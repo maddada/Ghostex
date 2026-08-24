@@ -1,10 +1,7 @@
-import type { SidebarActiveSessionsSortMode } from "../../shared/session-grid-contract";
-import {
-  moveProjectsWithWorktrees,
-  type ProjectWorktreeOrderItem,
-} from "../../shared/project-worktree-order";
-import type { SidebarProjectCollectionsState } from "../project-collections";
-import { SIDEBAR_REORDER_DISTANCE_PX } from "../sidebar-reorder-activation";
+import type { SidebarActiveSessionsSortMode } from '../../shared/session-grid-contract';
+import { moveProjectsWithWorktrees, type ProjectWorktreeOrderItem } from '../../shared/project-worktree-order';
+import type { SidebarProjectCollectionsState } from '../project-collections';
+import { SIDEBAR_REORDER_DISTANCE_PX } from '../sidebar-reorder-activation';
 import {
   canonicalizeSidebarSessionDropTarget,
   getClientPoint,
@@ -17,10 +14,10 @@ import {
   moveSessionIdsByDropTarget,
   type SidebarGroupDropTarget,
   type SidebarSessionDropTarget,
-} from "../sidebar-dnd";
-import { readRenderedSidebarSessionSlots } from "../sidebar-visible-session-slots";
-import { findSessionGroupId, haveSameSessionOrder } from "./session-ordering";
-import type { SessionIdsByGroup, SidebarGroupsById, SidebarSessionsById } from "./types";
+} from '../sidebar-dnd';
+import { readRenderedSidebarSessionSlots } from '../sidebar-visible-session-slots';
+import { findSessionGroupId, haveSameSessionOrder } from './session-ordering';
+import type { SessionIdsByGroup, SidebarGroupsById, SidebarSessionsById } from './types';
 
 export type SidebarPointerDownSessionTarget = {
   groupId: string;
@@ -44,20 +41,20 @@ export type SidebarProjectGroupOrderItem = ProjectWorktreeOrderItem & {
 export type SidebarProjectGroupLookup = Record<
   string,
   | {
-    projectContext?: {
-      path?: string;
-      editor: {
-        projectId: string;
+      projectContext?: {
+        path?: string;
+        editor: {
+          projectId: string;
+        };
+        worktree?: {
+          parentProjectId: string;
+        };
       };
-      worktree?: {
-        parentProjectId: string;
+      remoteMachineContext?: {
+        machineId: string;
+        projectId?: string;
       };
-    };
-    remoteMachineContext?: {
-      machineId: string;
-      projectId?: string;
-    };
-  }
+    }
   | undefined
 >;
 export function summarizeSidebarWakeScrollOrderState({
@@ -78,15 +75,15 @@ export function summarizeSidebarWakeScrollOrderState({
   sessionsById: SidebarSessionsById;
 }): Record<string, unknown> {
   const groupId = findSessionGroupId(displayedWorkspaceSessionIdsByGroup, focusedSessionId);
-  const groupSessionIds = groupId ? displayedWorkspaceSessionIdsByGroup[ groupId ] ?? [] : [];
+  const groupSessionIds = groupId ? (displayedWorkspaceSessionIdsByGroup[groupId] ?? []) : [];
   const groupIndex = groupId ? displayedWorkspaceGroupIds.indexOf(groupId) : -1;
   const targetIndexInGroup = groupSessionIds.indexOf(focusedSessionId);
-  const group = groupId ? groupsById[ groupId ] : undefined;
-  const session = sessionsById[ focusedSessionId ];
+  const group = groupId ? groupsById[groupId] : undefined;
+  const session = sessionsById[focusedSessionId];
   return {
     activeSessionsSortMode,
     displayedGroupCount: displayedWorkspaceGroupIds.length,
-    firstSessionIdInGroup: groupSessionIds[ 0 ],
+    firstSessionIdInGroup: groupSessionIds[0],
     focusedSessionId,
     groupId,
     groupIndex,
@@ -108,37 +105,31 @@ export function summarizeSidebarWakeScrollOrderState({
     sessionNativePaneState: session?.nativePaneState,
     sessionProviderSessionState: session?.providerSessionState,
     targetIndexInGroup,
-    targetWindowSessionIds: createSidebarWakeScrollSessionIdWindow(
-      groupSessionIds,
-      targetIndexInGroup,
-    ),
+    targetWindowSessionIds: createSidebarWakeScrollSessionIdWindow(groupSessionIds, targetIndexInGroup),
   };
 }
 
 export function summarizeSidebarWakeScrollRenderedSlots(
   root: ParentNode,
-  focusedSessionId: string,
+  focusedSessionId: string
 ): Record<string, unknown> {
   const slots = readRenderedSidebarSessionSlots(root);
   const renderedSessionIds = slots.map((slot) => slot.sessionId);
   const renderedIndex = renderedSessionIds.indexOf(focusedSessionId);
   return {
     renderedAwakeSlotCount: slots.filter((slot) => !slot.isSleeping).length,
-    renderedFirstSessionId: renderedSessionIds[ 0 ],
+    renderedFirstSessionId: renderedSessionIds[0],
     renderedIndex,
     renderedLastSessionId: renderedSessionIds.at(-1),
     renderedSleepingSlotCount: slots.filter((slot) => slot.isSleeping).length,
     renderedSlotCount: slots.length,
-    renderedWindowSessionIds: createSidebarWakeScrollSessionIdWindow(
-      renderedSessionIds,
-      renderedIndex,
-    ),
+    renderedWindowSessionIds: createSidebarWakeScrollSessionIdWindow(renderedSessionIds, renderedIndex),
   };
 }
 
 export function summarizeSidebarWakeScrollGeometry(
   focusedSessionElement: HTMLElement,
-  scrollViewport: HTMLElement,
+  scrollViewport: HTMLElement
 ): Record<string, unknown> {
   const rowBounds = focusedSessionElement.getBoundingClientRect();
   const viewportBounds = scrollViewport.getBoundingClientRect();
@@ -159,15 +150,12 @@ export function summarizeSidebarWakeScrollGeometry(
 export function createSidebarWakeScrollSessionIdWindow(
   sessionIds: readonly string[],
   targetIndex: number,
-  radius = 3,
+  radius = 3
 ): string[] {
   if (targetIndex < 0) {
     return [];
   }
-  return sessionIds.slice(
-    Math.max(0, targetIndex - radius),
-    Math.min(sessionIds.length, targetIndex + radius + 1),
-  );
+  return sessionIds.slice(Math.max(0, targetIndex - radius), Math.min(sessionIds.length, targetIndex + radius + 1));
 }
 
 export function roundSidebarWakeScrollMetric(value: number): number {
@@ -177,32 +165,32 @@ export function roundSidebarWakeScrollMetric(value: number): number {
 export function movePinnedSessionIdsByDropTarget(
   previousPinnedSessionIds: readonly string[],
   sourceSessionId: string,
-  target: SidebarSessionDropTarget,
+  target: SidebarSessionDropTarget
 ): string[] {
-  if (target.kind !== "session") {
-    return [ ...previousPinnedSessionIds ];
+  if (target.kind !== 'session') {
+    return [...previousPinnedSessionIds];
   }
 
   return (
     moveSessionIdsByDropTarget(
       {
-        [ target.groupId ]: [ ...previousPinnedSessionIds ],
+        [target.groupId]: [...previousPinnedSessionIds],
       },
       sourceSessionId,
-      target,
-    )[ target.groupId ] ?? [ ...previousPinnedSessionIds ]
+      target
+    )[target.groupId] ?? [...previousPinnedSessionIds]
   );
 }
 
 export function createPinnedSessionDropTargetLogKey(
-  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: "session"; }>,
-  target: SidebarSessionDropTarget | undefined,
+  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'session' }>,
+  target: SidebarSessionDropTarget | undefined
 ): string {
   if (!target) {
     return `${sourceData.groupId}:${sourceData.sessionId}:none`;
   }
 
-  if (target.kind === "group") {
+  if (target.kind === 'group') {
     return `${sourceData.groupId}:${sourceData.sessionId}:${target.groupId}:group:${target.position}`;
   }
 
@@ -210,23 +198,18 @@ export function createPinnedSessionDropTargetLogKey(
 }
 
 export function createPinnedSessionReorderDebugState(
-  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: "session"; }>,
+  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'session' }>,
   currentSessionIdsByGroup: SessionIdsByGroup,
   effectiveSessionIdsByGroup: SessionIdsByGroup,
   authoritativeSessionIdsByGroup: SessionIdsByGroup,
-  sessionsById: Record<
-    string,
-    { isPinned?: boolean; sessionId?: string; } | undefined
-  >,
+  sessionsById: Record<string, { isPinned?: boolean; sessionId?: string } | undefined>
 ): Record<string, unknown> {
-  const currentSessionIds = currentSessionIdsByGroup[ sourceData.groupId ] ?? [];
-  const effectiveSessionIds = effectiveSessionIdsByGroup[ sourceData.groupId ] ?? [];
-  const authoritativeSessionIds = authoritativeSessionIdsByGroup[ sourceData.groupId ] ?? [];
-  const currentPinnedSessionIds = currentSessionIds.filter(
-    (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
-  );
+  const currentSessionIds = currentSessionIdsByGroup[sourceData.groupId] ?? [];
+  const effectiveSessionIds = effectiveSessionIdsByGroup[sourceData.groupId] ?? [];
+  const authoritativeSessionIds = authoritativeSessionIdsByGroup[sourceData.groupId] ?? [];
+  const currentPinnedSessionIds = currentSessionIds.filter((sessionId) => sessionsById[sessionId]?.isPinned === true);
   const effectivePinnedSessionIds = effectiveSessionIds.filter(
-    (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
+    (sessionId) => sessionsById[sessionId]?.isPinned === true
   );
 
   return {
@@ -240,7 +223,7 @@ export function createPinnedSessionReorderDebugState(
     sourceCurrentPinnedIndex: currentPinnedSessionIds.indexOf(sourceData.sessionId),
     sourceEffectiveIndex: effectiveSessionIds.indexOf(sourceData.sessionId),
     sourceEffectivePinnedIndex: effectivePinnedSessionIds.indexOf(sourceData.sessionId),
-    sourceIsPinned: sessionsById[ sourceData.sessionId ]?.isPinned === true,
+    sourceIsPinned: sessionsById[sourceData.sessionId]?.isPinned === true,
   };
 }
 
@@ -255,13 +238,10 @@ export function summarizePointerEventForPinnedReorder(event: PointerEvent): Reco
   };
 }
 
-export function createPinnedSessionDomDebugState(
-  groupId: string,
-  sessionId: string,
-): Record<string, unknown> {
+export function createPinnedSessionDomDebugState(groupId: string, sessionId: string): Record<string, unknown> {
   const groupElement = getSidebarGroupElementById(groupId);
   const sessionElement = getTargetSessionElement(sessionId, undefined);
-  const frameElement = sessionElement?.closest<HTMLElement>(".session-frame");
+  const frameElement = sessionElement?.closest<HTMLElement>('.session-frame');
 
   return {
     group: {
@@ -283,17 +263,15 @@ export function createPinnedSessionDomDebugState(
 
 export function createPinnedSessionDropResolutionDebugState(
   nativeEvent: Event | undefined,
-  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: "session"; }>,
+  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'session' }>,
   sessionIdsByGroup: SessionIdsByGroup,
-  sessionsById: Record<string, { isPinned?: boolean; } | undefined>,
+  sessionsById: Record<string, { isPinned?: boolean } | undefined>
 ): Record<string, unknown> {
   const point = getClientPoint(nativeEvent);
   const groupElement = getSidebarGroupElementById(sourceData.groupId);
   const groupBounds = groupElement?.getBoundingClientRect();
-  const groupSessionIds = sessionIdsByGroup[ sourceData.groupId ] ?? [];
-  const pinnedSessionIds = groupSessionIds.filter(
-    (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
-  );
+  const groupSessionIds = sessionIdsByGroup[sourceData.groupId] ?? [];
+  const pinnedSessionIds = groupSessionIds.filter((sessionId) => sessionsById[sessionId]?.isPinned === true);
   const targetMetrics = pinnedSessionIds
     .filter((sessionId) => sessionId !== sourceData.sessionId)
     .map((sessionId) => {
@@ -304,19 +282,16 @@ export function createPinnedSessionDropResolutionDebugState(
         height: bounds?.height,
         midpointY: bounds ? bounds.top + bounds.height / 2 : undefined,
         pinnedIndex: pinnedSessionIds.indexOf(sessionId),
-        pointBeforeMidpoint:
-          bounds && point ? point.y <= bounds.top + bounds.height / 2 : undefined,
+        pointBeforeMidpoint: bounds && point ? point.y <= bounds.top + bounds.height / 2 : undefined,
         top: bounds?.top,
       };
     });
   const renderedPinnedBounds = targetMetrics
     .filter((metric) => metric.elementFound && metric.top !== undefined && metric.height !== undefined)
-    .reduce<{ bottom: number; top: number; } | undefined>((bounds, metric) => {
+    .reduce<{ bottom: number; top: number } | undefined>((bounds, metric) => {
       const top = metric.top!;
       const bottom = top + metric.height!;
-      return bounds
-        ? { bottom: Math.max(bounds.bottom, bottom), top: Math.min(bounds.top, top) }
-        : { bottom, top };
+      return bounds ? { bottom: Math.max(bounds.bottom, bottom), top: Math.min(bounds.top, top) } : { bottom, top };
     }, undefined);
   const pointInsideGroup =
     point !== undefined &&
@@ -342,7 +317,7 @@ export function createPinnedSessionDropResolutionDebugState(
 }
 
 export function summarizeElementRectForPinnedReorder(
-  element: Element | null | undefined,
+  element: Element | null | undefined
 ): Record<string, number> | undefined {
   if (!element) {
     return undefined;
@@ -358,7 +333,7 @@ export function summarizeElementRectForPinnedReorder(
 
 export function findCreatedGroupId(
   previousGroups: readonly string[],
-  nextGroups: readonly string[],
+  nextGroups: readonly string[]
 ): string | undefined {
   const previousGroupIds = new Set(previousGroups);
   return nextGroups.find((groupId) => !previousGroupIds.has(groupId));
@@ -368,7 +343,7 @@ export function resolveSessionDropTargetFromPoint(
   nativeEvent: Event | undefined,
   sessionIdsByGroup: SessionIdsByGroup,
   targetData: ReturnType<typeof getSidebarDropData>,
-  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: "session"; }> | undefined,
+  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'session' }> | undefined
 ) {
   const point = getClientPoint(nativeEvent);
   /*
@@ -390,12 +365,12 @@ export function resolveSessionDropTargetFromPoint(
     }
 
     const candidate = canonicalizeSidebarSessionDropTarget(rawCandidate);
-    const groupSessionIds = sessionIdsByGroup[ candidate.groupId ];
+    const groupSessionIds = sessionIdsByGroup[candidate.groupId];
     if (!groupSessionIds) {
       continue;
     }
 
-    if (candidate.kind === "session" && !groupSessionIds.includes(candidate.sessionId)) {
+    if (candidate.kind === 'session' && !groupSessionIds.includes(candidate.sessionId)) {
       continue;
     }
 
@@ -421,23 +396,23 @@ export function resolveSessionDropTargetFromPoint(
 export function isNoOpSessionDropTarget(
   sessionIdsByGroup: SessionIdsByGroup,
   sessionId: string,
-  target: SidebarSessionDropTarget,
+  target: SidebarSessionDropTarget
 ): boolean {
   const nextSessionIdsByGroup = moveSessionIdsByDropTarget(sessionIdsByGroup, sessionId, target);
   if (nextSessionIdsByGroup === sessionIdsByGroup) {
     return true;
   }
 
-  return Object.entries(nextSessionIdsByGroup).every(([ groupId, nextSessionIds ]) =>
-    haveSameSessionOrder(sessionIdsByGroup[ groupId ] ?? [], nextSessionIds),
+  return Object.entries(nextSessionIdsByGroup).every(([groupId, nextSessionIds]) =>
+    haveSameSessionOrder(sessionIdsByGroup[groupId] ?? [], nextSessionIds)
   );
 }
 
 export function resolvePinnedSessionDropTargetFromPoint(
   nativeEvent: Event | undefined,
-  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: "session"; }>,
+  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'session' }>,
   sessionIdsByGroup: SessionIdsByGroup,
-  sessionsById: Record<string, { isPinned?: boolean; } | undefined>,
+  sessionsById: Record<string, { isPinned?: boolean } | undefined>
 ): SidebarSessionDropTarget | undefined {
   const point = getClientPoint(nativeEvent);
   if (!point) {
@@ -446,10 +421,8 @@ export function resolvePinnedSessionDropTargetFromPoint(
 
   const groupElement = getSidebarGroupElementById(sourceData.groupId);
   const groupBounds = groupElement?.getBoundingClientRect();
-  const groupSessionIds = sessionIdsByGroup[ sourceData.groupId ] ?? [];
-  const pinnedSessionIds = groupSessionIds.filter(
-    (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
-  );
+  const groupSessionIds = sessionIdsByGroup[sourceData.groupId] ?? [];
+  const pinnedSessionIds = groupSessionIds.filter((sessionId) => sessionsById[sessionId]?.isPinned === true);
   if (pinnedSessionIds.length < 2 || !pinnedSessionIds.includes(sourceData.sessionId)) {
     return undefined;
   }
@@ -460,20 +433,18 @@ export function resolvePinnedSessionDropTargetFromPoint(
       const element = getTargetSessionElement(sessionId, point);
       return element
         ? [
-          {
-            bounds: element.getBoundingClientRect(),
-            sessionId,
-          },
-        ]
+            {
+              bounds: element.getBoundingClientRect(),
+              sessionId,
+            },
+          ]
         : [];
     });
   if (targetSessionMetrics.length === 0) {
     return undefined;
   }
   const renderedPinnedTop = Math.min(...targetSessionMetrics.map((target) => target.bounds.top));
-  const renderedPinnedBottom = Math.max(
-    ...targetSessionMetrics.map((target) => target.bounds.bottom),
-  );
+  const renderedPinnedBottom = Math.max(...targetSessionMetrics.map((target) => target.bounds.bottom));
   if (
     groupBounds
       ? point.y < groupBounds.top || point.y > groupBounds.bottom
@@ -498,18 +469,18 @@ export function resolvePinnedSessionDropTargetFromPoint(
       if (point.y < target.bounds.top + target.bounds.height / 2) {
         return {
           groupId: sourceData.groupId,
-          kind: "session",
-          position: "before",
+          kind: 'session',
+          position: 'before',
           sessionId: target.sessionId,
         };
       }
     }
 
-    const lastTarget = targetSessionMetrics[ targetSessionMetrics.length - 1 ];
+    const lastTarget = targetSessionMetrics[targetSessionMetrics.length - 1];
     return {
       groupId: sourceData.groupId,
-      kind: "session",
-      position: "after",
+      kind: 'session',
+      position: 'after',
       sessionId: lastTarget.sessionId,
     };
   })();
@@ -519,85 +490,72 @@ export function resolvePinnedSessionDropTargetFromPoint(
    * Pinned reorder also hides its insertion feedback when releasing would keep
    * the pinned row in its current slot.
    */
-  return isNoOpSessionDropTarget(sessionIdsByGroup, sourceData.sessionId, resolvedTarget)
-    ? undefined
-    : resolvedTarget;
+  return isNoOpSessionDropTarget(sessionIdsByGroup, sourceData.sessionId, resolvedTarget) ? undefined : resolvedTarget;
 }
 
 export type SidebarRemoteMachineDropTarget = {
-  position: "before" | "after";
+  position: 'before' | 'after';
   remoteMachineId: string;
 };
 
 export type SidebarProjectCollectionDropTarget = {
   collectionId: string;
-  position: "before" | "after";
+  position: 'before' | 'after';
 };
 
 export function resolveRemoteMachineDropTargetFromPoint(
   nativeEvent: Event | undefined,
   remoteMachineIds: readonly string[],
   sourceRemoteMachineId: string,
-  targetData: ReturnType<typeof getSidebarDropData>,
+  targetData: ReturnType<typeof getSidebarDropData>
 ): SidebarRemoteMachineDropTarget | undefined {
   const point = getClientPoint(nativeEvent);
   const candidate = point
     ? getRemoteMachineBoundaryTargetAtY(remoteMachineIds, point.y)
-    : targetData?.kind === "remote-machine" &&
-      remoteMachineIds.includes(targetData.remoteMachineId)
-      ? { remoteMachineId: targetData.remoteMachineId, position: "before" as const }
+    : targetData?.kind === 'remote-machine' && remoteMachineIds.includes(targetData.remoteMachineId)
+      ? { remoteMachineId: targetData.remoteMachineId, position: 'before' as const }
       : undefined;
   if (!candidate) {
     return undefined;
   }
-  return moveRemoteMachineIdToDropTarget(
-    remoteMachineIds,
-    sourceRemoteMachineId,
-    candidate,
-  )
-    ? candidate
-    : undefined;
+  return moveRemoteMachineIdToDropTarget(remoteMachineIds, sourceRemoteMachineId, candidate) ? candidate : undefined;
 }
 
 export function getRemoteMachineBoundaryTargetAtY(
   remoteMachineIds: readonly string[],
-  y: number,
+  y: number
 ): SidebarRemoteMachineDropTarget | undefined {
   const headerMidpoints = remoteMachineIds.flatMap((remoteMachineId) => {
     const section = document.querySelector<HTMLElement>(
-      `[data-sidebar-remote-machine-id="${CSS.escape(remoteMachineId)}"]`,
+      `[data-sidebar-remote-machine-id="${CSS.escape(remoteMachineId)}"]`
     );
-    const header = section?.querySelector<HTMLElement>(".reference-sidebar-section-row");
+    const header = section?.querySelector<HTMLElement>('.reference-sidebar-section-row');
     if (!header) {
       return [];
     }
     const bounds = header.getBoundingClientRect();
-    return bounds.height > 0
-      ? [{ midpoint: bounds.top + bounds.height / 2, remoteMachineId }]
-      : [];
+    return bounds.height > 0 ? [{ midpoint: bounds.top + bounds.height / 2, remoteMachineId }] : [];
   });
   if (headerMidpoints.length === 0) {
     return undefined;
   }
   for (const header of headerMidpoints) {
     if (y < header.midpoint) {
-      return { remoteMachineId: header.remoteMachineId, position: "before" };
+      return { remoteMachineId: header.remoteMachineId, position: 'before' };
     }
   }
   return {
     remoteMachineId: headerMidpoints[headerMidpoints.length - 1].remoteMachineId,
-    position: "after",
+    position: 'after',
   };
 }
 
 export function moveRemoteMachineIdToDropTarget(
   remoteMachineIds: readonly string[],
   sourceRemoteMachineId: string,
-  target: SidebarRemoteMachineDropTarget,
+  target: SidebarRemoteMachineDropTarget
 ): string[] | undefined {
-  const withoutSource = remoteMachineIds.filter(
-    (remoteMachineId) => remoteMachineId !== sourceRemoteMachineId,
-  );
+  const withoutSource = remoteMachineIds.filter((remoteMachineId) => remoteMachineId !== sourceRemoteMachineId);
   if (withoutSource.length === remoteMachineIds.length) {
     return undefined;
   }
@@ -605,22 +563,20 @@ export function moveRemoteMachineIdToDropTarget(
   if (target.remoteMachineId === sourceRemoteMachineId || anchorIndex < 0) {
     return undefined;
   }
-  const insertionIndex = target.position === "before" ? anchorIndex : anchorIndex + 1;
+  const insertionIndex = target.position === 'before' ? anchorIndex : anchorIndex + 1;
   const next = [...withoutSource];
   next.splice(insertionIndex, 0, sourceRemoteMachineId);
-  return next.every((remoteMachineId, index) => remoteMachineId === remoteMachineIds[index])
-    ? undefined
-    : next;
+  return next.every((remoteMachineId, index) => remoteMachineId === remoteMachineIds[index]) ? undefined : next;
 }
 
 export function areSameRemoteMachineDropTarget(
   left: SidebarRemoteMachineDropTarget | undefined,
-  right: SidebarRemoteMachineDropTarget | undefined,
+  right: SidebarRemoteMachineDropTarget | undefined
 ): boolean {
   return left?.remoteMachineId === right?.remoteMachineId && left?.position === right?.position;
 }
 
-export const LOCAL_PROJECT_LIST_SCOPE_ID = "local";
+export const LOCAL_PROJECT_LIST_SCOPE_ID = 'local';
 
 /*
  * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
@@ -629,7 +585,7 @@ export const LOCAL_PROJECT_LIST_SCOPE_ID = "local";
  * ids come from user settings, and a machine the user happened to id "local"
  * would otherwise silently overwrite this Mac's list and swallow its reorder.
  */
-export const SIDEBAR_V2_LOCAL_GROUP_ORDER_KEY = "sidebar-v2:local-project-order";
+export const SIDEBAR_V2_LOCAL_GROUP_ORDER_KEY = 'sidebar-v2:local-project-order';
 
 export function createRemoteProjectListScopeId(remoteMachineId: string): string {
   return `remote:${remoteMachineId}`;
@@ -647,19 +603,16 @@ export function createRemoteProjectListScopeId(remoteMachineId: string): string 
 export function resolveProjectUngroupDropScopeFromPoint(
   nativeEvent: Event | undefined,
   sourceGroupId: string,
-  groupsById: SidebarProjectGroupLookup,
+  groupsById: SidebarProjectGroupLookup
 ): string | undefined {
   const point = getClientPoint(nativeEvent);
   if (!point) {
     return undefined;
   }
-  const remoteMachineId =
-    groupsById[sourceGroupId]?.remoteMachineContext?.machineId;
-  const scopeId = remoteMachineId
-    ? createRemoteProjectListScopeId(remoteMachineId)
-    : LOCAL_PROJECT_LIST_SCOPE_ID;
+  const remoteMachineId = groupsById[sourceGroupId]?.remoteMachineContext?.machineId;
+  const scopeId = remoteMachineId ? createRemoteProjectListScopeId(remoteMachineId) : LOCAL_PROJECT_LIST_SCOPE_ID;
   const element = document.querySelector<HTMLElement>(
-    `[data-sidebar-project-ungroup-drop-zone="${CSS.escape(scopeId)}"]`,
+    `[data-sidebar-project-ungroup-drop-zone="${CSS.escape(scopeId)}"]`
   );
   if (!element) {
     return undefined;
@@ -677,24 +630,18 @@ export function resolveProjectUngroupDropScopeFromPoint(
 export function moveProjectGroupFamilyToEnd(
   groupIds: readonly string[],
   sourceGroupId: string,
-  groupsById: SidebarProjectGroupLookup,
+  groupsById: SidebarProjectGroupLookup
 ): string[] {
-  const sourceProjectId =
-    groupsById[sourceGroupId]?.projectContext?.editor.projectId;
+  const sourceProjectId = groupsById[sourceGroupId]?.projectContext?.editor.projectId;
   if (!sourceProjectId) {
     return [...groupIds];
   }
-  const familyProjectIds = new Set(
-    getProjectCollectionFamilyProjectIds(sourceProjectId, groupIds, groupsById),
-  );
+  const familyProjectIds = new Set(getProjectCollectionFamilyProjectIds(sourceProjectId, groupIds, groupsById));
   const isFamilyGroup = (groupId: string) => {
     const projectId = groupsById[groupId]?.projectContext?.editor.projectId;
     return Boolean(projectId && familyProjectIds.has(projectId));
   };
-  return [
-    ...groupIds.filter((groupId) => !isFamilyGroup(groupId)),
-    ...groupIds.filter(isFamilyGroup),
-  ];
+  return [...groupIds.filter((groupId) => !isFamilyGroup(groupId)), ...groupIds.filter(isFamilyGroup)];
 }
 
 /*
@@ -708,10 +655,10 @@ export function moveProjectGroupFamilyToEnd(
  */
 export function getLocalProjectCollectionElement(collectionId: string): HTMLElement | undefined {
   const elements = document.querySelectorAll<HTMLElement>(
-    `section.project-collection[data-sidebar-project-collection-id="${CSS.escape(collectionId)}"]`,
+    `section.project-collection[data-sidebar-project-collection-id="${CSS.escape(collectionId)}"]`
   );
   for (const element of elements) {
-    if (!element.closest(".reference-remote-machine-section")) {
+    if (!element.closest('.reference-remote-machine-section')) {
       return element;
     }
   }
@@ -722,26 +669,23 @@ export function resolveProjectCollectionDropTargetFromPoint(
   nativeEvent: Event | undefined,
   collectionIds: readonly string[],
   sourceCollectionId: string,
-  targetData: ReturnType<typeof getSidebarDropData>,
+  targetData: ReturnType<typeof getSidebarDropData>
 ): SidebarProjectCollectionDropTarget | undefined {
   const point = getClientPoint(nativeEvent);
   const candidate = point
     ? getProjectCollectionBoundaryTargetAtY(collectionIds, point.y)
-    : targetData?.kind === "project-collection" &&
-      collectionIds.includes(targetData.collectionId)
-      ? { collectionId: targetData.collectionId, position: "before" as const }
+    : targetData?.kind === 'project-collection' && collectionIds.includes(targetData.collectionId)
+      ? { collectionId: targetData.collectionId, position: 'before' as const }
       : undefined;
   if (!candidate) {
     return undefined;
   }
-  return moveCollectionIdToDropTarget(collectionIds, sourceCollectionId, candidate)
-    ? candidate
-    : undefined;
+  return moveCollectionIdToDropTarget(collectionIds, sourceCollectionId, candidate) ? candidate : undefined;
 }
 
 export function getProjectCollectionBoundaryTargetAtY(
   collectionIds: readonly string[],
-  y: number,
+  y: number
 ): SidebarProjectCollectionDropTarget | undefined {
   const midpoints = collectionIds.flatMap((collectionId) => {
     const element = getLocalProjectCollectionElement(collectionId);
@@ -749,21 +693,19 @@ export function getProjectCollectionBoundaryTargetAtY(
       return [];
     }
     const bounds = element.getBoundingClientRect();
-    return bounds.height > 0
-      ? [ { collectionId, midpoint: bounds.top + bounds.height / 2 } ]
-      : [];
+    return bounds.height > 0 ? [{ collectionId, midpoint: bounds.top + bounds.height / 2 }] : [];
   });
   if (midpoints.length === 0) {
     return undefined;
   }
   for (const entry of midpoints) {
     if (y < entry.midpoint) {
-      return { collectionId: entry.collectionId, position: "before" };
+      return { collectionId: entry.collectionId, position: 'before' };
     }
   }
   return {
-    collectionId: midpoints[ midpoints.length - 1 ].collectionId,
-    position: "after",
+    collectionId: midpoints[midpoints.length - 1].collectionId,
+    position: 'after',
   };
 }
 
@@ -774,11 +716,9 @@ export function getProjectCollectionBoundaryTargetAtY(
 export function moveCollectionIdToDropTarget(
   collectionIds: readonly string[],
   sourceCollectionId: string,
-  target: SidebarProjectCollectionDropTarget,
+  target: SidebarProjectCollectionDropTarget
 ): string[] | undefined {
-  const withoutSource = collectionIds.filter(
-    (collectionId) => collectionId !== sourceCollectionId,
-  );
+  const withoutSource = collectionIds.filter((collectionId) => collectionId !== sourceCollectionId);
   if (withoutSource.length === collectionIds.length) {
     return undefined;
   }
@@ -788,7 +728,7 @@ export function moveCollectionIdToDropTarget(
       ? undefined
       : anchorIndex < 0
         ? undefined
-        : target.position === "before"
+        : target.position === 'before'
           ? anchorIndex
           : anchorIndex + 1;
   if (insertionIndex === undefined) {
@@ -796,9 +736,7 @@ export function moveCollectionIdToDropTarget(
   }
   const next = [...withoutSource];
   next.splice(insertionIndex, 0, sourceCollectionId);
-  return next.every((collectionId, index) => collectionId === collectionIds[ index ])
-    ? undefined
-    : next;
+  return next.every((collectionId, index) => collectionId === collectionIds[index]) ? undefined : next;
 }
 
 export function resolveGroupDropTargetFromPoint(
@@ -806,7 +744,7 @@ export function resolveGroupDropTargetFromPoint(
   groupIds: readonly string[],
   groupsById: SidebarProjectGroupLookup,
   targetData: ReturnType<typeof getSidebarDropData>,
-  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: "group"; }> | undefined,
+  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'group' }> | undefined,
   /*
    * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
    * How "this drop would change nothing" is decided. V1's default answer runs the
@@ -815,7 +753,7 @@ export function resolveGroupDropTargetFromPoint(
    * are no-ops. Letting the caller supply the predicate keeps the drop line and
    * the committed reorder answering the same question.
    */
-  isNoOpTarget?: (target: SidebarGroupDropTarget) => boolean,
+  isNoOpTarget?: (target: SidebarGroupDropTarget) => boolean
 ): SidebarGroupDropTarget | undefined {
   const point = getClientPoint(nativeEvent);
   /*
@@ -829,11 +767,8 @@ export function resolveGroupDropTargetFromPoint(
    * no-op drops instead of falling through to another candidate.
    */
   const candidates = point
-    ? [ getSidebarGroupBoundaryTargetAtY(groupIds, point.y) ]
-    : [
-      getSidebarGroupDropTargetFromDropData(targetData, point),
-      getSidebarGroupDropTargetFromEvent(nativeEvent),
-    ];
+    ? [getSidebarGroupBoundaryTargetAtY(groupIds, point.y)]
+    : [getSidebarGroupDropTargetFromDropData(targetData, point), getSidebarGroupDropTargetFromEvent(nativeEvent)];
 
   for (const candidate of candidates) {
     if (!candidate) {
@@ -865,7 +800,7 @@ export function resolveGroupDropTargetFromPoint(
 
 export function getSidebarGroupBoundaryTargetAtY(
   groupIds: readonly string[],
-  y: number,
+  y: number
 ): SidebarGroupDropTarget | undefined {
   const groupHeaderMidpoints = groupIds.flatMap((groupId) => {
     const groupElement = getSidebarGroupElementById(groupId);
@@ -874,7 +809,7 @@ export function getSidebarGroupBoundaryTargetAtY(
     }
 
     const bounds = getSidebarGroupDropBoundsElement(groupElement).getBoundingClientRect();
-    return bounds.height > 0 ? [ { groupId, midpoint: bounds.top + bounds.height / 2 } ] : [];
+    return bounds.height > 0 ? [{ groupId, midpoint: bounds.top + bounds.height / 2 }] : [];
   });
   if (groupHeaderMidpoints.length === 0) {
     return undefined;
@@ -882,32 +817,32 @@ export function getSidebarGroupBoundaryTargetAtY(
 
   for (const header of groupHeaderMidpoints) {
     if (y < header.midpoint) {
-      return { groupId: header.groupId, position: "before" };
+      return { groupId: header.groupId, position: 'before' };
     }
   }
 
   return {
-    groupId: groupHeaderMidpoints[ groupHeaderMidpoints.length - 1 ].groupId,
-    position: "after",
+    groupId: groupHeaderMidpoints[groupHeaderMidpoints.length - 1].groupId,
+    position: 'after',
   };
 }
 
 export function areSameGroupDropTarget(
   left: SidebarGroupDropTarget | undefined,
-  right: SidebarGroupDropTarget | undefined,
+  right: SidebarGroupDropTarget | undefined
 ): boolean {
   return left?.groupId === right?.groupId && left?.position === right?.position;
 }
 
 export function areSameSessionDropTarget(
   left: SidebarSessionDropTarget | undefined,
-  right: SidebarSessionDropTarget | undefined,
+  right: SidebarSessionDropTarget | undefined
 ): boolean {
   if (!left || !right || left.kind !== right.kind || left.groupId !== right.groupId) {
     return left === right;
   }
 
-  if (left.kind === "session" && right.kind === "session") {
+  if (left.kind === 'session' && right.kind === 'session') {
     return left.sessionId === right.sessionId && left.position === right.position;
   }
 
@@ -916,21 +851,21 @@ export function areSameSessionDropTarget(
 
 export function isSourceSessionDropTarget(
   candidate: SidebarSessionDropTarget,
-  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: "session"; }> | undefined,
+  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'session' }> | undefined
 ): boolean {
   return Boolean(
     sourceData &&
-    candidate.kind === "session" &&
+    candidate.kind === 'session' &&
     candidate.groupId === sourceData.groupId &&
-    candidate.sessionId === sourceData.sessionId,
+    candidate.sessionId === sourceData.sessionId
   );
 }
 
 export function getSidebarSessionDropTargetFromDropData(
   targetData: ReturnType<typeof getSidebarDropData>,
-  point: ReturnType<typeof getClientPoint>,
+  point: ReturnType<typeof getClientPoint>
 ): SidebarSessionDropTarget | undefined {
-  if (targetData?.kind === "session") {
+  if (targetData?.kind === 'session') {
     const sessionElement = getTargetSessionElement(targetData.sessionId, point);
     if (!sessionElement) {
       return undefined;
@@ -944,30 +879,27 @@ export function getSidebarSessionDropTargetFromDropData(
      * midpoint. Resolve the explicit target with the same center/down-after
      * rule as point-based row hit testing so the line stays visible.
      */
-    const position: "after" | "before" =
-      relativeY >= bounds.top + bounds.height / 2 ? "after" : "before";
+    const position: 'after' | 'before' = relativeY >= bounds.top + bounds.height / 2 ? 'after' : 'before';
     return {
       groupId: targetData.groupId,
-      kind: "session",
+      kind: 'session',
       position,
       sessionId: targetData.sessionId,
     };
   }
 
-  if (targetData?.kind === "group") {
-    const groupElement = document.querySelector<HTMLElement>(
-      `[data-sidebar-group-id="${targetData.groupId}"]`,
-    );
+  if (targetData?.kind === 'group') {
+    const groupElement = document.querySelector<HTMLElement>(`[data-sidebar-group-id="${targetData.groupId}"]`);
     if (!groupElement) {
       return undefined;
     }
 
     const bounds = groupElement.getBoundingClientRect();
     const relativeY = point?.y ?? bounds.top;
-    const position: "end" | "start" = relativeY > bounds.top + bounds.height / 2 ? "end" : "start";
+    const position: 'end' | 'start' = relativeY > bounds.top + bounds.height / 2 ? 'end' : 'start';
     return {
       groupId: targetData.groupId,
-      kind: "group",
+      kind: 'group',
       position,
     };
   }
@@ -977,9 +909,9 @@ export function getSidebarSessionDropTargetFromDropData(
 
 export function getSidebarGroupDropTargetFromDropData(
   targetData: ReturnType<typeof getSidebarDropData>,
-  point: ReturnType<typeof getClientPoint>,
+  point: ReturnType<typeof getClientPoint>
 ): SidebarGroupDropTarget | undefined {
-  if (targetData?.kind !== "group") {
+  if (targetData?.kind !== 'group') {
     return undefined;
   }
 
@@ -999,7 +931,7 @@ export function getSidebarGroupDropTargetFromDropData(
   const relativeY = point?.y ?? bounds.top + bounds.height / 2;
   return {
     groupId: targetData.groupId,
-    position: relativeY > bounds.top + bounds.height / 2 ? "after" : "before",
+    position: relativeY > bounds.top + bounds.height / 2 ? 'after' : 'before',
   };
 }
 
@@ -1007,7 +939,7 @@ export function isNoOpGroupDropTarget(
   groupIds: readonly string[],
   sourceGroupId: string,
   target: SidebarGroupDropTarget,
-  groupsById: SidebarProjectGroupLookup,
+  groupsById: SidebarProjectGroupLookup
 ): boolean {
   /*
    * CDXC:ProjectReorder 2026-05-22-22:18:
@@ -1020,17 +952,14 @@ export function isNoOpGroupDropTarget(
    * a main-project drag is computed as a family move so its worktrees stay
    * directly underneath it in the same order.
    */
-  return haveSameSessionOrder(
-    groupIds,
-    moveGroupIdsByProjectDropTarget(groupIds, sourceGroupId, target, groupsById),
-  );
+  return haveSameSessionOrder(groupIds, moveGroupIdsByProjectDropTarget(groupIds, sourceGroupId, target, groupsById));
 }
 
 export function moveGroupIdsByProjectDropTarget(
   groupIds: readonly string[],
   sourceGroupId: string,
   target: SidebarGroupDropTarget,
-  groupsById: SidebarProjectGroupLookup,
+  groupsById: SidebarProjectGroupLookup
 ): string[] {
   const projectGroupItems = createProjectGroupOrderItems(groupIds, groupsById);
   if (projectGroupItems.length !== groupIds.length) {
@@ -1045,10 +974,10 @@ export function moveGroupIdsByProjectDropTarget(
 
 export function createProjectGroupOrderItems(
   groupIds: readonly string[],
-  groupsById: SidebarProjectGroupLookup,
+  groupsById: SidebarProjectGroupLookup
 ): SidebarProjectGroupOrderItem[] {
   return groupIds.flatMap((groupId) => {
-    const projectContext = groupsById[ groupId ]?.projectContext;
+    const projectContext = groupsById[groupId]?.projectContext;
     if (!projectContext) {
       return [];
     }
@@ -1057,9 +986,7 @@ export function createProjectGroupOrderItems(
       {
         orderId: groupId,
         projectId: projectContext.editor.projectId,
-        worktree: projectContext.worktree
-          ? { parentProjectId: projectContext.worktree.parentProjectId }
-          : undefined,
+        worktree: projectContext.worktree ? { parentProjectId: projectContext.worktree.parentProjectId } : undefined,
       },
     ];
   });
@@ -1068,13 +995,12 @@ export function createProjectGroupOrderItems(
 export function getProjectCollectionFamilyProjectIds(
   projectId: string,
   groupIds: readonly string[],
-  groupsById: SidebarProjectGroupLookup,
+  groupsById: SidebarProjectGroupLookup
 ): string[] {
   const requestedProjectContext = groupIds
     .map((groupId) => groupsById[groupId]?.projectContext)
     .find((projectContext) => projectContext?.editor.projectId === projectId);
-  const familyParentProjectId =
-    requestedProjectContext?.worktree?.parentProjectId ?? projectId;
+  const familyParentProjectId = requestedProjectContext?.worktree?.parentProjectId ?? projectId;
   const projectIds = groupIds.flatMap((groupId) => {
     const projectContext = groupsById[groupId]?.projectContext;
     const candidateProjectId = projectContext?.editor.projectId;
@@ -1093,7 +1019,7 @@ export function createProjectCollectionIdByProjectId(
   state: SidebarProjectCollectionsState,
   groupIds: readonly string[],
   groupsById: SidebarProjectGroupLookup,
-  resolveProjectId: (groupId: string) => string | undefined,
+  resolveProjectId: (groupId: string) => string | undefined
 ): Map<string, string> {
   const result = new Map<string, string>();
   for (const collection of state.collections) {
@@ -1115,7 +1041,7 @@ export function createProjectCollectionIdByProjectId(
 export function getRemoteProjectCollectionFamilyProjectIds(
   scopedProjectId: string,
   groupIds: readonly string[],
-  groupsById: SidebarProjectGroupLookup,
+  groupsById: SidebarProjectGroupLookup
 ): string[] {
   const requestedGroup = groupIds
     .map((groupId) => groupsById[groupId])
@@ -1124,8 +1050,7 @@ export function getRemoteProjectCollectionFamilyProjectIds(
   if (!rawProjectId) {
     return [];
   }
-  const familyParentProjectId =
-    requestedGroup?.projectContext?.worktree?.parentProjectId ?? rawProjectId;
+  const familyParentProjectId = requestedGroup?.projectContext?.worktree?.parentProjectId ?? rawProjectId;
   const projectIds = groupIds.flatMap((groupId) => {
     const group = groupsById[groupId];
     const candidateProjectId = group?.remoteMachineContext?.projectId;
@@ -1141,66 +1066,60 @@ export function getRemoteProjectCollectionFamilyProjectIds(
 }
 
 export function getSidebarGroupDropBoundsElement(groupElement: HTMLElement): HTMLElement {
-  return groupElement.querySelector<HTMLElement>(".group-head") ?? groupElement;
+  return groupElement.querySelector<HTMLElement>('.group-head') ?? groupElement;
 }
 
 export function getTargetSessionElement(
   sessionId: string,
-  point: ReturnType<typeof getClientPoint>,
+  point: ReturnType<typeof getClientPoint>
 ): HTMLElement | undefined {
   const selector = `[data-sidebar-session-id="${sessionId}"]`;
   if (point) {
     for (const element of document.elementsFromPoint(point.x, point.y)) {
       const sessionElement = element.closest<HTMLElement>(selector);
-      if (sessionElement && sessionElement.dataset.dragging !== "true") {
+      if (sessionElement && sessionElement.dataset.dragging !== 'true') {
         return sessionElement;
       }
     }
   }
 
   return Array.from(document.querySelectorAll<HTMLElement>(selector)).find(
-    (sessionElement) => sessionElement.dataset.dragging !== "true",
+    (sessionElement) => sessionElement.dataset.dragging !== 'true'
   );
 }
 
 export function getSidebarGroupElementById(groupId: string): HTMLElement | undefined {
-  return Array.from(document.querySelectorAll<HTMLElement>("[data-sidebar-group-id]")).find(
-    (groupElement) => groupElement.dataset.sidebarGroupId === groupId,
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-sidebar-group-id]')).find(
+    (groupElement) => groupElement.dataset.sidebarGroupId === groupId
   );
 }
 
 export function getTargetGroupElement(
   groupId: string,
-  point: ReturnType<typeof getClientPoint>,
+  point: ReturnType<typeof getClientPoint>
 ): HTMLElement | undefined {
   const selector = `[data-sidebar-group-id="${groupId}"]`;
   if (point) {
     for (const element of document.elementsFromPoint(point.x, point.y)) {
       const groupElement = element.closest<HTMLElement>(selector);
-      if (groupElement && groupElement.dataset.dragging !== "true") {
+      if (groupElement && groupElement.dataset.dragging !== 'true') {
         return groupElement;
       }
     }
   }
 
   return Array.from(document.querySelectorAll<HTMLElement>(selector)).find(
-    (groupElement) => groupElement.dataset.dragging !== "true",
+    (groupElement) => groupElement.dataset.dragging !== 'true'
   );
 }
 
 export function getDragNativeEvent(value: unknown): Event | undefined {
-  return isObjectRecord(value) && value.nativeEvent instanceof Event
-    ? value.nativeEvent
-    : undefined;
+  return isObjectRecord(value) && value.nativeEvent instanceof Event ? value.nativeEvent : undefined;
 }
 
-export function updateGroupDragPreviewFromEvent<
-  Preview extends { pointerOffsetY: number; top: number; },
->(
-  setGroupDragPreview: (
-    updater: (previous: Preview | undefined) => Preview | undefined,
-  ) => void,
-  nativeEvent: Event | undefined,
+export function updateGroupDragPreviewFromEvent<Preview extends { pointerOffsetY: number; top: number }>(
+  setGroupDragPreview: (updater: (previous: Preview | undefined) => Preview | undefined) => void,
+  nativeEvent: Event | undefined
 ): void {
   const point = getClientPoint(nativeEvent);
   if (!point) {
@@ -1210,24 +1129,21 @@ export function updateGroupDragPreviewFromEvent<
   setGroupDragPreview((previous) =>
     previous
       ? {
-        ...previous,
-        top: point.y - previous.pointerOffsetY,
-      }
-      : previous,
+          ...previous,
+          top: point.y - previous.pointerOffsetY,
+        }
+      : previous
   );
 }
 
 export function getProjectGroupDragHeaderMetrics(
   groupId: string,
-  point: { x: number; y: number; },
-): { left: number; pointerOffsetY: number; top: number; width: number; } | undefined {
-  const groupElement = Array.from(
-    document.querySelectorAll<HTMLElement>("[data-sidebar-group-id]"),
-  ).find(
-    (candidate) =>
-      candidate.dataset.sidebarGroupId === groupId && candidate.dataset.dragging !== "true",
+  point: { x: number; y: number }
+): { left: number; pointerOffsetY: number; top: number; width: number } | undefined {
+  const groupElement = Array.from(document.querySelectorAll<HTMLElement>('[data-sidebar-group-id]')).find(
+    (candidate) => candidate.dataset.sidebarGroupId === groupId && candidate.dataset.dragging !== 'true'
   );
-  const headerElement = groupElement?.querySelector<HTMLElement>(".group-head");
+  const headerElement = groupElement?.querySelector<HTMLElement>('.group-head');
   const headerRect = headerElement?.getBoundingClientRect();
   if (!headerRect) {
     return undefined;
@@ -1243,8 +1159,8 @@ export function getProjectGroupDragHeaderMetrics(
 
 export function getProjectCollectionDragMetrics(
   source: unknown,
-  collectionId: string,
-): { left: number; top: number; width: number; } | undefined {
+  collectionId: string
+): { left: number; top: number; width: number } | undefined {
   /*
    * CDXC:CollectionDragPreview 2026-07-22:
    * The same collection can render once locally and once per remote machine
@@ -1253,14 +1169,13 @@ export function getProjectCollectionDragMetrics(
    * instead of the header rect so the ghost's own 1px panel border lands
    * exactly on the grabbed panel's border.
    */
-  const sourceElement =
-    isObjectRecord(source) && source.element instanceof HTMLElement ? source.element : undefined;
+  const sourceElement = isObjectRecord(source) && source.element instanceof HTMLElement ? source.element : undefined;
   const sectionElement =
     sourceElement?.dataset.sidebarProjectCollectionId === collectionId
       ? sourceElement
-      : Array.from(
-        document.querySelectorAll<HTMLElement>("[data-sidebar-project-collection-id]"),
-      ).find((candidate) => candidate.dataset.sidebarProjectCollectionId === collectionId);
+      : Array.from(document.querySelectorAll<HTMLElement>('[data-sidebar-project-collection-id]')).find(
+          (candidate) => candidate.dataset.sidebarProjectCollectionId === collectionId
+        );
   const sectionRect = sectionElement?.getBoundingClientRect();
   if (!sectionRect) {
     return undefined;
@@ -1275,12 +1190,12 @@ export function getProjectCollectionDragMetrics(
 
 export function getRemoteMachineDragHeaderMetrics(
   remoteMachineId: string,
-  point: { x: number; y: number; },
-): { left: number; pointerOffsetY: number; top: number; width: number; } | undefined {
+  point: { x: number; y: number }
+): { left: number; pointerOffsetY: number; top: number; width: number } | undefined {
   const section = document.querySelector<HTMLElement>(
-    `[data-sidebar-remote-machine-id="${CSS.escape(remoteMachineId)}"]`,
+    `[data-sidebar-remote-machine-id="${CSS.escape(remoteMachineId)}"]`
   );
-  const header = section?.querySelector<HTMLElement>(".reference-sidebar-section-row");
+  const header = section?.querySelector<HTMLElement>('.reference-sidebar-section-row');
   const bounds = header?.getBoundingClientRect();
   if (!bounds) {
     return undefined;
@@ -1294,14 +1209,14 @@ export function getRemoteMachineDragHeaderMetrics(
 }
 
 export function createSessionPointerDragState(
-  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: "session"; }>,
+  sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'session' }>,
   pointerDownSessionTarget: SidebarPointerDownSessionTarget | undefined,
-  nativeEvent: Event | undefined,
+  nativeEvent: Event | undefined
 ): SidebarSessionPointerDragState {
   const startPoint =
     pointerDownSessionTarget &&
-      pointerDownSessionTarget.groupId === sourceData.groupId &&
-      pointerDownSessionTarget.sessionId === sourceData.sessionId
+    pointerDownSessionTarget.groupId === sourceData.groupId &&
+    pointerDownSessionTarget.sessionId === sourceData.sessionId
       ? pointerDownSessionTarget.point
       : undefined;
 
@@ -1313,32 +1228,26 @@ export function createSessionPointerDragState(
 
 export function updateSessionPointerDragState(
   pointerDragState: SidebarSessionPointerDragState | undefined,
-  nativeEvent: Event | undefined,
+  nativeEvent: Event | undefined
 ): void {
   if (!pointerDragState || pointerDragState.didMove) {
     return;
   }
 
-  pointerDragState.didMove = hasPointerDragMovedPastThreshold(
-    pointerDragState.startPoint,
-    getClientPoint(nativeEvent),
-  );
+  pointerDragState.didMove = hasPointerDragMovedPastThreshold(pointerDragState.startPoint, getClientPoint(nativeEvent));
 }
 
 export function hasPointerDragMovedPastThreshold(
-  startPoint: { x: number; y: number; } | undefined,
-  currentPoint: { x: number; y: number; } | undefined,
+  startPoint: { x: number; y: number } | undefined,
+  currentPoint: { x: number; y: number } | undefined
 ): boolean {
   if (!startPoint || !currentPoint) {
     return false;
   }
 
-  return (
-    Math.hypot(currentPoint.x - startPoint.x, currentPoint.y - startPoint.y) >=
-    SIDEBAR_REORDER_DISTANCE_PX
-  );
+  return Math.hypot(currentPoint.x - startPoint.x, currentPoint.y - startPoint.y) >= SIDEBAR_REORDER_DISTANCE_PX;
 }
 
 export function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }

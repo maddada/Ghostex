@@ -1,4 +1,4 @@
-import type { SidebarSessionGroup } from "./session-grid-contract-sidebar";
+import type { SidebarSessionGroup } from './session-grid-contract-sidebar';
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
@@ -19,9 +19,9 @@ gxserver probe can be built against it.
 */
 
 /** Per-project override for how aggressively checkouts merge. */
-export type SidebarV2ProjectGroupingMode = "repository" | "repositoryPath" | "separate";
+export type SidebarV2ProjectGroupingMode = 'repository' | 'repositoryPath' | 'separate';
 
-export type SidebarV2SourceControlProvider = "bitbucket" | "github" | "gitlab";
+export type SidebarV2SourceControlProvider = 'bitbucket' | 'github' | 'gitlab';
 
 export type SidebarV2RepositoryIdentity = {
   /** Normalized remote URL, e.g. `github.com/acme/example`. */
@@ -50,29 +50,29 @@ export type SidebarV2ProjectGroupingSettings = {
 };
 
 export const DEFAULT_SIDEBAR_V2_PROJECT_GROUPING_SETTINGS: SidebarV2ProjectGroupingSettings = {
-  sidebarV2ProjectGroupingMode: "repository",
+  sidebarV2ProjectGroupingMode: 'repository',
   sidebarV2ProjectGroupingOverrides: {},
 };
 
-export const SIDEBAR_V2_LOCAL_MACHINE_ID = "local";
+export const SIDEBAR_V2_LOCAL_MACHINE_ID = 'local';
 
 function isWindowsDrivePath(value: string): boolean {
   return /^[a-zA-Z]:([/\\]|$)/.test(value);
 }
 
 function isUncPath(value: string): boolean {
-  return value.startsWith("\\\\");
+  return value.startsWith('\\\\');
 }
 
 function isRootPath(value: string): boolean {
-  return value === "/" || value === "\\" || /^[a-zA-Z]:[/\\]?$/.test(value);
+  return value === '/' || value === '\\' || /^[a-zA-Z]:[/\\]?$/.test(value);
 }
 
 function trimTrailingPathSeparators(value: string): string {
   if (value.length === 0 || isRootPath(value)) {
     return value;
   }
-  const trimmed = value.startsWith("/") ? value.replace(/\/+$/g, "") : value.replace(/[\\/]+$/g, "");
+  const trimmed = value.startsWith('/') ? value.replace(/\/+$/g, '') : value.replace(/[\\/]+$/g, '');
   if (trimmed.length === 0) {
     return value;
   }
@@ -84,7 +84,7 @@ function trimTrailingPathSeparators(value: string): string {
 export function normalizeProjectPathForComparison(value: string): string {
   const normalized = trimTrailingPathSeparators(value.trim());
   if (isWindowsDrivePath(normalized) || isUncPath(normalized)) {
-    return normalized.replaceAll("/", "\\").toLowerCase();
+    return normalized.replaceAll('/', '\\').toLowerCase();
   }
   return normalized;
 }
@@ -97,18 +97,18 @@ export function normalizeProjectPathForComparison(value: string): string {
 export function normalizeGitRemoteUrl(value: string): string {
   const normalized = value
     .trim()
-    .replace(/\/+$/g, "")
-    .replace(/\.git$/i, "")
+    .replace(/\/+$/g, '')
+    .replace(/\.git$/i, '')
     .toLowerCase();
 
   if (/^(?:ssh|https?|git):\/\//i.test(normalized)) {
     try {
       const url = new URL(normalized);
       const repositoryPath = url.pathname
-        .split("/")
+        .split('/')
         .filter((segment) => segment.length > 0)
-        .join("/");
-      if (url.hostname && repositoryPath.includes("/")) {
+        .join('/');
+      if (url.hostname && repositoryPath.includes('/')) {
         return `${url.hostname}/${repositoryPath}`;
       }
     } catch {
@@ -126,15 +126,15 @@ export function normalizeGitRemoteUrl(value: string): string {
 }
 
 function detectSourceControlProvider(canonicalKey: string): SidebarV2SourceControlProvider | undefined {
-  const host = canonicalKey.split("/")[0] ?? "";
-  if (host.includes("github")) {
-    return "github";
+  const host = canonicalKey.split('/')[0] ?? '';
+  if (host.includes('github')) {
+    return 'github';
   }
-  if (host.includes("gitlab")) {
-    return "gitlab";
+  if (host.includes('gitlab')) {
+    return 'gitlab';
   }
-  if (host.includes("bitbucket")) {
-    return "bitbucket";
+  if (host.includes('bitbucket')) {
+    return 'bitbucket';
   }
   return undefined;
 }
@@ -157,8 +157,8 @@ export function deriveSidebarV2RepositoryIdentity(input: {
     return null;
   }
 
-  const repositoryPath = canonicalKey.split("/").slice(1).join("/");
-  const segments = repositoryPath.split("/").filter((segment) => segment.length > 0);
+  const repositoryPath = canonicalKey.split('/').slice(1).join('/');
+  const segments = repositoryPath.split('/').filter((segment) => segment.length > 0);
   const provider = detectSourceControlProvider(canonicalKey);
   const owner = segments[0];
   const name = segments.at(-1);
@@ -175,31 +175,28 @@ export function deriveSidebarV2RepositoryIdentity(input: {
 
 /** Identity of one physical checkout: machine + path. Never merges. */
 export function deriveSidebarV2PhysicalProjectKey(
-  project: Pick<SidebarV2Project, "machineId" | "path" | "projectId">,
+  project: Pick<SidebarV2Project, 'machineId' | 'path' | 'projectId'>
 ): string {
   const machineId = project.machineId?.trim() || SIDEBAR_V2_LOCAL_MACHINE_ID;
   const path = project.path?.trim();
-  return path
-    ? `${machineId}:${normalizeProjectPathForComparison(path)}`
-    : `${machineId}:#${project.projectId}`;
+  return path ? `${machineId}:${normalizeProjectPathForComparison(path)}` : `${machineId}:#${project.projectId}`;
 }
 
 /** Grouping overrides are keyed by the physical checkout, so overriding one
     machine's copy never silently rewrites another machine's. */
 export function deriveSidebarV2ProjectGroupingOverrideKey(
-  project: Pick<SidebarV2Project, "machineId" | "path" | "projectId">,
+  project: Pick<SidebarV2Project, 'machineId' | 'path' | 'projectId'>
 ): string {
   return deriveSidebarV2PhysicalProjectKey(project);
 }
 
 export function resolveSidebarV2ProjectGroupingMode(
-  project: Pick<SidebarV2Project, "machineId" | "path" | "projectId">,
-  settings: SidebarV2ProjectGroupingSettings,
+  project: Pick<SidebarV2Project, 'machineId' | 'path' | 'projectId'>,
+  settings: SidebarV2ProjectGroupingSettings
 ): SidebarV2ProjectGroupingMode {
   return (
-    settings.sidebarV2ProjectGroupingOverrides?.[
-      deriveSidebarV2ProjectGroupingOverrideKey(project)
-    ] ?? settings.sidebarV2ProjectGroupingMode
+    settings.sidebarV2ProjectGroupingOverrides?.[deriveSidebarV2ProjectGroupingOverrideKey(project)] ??
+    settings.sidebarV2ProjectGroupingMode
   );
 }
 
@@ -218,26 +215,26 @@ function deriveRepositoryRelativePath(project: SidebarV2Project): string | null 
     return null;
   }
   if (normalizedRootPath === normalizedProjectPath) {
-    return "";
+    return '';
   }
 
-  const separator = normalizedRootPath.includes("\\") ? "\\" : "/";
+  const separator = normalizedRootPath.includes('\\') ? '\\' : '/';
   const rootPrefix = `${normalizedRootPath}${separator}`;
   if (!normalizedProjectPath.startsWith(rootPrefix)) {
     return null;
   }
-  return normalizedProjectPath.slice(rootPrefix.length).replaceAll("\\", "/");
+  return normalizedProjectPath.slice(rootPrefix.length).replaceAll('\\', '/');
 }
 
 function deriveRepositoryScopedKey(
   project: SidebarV2Project,
-  groupingMode: SidebarV2ProjectGroupingMode,
+  groupingMode: SidebarV2ProjectGroupingMode
 ): string | null {
   const canonicalKey = project.repository?.canonicalKey?.trim();
   if (!canonicalKey) {
     return null;
   }
-  if (groupingMode === "repository") {
+  if (groupingMode === 'repository') {
     return canonicalKey;
   }
 
@@ -256,10 +253,10 @@ function deriveRepositoryScopedKey(
  */
 export function deriveSidebarV2LogicalProjectKey(
   project: SidebarV2Project,
-  options: { groupingMode?: SidebarV2ProjectGroupingMode } = {},
+  options: { groupingMode?: SidebarV2ProjectGroupingMode } = {}
 ): string {
-  const groupingMode = options.groupingMode ?? "repository";
-  if (groupingMode === "separate") {
+  const groupingMode = options.groupingMode ?? 'repository';
+  if (groupingMode === 'separate') {
     return deriveSidebarV2PhysicalProjectKey(project);
   }
   return deriveRepositoryScopedKey(project, groupingMode) ?? deriveSidebarV2PhysicalProjectKey(project);
@@ -267,7 +264,7 @@ export function deriveSidebarV2LogicalProjectKey(
 
 export function deriveSidebarV2LogicalProjectKeyFromSettings(
   project: SidebarV2Project,
-  settings: SidebarV2ProjectGroupingSettings,
+  settings: SidebarV2ProjectGroupingSettings
 ): string {
   return deriveSidebarV2LogicalProjectKey(project, {
     groupingMode: resolveSidebarV2ProjectGroupingMode(project, settings),
@@ -294,9 +291,7 @@ export function deriveSidebarV2ProjectGroupLabel(input: {
   members: readonly SidebarV2Project[];
   representative: SidebarV2Project;
 }): string {
-  const sharedDisplayNames = uniqueNonEmptyValues(
-    input.members.map((member) => member.repository?.displayName),
-  );
+  const sharedDisplayNames = uniqueNonEmptyValues(input.members.map((member) => member.repository?.displayName));
   if (sharedDisplayNames.length === 1) {
     return sharedDisplayNames[0]!;
   }
@@ -307,7 +302,7 @@ export function deriveSidebarV2ProjectGroupLabel(input: {
   return input.representative.title;
 }
 
-export type SidebarV2MachinePresence = "local-only" | "mixed" | "remote-only";
+export type SidebarV2MachinePresence = 'local-only' | 'mixed' | 'remote-only';
 
 export type SidebarV2LogicalProjectGroup = {
   displayName: string;
@@ -358,20 +353,16 @@ export function groupSidebarV2ProjectsByLogicalKey(input: {
     return [
       {
         displayName:
-          members.length > 1
-            ? deriveSidebarV2ProjectGroupLabel({ members, representative })
-            : representative.title,
+          members.length > 1 ? deriveSidebarV2ProjectGroupLabel({ members, representative }) : representative.title,
         machinePresence:
           hasLocal && remoteMembers.length > 0
-            ? ("mixed" as const)
+            ? ('mixed' as const)
             : remoteMembers.length > 0
-              ? ("remote-only" as const)
-              : ("local-only" as const),
+              ? ('remote-only' as const)
+              : ('local-only' as const),
         members,
         projectKey,
-        remoteMachineNames: uniqueNonEmptyValues(
-          remoteMembers.map((member) => member.machineName),
-        ),
+        remoteMachineNames: uniqueNonEmptyValues(remoteMembers.map((member) => member.machineName)),
         representative,
       },
     ];
@@ -400,8 +391,8 @@ export function groupSidebarV2ProjectsByLogicalKey(input: {
  * the shared root, which is exactly what that mode promises.
  */
 export function toSidebarV2Project(
-  group: Pick<SidebarSessionGroup, "groupId" | "projectContext" | "remoteMachineContext" | "title">,
-  repository?: SidebarV2RepositoryIdentity | null,
+  group: Pick<SidebarSessionGroup, 'groupId' | 'projectContext' | 'remoteMachineContext' | 'title'>,
+  repository?: SidebarV2RepositoryIdentity | null
 ): SidebarV2Project {
   const resolvedRepository =
     repository === undefined
@@ -431,10 +422,10 @@ export function toSidebarV2Project(
  * quietly change what "no override" means for every project at once.
  */
 export function createSidebarV2ProjectGroupingSettings(
-  overrides: Readonly<Record<string, SidebarV2ProjectGroupingMode>> | undefined,
+  overrides: Readonly<Record<string, SidebarV2ProjectGroupingMode>> | undefined
 ): SidebarV2ProjectGroupingSettings {
   return {
-    sidebarV2ProjectGroupingMode: "repository",
+    sidebarV2ProjectGroupingMode: 'repository',
     sidebarV2ProjectGroupingOverrides: overrides ?? {},
   };
 }

@@ -259,7 +259,9 @@ pub(crate) fn project_board_bridge_response_for_request_payload(
     })
 }
 
-pub(crate) fn project_beads_gxserver_action_for_board_action(action: &str) -> Result<&'static str, String> {
+pub(crate) fn project_beads_gxserver_action_for_board_action(
+    action: &str,
+) -> Result<&'static str, String> {
     match action {
         "addComment" => Ok("comment"),
         "addLabel" => Ok("addLabel"),
@@ -324,4 +326,3 @@ pub(crate) fn project_beads_gxserver_error_message(body: &str, status_code: Opti
         None => "gxserver Beads request failed.".to_string(),
     }
 }
-

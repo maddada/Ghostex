@@ -2,8 +2,8 @@
  * Compact devtools-style form primitives shared by every control-panel section.
  * Plain CSS only (see controls.css) — the sandbox is outside the Tailwind scan.
  */
-import type { ReactNode } from "react";
-import { usePersistedState } from "./controls-storage";
+import type { ReactNode } from 'react';
+import { usePersistedState } from './controls-storage';
 
 export function Section({
   id,
@@ -20,13 +20,13 @@ export function Section({
 }) {
   const [open, setOpen] = usePersistedState(`section.${id}`, defaultOpen);
   return (
-    <section className={open ? "cp-section is-open" : "cp-section"}>
-      <button className="cp-section-head" onClick={() => setOpen(!open)} type="button">
-        <span className="cp-caret">{open ? "▾" : "▸"}</span>
-        <span className="cp-section-title">{title}</span>
-        {badge === undefined ? null : <span className="cp-section-badge">{badge}</span>}
+    <section className={open ? 'cp-section is-open' : 'cp-section'}>
+      <button className='cp-section-head' onClick={() => setOpen(!open)} type='button'>
+        <span className='cp-caret'>{open ? '▾' : '▸'}</span>
+        <span className='cp-section-title'>{title}</span>
+        {badge === undefined ? null : <span className='cp-section-badge'>{badge}</span>}
       </button>
-      {open ? <div className="cp-section-body">{children}</div> : null}
+      {open ? <div className='cp-section-body'>{children}</div> : null}
     </section>
   );
 }
@@ -44,12 +44,12 @@ export function SubGroup({
 }) {
   const [open, setOpen] = usePersistedState(`subgroup.${id}`, defaultOpen);
   return (
-    <div className={open ? "cp-subgroup is-open" : "cp-subgroup"}>
-      <button className="cp-subgroup-head" onClick={() => setOpen(!open)} type="button">
-        <span className="cp-caret">{open ? "▾" : "▸"}</span>
+    <div className={open ? 'cp-subgroup is-open' : 'cp-subgroup'}>
+      <button className='cp-subgroup-head' onClick={() => setOpen(!open)} type='button'>
+        <span className='cp-caret'>{open ? '▾' : '▸'}</span>
         {title}
       </button>
-      {open ? <div className="cp-subgroup-body">{children}</div> : null}
+      {open ? <div className='cp-subgroup-body'>{children}</div> : null}
     </div>
   );
 }
@@ -66,12 +66,12 @@ export function Row({
   children: ReactNode;
 }) {
   return (
-    <div className={changed ? "cp-row is-changed" : "cp-row"}>
-      <div className="cp-row-label">
+    <div className={changed ? 'cp-row is-changed' : 'cp-row'}>
+      <div className='cp-row-label'>
         <span>{label}</span>
-        {hint === undefined ? null : <span className="cp-row-hint">{hint}</span>}
+        {hint === undefined ? null : <span className='cp-row-hint'>{hint}</span>}
       </div>
-      <div className="cp-row-control">{children}</div>
+      <div className='cp-row-control'>{children}</div>
     </div>
   );
 }
@@ -88,8 +88,8 @@ export function Toggle({
   title?: string;
 }) {
   return (
-    <label className="cp-toggle" title={title}>
-      <input checked={checked} onChange={(e) => onChange(e.target.checked)} type="checkbox" />
+    <label className='cp-toggle' title={title}>
+      <input checked={checked} onChange={(e) => onChange(e.target.checked)} type='checkbox' />
       {label === undefined ? null : <span>{label}</span>}
     </label>
   );
@@ -107,12 +107,7 @@ export function SelectField<T extends string>({
   title?: string;
 }) {
   return (
-    <select
-      className="cp-select"
-      onChange={(e) => onChange(e.target.value as T)}
-      title={title}
-      value={value}
-    >
+    <select className='cp-select' onChange={(e) => onChange(e.target.value as T)} title={title} value={value}>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
@@ -135,8 +130,8 @@ export function Stepper({
 }) {
   const clamp = (next: number) => Math.min(max, Math.max(min, next));
   return (
-    <div className="cp-stepper">
-      <button onClick={() => onChange(clamp(value - 1))} type="button">
+    <div className='cp-stepper'>
+      <button onClick={() => onChange(clamp(value - 1))} type='button'>
         −
       </button>
       <input
@@ -144,10 +139,10 @@ export function Stepper({
           const parsed = Number.parseInt(e.target.value, 10);
           onChange(Number.isFinite(parsed) ? clamp(parsed) : min);
         }}
-        type="number"
+        type='number'
         value={value}
       />
-      <button onClick={() => onChange(clamp(value + 1))} type="button">
+      <button onClick={() => onChange(clamp(value + 1))} type='button'>
         +
       </button>
     </div>
@@ -166,16 +161,16 @@ export function MsSlider({
   step?: number;
 }) {
   return (
-    <div className="cp-slider">
+    <div className='cp-slider'>
       <input
         max={max}
         min={0}
         onChange={(e) => onChange(Number(e.target.value))}
         step={step}
-        type="range"
+        type='range'
         value={value}
       />
-      <span className="cp-slider-value">{value}ms</span>
+      <span className='cp-slider-value'>{value}ms</span>
     </div>
   );
 }
@@ -185,29 +180,29 @@ export function Btn({
   children,
   disabled,
   title,
-  tone = "default",
+  tone = 'default',
   wide,
 }: {
   onClick: () => void;
   children: ReactNode;
   disabled?: boolean;
   title?: string;
-  tone?: "default" | "primary" | "danger" | "ghost";
+  tone?: 'default' | 'primary' | 'danger' | 'ghost';
   wide?: boolean;
 }) {
   return (
     <button
-      className={`cp-btn cp-btn--${tone}${wide === true ? " cp-btn--wide" : ""}`}
+      className={`cp-btn cp-btn--${tone}${wide === true ? ' cp-btn--wide' : ''}`}
       disabled={disabled}
       onClick={onClick}
       title={title}
-      type="button"
+      type='button'
     >
       {children}
     </button>
   );
 }
 
-export function Note({ tone = "info", children }: { tone?: "info" | "warning"; children: ReactNode }) {
+export function Note({ tone = 'info', children }: { tone?: 'info' | 'warning'; children: ReactNode }) {
   return <p className={`cp-note cp-note--${tone}`}>{children}</p>;
 }

@@ -5,30 +5,31 @@ slice covers the typed-operation dispatchers for Git/worktree/GitHub/Beads
 actions, pull request creation, and the shared Git toast helper. See
 `index.ts` for how the runtime's Git methods are recombined.
 */
-import { GPUI_MUTATING_GIT_ACTIONS } from "../constants";
-import type { GpuiSidebarRuntime } from "../core";
-import { createGpuiGitToastId, gpuiUserVisibleGitErrorMessage } from "../helpers/git";
+import { GPUI_MUTATING_GIT_ACTIONS } from '../constants';
+import type { GpuiSidebarRuntime } from '../core';
+import { createGpuiGitToastId, gpuiUserVisibleGitErrorMessage } from '../helpers/git';
 import type {
   GpuiRemoteCreatePullRequestResult,
   GpuiRemoteProjectReference,
   GpuiRemoteProjectScope,
-} from "../types-and-protocol";
-import { postAppModalHostMessage } from "@/packages/core-ui/app-modal-host-bridge";
-import type { AppToastLevel } from "@/packages/shared/app-toast-contract";
-import { createAppToastRequest } from "@/packages/shared/app-toast-contract";
+} from '../types-and-protocol';
+import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
+import { createAppToastRequest } from '@/packages/shared/app-toast-contract';
 import type {
   GxserverCreatePullRequestResult,
   GxserverProjectDomainState,
   GxserverTypedOperationResult,
-} from "@/packages/shared/gxserver-protocol";
+} from '@/packages/shared/gxserver-protocol';
 
 export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
-  async runGitAction(this: GpuiSidebarRuntime,
+  async runGitAction(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<GxserverTypedOperationResult> {
     if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+      throw new Error('gxserver is unavailable.');
     }
     /*
     CDXC:SidebarGitMemo 2026-07-29:
@@ -37,9 +38,9 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
     that project republish the pre-mutation state. Deleting before the RPC also
     covers a write that fails halfway.
     */
-    if (GPUI_MUTATING_GIT_ACTIONS.has(String(params.action ?? ""))) {
+    if (GPUI_MUTATING_GIT_ACTIONS.has(String(params.action ?? ''))) {
       this.gitStateMemoByProjectId.delete(project.projectId);
-      const result = await this.client.rpc<GxserverTypedOperationResult>("/api/runGitAction", {
+      const result = await this.client.rpc<GxserverTypedOperationResult>('/api/runGitAction', {
         ...params,
         projectId: project.projectId,
       });
@@ -53,24 +54,21 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
       void this.refreshProjectDiffStats(project);
       return result;
     }
-    return this.client.rpc<GxserverTypedOperationResult>("/api/runGitAction", {
+    return this.client.rpc<GxserverTypedOperationResult>('/api/runGitAction', {
       ...params,
       projectId: project.projectId,
     });
   },
 
-  async runRemoteGitAction(this: GpuiSidebarRuntime,
+  async runRemoteGitAction(
+    this: GpuiSidebarRuntime,
     remoteScope: GpuiRemoteProjectReference,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<GxserverTypedOperationResult> {
-    return this.requestRemoteGxserver<GxserverTypedOperationResult>(
-      remoteScope.machineId,
-      "/api/runGitAction",
-      {
-        ...params,
-        projectId: remoteScope.projectId,
-      },
-    );
+    return this.requestRemoteGxserver<GxserverTypedOperationResult>(remoteScope.machineId, '/api/runGitAction', {
+      ...params,
+      projectId: remoteScope.projectId,
+    });
   },
 
   /*
@@ -81,51 +79,51 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
   operation refuse to act on itself. `createProjectWorktree` already sends the
   parent for the same reason.
   */
-  async runWorktreeAction(this: GpuiSidebarRuntime,
+  async runWorktreeAction(
+    this: GpuiSidebarRuntime,
     parentProject: GxserverProjectDomainState,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<GxserverTypedOperationResult> {
     if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+      throw new Error('gxserver is unavailable.');
     }
-    return this.client.rpc<GxserverTypedOperationResult>("/api/runWorktreeAction", {
+    return this.client.rpc<GxserverTypedOperationResult>('/api/runWorktreeAction', {
       ...params,
       projectId: parentProject.projectId,
     });
   },
 
-  async runGitHubAction(this: GpuiSidebarRuntime,
+  async runGitHubAction(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<GxserverTypedOperationResult> {
     if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+      throw new Error('gxserver is unavailable.');
     }
-    return this.client.rpc<GxserverTypedOperationResult>("/api/runGitHubAction", {
+    return this.client.rpc<GxserverTypedOperationResult>('/api/runGitHubAction', {
       ...params,
       projectId: project.projectId,
     });
   },
 
-  async runRemoteGitHubAction(this: GpuiSidebarRuntime,
+  async runRemoteGitHubAction(
+    this: GpuiSidebarRuntime,
     remoteScope: GpuiRemoteProjectReference,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<GxserverTypedOperationResult> {
-    return this.requestRemoteGxserver<GxserverTypedOperationResult>(
-      remoteScope.machineId,
-      "/api/runGitHubAction",
-      {
-        ...params,
-        projectId: remoteScope.projectId,
-      },
-    );
+    return this.requestRemoteGxserver<GxserverTypedOperationResult>(remoteScope.machineId, '/api/runGitHubAction', {
+      ...params,
+      projectId: remoteScope.projectId,
+    });
   },
 
-  async createPullRequest(this: GpuiSidebarRuntime,
-    project: GxserverProjectDomainState,
+  async createPullRequest(
+    this: GpuiSidebarRuntime,
+    project: GxserverProjectDomainState
   ): Promise<GxserverCreatePullRequestResult> {
     if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+      throw new Error('gxserver is unavailable.');
     }
     /*
     CDXC:GPUISidebarGit 2026-06-24-16:28:
@@ -141,84 +139,87 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
     */
     this.gitHubStateMemoByProjectId.delete(project.projectId);
     this.gitStateMemoByProjectId.delete(project.projectId);
-    return this.client.rpc<GxserverCreatePullRequestResult>("/api/createPullRequest", {
+    return this.client.rpc<GxserverCreatePullRequestResult>('/api/createPullRequest', {
       projectId: project.projectId,
     });
   },
 
-  async createRemotePullRequest(this: GpuiSidebarRuntime,
-    remoteScope: GpuiRemoteProjectReference,
+  async createRemotePullRequest(
+    this: GpuiSidebarRuntime,
+    remoteScope: GpuiRemoteProjectReference
   ): Promise<GpuiRemoteCreatePullRequestResult> {
     return this.requestRemoteGxserver<GpuiRemoteCreatePullRequestResult>(
       remoteScope.machineId,
-      "/api/createPullRequest",
+      '/api/createPullRequest',
       {
         projectId: remoteScope.projectId,
       },
-      { timeoutMs: 45_000 },
+      { timeoutMs: 45_000 }
     );
   },
 
-  async runBeadsAction(this: GpuiSidebarRuntime,
+  async runBeadsAction(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<GxserverTypedOperationResult> {
     if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+      throw new Error('gxserver is unavailable.');
     }
-    return this.client.rpc<GxserverTypedOperationResult>("/api/runBeadsAction", {
+    return this.client.rpc<GxserverTypedOperationResult>('/api/runBeadsAction', {
       ...params,
       projectId: project.projectId,
     });
   },
 
-  async runRemoteBeadsAction(this: GpuiSidebarRuntime,
+  async runRemoteBeadsAction(
+    this: GpuiSidebarRuntime,
     remoteScope: GpuiRemoteProjectReference,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<GxserverTypedOperationResult> {
     return this.requestRemoteGxserver<GxserverTypedOperationResult>(
       remoteScope.machineId,
-      "/api/runBeadsAction",
+      '/api/runBeadsAction',
       {
         ...params,
         projectId: remoteScope.projectId,
       },
-      { timeoutMs: 60_000 },
+      { timeoutMs: 60_000 }
     );
   },
 
-  async runRemoteGitMutation(this: GpuiSidebarRuntime,
+  async runRemoteGitMutation(
+    this: GpuiSidebarRuntime,
     remoteScope: GpuiRemoteProjectScope,
     startedTitle: string,
     finishedTitle: string,
-    operation: () => Promise<void>,
+    operation: () => Promise<void>
   ): Promise<boolean> {
     const toastId = createGpuiGitToastId();
-    this.postGitToast("info", startedTitle, { persistent: true, toastId });
+    this.postGitToast('info', startedTitle, { persistent: true, toastId });
     try {
       await operation();
-      await this.refreshRemotePresentationFromGxserver(remoteScope.machineId).catch(
-        () => undefined,
-      );
-      this.postGitToast("success", finishedTitle, { toastId });
+      await this.refreshRemotePresentationFromGxserver(remoteScope.machineId).catch(() => undefined);
+      this.postGitToast('success', finishedTitle, { toastId });
       return true;
     } catch (error) {
-      this.postGitToast("error", `${startedTitle} failed`, {
-        description: gpuiUserVisibleGitErrorMessage(error, "Remote gxserver Git operation failed."),
+      this.postGitToast('error', `${startedTitle} failed`, {
+        description: gpuiUserVisibleGitErrorMessage(error, 'Remote gxserver Git operation failed.'),
         toastId,
       });
       return false;
     }
   },
 
-  postGitToast(this: GpuiSidebarRuntime,
+  postGitToast(
+    this: GpuiSidebarRuntime,
     level: AppToastLevel,
     title: string,
     options: {
       description?: string;
       persistent?: boolean;
       toastId?: string;
-    } = {},
+    } = {}
   ): void {
     try {
       postAppModalHostMessage(
@@ -226,7 +227,7 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
           persistent: options.persistent,
           toastId: options.toastId,
         }),
-        "AppModals:gpuiGitToast",
+        'AppModals:gpuiGitToast'
       );
     } catch {
       /*

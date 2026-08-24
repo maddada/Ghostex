@@ -303,7 +303,10 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "windows")]
-    pub(crate) fn render_windows_first_run_setup(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_windows_first_run_setup(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         let state = self.windows_first_run_setup_state.clone();
         let (title, description, detail, progress) = match &state {
             GpuiWindowsFirstRunSetupState::Checking => (
@@ -490,5 +493,4 @@ impl GhostexGpuiApp {
             .child(content)
             .into_any_element()
     }
-
 }

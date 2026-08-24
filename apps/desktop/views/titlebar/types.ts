@@ -1,31 +1,31 @@
-import type { SidebarProjectDiffStats } from "@/packages/shared/project-diff-stats";
-import type { SidebarCommandButton } from "@/packages/shared/sidebar-commands";
+import type { SidebarProjectDiffStats } from '@/packages/shared/project-diff-stats';
+import type { SidebarCommandButton } from '@/packages/shared/sidebar-commands';
 import type {
   SidebarAgentHookStatusMessage,
   SidebarGhostexCliStatusMessage,
   SidebarPortlessState,
-} from "@/packages/shared/session-grid-contract-sidebar";
-import type { NativePortlessAdminInstallAction } from "@/packages/shared/native-ghostty-host-protocol";
-import type { SidebarTheme } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/session-grid-contract-sidebar';
+import type { NativePortlessAdminInstallAction } from '@/packages/shared/native-ghostty-host-protocol';
+import type { SidebarTheme } from '@/packages/shared/session-grid-contract';
 import type {
   DiagnosticLoggingSettings,
   KeepAwakeDurationMinutes,
   SidebarSide,
   SessionPersistenceProvider,
   WebLinkOpenTarget,
-} from "@/packages/shared/ghostex-settings";
-import type { ghostexHotkeySettings } from "@/packages/shared/ghostex-hotkeys";
+} from '@/packages/shared/ghostex-settings';
+import type { ghostexHotkeySettings } from '@/packages/shared/ghostex-hotkeys';
 import type {
   CustomWorkspaceOpenTarget,
   WorkspaceIdeTargetApp,
   WorkspaceOpenTargetAvailability,
   WorkspaceOpenTargetDefinition,
-} from "@/packages/shared/workspace-open-targets";
-import type { SidebarGitAction, SidebarGitState } from "@/packages/shared/sidebar-git";
+} from '@/packages/shared/workspace-open-targets';
+import type { SidebarGitAction, SidebarGitState } from '@/packages/shared/sidebar-git';
 
-export type ProjectEditorLoadStatus = "idle" | "opening" | "running" | "error";
-export type TitlebarMode = "agents" | "code" | "git" | "automate" | "tasks" | "manage";
-export type TitlebarDropdownPanelKind = "resources" | "tips";
+export type ProjectEditorLoadStatus = 'idle' | 'opening' | 'running' | 'error';
+export type TitlebarMode = 'agents' | 'code' | 'git' | 'automate' | 'tasks' | 'manage';
+export type TitlebarDropdownPanelKind = 'resources' | 'tips';
 export type TitlebarDropdownPanelSize = {
   height: number;
   width: number;
@@ -36,10 +36,10 @@ export type NativeProcessResult = {
   requestId: string;
   stderr: string;
   stdout: string;
-  type: "processResult";
+  type: 'processResult';
 };
 
-export type NativeHostEvent = NativeProcessResult | { protocolVersion: 1; type: "hostReady" };
+export type NativeHostEvent = NativeProcessResult | { protocolVersion: 1; type: 'hostReady' };
 
 export type TitlebarOpenTargetsSettings = {
   availability: WorkspaceOpenTargetAvailability;
@@ -79,7 +79,7 @@ export type TitlebarResourceGroup = {
 };
 
 export type TitlebarResourceSession = {
-  activity: "attention" | "idle" | "working";
+  activity: 'attention' | 'idle' | 'working';
   agentIcon?: string;
   delayedSendDeadlineAt?: string;
   delayedSendRemainingLabel?: string;
@@ -88,25 +88,18 @@ export type TitlebarResourceSession = {
   isRunning: boolean;
   isSleeping?: boolean;
   lastInteractionAt?: string;
-  nativePaneState?: "mounted" | "mounting" | "unmounted";
-  providerSessionState?: "exists" | "missing" | "persistence-disabled" | "unknown";
+  nativePaneState?: 'mounted' | 'mounting' | 'unmounted';
+  providerSessionState?: 'exists' | 'missing' | 'persistence-disabled' | 'unknown';
   projectId?: string;
   sessionId: string;
-  sessionKind?: "browser" | "terminal";
+  sessionKind?: 'browser' | 'terminal';
   sessionPersistenceName?: string;
   sessionPersistenceProvider?: SessionPersistenceProvider;
   terminalTitle?: string;
   title: string;
 };
 
-export type TitlebarTipIcon =
-  | "browser"
-  | "command"
-  | "moon"
-  | "resources"
-  | "search"
-  | "sidebar"
-  | "warning";
+export type TitlebarTipIcon = 'browser' | 'command' | 'moon' | 'resources' | 'search' | 'sidebar' | 'warning';
 
 export type TitlebarTip = {
   action?: TitlebarTipAction;
@@ -119,19 +112,19 @@ export type TitlebarTip = {
 export type TitlebarTipAction =
   | {
       settingsSearchQuery: string;
-      type: "openSettings";
+      type: 'openSettings';
     }
   | {
-      type: "openBrowserPane";
+      type: 'openBrowserPane';
       url: string;
     };
 
 export type TitlebarNotice = {
-  action?: "openSettings";
+  action?: 'openSettings';
   body: string;
   icon: TitlebarTipIcon;
   id: string;
-  settingsTarget: "agentHooks" | "debuggingMode" | "ghostexCli" | "sessionPersistence";
+  settingsTarget: 'agentHooks' | 'debuggingMode' | 'ghostexCli' | 'sessionPersistence';
   title: string;
 };
 
@@ -139,7 +132,7 @@ export type TitlebarBrowserTabResource = {
   browserId: number;
   id: string;
   isActive?: boolean;
-  kind: "browser" | "code" | "git" | "tasks" | "manage" | string;
+  kind: 'browser' | 'code' | 'git' | 'tasks' | 'manage' | string;
   projectId?: string;
   sessionId?: string;
   title: string;
@@ -233,7 +226,7 @@ export type ResourceListeningServer = {
 export type ResourcePortlessServerPresentation = {
   hostname: string;
   isSetupActive: boolean;
-  protocol: SidebarPortlessState["health"]["protocol"];
+  protocol: SidebarPortlessState['health']['protocol'];
   setupAction?: NativePortlessAdminInstallAction;
   setupActionLabel: string;
   setupStatusLabel: string;
@@ -252,7 +245,7 @@ export type ResourceProcessBundle = {
   browserTab?: TitlebarBrowserTabResource;
   server?: ResourceListeningServer;
   session?: TitlebarResourceSession;
-  type: "browser" | "code" | "orphan" | "server" | "session";
+  type: 'browser' | 'code' | 'orphan' | 'server' | 'session';
 };
 
 export type ResourceProcessTotals = {
@@ -267,84 +260,84 @@ export type ResourceGroupView = {
 };
 
 export type NativeTitlebarCommand =
-  | { details?: string; event: string; force?: boolean; type: "appendModeSwitcherDebugLog" }
-  | { details?: string; event: string; type: "appendNativeChromeResponsivenessDebugLog" }
-  | { details?: string; event: string; force?: boolean; type: "appendSessionTitleDebugLog" }
-  | { details?: string; event: string; force?: boolean; type: "appendTerminalFocusDebugLog" }
+  | { details?: string; event: string; force?: boolean; type: 'appendModeSwitcherDebugLog' }
+  | { details?: string; event: string; type: 'appendNativeChromeResponsivenessDebugLog' }
+  | { details?: string; event: string; force?: boolean; type: 'appendSessionTitleDebugLog' }
+  | { details?: string; event: string; force?: boolean; type: 'appendTerminalFocusDebugLog' }
   | {
       args: string[];
       cwd?: string;
       env?: Record<string, string>;
       executable: string;
       requestId: string;
-      type: "runProcess";
+      type: 'runProcess';
     }
   | {
       enabled: boolean;
       installIfNeeded?: boolean;
       requestId: string;
-      type: "setKeepAwakeLidSleepPrevention";
+      type: 'setKeepAwakeLidSleepPrevention';
     }
   | {
       runtime?: KeepAwakeRuntimeState | null;
       suppressAutoStart: boolean;
-      type: "syncTitlebarKeepAwakeRuntime";
+      type: 'syncTitlebarKeepAwakeRuntime';
     }
-  | { type: "openActiveProjectEditorFromTitlebar" }
-  | { type: "toggleProjectEditorCompanionFromTitlebar" }
-  | { type: "exitFocusModeFromTitlebar" }
-  | { type: "bringPromptEditorToFrontFromTitlebar" }
-  | { type: "openAgentsModeFromTitlebar" }
-  | { type: "openGitHubProjectFromTitlebar" }
-  | { type: "openAutomateFromTitlebar" }
-  | { type: "openTasksPlaceholderFromTitlebar" }
-  | { type: "openManageFromTitlebar" }
-  | { type: "refreshWorkspaceOpenTargetAvailabilityFromTitlebar" }
-  | { type: "toggleCommandsPanelFromTitlebar" }
-  | { type: "togglePetOverlayFromTitlebar" }
-  | { type: "toggleSidebarCollapsed" }
-  | { type: "showUpdateDialogFromTitlebar" }
-  | { type: "startGxserverFromTitlebar" }
-  | { type: "stopGxserverFromTitlebar" }
-  | { type: "restartGxserverFromTitlebar" }
-  | { enabled: boolean; type: "setGxserverAlwaysStartFromTitlebar" }
-  | { sessionId: string; type: "focusResourceSessionFromTitlebar" }
-  | { sessionIds: string[]; type: "sleepInactiveSessionsFromTitlebar" }
-  | { projectIds: string[]; sessionIds: string[]; type: "quitResourcesFromTitlebar" }
-  | { commandId: string; type: "runSidebarCommandFromTitlebar" }
-  | { action: SidebarGitAction; type: "runSidebarGitActionFromTitlebar" }
-  | { type: "openExternalUrl"; url: string }
+  | { type: 'openActiveProjectEditorFromTitlebar' }
+  | { type: 'toggleProjectEditorCompanionFromTitlebar' }
+  | { type: 'exitFocusModeFromTitlebar' }
+  | { type: 'bringPromptEditorToFrontFromTitlebar' }
+  | { type: 'openAgentsModeFromTitlebar' }
+  | { type: 'openGitHubProjectFromTitlebar' }
+  | { type: 'openAutomateFromTitlebar' }
+  | { type: 'openTasksPlaceholderFromTitlebar' }
+  | { type: 'openManageFromTitlebar' }
+  | { type: 'refreshWorkspaceOpenTargetAvailabilityFromTitlebar' }
+  | { type: 'toggleCommandsPanelFromTitlebar' }
+  | { type: 'togglePetOverlayFromTitlebar' }
+  | { type: 'toggleSidebarCollapsed' }
+  | { type: 'showUpdateDialogFromTitlebar' }
+  | { type: 'startGxserverFromTitlebar' }
+  | { type: 'stopGxserverFromTitlebar' }
+  | { type: 'restartGxserverFromTitlebar' }
+  | { enabled: boolean; type: 'setGxserverAlwaysStartFromTitlebar' }
+  | { sessionId: string; type: 'focusResourceSessionFromTitlebar' }
+  | { sessionIds: string[]; type: 'sleepInactiveSessionsFromTitlebar' }
+  | { projectIds: string[]; sessionIds: string[]; type: 'quitResourcesFromTitlebar' }
+  | { commandId: string; type: 'runSidebarCommandFromTitlebar' }
+  | { action: SidebarGitAction; type: 'runSidebarGitActionFromTitlebar' }
+  | { type: 'openExternalUrl'; url: string }
   | {
       anchorRect: { height: number; width: number; x: number; y: number };
       kind: TitlebarDropdownPanelKind;
       preferredSize: TitlebarDropdownPanelSize;
-      type: "showTitlebarDropdownPanel";
+      type: 'showTitlebarDropdownPanel';
     }
-  | { type: "closeTitlebarDropdownPanel" }
-  | { type: "titlebarBlankMouseDown" }
-  | { kind: TitlebarDropdownPanelKind; type: "titlebarDropdownPanelReady" }
+  | { type: 'closeTitlebarDropdownPanel' }
+  | { type: 'titlebarBlankMouseDown' }
+  | { kind: TitlebarDropdownPanelKind; type: 'titlebarDropdownPanelReady' }
   | {
       height: number;
       kind: TitlebarDropdownPanelKind;
-      type: "resizeTitlebarDropdownPanel";
+      type: 'resizeTitlebarDropdownPanel';
       width: number;
     }
   | {
       targetApp: WorkspaceIdeTargetApp;
-      type: "openWorkspaceInIde";
+      type: 'openWorkspaceInIde';
       workspacePath: string;
     }
-  | { type: "openWorkspaceInFinder"; workspacePath: string }
+  | { type: 'openWorkspaceInFinder'; workspacePath: string }
   | {
       overlayOpen: boolean;
-      type: "setReactTitlebarStripState";
+      type: 'setReactTitlebarStripState';
     };
 
 export type ResolvedOpenTarget =
   | {
       definition: WorkspaceOpenTargetDefinition;
       id: string;
-      kind: "built-in";
+      kind: 'built-in';
       label: string;
       resolvedAppName?: string;
       resolvedCommand?: string;
@@ -353,7 +346,7 @@ export type ResolvedOpenTarget =
       command: string;
       custom: CustomWorkspaceOpenTarget;
       id: string;
-      kind: "custom";
+      kind: 'custom';
       label: string;
       resolvedCommand?: string;
     };
@@ -412,7 +405,7 @@ export type KeepAwakeRuntimeState = {
   durationMinutes: KeepAwakeDurationMinutes;
   fireAtMs?: number;
   pid: number;
-  source: "automatic" | "manual";
+  source: 'automatic' | 'manual';
   startedAtMs: number;
 };
 
@@ -422,8 +415,7 @@ export type KeepAwakeRuntimeSyncState = {
 };
 
 export type TitlebarKeepAwakeCommand =
-  | { action: "start"; durationMinutes?: KeepAwakeDurationMinutes }
-  | { action: "stop" };
+  { action: 'start'; durationMinutes?: KeepAwakeDurationMinutes } | { action: 'stop' };
 
 export type ResourceItemCollapseTarget = {
   collapsedWhenKeyPresent: boolean;

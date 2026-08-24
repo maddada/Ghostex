@@ -5,7 +5,7 @@
  * React hooks) whose returned closures are bound in the component at the same
  * point the inline declarations used to appear.
  */
-import { type Dispatch, type RefObject, type SetStateAction } from "react";
+import { type Dispatch, type RefObject, type SetStateAction } from 'react';
 import {
   normalizeghostexSettings,
   setDiagnosticLoggingScenario,
@@ -13,27 +13,21 @@ import {
   type ghostexSettings,
   type ghostexSettingsPatch,
   type ghostexSettingsUpdateSource,
-} from "../../shared/ghostex-settings";
-import { type SettingsModalTab } from "../settings-modal-tabs";
-import { getDiagnosticLoggingScenarioStateForDuration } from "./fields";
-import {
-  areSettingsModalNavigationStatesEqual,
-  getRememberedSettingsModalNavigationState,
-} from "./navigation-memory";
-import { DiagnosticLoggingDurationValue } from "./types";
+} from '../../shared/ghostex-settings';
+import { type SettingsModalTab } from '../settings-modal-tabs';
+import { getDiagnosticLoggingScenarioStateForDuration } from './fields';
+import { areSettingsModalNavigationStatesEqual, getRememberedSettingsModalNavigationState } from './navigation-memory';
+import { DiagnosticLoggingDurationValue } from './types';
 
 const NUMERIC_SETTINGS_DEBOUNCE_MS = 180;
 const SETTINGS_MODAL_NAVIGATION_SCROLL_DEBOUNCE_MS = 220;
 
 function createNormalizedSettingsPatch(
   normalizedSettings: ghostexSettings,
-  patch: ghostexSettingsPatch,
+  patch: ghostexSettingsPatch
 ): ghostexSettingsPatch {
   return Object.fromEntries(
-    (Object.keys(patch) as Array<keyof ghostexSettings>).map((key) => [
-      key,
-      normalizedSettings[key],
-    ]),
+    (Object.keys(patch) as Array<keyof ghostexSettings>).map((key) => [key, normalizedSettings[key]])
   ) as ghostexSettingsPatch;
 }
 
@@ -81,7 +75,7 @@ export function createSettingsPersistence({
   const postSettingsPatch = (
     patch: ghostexSettingsPatch,
     source: ghostexSettingsUpdateSource,
-    fallbackSettings: ghostexSettings,
+    fallbackSettings: ghostexSettings
   ) => {
     if (Object.keys(patch).length === 0) {
       return;
@@ -104,14 +98,14 @@ export function createSettingsPersistence({
           ...baseSettings,
           settingsModalNavigation: getRememberedSettingsModalNavigationState(
             navigationActiveTab,
-            baseSettings.settingsModalNavigation,
+            baseSettings.settingsModalNavigation
           ),
         });
     const shouldPersistNavigation =
       !isFirstLaunchSetup &&
       !areSettingsModalNavigationStatesEqual(
         baseSettings.settingsModalNavigation,
-        nextSettings.settingsModalNavigation,
+        nextSettings.settingsModalNavigation
       );
     /*
      * CDXC:SettingsNavigation 2026-06-30-04:47:
@@ -134,19 +128,15 @@ export function createSettingsPersistence({
       postSettingsPatch(
         {
           ...(pendingPatch ?? {}),
-          ...(shouldPersistNavigation
-            ? { settingsModalNavigation: nextSettings.settingsModalNavigation }
-            : {}),
+          ...(shouldPersistNavigation ? { settingsModalNavigation: nextSettings.settingsModalNavigation } : {}),
         },
-        pendingPatch ? "settings:control" : "settings:navigation",
-        nextSettings,
+        pendingPatch ? 'settings:control' : 'settings:navigation',
+        nextSettings
       );
     }
   };
 
-  const scheduleSettingsModalNavigationPersist = (
-    navigationActiveTab: SettingsModalTab = activeTab,
-  ) => {
+  const scheduleSettingsModalNavigationPersist = (navigationActiveTab: SettingsModalTab = activeTab) => {
     if (isFirstLaunchSetup) {
       return;
     }
@@ -162,10 +152,7 @@ export function createSettingsPersistence({
     onClose();
   };
 
-  const applySettings = (
-    nextSettings: ghostexSettings,
-    source: ghostexSettingsUpdateSource = "settings:bulk",
-  ) => {
+  const applySettings = (nextSettings: ghostexSettings, source: ghostexSettingsUpdateSource = 'settings:bulk') => {
     const normalizedSettings = normalizeghostexSettings(nextSettings);
     clearPendingSettings();
     pendingSettingsRef.current = undefined;
@@ -176,7 +163,7 @@ export function createSettingsPersistence({
 
   const applySettingsPatch = (
     patch: ghostexSettingsPatch,
-    source: ghostexSettingsUpdateSource = "settings:control",
+    source: ghostexSettingsUpdateSource = 'settings:control'
   ) => {
     const normalizedSettings = normalizeghostexSettings({
       ...(pendingSettingsRef.current ?? draft),
@@ -198,7 +185,7 @@ export function createSettingsPersistence({
    */
   const applySettingsPatchDebounced = (
     patch: ghostexSettingsPatch,
-    source: ghostexSettingsUpdateSource = "settings:control",
+    source: ghostexSettingsUpdateSource = 'settings:control'
   ) => {
     const normalizedSettings = normalizeghostexSettings({
       ...(pendingSettingsRef.current ?? draft),
@@ -243,21 +230,18 @@ export function createSettingsPersistence({
   };
   const updateDiagnosticLoggingScenario = (
     scenarioId: DiagnosticLoggingScenarioId,
-    duration: DiagnosticLoggingDurationValue,
+    duration: DiagnosticLoggingDurationValue
   ) => {
     updateDraft(
-      "diagnosticLogging",
+      'diagnosticLogging',
       setDiagnosticLoggingScenario(
         (pendingSettingsRef.current ?? draft).diagnosticLogging,
         scenarioId,
-        getDiagnosticLoggingScenarioStateForDuration(duration),
-      ),
+        getDiagnosticLoggingScenarioStateForDuration(duration)
+      )
     );
   };
-  const updateDraftDebounced = <Key extends keyof ghostexSettings>(
-    key: Key,
-    value: ghostexSettings[Key],
-  ) => {
+  const updateDraftDebounced = <Key extends keyof ghostexSettings>(key: Key, value: ghostexSettings[Key]) => {
     applySettingsPatchDebounced({ [key]: value } as Pick<ghostexSettings, Key>);
   };
 

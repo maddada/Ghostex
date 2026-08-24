@@ -27,7 +27,8 @@ pub(crate) enum GpuiProjectSettingsMetadataUpdate {
         project_id: String,
         directory: String,
     },
-    #[allow(dead_code)] // no live path: sidebar agent/command metadata is projected by gxserver now
+    #[allow(dead_code)]
+    // no live path: sidebar agent/command metadata is projected by gxserver now
     SidebarCommands {
         project_id: String,
         commands: Vec<GpuiStoredSidebarCommand>,
@@ -117,7 +118,9 @@ impl GpuiRecentProjectMutation {
     }
 }
 
-pub(crate) fn gpui_recent_projects_result_message(request: &GpuiRecentProjectsRequest) -> serde_json::Value {
+pub(crate) fn gpui_recent_projects_result_message(
+    request: &GpuiRecentProjectsRequest,
+) -> serde_json::Value {
     /*
     Recent Projects follows the same transient app-modal response path as
     Previous Sessions. The owning gxserver remains the only persistence
@@ -386,7 +389,9 @@ pub(crate) fn gpui_update_project_settings_metadata(
     }
 }
 
-pub(crate) fn gpui_active_project_id_from_snapshot(snapshot: Option<&GpuiProjectSnapshot>) -> Option<&str> {
+pub(crate) fn gpui_active_project_id_from_snapshot(
+    snapshot: Option<&GpuiProjectSnapshot>,
+) -> Option<&str> {
     snapshot
         .and_then(|snapshot| snapshot.active_project_id.as_ref())
         .map(|project_id| project_id.0.as_str())
@@ -482,4 +487,3 @@ pub(crate) fn automate_workarea_runtime_url_from_project_snapshot(
         ],
     ))
 }
-

@@ -29,12 +29,5 @@
     "apps/mobile/views/chat/**/*",
     "apps/mobile/views/find/**/*"
   ],
-  "exclude": [
-    "node_modules",
-    "build",
-    "dist",
-    "out",
-    "**/*.test.ts",
-    "**/*.test.tsx"
-  ]
+  "exclude": ["node_modules", "build", "dist", "out", "**/*.test.ts", "**/*.test.tsx"]
 }

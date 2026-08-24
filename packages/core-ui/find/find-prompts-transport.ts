@@ -19,17 +19,13 @@ import type {
   ToggleAgentPromptFavoriteParams,
   ToggleAgentPromptFavoriteResult,
   FindPromptLaunchPlan,
-} from "../../shared/agent-prompt-search";
+} from '../../shared/agent-prompt-search';
 
 export interface FindPromptsTransport {
   search(params: SearchAgentPromptsParams): Promise<SearchAgentPromptsResult>;
   readText(params: ReadAgentPromptTextParams): Promise<ReadAgentPromptTextResult>;
-  toggleFavorite(
-    params: ToggleAgentPromptFavoriteParams,
-  ): Promise<ToggleAgentPromptFavoriteResult>;
-  resolveLaunch(
-    params: ResolveAgentPromptLaunchParams,
-  ): Promise<ResolveAgentPromptLaunchResult>;
+  toggleFavorite(params: ToggleAgentPromptFavoriteParams): Promise<ToggleAgentPromptFavoriteResult>;
+  resolveLaunch(params: ResolveAgentPromptLaunchParams): Promise<ResolveAgentPromptLaunchResult>;
   /**
    * Brings an already-open Ghostex session to the front. Hosts without a
    * workspace to focus (a standalone page) omit it, and the view says the

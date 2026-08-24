@@ -28,9 +28,7 @@ export function getSessionCountsByGroup({
   groupIds: readonly string[];
   sessionIdsByGroup: SessionIdsByGroup;
 }): Record<string, number> {
-  return Object.fromEntries(
-    groupIds.map((groupId) => [groupId, (sessionIdsByGroup[groupId] ?? []).length]),
-  );
+  return Object.fromEntries(groupIds.map((groupId) => [groupId, (sessionIdsByGroup[groupId] ?? []).length]));
 }
 
 export function reconcileCollapsedGroupsById({

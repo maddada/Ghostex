@@ -1,7 +1,7 @@
 interface:
-  display_name: "ghostex-fable-5.6-orchestration"
-  short_description: "Fable plans, Codex gpt-5.6 workers implement, Fable verifies"
-  default_prompt: "Use $ghostex-fable-5.6-orchestration to plan a multi-phase task inline, launch a Codex gpt-5.6 worker pane per phase, then verify with a Fable pane and spawn fixers until verification passes."
+  display_name: 'ghostex-fable-5.6-orchestration'
+  short_description: 'Fable plans, Codex gpt-5.6 workers implement, Fable verifies'
+  default_prompt: 'Use $ghostex-fable-5.6-orchestration to plan a multi-phase task inline, launch a Codex gpt-5.6 worker pane per phase, then verify with a Fable pane and spawn fixers until verification passes.'
 
 policy:
   allow_implicit_invocation: false

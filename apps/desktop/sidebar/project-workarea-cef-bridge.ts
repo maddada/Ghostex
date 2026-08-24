@@ -28,7 +28,7 @@ function postToCefBridge(functionName: keyof GhostexGpuiWorkareaApi, message: un
   const send = () => {
     const api = (window as GhostexGpuiWorkareaWindow).ghostexGpui;
     const post = api?.[functionName];
-    if (typeof post === "function" && post(payload)) {
+    if (typeof post === 'function' && post(payload)) {
       return;
     }
     attempt += 1;
@@ -41,10 +41,7 @@ function postToCefBridge(functionName: keyof GhostexGpuiWorkareaApi, message: un
   send();
 }
 
-function installMessageHandler(
-  name: string,
-  functionName: keyof GhostexGpuiWorkareaApi,
-): void {
+function installMessageHandler(name: string, functionName: keyof GhostexGpuiWorkareaApi): void {
   const target = window as GhostexGpuiWorkareaWindow;
   target.webkit = target.webkit ?? {};
   target.webkit.messageHandlers = target.webkit.messageHandlers ?? {};
@@ -56,14 +53,14 @@ function installMessageHandler(
 }
 
 export function installKanbanCefBridge(): void {
-  installMessageHandler("ghostexProjectBeads", "postProjectBeadsRequest");
-  installMessageHandler("ghostexProjectBoard", "postProjectBoardRequest");
-  installMessageHandler("ghostexProjectBoardImages", "postProjectBoardImageRequest");
+  installMessageHandler('ghostexProjectBeads', 'postProjectBeadsRequest');
+  installMessageHandler('ghostexProjectBoard', 'postProjectBoardRequest');
+  installMessageHandler('ghostexProjectBoardImages', 'postProjectBoardImageRequest');
 }
 
 export function installManageCefBridge(): void {
   const target = window as GhostexGpuiWorkareaWindow;
   target.ghostexGpui = target.ghostexGpui ?? {};
   target.ghostexGpui.supportsManageFileChangePolling = true;
-  installMessageHandler("ghostexManageFiles", "postManageFilesRequest");
+  installMessageHandler('ghostexManageFiles', 'postManageFilesRequest');
 }

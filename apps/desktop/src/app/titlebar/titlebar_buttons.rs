@@ -334,5 +334,4 @@ impl GhostexGpuiApp {
             }
         }
     }
-
 }

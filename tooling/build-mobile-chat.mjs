@@ -33,45 +33,29 @@ Run after changing packages/core-ui/chat UI, core-ui styles, or the mobile-chat 
   bun run build:mobile-chat
 */
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import * as esbuild from "esbuild";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as esbuild from 'esbuild';
 
 import {
   SHIKI_ASSET_DIR_NAME,
   shikiClassicScriptEsbuildPlugin,
   writeShikiClassicAssets,
-} from "./shiki-classic-assets.mjs";
+} from './shiki-classic-assets.mjs';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const entry = path.join(repoRoot, "apps", "mobile", "views", "chat", "session-chat-main.tsx");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const entry = path.join(repoRoot, 'apps', 'mobile', 'views', 'chat', 'session-chat-main.tsx');
 /**
  * Both native projects reference this directory in place (Android through a
  * gradle assets.srcDir, iOS through the podspec's resources), so its name is
  * load-bearing on both platforms and in src/chat/SessionChatWebView.tsx.
  */
-export const SESSION_CHAT_ASSET_DIR_NAME = "session-chat";
-const webviewAssetsDir = path.join(repoRoot, "apps", "mobile", "app", "assets", "webview");
+export const SESSION_CHAT_ASSET_DIR_NAME = 'session-chat';
+const webviewAssetsDir = path.join(repoRoot, 'apps', 'mobile', 'app', 'assets', 'webview');
 const outDir = path.join(webviewAssetsDir, SESSION_CHAT_ASSET_DIR_NAME);
-const legacyHtmlModule = path.join(
-  repoRoot,
-  "apps",
-  "mobile",
-  "app",
-  "src",
-  "chat",
-  "session-chat-html.generated.ts",
-);
-const agentsOutFile = path.join(
-  repoRoot,
-  "apps",
-  "mobile",
-  "app",
-  "src",
-  "chat",
-  "session-chat-agents.generated.ts",
-);
+const legacyHtmlModule = path.join(repoRoot, 'apps', 'mobile', 'app', 'src', 'chat', 'session-chat-html.generated.ts');
+const agentsOutFile = path.join(repoRoot, 'apps', 'mobile', 'app', 'src', 'chat', 'session-chat-agents.generated.ts');
 
 /*
 The app's Vite/Bun builds deliberately import SVG source text with an import
@@ -80,18 +64,15 @@ attribute, so remove that source-only hint in this single-file build; the SVG
 dataurl loader below remains compatible with the logo helpers.
 */
 const mobileChatTextImportPlugin = {
-  name: "mobile-chat-text-imports",
+  name: 'mobile-chat-text-imports',
   setup(build) {
-    build.onLoad(
-      { filter: /core-ui\/(?:agent-logos\.ts|brand-icons\.tsx)$/ },
-      async (args) => ({
-        contents: (await fs.promises.readFile(args.path, "utf8")).replace(
-          /\s+with\s+\{\s*type:\s*["']text["']\s*\}/g,
-          "",
-        ),
-        loader: args.path.endsWith(".tsx") ? "tsx" : "ts",
-      }),
-    );
+    build.onLoad({ filter: /core-ui\/(?:agent-logos\.ts|brand-icons\.tsx)$/ }, async (args) => ({
+      contents: (await fs.promises.readFile(args.path, 'utf8')).replace(
+        /\s+with\s+\{\s*type:\s*["']text["']\s*\}/g,
+        ''
+      ),
+      loader: args.path.endsWith('.tsx') ? 'tsx' : 'ts',
+    }));
   },
 };
 
@@ -104,60 +85,60 @@ other client agree on, not a parsed approximation.
 */
 const agentsBundle = await esbuild.build({
   bundle: true,
-  format: "esm",
-  platform: "node",
+  format: 'esm',
+  platform: 'node',
   stdin: {
     contents: 'export { SESSION_CHAT_SUPPORTED_AGENTS } from "./packages/shared/session-chat";\n',
-    loader: "ts",
+    loader: 'ts',
     resolveDir: repoRoot,
-    sourcefile: "session-chat-agents-entry.ts",
+    sourcefile: 'session-chat-agents-entry.ts',
   },
   write: false,
 });
-const agentsModuleSource = agentsBundle.outputFiles[0]?.text ?? "";
+const agentsModuleSource = agentsBundle.outputFiles[0]?.text ?? '';
 const { SESSION_CHAT_SUPPORTED_AGENTS } = await import(
-  `data:text/javascript;base64,${Buffer.from(agentsModuleSource).toString("base64")}`
+  `data:text/javascript;base64,${Buffer.from(agentsModuleSource).toString('base64')}`
 );
 const supportedAgents = [...SESSION_CHAT_SUPPORTED_AGENTS];
 if (supportedAgents.length === 0) {
-  throw new Error("packages/shared/session-chat.ts exported no supported Session Chat agents.");
+  throw new Error('packages/shared/session-chat.ts exported no supported Session Chat agents.');
 }
 
 const result = await esbuild.build({
   bundle: true,
-  define: { "process.env.NODE_ENV": '"production"' },
+  define: { 'process.env.NODE_ENV': '"production"' },
   entryPoints: [entry],
-  format: "iife",
-  jsx: "automatic",
+  format: 'iife',
+  jsx: 'automatic',
   // Inline every url() asset so the single HTML document has no external
   // references (webview html sources have no usable base URL).
   loader: {
-    ".png": "dataurl",
-    ".svg": "dataurl",
-    ".ttf": "dataurl",
-    ".woff": "dataurl",
-    ".woff2": "dataurl",
+    '.png': 'dataurl',
+    '.svg': 'dataurl',
+    '.ttf': 'dataurl',
+    '.woff': 'dataurl',
+    '.woff2': 'dataurl',
   },
   minify: true,
-  outdir: "out",
+  outdir: 'out',
   plugins: [mobileChatTextImportPlugin, shikiClassicScriptEsbuildPlugin()],
-  target: ["safari16", "chrome110"],
+  target: ['safari16', 'chrome110'],
   write: false,
 });
 
-let js = "";
-let css = "";
+let js = '';
+let css = '';
 for (const file of result.outputFiles) {
-  if (file.path.endsWith(".js")) js += file.text;
-  else if (file.path.endsWith(".css")) css += file.text;
+  if (file.path.endsWith('.js')) js += file.text;
+  else if (file.path.endsWith('.css')) css += file.text;
 }
 if (!js) {
-  throw new Error("esbuild produced no JS output for the mobile chat page.");
+  throw new Error('esbuild produced no JS output for the mobile chat page.');
 }
 
 // </script>-shaped strings inside generated JS would end the inline script tag.
-const inlineJs = js.replace(/<\/script>/gi, "<\\/script>");
-const inlineCss = css.replace(/<\/style>/gi, "<\\/style>");
+const inlineJs = js.replace(/<\/script>/gi, '<\\/script>');
+const inlineCss = css.replace(/<\/style>/gi, '<\\/style>');
 
 const html = `<!doctype html>
 <html lang="en">
@@ -190,37 +171,35 @@ const agentsModule = `// GENERATED by tooling/build-mobile-chat.mjs in the Ghost
 // edit by hand. Source: SESSION_CHAT_SUPPORTED_AGENTS in packages/shared/session-chat.ts.
 // Regenerate with \`bun run build:mobile-chat\` there.
 
-export const SESSION_CHAT_SUPPORTED_AGENT_IDS: readonly string[] = ${JSON.stringify(
-  supportedAgents,
-)};
+export const SESSION_CHAT_SUPPORTED_AGENT_IDS: readonly string[] = ${JSON.stringify(supportedAgents)};
 `;
 
 fs.rmSync(outDir, { force: true, recursive: true });
 fs.mkdirSync(outDir, { recursive: true });
-fs.writeFileSync(path.join(outDir, "index.html"), html);
+fs.writeFileSync(path.join(outDir, 'index.html'), html);
 // Inside the page directory, not beside it: every file directly under
 // assets/webview is merged into the APK assets ROOT by the gradle srcDir, and
 // that root is shared with the bundled font.
 fs.writeFileSync(
-  path.join(outDir, "README.md"),
+  path.join(outDir, 'README.md'),
   [
-    "# Bundled webview assets",
-    "",
-    "GENERATED by `tooling/build-mobile-chat.mjs` in the Ghostex main repo — do",
-    "not edit by hand. Regenerate with `bun run build:mobile-chat` there.",
-    "",
-    "This whole directory is merged into the app bundle by BOTH native projects:",
-    "",
-    "- Android: `modules/ghostex-native/android/build.gradle` adds it as an",
-    "  `assets.srcDir`, so `session-chat/` lands at the APK assets root and the",
-    "  page is reachable at `file:///android_asset/session-chat/index.html`.",
-    "- iOS: `modules/ghostex-native/ios/GhostexNative.podspec` copies it through",
-    "  the `WebAssets` symlink, so the page is at",
-    "  `<Bundle.main>/session-chat/index.html`.",
-    "",
-    "`src/chat/SessionChatWebView.tsx` resolves those two URLs.",
-    "",
-  ].join("\n"),
+    '# Bundled webview assets',
+    '',
+    'GENERATED by `tooling/build-mobile-chat.mjs` in the Ghostex main repo — do',
+    'not edit by hand. Regenerate with `bun run build:mobile-chat` there.',
+    '',
+    'This whole directory is merged into the app bundle by BOTH native projects:',
+    '',
+    '- Android: `modules/ghostex-native/android/build.gradle` adds it as an',
+    '  `assets.srcDir`, so `session-chat/` lands at the APK assets root and the',
+    '  page is reachable at `file:///android_asset/session-chat/index.html`.',
+    '- iOS: `modules/ghostex-native/ios/GhostexNative.podspec` copies it through',
+    '  the `WebAssets` symlink, so the page is at',
+    '  `<Bundle.main>/session-chat/index.html`.',
+    '',
+    '`src/chat/SessionChatWebView.tsx` resolves those two URLs.',
+    '',
+  ].join('\n')
 );
 
 const shiki = await writeShikiClassicAssets(path.join(outDir, SHIKI_ASSET_DIR_NAME));
@@ -235,11 +214,9 @@ fs.writeFileSync(agentsOutFile, agentsModule);
 
 const pageKib = Math.round(Buffer.byteLength(html) / 1024);
 console.log(
-  `Wrote ${path.relative(repoRoot, path.join(outDir, "index.html"))} (${pageKib} KiB; js ${Math.round(js.length / 1024)} KiB, css ${Math.round(css.length / 1024)} KiB).`,
+  `Wrote ${path.relative(repoRoot, path.join(outDir, 'index.html'))} (${pageKib} KiB; js ${Math.round(js.length / 1024)} KiB, css ${Math.round(css.length / 1024)} KiB).`
 );
 console.log(
-  `Wrote ${path.relative(repoRoot, path.join(outDir, SHIKI_ASSET_DIR_NAME))} (${shiki.grammarCount} Shiki grammars + core, ${Math.round(shiki.bytes / 1024)} KiB, loaded on demand).`,
+  `Wrote ${path.relative(repoRoot, path.join(outDir, SHIKI_ASSET_DIR_NAME))} (${shiki.grammarCount} Shiki grammars + core, ${Math.round(shiki.bytes / 1024)} KiB, loaded on demand).`
 );
-console.log(
-  `Wrote ${path.relative(repoRoot, agentsOutFile)} (${supportedAgents.length} chat-capable agent ids).`,
-);
+console.log(`Wrote ${path.relative(repoRoot, agentsOutFile)} (${supportedAgents.length} chat-capable agent ids).`);

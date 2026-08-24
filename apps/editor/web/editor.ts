@@ -1,7 +1,7 @@
-import { trimPromptEditorTrailingSpaces } from "../../../packages/shared/prompt-editor-text";
+import { trimPromptEditorTrailingSpaces } from '../../../packages/shared/prompt-editor-text';
 
 type GhostexEditorConfigureMessage = {
-  type: "configure";
+  type: 'configure';
   initialText?: unknown;
   cursorOffset?: unknown;
   language?: unknown;
@@ -10,15 +10,15 @@ type GhostexEditorConfigureMessage = {
 };
 
 type GhostexEditorHostMessage =
-  | { type: "ready" }
-  | { type: "configured" }
-  | { type: "draftUpdate"; text: string; cursorOffset: number }
-  | { type: "cursorUpdate"; cursorOffset: number }
-  | { type: "saveAndClose"; text: string; cursorOffset: number }
-  | { type: "save"; text: string; cursorOffset: number }
-  | { type: "cancel"; text: string; cursorOffset: number }
+  | { type: 'ready' }
+  | { type: 'configured' }
+  | { type: 'draftUpdate'; text: string; cursorOffset: number }
+  | { type: 'cursorUpdate'; cursorOffset: number }
+  | { type: 'saveAndClose'; text: string; cursorOffset: number }
+  | { type: 'save'; text: string; cursorOffset: number }
+  | { type: 'cancel'; text: string; cursorOffset: number }
   | {
-      type: "pasteImage";
+      type: 'pasteImage';
       requestId: string;
       /*
        * The WKWebView host reads NSPasteboard directly, so the macOS message
@@ -28,17 +28,17 @@ type GhostexEditorHostMessage =
       base64Data?: string;
       suggestedName?: string;
     }
-  | { type: "loadImagePreview"; requestId: string; path: string };
+  | { type: 'loadImagePreview'; requestId: string; path: string };
 
 type ImagePasteResult = {
-  type: "imagePasteResult";
+  type: 'imagePasteResult';
   requestId: string;
   path?: string;
   error?: string;
 };
 
 type ImagePreviewResult = {
-  type: "imagePreviewResult";
+  type: 'imagePreviewResult';
   requestId: string;
   path: string;
   dataUrl?: string;
@@ -56,10 +56,7 @@ type ImagePreview = {
 type MonacoEditor = {
   createContextKey<T>(key: string, defaultValue: T): { set(value: T): void };
   dispose(): void;
-  executeEdits(
-    source: string,
-    edits: Array<{ range: unknown; text: string; forceMoveMarkers?: boolean }>,
-  ): boolean;
+  executeEdits(source: string, edits: Array<{ range: unknown; text: string; forceMoveMarkers?: boolean }>): boolean;
   focus(): void;
   getModel(): MonacoModel | null;
   getPosition(): unknown;
@@ -142,17 +139,17 @@ const pendingImagePreviewRequests = new Map<string, string>();
 
 window.MonacoEnvironment = {
   getWorkerUrl() {
-    return "./monaco/vs/base/worker/workerMain.js";
+    return './monaco/vs/base/worker/workerMain.js';
   },
 };
 
 require.config({
   paths: {
-    vs: "./monaco/vs",
+    vs: './monaco/vs',
   },
 });
 
-window.addEventListener("ghostex-editor-host-message", (event) => {
+window.addEventListener('ghostex-editor-host-message', (event) => {
   const detail = (event as CustomEvent<unknown>).detail;
   if (isConfigureMessage(detail)) {
     if (!applyConfigureMessage(detail)) {
@@ -178,122 +175,107 @@ window.addEventListener("ghostex-editor-host-message", (event) => {
   resolve(detail);
 });
 
-require(
-  ["vs/editor/editor.main"],
-  () => {
-    getRequiredElement("editor-hint").textContent = editorShortcutHint();
-    const editorElement = getRequiredElement("editor");
-    const saveButton = getRequiredElement("save-button") as HTMLButtonElement;
-    const cancelButton = getRequiredElement("cancel-button") as HTMLButtonElement;
-    const model = createModelForConfig({
-      filePath: "",
-      initialText: "",
-      language: "markdown",
-    });
+require(['vs/editor/editor.main'], () => {
+  getRequiredElement('editor-hint').textContent = editorShortcutHint();
+  const editorElement = getRequiredElement('editor');
+  const saveButton = getRequiredElement('save-button') as HTMLButtonElement;
+  const cancelButton = getRequiredElement('cancel-button') as HTMLButtonElement;
+  const model = createModelForConfig({
+    filePath: '',
+    initialText: '',
+    language: 'markdown',
+  });
 
-    editorInstance = monaco.editor.create(editorElement, {
-      acceptSuggestionOnEnter: "off",
-      automaticLayout: true,
-      cursorBlinking: "smooth",
-      fontFamily:
-        "JetBrains Mono, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
-      fontLigatures: true,
-      fontSize: 14,
-      lineNumbersMinChars: 3,
-      minimap: {
-        enabled: false,
-      },
-      model,
-      occurrencesHighlight: "off",
-      copyWithSyntaxHighlighting: false,
-      padding: {
-        bottom: 48,
-        top: 12,
-      },
-      parameterHints: {
-        enabled: false,
-      },
-      quickSuggestions: false,
-      renderLineHighlight: "none",
-      scrollBeyondLastLine: false,
-      scrollbar: {
-        horizontalScrollbarSize: 7,
-        verticalScrollbarSize: 7,
-      },
-      selectionHighlight: false,
-      snippetSuggestions: "none",
-      suggestOnTriggerCharacters: false,
-      tabCompletion: "off",
-      theme: "vs-dark",
-      wordBasedSuggestions: "off",
-      wordWrap: "on",
-    });
+  editorInstance = monaco.editor.create(editorElement, {
+    acceptSuggestionOnEnter: 'off',
+    automaticLayout: true,
+    cursorBlinking: 'smooth',
+    fontFamily: "JetBrains Mono, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+    fontLigatures: true,
+    fontSize: 14,
+    lineNumbersMinChars: 3,
+    minimap: {
+      enabled: false,
+    },
+    model,
+    occurrencesHighlight: 'off',
+    copyWithSyntaxHighlighting: false,
+    padding: {
+      bottom: 48,
+      top: 12,
+    },
+    parameterHints: {
+      enabled: false,
+    },
+    quickSuggestions: false,
+    renderLineHighlight: 'none',
+    scrollBeyondLastLine: false,
+    scrollbar: {
+      horizontalScrollbarSize: 7,
+      verticalScrollbarSize: 7,
+    },
+    selectionHighlight: false,
+    snippetSuggestions: 'none',
+    suggestOnTriggerCharacters: false,
+    tabCompletion: 'off',
+    theme: 'vs-dark',
+    wordBasedSuggestions: 'off',
+    wordWrap: 'on',
+  });
 
-    editorInstance.onDidChangeModelContent(() => {
-      scheduleDraftUpdate();
-      updateImagePreviews();
-    });
-    editorInstance.onDidChangeCursorPosition(() => {
-      scheduleCursorUpdate();
-    });
+  editorInstance.onDidChangeModelContent(() => {
+    scheduleDraftUpdate();
+    updateImagePreviews();
+  });
+  editorInstance.onDidChangeCursorPosition(() => {
+    scheduleCursorUpdate();
+  });
 
-    document.addEventListener("keydown", handleDocumentKeyDown, true);
-    /*
-     * The paste hook must live on window capture: Monaco's clipboard stack
-     * halts capture descent below document, so a listener on the editor
-     * container (or anywhere deeper) never fires and image pastes get
-     * silently dropped by the textarea default handling.
-     */
-    window.addEventListener("paste", handlePaste, true);
-    saveButton.addEventListener("click", () => {
-      saveAndClose();
-    });
-    cancelButton.addEventListener("click", () => {
-      cancel();
-    });
-    installImagePreviewPopupHandlers();
+  document.addEventListener('keydown', handleDocumentKeyDown, true);
+  /*
+   * The paste hook must live on window capture: Monaco's clipboard stack
+   * halts capture descent below document, so a listener on the editor
+   * container (or anywhere deeper) never fires and image pastes get
+   * silently dropped by the textarea default handling.
+   */
+  window.addEventListener('paste', handlePaste, true);
+  saveButton.addEventListener('click', () => {
+    saveAndClose();
+  });
+  cancelButton.addEventListener('click', () => {
+    cancel();
+  });
+  installImagePreviewPopupHandlers();
 
-    postToHost({ type: "ready" });
-    if (pendingConfigureMessage) {
-      const configureMessage = pendingConfigureMessage;
-      pendingConfigureMessage = null;
-      applyConfigureMessage(configureMessage);
-    } else {
-      editorInstance.focus();
-    }
-  },
-  (error) => {
-    console.error("Failed to load Monaco editor", error);
-  },
-);
+  postToHost({ type: 'ready' });
+  if (pendingConfigureMessage) {
+    const configureMessage = pendingConfigureMessage;
+    pendingConfigureMessage = null;
+    applyConfigureMessage(configureMessage);
+  } else {
+    editorInstance.focus();
+  }
+}, (error) => {
+  console.error('Failed to load Monaco editor', error);
+});
 
 function normalizeConfigureMessage(rawMessage: GhostexEditorConfigureMessage) {
-  const filePath =
-    typeof rawMessage.filePath === "string" && rawMessage.filePath.length > 0
-      ? rawMessage.filePath
-      : "";
+  const filePath = typeof rawMessage.filePath === 'string' && rawMessage.filePath.length > 0 ? rawMessage.filePath : '';
   return {
     filePath,
-    initialText: typeof rawMessage.initialText === "string" ? rawMessage.initialText : "",
+    initialText: typeof rawMessage.initialText === 'string' ? rawMessage.initialText : '',
     cursorOffset: normalizeCursorOffset(rawMessage.cursorOffset),
-    language:
-      typeof rawMessage.language === "string" && rawMessage.language.length > 0
-        ? rawMessage.language
-        : null,
+    language: typeof rawMessage.language === 'string' && rawMessage.language.length > 0 ? rawMessage.language : null,
   };
 }
 
-function createModelForConfig(config: {
-  filePath: string;
-  initialText: string;
-  language: string | null;
-}): MonacoModel {
+function createModelForConfig(config: { filePath: string; initialText: string; language: string | null }): MonacoModel {
   const language = config.language || undefined;
   const model = monaco.editor.createModel(config.initialText, language, uriForFilePath(config.filePath));
   if (config.language) {
     monaco.editor.setModelLanguage(model, config.language);
-  } else if (model.getLanguageId() === "plaintext") {
-    monaco.editor.setModelLanguage(model, "markdown");
+  } else if (model.getLanguageId() === 'plaintext') {
+    monaco.editor.setModelLanguage(model, 'markdown');
   }
   return model;
 }
@@ -317,12 +299,12 @@ function applyConfigureMessage(message: GhostexEditorConfigureMessage): boolean 
   const model = createModelForConfig(config);
   editorInstance.setModel(model);
   editorInstance.updateOptions({
-    wordWrap: model.getLanguageId() === "markdown" ? "on" : "off",
+    wordWrap: model.getLanguageId() === 'markdown' ? 'on' : 'off',
   });
   moveCaretToOffset(model, config.cursorOffset ?? model.getValueLength());
   editorInstance.focus();
   updateImagePreviews();
-  postToHost({ type: "configured" });
+  postToHost({ type: 'configured' });
 
   return true;
 }
@@ -334,8 +316,8 @@ function applyConfigureMessage(message: GhostexEditorConfigureMessage): boolean 
 function editorShortcutHint(): string {
   const platform = navigator.platform || navigator.userAgent;
   return /mac/iu.test(platform)
-    ? "F1 for commands - CMD + S or CTRL + G to Save"
-    : "F1 for commands - CTRL + S or CTRL + G to Save";
+    ? 'F1 for commands - CMD + S or CTRL + G to Save'
+    : 'F1 for commands - CTRL + S or CTRL + G to Save';
 }
 
 function getRequiredElement(id: string): HTMLElement {
@@ -350,11 +332,11 @@ function uriForFilePath(filePath: string): unknown {
   if (filePath.length > 0) {
     return monaco.Uri.file(filePath);
   }
-  return monaco.Uri.parse("inmemory://ghostex-editor/draft.md");
+  return monaco.Uri.parse('inmemory://ghostex-editor/draft.md');
 }
 
 function getCurrentText(): string {
-  return editorInstance?.getValue() ?? "";
+  return editorInstance?.getValue() ?? '';
 }
 
 function getCurrentCursorOffset(): number {
@@ -369,7 +351,7 @@ function getCurrentCursorOffset(): number {
 
 function saveAndClose(): void {
   postToHost({
-    type: "saveAndClose",
+    type: 'saveAndClose',
     text: getCurrentText(),
     cursorOffset: getCurrentCursorOffset(),
   });
@@ -377,7 +359,7 @@ function saveAndClose(): void {
 
 function cancel(): void {
   postToHost({
-    type: "cancel",
+    type: 'cancel',
     text: getCurrentText(),
     cursorOffset: getCurrentCursorOffset(),
   });
@@ -385,14 +367,7 @@ function cancel(): void {
 
 function handleDocumentKeyDown(event: KeyboardEvent): void {
   const key = event.key.toLowerCase();
-  if (
-    key === "escape" &&
-    openImagePreview &&
-    !event.ctrlKey &&
-    !event.altKey &&
-    !event.metaKey &&
-    !event.shiftKey
-  ) {
+  if (key === 'escape' && openImagePreview && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
     stopShortcutEvent(event);
     closeImagePreviewPopup();
     return;
@@ -407,10 +382,10 @@ function isSaveShortcut(event: KeyboardEvent, key: string): boolean {
   if (event.altKey || event.shiftKey) {
     return false;
   }
-  if (key === "s") {
+  if (key === 's') {
     return event.metaKey || event.ctrlKey;
   }
-  return key === "g" && event.ctrlKey && !event.metaKey;
+  return key === 'g' && event.ctrlKey && !event.metaKey;
 }
 
 function stopShortcutEvent(event: KeyboardEvent): void {
@@ -425,7 +400,7 @@ function scheduleDraftUpdate(): void {
   draftUpdateTimer = window.setTimeout(() => {
     draftUpdateTimer = null;
     postToHost({
-      type: "draftUpdate",
+      type: 'draftUpdate',
       text: getCurrentText(),
       cursorOffset: getCurrentCursorOffset(),
     });
@@ -438,7 +413,7 @@ function scheduleCursorUpdate(): void {
   }
   cursorUpdateTimer = window.setTimeout(() => {
     cursorUpdateTimer = null;
-    postToHost({ type: "cursorUpdate", cursorOffset: getCurrentCursorOffset() });
+    postToHost({ type: 'cursorUpdate', cursorOffset: getCurrentCursorOffset() });
   }, 120);
 }
 
@@ -479,7 +454,7 @@ function handlePaste(event: ClipboardEvent): void {
      * from shell capture or clipboard content: strip spaces/tabs at line ends
      * and only take over the paste when that changes the text.
      */
-    const pastedText = event.clipboardData?.getData("text/plain") ?? "";
+    const pastedText = event.clipboardData?.getData('text/plain') ?? '';
     const trimmedText = trimPromptEditorTrailingSpaces(pastedText);
     if (!pastedText || trimmedText === pastedText) {
       return;
@@ -497,7 +472,7 @@ function handlePaste(event: ClipboardEvent): void {
     requestImagePaste(createRequestId(), undefined, undefined)
       .then(handleImagePasteResult)
       .catch((error) => {
-        console.error("Image paste failed", error);
+        console.error('Image paste failed', error);
       });
     return;
   }
@@ -515,12 +490,12 @@ function handlePaste(event: ClipboardEvent): void {
 
   readFileAsDataUrl(imageFile)
     .then((dataUrl) => {
-      const base64Data = dataUrl.split(",", 2)[1] ?? "";
+      const base64Data = dataUrl.split(',', 2)[1] ?? '';
       return requestImagePaste(requestId, base64Data, suggestedName);
     })
     .then(handleImagePasteResult)
     .catch((error) => {
-      console.error("Image paste failed", error);
+      console.error('Image paste failed', error);
     });
 }
 
@@ -528,7 +503,7 @@ function handleImagePasteResult(result: ImagePasteResult): void {
   if (result.path) {
     insertImageMarkdown(result.path.trim());
   } else if (result.error) {
-    console.error("Image paste failed", result.error);
+    console.error('Image paste failed', result.error);
   }
 }
 
@@ -536,16 +511,14 @@ function insertImageMarkdown(imagePath: string): void {
   if (!editorInstance || !imagePath) {
     return;
   }
-  insertTextAtCursor(
-    `[Image #${getNextPromptEditorImageIndex(editorInstance.getValue())}](${imagePath})`,
-  );
+  insertTextAtCursor(`[Image #${getNextPromptEditorImageIndex(editorInstance.getValue())}](${imagePath})`);
 }
 
 function getNextPromptEditorImageIndex(text: string): number {
   const imageLabelPattern = /\[Image #(\d+)\]\(/g;
   let highestIndex = 0;
   for (const match of text.matchAll(imageLabelPattern)) {
-    const index = Number.parseInt(match[1] ?? "", 10);
+    const index = Number.parseInt(match[1] ?? '', 10);
     if (Number.isFinite(index)) {
       highestIndex = Math.max(highestIndex, index);
     }
@@ -558,7 +531,7 @@ function parsePromptEditorImagePreviews(text: string): ImagePreview[] {
   const previews: ImagePreview[] = [];
   for (const match of text.matchAll(markdownLinkPattern)) {
     const markdown = match[0];
-    const rawPath = match[1]?.trim() ?? "";
+    const rawPath = match[1]?.trim() ?? '';
     const startOffset = match.index ?? 0;
     if (!isPromptEditorImagePath(rawPath)) {
       continue;
@@ -577,7 +550,7 @@ function parsePromptEditorImagePreviews(text: string): ImagePreview[] {
 function isPromptEditorImagePath(path: string): boolean {
   const normalizedPath = path.split(/[?#]/u)[0].toLowerCase();
   return (
-    normalizedPath.startsWith("~/.ghostex/i/") ||
+    normalizedPath.startsWith('~/.ghostex/i/') ||
     /\.(avif|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/iu.test(normalizedPath)
   );
 }
@@ -616,7 +589,7 @@ function requestMissingImagePreviews(): void {
     const requestId = createRequestId();
     pendingImagePreviewPaths.add(preview.path);
     pendingImagePreviewRequests.set(requestId, preview.path);
-    postToHost({ type: "loadImagePreview", requestId, path: preview.path });
+    postToHost({ type: 'loadImagePreview', requestId, path: preview.path });
   }
 }
 
@@ -632,14 +605,14 @@ function handleImagePreviewResult(result: ImagePreviewResult): void {
   } else {
     failedImagePreviewPaths.add(requestedPath);
     if (result.error) {
-      console.error("Image preview load failed", requestedPath, result.error);
+      console.error('Image preview load failed', requestedPath, result.error);
     }
   }
   renderImagePreviewStrip();
 }
 
 function renderImagePreviewStrip(): void {
-  const strip = getRequiredElement("image-strip");
+  const strip = getRequiredElement('image-strip');
   strip.replaceChildren();
   if (imagePreviews.length === 0) {
     strip.hidden = true;
@@ -648,8 +621,8 @@ function renderImagePreviewStrip(): void {
   strip.hidden = false;
 
   for (const preview of imagePreviews) {
-    const thumb = document.createElement("div");
-    thumb.className = "editor-image-thumb";
+    const thumb = document.createElement('div');
+    thumb.className = 'editor-image-thumb';
     thumb.title = preview.path;
 
     /*
@@ -657,32 +630,32 @@ function renderImagePreviewStrip(): void {
      * removal as a separate small button above this full-area button so only
      * the explicit remove control is excluded.
      */
-    const openButton = document.createElement("button");
-    openButton.type = "button";
-    openButton.className = "editor-image-open";
-    openButton.setAttribute("aria-label", `Open image preview ${preview.path}`);
+    const openButton = document.createElement('button');
+    openButton.type = 'button';
+    openButton.className = 'editor-image-open';
+    openButton.setAttribute('aria-label', `Open image preview ${preview.path}`);
     const dataUrl = imagePreviewDataUrls.get(preview.path);
     if (dataUrl) {
-      const image = document.createElement("img");
-      image.alt = "";
+      const image = document.createElement('img');
+      image.alt = '';
       image.src = dataUrl;
       openButton.appendChild(image);
     } else {
-      const placeholder = document.createElement("span");
-      placeholder.setAttribute("aria-hidden", "true");
+      const placeholder = document.createElement('span');
+      placeholder.setAttribute('aria-hidden', 'true');
       openButton.appendChild(placeholder);
     }
-    openButton.addEventListener("click", () => {
+    openButton.addEventListener('click', () => {
       openImagePreviewPopup(preview);
     });
     thumb.appendChild(openButton);
 
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "editor-image-remove";
-    removeButton.setAttribute("aria-label", `Remove image ${preview.path}`);
-    removeButton.textContent = "✕";
-    removeButton.addEventListener("click", (event) => {
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'editor-image-remove';
+    removeButton.setAttribute('aria-label', `Remove image ${preview.path}`);
+    removeButton.textContent = '✕';
+    removeButton.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
       removeImagePreview(preview);
@@ -694,23 +667,23 @@ function renderImagePreviewStrip(): void {
 }
 
 function installImagePreviewPopupHandlers(): void {
-  const popup = getRequiredElement("image-popup");
-  const popupImage = getRequiredElement("image-popup-image");
-  const closeButton = getRequiredElement("image-popup-close");
+  const popup = getRequiredElement('image-popup');
+  const popupImage = getRequiredElement('image-popup-image');
+  const closeButton = getRequiredElement('image-popup-close');
   /*
    * The dimmed image-preview backdrop is part of the preview dismissal
    * target. Close on direct backdrop pointer-down while keeping the image
    * itself clickable as its own dismissal affordance.
    */
-  popup.addEventListener("pointerdown", (event) => {
+  popup.addEventListener('pointerdown', (event) => {
     if (event.target === popup) {
       closeImagePreviewPopup();
     }
   });
-  popupImage.addEventListener("click", () => {
+  popupImage.addEventListener('click', () => {
     closeImagePreviewPopup();
   });
-  closeButton.addEventListener("click", () => {
+  closeButton.addEventListener('click', () => {
     closeImagePreviewPopup();
   });
 }
@@ -721,14 +694,14 @@ function openImagePreviewPopup(preview: ImagePreview): void {
     return;
   }
   openImagePreview = preview;
-  const popupImage = getRequiredElement("image-popup-image") as HTMLImageElement;
+  const popupImage = getRequiredElement('image-popup-image') as HTMLImageElement;
   popupImage.src = dataUrl;
-  getRequiredElement("image-popup").hidden = false;
+  getRequiredElement('image-popup').hidden = false;
 }
 
 function closeImagePreviewPopup(): void {
   openImagePreview = null;
-  const popup = document.getElementById("image-popup");
+  const popup = document.getElementById('image-popup');
   if (popup) {
     popup.hidden = true;
   }
@@ -749,17 +722,17 @@ function removeImagePreview(preview: ImagePreview): void {
     return;
   }
   let endOffset = startOffset + preview.markdown.length;
-  if (currentText[startOffset - 1] === "\n" && currentText[endOffset] === "\n") {
+  if (currentText[startOffset - 1] === '\n' && currentText[endOffset] === '\n') {
     endOffset += 1;
-  } else if (currentText[endOffset] === "\n") {
+  } else if (currentText[endOffset] === '\n') {
     endOffset += 1;
-  } else if (currentText[startOffset - 1] === "\n") {
+  } else if (currentText[startOffset - 1] === '\n') {
     startOffset -= 1;
   }
   const startPosition = model.getPositionAt(startOffset);
   const endPosition = model.getPositionAt(endOffset);
   editorInstance.pushUndoStop();
-  editorInstance.executeEdits("ghostex-image-preview-remove", [
+  editorInstance.executeEdits('ghostex-image-preview-remove', [
     {
       forceMoveMarkers: true,
       range: {
@@ -768,7 +741,7 @@ function removeImagePreview(preview: ImagePreview): void {
         startColumn: startPosition.column,
         startLineNumber: startPosition.lineNumber,
       },
-      text: "",
+      text: '',
     },
   ]);
   editorInstance.pushUndoStop();
@@ -788,17 +761,14 @@ function hasImagePastePayload(event: ClipboardEvent): boolean {
   if (
     files.some((file) => {
       const type = file.type.toLowerCase();
-      return (
-        type.startsWith("image/") ||
-        /\.(avif|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/iu.test(file.name)
-      );
+      return type.startsWith('image/') || /\.(avif|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/iu.test(file.name);
     })
   ) {
     return true;
   }
 
   const items = Array.from(clipboardData.items);
-  if (items.some((item) => item.kind === "file" && item.type.toLowerCase().startsWith("image/"))) {
+  if (items.some((item) => item.kind === 'file' && item.type.toLowerCase().startsWith('image/'))) {
     return true;
   }
 
@@ -806,18 +776,14 @@ function hasImagePastePayload(event: ClipboardEvent): boolean {
   if (
     types.some(
       (type) =>
-        type === "files" ||
-        type === "public.file-url" ||
-        type.startsWith("image/") ||
-        type.startsWith("public.image"),
+        type === 'files' || type === 'public.file-url' || type.startsWith('image/') || type.startsWith('public.image')
     )
   ) {
     return true;
   }
 
   return (
-    types.includes("text/uri-list") &&
-    clipboardData.getData("text/uri-list").trim().toLowerCase().startsWith("file:")
+    types.includes('text/uri-list') && clipboardData.getData('text/uri-list').trim().toLowerCase().startsWith('file:')
   );
 }
 
@@ -826,7 +792,7 @@ function firstImageClipboardItem(dataTransfer: DataTransfer | null): DataTransfe
     return null;
   }
   for (const item of dataTransfer.items) {
-    if (item.kind === "file" && item.type.startsWith("image/")) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
       return item;
     }
   }
@@ -836,15 +802,15 @@ function firstImageClipboardItem(dataTransfer: DataTransfer | null): DataTransfe
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      if (typeof reader.result === "string") {
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') {
         resolve(reader.result);
       } else {
-        reject(new Error("Image data was not readable"));
+        reject(new Error('Image data was not readable'));
       }
     });
-    reader.addEventListener("error", () => {
-      reject(reader.error ?? new Error("Image data read failed"));
+    reader.addEventListener('error', () => {
+      reject(reader.error ?? new Error('Image data read failed'));
     });
     reader.readAsDataURL(file);
   });
@@ -853,14 +819,14 @@ function readFileAsDataUrl(file: File): Promise<string> {
 function requestImagePaste(
   requestId: string,
   base64Data: string | undefined,
-  suggestedName: string | undefined,
+  suggestedName: string | undefined
 ): Promise<ImagePasteResult> {
   return new Promise((resolve) => {
     pendingImagePasteRequests.set(requestId, resolve);
     postToHost(
       base64Data === undefined
-        ? { type: "pasteImage", requestId }
-        : { type: "pasteImage", requestId, base64Data, suggestedName },
+        ? { type: 'pasteImage', requestId }
+        : { type: 'pasteImage', requestId, base64Data, suggestedName }
     );
   });
 }
@@ -876,7 +842,7 @@ function insertTextAtCursor(text: string): void {
   }
 
   editorInstance.pushUndoStop();
-  editorInstance.executeEdits("ghostex-editor-image-paste", [
+  editorInstance.executeEdits('ghostex-editor-image-paste', [
     {
       forceMoveMarkers: true,
       range: selection,
@@ -894,9 +860,9 @@ function insertTextAtCursor(text: string): void {
 }
 
 function positionAfterInsertedText(selection: unknown, text: string): unknown {
-  const startLineNumber = readNumberProperty(selection, "startLineNumber", 1);
-  const startColumn = readNumberProperty(selection, "startColumn", 1);
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const startLineNumber = readNumberProperty(selection, 'startLineNumber', 1);
+  const startColumn = readNumberProperty(selection, 'startColumn', 1);
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   if (lines.length === 1) {
     return {
       column: startColumn + text.length,
@@ -910,29 +876,29 @@ function positionAfterInsertedText(selection: unknown, text: string): unknown {
 }
 
 function readNumberProperty(value: unknown, key: string, fallback: number): number {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return fallback;
   }
   const record = value as Record<string, unknown>;
-  return typeof record[key] === "number" ? record[key] : fallback;
+  return typeof record[key] === 'number' ? record[key] : fallback;
 }
 
 function suggestedImageName(file: File, requestId: string): string {
-  const extension = file.name.split(".").pop() || extensionForMimeType(file.type);
+  const extension = file.name.split('.').pop() || extensionForMimeType(file.type);
   return `pasted-image-${requestId}.${extension}`;
 }
 
 function extensionForMimeType(mimeType: string): string {
-  if (mimeType === "image/jpeg") {
-    return "jpg";
+  if (mimeType === 'image/jpeg') {
+    return 'jpg';
   }
-  if (mimeType === "image/gif") {
-    return "gif";
+  if (mimeType === 'image/gif') {
+    return 'gif';
   }
-  if (mimeType === "image/webp") {
-    return "webp";
+  if (mimeType === 'image/webp') {
+    return 'webp';
   }
-  return "png";
+  return 'png';
 }
 
 function createRequestId(): string {
@@ -943,7 +909,7 @@ function createRequestId(): string {
 }
 
 function normalizeCursorOffset(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     return null;
   }
   return Math.max(0, Math.floor(value));
@@ -966,36 +932,36 @@ function clampOffset(offset: number, length: number): number {
 }
 
 function isConfigureMessage(value: unknown): value is GhostexEditorConfigureMessage {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return false;
   }
-  return (value as Record<string, unknown>).type === "configure";
+  return (value as Record<string, unknown>).type === 'configure';
 }
 
 function isImagePasteResult(value: unknown): value is ImagePasteResult {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return false;
   }
   const record = value as Record<string, unknown>;
   return (
-    record.type === "imagePasteResult" &&
-    typeof record.requestId === "string" &&
-    (record.path === undefined || typeof record.path === "string") &&
-    (record.error === undefined || typeof record.error === "string")
+    record.type === 'imagePasteResult' &&
+    typeof record.requestId === 'string' &&
+    (record.path === undefined || typeof record.path === 'string') &&
+    (record.error === undefined || typeof record.error === 'string')
   );
 }
 
 function isImagePreviewResult(value: unknown): value is ImagePreviewResult {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return false;
   }
   const record = value as Record<string, unknown>;
   return (
-    record.type === "imagePreviewResult" &&
-    typeof record.requestId === "string" &&
-    typeof record.path === "string" &&
-    (record.dataUrl === undefined || typeof record.dataUrl === "string") &&
-    (record.error === undefined || typeof record.error === "string")
+    record.type === 'imagePreviewResult' &&
+    typeof record.requestId === 'string' &&
+    typeof record.path === 'string' &&
+    (record.dataUrl === undefined || typeof record.dataUrl === 'string') &&
+    (record.error === undefined || typeof record.error === 'string')
   );
 }
 

@@ -1,11 +1,7 @@
 :root {
   color-scheme: light dark;
   --meo-background: var(--vscode-editor-background);
-  --meo-inset-background: color-mix(
-    in srgb,
-    var(--meo-background, var(--vscode-editor-background)) 88%,
-    black 12%
-  );
+  --meo-inset-background: color-mix(in srgb, var(--meo-background, var(--vscode-editor-background)) 88%, black 12%);
   --meo-code-background: color-mix(
     in srgb,
     var(--meo-background, var(--vscode-editor-background)) 80%,
@@ -619,7 +615,10 @@ body {
   border-radius: 6px;
   user-select: none;
   line-height: 1em;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .mode-button {
@@ -858,11 +857,8 @@ body {
 }
 
 .cm-editor .cm-line.meo-md-details-summary-line {
-  box-shadow: inset 0 -1px 0 color-mix(
-    in srgb,
-    var(--meo-color-base03, var(--vscode-editorLineNumber-foreground)) 70%,
-    transparent
-  );
+  box-shadow: inset 0 -1px 0
+    color-mix(in srgb, var(--meo-color-base03, var(--vscode-editorLineNumber-foreground)) 70%, transparent);
 }
 
 .cm-editor .meo-md-details-summary:hover,
@@ -1305,7 +1301,9 @@ body {
   text-indent: 0;
 }
 
-.cm-editor .cm-line:is(.meo-md-quote, .meo-md-alert):is(.meo-md-code-block, .meo-mermaid-block) .meo-code-language-label {
+.cm-editor
+  .cm-line:is(.meo-md-quote, .meo-md-alert):is(.meo-md-code-block, .meo-mermaid-block)
+  .meo-code-language-label {
   left: 3ch;
 }
 
@@ -1373,7 +1371,9 @@ body {
 .cm-editor.meo-mode-source .meo-md-colon-fence-code *,
 .cm-editor .meo-mermaid-fallback code {
   font-variant-ligatures: none;
-  font-feature-settings: "liga" 0, "calt" 0;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
   text-rendering: auto;
 }
 
@@ -1493,20 +1493,21 @@ body {
 }
 
 .cm-editor.meo-mode-live .cm-line.meo-md-list-line.meo-md-list-line-selected {
-  background-image: repeating-linear-gradient(
+  background-image:
+    repeating-linear-gradient(
       to right,
       var(--meo-color-base03) 0,
       var(--meo-color-base03) 1px,
       transparent 1px,
       transparent var(--meo-list-guide-step)
     ),
-    linear-gradient(
-      to right,
-      var(--meo-selection-bg),
-      var(--meo-selection-bg)
-    );
-  background-size: var(--meo-list-indent-columns) 100%, var(--meo-effective-list-hanging-indent) 100%;
-  background-position: left top, left top;
+    linear-gradient(to right, var(--meo-selection-bg), var(--meo-selection-bg));
+  background-size:
+    var(--meo-list-indent-columns) 100%,
+    var(--meo-effective-list-hanging-indent) 100%;
+  background-position:
+    left top,
+    left top;
   background-repeat: no-repeat, no-repeat;
 }
 
@@ -1685,14 +1686,24 @@ body {
   height: auto;
 }
 
-.cm-editor .meo-mermaid-light-theme .meo-mermaid-svg-wrapper svg :where(.node rect, .node polygon, .node ellipse, .node circle, .node path),
-.meo-mermaid-fullscreen.meo-mermaid-light-theme .meo-mermaid-svg-wrapper svg :where(.node rect, .node polygon, .node ellipse, .node circle, .node path) {
+.cm-editor
+  .meo-mermaid-light-theme
+  .meo-mermaid-svg-wrapper
+  svg
+  :where(.node rect, .node polygon, .node ellipse, .node circle, .node path),
+.meo-mermaid-fullscreen.meo-mermaid-light-theme
+  .meo-mermaid-svg-wrapper
+  svg
+  :where(.node rect, .node polygon, .node ellipse, .node circle, .node path) {
   fill: #ffffff !important;
   stroke: #d0d7de !important;
 }
 
 .cm-editor .meo-mermaid-light-theme .meo-mermaid-svg-wrapper svg :where(.nodeLabel, .label, .edgeLabel, .edgeLabel p),
-.meo-mermaid-fullscreen.meo-mermaid-light-theme .meo-mermaid-svg-wrapper svg :where(.nodeLabel, .label, .edgeLabel, .edgeLabel p) {
+.meo-mermaid-fullscreen.meo-mermaid-light-theme
+  .meo-mermaid-svg-wrapper
+  svg
+  :where(.nodeLabel, .label, .edgeLabel, .edgeLabel p) {
   color: #1f2328 !important;
 }
 
@@ -1786,17 +1797,11 @@ body {
 }
 
 .meo-mermaid-zoom-btn:hover {
-  background-color: var(
-    --vscode-toolbar-hoverBackground,
-    rgba(31, 35, 40, 0.06)
-  );
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(31, 35, 40, 0.06));
 }
 
 .meo-mermaid-zoom-btn:active {
-  background-color: var(
-    --vscode-toolbar-activeBackground,
-    rgba(31, 35, 40, 0.16)
-  );
+  background-color: var(--vscode-toolbar-activeBackground, rgba(31, 35, 40, 0.16));
 }
 
 .meo-mermaid-exit-btn {
@@ -1924,10 +1929,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding-bottom: 30px;
-  scrollbar-color: var(
-    --meo-scrollbar-thumb,
-    color-mix(in srgb, var(--meo-foreground) 22%, transparent)
-  ) transparent;
+  scrollbar-color: var(--meo-scrollbar-thumb, color-mix(in srgb, var(--meo-foreground) 22%, transparent)) transparent;
   scrollbar-width: thin;
 }
 
@@ -2302,7 +2304,10 @@ body {
 .cm-editor .meo-merge-action-btn {
   appearance: none;
   border: 1px solid var(--vscode-button-border, transparent);
-  background-color: var(--meo-color-base03, var(--vscode-button-secondaryBackground, var(--vscode-button-background))) !important;
+  background-color: var(
+    --meo-color-base03,
+    var(--vscode-button-secondaryBackground, var(--vscode-button-background))
+  ) !important;
   color: var(--vscode-editor-foreground);
   border-radius: 4px;
   padding: 2px 8px;
@@ -2387,9 +2392,10 @@ body {
   overflow-x: auto;
   overflow-y: visible;
   scrollbar-color: var(
-    --vscode-scrollbarSlider-background,
-    color-mix(in srgb, var(--meo-color-base03) 70%, transparent)
-  ) transparent;
+      --vscode-scrollbarSlider-background,
+      color-mix(in srgb, var(--meo-color-base03) 70%, transparent)
+    )
+    transparent;
   scrollbar-width: thin;
 }
 
@@ -2588,7 +2594,10 @@ body {
   padding: 2px 8px;
   border: 1px solid var(--vscode-button-border, transparent);
   border-radius: 4px;
-  background-color: var(--meo-color-base03, var(--vscode-button-secondaryBackground, var(--vscode-button-background))) !important;
+  background-color: var(
+    --meo-color-base03,
+    var(--vscode-button-secondaryBackground, var(--vscode-button-background))
+  ) !important;
   color: var(--meo-foreground);
   font-size: 11px;
   line-height: 1.35;
@@ -2727,7 +2736,9 @@ body {
   padding: 0.25em 1ch;
 }
 
-.cm-editor.meo-mode-live .cm-line.meo-md-table-line:not(.meo-md-table-delim-line) .meo-md-table-cell.meo-md-table-cell-last {
+.cm-editor.meo-mode-live
+  .cm-line.meo-md-table-line:not(.meo-md-table-delim-line)
+  .meo-md-table-cell.meo-md-table-cell-last {
   border-right: 1px solid var(--vscode-panel-border);
 }
 

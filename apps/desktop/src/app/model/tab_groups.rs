@@ -4,19 +4,16 @@
 
 use crate::*;
 
-
 pub(crate) struct CommandPaneTabGroup {
     pub(crate) tabs: Vec<CommandPaneTab>,
     pub(crate) active_session: CommandSessionId,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct WorkspaceTabGroup {
     pub(crate) tabs: Vec<WorkspaceTab>,
     pub(crate) active_tab: TerminalSessionId,
 }
-
 
 impl CommandPaneTabGroup {
     pub(crate) fn active_session_id(&self) -> Option<CommandSessionId> {
@@ -59,7 +56,10 @@ impl CommandPaneTabGroup {
         Some(self.active_session)
     }
 
-    pub(crate) fn remove_session(&mut self, session_id: CommandSessionId) -> Option<CommandPaneTab> {
+    pub(crate) fn remove_session(
+        &mut self,
+        session_id: CommandSessionId,
+    ) -> Option<CommandPaneTab> {
         let tab_index = self
             .tabs
             .iter()
@@ -94,7 +94,6 @@ impl CommandPaneTabGroup {
         }
     }
 }
-
 
 impl WorkspaceTabGroup {
     pub(crate) fn active_session_id(&self) -> Option<TerminalSessionId> {
@@ -172,4 +171,3 @@ impl WorkspaceTabGroup {
         }
     }
 }
-

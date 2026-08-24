@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 pub(crate) fn shell_focus_to_shell_state_json(focus: ShellFocusTarget) -> serde_json::Value {
     match focus {
         ShellFocusTarget::AgentsPane(pane_id) => {
@@ -27,7 +26,6 @@ pub(crate) fn shell_focus_to_shell_state_json(focus: ShellFocusTarget) -> serde_
     }
 }
 
-
 pub(crate) fn shell_focus_from_shell_state(value: &serde_json::Value) -> Option<ShellFocusTarget> {
     let object = value.as_object()?;
     match json_string_field(object, "type")? {
@@ -48,7 +46,6 @@ pub(crate) fn shell_focus_from_shell_state(value: &serde_json::Value) -> Option<
         _ => None,
     }
 }
-
 
 pub(crate) fn valid_shell_focus_or_default_with_browser_tabs(
     focus: ShellFocusTarget,
@@ -73,7 +70,6 @@ pub(crate) fn valid_shell_focus_or_default_with_browser_tabs(
         _ => default_shell_focus_for_mode(active_mode, agents_workspace, project_editor_shell),
     }
 }
-
 
 pub(crate) fn valid_non_command_shell_focus_with_browser_tabs(
     focus: ShellFocusTarget,
@@ -131,7 +127,6 @@ pub(crate) fn valid_non_command_shell_focus_with_browser_tabs(
     }
 }
 
-
 pub(crate) fn default_shell_focus_for_mode(
     active_mode: TitlebarMode,
     agents_workspace: &WorkspaceModel,
@@ -146,7 +141,6 @@ pub(crate) fn default_shell_focus_for_mode(
         | TitlebarMode::Manage => ShellFocusTarget::ProjectEditorSurface(active_mode),
     }
 }
-
 
 pub(crate) fn restored_non_command_shell_focus_or_default_with_browser_tabs(
     previous_non_command_focus: Option<ShellFocusTarget>,

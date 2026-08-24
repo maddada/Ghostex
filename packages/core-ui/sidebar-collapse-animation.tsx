@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
+} from 'react';
 
 const SidebarCollapseAnimationDurationContext = createContext(0);
 
@@ -35,10 +35,7 @@ export function useSidebarCollapseAnimationDuration(): number {
  * a real start and end height while still unmounting expensive session rows
  * once they are hidden.
  */
-export function useSidebarCollapsiblePresence(
-  collapsed: boolean,
-  durationOverrideMs?: number,
-) {
+export function useSidebarCollapsiblePresence(collapsed: boolean, durationOverrideMs?: number) {
   const contextDurationMs = useSidebarCollapseAnimationDuration();
   const durationMs = durationOverrideMs ?? contextDurationMs;
   const [isPresent, setIsPresent] = useState(!collapsed);

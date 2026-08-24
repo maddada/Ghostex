@@ -217,4 +217,3 @@ pub(crate) fn apply_gpui_terminal_runtime_action_events(
     }
     runtime_state_changed
 }
-

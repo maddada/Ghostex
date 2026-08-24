@@ -485,5 +485,4 @@ impl GhostexGpuiApp {
             .child(label)
             .into_any_element()
     }
-
 }

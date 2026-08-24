@@ -1,17 +1,11 @@
-import { Excalidraw } from "@excalidraw/excalidraw";
-import { type ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { IconAlertTriangle } from "@tabler/icons-react";
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { MANAGE_EXCALIDRAW_CANVAS_BACKGROUND, MANAGE_EXCALIDRAW_CANVAS_THEME } from "../constants";
-import { ManagePreviewMessage, isEditableEventTarget } from "./preview-shared";
-import { createExcalidrawSceneSignature, parseExcalidrawFile, serializeExcalidrawFile } from "../excalidraw-io";
-import "@excalidraw/excalidraw/index.css";
+import { Excalidraw } from '@excalidraw/excalidraw';
+import { type ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+import { IconAlertTriangle } from '@tabler/icons-react';
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { MANAGE_EXCALIDRAW_CANVAS_BACKGROUND, MANAGE_EXCALIDRAW_CANVAS_THEME } from '../constants';
+import { ManagePreviewMessage, isEditableEventTarget } from './preview-shared';
+import { createExcalidrawSceneSignature, parseExcalidrawFile, serializeExcalidrawFile } from '../excalidraw-io';
+import '@excalidraw/excalidraw/index.css';
 
 export function ManageExcalidrawEditor({
   content,
@@ -24,7 +18,7 @@ export function ManageExcalidrawEditor({
 }) {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const hasAcceptedInitialSceneRef = useRef(false);
-  const previousSceneSignatureRef = useRef("");
+  const previousSceneSignatureRef = useRef('');
   const lastSerializedRef = useRef(content);
   const [parseError, setParseError] = useState<string>();
   const parsed = useMemo(() => parseExcalidrawFile(content), [content]);
@@ -33,20 +27,20 @@ export function ManageExcalidrawEditor({
     if (content !== lastSerializedRef.current) {
       lastSerializedRef.current = content;
       hasAcceptedInitialSceneRef.current = false;
-      previousSceneSignatureRef.current = "";
+      previousSceneSignatureRef.current = '';
     }
   }, [content]);
 
   if (parsed.ok === false) {
     return (
-      <div className="manage-drawing-source">
+      <div className='manage-drawing-source'>
         <ManagePreviewMessage
-          icon={<IconAlertTriangle aria-hidden="true" size={21} />}
+          icon={<IconAlertTriangle aria-hidden='true' size={21} />}
           title={parseError ?? parsed.error}
         />
         <textarea
           aria-label={`${fileName} source`}
-          className="manage-text-editor"
+          className='manage-text-editor'
           onChange={(event) => onChange(event.currentTarget.value)}
           spellCheck={false}
           value={content}
@@ -58,10 +52,10 @@ export function ManageExcalidrawEditor({
   const data = parsed.data;
   const drawingElements = data.elements ?? [];
   return (
-    <div className="manage-drawing-editor" onKeyDownCapture={handleManageExcalidrawKeyDown}>
+    <div className='manage-drawing-editor' onKeyDownCapture={handleManageExcalidrawKeyDown}>
       {parseError ? (
-        <div className="manage-drawing-error">
-          <IconAlertTriangle aria-hidden="true" size={15} />
+        <div className='manage-drawing-error'>
+          <IconAlertTriangle aria-hidden='true' size={15} />
           <span>{parseError}</span>
         </div>
       ) : null}
@@ -128,13 +122,11 @@ export function handleManageExcalidrawKeyDown(event: ReactKeyboardEvent<HTMLDivE
     !event.ctrlKey &&
     !event.altKey &&
     !event.shiftKey &&
-    event.key.toLocaleLowerCase() === "y"
+    event.key.toLocaleLowerCase() === 'y'
   ) {
     event.preventDefault();
     event.stopPropagation();
-    event.currentTarget
-      .querySelector<HTMLButtonElement>('[data-testid="button-redo"]:not(:disabled)')
-      ?.click();
+    event.currentTarget.querySelector<HTMLButtonElement>('[data-testid="button-redo"]:not(:disabled)')?.click();
     return;
   }
   suppressManageExcalidrawToolKeyBeep(event);

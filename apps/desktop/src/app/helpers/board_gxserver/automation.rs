@@ -18,7 +18,9 @@ pub(crate) enum GpuiAutomationBoardNavigation {
 pub(crate) const GPUI_QUICK_AUTOMATIONS_PROJECT_ID: &str = "quick-automations";
 pub(crate) const GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE: &str = "Automations Overview";
 
-pub(crate) fn gpui_automation_gxserver_endpoint_for_board_action(action: &str) -> Option<&'static str> {
+pub(crate) fn gpui_automation_gxserver_endpoint_for_board_action(
+    action: &str,
+) -> Option<&'static str> {
     // macOS `gxserverAutomationEndpointForProjectBoardAction` parity.
     match action {
         "automationGetState" => Some("/api/readAutomationState"),
@@ -43,7 +45,10 @@ pub(crate) fn gpui_automation_board_ok_response(
     })
 }
 
-pub(crate) fn gpui_project_board_error_response(request_id: &str, error: &str) -> serde_json::Value {
+pub(crate) fn gpui_project_board_error_response(
+    request_id: &str,
+    error: &str,
+) -> serde_json::Value {
     serde_json::json!({
         "error": error,
         "ok": false,
@@ -170,14 +175,18 @@ pub(crate) fn gpui_automation_scope_params(
     params
 }
 
-pub(crate) fn gpui_automation_payload_json(request: &serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) fn gpui_automation_payload_json(
+    request: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let payload_json = manage_request_string(request, "payloadJson")
         .ok_or_else(|| "No automation payload was supplied.".to_string())?;
     serde_json::from_str::<serde_json::Value>(&payload_json)
         .map_err(|_| "Automation payload is not valid JSON.".to_string())
 }
 
-pub(crate) fn gpui_automation_enabled_from_payload(request: &serde_json::Value) -> Result<bool, String> {
+pub(crate) fn gpui_automation_enabled_from_payload(
+    request: &serde_json::Value,
+) -> Result<bool, String> {
     let payload = gpui_automation_payload_json(request)
         .map_err(|_| "No automation enabled payload was supplied.".to_string())?;
     payload
@@ -470,4 +479,3 @@ pub(crate) fn gpui_automation_open_run_target(
     )?;
     Ok((refreshed, navigation))
 }
-

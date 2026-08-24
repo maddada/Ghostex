@@ -510,7 +510,10 @@ impl GhostexGpuiApp {
             .is_some_and(|session| session.is_generating_first_prompt_title)
     }
 
-    pub(crate) fn sync_gpui_engine_first_prompt_input_suppression(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn sync_gpui_engine_first_prompt_input_suppression(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let suppression_by_session = self
             .agents_gpui_engine_terminals
             .keys()
@@ -594,5 +597,4 @@ impl GhostexGpuiApp {
         */
         self.active_mode == TitlebarMode::Agents && !self.workspace_tab_drag_active
     }
-
 }

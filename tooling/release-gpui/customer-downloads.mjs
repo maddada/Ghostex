@@ -1,18 +1,18 @@
-const GITHUB_REPOSITORY = "maddada/Ghostex";
+const GITHUB_REPOSITORY = 'maddada/Ghostex';
 
-export const IOS_DISCORD_URL = "https://discord.gg/df7b3G92CS";
+export const IOS_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
 
 export function renderIosAvailabilityNotes() {
   return [
-    "### iOS",
-    "",
+    '### iOS',
+    '',
     `The iOS TestFlight is available through [Discord](${IOS_DISCORD_URL}). Join and post in the iOS channel to get the app.`,
-  ].join("\n");
+  ].join('\n');
 }
 
 function assertVersion(version) {
-  if (!/^\d+\.\d+\.\d+$/u.test(version ?? "")) {
-    throw new Error(`Version must be MAJOR.MINOR.PATCH, got ${version ?? "nothing"}`);
+  if (!/^\d+\.\d+\.\d+$/u.test(version ?? '')) {
+    throw new Error(`Version must be MAJOR.MINOR.PATCH, got ${version ?? 'nothing'}`);
   }
 }
 
@@ -26,28 +26,28 @@ export function customerDownloadEntries(version, assetNames) {
   const available = new Set(assetNames ?? []);
   const groups = [
     {
-      title: "macOS ARM",
-      downloads: [["Download DMG", `ghostex-${version}-arm64.dmg`]],
+      title: 'macOS ARM',
+      downloads: [['Download DMG', `ghostex-${version}-arm64.dmg`]],
     },
     {
-      title: "Android",
-      downloads: [["Download APK", "ghostex-android.apk"]],
+      title: 'Android',
+      downloads: [['Download APK', 'ghostex-android.apk']],
     },
     {
-      title: "Windows",
+      title: 'Windows',
       downloads: [
-        ["x64 installer", `ghostex-${version}-windows-x64.exe`],
-        ["x64 portable", `ghostex-${version}-windows-x64-portable.zip`],
-        ["ARM64 installer", `ghostex-${version}-windows-arm64.exe`],
-        ["ARM64 portable", `ghostex-${version}-windows-arm64-portable.zip`],
+        ['x64 installer', `ghostex-${version}-windows-x64.exe`],
+        ['x64 portable', `ghostex-${version}-windows-x64-portable.zip`],
+        ['ARM64 installer', `ghostex-${version}-windows-arm64.exe`],
+        ['ARM64 portable', `ghostex-${version}-windows-arm64-portable.zip`],
       ],
     },
     {
-      title: "Linux",
+      title: 'Linux',
       downloads: [
-        ["x64 Debian package", `ghostex_${version}_amd64.deb`],
-        ["x64 RPM package", `ghostex-${version}-1.x86_64.rpm`],
-        ["x64 tarball (Arch & other distros, mise/ubi)", `ghostex-${version}-linux-x64.tar.zst`],
+        ['x64 Debian package', `ghostex_${version}_amd64.deb`],
+        ['x64 RPM package', `ghostex-${version}-1.x86_64.rpm`],
+        ['x64 tarball (Arch & other distros, mise/ubi)', `ghostex-${version}-linux-x64.tar.zst`],
       ],
     },
   ];
@@ -68,25 +68,27 @@ export function customerDownloadEntries(version, assetNames) {
 
 export function renderCustomerDownloadNotes(version, assetNames) {
   const groups = customerDownloadEntries(version, assetNames);
-  if (groups.length === 0) return "";
+  if (groups.length === 0) return '';
 
-  const lines = [`## Download Ghostex ${version}`, ""];
+  const lines = [`## Download Ghostex ${version}`, ''];
   for (const group of groups) {
-    lines.push(`### ${group.title}`, "");
+    lines.push(`### ${group.title}`, '');
     for (const download of group.downloads) {
       lines.push(`- [${download.label}](${download.url})`);
     }
-    lines.push("");
-    if (group.title === "Android") {
-      lines.push(renderIosAvailabilityNotes(), "");
+    lines.push('');
+    if (group.title === 'Android') {
+      lines.push(renderIosAvailabilityNotes(), '');
     }
   }
-  return lines.join("\n").trimEnd();
+  return lines.join('\n').trimEnd();
 }
 
 export function mergeCustomerDownloadNotes(body, version, assetNames) {
-  const normalized = String(body ?? "").replaceAll("\r\n", "\n").trimEnd();
-  if (!normalized) throw new Error("Existing release notes are empty");
+  const normalized = String(body ?? '')
+    .replaceAll('\r\n', '\n')
+    .trimEnd();
+  if (!normalized) throw new Error('Existing release notes are empty');
 
   const removableHeadings = [
     /^## Downloads\s*$/mu,
@@ -99,5 +101,5 @@ export function mergeCustomerDownloadNotes(body, version, assetNames) {
   }, normalized.length);
   const prose = normalized.slice(0, cutAt).trimEnd();
   const downloads = renderCustomerDownloadNotes(version, assetNames);
-  return `${prose}${downloads ? `\n\n${downloads}` : ""}\n`;
+  return `${prose}${downloads ? `\n\n${downloads}` : ''}\n`;
 }

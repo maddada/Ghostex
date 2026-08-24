@@ -8,8 +8,8 @@ import {
   type SessionGridSnapshot,
   type SessionGroupRecord,
   type SessionRecord,
-} from "./session-grid-contract";
-import { normalizeSessionGridSnapshot } from "./session-grid-state";
+} from './session-grid-contract';
+import { normalizeSessionGridSnapshot } from './session-grid-state';
 
 export type GroupLocation = {
   group: SessionGroupRecord;
@@ -19,11 +19,11 @@ export type GroupLocation = {
 export function insertSessionIntoGroup(
   snapshot: SessionGridSnapshot,
   sessionRecord: SessionRecord,
-  targetIndex?: number,
+  targetIndex?: number
 ): SessionGridSnapshot {
   const orderedSessions = getOrderedSessions(snapshot);
   const insertionIndex =
-    typeof targetIndex === "number"
+    typeof targetIndex === 'number'
       ? Math.max(0, Math.min(targetIndex, orderedSessions.length))
       : orderedSessions.length;
   const nextSessions = [...orderedSessions];
@@ -38,7 +38,7 @@ export function insertSessionIntoGroup(
 export function updateActiveGroupSnapshot(
   snapshot: GroupedSessionWorkspaceSnapshot,
   getActiveGroup: (snapshot: GroupedSessionWorkspaceSnapshot) => SessionGroupRecord | undefined,
-  updater: (groupSnapshot: SessionGridSnapshot) => SessionGridSnapshot,
+  updater: (groupSnapshot: SessionGridSnapshot) => SessionGridSnapshot
 ): GroupedSessionWorkspaceSnapshot {
   const activeGroup = getActiveGroup(snapshot);
   if (!activeGroup) {
@@ -57,7 +57,7 @@ export function updateOwningGroupSnapshot(
   updater: (groupSnapshot: SessionGridSnapshot) => {
     changed: boolean;
     snapshot: SessionGridSnapshot;
-  },
+  }
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const location = findGroupContainingSession(snapshot, sessionId);
   if (!location) {
@@ -79,7 +79,7 @@ export function updateOwningGroupSnapshot(
 export function updateGroup(
   groups: readonly SessionGroupRecord[],
   groupId: string,
-  snapshot: SessionGridSnapshot,
+  snapshot: SessionGridSnapshot
 ): SessionGroupRecord[] {
   return groups.map((group) =>
     group.groupId === groupId
@@ -87,13 +87,13 @@ export function updateGroup(
           ...group,
           snapshot,
         }
-      : group,
+      : group
   );
 }
 
 export function findGroupContainingSession(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  sessionId: string,
+  sessionId: string
 ): GroupLocation | undefined {
   for (let index = 0; index < snapshot.groups.length; index += 1) {
     const group = snapshot.groups[index];
@@ -105,39 +105,30 @@ export function findGroupContainingSession(
   return undefined;
 }
 
-export function getSessionRecord(
-  snapshot: SessionGridSnapshot,
-  sessionId: string,
-): SessionRecord | undefined {
+export function getSessionRecord(snapshot: SessionGridSnapshot, sessionId: string): SessionRecord | undefined {
   return snapshot.sessions.find((session) => session.sessionId === sessionId);
 }
 
 export function isGroupedWorkspaceSnapshot(
-  snapshot: GroupedSessionWorkspaceSnapshot | undefined,
+  snapshot: GroupedSessionWorkspaceSnapshot | undefined
 ): snapshot is GroupedSessionWorkspaceSnapshot {
-  return Boolean(
-    snapshot && Array.isArray(snapshot.groups) && typeof snapshot.activeGroupId === "string",
-  );
+  return Boolean(snapshot && Array.isArray(snapshot.groups) && typeof snapshot.activeGroupId === 'string');
 }
 
 export function isSessionGroupRecord(candidate: unknown): candidate is SessionGroupRecord {
   return Boolean(
     candidate &&
-    typeof candidate === "object" &&
-    typeof (candidate as SessionGroupRecord).groupId === "string" &&
-    typeof (candidate as SessionGroupRecord).title === "string" &&
-    typeof (candidate as SessionGroupRecord).snapshot === "object",
+    typeof candidate === 'object' &&
+    typeof (candidate as SessionGroupRecord).groupId === 'string' &&
+    typeof (candidate as SessionGroupRecord).title === 'string' &&
+    typeof (candidate as SessionGroupRecord).snapshot === 'object'
   );
 }
 
 export function normalizeGroup(group: SessionGroupRecord, index: number): SessionGroupRecord {
   return {
     groupId:
-      group.groupId.trim().length > 0
-        ? group.groupId
-        : index === 0
-          ? DEFAULT_MAIN_GROUP_ID
-          : `group-${index + 1}`,
+      group.groupId.trim().length > 0 ? group.groupId : index === 0 ? DEFAULT_MAIN_GROUP_ID : `group-${index + 1}`,
     snapshot: normalizeSessionGridSnapshot(group.snapshot),
     title:
       group.title.trim().length > 0
@@ -158,11 +149,8 @@ export function normalizeWorkspaceSessionDisplayIds(groups: readonly SessionGrou
 
   const nextGroups = groups.map((group) => {
     const sessions = group.snapshot.sessions.map((session) => {
-      const normalizedDisplayId = formatSessionDisplayId(session.displayId ?? "");
-      if (
-        !usedDisplayIds.has(normalizedDisplayId) &&
-        isValidSessionDisplayId(normalizedDisplayId)
-      ) {
+      const normalizedDisplayId = formatSessionDisplayId(session.displayId ?? '');
+      if (!usedDisplayIds.has(normalizedDisplayId) && isValidSessionDisplayId(normalizedDisplayId)) {
         usedDisplayIds.add(normalizedDisplayId);
         return {
           ...session,
@@ -204,14 +192,14 @@ export function claimNextSessionDisplayId(snapshot: GroupedSessionWorkspaceSnaps
   nextSessionDisplayId: number;
 } {
   const usedDisplayIds = new Set(
-    snapshot.groups.flatMap((group) => group.snapshot.sessions.map((session) => session.displayId)),
+    snapshot.groups.flatMap((group) => group.snapshot.sessions.map((session) => session.displayId))
   );
   return claimDisplayId(usedDisplayIds, snapshot.nextSessionDisplayId);
 }
 
 export function claimDisplayId(
   usedDisplayIds: Set<string>,
-  startDisplayId: number,
+  startDisplayId: number
 ): { displayId: string; nextSessionDisplayId: number } {
   const normalizedStartDisplayId =
     ((Math.floor(startDisplayId) % MAX_SESSION_DISPLAY_ID_COUNT) + MAX_SESSION_DISPLAY_ID_COUNT) %
@@ -225,10 +213,7 @@ export function claimDisplayId(
   };
 }
 
-export function findNextAvailableDisplayId(
-  usedDisplayIds: Set<string>,
-  startDisplayId: number,
-): number {
+export function findNextAvailableDisplayId(usedDisplayIds: Set<string>, startDisplayId: number): number {
   for (let offset = 0; offset < MAX_SESSION_DISPLAY_ID_COUNT; offset += 1) {
     const candidate = (startDisplayId + offset) % MAX_SESSION_DISPLAY_ID_COUNT;
     if (!usedDisplayIds.has(formatSessionDisplayId(candidate))) {

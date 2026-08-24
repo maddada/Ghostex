@@ -5,14 +5,12 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CommandPaneMode {
     Pinned,
     Floating,
     Collapsed,
 }
-
 
 impl CommandPaneMode {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -33,13 +31,11 @@ impl CommandPaneMode {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneNewCommandControlPlacement {
     FixedActionCluster,
     InlineTabRun,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneBottomReservationChrome {
@@ -47,13 +43,11 @@ pub(crate) enum CommandPaneBottomReservationChrome {
     CollapsedStrip,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CommandPaneWorkspaceBottomReservation {
     pub(crate) chrome: CommandPaneBottomReservationChrome,
     pub(crate) height: f32,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum CommandPaneWorkspaceLayoutPlan {
@@ -73,7 +67,6 @@ pub(crate) enum CommandPaneWorkspaceLayoutPlan {
     },
 }
 
-
 pub(crate) fn agents_workspace_tab_context_close_scope_label(
     scope: AgentsWorkspaceTabCloseScope,
 ) -> &'static str {
@@ -84,7 +77,6 @@ pub(crate) fn agents_workspace_tab_context_close_scope_label(
         AgentsWorkspaceTabCloseScope::CloseRight => "Close Right",
     }
 }
-
 
 pub(crate) fn agents_workspace_tab_context_sleep_scope_label(
     scope: AgentsWorkspaceTabSleepScope,
@@ -97,13 +89,12 @@ pub(crate) fn agents_workspace_tab_context_sleep_scope_label(
     }
 }
 
-
 pub(crate) fn agents_workspace_tab_context_focus_label() -> &'static str {
     "Focus"
 }
 
-
-pub(crate) fn agents_workspace_tab_context_scoped_close_order() -> [AgentsWorkspaceTabCloseScope; 3] {
+pub(crate) fn agents_workspace_tab_context_scoped_close_order() -> [AgentsWorkspaceTabCloseScope; 3]
+{
     /*
     CDXC:GPUIAgentsTabContextMenu 2026-06-26-06:57:
     Native workspace tab right-click menus omit direct Close Tab and order scoped close rows as Close Right, Close Left, then Close Other Tabs. GPUI Agents menus use the same row set while direct close remains owned by inline tab chrome and middle-click gestures.
@@ -114,7 +105,6 @@ pub(crate) fn agents_workspace_tab_context_scoped_close_order() -> [AgentsWorksp
         AgentsWorkspaceTabCloseScope::CloseOthers,
     ]
 }
-
 
 pub(crate) fn agents_workspace_tab_context_sleep_order(
     clicked_tab_is_sleeping: bool,
@@ -135,8 +125,9 @@ pub(crate) fn agents_workspace_tab_context_sleep_order(
     scopes
 }
 
-
-pub(crate) fn command_pane_tab_context_close_scope_label(scope: CommandPaneTabCloseScope) -> &'static str {
+pub(crate) fn command_pane_tab_context_close_scope_label(
+    scope: CommandPaneTabCloseScope,
+) -> &'static str {
     match scope {
         CommandPaneTabCloseScope::Close => "Close Tab",
         CommandPaneTabCloseScope::CloseLeft => "Close Left",
@@ -145,8 +136,9 @@ pub(crate) fn command_pane_tab_context_close_scope_label(scope: CommandPaneTabCl
     }
 }
 
-
-pub(crate) fn command_pane_tab_context_sleep_scope_label(scope: CommandPaneTabSleepScope) -> &'static str {
+pub(crate) fn command_pane_tab_context_sleep_scope_label(
+    scope: CommandPaneTabSleepScope,
+) -> &'static str {
     match scope {
         CommandPaneTabSleepScope::Sleep => "Sleep",
         CommandPaneTabSleepScope::SleepLeft => "Sleep Left",
@@ -155,20 +147,18 @@ pub(crate) fn command_pane_tab_context_sleep_scope_label(scope: CommandPaneTabSl
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneTabSessionAction {
     Rename,
-    #[allow(dead_code)] // never constructed: kept so the chrome-status enum stays a complete mirror of the tab status vocabulary
+    #[allow(dead_code)]
+    // never constructed: kept so the chrome-status enum stays a complete mirror of the tab status vocabulary
     DelayedSend,
     CloseAfterDone,
 }
 
-
 pub(crate) fn command_pane_tab_context_focus_label() -> &'static str {
     "Focus"
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneTabContextFocusPolicy {
@@ -176,13 +166,11 @@ pub(crate) enum CommandPaneTabContextFocusPolicy {
     SelectExpandWakeAndFocus,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneScopedTabMutationFocusPolicy {
     FocusCommandPane,
     PreserveCurrentFocus,
 }
-
 
 pub(crate) fn command_pane_tab_context_session_action_focus_policy(
     action: CommandPaneTabSessionAction,
@@ -204,7 +192,6 @@ pub(crate) fn command_pane_tab_context_session_action_focus_policy(
     }
 }
 
-
 pub(crate) fn command_pane_tab_context_scoped_lifecycle_focus_policy()
 -> CommandPaneScopedTabMutationFocusPolicy {
     /*
@@ -213,7 +200,6 @@ pub(crate) fn command_pane_tab_context_scoped_lifecycle_focus_policy()
     */
     CommandPaneScopedTabMutationFocusPolicy::PreserveCurrentFocus
 }
-
 
 pub(crate) fn command_pane_tab_context_runtime_action_count(
     _command_pane: &CommandPaneModel,
@@ -230,8 +216,10 @@ pub(crate) fn command_pane_tab_context_runtime_action_count(
     0
 }
 
-
-pub(crate) fn command_pane_tab_tooltip(title: &str, delayed_send_remaining_label: Option<&str>) -> String {
+pub(crate) fn command_pane_tab_tooltip(
+    title: &str,
+    delayed_send_remaining_label: Option<&str>,
+) -> String {
     /*
     CDXC:GPUICommandDelayedSend 2026-06-25-17:57:
     Native command tabs keep the normal title tooltip but append "Delayed Send in <remaining>" while a live timer label exists. Use only the visible title plus the runtime countdown label already allowed for tab/body/sidebar timer chrome; do not read command text, terminal content, shell-state JSON, paths, stdout/stderr, or persisted placeholder flags.
@@ -248,7 +236,6 @@ pub(crate) fn command_pane_tab_tooltip(title: &str, delayed_send_remaining_label
         .unwrap_or_else(|| title.to_string())
 }
 
-
 pub(crate) fn command_pane_tab_context_scoped_close_order() -> [CommandPaneTabCloseScope; 3] {
     /*
     CDXC:GPUICommandTabContextMenu 2026-06-25-14:07:
@@ -260,7 +247,6 @@ pub(crate) fn command_pane_tab_context_scoped_close_order() -> [CommandPaneTabCl
         CommandPaneTabCloseScope::CloseOthers,
     ]
 }
-
 
 pub(crate) fn command_pane_tab_context_sleep_order(
     clicked_tab_is_sleeping: bool,
@@ -281,15 +267,14 @@ pub(crate) fn command_pane_tab_context_sleep_order(
     scopes
 }
 
-
-pub(crate) fn command_pane_new_command_control_placement() -> CommandPaneNewCommandControlPlacement {
+pub(crate) fn command_pane_new_command_control_placement() -> CommandPaneNewCommandControlPlacement
+{
     /*
     CDXC:GPUICommandPaneControls 2026-06-25-12:13:
     macOS command-pane chrome keeps New Terminal inline with the tab run, while the fixed right action cluster is reserved for panel actions such as Pin/Unpin and Minimize/Expand. GPUI should not render New Terminal in that fixed cluster.
     */
     CommandPaneNewCommandControlPlacement::InlineTabRun
 }
-
 
 pub(crate) fn command_pane_tab_add_tooltip() -> &'static str {
     /*
@@ -299,7 +284,6 @@ pub(crate) fn command_pane_tab_add_tooltip() -> &'static str {
     "New Terminal"
 }
 
-
 pub(crate) fn command_pane_tab_add_icon_path() -> &'static str {
     /*
     CDXC:GPUICommandPaneControls 2026-06-25-13:54:
@@ -307,7 +291,6 @@ pub(crate) fn command_pane_tab_add_icon_path() -> &'static str {
     */
     COMMAND_ICON_PLUS
 }
-
 
 pub(crate) fn command_pane_panel_mode_controls_visible(expanded_chrome: bool) -> bool {
     /*
@@ -317,7 +300,6 @@ pub(crate) fn command_pane_panel_mode_controls_visible(expanded_chrome: bool) ->
     COMMAND_PANE_FLOATING_MODE_ENABLED && expanded_chrome
 }
 
-
 pub(crate) fn command_pane_mode_for_current_release(mode: CommandPaneMode) -> CommandPaneMode {
     if COMMAND_PANE_FLOATING_MODE_ENABLED || mode != CommandPaneMode::Floating {
         mode
@@ -325,7 +307,6 @@ pub(crate) fn command_pane_mode_for_current_release(mode: CommandPaneMode) -> Co
         CommandPaneMode::Pinned
     }
 }
-
 
 pub(crate) fn command_pane_panel_pin_icon_path(mode: CommandPaneMode) -> &'static str {
     /*
@@ -338,7 +319,6 @@ pub(crate) fn command_pane_panel_pin_icon_path(mode: CommandPaneMode) -> &'stati
     }
 }
 
-
 pub(crate) fn command_pane_panel_visibility_icon_path(expanded: bool) -> &'static str {
     /*
     CDXC:GPUICommandPaneControls 2026-06-25-13:40:
@@ -350,7 +330,6 @@ pub(crate) fn command_pane_panel_visibility_icon_path(expanded: bool) -> &'stati
         COMMAND_ICON_CHEVRON_UP
     }
 }
-
 
 pub(crate) fn command_pane_bottom_reservation_chrome(
     mode: CommandPaneMode,
@@ -365,7 +344,6 @@ pub(crate) fn command_pane_bottom_reservation_chrome(
         CommandPaneMode::Collapsed => Some(CommandPaneBottomReservationChrome::CollapsedStrip),
     }
 }
-
 
 pub(crate) fn command_pane_workspace_layout_plan(
     mode: CommandPaneMode,
@@ -419,7 +397,6 @@ pub(crate) fn command_pane_workspace_layout_plan(
     }
 }
 
-
 pub(crate) fn command_pane_control_trailing_padding(expanded_chrome: bool) -> f32 {
     /*
     CDXC:GPUICommandPaneControls 2026-06-25-13:47:
@@ -432,7 +409,6 @@ pub(crate) fn command_pane_control_trailing_padding(expanded_chrome: bool) -> f3
     }
 }
 
-
 pub(crate) fn command_pane_tab_left_mouse_up_selects(
     pending_click: Option<CommandPanePendingTabClick>,
     target: CommandPanePendingTabClick,
@@ -444,7 +420,6 @@ pub(crate) fn command_pane_tab_left_mouse_up_selects(
     */
     pending_click == Some(target) && !command_tab_drag_active
 }
-
 
 pub(crate) fn command_pane_tab_left_mouse_up_focuses(
     click_count: usize,
@@ -462,7 +437,6 @@ pub(crate) fn command_pane_tab_left_mouse_up_focuses(
         && command_pane.tab_context_allows_focus_mode(target.group_id, target.session_id)
 }
 
-
 pub(crate) fn command_pane_tab_left_mouse_up_finishes_drag(command_tab_drag_active: bool) -> bool {
     /*
     CDXC:GPUICommandTabSelection 2026-06-25-19:21:
@@ -470,9 +444,6 @@ pub(crate) fn command_pane_tab_left_mouse_up_finishes_drag(command_tab_drag_acti
     */
     command_tab_drag_active
 }
-
-
-
 
 pub(crate) fn command_pane_tab_pending_click_after_mouse_up_out(
     pending_click: Option<CommandPanePendingTabClick>,
@@ -492,7 +463,6 @@ pub(crate) fn command_pane_tab_pending_click_after_mouse_up_out(
     }
 }
 
-
 pub(crate) fn workspace_tab_left_mouse_up_selects(
     pending_click: Option<WorkspacePendingTabClick>,
     target: WorkspacePendingTabClick,
@@ -504,7 +474,6 @@ pub(crate) fn workspace_tab_left_mouse_up_selects(
     */
     pending_click == Some(target) && !workspace_tab_drag_active
 }
-
 
 pub(crate) fn workspace_tab_left_mouse_up_focuses(
     click_count: usize,
@@ -519,7 +488,6 @@ pub(crate) fn workspace_tab_left_mouse_up_focuses(
     click_count >= 2
         && workspace_tab_left_mouse_up_selects(pending_click, target, workspace_tab_drag_active)
 }
-
 
 pub(crate) fn workspace_tab_pending_click_after_mouse_up_out(
     pending_click: Option<WorkspacePendingTabClick>,
@@ -536,7 +504,6 @@ pub(crate) fn workspace_tab_pending_click_after_mouse_up_out(
     }
 }
 
-
 pub(crate) fn command_pane_tab_separator_visible(has_following_command_tab: bool) -> bool {
     /*
     CDXC:GPUICommandTabSeparators 2026-06-25-14:17:
@@ -544,7 +511,6 @@ pub(crate) fn command_pane_tab_separator_visible(has_following_command_tab: bool
     */
     has_following_command_tab
 }
-
 
 pub(crate) fn command_pane_sticky_active_tab_edge_for_scroll_handle(
     scroll_handle: &ScrollHandle,
@@ -561,7 +527,6 @@ pub(crate) fn command_pane_sticky_active_tab_edge_for_scroll_handle(
         scroll_handle.max_offset().x,
     )
 }
-
 
 pub(crate) fn command_pane_sticky_active_tab_edge(
     viewport_bounds: Bounds<Pixels>,
@@ -586,7 +551,6 @@ pub(crate) fn command_pane_sticky_active_tab_edge(
     }
 }
 
-
 pub(crate) fn command_pane_tab_scroll_geometry_ready(
     viewport_bounds: Bounds<Pixels>,
     active_tab_bounds: Bounds<Pixels>,
@@ -596,7 +560,6 @@ pub(crate) fn command_pane_tab_scroll_geometry_ready(
         && active_tab_bounds.size.width > px(0.0)
         && max_scroll_x > px(0.0)
 }
-
 
 pub(crate) fn command_pane_active_tab_visible_width(
     viewport_bounds: Bounds<Pixels>,
@@ -620,7 +583,6 @@ pub(crate) fn command_pane_active_tab_visible_width(
     }
 }
 
-
 pub(crate) fn command_pane_active_tab_minimum_usable_visible_width(
     active_tab_bounds: Bounds<Pixels>,
 ) -> Pixels {
@@ -630,7 +592,6 @@ pub(crate) fn command_pane_active_tab_minimum_usable_visible_width(
         px(COMMAND_PANE_ACTIVE_TAB_REVEAL_MINIMUM_VISIBLE_WIDTH)
     }
 }
-
 
 pub(crate) fn command_pane_active_tab_reveal_scroll_offset_x(
     viewport_bounds: Bounds<Pixels>,
@@ -666,7 +627,6 @@ pub(crate) fn command_pane_active_tab_reveal_scroll_offset_x(
     ))
 }
 
-
 pub(crate) fn command_pane_clamped_tab_scroll_offset_x(
     target_offset_x: Pixels,
     max_scroll_x: Pixels,
@@ -680,7 +640,6 @@ pub(crate) fn command_pane_clamped_tab_scroll_offset_x(
         target_offset_x
     }
 }
-
 
 pub(crate) fn command_pane_reveal_active_tab_with_native_margin(
     scroll_handle: &ScrollHandle,
@@ -705,7 +664,6 @@ pub(crate) fn command_pane_reveal_active_tab_with_native_margin(
     }
 }
 
-
 pub(crate) fn command_pane_tab_wheel_scroll_delta_x(
     delta: ScrollDelta,
     line_height: Pixels,
@@ -727,7 +685,6 @@ pub(crate) fn command_pane_tab_wheel_scroll_delta_x(
     ))
 }
 
-
 pub(crate) fn command_pane_amplified_vertical_wheel_tab_delta(delta_y: Pixels) -> Pixels {
     let scaled_delta = delta_y * COMMAND_PANE_VERTICAL_WHEEL_TAB_SCROLL_MULTIPLIER;
     if scaled_delta == px(0.0) {
@@ -742,7 +699,6 @@ pub(crate) fn command_pane_amplified_vertical_wheel_tab_delta(delta_y: Pixels) -
         minimum_delta
     }
 }
-
 
 pub(crate) fn command_pane_handle_tab_strip_scroll_wheel(
     scroll_handle: &ScrollHandle,
@@ -768,7 +724,6 @@ pub(crate) fn command_pane_handle_tab_strip_scroll_wheel(
     true
 }
 
-
 pub(crate) fn command_pane_centered_active_tab_scroll_offset_x(
     viewport_bounds: Bounds<Pixels>,
     active_tab_bounds: Bounds<Pixels>,
@@ -787,7 +742,6 @@ pub(crate) fn command_pane_centered_active_tab_scroll_offset_x(
     let centered_offset = viewport_bounds.center().x - active_tab_bounds.center().x;
     command_pane_clamped_tab_scroll_offset_x(centered_offset, max_scroll_x)
 }
-
 
 pub(crate) fn command_pane_center_active_tab_in_scroll_handle(
     scroll_handle: &ScrollHandle,
@@ -809,19 +763,18 @@ pub(crate) fn command_pane_center_active_tab_in_scroll_handle(
     true
 }
 
-
-pub(crate) fn command_pane_sticky_active_tab_icon_path(edge: CommandPaneStickyActiveTabEdge) -> &'static str {
+pub(crate) fn command_pane_sticky_active_tab_icon_path(
+    edge: CommandPaneStickyActiveTabEdge,
+) -> &'static str {
     match edge {
         CommandPaneStickyActiveTabEdge::Leading => COMMAND_ICON_CHEVRON_LEFT,
         CommandPaneStickyActiveTabEdge::Trailing => COMMAND_ICON_CHEVRON_RIGHT,
     }
 }
 
-
 pub(crate) fn command_pane_sticky_active_tab_tooltip() -> &'static str {
     "Show Active Tab"
 }
-
 
 pub(crate) fn command_pane_sticky_active_tab_trailing_inset(
     expanded_chrome: bool,
@@ -839,15 +792,15 @@ pub(crate) fn command_pane_sticky_active_tab_trailing_inset(
         }
 }
 
-
-pub(crate) fn command_pane_empty_titlebar_double_click_creates_new_terminal(click_count: usize) -> bool {
+pub(crate) fn command_pane_empty_titlebar_double_click_creates_new_terminal(
+    click_count: usize,
+) -> bool {
     /*
     CDXC:GPUICommandTabDoubleClick 2026-06-25-13:50:
     Native command titlebars create New Terminal only for double-clicks on empty tab chrome. Single clicks and real tab/control hits must keep their normal focus, selection, drag, and action behavior.
     */
     click_count >= 2
 }
-
 
 pub(crate) fn command_pane_fixed_panel_control_count(expanded_chrome: bool) -> usize {
     /*
@@ -866,13 +819,11 @@ pub(crate) fn command_pane_fixed_panel_control_count(expanded_chrome: bool) -> u
     count
 }
 
-
 pub(crate) fn command_pane_fixed_panel_control_width(expanded_chrome: bool) -> f32 {
     command_pane_fixed_panel_control_count(expanded_chrome) as f32
         * COMMAND_PANE_CONTROL_BUTTON_SIZE
         + command_pane_control_trailing_padding(expanded_chrome)
 }
-
 
 pub(crate) fn command_pane_inline_tab_add_visible_for_chrome_width(
     chrome_width: f32,
@@ -890,7 +841,6 @@ pub(crate) fn command_pane_inline_tab_add_visible_for_chrome_width(
             + COMMAND_PANE_TAB_BAR_HEIGHT
 }
 
-
 pub(crate) fn command_pane_panel_pin_label(mode: CommandPaneMode) -> &'static str {
     /*
     CDXC:GPUICommandPaneControls 2026-06-25-12:19:
@@ -902,7 +852,6 @@ pub(crate) fn command_pane_panel_pin_label(mode: CommandPaneMode) -> &'static st
     }
 }
 
-
 pub(crate) fn command_pane_panel_minimize_label() -> &'static str {
     /*
     CDXC:GPUICommandPaneControls 2026-06-25-12:19:
@@ -911,7 +860,6 @@ pub(crate) fn command_pane_panel_minimize_label() -> &'static str {
     "Minimize Commands Panel"
 }
 
-
 pub(crate) fn command_pane_panel_expand_menu_label() -> &'static str {
     /*
     CDXC:GPUICommandPaneControls 2026-06-25-12:23:
@@ -919,7 +867,6 @@ pub(crate) fn command_pane_panel_expand_menu_label() -> &'static str {
     */
     "Expand Commands Panel"
 }
-
 
 // CPRAILDBG: temporary diagnostic logging for the command-pane resize-rail
 // drag investigation. Remove before handoff.
@@ -944,7 +891,6 @@ pub(crate) fn cpraildbg(message: &str) {
     let _ = writeln!(file, "[{millis}] {message}");
 }
 
-
 /*
 CDXC:GPUICommandPaneTabs 2026-06-22-17:20:
 Command-pane tab chrome is focus-invariant: command group focus and shell focus may drive keyboard ownership and group borders, but per-tab brightness derives only from semantic command status and active membership inside the command tab group. CommandPaneModel.focused_group and shell focus are intentionally excluded.
@@ -954,7 +900,6 @@ pub(crate) struct CommandTabChromeSignature {
     pub(crate) tab_status: CommandTerminalTabStatus,
     pub(crate) active_in_tab_group: bool,
 }
-
 
 pub(crate) fn command_tab_chrome_signature(
     tab_group: &CommandPaneTabGroup,
@@ -967,7 +912,6 @@ pub(crate) fn command_tab_chrome_signature(
     }
 }
 
-
 pub(crate) fn command_pane_group_has_first_responder_border(
     shell_focus: ShellFocusTarget,
     focused_group: CommandPaneGroupId,
@@ -979,7 +923,6 @@ pub(crate) fn command_pane_group_has_first_responder_border(
     */
     shell_focus == ShellFocusTarget::CommandPane && focused_group == group_id
 }
-
 
 pub(crate) fn command_pane_group_border_color(
     mode: CommandPaneMode,
@@ -1003,13 +946,11 @@ pub(crate) fn command_pane_group_border_color(
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneGroupBorderWidth {
     Focused,
     Inactive,
 }
-
 
 impl CommandPaneGroupBorderWidth {
     #[allow(dead_code)] // no caller: group border widths are applied inline in render/command_pane_tabs_core.rs; kept with the border-width chrome model
@@ -1020,7 +961,6 @@ impl CommandPaneGroupBorderWidth {
         }
     }
 }
-
 
 pub(crate) fn command_pane_group_border_width(
     shell_focus: ShellFocusTarget,

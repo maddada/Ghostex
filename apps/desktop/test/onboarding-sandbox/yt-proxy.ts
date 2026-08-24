@@ -20,18 +20,18 @@
  *
  * Scope: dev server only. Nothing here ships.
  */
-import type { Plugin } from "vite";
-import type { IncomingMessage, ServerResponse } from "node:http";
-import { Readable } from "node:stream";
+import type { Plugin } from 'vite';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Readable } from 'node:stream';
 
-const YOUTUBE_ORIGIN = "https://www.youtube.com";
-const PROXY_PREFIX = "/yt";
+const YOUTUBE_ORIGIN = 'https://www.youtube.com';
+const PROXY_PREFIX = '/yt';
 /** `/gv/<googlevideo host>/<path>` — media segments (see REWRITE_SCRIPT). */
-const MEDIA_PROXY_PREFIX = "/gv";
+const MEDIA_PROXY_PREFIX = '/gv';
 const MEDIA_HOST_PATTERN = /^[a-z0-9._-]+\.googlevideo\.com$/i;
 
 /** The watch URL gpui hands to CEF, re-pointed at this proxy. */
-export const SANDBOX_TUTORIAL_VIDEO_PROXY_URL = "/yt/watch?v=APdP-j5n4Mw";
+export const SANDBOX_TUTORIAL_VIDEO_PROXY_URL = '/yt/watch?v=APdP-j5n4Mw';
 
 /*
  * The watch document requests most of its own machinery with root-absolute
@@ -45,39 +45,39 @@ const YOUTUBE_ROOT_PREFIXES = [
    * dropping the /yt prefix, so a reload (or an in-page navigation to another
    * video) lands here instead. The sandbox never serves /watch itself.
    */
-  "/watch",
-  "/s/",
-  "/youtubei/",
-  "/yts/",
-  "/iframe_api",
-  "/generate_204",
-  "/player_204",
-  "/ptracking",
-  "/csi_204",
-  "/error_204",
-  "/api/stats/",
-  "/youtubei",
+  '/watch',
+  '/s/',
+  '/youtubei/',
+  '/yts/',
+  '/iframe_api',
+  '/generate_204',
+  '/player_204',
+  '/ptracking',
+  '/csi_204',
+  '/error_204',
+  '/api/stats/',
+  '/youtubei',
 ];
 
 /** Hop-by-hop + identity headers that must not be forwarded upstream. */
 const DROPPED_REQUEST_HEADERS = new Set([
-  "accept-encoding",
-  "connection",
-  "content-length",
-  "cookie",
-  "host",
-  "if-modified-since",
-  "if-none-match",
-  "keep-alive",
-  "origin",
-  "proxy-connection",
-  "referer",
-  "sec-fetch-dest",
-  "sec-fetch-mode",
-  "sec-fetch-site",
-  "sec-fetch-user",
-  "transfer-encoding",
-  "upgrade-insecure-requests",
+  'accept-encoding',
+  'connection',
+  'content-length',
+  'cookie',
+  'host',
+  'if-modified-since',
+  'if-none-match',
+  'keep-alive',
+  'origin',
+  'proxy-connection',
+  'referer',
+  'sec-fetch-dest',
+  'sec-fetch-mode',
+  'sec-fetch-site',
+  'sec-fetch-user',
+  'transfer-encoding',
+  'upgrade-insecure-requests',
 ]);
 
 /*
@@ -92,35 +92,31 @@ const DROPPED_RESPONSE_HEADERS = new Set([
    * headers are dropped for the same "describes the real origin, not ours"
    * reason.
    */
-  "alt-svc",
+  'alt-svc',
   /*
    * Connection-specific headers: HTTP/2 refuses to send them
    * (ERR_HTTP2_INVALID_CONNECTION_HEADERS), and the dev server speaks h2.
    */
-  "connection",
-  "keep-alive",
-  "proxy-connection",
-  "upgrade",
-  "content-encoding",
-  "nel",
-  "report-to",
-  "reporting-endpoints",
-  "content-length",
-  "content-security-policy",
-  "content-security-policy-report-only",
-  "cross-origin-embedder-policy",
-  "cross-origin-opener-policy",
-  "cross-origin-resource-policy",
-  "set-cookie",
-  "transfer-encoding",
-  "x-frame-options",
+  'connection',
+  'keep-alive',
+  'proxy-connection',
+  'upgrade',
+  'content-encoding',
+  'nel',
+  'report-to',
+  'reporting-endpoints',
+  'content-length',
+  'content-security-policy',
+  'content-security-policy-report-only',
+  'cross-origin-embedder-policy',
+  'cross-origin-opener-policy',
+  'cross-origin-resource-policy',
+  'set-cookie',
+  'transfer-encoding',
+  'x-frame-options',
 ]);
 
-const REDIRECT_ORIGINS = [
-  "https://www.youtube.com",
-  "https://m.youtube.com",
-  "https://youtube.com",
-];
+const REDIRECT_ORIGINS = ['https://www.youtube.com', 'https://m.youtube.com', 'https://youtube.com'];
 
 /*
  * Injected at the very start of <head>, before any YouTube script runs.
@@ -187,20 +183,20 @@ const REWRITE_SCRIPT = `<script>(function(){
 function resolveUpstreamUrl(rawUrl: string): string | null {
   if (rawUrl.startsWith(`${MEDIA_PROXY_PREFIX}/`)) {
     const rest = rawUrl.slice(MEDIA_PROXY_PREFIX.length + 1);
-    const slash = rest.indexOf("/");
+    const slash = rest.indexOf('/');
     const host = slash === -1 ? rest : rest.slice(0, slash);
     if (!MEDIA_HOST_PATTERN.test(host)) {
       return null;
     }
-    return `https://${host}${slash === -1 ? "/" : rest.slice(slash)}`;
+    return `https://${host}${slash === -1 ? '/' : rest.slice(slash)}`;
   }
   if (rawUrl === PROXY_PREFIX) {
     return `${YOUTUBE_ORIGIN}/`;
   }
   if (rawUrl.startsWith(`${PROXY_PREFIX}/`) || rawUrl.startsWith(`${PROXY_PREFIX}?`)) {
-    return `${YOUTUBE_ORIGIN}${rawUrl.slice(PROXY_PREFIX.length) || "/"}`;
+    return `${YOUTUBE_ORIGIN}${rawUrl.slice(PROXY_PREFIX.length) || '/'}`;
   }
-  const path = rawUrl.split("?", 1)[0];
+  const path = rawUrl.split('?', 1)[0];
   return YOUTUBE_ROOT_PREFIXES.some((prefix) => path === prefix || path.startsWith(prefix))
     ? `${YOUTUBE_ORIGIN}${rawUrl}`
     : null;
@@ -213,25 +209,28 @@ function upstreamHeaders(request: IncomingMessage): Headers {
      * Over HTTP/2 the compat layer hands us pseudo-headers (":method",
      * ":path", ":scheme", ":authority"); `Headers.set` throws on those names.
      */
-    if (value === undefined || name.startsWith(":") || DROPPED_REQUEST_HEADERS.has(name)) {
+    if (value === undefined || name.startsWith(':') || DROPPED_REQUEST_HEADERS.has(name)) {
       continue;
     }
-    headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+    headers.set(name, Array.isArray(value) ? value.join(', ') : value);
   }
   // Identity YouTube trusts: a real youtube.com navigation, no cookies.
-  headers.set("origin", YOUTUBE_ORIGIN);
-  headers.set("referer", `${YOUTUBE_ORIGIN}/`);
-  if (!headers.has("user-agent")) {
-    headers.set("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36");
+  headers.set('origin', YOUTUBE_ORIGIN);
+  headers.set('referer', `${YOUTUBE_ORIGIN}/`);
+  if (!headers.has('user-agent')) {
+    headers.set(
+      'user-agent',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+    );
   }
-  headers.set("accept-language", headers.get("accept-language") ?? "en-US,en;q=0.9");
+  headers.set('accept-language', headers.get('accept-language') ?? 'en-US,en;q=0.9');
   return headers;
 }
 
 function rewriteLocation(location: string): string {
   for (const origin of REDIRECT_ORIGINS) {
     if (location.startsWith(origin)) {
-      return `${PROXY_PREFIX}${location.slice(origin.length) || "/"}`;
+      return `${PROXY_PREFIX}${location.slice(origin.length) || '/'}`;
     }
   }
   return location;
@@ -246,15 +245,13 @@ function injectRewriteScript(html: string): string {
   return `${html.slice(0, insertAt)}${REWRITE_SCRIPT}${html.slice(insertAt)}`;
 }
 
-async function readRequestBody(
-  request: IncomingMessage,
-): Promise<Uint8Array<ArrayBuffer> | undefined> {
-  if (request.method === "GET" || request.method === "HEAD") {
+async function readRequestBody(request: IncomingMessage): Promise<Uint8Array<ArrayBuffer> | undefined> {
+  if (request.method === 'GET' || request.method === 'HEAD') {
     return undefined;
   }
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
   }
   if (chunks.length === 0) {
     return undefined;
@@ -266,11 +263,7 @@ async function readRequestBody(
   return body;
 }
 
-async function proxyRequest(
-  upstreamUrl: string,
-  request: IncomingMessage,
-  response: ServerResponse,
-): Promise<void> {
+async function proxyRequest(upstreamUrl: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25_000);
   try {
@@ -278,8 +271,8 @@ async function proxyRequest(
     const upstream = await fetch(upstreamUrl, {
       body,
       headers: upstreamHeaders(request),
-      method: request.method ?? "GET",
-      redirect: "manual",
+      method: request.method ?? 'GET',
+      redirect: 'manual',
       signal: controller.signal,
     });
 
@@ -287,13 +280,13 @@ async function proxyRequest(
     for (const name of DROPPED_RESPONSE_HEADERS) {
       outgoing.delete(name);
     }
-    const location = upstream.headers.get("location");
+    const location = upstream.headers.get('location');
     if (location) {
-      outgoing.set("location", rewriteLocation(location));
+      outgoing.set('location', rewriteLocation(location));
     }
 
-    const contentType = upstream.headers.get("content-type") ?? "";
-    const isHtml = contentType.includes("text/html");
+    const contentType = upstream.headers.get('content-type') ?? '';
+    const isHtml = contentType.includes('text/html');
     for (const [name, value] of outgoing) {
       response.setHeader(name, value);
     }
@@ -306,14 +299,14 @@ async function proxyRequest(
     if (isHtml) {
       const html = await upstream.text();
       const rewritten = injectRewriteScript(html);
-      response.setHeader("content-length", Buffer.byteLength(rewritten));
+      response.setHeader('content-length', Buffer.byteLength(rewritten));
       response.end(rewritten);
       return;
     }
     Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]).pipe(response);
   } catch (error) {
     response.statusCode = 502;
-    response.setHeader("content-type", "text/plain; charset=utf-8");
+    response.setHeader('content-type', 'text/plain; charset=utf-8');
     response.end(`onboarding-sandbox youtube proxy failed: ${String(error)}`);
   } finally {
     clearTimeout(timeout);
@@ -328,20 +321,20 @@ async function proxyRequest(
  */
 export function sandboxYouTubeProxy(): Plugin {
   return {
-    name: "onboarding-sandbox-youtube-proxy",
+    name: 'onboarding-sandbox-youtube-proxy',
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        const rawUrl = request.url ?? "";
+        const rawUrl = request.url ?? '';
         /*
          * The watch page registers a service worker at /sw.js. Serving the real
          * one would let YouTube's worker intercept every sandbox request on this
          * origin; letting vite answer it returns index.html and logs an
          * "unsupported MIME type" error. Answer 404 so registration just fails.
          */
-        if (rawUrl.split("?", 1)[0] === "/sw.js") {
+        if (rawUrl.split('?', 1)[0] === '/sw.js') {
           response.statusCode = 404;
-          response.setHeader("content-type", "text/plain; charset=utf-8");
-          response.end("not found");
+          response.setHeader('content-type', 'text/plain; charset=utf-8');
+          response.end('not found');
           return;
         }
         const upstreamUrl = resolveUpstreamUrl(rawUrl);

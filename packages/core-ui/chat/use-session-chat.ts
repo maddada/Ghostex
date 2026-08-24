@@ -8,7 +8,7 @@
 // seed; appends are never trimmed, because a trim removes the OLDEST rows and
 // the pagination cursor cannot reach them again.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   GxserverAnswerSessionChatPromptParams,
   GxserverReadSessionChatResult,
@@ -25,7 +25,7 @@ import type {
   SessionChatTerminalActivity,
   SessionChatTerminalNotice,
   SessionChatTurnLifecycle,
-} from "../../shared/session-chat";
+} from '../../shared/session-chat';
 import {
   applySessionChatAppends,
   createIncrementalSessionChatAssembler,
@@ -33,15 +33,15 @@ import {
   sessionChatIdCollides,
   sessionChatSharesPrefix,
   stampSessionChatArrivalOrder,
-} from "./session-chat-assembler";
+} from './session-chat-assembler';
 import {
   applySessionChatMergerAppend,
   createSessionChatMerger,
   removeSessionChatMergerIds,
   replaceSessionChatMergerList,
   type SessionChatMerger,
-} from "./session-chat-merge";
-import { countSessionChatCompactionRecords } from "./session-chat-noise";
+} from './session-chat-merge';
+import { countSessionChatCompactionRecords } from './session-chat-noise';
 import {
   appendSessionChatCommandMarker,
   applySessionChatCommandMarkerBoundaries,
@@ -55,33 +55,20 @@ import {
   visibleSessionChatPendingSends,
   type SessionChatCommandMarker,
   type SessionChatPendingSend,
-} from "./session-chat-pending";
-import {
-  SESSION_CHAT_INITIAL_LIMIT,
-  SESSION_CHAT_MAX_LIMIT,
-  SESSION_CHAT_PAGE,
-} from "./session-chat-pagination";
-import {
-  classifySessionChatSend,
-  SESSION_CHAT_DEFAULT_COMMAND_CATALOG,
-} from "./session-chat-send-classification";
-import {
-  deriveSessionChatStreamingText,
-  sessionChatStreamingMessage,
-} from "./session-chat-streaming";
-import { surfaceSkillInvocationUserTurns } from "./session-chat-command-envelope";
+} from './session-chat-pending';
+import { SESSION_CHAT_INITIAL_LIMIT, SESSION_CHAT_MAX_LIMIT, SESSION_CHAT_PAGE } from './session-chat-pagination';
+import { classifySessionChatSend, SESSION_CHAT_DEFAULT_COMMAND_CATALOG } from './session-chat-send-classification';
+import { deriveSessionChatStreamingText, sessionChatStreamingMessage } from './session-chat-streaming';
+import { surfaceSkillInvocationUserTurns } from './session-chat-command-envelope';
 import {
   moveSessionChatQueueRow,
   sessionChatDraftClientId,
   sessionChatQueueCapabilities,
   type SessionChatQueueCapabilities,
-} from "./session-chat-queue";
-import type { SessionChatTransport } from "./session-chat-transport";
-import {
-  selectSessionChatViewState,
-  type SessionChatViewState,
-} from "./session-chat-view-state";
-import { deriveSessionChatWorkingOverride } from "./session-chat-working-status";
+} from './session-chat-queue';
+import type { SessionChatTransport } from './session-chat-transport';
+import { selectSessionChatViewState, type SessionChatViewState } from './session-chat-view-state';
+import { deriveSessionChatWorkingOverride } from './session-chat-working-status';
 
 // Client-side not-found/starting retry patience (upstream chat spec §5.13).
 const NOTFOUND_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
@@ -113,21 +100,15 @@ const RESYNC_RETRY_MAX_DELAY_MS = 15_000;
 const STALL_THRESHOLD_MS = 20_000;
 const STALL_CHECK_INTERVAL_MS = 5_000;
 
-const CLAUDE_TERMINAL_STATUS_KIND = "claude-status";
+const CLAUDE_TERMINAL_STATUS_KIND = 'claude-status';
 
 interface SessionChatStreamPosition {
   epoch: number;
   seq: number;
 }
 
-function isAheadOf(
-  candidate: SessionChatStreamPosition,
-  reference: SessionChatStreamPosition,
-): boolean {
-  return (
-    candidate.epoch > reference.epoch ||
-    (candidate.epoch === reference.epoch && candidate.seq > reference.seq)
-  );
+function isAheadOf(candidate: SessionChatStreamPosition, reference: SessionChatStreamPosition): boolean {
+  return candidate.epoch > reference.epoch || (candidate.epoch === reference.epoch && candidate.seq > reference.seq);
 }
 
 function notFoundRetryDelayMs(attempt: number): number {
@@ -141,7 +122,7 @@ function resyncRetryDelayMs(attempt: number): number {
 function withReadTimeout<T>(read: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error("Session chat read timed out."));
+      reject(new Error('Session chat read timed out.'));
     }, READ_TIMEOUT_MS);
     read.then(
       (value) => {
@@ -151,23 +132,21 @@ function withReadTimeout<T>(read: Promise<T>): Promise<T> {
       (readError: unknown) => {
         clearTimeout(timer);
         reject(readError instanceof Error ? readError : new Error(String(readError)));
-      },
+      }
     );
   });
 }
 
 function normalizedSessionChatText(message: SessionChatMessage): string {
   return message.blocks
-    .filter((block) => block.type === "text")
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .join("\n\n")
-    .replace(/\s+/g, " ")
+    .filter((block) => block.type === 'text')
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('\n\n')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
-function terminalStatusMessage(
-  activity: SessionChatTerminalActivity,
-): SessionChatMessage | null {
+function terminalStatusMessage(activity: SessionChatTerminalActivity): SessionChatMessage | null {
   const text = activity.label.trim();
   if (activity.kind !== CLAUDE_TERMINAL_STATUS_KIND || !text) {
     return null;
@@ -175,10 +154,10 @@ function terminalStatusMessage(
   const timestamp = Date.parse(activity.detectedAt);
   return {
     id: `terminal-status:${activity.detectedAt}:${text}`,
-    role: "reasoning",
-    blocks: [{ type: "text", text }],
+    role: 'reasoning',
+    blocks: [{ type: 'text', text }],
     timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
-    source: "hook",
+    source: 'hook',
   };
 }
 
@@ -292,9 +271,7 @@ export interface UseSessionChatResult {
    * of pretending it works.
    */
   sendKey?: (key: SessionChatSendKey, marker: string) => Promise<void>;
-  answerPrompt: (
-    params: Omit<GxserverAnswerSessionChatPromptParams, "projectId" | "sessionId">,
-  ) => Promise<void>;
+  answerPrompt: (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>) => Promise<void>;
   interrupt: () => Promise<void>;
   /** Ghostex prompt queue: rows the agent has never seen (plan 016). */
   queue: SessionChatQueueController;
@@ -312,7 +289,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   } = options;
 
   const [transcript, setTranscript] = useState<readonly SessionChatMessage[]>([]);
-  const [serverStatus, setServerStatus] = useState<SessionChatStatus>("loading");
+  const [serverStatus, setServerStatus] = useState<SessionChatStatus>('loading');
   const [lifecycle, setLifecycle] = useState<SessionChatTurnLifecycle | null>(null);
   const [prompt, setPrompt] = useState<SessionChatInteractivePrompt | null>(null);
   const [agent, setAgent] = useState<string | null>(null);
@@ -328,22 +305,17 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const [serverWorking, setServerWorking] = useState(false);
   // Detected model/effort: carried by read results and by
   // snapshot/replaced/state frames. Absent ⇒ unchanged (older daemons omit it).
-  const [selectedOptions, setSelectedOptions] = useState<SessionChatDetectedOptions | null>(
-    null,
-  );
+  const [selectedOptions, setSelectedOptions] = useState<SessionChatDetectedOptions | null>(null);
   // Terminal-state notice: carried by read results and by
   // snapshot/replaced/state frames. Omitted ⇒ CLEARED (prompt semantics, unlike
   // selectedOptions) — the server only stops sending it once the state is gone.
-  const [terminalNotice, setTerminalNotice] = useState<SessionChatTerminalNotice | null>(
-    null,
-  );
+  const [terminalNotice, setTerminalNotice] = useState<SessionChatTerminalNotice | null>(null);
   /*
   CDXC:SessionChatTerminalActivity 2026-08-22: structured on-screen progress
   (compaction), carried and cleared exactly like the notice above. Claude's
   current `⏺` line is split into transient reasoning history below instead.
   */
-  const [terminalActivity, setTerminalActivity] =
-    useState<SessionChatTerminalActivity | null>(null);
+  const [terminalActivity, setTerminalActivity] = useState<SessionChatTerminalActivity | null>(null);
   // CDXC:SessionChatAgentFleet 2026-08-23: carried and cleared exactly like the
   // activity row above; the strip's clocks tick locally off `detectedAt`.
   const [agentFleet, setAgentFleet] = useState<SessionChatAgentFleet | null>(null);
@@ -353,18 +325,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   because the server retires them on its own TTL and an omission is far more
   often "this frame had nothing to add" than "that rename never happened".
   */
-  const [appCommands, setAppCommands] = useState<readonly SessionChatAppCommand[]>(
-    [],
-  );
+  const [appCommands, setAppCommands] = useState<readonly SessionChatAppCommand[]>([]);
   // Claude replaces its current `⏺ …` terminal line in place. Keep each
   // DISTINCT value only for this mounted chat; matching transcript text removes
   // it from composition as soon as JSONL catches up. Distinct rather than
   // merely non-repeating: the line cycles back to an earlier phrase between
   // lines that the transcript later swallows, so a "differs from the previous
   // one" rule leaves the same phrase standing several times in a row.
-  const [terminalStatusMessages, setTerminalStatusMessages] = useState<
-    readonly SessionChatMessage[]
-  >([]);
+  const [terminalStatusMessages, setTerminalStatusMessages] = useState<readonly SessionChatMessage[]>([]);
   /*
   CDXC:SessionChatScreenProbed 2026-08-22: "gxserver has read this screen",
   carried by read results and by snapshot/replaced/state frames. Latched rather
@@ -379,9 +347,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   control. An empty array means supported-and-empty. Once present it is
   authoritative and replaces the list wholesale.
   */
-  const [queuePrompts, setQueuePrompts] = useState<readonly SessionChatQueuedPrompt[] | null>(
-    null,
-  );
+  const [queuePrompts, setQueuePrompts] = useState<readonly SessionChatQueuedPrompt[] | null>(null);
   /*
   Latest synced composer draft. An OMITTED draft means unchanged, NOT cleared
   (see CDXC:SessionChatQueueCarriage) — so this only ever moves forward, and a
@@ -427,24 +393,21 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
    */
   const workingSignalRef = useRef(false);
 
-  const applyTerminalActivity = useCallback(
-    (activity: SessionChatTerminalActivity | undefined): void => {
-      const transient = activity ? terminalStatusMessage(activity) : null;
-      if (!transient) {
-        setTerminalActivity(activity ?? null);
-        return;
+  const applyTerminalActivity = useCallback((activity: SessionChatTerminalActivity | undefined): void => {
+    const transient = activity ? terminalStatusMessage(activity) : null;
+    if (!transient) {
+      setTerminalActivity(activity ?? null);
+      return;
+    }
+    setTerminalActivity(null);
+    setTerminalStatusMessages((current) => {
+      const text = normalizedSessionChatText(transient);
+      if (current.some((message) => normalizedSessionChatText(message) === text)) {
+        return current;
       }
-      setTerminalActivity(null);
-      setTerminalStatusMessages((current) => {
-        const text = normalizedSessionChatText(transient);
-        if (current.some((message) => normalizedSessionChatText(message) === text)) {
-          return current;
-        }
-        return [...current, transient];
-      });
-    },
-    [],
-  );
+      return [...current, transient];
+    });
+  }, []);
 
   /**
    * Folds the two queue-carriage fields with their DIFFERENT omission rules:
@@ -461,7 +424,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setSyncedDraft(carrier.draft);
       }
     },
-    [],
+    []
   );
 
   const applyAuthoritative = useCallback(
@@ -500,7 +463,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setHasMore(result.hasMore);
       beforeOffsetRef.current = result.beforeOffset;
       setServerStatus(result.status);
-      setServerWorking(result.working === true || result.status === "working");
+      setServerWorking(result.working === true || result.status === 'working');
       setPrompt(result.prompt ?? null);
       if (result.agent !== undefined) {
         setAgent(result.agent);
@@ -519,12 +482,12 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setScreenProbed(true);
       }
       applyQueueCarriage(result);
-      setError(result.status === "error" ? (result.error ?? "Conversation could not be loaded.") : null);
+      setError(result.status === 'error' ? (result.error ?? 'Conversation could not be loaded.') : null);
       // A fresh authoritative generation cancels an in-flight older page.
       loadEarlierEpochRef.current = null;
       setLoadingEarlier(false);
     },
-    [applyQueueCarriage, applyTerminalActivity],
+    [applyQueueCarriage, applyTerminalActivity]
   );
 
   const requestResync = useCallback((): void => {
@@ -576,8 +539,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       })
       .catch(() => {
         if (!closedRef.current && generationRef.current === generation) {
-          setError("Conversation could not be loaded.");
-          setServerStatus("error");
+          setError('Conversation could not be loaded.');
+          setServerStatus('error');
           scheduleResyncRetry();
         }
       })
@@ -590,11 +553,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     // Backoff, never giving up while mounted: the next read is the only thing
     // that can clear the error state (applyAuthoritative does it on success).
     function scheduleResyncRetry(): void {
-      if (
-        closedRef.current ||
-        generationRef.current !== generation ||
-        resyncRetryTimerRef.current !== null
-      ) {
+      if (closedRef.current || generationRef.current !== generation || resyncRetryTimerRef.current !== null) {
         return;
       }
       const delay = resyncRetryDelayMs(resyncFailuresRef.current);
@@ -642,7 +601,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     workingStartedAtRef.current = null;
     setServerWorking(false);
     setTranscript([]);
-    setServerStatus("loading");
+    setServerStatus('loading');
     setLifecycle(null);
     setPrompt(null);
     setAgentSessionId(null);
@@ -666,20 +625,17 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     setQueuePrompts(null);
     setSyncedDraft(null);
 
-    const acceptSequencedFrame = (event: {
-      epoch: number;
-      seq: number;
-    }): "apply" | "drop" | "resync" => {
+    const acceptSequencedFrame = (event: { epoch: number; seq: number }): 'apply' | 'drop' | 'resync' => {
       if (frameState.epoch !== null && event.epoch === frameState.epoch) {
         if (event.seq <= frameState.seq) {
-          return "drop";
+          return 'drop';
         }
         if (event.seq === frameState.seq + 1) {
           frameState.seq = event.seq;
-          return "apply";
+          return 'apply';
         }
       }
-      return "resync";
+      return 'resync';
     };
 
     const onEvent = (event: GxserverSessionChatEvent): void => {
@@ -698,7 +654,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           resyncSeenInFlightRef.current = position;
         }
       }
-      if (event.type === "sessionChatSnapshot" || event.type === "sessionChatReplaced") {
+      if (event.type === 'sessionChatSnapshot' || event.type === 'sessionChatReplaced') {
         frameState.epoch = event.epoch;
         frameState.seq = event.seq;
         frameState.frameArrived = true;
@@ -706,20 +662,17 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         return;
       }
       const verdict = acceptSequencedFrame(event);
-      if (verdict === "drop") {
+      if (verdict === 'drop') {
         return;
       }
-      if (verdict === "resync") {
+      if (verdict === 'resync') {
         requestResync();
         return;
       }
-      if (event.type === "sessionChatAppended") {
+      if (event.type === 'sessionChatAppended') {
         // Retract first: the rows that replace an abandoned prompt can ride
         // the very same frame.
-        const retracted = removeSessionChatMergerIds(
-          mergerRef.current,
-          event.supersededMessageIds ?? [],
-        );
+        const retracted = removeSessionChatMergerIds(mergerRef.current, event.supersededMessageIds ?? []);
         if (retracted) {
           setTranscript(mergerRef.current.list);
         }
@@ -730,7 +683,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           // live list already holds.
           limitRef.current = Math.min(
             SESSION_CHAT_MAX_LIMIT,
-            Math.max(limitRef.current, mergerRef.current.list.length),
+            Math.max(limitRef.current, mergerRef.current.list.length)
           );
           setTranscript(mergerRef.current.list);
         }
@@ -742,7 +695,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       // sessionChatState — also how hook activity transitions (working ↔ idle)
       // reach every host.
       setServerStatus(event.status);
-      setServerWorking(event.working === true || event.status === "working");
+      setServerWorking(event.working === true || event.status === 'working');
       if (event.lifecycle) {
         setLifecycle(event.lifecycle);
       }
@@ -784,38 +737,27 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     const seedRead = (): void => {
       void withReadTimeout(transport.read({ limit: limitRef.current }))
         .then((result: GxserverReadSessionChatResult) => {
-          if (
-            closedRef.current ||
-            generationRef.current !== generation ||
-            frameState.frameArrived
-          ) {
+          if (closedRef.current || generationRef.current !== generation || frameState.frameArrived) {
             return;
           }
           lastFrameAtRef.current = Date.now();
           frameState.epoch = result.epoch;
           frameState.seq = result.seq;
           applyAuthoritative(result);
-          if (
-            result.status === "starting" &&
-            Date.now() - startedAt < NOTFOUND_RETRY_WINDOW_MS
-          ) {
+          if (result.status === 'starting' && Date.now() - startedAt < NOTFOUND_RETRY_WINDOW_MS) {
             scheduleRetry(seedRead);
           }
         })
         .catch(() => {
-          if (
-            closedRef.current ||
-            generationRef.current !== generation ||
-            frameState.frameArrived
-          ) {
+          if (closedRef.current || generationRef.current !== generation || frameState.frameArrived) {
             return;
           }
           if (Date.now() - startedAt < NOTFOUND_RETRY_WINDOW_MS) {
             scheduleRetry(seedRead);
             return;
           }
-          setError("Conversation could not be loaded.");
-          setServerStatus("error");
+          setError('Conversation could not be loaded.');
+          setServerStatus('error');
         });
     };
     seedRead();
@@ -858,14 +800,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       unsubscribe();
     };
-  }, [
-    applyAuthoritative,
-    applyQueueCarriage,
-    applyTerminalActivity,
-    initialLimit,
-    requestResync,
-    transport,
-  ]);
+  }, [applyAuthoritative, applyQueueCarriage, applyTerminalActivity, initialLimit, requestResync, transport]);
 
   // --- Assembly (suffix-extension fast path, §6.4) ---------------------------
   const assembled = useMemo(() => {
@@ -875,8 +810,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     // same-millisecond rows keep that order through the sort.
     stampSessionChatArrivalOrder(transcript);
     const isSuffixExtension =
-      transcript.length >= applied.length &&
-      sessionChatSharesPrefix(transcript, applied, applied.length);
+      transcript.length >= applied.length && sessionChatSharesPrefix(transcript, applied, applied.length);
     if (isSuffixExtension && transcript.length > applied.length) {
       applySessionChatAppends(assembler, transcript.slice(applied.length));
     } else if (!isSuffixExtension) {
@@ -888,15 +822,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
 
   const catalogSet = useMemo(() => new Set(commandCatalog), [commandCatalog]);
 
-  const surfaced = useMemo(
-    () => surfaceSkillInvocationUserTurns(assembled, catalogSet),
-    [assembled, catalogSet],
-  );
+  const surfaced = useMemo(() => surfaceSkillInvocationUserTurns(assembled, catalogSet), [assembled, catalogSet]);
 
-  const boundaried = useMemo(
-    () => applySessionChatCommandMarkerBoundaries(surfaced, markers),
-    [markers, surfaced],
-  );
+  const boundaried = useMemo(() => applySessionChatCommandMarkerBoundaries(surfaced, markers), [markers, surfaced]);
 
   /*
    * Counted off the RAW authoritative list, the same one `send` snapshots
@@ -904,10 +832,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
    * outright, so counting the two ends of the comparison on different lists
    * could leave a `/compact` marker either retired on sight or stranded.
    */
-  const compactionRecords = useMemo(
-    () => countSessionChatCompactionRecords(transcript),
-    [transcript],
-  );
+  const compactionRecords = useMemo(() => countSessionChatCompactionRecords(transcript), [transcript]);
 
   // --- Pending prune against the authoritative list --------------------------
   useEffect(() => {
@@ -926,11 +851,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // signal. Settling is owned by an idle transition, a terminal turn
   // lifecycle, or a local interrupt.
   const optimisticWorking = pending.length > 0;
-  const workingSignal =
-    optimisticWorking ||
-    serverWorking ||
-    serverStatus === "working" ||
-    externalWorking === true;
+  const workingSignal = optimisticWorking || serverWorking || serverStatus === 'working' || externalWorking === true;
   workingSignalRef.current = workingSignal;
   if (workingSignal) {
     workingStartedAtRef.current ??= Date.now();
@@ -948,8 +869,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // A locally accepted send owns the working presentation immediately. It
   // remains pending until the authoritative transcript advances past that
   // user turn, bridging the gap before host/server activity arrives.
-  const working =
-    (optimisticWorking || workingOverride === "working") && !interrupted;
+  const working = (optimisticWorking || workingOverride === 'working') && !interrupted;
   workingRef.current = working;
 
   // Clear the Stop suppression once the live signal settles (§10.5).
@@ -962,32 +882,27 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // Live work can arrive before the seed read. Keep unresolved transcript
   // states authoritative so they cannot be mistaken for confirmed emptiness.
   const status: SessionChatStatus = error
-    ? "error"
-    : serverStatus === "loading" || serverStatus === "starting"
+    ? 'error'
+    : serverStatus === 'loading' || serverStatus === 'starting'
       ? serverStatus
       : working
-        ? "working"
-        : serverStatus === "working"
-          ? "ready"
+        ? 'working'
+        : serverStatus === 'working'
+          ? 'ready'
           : serverStatus;
 
   // --- Composition (§11.1 order: markers → streaming → pending) --------------
   const messages = useMemo(() => {
-    const markerMessages = sessionChatCommandMarkersAsMessages(
-      markers,
-      compactionRecords,
-    );
-    const pendingMessages = sessionChatPendingSendsAsMessages(
-      visibleSessionChatPendingSends(pending, boundaried),
-    );
+    const markerMessages = sessionChatCommandMarkersAsMessages(markers, compactionRecords);
+    const pendingMessages = sessionChatPendingSendsAsMessages(visibleSessionChatPendingSends(pending, boundaried));
     const authoritativeText = new Set(
       boundaried
-        .filter((message) => message.source === "transcript")
+        .filter((message) => message.source === 'transcript')
         .map(normalizedSessionChatText)
-        .filter(Boolean),
+        .filter(Boolean)
     );
     const visibleTerminalStatuses = terminalStatusMessages.filter(
-      (message) => !authoritativeText.has(normalizedSessionChatText(message)),
+      (message) => !authoritativeText.has(normalizedSessionChatText(message))
     );
     const tail: SessionChatMessage[] = [
       ...visibleTerminalStatuses,
@@ -1004,16 +919,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     }
     tail.push(...pendingMessages);
     return [...boundaried, ...tail];
-  }, [
-    appCommands,
-    boundaried,
-    compactionRecords,
-    markers,
-    pending,
-    previewText,
-    terminalStatusMessages,
-    working,
-  ]);
+  }, [appCommands, boundaried, compactionRecords, markers, pending, previewText, terminalStatusMessages, working]);
 
   const view = selectSessionChatViewState({
     error,
@@ -1030,9 +936,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     setLoadingEarlier(true);
     const requestEpoch = frameStateRef.current.epoch;
     loadEarlierEpochRef.current = requestEpoch;
-    void withReadTimeout(
-      transport.read({ beforeOffset: beforeOffsetRef.current, limit: SESSION_CHAT_PAGE }),
-    )
+    void withReadTimeout(transport.read({ beforeOffset: beforeOffsetRef.current, limit: SESSION_CHAT_PAGE }))
       .then((result) => {
         if (closedRef.current || loadEarlierEpochRef.current !== requestEpoch) {
           return;
@@ -1057,7 +961,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         // history that is already on screen.
         limitRef.current = Math.min(
           SESSION_CHAT_MAX_LIMIT,
-          Math.max(limitRef.current + SESSION_CHAT_PAGE, merger.list.length),
+          Math.max(limitRef.current + SESSION_CHAT_PAGE, merger.list.length)
         );
         setTranscript(merger.list);
         setHasMore(result.hasMore);
@@ -1081,10 +985,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     async (text: string, imagePaths?: string[]): Promise<void> => {
       const classification = classifySessionChatSend(text, commandCatalog);
       let pendingId: string | null = null;
-      if (
-        classification === "chat" &&
-        (text.trim().length > 0 || (imagePaths?.length ?? 0) > 0)
-      ) {
+      if (classification === 'chat' && (text.trim().length > 0 || (imagePaths?.length ?? 0) > 0)) {
         const last = mergerRef.current.list.at(-1);
         const id = nextSessionChatPendingSendId();
         pendingId = id;
@@ -1103,20 +1004,12 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
             ? next.slice(next.length - SESSION_CHAT_PENDING_SEND_LIMIT)
             : next;
         });
-      } else if (classification === "command") {
+      } else if (classification === 'command') {
         // Snapshot the compactions already on record, so a `/compact` marker
         // retires against ITS OWN compaction rather than an earlier one.
-        const compactionRecordsBefore = countSessionChatCompactionRecords(
-          mergerRef.current.list,
-        );
+        const compactionRecordsBefore = countSessionChatCompactionRecords(mergerRef.current.list);
         setMarkers((current) =>
-          appendSessionChatCommandMarker(
-            current,
-            text.trim(),
-            Date.now(),
-            undefined,
-            compactionRecordsBefore,
-          ),
+          appendSessionChatCommandMarker(current, text.trim(), Date.now(), undefined, compactionRecordsBefore)
         );
       }
       try {
@@ -1129,7 +1022,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         throw sendError;
       }
     },
-    [commandCatalog, transport],
+    [commandCatalog, transport]
   );
 
   /**
@@ -1144,22 +1037,18 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         return;
       }
       await transportSendKey.call(transport, key);
-      if (marker.trim() !== "") {
-        setMarkers((current) =>
-          appendSessionChatCommandMarker(current, key, Date.now(), marker),
-        );
+      if (marker.trim() !== '') {
+        setMarkers((current) => appendSessionChatCommandMarker(current, key, Date.now(), marker));
       }
     },
-    [transport, transportSendKey],
+    [transport, transportSendKey]
   );
 
   const answerPrompt = useCallback(
-    async (
-      params: Omit<GxserverAnswerSessionChatPromptParams, "projectId" | "sessionId">,
-    ): Promise<void> => {
+    async (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>): Promise<void> => {
       await transport.answerPrompt(params);
     },
-    [transport],
+    [transport]
   );
 
   // --- Ghostex prompt queue + synced draft ------------------------------------
@@ -1169,16 +1058,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         daemonSupportsQueue: queuePrompts !== null,
         transport,
       }),
-    [queuePrompts, transport],
+    [queuePrompts, transport]
   );
   const clientId = useMemo(() => sessionChatDraftClientId(), []);
   // Every mutation answers with the whole authoritative queue, so an optimistic
   // step that lost a race self-corrects on the next line instead of needing a
   // rollback path.
   const queueMutation = useCallback(
-    async (
-      run: (() => Promise<{ queue: SessionChatQueuedPrompt[] }>) | undefined,
-    ): Promise<void> => {
+    async (run: (() => Promise<{ queue: SessionChatQueuedPrompt[] }>) | undefined): Promise<void> => {
       if (!run) {
         return;
       }
@@ -1187,7 +1074,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setQueuePrompts(result.queue);
       }
     },
-    [],
+    []
   );
   const queuePrompt = useCallback(
     async (text: string): Promise<void> => {
@@ -1197,7 +1084,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       await queueMutation(() => call({ text }));
     },
-    [queueCapabilities.canQueue, queueMutation, transport],
+    [queueCapabilities.canQueue, queueMutation, transport]
   );
   const retryPrompt = useCallback(
     async (promptId: string): Promise<void> => {
@@ -1207,7 +1094,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       await queueMutation(() => call({ promptId, retry: true }));
     },
-    [queueCapabilities.canRetry, queueMutation, transport],
+    [queueCapabilities.canRetry, queueMutation, transport]
   );
   const removePrompt = useCallback(
     async (promptId: string): Promise<SessionChatQueuedPrompt | null> => {
@@ -1223,7 +1110,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       // the composer without having cached it across the round trip.
       return result.prompt;
     },
-    [queueCapabilities.canRemove, transport],
+    [queueCapabilities.canRemove, transport]
   );
   const reorder = useCallback(
     async (promptIds: string[]): Promise<void> => {
@@ -1247,7 +1134,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       });
       await queueMutation(() => call({ promptIds }));
     },
-    [queueCapabilities.canReorder, queueMutation, transport],
+    [queueCapabilities.canReorder, queueMutation, transport]
   );
   const sendNow = useCallback(
     async (promptId: string): Promise<void> => {
@@ -1257,7 +1144,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       await queueMutation(() => call({ promptId }));
     },
-    [queueCapabilities.canSendNow, queueMutation, transport],
+    [queueCapabilities.canSendNow, queueMutation, transport]
   );
   const pushDraft = useCallback(
     async (content: string): Promise<void> => {
@@ -1267,7 +1154,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       await call({ clientId, content });
     },
-    [clientId, transport],
+    [clientId, transport]
   );
   const queue = useMemo<SessionChatQueueController>(
     () => ({
@@ -1279,15 +1166,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       retryPrompt,
       sendNow,
     }),
-    [
-      queueCapabilities,
-      queuePrompt,
-      queuePrompts,
-      removePrompt,
-      reorder,
-      retryPrompt,
-      sendNow,
-    ],
+    [queueCapabilities, queuePrompt, queuePrompts, removePrompt, reorder, retryPrompt, sendNow]
   );
   const draft = useMemo<SessionChatDraftController>(
     () => ({
@@ -1296,7 +1175,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       push: pushDraft,
       synced: syncedDraft,
     }),
-    [clientId, pushDraft, queueCapabilities.canSyncDraft, syncedDraft],
+    [clientId, pushDraft, queueCapabilities.canSyncDraft, syncedDraft]
   );
 
   const interrupt = useCallback(async (): Promise<void> => {

@@ -56,7 +56,11 @@ impl GhostexGpuiApp {
         );
     }
 
-    pub(crate) fn run_gpui_titlebar_git_menu_row(&mut self, row_index: usize, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn run_gpui_titlebar_git_menu_row(
+        &mut self,
+        row_index: usize,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let Some(row) = self
             .titlebar_git_menu_state
             .as_ref()
@@ -232,5 +236,4 @@ impl GhostexGpuiApp {
             cx,
         );
     }
-
 }

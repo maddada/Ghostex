@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 
 /**
  * CDXC:WorktreeRename 2026-08-09-18:40:
@@ -53,33 +53,30 @@ import { describe, expect, test } from "vitest";
  */
 
 const gpuiSidebarDispatchSource = readFileSync(
-  new URL("../../apps/desktop/src/app/sidebar_dispatch.rs", import.meta.url),
-  "utf8",
+  new URL('../../apps/desktop/src/app/sidebar_dispatch.rs', import.meta.url),
+  'utf8'
 );
 const gpuiDelayedSendSource = readFileSync(
-  new URL("../../apps/desktop/src/app/delayed_send.rs", import.meta.url),
-  "utf8",
+  new URL('../../apps/desktop/src/app/delayed_send.rs', import.meta.url),
+  'utf8'
 );
 const gpuiModalKindSource = readFileSync(
-  new URL("../../apps/desktop/src/app/model/app_modal_kind.rs", import.meta.url),
-  "utf8",
+  new URL('../../apps/desktop/src/app/model/app_modal_kind.rs', import.meta.url),
+  'utf8'
 );
 const gpuiRuntimeDispatchSource = readFileSync(
-  new URL("../../apps/desktop/sidebar/gxserver-runtime/core.ts", import.meta.url),
-  "utf8",
+  new URL('../../apps/desktop/sidebar/gxserver-runtime/core.ts', import.meta.url),
+  'utf8'
 );
 const gpuiRuntimeWorktreeSource = readFileSync(
-  new URL("../../apps/desktop/sidebar/gxserver-runtime/worktrees.ts", import.meta.url),
-  "utf8",
+  new URL('../../apps/desktop/sidebar/gxserver-runtime/worktrees.ts', import.meta.url),
+  'utf8'
 );
 const gpuiRuntimeWorktreeHelperSource = readFileSync(
-  new URL("../../apps/desktop/sidebar/gxserver-runtime/helpers/worktrees.ts", import.meta.url),
-  "utf8",
+  new URL('../../apps/desktop/sidebar/gxserver-runtime/helpers/worktrees.ts', import.meta.url),
+  'utf8'
 );
-const modalHostSource = readFileSync(
-  new URL("../../apps/desktop/views/modal-host.tsx", import.meta.url),
-  "utf8",
-);
+const modalHostSource = readFileSync(new URL('../../apps/desktop/views/modal-host.tsx', import.meta.url), 'utf8');
 
 function sourceBetweenIn(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -89,7 +86,7 @@ function sourceBetweenIn(source: string, start: string, end: string): string {
   return source.slice(startIndex, endIndex);
 }
 
-describe("gpui/src/main.rs rename bridge", () => {
+describe('gpui/src/main.rs rename bridge', () => {
   test("forwards the rename confirmation's name, projectId, and renameBranch", () => {
     /*
      * The string loop and the boolean block are separate code paths in
@@ -99,8 +96,8 @@ describe("gpui/src/main.rs rename bridge", () => {
      */
     const allowlist = sourceBetweenIn(
       gpuiSidebarDispatchSource,
-      "fn forward_gpui_worktree_modal_command_to_sidebar",
-      "let Some(sidebar) = self.sidebar.clone()",
+      'fn forward_gpui_worktree_modal_command_to_sidebar',
+      'let Some(sidebar) = self.sidebar.clone()'
     );
 
     expect(allowlist).toContain('"confirmRenameWorktree" => &["projectId", "name"]');
@@ -108,7 +105,7 @@ describe("gpui/src/main.rs rename bridge", () => {
     expect(allowlist).toContain('"renameBranch"');
   });
 
-  test("dispatches confirmRenameWorktree to the worktree forwarder", () => {
+  test('dispatches confirmRenameWorktree to the worktree forwarder', () => {
     /*
      * This fixed list gates the forwarder. Without the new type here, hop 8
      * above is never reached and the modal's Rename button does nothing at all.
@@ -116,32 +113,28 @@ describe("gpui/src/main.rs rename bridge", () => {
     const dispatch = sourceBetweenIn(
       gpuiDelayedSendSource,
       '"requestProjectWorktrees"\n            | "createProjectWorktree"',
-      "forward_gpui_worktree_modal_command_to_sidebar(command_type, command, cx);",
+      'forward_gpui_worktree_modal_command_to_sidebar(command_type, command, cx);'
     );
 
     expect(dispatch).toContain('"confirmRenameWorktree"');
   });
 
-  test("registers the renameWorktree app-modal kind", () => {
+  test('registers the renameWorktree app-modal kind', () => {
     expect(gpuiModalKindSource).toContain('"renameWorktree" => Some(Self::RenameWorktree)');
     expect(gpuiModalKindSource).toContain('Self::RenameWorktree => "renameWorktree"');
     expect(gpuiModalKindSource).toContain('Self::RenameWorktree => "Ghostex Rename Worktree"');
   });
 });
 
-describe("gpui/sidebar/gxserver-runtime rename handlers", () => {
-  test("handles both rename messages", () => {
+describe('gpui/sidebar/gxserver-runtime rename handlers', () => {
+  test('handles both rename messages', () => {
     expect(gpuiRuntimeDispatchSource).toContain('case "promptRenameWorktreeForGroup":');
     expect(gpuiRuntimeDispatchSource).toContain('case "confirmRenameWorktree":');
-    expect(gpuiRuntimeWorktreeSource).toContain(
-      "async promptRenameWorktreeForGroup(this: GpuiSidebarRuntime,",
-    );
-    expect(gpuiRuntimeWorktreeSource).toContain(
-      "async confirmRenameWorktree(this: GpuiSidebarRuntime,",
-    );
+    expect(gpuiRuntimeWorktreeSource).toContain('async promptRenameWorktreeForGroup(this: GpuiSidebarRuntime,');
+    expect(gpuiRuntimeWorktreeSource).toContain('async confirmRenameWorktree(this: GpuiSidebarRuntime,');
   });
 
-  test("calls the single rename endpoint rather than orchestrating git itself", () => {
+  test('calls the single rename endpoint rather than orchestrating git itself', () => {
     /*
      * Rollback for a failed move lives in gxserver, not here: a renderer that
      * reloads mid-rename must not be the only thing that can undo a half-applied
@@ -149,8 +142,8 @@ describe("gpui/sidebar/gxserver-runtime rename handlers", () => {
      */
     const confirm = sourceBetweenIn(
       gpuiRuntimeWorktreeSource,
-      "async confirmRenameWorktree(this: GpuiSidebarRuntime,",
-      "async promptDeleteRemoteWorktreeForGroup(this: GpuiSidebarRuntime,",
+      'async confirmRenameWorktree(this: GpuiSidebarRuntime,',
+      'async promptDeleteRemoteWorktreeForGroup(this: GpuiSidebarRuntime,'
     );
 
     expect(confirm).toContain('"/api/renameWorktreeProject"');
@@ -158,26 +151,24 @@ describe("gpui/sidebar/gxserver-runtime rename handlers", () => {
     expect(confirm).not.toContain('action: "renameBranch"');
   });
 
-  test("routes rename errors around the slash-stripping worktree error filter", () => {
+  test('routes rename errors around the slash-stripping worktree error filter', () => {
     /*
      * `gpuiWorktreeUserVisibleErrorMessage` drops any message containing "/",
      * which is every rename refusal that names a branch. The rename flow needs
      * its own reader or the user gets a generic failure instead of
      * `Branch "feat/x" already exists.`
      */
-    expect(gpuiRuntimeWorktreeHelperSource).toContain(
-      "function gpuiWorktreeRenameUserVisibleErrorMessage(",
-    );
+    expect(gpuiRuntimeWorktreeHelperSource).toContain('function gpuiWorktreeRenameUserVisibleErrorMessage(');
     const confirm = sourceBetweenIn(
       gpuiRuntimeWorktreeSource,
-      "async confirmRenameWorktree(this: GpuiSidebarRuntime,",
-      "async promptDeleteRemoteWorktreeForGroup(this: GpuiSidebarRuntime,",
+      'async confirmRenameWorktree(this: GpuiSidebarRuntime,',
+      'async promptDeleteRemoteWorktreeForGroup(this: GpuiSidebarRuntime,'
     );
-    expect(confirm).toContain("gpuiWorktreeRenameUserVisibleErrorMessage(error)");
-    expect(confirm).not.toContain("gpuiWorktreeUserVisibleErrorMessage(error)");
+    expect(confirm).toContain('gpuiWorktreeRenameUserVisibleErrorMessage(error)');
+    expect(confirm).not.toContain('gpuiWorktreeUserVisibleErrorMessage(error)');
   });
 
-  test("translates an out-of-date daemon into something the user can act on", () => {
+  test('translates an out-of-date daemon into something the user can act on', () => {
     /*
      * Verified live against a stale daemon: it answers
      * `notFound: "No gxserver endpoint for POST /api/renameWorktreeProject."`.
@@ -189,20 +180,20 @@ describe("gpui/sidebar/gxserver-runtime rename handlers", () => {
      */
     const reader = sourceBetweenIn(
       gpuiRuntimeWorktreeHelperSource,
-      "function gpuiWorktreeRenameUserVisibleErrorMessage(",
-      "\n}",
+      'function gpuiWorktreeRenameUserVisibleErrorMessage(',
+      '\n}'
     );
 
     expect(reader).toContain('message.includes("/api/renameWorktreeProject")');
-    expect(reader).toContain("Quit Ghostex fully, reopen it, and try again.");
+    expect(reader).toContain('Quit Ghostex fully, reopen it, and try again.');
   });
 });
 
-describe("native/sidebar/modal-host.tsx rename modal", () => {
-  test("registers the modal kind, its fit-height selector, and its open arm", () => {
+describe('native/sidebar/modal-host.tsx rename modal', () => {
+  test('registers the modal kind, its fit-height selector, and its open arm', () => {
     expect(modalHostSource).toContain('renameWorktree: ".worktree-rename-modal-shadcn"');
     expect(modalHostSource).toContain('message.modal === "renameWorktree"');
-    expect(modalHostSource).toContain("worktreeRenameDraft?: WorktreeRenameModalDraft");
+    expect(modalHostSource).toContain('worktreeRenameDraft?: WorktreeRenameModalDraft');
     expect(modalHostSource).toContain('type: "confirmRenameWorktree"');
   });
 });

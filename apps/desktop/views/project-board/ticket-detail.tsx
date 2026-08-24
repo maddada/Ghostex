@@ -1,34 +1,16 @@
-import {
-  IconExternalLink,
-  IconLink,
-  IconPlayerPlay,
-  IconUnlink,
-  IconUser,
-  IconX,
-} from "@tabler/icons-react";
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type KeyboardEvent,
-} from "react";
-import { createPortal } from "react-dom";
-import { Button } from "@/packages/components/ui/button";
-import { Input } from "@/packages/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/packages/components/ui/select";
+import { IconExternalLink, IconLink, IconPlayerPlay, IconUnlink, IconUser, IconX } from '@tabler/icons-react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { Button } from '@/packages/components/ui/button';
+import { Input } from '@/packages/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import {
   TOOLTIP_DELAY_MS,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/packages/components/ui/tooltip";
+} from '@/packages/components/ui/tooltip';
 import {
   PRIORITY_OPTIONS,
   TSHIRT_OPTIONS,
@@ -44,16 +26,13 @@ import {
   type BoardTicket,
   type DescriptionImageReference,
   type TshirtSize,
-} from "../project-board-shared";
+} from '../project-board-shared';
 import {
   type ProjectBoardAgentOption,
   type ProjectBoardConversationLinkView,
-} from "@/packages/shared/bead-conversation-links";
-import { type ConversationActionState } from "./types";
-import {
-  PROJECT_BOARD_PRIORITY_SELECT_ITEMS,
-  PROJECT_BOARD_TSHIRT_SELECT_ITEMS,
-} from "./constants";
+} from '@/packages/shared/bead-conversation-links';
+import { type ConversationActionState } from './types';
+import { PROJECT_BOARD_PRIORITY_SELECT_ITEMS, PROJECT_BOARD_TSHIRT_SELECT_ITEMS } from './constants';
 
 export function TicketMetaFields({
   assignee,
@@ -94,18 +73,18 @@ export function TicketMetaFields({
   ticketOptions: Array<{ id: string; label: string }>;
   tshirt?: TshirtSize;
 }) {
-  const [labelDraft, setLabelDraft] = useState("");
+  const [labelDraft, setLabelDraft] = useState('');
   const labelSuggestions = knownLabels.filter((label) => !labels.includes(label));
   const creator = ticketCreatorName(createdBy, assignee);
   const statusSelectItems = useMemo(
     () => boardColumns.map((column) => ({ label: column.label, value: column.key })),
-    [boardColumns],
+    [boardColumns]
   );
 
   return (
-    <div className="project-ticket-meta-grid">
+    <div className='project-ticket-meta-grid'>
       {showStatus ? (
-        <label className="project-ticket-field project-ticket-field-inline">
+        <label className='project-ticket-field project-ticket-field-inline'>
           <span>Status</span>
           <Select
             items={statusSelectItems}
@@ -125,13 +104,9 @@ export function TicketMetaFields({
           </Select>
         </label>
       ) : null}
-      <label className="project-ticket-field project-ticket-field-inline">
+      <label className='project-ticket-field project-ticket-field-inline'>
         <span>Priority</span>
-        <Select
-          items={PROJECT_BOARD_PRIORITY_SELECT_ITEMS}
-          onValueChange={onPriorityChange}
-          value={priority}
-        >
+        <Select items={PROJECT_BOARD_PRIORITY_SELECT_ITEMS} onValueChange={onPriorityChange} value={priority}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -144,18 +119,18 @@ export function TicketMetaFields({
           </SelectContent>
         </Select>
       </label>
-      <label className="project-ticket-field project-ticket-field-inline">
+      <label className='project-ticket-field project-ticket-field-inline'>
         <span>T-shirt</span>
         <Select
           items={PROJECT_BOARD_TSHIRT_SELECT_ITEMS}
-          onValueChange={(value) => onTshirtChange(value === "none" ? undefined : (value as TshirtSize))}
-          value={tshirt ?? "none"}
+          onValueChange={(value) => onTshirtChange(value === 'none' ? undefined : (value as TshirtSize))}
+          value={tshirt ?? 'none'}
         >
           <SelectTrigger>
-            <SelectValue placeholder="None" />
+            <SelectValue placeholder='None' />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">None</SelectItem>
+            <SelectItem value='none'>None</SelectItem>
             {TSHIRT_OPTIONS.map((option) => (
               <SelectItem key={option.label} value={option.label}>
                 {option.label}
@@ -168,42 +143,42 @@ export function TicketMetaFields({
         CDXC:ProjectBoardTicketMetadata 2026-05-30-08:31:
         Ticket metadata should put Labels where Blocked by was, keep every metadata control's label-to-element spacing consistent, and show T-shirt select values as friendly labels.
       */}
-      <div className="project-ticket-field project-ticket-field-inline project-ticket-labels-field">
+      <div className='project-ticket-field project-ticket-field-inline project-ticket-labels-field'>
         <span>Labels</span>
         {labels.length > 0 ? (
-          <div className="project-ticket-label-list">
+          <div className='project-ticket-label-list'>
             {labels.map((label) => (
               <button
-                className="project-ticket-label-chip"
+                className='project-ticket-label-chip'
                 key={label}
                 onClick={() => onLabelsChange(labels.filter((candidate) => candidate !== label))}
-                type="button"
+                type='button'
               >
                 {label}
-                <IconX aria-hidden="true" />
+                <IconX aria-hidden='true' />
               </button>
             ))}
           </div>
         ) : null}
-        <div className="project-ticket-label-editor">
+        <div className='project-ticket-label-editor'>
           <Input
-            aria-label="Add label"
-            list="project-board-label-suggestions"
+            aria-label='Add label'
+            list='project-board-label-suggestions'
             onChange={(event) => setLabelDraft(event.currentTarget.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (event.key === 'Enter') {
                 event.preventDefault();
                 const next = labelDraft.trim();
                 if (next && !labels.includes(next)) {
                   onLabelsChange([...labels, next]);
                 }
-                setLabelDraft("");
+                setLabelDraft('');
               }
             }}
-            placeholder="Add label"
+            placeholder='Add label'
             value={labelDraft}
           />
-          <datalist id="project-board-label-suggestions">
+          <datalist id='project-board-label-suggestions'>
             {labelSuggestions.map((label) => (
               <option key={label} value={label} />
             ))}
@@ -214,41 +189,41 @@ export function TicketMetaFields({
               if (next && !labels.includes(next)) {
                 onLabelsChange([...labels, next]);
               }
-              setLabelDraft("");
+              setLabelDraft('');
             }}
-            type="button"
-            variant="outline"
+            type='button'
+            variant='outline'
           >
             Add
           </Button>
         </div>
       </div>
       <DependencyPicker
-        label="Blocking"
+        label='Blocking'
         onChange={onBlockingChange}
         selectedIds={blockingIds}
         ticketOptions={ticketOptions}
       />
       <DependencyPicker
-        label="Blocked by"
+        label='Blocked by'
         onChange={onBlockedByChange}
         selectedIds={blockedByIds}
         ticketOptions={ticketOptions}
       />
       {creator ? (
-        <div className="project-ticket-field project-ticket-field-inline">
+        <div className='project-ticket-field project-ticket-field-inline'>
           <span>Created by</span>
-          <div className="project-ticket-creator-value" title={creator}>
+          <div className='project-ticket-creator-value' title={creator}>
             {creator}
           </div>
         </div>
       ) : null}
       {assignee ? (
-        <div className="project-ticket-field project-ticket-field-inline">
+        <div className='project-ticket-field project-ticket-field-inline'>
           <span>Assignee</span>
-          <div className="project-ticket-assignee-value" title={assignee}>
-            <IconUser aria-hidden="true" />
-            <span className="project-ticket-assignee-name">{assignee}</span>
+          <div className='project-ticket-assignee-value' title={assignee}>
+            <IconUser aria-hidden='true' />
+            <span className='project-ticket-assignee-name'>{assignee}</span>
           </div>
         </div>
       ) : null}
@@ -267,24 +242,24 @@ export function DependencyPicker({
   selectedIds: string[];
   ticketOptions: Array<{ id: string; label: string }>;
 }) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState('');
   const available = ticketOptions.filter((option) => !selectedIds.includes(option.id));
   return (
-    <div className="project-ticket-field project-ticket-field-inline">
+    <div className='project-ticket-field project-ticket-field-inline'>
       <span>{label}</span>
       {selectedIds.length > 0 ? (
-        <div className="project-ticket-label-list">
+        <div className='project-ticket-label-list'>
           {selectedIds.map((id) => {
             const ticket = ticketOptions.find((option) => option.id === id);
             return (
               <button
-                className="project-ticket-label-chip"
+                className='project-ticket-label-chip'
                 key={id}
                 onClick={() => onChange(selectedIds.filter((candidate) => candidate !== id))}
-                type="button"
+                type='button'
               >
                 {ticket?.label ?? id}
-                <IconX aria-hidden="true" />
+                <IconX aria-hidden='true' />
               </button>
             );
           })}
@@ -295,7 +270,7 @@ export function DependencyPicker({
           if (value && !selectedIds.includes(value)) {
             onChange([...selectedIds, value]);
           }
-          setDraft("");
+          setDraft('');
         }}
         value={draft}
       >
@@ -328,17 +303,15 @@ export function DependencySummary({
   }
   const labelFor = (id: string) => tickets.find((ticket) => ticket.id === id)?.displayId ?? id;
   return (
-    <div className="flex flex-col gap-1 text-xs font-normal text-muted-foreground">
+    <div className='flex flex-col gap-1 text-xs font-normal text-muted-foreground'>
       {blockedByIds.length > 0 ? (
-        <p className="m-0">
-          <span className="text-foreground/80">Blocked by:</span>{" "}
-          {blockedByIds.map(labelFor).join(", ")}
+        <p className='m-0'>
+          <span className='text-foreground/80'>Blocked by:</span> {blockedByIds.map(labelFor).join(', ')}
         </p>
       ) : null}
       {blockingIds.length > 0 ? (
-        <p className="m-0">
-          <span className="text-foreground/80">Blocking:</span>{" "}
-          {blockingIds.map(labelFor).join(", ")}
+        <p className='m-0'>
+          <span className='text-foreground/80'>Blocking:</span> {blockingIds.map(labelFor).join(', ')}
         </p>
       ) : null}
     </div>
@@ -367,12 +340,12 @@ export function ImagePreviewStrip({
       return;
     }
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         setOpenImage(undefined);
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [images, openImage]);
 
   if (images.length === 0) {
@@ -381,13 +354,13 @@ export function ImagePreviewStrip({
 
   return (
     <>
-      <div className="project-ticket-image-strip" aria-label="Image previews">
+      <div className='project-ticket-image-strip' aria-label='Image previews'>
         {images.map((image) => {
           const previewSrc = imagePreviewDataUrls[image.src];
           return (
             <div
               aria-label={previewSrc ? `Open image preview ${image.src}` : undefined}
-              className="project-ticket-image-thumb"
+              className='project-ticket-image-thumb'
               key={image.id}
               onClick={() => {
                 if (previewSrc) {
@@ -398,19 +371,19 @@ export function ImagePreviewStrip({
                 if (!previewSrc) {
                   return;
                 }
-                if (event.key === "Enter" || event.key === " ") {
+                if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   setOpenImage(image);
                 }
               }}
-              role={previewSrc ? "button" : undefined}
+              role={previewSrc ? 'button' : undefined}
               tabIndex={previewSrc ? 0 : undefined}
             >
-              {previewSrc ? <img alt="" src={previewSrc} /> : <span aria-hidden="true" />}
+              {previewSrc ? <img alt='' src={previewSrc} /> : <span aria-hidden='true' />}
               {onRemove ? (
                 <button
-                  aria-label="Remove pasted image"
-                  className="project-ticket-image-remove"
+                  aria-label='Remove pasted image'
+                  className='project-ticket-image-remove'
                   onClick={(event) => {
                     event.stopPropagation();
                     onRemove(image);
@@ -418,9 +391,9 @@ export function ImagePreviewStrip({
                       setOpenImage(undefined);
                     }
                   }}
-                  type="button"
+                  type='button'
                 >
-                  <IconX aria-hidden="true" />
+                  <IconX aria-hidden='true' />
                 </button>
               ) : null}
             </div>
@@ -429,14 +402,10 @@ export function ImagePreviewStrip({
       </div>
       {openImage && openPreviewSrc
         ? createPortal(
-            <div
-              className="project-ticket-image-popup"
-              onClick={() => setOpenImage(undefined)}
-              role="presentation"
-            >
-              <img alt="" src={openPreviewSrc} />
+            <div className='project-ticket-image-popup' onClick={() => setOpenImage(undefined)} role='presentation'>
+              <img alt='' src={openPreviewSrc} />
             </div>,
-            document.body,
+            document.body
           )
         : null}
     </>
@@ -464,7 +433,7 @@ export function ConversationSection({
   onUnlinkConversation: (link: ProjectBoardConversationLinkView) => void;
   selectedAgentId: string;
 }) {
-  const isAssociating = action?.kind === "associate";
+  const isAssociating = action?.kind === 'associate';
   const hasActiveConversationAction = Boolean(action);
   const agentSelectItems = useMemo(
     () =>
@@ -472,20 +441,20 @@ export function ConversationSection({
         label: agent.label,
         value: agent.agentId,
       })),
-    [agents],
+    [agents]
   );
   return (
-    <section className="project-ticket-conversations" aria-label="Linked conversations">
-      <div className="project-ticket-section-title">Start work with</div>
-      <div className="project-ticket-conversation-controls">
+    <section className='project-ticket-conversations' aria-label='Linked conversations'>
+      <div className='project-ticket-section-title'>Start work with</div>
+      <div className='project-ticket-conversation-controls'>
         <Select
           disabled={agents.length === 0}
           items={agentSelectItems}
           onValueChange={onSelectedAgentChange}
           value={selectedAgentId}
         >
-          <SelectTrigger aria-label="Agent for Start work">
-            <SelectValue placeholder="Choose agent" />
+          <SelectTrigger aria-label='Agent for Start work'>
+            <SelectValue placeholder='Choose agent' />
           </SelectTrigger>
           <SelectContent>
             {agents.map((agent) => (
@@ -498,52 +467,45 @@ export function ConversationSection({
         <Button
           disabled={!focusedSessionId || hasActiveConversationAction}
           onClick={onAssociateFocusedSession}
-          type="button"
-          variant="outline"
+          type='button'
+          variant='outline'
         >
-          <IconLink data-icon="inline-start" />
-          {isAssociating ? "Associating" : "Associate focused"}
+          <IconLink data-icon='inline-start' />
+          {isAssociating ? 'Associating' : 'Associate focused'}
         </Button>
       </div>
       {links.length > 0 ? (
         <TooltipProvider delayDuration={TOOLTIP_DELAY_MS}>
-          <div className="project-ticket-conversation-list">
+          <div className='project-ticket-conversation-list'>
             {links.map((link) => {
               const label = conversationLinkLabel(link);
               const actionKind = conversationLinkActionKind(link);
               return (
-                <div className="project-ticket-conversation-row" key={link.id}>
-                  <div className="project-ticket-conversation-main">
-                    <ConversationLinkName
-                      className="project-ticket-conversation-name"
-                      label={label}
-                    />
-                    <span className="project-ticket-conversation-status">
-                      {conversationLinkStatusText(link)}
-                    </span>
+                <div className='project-ticket-conversation-row' key={link.id}>
+                  <div className='project-ticket-conversation-main'>
+                    <ConversationLinkName className='project-ticket-conversation-name' label={label} />
+                    <span className='project-ticket-conversation-status'>{conversationLinkStatusText(link)}</span>
                   </div>
-                  <div className="project-ticket-conversation-actions">
+                  <div className='project-ticket-conversation-actions'>
                     <Button
                       aria-label={
-                        actionKind === "resume"
-                          ? "Resume linked conversation"
-                          : "Jump to linked conversation"
+                        actionKind === 'resume' ? 'Resume linked conversation' : 'Jump to linked conversation'
                       }
-                      disabled={actionKind === "none" || hasActiveConversationAction}
+                      disabled={actionKind === 'none' || hasActiveConversationAction}
                       onClick={() => onJumpToConversation(link)}
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
+                      size='icon-sm'
+                      type='button'
+                      variant='ghost'
                     >
-                      {actionKind === "resume" ? <IconPlayerPlay /> : <IconExternalLink />}
+                      {actionKind === 'resume' ? <IconPlayerPlay /> : <IconExternalLink />}
                     </Button>
                     <Button
-                      aria-label="Unlink conversation"
+                      aria-label='Unlink conversation'
                       disabled={hasActiveConversationAction}
                       onClick={() => onUnlinkConversation(link)}
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
+                      size='icon-sm'
+                      type='button'
+                      variant='ghost'
                     >
                       <IconUnlink />
                     </Button>
@@ -554,35 +516,29 @@ export function ConversationSection({
           </div>
         </TooltipProvider>
       ) : (
-        <p className="project-ticket-empty">No linked conversation yet.</p>
+        <p className='project-ticket-empty'>No linked conversation yet.</p>
       )}
     </section>
   );
 }
 
 export function getPrimaryUsableConversationLink(
-  links: ProjectBoardConversationLinkView[],
+  links: ProjectBoardConversationLinkView[]
 ): ProjectBoardConversationLinkView | undefined {
   return links.find(isUsableConversationLink);
 }
 
-export function ConversationLinkName({
-  className,
-  label,
-}: {
-  className: string;
-  label: string;
-}) {
+export function ConversationLinkName({ className, label }: { className: string; label: string }) {
   return (
     <Tooltip>
       <TooltipTrigger render={<span className={className}>{label}</span>} />
-      <TooltipContent side="bottom">{label}</TooltipContent>
+      <TooltipContent side='bottom'>{label}</TooltipContent>
     </Tooltip>
   );
 }
 
 export function projectBoardCommentMetadataFromLink(
-  link: ProjectBoardConversationLinkView | undefined,
+  link: ProjectBoardConversationLinkView | undefined
 ): ProjectBoardCommentMetadata {
   /*
    * CDXC:ProjectBoardComments 2026-06-05-06:43:
@@ -602,7 +558,7 @@ export function projectBoardCommentMetadataFromLink(
 
 export function compareConversationLinksNewestFirst(
   left: ProjectBoardConversationLinkView,
-  right: ProjectBoardConversationLinkView,
+  right: ProjectBoardConversationLinkView
 ): number {
   const leftTime = Date.parse(left.updatedAt);
   const rightTime = Date.parse(right.updatedAt);

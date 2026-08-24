@@ -4,18 +4,18 @@ import {
   sortSettledSessionsForSidebarV2,
   sortSnoozedSessionsForSidebarV2,
   type SidebarV2Partition,
-} from "../../shared/sidebar-v2-sort";
+} from '../../shared/sidebar-v2-sort';
 import {
   SIDEBAR_V2_LIFECYCLE_CAPABILITIES_DISABLED,
   resolveSidebarV2NextWakeAtMs,
   type SidebarV2LifecycleCapabilities,
-} from "../../shared/sidebar-v2-lifecycle";
+} from '../../shared/sidebar-v2-lifecycle';
 import {
   isSidebarV2BrowserSession,
   toSidebarV2SessionsFromGroup,
   type SidebarV2Session,
-} from "../../shared/sidebar-v2-session";
-import { firstValidTimestampMs } from "../../shared/sidebar-v2-status";
+} from '../../shared/sidebar-v2-session';
+import { firstValidTimestampMs } from '../../shared/sidebar-v2-status';
 import {
   DEFAULT_SIDEBAR_V2_PROJECT_GROUPING_SETTINGS,
   deriveSidebarV2ProjectGroupingOverrideKey,
@@ -25,10 +25,10 @@ import {
   type SidebarV2Project,
   type SidebarV2ProjectGroupingMode,
   type SidebarV2ProjectGroupingSettings,
-} from "../../shared/sidebar-v2-logical-project";
-import type { SidebarSessionItem } from "../../shared/session-grid-contract";
-import type { WorkspaceProjectIcon } from "../../shared/workspace-project-appearance";
-import type { SidebarGroupRecord } from "../sidebar-store";
+} from '../../shared/sidebar-v2-logical-project';
+import type { SidebarSessionItem } from '../../shared/session-grid-contract';
+import type { WorkspaceProjectIcon } from '../../shared/workspace-project-appearance';
+import type { SidebarGroupRecord } from '../sidebar-store';
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -48,7 +48,7 @@ import type { SidebarGroupRecord } from "../sidebar-store";
     default and server's `DEFAULT_AUTO_SETTLE_AFTER_DAYS`. */
 export const SIDEBAR_V2_DEFAULT_AUTO_SETTLE_DAYS = 3;
 
-export const SIDEBAR_V2_ALL_SCOPE_ID = "all";
+export const SIDEBAR_V2_ALL_SCOPE_ID = 'all';
 
 export type SidebarV2ScopeOption = {
   /** Sessions the scope would show, browser rows included. */
@@ -130,15 +130,15 @@ export type SidebarV2GroupModel = {
 
 export type SidebarV2ProjectIdentity = Pick<
   SidebarV2GroupModel,
-  | "discoveredIconDataUrl"
-  | "groupId"
-  | "icon"
-  | "iconDataUrl"
-  | "isQuick"
-  | "isStale"
-  | "isWorktree"
-  | "machineName"
-  | "title"
+  | 'discoveredIconDataUrl'
+  | 'groupId'
+  | 'icon'
+  | 'iconDataUrl'
+  | 'isQuick'
+  | 'isStale'
+  | 'isWorktree'
+  | 'machineName'
+  | 'title'
 >;
 
 export type SidebarV2ViewModelInput = {
@@ -214,10 +214,7 @@ export type SidebarV2ViewModel = {
   scopedGroupIds: string[];
 };
 
-function resolveProjectIdentity(
-  groupId: string,
-  group: SidebarGroupRecord | undefined,
-): SidebarV2ProjectIdentity {
+function resolveProjectIdentity(groupId: string, group: SidebarGroupRecord | undefined): SidebarV2ProjectIdentity {
   return {
     discoveredIconDataUrl: group?.projectContext?.discoveredIconDataUrl,
     groupId,
@@ -232,7 +229,7 @@ function resolveProjectIdentity(
      * The projectless chat collection is user-facing as "Quick". Keep that
      * label here so the scope menu and card project slot agree with V1.
      */
-    title: group?.isChatCollection === true ? "Quick" : (group?.title ?? groupId),
+    title: group?.isChatCollection === true ? 'Quick' : (group?.title ?? groupId),
   };
 }
 
@@ -262,12 +259,7 @@ export function resolveSidebarV2CreationRanks(input: {
       continue;
     }
     const registryIndex = registryIndexById.get(session.sessionId);
-    ranks.set(
-      session.sessionId,
-      registryIndex === undefined
-        ? Number.NEGATIVE_INFINITY
-        : -1 - registryIndex,
-    );
+    ranks.set(session.sessionId, registryIndex === undefined ? Number.NEGATIVE_INFINITY : -1 - registryIndex);
   }
   return ranks;
 }
@@ -280,19 +272,15 @@ export function resolveSidebarV2CreationRanks(input: {
  */
 function mergeSidebarV2Partitions(
   partitions: readonly SidebarV2Partition<SidebarV2Session>[],
-  options: { creationRankById: ReadonlyMap<string, number> },
+  options: { creationRankById: ReadonlyMap<string, number> }
 ): SidebarV2Partition<SidebarV2Session> {
   return {
     active: sortSessionsForSidebarV2(
       partitions.flatMap((partition) => partition.active),
-      { creationRankById: options.creationRankById },
+      { creationRankById: options.creationRankById }
     ),
-    settled: sortSettledSessionsForSidebarV2(
-      partitions.flatMap((partition) => partition.settled),
-    ),
-    snoozed: sortSnoozedSessionsForSidebarV2(
-      partitions.flatMap((partition) => partition.snoozed),
-    ),
+    settled: sortSettledSessionsForSidebarV2(partitions.flatMap((partition) => partition.settled)),
+    snoozed: sortSnoozedSessionsForSidebarV2(partitions.flatMap((partition) => partition.snoozed)),
   };
 }
 
@@ -319,9 +307,7 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
     sessions: allSessions,
   });
   const fallbackAutoSettleAfterDays =
-    input.autoSettleAfterDays === undefined
-      ? SIDEBAR_V2_DEFAULT_AUTO_SETTLE_DAYS
-      : input.autoSettleAfterDays;
+    input.autoSettleAfterDays === undefined ? SIDEBAR_V2_DEFAULT_AUTO_SETTLE_DAYS : input.autoSettleAfterDays;
   /*
    * CDXC:SidebarV2LogicalProjects 2026-07-29:
    * The window is looked up per group, not applied once to the whole inbox.
@@ -349,9 +335,7 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
    * order over the merged set, not a stable merge of pre-sorted runs.
    */
   const capabilitiesByGroupId: Record<string, SidebarV2LifecycleCapabilities> = {};
-  const resolveGroupCapabilities = (
-    groupId: string,
-  ): SidebarV2LifecycleCapabilities | undefined => {
+  const resolveGroupCapabilities = (groupId: string): SidebarV2LifecycleCapabilities | undefined => {
     if (input.capabilitiesByGroupId === undefined) {
       return undefined;
     }
@@ -375,7 +359,7 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
         ...partitionOptions,
         autoSettleAfterDays: resolveAutoSettleAfterDays(groupId),
         capabilities,
-      }),
+      })
     );
     browserSessionsByGroupId.set(groupId, browserSessions);
   }
@@ -407,7 +391,7 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
         projectContext: group?.projectContext,
         remoteMachineContext: group?.remoteMachineContext,
         title: projectsByGroupId[groupId]?.title ?? groupId,
-      }),
+      })
     );
   }
   const logicalGroups = groupSidebarV2ProjectsByLogicalKey({
@@ -427,20 +411,17 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
         .filter((projectId) => projectId !== logicalGroup.representative.projectId),
     ];
     const memberModes = logicalGroup.members.map((member) =>
-      resolveSidebarV2ProjectGroupingMode(member, projectGrouping),
+      resolveSidebarV2ProjectGroupingMode(member, projectGrouping)
     );
-    const sharedMode = memberModes.every((mode) => mode === memberModes[0])
-      ? memberModes[0]
-      : undefined;
+    const sharedMode = memberModes.every((mode) => mode === memberModes[0]) ? memberModes[0] : undefined;
     const representativeGroupId = logicalGroup.representative.projectId;
     const memberRepositoryKeys = new Set(
       logicalGroup.members.flatMap((member) => {
         const canonicalKey = member.repository?.canonicalKey?.trim();
         return canonicalKey ? [canonicalKey] : [];
-      }),
+      })
     );
-    const [repositoryCanonicalKey] =
-      memberRepositoryKeys.size === 1 ? [...memberRepositoryKeys] : [];
+    const [repositoryCanonicalKey] = memberRepositoryKeys.size === 1 ? [...memberRepositoryKeys] : [];
     /*
      * The project line inside a merged group shows the SHARED name, so a flat
      * inbox card never claims a session belongs to "ghostex" on one row and
@@ -461,17 +442,11 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
        * Keep the store's incoming order for them instead of re-sorting, so
        * grouped mode reads exactly like the classic sidebar.
        */
-      browserSessions: memberGroupIds.flatMap(
-        (memberGroupId) => browserSessionsByGroupId.get(memberGroupId) ?? [],
-      ),
-      canGroupAcrossMachines: logicalGroup.members.some(
-        (member) => member.repository !== undefined,
-      ),
+      browserSessions: memberGroupIds.flatMap((memberGroupId) => browserSessionsByGroupId.get(memberGroupId) ?? []),
+      canGroupAcrossMachines: logicalGroup.members.some((member) => member.repository !== undefined),
       groupId: representativeGroupId,
       ...(sharedMode ? { groupingMode: sharedMode } : {}),
-      groupingOverrideKeys: logicalGroup.members.map((member) =>
-        deriveSidebarV2ProjectGroupingOverrideKey(member),
-      ),
+      groupingOverrideKeys: logicalGroup.members.map((member) => deriveSidebarV2ProjectGroupingOverrideKey(member)),
       isMerged: memberGroupIds.length > 1,
       memberGroupIds,
       partition: mergeSidebarV2Partitions(
@@ -479,12 +454,12 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
           const partition = partitionsByGroupId.get(memberGroupId);
           return partition ? [partition] : [];
         }),
-        { creationRankById },
+        { creationRankById }
       ),
       ...(repositoryCanonicalKey ? { repositoryCanonicalKey } : {}),
       sessionCount: memberGroupIds.reduce(
         (total, memberGroupId) => total + (sessionsByGroupId.get(memberGroupId) ?? []).length,
-        0,
+        0
       ),
       title: logicalGroup.displayName,
     };
@@ -501,16 +476,12 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
     input.scopeId === SIDEBAR_V2_ALL_SCOPE_ID
       ? undefined
       : groups.find((group) => group.memberGroupIds.includes(input.scopeId));
-  const scopedGroupIds = scopedLogicalGroup
-    ? [...scopedLogicalGroup.memberGroupIds]
-    : [...input.groupIds];
+  const scopedGroupIds = scopedLogicalGroup ? [...scopedLogicalGroup.memberGroupIds] : [...input.groupIds];
   const scopedGroupIdSet = new Set(scopedGroupIds);
   const scopedSessions = allSessions.filter(
-    (session) => session.projectId !== undefined && scopedGroupIdSet.has(session.projectId),
+    (session) => session.projectId !== undefined && scopedGroupIdSet.has(session.projectId)
   );
-  const scopedBrowserSessions = scopedSessions.filter((session) =>
-    isSidebarV2BrowserSession(session),
-  );
+  const scopedBrowserSessions = scopedSessions.filter((session) => isSidebarV2BrowserSession(session));
   const scopedPartitions = scopedGroupIds.flatMap((groupId) => {
     const partition = partitionsByGroupId.get(groupId);
     return partition ? [partition] : [];
@@ -549,7 +520,7 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
         groupId: null,
         isQuick: false,
         isWorktree: false,
-        label: "All projects",
+        label: 'All projects',
         scopeId: SIDEBAR_V2_ALL_SCOPE_ID,
       },
       /*

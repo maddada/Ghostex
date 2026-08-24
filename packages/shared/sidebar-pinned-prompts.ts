@@ -17,11 +17,11 @@ export function normalizeSidebarPinnedPrompts(candidate: unknown): SidebarPinned
       continue;
     }
 
-    const promptId = typeof item.promptId === "string" ? item.promptId.trim() : "";
-    const content = typeof item.content === "string" ? item.content : "";
-    const createdAt = typeof item.createdAt === "string" ? item.createdAt : "";
-    const titleCandidate = typeof item.title === "string" ? item.title : "";
-    const updatedAt = typeof item.updatedAt === "string" ? item.updatedAt : "";
+    const promptId = typeof item.promptId === 'string' ? item.promptId.trim() : '';
+    const content = typeof item.content === 'string' ? item.content : '';
+    const createdAt = typeof item.createdAt === 'string' ? item.createdAt : '';
+    const titleCandidate = typeof item.title === 'string' ? item.title : '';
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : '';
     const title = normalizePinnedPromptTitle(titleCandidate, content);
     if (!promptId || !content || !createdAt || !updatedAt) {
       continue;
@@ -50,7 +50,7 @@ function comparePinnedPromptDate(left: string, right: string): number {
 }
 
 function isObjectRecord(candidate: unknown): candidate is Record<string, unknown> {
-  return typeof candidate === "object" && candidate !== null;
+  return typeof candidate === 'object' && candidate !== null;
 }
 
 function normalizePinnedPromptTitle(titleCandidate: string, content: string): string {
@@ -65,7 +65,7 @@ function normalizePinnedPromptTitle(titleCandidate: string, content: string): st
     .find(Boolean);
 
   if (!firstContentLine) {
-    return "Untitled Prompt";
+    return 'Untitled Prompt';
   }
 
   return firstContentLine.slice(0, 80);

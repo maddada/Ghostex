@@ -7,17 +7,14 @@ import {
   GPUI_PROJECT_BOARD_CONVERSATION_ACTIONS,
   GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_REQUEST_MESSAGE_TYPE,
   GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_REQUEST_MESSAGE_VERSION,
-} from "../constants";
-import type { GpuiProjectBoardConversationRequest } from "../types-and-protocol";
-import type { AppToastLevel } from "@/packages/shared/app-toast-contract";
-import type { GxserverPresentationSearchResult } from "@/packages/shared/gxserver-protocol";
-import { DEFAULT_TERMINAL_SESSION_TITLE } from "@/packages/shared/session-grid-contract";
+} from '../constants';
+import type { GpuiProjectBoardConversationRequest } from '../types-and-protocol';
+import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
+import type { GxserverPresentationSearchResult } from '@/packages/shared/gxserver-protocol';
+import { DEFAULT_TERMINAL_SESSION_TITLE } from '@/packages/shared/session-grid-contract';
 
-export function boundedGpuiProjectBoardRequestString(
-  value: unknown,
-  maxChars: number,
-): string | undefined {
-  if (typeof value !== "string") {
+export function boundedGpuiProjectBoardRequestString(value: unknown, maxChars: number): string | undefined {
+  if (typeof value !== 'string') {
     return undefined;
   }
   const trimmed = value.trim();
@@ -28,9 +25,9 @@ export function boundedGpuiProjectBoardRequestString(
 }
 
 export function normalizeGpuiProjectBoardConversationRequest(
-  payload: unknown,
+  payload: unknown
 ): GpuiProjectBoardConversationRequest | undefined {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return undefined;
   }
   const record = payload as Record<string, unknown>;
@@ -38,19 +35,19 @@ export function normalizeGpuiProjectBoardConversationRequest(
     record.type !== GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_REQUEST_MESSAGE_TYPE ||
     record.version !== GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_REQUEST_MESSAGE_VERSION ||
     !record.request ||
-    typeof record.request !== "object" ||
+    typeof record.request !== 'object' ||
     Array.isArray(record.request)
   ) {
     return undefined;
   }
   const request = record.request as Record<string, unknown>;
   const requestId = boundedGpuiProjectBoardRequestString(request.requestId, 256);
-  const action = typeof request.action === "string" ? request.action : "";
+  const action = typeof request.action === 'string' ? request.action : '';
   if (!requestId || !GPUI_PROJECT_BOARD_CONVERSATION_ACTIONS.has(action)) {
     return undefined;
   }
   return {
-    action: action as GpuiProjectBoardConversationRequest["action"],
+    action: action as GpuiProjectBoardConversationRequest['action'],
     agentId: boundedGpuiProjectBoardRequestString(request.agentId, 256),
     beadDisplayId: boundedGpuiProjectBoardRequestString(request.beadDisplayId, 256),
     beadId: boundedGpuiProjectBoardRequestString(request.beadId, 512),
@@ -68,13 +65,13 @@ export function normalizeGpuiProjectBoardConversationRequest(
 
 export function normalizeGpuiProjectBoardToastLevel(level: string | undefined): AppToastLevel {
   switch (level) {
-    case "error":
-    case "info":
-    case "success":
-    case "warning":
+    case 'error':
+    case 'info':
+    case 'success':
+    case 'warning':
       return level;
     default:
-      return "error";
+      return 'error';
   }
 }
 

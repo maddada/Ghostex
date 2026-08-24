@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy)]
 pub(crate) enum BrowserToolbarAction {
     Back,
@@ -21,7 +20,6 @@ pub(crate) enum BrowserToolbarAction {
     DevTools,
 }
 
-
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiBrowserFindState {
     pub(crate) query: String,
@@ -29,7 +27,6 @@ pub(crate) struct GpuiBrowserFindState {
     pub(crate) active_match_ordinal: i32,
     pub(crate) final_update: bool,
 }
-
 
 /*
 CDXC:GPUIBrowserMediaPermissions 2026-07-27:
@@ -58,13 +55,11 @@ pub(crate) struct GpuiBrowserMediaPermissionPrompt {
     pub(crate) request: cef::BrowserMediaAccessRequest,
 }
 
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct GpuiBrowserMediaPermissionDecision {
     pub(crate) microphone: Option<bool>,
     pub(crate) camera: Option<bool>,
 }
-
 
 impl GpuiBrowserMediaPermissionDecision {
     pub(crate) fn is_empty(self) -> bool {
@@ -72,7 +67,10 @@ impl GpuiBrowserMediaPermissionDecision {
     }
 
     /// Requested devices this origin has no stored answer for yet.
-    pub(crate) fn undecided(self, requested: cef::BrowserMediaAccessKinds) -> cef::BrowserMediaAccessKinds {
+    pub(crate) fn undecided(
+        self,
+        requested: cef::BrowserMediaAccessKinds,
+    ) -> cef::BrowserMediaAccessKinds {
         cef::BrowserMediaAccessKinds {
             microphone: requested.microphone && self.microphone.is_none(),
             camera: requested.camera && self.camera.is_none(),
@@ -80,7 +78,10 @@ impl GpuiBrowserMediaPermissionDecision {
     }
 
     /// Requested devices this origin is already allowed to use.
-    pub(crate) fn granted(self, requested: cef::BrowserMediaAccessKinds) -> cef::BrowserMediaAccessKinds {
+    pub(crate) fn granted(
+        self,
+        requested: cef::BrowserMediaAccessKinds,
+    ) -> cef::BrowserMediaAccessKinds {
         cef::BrowserMediaAccessKinds {
             microphone: requested.microphone && self.microphone == Some(true),
             camera: requested.camera && self.camera == Some(true),
@@ -97,12 +98,10 @@ impl GpuiBrowserMediaPermissionDecision {
     }
 }
 
-
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiBrowserMediaPermissionDecisions {
     pub(crate) origins: HashMap<String, GpuiBrowserMediaPermissionDecision>,
 }
-
 
 impl GpuiBrowserMediaPermissionDecisions {
     pub(crate) fn decision(
@@ -138,11 +137,12 @@ impl GpuiBrowserMediaPermissionDecisions {
     }
 }
 
-
-pub(crate) fn gpui_browser_media_permission_key(profile_id: BrowserProfileId, origin: &str) -> String {
+pub(crate) fn gpui_browser_media_permission_key(
+    profile_id: BrowserProfileId,
+    origin: &str,
+) -> String {
     format!("{}|{origin}", profile_id.cef_profile_string())
 }
-
 
 /// Normalizes a CEF requesting origin down to the scheme+authority marker used
 /// as the stored permission key. Opaque or authority-less origins (`null`,
@@ -165,7 +165,6 @@ pub(crate) fn gpui_browser_media_permission_origin(raw: &str) -> Option<String> 
     Some(format!("{scheme}://{authority}"))
 }
 
-
 pub(crate) fn gpui_browser_media_permission_display_origin(origin: &str) -> String {
     origin
         .split_once("://")
@@ -173,15 +172,15 @@ pub(crate) fn gpui_browser_media_permission_display_origin(origin: &str) -> Stri
         .to_string()
 }
 
-
-pub(crate) fn gpui_browser_media_permission_kinds_label(kinds: cef::BrowserMediaAccessKinds) -> &'static str {
+pub(crate) fn gpui_browser_media_permission_kinds_label(
+    kinds: cef::BrowserMediaAccessKinds,
+) -> &'static str {
     match (kinds.microphone, kinds.camera) {
         (true, true) => "your microphone and camera",
         (true, false) => "your microphone",
         _ => "your camera",
     }
 }
-
 
 #[derive(Clone, Copy)]
 pub(crate) enum GpuiFocusedSurfaceZoomCommand {

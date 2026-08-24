@@ -1,17 +1,14 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fireEvent, waitFor, within } from "storybook/test";
-import {
-  SIDEBAR_V2_DISCOVERED_ICON_DATA_URL,
-  SIDEBAR_V2_USER_ICON_DATA_URL,
-} from "./sidebar-v2-story-fixtures";
-import type { SidebarStoryArgs } from "../sidebar-story-fixtures";
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, fireEvent, waitFor, within } from 'storybook/test';
+import { SIDEBAR_V2_DISCOVERED_ICON_DATA_URL, SIDEBAR_V2_USER_ICON_DATA_URL } from './sidebar-v2-story-fixtures';
+import type { SidebarStoryArgs } from '../sidebar-story-fixtures';
 import {
   DEFAULT_SIDEBAR_STORY_ARGS,
   SIDEBAR_STORY_ARG_TYPES,
   SIDEBAR_STORY_DECORATORS,
   renderSidebarStory,
-} from "../sidebar-story-meta";
-import { findSidebarV2Row, waitForSidebarV2 } from "./sidebar-v2.story-helpers";
+} from '../sidebar-story-meta';
+import { findSidebarV2Row, waitForSidebarV2 } from './sidebar-v2.story-helpers';
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -22,10 +19,10 @@ import { findSidebarV2Row, waitForSidebarV2 } from "./sidebar-v2.story-helpers";
  */
 
 const meta = {
-  title: "Sidebar/V2 Inbox",
+  title: 'Sidebar/V2 Inbox',
   args: {
     ...DEFAULT_SIDEBAR_STORY_ARGS,
-    fixture: "sidebar-v2-inbox",
+    fixture: 'sidebar-v2-inbox',
     /*
      * CDXC:SidebarV2Lifecycle 2026-07-29:
      * The default V2 story runs against a CURRENT gxserver. The degraded
@@ -37,9 +34,9 @@ const meta = {
      * card line where the fixtures have one. The two degraded daemons get their
      * own stories: no capability block at all, and lifecycle without git.
      */
-    sidebarLifecycleCapabilities: "settleSnoozeAndGit",
-    sidebarV2Layout: "flat",
-    sidebarVersion: "v2",
+    sidebarLifecycleCapabilities: 'settleSnoozeAndGit',
+    sidebarV2Layout: 'flat',
+    sidebarVersion: 'v2',
   },
   argTypes: SIDEBAR_STORY_ARG_TYPES,
   decorators: SIDEBAR_STORY_DECORATORS,
@@ -58,7 +55,7 @@ export const FlatInbox: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("float the pinned session above the rest of the inbox", async () => {
+    await step('float the pinned session above the rest of the inbox', async () => {
       /*
        * CDXC:SidebarV2BrowserShelfFirst 2026-07-30:
        * Browser tabs lead the flat list now, and they render as cards too, so
@@ -66,25 +63,21 @@ export const FlatInbox: Story = {
        * The fixture names every browser session `…-browser`, and nothing else
        * does.
        */
-      const cardIds = [
-        ...root.querySelectorAll('.sidebar-v2-row[data-variant="card"][data-session-id]'),
-      ].map((card) => card.getAttribute("data-session-id"));
-      expect(cardIds.find((sessionId) => !sessionId?.endsWith("-browser"))).toBe(
-        "v2-ghostex-pinned",
+      const cardIds = [...root.querySelectorAll('.sidebar-v2-row[data-variant="card"][data-session-id]')].map((card) =>
+        card.getAttribute('data-session-id')
       );
+      expect(cardIds.find((sessionId) => !sessionId?.endsWith('-browser'))).toBe('v2-ghostex-pinned');
     });
 
-    await step("render every status hue the resolver can produce", async () => {
+    await step('render every status hue the resolver can produce', async () => {
       const kinds = new Set(
-        [...root.querySelectorAll(".sidebar-v2-status")].map((element) =>
-          element.getAttribute("data-kind"),
-        ),
+        [...root.querySelectorAll('.sidebar-v2-status')].map((element) => element.getAttribute('data-kind'))
       );
-      expect(kinds.has("working")).toBe(true);
-      expect(kinds.has("input")).toBe(true);
-      expect(kinds.has("failed")).toBe(true);
-      expect(kinds.has("done")).toBe(true);
-      expect(kinds.has("idle")).toBe(true);
+      expect(kinds.has('working')).toBe(true);
+      expect(kinds.has('input')).toBe(true);
+      expect(kinds.has('failed')).toBe(true);
+      expect(kinds.has('done')).toBe(true);
+      expect(kinds.has('idle')).toBe(true);
     });
 
     await step("paint attention amber, because Ghostex only knows 'act now'", async () => {
@@ -93,26 +86,22 @@ export const FlatInbox: Story = {
        * split, so every attention row has to read as the loud one. Indigo is
        * reserved for a host that actually says `attentionKind: "input"`.
        */
-      const attentionRow = await findSidebarV2Row(storyRoot, "v2-quick-approval");
-      const status = attentionRow.querySelector(".sidebar-v2-status");
-      expect(status?.getAttribute("data-hue")).toBe("amber");
-      expect(
-        [...root.querySelectorAll('.sidebar-v2-status[data-hue="indigo"]')].length,
-      ).toBe(0);
+      const attentionRow = await findSidebarV2Row(storyRoot, 'v2-quick-approval');
+      const status = attentionRow.querySelector('.sidebar-v2-status');
+      expect(status?.getAttribute('data-hue')).toBe('amber');
+      expect([...root.querySelectorAll('.sidebar-v2-status[data-hue="indigo"]')].length).toBe(0);
     });
 
-    await step("highlight exactly one current session", async () => {
+    await step('highlight exactly one current session', async () => {
       const activeRows = [...root.querySelectorAll('.sidebar-v2-row[data-active="true"]')];
-      expect(activeRows.map((row) => row.getAttribute("data-session-id"))).toEqual([
-        "v2-ghostex-working",
-      ]);
+      expect(activeRows.map((row) => row.getAttribute('data-session-id'))).toEqual(['v2-ghostex-working']);
     });
 
-    await step("recede the resting rows and never the loud ones", async () => {
-      const idleRow = await findSidebarV2Row(storyRoot, "v2-quick-idle");
-      const workingRow = await findSidebarV2Row(storyRoot, "v2-ghostex-working");
-      expect(idleRow.getAttribute("data-recede")).toBe("true");
-      expect(workingRow.getAttribute("data-recede")).toBe("false");
+    await step('recede the resting rows and never the loud ones', async () => {
+      const idleRow = await findSidebarV2Row(storyRoot, 'v2-quick-idle');
+      const workingRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-working');
+      expect(idleRow.getAttribute('data-recede')).toBe('true');
+      expect(workingRow.getAttribute('data-recede')).toBe('false');
     });
   },
 };
@@ -124,29 +113,25 @@ export const Shelves: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("collapse Snoozed and show its count in the header", async () => {
-      const header = root.querySelector<HTMLElement>(
-        '.sidebar-v2-shelf-header[data-tone="snoozed"]',
-      );
-      expect(header?.getAttribute("aria-expanded")).toBe("false");
-      expect(header?.textContent).toContain("Snoozed (1)");
+    await step('collapse Snoozed and show its count in the header', async () => {
+      const header = root.querySelector<HTMLElement>('.sidebar-v2-shelf-header[data-tone="snoozed"]');
+      expect(header?.getAttribute('aria-expanded')).toBe('false');
+      expect(header?.textContent).toContain('Snoozed (1)');
       expect(root.querySelector('[data-session-id="v2-ghostex-snoozed"]')).toBeNull();
     });
 
-    await step("reveal snoozed rows as slim rows when expanded", async () => {
-      const header = root.querySelector<HTMLElement>(
-        '.sidebar-v2-shelf-header[data-tone="snoozed"]',
-      );
+    await step('reveal snoozed rows as slim rows when expanded', async () => {
+      const header = root.querySelector<HTMLElement>('.sidebar-v2-shelf-header[data-tone="snoozed"]');
       fireEvent.click(header!);
-      const row = await findSidebarV2Row(storyRoot, "v2-ghostex-snoozed");
-      expect(row.getAttribute("data-variant")).toBe("slim");
-      expect(header?.textContent).toContain("Snoozed");
-      expect(header?.textContent).not.toContain("(1)");
+      const row = await findSidebarV2Row(storyRoot, 'v2-ghostex-snoozed');
+      expect(row.getAttribute('data-variant')).toBe('slim');
+      expect(header?.textContent).toContain('Snoozed');
+      expect(header?.textContent).not.toContain('(1)');
     });
 
-    await step("park the long-idle session on the Settled shelf", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-ghostex-settled");
-      expect(row.getAttribute("data-variant")).toBe("slim");
+    await step('park the long-idle session on the Settled shelf', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-ghostex-settled');
+      expect(row.getAttribute('data-variant')).toBe('slim');
     });
   },
 };
@@ -163,53 +148,51 @@ export const LifecycleShelves: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("park both settle shapes on the Settled shelf", async () => {
-      const autoSettled = await findSidebarV2Row(storyRoot, "v2-ghostex-settled");
-      const handSettled = await findSidebarV2Row(storyRoot, "v2-ghostex-settled-manual");
-      expect(autoSettled.getAttribute("data-variant")).toBe("slim");
-      expect(handSettled.getAttribute("data-variant")).toBe("slim");
+    await step('park both settle shapes on the Settled shelf', async () => {
+      const autoSettled = await findSidebarV2Row(storyRoot, 'v2-ghostex-settled');
+      const handSettled = await findSidebarV2Row(storyRoot, 'v2-ghostex-settled-manual');
+      expect(autoSettled.getAttribute('data-variant')).toBe('slim');
+      expect(handSettled.getAttribute('data-variant')).toBe('slim');
     });
 
-    await step("offer un-settle on settled rows and wake on snoozed rows", async () => {
-      const settledRow = await findSidebarV2Row(storyRoot, "v2-ghostex-settled");
-      expect(settledRow.getAttribute("data-lifecycle-action")).toBe("unsettle");
+    await step('offer un-settle on settled rows and wake on snoozed rows', async () => {
+      const settledRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-settled');
+      expect(settledRow.getAttribute('data-lifecycle-action')).toBe('unsettle');
       expect(settledRow.querySelector('[aria-label="Un-settle session"]')).toBeTruthy();
 
-      fireEvent.click(
-        root.querySelector<HTMLElement>('.sidebar-v2-shelf-header[data-tone="snoozed"]')!,
-      );
-      const snoozedRow = await findSidebarV2Row(storyRoot, "v2-ghostex-snoozed");
-      expect(snoozedRow.getAttribute("data-lifecycle-action")).toBe("wake");
+      fireEvent.click(root.querySelector<HTMLElement>('.sidebar-v2-shelf-header[data-tone="snoozed"]')!);
+      const snoozedRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-snoozed');
+      expect(snoozedRow.getAttribute('data-lifecycle-action')).toBe('wake');
       expect(snoozedRow.querySelector('[aria-label="Wake session now"]')).toBeTruthy();
     });
 
     await step("state a snoozed row's return time instead of its last activity", async () => {
-      const snoozedRow = await findSidebarV2Row(storyRoot, "v2-ghostex-snoozed");
+      const snoozedRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-snoozed');
       const wakeLabel = snoozedRow.querySelector('[data-lifecycle-label="wake"]');
       expect(wakeLabel?.textContent).toMatch(/^\d+[mhd]$/);
     });
 
-    await step("offer settle and snooze on ordinary inbox cards", async () => {
-      const inboxRow = await findSidebarV2Row(storyRoot, "v2-quick-idle");
-      expect(inboxRow.getAttribute("data-lifecycle-action")).toBe("settle");
+    await step('offer settle and snooze on ordinary inbox cards', async () => {
+      const inboxRow = await findSidebarV2Row(storyRoot, 'v2-quick-idle');
+      expect(inboxRow.getAttribute('data-lifecycle-action')).toBe('settle');
       expect(inboxRow.querySelector('[aria-label="Settle session"]')).toBeTruthy();
       expect(inboxRow.querySelector('[aria-label="Snooze session"]')).toBeTruthy();
     });
 
-    await step("never offer settle to a session that is working or blocked", async () => {
-      const workingRow = await findSidebarV2Row(storyRoot, "v2-ghostex-working");
+    await step('never offer settle to a session that is working or blocked', async () => {
+      const workingRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-working');
       expect(workingRow.querySelector('[aria-label="Settle session"]')).toBeNull();
       // Snooze IS allowed while working: it changes visibility, not the agent.
       expect(workingRow.querySelector('[aria-label="Snooze session"]')).toBeTruthy();
 
-      const blockedRow = await findSidebarV2Row(storyRoot, "v2-quick-approval");
+      const blockedRow = await findSidebarV2Row(storyRoot, 'v2-quick-approval');
       expect(blockedRow.querySelector('[aria-label="Settle session"]')).toBeNull();
       expect(blockedRow.querySelector('[aria-label="Snooze session"]')).toBeNull();
     });
 
-    await step("keep lifecycle actions off browser rows", async () => {
-      const browserRow = await findSidebarV2Row(storyRoot, "v2-ghostex-browser");
-      expect(browserRow.getAttribute("data-lifecycle-action")).toBe("none");
+    await step('keep lifecycle actions off browser rows', async () => {
+      const browserRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-browser');
+      expect(browserRow.getAttribute('data-lifecycle-action')).toBe('none');
       expect(browserRow.querySelector('[aria-label="Snooze session"]')).toBeNull();
     });
   },
@@ -226,31 +209,31 @@ export const WokeFromSnooze: Story = {
 
     await waitForSidebarV2(storyRoot);
 
-    await step("return an expired snooze to the inbox with a Woke badge", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-zmx-woke");
-      expect(row.getAttribute("data-variant")).toBe("card");
-      expect(row.getAttribute("data-woke")).toBe("true");
+    await step('return an expired snooze to the inbox with a Woke badge', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-zmx-woke');
+      expect(row.getAttribute('data-variant')).toBe('card');
+      expect(row.getAttribute('data-woke')).toBe('true');
       const woke = row.querySelector('[data-lifecycle-label="woke"]');
-      expect(woke?.textContent).toContain("Woke");
-      expect(woke?.getAttribute("aria-label")).toBe("Woke from snooze");
+      expect(woke?.textContent).toContain('Woke');
+      expect(woke?.getAttribute('aria-label')).toBe('Woke from snooze');
     });
 
-    await step("pull a still-snoozed session back the moment it is blocked on you", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-zmx-raised-hand");
-      expect(row.getAttribute("data-variant")).toBe("card");
-      expect(row.getAttribute("data-woke")).toBe("true");
+    await step('pull a still-snoozed session back the moment it is blocked on you', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-zmx-raised-hand');
+      expect(row.getAttribute('data-variant')).toBe('card');
+      expect(row.getAttribute('data-woke')).toBe('true');
     });
 
-    await step("let the live status outrank the historical one", async () => {
+    await step('let the live status outrank the historical one', async () => {
       /*
        * A raised hand is an attention row first and a woken row second: its
        * slot must show the amber "act now" status, with the wake reduced to a
        * glyph beside it rather than a second competing label. Attention color
        * keys off data-hue, never data-kind.
        */
-      const row = await findSidebarV2Row(storyRoot, "v2-zmx-raised-hand");
-      const status = row.querySelector(".sidebar-v2-status");
-      expect(status?.getAttribute("data-hue")).toBe("amber");
+      const row = await findSidebarV2Row(storyRoot, 'v2-zmx-raised-hand');
+      const status = row.querySelector('.sidebar-v2-status');
+      expect(status?.getAttribute('data-hue')).toBe('amber');
       expect(row.querySelector('[data-lifecycle-label="woke"]')).toBeNull();
       expect(row.querySelector('[data-lifecycle-mark="woke"]')).toBeTruthy();
     });
@@ -264,29 +247,27 @@ export const WokeFromSnooze: Story = {
  * feature the daemon cannot serve.
  */
 export const WithoutLifecycleCapabilities: Story = {
-  args: { sidebarLifecycleCapabilities: "absent" },
+  args: { sidebarLifecycleCapabilities: 'absent' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("keep every shelf empty", async () => {
+    await step('keep every shelf empty', async () => {
       await waitFor(() => {
-        expect(
-          root.querySelector('.sidebar-v2-shelf-header[data-tone="settled"]'),
-        ).toBeNull();
+        expect(root.querySelector('.sidebar-v2-shelf-header[data-tone="settled"]')).toBeNull();
       });
       expect(root.querySelector('.sidebar-v2-shelf-header[data-tone="snoozed"]')).toBeNull();
     });
 
-    await step("show the would-be settled and snoozed rows in the inbox instead", async () => {
-      const settledRow = await findSidebarV2Row(storyRoot, "v2-ghostex-settled");
-      const snoozedRow = await findSidebarV2Row(storyRoot, "v2-ghostex-snoozed");
-      expect(settledRow.getAttribute("data-variant")).toBe("card");
-      expect(snoozedRow.getAttribute("data-variant")).toBe("card");
+    await step('show the would-be settled and snoozed rows in the inbox instead', async () => {
+      const settledRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-settled');
+      const snoozedRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-snoozed');
+      expect(settledRow.getAttribute('data-variant')).toBe('card');
+      expect(snoozedRow.getAttribute('data-variant')).toBe('card');
     });
 
-    await step("render no lifecycle affordance anywhere", async () => {
-      expect(root.querySelectorAll("[data-lifecycle-action]:not(.sidebar-v2-row)")).toHaveLength(0);
+    await step('render no lifecycle affordance anywhere', async () => {
+      expect(root.querySelectorAll('[data-lifecycle-action]:not(.sidebar-v2-row)')).toHaveLength(0);
       expect(root.querySelectorAll('[aria-label="Settle session"]')).toHaveLength(0);
       expect(root.querySelectorAll('[aria-label="Snooze session"]')).toHaveLength(0);
       expect(root.querySelectorAll('[data-lifecycle-label="woke"]')).toHaveLength(0);
@@ -309,52 +290,44 @@ export const GitAndPullRequestCards: Story = {
     await waitForSidebarV2(storyRoot);
 
     await step("state branch, review, and diff on the card's meta line", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-ghostex-working");
+      const row = await findSidebarV2Row(storyRoot, 'v2-ghostex-working');
       const meta = row.querySelector<HTMLElement>('[data-line="meta"]');
-      expect(meta?.getAttribute("data-meta")).toBe("git");
-      expect(meta?.querySelector(".sidebar-v2-row-branch-name")?.textContent).toBe(
-        "ghostex/sidebar-v2-inbox",
-      );
-      expect(meta?.querySelector(".sidebar-v2-row-pr")?.textContent).toBe("#128");
-      expect(meta?.querySelector(".sidebar-v2-row-pr")?.getAttribute("data-pr-state")).toBe(
-        "open",
-      );
-      expect(meta?.querySelector(".sidebar-v2-row-diff-added")?.textContent).toBe("+412");
-      expect(meta?.querySelector(".sidebar-v2-row-diff-removed")?.textContent).toBe("−87");
+      expect(meta?.getAttribute('data-meta')).toBe('git');
+      expect(meta?.querySelector('.sidebar-v2-row-branch-name')?.textContent).toBe('ghostex/sidebar-v2-inbox');
+      expect(meta?.querySelector('.sidebar-v2-row-pr')?.textContent).toBe('#128');
+      expect(meta?.querySelector('.sidebar-v2-row-pr')?.getAttribute('data-pr-state')).toBe('open');
+      expect(meta?.querySelector('.sidebar-v2-row-diff-added')?.textContent).toBe('+412');
+      expect(meta?.querySelector('.sidebar-v2-row-diff-removed')?.textContent).toBe('−87');
     });
 
-    await step("keep a card three lines with git, exactly as it was without", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-ghostex-working");
-      expect(row.closest(".sidebar-v2-row-item")?.getAttribute("data-card-lines")).toBe("3");
+    await step('keep a card three lines with git, exactly as it was without', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-ghostex-working');
+      expect(row.closest('.sidebar-v2-row-item')?.getAttribute('data-card-lines')).toBe('3');
     });
 
-    await step("show a lone branch with no badge and no diff", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-ghostex-pinned");
+    await step('show a lone branch with no badge and no diff', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-ghostex-pinned');
       const meta = row.querySelector<HTMLElement>('[data-line="meta"]');
-      expect(meta?.querySelector(".sidebar-v2-row-branch-name")?.textContent).toBe("release/6.9");
-      expect(meta?.querySelector(".sidebar-v2-row-pr")).toBeNull();
-      expect(meta?.querySelector(".sidebar-v2-row-diff")).toBeNull();
+      expect(meta?.querySelector('.sidebar-v2-row-branch-name')?.textContent).toBe('release/6.9');
+      expect(meta?.querySelector('.sidebar-v2-row-pr')).toBeNull();
+      expect(meta?.querySelector('.sidebar-v2-row-diff')).toBeNull();
     });
 
-    await step("color the draft and closed reviews by their own state", async () => {
-      const draftRow = await findSidebarV2Row(storyRoot, "v2-zmx-failed");
-      expect(
-        draftRow.querySelector(".sidebar-v2-row-pr")?.getAttribute("data-pr-state"),
-      ).toBe("draft");
-      const closedRow = await findSidebarV2Row(storyRoot, "v2-zmx-done");
-      expect(
-        closedRow.querySelector(".sidebar-v2-row-pr")?.getAttribute("data-pr-state"),
-      ).toBe("closed");
+    await step('color the draft and closed reviews by their own state', async () => {
+      const draftRow = await findSidebarV2Row(storyRoot, 'v2-zmx-failed');
+      expect(draftRow.querySelector('.sidebar-v2-row-pr')?.getAttribute('data-pr-state')).toBe('draft');
+      const closedRow = await findSidebarV2Row(storyRoot, 'v2-zmx-done');
+      expect(closedRow.querySelector('.sidebar-v2-row-pr')?.getAttribute('data-pr-state')).toBe('closed');
     });
 
-    await step("keep only the PR badge on a slim settled row", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-ghostex-settled-manual");
-      expect(row.getAttribute("data-variant")).toBe("slim");
-      const badge = row.querySelector(".sidebar-v2-row-pr");
-      expect(badge?.textContent).toBe("#124");
-      expect(badge?.getAttribute("data-pr-state")).toBe("merged");
-      expect(row.querySelector(".sidebar-v2-row-branch")).toBeNull();
-      expect(row.querySelector(".sidebar-v2-row-diff")).toBeNull();
+    await step('keep only the PR badge on a slim settled row', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-ghostex-settled-manual');
+      expect(row.getAttribute('data-variant')).toBe('slim');
+      const badge = row.querySelector('.sidebar-v2-row-pr');
+      expect(badge?.textContent).toBe('#124');
+      expect(badge?.getAttribute('data-pr-state')).toBe('merged');
+      expect(row.querySelector('.sidebar-v2-row-branch')).toBeNull();
+      expect(row.querySelector('.sidebar-v2-row-diff')).toBeNull();
     });
 
     /*
@@ -363,19 +336,19 @@ export const GitAndPullRequestCards: Story = {
      * as the session's cwd (or the project's path) — a folder path, never the
      * agent name the fixtures' prose suggested.
      */
-    await step("render nothing for a probe that found nothing to say", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-quick-approval");
-      expect(row.querySelector("[data-sidebar-v2-git]")).toBeNull();
+    await step('render nothing for a probe that found nothing to say', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-quick-approval');
+      expect(row.querySelector('[data-sidebar-v2-git]')).toBeNull();
       expect(row.querySelector('[data-line="meta"]')).toBeNull();
-      expect(row.closest(".sidebar-v2-row-item")?.getAttribute("data-card-lines")).toBe("2");
+      expect(row.closest('.sidebar-v2-row-item')?.getAttribute('data-card-lines')).toBe('2');
     });
 
-    await step("never show a folder path instead of a branch", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-quick-idle");
-      expect(row.querySelector("[data-sidebar-v2-git]")).toBeNull();
+    await step('never show a folder path instead of a branch', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-quick-idle');
+      expect(row.querySelector('[data-sidebar-v2-git]')).toBeNull();
       expect(row.querySelector('[data-line="meta"]')).toBeNull();
-      expect(row.querySelector(".sidebar-v2-row-meta")).toBeNull();
-      expect(row.closest(".sidebar-v2-row-item")?.getAttribute("data-card-lines")).toBe("2");
+      expect(row.querySelector('.sidebar-v2-row-meta')).toBeNull();
+      expect(row.closest('.sidebar-v2-row-item')?.getAttribute('data-card-lines')).toBe('2');
     });
   },
 };
@@ -388,27 +361,27 @@ export const GitAndPullRequestCards: Story = {
  * decides.
  */
 export const WithoutGitCapability: Story = {
-  args: { sidebarLifecycleCapabilities: "settleAndSnooze" },
+  args: { sidebarLifecycleCapabilities: 'settleAndSnooze' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("render no branch, badge, or diff anywhere", async () => {
+    await step('render no branch, badge, or diff anywhere', async () => {
       await waitFor(() => {
-        expect(root.querySelectorAll("[data-sidebar-v2-git]")).toHaveLength(0);
+        expect(root.querySelectorAll('[data-sidebar-v2-git]')).toHaveLength(0);
       });
-      expect(root.querySelectorAll(".sidebar-v2-row-pr")).toHaveLength(0);
-      expect(root.querySelectorAll(".sidebar-v2-row-diff")).toHaveLength(0);
+      expect(root.querySelectorAll('.sidebar-v2-row-pr')).toHaveLength(0);
+      expect(root.querySelectorAll('.sidebar-v2-row-diff')).toHaveLength(0);
     });
 
-    await step("keep the card identical to a session with no git data", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-ghostex-working");
+    await step('keep the card identical to a session with no git data', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-ghostex-working');
       expect(row.querySelector('[data-line="meta"]')).toBeNull();
-      expect(row.closest(".sidebar-v2-row-item")?.getAttribute("data-card-lines")).toBe("2");
+      expect(row.closest('.sidebar-v2-row-item')?.getAttribute('data-card-lines')).toBe('2');
     });
 
-    await step("keep the settle/snooze affordances the daemon does support", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-quick-idle");
+    await step('keep the settle/snooze affordances the daemon does support', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-quick-idle');
       expect(row.querySelector('[aria-label="Settle session"]')).toBeTruthy();
     });
   },
@@ -420,19 +393,15 @@ export const BrowserSection: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("list browser sessions under their own header", async () => {
-      const header = root.querySelector<HTMLElement>(
-        '.sidebar-v2-shelf-header[data-tone="browser"]',
-      );
-      expect(header?.textContent).toContain("Browser");
-      await findSidebarV2Row(storyRoot, "v2-ghostex-browser");
-      await findSidebarV2Row(storyRoot, "v2-zmx-browser");
+    await step('list browser sessions under their own header', async () => {
+      const header = root.querySelector<HTMLElement>('.sidebar-v2-shelf-header[data-tone="browser"]');
+      expect(header?.textContent).toContain('Browser');
+      await findSidebarV2Row(storyRoot, 'v2-ghostex-browser');
+      await findSidebarV2Row(storyRoot, 'v2-zmx-browser');
     });
 
-    await step("keep browser rows out of the agent inbox", async () => {
-      const inboxIds = [
-        ...root.querySelectorAll('.sidebar-v2-list > .sidebar-v2-row-item[data-variant="card"]'),
-      ];
+    await step('keep browser rows out of the agent inbox', async () => {
+      const inboxIds = [...root.querySelectorAll('.sidebar-v2-list > .sidebar-v2-row-item[data-variant="card"]')];
       expect(inboxIds.length).toBeGreaterThan(0);
     });
   },
@@ -441,25 +410,23 @@ export const BrowserSection: Story = {
 /** Group by Project: collapsible project groups, browser rows above agent rows,
     and a per-project Settled shelf. */
 export const ByProject: Story = {
-  args: { sidebarV2Layout: "byProject" },
+  args: { sidebarV2Layout: 'byProject' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("render one group per project", async () => {
+    await step('render one group per project', async () => {
       await waitFor(() => {
-        expect(root.querySelectorAll("[data-sidebar-v2-group-id]").length).toBe(3);
+        expect(root.querySelectorAll('[data-sidebar-v2-group-id]').length).toBe(3);
       });
     });
 
-    await step("render browser rows above agent rows inside a project", async () => {
-      const group = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-project-ghostex"]',
+    await step('render browser rows above agent rows inside a project', async () => {
+      const group = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-project-ghostex"]');
+      const rowIds = [...group!.querySelectorAll('[data-session-id]')].map((element) =>
+        element.getAttribute('data-session-id')
       );
-      const rowIds = [...group!.querySelectorAll("[data-session-id]")].map((element) =>
-        element.getAttribute("data-session-id"),
-      );
-      expect(rowIds[0]).toBe("v2-ghostex-browser");
+      expect(rowIds[0]).toBe('v2-ghostex-browser');
     });
 
     /*
@@ -470,30 +437,24 @@ export const ByProject: Story = {
      */
     await step("show each group header's real project icon", async () => {
       const ghostexHeader = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-project-ghostex"] .group-head',
+        '[data-sidebar-v2-group-id="v2-project-ghostex"] .group-head'
       );
-      expect(
-        ghostexHeader?.querySelector('.sidebar-v2-project-icon[data-icon-variant="tabler"]'),
-      ).toBeTruthy();
-      const zmxHeader = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-project-zmx"] .group-head',
-      );
-      expect(zmxHeader?.querySelector("img.sidebar-v2-project-icon")).toBeTruthy();
+      expect(ghostexHeader?.querySelector('.sidebar-v2-project-icon[data-icon-variant="tabler"]')).toBeTruthy();
+      const zmxHeader = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-project-zmx"] .group-head');
+      expect(zmxHeader?.querySelector('img.sidebar-v2-project-icon')).toBeTruthy();
     });
 
-    await step("give each project its own Settled shelf", async () => {
-      const group = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-project-ghostex"]',
-      );
+    await step('give each project its own Settled shelf', async () => {
+      const group = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-project-ghostex"]');
       expect(group!.querySelector('.sidebar-v2-shelf-header[data-tone="settled"]')).toBeTruthy();
     });
 
-    await step("drop the project line: the group header already states it", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-ghostex-working");
+    await step('drop the project line: the group header already states it', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-ghostex-working');
       expect(row.querySelector('[data-line="project"]')).toBeNull();
-      const status = row.querySelector<HTMLElement>(".sidebar-v2-status");
+      const status = row.querySelector<HTMLElement>('.sidebar-v2-status');
       expect(status?.closest('[data-line="title"]')).toBeTruthy();
-      expect(row.closest(".sidebar-v2-row-item")?.getAttribute("data-card-lines")).toBe("2");
+      expect(row.closest('.sidebar-v2-row-item')?.getAttribute('data-card-lines')).toBe('2');
     });
   },
 };
@@ -502,17 +463,17 @@ export const ByProject: Story = {
     V2 must never render that as a project — it shows the same recovery block
     the classic sidebar shows. */
 export const GxserverUnavailable: Story = {
-  args: { fixture: "sidebar-v2-gxserver-unavailable" },
+  args: { fixture: 'sidebar-v2-gxserver-unavailable' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("keep the placeholder group out of the inbox", async () => {
+    await step('keep the placeholder group out of the inbox', async () => {
       expect(root.querySelector('[data-sidebar-v2-group-id="gxserver-unavailable"]')).toBeNull();
-      expect(root.querySelector(".sidebar-v2-row")).toBeNull();
+      expect(root.querySelector('.sidebar-v2-row')).toBeNull();
     });
 
-    await step("show the host recovery copy instead of an inbox empty state", async () => {
+    await step('show the host recovery copy instead of an inbox empty state', async () => {
       /*
        * The copy is deliberately delayed by 20s while a cold start can still
        * recover (see SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS), so this
@@ -520,13 +481,13 @@ export const GxserverUnavailable: Story = {
        */
       await waitFor(
         () => {
-          expect(root.querySelector(".reference-sidebar-empty-state")?.textContent).toContain(
-            "Unable to load sessions.",
+          expect(root.querySelector('.reference-sidebar-empty-state')?.textContent).toContain(
+            'Unable to load sessions.'
           );
         },
-        { timeout: 30_000 },
+        { timeout: 30_000 }
       );
-      expect(root.querySelector(".sidebar-v2-empty-message")).toBeNull();
+      expect(root.querySelector('.sidebar-v2-empty-message')).toBeNull();
     });
   },
 };
@@ -534,20 +495,16 @@ export const GxserverUnavailable: Story = {
 /** Nothing to show at all: the one moment a user could suspect V2 lost their
     sessions, so the escape hatch back to the classic sidebar lives here. */
 export const EmptyInbox: Story = {
-  args: { fixture: "sidebar-v2-empty" },
+  args: { fixture: 'sidebar-v2-empty' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("explain the empty inbox and offer the way back", async () => {
+    await step('explain the empty inbox and offer the way back', async () => {
       await waitFor(() => {
-        expect(root.querySelector(".sidebar-v2-empty-message")?.textContent).toBe(
-          "No sessions yet",
-        );
+        expect(root.querySelector('.sidebar-v2-empty-message')?.textContent).toBe('No sessions yet');
       });
-      expect(root.querySelector(".sidebar-v2-empty-action")?.textContent).toContain(
-        "classic sidebar",
-      );
+      expect(root.querySelector('.sidebar-v2-empty-action')?.textContent).toContain('classic sidebar');
     });
   },
 };
@@ -579,66 +536,64 @@ export const RowActionChips: Story = {
     const body = within(storyRoot);
     const view = storyRoot.ownerDocument.defaultView;
 
-    await step("style every control as a 20px chip, with no scrim behind them", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-quick-idle");
-      const bar = row.querySelector<HTMLElement>(".sidebar-v2-row-actions");
+    await step('style every control as a 20px chip, with no scrim behind them', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-quick-idle');
+      const bar = row.querySelector<HTMLElement>('.sidebar-v2-row-actions');
       expect(bar).toBeTruthy();
       const barStyle = view!.getComputedStyle(bar as HTMLElement);
-      expect(barStyle.backgroundImage).toBe("none");
+      expect(barStyle.backgroundImage).toBe('none');
       /* Out of flow: the F8 no-reflow invariant is not relaxed by the restyle. */
-      expect(barStyle.position).toBe("absolute");
+      expect(barStyle.position).toBe('absolute');
 
       const snooze = row.querySelector<HTMLElement>('[aria-label="Snooze session"]');
       expect(snooze).toBeTruthy();
       const chipStyle = view!.getComputedStyle(snooze as HTMLElement);
-      expect(chipStyle.width).toBe("20px");
-      expect(chipStyle.height).toBe("20px");
-      expect(chipStyle.borderTopWidth).toBe("1px");
-      expect(chipStyle.borderTopStyle).toBe("solid");
-      expect(chipStyle.borderTopLeftRadius).toBe("6px");
+      expect(chipStyle.width).toBe('20px');
+      expect(chipStyle.height).toBe('20px');
+      expect(chipStyle.borderTopWidth).toBe('1px');
+      expect(chipStyle.borderTopStyle).toBe('solid');
+      expect(chipStyle.borderTopLeftRadius).toBe('6px');
       /*
        * A filled, OPAQUE chip, not the old transparent icon button — and not a
        * translucent one either: with no scrim behind the bar, an alpha below 1
        * let a long project name read straight through the buttons.
        */
-      expect(chipStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+      expect(chipStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
       expect(chipStyle.backgroundColor).not.toMatch(/\/\s*0?\.\d/);
 
       /* Settle is the one chip that grows to its label instead of squeezing it. */
       const settle = row.querySelector<HTMLElement>('[aria-label="Settle session"]');
       expect(settle).toBeTruthy();
-      expect(
-        Number.parseFloat(view!.getComputedStyle(settle as HTMLElement).width),
-      ).toBeGreaterThan(20);
+      expect(Number.parseFloat(view!.getComputedStyle(settle as HTMLElement).width)).toBeGreaterThan(20);
     });
 
-    await step("offer unpin, leftmost, only on a pinned row", async () => {
-      const pinnedRow = await findSidebarV2Row(storyRoot, "v2-ghostex-pinned");
-      const bar = pinnedRow.querySelector<HTMLElement>(".sidebar-v2-row-actions");
+    await step('offer unpin, leftmost, only on a pinned row', async () => {
+      const pinnedRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-pinned');
+      const bar = pinnedRow.querySelector<HTMLElement>('.sidebar-v2-row-actions');
       const unpin = bar?.querySelector<HTMLElement>('[aria-label="Unpin session"]');
       expect(unpin).toBeTruthy();
       expect(bar?.firstElementChild).toBe(unpin);
 
-      const plainRow = await findSidebarV2Row(storyRoot, "v2-quick-idle");
+      const plainRow = await findSidebarV2Row(storyRoot, 'v2-quick-idle');
       expect(plainRow.querySelector('[aria-label="Unpin session"]')).toBeNull();
       expect(plainRow.querySelector('[aria-label="Pin session"]')).toBeNull();
       expect(root.querySelectorAll('[aria-label="Pin session"]')).toHaveLength(0);
     });
 
-    await step("mark a pinned row at rest, inside the slot that swaps on hover", async () => {
-      const pinnedRow = await findSidebarV2Row(storyRoot, "v2-ghostex-pinned");
-      const mark = pinnedRow.querySelector<HTMLElement>("[data-sidebar-v2-pinned]");
+    await step('mark a pinned row at rest, inside the slot that swaps on hover', async () => {
+      const pinnedRow = await findSidebarV2Row(storyRoot, 'v2-ghostex-pinned');
+      const mark = pinnedRow.querySelector<HTMLElement>('[data-sidebar-v2-pinned]');
       expect(mark).toBeTruthy();
-      expect(mark?.closest(".sidebar-v2-row-slot-status")).toBeTruthy();
-      expect(pinnedRow.getAttribute("data-pinned")).toBe("true");
+      expect(mark?.closest('.sidebar-v2-row-slot-status')).toBeTruthy();
+      expect(pinnedRow.getAttribute('data-pinned')).toBe('true');
 
-      const plainRow = await findSidebarV2Row(storyRoot, "v2-quick-idle");
-      expect(plainRow.querySelector("[data-sidebar-v2-pinned]")).toBeNull();
+      const plainRow = await findSidebarV2Row(storyRoot, 'v2-quick-idle');
+      expect(plainRow.querySelector('[data-sidebar-v2-pinned]')).toBeNull();
     });
 
-    await step("keep the menu on right-click, anchored to the pointer", async () => {
+    await step('keep the menu on right-click, anchored to the pointer', async () => {
       expect(root.querySelectorAll('[aria-label="Session actions"]')).toHaveLength(0);
-      const row = await findSidebarV2Row(storyRoot, "v2-quick-idle");
+      const row = await findSidebarV2Row(storyRoot, 'v2-quick-idle');
       /*
        * The pointer coordinates are deliberately a fixed point near the
        * viewport's top-left, NOT the row's own rect: `SidebarContextMenuPortal`
@@ -651,8 +606,8 @@ export const RowActionChips: Story = {
       const clientX = 40;
       const clientY = 40;
       fireEvent.contextMenu(row, { bubbles: true, clientX, clientY });
-      const item = await body.findByRole("menuitem", { name: "Rename" });
-      const menu = item.closest<HTMLElement>(".sidebar-v2-session-context-menu");
+      const item = await body.findByRole('menuitem', { name: 'Rename' });
+      const menu = item.closest<HTMLElement>('.sidebar-v2-session-context-menu');
       expect(menu).toBeTruthy();
       /* Non-vacuity for the "unclamped" premise above. */
       const menuRect = (menu as HTMLElement).getBoundingClientRect();
@@ -661,7 +616,7 @@ export const RowActionChips: Story = {
       expect(menu?.style.left).toBe(`${clientX}px`);
       expect(menu?.style.top).toBe(`${clientY}px`);
       /* Pinning still has a home now that the bar dropped its pin control. */
-      await body.findByRole("menuitem", { name: "Pin" });
+      await body.findByRole('menuitem', { name: 'Pin' });
     });
   },
 };
@@ -684,71 +639,67 @@ export const RowActionChips: Story = {
  * of them.
  */
 export const ProjectLineWidth: Story = {
-  args: { fixture: "sidebar-v2-row-width" },
+  args: { fixture: 'sidebar-v2-row-width' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     await waitForSidebarV2(storyRoot);
 
     const projectLabel = async (sessionId: string): Promise<HTMLElement> => {
       const row = await findSidebarV2Row(storyRoot, sessionId);
-      const label = row.querySelector<HTMLElement>(".sidebar-v2-row-project");
+      const label = row.querySelector<HTMLElement>('.sidebar-v2-row-project');
       expect(label).toBeTruthy();
       return label as HTMLElement;
     };
 
-    await step("show a project name that fits in full, with no ellipsis", async () => {
-      const label = await projectLabel("v2-width-fits-session");
-      expect(label.textContent).toBe("maddada/ghostex");
+    await step('show a project name that fits in full, with no ellipsis', async () => {
+      const label = await projectLabel('v2-width-fits-session');
+      expect(label.textContent).toBe('maddada/ghostex');
       await waitFor(() => {
         expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
       });
     });
 
-    await step("still truncate a name that genuinely cannot fit", async () => {
-      const label = await projectLabel("v2-width-overflows-session");
+    await step('still truncate a name that genuinely cannot fit', async () => {
+      const label = await projectLabel('v2-width-overflows-session');
       expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
     });
 
-    await step("keep line 1 pixel-identical while the actions are revealed", async () => {
-      const label = await projectLabel("v2-width-fits-session");
-      const row = label.closest<HTMLElement>(".sidebar-v2-row");
-      const actions = row?.querySelector<HTMLElement>(".sidebar-v2-row-actions");
+    await step('keep line 1 pixel-identical while the actions are revealed', async () => {
+      const label = await projectLabel('v2-width-fits-session');
+      const row = label.closest<HTMLElement>('.sidebar-v2-row');
+      const actions = row?.querySelector<HTMLElement>('.sidebar-v2-row-actions');
       expect(actions).toBeTruthy();
       const view = label.ownerDocument.defaultView;
-      expect(view?.getComputedStyle(actions as HTMLElement).visibility).toBe("hidden");
+      expect(view?.getComputedStyle(actions as HTMLElement).visibility).toBe('hidden');
 
       const restingRect = label.getBoundingClientRect();
       const restingScroll = label.scrollWidth;
 
-      row?.setAttribute("data-menu-open", "true");
+      row?.setAttribute('data-menu-open', 'true');
       try {
         /* Non-vacuity: the swap must really have happened before measuring. */
-        expect(view?.getComputedStyle(actions as HTMLElement).visibility).toBe("visible");
+        expect(view?.getComputedStyle(actions as HTMLElement).visibility).toBe('visible');
         const hoveredRect = label.getBoundingClientRect();
         expect(hoveredRect.width).toBe(restingRect.width);
         expect(hoveredRect.left).toBe(restingRect.left);
         expect(label.scrollWidth).toBe(restingScroll);
         expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
       } finally {
-        row?.setAttribute("data-menu-open", "false");
+        row?.setAttribute('data-menu-open', 'false');
       }
     });
 
     await step("render each project's real icon, folder only when there is none", async () => {
-      const fitsRow = await findSidebarV2Row(storyRoot, "v2-width-fits-session");
-      const image = fitsRow.querySelector<HTMLImageElement>("img.sidebar-v2-project-icon");
-      expect(image?.getAttribute("src")).toContain("data:image/png;base64,");
+      const fitsRow = await findSidebarV2Row(storyRoot, 'v2-width-fits-session');
+      const image = fitsRow.querySelector<HTMLImageElement>('img.sidebar-v2-project-icon');
+      expect(image?.getAttribute('src')).toContain('data:image/png;base64,');
 
-      const tablerRow = await findSidebarV2Row(storyRoot, "v2-width-overflows-session");
-      expect(
-        tablerRow.querySelector('.sidebar-v2-project-icon[data-icon-variant="tabler"]'),
-      ).toBeTruthy();
-      expect(tablerRow.querySelector("img.sidebar-v2-project-icon")).toBeNull();
+      const tablerRow = await findSidebarV2Row(storyRoot, 'v2-width-overflows-session');
+      expect(tablerRow.querySelector('.sidebar-v2-project-icon[data-icon-variant="tabler"]')).toBeTruthy();
+      expect(tablerRow.querySelector('img.sidebar-v2-project-icon')).toBeNull();
 
-      const plainRow = await findSidebarV2Row(storyRoot, "v2-width-plain-session");
-      expect(
-        plainRow.querySelector('.sidebar-v2-project-icon[data-icon-variant="glyph"]'),
-      ).toBeTruthy();
+      const plainRow = await findSidebarV2Row(storyRoot, 'v2-width-plain-session');
+      expect(plainRow.querySelector('.sidebar-v2-project-icon[data-icon-variant="glyph"]')).toBeTruthy();
     });
   },
 };
@@ -766,7 +717,7 @@ export const ProjectLineWidth: Story = {
  * check is a real comparison instead of a project with only one icon.
  */
 export const ProjectIconPrecedence: Story = {
-  args: { fixture: "sidebar-v2-project-icons" },
+  args: { fixture: 'sidebar-v2-project-icons' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
@@ -774,16 +725,16 @@ export const ProjectIconPrecedence: Story = {
 
     const projectIcon = async (sessionId: string): Promise<HTMLElement> => {
       const row = await findSidebarV2Row(storyRoot, sessionId);
-      const icon = row.querySelector<HTMLElement>(".sidebar-v2-project-icon");
+      const icon = row.querySelector<HTMLElement>('.sidebar-v2-project-icon');
       expect(icon).toBeTruthy();
       return icon as HTMLElement;
     };
 
-    await step("keep a user-attached image ahead of the discovered icon", async () => {
-      const icon = await projectIcon("v2-icons-user-image-session");
-      expect(icon.getAttribute("data-icon-variant")).toBe("image");
-      expect(icon.getAttribute("src")).toBe(SIDEBAR_V2_USER_ICON_DATA_URL);
-      expect(icon.getAttribute("src")).not.toBe(SIDEBAR_V2_DISCOVERED_ICON_DATA_URL);
+    await step('keep a user-attached image ahead of the discovered icon', async () => {
+      const icon = await projectIcon('v2-icons-user-image-session');
+      expect(icon.getAttribute('data-icon-variant')).toBe('image');
+      expect(icon.getAttribute('src')).toBe(SIDEBAR_V2_USER_ICON_DATA_URL);
+      expect(icon.getAttribute('src')).not.toBe(SIDEBAR_V2_DISCOVERED_ICON_DATA_URL);
     });
 
     await step("show the repository's favicon ahead of a stale typed glyph", async () => {
@@ -793,20 +744,20 @@ export const ProjectIconPrecedence: Story = {
        * deprecated macOS app's picker. A glyph nobody can even set any more must
        * not hide the icon the repository actually ships.
        */
-      const icon = await projectIcon("v2-icons-legacy-glyph-session");
-      expect(icon.getAttribute("data-icon-variant")).toBe("discovered");
-      expect(icon.getAttribute("src")).toBe(SIDEBAR_V2_DISCOVERED_ICON_DATA_URL);
+      const icon = await projectIcon('v2-icons-legacy-glyph-session');
+      expect(icon.getAttribute('data-icon-variant')).toBe('discovered');
+      expect(icon.getAttribute('src')).toBe(SIDEBAR_V2_DISCOVERED_ICON_DATA_URL);
     });
 
-    await step("keep the typed glyph when the repository ships nothing", async () => {
-      const icon = await projectIcon("v2-icons-glyph-only-session");
-      expect(icon.getAttribute("data-icon-variant")).toBe("tabler");
+    await step('keep the typed glyph when the repository ships nothing', async () => {
+      const icon = await projectIcon('v2-icons-glyph-only-session');
+      expect(icon.getAttribute('data-icon-variant')).toBe('tabler');
     });
 
     await step("show the repository's own icon when the user chose none", async () => {
-      const icon = await projectIcon("v2-icons-discovered-session");
-      expect(icon.getAttribute("data-icon-variant")).toBe("discovered");
-      expect(icon.getAttribute("src")).toBe(SIDEBAR_V2_DISCOVERED_ICON_DATA_URL);
+      const icon = await projectIcon('v2-icons-discovered-session');
+      expect(icon.getAttribute('data-icon-variant')).toBe('discovered');
+      expect(icon.getAttribute('src')).toBe(SIDEBAR_V2_DISCOVERED_ICON_DATA_URL);
       /*
        * Rounded and contained like the browser favicons it sits beside, and
        * from the SHARED `.sidebar-v2-project-icon` rule rather than a
@@ -814,33 +765,33 @@ export const ProjectIconPrecedence: Story = {
        * fourth kind of chrome.
        */
       const view = icon.ownerDocument.defaultView;
-      expect(view?.getComputedStyle(icon).borderRadius).toBe("5px");
-      expect(view?.getComputedStyle(icon).objectFit).toBe("contain");
+      expect(view?.getComputedStyle(icon).borderRadius).toBe('5px');
+      expect(view?.getComputedStyle(icon).objectFit).toBe('contain');
     });
 
-    await step("carry the discovered icon onto browser rows too", async () => {
-      const icon = await projectIcon("v2-icons-discovered-browser");
-      expect(icon.getAttribute("data-icon-variant")).toBe("discovered");
+    await step('carry the discovered icon onto browser rows too', async () => {
+      const icon = await projectIcon('v2-icons-discovered-browser');
+      expect(icon.getAttribute('data-icon-variant')).toBe('discovered');
     });
 
-    await step("fall back to the folder only with no icon at all", async () => {
-      const icon = await projectIcon("v2-icons-none-session");
-      expect(icon.getAttribute("data-icon-variant")).toBe("glyph");
+    await step('fall back to the folder only with no icon at all', async () => {
+      const icon = await projectIcon('v2-icons-none-session');
+      expect(icon.getAttribute('data-icon-variant')).toBe('glyph');
     });
 
-    await step("resolve every scope menu entry through the same chain", async () => {
-      const trigger = root.querySelector<HTMLElement>(".sidebar-v2-scope-trigger");
+    await step('resolve every scope menu entry through the same chain', async () => {
+      const trigger = root.querySelector<HTMLElement>('.sidebar-v2-scope-trigger');
       expect(trigger).toBeTruthy();
       fireEvent.click(trigger as HTMLElement);
       const variantOf = async (name: RegExp): Promise<string | null | undefined> =>
-        (await body.findByRole("menuitemradio", { name }))
-          .querySelector<HTMLElement>(".sidebar-v2-project-icon")
-          ?.getAttribute("data-icon-variant");
-      expect(await variantOf(/picked-image/)).toBe("image");
-      expect(await variantOf(/legacy-glyph-and-favicon/)).toBe("discovered");
-      expect(await variantOf(/glyph-only/)).toBe("tabler");
-      expect(await variantOf(/ships-a-favicon/)).toBe("discovered");
-      expect(await variantOf(/no-icon-at-all/)).toBe("glyph");
+        (await body.findByRole('menuitemradio', { name }))
+          .querySelector<HTMLElement>('.sidebar-v2-project-icon')
+          ?.getAttribute('data-icon-variant');
+      expect(await variantOf(/picked-image/)).toBe('image');
+      expect(await variantOf(/legacy-glyph-and-favicon/)).toBe('discovered');
+      expect(await variantOf(/glyph-only/)).toBe('tabler');
+      expect(await variantOf(/ships-a-favicon/)).toBe('discovered');
+      expect(await variantOf(/no-icon-at-all/)).toBe('glyph');
     });
   },
 };
@@ -848,27 +799,25 @@ export const ProjectIconPrecedence: Story = {
 /** The same chain on the group headers, which are the ONLY place Group-by-Project
     states a project's identity (grouped rows drop the per-card project line). */
 export const ProjectIconPrecedenceInGroups: Story = {
-  args: { fixture: "sidebar-v2-project-icons", sidebarV2Layout: "byProject" },
+  args: { fixture: 'sidebar-v2-project-icons', sidebarV2Layout: 'byProject' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
     const headerIconVariant = (groupId: string): string | null | undefined =>
       root
-        .querySelector<HTMLElement>(
-          `[data-sidebar-v2-group-id="${groupId}"] .group-head .sidebar-v2-project-icon`,
-        )
-        ?.getAttribute("data-icon-variant");
+        .querySelector<HTMLElement>(`[data-sidebar-v2-group-id="${groupId}"] .group-head .sidebar-v2-project-icon`)
+        ?.getAttribute('data-icon-variant');
 
-    await step("resolve every group header through the same chain", async () => {
+    await step('resolve every group header through the same chain', async () => {
       await waitFor(() => {
-        expect(root.querySelectorAll("[data-sidebar-v2-group-id]").length).toBe(5);
+        expect(root.querySelectorAll('[data-sidebar-v2-group-id]').length).toBe(5);
       });
-      expect(headerIconVariant("v2-icons-user-image")).toBe("image");
-      expect(headerIconVariant("v2-icons-legacy-glyph")).toBe("discovered");
-      expect(headerIconVariant("v2-icons-glyph-only")).toBe("tabler");
-      expect(headerIconVariant("v2-icons-discovered")).toBe("discovered");
-      expect(headerIconVariant("v2-icons-none")).toBe("glyph");
+      expect(headerIconVariant('v2-icons-user-image')).toBe('image');
+      expect(headerIconVariant('v2-icons-legacy-glyph')).toBe('discovered');
+      expect(headerIconVariant('v2-icons-glyph-only')).toBe('tabler');
+      expect(headerIconVariant('v2-icons-discovered')).toBe('discovered');
+      expect(headerIconVariant('v2-icons-none')).toBe('glyph');
     });
   },
 };

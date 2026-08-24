@@ -2,18 +2,17 @@ import {
   isSidebarCommandIcon,
   normalizeSidebarCommandIconColor,
   type SidebarCommandIcon,
-} from "./sidebar-command-icons";
+} from './sidebar-command-icons';
 
 export type WorkspaceProjectIcon =
-  | { kind: "image"; dataUrl: string }
-  | { color?: string; icon: SidebarCommandIcon; kind: "tabler" };
+  { kind: 'image'; dataUrl: string } | { color?: string; icon: SidebarCommandIcon; kind: 'tabler' };
 
 export type WorkspaceProjectIconSource = {
   icon?: WorkspaceProjectIcon;
   iconDataUrl?: string;
 };
 
-export const DEFAULT_WORKSPACE_THEME_COLOR = "#2f6feb";
+export const DEFAULT_WORKSPACE_THEME_COLOR = '#2f6feb';
 const MAX_WORKSPACE_THEME_COLOR_HISTORY = 8;
 
 /**
@@ -27,18 +26,18 @@ export function normalizeWorkspaceThemeColor(value: unknown): string | undefined
   return normalizeSidebarCommandIconColor(value);
 }
 
-export function getWorkspaceThemeForeground(themeColor: string): "#111111" | "#ffffff" {
+export function getWorkspaceThemeForeground(themeColor: string): '#111111' | '#ffffff' {
   const normalizedColor = normalizeWorkspaceThemeColor(themeColor);
   if (!normalizedColor) {
-    return "#ffffff";
+    return '#ffffff';
   }
 
-  const hex = normalizedColor.replace("#", "");
+  const hex = normalizedColor.replace('#', '');
   const red = Number.parseInt(hex.slice(0, 2), 16);
   const green = Number.parseInt(hex.slice(2, 4), 16);
   const blue = Number.parseInt(hex.slice(4, 6), 16);
   const luminance = (red * 299 + green * 587 + blue * 114) / 1000;
-  return luminance > 154 ? "#111111" : "#ffffff";
+  return luminance > 154 ? '#111111' : '#ffffff';
 }
 
 export function normalizeWorkspaceThemeColorHistory(value: unknown): string[] {
@@ -57,10 +56,7 @@ export function normalizeWorkspaceThemeColorHistory(value: unknown): string[] {
   return colors.slice(0, MAX_WORKSPACE_THEME_COLOR_HISTORY);
 }
 
-export function updateWorkspaceThemeColorHistory(
-  history: readonly string[],
-  value: unknown,
-): string[] {
+export function updateWorkspaceThemeColorHistory(history: readonly string[], value: unknown): string[] {
   const color = normalizeWorkspaceThemeColor(value);
   if (!color) {
     return normalizeWorkspaceThemeColorHistory([...history]);
@@ -73,19 +69,19 @@ export function updateWorkspaceThemeColorHistory(
 }
 
 export function normalizeWorkspaceProjectIcon(value: unknown): WorkspaceProjectIcon | undefined {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return undefined;
   }
   const icon = value as Partial<WorkspaceProjectIcon>;
-  if (icon.kind === "image") {
+  if (icon.kind === 'image') {
     const dataUrl = normalizeWorkspaceProjectIconDataUrl(icon.dataUrl);
-    return dataUrl ? { dataUrl, kind: "image" } : undefined;
+    return dataUrl ? { dataUrl, kind: 'image' } : undefined;
   }
-  if (icon.kind === "tabler" && isSidebarCommandIcon(icon.icon)) {
+  if (icon.kind === 'tabler' && isSidebarCommandIcon(icon.icon)) {
     return {
       color: normalizeSidebarCommandIconColor(icon.color),
       icon: icon.icon,
-      kind: "tabler",
+      kind: 'tabler',
     };
   }
   return undefined;
@@ -98,7 +94,7 @@ export function normalizeWorkspaceProjectIcon(value: unknown): WorkspaceProjectI
  * rendering through the image variant after upgrade.
  */
 export function normalizeWorkspaceProjectIconDataUrl(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
   return /^data:image\/(?:png|svg\+xml);base64,/u.test(value) ? value : undefined;
@@ -126,7 +122,7 @@ const DISCOVERED_PROJECT_ICON_DATA_URL_PATTERN =
   /^data:image\/(?:png|svg\+xml|x-icon|vnd\.microsoft\.icon|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/u;
 
 export function normalizeDiscoveredProjectIconDataUrl(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
   const trimmed = value.trim();
@@ -140,10 +136,10 @@ export function normalizeDiscoveredProjectIconDataUrl(value: unknown): string | 
  * instead of each surface inventing separate icon lookup rules.
  */
 export function resolveWorkspaceProjectIconDataUrl(
-  project: WorkspaceProjectIconSource | undefined,
+  project: WorkspaceProjectIconSource | undefined
 ): string | undefined {
   const icon = normalizeWorkspaceProjectIcon(project?.icon);
-  if (icon?.kind === "image") {
+  if (icon?.kind === 'image') {
     return icon.dataUrl;
   }
   return normalizeWorkspaceProjectIconDataUrl(project?.iconDataUrl);

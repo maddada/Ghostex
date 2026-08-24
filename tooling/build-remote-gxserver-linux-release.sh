@@ -41,40 +41,40 @@ EOF
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
-		--arch)
-			ARCH_FILTER="${2:-}"
-			shift 2
-			;;
-		--check-only)
-			CHECK_ONLY=1
-			shift
-			;;
-		--force)
-			FORCE=1
-			shift
-			;;
-		--allow-dirty)
-			ALLOW_DIRTY=1
-			shift
-			;;
-		--help | -h)
-			usage
-			exit 0
-			;;
-		*)
-			echo "Unknown option: $1" >&2
-			usage >&2
-			exit 2
-			;;
+	--arch)
+		ARCH_FILTER="${2:-}"
+		shift 2
+		;;
+	--check-only)
+		CHECK_ONLY=1
+		shift
+		;;
+	--force)
+		FORCE=1
+		shift
+		;;
+	--allow-dirty)
+		ALLOW_DIRTY=1
+		shift
+		;;
+	--help | -h)
+		usage
+		exit 0
+		;;
+	*)
+		echo "Unknown option: $1" >&2
+		usage >&2
+		exit 2
+		;;
 	esac
 done
 
 case "$ARCH_FILTER" in
-	x64 | arm64 | all) ;;
-	*)
-		echo "Unsupported --arch value: $ARCH_FILTER (expected x64, arm64, or all)" >&2
-		exit 2
-		;;
+x64 | arm64 | all) ;;
+*)
+	echo "Unsupported --arch value: $ARCH_FILTER (expected x64, arm64, or all)" >&2
+	exit 2
+	;;
 esac
 
 ARCHES=()
@@ -168,11 +168,11 @@ if [[ "$FORCE" != "1" ]] && report_freshness >/dev/null 2>&1; then
 		host_arch="$(uname -m)"
 		for arch in "${ARCHES[@]}"; do
 			case "$arch:$host_arch" in
-				x64:x86_64 | arm64:aarch64 | arm64:arm64) ;;
-				*)
-					echo "GHOSTEX_REQUIRE_BEADS_SMOKE=1 requires a native Linux $arch runner; current host is $(uname -s)/$host_arch." >&2
-					exit 1
-					;;
+			x64:x86_64 | arm64:aarch64 | arm64:arm64) ;;
+			*)
+				echo "GHOSTEX_REQUIRE_BEADS_SMOKE=1 requires a native Linux $arch runner; current host is $(uname -s)/$host_arch." >&2
+				exit 1
+				;;
 			esac
 			node "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs" "$PACKAGE_ROOT/$arch/package/bin/bd"
 		done
@@ -213,10 +213,10 @@ resolve_zig_016() {
 		"$(command -v zig || true)"; do
 		[[ -n "$candidate" && -x "$candidate" ]] || continue
 		case "$(zig_version_of "$candidate")" in
-			0.16.* | 0.17.* | 0.18.*)
-				printf '%s\n' "$candidate"
-				return 0
-				;;
+		0.16.* | 0.17.* | 0.18.*)
+			printf '%s\n' "$candidate"
+			return 0
+			;;
 		esac
 	done
 	return 1
@@ -297,16 +297,16 @@ build_arch() {
 	started="$(date +%s)"
 	local cc_wrapper rust_triple env_suffix
 	case "$arch" in
-		x64)
-			rust_triple="x86_64_unknown_linux_musl"
-			cc_wrapper="$WRAPPER_DIR/x86_64-linux-musl-cc"
-			env_suffix="X86_64_UNKNOWN_LINUX_MUSL"
-			;;
-		arm64)
-			rust_triple="aarch64_unknown_linux_musl"
-			cc_wrapper="$WRAPPER_DIR/aarch64-linux-musl-cc"
-			env_suffix="AARCH64_UNKNOWN_LINUX_MUSL"
-			;;
+	x64)
+		rust_triple="x86_64_unknown_linux_musl"
+		cc_wrapper="$WRAPPER_DIR/x86_64-linux-musl-cc"
+		env_suffix="X86_64_UNKNOWN_LINUX_MUSL"
+		;;
+	arm64)
+		rust_triple="aarch64_unknown_linux_musl"
+		cc_wrapper="$WRAPPER_DIR/aarch64-linux-musl-cc"
+		env_suffix="AARCH64_UNKNOWN_LINUX_MUSL"
+		;;
 	esac
 
 	echo "==> Building remote gxserver Linux $arch package"

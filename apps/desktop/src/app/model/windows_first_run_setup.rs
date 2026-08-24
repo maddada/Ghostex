@@ -7,7 +7,6 @@
 
 use crate::*;
 
-
 #[cfg(target_os = "windows")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiWindowsFirstRunSetupState {
@@ -20,7 +19,6 @@ pub(crate) enum GpuiWindowsFirstRunSetupState {
     Failed(String),
     Ready,
 }
-
 
 #[cfg(target_os = "windows")]
 #[derive(Clone, Debug)]

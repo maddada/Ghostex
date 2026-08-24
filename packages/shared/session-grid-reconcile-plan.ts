@@ -1,5 +1,5 @@
-import { createEditorLayoutPlan } from "./editor-layout";
-import type { SessionGridSnapshot } from "./session-grid-contract";
+import { createEditorLayoutPlan } from './editor-layout';
+import type { SessionGridSnapshot } from './session-grid-contract';
 
 export type VisibleSessionSlotRef = {
   sessionId: string;
@@ -16,8 +16,8 @@ export type VisibleSessionReconcilePlan =
   | {
       currentVisibleSessionIds: string[];
       nextVisibleSessionIds: string[];
-      reason: "layout-shape-changed" | "missing-current-layout";
-      strategy: "rebuild";
+      reason: 'layout-shape-changed' | 'missing-current-layout';
+      strategy: 'rebuild';
     }
   | {
       changedSlots: VisibleSessionSlotChange[];
@@ -31,13 +31,13 @@ export type VisibleSessionReconcilePlan =
       }>;
       nextVisibleSessionIds: string[];
       outgoingSlots: VisibleSessionSlotRef[];
-      strategy: "incremental";
+      strategy: 'incremental';
       unchangedSlots: VisibleSessionSlotRef[];
     };
 
 export function createVisibleSessionReconcilePlan(
   currentSnapshot: SessionGridSnapshot | undefined,
-  nextSnapshot: SessionGridSnapshot,
+  nextSnapshot: SessionGridSnapshot
 ): VisibleSessionReconcilePlan {
   const currentVisibleSessionIds = currentSnapshot?.visibleSessionIds ?? [];
   const nextVisibleSessionIds = nextSnapshot.visibleSessionIds;
@@ -46,8 +46,8 @@ export function createVisibleSessionReconcilePlan(
     return {
       currentVisibleSessionIds,
       nextVisibleSessionIds,
-      reason: "missing-current-layout",
-      strategy: "rebuild",
+      reason: 'missing-current-layout',
+      strategy: 'rebuild',
     };
   }
 
@@ -55,8 +55,8 @@ export function createVisibleSessionReconcilePlan(
     return {
       currentVisibleSessionIds,
       nextVisibleSessionIds,
-      reason: "layout-shape-changed",
-      strategy: "rebuild",
+      reason: 'layout-shape-changed',
+      strategy: 'rebuild',
     };
   }
 
@@ -81,7 +81,7 @@ export function createVisibleSessionReconcilePlan(
   }
 
   const currentIndexBySessionId = new Map(
-    currentVisibleSessionIds.map((sessionId, slotIndex) => [sessionId, slotIndex]),
+    currentVisibleSessionIds.map((sessionId, slotIndex) => [sessionId, slotIndex])
   );
   const incomingSlots = nextVisibleSessionIds
     .map((sessionId, slotIndex) => ({ sessionId, slotIndex }))
@@ -110,27 +110,18 @@ export function createVisibleSessionReconcilePlan(
     movedSessions,
     nextVisibleSessionIds,
     outgoingSlots,
-    strategy: "incremental",
+    strategy: 'incremental',
     unchangedSlots,
   };
 }
 
-function hasLayoutShapeChanged(
-  currentSnapshot: SessionGridSnapshot,
-  nextSnapshot: SessionGridSnapshot,
-): boolean {
+function hasLayoutShapeChanged(currentSnapshot: SessionGridSnapshot, nextSnapshot: SessionGridSnapshot): boolean {
   if (currentSnapshot.viewMode !== nextSnapshot.viewMode) {
     return true;
   }
 
-  const currentLayoutPlan = createEditorLayoutPlan(
-    currentSnapshot.visibleSessionIds.length,
-    currentSnapshot.viewMode,
-  );
-  const nextLayoutPlan = createEditorLayoutPlan(
-    nextSnapshot.visibleSessionIds.length,
-    nextSnapshot.viewMode,
-  );
+  const currentLayoutPlan = createEditorLayoutPlan(currentSnapshot.visibleSessionIds.length, currentSnapshot.viewMode);
+  const nextLayoutPlan = createEditorLayoutPlan(nextSnapshot.visibleSessionIds.length, nextSnapshot.viewMode);
 
   return !haveSameNumbers(currentLayoutPlan.rowLengths, nextLayoutPlan.rowLengths);
 }

@@ -19,7 +19,7 @@ import {
   GPUI_SIDEBAR_WORKSPACE_TERMINAL_TITLE_CHANGED_MESSAGE_TYPE,
   GPUI_SIDEBAR_WORKSPACE_TERMINAL_TITLE_CHANGED_MESSAGE_VERSION,
   GPUI_SIDEBAR_WORKSPACE_TERMINAL_TITLE_MAX_CHARS,
-} from "../constants";
+} from '../constants';
 import type {
   GpuiWorkspaceFirstPromptTitleGenerationCancelPayload,
   GpuiWorkspaceSessionAttentionAcknowledgePayload,
@@ -28,46 +28,33 @@ import type {
   GpuiWorkspaceTerminalLifecycleRequest,
   GpuiWorkspaceTerminalRuntimeActionPayload,
   GpuiWorkspaceTerminalTitleChangedPayload,
-} from "../types-and-protocol";
-import { isObjectRecord, normalizeNonEmptyString } from "./records";
-import {
-  parseGpuiRemotePresentationProjectId,
-  parseGpuiRemotePresentationSessionId,
-} from "./remote-presentation";
-import { gpuiStatusPetActivationSessionIdAllowed } from "./status-indicators";
-import {
-  parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type { GxserverSessionTransitionResult } from "@/packages/shared/gxserver-protocol";
+} from '../types-and-protocol';
+import { isObjectRecord, normalizeNonEmptyString } from './records';
+import { parseGpuiRemotePresentationProjectId, parseGpuiRemotePresentationSessionId } from './remote-presentation';
+import { gpuiStatusPetActivationSessionIdAllowed } from './status-indicators';
+import { parseGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { GxserverSessionTransitionResult } from '@/packages/shared/gxserver-protocol';
 
-export function gpuiWorkspaceTerminalTitleCommandForAgent(
-  agentId: string,
-): "name" | "rename" | "title" {
+export function gpuiWorkspaceTerminalTitleCommandForAgent(agentId: string): 'name' | 'rename' | 'title' {
   const normalizedAgentId = agentId.trim().toLowerCase();
-  if (normalizedAgentId === "pi" || normalizedAgentId === "π") {
-    return "name";
+  if (normalizedAgentId === 'pi' || normalizedAgentId === 'π') {
+    return 'name';
   }
-  if (
-    normalizedAgentId === "hermes" ||
-    normalizedAgentId === "hermes agent" ||
-    normalizedAgentId === "hermes-agent"
-  ) {
-    return "title";
+  if (normalizedAgentId === 'hermes' || normalizedAgentId === 'hermes agent' || normalizedAgentId === 'hermes-agent') {
+    return 'title';
   }
-  return "rename";
+  return 'rename';
 }
 
 export function normalizeGpuiWorkspaceTerminalTitleChanged(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceTerminalTitleChangedPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
   if (
-    Object.keys(record).some(
-      (key) => !["projectId", "rawTitle", "sessionId", "type", "version"].includes(key),
-    ) ||
+    Object.keys(record).some((key) => !['projectId', 'rawTitle', 'sessionId', 'type', 'version'].includes(key)) ||
     record.type !== GPUI_SIDEBAR_WORKSPACE_TERMINAL_TITLE_CHANGED_MESSAGE_TYPE ||
     record.version !== GPUI_SIDEBAR_WORKSPACE_TERMINAL_TITLE_CHANGED_MESSAGE_VERSION
   ) {
@@ -75,7 +62,7 @@ export function normalizeGpuiWorkspaceTerminalTitleChanged(
   }
   const projectId = normalizeNonEmptyString(record.projectId)?.trim();
   const sessionId = normalizeNonEmptyString(record.sessionId)?.trim();
-  const rawTitle = typeof record.rawTitle === "string" ? record.rawTitle : undefined;
+  const rawTitle = typeof record.rawTitle === 'string' ? record.rawTitle : undefined;
   if (
     !projectId ||
     !sessionId ||
@@ -103,17 +90,13 @@ export function createExportedTranscriptMentionDraft(path: string): string {
 }
 
 export function normalizeGpuiWorkspaceTerminalRuntimeAction(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceTerminalRuntimeActionPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (
-    Object.keys(record).some(
-      (key) => !["action", "projectId", "sessionId", "type", "version"].includes(key),
-    )
-  ) {
+  if (Object.keys(record).some((key) => !['action', 'projectId', 'sessionId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -122,16 +105,14 @@ export function normalizeGpuiWorkspaceTerminalRuntimeAction(
   ) {
     return undefined;
   }
-  if (record.action === "sleepInactiveSessions" || record.action === "sleepAllDaemonSessions") {
+  if (record.action === 'sleepInactiveSessions' || record.action === 'sleepAllDaemonSessions') {
     if (record.projectId !== undefined || record.sessionId !== undefined) {
       return undefined;
     }
     return { action: record.action };
   }
   const action =
-    record.action === "exportTranscript" ||
-    record.action === "forkSession" ||
-    record.action === "fullReloadSession"
+    record.action === 'exportTranscript' || record.action === 'forkSession' || record.action === 'fullReloadSession'
       ? record.action
       : undefined;
   const projectId = normalizeNonEmptyString(record.projectId)?.trim();
@@ -148,16 +129,12 @@ export function normalizeGpuiWorkspaceTerminalRuntimeAction(
   return { action, projectId, sessionId };
 }
 
-export function normalizeGpuiWorkspaceTerminalBell(
-  value: unknown,
-): GpuiWorkspaceTerminalBellPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+export function normalizeGpuiWorkspaceTerminalBell(value: unknown): GpuiWorkspaceTerminalBellPayload | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (
-    Object.keys(record).some((key) => !["projectId", "sessionId", "type", "version"].includes(key))
-  ) {
+  if (Object.keys(record).some((key) => !['projectId', 'sessionId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -180,15 +157,13 @@ export function normalizeGpuiWorkspaceTerminalBell(
 }
 
 export function normalizeGpuiWorkspaceTerminalEscapePressed(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceTerminalEscapePressedPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (
-    Object.keys(record).some((key) => !["projectId", "sessionId", "type", "version"].includes(key))
-  ) {
+  if (Object.keys(record).some((key) => !['projectId', 'sessionId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -211,15 +186,13 @@ export function normalizeGpuiWorkspaceTerminalEscapePressed(
 }
 
 export function normalizeGpuiWorkspaceFirstPromptTitleGenerationCancel(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceFirstPromptTitleGenerationCancelPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (
-    Object.keys(record).some((key) => !["projectId", "sessionId", "type", "version"].includes(key))
-  ) {
+  if (Object.keys(record).some((key) => !['projectId', 'sessionId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -242,15 +215,13 @@ export function normalizeGpuiWorkspaceFirstPromptTitleGenerationCancel(
 }
 
 export function normalizeGpuiWorkspaceSessionAttentionAcknowledge(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceSessionAttentionAcknowledgePayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (
-    Object.keys(record).some((key) => !["projectId", "sessionId", "type", "version"].includes(key))
-  ) {
+  if (Object.keys(record).some((key) => !['projectId', 'sessionId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -273,22 +244,21 @@ export function normalizeGpuiWorkspaceSessionAttentionAcknowledge(
 }
 
 export function normalizeQueuedGpuiWorkspaceTerminalLifecycleRequest(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceTerminalLifecycleRequest | undefined {
   /*
   CDXC:GPUIWorkspaceLifecycle 2026-06-26-05:23:
   Lifecycle retries may contain either the raw fixed bridge payload queued before React started or the runtime's already-normalized id-only request queued while the CEF result bridge was missing. Accept only those two bounded shapes so retries do not reintroduce paths, commands, terminal text, URLs, tokens, or generic IPC fields.
   */
   return (
-    normalizeGpuiWorkspaceTerminalLifecycleRequest(value) ??
-    normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(value)
+    normalizeGpuiWorkspaceTerminalLifecycleRequest(value) ?? normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(value)
   );
 }
 
 export function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceTerminalLifecycleRequest | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
@@ -296,29 +266,23 @@ export function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
     Object.keys(record).some(
       (key) =>
         ![
-          "action",
-          "projectId",
-          "replacementProjectId",
-          "replacementSessionId",
-          "requestId",
-          "sessionId",
-          "skipReplacementFallback",
-        ].includes(key),
+          'action',
+          'projectId',
+          'replacementProjectId',
+          'replacementSessionId',
+          'requestId',
+          'sessionId',
+          'skipReplacementFallback',
+        ].includes(key)
     )
   ) {
     return undefined;
   }
-  if (
-    typeof record.requestId !== "number" ||
-    !Number.isSafeInteger(record.requestId) ||
-    record.requestId <= 0
-  ) {
+  if (typeof record.requestId !== 'number' || !Number.isSafeInteger(record.requestId) || record.requestId <= 0) {
     return undefined;
   }
   const action =
-    record.action === "close" || record.action === "sleep" || record.action === "wake"
-      ? record.action
-      : undefined;
+    record.action === 'close' || record.action === 'sleep' || record.action === 'wake' ? record.action : undefined;
   const projectId = normalizeNonEmptyString(record.projectId)?.trim();
   const sessionId = normalizeNonEmptyString(record.sessionId)?.trim();
   const replacementProjectId = normalizeNonEmptyString(record.replacementProjectId)?.trim();
@@ -333,10 +297,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
   ) {
     return undefined;
   }
-  if (
-    (replacementProjectId && !replacementSessionId) ||
-    (!replacementProjectId && replacementSessionId)
-  ) {
+  if ((replacementProjectId && !replacementSessionId) || (!replacementProjectId && replacementSessionId)) {
     return undefined;
   }
   if (record.skipReplacementFallback === true && replacementProjectId && replacementSessionId) {
@@ -353,9 +314,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
   return {
     action,
     projectId,
-    ...(replacementProjectId && replacementSessionId
-      ? { replacementProjectId, replacementSessionId }
-      : {}),
+    ...(replacementProjectId && replacementSessionId ? { replacementProjectId, replacementSessionId } : {}),
     requestId: record.requestId,
     sessionId,
     skipReplacementFallback: record.skipReplacementFallback,
@@ -363,9 +322,9 @@ export function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
 }
 
 export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceTerminalLifecycleRequest | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
@@ -373,16 +332,16 @@ export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
     Object.keys(record).some(
       (key) =>
         ![
-          "action",
-          "projectId",
-          "replacementProjectId",
-          "replacementSessionId",
-          "requestId",
-          "sessionId",
-          "skipReplacementFallback",
-          "type",
-          "version",
-        ].includes(key),
+          'action',
+          'projectId',
+          'replacementProjectId',
+          'replacementSessionId',
+          'requestId',
+          'sessionId',
+          'skipReplacementFallback',
+          'type',
+          'version',
+        ].includes(key)
     )
   ) {
     return undefined;
@@ -390,16 +349,14 @@ export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
   if (
     record.type !== GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_MESSAGE_TYPE ||
     record.version !== GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_MESSAGE_VERSION ||
-    typeof record.requestId !== "number" ||
+    typeof record.requestId !== 'number' ||
     !Number.isSafeInteger(record.requestId) ||
     record.requestId <= 0
   ) {
     return undefined;
   }
   const action =
-    record.action === "close" || record.action === "sleep" || record.action === "wake"
-      ? record.action
-      : undefined;
+    record.action === 'close' || record.action === 'sleep' || record.action === 'wake' ? record.action : undefined;
   if (!action) {
     return undefined;
   }
@@ -420,10 +377,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
   if (record.skipReplacementFallback !== undefined && record.skipReplacementFallback !== true) {
     return undefined;
   }
-  if (
-    (replacementProjectId && !replacementSessionId) ||
-    (!replacementProjectId && replacementSessionId)
-  ) {
+  if ((replacementProjectId && !replacementSessionId) || (!replacementProjectId && replacementSessionId)) {
     return undefined;
   }
   if (skipReplacementFallback && replacementProjectId && replacementSessionId) {
@@ -440,9 +394,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
   return {
     action,
     projectId,
-    ...(replacementProjectId && replacementSessionId
-      ? { replacementProjectId, replacementSessionId }
-      : {}),
+    ...(replacementProjectId && replacementSessionId ? { replacementProjectId, replacementSessionId } : {}),
     requestId: record.requestId,
     sessionId,
     skipReplacementFallback,
@@ -461,20 +413,20 @@ export function didGpuiGxserverProviderTransitionCommit(result: GxserverSessionT
   if (!isObjectRecord(providerState)) {
     return false;
   }
-  const expectedLifecycleState = result.action === "sleep" ? "sleeping" : "stopped";
+  const expectedLifecycleState = result.action === 'sleep' ? 'sleeping' : 'stopped';
   const killSucceeded = readGpuiTransitionKillSucceeded(
-    isObjectRecord(result.transition) ? result.transition : undefined,
+    isObjectRecord(result.transition) ? result.transition : undefined
   );
   return (
     result.session.lifecycleState === expectedLifecycleState &&
-    providerState.lifecycleState === "missing" &&
+    providerState.lifecycleState === 'missing' &&
     killSucceeded !== false
   );
 }
 
 export function shouldApplyGpuiLocalWorkspaceTransition(
   result: GxserverSessionTransitionResult,
-  action: "close" | "sleep",
+  action: 'close' | 'sleep'
 ): boolean {
   /*
   CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:44:
@@ -483,23 +435,20 @@ export function shouldApplyGpuiLocalWorkspaceTransition(
   if (!isObjectRecord(result) || result.action !== action || !isObjectRecord(result.session)) {
     return false;
   }
-  return action === "close" || didGpuiGxserverProviderTransitionCommit(result);
+  return action === 'close' || didGpuiGxserverProviderTransitionCommit(result);
 }
 
-export function readGpuiTransitionKillSucceeded(
-  transition: Record<string, unknown> | undefined,
-): boolean | undefined {
+export function readGpuiTransitionKillSucceeded(transition: Record<string, unknown> | undefined): boolean | undefined {
   const kill = transition?.kill;
   if (!isObjectRecord(kill)) {
     return undefined;
   }
-  return typeof kill.killed === "boolean" ? kill.killed : undefined;
+  return typeof kill.killed === 'boolean' ? kill.killed : undefined;
 }
 
 export function gpuiWorkspaceLifecycleProjectIdAllowed(value: string): boolean {
   return (
-    gpuiLocalWorkspaceLifecycleProjectIdAllowed(value) ||
-    parseGpuiRemotePresentationProjectId(value) !== undefined
+    gpuiLocalWorkspaceLifecycleProjectIdAllowed(value) || parseGpuiRemotePresentationProjectId(value) !== undefined
   );
 }
 
@@ -510,7 +459,7 @@ export function gpuiLocalWorkspaceLifecycleProjectIdAllowed(value: string): bool
 export function gpuiLocalWorkspaceLifecycleSessionIdAllowed(value: string): boolean {
   return (
     gpuiStatusPetActivationSessionIdAllowed(value) &&
-    !value.includes(":") &&
+    !value.includes(':') &&
     !parseGpuiRemotePresentationSessionId(value) &&
     !parseGxserverPresentationProjectSessionId(value)
   );

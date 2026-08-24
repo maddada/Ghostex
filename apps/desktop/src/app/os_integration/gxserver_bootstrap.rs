@@ -371,7 +371,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn start_gpui_workspace_open_target_availability_scan(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn start_gpui_workspace_open_target_availability_scan(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         // macOS detects installed Open In targets once when the native sidebar
         // starts (refreshWorkspaceOpenTargetAvailabilityAtStartup) and persists
         // the result into workspaceOpenTargetAvailability; the manual titlebar
@@ -416,5 +419,4 @@ impl GhostexGpuiApp {
         };
         self.refresh_gpui_shared_settings_consumers_after_save(&write_result.snapshot, cx);
     }
-
 }

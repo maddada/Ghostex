@@ -56,7 +56,8 @@ pub(crate) fn gpui_gxserver_server_health(timeout: Duration) -> Result<serde_jso
 }
 
 pub(crate) const GPUI_GXSERVER_DAEMON_TOAST_ID: &str = "toast-gxserver-daemon";
-pub(crate) const GPUI_MISSING_MONACO_PROMPT_EDITOR_TOAST_ID: &str = "toast-monaco-prompt-editor-missing";
+pub(crate) const GPUI_MISSING_MONACO_PROMPT_EDITOR_TOAST_ID: &str =
+    "toast-monaco-prompt-editor-missing";
 pub(crate) const GPUI_GXSERVER_EXPECTED_PRODUCT: &str = "gxserver";
 
 pub(crate) enum GpuiLocalGxserverHealthState {
@@ -618,4 +619,3 @@ pub(crate) fn gpui_gxserver_protocol_mismatch_message(reported: Option<u64>) -> 
         reported.map_or_else(|| "none".to_string(), |version| version.to_string()),
     )
 }
-

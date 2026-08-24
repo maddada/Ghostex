@@ -1,4 +1,4 @@
-import type { SettingsModalNavigationTab } from "../shared/ghostex-settings";
+import type { SettingsModalNavigationTab } from '../shared/ghostex-settings';
 
 export type SettingsModalTab = SettingsModalNavigationTab;
 
@@ -24,10 +24,10 @@ export function shouldShowOSIntegrationSettingsTab({
 
 export function resolveSettingsModalTabForVisibility(
   tab: SettingsModalTab,
-  { showOSIntegrationSettingsTab }: SettingsModalTabVisibilityOptions,
+  { showOSIntegrationSettingsTab }: SettingsModalTabVisibilityOptions
 ): SettingsModalTab {
-  if (tab === "osIntegration" && !showOSIntegrationSettingsTab) {
-    return "settings";
+  if (tab === 'osIntegration' && !showOSIntegrationSettingsTab) {
+    return 'settings';
   }
   return tab;
 }

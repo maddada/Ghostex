@@ -6,12 +6,9 @@ import {
   type GxserverPresentationSnapshot,
   type GxserverRpcEndpointPath,
   type GxserverServerHealthResponse,
-} from "@/packages/shared/gxserver-protocol";
-import {
-  isSessionChatEventType,
-  type GxserverSessionChatEvent,
-} from "@/packages/shared/session-chat";
-import type { GhostexWebMachine } from "./types";
+} from '@/packages/shared/gxserver-protocol';
+import { isSessionChatEventType, type GxserverSessionChatEvent } from '@/packages/shared/session-chat';
+import type { GhostexWebMachine } from './types';
 
 export type SessionChatEventHandler = (event: GxserverSessionChatEvent) => void;
 
@@ -33,7 +30,7 @@ export type PresentationSubscription = {
      * least as large as what the client already displays, or a reconnect's
      * snapshot visibly shrinks a long conversation.
      */
-    currentLimit?: () => number,
+    currentLimit?: () => number
   ): () => void;
 };
 
@@ -48,35 +45,32 @@ type PresentationSubscriptionHandlers = {
 export function createGxserverClient(machine: GhostexWebMachine) {
   const createHeaders = (): Record<string, string> => ({
     authorization: `Bearer ${machine.authToken}`,
-    "x-gxserver-protocol-version": String(GXSERVER_PROTOCOL_VERSION),
+    'x-gxserver-protocol-version': String(GXSERVER_PROTOCOL_VERSION),
   });
 
   async function fetchHealth(): Promise<GxserverServerHealthResponse> {
     const response = await fetch(`${machine.baseUrl}/api/health/server`, {
       headers: createHeaders(),
-      method: "GET",
+      method: 'GET',
     });
     const body = await readJson(response);
     if (!response.ok) {
       throw new Error(readErrorMessage(body, `gxserver health probe failed (${response.status}).`));
     }
     if (!isHealthResponse(body)) {
-      throw new Error("The server did not return a compatible gxserver health response.");
+      throw new Error('The server did not return a compatible gxserver health response.');
     }
     return body;
   }
 
-  async function rpc<TResult>(
-    path: GxserverRpcEndpointPath,
-    params: Record<string, unknown> = {},
-  ): Promise<TResult> {
+  async function rpc<TResult>(path: GxserverRpcEndpointPath, params: Record<string, unknown> = {}): Promise<TResult> {
     const response = await fetch(`${machine.baseUrl}${path}`, {
       body: JSON.stringify({ params, protocolVersion: GXSERVER_PROTOCOL_VERSION }),
       headers: {
         ...createHeaders(),
-        "content-type": "application/json",
+        'content-type': 'application/json',
       },
-      method: "POST",
+      method: 'POST',
     });
     const body = await readJson(response);
     if (!response.ok || !isRpcResponse(body)) {
@@ -84,28 +78,26 @@ export function createGxserverClient(machine: GhostexWebMachine) {
     }
     if (body.protocolVersion !== GXSERVER_PROTOCOL_VERSION) {
       throw new Error(
-        `gxserver protocol mismatch. Expected ${GXSERVER_PROTOCOL_VERSION}, got ${String(body.protocolVersion)}.`,
+        `gxserver protocol mismatch. Expected ${GXSERVER_PROTOCOL_VERSION}, got ${String(body.protocolVersion)}.`
       );
     }
     return body.result as TResult;
   }
 
   async function fetchPresentationSnapshot(): Promise<GxserverPresentationSnapshot> {
-    const { snapshot } = await rpc<{ snapshot: GxserverPresentationSnapshot }>(
-      "/api/readPresentationSnapshot",
-    );
+    const { snapshot } = await rpc<{ snapshot: GxserverPresentationSnapshot }>('/api/readPresentationSnapshot');
     return snapshot;
   }
 
   function subscribePresentation(
     clientId: string,
     handlers: PresentationSubscriptionHandlers,
-    lastRevision: number,
+    lastRevision: number
   ): PresentationSubscription {
     const url = new URL(`${machine.baseUrl}/api/events`);
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    url.searchParams.set("authToken", machine.authToken);
-    url.searchParams.set("protocolVersion", String(GXSERVER_PROTOCOL_VERSION));
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.searchParams.set('authToken', machine.authToken);
+    url.searchParams.set('protocolVersion', String(GXSERVER_PROTOCOL_VERSION));
 
     const socket = new WebSocket(url);
     let closedByClient = false;
@@ -118,31 +110,28 @@ export function createGxserverClient(machine: GhostexWebMachine) {
         currentLimit?: () => number;
       }
     >();
-    const chatKey = (projectId: string, sessionId: string) =>
-      JSON.stringify([projectId, sessionId]);
-    const sendChatSubscribe = (entry: {
-      projectId: string;
-      sessionId: string;
-      currentLimit?: () => number;
-    }) => {
+    const chatKey = (projectId: string, sessionId: string) => JSON.stringify([projectId, sessionId]);
+    const sendChatSubscribe = (entry: { projectId: string; sessionId: string; currentLimit?: () => number }) => {
       if (socket.readyState === WebSocket.OPEN) {
         const limit = entry.currentLimit?.();
         socket.send(
           JSON.stringify({
             projectId: entry.projectId,
             sessionId: entry.sessionId,
-            type: "subscribeSessionChat",
-            ...(typeof limit === "number" && limit > 0 ? { limit } : {}),
-          }),
+            type: 'subscribeSessionChat',
+            ...(typeof limit === 'number' && limit > 0 ? { limit } : {}),
+          })
         );
       }
     };
-    socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({
-        clientId,
-        lastRevision,
-        type: "subscribePresentation",
-      }));
+    socket.addEventListener('open', () => {
+      socket.send(
+        JSON.stringify({
+          clientId,
+          lastRevision,
+          type: 'subscribePresentation',
+        })
+      );
       // Chat subscriptions attached while the socket was still connecting are
       // flushed here, after subscribePresentation.
       for (const entry of chatHandlers.values()) {
@@ -150,11 +139,11 @@ export function createGxserverClient(machine: GhostexWebMachine) {
       }
       handlers.onOpen();
     });
-    socket.addEventListener("message", (event) => {
+    socket.addEventListener('message', (event) => {
       const parsed = parseGxserverEvent(event.data);
-      if (parsed?.type === "presentationSnapshot") {
+      if (parsed?.type === 'presentationSnapshot') {
         handlers.onSnapshot(parsed.snapshot);
-      } else if (parsed?.type === "presentationDelta") {
+      } else if (parsed?.type === 'presentationDelta') {
         handlers.onDelta(parsed.delta, parsed.revision);
       } else if (parsed && isSessionChatEventType(parsed.type)) {
         const chatEvent = parsed as GxserverSessionChatEvent;
@@ -166,8 +155,8 @@ export function createGxserverClient(machine: GhostexWebMachine) {
         }
       }
     });
-    socket.addEventListener("error", () => handlers.onError());
-    socket.addEventListener("close", () => {
+    socket.addEventListener('error', () => handlers.onError());
+    socket.addEventListener('close', () => {
       if (!closedByClient) {
         handlers.onClose();
       }
@@ -200,7 +189,7 @@ export function createGxserverClient(machine: GhostexWebMachine) {
           if (current.handlers.size === 0) {
             chatHandlers.delete(key);
             if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ projectId, sessionId, type: "unsubscribeSessionChat" }));
+              socket.send(JSON.stringify({ projectId, sessionId, type: 'unsubscribeSessionChat' }));
             }
           }
         };
@@ -218,37 +207,36 @@ export function createGxserverClient(machine: GhostexWebMachine) {
 
 async function readJson(response: Response): Promise<unknown> {
   const text = await response.text();
-  return text.trim() ? JSON.parse(text) as unknown : undefined;
+  return text.trim() ? (JSON.parse(text) as unknown) : undefined;
 }
 
 function isHealthResponse(value: unknown): value is GxserverServerHealthResponse {
-  return isObject(value)
-    && value.ok === true
-    && value.product === GXSERVER_PRODUCT
-    && value.protocolVersion === GXSERVER_PROTOCOL_VERSION;
+  return (
+    isObject(value) &&
+    value.ok === true &&
+    value.product === GXSERVER_PRODUCT &&
+    value.protocolVersion === GXSERVER_PROTOCOL_VERSION
+  );
 }
 
 function isRpcResponse(
-  value: unknown,
+  value: unknown
 ): value is { ok: true; product: string; protocolVersion: number; result: unknown } {
-  return isObject(value)
-    && value.ok === true
-    && value.product === GXSERVER_PRODUCT
-    && "result" in value;
+  return isObject(value) && value.ok === true && value.product === GXSERVER_PRODUCT && 'result' in value;
 }
 
 function readErrorMessage(value: unknown, defaultMessage: string): string {
-  return isObject(value) && typeof value.message === "string" ? value.message : defaultMessage;
+  return isObject(value) && typeof value.message === 'string' ? value.message : defaultMessage;
 }
 
 function parseGxserverEvent(value: unknown): GxserverEvent | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
   try {
     const parsed = JSON.parse(value) as unknown;
     return isObject(parsed) && parsed.protocolVersion === GXSERVER_PROTOCOL_VERSION
-      ? parsed as GxserverEvent
+      ? (parsed as GxserverEvent)
       : undefined;
   } catch {
     return undefined;
@@ -256,6 +244,5 @@ function parseGxserverEvent(value: unknown): GxserverEvent | undefined {
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-

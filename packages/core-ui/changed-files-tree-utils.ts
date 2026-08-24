@@ -1,4 +1,4 @@
-import type { SidebarGitChangedFile } from "../shared/sidebar-git";
+import type { SidebarGitChangedFile } from '../shared/sidebar-git';
 
 export type ChangedFilesTreeStat = {
   additions: number;
@@ -7,14 +7,14 @@ export type ChangedFilesTreeStat = {
 
 export type ChangedFilesTreeDirectoryNode = {
   children: ChangedFilesTreeNode[];
-  kind: "directory";
+  kind: 'directory';
   name: string;
   path: string;
   stat: ChangedFilesTreeStat;
 };
 
 export type ChangedFilesTreeFileNode = {
-  kind: "file";
+  kind: 'file';
   name: string;
   path: string;
   stat: ChangedFilesTreeStat;
@@ -30,12 +30,12 @@ type MutableDirectoryNode = {
   stat: ChangedFilesTreeStat;
 };
 
-const SORT_LOCALE_OPTIONS: Intl.CollatorOptions = { numeric: true, sensitivity: "base" };
+const SORT_LOCALE_OPTIONS: Intl.CollatorOptions = { numeric: true, sensitivity: 'base' };
 
 function normalizePathSegments(pathValue: string): string[] {
   return pathValue
-    .replaceAll("\\", "/")
-    .split("/")
+    .replaceAll('\\', '/')
+    .split('/')
     .filter((segment) => segment.length > 0);
 }
 
@@ -45,7 +45,7 @@ function compareByName(left: { name: string }, right: { name: string }): number 
 
 function compactDirectoryNode(node: ChangedFilesTreeDirectoryNode): ChangedFilesTreeDirectoryNode {
   const compactedChildren = node.children.map((child) =>
-    child.kind === "directory" ? compactDirectoryNode(child) : child,
+    child.kind === 'directory' ? compactDirectoryNode(child) : child
   );
 
   let compactedNode: ChangedFilesTreeDirectoryNode = {
@@ -53,11 +53,11 @@ function compactDirectoryNode(node: ChangedFilesTreeDirectoryNode): ChangedFiles
     children: compactedChildren,
   };
 
-  while (compactedNode.children.length === 1 && compactedNode.children[0]?.kind === "directory") {
+  while (compactedNode.children.length === 1 && compactedNode.children[0]?.kind === 'directory') {
     const onlyChild = compactedNode.children[0];
     compactedNode = {
       children: onlyChild.children,
-      kind: "directory",
+      kind: 'directory',
       name: `${compactedNode.name}/${onlyChild.name}`,
       path: onlyChild.path,
       stat: onlyChild.stat,
@@ -72,7 +72,7 @@ function toTreeNodes(directory: MutableDirectoryNode): ChangedFilesTreeNode[] {
     .toSorted(compareByName)
     .map<ChangedFilesTreeDirectoryNode>((subdirectory) => ({
       children: toTreeNodes(subdirectory),
-      kind: "directory",
+      kind: 'directory',
       name: subdirectory.name,
       path: subdirectory.path,
       stat: {
@@ -85,9 +85,7 @@ function toTreeNodes(directory: MutableDirectoryNode): ChangedFilesTreeNode[] {
   return [...subdirectories, ...directory.files.toSorted(compareByName)];
 }
 
-export function buildChangedFilesTree(
-  files: ReadonlyArray<SidebarGitChangedFile>,
-): ChangedFilesTreeNode[] {
+export function buildChangedFilesTree(files: ReadonlyArray<SidebarGitChangedFile>): ChangedFilesTreeNode[] {
   /**
    * CDXC:Worktrees 2026-05-18-23:07:
    * Git review surfaces show changed files as a compact directory tree with aggregated additions/deletions so worktree commit/PR flows can select files without flattening large project paths.
@@ -95,8 +93,8 @@ export function buildChangedFilesTree(
   const root: MutableDirectoryNode = {
     directories: new Map(),
     files: [],
-    name: "",
-    path: "",
+    name: '',
+    path: '',
     stat: { additions: 0, deletions: 0 },
   };
 
@@ -111,7 +109,7 @@ export function buildChangedFilesTree(
       continue;
     }
 
-    const filePath = segments.join("/");
+    const filePath = segments.join('/');
     const stat = {
       additions: Number.isFinite(file.additions) ? Math.max(0, file.additions) : 0,
       deletions: Number.isFinite(file.deletions) ? Math.max(0, file.deletions) : 0,
@@ -139,7 +137,7 @@ export function buildChangedFilesTree(
     }
 
     currentDirectory.files.push({
-      kind: "file",
+      kind: 'file',
       name: fileName,
       path: filePath,
       stat,
@@ -154,14 +152,12 @@ export function buildChangedFilesTree(
   return toTreeNodes(root);
 }
 
-export function summarizeChangedFiles(
-  files: ReadonlyArray<SidebarGitChangedFile>,
-): ChangedFilesTreeStat {
+export function summarizeChangedFiles(files: ReadonlyArray<SidebarGitChangedFile>): ChangedFilesTreeStat {
   return files.reduce(
     (total, file) => ({
       additions: total.additions + Math.max(0, file.additions),
       deletions: total.deletions + Math.max(0, file.deletions),
     }),
-    { additions: 0, deletions: 0 },
+    { additions: 0, deletions: 0 }
   );
 }

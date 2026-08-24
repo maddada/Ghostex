@@ -29,7 +29,11 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    pub(crate) fn render_browser_body(&self, leaf: &BrowserLeaf, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_browser_body(
+        &self,
+        leaf: &BrowserLeaf,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         let pane_id = leaf.pane_id;
         let placeholder = self.browser_body_placeholder_for_leaf(leaf);
         let active_browser_surface = self.browser_surface_for_rendered_leaf(leaf);
@@ -72,7 +76,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    pub(crate) fn browser_body_placeholder_for_leaf(&self, leaf: &BrowserLeaf) -> BrowserBodyPlaceholder {
+    pub(crate) fn browser_body_placeholder_for_leaf(
+        &self,
+        leaf: &BrowserLeaf,
+    ) -> BrowserBodyPlaceholder {
         leaf.tab_group
             .active_tab_id()
             .and_then(|tab_id| self.browser_tabs.tab(tab_id))
@@ -494,7 +501,10 @@ impl GhostexGpuiApp {
         )
     }
 
-    pub(crate) fn browser_pane_drop_zone(&self, pane_id: BrowserPaneId) -> Option<WorkspaceDropZone> {
+    pub(crate) fn browser_pane_drop_zone(
+        &self,
+        pane_id: BrowserPaneId,
+    ) -> Option<WorkspaceDropZone> {
         match self.browser_tab_drop_feedback {
             Some(BrowserDropFeedback {
                 pane_id: feedback_pane_id,

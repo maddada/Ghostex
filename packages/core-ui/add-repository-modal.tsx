@@ -1,6 +1,6 @@
-import { IconFolderOpen, IconInfoCircle } from "@tabler/icons-react";
-import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
-import { Button } from "@/packages/components/ui/button";
+import { IconFolderOpen, IconInfoCircle } from '@tabler/icons-react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { Button } from '@/packages/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -8,23 +8,23 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/packages/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/packages/components/ui/field";
-import { Input } from "@/packages/components/ui/input";
-import type { GxserverRepositoryClonePreviewResult } from "../shared/gxserver-protocol";
-import { isRepositoryCloneBranchNameInputValid, parseRepositoryCloneInput } from "../shared/repository-clone";
-import { AppTooltip, TooltipProvider } from "./app-tooltip";
-import { postAppModalHostMessage } from "./app-modal-host-bridge";
-import { canSubmitAddRepositoryClone } from "./add-repository-modal-state";
-import { RemoteProjectPickerModal } from "./remote-project-picker/remote-project-picker-modal";
+} from '@/packages/components/ui/dialog';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
+import { Input } from '@/packages/components/ui/input';
+import type { GxserverRepositoryClonePreviewResult } from '../shared/gxserver-protocol';
+import { isRepositoryCloneBranchNameInputValid, parseRepositoryCloneInput } from '../shared/repository-clone';
+import { AppTooltip, TooltipProvider } from './app-tooltip';
+import { postAppModalHostMessage } from './app-modal-host-bridge';
+import { canSubmitAddRepositoryClone } from './add-repository-modal-state';
+import { RemoteProjectPickerModal } from './remote-project-picker/remote-project-picker-modal';
 import type {
   RemoteFilesystemBrowseInput,
   RemoteFilesystemBrowseResult,
-} from "./remote-project-picker/remote-filesystem";
+} from './remote-project-picker/remote-filesystem';
 
-const ADD_REPOSITORY_LAST_LOCATION_STORAGE_KEY = "ghostex.addRepository.lastLocation";
+const ADD_REPOSITORY_LAST_LOCATION_STORAGE_KEY = 'ghostex.addRepository.lastLocation';
 const ADD_REPOSITORY_OPTION_HELP_TOOLTIP_STYLE = {
-  maxWidth: "min(230px, 90vw)",
+  maxWidth: 'min(230px, 90vw)',
 } satisfies CSSProperties;
 
 type AddRepositoryCloneRequest = {
@@ -49,9 +49,7 @@ export type AddRepositoryModalProps = {
   onCancel: () => void;
   onClone: (request: AddRepositoryCloneRequest) => void;
   onCloneSuccess: () => void;
-  onRemoteBrowse?: (
-    input: RemoteFilesystemBrowseInput,
-  ) => Promise<RemoteFilesystemBrowseResult | null>;
+  onRemoteBrowse?: (input: RemoteFilesystemBrowseInput) => Promise<RemoteFilesystemBrowseResult | null>;
   onPreview: (request: AddRepositoryClonePreviewRequest) => void;
   remoteMachineId?: string;
   remoteMachineName?: string;
@@ -59,7 +57,7 @@ export type AddRepositoryModalProps = {
 
 type RepositoryFolderPickedMessage = {
   path?: unknown;
-  type: "repositoryFolderPicked";
+  type: 'repositoryFolderPicked';
 };
 
 type RepositoryCloneResultMessage = {
@@ -67,7 +65,7 @@ type RepositoryCloneResultMessage = {
   ok: boolean;
   projectPath?: unknown;
   requestId: string;
-  type: "repositoryCloneResult";
+  type: 'repositoryCloneResult';
 };
 
 type RepositoryClonePreviewResultMessage = {
@@ -75,7 +73,7 @@ type RepositoryClonePreviewResultMessage = {
   ok: boolean;
   preview?: unknown;
   requestId: string;
-  type: "repositoryClonePreviewResult";
+  type: 'repositoryClonePreviewResult';
 };
 
 /**
@@ -109,10 +107,10 @@ export function AddRepositoryModal({
   const activeRequestIdRef = useRef<string | undefined>(undefined);
   const previewRequestIdRef = useRef<string | undefined>(undefined);
   const [cloneMainOnly, setCloneMainOnly] = useState(false);
-  const [repositoryInput, setRepositoryInput] = useState("");
+  const [repositoryInput, setRepositoryInput] = useState('');
   const [folderPath, setFolderPath] = useState(readLastRepositoryLocation);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [branchName, setBranchName] = useState("");
+  const [newFolderName, setNewFolderName] = useState('');
+  const [branchName, setBranchName] = useState('');
   const [clonePreview, setClonePreview] = useState<GxserverRepositoryClonePreviewResult | undefined>(undefined);
   const [previewErrorMessage, setPreviewErrorMessage] = useState<string | undefined>(undefined);
   const [shallowClone, setShallowClone] = useState(false);
@@ -120,22 +118,22 @@ export function AddRepositoryModal({
   const [isCloning, setIsCloning] = useState(false);
   const [isRemoteDestinationPickerOpen, setIsRemoteDestinationPickerOpen] = useState(false);
   const isRemoteClone =
-    typeof remoteMachineId === "string" &&
+    typeof remoteMachineId === 'string' &&
     remoteMachineId.trim().length > 0 &&
-    typeof remoteMachineName === "string" &&
+    typeof remoteMachineName === 'string' &&
     remoteMachineName.trim().length > 0 &&
-    typeof onRemoteBrowse === "function";
+    typeof onRemoteBrowse === 'function';
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
 
-    setRepositoryInput("");
+    setRepositoryInput('');
     setCloneMainOnly(false);
     setShallowClone(false);
-    setNewFolderName("");
-    setBranchName("");
+    setNewFolderName('');
+    setBranchName('');
     setClonePreview(undefined);
     setPreviewErrorMessage(undefined);
     setErrorMessage(undefined);
@@ -143,7 +141,7 @@ export function AddRepositoryModal({
     setIsRemoteDestinationPickerOpen(false);
     activeRequestIdRef.current = undefined;
     previewRequestIdRef.current = undefined;
-    setFolderPath(isRemoteClone ? "~/" : readLastRepositoryLocation());
+    setFolderPath(isRemoteClone ? '~/' : readLastRepositoryLocation());
 
     const animationFrame = window.requestAnimationFrame(() => {
       repositoryRef.current?.focus();
@@ -164,9 +162,7 @@ export function AddRepositoryModal({
       setPreviewErrorMessage(undefined);
       return;
     }
-    const requestId = `repository-clone-preview-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2)}`;
+    const requestId = `repository-clone-preview-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     previewRequestIdRef.current = requestId;
     const timeout = window.setTimeout(() => {
       onPreview({
@@ -184,11 +180,11 @@ export function AddRepositoryModal({
   useEffect(() => {
     const handleModalHostMessage = (event: Event) => {
       const message = (event as CustomEvent<unknown>).detail;
-      if (!message || typeof message !== "object" || !("type" in message)) {
+      if (!message || typeof message !== 'object' || !('type' in message)) {
         return;
       }
       if (isRepositoryFolderPickedMessage(message)) {
-        const nextPath = typeof message.path === "string" ? message.path.trim() : "";
+        const nextPath = typeof message.path === 'string' ? message.path.trim() : '';
         if (nextPath) {
           rememberLastRepositoryLocation(nextPath);
           setFolderPath(nextPath);
@@ -202,9 +198,9 @@ export function AddRepositoryModal({
         if (!message.ok) {
           setClonePreview(undefined);
           setPreviewErrorMessage(
-            typeof message.error === "string" && message.error.trim()
+            typeof message.error === 'string' && message.error.trim()
               ? message.error.trim()
-              : "Repository clone preview failed.",
+              : 'Repository clone preview failed.'
           );
           return;
         }
@@ -226,15 +222,13 @@ export function AddRepositoryModal({
         return;
       }
       setErrorMessage(
-        typeof message.error === "string" && message.error.trim()
-          ? message.error.trim()
-          : "Repository clone failed.",
+        typeof message.error === 'string' && message.error.trim() ? message.error.trim() : 'Repository clone failed.'
       );
     };
 
-    window.addEventListener("ghostex-app-modal-host-message", handleModalHostMessage);
+    window.addEventListener('ghostex-app-modal-host-message', handleModalHostMessage);
     return () => {
-      window.removeEventListener("ghostex-app-modal-host-message", handleModalHostMessage);
+      window.removeEventListener('ghostex-app-modal-host-message', handleModalHostMessage);
     };
   }, [onCloneSuccess]);
 
@@ -261,19 +255,19 @@ export function AddRepositoryModal({
     const normalizedRepositoryInput = repositoryInput.trim();
     const normalizedFolderPath = folderPath.trim();
     if (!parseRepositoryCloneInput(normalizedRepositoryInput)) {
-      setErrorMessage("Enter a Git repository to clone.");
+      setErrorMessage('Enter a Git repository to clone.');
       return;
     }
     if (!isRepositoryCloneBranchNameInputValid(branchName)) {
-      setErrorMessage("Enter a valid Git branch name.");
+      setErrorMessage('Enter a valid Git branch name.');
       return;
     }
     if (!normalizedFolderPath) {
-      setErrorMessage("Choose a folder location.");
+      setErrorMessage('Choose a folder location.');
       return;
     }
     if (clonePreview?.destinationExists) {
-      setErrorMessage(clonePreview.warning ?? "Choose a new folder name before cloning.");
+      setErrorMessage(clonePreview.warning ?? 'Choose a new folder name before cloning.');
       return;
     }
     if (previewErrorMessage) {
@@ -281,9 +275,7 @@ export function AddRepositoryModal({
       return;
     }
 
-    const requestId = `repository-clone-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2)}`;
+    const requestId = `repository-clone-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     if (!isRemoteClone) {
       rememberLastRepositoryLocation(normalizedFolderPath);
     }
@@ -310,48 +302,48 @@ export function AddRepositoryModal({
       open={isOpen}
     >
       <DialogContent
-        className="command-config-modal-shadcn session-rename-modal-shadcn add-repository-modal-shadcn font-sans"
+        className='command-config-modal-shadcn session-rename-modal-shadcn add-repository-modal-shadcn font-sans'
         showCloseButton={false}
       >
-        <form className="session-rename-form add-repository-form" onSubmit={submit}>
+        <form className='session-rename-form add-repository-form' onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle className="text-xl">Clone Repository</DialogTitle>
+            <DialogTitle className='text-xl'>Clone Repository</DialogTitle>
             <DialogDescription>
               {isRemoteClone
                 ? `Clone a Git repository on ${remoteMachineName} and add it as a remote project.`
-                : "Clone a Git repository and add it as a project."}
+                : 'Clone a Git repository and add it as a project.'}
             </DialogDescription>
           </DialogHeader>
-          <FieldGroup className="session-rename-field-group">
+          <FieldGroup className='session-rename-field-group'>
             <Field data-invalid={hasInvalidRepositoryInput || undefined}>
               <FieldLabel htmlFor={repositoryId}>Repository</FieldLabel>
               <Input
                 aria-invalid={hasInvalidRepositoryInput || undefined}
                 autoFocus
-                className="h-10 px-3 text-sm md:text-sm"
+                className='h-10 px-3 text-sm md:text-sm'
                 disabled={isCloning}
                 id={repositoryId}
                 onChange={(event) => {
                   setRepositoryInput(event.currentTarget.value);
-                  setNewFolderName("");
-                  setBranchName("");
+                  setNewFolderName('');
+                  setBranchName('');
                   setClonePreview(undefined);
                   setPreviewErrorMessage(undefined);
                   setErrorMessage(undefined);
                 }}
-                placeholder="maddada/zehn"
+                placeholder='maddada/zehn'
                 ref={repositoryRef}
                 value={repositoryInput}
               />
               <FieldDescription>
-                {clonePreview?.cloneUrl ?? "Paste a GitHub shorthand, HTTPS URL, or SSH URL."}
+                {clonePreview?.cloneUrl ?? 'Paste a GitHub shorthand, HTTPS URL, or SSH URL.'}
               </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor={folderId}>Folder location</FieldLabel>
-              <div className="add-repository-folder-row">
+              <div className='add-repository-folder-row'>
                 <Input
-                  className="h-10 px-3 text-sm md:text-sm"
+                  className='h-10 px-3 text-sm md:text-sm'
                   disabled={isCloning}
                   id={folderId}
                   onChange={(event) => {
@@ -370,21 +362,19 @@ export function AddRepositoryModal({
                       return;
                     }
                     postAppModalHostMessage(
-                      { initialPath: folderPath.trim(), type: "pickRepositoryFolder" },
-                      "AppModals:pickRepositoryFolder",
+                      { initialPath: folderPath.trim(), type: 'pickRepositoryFolder' },
+                      'AppModals:pickRepositoryFolder'
                     );
                   }}
-                  type="button"
-                  variant="secondary"
+                  type='button'
+                  variant='secondary'
                 >
-                  <IconFolderOpen aria-hidden="true" data-icon="inline-start" />
+                  <IconFolderOpen aria-hidden='true' data-icon='inline-start' />
                   Choose
                 </Button>
               </div>
               {isRemoteClone ? (
-                <FieldDescription>
-                  Folder path on {remoteMachineName}; Choose browses that machine.
-                </FieldDescription>
+                <FieldDescription>Folder path on {remoteMachineName}; Choose browses that machine.</FieldDescription>
               ) : null}
             </Field>
             <Field data-invalid={destinationWarning ? true : undefined}>
@@ -398,7 +388,7 @@ export function AddRepositoryModal({
               <FieldLabel htmlFor={newFolderId}>New folder</FieldLabel>
               <Input
                 aria-invalid={destinationWarning ? true : undefined}
-                className="h-10 px-3 text-sm md:text-sm"
+                className='h-10 px-3 text-sm md:text-sm'
                 disabled={isCloning}
                 id={newFolderId}
                 onChange={(event) => {
@@ -411,7 +401,7 @@ export function AddRepositoryModal({
                 value={newFolderName}
               />
               <FieldDescription>
-                {clonePreview?.destinationPath ?? "The repository will be cloned into this folder."}
+                {clonePreview?.destinationPath ?? 'The repository will be cloned into this folder.'}
               </FieldDescription>
             </Field>
             <Field data-invalid={hasInvalidBranchName ? true : undefined}>
@@ -422,24 +412,24 @@ export function AddRepositoryModal({
               <FieldLabel htmlFor={branchId}>Branch</FieldLabel>
               <Input
                 aria-invalid={hasInvalidBranchName ? true : undefined}
-                className="h-10 px-3 text-sm md:text-sm"
+                className='h-10 px-3 text-sm md:text-sm'
                 disabled={isCloning}
                 id={branchId}
                 onChange={(event) => {
                   setBranchName(event.currentTarget.value);
                   setErrorMessage(undefined);
                 }}
-                placeholder="Leave empty to clone main/master"
+                placeholder='Leave empty to clone main/master'
                 value={branchName}
               />
               <FieldDescription>
                 {hasInvalidBranchName
-                  ? "Enter a valid Git branch name."
-                  : "Type a branch name only when you do not want the repository default."}
+                  ? 'Enter a valid Git branch name.'
+                  : 'Type a branch name only when you do not want the repository default.'}
               </FieldDescription>
             </Field>
             <TooltipProvider delayDuration={300}>
-              <div className="add-repository-options-row">
+              <div className='add-repository-options-row'>
                 {/*
                 CDXC:AddRepository 2026-06-01-10:28:
                 The Clone Repository modal needs explicit unchecked clone-scope options for reference-only repositories. Keep the option help adjacent to each checkbox so users understand main-only and shallow clones are for repos they want to inspect, not repos they expect to work on heavily.
@@ -450,73 +440,73 @@ export function AddRepositoryModal({
                 CDXC:AddRepository 2026-06-07-16:06:
                 Branch-only clone scope now follows the Branch field. If Branch is empty, Git clones only the repository default branch; if Branch is typed, Git clones only that branch.
                 */}
-                <label className="add-repository-option" htmlFor={cloneMainOnlyId}>
+                <label className='add-repository-option' htmlFor={cloneMainOnlyId}>
                   <input
                     checked={cloneMainOnly}
-                    className="add-repository-option-checkbox"
+                    className='add-repository-option-checkbox'
                     disabled={isCloning}
                     id={cloneMainOnlyId}
                     onChange={(event) => setCloneMainOnly(event.currentTarget.checked)}
-                    type="checkbox"
+                    type='checkbox'
                   />
-                  <span className="add-repository-option-label">Clone branch only</span>
+                  <span className='add-repository-option-label'>Clone branch only</span>
                   <AppTooltip
-                    content="Use for repos you mostly want as references. This fetches only the selected branch, or the default branch when Branch is empty, so avoid it for repos you plan to work on heavily across branches."
+                    content='Use for repos you mostly want as references. This fetches only the selected branch, or the default branch when Branch is empty, so avoid it for repos you plan to work on heavily across branches.'
                     contentStyle={ADD_REPOSITORY_OPTION_HELP_TOOLTIP_STYLE}
                   >
                     <span
-                      aria-label="Clone branch only help"
-                      className="add-repository-option-info"
-                      role="img"
+                      aria-label='Clone branch only help'
+                      className='add-repository-option-info'
+                      role='img'
                       tabIndex={0}
                     >
-                      <IconInfoCircle aria-hidden="true" size={14} stroke={2.2} />
+                      <IconInfoCircle aria-hidden='true' size={14} stroke={2.2} />
                     </span>
                   </AppTooltip>
                 </label>
-                <label className="add-repository-option" htmlFor={shallowCloneId}>
+                <label className='add-repository-option' htmlFor={shallowCloneId}>
                   <input
                     checked={shallowClone}
-                    className="add-repository-option-checkbox"
+                    className='add-repository-option-checkbox'
                     disabled={isCloning}
                     id={shallowCloneId}
                     onChange={(event) => setShallowClone(event.currentTarget.checked)}
-                    type="checkbox"
+                    type='checkbox'
                   />
-                  <span className="add-repository-option-label">Shallow clone</span>
+                  <span className='add-repository-option-label'>Shallow clone</span>
                   <AppTooltip
-                    content="Use for repos you mostly want as references. This fetches only the latest history depth, so avoid it for repos you plan to work on heavily with blame, bisect, or older commits."
+                    content='Use for repos you mostly want as references. This fetches only the latest history depth, so avoid it for repos you plan to work on heavily with blame, bisect, or older commits.'
                     contentStyle={ADD_REPOSITORY_OPTION_HELP_TOOLTIP_STYLE}
                   >
                     <span
-                      aria-label="Shallow clone help"
-                      className="add-repository-option-info"
-                      role="img"
+                      aria-label='Shallow clone help'
+                      className='add-repository-option-info'
+                      role='img'
                       tabIndex={0}
                     >
-                      <IconInfoCircle aria-hidden="true" size={14} stroke={2.2} />
+                      <IconInfoCircle aria-hidden='true' size={14} stroke={2.2} />
                     </span>
                   </AppTooltip>
                 </label>
               </div>
             </TooltipProvider>
             {destinationWarning ? (
-              <div className="add-repository-warning" role="alert">
+              <div className='add-repository-warning' role='alert'>
                 {destinationWarning}
               </div>
             ) : null}
             {errorMessage || previewErrorMessage ? (
-              <div className="add-repository-error" role="alert">
+              <div className='add-repository-error' role='alert'>
                 {errorMessage ?? previewErrorMessage}
               </div>
             ) : null}
           </FieldGroup>
           <DialogFooter>
-            <Button disabled={isCloning} onClick={onCancel} type="button" variant="outline">
+            <Button disabled={isCloning} onClick={onCancel} type='button' variant='outline'>
               Cancel
             </Button>
-            <Button disabled={!canClone} type="submit">
-              {isCloning ? "Cloning..." : "Clone & Add"}
+            <Button disabled={!canClone} type='submit'>
+              {isCloning ? 'Cloning...' : 'Clone & Add'}
             </Button>
           </DialogFooter>
         </form>
@@ -528,11 +518,11 @@ export function AddRepositoryModal({
            * local-only; remote browsing is machine-scoped through gxserver.
            */
           <RemoteProjectPickerModal
-            actionLabel="Select"
+            actionLabel='Select'
             description={`Choose a clone destination folder on ${remoteMachineName}`}
-            initialQuery={folderPath.trim() || "~/"}
+            initialQuery={folderPath.trim() || '~/'}
             isOpen={isRemoteDestinationPickerOpen}
-            machineName={remoteMachineName ?? "Remote"}
+            machineName={remoteMachineName ?? 'Remote'}
             onAddProject={(path) => {
               setFolderPath(path);
               setClonePreview(undefined);
@@ -541,8 +531,8 @@ export function AddRepositoryModal({
             }}
             onBrowse={onRemoteBrowse}
             onClose={() => setIsRemoteDestinationPickerOpen(false)}
-            pendingLabel="Selecting"
-            title="Select clone destination"
+            pendingLabel='Selecting'
+            title='Select clone destination'
           />
         ) : null}
       </DialogContent>
@@ -555,10 +545,9 @@ function readLastRepositoryLocation(): string {
   if (storedLocation) {
     return storedLocation;
   }
-  const nativeBootstrap = (
-    window as { __ghostex_NATIVE_HOST__?: { cwd?: string; homeDir?: string } }
-  ).__ghostex_NATIVE_HOST__;
-  return nativeBootstrap?.cwd?.trim() || nativeBootstrap?.homeDir?.trim() || "";
+  const nativeBootstrap = (window as { __ghostex_NATIVE_HOST__?: { cwd?: string; homeDir?: string } })
+    .__ghostex_NATIVE_HOST__;
+  return nativeBootstrap?.cwd?.trim() || nativeBootstrap?.homeDir?.trim() || '';
 }
 
 function rememberLastRepositoryLocation(path: string): void {
@@ -566,41 +555,41 @@ function rememberLastRepositoryLocation(path: string): void {
 }
 
 function isRepositoryFolderPickedMessage(message: object): message is RepositoryFolderPickedMessage {
-  return "type" in message && message.type === "repositoryFolderPicked";
+  return 'type' in message && message.type === 'repositoryFolderPicked';
 }
 
 function isRepositoryCloneResultMessage(message: object): message is RepositoryCloneResultMessage {
   return (
-    "type" in message &&
-    message.type === "repositoryCloneResult" &&
-    "requestId" in message &&
-    typeof message.requestId === "string" &&
-    "ok" in message &&
-    typeof message.ok === "boolean"
+    'type' in message &&
+    message.type === 'repositoryCloneResult' &&
+    'requestId' in message &&
+    typeof message.requestId === 'string' &&
+    'ok' in message &&
+    typeof message.ok === 'boolean'
   );
 }
 
 function isRepositoryClonePreviewResultMessage(message: object): message is RepositoryClonePreviewResultMessage {
   return (
-    "type" in message &&
-    message.type === "repositoryClonePreviewResult" &&
-    "requestId" in message &&
-    typeof message.requestId === "string" &&
-    "ok" in message &&
-    typeof message.ok === "boolean"
+    'type' in message &&
+    message.type === 'repositoryClonePreviewResult' &&
+    'requestId' in message &&
+    typeof message.requestId === 'string' &&
+    'ok' in message &&
+    typeof message.ok === 'boolean'
   );
 }
 
 function isRepositoryClonePreview(value: unknown): value is GxserverRepositoryClonePreviewResult {
   return (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
     !Array.isArray(value) &&
-    typeof (value as GxserverRepositoryClonePreviewResult).cloneUrl === "string" &&
-    typeof (value as GxserverRepositoryClonePreviewResult).destinationFolderName === "string" &&
-    typeof (value as GxserverRepositoryClonePreviewResult).destinationPath === "string" &&
-    typeof (value as GxserverRepositoryClonePreviewResult).parentPath === "string" &&
-    typeof (value as GxserverRepositoryClonePreviewResult).repositoryName === "string" &&
-    typeof (value as GxserverRepositoryClonePreviewResult).destinationExists === "boolean"
+    typeof (value as GxserverRepositoryClonePreviewResult).cloneUrl === 'string' &&
+    typeof (value as GxserverRepositoryClonePreviewResult).destinationFolderName === 'string' &&
+    typeof (value as GxserverRepositoryClonePreviewResult).destinationPath === 'string' &&
+    typeof (value as GxserverRepositoryClonePreviewResult).parentPath === 'string' &&
+    typeof (value as GxserverRepositoryClonePreviewResult).repositoryName === 'string' &&
+    typeof (value as GxserverRepositoryClonePreviewResult).destinationExists === 'boolean'
   );
 }

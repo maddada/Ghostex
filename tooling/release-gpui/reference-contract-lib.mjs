@@ -1,24 +1,22 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export function extractManagedTooltipPlacements(source) {
-  const match = source.match(
-    /\bpub\s+enum\s+ManagedTooltipPlacement\s*\{(?<body>[\s\S]*?)^\}/mu,
-  );
+  const match = source.match(/\bpub\s+enum\s+ManagedTooltipPlacement\s*\{(?<body>[\s\S]*?)^\}/mu);
   if (!match?.groups?.body) {
-    throw new Error("Pinned gpui-component patch does not define ManagedTooltipPlacement");
+    throw new Error('Pinned gpui-component patch does not define ManagedTooltipPlacement');
   }
 
   return new Set(
-    [...match.groups.body.matchAll(/^\s*(?:#\[[^\]]+\]\s*)*(?<name>[A-Z][A-Za-z0-9_]*)\s*,/gmu)]
-      .map(({ groups }) => groups.name),
+    [...match.groups.body.matchAll(/^\s*(?:#\[[^\]]+\]\s*)*(?<name>[A-Z][A-Za-z0-9_]*)\s*,/gmu)].map(
+      ({ groups }) => groups.name
+    )
   );
 }
 
 export function extractManagedTooltipPlacementUsages(source) {
   return new Set(
-    [...source.matchAll(/\bManagedTooltipPlacement::(?<name>[A-Z][A-Za-z0-9_]*)\b/gu)]
-      .map(({ groups }) => groups.name),
+    [...source.matchAll(/\bManagedTooltipPlacement::(?<name>[A-Z][A-Za-z0-9_]*)\b/gu)].map(({ groups }) => groups.name)
   );
 }
 
@@ -28,9 +26,9 @@ export function rustSourcesUnder(root) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name !== "target") visit(path);
-      } else if (entry.isFile() && entry.name.endsWith(".rs")) {
-        sources.push({ path, source: readFileSync(path, "utf8") });
+        if (entry.name !== 'target') visit(path);
+      } else if (entry.isFile() && entry.name.endsWith('.rs')) {
+        sources.push({ path, source: readFileSync(path, 'utf8') });
       }
     }
   };
@@ -57,8 +55,7 @@ export function missingManagedTooltipPlacements(librarySource, applicationSource
 
 export function extractPublicRustMethods(source) {
   return new Set(
-    [...source.matchAll(/^\s*pub\s+fn\s+(?<name>[a-z_][A-Za-z0-9_]*)\s*\(/gmu)]
-      .map(({ groups }) => groups.name),
+    [...source.matchAll(/^\s*pub\s+fn\s+(?<name>[a-z_][A-Za-z0-9_]*)\s*\(/gmu)].map(({ groups }) => groups.name)
   );
 }
 

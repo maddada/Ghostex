@@ -26,9 +26,9 @@ jobs:
           submodules: false
       - name: Validate immutable replacement inputs
         env:
-          GHOSTEX_RELEASE_ANDROID: "true"
-          GHOSTEX_RELEASE_ALLOW_EXISTING_TAG: "1"
-          GHOSTEX_RELEASE_UPDATE_SPARKLE: "false"
+          GHOSTEX_RELEASE_ANDROID: 'true'
+          GHOSTEX_RELEASE_ALLOW_EXISTING_TAG: '1'
+          GHOSTEX_RELEASE_UPDATE_SPARKLE: 'false'
           ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
           ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
           ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}

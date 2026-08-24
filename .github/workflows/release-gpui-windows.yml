@@ -35,7 +35,7 @@ on:
       plan:
         description: Resolved release plan JSON from the prepare job
         required: false
-        default: ""
+        default: ''
         type: string
     secrets:
       WINDOWS_CODE_SIGN_PFX_BASE64:

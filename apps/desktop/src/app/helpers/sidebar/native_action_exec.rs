@@ -9,7 +9,6 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use anyhow::Result;
 
 use crate::app::helpers::*;
@@ -364,4 +363,3 @@ pub(crate) fn gpui_open_sidebar_git_changed_file_in_ide(
     gpui_open_project_path_in_default_editor(&absolute_file_path)
         .map_err(|_| "Configured editor could not open that file.".to_string())
 }
-

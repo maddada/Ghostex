@@ -6,20 +6,14 @@
  * timeout cleanup. They are kept in one hook, in their original order, so the
  * component's hook sequence is unchanged.
  */
-import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
-import { type SidebarGhostexFolderStatsMessage } from "../../shared/session-grid-contract";
-import { normalizeghostexSettings, type ghostexSettings } from "../../shared/ghostex-settings";
-import { type SettingsModalTab } from "../settings-modal-tabs";
-import { type WebviewApi } from "../webview-api";
-import { getMostlyVisibleSettingsSectionId } from "./search";
-import {
-  getActiveSettingsModalScrollViewport,
-  getMainSettingsSectionRef,
-} from "./scroll-targets";
-import {
-  MainSettingsScrollTargetId,
-  SettingsSectionMeasurementItem,
-} from "./types";
+import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { type SidebarGhostexFolderStatsMessage } from '../../shared/session-grid-contract';
+import { normalizeghostexSettings, type ghostexSettings } from '../../shared/ghostex-settings';
+import { type SettingsModalTab } from '../settings-modal-tabs';
+import { type WebviewApi } from '../webview-api';
+import { getMostlyVisibleSettingsSectionId } from './search';
+import { getActiveSettingsModalScrollViewport, getMainSettingsSectionRef } from './scroll-targets';
+import { MainSettingsScrollTargetId, SettingsSectionMeasurementItem } from './types';
 
 export function useSettingsModalEffects({
   activeTab,
@@ -107,7 +101,7 @@ export function useSettingsModalEffects({
   vscode: WebviewApi | undefined;
 }) {
   useEffect(() => {
-    if (!isOpen || activeTab !== "settings" || initialSection === undefined) {
+    if (!isOpen || activeTab !== 'settings' || initialSection === undefined) {
       return;
     }
     /**
@@ -146,13 +140,13 @@ export function useSettingsModalEffects({
       agents: agentsOnboardingSectionRef,
     });
     const animationFrame = requestAnimationFrame(() => {
-      targetSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      targetSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     return () => cancelAnimationFrame(animationFrame);
   }, [activeTab, initialSection, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || activeTab !== "settings") {
+    if (!isOpen || activeTab !== 'settings') {
       return;
     }
 
@@ -163,11 +157,11 @@ export function useSettingsModalEffects({
       }
       const mostlyVisibleSectionId = getMostlyVisibleSettingsSectionId(
         viewport,
-        getMainSettingsSectionMeasurementItems(),
+        getMainSettingsSectionMeasurementItems()
       );
       if (mostlyVisibleSectionId) {
         setActiveMainSettingsSectionId((currentSectionId) =>
-          currentSectionId === mostlyVisibleSectionId ? currentSectionId : mostlyVisibleSectionId,
+          currentSectionId === mostlyVisibleSectionId ? currentSectionId : mostlyVisibleSectionId
         );
       }
     });
@@ -179,7 +173,7 @@ export function useSettingsModalEffects({
       return;
     }
     if (isFirstLaunchSetup) {
-      setActiveTabState("settings");
+      setActiveTabState('settings');
     }
     /**
      * CDXC:SettingsTabs 2026-05-13-16:05
@@ -197,7 +191,7 @@ export function useSettingsModalEffects({
   useEffect(() => {
     if (
       !isOpen ||
-      activeTab !== "settings" ||
+      activeTab !== 'settings' ||
       ghostexFolderStats ||
       ghostexFolderStatsLoading ||
       !onRequestGhostexFolderStats ||
@@ -227,7 +221,7 @@ export function useSettingsModalEffects({
           observer.disconnect();
         }
       },
-      { rootMargin: "96px 0px" },
+      { rootMargin: '96px 0px' }
     );
     observer.observe(sectionElement);
     return () => observer.disconnect();
@@ -247,7 +241,7 @@ export function useSettingsModalEffects({
    * Native answers through the appIconState prop (relayed via the modal host).
    */
   useEffect(() => {
-    if (!isOpen || activeTab !== "settings" || !vscode || appIconPickerUnavailable) {
+    if (!isOpen || activeTab !== 'settings' || !vscode || appIconPickerUnavailable) {
       hasRequestedAppIconsRef.current = false;
       return;
     }
@@ -255,7 +249,7 @@ export function useSettingsModalEffects({
       return;
     }
     hasRequestedAppIconsRef.current = true;
-    vscode.postMessage({ type: "listAppIcons" });
+    vscode.postMessage({ type: 'listAppIcons' });
   }, [activeTab, appIconPickerUnavailable, isOpen, vscode]);
 
   useEffect(() => {

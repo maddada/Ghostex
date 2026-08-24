@@ -3,15 +3,35 @@ name: Release build - macOS arm64
 on:
   workflow_dispatch:
     inputs:
-      version: { description: "Semver release version", required: true, type: string }
-      source_sha: { description: "Immutable application source commit", required: true, type: string }
-      channel: { description: "Release channel", required: true, default: stable, type: choice, options: [stable, prerelease, test] }
-      update_sparkle: { description: "Generate production Sparkle metadata for later assembly", required: true, default: true, type: boolean }
-      macos_stage: { description: "Run the full flow or one resumable stage", required: true, default: all, type: choice, options: [all, build-sign, submit, poll-staple] }
-      gxserver_x64_run_id: { description: "Optional successful gxserver x64 run", required: false, type: string }
-      gxserver_arm64_run_id: { description: "Optional successful gxserver ARM64 run", required: false, type: string }
-      prerequisite_run_id: { description: "Run containing the preserved signed DMG", required: false, type: string }
-      submission_id: { description: "Existing Apple submission ID", required: false, type: string }
+      version: { description: 'Semver release version', required: true, type: string }
+      source_sha: { description: 'Immutable application source commit', required: true, type: string }
+      channel:
+        {
+          description: 'Release channel',
+          required: true,
+          default: stable,
+          type: choice,
+          options: [stable, prerelease, test],
+        }
+      update_sparkle:
+        {
+          description: 'Generate production Sparkle metadata for later assembly',
+          required: true,
+          default: true,
+          type: boolean,
+        }
+      macos_stage:
+        {
+          description: 'Run the full flow or one resumable stage',
+          required: true,
+          default: all,
+          type: choice,
+          options: [all, build-sign, submit, poll-staple],
+        }
+      gxserver_x64_run_id: { description: 'Optional successful gxserver x64 run', required: false, type: string }
+      gxserver_arm64_run_id: { description: 'Optional successful gxserver ARM64 run', required: false, type: string }
+      prerequisite_run_id: { description: 'Run containing the preserved signed DMG', required: false, type: string }
+      submission_id: { description: 'Existing Apple submission ID', required: false, type: string }
 
 permissions:
   actions: write
@@ -24,7 +44,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with: { ref: "${{ inputs.source_sha }}", fetch-depth: 0, submodules: false }
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0, submodules: false }
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
@@ -61,7 +81,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with: { ref: "${{ inputs.source_sha }}", fetch-depth: 0, submodules: false }
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0, submodules: false }
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
@@ -168,7 +188,7 @@ jobs:
           [[ "$(shasum -a 256 "$RIPGREP_CACHE_PATH" | awk '{print $1}')" == "$RIPGREP_SHA256" ]]
           tar -tzf "$RIPGREP_CACHE_PATH" >/dev/null
       - name: Install runtime source dependencies
-        env: { GITHUB_TOKEN: "${{ github.token }}" }
+        env: { GITHUB_TOKEN: '${{ github.token }}' }
         run: |
           bun install --frozen-lockfile
           npm --prefix .dependencies/code-server ci
@@ -199,7 +219,7 @@ jobs:
       - name: Build signed runtime prerequisite
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GHOSTEX_CODE_SIGN_IDENTITY: "Developer ID Application: Mohamad Youssef (KTKP595G3B)"
+          GHOSTEX_CODE_SIGN_IDENTITY: 'Developer ID Application: Mohamad Youssef (KTKP595G3B)'
           GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz
           GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz
           GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
@@ -225,7 +245,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with: { ref: "${{ inputs.source_sha }}", fetch-depth: 0, submodules: false }
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0, submodules: false }
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
@@ -276,7 +296,7 @@ jobs:
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with: { ref: "${{ inputs.source_sha }}", fetch-depth: 0, submodules: false }
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0, submodules: false }
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
@@ -311,7 +331,7 @@ jobs:
           rsync --version | head -n 1 | grep -F 'version 3.4.4'
           rustup toolchain install 1.95.0 --profile minimal
       - name: Install root assembly dependencies
-        env: { GITHUB_TOKEN: "${{ github.token }}" }
+        env: { GITHUB_TOKEN: '${{ github.token }}' }
         run: bun install --frozen-lockfile
       - name: Import ephemeral Developer ID certificate
         env:
@@ -331,7 +351,7 @@ jobs:
       - name: Build and sign without submitting to Apple
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GHOSTEX_CODE_SIGN_IDENTITY: "Developer ID Application: Mohamad Youssef (KTKP595G3B)"
+          GHOSTEX_CODE_SIGN_IDENTITY: 'Developer ID Application: Mohamad Youssef (KTKP595G3B)'
           GHOSTEX_MACOS_RELEASE_STAGE: build-sign
           GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/on-demand-assets/${{ inputs.version }}/gxserver-linux-arm64.tar.gz
           GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/on-demand-assets/${{ inputs.version }}/gxserver-linux-x64.tar.gz
@@ -353,16 +373,16 @@ jobs:
     if: ${{ inputs.macos_stage == 'all' || inputs.macos_stage == 'build-sign' }}
     needs: build_sign
     runs-on: macos-15
-    concurrency: { group: "release-state-${{ inputs.version }}", cancel-in-progress: false }
+    concurrency: { group: 'release-state-${{ inputs.version }}', cancel-in-progress: false }
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, fetch-depth: 1 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24.13.1 }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with: { name: "${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed", path: build/macos-signed }
+        with: { name: '${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed', path: build/macos-signed }
       - name: Record the preserved signed DMG
-        env: { GH_TOKEN: "${{ github.token }}" }
+        env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           dmg_sha="$(shasum -a 256 "build/macos-signed/ghostex-${{ inputs.version }}-arm64.dmg" | awk '{print $1}')"
           node tooling/release-resumable.mjs record-macos-signed \
@@ -378,7 +398,7 @@ jobs:
     if: ${{ always() && (inputs.macos_stage == 'all' || inputs.macos_stage == 'submit') && (needs.record_signed.result == 'success' || inputs.macos_stage == 'submit') }}
     needs: [build_sign, record_signed]
     runs-on: macos-15
-    concurrency: { group: "release-state-${{ inputs.version }}", cancel-in-progress: false }
+    concurrency: { group: 'release-state-${{ inputs.version }}', cancel-in-progress: false }
     outputs:
       submission_id: ${{ steps.submit.outputs.submission_id }}
     steps:
@@ -388,13 +408,13 @@ jobs:
         with: { node-version: 24.13.1 }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         if: ${{ inputs.macos_stage == 'all' }}
-        with: { name: "${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed", path: build/macos-signed }
+        with: { name: '${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed', path: build/macos-signed }
       - name: Download preserved signed package from prerequisite run
         if: ${{ inputs.macos_stage == 'submit' }}
-        env: { GH_TOKEN: "${{ github.token }}" }
+        env: { GH_TOKEN: '${{ github.token }}' }
         run: gh run download "${{ inputs.prerequisite_run_id }}" --repo maddada/Ghostex --name "${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed" --dir build/macos-signed
       - name: Restore direct notarization key
-        env: { NOTARY_KEY_BASE64: "${{ secrets.APPLE_NOTARY_KEY_BASE64 }}" }
+        env: { NOTARY_KEY_BASE64: '${{ secrets.APPLE_NOTARY_KEY_BASE64 }}' }
         run: |
           if [[ -n "$NOTARY_KEY_BASE64" ]]; then
             printf '%s' "$NOTARY_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
@@ -433,20 +453,20 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with: { ref: "${{ inputs.source_sha }}", fetch-depth: 0, submodules: false }
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0, submodules: false }
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24.13.1 }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         if: ${{ inputs.macos_stage == 'all' }}
-        with: { name: "${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed", path: build/macos-signed }
+        with: { name: '${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed', path: build/macos-signed }
       - name: Download preserved signed package from prerequisite run
         if: ${{ inputs.macos_stage == 'poll-staple' }}
-        env: { GH_TOKEN: "${{ github.token }}" }
+        env: { GH_TOKEN: '${{ github.token }}' }
         run: gh run download "${{ inputs.prerequisite_run_id }}" --repo maddada/Ghostex --name "${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed" --dir build/macos-signed
       - name: Restore direct notarization key
-        env: { NOTARY_KEY_BASE64: "${{ secrets.APPLE_NOTARY_KEY_BASE64 }}" }
+        env: { NOTARY_KEY_BASE64: '${{ secrets.APPLE_NOTARY_KEY_BASE64 }}' }
         run: |
           if [[ -n "$NOTARY_KEY_BASE64" ]]; then
             printf '%s' "$NOTARY_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
@@ -483,7 +503,7 @@ jobs:
     needs: poll_staple
     if: ${{ always() && needs.poll_staple.result == 'success' }}
     runs-on: ubuntu-24.04
-    concurrency: { group: "release-state-${{ inputs.version }}", cancel-in-progress: false }
+    concurrency: { group: 'release-state-${{ inputs.version }}', cancel-in-progress: false }
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, fetch-depth: 1 }
@@ -494,5 +514,5 @@ jobs:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-macos-final
           path: build/macos-final
       - name: Stage final notarized assets and metadata
-        env: { GH_TOKEN: "${{ github.token }}" }
+        env: { GH_TOKEN: '${{ github.token }}' }
         run: node tooling/release-resumable.mjs stage-package-and-advance "${{ inputs.version }}" "${{ inputs.source_sha }}" macos-arm64 build/macos-final "$(git rev-parse HEAD)" "${{ inputs.channel }}" "${{ inputs.update_sparkle }}"

@@ -10,7 +10,10 @@ use crate::*;
 
 impl GhostexGpuiApp {
     #[cfg(target_os = "macos")]
-    pub(crate) fn drain_agents_terminal_runtime_clipboard_requests(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn drain_agents_terminal_runtime_clipboard_requests(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUITerminalClipboard 2026-06-23-19:07:
         Agents runtime clipboard handoff is authorized by exact mounted surface ownership, not focus. The drain snapshots current Agents mount keys, re-gets the still-mounted owner on the app thread, enables only standard clipboard for owner-local queued Ghostty requests, reads only explicit string entries, and writes only runtime-provided text without logging, persistence, selection clipboard support, or fallback requester inference.
@@ -443,5 +446,4 @@ impl GhostexGpuiApp {
             self.project_editor_companion_terminal_appkit_focused_host = next_appkit_focus_identity;
         }
     }
-
 }

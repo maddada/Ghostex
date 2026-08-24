@@ -1,9 +1,6 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import {
-  ADD_PROJECT_STORY_LOCAL_MACHINE,
-  ADD_PROJECT_STORY_REMOTE_MACHINE,
-} from "./add-project-modal-mocks";
-import { AddProjectStoryHarness } from "./add-project-modal.story-harness";
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { ADD_PROJECT_STORY_LOCAL_MACHINE, ADD_PROJECT_STORY_REMOTE_MACHINE } from './add-project-modal-mocks';
+import { AddProjectStoryHarness } from './add-project-modal.story-harness';
 
 /*
  * CDXC:AddProject 2026-07-30:
@@ -13,7 +10,7 @@ import { AddProjectStoryHarness } from "./add-project-modal.story-harness";
  */
 
 const meta = {
-  title: "Modals/Add Project",
+  title: 'Modals/Add Project',
   component: AddProjectStoryHarness,
 } satisfies Meta<typeof AddProjectStoryHarness>;
 
@@ -64,7 +61,7 @@ export const SlowMachine: Story = {
 export const AddAlwaysFails: Story = {
   args: {
     mockOptions: {
-      addProjectError: "Workspace root is not a directory: /Users/story/dev/notes.md",
+      addProjectError: 'Workspace root is not a directory: /Users/story/dev/notes.md',
     },
   },
 };

@@ -1,5 +1,5 @@
-import type { SidebarV2ChangeRequestState, SidebarV2Session } from "./sidebar-v2-session";
-import { firstValidTimestampMs } from "./sidebar-v2-status";
+import type { SidebarV2ChangeRequestState, SidebarV2Session } from './sidebar-v2-session';
+import { firstValidTimestampMs } from './sidebar-v2-status';
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
@@ -47,14 +47,14 @@ export const SIDEBAR_V2_LIFECYCLE_CAPABILITIES_DISABLED: SidebarV2LifecycleCapab
 
 export type SidebarV2LifecycleSession = Pick<
   SidebarV2Session,
-  | "activity"
-  | "lastInteractionAt"
-  | "lifecycleState"
-  | "settledAt"
-  | "settledOverride"
-  | "snoozedAt"
-  | "snoozedUntil"
-  | "workingStartedAt"
+  | 'activity'
+  | 'lastInteractionAt'
+  | 'lifecycleState'
+  | 'settledAt'
+  | 'settledOverride'
+  | 'snoozedAt'
+  | 'snoozedUntil'
+  | 'workingStartedAt'
 >;
 
 export type SidebarV2SettleOptions = {
@@ -74,7 +74,7 @@ export type SidebarV2SnoozeOptions = {
 
 /** The meaningful-activity clock a session's settle window counts from. */
 export function sessionLastActivityAtMs(
-  session: Pick<SidebarV2Session, "lastInteractionAt" | "workingStartedAt">,
+  session: Pick<SidebarV2Session, 'lastInteractionAt' | 'workingStartedAt'>
 ): number | null {
   const lastInteractionAtMs = firstValidTimestampMs(session.lastInteractionAt);
   const workingStartedAtMs = firstValidTimestampMs(session.workingStartedAt);
@@ -88,18 +88,14 @@ export function sessionLastActivityAtMs(
 }
 
 /** The agent is blocked on the user. Never hide this, whatever the override. */
-export function isSidebarV2SessionBlockedOnUser(
-  session: Pick<SidebarV2Session, "activity">,
-): boolean {
-  return session.activity === "attention";
+export function isSidebarV2SessionBlockedOnUser(session: Pick<SidebarV2Session, 'activity'>): boolean {
+  return session.activity === 'attention';
 }
 
 /** The agent is in motion. Ghostex reads this from `activity`, never from
     `lifecycleState`, which only reports pane liveness. */
-export function isSidebarV2SessionWorking(
-  session: Pick<SidebarV2Session, "activity">,
-): boolean {
-  return session.activity === "working";
+export function isSidebarV2SessionWorking(session: Pick<SidebarV2Session, 'activity'>): boolean {
+  return session.activity === 'working';
 }
 
 /**
@@ -108,8 +104,8 @@ export function isSidebarV2SessionWorking(
  * CLASSIFY as settled must also be refused as a settle TARGET.
  */
 export function canSettleSidebarV2Session(
-  session: Pick<SidebarV2Session, "activity">,
-  options: { capabilities?: SidebarV2LifecycleCapabilities } = {},
+  session: Pick<SidebarV2Session, 'activity'>,
+  options: { capabilities?: SidebarV2LifecycleCapabilities } = {}
 ): boolean {
   if (options.capabilities !== undefined && !options.capabilities.settle) {
     return false;
@@ -123,8 +119,8 @@ export function canSettleSidebarV2Session(
  * snoozable — snooze only affects visibility, never the agent.
  */
 export function canSnoozeSidebarV2Session(
-  session: Pick<SidebarV2Session, "activity">,
-  options: { capabilities?: SidebarV2LifecycleCapabilities } = {},
+  session: Pick<SidebarV2Session, 'activity'>,
+  options: { capabilities?: SidebarV2LifecycleCapabilities } = {}
 ): boolean {
   if (options.capabilities !== undefined && !options.capabilities.snooze) {
     return false;
@@ -138,9 +134,7 @@ export function canSnoozeSidebarV2Session(
  * after the snooze was set. Raising a hand never clears the server-side snooze
  * fields; it only stops the session from CLASSIFYING as snoozed.
  */
-export function sidebarV2SessionRaisedHandWhileSnoozed(
-  session: SidebarV2LifecycleSession,
-): boolean {
+export function sidebarV2SessionRaisedHandWhileSnoozed(session: SidebarV2LifecycleSession): boolean {
   if (isSidebarV2SessionBlockedOnUser(session)) {
     return true;
   }
@@ -149,7 +143,7 @@ export function sidebarV2SessionRaisedHandWhileSnoozed(
 
   // Only a FRESH failure raises the hand: a session snoozed while already
   // failed stays snoozed — that snooze was the user saying "I saw it, not now".
-  if (session.lifecycleState === "error") {
+  if (session.lifecycleState === 'error') {
     if (snoozedAtMs === null) {
       return true;
     }
@@ -161,12 +155,7 @@ export function sidebarV2SessionRaisedHandWhileSnoozed(
 
   // Work that finished after the snooze is new information the user asked to
   // be told about ("something happened" wakes early).
-  if (
-    snoozedAtMs !== null &&
-    session.activity === "idle" &&
-    lastActivityMs !== null &&
-    lastActivityMs > snoozedAtMs
-  ) {
+  if (snoozedAtMs !== null && session.activity === 'idle' && lastActivityMs !== null && lastActivityMs > snoozedAtMs) {
     return true;
   }
   return false;
@@ -180,7 +169,7 @@ export function sidebarV2SessionRaisedHandWhileSnoozed(
  */
 export function effectiveSidebarV2Snoozed(
   session: SidebarV2LifecycleSession,
-  options: SidebarV2SnoozeOptions,
+  options: SidebarV2SnoozeOptions
 ): boolean {
   if (options.capabilities !== undefined && !options.capabilities.snooze) {
     return false;
@@ -205,7 +194,7 @@ export function effectiveSidebarV2Snoozed(
  */
 export function sidebarV2SessionWokeAtMs(
   session: SidebarV2LifecycleSession,
-  options: SidebarV2SnoozeOptions,
+  options: SidebarV2SnoozeOptions
 ): number | null {
   if (options.capabilities !== undefined && !options.capabilities.snooze) {
     return null;
@@ -232,7 +221,7 @@ export function sidebarV2SessionWokeAtMs(
  */
 export function effectiveSidebarV2Settled(
   session: SidebarV2LifecycleSession,
-  options: SidebarV2SettleOptions,
+  options: SidebarV2SettleOptions
 ): boolean {
   if (options.capabilities !== undefined && !options.capabilities.settle) {
     return false;
@@ -241,15 +230,15 @@ export function effectiveSidebarV2Settled(
   if (isSidebarV2SessionBlockedOnUser(session) || isSidebarV2SessionWorking(session)) {
     return false;
   }
-  if (session.settledOverride === "settled") {
+  if (session.settledOverride === 'settled') {
     return true;
   }
   // "active" is the explicit keep-active pin: it suppresses auto-settle until
   // real activity clears it server-side.
-  if (session.settledOverride === "active") {
+  if (session.settledOverride === 'active') {
     return false;
   }
-  if (options.changeRequestState === "merged" || options.changeRequestState === "closed") {
+  if (options.changeRequestState === 'merged' || options.changeRequestState === 'closed') {
     return true;
   }
   if (options.autoSettleAfterDays === null) {
@@ -263,7 +252,7 @@ export function effectiveSidebarV2Settled(
   return lastActivityMs < options.nowMs - options.autoSettleAfterDays * DAY_MS;
 }
 
-export type SidebarV2AutoSettleReason = "changeRequest" | "inactivity";
+export type SidebarV2AutoSettleReason = 'changeRequest' | 'inactivity';
 
 export type SidebarV2AutoSettleDecision = {
   reason: SidebarV2AutoSettleReason | null;
@@ -277,7 +266,7 @@ export type SidebarV2AutoSettleDecision = {
  */
 export function resolveSidebarV2AutoSettleDecision(
   session: SidebarV2LifecycleSession,
-  options: SidebarV2SettleOptions,
+  options: SidebarV2SettleOptions
 ): SidebarV2AutoSettleDecision {
   if (options.capabilities !== undefined && !options.capabilities.settle) {
     return { reason: null, shouldAutoSettle: false };
@@ -285,11 +274,11 @@ export function resolveSidebarV2AutoSettleDecision(
   if (!canSettleSidebarV2Session(session)) {
     return { reason: null, shouldAutoSettle: false };
   }
-  if (session.settledOverride === "active") {
+  if (session.settledOverride === 'active') {
     return { reason: null, shouldAutoSettle: false };
   }
-  if (options.changeRequestState === "merged" || options.changeRequestState === "closed") {
-    return { reason: "changeRequest", shouldAutoSettle: true };
+  if (options.changeRequestState === 'merged' || options.changeRequestState === 'closed') {
+    return { reason: 'changeRequest', shouldAutoSettle: true };
   }
   if (options.autoSettleAfterDays === null) {
     return { reason: null, shouldAutoSettle: false };
@@ -300,7 +289,7 @@ export function resolveSidebarV2AutoSettleDecision(
   }
   const isInactive = lastActivityMs < options.nowMs - options.autoSettleAfterDays * DAY_MS;
   return {
-    reason: isInactive ? "inactivity" : null,
+    reason: isInactive ? 'inactivity' : null,
     shouldAutoSettle: isInactive,
   };
 }
@@ -311,7 +300,7 @@ export function resolveSidebarV2AutoSettleDecision(
  */
 export function resolveSidebarV2NextWakeAtMs(
   session: SidebarV2LifecycleSession,
-  options: SidebarV2SnoozeOptions,
+  options: SidebarV2SnoozeOptions
 ): number | null {
   if (!effectiveSidebarV2Snoozed(session, options)) {
     return null;

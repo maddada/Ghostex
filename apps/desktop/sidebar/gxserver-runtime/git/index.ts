@@ -10,16 +10,16 @@ other importer. `gpuiSidebarRuntimeGitMethodsShapeCheck` below is the same
 check the original file ran, moved here since this is now where the object
 literal is assembled.
 */
-import { gpuiSidebarRuntimeGitActionsAndConfirmMethods } from "./actions-and-confirm";
-import { gpuiSidebarRuntimeGitBranchOperationsMethods } from "./branch-operations";
-import { gpuiSidebarRuntimeGitDiffStatsMethods } from "./diff-stats";
-import { gpuiSidebarRuntimeGitStateAndGithubMethods } from "./state-and-github";
-import { gpuiSidebarRuntimeGitTypedOperationsMethods } from "./typed-operations";
-import type { GpuiSidebarRuntimeGitMethods } from "./types";
-import { gpuiSidebarRuntimeGitWorkflowAndPreferencesMethods } from "./workflow-and-preferences";
-import { gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods } from "./worktree-merge-and-review";
+import { gpuiSidebarRuntimeGitActionsAndConfirmMethods } from './actions-and-confirm';
+import { gpuiSidebarRuntimeGitBranchOperationsMethods } from './branch-operations';
+import { gpuiSidebarRuntimeGitDiffStatsMethods } from './diff-stats';
+import { gpuiSidebarRuntimeGitStateAndGithubMethods } from './state-and-github';
+import { gpuiSidebarRuntimeGitTypedOperationsMethods } from './typed-operations';
+import type { GpuiSidebarRuntimeGitMethods } from './types';
+import { gpuiSidebarRuntimeGitWorkflowAndPreferencesMethods } from './workflow-and-preferences';
+import { gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods } from './worktree-merge-and-review';
 
-export type { GpuiSidebarRuntimeGitMethods } from "./types";
+export type { GpuiSidebarRuntimeGitMethods } from './types';
 
 export const gpuiSidebarRuntimeGitMethods = {
   ...gpuiSidebarRuntimeGitDiffStatsMethods,

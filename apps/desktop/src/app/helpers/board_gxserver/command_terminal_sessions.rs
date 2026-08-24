@@ -44,7 +44,9 @@ pub(crate) fn gpui_create_command_terminal_gxserver_session(
     })
 }
 
-pub(crate) fn gpui_close_command_terminal_gxserver_session(key: &GpuiLocalWorkspaceSessionKey) -> bool {
+pub(crate) fn gpui_close_command_terminal_gxserver_session(
+    key: &GpuiLocalWorkspaceSessionKey,
+) -> bool {
     let _ = gpui_gxserver_rpc_result(
         "/api/transitionSession",
         &serde_json::json!({
@@ -376,4 +378,3 @@ pub(crate) fn gpui_random_uuid_string() -> Result<String, String> {
         bytes[15]
     ))
 }
-

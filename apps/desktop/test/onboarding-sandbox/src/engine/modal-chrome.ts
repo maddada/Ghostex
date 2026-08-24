@@ -12,12 +12,12 @@
  * fit-height kinds is apps/desktop/views/modal-host.tsx:152
  * ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS.
  */
-import type { SandboxModalKind } from "../state/types";
+import type { SandboxModalKind } from '../state/types';
 
 export interface SandboxModalChrome {
   title: string;
   width: number;
-  height: number | "fit";
+  height: number | 'fit';
   /** Fallback height used by the frame until `contentHeightMeasured` arrives. */
   initialHeight: number;
   /** Mirrors `GpuiAppModalKind::requires_sidebar_state` (apps/desktop/src/app/model/app_modal_kind.rs). */
@@ -43,29 +43,29 @@ const COMPACT_WIDTH = 760;
 
 /** Kinds that hydrate the sidebar store before opening. */
 const REQUIRES_SIDEBAR_STATE: ReadonlySet<SandboxModalKind> = new Set<SandboxModalKind>([
-  "settings",
-  "hotkeys",
-  "configureAgents",
-  "configureActions",
-  "openTargets",
-  "firstLaunchSetup",
-  "agentsHub",
-  "pinnedPrompts",
-  "scratchPad",
-  "delayedSend",
-  "renameSession",
-  "worktree",
-  "deleteWorktree",
-  "gitCommit",
-  "gitFileDiff",
-  "portlessSetup",
-  "discoverGhostex",
+  'settings',
+  'hotkeys',
+  'configureAgents',
+  'configureActions',
+  'openTargets',
+  'firstLaunchSetup',
+  'agentsHub',
+  'pinnedPrompts',
+  'scratchPad',
+  'delayedSend',
+  'renameSession',
+  'worktree',
+  'deleteWorktree',
+  'gitCommit',
+  'gitFileDiff',
+  'portlessSetup',
+  'discoverGhostex',
   /*
    * `tipsAndTricks` has no GpuiAppModalKind counterpart (gpui never opens it),
    * but the React host gates it behind the same hydrated store as
    * firstLaunchSetup, so the gallery must hydrate it to see anything.
    */
-  "tipsAndTricks",
+  'tipsAndTricks',
 ]);
 
 /**
@@ -77,81 +77,81 @@ const REQUIRES_SIDEBAR_STATE: ReadonlySet<SandboxModalKind> = new Set<SandboxMod
  * strips `x-frame-options`/CSP so the same document can render inside the fake
  * native window and stay same-origin for the simulated `f` key press.
  */
-export const SANDBOX_TUTORIAL_VIDEO_URL = "/yt/watch?v=APdP-j5n4Mw";
+export const SANDBOX_TUTORIAL_VIDEO_URL = '/yt/watch?v=APdP-j5n4Mw';
 
 type ChromeSpec = {
   title: string;
   width: number;
-  height: number | "fit";
+  height: number | 'fit';
   initialHeight?: number;
   nonReactHostUrl?: string;
 };
 
 const CHROME: Record<SandboxModalKind, ChromeSpec> = {
-  addProject: { title: "Ghostex Add Project", width: 640, height: 460 },
-  addRepository: { title: "Ghostex Clone Repository", width: 640, height: "fit", initialHeight: 660 },
-  agentConfig: { title: "Ghostex Agent", width: COMPACT_WIDTH, height: "fit", initialHeight: 600 },
-  agentsHub: { title: "Ghostex Agents Hub", width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
-  commandPalette: { title: "Ghostex Quick Access", width: QUICK_ACCESS_WIDTH, height: QUICK_ACCESS_HEIGHT },
-  configureActions: { title: "Ghostex Actions", width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
-  configureAgents: { title: "Ghostex Configure Agents", width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
-  daemonSessions: { title: "Ghostex Running Sessions", width: 880, height: SETTINGS_HEIGHT },
-  delayedSend: { title: "Ghostex Session Automations", width: 470, height: "fit", initialHeight: 565 },
-  deleteWorktree: { title: "Ghostex Delete Worktree", width: COMPACT_WIDTH, height: "fit", initialHeight: 600 },
-  discoverGhostex: { title: "Discover Ghostex", width: 1120, height: 850 },
-  firstLaunchSetup: { title: "Ghostex Tips", width: 1120, height: 850 },
-  firstUserMessage: { title: "Ghostex First Message", width: COMPACT_WIDTH, height: "fit", initialHeight: 520 },
-  gitCommit: { title: "Ghostex Commit Changes", width: 1078, height: 758 },
-  gitFileDiff: { title: "Ghostex File Diff", width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
-  hotkeys: { title: "Ghostex Hotkeys", width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
+  addProject: { title: 'Ghostex Add Project', width: 640, height: 460 },
+  addRepository: { title: 'Ghostex Clone Repository', width: 640, height: 'fit', initialHeight: 660 },
+  agentConfig: { title: 'Ghostex Agent', width: COMPACT_WIDTH, height: 'fit', initialHeight: 600 },
+  agentsHub: { title: 'Ghostex Agents Hub', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
+  commandPalette: { title: 'Ghostex Quick Access', width: QUICK_ACCESS_WIDTH, height: QUICK_ACCESS_HEIGHT },
+  configureActions: { title: 'Ghostex Actions', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
+  configureAgents: { title: 'Ghostex Configure Agents', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
+  daemonSessions: { title: 'Ghostex Running Sessions', width: 880, height: SETTINGS_HEIGHT },
+  delayedSend: { title: 'Ghostex Session Automations', width: 470, height: 'fit', initialHeight: 565 },
+  deleteWorktree: { title: 'Ghostex Delete Worktree', width: COMPACT_WIDTH, height: 'fit', initialHeight: 600 },
+  discoverGhostex: { title: 'Discover Ghostex', width: 1120, height: 850 },
+  firstLaunchSetup: { title: 'Ghostex Tips', width: 1120, height: 850 },
+  firstUserMessage: { title: 'Ghostex First Message', width: COMPACT_WIDTH, height: 'fit', initialHeight: 520 },
+  gitCommit: { title: 'Ghostex Commit Changes', width: 1078, height: 758 },
+  gitFileDiff: { title: 'Ghostex File Diff', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
+  hotkeys: { title: 'Ghostex Hotkeys', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
   missingProjectFolder: {
-    title: "Ghostex Project Folder Missing",
+    title: 'Ghostex Project Folder Missing',
     width: 560,
-    height: "fit",
+    height: 'fit',
     initialHeight: 360,
   },
-  openTargets: { title: "Ghostex Open Targets", width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
-  pinnedPrompts: { title: "Ghostex Pinned Prompts", width: COMPACT_WIDTH, height: SETTINGS_HEIGHT },
-  portlessSetup: { title: "Ghostex Portless Setup", width: 640, height: "fit", initialHeight: 340 },
+  openTargets: { title: 'Ghostex Open Targets', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
+  pinnedPrompts: { title: 'Ghostex Pinned Prompts', width: COMPACT_WIDTH, height: SETTINGS_HEIGHT },
+  portlessSetup: { title: 'Ghostex Portless Setup', width: 640, height: 'fit', initialHeight: 340 },
   previousSessions: {
-    title: "Ghostex Quick Access",
+    title: 'Ghostex Quick Access',
     width: QUICK_ACCESS_WIDTH,
     height: QUICK_ACCESS_HEIGHT,
   },
   recentProjects: {
-    title: "Ghostex Quick Access",
+    title: 'Ghostex Quick Access',
     width: QUICK_ACCESS_WIDTH,
     height: QUICK_ACCESS_HEIGHT,
   },
   remoteGxserverInstall: {
-    title: "Ghostex Remote Setup",
+    title: 'Ghostex Remote Setup',
     width: 560,
-    height: "fit",
+    height: 'fit',
     initialHeight: 380,
   },
   remoteProjectPicker: {
-    title: "Ghostex Remote Project",
+    title: 'Ghostex Remote Project',
     width: 720,
-    height: "fit",
+    height: 'fit',
     initialHeight: 640,
   },
-  renameSession: { title: "Ghostex Rename Session", width: 570, height: "fit", initialHeight: 440 },
-  scratchPad: { title: "Ghostex Scratch Pad", width: 520, height: 700 },
-  settings: { title: "Ghostex Settings", width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
+  renameSession: { title: 'Ghostex Rename Session', width: 570, height: 'fit', initialHeight: 440 },
+  scratchPad: { title: 'Ghostex Scratch Pad', width: 520, height: 700 },
+  settings: { title: 'Ghostex Settings', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
   stashedPrompts: {
-    title: "Ghostex Quick Access",
+    title: 'Ghostex Quick Access',
     width: QUICK_ACCESS_WIDTH,
     height: QUICK_ACCESS_HEIGHT,
   },
-  tipsAndTricks: { title: "Ghostex Tips", width: 1120, height: 850 },
-  updateAvailable: { title: "Ghostex Update", width: 640, height: "fit", initialHeight: 560 },
+  tipsAndTricks: { title: 'Ghostex Tips', width: 1120, height: 850 },
+  updateAvailable: { title: 'Ghostex Update', width: 640, height: 'fit', initialHeight: 560 },
   watchGhostexVideo: {
-    title: "Ghostex Tutorial Video",
+    title: 'Ghostex Tutorial Video',
     width: 1120,
     height: 750,
     nonReactHostUrl: SANDBOX_TUTORIAL_VIDEO_URL,
   },
-  worktree: { title: "Ghostex Add Worktree", width: 640, height: "fit", initialHeight: 640 },
+  worktree: { title: 'Ghostex Add Worktree', width: 640, height: 'fit', initialHeight: 640 },
 };
 
 export function modalChrome(modal: SandboxModalKind): SandboxModalChrome {
@@ -160,7 +160,7 @@ export function modalChrome(modal: SandboxModalKind): SandboxModalChrome {
     title: spec.title,
     width: spec.width,
     height: spec.height,
-    initialHeight: spec.initialHeight ?? (spec.height === "fit" ? 480 : spec.height),
+    initialHeight: spec.initialHeight ?? (spec.height === 'fit' ? 480 : spec.height),
     requiresSidebarState: REQUIRES_SIDEBAR_STATE.has(modal),
     ...(spec.nonReactHostUrl ? { nonReactHostUrl: spec.nonReactHostUrl } : {}),
   };
@@ -178,28 +178,28 @@ export function modalChrome(modal: SandboxModalKind): SandboxModalChrome {
  * already on a real origin, but it serves the same wrapper page so the modal
  * exercises the identical host page -> player page -> YouTube chain.
  */
-export const SANDBOX_TUTORIAL_VIDEO_EMBED_URL = "/tutorial-video-player.html";
+export const SANDBOX_TUTORIAL_VIDEO_EMBED_URL = '/tutorial-video-player.html';
 
 export function modalOpenPayload(modal: SandboxModalKind): Record<string, unknown> {
   switch (modal) {
-    case "commandPalette":
-      return { initialQuery: "" };
-    case "firstLaunchSetup":
+    case 'commandPalette':
+      return { initialQuery: '' };
+    case 'firstLaunchSetup':
       return { tutorialVideoEmbedUrl: SANDBOX_TUTORIAL_VIDEO_EMBED_URL };
-    case "remoteGxserverInstall":
-    case "remoteProjectPicker":
-      return { remoteMachineId: "", remoteMachineName: "Remote" };
-    case "portlessSetup":
-      return { mode: "install", protocol: "https" };
-    case "renameSession":
-      return { initialTitle: "", sessionId: "sandbox-session-1" };
-    case "updateAvailable":
-      return { state: "available", version: "7.11.1" };
-    case "missingProjectFolder":
+    case 'remoteGxserverInstall':
+    case 'remoteProjectPicker':
+      return { remoteMachineId: '', remoteMachineName: 'Remote' };
+    case 'portlessSetup':
+      return { mode: 'install', protocol: 'https' };
+    case 'renameSession':
+      return { initialTitle: '', sessionId: 'sandbox-session-1' };
+    case 'updateAvailable':
+      return { state: 'available', version: '7.11.1' };
+    case 'missingProjectFolder':
       return {
-        projectId: "sandbox-project-1",
-        projectName: "ghostex",
-        projectPath: "/Users/story/dev/ghostex",
+        projectId: 'sandbox-project-1',
+        projectName: 'ghostex',
+        projectPath: '/Users/story/dev/ghostex',
       };
     default:
       return {};
@@ -213,54 +213,46 @@ export const MODAL_GALLERY_GROUPS: ReadonlyArray<{
   modals: readonly SandboxModalKind[];
 }> = [
   {
-    id: "onboarding",
-    label: "Onboarding",
-    modals: ["watchGhostexVideo", "firstLaunchSetup", "discoverGhostex", "tipsAndTricks"],
+    id: 'onboarding',
+    label: 'Onboarding',
+    modals: ['watchGhostexVideo', 'firstLaunchSetup', 'discoverGhostex', 'tipsAndTricks'],
   },
   {
-    id: "project",
-    label: "Projects",
+    id: 'project',
+    label: 'Projects',
     modals: [
-      "addProject",
-      "addRepository",
-      "missingProjectFolder",
-      "remoteProjectPicker",
-      "remoteGxserverInstall",
-      "worktree",
-      "deleteWorktree",
-      "gitCommit",
-      "gitFileDiff",
+      'addProject',
+      'addRepository',
+      'missingProjectFolder',
+      'remoteProjectPicker',
+      'remoteGxserverInstall',
+      'worktree',
+      'deleteWorktree',
+      'gitCommit',
+      'gitFileDiff',
     ],
   },
   {
-    id: "settings",
-    label: "Settings",
-    modals: [
-      "settings",
-      "hotkeys",
-      "configureAgents",
-      "configureActions",
-      "openTargets",
-      "agentsHub",
-      "portlessSetup",
-    ],
+    id: 'settings',
+    label: 'Settings',
+    modals: ['settings', 'hotkeys', 'configureAgents', 'configureActions', 'openTargets', 'agentsHub', 'portlessSetup'],
   },
   {
-    id: "misc",
-    label: "Quick access & misc",
+    id: 'misc',
+    label: 'Quick access & misc',
     modals: [
-      "commandPalette",
-      "previousSessions",
-      "recentProjects",
-      "stashedPrompts",
-      "pinnedPrompts",
-      "scratchPad",
-      "daemonSessions",
-      "delayedSend",
-      "renameSession",
-      "agentConfig",
-      "firstUserMessage",
-      "updateAvailable",
+      'commandPalette',
+      'previousSessions',
+      'recentProjects',
+      'stashedPrompts',
+      'pinnedPrompts',
+      'scratchPad',
+      'daemonSessions',
+      'delayedSend',
+      'renameSession',
+      'agentConfig',
+      'firstUserMessage',
+      'updateAvailable',
     ],
   },
 ];

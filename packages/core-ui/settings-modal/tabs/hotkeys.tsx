@@ -1,16 +1,6 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  type UIEvent as ReactUIEvent,
-} from "react";
-import { Button } from "@/packages/components/ui/button";
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldLabel,
-} from "@/packages/components/ui/field";
+import { useEffect, useMemo, useRef, type UIEvent as ReactUIEvent } from 'react';
+import { Button } from '@/packages/components/ui/button';
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@/packages/components/ui/field';
 import {
   DEFAULT_ghostex_HOTKEYS,
   GHOSTEX_HOTKEY_DEFINITIONS,
@@ -18,17 +8,10 @@ import {
   normalizeghostexHotkeySettings,
   type ghostexHotkeyActionId,
   type ghostexHotkeySettings,
-} from "../../../shared/ghostex-hotkeys";
-import { HotkeyRecorderField } from "../../hotkey-recorder-field";
-import {
-  SettingsNativeScrollArea,
-  SettingsSection,
-  ToggleField,
-} from "../fields";
-import {
-  getMostlyVisibleSettingsSectionId,
-  shouldShowSetting,
-} from "../search";
+} from '../../../shared/ghostex-hotkeys';
+import { HotkeyRecorderField } from '../../hotkey-recorder-field';
+import { SettingsNativeScrollArea, SettingsSection, ToggleField } from '../fields';
+import { getMostlyVisibleSettingsSectionId, shouldShowSetting } from '../search';
 import {
   HotkeySettingsDefinitionById,
   HotkeySettingsSectionDefinition,
@@ -38,7 +21,7 @@ import {
   SettingModificationProps,
   SettingsSectionMeasurementItem,
   SettingsSectionNavigationItem,
-} from "../types";
+} from '../types';
 
 export function HotkeysSettingsTab({
   definitionsById,
@@ -73,10 +56,7 @@ export function HotkeysSettingsTab({
 }) {
   const normalizedHotkeys = normalizeghostexHotkeySettings(hotkeys);
   const defaultHotkeys = normalizeghostexHotkeySettings(DEFAULT_ghostex_HOTKEYS);
-  const duplicateIds = useMemo(
-    () => getDuplicateHotkeyIds(normalizedHotkeys),
-    [normalizedHotkeys],
-  );
+  const duplicateIds = useMemo(() => getDuplicateHotkeyIds(normalizedHotkeys), [normalizedHotkeys]);
   const pendingHotkeySectionViewportRef = useRef<HTMLElement | null>(null);
   const hotkeySectionFrameRef = useRef<number | undefined>(undefined);
   /**
@@ -89,19 +69,18 @@ export function HotkeysSettingsTab({
    * The same top search query filters General and Hotkeys instead of keeping a
    * hidden tab-specific search state.
    */
-  const visibleHotkeySectionNavigation: SettingsSectionNavigationItem<HotkeySettingsSectionId>[] =
-    visibleSections.map((section) => ({
+  const visibleHotkeySectionNavigation: SettingsSectionNavigationItem<HotkeySettingsSectionId>[] = visibleSections.map(
+    (section) => ({
       id: section.id,
       title: section.title,
-    }));
+    })
+  );
   const visibleHotkeySectionMeasurementItems: SettingsSectionMeasurementItem<HotkeySettingsSectionId>[] =
     visibleSections.map((section) => ({
       id: section.id,
       ref: sectionRefs[section.id],
     }));
-  const visibleHotkeySectionIds = visibleHotkeySectionNavigation
-    .map((section) => section.id)
-    .join("|");
+  const visibleHotkeySectionIds = visibleHotkeySectionNavigation.map((section) => section.id).join('|');
   const hasVisibleHotkeys = visibleSections.length > 0;
 
   const updateHotkey = (id: ghostexHotkeyActionId, value: string) => {
@@ -109,7 +88,7 @@ export function HotkeysSettingsTab({
       normalizeghostexHotkeySettings({
         ...normalizedHotkeys,
         [id]: normalizeHotkeyText(value),
-      }),
+      })
     );
   };
 
@@ -137,7 +116,7 @@ export function HotkeysSettingsTab({
       }
       const mostlyVisibleSectionId = getMostlyVisibleSettingsSectionId(
         pendingViewport,
-        visibleHotkeySectionMeasurementItems,
+        visibleHotkeySectionMeasurementItems
       );
       if (mostlyVisibleSectionId) {
         onActiveSectionChange(mostlyVisibleSectionId);
@@ -146,7 +125,7 @@ export function HotkeysSettingsTab({
   };
 
   const handleHotkeySettingsScrollCapture = (event: ReactUIEvent<HTMLDivElement>) => {
-    if (!(event.target instanceof HTMLElement) || event.target.dataset.slot !== "scroll-area-viewport") {
+    if (!(event.target instanceof HTMLElement) || event.target.dataset.slot !== 'scroll-area-viewport') {
       return;
     }
     scheduleHotkeySectionMeasurement(event.target);
@@ -167,10 +146,7 @@ export function HotkeysSettingsTab({
       if (!viewport) {
         return;
       }
-      const mostlyVisibleSectionId = getMostlyVisibleSettingsSectionId(
-        viewport,
-        visibleHotkeySectionMeasurementItems,
-      );
+      const mostlyVisibleSectionId = getMostlyVisibleSettingsSectionId(viewport, visibleHotkeySectionMeasurementItems);
       if (mostlyVisibleSectionId) {
         onActiveSectionChange(mostlyVisibleSectionId);
       }
@@ -179,65 +155,56 @@ export function HotkeysSettingsTab({
   }, [onActiveSectionChange, searchQuery, visibleHotkeySectionIds]);
 
   return (
-    <div className="settings-main-tab-layout">
+    <div className='settings-main-tab-layout'>
       <SettingsNativeScrollArea
-        className="settings-main-scroll h-full min-h-0"
+        className='settings-main-scroll h-full min-h-0'
         onScrollCapture={handleHotkeySettingsScrollCapture}
       >
-        <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">
+        <div className='settings-page-width flex flex-col gap-6 px-5 pb-5'>
           {visibleSections.map((section) => (
-            <SettingsSection
-              key={section.id}
-              sectionRef={sectionRefs[section.id]}
-              title={section.title}
-            >
-              {section.id === "projects" &&
-              shouldShowSetting(sectionSearches.projects, "expandCollapsedProjectsOnJump") ? (
+            <SettingsSection key={section.id} sectionRef={sectionRefs[section.id]} title={section.title}>
+              {section.id === 'projects' &&
+              shouldShowSetting(sectionSearches.projects, 'expandCollapsedProjectsOnJump') ? (
                 <ToggleField
                   checked={expandCollapsedProjectsOnJump}
-                  description="Reveal a collapsed project row before focusing it from Jump to Project hotkeys."
-                  label="Expand Collapsed Projects on Jump"
+                  description='Reveal a collapsed project row before focusing it from Jump to Project hotkeys.'
+                  label='Expand Collapsed Projects on Jump'
                   {...expandCollapsedProjectsOnJumpModification}
                   onChange={onExpandCollapsedProjectsOnJumpChange}
                 />
               ) : null}
-              {section.id === "projects" &&
+              {section.id === 'projects' &&
               expandCollapsedProjectsOnJump &&
-              shouldShowSetting(sectionSearches.projects, "showLessForExpandedProjectJumps") ? (
+              shouldShowSetting(sectionSearches.projects, 'showLessForExpandedProjectJumps') ? (
                 <ToggleField
                   checked={showLessForExpandedProjectJumps}
-                  description="After a project jump expands a collapsed project, switch that project session list to Show less."
-                  label="Use Show less After Jump Expand"
+                  description='After a project jump expands a collapsed project, switch that project session list to Show less.'
+                  label='Use Show less After Jump Expand'
                   {...showLessForExpandedProjectJumpsModification}
                   onChange={onShowLessForExpandedProjectJumpsChange}
                 />
               ) : null}
               {section.ids.flatMap((id) => {
                 const definition = definitionsById.get(id);
-                if (
-                  !definition ||
-                  !shouldShowSetting(sectionSearches[section.id], definition.id)
-                ) {
+                if (!definition || !shouldShowSetting(sectionSearches[section.id], definition.id)) {
                   return [];
                 }
                 const value = normalizedHotkeys[definition.id] ?? definition.defaultKey;
                 const isDuplicate = duplicateIds.has(definition.id);
                 return [
-                  <Field className="gap-2.5" data-invalid={isDuplicate} key={definition.id}>
+                  <Field className='gap-2.5' data-invalid={isDuplicate} key={definition.id}>
                     <FieldContent>
-                      <FieldLabel className="text-sm" htmlFor={`hotkey-${definition.id}`}>
+                      <FieldLabel className='text-sm' htmlFor={`hotkey-${definition.id}`}>
                         {definition.title}
                       </FieldLabel>
-                      <FieldDescription className="text-sm">
-                        {definition.description}
-                      </FieldDescription>
+                      <FieldDescription className='text-sm'>{definition.description}</FieldDescription>
                     </FieldContent>
                     <HotkeyRecorderField
                       ariaInvalid={isDuplicate}
                       id={`hotkey-${definition.id}`}
                       hotkey={value}
                       onChange={(nextHotkey) => updateHotkey(definition.id, nextHotkey)}
-                      originalHotkey={defaultHotkeys[definition.id] ?? ""}
+                      originalHotkey={defaultHotkeys[definition.id] ?? ''}
                     />
                   </Field>,
                 ];
@@ -245,12 +212,12 @@ export function HotkeysSettingsTab({
             </SettingsSection>
           ))}
           {!hasVisibleHotkeys ? (
-            <div className="rounded-none border border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+            <div className='rounded-none border border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground'>
               No hotkeys match your search.
             </div>
           ) : null}
-          <div className="flex justify-end">
-            <Button onClick={resetHotkeys} type="button" variant="outline">
+          <div className='flex justify-end'>
+            <Button onClick={resetHotkeys} type='button' variant='outline'>
               Reset Hotkeys
             </Button>
           </div>
@@ -273,6 +240,6 @@ export function getDuplicateHotkeyIds(hotkeys: ghostexHotkeySettings): Set<ghost
   return new Set(
     Array.from(idsByHotkey.values())
       .filter((ids) => ids.length > 1)
-      .flat(),
+      .flat()
   );
 }

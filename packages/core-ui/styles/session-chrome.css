@@ -15,7 +15,7 @@
   text-transform: uppercase;
 }
 
-.session-visibility-badge[data-visible="true"] {
+.session-visibility-badge[data-visible='true'] {
   border-color: color-mix(in srgb, var(--app-button-background) 34%, transparent);
   background: color-mix(in srgb, var(--app-button-background) 18%, transparent);
   color: color-mix(in srgb, var(--app-button-background) 72%, var(--app-foreground) 28%);
@@ -52,23 +52,23 @@
 
 .session-activity-badge::before {
   border-radius: 0;
-  content: "";
+  content: '';
   height: 7px;
   width: 7px;
   background: currentColor;
   box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 30%, transparent);
 }
 
-.session-activity-badge[data-activity="working"] {
+.session-activity-badge[data-activity='working'] {
   border-color: color-mix(in srgb, var(--working-primary) 48%, transparent);
   color: color-mix(in srgb, var(--working-secondary) 82%, var(--app-foreground) 18%);
 }
 
-.session-activity-badge[data-activity="working"]::before {
+.session-activity-badge[data-activity='working']::before {
   animation: session-status-dot-pulse 1.35s ease-in-out infinite;
 }
 
-.session-activity-badge[data-activity="attention"] {
+.session-activity-badge[data-activity='attention'] {
   border-color: color-mix(in srgb, var(--attention-primary) 56%, transparent);
   color: color-mix(in srgb, var(--attention-secondary) 86%, var(--app-foreground) 14%);
 }
@@ -111,12 +111,12 @@
   display: inline-block;
 }
 
-.session-meta[data-visible="false"] {
+.session-meta[data-visible='false'] {
   opacity: 0;
 }
 
-.session:hover .session-meta[data-visible="false"],
-.session:focus-visible .session-meta[data-visible="false"] {
+.session:hover .session-meta[data-visible='false'],
+.session:focus-visible .session-meta[data-visible='false'] {
   opacity: 1;
 }
 

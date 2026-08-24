@@ -11,7 +11,6 @@ use std::{fs, path::Path, time::Duration};
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use gpui::Window;
 
 use crate::app::helpers::*;
@@ -384,4 +383,3 @@ pub(crate) fn project_scoped_workarea_availability_from_latest_sidebar_snapshot(
         snapshot.titlebar_availability()
     })
 }
-

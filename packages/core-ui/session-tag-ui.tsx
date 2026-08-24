@@ -14,7 +14,7 @@ import {
   IconTagOff,
   IconTestPipe,
   type TablerIcon,
-} from "@tabler/icons-react";
+} from '@tabler/icons-react';
 import {
   getEffectiveSidebarSessionTag,
   getSidebarSessionTagLabel,
@@ -23,7 +23,7 @@ import {
   SIDEBAR_SESSION_TAG_SECTIONS,
   type SidebarSessionTag,
   type SidebarSessionTagFilter,
-} from "../shared/session-tags";
+} from '../shared/session-tags';
 
 const SIDEBAR_SESSION_TAG_ICONS = {
   blocked: IconBarrierBlock,
@@ -32,10 +32,10 @@ const SIDEBAR_SESSION_TAG_ICONS = {
   done: IconCircleCheck,
   favorite: IconStar,
   feature: IconPuzzle,
-  "high-priority": IconAlertTriangle,
-  "in-progress": IconPlayerPlay,
-  "low-priority": IconArrowDown,
-  "on-hold": IconPlayerPause,
+  'high-priority': IconAlertTriangle,
+  'in-progress': IconPlayerPlay,
+  'low-priority': IconArrowDown,
+  'on-hold': IconPlayerPause,
   research: IconMicroscope,
   testing: IconTestPipe,
   todo: IconCheckbox,
@@ -76,10 +76,10 @@ export function SessionTagIcon({
   if (tag === SIDEBAR_SESSION_TAG_FILTER_UNTAGGED) {
     return (
       <IconTagOff
-        aria-hidden="true"
+        aria-hidden='true'
         className={className}
         data-session-tag={tag}
-        fill="none"
+        fill='none'
         size={size}
         stroke={stroke}
       />
@@ -88,10 +88,10 @@ export function SessionTagIcon({
   const Icon = getSessionTagIcon(tag);
   return (
     <Icon
-      aria-hidden="true"
+      aria-hidden='true'
       className={className}
       data-session-tag={tag}
-      fill={fillFavorite && tag === "favorite" ? "currentColor" : "none"}
+      fill={fillFavorite && tag === 'favorite' ? 'currentColor' : 'none'}
       size={size}
       stroke={stroke}
     />

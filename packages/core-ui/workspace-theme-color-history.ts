@@ -1,8 +1,6 @@
-import {
-  normalizeWorkspaceThemeColorHistory,
-} from "../shared/workspace-project-appearance";
+import { normalizeWorkspaceThemeColorHistory } from '../shared/workspace-project-appearance';
 
-const WORKSPACE_THEME_COLOR_HISTORY_STORAGE_KEY = "ghostex-workspace-theme-color-history";
+const WORKSPACE_THEME_COLOR_HISTORY_STORAGE_KEY = 'ghostex-workspace-theme-color-history';
 
 /*
 CDXC:ProjectSidebarOwnership 2026-06-02-13:58:
@@ -11,7 +9,7 @@ Shared helpers must stay side-effect free after the gxserver/native ownership sp
 export function readWorkspaceThemeColorHistory(): string[] {
   try {
     return normalizeWorkspaceThemeColorHistory(
-      JSON.parse(localStorage.getItem(WORKSPACE_THEME_COLOR_HISTORY_STORAGE_KEY) ?? "[]"),
+      JSON.parse(localStorage.getItem(WORKSPACE_THEME_COLOR_HISTORY_STORAGE_KEY) ?? '[]')
     );
   } catch {
     return [];
@@ -22,7 +20,7 @@ export function writeWorkspaceThemeColorHistory(history: readonly string[]): voi
   try {
     localStorage.setItem(
       WORKSPACE_THEME_COLOR_HISTORY_STORAGE_KEY,
-      JSON.stringify(normalizeWorkspaceThemeColorHistory([...history])),
+      JSON.stringify(normalizeWorkspaceThemeColorHistory([...history]))
     );
   } catch {
     // Ignore storage failures; the chosen project theme color still persists on the project.

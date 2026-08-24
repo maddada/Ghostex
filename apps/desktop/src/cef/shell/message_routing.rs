@@ -167,7 +167,8 @@ pub(crate) const FIRST_PARTY_CEF_ENTRY_PATH_MARKERS: [&str; 2] =
 // dist/sidebar beside the executable (see build-windows-app.ps1 /
 // build-linux-app.sh).
 #[cfg(any(target_os = "windows", target_os = "linux"))]
-pub(crate) const FIRST_PARTY_CEF_ENTRY_PATH_MARKERS: [&str; 2] = ["/resources/sidebar/", "/dist/sidebar/"];
+pub(crate) const FIRST_PARTY_CEF_ENTRY_PATH_MARKERS: [&str; 2] =
+    ["/resources/sidebar/", "/dist/sidebar/"];
 
 pub(crate) fn is_gpui_first_party_cef_entry_url(url: &str, entry_file_name: &str) -> bool {
     let Some(base) = url.split(['?', '#']).next() else {
@@ -180,7 +181,9 @@ pub(crate) fn is_gpui_first_party_cef_entry_url(url: &str, entry_file_name: &str
             .any(|marker| base.contains(marker))
 }
 
-pub(crate) fn app_modal_host_bridge_surface_for_frame_url(url: &str) -> Option<AppModalHostBridgeSurface> {
+pub(crate) fn app_modal_host_bridge_surface_for_frame_url(
+    url: &str,
+) -> Option<AppModalHostBridgeSurface> {
     APP_MODAL_HOST_BRIDGE_SURFACE_SPECS
         .iter()
         .find(|spec| is_gpui_first_party_cef_entry_url(url, spec.entry_file_name))
@@ -1253,7 +1256,10 @@ pub(crate) fn sidebar_gxserver_bootstrap_from_process_message(
     })
 }
 
-pub(crate) fn non_empty_cef_argument_string(arguments: &cef::ListValue, index: usize) -> Option<String> {
+pub(crate) fn non_empty_cef_argument_string(
+    arguments: &cef::ListValue,
+    index: usize,
+) -> Option<String> {
     let value = CefString::from(&arguments.string(index)).to_string();
     (!value.trim().is_empty()).then_some(value)
 }
@@ -1316,7 +1322,10 @@ pub(crate) fn bounded_sidebar_saved_settings_json(value: &str) -> &str {
     value
 }
 
-pub(crate) fn parse_sidebar_json_v8_object(context: &mut cef::V8Context, json_text: &str) -> Option<V8Value> {
+pub(crate) fn parse_sidebar_json_v8_object(
+    context: &mut cef::V8Context,
+    json_text: &str,
+) -> Option<V8Value> {
     if json_text.trim().is_empty() {
         return None;
     }
@@ -1458,7 +1467,10 @@ pub(crate) fn bool_to_cef_int(value: bool) -> c_int {
     if value { 1 } else { 0 }
 }
 
-pub(crate) fn send_sidebar_bridge_process_message(process_message_name: &str, payload: &str) -> bool {
+pub(crate) fn send_sidebar_bridge_process_message(
+    process_message_name: &str,
+    payload: &str,
+) -> bool {
     if sidebar_bridge_event_kind_for_process_message(process_message_name).is_none() {
         return false;
     }
@@ -1486,7 +1498,10 @@ pub(crate) fn send_sidebar_bridge_process_message(process_message_name: &str, pa
     true
 }
 
-pub(crate) fn send_project_workarea_bridge_process_message(process_message_name: &str, payload: &str) -> bool {
+pub(crate) fn send_project_workarea_bridge_process_message(
+    process_message_name: &str,
+    payload: &str,
+) -> bool {
     if project_workarea_bridge_event_kind_for_process_message(process_message_name).is_none() {
         return false;
     }

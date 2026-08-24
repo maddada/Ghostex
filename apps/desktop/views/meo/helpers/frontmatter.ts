@@ -89,7 +89,7 @@ export function parseFrontmatter(state: EditorState): FrontmatterInfo | null {
           closingFrom: closingLine.from + closingOffset,
           closingTo: closingLine.from + closingOffset + 3,
           from: openingLine.from,
-          to: closingLine.from + closingOffset + 3
+          to: closingLine.from + closingOffset + 3,
         };
         break;
       }
@@ -118,10 +118,12 @@ export const sourceFrontmatterField = StateField.define<any>({
       return value;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });
 
-const sourceFrontmatterContentLineDeco = Decoration.line({ class: 'meo-md-frontmatter-line meo-md-frontmatter-content' });
+const sourceFrontmatterContentLineDeco = Decoration.line({
+  class: 'meo-md-frontmatter-line meo-md-frontmatter-content',
+});
 const sourceFrontmatterDelimiterLineDeco = Decoration.line({ class: 'meo-md-frontmatter-delimiter-line' });
 const sourceFrontmatterKeyDeco = Decoration.mark({ class: 'meo-md-frontmatter-key' });
 const sourceFrontmatterValueDeco = Decoration.mark({ class: 'meo-md-frontmatter-value' });
@@ -167,7 +169,7 @@ export function yamlFrontmatterFieldOffsets(lineText: string): YamlFieldOffsets 
   return {
     keyFromOffset: offset,
     keyToOffset: colonOffset + 1,
-    valueFromOffset: valueStartOffset < lineText.length ? valueStartOffset : null
+    valueFromOffset: valueStartOffset < lineText.length ? valueStartOffset : null,
   };
 }
 
@@ -182,7 +184,10 @@ export function parseSimpleYamlFlowArrayValue(lineText: string, valueFromOffset:
   }
 
   let arrayToOffset = lineText.length;
-  while (arrayToOffset > valueFromOffset && (lineText[arrayToOffset - 1] === ' ' || lineText[arrayToOffset - 1] === '\t')) {
+  while (
+    arrayToOffset > valueFromOffset &&
+    (lineText[arrayToOffset - 1] === ' ' || lineText[arrayToOffset - 1] === '\t')
+  ) {
     arrayToOffset -= 1;
   }
 
@@ -198,7 +203,7 @@ export function parseSimpleYamlFlowArrayValue(lineText: string, valueFromOffset:
 
   for (let i = innerFromOffset; i < innerToOffset; i += 1) {
     const ch = lineText[i];
-    if (ch === '"' || ch === '\'' || ch === '[' || ch === ']' || ch === '{' || ch === '}') {
+    if (ch === '"' || ch === "'" || ch === '[' || ch === ']' || ch === '{' || ch === '}') {
       return null;
     }
   }
@@ -216,7 +221,10 @@ export function parseSimpleYamlFlowArrayValue(lineText: string, valueFromOffset:
     while (itemFromOffset < itemToOffset && (lineText[itemFromOffset] === ' ' || lineText[itemFromOffset] === '\t')) {
       itemFromOffset += 1;
     }
-    while (itemToOffset > itemFromOffset && (lineText[itemToOffset - 1] === ' ' || lineText[itemToOffset - 1] === '\t')) {
+    while (
+      itemToOffset > itemFromOffset &&
+      (lineText[itemToOffset - 1] === ' ' || lineText[itemToOffset - 1] === '\t')
+    ) {
       itemToOffset -= 1;
     }
 
@@ -227,7 +235,7 @@ export function parseSimpleYamlFlowArrayValue(lineText: string, valueFromOffset:
     items.push({
       fromOffset: itemFromOffset,
       toOffset: itemToOffset,
-      text: lineText.slice(itemFromOffset, itemToOffset)
+      text: lineText.slice(itemFromOffset, itemToOffset),
     });
 
     partFromOffset = i + 1;
@@ -240,22 +248,29 @@ export function parseSimpleYamlFlowArrayValue(lineText: string, valueFromOffset:
   return {
     fromOffset: valueFromOffset,
     toOffset: arrayToOffset,
-    items
+    items,
   };
 }
 
-function frontmatterContentLineRange(state: EditorState, frontmatter: FrontmatterInfo | null): { startLineNo: number; endLineNo: number } | null {
+function frontmatterContentLineRange(
+  state: EditorState,
+  frontmatter: FrontmatterInfo | null
+): { startLineNo: number; endLineNo: number } | null {
   if (!frontmatter || frontmatter.contentTo <= frontmatter.contentFrom) {
     return null;
   }
 
   return {
     startLineNo: state.doc.lineAt(frontmatter.contentFrom).number,
-    endLineNo: state.doc.lineAt(frontmatter.contentTo - 1).number
+    endLineNo: state.doc.lineAt(frontmatter.contentTo - 1).number,
   };
 }
 
-export function forEachFrontmatterContentLine(state: EditorState, frontmatter: FrontmatterInfo | null, callback: (line: LineInfo) => void): void {
+export function forEachFrontmatterContentLine(
+  state: EditorState,
+  frontmatter: FrontmatterInfo | null,
+  callback: (line: LineInfo) => void
+): void {
   const range = frontmatterContentLineRange(state, frontmatter);
   if (!range) {
     return;
@@ -266,7 +281,11 @@ export function forEachFrontmatterContentLine(state: EditorState, frontmatter: F
   }
 }
 
-export function forEachYamlFrontmatterField(state: EditorState, frontmatter: FrontmatterInfo | null, callback: (range: YamlFieldRange) => void): void {
+export function forEachYamlFrontmatterField(
+  state: EditorState,
+  frontmatter: FrontmatterInfo | null,
+  callback: (range: YamlFieldRange) => void
+): void {
   forEachFrontmatterContentLine(state, frontmatter, (line) => {
     const offsets = yamlFrontmatterFieldOffsets(line.text);
     if (!offsets) {
@@ -278,7 +297,7 @@ export function forEachYamlFrontmatterField(state: EditorState, frontmatter: Fro
       keyFrom: line.from + offsets.keyFromOffset,
       keyTo: line.from + offsets.keyToOffset,
       valueFrom: offsets.valueFromOffset === null ? null : line.from + offsets.valueFromOffset,
-      valueTo: line.to
+      valueTo: line.to,
     });
   });
 }

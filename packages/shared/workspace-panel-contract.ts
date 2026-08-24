@@ -4,8 +4,8 @@ import type {
   SidebarSessionActivityState,
   TerminalViewMode,
   TerminalSessionRecord,
-} from "./session-grid-contract";
-import type { TerminalSessionSnapshot } from "./terminal-host-protocol";
+} from './session-grid-contract';
+import type { TerminalSessionSnapshot } from './terminal-host-protocol';
 
 export type WorkspacePanelConnection = {
   baseUrl: string;
@@ -14,7 +14,7 @@ export type WorkspacePanelConnection = {
   workspaceId: string;
 };
 
-export type WorkspacePanelTerminalCursorStyle = "bar" | "block" | "underline";
+export type WorkspacePanelTerminalCursorStyle = 'bar' | 'block' | 'underline';
 
 export type WorkspacePanelTerminalAppearance = {
   cursorBlink: boolean;
@@ -36,16 +36,16 @@ export type WorkspacePanelLayoutAppearance = {
 export type WorkspacePanelAutoFocusRequest = {
   requestId: number;
   sessionId: string;
-  source: "sidebar" | "reload";
+  source: 'sidebar' | 'reload';
 };
 
-export type WorkspaceWelcomeModalMode = "optional" | "required";
+export type WorkspaceWelcomeModalMode = 'optional' | 'required';
 
 export type WorkspacePanelTerminalPane = {
   activity?: SidebarSessionActivityState;
   isGeneratingFirstPromptTitle?: boolean;
   lifecycleState?: SessionLifecycleState;
-  kind: "terminal";
+  kind: 'terminal';
   isVisible: boolean;
   visibleSlotIndex?: number;
   renderNonce: number;
@@ -58,7 +58,7 @@ export type WorkspacePanelTerminalPane = {
 export type WorkspacePanelPane = WorkspacePanelTerminalPane;
 
 export type WorkspacePanelHydrateMessage = {
-  type: "hydrate";
+  type: 'hydrate';
   activeGroupId: string;
   autoFocusRequest?: WorkspacePanelAutoFocusRequest;
   buildStamp?: string;
@@ -74,8 +74,8 @@ export type WorkspacePanelHydrateMessage = {
   workspaceSnapshot: GroupedSessionWorkspaceSnapshot;
 };
 
-export type WorkspacePanelSessionStateMessage = Omit<WorkspacePanelHydrateMessage, "type"> & {
-  type: "sessionState";
+export type WorkspacePanelSessionStateMessage = Omit<WorkspacePanelHydrateMessage, 'type'> & {
+  type: 'sessionState';
 };
 
 export type WorkspacePanelTerminalPresentationChangedMessage = {
@@ -85,34 +85,34 @@ export type WorkspacePanelTerminalPresentationChangedMessage = {
   sessionId: string;
   snapshot?: TerminalSessionSnapshot;
   terminalTitle?: string;
-  type: "terminalPresentationChanged";
+  type: 'terminalPresentationChanged';
 };
 
 export type WorkspacePanelDestroyTerminalRuntimeReason =
-  | "auto-sleep"
-  | "close-session"
-  | "full-reload-group"
-  | "full-reload-session"
-  | "manual-sleep"
-  | "reset-workspace"
-  | "sleep-group"
-  | "unknown";
+  | 'auto-sleep'
+  | 'close-session'
+  | 'full-reload-group'
+  | 'full-reload-session'
+  | 'manual-sleep'
+  | 'reset-workspace'
+  | 'sleep-group'
+  | 'unknown';
 
 export type WorkspacePanelDestroyTerminalRuntimeMessage = {
   reason: WorkspacePanelDestroyTerminalRuntimeReason;
   sessionId: string;
-  type: "destroyTerminalRuntime";
+  type: 'destroyTerminalRuntime';
 };
 
 export type WorkspacePanelScrollTerminalToBottomMessage = {
   requestId: number;
   sessionId: string;
-  type: "scrollTerminalToBottom";
+  type: 'scrollTerminalToBottom';
 };
 
 export type WorkspacePanelShowWelcomeMessage = {
   mode?: WorkspaceWelcomeModalMode;
-  type: "showWelcomeModal";
+  type: 'showWelcomeModal';
 };
 
 export type WorkspacePanelShowToastMessage = {
@@ -122,18 +122,18 @@ export type WorkspacePanelShowToastMessage = {
   expiresAt: number;
   message: string;
   title: string;
-  type: "showToast";
+  type: 'showToast';
 };
 
 export type WorkspacePanelCodexWelcomeSettingAppliedMessage = {
-  type: "codexWelcomeSettingApplied";
-  setting: "statusLine" | "terminalTitle";
-  status: "alreadySet" | "updated";
+  type: 'codexWelcomeSettingApplied';
+  setting: 'statusLine' | 'terminalTitle';
+  status: 'alreadySet' | 'updated';
 };
 
 export type WorkspacePanelFlashCompletionSessionMessage = {
   sessionId: string;
-  type: "flashCompletionSession";
+  type: 'flashCompletionSession';
 };
 
 export type WorkspacePanelClipboardFilePayload = {
@@ -150,7 +150,7 @@ export type WorkspacePanelResolveClipboardImagePathResultMessage = {
   path: string;
   requestId: number;
   sessionId: string;
-  type: "resolveClipboardImagePathResult";
+  type: 'resolveClipboardImagePathResult';
 };
 
 export type WorkspacePanelReadNativeClipboardPayloadResultMessage = {
@@ -160,7 +160,7 @@ export type WorkspacePanelReadNativeClipboardPayloadResultMessage = {
   sessionId: string;
   source?: string;
   text: string;
-  type: "readNativeClipboardPayloadResult";
+  type: 'readNativeClipboardPayloadResult';
 };
 
 export type ExtensionToWorkspacePanelMessage =
@@ -177,78 +177,74 @@ export type ExtensionToWorkspacePanelMessage =
   | WorkspacePanelReadNativeClipboardPayloadResultMessage;
 
 export type WorkspacePanelReadyMessage = {
-  type: "ready";
+  type: 'ready';
 };
 
 export type WorkspacePanelFocusSessionMessage = {
-  type: "focusSession";
+  type: 'focusSession';
   sessionId: string;
 };
 
 export type WorkspacePanelCreateSessionMessage = {
-  type: "createSession";
+  type: 'createSession';
 };
 
-export type WorkspacePanelAcknowledgeSessionAttentionReason =
-  | "click"
-  | "escape"
-  | "focusDwell"
-  | "typing";
+export type WorkspacePanelAcknowledgeSessionAttentionReason = 'click' | 'escape' | 'focusDwell' | 'typing';
 
 export type WorkspacePanelAcknowledgeSessionAttentionMessage = {
-  type: "acknowledgeSessionAttention";
+  type: 'acknowledgeSessionAttention';
   reason: WorkspacePanelAcknowledgeSessionAttentionReason;
   sessionId: string;
 };
 
 export type WorkspacePanelCloseSessionMessage = {
-  type: "closeSession";
+  type: 'closeSession';
   sessionId: string;
 };
 
 export type WorkspacePanelFullReloadSessionMessage = {
-  type: "fullReloadSession";
+  type: 'fullReloadSession';
   sessionId: string;
 };
 
 export type WorkspacePanelPromptRenameSessionMessage = {
-  type: "promptRenameSession";
+  type: 'promptRenameSession';
   sessionId: string;
 };
 
 export type WorkspacePanelCancelFirstPromptAutoRenameMessage = {
-  type: "cancelFirstPromptAutoRename";
+  type: 'cancelFirstPromptAutoRename';
   sessionId: string;
 };
 
 export type WorkspacePanelAdjustTerminalFontSizeMessage = {
   delta: -1 | 1;
-  type: "adjustTerminalFontSize";
+  type: 'adjustTerminalFontSize';
 };
 
 export type WorkspacePanelResetTerminalFontSizeMessage = {
-  type: "resetTerminalFontSize";
+  type: 'resetTerminalFontSize';
 };
 
 export type WorkspacePanelForkSessionMessage = {
-  type: "forkSession";
+  type: 'forkSession';
   sessionId: string;
 };
 
 export type WorkspacePanelSetSessionSleepingMessage = {
-  type: "setSessionSleeping";
+  type: 'setSessionSleeping';
   sessionId: string;
   sleeping: boolean;
 };
 
 export type WorkspacePanelSyncSessionOrderMessage = {
-  type: "syncSessionOrder";
+  type: 'syncSessionOrder';
   groupId: string;
   sessionIds: string[];
 };
 
 export type WorkspacePanelSyncPaneOrderMessage = {
-  type: "syncPaneOrder";
+  type: 'syncPaneOrder';
   groupId: string;
   sessionIds: string[];
 };
@@ -256,37 +252,37 @@ export type WorkspacePanelSyncPaneOrderMessage = {
 export type WorkspacePanelDebugLogMessage = {
   details?: unknown;
   event: string;
-  type: "workspaceDebugLog";
+  type: 'workspaceDebugLog';
 };
 
 export type WorkspacePanelReloadMessage = {
   sessionId?: string;
-  type: "reloadWorkspacePanel";
+  type: 'reloadWorkspacePanel';
 };
 
 export type WorkspacePanelResolveClipboardImagePathMessage = {
   path: string;
   requestId: number;
   sessionId: string;
-  type: "resolveClipboardImagePath";
+  type: 'resolveClipboardImagePath';
 };
 
 export type WorkspacePanelReadNativeClipboardPayloadMessage = {
   requestId: number;
   sessionId: string;
-  type: "readNativeClipboardPayload";
+  type: 'readNativeClipboardPayload';
 };
 
 export type WorkspacePanelCompleteWelcomeMessage = {
-  type: "completeWelcome";
+  type: 'completeWelcome';
 };
 
 export type WorkspacePanelApplyCodexTerminalTitleMessage = {
-  type: "applyCodexTerminalTitle";
+  type: 'applyCodexTerminalTitle';
 };
 
 export type WorkspacePanelApplyCodexStatusLineMessage = {
-  type: "applyCodexStatusLine";
+  type: 'applyCodexStatusLine';
 };
 
 export type WorkspacePanelToExtensionMessage =
@@ -315,13 +311,12 @@ export type WorkspacePanelToExtensionMessage =
   | WorkspacePanelSyncSessionOrderMessage
   | WorkspacePanelReloadMessage
   | WorkspacePanelResolveClipboardImagePathMessage
-  | WorkspacePanelReadNativeClipboardPayloadMessage
-  ;
+  | WorkspacePanelReadNativeClipboardPayloadMessage;
 
 export function stripWorkspacePanelTransientFields(
-  message: ExtensionToWorkspacePanelMessage,
+  message: ExtensionToWorkspacePanelMessage
 ): ExtensionToWorkspacePanelMessage {
-  if (message.type !== "hydrate" && message.type !== "sessionState") {
+  if (message.type !== 'hydrate' && message.type !== 'sessionState') {
     return message;
   }
 

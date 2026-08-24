@@ -7,8 +7,7 @@ use std::{
 
 pub const REPO_RELATIVE_GHOSTTYKIT_HEADER: &str =
     "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/Headers/ghostty.h";
-pub const REPO_RELATIVE_GHOSTTYKIT_ARCHIVE: &str =
-    "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
+pub const REPO_RELATIVE_GHOSTTYKIT_ARCHIVE: &str = "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
 
 /*
 CDXC:GPUIGhosttyKitAdapter 2026-06-22-20:35:

@@ -4,8 +4,8 @@ import {
   getOrderedSessions,
   type SessionGridSnapshot,
   type SessionRecord,
-} from "./session-grid-contract";
-import { reindexSessionsInOrder } from "./session-grid-state-helpers";
+} from './session-grid-contract';
+import { reindexSessionsInOrder } from './session-grid-state-helpers';
 
 export type ReorderGroupSessionsResult = {
   changed: boolean;
@@ -14,7 +14,7 @@ export type ReorderGroupSessionsResult = {
 
 export function reorderGroupSessions(
   snapshot: SessionGridSnapshot,
-  sessionIds: readonly string[],
+  sessionIds: readonly string[]
 ): ReorderGroupSessionsResult {
   const currentSessions = getOrderedSessions({
     ...createDefaultSessionGridSnapshot(),
@@ -29,9 +29,7 @@ export function reorderGroupSessions(
     sessions: snapshot.sessions,
   });
   const currentExactSessionIds = currentSessions.map((session) => session.sessionId);
-  const currentCanonicalSessionIds = currentSessions.map((session) =>
-    createCanonicalSessionId(session.displayId),
-  );
+  const currentCanonicalSessionIds = currentSessions.map((session) => createCanonicalSessionId(session.displayId));
   if (sessionIds.length !== currentExactSessionIds.length) {
     return { changed: false, snapshot };
   }
@@ -40,19 +38,13 @@ export function reorderGroupSessions(
   if (incomingSessionIdSet.size !== sessionIds.length) {
     return { changed: false, snapshot };
   }
-  const matchesExactIds = currentExactSessionIds.every((sessionId) =>
-    incomingSessionIdSet.has(sessionId),
-  );
-  const matchesCanonicalIds = currentCanonicalSessionIds.every((sessionId) =>
-    incomingSessionIdSet.has(sessionId),
-  );
+  const matchesExactIds = currentExactSessionIds.every((sessionId) => incomingSessionIdSet.has(sessionId));
+  const matchesCanonicalIds = currentCanonicalSessionIds.every((sessionId) => incomingSessionIdSet.has(sessionId));
   if (!matchesExactIds && !matchesCanonicalIds) {
     return { changed: false, snapshot };
   }
 
-  const currentComparableSessionIds = matchesExactIds
-    ? currentExactSessionIds
-    : currentCanonicalSessionIds;
+  const currentComparableSessionIds = matchesExactIds ? currentExactSessionIds : currentCanonicalSessionIds;
   if (currentComparableSessionIds.every((sessionId, index) => sessionId === sessionIds[index])) {
     return { changed: false, snapshot };
   }
@@ -76,13 +68,8 @@ export function reorderGroupSessions(
   }
 
   const reindexedSessions = reindexSessionsInOrder(reorderedSessions);
-  const nextVisibleSessionIds = sessionIds.slice(
-    0,
-    Math.min(snapshot.visibleCount, sessionIds.length),
-  );
-  const focusedSession = snapshot.focusedSessionId
-    ? sessionByComparableId.get(snapshot.focusedSessionId)
-    : undefined;
+  const nextVisibleSessionIds = sessionIds.slice(0, Math.min(snapshot.visibleCount, sessionIds.length));
+  const focusedSession = snapshot.focusedSessionId ? sessionByComparableId.get(snapshot.focusedSessionId) : undefined;
   const focusedComparableSessionId = focusedSession
     ? matchesExactIds
       ? focusedSession.sessionId
@@ -104,7 +91,7 @@ export function reorderGroupSessions(
 }
 
 function createCanonicalSessionId(displayId: string | number | undefined): string {
-  if (typeof displayId === "string" && /^(?:g|s)-[a-z0-9-]+$/i.test(displayId.trim())) {
+  if (typeof displayId === 'string' && /^(?:g|s)-[a-z0-9-]+$/i.test(displayId.trim())) {
     return displayId.trim();
   }
 

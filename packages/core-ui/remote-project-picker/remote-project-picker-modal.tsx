@@ -1,12 +1,6 @@
-import { IconArrowBackUp, IconFolder, IconFolderPlus } from "@tabler/icons-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
-import { Button } from "@/packages/components/ui/button";
+import { IconArrowBackUp, IconFolder, IconFolderPlus } from '@tabler/icons-react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Button } from '@/packages/components/ui/button';
 import {
   Command,
   CommandDialog,
@@ -16,8 +10,8 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
-} from "@/packages/components/ui/command";
-import { cn } from "@/packages/components/utils";
+} from '@/packages/components/ui/command';
+import { cn } from '@/packages/components/utils';
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -28,19 +22,16 @@ import {
   isFilesystemBrowseQuery,
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
-} from "./remote-project-paths";
+} from './remote-project-paths';
 import {
   buildBrowseGroups,
   filterBrowseEntries,
   REMOTE_PICKER_ITEM_ICON_CLASS,
   type RemoteCommandPaletteActionItem,
-} from "./remote-command-palette-logic";
-import type {
-  RemoteFilesystemBrowseInput,
-  RemoteFilesystemBrowseResult,
-} from "./remote-filesystem";
+} from './remote-command-palette-logic';
+import type { RemoteFilesystemBrowseInput, RemoteFilesystemBrowseResult } from './remote-filesystem';
 
-const EMPTY_BROWSE_ENTRIES: RemoteFilesystemBrowseResult["entries"] = [];
+const EMPTY_BROWSE_ENTRIES: RemoteFilesystemBrowseResult['entries'] = [];
 
 export type RemoteProjectPickerModalProps = {
   actionLabel?: string;
@@ -57,17 +48,17 @@ export type RemoteProjectPickerModalProps = {
 };
 
 export function RemoteProjectPickerModal({
-  actionLabel = "Add",
+  actionLabel = 'Add',
   description,
-  initialQuery = "~/",
+  initialQuery = '~/',
   isOpen,
   machineName,
   onAddProject,
   onBrowse,
   onClose,
-  pendingLabel = "Adding",
-  platform = typeof navigator === "undefined" ? "" : navigator.platform,
-  title = "Add remote project",
+  pendingLabel = 'Adding',
+  platform = typeof navigator === 'undefined' ? '' : navigator.platform,
+  title = 'Add remote project',
 }: RemoteProjectPickerModalProps) {
   const [query, setQuery] = useState(initialQuery);
   const [browseGeneration, setBrowseGeneration] = useState(0);
@@ -90,9 +81,8 @@ export function RemoteProjectPickerModal({
   }, [initialQuery, isOpen]);
 
   const isBrowsing = isFilesystemBrowseQuery(query, platform);
-  const browseDirectoryPath = isBrowsing ? getBrowseDirectoryPath(query) : "";
-  const browseFilterQuery =
-    isBrowsing && !hasTrailingPathSeparator(query) ? getBrowseLeafPathSegment(query) : "";
+  const browseDirectoryPath = isBrowsing ? getBrowseDirectoryPath(query) : '';
+  const browseFilterQuery = isBrowsing && !hasTrailingPathSeparator(query) ? getBrowseLeafPathSegment(query) : '';
   const unsupportedWindowsPath = isUnsupportedWindowsProjectPath(query.trim(), platform);
 
   useEffect(() => {
@@ -115,7 +105,7 @@ export function RemoteProjectPickerModal({
           return;
         }
         setBrowseResult(null);
-        setBrowseError(error instanceof Error ? error.message : "Unable to browse that directory.");
+        setBrowseError(error instanceof Error ? error.message : 'Unable to browse that directory.');
       })
       .finally(() => {
         if (browseRequestRef.current === requestId) {
@@ -125,13 +115,9 @@ export function RemoteProjectPickerModal({
   }, [browseDirectoryPath, browseGeneration, isBrowsing, isOpen, onBrowse, unsupportedWindowsPath]);
 
   const browseEntries = browseResult?.entries ?? EMPTY_BROWSE_ENTRIES;
-  const {
-    exactEntry,
-    filteredEntries,
-    highlightedEntry,
-  } = useMemo(
+  const { exactEntry, filteredEntries, highlightedEntry } = useMemo(
     () => filterBrowseEntries({ browseEntries, browseFilterQuery, highlightedItemValue }),
-    [browseEntries, browseFilterQuery, highlightedItemValue],
+    [browseEntries, browseFilterQuery, highlightedItemValue]
   );
 
   function browseTo(name: string): void {
@@ -162,9 +148,9 @@ export function RemoteProjectPickerModal({
     !hasHighlightedBrowseItem &&
     (hasTrailingPathSeparator(query) ? !browseResult : exactEntry === null);
   const submitActionLabel = willCreateProjectPath ? `Create & ${actionLabel}` : actionLabel;
-  const useMetaForMod = platform.toLowerCase().includes("mac");
-  const submitModifierLabel = useMetaForMod ? "\u2318" : "Ctrl";
-  const addShortcutLabel = hasHighlightedBrowseItem ? `${submitModifierLabel} Enter` : "Enter";
+  const useMetaForMod = platform.toLowerCase().includes('mac');
+  const submitModifierLabel = useMetaForMod ? '\u2318' : 'Ctrl';
+  const addShortcutLabel = hasHighlightedBrowseItem ? `${submitModifierLabel} Enter` : 'Enter';
 
   const browseGroups = buildBrowseGroups({
     browseEntries: filteredEntries,
@@ -190,7 +176,7 @@ export function RemoteProjectPickerModal({
       await onAddProject(resolvedPath);
       onClose();
     } catch (error) {
-      setBrowseError(error instanceof Error ? error.message : "Unable to add that remote project.");
+      setBrowseError(error instanceof Error ? error.message : 'Unable to add that remote project.');
     } finally {
       setIsAddingProject(false);
     }
@@ -198,9 +184,7 @@ export function RemoteProjectPickerModal({
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
     const shouldSubmitBrowsePath =
-      canSubmitBrowsePath &&
-      event.key === "Enter" &&
-      (!hasHighlightedBrowseItem || isPrimaryModifierPressed(event));
+      canSubmitBrowsePath && event.key === 'Enter' && (!hasHighlightedBrowseItem || isPrimaryModifierPressed(event));
 
     if (shouldSubmitBrowsePath) {
       event.preventDefault();
@@ -214,7 +198,7 @@ export function RemoteProjectPickerModal({
 
   return (
     <CommandDialog
-      className="remote-project-picker-dialog max-w-2xl"
+      className='remote-project-picker-dialog max-w-2xl'
       description={description ?? `Browse project folders on ${machineName}`}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
@@ -243,39 +227,39 @@ export function RemoteProjectPickerModal({
         }}
         value={highlightedItemValue ?? undefined}
       >
-        <div className="relative">
+        <div className='relative'>
           <CommandInput
             className={cn(
-              "remote-project-picker-input",
-              isBrowsing ? (willCreateProjectPath ? "pr-36" : "pr-20") : undefined,
+              'remote-project-picker-input',
+              isBrowsing ? (willCreateProjectPath ? 'pr-36' : 'pr-20') : undefined
             )}
             onKeyDown={handleKeyDown}
             onValueChange={(value) => {
               setHighlightedItemValue(null);
               setQuery(value);
             }}
-            placeholder="Enter project path (e.g. ~/projects/my-app)"
+            placeholder='Enter project path (e.g. ~/projects/my-app)'
             value={query}
           />
           {isBrowsing ? (
             <Button
               aria-label={`${submitActionLabel} (${addShortcutLabel})`}
               className={cn(
-                "absolute top-1/2 right-2 h-6 -translate-y-1/2 gap-1 px-2 text-xs",
-                hasHighlightedBrowseItem ? "w-24" : "w-16",
+                'absolute top-1/2 right-2 h-6 -translate-y-1/2 gap-1 px-2 text-xs',
+                hasHighlightedBrowseItem ? 'w-24' : 'w-16'
               )}
               disabled={unsupportedWindowsPath || isAddingProject}
               onClick={() => {
                 void submitAddProject(resolvedAddProjectPath);
               }}
-              type="button"
-              variant="outline"
+              type='button'
+              variant='outline'
             >
               {isAddingProject ? pendingLabel : submitActionLabel}
             </Button>
           ) : null}
         </div>
-        <CommandList className="max-h-[min(28rem,70vh)]">
+        <CommandList className='max-h-[min(28rem,70vh)]'>
           {unsupportedWindowsPath ? (
             <CommandEmpty>Windows paths are only supported on Windows remote machines.</CommandEmpty>
           ) : browseError ? (
@@ -286,9 +270,7 @@ export function RemoteProjectPickerModal({
             <CommandEmpty>Loading directories...</CommandEmpty>
           ) : browseGroups[0]?.items.length === 0 ? (
             <CommandEmpty>
-              {willCreateProjectPath
-                ? "Press Enter to create this folder and add it as a project."
-                : "No directories."}
+              {willCreateProjectPath ? 'Press Enter to create this folder and add it as a project.' : 'No directories.'}
             </CommandEmpty>
           ) : (
             browseGroups.map((group) => (
@@ -303,8 +285,8 @@ export function RemoteProjectPickerModal({
                     value={item.value}
                   >
                     {item.icon}
-                    <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                    {item.value.startsWith("browse:") && item.value !== "browse:up" ? (
+                    <span className='min-w-0 flex-1 truncate'>{item.title}</span>
+                    {item.value.startsWith('browse:') && item.value !== 'browse:up' ? (
                       <CommandShortcut>Enter</CommandShortcut>
                     ) : null}
                   </CommandItem>
@@ -313,12 +295,14 @@ export function RemoteProjectPickerModal({
             ))
           )}
         </CommandList>
-        <div className="flex items-center gap-3 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+        <div className='flex items-center gap-3 border-t border-border px-3 py-2 text-xs text-muted-foreground'>
           <span>Enter Select</span>
-          <span>{addShortcutLabel} {submitActionLabel}</span>
+          <span>
+            {addShortcutLabel} {submitActionLabel}
+          </span>
           <span>Esc Close</span>
-          <span className="ml-auto inline-flex items-center gap-1">
-            <IconFolderPlus aria-hidden="true" className="size-3" />
+          <span className='ml-auto inline-flex items-center gap-1'>
+            <IconFolderPlus aria-hidden='true' className='size-3' />
             {machineName}
           </span>
         </div>

@@ -373,7 +373,6 @@ impl GhostexGpuiApp {
             });
         }
 
-
         let mut code_rows = Vec::new();
         if let Some(process) = processes
             .iter()
@@ -470,5 +469,4 @@ impl GhostexGpuiApp {
             total_memory_mb,
         }
     }
-
 }

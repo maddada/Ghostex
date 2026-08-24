@@ -40,13 +40,7 @@
       "0008_remove_retired_session_type_tags",
       "0009_remove_legacy_zmux_chat_projects"
     ],
-    "capabilities": [
-      "health",
-      "events",
-      "localFullApi",
-      "remoteLimitedApi",
-      "strictProtocolVersion"
-    ]
+    "capabilities": ["health", "events", "localFullApi", "remoteLimitedApi", "strictProtocolVersion"]
   },
   "paths": {
     "stateRoot": "~/.ghostex/gxserver",

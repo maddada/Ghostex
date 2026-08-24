@@ -209,7 +209,11 @@ pub(crate) fn gpui_spawn_zmx_refresh_if_stale_process(
     });
 }
 
-pub(crate) fn gpui_record_zmx_refresh_launch_failure(rows: u16, columns: u16, reason: &'static str) {
+pub(crate) fn gpui_record_zmx_refresh_launch_failure(
+    rows: u16,
+    columns: u16,
+    reason: &'static str,
+) {
     support_logs::append(
         support_logs::GpuiSupportLog::TerminalFocus,
         "gpui.zmxPersistenceViewportRefresh.ifStale",
@@ -350,4 +354,3 @@ pub(crate) struct GpuiPinnedPrompt {
     pub(crate) title: String,
     pub(crate) updated_at: String,
 }
-

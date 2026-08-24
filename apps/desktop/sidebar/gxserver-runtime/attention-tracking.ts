@@ -10,36 +10,30 @@ import {
   GPUI_MIN_ATTENTION_VISIBLE_MS,
   GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_TYPE,
   GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_VERSION,
-} from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
+} from './constants';
+import type { GpuiSidebarRuntime } from './core';
 import {
   getGpuiPresentationAttentionEventId,
   getGpuiSessionAttentionEventKey,
   gpuiSessionAttentionTargetKey,
-} from "./helpers/attention";
-import { createGpuiSidebarSettings } from "./helpers/bootstrap";
-import { normalizeNonEmptyString } from "./helpers/records";
+} from './helpers/attention';
+import { createGpuiSidebarSettings } from './helpers/bootstrap';
+import { normalizeNonEmptyString } from './helpers/records';
 import {
   createGpuiRemotePresentationSessionId,
   parseGpuiRemotePresentationSessionId,
-} from "./helpers/remote-presentation";
+} from './helpers/remote-presentation';
 import {
   normalizeGpuiWorkspaceSessionAttentionAcknowledge,
   normalizeGpuiWorkspaceTerminalEscapePressed,
-} from "./helpers/terminal-lifecycle";
-import type {
-  GpuiSessionAttentionAcknowledgeReason,
-  GpuiSessionAttentionTarget,
-} from "./types-and-protocol";
-import type { CompletionSoundSetting } from "@/packages/shared/completion-sound";
+} from './helpers/terminal-lifecycle';
+import type { GpuiSessionAttentionAcknowledgeReason, GpuiSessionAttentionTarget } from './types-and-protocol';
+import type { CompletionSoundSetting } from '@/packages/shared/completion-sound';
 import {
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type {
-  GxserverPresentationSession,
-  GxserverPresentationSnapshot,
-} from "@/packages/shared/gxserver-protocol";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { GxserverPresentationSession, GxserverPresentationSnapshot } from '@/packages/shared/gxserver-protocol';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -54,27 +48,85 @@ export interface GpuiSidebarRuntimeAttentionMethods {
   handleGpuiWorkspaceSessionAttentionAcknowledge(payload: unknown): void;
   handleGpuiWorkspaceTerminalEscapePressed(payload: unknown): void;
   acknowledgeSessionAttention(sessionId: string, reason: GpuiSessionAttentionAcknowledgeReason): boolean;
-  acknowledgePresentationSessionAttention(target: GpuiSessionAttentionTarget, reason: GpuiSessionAttentionAcknowledgeReason): boolean;
-  completePresentationSessionAttentionAcknowledgement(target: GpuiSessionAttentionTarget, reason: GpuiSessionAttentionAcknowledgeReason, attentionEnteredAt?: number): boolean;
-  clearPresentationSessionAttentionLocally(target: GpuiSessionAttentionTarget, reason: GpuiSessionAttentionAcknowledgeReason): boolean;
-  currentPresentationSessionForAttentionTarget(target: GpuiSessionAttentionTarget): GxserverPresentationSession | undefined;
-  setLocalPresentationSessionActivityLocally(projectId: string, sessionId: string, activity: GxserverPresentationSession["activity"], _reason: string): boolean;
-  setRemotePresentationSessionActivityLocally(machineId: string, projectId: string, sessionId: string, activity: GxserverPresentationSession["activity"], _reason: string): boolean;
-  syncLocalSessionAttentionAcknowledgementWithGxserver(projectId: string, sessionId: string, agentName: string | undefined): Promise<void>;
-  syncLocalSessionTerminalEscapeWithGxserver(projectId: string, sessionId: string, agentName: string | undefined): Promise<void>;
-  syncRemoteSessionAttentionAcknowledgementWithGxserver(machineId: string, projectId: string, sessionId: string, agentName: string | undefined): Promise<void>;
-  projectLocalPresentationAttentionAcknowledgementGuards(presentation: GxserverPresentationSnapshot): GxserverPresentationSnapshot;
-  projectRemotePresentationAttentionAcknowledgementGuards(machineId: string, presentation: GxserverPresentationSnapshot): GxserverPresentationSnapshot;
-  projectPresentationAttentionAcknowledgementGuards(presentation: GxserverPresentationSnapshot, sessionKeyForPresentationSession: (session: GxserverPresentationSession) => string): GxserverPresentationSnapshot;
-  syncLocalPresentationAttentionTracking(previousSessions: readonly GxserverPresentationSession[], nextSessions: readonly GxserverPresentationSession[]): void;
-  syncRemotePresentationAttentionTracking(machineId: string, previousSessions: readonly GxserverPresentationSession[], nextSessions: readonly GxserverPresentationSession[]): void;
-  syncPresentationAttentionTracking(previousSessions: readonly GxserverPresentationSession[], nextSessions: readonly GxserverPresentationSession[], sessionKeyForPresentationSession: (session: GxserverPresentationSession) => string): void;
+  acknowledgePresentationSessionAttention(
+    target: GpuiSessionAttentionTarget,
+    reason: GpuiSessionAttentionAcknowledgeReason
+  ): boolean;
+  completePresentationSessionAttentionAcknowledgement(
+    target: GpuiSessionAttentionTarget,
+    reason: GpuiSessionAttentionAcknowledgeReason,
+    attentionEnteredAt?: number
+  ): boolean;
+  clearPresentationSessionAttentionLocally(
+    target: GpuiSessionAttentionTarget,
+    reason: GpuiSessionAttentionAcknowledgeReason
+  ): boolean;
+  currentPresentationSessionForAttentionTarget(
+    target: GpuiSessionAttentionTarget
+  ): GxserverPresentationSession | undefined;
+  setLocalPresentationSessionActivityLocally(
+    projectId: string,
+    sessionId: string,
+    activity: GxserverPresentationSession['activity'],
+    _reason: string
+  ): boolean;
+  setRemotePresentationSessionActivityLocally(
+    machineId: string,
+    projectId: string,
+    sessionId: string,
+    activity: GxserverPresentationSession['activity'],
+    _reason: string
+  ): boolean;
+  syncLocalSessionAttentionAcknowledgementWithGxserver(
+    projectId: string,
+    sessionId: string,
+    agentName: string | undefined
+  ): Promise<void>;
+  syncLocalSessionTerminalEscapeWithGxserver(
+    projectId: string,
+    sessionId: string,
+    agentName: string | undefined
+  ): Promise<void>;
+  syncRemoteSessionAttentionAcknowledgementWithGxserver(
+    machineId: string,
+    projectId: string,
+    sessionId: string,
+    agentName: string | undefined
+  ): Promise<void>;
+  projectLocalPresentationAttentionAcknowledgementGuards(
+    presentation: GxserverPresentationSnapshot
+  ): GxserverPresentationSnapshot;
+  projectRemotePresentationAttentionAcknowledgementGuards(
+    machineId: string,
+    presentation: GxserverPresentationSnapshot
+  ): GxserverPresentationSnapshot;
+  projectPresentationAttentionAcknowledgementGuards(
+    presentation: GxserverPresentationSnapshot,
+    sessionKeyForPresentationSession: (session: GxserverPresentationSession) => string
+  ): GxserverPresentationSnapshot;
+  syncLocalPresentationAttentionTracking(
+    previousSessions: readonly GxserverPresentationSession[],
+    nextSessions: readonly GxserverPresentationSession[]
+  ): void;
+  syncRemotePresentationAttentionTracking(
+    machineId: string,
+    previousSessions: readonly GxserverPresentationSession[],
+    nextSessions: readonly GxserverPresentationSession[]
+  ): void;
+  syncPresentationAttentionTracking(
+    previousSessions: readonly GxserverPresentationSession[],
+    nextSessions: readonly GxserverPresentationSession[],
+    sessionKeyForPresentationSession: (session: GxserverPresentationSession) => string
+  ): void;
   clearSessionAttentionTracking(sessionKey: string): void;
   clearSessionAttentionAcknowledgementTimer(sessionKey: string): void;
   markSessionAttentionEventLocallyAcknowledged(sessionKey: string, attentionEventId: string | undefined): void;
   isSessionAttentionEventLocallyAcknowledged(sessionKey: string, attentionEventId: string | undefined): boolean;
   clearLocallyAcknowledgedAttentionEventsForSession(sessionKey: string): void;
-  detectSessionAttentionCompletionSounds(previousSessions: readonly GxserverPresentationSession[], nextSessions: readonly GxserverPresentationSession[]): void;
+  detectSessionAttentionCompletionSounds(
+    previousSessions: readonly GxserverPresentationSession[],
+    nextSessions: readonly GxserverPresentationSession[]
+  ): void;
   suppressAttentionCompletionSoundAfterTerminalEscape(sessionKey: string): void;
   getAttentionCompletionSoundSuppressedUntil(sessionKey: string): number | undefined;
   postNativeSessionCompletionSound(sound: CompletionSoundSetting): void;
@@ -82,18 +134,14 @@ export interface GpuiSidebarRuntimeAttentionMethods {
 }
 
 export const gpuiSidebarRuntimeAttentionMethods = {
-
   handleGpuiWorkspaceSessionAttentionAcknowledge(this: GpuiSidebarRuntime, payload: unknown): void {
     const acknowledgement = normalizeGpuiWorkspaceSessionAttentionAcknowledge(payload);
     if (!acknowledgement) {
       return;
     }
     this.acknowledgeSessionAttention(
-      createGxserverPresentationProjectSessionId(
-        acknowledgement.projectId,
-        acknowledgement.sessionId,
-      ),
-      "native-focus",
+      createGxserverPresentationProjectSessionId(acknowledgement.projectId, acknowledgement.sessionId),
+      'native-focus'
     );
   },
 
@@ -103,40 +151,41 @@ export const gpuiSidebarRuntimeAttentionMethods = {
       return;
     }
     const target: GpuiSessionAttentionTarget = {
-      kind: "local",
+      kind: 'local',
       projectId: escape.projectId,
       sessionId: escape.sessionId,
     };
     const sessionKey = gpuiSessionAttentionTargetKey(target);
     this.suppressAttentionCompletionSoundAfterTerminalEscape(sessionKey);
     const session = this.currentPresentationSessionForAttentionTarget(target);
-    if (session?.activity === "attention") {
-      const didChange = this.clearPresentationSessionAttentionLocally(target, "terminal-escape");
+    if (session?.activity === 'attention') {
+      const didChange = this.clearPresentationSessionAttentionLocally(target, 'terminal-escape');
       if (didChange) {
-        this.publishPresentation("patch");
+        this.publishPresentation('patch');
       }
     }
     void this.syncLocalSessionTerminalEscapeWithGxserver(
       escape.projectId,
       escape.sessionId,
-      normalizeNonEmptyString(session?.agentName),
+      normalizeNonEmptyString(session?.agentName)
     );
   },
 
-  acknowledgeSessionAttention(this: GpuiSidebarRuntime,
+  acknowledgeSessionAttention(
+    this: GpuiSidebarRuntime,
     sessionId: string,
-    reason: GpuiSessionAttentionAcknowledgeReason,
+    reason: GpuiSessionAttentionAcknowledgeReason
   ): boolean {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
       return this.acknowledgePresentationSessionAttention(
         {
-          kind: "remote",
+          kind: 'remote',
           machineId: remoteSession.machineId,
           projectId: remoteSession.projectId,
           sessionId: remoteSession.sessionId,
         },
-        reason,
+        reason
       );
     }
     const reference = parseGxserverPresentationProjectSessionId(sessionId);
@@ -145,20 +194,21 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     }
     return this.acknowledgePresentationSessionAttention(
       {
-        kind: "local",
+        kind: 'local',
         projectId: reference.projectId,
         sessionId: reference.sessionId,
       },
-      reason,
+      reason
     );
   },
 
-  acknowledgePresentationSessionAttention(this: GpuiSidebarRuntime,
+  acknowledgePresentationSessionAttention(
+    this: GpuiSidebarRuntime,
     target: GpuiSessionAttentionTarget,
-    reason: GpuiSessionAttentionAcknowledgeReason,
+    reason: GpuiSessionAttentionAcknowledgeReason
   ): boolean {
     const session = this.currentPresentationSessionForAttentionTarget(target);
-    if (session?.activity !== "attention") {
+    if (session?.activity !== 'attention') {
       return false;
     }
     const sessionKey = gpuiSessionAttentionTargetKey(target);
@@ -174,11 +224,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
           const latestAttentionEnteredAt = this.attentionEnteredAtBySessionKey.get(sessionKey);
           if (
             latestAttentionEnteredAt !== attentionEnteredAt ||
-            !this.completePresentationSessionAttentionAcknowledgement(
-              target,
-              reason,
-              attentionEnteredAt,
-            )
+            !this.completePresentationSessionAttentionAcknowledgement(target, reason, attentionEnteredAt)
           ) {
             return;
           }
@@ -187,20 +233,17 @@ export const gpuiSidebarRuntimeAttentionMethods = {
       }
       return true;
     }
-    return this.completePresentationSessionAttentionAcknowledgement(
-      target,
-      reason,
-      attentionEnteredAt,
-    );
+    return this.completePresentationSessionAttentionAcknowledgement(target, reason, attentionEnteredAt);
   },
 
-  completePresentationSessionAttentionAcknowledgement(this: GpuiSidebarRuntime,
+  completePresentationSessionAttentionAcknowledgement(
+    this: GpuiSidebarRuntime,
     target: GpuiSessionAttentionTarget,
     reason: GpuiSessionAttentionAcknowledgeReason,
-    attentionEnteredAt?: number,
+    attentionEnteredAt?: number
   ): boolean {
     const session = this.currentPresentationSessionForAttentionTarget(target);
-    if (session?.activity !== "attention") {
+    if (session?.activity !== 'attention') {
       return false;
     }
     const sessionKey = gpuiSessionAttentionTargetKey(target);
@@ -214,7 +257,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     }
 
     const didChange = this.clearPresentationSessionAttentionLocally(target, reason);
-    if (target.kind === "remote") {
+    if (target.kind === 'remote') {
       if (didChange) {
         this.publishRemotePresentationPatch();
       }
@@ -222,68 +265,65 @@ export const gpuiSidebarRuntimeAttentionMethods = {
         target.machineId,
         target.projectId,
         target.sessionId,
-        normalizeNonEmptyString(session.agentName),
+        normalizeNonEmptyString(session.agentName)
       );
       return true;
     }
 
     if (didChange) {
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
     }
     void this.syncLocalSessionAttentionAcknowledgementWithGxserver(
       target.projectId,
       target.sessionId,
-      normalizeNonEmptyString(session.agentName),
+      normalizeNonEmptyString(session.agentName)
     );
     return true;
   },
 
-  clearPresentationSessionAttentionLocally(this: GpuiSidebarRuntime,
+  clearPresentationSessionAttentionLocally(
+    this: GpuiSidebarRuntime,
     target: GpuiSessionAttentionTarget,
-    reason: GpuiSessionAttentionAcknowledgeReason,
+    reason: GpuiSessionAttentionAcknowledgeReason
   ): boolean {
     const session = this.currentPresentationSessionForAttentionTarget(target);
-    if (session?.activity !== "attention") {
+    if (session?.activity !== 'attention') {
       return false;
     }
     const sessionKey = gpuiSessionAttentionTargetKey(target);
     const attentionEventId =
-      getGpuiPresentationAttentionEventId(session) ??
-      this.attentionEventIdBySessionKey.get(sessionKey);
+      getGpuiPresentationAttentionEventId(session) ?? this.attentionEventIdBySessionKey.get(sessionKey);
     this.markSessionAttentionEventLocallyAcknowledged(sessionKey, attentionEventId);
     const didChange =
-      target.kind === "remote"
+      target.kind === 'remote'
         ? this.setRemotePresentationSessionActivityLocally(
             target.machineId,
             target.projectId,
             target.sessionId,
-            "idle",
-            reason,
+            'idle',
+            reason
           )
-        : this.setLocalPresentationSessionActivityLocally(
-            target.projectId,
-            target.sessionId,
-            "idle",
-            reason,
-          );
+        : this.setLocalPresentationSessionActivityLocally(target.projectId, target.sessionId, 'idle', reason);
     this.clearSessionAttentionTracking(sessionKey);
     return didChange;
   },
 
-  currentPresentationSessionForAttentionTarget(this: GpuiSidebarRuntime,
-    target: GpuiSessionAttentionTarget,
+  currentPresentationSessionForAttentionTarget(
+    this: GpuiSidebarRuntime,
+    target: GpuiSessionAttentionTarget
   ): GxserverPresentationSession | undefined {
-    if (target.kind === "remote") {
+    if (target.kind === 'remote') {
       return this.findRemotePresentationSession(target);
     }
     return this.findLocalPresentationSession(target.projectId, target.sessionId);
   },
 
-  setLocalPresentationSessionActivityLocally(this: GpuiSidebarRuntime,
+  setLocalPresentationSessionActivityLocally(
+    this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
-    activity: GxserverPresentationSession["activity"],
-    _reason: string,
+    activity: GxserverPresentationSession['activity'],
+    _reason: string
   ): boolean {
     const presentation = this.presentation;
     if (!presentation) {
@@ -294,14 +334,11 @@ export const gpuiSidebarRuntimeAttentionMethods = {
       if (session.projectId !== projectId || session.sessionId !== sessionId) {
         return session;
       }
-      if (
-        session.activity === activity &&
-        (activity === "attention" || session.attention === undefined)
-      ) {
+      if (session.activity === activity && (activity === 'attention' || session.attention === undefined)) {
         return session;
       }
       didChange = true;
-      if (activity !== "attention") {
+      if (activity !== 'attention') {
         const { attention: _attention, ...withoutAttention } = session;
         return {
           ...withoutAttention,
@@ -323,12 +360,13 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     return true;
   },
 
-  setRemotePresentationSessionActivityLocally(this: GpuiSidebarRuntime,
+  setRemotePresentationSessionActivityLocally(
+    this: GpuiSidebarRuntime,
     machineId: string,
     projectId: string,
     sessionId: string,
-    activity: GxserverPresentationSession["activity"],
-    _reason: string,
+    activity: GxserverPresentationSession['activity'],
+    _reason: string
   ): boolean {
     const presentation = this.remotePresentations.get(machineId);
     if (!presentation) {
@@ -339,14 +377,11 @@ export const gpuiSidebarRuntimeAttentionMethods = {
       if (session.projectId !== projectId || session.sessionId !== sessionId) {
         return session;
       }
-      if (
-        session.activity === activity &&
-        (activity === "attention" || session.attention === undefined)
-      ) {
+      if (session.activity === activity && (activity === 'attention' || session.attention === undefined)) {
         return session;
       }
       didChange = true;
-      if (activity !== "attention") {
+      if (activity !== 'attention') {
         const { attention: _attention, ...withoutAttention } = session;
         return {
           ...withoutAttention,
@@ -368,19 +403,20 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     return true;
   },
 
-  async syncLocalSessionAttentionAcknowledgementWithGxserver(this: GpuiSidebarRuntime,
+  async syncLocalSessionAttentionAcknowledgementWithGxserver(
+    this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
-    agentName: string | undefined,
+    agentName: string | undefined
   ): Promise<void> {
     const client = this.client;
     if (!client) {
       return;
     }
     try {
-      await client.rpc("/api/updateAgentActivity", {
+      await client.rpc('/api/updateAgentActivity', {
         ...(agentName ? { agentName } : {}),
-        event: "acknowledge",
+        event: 'acknowledge',
         projectId,
         sessionId,
       });
@@ -389,19 +425,20 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     }
   },
 
-  async syncLocalSessionTerminalEscapeWithGxserver(this: GpuiSidebarRuntime,
+  async syncLocalSessionTerminalEscapeWithGxserver(
+    this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
-    agentName: string | undefined,
+    agentName: string | undefined
   ): Promise<void> {
     const client = this.client;
     if (!client) {
       return;
     }
     try {
-      await client.rpc("/api/updateAgentActivity", {
+      await client.rpc('/api/updateAgentActivity', {
         ...(agentName ? { agentName } : {}),
-        event: "escape",
+        event: 'escape',
         projectId,
         sessionId,
       });
@@ -410,16 +447,17 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     }
   },
 
-  async syncRemoteSessionAttentionAcknowledgementWithGxserver(this: GpuiSidebarRuntime,
+  async syncRemoteSessionAttentionAcknowledgementWithGxserver(
+    this: GpuiSidebarRuntime,
     machineId: string,
     projectId: string,
     sessionId: string,
-    agentName: string | undefined,
+    agentName: string | undefined
   ): Promise<void> {
     try {
-      await this.requestRemoteGxserver(machineId, "/api/updateAgentActivity", {
+      await this.requestRemoteGxserver(machineId, '/api/updateAgentActivity', {
         ...(agentName ? { agentName } : {}),
-        event: "acknowledge",
+        event: 'acknowledge',
         projectId,
         sessionId,
       });
@@ -428,30 +466,33 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     }
   },
 
-  projectLocalPresentationAttentionAcknowledgementGuards(this: GpuiSidebarRuntime,
-    presentation: GxserverPresentationSnapshot,
+  projectLocalPresentationAttentionAcknowledgementGuards(
+    this: GpuiSidebarRuntime,
+    presentation: GxserverPresentationSnapshot
   ): GxserverPresentationSnapshot {
     return this.projectPresentationAttentionAcknowledgementGuards(presentation, (session) =>
-      createGxserverPresentationProjectSessionId(session.projectId, session.sessionId),
+      createGxserverPresentationProjectSessionId(session.projectId, session.sessionId)
     );
   },
 
-  projectRemotePresentationAttentionAcknowledgementGuards(this: GpuiSidebarRuntime,
+  projectRemotePresentationAttentionAcknowledgementGuards(
+    this: GpuiSidebarRuntime,
     machineId: string,
-    presentation: GxserverPresentationSnapshot,
+    presentation: GxserverPresentationSnapshot
   ): GxserverPresentationSnapshot {
     return this.projectPresentationAttentionAcknowledgementGuards(presentation, (session) =>
-      createGpuiRemotePresentationSessionId(machineId, session.projectId, session.sessionId),
+      createGpuiRemotePresentationSessionId(machineId, session.projectId, session.sessionId)
     );
   },
 
-  projectPresentationAttentionAcknowledgementGuards(this: GpuiSidebarRuntime,
+  projectPresentationAttentionAcknowledgementGuards(
+    this: GpuiSidebarRuntime,
     presentation: GxserverPresentationSnapshot,
-    sessionKeyForPresentationSession: (session: GxserverPresentationSession) => string,
+    sessionKeyForPresentationSession: (session: GxserverPresentationSession) => string
   ): GxserverPresentationSnapshot {
     let didChange = false;
     const sessions = presentation.sessions.map((session) => {
-      if (session.activity !== "attention") {
+      if (session.activity !== 'attention') {
         return session;
       }
       const sessionKey = sessionKeyForPresentationSession(session);
@@ -464,7 +505,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
         const { attention: _attention, ...withoutAttention } = session;
         return {
           ...withoutAttention,
-          activity: "idle" as const,
+          activity: 'idle' as const,
         };
       }
       if (attentionEventId !== undefined) {
@@ -480,35 +521,38 @@ export const gpuiSidebarRuntimeAttentionMethods = {
       : presentation;
   },
 
-  syncLocalPresentationAttentionTracking(this: GpuiSidebarRuntime,
+  syncLocalPresentationAttentionTracking(
+    this: GpuiSidebarRuntime,
     previousSessions: readonly GxserverPresentationSession[],
-    nextSessions: readonly GxserverPresentationSession[],
+    nextSessions: readonly GxserverPresentationSession[]
   ): void {
     this.syncPresentationAttentionTracking(previousSessions, nextSessions, (session) =>
-      createGxserverPresentationProjectSessionId(session.projectId, session.sessionId),
+      createGxserverPresentationProjectSessionId(session.projectId, session.sessionId)
     );
   },
 
-  syncRemotePresentationAttentionTracking(this: GpuiSidebarRuntime,
+  syncRemotePresentationAttentionTracking(
+    this: GpuiSidebarRuntime,
     machineId: string,
     previousSessions: readonly GxserverPresentationSession[],
-    nextSessions: readonly GxserverPresentationSession[],
+    nextSessions: readonly GxserverPresentationSession[]
   ): void {
     this.syncPresentationAttentionTracking(previousSessions, nextSessions, (session) =>
-      createGpuiRemotePresentationSessionId(machineId, session.projectId, session.sessionId),
+      createGpuiRemotePresentationSessionId(machineId, session.projectId, session.sessionId)
     );
   },
 
-  syncPresentationAttentionTracking(this: GpuiSidebarRuntime,
+  syncPresentationAttentionTracking(
+    this: GpuiSidebarRuntime,
     previousSessions: readonly GxserverPresentationSession[],
     nextSessions: readonly GxserverPresentationSession[],
-    sessionKeyForPresentationSession: (session: GxserverPresentationSession) => string,
+    sessionKeyForPresentationSession: (session: GxserverPresentationSession) => string
   ): void {
     const previousKeys = new Set(previousSessions.map(sessionKeyForPresentationSession));
     const nextAttentionKeys = new Set<string>();
     for (const session of nextSessions) {
       const sessionKey = sessionKeyForPresentationSession(session);
-      if (session.activity !== "attention") {
+      if (session.activity !== 'attention') {
         if (previousKeys.has(sessionKey)) {
           this.clearSessionAttentionTracking(sessionKey);
         }
@@ -554,9 +598,10 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     this.attentionAcknowledgementTimeoutsBySessionKey.delete(sessionKey);
   },
 
-  markSessionAttentionEventLocallyAcknowledged(this: GpuiSidebarRuntime,
+  markSessionAttentionEventLocallyAcknowledged(
+    this: GpuiSidebarRuntime,
     sessionKey: string,
-    attentionEventId: string | undefined,
+    attentionEventId: string | undefined
   ): void {
     const eventKey = getGpuiSessionAttentionEventKey(sessionKey, attentionEventId);
     if (eventKey === undefined || this.locallyAcknowledgedAttentionEventKeys.has(eventKey)) {
@@ -565,8 +610,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     this.locallyAcknowledgedAttentionEventKeys.add(eventKey);
     this.locallyAcknowledgedAttentionEventKeyOrder.push(eventKey);
     while (
-      this.locallyAcknowledgedAttentionEventKeyOrder.length >
-      GPUI_LOCALLY_ACKNOWLEDGED_ATTENTION_EVENT_CACHE_LIMIT
+      this.locallyAcknowledgedAttentionEventKeyOrder.length > GPUI_LOCALLY_ACKNOWLEDGED_ATTENTION_EVENT_CACHE_LIMIT
     ) {
       const staleKey = this.locallyAcknowledgedAttentionEventKeyOrder.shift();
       if (staleKey !== undefined) {
@@ -575,9 +619,10 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     }
   },
 
-  isSessionAttentionEventLocallyAcknowledged(this: GpuiSidebarRuntime,
+  isSessionAttentionEventLocallyAcknowledged(
+    this: GpuiSidebarRuntime,
     sessionKey: string,
-    attentionEventId: string | undefined,
+    attentionEventId: string | undefined
   ): boolean {
     const eventKey = getGpuiSessionAttentionEventKey(sessionKey, attentionEventId);
     return eventKey !== undefined && this.locallyAcknowledgedAttentionEventKeys.has(eventKey);
@@ -593,10 +638,9 @@ export const gpuiSidebarRuntimeAttentionMethods = {
       }
     }
     if (didClear) {
-      this.locallyAcknowledgedAttentionEventKeyOrder =
-        this.locallyAcknowledgedAttentionEventKeyOrder.filter(
-          (eventKey) => !eventKey.startsWith(keyPrefix),
-        );
+      this.locallyAcknowledgedAttentionEventKeyOrder = this.locallyAcknowledgedAttentionEventKeyOrder.filter(
+        (eventKey) => !eventKey.startsWith(keyPrefix)
+      );
     }
   },
 
@@ -610,38 +654,32 @@ export const gpuiSidebarRuntimeAttentionMethods = {
   acknowledgement round-trips through gxserver and only ever transitions a
   session OUT of attention, so it cannot re-trigger this edge.
   */
-  detectSessionAttentionCompletionSounds(this: GpuiSidebarRuntime,
+  detectSessionAttentionCompletionSounds(
+    this: GpuiSidebarRuntime,
     previousSessions: readonly GxserverPresentationSession[],
-    nextSessions: readonly GxserverPresentationSession[],
+    nextSessions: readonly GxserverPresentationSession[]
   ): void {
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
     if (!settings.completionBellEnabled) {
       return;
     }
-    let previousActivityBySessionKey:
-      Map<string, GxserverPresentationSession["activity"]> | undefined;
+    let previousActivityBySessionKey: Map<string, GxserverPresentationSession['activity']> | undefined;
     for (const session of nextSessions) {
-      if (session.activity !== "attention" || session.attention?.acknowledged === true) {
+      if (session.activity !== 'attention' || session.attention?.acknowledged === true) {
         continue;
       }
-      const sessionKey = createGxserverPresentationProjectSessionId(
-        session.projectId,
-        session.sessionId,
-      );
+      const sessionKey = createGxserverPresentationProjectSessionId(session.projectId, session.sessionId);
       if (this.getAttentionCompletionSoundSuppressedUntil(sessionKey) !== undefined) {
         continue;
       }
       previousActivityBySessionKey ??= new Map(
         previousSessions.map((previousSession) => [
-          createGxserverPresentationProjectSessionId(
-            previousSession.projectId,
-            previousSession.sessionId,
-          ),
+          createGxserverPresentationProjectSessionId(previousSession.projectId, previousSession.sessionId),
           previousSession.activity,
-        ]),
+        ])
       );
       const previousActivity = previousActivityBySessionKey.get(sessionKey);
-      if (previousActivity === undefined || previousActivity === "attention") {
+      if (previousActivity === undefined || previousActivity === 'attention') {
         continue;
       }
       const attentionEventId = getGpuiPresentationAttentionEventId(session);
@@ -654,7 +692,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
       this.messageSource.postMessage({
         sessionId: sessionKey,
         sound: settings.completionSound,
-        type: "playCompletionSound",
+        type: 'playCompletionSound',
       });
       this.postNativeSessionCompletionSound(settings.completionSound);
     }
@@ -663,13 +701,12 @@ export const gpuiSidebarRuntimeAttentionMethods = {
   suppressAttentionCompletionSoundAfterTerminalEscape(this: GpuiSidebarRuntime, sessionKey: string): void {
     this.attentionCompletionSoundSuppressedUntilBySessionKey.set(
       sessionKey,
-      Date.now() + GPUI_ESCAPE_DONE_SUPPRESSION_MS,
+      Date.now() + GPUI_ESCAPE_DONE_SUPPRESSION_MS
     );
   },
 
   getAttentionCompletionSoundSuppressedUntil(this: GpuiSidebarRuntime, sessionKey: string): number | undefined {
-    const suppressedUntil =
-      this.attentionCompletionSoundSuppressedUntilBySessionKey.get(sessionKey);
+    const suppressedUntil = this.attentionCompletionSoundSuppressedUntilBySessionKey.get(sessionKey);
     if (suppressedUntil === undefined) {
       return undefined;
     }
@@ -689,7 +726,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
   */
   postNativeSessionCompletionSound(this: GpuiSidebarRuntime, sound: CompletionSoundSetting): void {
     const postCompletionSound = window.ghostexGpui?.postSessionCompletionSound;
-    if (typeof postCompletionSound !== "function") {
+    if (typeof postCompletionSound !== 'function') {
       return;
     }
     postCompletionSound(
@@ -697,7 +734,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
         version: GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_VERSION,
         type: GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_TYPE,
         sound,
-      }),
+      })
     );
   },
 
@@ -707,10 +744,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     }
     this.attentionCompletionSoundEventKeys.add(eventKey);
     this.attentionCompletionSoundEventKeyOrder.push(eventKey);
-    while (
-      this.attentionCompletionSoundEventKeyOrder.length >
-      GPUI_ATTENTION_COMPLETION_SOUND_EVENT_CACHE_LIMIT
-    ) {
+    while (this.attentionCompletionSoundEventKeyOrder.length > GPUI_ATTENTION_COMPLETION_SOUND_EVENT_CACHE_LIMIT) {
       const staleKey = this.attentionCompletionSoundEventKeyOrder.shift();
       if (staleKey !== undefined) {
         this.attentionCompletionSoundEventKeys.delete(staleKey);
@@ -720,5 +754,6 @@ export const gpuiSidebarRuntimeAttentionMethods = {
   },
 };
 
-const gpuiSidebarRuntimeAttentionMethodsShapeCheck: GpuiSidebarRuntimeAttentionMethods = gpuiSidebarRuntimeAttentionMethods;
+const gpuiSidebarRuntimeAttentionMethodsShapeCheck: GpuiSidebarRuntimeAttentionMethods =
+  gpuiSidebarRuntimeAttentionMethods;
 void gpuiSidebarRuntimeAttentionMethodsShapeCheck;

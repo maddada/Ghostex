@@ -1,30 +1,24 @@
-import {
-  type SidebarThemeSetting,
-  type TerminalEngine,
-} from "../session-grid-contract-core";
-import { DEFAULT_COMMANDS_PANEL_HEIGHT_PX } from "../session-grid-contract-session";
-import { type SessionChatTheme } from "../session-chat";
-import { type CompletionSoundSetting } from "../completion-sound";
-import { type ghostexHotkeySettings } from "../ghostex-hotkeys";
-import {
-  type CustomWorkspaceOpenTarget,
-  type WorkspaceOpenTargetAvailability,
-} from "../workspace-open-targets";
-import { type PetId } from "../pets";
-import { type SidebarSessionTagListItem } from "../session-tags";
-import { type DiagnosticLoggingSettings } from "./diagnostic-logging";
-import { type RemoteMachineSettings } from "./remote-machines";
-import { type SettingsModalNavigationState } from "./settings-modal-navigation";
+import { type SidebarThemeSetting, type TerminalEngine } from '../session-grid-contract-core';
+import { DEFAULT_COMMANDS_PANEL_HEIGHT_PX } from '../session-grid-contract-session';
+import { type SessionChatTheme } from '../session-chat';
+import { type CompletionSoundSetting } from '../completion-sound';
+import { type ghostexHotkeySettings } from '../ghostex-hotkeys';
+import { type CustomWorkspaceOpenTarget, type WorkspaceOpenTargetAvailability } from '../workspace-open-targets';
+import { type PetId } from '../pets';
+import { type SidebarSessionTagListItem } from '../session-tags';
+import { type DiagnosticLoggingSettings } from './diagnostic-logging';
+import { type RemoteMachineSettings } from './remote-machines';
+import { type SettingsModalNavigationState } from './settings-modal-navigation';
 
-export type GhosttyConfirmCloseSurface = "false" | "true" | "always";
-export type GhosttyCopyOnSelect = "false" | "true" | "clipboard";
-export type GhosttyScrollbar = "system" | "never";
-export type TerminalCursorStyle = "bar" | "block" | "underline";
-export type TerminalBackgroundImageFit = "cover" | "contain" | "stretch" | "natural";
-export type WindowsTerminalBackend = "wsl";
-export type BrowserOpenMode = "browser-pane";
-export type BrowserFeedbackTool = "agentation";
-export type PortlessProtocol = "https" | "http";
+export type GhosttyConfirmCloseSurface = 'false' | 'true' | 'always';
+export type GhosttyCopyOnSelect = 'false' | 'true' | 'clipboard';
+export type GhosttyScrollbar = 'system' | 'never';
+export type TerminalCursorStyle = 'bar' | 'block' | 'underline';
+export type TerminalBackgroundImageFit = 'cover' | 'contain' | 'stretch' | 'natural';
+export type WindowsTerminalBackend = 'wsl';
+export type BrowserOpenMode = 'browser-pane';
+export type BrowserFeedbackTool = 'agentation';
+export type PortlessProtocol = 'https' | 'http';
 /**
  * CDXC:WebLinkOpenTarget 2026-08-19:
  * One answer to "where does a web link Ghostex opens land". Command-clicked
@@ -32,22 +26,14 @@ export type PortlessProtocol = "https" | "http";
  * this single target instead of the old split between a Browser toggle and a
  * Dev Servers dropdown, which could disagree with each other.
  */
-export type WebLinkOpenTarget = "internal-browser" | "system-default-browser";
+export type WebLinkOpenTarget = 'internal-browser' | 'system-default-browser';
 export type DefaultEditorCommand =
-  | "code"
-  | "code-insiders"
-  | "zed"
-  | "zeditor"
-  | "cursor"
-  | "windsurf"
-  | "codium"
-  | "subl"
-  | "other";
-export type SessionPersistenceProvider = "off" | "tmux" | "zmx" | "zellij";
-export type SessionStatusIndicatorSize = "small" | "medium" | "large" | "x-large";
-export type SidebarSide = "left" | "right";
-export type CommandsPanelSide = "bottom" | "right";
-export type SidebarProjectGroupStyle = "quiet" | "header" | "branched";
+  'code' | 'code-insiders' | 'zed' | 'zeditor' | 'cursor' | 'windsurf' | 'codium' | 'subl' | 'other';
+export type SessionPersistenceProvider = 'off' | 'tmux' | 'zmx' | 'zellij';
+export type SessionStatusIndicatorSize = 'small' | 'medium' | 'large' | 'x-large';
+export type SidebarSide = 'left' | 'right';
+export type CommandsPanelSide = 'bottom' | 'right';
+export type SidebarProjectGroupStyle = 'quiet' | 'header' | 'branched';
 export const MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
 export const MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 1000;
 export const SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS = 100;
@@ -63,22 +49,18 @@ export function clampSessionChatTranscriptWidthPercent(value: number): number {
   }
   const clamped = Math.min(
     MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
-    Math.max(MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT, value),
+    Math.max(MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT, value)
   );
-  return (
-    Math.round(clamped / SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP) *
-    SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP
-  );
+  return Math.round(clamped / SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP) * SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP;
 }
 
 export function clampSidebarCollapseAnimationDurationMs(value: number): number {
   const clamped = Math.min(
     MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
-    Math.max(MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS, value),
+    Math.max(MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS, value)
   );
   return (
-    Math.round(clamped / SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS) *
-    SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS
+    Math.round(clamped / SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS) * SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS
   );
 }
 /**
@@ -87,23 +69,23 @@ export function clampSidebarCollapseAnimationDurationMs(value: number): number {
  * sidebar. The stored version selector rides the normal settings file, so
  * hosts that only persist unknown keys need no change to support it.
  */
-export type SidebarVersion = "v1" | "v2";
+export type SidebarVersion = 'v1' | 'v2';
 /** The surface shown first when a newly launched agent supports Session Chat. */
-export type PreferredAgentInterface = "terminal" | "chat";
+export type PreferredAgentInterface = 'terminal' | 'chat';
 /**
  * CDXC:SidebarV2 2026-07-29:
  * Sidebar V2 renders one flat session inbox by default and can switch to
  * collapsible per-project groups. Keep the sub-mode as its own key so the
  * layout choice survives switching back and forth between V1 and V2.
  */
-export type SidebarV2Layout = "flat" | "byProject";
+export type SidebarV2Layout = 'flat' | 'byProject';
 /**
  * CDXC:SidebarV2Worktree 2026-07-29:
  * What the plain "+" does in Sidebar V2: start a session in the project itself
  * ("local", the unchanged instant path) or open the worktree popover
  * pre-filled ("worktree").
  */
-export type SidebarNewSessionEnvMode = "local" | "worktree";
+export type SidebarNewSessionEnvMode = 'local' | 'worktree';
 /**
  * CDXC:SidebarV2LogicalProjects 2026-07-29:
  * How aggressively one checkout merges with other checkouts of the same
@@ -112,16 +94,11 @@ export type SidebarNewSessionEnvMode = "local" | "worktree";
  * one-for-one; the two spellings must stay identical because this settings
  * value is fed straight into that module.
  */
-export type SidebarProjectGroupingMode = "repository" | "repositoryPath" | "separate";
-export type SidebarSettingsPresetId = "codex" | "minimal" | "detailed" | "recommended";
-export type PromptEditorBackend = "inherit" | "monaco";
-export type SessionTitleGenerationAgent = "codex" | "cursor" | "claude" | "grok" | "custom";
-export type AppShotsHotkey =
-  | "both-command"
-  | "both-shift"
-  | "both-option"
-  | "double-left-shift"
-  | "double-left-option";
+export type SidebarProjectGroupingMode = 'repository' | 'repositoryPath' | 'separate';
+export type SidebarSettingsPresetId = 'codex' | 'minimal' | 'detailed' | 'recommended';
+export type PromptEditorBackend = 'inherit' | 'monaco';
+export type SessionTitleGenerationAgent = 'codex' | 'cursor' | 'claude' | 'grok' | 'custom';
+export type AppShotsHotkey = 'both-command' | 'both-shift' | 'both-option' | 'double-left-shift' | 'double-left-option';
 export type KeepAwakeDurationMinutes = 0 | 120 | 300;
 export type AutoSleepIdleMinutes = 5 | 10 | 15 | 30 | 60 | 120 | 300;
 /**
@@ -130,7 +107,7 @@ export type AutoSleepIdleMinutes = 5 | 10 | 15 | 30 | 60 | 120 | 300;
  * counts, and upcoming modal accents) from a single user-configurable color.
  * The default is the sky tone those surfaces shipped hardcoded.
  */
-export const DEFAULT_ACCENT_COLOR = "#38bdf8";
+export const DEFAULT_ACCENT_COLOR = '#38bdf8';
 export const DEFAULT_TERMINAL_PANE_PADDING_PX = 0;
 export const MIN_TERMINAL_PANE_PADDING_PX = 0;
 export const MAX_TERMINAL_PANE_PADDING_PX = 64;
@@ -149,7 +126,7 @@ export function clampCommandsPanelDefaultHeightPx(value: number): number {
   }
   return Math.min(
     MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
-    Math.max(MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX, Math.round(value)),
+    Math.max(MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX, Math.round(value))
   );
 }
 
@@ -157,10 +134,7 @@ export function clampSidebarDefaultWidthPx(value: number): number {
   if (!Number.isFinite(value)) {
     return DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX;
   }
-  return Math.min(
-    MAX_SIDEBAR_DEFAULT_WIDTH_PX,
-    Math.max(MIN_SIDEBAR_DEFAULT_WIDTH_PX, Math.round(value)),
-  );
+  return Math.min(MAX_SIDEBAR_DEFAULT_WIDTH_PX, Math.max(MIN_SIDEBAR_DEFAULT_WIDTH_PX, Math.round(value)));
 }
 
 export function clampProjectSessionListCollapsedCount(value: number): number {
@@ -169,7 +143,7 @@ export function clampProjectSessionListCollapsedCount(value: number): number {
   }
   return Math.min(
     MAX_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
-    Math.max(MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT, Math.round(value)),
+    Math.max(MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT, Math.round(value))
   );
 }
 
@@ -177,10 +151,7 @@ export function clampTerminalPanePaddingPx(value: number): number {
   if (!Number.isFinite(value)) {
     return DEFAULT_TERMINAL_PANE_PADDING_PX;
   }
-  return Math.min(
-    MAX_TERMINAL_PANE_PADDING_PX,
-    Math.max(MIN_TERMINAL_PANE_PADDING_PX, Math.round(value)),
-  );
+  return Math.min(MAX_TERMINAL_PANE_PADDING_PX, Math.max(MIN_TERMINAL_PANE_PADDING_PX, Math.round(value)));
 }
 
 /**
@@ -717,12 +688,12 @@ export type ghostexSettings = {
 export type ghostexSettingsPatch = Partial<ghostexSettings>;
 
 export type ghostexSettingsUpdateSource =
-  | "firstLaunch:preferences"
-  | "settings:bulk"
-  | "settings:control"
-  | "settings:navigation"
-  | "settings:remoteMachines"
-  | "sidebar:remoteMachineOrder"
+  | 'firstLaunch:preferences'
+  | 'settings:bulk'
+  | 'settings:control'
+  | 'settings:navigation'
+  | 'settings:remoteMachines'
+  | 'sidebar:remoteMachineOrder'
   /**
    * CDXC:SidebarV2 2026-07-29:
    * The sidebar Sort & Filter menu can switch the sidebar version and its
@@ -730,43 +701,41 @@ export type ghostexSettingsUpdateSource =
    * from the Settings modal, so they carry their own source and must never be
    * treated as a remote-machine-capable save.
    */
-  | "sidebar:sidebarVersion"
+  | 'sidebar:sidebarVersion'
   /**
    * CDXC:SidebarV2Worktree 2026-07-29:
    * Sidebar V2's "+" menu can flip the default environment for new sessions.
    * Same reasoning as the version switch above: a sidebar-surface write, never
    * a remote-machine-capable save.
    */
-  | "sidebar:newSessionsDefaultEnvMode"
+  | 'sidebar:newSessionsDefaultEnvMode'
   /**
    * CDXC:SidebarV2LogicalProjects 2026-07-29:
    * Sidebar V2's project group header can change how one checkout merges with
    * other checkouts of the same repository. Same reasoning as the two sources
    * above: a sidebar-surface write, never a remote-machine-capable save.
    */
-  | "sidebar:projectGrouping";
+  | 'sidebar:projectGrouping';
 
-export function canSettingsUpdateSourceChangeRemoteMachines(
-  source: ghostexSettingsUpdateSource | undefined,
-): boolean {
+export function canSettingsUpdateSourceChangeRemoteMachines(source: ghostexSettingsUpdateSource | undefined): boolean {
   /*
    * CDXC:RemoteMachines 2026-06-30-15:18:
    * Remote machine settings must not be rewritten by broad Settings saves such
    * as tab, scroll, preset, or reset updates. Only explicit remote-machine UI
    * and sidebar ordering operations may replace the saved machine list.
    */
-  return source === "settings:remoteMachines" || source === "sidebar:remoteMachineOrder";
+  return source === 'settings:remoteMachines' || source === 'sidebar:remoteMachineOrder';
 }
 
 export const SIDEBAR_SETTINGS_PRESET_KEYS = [
-  "showProjectIcons",
-  "hideSessionAgentIconUntilHover",
-  "hideBrowserFaviconUntilHover",
-  "showCloseButtonOnSessionCards",
-  "hideLastActiveTimeOnSessionCards",
-  "hideProjectHeaderDiffStats",
-  "showProjectEditorDiffFileCount",
-  "hideMenuBarSessionStatusIndicators",
+  'showProjectIcons',
+  'hideSessionAgentIconUntilHover',
+  'hideBrowserFaviconUntilHover',
+  'showCloseButtonOnSessionCards',
+  'hideLastActiveTimeOnSessionCards',
+  'hideProjectHeaderDiffStats',
+  'showProjectEditorDiffFileCount',
+  'hideMenuBarSessionStatusIndicators',
 ] as const satisfies ReadonlyArray<keyof ghostexSettings>;
 
 export type SidebarSettingsPresetKey = (typeof SIDEBAR_SETTINGS_PRESET_KEYS)[number];

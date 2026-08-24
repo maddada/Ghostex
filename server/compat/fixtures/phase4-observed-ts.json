@@ -201,13 +201,7 @@
             "protocolVersion": 1,
             "version": "0.1.0",
             "buildIdentity": "<buildIdentity>",
-            "capabilities": [
-              "health",
-              "events",
-              "localFullApi",
-              "remoteLimitedApi",
-              "strictProtocolVersion"
-            ],
+            "capabilities": ["health", "events", "localFullApi", "remoteLimitedApi", "strictProtocolVersion"],
             "listeners": {
               "local": {
                 "enabled": true,
@@ -305,13 +299,7 @@
             "protocolVersion": 1,
             "version": "0.1.0",
             "buildIdentity": "<buildIdentity>",
-            "capabilities": [
-              "health",
-              "events",
-              "localFullApi",
-              "remoteLimitedApi",
-              "strictProtocolVersion"
-            ],
+            "capabilities": ["health", "events", "localFullApi", "remoteLimitedApi", "strictProtocolVersion"],
             "listeners": {
               "local": {
                 "enabled": true,
@@ -515,9 +503,7 @@
           },
           "project": {
             "createdAt": "<timestamp>",
-            "groupIds": [
-              "<projectId>:active"
-            ],
+            "groupIds": ["<projectId>:active"],
             "isFavorite": false,
             "isPinned": false,
             "path": "<home>/workspace/phase4-project",

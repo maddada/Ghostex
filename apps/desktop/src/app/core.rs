@@ -15,6 +15,8 @@ use std::time::Instant;
 // just the macOS-only shims that first introduced the import.
 use std::cell::Cell;
 
+use crate::terminal_surface_host::NativeTerminalSurfaceHost;
+use crate::terminal_surface_lifecycle::NativeTerminalSurfaceLifecycleState;
 use gpui::Bounds;
 use gpui::ClipboardItem;
 use gpui::Entity;
@@ -42,8 +44,6 @@ use gpui::px;
 use gpui_component::h_flex;
 use gpui_component::input::InputState;
 use gpui_component::v_flex;
-use crate::terminal_surface_host::NativeTerminalSurfaceHost;
-use crate::terminal_surface_lifecycle::NativeTerminalSurfaceLifecycleState;
 
 use crate::app::actions::*;
 use crate::app::consts::*;
@@ -79,7 +79,8 @@ pub struct GhostexGpuiApp {
     */
     pub(crate) agents_workspace_project_id: Option<String>,
     pub(crate) parked_agents_workspaces_by_project: HashMap<String, serde_json::Value>,
-    pub(crate) parked_agents_terminal_runtimes_by_project: HashMap<String, ParkedAgentsTerminalRuntime>,
+    pub(crate) parked_agents_terminal_runtimes_by_project:
+        HashMap<String, ParkedAgentsTerminalRuntime>,
     /*
     CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
     Leading-edge + trailing-debounce state for project switches. `until` is the
@@ -205,7 +206,8 @@ pub struct GhostexGpuiApp {
     CDXC:GPUITitlebarActions 2026-06-27-09:26:
     The GPUI titlebar Action button needs the same click-time Debug rerun decision as the shared command palette, but Rust owns that native control. Keep only command ids, active run ids, and coarse run state in memory so titlebar clicks can mirror close-on-exit failure reruns without storing command text, URLs, cwd/env, paths, status-file paths, terminal output, logs, or shell-state data.
     */
-    pub(crate) sidebar_command_run_feedback_states: HashMap<String, GpuiSidebarCommandRunFeedbackState>,
+    pub(crate) sidebar_command_run_feedback_states:
+        HashMap<String, GpuiSidebarCommandRunFeedbackState>,
     pub(crate) keep_awake_runtime: Option<GpuiKeepAwakeRuntime>,
     pub(crate) keep_awake_runtime_generation: u64,
     /*
@@ -278,7 +280,8 @@ pub struct GhostexGpuiApp {
     // arrangement per canonical workspace project key. See GpuiProjectViewState.
     pub(crate) project_view_states_by_project: HashMap<String, GpuiProjectViewState>,
     #[cfg(target_os = "macos")]
-    pub(crate) remote_attach_askpass_scripts: HashMap<GpuiRemoteAttachSessionKey, GpuiRemoteAskpassScript>,
+    pub(crate) remote_attach_askpass_scripts:
+        HashMap<GpuiRemoteAttachSessionKey, GpuiRemoteAskpassScript>,
     /*
     CDXC:GPUISourceRuntime 2026-06-24-23:17:
     GPUI Source uses a runtime-only code-server owner equivalent to macOS's shared editor process. It may hold the owned Child and current in-memory folder URL target while the app runs, but it must not persist paths, URLs, command text, stdout/stderr, tokens, page titles, or project names into shell state or support logs.
@@ -336,7 +339,8 @@ pub struct GhostexGpuiApp {
     Mapped workspace rename uses this same runtime-only gxserver project/session to shell-tab map, then requires a currently mounted Running Agents Ghostty surface before sending `/rename <title>` and a real Return key. Do not store rename titles, raw renderer JSON, command text, paths, output, or fallback target choices here.
     */
     pub(crate) local_workspace_latest_focus_key: Option<GpuiLocalWorkspaceSessionKey>,
-    pub(crate) local_workspace_session_mappings: HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
+    pub(crate) local_workspace_session_mappings:
+        HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
     pub(crate) local_workspace_attach_pending: HashSet<GpuiLocalWorkspaceSessionKey>,
     /*
     CDXC:GPUISessionChatSurface 2026-07-31:
@@ -398,7 +402,8 @@ pub struct GhostexGpuiApp {
     pub(crate) tab_strip_built_in_buttons: shared_settings::SharedTabStripBuiltInButtons,
     pub(crate) sidebar_session_status_indicators: GpuiSidebarSessionStatusIndicatorsState,
     pub(crate) sidebar_session_status_indicators_snapshot_seen: bool,
-    pub(crate) session_attention_notification_rate_limiter: GpuiSessionAttentionNotificationRateLimiter,
+    pub(crate) session_attention_notification_rate_limiter:
+        GpuiSessionAttentionNotificationRateLimiter,
     pub(crate) sidebar_pet_overlay: GpuiSidebarPetOverlayState,
     /*
     CDXC:GPUIAppShots 2026-06-25-23:28:
@@ -438,7 +443,8 @@ pub struct GhostexGpuiApp {
     daemon-owned zmx session without persisting project paths, command text, or
     attach commands.
     */
-    pub(crate) command_gxserver_session_mappings: HashMap<CommandSessionId, GpuiLocalWorkspaceSessionKey>,
+    pub(crate) command_gxserver_session_mappings:
+        HashMap<CommandSessionId, GpuiLocalWorkspaceSessionKey>,
     pub(crate) command_gxserver_attach_pending: HashSet<CommandSessionId>,
     pub(crate) pending_command_gxserver_cleanup: HashSet<GpuiLocalWorkspaceSessionKey>,
     pub(crate) command_gxserver_cleanup_in_flight: HashSet<GpuiLocalWorkspaceSessionKey>,
@@ -458,7 +464,8 @@ pub struct GhostexGpuiApp {
     CDXC:GPUICommandCloseAfterDone 2026-06-25-15:24:
     Command Close After Done deadlines are runtime-only countdowns derived from armed command sessions that are currently done. Store only command session ids, deadlines, and cancellation generations here; the persisted shell state carries only the safe armed boolean.
     */
-    pub(crate) command_close_after_done_timers: HashMap<CommandSessionId, GpuiCommandCloseAfterDoneTimer>,
+    pub(crate) command_close_after_done_timers:
+        HashMap<CommandSessionId, GpuiCommandCloseAfterDoneTimer>,
     pub(crate) command_close_after_done_generation: u64,
     pub(crate) command_close_after_done_countdown_ticker_active: bool,
     /*
@@ -480,8 +487,10 @@ pub struct GhostexGpuiApp {
     pub(crate) command_pane_layout_bounds: Option<Bounds<Pixels>>,
     pub(crate) project_editor_surface_layout_bounds: Option<ProjectEditorFocusBounds>,
     pub(crate) project_editor_companion_layout_bounds: Option<ProjectEditorFocusBounds>,
-    pub(crate) agents_terminal_mount_slot_bounds: HashMap<AgentsTerminalBodyMountSlotId, Bounds<Pixels>>,
-    pub(crate) command_terminal_mount_slot_bounds: HashMap<CommandTerminalBodyMountSlotId, Bounds<Pixels>>,
+    pub(crate) agents_terminal_mount_slot_bounds:
+        HashMap<AgentsTerminalBodyMountSlotId, Bounds<Pixels>>,
+    pub(crate) command_terminal_mount_slot_bounds:
+        HashMap<CommandTerminalBodyMountSlotId, Bounds<Pixels>>,
     pub(crate) project_editor_companion_terminal_session_id: Option<TerminalSessionId>,
     pub(crate) project_editor_companion_secondary_terminal_session_id: Option<TerminalSessionId>,
     pub(crate) project_editor_companion_focused_terminal_slot: ProjectEditorCompanionTerminalSlot,
@@ -495,7 +504,8 @@ pub struct GhostexGpuiApp {
     focused terminal slot identity. Both stay out of shell-state JSON and logs.
     */
     pub(crate) zmx_persistence_resize_refresh_generation: u64,
-    pub(crate) zmx_persistence_last_focused_terminal_slot: Option<ZmxPersistenceFocusedTerminalSlot>,
+    pub(crate) zmx_persistence_last_focused_terminal_slot:
+        Option<ZmxPersistenceFocusedTerminalSlot>,
     /*
     CDXC:GPUIZmxPersistenceRefresh 2026-07-11:
     The mount-slot bounds maps above are per-render measurement state and are
@@ -546,7 +556,8 @@ pub struct GhostexGpuiApp {
         HashMap<AgentsTerminalBodyMountSlotId, AgentsTerminalParkedOwnerBodyGeometry>,
     pub(crate) agents_terminal_runtime_sessions: AgentsTerminalRuntimeSessionRegistry,
     pub(crate) agents_terminal_startup_coordinator: AgentsTerminalStartupCoordinator,
-    pub(crate) agents_terminal_startup_launch_payload_source: AgentsTerminalStartupLaunchPayloadSource,
+    pub(crate) agents_terminal_startup_launch_payload_source:
+        AgentsTerminalStartupLaunchPayloadSource,
     pub(crate) agents_terminal_launch_payload_source: AgentsTerminalLaunchPayloadSource,
     pub(crate) command_terminal_launch_payload_source: CommandTerminalLaunchPayloadSource,
     pub(crate) project_editor_companion_terminal_launch_payload_source:
@@ -559,7 +570,8 @@ pub struct GhostexGpuiApp {
     >,
     pub(crate) agents_terminal_surface_host: NativeTerminalSurfaceHost,
     pub(crate) agents_terminal_surface_lifecycle: NativeTerminalSurfaceLifecycleState,
-    pub(crate) command_terminal_surface_host: NativeTerminalSurfaceHost<CommandTerminalBodyMountSlotId>,
+    pub(crate) command_terminal_surface_host:
+        NativeTerminalSurfaceHost<CommandTerminalBodyMountSlotId>,
     pub(crate) command_terminal_surface_lifecycle:
         NativeTerminalSurfaceLifecycleState<CommandTerminalBodyMountSlotId>,
     pub(crate) project_editor_companion_terminal_surface_host:
@@ -673,7 +685,8 @@ pub struct GhostexGpuiApp {
     pub(crate) command_split_drag: Option<CommandPaneSplitResizeDragState>,
     pub(crate) browser_split_drag: Option<BrowserSplitResizeDragState>,
     pub(crate) project_editor_companion_drag: Option<ProjectEditorCompanionResizeDragState>,
-    pub(crate) project_editor_companion_split_drag: Option<ProjectEditorCompanionSplitResizeDragState>,
+    pub(crate) project_editor_companion_split_drag:
+        Option<ProjectEditorCompanionSplitResizeDragState>,
     pub(crate) project_editor_companion_divider_hovering: Option<TitlebarMode>,
     pub(crate) project_editor_companion_divider_hover_visible: Option<TitlebarMode>,
     pub(crate) project_editor_companion_divider_hover_epoch: u64,
@@ -722,7 +735,8 @@ pub struct GhostexGpuiApp {
     pub(crate) plugin_settings_action_errors: HashMap<&'static str, String>,
     pub(crate) plugin_settings_action_generations: HashMap<&'static str, u64>,
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-    pub(crate) cef_component_window: Option<WindowHandle<cef_component_window::GpuiCefComponentWindow>>,
+    pub(crate) cef_component_window:
+        Option<WindowHandle<cef_component_window::GpuiCefComponentWindow>>,
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     pub(crate) cef_component_install_generation: u64,
     /*
@@ -789,7 +803,8 @@ pub struct GhostexGpuiApp {
     /// status-trigger checkpoint; deadlines, generations, and mount owners stay
     /// process-local.
     pub(crate) agents_delayed_send_timers: HashMap<TerminalSessionId, GpuiCommandDelayedSendTimer>,
-    pub(crate) agents_send_when_stopped_watchers: HashMap<TerminalSessionId, GpuiAgentsSendWhenStoppedWatcher>,
+    pub(crate) agents_send_when_stopped_watchers:
+        HashMap<TerminalSessionId, GpuiAgentsSendWhenStoppedWatcher>,
     pub(crate) agents_delayed_send_generation: u64,
     pub(crate) agents_delayed_send_countdown_ticker_active: bool,
     pub(crate) agents_delayed_send_persistence_ticker_active: bool,

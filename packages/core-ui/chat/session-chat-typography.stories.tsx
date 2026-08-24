@@ -1,7 +1,7 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { ReactNode } from "react";
-import type { SessionChatMessage } from "../../shared/session-chat";
-import { SessionChatMessageList } from "./session-chat-message-list";
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { ReactNode } from 'react';
+import type { SessionChatMessage } from '../../shared/session-chat';
+import { SessionChatMessageList } from './session-chat-message-list';
 
 /*
  * Showcase for the four small typographic deltas the chat.css port had missed:
@@ -27,14 +27,14 @@ import { SessionChatMessageList } from "./session-chat-message-list";
 
 /** A GFM footnote block: refs in the prose, definitions in the trailing section. */
 const FOOTNOTES = [
-  "Remote attach has two failure modes, and they look identical from the",
-  "sidebar: a carrier that dies[^carrier], and a scoped id that does not",
-  "match[^scope].",
-  "",
-  "[^carrier]: The SSH carrier is an ordinary session, so a filter that drops it",
-  "    drops the tunnel underneath.",
-  "[^scope]: The scoped id is the workspace key.",
-].join("\n");
+  'Remote attach has two failure modes, and they look identical from the',
+  'sidebar: a carrier that dies[^carrier], and a scoped id that does not',
+  'match[^scope].',
+  '',
+  '[^carrier]: The SSH carrier is an ordinary session, so a filter that drops it',
+  '    drops the tunnel underneath.',
+  '[^scope]: The scoped id is the workspace key.',
+].join('\n');
 
 /*
  * Real files behind real URLs rather than inline `data:` ones: react-markdown's
@@ -43,20 +43,20 @@ const FOOTNOTES = [
  * keeps these three — all under Vite's 4 KB inline limit — from being turned
  * into exactly such a data URL by the bundler.
  */
-const CLAUDE_ICON = new URL("../assets/claude.svg?no-inline", import.meta.url).href;
-const CODEX_ICON = new URL("../assets/codex.svg?no-inline", import.meta.url).href;
-const GEMINI_ICON = new URL("../assets/gemini.svg?no-inline", import.meta.url).href;
+const CLAUDE_ICON = new URL('../assets/claude.svg?no-inline', import.meta.url).href;
+const CODEX_ICON = new URL('../assets/codex.svg?no-inline', import.meta.url).href;
+const GEMINI_ICON = new URL('../assets/gemini.svg?no-inline', import.meta.url).href;
 
 const INLINE_IMAGES = [
-  "The three agents that took a turn on it:",
-  "",
+  'The three agents that took a turn on it:',
+  '',
   `![claude](${CLAUDE_ICON}) claude, `,
   `![codex](${CODEX_ICON}) codex, and `,
   `![gemini](${GEMINI_ICON}) gemini.`,
-  "",
-  "That is one paragraph and one sentence, so it belongs on one line — which is",
-  "also the shape of the badge row an agent pastes out of a README.",
-].join("\n");
+  '',
+  'That is one paragraph and one sentence, so it belongs on one line — which is',
+  'also the shape of the badge row an agent pastes out of a README.',
+].join('\n');
 
 /**
  * An ordered list whose last marker is three digits. Written with `start: 96`
@@ -64,26 +64,26 @@ const INLINE_IMAGES = [
  * marker, which is what decides whether the leading digit is clipped.
  */
 const LONG_ORDERED_LIST = [
-  "Picking up at the tail of the migration checklist:",
-  "",
+  'Picking up at the tail of the migration checklist:',
+  '',
   ...[
-    "Drain the queue.",
-    "Stop the daemon.",
-    "Swap the binary.",
-    "Wait for the handshake.",
-    "Re-run resume lookup.",
-    "Compare the census.",
-    "Re-arm the sidebar.",
-    "Clear the rollback marker.",
-    "Post the result.",
+    'Drain the queue.',
+    'Stop the daemon.',
+    'Swap the binary.',
+    'Wait for the handshake.',
+    'Re-run resume lookup.',
+    'Compare the census.',
+    'Re-arm the sidebar.',
+    'Clear the rollback marker.',
+    'Post the result.',
   ].map((text, index) => `${96 + index}. ${text}`),
-  "",
-  "Nested under one of them, the numbering starts over and so does the gutter:",
-  "",
-  "1. Outer",
-  "   1. Inner, which must not inherit the widened gutter",
-  "   2. Inner",
-].join("\n");
+  '',
+  'Nested under one of them, the numbering starts over and so does the gutter:',
+  '',
+  '1. Outer',
+  '   1. Inner, which must not inherit the widened gutter',
+  '   2. Inner',
+].join('\n');
 
 /**
  * A task list at the top level and a second one nested inside an ordered list
@@ -92,34 +92,34 @@ const LONG_ORDERED_LIST = [
  * edge of the list it is actually in.
  */
 const TASK_LIST = [
-  "Where the release stands:",
-  "",
-  "- [x] Bundle the remote daemon",
-  "- [x] Gate the new selectors",
-  "- [ ] Ship the token probe",
-  "",
-  "And the same list nested inside a three-digit ordered list:",
-  "",
-  "104. Verify the checklist tail",
+  'Where the release stands:',
+  '',
+  '- [x] Bundle the remote daemon',
+  '- [x] Gate the new selectors',
+  '- [ ] Ship the token probe',
+  '',
+  'And the same list nested inside a three-digit ordered list:',
+  '',
+  '104. Verify the checklist tail',
   "     - [x] On the nested list's own text edge",
-  "     - [ ] A second row to read the alignment against",
-  "105. Sign off",
-].join("\n");
+  '     - [ ] A second row to read the alignment against',
+  '105. Sign off',
+].join('\n');
 
 function assistantTurn(id: string, text: string): SessionChatMessage {
   return {
-    blocks: [{ text, type: "text" }],
+    blocks: [{ text, type: 'text' }],
     id,
-    role: "assistant",
-    source: "transcript",
+    role: 'assistant',
+    source: 'transcript',
     timestamp: 1_000,
   };
 }
 
-const FOOTNOTE_MESSAGES = [assistantTurn("footnotes", FOOTNOTES)];
-const IMAGE_MESSAGES = [assistantTurn("images", INLINE_IMAGES)];
-const ORDERED_MESSAGES = [assistantTurn("ordered", LONG_ORDERED_LIST)];
-const TASK_MESSAGES = [assistantTurn("tasks", TASK_LIST)];
+const FOOTNOTE_MESSAGES = [assistantTurn('footnotes', FOOTNOTES)];
+const IMAGE_MESSAGES = [assistantTurn('images', INLINE_IMAGES)];
+const ORDERED_MESSAGES = [assistantTurn('ordered', LONG_ORDERED_LIST)];
+const TASK_MESSAGES = [assistantTurn('tasks', TASK_LIST)];
 
 /*
  * The "before" column is the same transcript with each of the four rules put
@@ -180,13 +180,13 @@ function ChatPane({
 }: {
   before?: boolean;
   messages: SessionChatMessage[];
-  theme: "dark" | "light";
+  theme: 'dark' | 'light';
 }) {
   return (
     <div
-      className="ghostex-session-chat-scope flex min-h-0 flex-1 flex-col bg-background text-foreground"
+      className='ghostex-session-chat-scope flex min-h-0 flex-1 flex-col bg-background text-foreground'
       data-chat-theme={theme}
-      data-chat-typography-preview={before ? "before" : undefined}
+      data-chat-typography-preview={before ? 'before' : undefined}
     >
       <SessionChatMessageList
         hasMore={false}
@@ -209,18 +209,16 @@ function ChatPane({
 function Pane({ children, label }: { children: ReactNode; label: string }) {
   return (
     <div
-      className="flex min-h-0 flex-none flex-col overflow-hidden rounded-lg border border-white/10"
-      style={{ width: "21rem" }}
+      className='flex min-h-0 flex-none flex-col overflow-hidden rounded-lg border border-white/10'
+      style={{ width: '21rem' }}
     >
-      <div className="px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-white/60">
-        {label}
-      </div>
+      <div className='px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-white/60'>{label}</div>
       {children}
     </div>
   );
 }
 
-function SessionChatTypographyStory({ theme }: { theme: "dark" | "light" }) {
+function SessionChatTypographyStory({ theme }: { theme: 'dark' | 'light' }) {
   const rows: {
     height: string;
     labels: [string, string];
@@ -228,42 +226,37 @@ function SessionChatTypographyStory({ theme }: { theme: "dark" | "light" }) {
     title: string;
   }[] = [
     {
-      height: "22rem",
-      labels: ["after — ruled, muted, chip refs", "before — unstyled trailing list"],
+      height: '22rem',
+      labels: ['after — ruled, muted, chip refs', 'before — unstyled trailing list'],
       messages: FOOTNOTE_MESSAGES,
-      title: "1. Footnotes",
+      title: '1. Footnotes',
     },
     {
-      height: "23rem",
-      labels: ["after — inline-block, one row", "before — preflight block, stacked"],
+      height: '23rem',
+      labels: ['after — inline-block, one row', 'before — preflight block, stacked'],
       messages: IMAGE_MESSAGES,
-      title: "2. Inline images",
+      title: '2. Inline images',
     },
     {
-      height: "34rem",
-      labels: ["after — gutter fits the 3-digit marker", "before — marker escapes the text edge"],
+      height: '34rem',
+      labels: ['after — gutter fits the 3-digit marker', 'before — marker escapes the text edge'],
       messages: ORDERED_MESSAGES,
-      title: "3. Ordered-list gutter",
+      title: '3. Ordered-list gutter',
     },
     {
-      height: "23rem",
-      labels: ["after — pulled the real gutter", "before — hardcoded -1.1rem"],
+      height: '23rem',
+      labels: ['after — pulled the real gutter', 'before — hardcoded -1.1rem'],
       messages: TASK_MESSAGES,
-      title: "4. Task-list checkboxes",
+      title: '4. Task-list checkboxes',
     },
   ];
   return (
-    <div
-      className="ghostex-chat-typography-story flex flex-col gap-3 bg-[#0a0a0a] p-2"
-      style={{ minHeight: "100vh" }}
-    >
+    <div className='ghostex-chat-typography-story flex flex-col gap-3 bg-[#0a0a0a] p-2' style={{ minHeight: '100vh' }}>
       <style>{PREVIEW_STYLES}</style>
       {rows.map((row) => (
-        <div className="flex flex-col gap-1" key={row.title}>
-          <div className="px-1 font-mono text-[11px] uppercase tracking-wide text-white/60">
-            {row.title}
-          </div>
-          <div className="flex gap-2" style={{ height: row.height }}>
+        <div className='flex flex-col gap-1' key={row.title}>
+          <div className='px-1 font-mono text-[11px] uppercase tracking-wide text-white/60'>{row.title}</div>
+          <div className='flex gap-2' style={{ height: row.height }}>
             <Pane label={row.labels[0]}>
               <ChatPane messages={row.messages} theme={theme} />
             </Pane>
@@ -278,16 +271,16 @@ function SessionChatTypographyStory({ theme }: { theme: "dark" | "light" }) {
 }
 
 const meta = {
-  argTypes: { theme: { control: "inline-radio", options: ["dark", "light"] } },
+  argTypes: { theme: { control: 'inline-radio', options: ['dark', 'light'] } },
   component: SessionChatTypographyStory,
-  parameters: { layout: "fullscreen" },
-  title: "Chat/Typography",
+  parameters: { layout: 'fullscreen' },
+  title: 'Chat/Typography',
 } satisfies Meta<typeof SessionChatTypographyStory>;
 
 export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Dark: Story = { args: { theme: "dark" } };
+export const Dark: Story = { args: { theme: 'dark' } };
 
-export const Light: Story = { args: { theme: "light" } };
+export const Light: Story = { args: { theme: 'light' } };

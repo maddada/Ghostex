@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FocusedCommandPaneCloseDecision {
     CloseCommandTab {
@@ -15,7 +14,6 @@ pub(crate) enum FocusedCommandPaneCloseDecision {
     InterceptNoOp,
     FallThroughToActiveMode,
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FocusedSurfaceCloseDecision {
@@ -29,7 +27,6 @@ pub(crate) enum FocusedSurfaceCloseDecision {
     CloseBrowserActiveTab,
     NoOp,
 }
-
 
 pub(crate) fn focused_command_pane_close_decision(
     shell_focus: ShellFocusTarget,
@@ -58,7 +55,6 @@ pub(crate) fn focused_command_pane_close_decision(
         }
     }
 }
-
 
 pub(crate) fn focused_surface_close_decision(
     shell_focus: ShellFocusTarget,
@@ -121,7 +117,6 @@ pub(crate) fn focused_surface_close_decision(
     }
 }
 
-
 pub(crate) fn focused_command_pane_close_target(
     shell_focus: ShellFocusTarget,
     command_pane: &CommandPaneModel,
@@ -147,7 +142,6 @@ pub(crate) fn focused_command_pane_close_target(
     }
 }
 
-
 pub(crate) fn focused_command_pane_sleep_target(
     shell_focus: ShellFocusTarget,
     command_pane: &CommandPaneModel,
@@ -167,7 +161,6 @@ pub(crate) fn focused_command_pane_sleep_target(
         .then_some((group_id, session_id))
 }
 
-
 pub(crate) fn focused_command_pane_rename_target(
     shell_focus: ShellFocusTarget,
     command_pane: &CommandPaneModel,
@@ -181,7 +174,6 @@ pub(crate) fn focused_command_pane_rename_target(
     }
     command_pane.focused_group_active_session_id()
 }
-
 
 pub(crate) fn focused_command_pane_wake_target(
     shell_focus: ShellFocusTarget,
@@ -201,7 +193,6 @@ pub(crate) fn focused_command_pane_wake_target(
         .is_some_and(|session| session.is_sleeping)
         .then_some((group_id, session_id))
 }
-
 
 pub(crate) fn command_terminal_surface_focus_states_for_slots(
     shell_focus: ShellFocusTarget,

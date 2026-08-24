@@ -1,6 +1,6 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { SessionChatMessage } from "../../shared/session-chat";
-import { SessionChatMessageList } from "./session-chat-message-list";
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { SessionChatMessage } from '../../shared/session-chat';
+import { SessionChatMessageList } from './session-chat-message-list';
 
 /*
  * What a user's turn is, and what it is not.
@@ -31,61 +31,56 @@ import { SessionChatMessageList } from "./session-chat-message-list";
 
 /** Repro 1: two quoted lines, each answered by an unquoted one. */
 const QUOTE_TURN = [
-  "> Two bits of accidental damage worth fixing",
-  "fix these with subagent",
-  "",
+  '> Two bits of accidental damage worth fixing',
+  'fix these with subagent',
+  '',
   "> If you don't care about herdr 0.8.x features right now",
-  "lets delete the tui2 fully. i dont want it anymore. it has served its",
-  "purpose.",
-  "",
-  "what other questions do you have here / what else do we plan to do?",
-].join("\n");
+  'lets delete the tui2 fully. i dont want it anymore. it has served its',
+  'purpose.',
+  '',
+  'what other questions do you have here / what else do we plan to do?',
+].join('\n');
 
 /** Repro 2: a numbered list with a blank line between the items. */
 const LIST_TURN = [
-  "1. we already changed it to launch main ghostex app",
-  "",
-  "2. delete it full on fam. i dont want it at all anymore.",
-  "",
-  "3. delete it as soon as spec is done, no need to keep it around after that.",
-].join("\n");
+  '1. we already changed it to launch main ghostex app',
+  '',
+  '2. delete it full on fam. i dont want it at all anymore.',
+  '',
+  '3. delete it as soon as spec is done, no need to keep it around after that.',
+].join('\n');
 
 /** The same two shapes an agent would write, to show GFM is untouched. */
 const AGENT_TURN = [
   "Read back the way an agent's answer is read:",
-  "",
-  "> a quoted line",
-  "continued lazily, which is correct in a document",
-  "",
-  "1. first",
-  "2. second",
-].join("\n");
+  '',
+  '> a quoted line',
+  'continued lazily, which is correct in a document',
+  '',
+  '1. first',
+  '2. second',
+].join('\n');
 
-function turn(
-  id: string,
-  role: SessionChatMessage["role"],
-  text: string,
-  timestamp: number,
-): SessionChatMessage {
+function turn(id: string, role: SessionChatMessage['role'], text: string, timestamp: number): SessionChatMessage {
   return {
-    blocks: [{ text, type: "text" }],
+    blocks: [{ text, type: 'text' }],
     id,
     role,
-    source: "transcript",
+    source: 'transcript',
     timestamp,
   };
 }
 
 const MESSAGES: SessionChatMessage[] = [
-  turn("user-1", "user", QUOTE_TURN, 1_000),
+  turn('user-1', 'user', QUOTE_TURN, 1_000),
   turn(
-    "assistant-1",
-    "assistant",
-    "Both quotes end where you stopped typing `>`, and the lines under them are your lines.",
-    2_000,
+    'assistant-1',
+    'assistant',
+    'Both quotes end where you stopped typing `>`, and the lines under them are your lines.',
+    2_000
   ),
-  turn("user-2", "user", LIST_TURN, 3_000),
-  turn("assistant-2", "assistant", AGENT_TURN, 4_000),
+  turn('user-2', 'user', LIST_TURN, 3_000),
+  turn('assistant-2', 'assistant', AGENT_TURN, 4_000),
 ];
 
 const STORY_STYLES = `
@@ -105,8 +100,8 @@ const STORY_STYLES = `
 `;
 
 const meta: Meta = {
-  title: "Session Chat/User text",
-  parameters: { layout: "fullscreen" },
+  title: 'Session Chat/User text',
+  parameters: { layout: 'fullscreen' },
 };
 
 export default meta;
@@ -114,12 +109,9 @@ export default meta;
 /** The two reported repros, in a transcript, on the chat's own page colour. */
 export const TypedText: StoryObj = {
   render: () => (
-    <div className="chat-user-text-story">
+    <div className='chat-user-text-story'>
       <style>{STORY_STYLES}</style>
-      <div
-        className="ghostex-session-chat-scope chat-user-text-story__surface"
-        data-chat-theme="dark"
-      >
+      <div className='ghostex-session-chat-scope chat-user-text-story__surface' data-chat-theme='dark'>
         <SessionChatMessageList
           hasMore={false}
           isWorking={false}

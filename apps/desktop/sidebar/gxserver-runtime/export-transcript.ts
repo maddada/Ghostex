@@ -3,18 +3,16 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import type { GpuiSidebarRuntime } from "./core";
-import { normalizeNonEmptyString } from "./helpers/records";
-import { parseGpuiRemotePresentationSessionId } from "./helpers/remote-presentation";
-import { createExportedTranscriptMentionDraft } from "./helpers/terminal-lifecycle";
-import type { GpuiExportedTranscriptResult } from "./types-and-protocol";
-import { openAppModal } from "@/packages/core-ui/app-modal-host-bridge";
-import {
-  parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type { GxserverExportSessionTranscriptResult } from "@/packages/shared/gxserver-protocol";
-import { createAgentSessionDefaultTitle } from "@/packages/shared/session-grid-contract";
-import type { SidebarAgentButton } from "@/packages/shared/sidebar-agents";
+import type { GpuiSidebarRuntime } from './core';
+import { normalizeNonEmptyString } from './helpers/records';
+import { parseGpuiRemotePresentationSessionId } from './helpers/remote-presentation';
+import { createExportedTranscriptMentionDraft } from './helpers/terminal-lifecycle';
+import type { GpuiExportedTranscriptResult } from './types-and-protocol';
+import { openAppModal } from '@/packages/core-ui/app-modal-host-bridge';
+import { parseGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { GxserverExportSessionTranscriptResult } from '@/packages/shared/gxserver-protocol';
+import { createAgentSessionDefaultTitle } from '@/packages/shared/session-grid-contract';
+import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -33,7 +31,6 @@ export interface GpuiSidebarRuntimeExportTranscriptMethods {
 }
 
 export const gpuiSidebarRuntimeExportTranscriptMethods = {
-
   /*
   CDXC:ExportTranscript 2026-08-20:
   Export Transcript is a daemon operation, not a local file read: the agent's
@@ -51,16 +48,16 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       try {
         const result = await this.requestRemoteGxserver<GxserverExportSessionTranscriptResult>(
           remoteSession.machineId,
-          "/api/exportSessionTranscript",
+          '/api/exportSessionTranscript',
           {
             projectId: remoteSession.projectId,
             sessionId: remoteSession.sessionId,
           },
-          { timeoutMs: 60_000 },
+          { timeoutMs: 60_000 }
         );
         const path = normalizeNonEmptyString(result?.path);
         if (!path) {
-          throw new Error("The remote gxserver did not return the exported file.");
+          throw new Error('The remote gxserver did not return the exported file.');
         }
         exported = {
           agentId: this.resolveExportTranscriptAgentId(result?.agent),
@@ -69,7 +66,7 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
           projectId: remoteSession.projectId,
         };
       } catch (error) {
-        this.postRemoteToast("error", "Could not export transcript", {
+        this.postRemoteToast('error', 'Could not export transcript', {
           description: error instanceof Error ? error.message : String(error),
         });
         return;
@@ -84,34 +81,28 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       return;
     }
     const sourceSession = this.presentation?.sessions.find(
-      (session) =>
-        session.projectId === reference.projectId && session.sessionId === reference.sessionId,
+      (session) => session.projectId === reference.projectId && session.sessionId === reference.sessionId
     );
     if (!sourceSession) {
       return;
     }
     let exported: GpuiExportedTranscriptResult;
     try {
-      const result = await this.client.rpc<GxserverExportSessionTranscriptResult>(
-        "/api/exportSessionTranscript",
-        {
-          projectId: reference.projectId,
-          sessionId: reference.sessionId,
-        },
-      );
+      const result = await this.client.rpc<GxserverExportSessionTranscriptResult>('/api/exportSessionTranscript', {
+        projectId: reference.projectId,
+        sessionId: reference.sessionId,
+      });
       const path = normalizeNonEmptyString(result?.path);
       if (!path) {
-        throw new Error("gxserver did not return the exported file.");
+        throw new Error('gxserver did not return the exported file.');
       }
       exported = {
-        agentId:
-          normalizeNonEmptyString(sourceSession.agentId) ??
-          this.resolveExportTranscriptAgentId(result?.agent),
+        agentId: normalizeNonEmptyString(sourceSession.agentId) ?? this.resolveExportTranscriptAgentId(result?.agent),
         path,
         projectId: reference.projectId,
       };
     } catch (error) {
-      this.postSidebarActionToast("error", "Could not export transcript", {
+      this.postSidebarActionToast('error', 'Could not export transcript', {
         description: error instanceof Error ? error.message : String(error),
       });
       return;
@@ -144,9 +135,9 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       // nothing to reveal and the dialog hides the button instead of offering
       // a path the local file manager cannot open.
       canReveal: result.machineId === undefined,
-      modal: "exportTranscriptResult",
+      modal: 'exportTranscriptResult',
       path: result.path,
-      type: "open",
+      type: 'open',
     });
   },
 
@@ -155,11 +146,11 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
    * the agent choice; the exported path and its project stay in this runtime.
    */
   async handleGpuiExportTranscriptModalCommand(this: GpuiSidebarRuntime, payload: unknown): Promise<void> {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return;
     }
     const record = payload as Record<string, unknown>;
-    if (record.type !== "startExportedTranscriptConversation") {
+    if (record.type !== 'startExportedTranscriptConversation') {
       return;
     }
     const exported = this.pendingExportedTranscript;
@@ -170,8 +161,8 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
     const agentId = normalizeNonEmptyString(record.agentId) ?? exported.agentId;
     const agent = agentId ? this.resolveSidebarAgent(agentId) : undefined;
     if (!agent) {
-      this.postSidebarActionToast("warning", "Could not start the conversation", {
-        description: "Choose a configured agent for the new session.",
+      this.postSidebarActionToast('warning', 'Could not start the conversation', {
+        description: 'Choose a configured agent for the new session.',
       });
       return;
     }
@@ -189,33 +180,32 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       await this.createRemoteAgentSessionForProject(
         { machineId: exported.machineId, projectId: exported.projectId },
         agent.agentId,
-        "",
+        '',
         title,
-        { firstUserInputDraft: draft },
+        { firstUserInputDraft: draft }
       ).catch((error: unknown) => {
-        this.postRemoteToast("error", "Could not start the conversation", {
+        this.postRemoteToast('error', 'Could not start the conversation', {
           description: error instanceof Error ? error.message : String(error),
         });
       });
       return;
     }
-    const project = this.domainProjects.find(
-      (candidate) => candidate.projectId === exported.projectId,
-    );
+    const project = this.domainProjects.find((candidate) => candidate.projectId === exported.projectId);
     if (!project) {
       return;
     }
-    await this.createAgentSessionRecordForProject(project, agent, "", {
-      errorMessage: "Could not create the new agent session.",
+    await this.createAgentSessionRecordForProject(project, agent, '', {
+      errorMessage: 'Could not create the new agent session.',
       firstUserInputDraft: draft,
       title,
     }).catch((error: unknown) => {
-      this.postSidebarActionToast("error", "Could not start the conversation", {
+      this.postSidebarActionToast('error', 'Could not start the conversation', {
         description: error instanceof Error ? error.message : String(error),
       });
     });
   },
 };
 
-const gpuiSidebarRuntimeExportTranscriptMethodsShapeCheck: GpuiSidebarRuntimeExportTranscriptMethods = gpuiSidebarRuntimeExportTranscriptMethods;
+const gpuiSidebarRuntimeExportTranscriptMethodsShapeCheck: GpuiSidebarRuntimeExportTranscriptMethods =
+  gpuiSidebarRuntimeExportTranscriptMethods;
 void gpuiSidebarRuntimeExportTranscriptMethodsShapeCheck;

@@ -1,4 +1,4 @@
-import type { GhostexWebMachine, MachineConnectionState } from "../connections/types";
+import type { GhostexWebMachine, MachineConnectionState } from '../connections/types';
 
 /**
  * Apply a complete remote-machine id order without allowing the local machine
@@ -7,17 +7,15 @@ import type { GhostexWebMachine, MachineConnectionState } from "../connections/t
  */
 export function applyRemoteMachineOrder(
   machines: readonly GhostexWebMachine[],
-  orderedRemoteMachineIds: readonly string[],
+  orderedRemoteMachineIds: readonly string[]
 ): readonly GhostexWebMachine[] {
-  const localMachines = machines.filter((machine) => machine.machineId === "local");
-  const remoteMachines = machines.filter((machine) => machine.machineId !== "local");
+  const localMachines = machines.filter((machine) => machine.machineId === 'local');
+  const remoteMachines = machines.filter((machine) => machine.machineId !== 'local');
   if (orderedRemoteMachineIds.length !== remoteMachines.length) {
     return machines;
   }
 
-  const remoteMachineById = new Map(
-    remoteMachines.map((machine) => [machine.machineId, machine]),
-  );
+  const remoteMachineById = new Map(remoteMachines.map((machine) => [machine.machineId, machine]));
   const orderedRemoteMachines: GhostexWebMachine[] = [];
   const seenMachineIds = new Set<string>();
   for (const machineId of orderedRemoteMachineIds) {
@@ -30,28 +28,22 @@ export function applyRemoteMachineOrder(
   }
 
   const nextMachines = [...localMachines, ...orderedRemoteMachines];
-  return nextMachines.every((machine, index) => machine === machines[index])
-    ? machines
-    : nextMachines;
+  return nextMachines.every((machine, index) => machine === machines[index]) ? machines : nextMachines;
 }
 
 /** Keep runtime presentation order aligned with the durable machine catalog. */
 export function orderMachineConnectionStates(
   states: readonly MachineConnectionState[],
-  machines: readonly GhostexWebMachine[],
+  machines: readonly GhostexWebMachine[]
 ): readonly MachineConnectionState[] {
-  const catalogIndexByMachineId = new Map(
-    machines.map((machine, index) => [machine.machineId, index]),
-  );
-  const originalIndexByMachineId = new Map(
-    states.map((state, index) => [state.machine.machineId, index]),
-  );
+  const catalogIndexByMachineId = new Map(machines.map((machine, index) => [machine.machineId, index]));
+  const originalIndexByMachineId = new Map(states.map((state, index) => [state.machine.machineId, index]));
 
   return [...states].sort((left, right) => {
-    if (left.machine.machineId === "local") {
-      return right.machine.machineId === "local" ? 0 : -1;
+    if (left.machine.machineId === 'local') {
+      return right.machine.machineId === 'local' ? 0 : -1;
     }
-    if (right.machine.machineId === "local") {
+    if (right.machine.machineId === 'local') {
       return 1;
     }
     const leftIndex = catalogIndexByMachineId.get(left.machine.machineId);

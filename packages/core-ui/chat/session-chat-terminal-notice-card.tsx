@@ -30,29 +30,19 @@ nothing on screen explaining why, since the CLI accepts no input until it is
 answered. "Open terminal" stays as the escape hatch.
 */
 
-import {
-  IconAlertTriangle,
-  IconChevronRight,
-  IconInfoCircle,
-  IconTerminal2,
-  IconX,
-} from "@tabler/icons-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { SessionChatTerminalNotice } from "../../shared/session-chat";
-import { cn } from "@/packages/components/utils";
-import { Button } from "../../components/ui/button";
-import { SessionChatChoiceRows } from "./session-chat-choice-rows";
+import { IconAlertTriangle, IconChevronRight, IconInfoCircle, IconTerminal2, IconX } from '@tabler/icons-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { SessionChatTerminalNotice } from '../../shared/session-chat';
+import { cn } from '@/packages/components/utils';
+import { Button } from '../../components/ui/button';
+import { SessionChatChoiceRows } from './session-chat-choice-rows';
 
-const SEND_FAILED_NOTICE =
-  "Couldn't deliver those keys — switch to Terminal View to act there.";
-const READ_ONLY_HINT = "Input is held by another device.";
-const CHOICE_FAILED_NOTICE =
-  "Couldn't answer that picker — it may have been answered in the terminal already.";
-const CHOICE_DEFAULT_BADGE = "Selected in terminal";
+const SEND_FAILED_NOTICE = "Couldn't deliver those keys — switch to Terminal View to act there.";
+const READ_ONLY_HINT = 'Input is held by another device.';
+const CHOICE_FAILED_NOTICE = "Couldn't answer that picker — it may have been answered in the terminal already.";
+const CHOICE_DEFAULT_BADGE = 'Selected in terminal';
 
-export function sessionChatTerminalNoticeDismissKey(
-  notice: SessionChatTerminalNotice | null,
-): string | null {
+export function sessionChatTerminalNoticeDismissKey(notice: SessionChatTerminalNotice | null): string | null {
   return notice ? `${notice.kind}:${notice.detectedAt}` : null;
 }
 
@@ -84,18 +74,18 @@ export interface SessionChatTerminalNoticeCardProps {
 
 /** An action this build knows how to run, with its payload already proven. */
 type RenderableNoticeAction =
-  | { id: string; label: string; kind: "switchToTerminal" }
-  | { id: string; label: string; kind: "sendKeys"; send: string };
+  | { id: string; label: string; kind: 'switchToTerminal' }
+  | { id: string; label: string; kind: 'sendKeys'; send: string };
 
 interface SeverityStyle {
   shell: string;
   icon: string;
 }
 
-const SEVERITY_STYLES: Record<SessionChatTerminalNotice["severity"], SeverityStyle> = {
-  error: { icon: "text-destructive", shell: "border-destructive/40 bg-destructive/10" },
-  info: { icon: "text-muted-foreground", shell: "border-input bg-muted/20" },
-  warning: { icon: "text-amber-400", shell: "border-amber-500/40 bg-amber-500/10" },
+const SEVERITY_STYLES: Record<SessionChatTerminalNotice['severity'], SeverityStyle> = {
+  error: { icon: 'text-destructive', shell: 'border-destructive/40 bg-destructive/10' },
+  info: { icon: 'text-muted-foreground', shell: 'border-input bg-muted/20' },
+  warning: { icon: 'text-amber-400', shell: 'border-amber-500/40 bg-amber-500/10' },
 };
 
 /**
@@ -117,17 +107,14 @@ function NoticeShell({
 }: {
   children: React.ReactNode;
   kind: string;
-  severity: SessionChatTerminalNotice["severity"];
+  severity: SessionChatTerminalNotice['severity'];
 }) {
   return (
     <div
-      className={cn(
-        "min-w-0 overflow-hidden rounded-2xl border",
-        severityStyle(severity).shell,
-      )}
+      className={cn('min-w-0 overflow-hidden rounded-2xl border', severityStyle(severity).shell)}
       data-kind={kind}
       data-severity={severity}
-      role="status"
+      role='status'
     >
       {children}
     </div>
@@ -188,16 +175,16 @@ export function SessionChatTerminalNoticeCard({
   // does.
   const actions: RenderableNoticeAction[] = [];
   for (const action of notice.actions ?? []) {
-    if (action.kind === "switchToTerminal") {
+    if (action.kind === 'switchToTerminal') {
       if (onSwitchToTerminal) {
-        actions.push({ id: action.id, kind: "switchToTerminal", label: action.label });
+        actions.push({ id: action.id, kind: 'switchToTerminal', label: action.label });
       }
-    } else if (action.kind === "sendKeys" && action.send !== undefined) {
+    } else if (action.kind === 'sendKeys' && action.send !== undefined) {
       // A `sendKeys` action without bytes has nothing to write; an inert button
       // would claim an ability the notice never carried.
       actions.push({
         id: action.id,
-        kind: "sendKeys",
+        kind: 'sendKeys',
         label: action.label,
         send: action.send,
       });
@@ -245,25 +232,21 @@ export function SessionChatTerminalNoticeCard({
       });
   };
 
-  const SeverityIcon = notice.severity === "info" ? IconInfoCircle : IconAlertTriangle;
+  const SeverityIcon = notice.severity === 'info' ? IconInfoCircle : IconAlertTriangle;
 
   return (
     <NoticeShell kind={notice.kind} severity={notice.severity}>
-      <div className="flex items-start gap-2 px-3 py-2.5">
+      <div className='flex items-start gap-2 px-3 py-2.5'>
         <SeverityIcon
-          aria-hidden="true"
-          className={cn("mt-0.5 size-4 shrink-0", severityStyle(notice.severity).icon)}
+          aria-hidden='true'
+          className={cn('mt-0.5 size-4 shrink-0', severityStyle(notice.severity).icon)}
           stroke={2}
         />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm leading-snug font-medium text-foreground">{notice.title}</p>
-          {notice.detail ? (
-            <p className="mt-1 text-xs leading-snug text-muted-foreground">
-              {notice.detail}
-            </p>
-          ) : null}
+        <div className='min-w-0 flex-1'>
+          <p className='text-sm leading-snug font-medium text-foreground'>{notice.title}</p>
+          {notice.detail ? <p className='mt-1 text-xs leading-snug text-muted-foreground'>{notice.detail}</p> : null}
           {answerable ? (
-            <div className="mt-3">
+            <div className='mt-3'>
               <SessionChatChoiceRows
                 onSelect={answerChoice}
                 options={choices.map((choice) => ({
@@ -278,35 +261,30 @@ export function SessionChatTerminalNoticeCard({
                 selected={pickedChoice === null ? [] : [pickedChoice]}
               />
               {!canSend ? (
-                <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-                  {READ_ONLY_HINT}
-                </p>
+                <p className='mt-2 text-[11px] leading-snug text-muted-foreground'>{READ_ONLY_HINT}</p>
               ) : null}
             </div>
           ) : null}
           {notice.screenTail ? (
-            <div className="mt-2">
+            <div className='mt-2'>
               <button
-                className="group/tail inline-flex items-center gap-1 rounded-md text-[11px] font-medium text-muted-foreground outline-none transition-colors duration-150 hover:text-foreground"
+                className='group/tail inline-flex items-center gap-1 rounded-md text-[11px] font-medium text-muted-foreground outline-none transition-colors duration-150 hover:text-foreground'
                 // The sidebar's legacy bare-button base paints a 1px app border
                 // on every unnamed button; naming the slot opts this row out.
-                data-slot="session-chat-notice-tail-toggle"
+                data-slot='session-chat-notice-tail-toggle'
                 onClick={() => setTailOpen((value) => !value)}
-                type="button"
+                type='button'
               >
-                {tailOpen ? "Hide terminal output" : "Show terminal output"}
+                {tailOpen ? 'Hide terminal output' : 'Show terminal output'}
                 {/* Control tier, like every other expander in the chat. */}
                 <IconChevronRight
-                  aria-hidden="true"
-                  className={cn(
-                    "ghostex-chat-disclosure-chevron",
-                    tailOpen && "is-open",
-                  )}
+                  aria-hidden='true'
+                  className={cn('ghostex-chat-disclosure-chevron', tailOpen && 'is-open')}
                 />
               </button>
               {tailOpen ? (
-                <div className="mt-2 min-w-0 rounded-lg border border-border/65 bg-background/70 p-3">
-                  <pre className="max-h-40 min-w-0 overflow-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
+                <div className='mt-2 min-w-0 rounded-lg border border-border/65 bg-background/70 p-3'>
+                  <pre className='max-h-40 min-w-0 overflow-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]'>
                     {notice.screenTail}
                   </pre>
                 </div>
@@ -314,26 +292,17 @@ export function SessionChatTerminalNoticeCard({
             </div>
           ) : null}
           {sendFailed ? (
-            <p className="mt-2 text-[11px] leading-snug text-destructive/80">
-              {SEND_FAILED_NOTICE}
-            </p>
+            <p className='mt-2 text-[11px] leading-snug text-destructive/80'>{SEND_FAILED_NOTICE}</p>
           ) : null}
           {choiceFailed ? (
-            <p className="mt-2 text-[11px] leading-snug text-destructive/80">
-              {CHOICE_FAILED_NOTICE}
-            </p>
+            <p className='mt-2 text-[11px] leading-snug text-destructive/80'>{CHOICE_FAILED_NOTICE}</p>
           ) : null}
           {actions.length > 0 ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className='mt-3 flex flex-wrap items-center gap-2'>
               {actions.map((action) =>
-                action.kind === "switchToTerminal" ? (
-                  <Button
-                    key={action.id}
-                    onClick={onSwitchToTerminal}
-                    size="xs"
-                    variant="outline"
-                  >
-                    <IconTerminal2 aria-hidden="true" stroke={2} />
+                action.kind === 'switchToTerminal' ? (
+                  <Button key={action.id} onClick={onSwitchToTerminal} size='xs' variant='outline'>
+                    <IconTerminal2 aria-hidden='true' stroke={2} />
                     {action.label}
                   </Button>
                 ) : (
@@ -341,25 +310,20 @@ export function SessionChatTerminalNoticeCard({
                     disabled={!canSend || sending}
                     key={action.id}
                     onClick={() => runSendKeys(action.send)}
-                    size="xs"
-                    variant="outline"
+                    size='xs'
+                    variant='outline'
                     {...(canSend ? {} : { title: READ_ONLY_HINT })}
                   >
                     {action.label}
                   </Button>
-                ),
+                )
               )}
             </div>
           ) : null}
         </div>
         {answerable ? null : (
-          <Button
-            aria-label="Dismiss"
-            onClick={() => setDismissedKey(noticeKey)}
-            size="icon-xs"
-            variant="ghost"
-          >
-            <IconX aria-hidden="true" stroke={2} />
+          <Button aria-label='Dismiss' onClick={() => setDismissedKey(noticeKey)} size='icon-xs' variant='ghost'>
+            <IconX aria-hidden='true' stroke={2} />
           </Button>
         )}
       </div>

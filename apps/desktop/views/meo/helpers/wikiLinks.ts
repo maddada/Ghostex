@@ -90,7 +90,10 @@ export const cancelPendingWikiStatusRefresh = (): void => {
   }
 };
 
-export const handleResolvedWikiLinks = (message: { requestId: string; results?: Array<{ target: string; exists: boolean }> }): boolean => {
+export const handleResolvedWikiLinks = (message: {
+  requestId: string;
+  results?: Array<{ target: string; exists: boolean }>;
+}): boolean => {
   if (message.requestId !== latestWikiLinkRequestId) {
     return false;
   }
@@ -139,9 +142,10 @@ function wikiLinkBounds(state: EditorState, node: any): WikiLinkBounds | null {
     return null;
   }
 
-  const fullForm = node.from + 1 < node.to
-    && state.doc.sliceString(node.from, node.from + 2) === '[['
-    && state.doc.sliceString(node.to - 2, node.to) === ']]';
+  const fullForm =
+    node.from + 1 < node.to &&
+    state.doc.sliceString(node.from, node.from + 2) === '[[' &&
+    state.doc.sliceString(node.to - 2, node.to) === ']]';
   if (fullForm) {
     if (isEscapedPosition(state, node.from)) {
       return null;
@@ -152,15 +156,16 @@ function wikiLinkBounds(state: EditorState, node: any): WikiLinkBounds | null {
       closeFrom: node.to - 2,
       closeTo: node.to,
       contentFrom: node.from + 2,
-      contentTo: node.to - 2
+      contentTo: node.to - 2,
     };
   }
 
   if (node.from < 1 || node.to >= state.doc.length || isEscapedPosition(state, node.from - 1)) {
     return null;
   }
-  const wrappedForm = state.doc.sliceString(node.from - 1, node.from + 1) === '[['
-    && state.doc.sliceString(node.to - 1, node.to + 1) === ']]';
+  const wrappedForm =
+    state.doc.sliceString(node.from - 1, node.from + 1) === '[[' &&
+    state.doc.sliceString(node.to - 1, node.to + 1) === ']]';
   if (!wrappedForm) {
     return null;
   }
@@ -171,7 +176,7 @@ function wikiLinkBounds(state: EditorState, node: any): WikiLinkBounds | null {
     closeFrom: node.to - 1,
     closeTo: node.to + 1,
     contentFrom: node.from + 1,
-    contentTo: node.to - 1
+    contentTo: node.to - 1,
   };
 }
 
@@ -204,7 +209,7 @@ export function wikiMarkerRanges(state: EditorState, node: any): { from: number;
   }
   return [
     { from: bounds.openFrom, to: bounds.openTo },
-    { from: bounds.closeFrom, to: bounds.closeTo }
+    { from: bounds.closeFrom, to: bounds.closeTo },
   ];
 }
 
@@ -264,7 +269,7 @@ export function parseWikiLinkData(state: EditorState, node: any): WikiLinkData |
     openFrom: bounds.openFrom,
     openTo: bounds.openTo,
     closeFrom: bounds.closeFrom,
-    closeTo: bounds.closeTo
+    closeTo: bounds.closeTo,
   };
 }
 
@@ -307,7 +312,7 @@ function computeSourceWikiMarkers(state: EditorState): any {
       for (const range of ranges) {
         builder.add(range.from, range.to, sourceWikiMarkerDeco);
       }
-    }
+    },
   });
 
   return builder.finish();
@@ -331,5 +336,5 @@ export const sourceWikiMarkerField = StateField.define<any>({
       return markers;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });

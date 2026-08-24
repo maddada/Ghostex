@@ -1,16 +1,13 @@
-import {
-  IconChevronLeft,
-  IconChevronRight,
-} from "@tabler/icons-react";
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/packages/components/ui/dialog";
-import { cn } from "@/packages/components/utils";
-import type { SidebarTheme } from "../shared/session-grid-contract";
-import agentsTerminalSplitsImage from "../../media/readme/ghostex-agents-terminal-splits.png";
-import chromiumDesignModeImage from "../../media/readme/ghostex-chromium-design-mode.png";
-import embeddedVscodeEditorImage from "../../media/readme/ghostex-embedded-vscode-editor.png";
-import kanbanBeadsBoardImage from "../../media/readme/ghostex-kanban-beads-board.png";
-import richPromptEditorImage from "../../media/readme/ghostex-rich-prompt-editor-ctrl-g.png";
+import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
+import { cn } from '@/packages/components/utils';
+import type { SidebarTheme } from '../shared/session-grid-contract';
+import agentsTerminalSplitsImage from '../../media/readme/ghostex-agents-terminal-splits.png';
+import chromiumDesignModeImage from '../../media/readme/ghostex-chromium-design-mode.png';
+import embeddedVscodeEditorImage from '../../media/readme/ghostex-embedded-vscode-editor.png';
+import kanbanBeadsBoardImage from '../../media/readme/ghostex-kanban-beads-board.png';
+import richPromptEditorImage from '../../media/readme/ghostex-rich-prompt-editor-ctrl-g.png';
 
 export type DiscoverGhostexModalProps = {
   isOpen: boolean;
@@ -108,79 +105,71 @@ type DiscoverGhostexFeature = {
  */
 const DISCOVER_GHOSTEX_FEATURES: readonly DiscoverGhostexFeature[] = [
   {
-    id: "rich-prompt-editor",
-    title: "Rich Prompt Editor with Ctrl + G",
-    description: "Edit your agent prompts with full hotkeys support and even image previews!",
-    imageAlt: "Ghostex Rich Prompt Editor with Ctrl + G",
+    id: 'rich-prompt-editor',
+    title: 'Rich Prompt Editor with Ctrl + G',
+    description: 'Edit your agent prompts with full hotkeys support and even image previews!',
+    imageAlt: 'Ghostex Rich Prompt Editor with Ctrl + G',
     imageSrc: richPromptEditorImage,
   },
   {
-    id: "chromium-design-mode",
-    title: "Chromium Browser with Design Mode",
+    id: 'chromium-design-mode',
+    title: 'Chromium Browser with Design Mode',
     description:
-      "Comes with Devtools, Agent Browser Control, and Profiles mgmt. Your agent can control it with the /ghostex-embedded-browser-use skill.",
-    imageAlt: "Ghostex Chromium Browser with Design Mode",
+      'Comes with Devtools, Agent Browser Control, and Profiles mgmt. Your agent can control it with the /ghostex-embedded-browser-use skill.',
+    imageAlt: 'Ghostex Chromium Browser with Design Mode',
     imageSrc: chromiumDesignModeImage,
   },
   {
-    id: "embedded-vscode-editor",
-    title: "Full VS Code Based Editor Built-in",
-    description:
-      "Great for working with markdown, reviewing code, and checking PRs (Github Extension is great!)",
-    imageAlt: "Ghostex Full VS Code Based Editor Built-in",
+    id: 'embedded-vscode-editor',
+    title: 'Full VS Code Based Editor Built-in',
+    description: 'Great for working with markdown, reviewing code, and checking PRs (Github Extension is great!)',
+    imageAlt: 'Ghostex Full VS Code Based Editor Built-in',
     imageSrc: embeddedVscodeEditorImage,
   },
   {
-    id: "beads-kanban-board",
-    title: "Manage Your Project on a Kanban board",
+    id: 'beads-kanban-board',
+    title: 'Manage Your Project on a Kanban board',
     description:
-      "Store your ideas here then let an orchestrator agent hand them off to other agents (use the /ghostex-agent-orchestration skill)",
-    imageAlt: "Ghostex Kanban Board and Beads",
+      'Store your ideas here then let an orchestrator agent hand them off to other agents (use the /ghostex-agent-orchestration skill)',
+    imageAlt: 'Ghostex Kanban Board and Beads',
     imageSrc: kanbanBeadsBoardImage,
   },
   {
-    id: "layout-freedom",
-    title: "Full Layout Freedom",
+    id: 'layout-freedom',
+    title: 'Full Layout Freedom',
     description:
-      "Split your agent terminals anyway you like. Use the same hotkeys from ghostty to navigate the UI with keyboard only.",
-    imageAlt: "Ghostex Full Layout Freedom",
+      'Split your agent terminals anyway you like. Use the same hotkeys from ghostty to navigate the UI with keyboard only.',
+    imageAlt: 'Ghostex Full Layout Freedom',
     imageSrc: agentsTerminalSplitsImage,
   },
 ];
 
-export function DiscoverGhostexModal({
-  isOpen,
-  onClose,
-  theme = "dark-blue",
-}: DiscoverGhostexModalProps) {
+export function DiscoverGhostexModal({ isOpen, onClose, theme = 'dark-blue' }: DiscoverGhostexModalProps) {
   const titleId = useId();
   const [activeFeatureId, setActiveFeatureId] = useState(DISCOVER_GHOSTEX_FEATURES[0].id);
   const activeFeatureIndex = useMemo(
     () =>
       Math.max(
         0,
-        DISCOVER_GHOSTEX_FEATURES.findIndex((feature) => feature.id === activeFeatureId),
+        DISCOVER_GHOSTEX_FEATURES.findIndex((feature) => feature.id === activeFeatureId)
       ),
-    [activeFeatureId],
+    [activeFeatureId]
   );
   const activeFeature = DISCOVER_GHOSTEX_FEATURES[activeFeatureIndex];
   const canActivatePreviousFeature = activeFeatureIndex > 0;
   const canActivateNextFeature = activeFeatureIndex < DISCOVER_GHOSTEX_FEATURES.length - 1;
   const activateRelativeFeature = (offset: -1 | 1) => {
-    const nextFeatureIndex = Math.min(
-      DISCOVER_GHOSTEX_FEATURES.length - 1,
-      Math.max(0, activeFeatureIndex + offset),
-    );
+    const nextFeatureIndex = Math.min(DISCOVER_GHOSTEX_FEATURES.length - 1, Math.max(0, activeFeatureIndex + offset));
     if (nextFeatureIndex === activeFeatureIndex) {
       return;
     }
     setActiveFeatureId(DISCOVER_GHOSTEX_FEATURES[nextFeatureIndex].id);
   };
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "ArrowLeft") {
+    if (event.key === 'ArrowLeft') {
       event.preventDefault();
       activateRelativeFeature(-1);
-    } else if (event.key === "ArrowRight") {
+    } else if (event.key === 'ArrowRight') {
       event.preventDefault();
       activateRelativeFeature(1);
     }
@@ -205,57 +194,55 @@ export function DiscoverGhostexModal({
       <DialogContent
         aria-labelledby={titleId}
         className={cn(
-          "ghostex-settings-shadcn settings-modal-dialog first-launch-setup-modal-dialog discover-ghostex-modal-dialog flex flex-col gap-0 overflow-hidden p-0 font-sans",
-          getSidebarThemeVariant(theme) === "dark" && "dark",
+          'ghostex-settings-shadcn settings-modal-dialog first-launch-setup-modal-dialog discover-ghostex-modal-dialog flex flex-col gap-0 overflow-hidden p-0 font-sans',
+          getSidebarThemeVariant(theme) === 'dark' && 'dark'
         )}
         data-sidebar-theme={theme}
         onKeyDown={handleKeyDown}
         showCloseButton={false}
       >
-        <DialogHeader className="sr-only">
+        <DialogHeader className='sr-only'>
           <DialogTitle id={titleId}>Highlighted Features</DialogTitle>
         </DialogHeader>
-        <div className="discover-ghostex-body">
+        <div className='discover-ghostex-body'>
           <section
-            aria-labelledby="discover-ghostex-feature-title"
-            className="discover-ghostex-feature-stage"
-            id="discover-ghostex-feature-panel"
-            role="tabpanel"
+            aria-labelledby='discover-ghostex-feature-title'
+            className='discover-ghostex-feature-stage'
+            id='discover-ghostex-feature-panel'
+            role='tabpanel'
           >
-            <div className="discover-ghostex-feature-copy">
-              <div className="discover-ghostex-feature-heading">
-                <h2 className="discover-ghostex-feature-title" id="discover-ghostex-feature-title">
+            <div className='discover-ghostex-feature-copy'>
+              <div className='discover-ghostex-feature-heading'>
+                <h2 className='discover-ghostex-feature-title' id='discover-ghostex-feature-title'>
                   {activeFeature.title}
                 </h2>
-                <p className="discover-ghostex-feature-description">
-                  {activeFeature.description}
-                </p>
+                <p className='discover-ghostex-feature-description'>{activeFeature.description}</p>
               </div>
             </div>
-            <div className="discover-ghostex-feature-visual">
+            <div className='discover-ghostex-feature-visual'>
               <button
-                aria-label="Previous highlighted feature"
-                className="discover-ghostex-feature-nav-button discover-ghostex-feature-nav-button-left"
+                aria-label='Previous highlighted feature'
+                className='discover-ghostex-feature-nav-button discover-ghostex-feature-nav-button-left'
                 disabled={!canActivatePreviousFeature}
                 onClick={() => activateRelativeFeature(-1)}
-                type="button"
+                type='button'
               >
-                <IconChevronLeft aria-hidden="true" size={20} stroke={2} />
+                <IconChevronLeft aria-hidden='true' size={20} stroke={2} />
               </button>
               <img
                 alt={activeFeature.imageAlt}
-                className="discover-ghostex-feature-image"
-                decoding="async"
+                className='discover-ghostex-feature-image'
+                decoding='async'
                 src={activeFeature.imageSrc}
               />
               <button
-                aria-label="Next highlighted feature"
-                className="discover-ghostex-feature-nav-button discover-ghostex-feature-nav-button-right"
+                aria-label='Next highlighted feature'
+                className='discover-ghostex-feature-nav-button discover-ghostex-feature-nav-button-right'
                 disabled={!canActivateNextFeature}
                 onClick={() => activateRelativeFeature(1)}
-                type="button"
+                type='button'
               >
-                <IconChevronRight aria-hidden="true" size={20} stroke={2} />
+                <IconChevronRight aria-hidden='true' size={20} stroke={2} />
               </button>
             </div>
           </section>
@@ -265,6 +252,6 @@ export function DiscoverGhostexModal({
   );
 }
 
-function getSidebarThemeVariant(theme: SidebarTheme): "dark" | "light" {
-  return theme.startsWith("light-") || theme === "plain-light" ? "light" : "dark";
+function getSidebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
+  return theme.startsWith('light-') || theme === 'plain-light' ? 'light' : 'dark';
 }

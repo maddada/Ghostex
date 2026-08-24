@@ -11,18 +11,15 @@
  * mutated when missing from the live release or when the operator selected them.
  */
 
-import { PRODUCT_IDS, productDefinition } from "./product-inputs.mjs";
-import {
-  buildReleaseProvenanceRecord,
-  compactPlanForRecord,
-} from "./publish-provenance.mjs";
-import { mergeCustomerDownloadNotes } from "./customer-downloads.mjs";
-import { releaseProvenanceAssetName, validateReleaseProvenance } from "./provenance.mjs";
+import { PRODUCT_IDS, productDefinition } from './product-inputs.mjs';
+import { buildReleaseProvenanceRecord, compactPlanForRecord } from './publish-provenance.mjs';
+import { mergeCustomerDownloadNotes } from './customer-downloads.mjs';
+import { releaseProvenanceAssetName, validateReleaseProvenance } from './provenance.mjs';
 
-export const AMEND_EXISTING_WORKFLOW_FILE = "release-amend-existing.yml";
+export const AMEND_EXISTING_WORKFLOW_FILE = 'release-amend-existing.yml';
 
 const SCOPE_FLAG_TO_PRODUCT = Object.freeze(
-  Object.fromEntries(PRODUCT_IDS.map((productId) => [productDefinition(productId).scopeFlag, productId])),
+  Object.fromEntries(PRODUCT_IDS.map((productId) => [productDefinition(productId).scopeFlag, productId]))
 );
 
 export function productIdsFromScopeFlags(scope) {
@@ -31,34 +28,34 @@ export function productIdsFromScopeFlags(scope) {
 
 export function packDependencies(productId) {
   productDefinition(productId);
-  if (productId === "macos-arm64") return ["gxserver-linux-x64", "gxserver-linux-arm64"];
-  if (productId === "linux-deb-x64" || productId === "linux-rpm-x64" || productId === "linux-tar-x64") {
-    return ["gxserver-linux-x64"];
+  if (productId === 'macos-arm64') return ['gxserver-linux-x64', 'gxserver-linux-arm64'];
+  if (productId === 'linux-deb-x64' || productId === 'linux-rpm-x64' || productId === 'linux-tar-x64') {
+    return ['gxserver-linux-x64'];
   }
-  if (productId === "windows-x64" || productId === "gxserver-wsl-windows-x64") return ["gxserver-linux-x64"];
-  if (productId === "windows-arm64" || productId === "gxserver-wsl-windows-arm64") return ["gxserver-linux-arm64"];
+  if (productId === 'windows-x64' || productId === 'gxserver-wsl-windows-x64') return ['gxserver-linux-x64'];
+  if (productId === 'windows-arm64' || productId === 'gxserver-wsl-windows-arm64') return ['gxserver-linux-arm64'];
   return [];
 }
 
 export function companionProducts(productId) {
   productDefinition(productId);
-  if (productId === "windows-x64") return ["gxserver-wsl-windows-x64"];
-  if (productId === "windows-arm64") return ["gxserver-wsl-windows-arm64"];
+  if (productId === 'windows-x64') return ['gxserver-wsl-windows-x64'];
+  if (productId === 'windows-arm64') return ['gxserver-wsl-windows-arm64'];
   return [];
 }
 
 export function consumersOfGxserver(arch) {
-  if (arch === "x64") {
+  if (arch === 'x64') {
     return [
-      "windows-x64",
-      "gxserver-wsl-windows-x64",
-      "linux-deb-x64",
-      "linux-rpm-x64",
-      "linux-tar-x64",
-      "macos-arm64",
+      'windows-x64',
+      'gxserver-wsl-windows-x64',
+      'linux-deb-x64',
+      'linux-rpm-x64',
+      'linux-tar-x64',
+      'macos-arm64',
     ];
   }
-  if (arch === "arm64") return ["windows-arm64", "gxserver-wsl-windows-arm64", "macos-arm64"];
+  if (arch === 'arm64') return ['windows-arm64', 'gxserver-wsl-windows-arm64', 'macos-arm64'];
   throw new Error(`Unknown gxserver architecture: ${arch}`);
 }
 
@@ -80,7 +77,7 @@ export function resolveAmendIntent({ liveProductIds, selected }) {
     return productId;
   });
   if (selectedIds.length === 0) {
-    throw new Error("Select at least one product to add or replace on the existing release");
+    throw new Error('Select at least one product to add or replace on the existing release');
   }
 
   const mutate = new Set(selectedIds);
@@ -98,17 +95,17 @@ export function resolveAmendIntent({ liveProductIds, selected }) {
 
   const mutateIds = sortedProductIds(mutate);
   for (const productId of mutateIds) {
-    if (!productId.startsWith("gxserver-linux-")) continue;
+    if (!productId.startsWith('gxserver-linux-')) continue;
     /* Replacing a live gxserver archive without rebuilding the packages that
      * embed it would desynchronize the tag. Adding a missing archive is the
      * opposite: it fills a hole the live consumers already name. */
     if (!live.has(productId)) continue;
-    const arch = productId.slice("gxserver-linux-".length);
+    const arch = productId.slice('gxserver-linux-'.length);
     for (const consumer of consumersOfGxserver(arch)) {
       if (live.has(consumer) && !mutate.has(consumer)) {
         throw new Error(
           `Amending ${productId} would desynchronize live ${consumer}, which embeds that archive. ` +
-            `Select ${consumer} as well.`,
+            `Select ${consumer} as well.`
         );
       }
     }
@@ -148,11 +145,11 @@ export function liveAssetDigestMap(assets) {
   const map = new Map();
   for (const asset of assets ?? []) {
     const digest =
-      typeof asset.digest === "string" && asset.digest.startsWith("sha256:")
-        ? asset.digest.slice("sha256:".length)
-        : typeof asset.sha256 === "string"
+      typeof asset.digest === 'string' && asset.digest.startsWith('sha256:')
+        ? asset.digest.slice('sha256:'.length)
+        : typeof asset.sha256 === 'string'
           ? asset.sha256
-          : "";
+          : '';
     map.set(asset.name, { digest, size: asset.size });
   }
   return map;
@@ -183,7 +180,7 @@ export function assertLiveDependencyAlignment({ liveAssets, mutate, packedShaByN
   const live = liveAssetDigestMap(liveAssets);
   const mutateSet = new Set(mutate);
   for (const [name, sha] of Object.entries(packedShaByName ?? {})) {
-    const productId = name.startsWith("gxserver-linux-") ? name.replace(/\.tar\.gz$/u, "") : null;
+    const productId = name.startsWith('gxserver-linux-') ? name.replace(/\.tar\.gz$/u, '') : null;
     if (!productId || mutateSet.has(productId)) continue;
     const recorded = live.get(name);
     if (!recorded?.digest) {
@@ -191,17 +188,13 @@ export function assertLiveDependencyAlignment({ liveAssets, mutate, packedShaByN
     }
     if (recorded.digest !== sha) {
       throw new Error(
-        `Packed ${name} digest ${sha.slice(0, 12)} does not match the live release ${recorded.digest.slice(0, 12)}`,
+        `Packed ${name} digest ${sha.slice(0, 12)} does not match the live release ${recorded.digest.slice(0, 12)}`
       );
     }
   }
 }
 
-export function mergeReleaseNotes({
-  assetNames,
-  liveBody,
-  version,
-}) {
+export function mergeReleaseNotes({ assetNames, liveBody, version }) {
   return mergeCustomerDownloadNotes(liveBody, version, assetNames);
 }
 
@@ -227,7 +220,7 @@ export function mergeAmendProvenance({
   const livePlan = published.plan ?? {};
   const livePlanProducts = { ...(livePlan.products ?? {}) };
   for (const [productId, entry] of Object.entries(amendPlan.products ?? {})) {
-    if (entry.action !== "skip") livePlanProducts[productId] = entry;
+    if (entry.action !== 'skip') livePlanProducts[productId] = entry;
   }
   const expectedPlatforms = PRODUCT_IDS.filter((productId) => ordered[productId]);
   const mergedPlan = compactPlanForRecord({
@@ -269,16 +262,14 @@ export function scopeEnvFromFlags(scopeFlags) {
 }
 
 export function githubOutputsForIntent(intent, { updateSparkle, version }) {
-  const sparkle = Boolean(updateSparkle) && intent.mutate.includes("macos-arm64");
+  const sparkle = Boolean(updateSparkle) && intent.mutate.includes('macos-arm64');
   return {
-    amend_products: intent.mutate.join(","),
-    expected_platforms: intent.scope.join(","),
-    force_products: intent.forceProducts.join(","),
+    amend_products: intent.mutate.join(','),
+    expected_platforms: intent.scope.join(','),
+    force_products: intent.forceProducts.join(','),
     update_sparkle: String(sparkle),
     version,
-    ...Object.fromEntries(
-      Object.entries(intent.scopeFlags).map(([flag, enabled]) => [flag, String(Boolean(enabled))]),
-    ),
+    ...Object.fromEntries(Object.entries(intent.scopeFlags).map(([flag, enabled]) => [flag, String(Boolean(enabled))])),
   };
 }
 

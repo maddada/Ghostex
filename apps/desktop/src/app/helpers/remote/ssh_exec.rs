@@ -367,4 +367,3 @@ pub(crate) fn gpui_login_shell_remote_command(command: &str) -> String {
         "if [ -x /bin/zsh ]; then exec /bin/zsh -lic {quoted_command}; elif command -v zsh >/dev/null 2>&1; then exec zsh -lic {quoted_command}; else exec /bin/sh -lc {quoted_command}; fi"
     )
 }
-

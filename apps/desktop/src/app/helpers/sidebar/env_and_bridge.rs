@@ -11,7 +11,6 @@ use std::{env, path::PathBuf, sync::atomic::Ordering, time::Duration};
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use anyhow::{Context as _, Result};
 use gpui::{Hsla, rgb};
 
@@ -257,7 +256,9 @@ pub(crate) fn gpui_sidebar_agent_icon(value: Option<&str>) -> Option<&'static st
     }
 }
 
-pub(crate) fn gpui_previous_session_reference_from_history_id(history_id: &str) -> Option<(&str, &str)> {
+pub(crate) fn gpui_previous_session_reference_from_history_id(
+    history_id: &str,
+) -> Option<(&str, &str)> {
     let payload = history_id.strip_prefix("gxserver:")?;
     let (project_id, session_id) = payload.split_once(':')?;
     if session_id.contains(':')
@@ -351,4 +352,3 @@ pub(crate) fn gpui_sidebar_portless_state_with_presentation() -> Option<serde_js
     state["presentation"] = presentation;
     Some(state)
 }
-

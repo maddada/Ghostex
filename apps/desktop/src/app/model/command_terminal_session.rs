@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 /*
 CDXC:GPUICommandTabStatus 2026-06-27-05:07:
 Command-pane tab status indicators now have live Action parity plus safe restored metadata: Action command tabs own run ids, session-state file stamping, status-file polling, run-start Working, idle completion, completion feedback, and exit cleanup, while non-Action/restored tabs remain enum/boolean status only. Status must not be inferred from shell titles, output, paths, command text, env, logs, or persisted shell JSON. Persistence keeps only the bounded Action selector needed to reclaim the same tab after restart; run ids, status-file paths, command text, stdout/stderr, terminal content, countdown labels, paths, tokens, and private titles remain runtime-only.
@@ -26,13 +25,11 @@ pub(crate) enum CommandTerminalActivity {
     Attention,
 }
 
-
 impl Default for CommandTerminalActivity {
     fn default() -> Self {
         Self::Idle
     }
 }
-
 
 impl CommandTerminalActivity {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -53,7 +50,6 @@ impl CommandTerminalActivity {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CommandTerminalTabStatus {
     Idle,
@@ -61,7 +57,6 @@ pub(crate) enum CommandTerminalTabStatus {
     Attention,
     DelayedSend,
 }
-
 
 impl CommandTerminalTabStatus {
     pub(crate) fn element_slug(self) -> &'static str {
@@ -73,7 +68,6 @@ impl CommandTerminalTabStatus {
         }
     }
 }
-
 
 pub(crate) fn command_terminal_tab_status(
     activity: CommandTerminalActivity,
@@ -89,7 +83,6 @@ pub(crate) fn command_terminal_tab_status(
         }
     }
 }
-
 
 pub(crate) struct CommandTerminalSession {
     pub(crate) id: CommandSessionId,
@@ -109,7 +102,6 @@ pub(crate) struct CommandTerminalSession {
     pub(crate) action_run_id: Option<String>,
     pub(crate) action_status_file_path: Option<PathBuf>,
 }
-
 
 impl CommandTerminalSession {
     pub(crate) fn placeholder(id: CommandSessionId, title: String) -> Self {
@@ -157,7 +149,10 @@ impl CommandTerminalSession {
         self
     }
 
-    pub(crate) fn with_gxserver_session_key(mut self, key: Option<GpuiLocalWorkspaceSessionKey>) -> Self {
+    pub(crate) fn with_gxserver_session_key(
+        mut self,
+        key: Option<GpuiLocalWorkspaceSessionKey>,
+    ) -> Self {
         self.gxserver_session_key = key;
         self
     }

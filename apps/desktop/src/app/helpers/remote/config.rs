@@ -277,4 +277,3 @@ pub(crate) fn gpui_remote_project_name_from_path(path: &str) -> String {
         .take(120)
         .collect()
 }
-

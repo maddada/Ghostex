@@ -7,48 +7,43 @@ import {
   GPUI_REMOTE_GROUP_ORDER_STORAGE_KEY,
   GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY,
   GPUI_REMOTE_RECENT_PROJECTS_STORAGE_KEY,
-} from "../constants";
-import { normalizeGpuiSidebarTheme } from "./bootstrap";
-import { normalizeNonEmptyString } from "./records";
-import {
-  createGpuiRemotePresentationProjectId,
-  isPresentationSnapshot,
-} from "./remote-presentation";
-import { normalizeGpuiProjectPath } from "./worktrees";
-import type { ghostexSettings } from "@/packages/shared/ghostex-settings";
+} from '../constants';
+import { normalizeGpuiSidebarTheme } from './bootstrap';
+import { normalizeNonEmptyString } from './records';
+import { createGpuiRemotePresentationProjectId, isPresentationSnapshot } from './remote-presentation';
+import { normalizeGpuiProjectPath } from './worktrees';
+import type { ghostexSettings } from '@/packages/shared/ghostex-settings';
 import type {
   GxserverPresentationSnapshot,
   GxserverProjectId,
   GxserverRecentProjectDomainState,
-} from "@/packages/shared/gxserver-protocol";
-import type { SidebarRecentProject } from "@/packages/shared/session-grid-contract";
-import { resolveSidebarTheme } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/gxserver-protocol';
+import type { SidebarRecentProject } from '@/packages/shared/session-grid-contract';
+import { resolveSidebarTheme } from '@/packages/shared/session-grid-contract';
 import {
   normalizeWorkspaceProjectIcon,
   normalizeWorkspaceProjectIconDataUrl,
   normalizeWorkspaceThemeColor,
-} from "@/packages/shared/workspace-project-appearance";
+} from '@/packages/shared/workspace-project-appearance';
 
 export function createGpuiRecentProjects(
   recentProjects: readonly GxserverRecentProjectDomainState[],
-  settings: ghostexSettings,
+  settings: ghostexSettings
 ): SidebarRecentProject[] {
   return recentProjects
     .flatMap((project) => {
-      const projectId = typeof project.projectId === "string" ? project.projectId.trim() : "";
-      const title = typeof project.title === "string" ? project.title.trim() : "";
+      const projectId = typeof project.projectId === 'string' ? project.projectId.trim() : '';
+      const title = typeof project.title === 'string' ? project.title.trim() : '';
       const path = normalizeGpuiProjectPath(project.path);
       if (!projectId || !title || !path) {
         return [];
       }
       const icon = normalizeWorkspaceProjectIcon(project.icon);
       const iconDataUrl = normalizeWorkspaceProjectIconDataUrl(project.iconDataUrl);
-      const theme =
-        normalizeGpuiSidebarTheme(project.theme) ??
-        resolveSidebarTheme(settings.sidebarTheme, "dark");
+      const theme = normalizeGpuiSidebarTheme(project.theme) ?? resolveSidebarTheme(settings.sidebarTheme, 'dark');
       const themeColor = normalizeWorkspaceThemeColor(project.themeColor);
       const recentClosedAt =
-        typeof project.recentClosedAt === "string" && project.recentClosedAt.trim().length > 0
+        typeof project.recentClosedAt === 'string' && project.recentClosedAt.trim().length > 0
           ? project.recentClosedAt.trim()
           : undefined;
       return [
@@ -59,9 +54,7 @@ export function createGpuiRecentProjects(
           ...(themeColor ? { themeColor } : {}),
           path,
           projectId,
-          sessionCount: Number.isFinite(project.sessionCount)
-            ? Math.max(0, Math.floor(project.sessionCount))
-            : 0,
+          sessionCount: Number.isFinite(project.sessionCount) ? Math.max(0, Math.floor(project.sessionCount)) : 0,
           theme,
           title,
         },
@@ -71,10 +64,9 @@ export function createGpuiRecentProjects(
 }
 
 export function createGpuiRemoteRecentProjects(
-  recentProjectsByMachineId:
-    ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]> | undefined,
+  recentProjectsByMachineId: ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]> | undefined,
   presentationsByMachineId: ReadonlyMap<string, GxserverPresentationSnapshot> | undefined,
-  settings: ghostexSettings,
+  settings: ghostexSettings
 ): SidebarRecentProject[] {
   /*
   CDXC:GPUIRemoteProjects 2026-06-27-19:37:
@@ -86,9 +78,7 @@ export function createGpuiRemoteRecentProjects(
   if (!recentProjectsByMachineId) {
     return [];
   }
-  const remoteMachinesById = new Map(
-    settings.remoteMachines.map((machine) => [machine.id, machine]),
-  );
+  const remoteMachinesById = new Map(settings.remoteMachines.map((machine) => [machine.id, machine]));
   return [...recentProjectsByMachineId.entries()].flatMap(([machineId, recentProjects]) => {
     const machine = remoteMachinesById.get(machineId);
     if (!machine) {
@@ -96,28 +86,23 @@ export function createGpuiRemoteRecentProjects(
     }
     const presentation = presentationsByMachineId?.get(machineId);
     return recentProjects.flatMap((project) => {
-      const projectId = typeof project.projectId === "string" ? project.projectId.trim() : "";
-      const presentationProject = presentation?.projects.find(
-        (candidate) => candidate.projectId === projectId,
-      );
+      const projectId = typeof project.projectId === 'string' ? project.projectId.trim() : '';
+      const presentationProject = presentation?.projects.find((candidate) => candidate.projectId === projectId);
       if (presentation && !presentationProject) {
         return [];
       }
       const title =
-        presentationProject?.title.trim() ||
-        (typeof project.title === "string" ? project.title.trim() : "");
+        presentationProject?.title.trim() || (typeof project.title === 'string' ? project.title.trim() : '');
       const path = normalizeGpuiProjectPath(presentationProject?.path ?? project.path);
       if (!projectId || !title || !path) {
         return [];
       }
       const icon = normalizeWorkspaceProjectIcon(project.icon);
       const iconDataUrl = normalizeWorkspaceProjectIconDataUrl(project.iconDataUrl);
-      const theme =
-        normalizeGpuiSidebarTheme(project.theme) ??
-        resolveSidebarTheme(settings.sidebarTheme, "dark");
+      const theme = normalizeGpuiSidebarTheme(project.theme) ?? resolveSidebarTheme(settings.sidebarTheme, 'dark');
       const themeColor = normalizeWorkspaceThemeColor(project.themeColor);
       const recentClosedAt =
-        typeof project.recentClosedAt === "string" && project.recentClosedAt.trim().length > 0
+        typeof project.recentClosedAt === 'string' && project.recentClosedAt.trim().length > 0
           ? project.recentClosedAt.trim()
           : undefined;
       return [
@@ -129,7 +114,7 @@ export function createGpuiRemoteRecentProjects(
           path,
           projectId: createGpuiRemotePresentationProjectId(machineId, projectId),
           remoteMachineId: machineId,
-          remoteMachineName: machine.name || "Remote",
+          remoteMachineName: machine.name || 'Remote',
           sessionCount: presentation
             ? countGpuiRemotePresentationProjectSessions(presentation, projectId)
             : Number.isFinite(project.sessionCount)
@@ -152,10 +137,8 @@ machine ids and remote project ids.
 */
 export function readStoredGpuiRemoteGroupOrder(): Map<string, string[]> {
   try {
-    const raw: unknown = JSON.parse(
-      localStorage.getItem(GPUI_REMOTE_GROUP_ORDER_STORAGE_KEY) ?? "{}",
-    );
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    const raw: unknown = JSON.parse(localStorage.getItem(GPUI_REMOTE_GROUP_ORDER_STORAGE_KEY) ?? '{}');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       return new Map();
     }
     const next = new Map<string, string[]>();
@@ -164,8 +147,7 @@ export function readStoredGpuiRemoteGroupOrder(): Map<string, string[]> {
         continue;
       }
       const projectIds = order.filter(
-        (projectId): projectId is string =>
-          typeof projectId === "string" && projectId.trim().length > 0,
+        (projectId): projectId is string => typeof projectId === 'string' && projectId.trim().length > 0
       );
       if (projectIds.length > 0) {
         next.set(machineId, projectIds);
@@ -177,14 +159,9 @@ export function readStoredGpuiRemoteGroupOrder(): Map<string, string[]> {
   }
 }
 
-export function writeStoredGpuiRemoteGroupOrder(
-  orderByMachineId: ReadonlyMap<string, readonly string[]>,
-): void {
+export function writeStoredGpuiRemoteGroupOrder(orderByMachineId: ReadonlyMap<string, readonly string[]>): void {
   try {
-    localStorage.setItem(
-      GPUI_REMOTE_GROUP_ORDER_STORAGE_KEY,
-      JSON.stringify(Object.fromEntries(orderByMachineId)),
-    );
+    localStorage.setItem(GPUI_REMOTE_GROUP_ORDER_STORAGE_KEY, JSON.stringify(Object.fromEntries(orderByMachineId)));
   } catch {
     // CEF storage may be unavailable in tests or early bootstrap; the in-memory order still drives this session.
   }
@@ -192,10 +169,8 @@ export function writeStoredGpuiRemoteGroupOrder(
 
 export function readStoredGpuiRemoteLastSeenPresentations(): Map<string, GxserverPresentationSnapshot> {
   try {
-    const raw: unknown = JSON.parse(
-      localStorage.getItem(GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY) ?? "{}",
-    );
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    const raw: unknown = JSON.parse(localStorage.getItem(GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY) ?? '{}');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       return new Map();
     }
     const next = new Map<string, GxserverPresentationSnapshot>();
@@ -212,7 +187,7 @@ export function readStoredGpuiRemoteLastSeenPresentations(): Map<string, Gxserve
 }
 
 export function writeStoredGpuiRemoteLastSeenPresentations(
-  presentationsByMachineId: ReadonlyMap<string, GxserverPresentationSnapshot>,
+  presentationsByMachineId: ReadonlyMap<string, GxserverPresentationSnapshot>
 ): void {
   /*
   CDXC:GPUIRemoteLastSeen 2026-07-12:
@@ -225,7 +200,7 @@ export function writeStoredGpuiRemoteLastSeenPresentations(
   try {
     localStorage.setItem(
       GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY,
-      JSON.stringify(Object.fromEntries(presentationsByMachineId)),
+      JSON.stringify(Object.fromEntries(presentationsByMachineId))
     );
   } catch {
     // CEF storage may be unavailable in tests or early bootstrap; the in-memory copy still drives this session.
@@ -236,8 +211,8 @@ export function readStoredGpuiRemoteRecentProjects(): Map<string, GxserverRecent
   try {
     return groupGpuiRemoteRecentProjectsByMachine(
       normalizeStoredGpuiRemoteRecentProjects(
-        JSON.parse(localStorage.getItem(GPUI_REMOTE_RECENT_PROJECTS_STORAGE_KEY) ?? "[]"),
-      ),
+        JSON.parse(localStorage.getItem(GPUI_REMOTE_RECENT_PROJECTS_STORAGE_KEY) ?? '[]')
+      )
     );
   } catch {
     return new Map();
@@ -245,14 +220,14 @@ export function readStoredGpuiRemoteRecentProjects(): Map<string, GxserverRecent
 }
 
 export function writeStoredGpuiRemoteRecentProjects(
-  projectsByMachineId: ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]>,
+  projectsByMachineId: ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]>
 ): void {
   try {
     const rows = [...projectsByMachineId.entries()].flatMap(([machineId, projects]) =>
       projects.flatMap((project) => {
-        const projectId = typeof project.projectId === "string" ? project.projectId.trim() : "";
-        const title = typeof project.title === "string" ? project.title.trim() : "";
-        const path = typeof project.path === "string" ? project.path.trim() : "";
+        const projectId = typeof project.projectId === 'string' ? project.projectId.trim() : '';
+        const title = typeof project.title === 'string' ? project.title.trim() : '';
+        const path = typeof project.path === 'string' ? project.path.trim() : '';
         if (!machineId.trim() || !projectId || !title) {
           return [];
         }
@@ -261,15 +236,12 @@ export function writeStoredGpuiRemoteRecentProjects(
             machineId: machineId.trim(),
             path,
             projectId,
-            recentClosedAt:
-              typeof project.recentClosedAt === "string" ? project.recentClosedAt : undefined,
-            sessionCount: Number.isFinite(project.sessionCount)
-              ? Math.max(0, Math.floor(project.sessionCount))
-              : 0,
+            recentClosedAt: typeof project.recentClosedAt === 'string' ? project.recentClosedAt : undefined,
+            sessionCount: Number.isFinite(project.sessionCount) ? Math.max(0, Math.floor(project.sessionCount)) : 0,
             title,
           },
         ];
-      }),
+      })
     );
     /*
     CDXC:GPUIRemoteProjects 2026-06-27-19:37:
@@ -285,13 +257,13 @@ export function writeStoredGpuiRemoteRecentProjects(
 }
 
 export function normalizeStoredGpuiRemoteRecentProjects(
-  value: unknown,
+  value: unknown
 ): Array<{ machineId: string; project: GxserverRecentProjectDomainState }> {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.flatMap((candidate) => {
-    if (!candidate || typeof candidate !== "object") {
+    if (!candidate || typeof candidate !== 'object') {
       return [];
     }
     const record = candidate as Record<string, unknown>;
@@ -301,9 +273,9 @@ export function normalizeStoredGpuiRemoteRecentProjects(
     if (!machineId || !projectId || !title) {
       return [];
     }
-    const path = typeof record.path === "string" ? record.path.trim() : "";
+    const path = typeof record.path === 'string' ? record.path.trim() : '';
     const recentClosedAt =
-      typeof record.recentClosedAt === "string" &&
+      typeof record.recentClosedAt === 'string' &&
       record.recentClosedAt.trim().length > 0 &&
       Number.isFinite(Date.parse(record.recentClosedAt))
         ? record.recentClosedAt.trim()
@@ -316,8 +288,7 @@ export function normalizeStoredGpuiRemoteRecentProjects(
           path,
           projectId: projectId as GxserverProjectId,
           ...(recentClosedAt ? { recentClosedAt } : {}),
-          sessionCount:
-            Number.isFinite(sessionCount) && sessionCount > 0 ? Math.floor(sessionCount) : 0,
+          sessionCount: Number.isFinite(sessionCount) && sessionCount > 0 ? Math.floor(sessionCount) : 0,
           title,
         },
       },
@@ -330,7 +301,7 @@ CDXC:GPUIRemoteProjects 2026-06-27-21:59:
 The GPUI start build runs through Vite/Rolldown, whose transformer accepts readonly array shorthand and ReadonlyArray<T> but rejects `readonly Array<T>`. Keep this helper input in ReadonlyArray<T> form so Remote Recent Projects packaging does not break local GPUI startup.
 */
 export function groupGpuiRemoteRecentProjectsByMachine(
-  rows: ReadonlyArray<{ machineId: string; project: GxserverRecentProjectDomainState }>,
+  rows: ReadonlyArray<{ machineId: string; project: GxserverRecentProjectDomainState }>
 ): Map<string, GxserverRecentProjectDomainState[]> {
   const projectsByMachineId = new Map<string, GxserverRecentProjectDomainState[]>();
   for (const row of rows) {
@@ -339,38 +310,33 @@ export function groupGpuiRemoteRecentProjectsByMachine(
       orderGpuiRecentProjects([
         row.project,
         ...(projectsByMachineId.get(row.machineId) ?? []).filter(
-          (project) => project.projectId !== row.project.projectId,
+          (project) => project.projectId !== row.project.projectId
         ),
-      ]),
+      ])
     );
   }
   return projectsByMachineId;
 }
 
 export function orderGpuiRecentProjects(
-  projects: readonly GxserverRecentProjectDomainState[],
+  projects: readonly GxserverRecentProjectDomainState[]
 ): GxserverRecentProjectDomainState[] {
   return [...projects].sort(
-    (left, right) => Date.parse(right.recentClosedAt ?? "") - Date.parse(left.recentClosedAt ?? ""),
+    (left, right) => Date.parse(right.recentClosedAt ?? '') - Date.parse(left.recentClosedAt ?? '')
   );
 }
 
 export function countGpuiRemotePresentationProjectSessions(
   presentation: GxserverPresentationSnapshot,
-  projectId: string,
+  projectId: string
 ): number {
   return presentation.sessions.filter(
     (session) =>
-      session.projectId === projectId &&
-      session.visibleInSidebarByDefault === true &&
-      session.surface !== "commands",
+      session.projectId === projectId && session.visibleInSidebarByDefault === true && session.surface !== 'commands'
   ).length;
 }
 
-export function compareGpuiRecentProjectsByClosedAt(
-  left: SidebarRecentProject,
-  right: SidebarRecentProject,
-): number {
+export function compareGpuiRecentProjectsByClosedAt(left: SidebarRecentProject, right: SidebarRecentProject): number {
   /*
   CDXC:GPUIRecentProjects 2026-06-25-19:22:
   Native `compareRecentProjectsByClosedAt` only sorts parsed close time descending. The Recent Projects drawer contract does not include gxserver `updatedAt`, so GPUI must not invent title or id tie-breaks; stable sort preserves producer order for equal timestamps.
@@ -379,6 +345,6 @@ export function compareGpuiRecentProjectsByClosedAt(
 }
 
 export function gpuiRecentProjectClosedAtMillis(project: SidebarRecentProject): number {
-  const millis = Date.parse(project.recentClosedAt ?? "");
+  const millis = Date.parse(project.recentClosedAt ?? '');
   return Number.isFinite(millis) ? millis : 0;
 }

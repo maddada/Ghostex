@@ -1,22 +1,19 @@
-import { type BinaryFiles } from "@excalidraw/excalidraw/types";
-import {
-  type ButtonHTMLAttributes,
-  type ReactNode,
-} from "react";
-import { EditorView } from "@codemirror/view";
-import { type ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import { type BinaryFiles } from '@excalidraw/excalidraw/types';
+import { type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { EditorView } from '@codemirror/view';
+import { type ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import {
   type ProjectDocsFileEntry as ManageFileEntry,
   type ProjectDocsGitBaseline as ManageGitBaseline,
   type ProjectDocsRequest as ManageFilesBridgeRequest,
-} from "@/packages/shared/project-docs";
-import { MANAGE_DOCS_ROOT_PATH } from "./constants";
+} from '@/packages/shared/project-docs';
+import { MANAGE_DOCS_ROOT_PATH } from './constants';
 
-export type ManageAnnotationType = "comment" | "redline";
+export type ManageAnnotationType = 'comment' | 'redline';
 
-export type ManageAnnotationScope = "global" | "selection";
+export type ManageAnnotationScope = 'global' | 'selection';
 
-export type ManageQuickLabelId = "clarify" | "needs-tests" | "looks-good";
+export type ManageQuickLabelId = 'clarify' | 'needs-tests' | 'looks-good';
 
 export type ManageQuickLabel = {
   color: string;
@@ -76,9 +73,9 @@ export type ManageCommentDraft = {
   quote: string;
 };
 
-export type ManageSidebarSide = "left" | "right";
+export type ManageSidebarSide = 'left' | 'right';
 
-export type ManageArtifactKind = "excalidraw" | "html" | "markdown";
+export type ManageArtifactKind = 'excalidraw' | 'html' | 'markdown';
 
 export type ManageFileContextMenuState = {
   confirmingDelete?: boolean;
@@ -89,31 +86,31 @@ export type ManageFileContextMenuState = {
 
 export type ManageFileOperationState = {
   action:
-    | "addToSessionContext"
-    | "copyFullPath"
-    | "createFile"
-    | "createFolder"
-    | "delete"
-    | "duplicate"
-    | "move"
-    | "rename"
-    | "revealInFinder";
+    | 'addToSessionContext'
+    | 'copyFullPath'
+    | 'createFile'
+    | 'createFolder'
+    | 'delete'
+    | 'duplicate'
+    | 'move'
+    | 'rename'
+    | 'revealInFinder';
   path: string;
 };
 
 export type ManageDragState = {
-  kind: ManageFileEntry["kind"];
+  kind: ManageFileEntry['kind'];
   path: string;
 };
 
 export type ManageDropTarget =
   | {
-      kind: "entry";
+      kind: 'entry';
       path: string;
       targetDirectoryPath: string;
     }
   | {
-      kind: "root";
+      kind: 'root';
       path: typeof MANAGE_DOCS_ROOT_PATH;
     };
 
@@ -123,7 +120,7 @@ export type ManageRenameDialogState = {
   value: string;
 };
 
-export type ManageMarkdownAlertKind = "caution" | "important" | "note" | "tip" | "warning";
+export type ManageMarkdownAlertKind = 'caution' | 'important' | 'note' | 'tip' | 'warning';
 
 export type ManageMarkdownBlock = {
   alertKind?: ManageMarkdownAlertKind;
@@ -138,7 +135,7 @@ export type ManageMarkdownBlock = {
   orderedIndex?: number;
   orderedStart?: number;
   startLine: number;
-  type: "blockquote" | "code" | "directive" | "heading" | "hr" | "html" | "list-item" | "paragraph" | "table";
+  type: 'blockquote' | 'code' | 'directive' | 'heading' | 'hr' | 'html' | 'list-item' | 'paragraph' | 'table';
 };
 
 export type ManageMeoEditor = {
@@ -146,11 +143,11 @@ export type ManageMeoEditor = {
   destroy: () => void;
   findNext?: (
     query: string,
-    options?: { caseSensitive?: boolean; focusEditor?: boolean; wholeWord?: boolean },
+    options?: { caseSensitive?: boolean; focusEditor?: boolean; wholeWord?: boolean }
   ) => { current?: number; found?: boolean; total?: number } | null;
   findPrevious?: (
     query: string,
-    options?: { caseSensitive?: boolean; focusEditor?: boolean; wholeWord?: boolean },
+    options?: { caseSensitive?: boolean; focusEditor?: boolean; wholeWord?: boolean }
   ) => { current?: number; found?: boolean; total?: number } | null;
   focus: () => void;
   getText: () => string;
@@ -159,12 +156,12 @@ export type ManageMeoEditor = {
   replaceAll?: (
     query: string,
     replacement: string,
-    options?: { caseSensitive?: boolean; wholeWord?: boolean },
+    options?: { caseSensitive?: boolean; wholeWord?: boolean }
   ) => { replaced?: number; total?: number };
   replaceCurrent?: (
     query: string,
     replacement: string,
-    options?: { caseSensitive?: boolean; wholeWord?: boolean },
+    options?: { caseSensitive?: boolean; wholeWord?: boolean }
   ) => { current?: number; found?: boolean; replaced?: boolean; total?: number };
   setGitBaseline?: (snapshot?: ManageGitBaseline | null) => void;
   setGitGutterVisible?: (visible: boolean) => void;
@@ -175,10 +172,10 @@ export type ManageMeoEditor = {
   view: EditorView;
 };
 
-export type ManageMeoMode = "live" | "source";
+export type ManageMeoMode = 'live' | 'source';
 
 export type ManageMeoSelectionState = {
-  align?: "center" | "start";
+  align?: 'center' | 'start';
   anchorBottomY?: number;
   anchorX?: number;
   anchorY?: number;
@@ -187,7 +184,7 @@ export type ManageMeoSelectionState = {
   visible?: boolean;
 };
 
-export type ManageSelectionToolbarMode = "annotations" | "formatting";
+export type ManageSelectionToolbarMode = 'annotations' | 'formatting';
 
 export type ManageMeoAnnotationDecoration = {
   from: number;
@@ -229,5 +226,5 @@ export type ManageDocsOpenFileWindow = Window & {
 };
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

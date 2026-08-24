@@ -5,8 +5,8 @@ import {
   MANAGE_MEO_HEADING_COLOR,
   MANAGE_MEO_VARIABLE_COLOR,
   MANAGE_REDLINE_ANNOTATION_COLOR,
-} from "./constants";
-import { quickLabelColor } from "./annotation-store";
+} from './constants';
+import { quickLabelColor } from './annotation-store';
 
 export const MANAGE_STYLES = `
   :root {
@@ -1614,17 +1614,17 @@ export const MANAGE_STYLES = `
 
   .annotation-highlight[data-label-id="clarify"],
   .manage-annotation-highlight[data-label-id="clarify"] {
-    --manage-annotation-color: ${quickLabelColor("clarify")};
+    --manage-annotation-color: ${quickLabelColor('clarify')};
   }
 
   .annotation-highlight[data-label-id="needs-tests"],
   .manage-annotation-highlight[data-label-id="needs-tests"] {
-    --manage-annotation-color: ${quickLabelColor("needs-tests")};
+    --manage-annotation-color: ${quickLabelColor('needs-tests')};
   }
 
   .annotation-highlight[data-label-id="looks-good"],
   .manage-annotation-highlight[data-label-id="looks-good"] {
-    --manage-annotation-color: ${quickLabelColor("looks-good")};
+    --manage-annotation-color: ${quickLabelColor('looks-good')};
   }
 
   .annotation-highlight.deletion,

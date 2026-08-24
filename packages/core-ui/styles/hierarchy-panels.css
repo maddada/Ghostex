@@ -21,7 +21,7 @@
 
 /* ------------------- level 1: section labels ------------------- */
 
-.sidebar-reference-layout[data-reference-sidebar="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] {
   --sidebar-active-session-border: #ffffff;
 }
 
@@ -51,8 +51,7 @@
  * the connection state, so a second rest-state indicator only added noise and
  * pushed that control away from the machine name.
  */
-.reference-remote-machine-section[data-disconnected="true"]
-  .reference-sidebar-section-heading {
+.reference-remote-machine-section[data-disconnected='true'] .reference-sidebar-section-heading {
   color: color-mix(in srgb, var(--app-foreground) 40%, transparent);
 }
 
@@ -71,7 +70,7 @@
   padding-left: 6px;
 }
 
-.reference-sidebar-section-row[data-collapsed="true"][data-contains-active-session="true"] {
+.reference-sidebar-section-row[data-collapsed='true'][data-contains-active-session='true'] {
   border-radius: 5px;
   box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border);
 }
@@ -85,7 +84,7 @@
  * specific as the shared primary-nav padding rule in group-panels.css, which
  * targets the same button through .reference-sidebar-search-more-row.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   .reference-sidebar-search-more-row
   .reference-sidebar-search-slot
@@ -99,31 +98,27 @@
  * underline only once it is activated (clicked) — that underline is the sole
  * "you are typing here" affordance.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-slot
   .reference-sidebar-nav-button:is(:hover, :focus-visible, :active) {
   background: transparent;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-search-slot
-  .reference-sidebar-nav-label,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-search-slot .reference-sidebar-nav-label,
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-slot
   .reference-sidebar-inline-search-input,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-search-slot
-  .reference-sidebar-search-icon {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-search-slot .reference-sidebar-search-icon {
   color: color-mix(in srgb, var(--app-foreground) 52%, transparent);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-slot:hover
   .reference-sidebar-nav-label,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-slot:hover
   .reference-sidebar-inline-search-input,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-slot:hover
   .reference-sidebar-search-icon {
   color: var(--app-foreground);
@@ -134,19 +129,19 @@
  * outranks a plain color declaration; clearing the animation on hover lets the
  * brighter color apply.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-slot:hover
   .reference-sidebar-inline-search-input::placeholder {
   animation: none;
   color: var(--app-foreground);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-search-slot[data-active="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-sidebar-search-slot[data-active='true']
   .reference-sidebar-inline-search-row::after {
   background: color-mix(in srgb, var(--app-foreground) 38%, transparent);
   bottom: 6px;
-  content: "";
+  content: '';
   height: 1px;
   left: calc(var(--reference-sidebar-primary-nav-edge-bleed-left) - 2px);
   pointer-events: none;
@@ -158,20 +153,15 @@
  * The More (overflow menu) trigger is chrome of the same rank as the labels, so
  * it rests at the section-label color and brightens with hover / open state.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-menu-cell
   .reference-sidebar-nav-button {
   color: color-mix(in srgb, var(--app-foreground) 52%, transparent);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-menu-cell
-  .reference-sidebar-nav-button:is(
-    :hover,
-    :focus-visible,
-    [aria-expanded="true"],
-    [data-state="open"]
-  ) {
+  .reference-sidebar-nav-button:is(:hover, :focus-visible, [aria-expanded='true'], [data-state='open']) {
   color: var(--app-foreground);
 }
 
@@ -180,7 +170,7 @@
  * dot now only appears for actionable states (working / needs attention), so
  * color in the header row always means "something to look at".
  */
-.group-collapsed-status-count[data-activity="awake"]::before {
+.group-collapsed-status-count[data-activity='awake']::before {
   display: none;
 }
 
@@ -193,11 +183,7 @@
  * normal content layout.
  */
 section.project-collection {
-  --project-collection-expanded-surface: color-mix(
-    in srgb,
-    var(--app-background) 96%,
-    #000000 4%
-  );
+  --project-collection-expanded-surface: color-mix(in srgb, var(--app-background) 96%, #000000 4%);
   --project-group-rail-color: var(--project-collection-color);
   --project-group-rail-width: 3px;
   background: transparent;
@@ -211,7 +197,7 @@ section.project-collection {
 section.project-collection::after {
   background: var(--project-group-rail-color);
   bottom: 5px;
-  content: "";
+  content: '';
   left: 0;
   pointer-events: none;
   position: absolute;
@@ -219,7 +205,7 @@ section.project-collection::after {
   width: var(--project-group-rail-width);
 }
 
-.sidebar-reference-layout[data-project-group-style="quiet"] section.project-collection {
+.sidebar-reference-layout[data-project-group-style='quiet'] section.project-collection {
   --project-group-rail-color: color-mix(
     in srgb,
     var(--project-collection-color) 55%,
@@ -228,16 +214,12 @@ section.project-collection::after {
   --project-group-rail-width: 1px;
 }
 
-.sidebar-reference-layout[data-project-group-style="branched"] section.project-collection {
-  --project-group-rail-color: color-mix(
-    in srgb,
-    var(--project-collection-color) 18%,
-    transparent
-  );
+.sidebar-reference-layout[data-project-group-style='branched'] section.project-collection {
+  --project-group-rail-color: color-mix(in srgb, var(--project-collection-color) 18%, transparent);
   --project-group-rail-width: 2px;
 }
 
-.sidebar-reference-layout[data-project-group-style="branched"] section.project-collection::after {
+.sidebar-reference-layout[data-project-group-style='branched'] section.project-collection::after {
   top: 0;
 }
 
@@ -251,15 +233,11 @@ section.project-collection > .project-collection-header {
   width: calc(100% + 9px);
 }
 
-.sidebar-reference-layout[data-project-group-style="header"]
-  section.project-collection
-  > .project-collection-header {
+.sidebar-reference-layout[data-project-group-style='header'] section.project-collection > .project-collection-header {
   background: color-mix(in srgb, var(--project-collection-color) 12%, transparent);
 }
 
-.sidebar-reference-layout[data-project-group-style="branched"]
-  section.project-collection
-  > .project-collection-header {
+.sidebar-reference-layout[data-project-group-style='branched'] section.project-collection > .project-collection-header {
   background: color-mix(in srgb, var(--project-collection-color) 18%, transparent);
   margin-left: -10px;
   width: calc(100% + 10px);
@@ -274,7 +252,7 @@ section.project-collection > .project-collection-header {
  */
 section.project-collection[data-collection-drop-position]::before {
   background: #c8cdd5;
-  content: "";
+  content: '';
   height: 2px;
   left: 2px;
   opacity: 0.72;
@@ -284,11 +262,11 @@ section.project-collection[data-collection-drop-position]::before {
   z-index: 8;
 }
 
-section.project-collection[data-collection-drop-position="before"]::before {
+section.project-collection[data-collection-drop-position='before']::before {
   top: -6px;
 }
 
-section.project-collection[data-collection-drop-position="after"]::before {
+section.project-collection[data-collection-drop-position='after']::before {
   bottom: -6px;
   top: auto;
 }
@@ -297,8 +275,7 @@ section.project-collection > .project-collection-header:hover {
   background: color-mix(in srgb, var(--project-collection-color) 22%, transparent);
 }
 
-section.project-collection[data-collapsed="true"][data-contains-active-session="true"]
-  > .project-collection-header {
+section.project-collection[data-collapsed='true'][data-contains-active-session='true'] > .project-collection-header {
   box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border);
 }
 
@@ -309,9 +286,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  */
 .project-collection-title,
 .project-collection-title-input,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-title {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-title {
   color: color-mix(in srgb, var(--app-foreground) 92%, #ffffff 8%);
   font-size: 15.55px;
   letter-spacing: 0.01em;
@@ -323,9 +298,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
   font-weight: 800;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-title {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-title {
   font-weight: 700;
 }
 
@@ -351,7 +324,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * the rounded corners. Drop-position lines (::before/::after at -9px) still
  * render because overflow stays visible.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-project-group="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] {
   /*
    * Rows and headers use the scroll-row bleed vars to reach the sidebar edges
    * in the flat layout. Inside a rounded card that bleed would poke hover
@@ -374,22 +347,19 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * Top-level (groupless) project headers start farther inward while keeping
  * their existing right edge; cards nested inside a collection stay symmetric.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-project-group-list
-  > .group[data-project-group="true"] {
+  > .group[data-project-group='true'] {
   margin-left: 18px;
   margin-right: 5px;
   width: calc(100% - 23px);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-sessions {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-sessions {
   padding: 0 3px 3px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"][data-collapsed="false"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'][data-collapsed='false'] {
   margin-bottom: 7px;
 }
 
@@ -398,57 +368,48 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * child override leaves the tighter spacing between projects inside an
  * expanded group untouched.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-project-group-list
-  > .group[data-project-group="true"] {
+  > .group[data-project-group='true'] {
   margin-bottom: 10px;
 }
 
 /*
  * Compact project headers remain normal-flow rows with no resting surface.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-head {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head {
   border-radius: 5px;
   margin-left: 0;
   margin-right: 0;
   padding: 2px 8px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-head::before {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head::before {
   border-radius: inherit;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-title-row {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-title-row {
   min-height: 26px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-title-handle {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-title-handle {
   margin-left: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true']
   .sidebar-v2-project-icon
   + .group-title-handle {
   margin-left: 10px;
 }
 
-
 /* Branched mode adds a short visual link from the group rail to each project. */
-.sidebar-reference-layout[data-project-group-style="branched"]
+.sidebar-reference-layout[data-project-group-style='branched']
   .project-collection-projects
-  > .group[data-project-group="true"]
+  > .group[data-project-group='true']
   .group-title-wrap::before {
   background: var(--project-group-rail-color);
-  content: "";
+  content: '';
   height: 2px;
   left: -43px;
   pointer-events: none;
@@ -458,16 +419,12 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
 }
 
 /* Top-level projects keep the same branch marker without inventing a parent rail. */
-.sidebar-reference-layout[data-project-group-style="branched"]
+.sidebar-reference-layout[data-project-group-style='branched']
   .reference-project-group-list
-  > .group[data-project-group="true"]
+  > .group[data-project-group='true']
   .group-title-wrap::before {
-  background: color-mix(
-    in srgb,
-    var(--workspace-project-theme-color, var(--app-foreground)) 18%,
-    transparent
-  );
-  content: "";
+  background: color-mix(in srgb, var(--workspace-project-theme-color, var(--app-foreground)) 18%, transparent);
+  content: '';
   height: 2px;
   left: -21px;
   pointer-events: none;
@@ -477,7 +434,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
 }
 
 /* Non-reference contexts (Storybook grid stories, legacy layouts). */
-.group[data-project-group="true"] {
+.group[data-project-group='true'] {
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -491,9 +448,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * project boundary. Pull the whole row block (icons, titles, kind labels)
  * 10px back toward the card edge.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .session-frame {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .session-frame {
   --reference-session-leading-inset: 5px;
   --reference-session-title-inset: 15px;
 }
@@ -520,51 +475,34 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * Rows outside a project collection use the neutral expanded group surface as
  * their base.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .session {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session {
   --session-expanded-group-surface: var(
     --project-collection-expanded-surface,
     color-mix(in srgb, var(--app-background) 96%, #000000 4%)
   );
   --session-surface: color-mix(in srgb, var(--app-background) 90%, #000000 10%);
-  --session-light-surface: color-mix(
-    in srgb,
-    var(--session-expanded-group-surface) 70%,
-    var(--app-foreground) 30%
-  );
-  --session-hover-surface: color-mix(
-    in srgb,
-    var(--session-expanded-group-surface) 78%,
-    var(--app-foreground) 22%
-  );
-  --session-focused-surface: color-mix(
-    in srgb,
-    var(--session-light-surface) 90%,
-    #000000 10%
-  );
-  --session-visible-surface: color-mix(
-    in srgb,
-    var(--session-light-surface) 60%,
-    #000000 40%
-  );
+  --session-light-surface: color-mix(in srgb, var(--session-expanded-group-surface) 70%, var(--app-foreground) 30%);
+  --session-hover-surface: color-mix(in srgb, var(--session-expanded-group-surface) 78%, var(--app-foreground) 22%);
+  --session-focused-surface: color-mix(in srgb, var(--session-light-surface) 90%, #000000 10%);
+  --session-visible-surface: color-mix(in srgb, var(--session-light-surface) 60%, #000000 40%);
   --session-visible-hover-overlay: color-mix(in srgb, var(--app-foreground) 8%, transparent);
   border-radius: 5px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session[data-visible="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session[data-visible='true'] {
   --session-surface: var(--session-visible-surface);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session[data-focused="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session[data-focused='true'] {
   --session-surface: var(--session-focused-surface);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session:not([data-focused="true"]):is(:hover, :focus-visible) {
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .session:not([data-focused='true']):is(:hover, :focus-visible) {
   --session-surface: var(--session-hover-surface);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session[data-focused="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session[data-focused='true'] {
   /*
    * The focused row owns its active outline directly. Do not make this depend
    * on ancestor propagation, and do not let hover/focus-visible shadows replace
@@ -573,8 +511,8 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
   box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border) !important;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-collapsed="true"][data-contains-active-session="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-collapsed='true'][data-contains-active-session='true']
   > .group-head::before {
   box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border) !important;
 }
@@ -585,7 +523,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * gray. Route it back through --session-surface (custom sidebar/titlebar
  * color themes keep their own higher-specificity ::after override).
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .session::after {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session::after {
   background: var(--session-surface);
   border-radius: 4px;
 }
@@ -595,7 +533,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * must use the same inner radius or the active surface peeks through at the
  * four corners while a title is being generated.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-title-generation-overlay {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-title-generation-overlay {
   border-radius: 4px;
 }
 
@@ -616,7 +554,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
 
 .project-list-end-ungroup-drop-zone::before {
   background: #c8cdd5;
-  content: "";
+  content: '';
   height: 2px;
   left: 3px;
   opacity: 0;
@@ -626,7 +564,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
   z-index: 8;
 }
 
-.project-list-end-ungroup-drop-zone[data-active="true"]::before {
+.project-list-end-ungroup-drop-zone[data-active='true']::before {
   opacity: 0.72;
 }
 
@@ -636,10 +574,8 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * remote-machine section follows it, reduce that header's usual 17px top
  * margin by 10px so the boundary does not double-space.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-project-group-list[data-collapsed="false"]:has(
-    > .project-list-end-ungroup-drop-zone
-  )
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-project-group-list[data-collapsed='false']:has(> .project-list-end-ungroup-drop-zone)
   + .reference-remote-section-list
   > .reference-remote-machine-section:first-child
   > .reference-sidebar-section-row {

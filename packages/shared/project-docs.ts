@@ -1,5 +1,5 @@
-export const PROJECT_DOCS_GXSERVER_ENDPOINT = "/api/runProjectDocsAction";
-export const PROJECT_DOCS_RESOURCE_ACTION = "readResource" as const;
+export const PROJECT_DOCS_GXSERVER_ENDPOINT = '/api/runProjectDocsAction';
+export const PROJECT_DOCS_RESOURCE_ACTION = 'readResource' as const;
 
 export type ProjectDocsFileEntry = {
   depth: number;
@@ -12,7 +12,7 @@ export type ProjectDocsFileEntry = {
    * already. Absent for hosts that predate it — fall back to `path`.
    */
   displayPath?: string;
-  kind: "directory" | "file";
+  kind: 'directory' | 'file';
   modifiedAt?: string;
   name: string;
   path: string;
@@ -20,13 +20,7 @@ export type ProjectDocsFileEntry = {
 };
 
 export type ProjectDocsGitBaselineReason =
-  | "binary"
-  | "error"
-  | "git-unavailable"
-  | "ignored"
-  | "not-file"
-  | "not-repo"
-  | "too-large";
+  'binary' | 'error' | 'git-unavailable' | 'ignored' | 'not-file' | 'not-repo' | 'too-large';
 
 export type ProjectDocsGitBaseline = {
   available: boolean;
@@ -49,7 +43,7 @@ export type ProjectDocsFilePreview = {
   displayPath?: string;
   error?: string;
   gitBaseline?: ProjectDocsGitBaseline;
-  kind: "text" | "unsupported";
+  kind: 'text' | 'unsupported';
   modifiedAt?: string;
   name: string;
   path: string;
@@ -58,19 +52,19 @@ export type ProjectDocsFilePreview = {
 
 export type ProjectDocsRequest = {
   action:
-    | "addToSessionContext"
-    | "copyFullPath"
-    | "list"
-    | "read"
-    | "stat"
-    | "save"
-    | "rename"
-    | "delete"
-    | "duplicate"
-    | "createFolder"
-    | "move"
-    | "revealInFinder"
-    | "openDocsFoldersSettings";
+    | 'addToSessionContext'
+    | 'copyFullPath'
+    | 'list'
+    | 'read'
+    | 'stat'
+    | 'save'
+    | 'rename'
+    | 'delete'
+    | 'duplicate'
+    | 'createFolder'
+    | 'move'
+    | 'revealInFinder'
+    | 'openDocsFoldersSettings';
   content?: string;
   newPath?: string;
   path?: string;
@@ -80,7 +74,7 @@ export type ProjectDocsRequest = {
 };
 
 export type ProjectDocsResponse = {
-  action: ProjectDocsRequest["action"];
+  action: ProjectDocsRequest['action'];
   entries?: ProjectDocsFileEntry[];
   error?: string;
   file?: ProjectDocsFilePreview;
@@ -105,7 +99,7 @@ export type ProjectDocsResourceResponse = {
 
 export type ProjectDocsResourceTransport = (
   endpoint: typeof PROJECT_DOCS_GXSERVER_ENDPOINT,
-  request: ProjectDocsResourceRequest,
+  request: ProjectDocsResourceRequest
 ) => Promise<unknown>;
 
 export type ProjectDocsHostTransport = {
@@ -115,40 +109,37 @@ export type ProjectDocsHostTransport = {
   timeoutMs: number;
 };
 
-export function createProjectDocsRequestId(prefix = "docs"): string {
+export function createProjectDocsRequestId(prefix = 'docs'): string {
   return `${prefix}-${globalThis.crypto.randomUUID()}`;
 }
 
 function isProjectDocsResponseRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function decodeProjectDocsResourceResponse(
-  value: unknown,
-  requestId: string,
-): Uint8Array {
+export function decodeProjectDocsResourceResponse(value: unknown, requestId: string): Uint8Array {
   if (
     !isProjectDocsResponseRecord(value) ||
     value.action !== PROJECT_DOCS_RESOURCE_ACTION ||
     value.requestId !== requestId
   ) {
-    throw new Error("The Docs service returned an invalid resource response.");
+    throw new Error('The Docs service returned an invalid resource response.');
   }
-  if (typeof value.error === "string" && value.error.length > 0) {
+  if (typeof value.error === 'string' && value.error.length > 0) {
     throw new Error(value.error);
   }
-  if (typeof value.dataBase64 !== "string") {
-    throw new Error("The Docs service returned an invalid resource response.");
+  if (typeof value.dataBase64 !== 'string') {
+    throw new Error('The Docs service returned an invalid resource response.');
   }
   const decoded = globalThis.atob(value.dataBase64);
   return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
 }
 
 export async function readProjectDocsResource(
-  request: Omit<ProjectDocsResourceRequest, "action" | "requestId">,
-  transport: ProjectDocsResourceTransport,
+  request: Omit<ProjectDocsResourceRequest, 'action' | 'requestId'>,
+  transport: ProjectDocsResourceTransport
 ): Promise<Uint8Array> {
-  const requestId = createProjectDocsRequestId("docs-resource");
+  const requestId = createProjectDocsRequestId('docs-resource');
   const response = await transport(PROJECT_DOCS_GXSERVER_ENDPOINT, {
     ...request,
     action: PROJECT_DOCS_RESOURCE_ACTION,
@@ -165,15 +156,15 @@ export async function readProjectDocsResource(
  * native Manage page or duplicating its timeout/correlation behavior.
  */
 export function requestProjectDocsFromHost(
-  request: Omit<ProjectDocsRequest, "requestId">,
-  transport: ProjectDocsHostTransport,
+  request: Omit<ProjectDocsRequest, 'requestId'>,
+  transport: ProjectDocsHostTransport
 ): Promise<ProjectDocsResponse> {
   const requestId = createProjectDocsRequestId();
   const message: ProjectDocsRequest = { ...request, requestId };
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       transport.eventTarget.removeEventListener(transport.eventName, handleResponse);
-      reject(new Error("Docs request timed out."));
+      reject(new Error('Docs request timed out.'));
     }, transport.timeoutMs);
     function handleResponse(event: Event) {
       const response = (event as CustomEvent<ProjectDocsResponse>).detail;

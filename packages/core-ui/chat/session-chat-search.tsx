@@ -1,16 +1,16 @@
-import { IconChevronDown, IconChevronUp, IconX } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import { IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
   InputGroupText,
-} from "../../components/ui/input-group";
+} from '../../components/ui/input-group';
 
-const MATCH_HIGHLIGHT_NAME = "ghostex-chat-search-match";
-const ACTIVE_HIGHLIGHT_NAME = "ghostex-chat-search-active";
+const MATCH_HIGHLIGHT_NAME = 'ghostex-chat-search-match';
+const ACTIVE_HIGHLIGHT_NAME = 'ghostex-chat-search-active';
 
 interface HighlightRegistry {
   delete(name: string): void;
@@ -23,11 +23,8 @@ function highlightApi(): {
   HighlightClass: HighlightConstructor;
   registry: HighlightRegistry;
 } | null {
-  const HighlightClass = (window as typeof window & { Highlight?: HighlightConstructor })
-    .Highlight;
-  const registry = (window.CSS as
-    | (typeof CSS & { highlights?: HighlightRegistry })
-    | undefined)?.highlights;
+  const HighlightClass = (window as typeof window & { Highlight?: HighlightConstructor }).Highlight;
+  const registry = (window.CSS as (typeof CSS & { highlights?: HighlightRegistry }) | undefined)?.highlights;
   return HighlightClass && registry ? { HighlightClass, registry } : null;
 }
 
@@ -38,16 +35,14 @@ function clearHighlights(): void {
 }
 
 function transcriptMatches(root: HTMLElement, query: string): Range[] {
-  const content = root.querySelector<HTMLElement>(
-    '[data-slot="message-scroller-content"]',
-  );
+  const content = root.querySelector<HTMLElement>('[data-slot="message-scroller-content"]');
   const needle = query.trim();
   if (!content || !needle) {
     return [];
   }
 
   const textNodes: Array<{ end: number; node: Text; start: number }> = [];
-  let transcriptText = "";
+  let transcriptText = '';
   const matches: Range[] = [];
   const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -55,7 +50,7 @@ function transcriptMatches(root: HTMLElement, query: string): Range[] {
       if (
         !node.textContent?.trim() ||
         parent?.closest(
-          'button, input, script, style, textarea, [aria-hidden="true"], [hidden], [data-session-chat-search-ignore="true"]',
+          'button, input, script, style, textarea, [aria-hidden="true"], [hidden], [data-session-chat-search-ignore="true"]'
         )
       ) {
         return NodeFilter.FILTER_REJECT;
@@ -65,14 +60,14 @@ function transcriptMatches(root: HTMLElement, query: string): Range[] {
   });
 
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node.textContent ?? "";
+    const text = node.textContent ?? '';
     const start = transcriptText.length;
     transcriptText += text;
     textNodes.push({ end: transcriptText.length, node: node as Text, start });
   }
 
-  const escapedNeedle = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(escapedNeedle, "giu");
+  const escapedNeedle = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(escapedNeedle, 'giu');
   for (const match of transcriptText.matchAll(pattern)) {
     const matchStart = match.index;
     const matchEnd = matchStart + match[0].length;
@@ -90,9 +85,7 @@ function transcriptMatches(root: HTMLElement, query: string): Range[] {
 }
 
 function centerMatch(root: HTMLElement, range: Range): void {
-  const viewport = root.querySelector<HTMLElement>(
-    '[data-slot="message-scroller-viewport"]',
-  );
+  const viewport = root.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
   const parent = range.startContainer.parentElement;
   const target = parent?.closest<HTMLElement>('[data-slot="message-scroller-item"]') ?? parent;
   if (!viewport || !target) {
@@ -102,13 +95,8 @@ function centerMatch(root: HTMLElement, range: Range): void {
   const viewportRect = viewport.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
   viewport.scrollTo({
-    behavior: "smooth",
-    top:
-      viewport.scrollTop +
-      targetRect.top -
-      viewportRect.top -
-      viewport.clientHeight / 2 +
-      targetRect.height / 2,
+    behavior: 'smooth',
+    top: viewport.scrollTop + targetRect.top - viewportRect.top - viewport.clientHeight / 2 + targetRect.height / 2,
   });
 }
 
@@ -124,7 +112,7 @@ export interface SessionChatHostSearchBridge {
 
 export function SessionChatSearch({
   hostBridge,
-  layout = "inline",
+  layout = 'inline',
   rootRef,
   searchRevision,
 }: {
@@ -133,19 +121,19 @@ export function SessionChatSearch({
    * "inline": the terminal-style row the desktop and web chats drop in above
    * the transcript. "overlay": the floating card the touch hosts use.
    */
-  layout?: "inline" | "overlay";
+  layout?: 'inline' | 'overlay';
   rootRef: RefObject<HTMLDivElement | null>;
   searchRevision: unknown;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<readonly Range[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const close = useCallback(() => {
     setOpen(false);
-    setQuery("");
+    setQuery('');
     setMatches([]);
     setActiveIndex(0);
     clearHighlights();
@@ -153,12 +141,7 @@ export function SessionChatSearch({
 
   useEffect(() => {
     const handleShortcut = (event: globalThis.KeyboardEvent): void => {
-      if (
-        event.key.toLocaleLowerCase() !== "f" ||
-        !event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      ) {
+      if (event.key.toLocaleLowerCase() !== 'f' || !event.metaKey || event.ctrlKey || event.altKey) {
         return;
       }
       event.preventDefault();
@@ -169,8 +152,8 @@ export function SessionChatSearch({
         inputRef.current?.select();
       });
     };
-    window.addEventListener("keydown", handleShortcut, true);
-    return () => window.removeEventListener("keydown", handleShortcut, true);
+    window.addEventListener('keydown', handleShortcut, true);
+    return () => window.removeEventListener('keydown', handleShortcut, true);
   }, []);
 
   useEffect(() => hostBridge?.register({ open: () => setOpen(true) }), [hostBridge]);
@@ -231,26 +214,26 @@ export function SessionChatSearch({
       }
       setActiveIndex((current) => (current + offset + matches.length) % matches.length);
     },
-    [matches.length],
+    [matches.length]
   );
 
   const handleInputKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>): void => {
-      if (event.key === "Enter") {
+      if (event.key === 'Enter') {
         event.preventDefault();
         move(event.shiftKey ? -1 : 1);
-      } else if (event.key === "ArrowUp") {
+      } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         move(-1);
-      } else if (event.key === "ArrowDown") {
+      } else if (event.key === 'ArrowDown') {
         event.preventDefault();
         move(1);
-      } else if (event.key === "Escape") {
+      } else if (event.key === 'Escape') {
         event.preventDefault();
         close();
       }
     },
-    [close, move],
+    [close, move]
   );
 
   if (!open) {
@@ -260,67 +243,64 @@ export function SessionChatSearch({
   const resultLabel = query.trim()
     ? matches.length > 0
       ? `${activeIndex + 1} of ${matches.length}`
-      : "No results"
-    : "";
+      : 'No results'
+    : '';
 
-  if (layout === "inline") {
+  if (layout === 'inline') {
     const terminalResultLabel = query.trim()
       ? matches.length > 0
         ? `${activeIndex + 1}/${matches.length}`
-        : "N/A"
-      : "";
+        : 'N/A'
+      : '';
     return (
       <div
-        className="ghostex-chat-terminal-search-row"
-        data-session-chat-search-ignore="true"
-        data-session-chat-typing-redirect-ignore="true"
-        role="search"
+        className='ghostex-chat-terminal-search-row'
+        data-session-chat-search-ignore='true'
+        data-session-chat-typing-redirect-ignore='true'
+        role='search'
       >
-        <div className="ghostex-chat-terminal-search-bar">
+        <div className='ghostex-chat-terminal-search-bar'>
           <input
-            aria-label="Search conversation"
+            aria-label='Search conversation'
             autoFocus
-            className="ghostex-chat-terminal-search-input"
+            className='ghostex-chat-terminal-search-input'
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleInputKeyDown}
-            placeholder="Search"
+            placeholder='Search'
             ref={inputRef}
             spellCheck={false}
             value={query}
           />
           {terminalResultLabel ? (
-            <span
-              aria-live="polite"
-              className="ghostex-chat-terminal-search-count"
-            >
+            <span aria-live='polite' className='ghostex-chat-terminal-search-count'>
               {terminalResultLabel}
             </span>
           ) : null}
-          <div className="ghostex-chat-terminal-search-actions">
+          <div className='ghostex-chat-terminal-search-actions'>
             <button
-              aria-label="Previous result"
-              className="ghostex-chat-terminal-search-button"
+              aria-label='Previous result'
+              className='ghostex-chat-terminal-search-button'
               onClick={() => move(-1)}
               onMouseDown={(event) => event.preventDefault()}
-              type="button"
+              type='button'
             >
               ↑
             </button>
             <button
-              aria-label="Next result"
-              className="ghostex-chat-terminal-search-button"
+              aria-label='Next result'
+              className='ghostex-chat-terminal-search-button'
               onClick={() => move(1)}
               onMouseDown={(event) => event.preventDefault()}
-              type="button"
+              type='button'
             >
               ↓
             </button>
             <button
-              aria-label="Close search"
-              className="ghostex-chat-terminal-search-button"
+              aria-label='Close search'
+              className='ghostex-chat-terminal-search-button'
               onClick={close}
               onMouseDown={(event) => event.preventDefault()}
-              type="button"
+              type='button'
             >
               ✕
             </button>
@@ -332,49 +312,46 @@ export function SessionChatSearch({
 
   return (
     <div
-      className="absolute inset-x-3 top-3 z-30 rounded-lg border border-border bg-popover p-1 shadow-lg"
-      data-session-chat-typing-redirect-ignore="true"
-      data-session-chat-search-ignore="true"
-      role="search"
+      className='absolute inset-x-3 top-3 z-30 rounded-lg border border-border bg-popover p-1 shadow-lg'
+      data-session-chat-typing-redirect-ignore='true'
+      data-session-chat-search-ignore='true'
+      role='search'
     >
-      <InputGroup className="rounded-lg bg-background">
+      <InputGroup className='rounded-lg bg-background'>
         <InputGroupInput
-          aria-label="Search conversation"
+          aria-label='Search conversation'
           autoFocus
           // text-sm is the transcript's own body size (Bubble content); the
           // input's shadcn default is a step larger on a phone-width viewport.
-          className="text-sm"
+          className='text-sm'
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleInputKeyDown}
-          placeholder="Search..."
+          placeholder='Search...'
           ref={inputRef}
           value={query}
         />
-        <InputGroupAddon align="inline-end" className="gap-0.5 pr-1.5">
-          <InputGroupText
-            aria-live="polite"
-            className="min-w-14 justify-end whitespace-nowrap text-xs tabular-nums"
-          >
+        <InputGroupAddon align='inline-end' className='gap-0.5 pr-1.5'>
+          <InputGroupText aria-live='polite' className='min-w-14 justify-end whitespace-nowrap text-xs tabular-nums'>
             {resultLabel}
           </InputGroupText>
           <InputGroupButton
-            aria-label="Previous result"
+            aria-label='Previous result'
             disabled={matches.length === 0}
             onClick={() => move(-1)}
-            size="icon-sm"
+            size='icon-sm'
           >
-            <IconChevronUp aria-hidden="true" data-icon="inline-start" />
+            <IconChevronUp aria-hidden='true' data-icon='inline-start' />
           </InputGroupButton>
           <InputGroupButton
-            aria-label="Next result"
+            aria-label='Next result'
             disabled={matches.length === 0}
             onClick={() => move(1)}
-            size="icon-sm"
+            size='icon-sm'
           >
-            <IconChevronDown aria-hidden="true" data-icon="inline-start" />
+            <IconChevronDown aria-hidden='true' data-icon='inline-start' />
           </InputGroupButton>
-          <InputGroupButton aria-label="Close search" onClick={close} size="icon-sm">
-            <IconX aria-hidden="true" data-icon="inline-start" />
+          <InputGroupButton aria-label='Close search' onClick={close} size='icon-sm'>
+            <IconX aria-hidden='true' data-icon='inline-start' />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>

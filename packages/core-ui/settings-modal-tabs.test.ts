@@ -1,11 +1,8 @@
-import { describe, expect, test } from "vitest";
-import {
-  resolveSettingsModalTabForVisibility,
-  shouldShowOSIntegrationSettingsTab,
-} from "./settings-modal-tabs";
+import { describe, expect, test } from 'vitest';
+import { resolveSettingsModalTabForVisibility, shouldShowOSIntegrationSettingsTab } from './settings-modal-tabs';
 
-describe("settings modal tabs", () => {
-  test("hides macOS OS Integration unless experimental features are enabled", () => {
+describe('settings modal tabs', () => {
+  test('hides macOS OS Integration unless experimental features are enabled', () => {
     /*
      * CDXC:ExperimentalFeatures 2026-06-28-07:41:
      * Settings should not expose macOS OS Integration during ordinary app use.
@@ -16,35 +13,35 @@ describe("settings modal tabs", () => {
       shouldShowOSIntegrationSettingsTab({
         isFirstLaunchSetup: false,
         showBetaFeatures: false,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowOSIntegrationSettingsTab({
         isFirstLaunchSetup: true,
         showBetaFeatures: true,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowOSIntegrationSettingsTab({
         isFirstLaunchSetup: false,
         showBetaFeatures: true,
-      }),
+      })
     ).toBe(true);
 
     expect(
-      resolveSettingsModalTabForVisibility("osIntegration", {
+      resolveSettingsModalTabForVisibility('osIntegration', {
         showOSIntegrationSettingsTab: false,
-      }),
-    ).toBe("settings");
+      })
+    ).toBe('settings');
     expect(
-      resolveSettingsModalTabForVisibility("osIntegration", {
+      resolveSettingsModalTabForVisibility('osIntegration', {
         showOSIntegrationSettingsTab: true,
-      }),
-    ).toBe("osIntegration");
+      })
+    ).toBe('osIntegration');
     expect(
-      resolveSettingsModalTabForVisibility("integrations", {
+      resolveSettingsModalTabForVisibility('integrations', {
         showOSIntegrationSettingsTab: false,
-      }),
-    ).toBe("integrations");
+      })
+    ).toBe('integrations');
   });
 });

@@ -5,14 +5,12 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy)]
 pub(crate) enum WorkspaceTabActionIcon {
     NewTerminal,
     NewBrowser,
     Overflow,
 }
-
 
 /*
 CDXC:GPUIAgentsTabChrome 2026-06-22-17:07:
@@ -29,13 +27,11 @@ pub(crate) enum WorkspaceTabLifecycleVisualRole {
     InactiveNonRunning,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct WorkspaceTabLifecycleVisualTone {
     pub(crate) presentation_state: TerminalSessionPresentationState,
     pub(crate) role: WorkspaceTabLifecycleVisualRole,
 }
-
 
 impl WorkspaceTabLifecycleVisualTone {
     pub(crate) fn new(
@@ -75,7 +71,6 @@ impl WorkspaceTabLifecycleVisualTone {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct WorkspaceTabChromeSignature {
     pub(crate) presentation_state: TerminalSessionPresentationState,
@@ -83,7 +78,6 @@ pub(crate) struct WorkspaceTabChromeSignature {
     pub(crate) active_in_tab_group: bool,
     pub(crate) lifecycle_visual_tone: WorkspaceTabLifecycleVisualTone,
 }
-
 
 pub(crate) fn workspace_tab_chrome_signature(
     tab_group: &WorkspaceTabGroup,
@@ -107,7 +101,6 @@ pub(crate) fn workspace_tab_chrome_signature(
     }
 }
 
-
 pub(crate) fn workspace_tab_icon_element(
     element_id: impl Into<String>,
     agent_icon: Option<&'static str>,
@@ -121,7 +114,6 @@ pub(crate) fn workspace_tab_icon_element(
     }
     workspace_tab_terminal_icon_element(element_id, visual_tone)
 }
-
 
 pub(crate) fn workspace_tab_agent_icon_element(
     element_id: impl Into<String>,
@@ -144,7 +136,6 @@ pub(crate) fn workspace_tab_agent_icon_element(
         )
         .into_any_element()
 }
-
 
 pub(crate) fn workspace_tab_terminal_icon_element(
     element_id: impl Into<String>,
@@ -190,7 +181,6 @@ pub(crate) fn workspace_tab_terminal_icon_element(
         .into_any_element()
 }
 
-
 pub(crate) fn workspace_tab_status_indicator_visible(
     visual_tone: WorkspaceTabLifecycleVisualTone,
     tab_status: AgentTerminalTabStatus,
@@ -200,7 +190,6 @@ pub(crate) fn workspace_tab_status_indicator_visible(
         && !tab_hovered
         && !matches!(tab_status, AgentTerminalTabStatus::Idle)
 }
-
 
 pub(crate) fn workspace_tab_status_title_trailing_reserved_width(
     visual_tone: WorkspaceTabLifecycleVisualTone,
@@ -214,7 +203,6 @@ pub(crate) fn workspace_tab_status_title_trailing_reserved_width(
         0.0
     }
 }
-
 
 pub(crate) fn workspace_tab_status_indicator_element(
     element_id: impl Into<String>,
@@ -234,14 +222,12 @@ pub(crate) fn workspace_tab_status_indicator_element(
         .into_any_element()
 }
 
-
 pub(crate) fn workspace_tab_sleep_icon_visible(
     visual_tone: WorkspaceTabLifecycleVisualTone,
     tab_hovered: bool,
 ) -> bool {
     visual_tone.presentation_state == TerminalSessionPresentationState::Sleeping && !tab_hovered
 }
-
 
 pub(crate) fn workspace_tab_sleep_icon_color() -> Hsla {
     rgb(0xdbdbdb).opacity(0.42).into()

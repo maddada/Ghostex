@@ -1,66 +1,66 @@
-import type { AgentConfigDraft } from "./agent-config-modal";
-import { logAppModalError } from "./app-modal-error-log";
-import type { GitCommitModalDraft } from "./git-commit-modal";
-import type { SettingsModalTab } from "./settings-modal";
-import type { SidebarAgentIcon } from "../shared/sidebar-agents";
+import type { AgentConfigDraft } from './agent-config-modal';
+import { logAppModalError } from './app-modal-error-log';
+import type { GitCommitModalDraft } from './git-commit-modal';
+import type { SettingsModalTab } from './settings-modal';
+import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 
 export type AppModalKind =
-  | "addProject"
-  | "agentConfig"
-  | "agentsHub"
-  | "commandPalette"
-  | "configureActions"
-  | "configureAgents"
-  | "daemonSessions"
-  | "discoverGhostex"
-  | "exportTranscriptResult"
-  | "watchGhostexVideo"
-  | "gitCommit"
-  | "gitFileDiff"
-  | "deleteWorktree"
-  | "hotkeys"
-  | "missingProjectFolder"
-  | "openTargets"
-  | "pinnedPrompts"
-  | "portlessSetup"
-  | "previousSessions"
-  | "recentProjects"
-  | "firstUserMessage"
-  | "remoteGxserverInstall"
-  | "remoteProjectPicker"
-  | "delayedSend"
-  | "renameSession"
-  | "scratchPad"
-  | "settings"
-  | "stashedPrompts"
-  | "worktree"
-  | "tipsAndTricks"
-  | "firstLaunchSetup";
+  | 'addProject'
+  | 'agentConfig'
+  | 'agentsHub'
+  | 'commandPalette'
+  | 'configureActions'
+  | 'configureAgents'
+  | 'daemonSessions'
+  | 'discoverGhostex'
+  | 'exportTranscriptResult'
+  | 'watchGhostexVideo'
+  | 'gitCommit'
+  | 'gitFileDiff'
+  | 'deleteWorktree'
+  | 'hotkeys'
+  | 'missingProjectFolder'
+  | 'openTargets'
+  | 'pinnedPrompts'
+  | 'portlessSetup'
+  | 'previousSessions'
+  | 'recentProjects'
+  | 'firstUserMessage'
+  | 'remoteGxserverInstall'
+  | 'remoteProjectPicker'
+  | 'delayedSend'
+  | 'renameSession'
+  | 'scratchPad'
+  | 'settings'
+  | 'stashedPrompts'
+  | 'worktree'
+  | 'tipsAndTricks'
+  | 'firstLaunchSetup';
 
 export type OpenAppModalMessage =
   | {
       modal: Exclude<
         AppModalKind,
-        | "addProject"
-        | "agentConfig"
-        | "commandPalette"
-        | "delayedSend"
-        | "discoverGhostex"
-        | "exportTranscriptResult"
-        | "firstUserMessage"
-        | "gitCommit"
-        | "gitFileDiff"
-        | "deleteWorktree"
-        | "missingProjectFolder"
-        | "portlessSetup"
-        | "recentProjects"
-        | "remoteGxserverInstall"
-        | "renameSession"
-        | "remoteProjectPicker"
-        | "stashedPrompts"
-        | "worktree"
+        | 'addProject'
+        | 'agentConfig'
+        | 'commandPalette'
+        | 'delayedSend'
+        | 'discoverGhostex'
+        | 'exportTranscriptResult'
+        | 'firstUserMessage'
+        | 'gitCommit'
+        | 'gitFileDiff'
+        | 'deleteWorktree'
+        | 'missingProjectFolder'
+        | 'portlessSetup'
+        | 'recentProjects'
+        | 'remoteGxserverInstall'
+        | 'renameSession'
+        | 'remoteProjectPicker'
+        | 'stashedPrompts'
+        | 'worktree'
       >;
-      type: "open";
+      type: 'open';
     }
   | {
       /**
@@ -71,10 +71,10 @@ export type OpenAppModalMessage =
        * back into. Both are optional so the modal can still open (in
        * all-projects browse mode) when the launcher has no session mapping.
        */
-      modal: "stashedPrompts";
+      modal: 'stashedPrompts';
       projectId?: string;
       sessionId?: string;
-      type: "open";
+      type: 'open';
     }
   | {
       /**
@@ -86,9 +86,9 @@ export type OpenAppModalMessage =
        */
       agentId?: string;
       canReveal: boolean;
-      modal: "exportTranscriptResult";
+      modal: 'exportTranscriptResult';
       path: string;
-      type: "open";
+      type: 'open';
     }
   | {
       /*
@@ -98,9 +98,9 @@ export type OpenAppModalMessage =
        * to this modal open so manual overflow-menu Discover launches stay a
        * standalone tour.
        */
-      modal: "discoverGhostex";
+      modal: 'discoverGhostex';
       showFirstLaunchSetupOnClose?: boolean;
-      type: "open";
+      type: 'open';
     }
   | {
       /**
@@ -110,8 +110,8 @@ export type OpenAppModalMessage =
        * the query text.
        */
       initialQuery?: string;
-      modal: "commandPalette";
-      type: "open";
+      modal: 'commandPalette';
+      type: 'open';
     }
   | {
       /*
@@ -121,17 +121,17 @@ export type OpenAppModalMessage =
        * native admin protocol. Do not send settings or project/session data
        * through this modal-open boundary.
        */
-      modal: "portlessSetup";
-      mode: "firstSetup" | "standaloneReconfigure";
-      protocol: "https" | "http";
-      type: "open";
+      modal: 'portlessSetup';
+      mode: 'firstSetup' | 'standaloneReconfigure';
+      protocol: 'https' | 'http';
+      type: 'open';
     }
   | {
-      modal: "missingProjectFolder";
+      modal: 'missingProjectFolder';
       projectId: string;
       projectName: string;
       projectPath: string;
-      type: "open";
+      type: 'open';
     }
   | {
       /**
@@ -143,42 +143,42 @@ export type OpenAppModalMessage =
        * sources step when it has one.
        */
       machineId?: string;
-      modal: "addProject";
-      type: "open";
+      modal: 'addProject';
+      type: 'open';
     }
   | {
-      modal: "remoteGxserverInstall";
+      modal: 'remoteGxserverInstall';
       remoteMachineId: string;
       remoteMachineName: string;
-      type: "open";
+      type: 'open';
     }
   | {
       initialQuery?: string;
-      modal: "remoteProjectPicker";
+      modal: 'remoteProjectPicker';
       remoteMachineId: string;
       remoteMachineName: string;
-      type: "open";
+      type: 'open';
     }
   | {
       machineId?: string;
       machineName?: string;
-      modal: "recentProjects";
-      type: "open";
+      modal: 'recentProjects';
+      type: 'open';
     }
   | {
       initialSearchQuery?: string;
       initialRemoteMachineId?: string;
       initialTab?: SettingsModalTab;
-      modal: "settings";
-      type: "open";
+      modal: 'settings';
+      type: 'open';
     }
-  | { gitCommitDraft: GitCommitModalDraft; modal: "gitCommit"; type: "open" }
-  | { agentDraft: AgentConfigDraft; modal: "agentConfig"; type: "open" }
+  | { gitCommitDraft: GitCommitModalDraft; modal: 'gitCommit'; type: 'open' }
+  | { agentDraft: AgentConfigDraft; modal: 'agentConfig'; type: 'open' }
   | {
       message: string;
-      modal: "firstUserMessage";
+      modal: 'firstUserMessage';
       title?: string;
-      type: "open";
+      type: 'open';
     }
   | {
       /**
@@ -191,18 +191,18 @@ export type OpenAppModalMessage =
       closeAfterDoneActive?: boolean;
       delayedSendDeadlineAt?: string;
       delayedSendRemainingLabel?: string;
-      modal: "delayedSend";
+      modal: 'delayedSend';
       sendWhenAllProjectSessionsStopActive?: boolean;
       sendWhenAgentStopsActive?: boolean;
       sessionId: string;
       supportsSendWhenAgentStops?: boolean;
       supportsSendWhenAllProjectSessionsStop?: boolean;
       title?: string;
-      type: "open";
+      type: 'open';
     }
   | {
       initialTitle: string;
-      modal: "renameSession";
+      modal: 'renameSession';
       /**
        * CDXC:SessionHistoryTitleSource 2026-07-29:
        * The rename modal enables empty-title Generate Name only for sessions
@@ -211,16 +211,16 @@ export type OpenAppModalMessage =
        */
       sessionAgentIcon?: string;
       sessionId: string;
-      type: "open";
+      type: 'open';
     }
   | {
-      modal: "worktree";
+      modal: 'worktree';
       projectId?: string;
       projectName?: string;
       projectPath?: string;
       remoteMachineId?: string;
       remoteMachineName?: string;
-      type: "open";
+      type: 'open';
     };
 
 declare global {
@@ -238,7 +238,7 @@ declare global {
         };
       };
     };
-    __ghostex_APP_MODAL_HOST_SURFACE__?: "main" | "nativeWindow";
+    __ghostex_APP_MODAL_HOST_SURFACE__?: 'main' | 'nativeWindow';
   }
 }
 
@@ -252,11 +252,7 @@ export function openAppModal(message: OpenAppModalMessage): void {
   postAppModalHostMessage(message, `AppModals:${message.modal}`);
 }
 
-export type QuickAccessPage =
-  | "commands"
-  | "recentProjects"
-  | "recentSessions"
-  | "savedPrompts";
+export type QuickAccessPage = 'commands' | 'recentProjects' | 'recentSessions' | 'savedPrompts';
 
 type QuickAccessOpenOptions = {
   machineId?: string;
@@ -268,38 +264,35 @@ type QuickAccessOpenOptions = {
  * modal-host boundary so shortcuts, sidebar buttons, titlebar actions, palette
  * commands, and the tabs themselves cannot drift back to query-driven routing.
  */
-export function openQuickAccess(
-  page: QuickAccessPage,
-  options: QuickAccessOpenOptions = {},
-): void {
-  if (page === "recentProjects") {
+export function openQuickAccess(page: QuickAccessPage, options: QuickAccessOpenOptions = {}): void {
+  if (page === 'recentProjects') {
     openAppModal({
       ...(options.machineId ? { machineId: options.machineId } : {}),
       ...(options.machineName ? { machineName: options.machineName } : {}),
-      modal: "recentProjects",
-      type: "open",
+      modal: 'recentProjects',
+      type: 'open',
     });
     return;
   }
-  if (page === "recentSessions") {
-    openAppModal({ modal: "previousSessions", type: "open" });
+  if (page === 'recentSessions') {
+    openAppModal({ modal: 'previousSessions', type: 'open' });
     return;
   }
-  if (page === "savedPrompts") {
-    openAppModal({ modal: "stashedPrompts", type: "open" });
+  if (page === 'savedPrompts') {
+    openAppModal({ modal: 'stashedPrompts', type: 'open' });
     return;
   }
-  openAppModal({ initialQuery: "", modal: "commandPalette", type: "open" });
+  openAppModal({ initialQuery: '', modal: 'commandPalette', type: 'open' });
 }
 
-export function closeAppModal(area = "AppModals:close"): void {
-  postAppModalHostMessage({ type: "close" }, area);
+export function closeAppModal(area = 'AppModals:close'): void {
+  postAppModalHostMessage({ type: 'close' }, area);
 }
 
 export function postAppModalHostMessage(message: unknown, area: string): void {
   const modalHost = window.webkit?.messageHandlers?.ghostexAppModalHost;
   if (!modalHost) {
-    const error = new Error("Native full-window modal host is unavailable.");
+    const error = new Error('Native full-window modal host is unavailable.');
     logAppModalError(area, error);
     throw error;
   }
@@ -318,13 +311,7 @@ export function postAppModalHostMessage(message: unknown, area: string): void {
 
 function withModalHostSurface(message: unknown): unknown {
   const surface = window.__ghostex_APP_MODAL_HOST_SURFACE__;
-  if (
-    !surface ||
-    !message ||
-    typeof message !== "object" ||
-    Array.isArray(message) ||
-    "surface" in message
-  ) {
+  if (!surface || !message || typeof message !== 'object' || Array.isArray(message) || 'surface' in message) {
     return message;
   }
   return {

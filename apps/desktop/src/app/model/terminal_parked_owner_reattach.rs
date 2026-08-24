@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 /*
 CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
 Sleeping wake and popped-out reattach are runtime-owner moves, not startup attempts. Parked owner geometry and reattach plans stay process-local, require the same durable shell session, process-local runtime id, pane/session slot, and current body bounds, and must not create launch payloads, startup hosts, fallback surfaces, logs, shell-state fields, or fake Running state.
@@ -15,7 +14,6 @@ pub(crate) struct AgentsTerminalParkedOwnerBodyGeometry {
     pub(crate) bounds: Bounds<Pixels>,
     pub(crate) scale_factor: f32,
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone, Copy, PartialEq)]
@@ -28,10 +26,11 @@ pub(crate) struct AgentsTerminalParkedOwnerReattachPlan {
     pub(crate) scale_factor: f32,
 }
 
-
 #[cfg(target_os = "macos")]
 impl AgentsTerminalParkedOwnerReattachPlan {
-    pub(crate) fn attachment_plan(self) -> terminal_surface_host::NativeTerminalSurfaceAttachmentPlan {
+    pub(crate) fn attachment_plan(
+        self,
+    ) -> terminal_surface_host::NativeTerminalSurfaceAttachmentPlan {
         terminal_surface_host::NativeTerminalSurfaceAttachmentPlan {
             host_id: terminal_surface_host::NativeTerminalSurfaceHostId::from_slot_id(
                 self.current_mount_slot_id,
@@ -42,7 +41,6 @@ impl AgentsTerminalParkedOwnerReattachPlan {
     }
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) struct AgentsTerminalParkedRuntimeOwner {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
@@ -51,7 +49,6 @@ pub(crate) struct AgentsTerminalParkedRuntimeOwner {
     pub(crate) host_native_view: terminal_native_view::AppOwnedTerminalHostNativeView,
     pub(crate) surface_owner: terminal_ghostty_surface::GhosttySurfaceOwner,
 }
-
 
 #[cfg(target_os = "macos")]
 impl AgentsTerminalParkedRuntimeOwner {
@@ -84,7 +81,10 @@ impl AgentsTerminalParkedRuntimeOwner {
             && self.surface_owner.runtime_session_id() == runtime_session_id
     }
 
-    pub(crate) fn can_reattach_with_plan(&self, plan: AgentsTerminalParkedOwnerReattachPlan) -> bool {
+    pub(crate) fn can_reattach_with_plan(
+        &self,
+        plan: AgentsTerminalParkedOwnerReattachPlan,
+    ) -> bool {
         self.matches_identity(
             plan.runtime_session_id,
             plan.shell_session_id,
@@ -113,7 +113,6 @@ impl AgentsTerminalParkedRuntimeOwner {
     }
 }
 
-
 /*
 CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-07:42:
 Sleeping command terminals should park the existing AppKit host and Ghostty surface owner, not free and recreate them on wake. The parked owner is process-local and exact command group/session keyed; it must never infer ownership from titles, command text, cwd/env, terminal output, focus fallback, shell-state JSON, logs, or Agents runtime maps.
@@ -126,7 +125,6 @@ pub(crate) struct CommandTerminalParkedOwnerReattachPlan {
     pub(crate) current_mount_slot_id: CommandTerminalBodyMountSlotId,
     pub(crate) bounds: Bounds<Pixels>,
 }
-
 
 #[cfg(target_os = "macos")]
 impl CommandTerminalParkedOwnerReattachPlan {
@@ -144,16 +142,15 @@ impl CommandTerminalParkedOwnerReattachPlan {
     }
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) struct CommandTerminalParkedRuntimeOwner {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
     pub(crate) mount_slot_id: CommandTerminalBodyMountSlotId,
     pub(crate) host_native_view:
         terminal_native_view::AppOwnedTerminalHostNativeView<CommandTerminalBodyMountSlotId>,
-    pub(crate) surface_owner: terminal_ghostty_surface::GhosttySurfaceOwner<CommandTerminalBodyMountSlotId>,
+    pub(crate) surface_owner:
+        terminal_ghostty_surface::GhosttySurfaceOwner<CommandTerminalBodyMountSlotId>,
 }
-
 
 #[cfg(target_os = "macos")]
 impl CommandTerminalParkedRuntimeOwner {
@@ -186,7 +183,10 @@ impl CommandTerminalParkedRuntimeOwner {
             && self.surface_owner.runtime_session_id() == runtime_session_id
     }
 
-    pub(crate) fn can_reattach_with_plan(&self, plan: CommandTerminalParkedOwnerReattachPlan) -> bool {
+    pub(crate) fn can_reattach_with_plan(
+        &self,
+        plan: CommandTerminalParkedOwnerReattachPlan,
+    ) -> bool {
         self.matches_identity(plan.runtime_session_id, plan.parked_mount_slot_id)
             && plan.parked_mount_slot_id == plan.current_mount_slot_id
             && self
@@ -213,7 +213,6 @@ impl CommandTerminalParkedRuntimeOwner {
     }
 }
 
-
 pub(crate) fn prune_agents_terminal_parked_owner_body_slot_geometries(
     agents_workspace_visible: bool,
     agents_workspace: &WorkspaceModel,
@@ -229,7 +228,6 @@ pub(crate) fn prune_agents_terminal_parked_owner_body_slot_geometries(
     };
     parked_owner_body_geometries.retain(|slot_id, _| current_slot_ids.contains(slot_id));
 }
-
 
 pub(crate) fn record_agents_terminal_parked_owner_body_slot_geometry(
     agents_workspace_visible: bool,
@@ -263,9 +261,10 @@ pub(crate) fn record_agents_terminal_parked_owner_body_slot_geometry(
     }
 }
 
-
 #[cfg(target_os = "macos")]
-pub(crate) fn terminal_presentation_state_can_hold_parked_runtime_owner(session: &TerminalSession) -> bool {
+pub(crate) fn terminal_presentation_state_can_hold_parked_runtime_owner(
+    session: &TerminalSession,
+) -> bool {
     matches!(
         session.presentation_state,
         TerminalSessionPresentationState::Running
@@ -274,7 +273,6 @@ pub(crate) fn terminal_presentation_state_can_hold_parked_runtime_owner(session:
     ) || (session.presentation_state == TerminalSessionPresentationState::Mounting
         && !session.can_enter_startup_pipeline())
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn prune_agents_terminal_parked_runtime_owners(
@@ -315,7 +313,6 @@ pub(crate) fn prune_agents_terminal_parked_runtime_owners(
     });
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn agents_terminal_parked_owner_reattach_plan_for_slot(
     agents_workspace_visible: bool,
@@ -354,7 +351,6 @@ pub(crate) fn agents_terminal_parked_owner_reattach_plan_for_slot(
     };
     parked_owner.can_reattach_with_plan(plan).then_some(plan)
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn agents_terminal_running_parked_owner_reattach_plan_for_slot(
@@ -397,7 +393,6 @@ pub(crate) fn agents_terminal_running_parked_owner_reattach_plan_for_slot(
     };
     parked_owner.can_reattach_with_plan(plan).then_some(plan)
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn agents_terminal_parked_owner_reattach_plans(
@@ -452,7 +447,6 @@ pub(crate) fn agents_terminal_parked_owner_reattach_plans(
     });
     plans
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn park_agents_terminal_runtime_owner_before_host_detach(
@@ -531,7 +525,6 @@ pub(crate) fn park_agents_terminal_runtime_owner_before_host_detach(
     );
     true
 }
-
 
 #[cfg(target_os = "macos")]
 #[allow(dead_code)] // no caller: group moves park runtime owners through the pane-level parking path
@@ -613,7 +606,6 @@ pub(crate) fn park_agents_terminal_runtime_owner_for_group_move(
     );
     true
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn transfer_agents_terminal_parked_runtime_owner_reattach(
@@ -707,7 +699,6 @@ pub(crate) fn transfer_agents_terminal_parked_runtime_owner_reattach(
     true
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn command_terminal_session_can_hold_parked_runtime_owner(
     command_pane: &CommandPaneModel,
@@ -720,7 +711,6 @@ pub(crate) fn command_terminal_session_can_hold_parked_runtime_owner(
     command_pane_group_for_session(command_pane, slot_id.session_id) == Some(slot_id.group_id)
         && command_pane.session(slot_id.session_id).is_some()
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn prune_command_terminal_parked_runtime_owners(
@@ -757,7 +747,6 @@ pub(crate) fn prune_command_terminal_parked_runtime_owners(
             && owner.matches_identity(*runtime_session_id, owner.mount_slot_id)
     });
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn park_command_terminal_runtime_owner_before_host_detach(
@@ -834,7 +823,6 @@ pub(crate) fn park_command_terminal_runtime_owner_before_host_detach(
     true
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn command_terminal_parked_owner_reattach_plan_for_slot(
     command_pane: &CommandPaneModel,
@@ -866,7 +854,6 @@ pub(crate) fn command_terminal_parked_owner_reattach_plan_for_slot(
     parked_owner.can_reattach_with_plan(plan).then_some(plan)
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn command_terminal_parked_owner_reattach_plans(
     command_pane: &CommandPaneModel,
@@ -897,7 +884,6 @@ pub(crate) fn command_terminal_parked_owner_reattach_plans(
     });
     plans
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn transfer_command_terminal_parked_runtime_owner_reattach(

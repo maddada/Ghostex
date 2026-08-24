@@ -5,14 +5,14 @@ import {
   createGxserverPresentationSidebarGroups,
   orderGxserverPresentationSidebarProjects,
   type GxserverPresentationSidebarProjectOverlay,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverPresentationSession,
   GxserverForkSessionResult,
   GxserverProjectDomainState,
   GxserverRecentProjectDomainState,
   GxserverSidebarHudResponse,
-} from "@/packages/shared/gxserver-protocol";
+} from '@/packages/shared/gxserver-protocol';
 import {
   createDefaultSessionGridSnapshot,
   createSidebarHudState,
@@ -21,34 +21,24 @@ import {
   type SidebarRecentProject,
   type SidebarSessionGroup,
   type SidebarToExtensionMessage,
-} from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/session-grid-contract';
 import {
   DEFAULT_SIDEBAR_AGENTS,
   getSidebarAgentIconById,
   type SidebarAgentButton,
-} from "@/packages/shared/sidebar-agents";
-import {
-  type RemoteMachineSettings,
-  type ghostexSettings,
-} from "@/packages/shared/ghostex-settings";
-import { readWebSettings } from "../app/web-settings";
+} from '@/packages/shared/sidebar-agents';
+import { type RemoteMachineSettings, type ghostexSettings } from '@/packages/shared/ghostex-settings';
+import { readWebSettings } from '../app/web-settings';
 import {
   normalizeWorkspaceProjectIcon,
   normalizeWorkspaceProjectIconDataUrl,
   normalizeWorkspaceThemeColor,
-} from "@/packages/shared/workspace-project-appearance";
-import type { OpenAddProjectModalDetail } from "../app/action-events";
-import {
-  getConnectionStates,
-  rpcForMachine,
-  subscribeConnectionStates,
-} from "../connections/connection-registry";
-import type { MachineConnectionState } from "../connections/types";
-import {
-  getMachineCatalogState,
-  reorderRemoteMachines,
-} from "../machines/machine-catalog";
-import { orderMachineConnectionStates } from "../machines/machine-order";
+} from '@/packages/shared/workspace-project-appearance';
+import type { OpenAddProjectModalDetail } from '../app/action-events';
+import { getConnectionStates, rpcForMachine, subscribeConnectionStates } from '../connections/connection-registry';
+import type { MachineConnectionState } from '../connections/types';
+import { getMachineCatalogState, reorderRemoteMachines } from '../machines/machine-catalog';
+import { orderMachineConnectionStates } from '../machines/machine-order';
 import {
   createSidebarGroupId,
   createSidebarProjectId,
@@ -58,23 +48,23 @@ import {
   parseSidebarSessionId,
   type SidebarProjectReference,
   type SidebarSessionReference,
-} from "./sidebar-ids";
-import { setActiveSidebarProject } from "./active-project-store";
-import type { NavigationHistoryEntry } from "@/packages/shared/navigation-history/navigation-history-contract";
-import { NAVIGATION_HISTORY_SCOPE_WEB } from "@/packages/shared/navigation-history/navigation-history-contract";
+} from './sidebar-ids';
+import { setActiveSidebarProject } from './active-project-store';
+import type { NavigationHistoryEntry } from '@/packages/shared/navigation-history/navigation-history-contract';
+import { NAVIGATION_HISTORY_SCOPE_WEB } from '@/packages/shared/navigation-history/navigation-history-contract';
 import {
   NavigationHistoryController,
   type NavigationHistoryRpc,
-} from "@/packages/shared/navigation-history/navigation-history-controller";
+} from '@/packages/shared/navigation-history/navigation-history-controller';
 import {
   installNavigationHistoryHotkeys,
   navigationHistoryHotkeyDirection,
-} from "@/packages/shared/navigation-history/navigation-history-hotkeys";
+} from '@/packages/shared/navigation-history/navigation-history-hotkeys';
 
-const DEBUG_SIDEBAR_STORAGE_KEY = "ghostexWeb.debugSidebar";
-const DEFAULT_TERMINAL_TITLE = "Terminal";
+const DEBUG_SIDEBAR_STORAGE_KEY = 'ghostexWeb.debugSidebar';
+const DEFAULT_TERMINAL_TITLE = 'Terminal';
 
-type SidebarMessageSource = Pick<EventTarget, "addEventListener" | "removeEventListener">;
+type SidebarMessageSource = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
 
 type MachineProjectMetadata = {
   projects: readonly GxserverProjectDomainState[];
@@ -87,22 +77,22 @@ type MachineRecentProjects = {
 };
 
 export type GhostexWebFocusSessionDetail = SidebarSessionReference & {
-  placement: "focusedPane";
+  placement: 'focusedPane';
   placementTargetSessionId?: string;
-  source: "sidebar";
+  source: 'sidebar';
 };
 
 declare global {
   interface WindowEventMap {
-    "ghostex-web:focusSession": CustomEvent<GhostexWebFocusSessionDetail>;
-    "ghostex-web:activeSessionContext": CustomEvent<SidebarSessionReference>;
-    "ghostex-web:openFindPrompts": CustomEvent<undefined>;
+    'ghostex-web:focusSession': CustomEvent<GhostexWebFocusSessionDetail>;
+    'ghostex-web:activeSessionContext': CustomEvent<SidebarSessionReference>;
+    'ghostex-web:openFindPrompts': CustomEvent<undefined>;
   }
 }
 
 class WebSidebarMessageSource extends EventTarget {
   postMessage(message: ExtensionToSidebarMessage): void {
-    this.dispatchEvent(new MessageEvent<ExtensionToSidebarMessage>("message", { data: message }));
+    this.dispatchEvent(new MessageEvent<ExtensionToSidebarMessage>('message', { data: message }));
   }
 }
 
@@ -133,7 +123,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   let running = false;
   let unsubscribeConnections: (() => void) | undefined;
   let uninstallNavigationHistoryHotkeys: (() => void) | undefined;
-  let hudRequestKey = "";
+  let hudRequestKey = '';
   let remoteHud: GxserverSidebarHudResponse | undefined;
   let settings = readWebSettings();
   const projectMetadataByMachineId = new Map<string, MachineProjectMetadata>();
@@ -152,7 +142,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
    */
   const navigationHistoryOwnerMachineId = (): string | undefined => {
     const states = getConnectionStates();
-    const local = states.find((state) => state.machine.machineId === "local");
+    const local = states.find((state) => state.machine.machineId === 'local');
     return (local ?? states[0])?.machine.machineId;
   };
 
@@ -174,23 +164,22 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       void focusSession(entry.sessionId as string);
       return true;
     }
-    const projectTarget = entry.groupId
-      ? parseSidebarGroupId(entry.groupId)
-      : parseSidebarProjectId(entry.projectId);
+    const projectTarget = entry.groupId ? parseSidebarGroupId(entry.groupId) : parseSidebarProjectId(entry.projectId);
     if (!projectTarget || !presentationHasProject(states, projectTarget)) {
       return false;
     }
     activeTarget = projectTarget;
-    hudRequestKey = "";
+    hudRequestKey = '';
     publish();
     return true;
   };
 
   const navigationHistory = new NavigationHistoryController({
     activate: activateNavigationHistoryEntry,
-    onError: (error) => debugLog("navigationHistoryError", {
-      error: error instanceof Error ? error.message : String(error),
-    }),
+    onError: (error) =>
+      debugLog('navigationHistoryError', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
     resolveRpc: navigationHistoryRpc,
     scopeId: NAVIGATION_HISTORY_SCOPE_WEB,
   });
@@ -199,14 +188,8 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     if (!running) {
       return;
     }
-    const states = orderMachineConnectionStates(
-      getConnectionStates(),
-      getMachineCatalogState().machines,
-    );
-    if (
-      pendingActiveSessionContext
-      && presentationHasSession(states, pendingActiveSessionContext)
-    ) {
+    const states = orderMachineConnectionStates(getConnectionStates(), getMachineCatalogState().machines);
+    if (pendingActiveSessionContext && presentationHasSession(states, pendingActiveSessionContext)) {
       activeTarget = {
         machineId: pendingActiveSessionContext.machineId,
         projectId: pendingActiveSessionContext.projectId,
@@ -219,38 +202,24 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     focusedTarget = reconcileFocusedTarget(focusedTarget, states);
     // Coalesced inside the controller: an unchanged target costs one string
     // compare here and never reaches the daemon.
-    navigationHistory.recordVisit(
-      createNavigationHistoryEntry(states, activeTarget, focusedTarget),
-    );
-    const groups = createMergedSidebarGroups(
-      states,
-      activeTarget,
-      focusedTarget,
-      projectMetadataByMachineId,
-    );
-    debugLog("publish", {
+    navigationHistory.recordVisit(createNavigationHistoryEntry(states, activeTarget, focusedTarget));
+    const groups = createMergedSidebarGroups(states, activeTarget, focusedTarget, projectMetadataByMachineId);
+    debugLog('publish', {
       groupCount: groups.length,
       groups: groups.slice(0, 8).map((group) => ({
         sessionCount: group.sessions.length,
         title: group.title,
       })),
     });
-    const hud = createWebSidebarHud(
-      groups,
-      focusedTarget,
-      remoteHud,
-      states,
-      recentProjectsByMachineId,
-      settings,
-    );
+    const hud = createWebSidebarHud(groups, focusedTarget, remoteHud, states, recentProjectsByMachineId, settings);
     const message: ExtensionToSidebarMessage = {
       groups,
       hud,
       pinnedPrompts: [],
       previousSessions: [],
       revision: ++revision,
-      scratchPadContent: "",
-      type: hasHydrated ? "sessionState" : "hydrate",
+      scratchPadContent: '',
+      type: hasHydrated ? 'sessionState' : 'hydrate',
     };
     hasHydrated = true;
     messageSource.postMessage(message);
@@ -264,8 +233,8 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     machineId: string,
     recentProjects: readonly GxserverRecentProjectDomainState[],
     signature = createRecentProjectsSignature(
-      getConnectionStates().find((state) => state.machine.machineId === machineId),
-    ),
+      getConnectionStates().find((state) => state.machine.machineId === machineId)
+    )
   ): void => {
     const state = getConnectionStates().find((candidate) => candidate.machine.machineId === machineId);
     if (!state) {
@@ -287,36 +256,35 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       }
     }
     for (const state of states) {
-      if (state.status !== "connected") {
+      if (state.status !== 'connected') {
         continue;
       }
       const machineId = state.machine.machineId;
       const signature = createRecentProjectsSignature(state);
       if (
-        recentProjectsByMachineId.get(machineId)?.signature === signature
-        || recentProjectsRequestSignatures.get(machineId) === signature
+        recentProjectsByMachineId.get(machineId)?.signature === signature ||
+        recentProjectsRequestSignatures.get(machineId) === signature
       ) {
         continue;
       }
       recentProjectsRequestSignatures.set(machineId, signature);
-      void rpcForMachine<{ recentProjects: GxserverRecentProjectDomainState[] }>(
-        machineId,
-        "/api/listRecentProjects",
-      ).then(({ recentProjects }) => {
-        if (!running || recentProjectsRequestSignatures.get(machineId) !== signature) {
-          return;
-        }
-        recentProjectsRequestSignatures.delete(machineId);
-        applyRecentProjects(machineId, recentProjects, signature);
-      }).catch((error: unknown) => {
-        if (recentProjectsRequestSignatures.get(machineId) === signature) {
+      void rpcForMachine<{ recentProjects: GxserverRecentProjectDomainState[] }>(machineId, '/api/listRecentProjects')
+        .then(({ recentProjects }) => {
+          if (!running || recentProjectsRequestSignatures.get(machineId) !== signature) {
+            return;
+          }
           recentProjectsRequestSignatures.delete(machineId);
-        }
-        debugLog("recentProjectsError", {
-          error: error instanceof Error ? error.message : String(error),
-          machineId,
+          applyRecentProjects(machineId, recentProjects, signature);
+        })
+        .catch((error: unknown) => {
+          if (recentProjectsRequestSignatures.get(machineId) === signature) {
+            recentProjectsRequestSignatures.delete(machineId);
+          }
+          debugLog('recentProjectsError', {
+            error: error instanceof Error ? error.message : String(error),
+            machineId,
+          });
         });
-      });
     }
   };
 
@@ -326,39 +294,36 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       if (!presentation) {
         continue;
       }
-      const signature = presentation.projects
-        .map((project) => `${project.projectId}:${project.updatedAt}`)
-        .join("|");
+      const signature = presentation.projects.map((project) => `${project.projectId}:${project.updatedAt}`).join('|');
       if (
-        projectMetadataByMachineId.get(state.machine.machineId)?.signature === signature
-        || projectMetadataRequestSignatures.get(state.machine.machineId) === signature
+        projectMetadataByMachineId.get(state.machine.machineId)?.signature === signature ||
+        projectMetadataRequestSignatures.get(state.machine.machineId) === signature
       ) {
         continue;
       }
       projectMetadataRequestSignatures.set(state.machine.machineId, signature);
-      void rpcForMachine<{ projects: GxserverProjectDomainState[] }>(
-        state.machine.machineId,
-        "/api/listProjects",
-      ).then(({ projects }) => {
-        if (!running || projectMetadataRequestSignatures.get(state.machine.machineId) !== signature) {
-          return;
-        }
-        projectMetadataByMachineId.set(state.machine.machineId, { projects, signature });
-        debugLog("projectMetadata", {
-          chatProjectCount: projects.filter(isChatDomainProject).length,
-          machineId: state.machine.machineId,
-          projectCount: projects.length,
+      void rpcForMachine<{ projects: GxserverProjectDomainState[] }>(state.machine.machineId, '/api/listProjects')
+        .then(({ projects }) => {
+          if (!running || projectMetadataRequestSignatures.get(state.machine.machineId) !== signature) {
+            return;
+          }
+          projectMetadataByMachineId.set(state.machine.machineId, { projects, signature });
+          debugLog('projectMetadata', {
+            chatProjectCount: projects.filter(isChatDomainProject).length,
+            machineId: state.machine.machineId,
+            projectCount: projects.length,
+          });
+          publish();
+        })
+        .catch((error: unknown) => {
+          if (projectMetadataRequestSignatures.get(state.machine.machineId) === signature) {
+            projectMetadataRequestSignatures.delete(state.machine.machineId);
+          }
+          debugLog('projectMetadataError', {
+            error: error instanceof Error ? error.message : String(error),
+            machineId: state.machine.machineId,
+          });
         });
-        publish();
-      }).catch((error: unknown) => {
-        if (projectMetadataRequestSignatures.get(state.machine.machineId) === signature) {
-          projectMetadataRequestSignatures.delete(state.machine.machineId);
-        }
-        debugLog("projectMetadataError", {
-          error: error instanceof Error ? error.message : String(error),
-          machineId: state.machine.machineId,
-        });
-      });
     }
   };
 
@@ -371,19 +336,21 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       return;
     }
     hudRequestKey = requestKey;
-    void rpcForMachine<GxserverSidebarHudResponse>(target.machineId, "/api/readSidebarHud", {
+    void rpcForMachine<GxserverSidebarHudResponse>(target.machineId, '/api/readSidebarHud', {
       activeProjectId: target.projectId,
-    }).then((hud) => {
-      if (!running || hudRequestKey !== requestKey) {
-        return;
-      }
-      remoteHud = hud;
-      publish();
-    }).catch(() => {
-      if (hudRequestKey === requestKey) {
-        remoteHud = undefined;
-      }
-    });
+    })
+      .then((hud) => {
+        if (!running || hudRequestKey !== requestKey) {
+          return;
+        }
+        remoteHud = hud;
+        publish();
+      })
+      .catch(() => {
+        if (hudRequestKey === requestKey) {
+          remoteHud = undefined;
+        }
+      });
   };
 
   const focusSession = async (sessionId: string): Promise<void> => {
@@ -394,10 +361,10 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     activeTarget = target;
     focusedTarget = target;
     const session = findPresentationSession(getConnectionStates(), target);
-    if (session?.activity === "attention") {
-      void rpcForMachine(target.machineId, "/api/updateAgentActivity", {
+    if (session?.activity === 'attention') {
+      void rpcForMachine(target.machineId, '/api/updateAgentActivity', {
         ...(session.agentName ? { agentName: session.agentName } : {}),
-        event: "acknowledge",
+        event: 'acknowledge',
         projectId: target.projectId,
         sessionId: target.sessionId,
       });
@@ -407,19 +374,20 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   };
 
   const createSession = async (groupId?: string): Promise<void> => {
-    const target = (groupId ? parseSidebarGroupId(groupId) : undefined)
-      ?? activeTarget
-      ?? primaryProjectTarget(getConnectionStates());
+    const target =
+      (groupId ? parseSidebarGroupId(groupId) : undefined) ??
+      activeTarget ??
+      primaryProjectTarget(getConnectionStates());
     if (!target) {
       return;
     }
     const result = await rpcForMachine<{
       session?: { projectId?: string; sessionId?: string };
-    }>(target.machineId, "/api/createSession", {
-      kind: "terminal",
-      lifecycleState: "running",
+    }>(target.machineId, '/api/createSession', {
+      kind: 'terminal',
+      lifecycleState: 'running',
       projectId: target.projectId,
-      surface: "workspace",
+      surface: 'workspace',
       title: DEFAULT_TERMINAL_TITLE,
     });
     const sessionId = result.session?.sessionId;
@@ -435,20 +403,21 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     }
   };
 
-  const createQuickSession = async (kind: "agent" | "terminal", agentId?: string): Promise<void> => {
-    const machineId = activeTarget?.machineId
-      ?? getConnectionStates().find((state) => state.machine.machineId === "local")?.machine.machineId;
+  const createQuickSession = async (kind: 'agent' | 'terminal', agentId?: string): Promise<void> => {
+    const machineId =
+      activeTarget?.machineId ??
+      getConnectionStates().find((state) => state.machine.machineId === 'local')?.machine.machineId;
     if (!machineId) {
       return;
     }
     const { project } = await rpcForMachine<{ project: GxserverProjectDomainState }>(
       machineId,
-      "/api/createQuickProject",
-      { kind },
+      '/api/createQuickProject',
+      { kind }
     );
     activeTarget = { machineId, projectId: project.projectId };
-    hudRequestKey = "";
-    if (kind === "agent" && agentId) {
+    hudRequestKey = '';
+    if (kind === 'agent' && agentId) {
       await createAgentSession(agentId);
       return;
     }
@@ -457,7 +426,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
 
   const postMessage = (message: SidebarToExtensionMessage): void => {
     void handleSidebarMessage(message).catch((error: unknown) => {
-      debugLog("actionError", {
+      debugLog('actionError', {
         error: error instanceof Error ? error.message : String(error),
         type: message.type,
       });
@@ -466,78 +435,82 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
 
   const handleSidebarMessage = async (message: SidebarToExtensionMessage): Promise<void> => {
     switch (message.type) {
-      case "focusSession":
-      case "focusSessionMode":
+      case 'focusSession':
+      case 'focusSessionMode':
         await focusSession(message.sessionId);
         return;
-      case "focusGroup": {
+      case 'focusGroup': {
         const target = parseSidebarGroupId(message.groupId);
         if (target) {
           activeTarget = target;
-          hudRequestKey = "";
+          hudRequestKey = '';
           publish();
         }
         return;
       }
-      case "createSession":
-      case "createFullWidthTerminalPane":
+      case 'createSession':
+      case 'createFullWidthTerminalPane':
         await createSession();
         return;
-      case "createChat":
-        await createQuickSession("terminal");
+      case 'createChat':
+        await createQuickSession('terminal');
         return;
-      case "createSessionInGroup":
+      case 'createSessionInGroup':
         await createSession(message.groupId);
         return;
-      case "setSessionSleeping": {
+      case 'setSessionSleeping': {
         const target = parseSidebarSessionId(message.sessionId);
         if (target) {
-          await lifecycleRpc(target, message.sleeping ? "/api/sleepSession" : "/api/wakeSession");
+          await lifecycleRpc(target, message.sleeping ? '/api/sleepSession' : '/api/wakeSession');
         }
         return;
       }
-      case "setSessionsSleeping":
-        await Promise.all(message.sessionIds.map(async (sessionId) => {
-          const target = parseSidebarSessionId(sessionId);
-          if (target) {
-            await lifecycleRpc(target, message.sleeping ? "/api/sleepSession" : "/api/wakeSession");
-          }
-        }));
+      case 'setSessionsSleeping':
+        await Promise.all(
+          message.sessionIds.map(async (sessionId) => {
+            const target = parseSidebarSessionId(sessionId);
+            if (target) {
+              await lifecycleRpc(target, message.sleeping ? '/api/sleepSession' : '/api/wakeSession');
+            }
+          })
+        );
         return;
-      case "setGroupSleeping":
+      case 'setGroupSleeping':
         await setGroupSleeping(message.groupId, message.sleeping);
         return;
-      case "sleepInactiveProjectSessions":
-        await transitionProjectSessions(message.groupId, "sleepInactive");
+      case 'sleepInactiveProjectSessions':
+        await transitionProjectSessions(message.groupId, 'sleepInactive');
         return;
-      case "wakeProjectSleepingSessions":
-        await transitionProjectSessions(message.groupId, "wakeSleeping");
+      case 'wakeProjectSleepingSessions':
+        await transitionProjectSessions(message.groupId, 'wakeSleeping');
         return;
-      case "closeInactiveProjectSessions":
-        await transitionProjectSessions(message.groupId, "closeInactive");
+      case 'closeInactiveProjectSessions':
+        await transitionProjectSessions(message.groupId, 'closeInactive');
         return;
-      case "closeSession": {
+      case 'closeSession': {
         const target = parseSidebarSessionId(message.sessionId);
         if (target) {
-          await lifecycleRpc(target, "/api/killSession");
+          await lifecycleRpc(target, '/api/killSession');
         }
         return;
       }
-      case "closeSessions":
-        await Promise.all(message.sessionIds.map(async (sessionId) => {
-          const target = parseSidebarSessionId(sessionId);
-          if (target) {
-            await lifecycleRpc(target, "/api/killSession");
-          }
-        }));
+      case 'closeSessions':
+        await Promise.all(
+          message.sessionIds.map(async (sessionId) => {
+            const target = parseSidebarSessionId(sessionId);
+            if (target) {
+              await lifecycleRpc(target, '/api/killSession');
+            }
+          })
+        );
         return;
-      case "forkSession": {
+      case 'forkSession': {
         const target = parseSidebarSessionId(message.sessionId);
         if (target) {
           const result = await rpcForMachine<GxserverForkSessionResult>(
             target.machineId,
-            "/api/forkSession",
-            lifecycleParams(target),
+            '/api/forkSession',
+            lifecycleParams(target)
           );
           const createdTarget = {
             machineId: target.machineId,
@@ -550,88 +523,78 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         }
         return;
       }
-      case "renameSession": {
+      case 'renameSession': {
         const target = parseSidebarSessionId(message.sessionId);
         if (target) {
-          await rpcForMachine(target.machineId, "/api/requestSessionRename", {
+          await rpcForMachine(target.machineId, '/api/requestSessionRename', {
             ...(message.agentId ? { agentName: message.agentId } : {}),
             ...lifecycleParams(target),
             title: message.title,
-            titleSource: message.shouldGenerateTitle ? "generated" : "user",
+            titleSource: message.shouldGenerateTitle ? 'generated' : 'user',
           });
         }
         return;
       }
-      case "setSessionFavorite":
+      case 'setSessionFavorite':
         await updateSession(message.sessionId, {
           isFavorite: message.favorite,
-          sessionTag: message.favorite ? "favorite" : null,
+          sessionTag: message.favorite ? 'favorite' : null,
         });
         return;
-      case "setSessionTag":
+      case 'setSessionTag':
         await updateSession(message.sessionId, {
-          isFavorite: message.sessionTag === "favorite",
+          isFavorite: message.sessionTag === 'favorite',
           sessionTag: message.sessionTag ?? null,
         });
         return;
-      case "setSessionPinned":
+      case 'setSessionPinned':
         await updateSession(message.sessionId, { isPinned: message.pinned });
         return;
-      case "syncSessionOrder":
+      case 'syncSessionOrder':
         await syncSessionOrder(message.groupId, message.sessionIds);
         return;
-      case "updateSettingsPatch": {
-        if (
-          message.source === "sidebar:remoteMachineOrder"
-          && message.patch.remoteMachines
-        ) {
-          const changed = reorderRemoteMachines(
-            message.patch.remoteMachines.map((machine) => machine.id),
-          );
+      case 'updateSettingsPatch': {
+        if (message.source === 'sidebar:remoteMachineOrder' && message.patch.remoteMachines) {
+          const changed = reorderRemoteMachines(message.patch.remoteMachines.map((machine) => machine.id));
           if (changed) {
             publish();
           }
         }
         return;
       }
-      case "runSidebarAgent":
+      case 'runSidebarAgent':
         if (message.groupId === GXSERVER_PRESENTATION_CHATS_GROUP_ID) {
-          await createQuickSession("agent", message.agentId);
+          await createQuickSession('agent', message.agentId);
         } else {
           await createAgentSession(message.agentId, message.groupId);
         }
         return;
-      case "renameWorkspaceProjectForGroup": {
+      case 'renameWorkspaceProjectForGroup': {
         const target = parseSidebarGroupId(message.groupId);
         if (target) {
-          await rpcForMachine(target.machineId, "/api/updateProject", {
+          await rpcForMachine(target.machineId, '/api/updateProject', {
             name: message.title,
             projectId: target.projectId,
           });
         }
         return;
       }
-      case "closeWorkspaceProjectForGroup": {
+      case 'closeWorkspaceProjectForGroup': {
         const target = parseSidebarGroupId(message.groupId);
         if (target) {
           const { recentProjects } = await rpcForMachine<{
             recentProjects: GxserverRecentProjectDomainState[];
-          }>(target.machineId, "/api/closeProjectToRecent", { projectId: target.projectId });
+          }>(target.machineId, '/api/closeProjectToRecent', { projectId: target.projectId });
           applyRecentProjects(target.machineId, recentProjects);
         }
         return;
       }
-      case "requestRecentProjects": {
+      case 'requestRecentProjects': {
         const requestedMachineId = message.machineId;
-        const state = resolveRecentProjectsMachineState(
-          getConnectionStates(),
-          requestedMachineId,
-        );
+        const state = resolveRecentProjectsMachineState(getConnectionStates(), requestedMachineId);
         let recentProjects: SidebarRecentProject[] = [];
         if (state) {
-          const pendingMutation = pendingRecentProjectMutations.get(
-            state.machine.machineId,
-          );
+          const pendingMutation = pendingRecentProjectMutations.get(state.machine.machineId);
           if (pendingMutation) {
             try {
               await pendingMutation;
@@ -642,14 +605,14 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
           try {
             const result = await rpcForMachine<{
               recentProjects: GxserverRecentProjectDomainState[];
-            }>(state.machine.machineId, "/api/listRecentProjects");
+            }>(state.machine.machineId, '/api/listRecentProjects');
             recentProjects = createWebRecentProjects(state, result.recentProjects);
             recentProjectsByMachineId.set(state.machine.machineId, {
               projects: recentProjects,
               signature: createRecentProjectsSignature(state),
             });
           } catch (error) {
-            debugLog("requestRecentProjectsError", {
+            debugLog('requestRecentProjectsError', {
               error: error instanceof Error ? error.message : String(error),
               machineId: state.machine.machineId,
             });
@@ -658,32 +621,29 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         messageSource.postMessage({
           ...(requestedMachineId === undefined ? {} : { machineId: requestedMachineId }),
           recentProjects,
-          type: "recentProjectsResult",
+          type: 'recentProjectsResult',
         });
         return;
       }
-      case "removeWorkspaceProjectForGroup":
-      {
+      case 'removeWorkspaceProjectForGroup': {
         const target = parseSidebarGroupId(message.groupId);
         if (target) {
-          await rpcForMachine(target.machineId, "/api/removeProject", {
+          await rpcForMachine(target.machineId, '/api/removeProject', {
             projectId: target.projectId,
           });
         }
         return;
       }
-      case "restoreRecentProject":
-      case "removeRecentProject": {
+      case 'restoreRecentProject':
+      case 'removeRecentProject': {
         const target = parseSidebarProjectId(message.projectId);
         if (target) {
           const mutation = rpcForMachine<{
             recentProjects: GxserverRecentProjectDomainState[];
           }>(
             target.machineId,
-            message.type === "restoreRecentProject"
-              ? "/api/restoreRecentProject"
-              : "/api/removeRecentProject",
-            { projectId: target.projectId },
+            message.type === 'restoreRecentProject' ? '/api/restoreRecentProject' : '/api/removeRecentProject',
+            { projectId: target.projectId }
           ).then(({ recentProjects }) => {
             applyRecentProjects(target.machineId, recentProjects);
           });
@@ -698,7 +658,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         }
         return;
       }
-      case "copyRecentProjectPath": {
+      case 'copyRecentProjectPath': {
         const target = parseSidebarProjectId(message.projectId);
         const project = target
           ? recentProjectsByMachineId
@@ -710,7 +670,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         }
         return;
       }
-      case "pickWorkspaceFolder": {
+      case 'pickWorkspaceFolder': {
         /*
          * CDXC:AddProject 2026-07-30:
          * `pickWorkspaceFolder` is the sidebar's local "Add project" affordance
@@ -721,16 +681,14 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
          * added project reaches the sidebar as an ordinary presentation delta.
          */
         const detail: OpenAddProjectModalDetail = {};
-        window.dispatchEvent(
-          new CustomEvent("ghostex-web:openAddProjectModal", { detail }),
-        );
+        window.dispatchEvent(new CustomEvent('ghostex-web:openAddProjectModal', { detail }));
         return;
       }
-      case "searchPreviousSessionsByText": {
-        window.dispatchEvent(new CustomEvent("ghostex-web:openFindPrompts"));
+      case 'searchPreviousSessionsByText': {
+        window.dispatchEvent(new CustomEvent('ghostex-web:openFindPrompts'));
         return;
       }
-      case "runGhostexHotkeyAction": {
+      case 'runGhostexHotkeyAction': {
         /*
          * CDXC:NavigationHistory 2026-08-19:
          * The shared command palette forwards host-owned hotkey rows as action
@@ -748,24 +706,24 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
          * owns presentation, so native-style command actions only announce
          * the intent here and never mutate the focused workspace pane.
          */
-        if (message.actionId === "openFindPrompts") {
-          window.dispatchEvent(new CustomEvent("ghostex-web:openFindPrompts"));
+        if (message.actionId === 'openFindPrompts') {
+          window.dispatchEvent(new CustomEvent('ghostex-web:openFindPrompts'));
           return;
         }
-        debugLog("nativeOnlyNoOp", { actionId: message.actionId, type: message.type });
+        debugLog('nativeOnlyNoOp', { actionId: message.actionId, type: message.type });
         return;
       }
-      case "openRecentProjectInFinder":
-        console.warn("[ghostex-web] Open in Finder is unavailable in the browser.");
+      case 'openRecentProjectInFinder':
+        console.warn('[ghostex-web] Open in Finder is unavailable in the browser.');
         return;
-      case "cancelSidebarSessionFocusBorderHandoff":
-      case "setSidebarSessionFocusBorderHandoffHitTarget":
-      case "sidebarDebugLog":
-      case "closeGroup":
-      case "renameGroup":
+      case 'cancelSidebarSessionFocusBorderHandoff':
+      case 'setSidebarSessionFocusBorderHandoffHitTarget':
+      case 'sidebarDebugLog':
+      case 'closeGroup':
+      case 'renameGroup':
         return;
       default:
-        debugLog("nativeOnlyNoOp", { type: message.type });
+        debugLog('nativeOnlyNoOp', { type: message.type });
     }
   };
 
@@ -775,40 +733,45 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       return;
     }
     const sessions = projectSessions(getConnectionStates(), target);
-    await Promise.all(sessions.map((session) => lifecycleRpc(
-      { ...target, sessionId: session.sessionId },
-      sleeping ? "/api/sleepSession" : "/api/wakeSession",
-    )));
+    await Promise.all(
+      sessions.map((session) =>
+        lifecycleRpc({ ...target, sessionId: session.sessionId }, sleeping ? '/api/sleepSession' : '/api/wakeSession')
+      )
+    );
   };
 
   const transitionProjectSessions = async (
     groupId: string,
-    action: "closeInactive" | "sleepInactive" | "wakeSleeping",
+    action: 'closeInactive' | 'sleepInactive' | 'wakeSleeping'
   ): Promise<void> => {
     const target = parseSidebarGroupId(groupId);
     if (!target) {
       return;
     }
     const sessions = projectSessions(getConnectionStates(), target).filter((session) => {
-      if (action === "wakeSleeping") {
-        return session.lifecycleState === "sleeping";
+      if (action === 'wakeSleeping') {
+        return session.lifecycleState === 'sleeping';
       }
-      return session.activity === "idle";
+      return session.activity === 'idle';
     });
-    await Promise.all(sessions.map((session) => lifecycleRpc(
-      { ...target, sessionId: session.sessionId },
-      action === "closeInactive"
-        ? "/api/killSession"
-        : action === "sleepInactive"
-          ? "/api/sleepSession"
-          : "/api/wakeSession",
-    )));
+    await Promise.all(
+      sessions.map((session) =>
+        lifecycleRpc(
+          { ...target, sessionId: session.sessionId },
+          action === 'closeInactive'
+            ? '/api/killSession'
+            : action === 'sleepInactive'
+              ? '/api/sleepSession'
+              : '/api/wakeSession'
+        )
+      )
+    );
   };
 
   const updateSession = async (sessionId: string, update: Record<string, unknown>): Promise<void> => {
     const target = parseSidebarSessionId(sessionId);
     if (target) {
-      await rpcForMachine(target.machineId, "/api/updateSession", {
+      await rpcForMachine(target.machineId, '/api/updateSession', {
         ...update,
         projectId: target.projectId,
         sessionId: target.sessionId,
@@ -827,7 +790,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         ? [session.sessionId]
         : [];
     });
-    await rpcForMachine(target.machineId, "/api/updateSessionOrder", {
+    await rpcForMachine(target.machineId, '/api/updateSessionOrder', {
       projectId: target.projectId,
       sessionIds: routedIds,
     });
@@ -838,18 +801,16 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     if (!target || !agentId.trim()) {
       return;
     }
-    await rpcForMachine(target.machineId, "/api/createAgentSession", {
+    await rpcForMachine(target.machineId, '/api/createAgentSession', {
       agentId: agentId.trim(),
       projectId: target.projectId,
       requireLaunchCommand: true,
-      surface: "workspace",
+      surface: 'workspace',
       title: `${agentId.trim()} Session`,
     });
   };
 
-  const onActiveSessionContext = (
-    event: WindowEventMap["ghostex-web:activeSessionContext"],
-  ): void => {
+  const onActiveSessionContext = (event: WindowEventMap['ghostex-web:activeSessionContext']): void => {
     const target = event.detail;
     if (!presentationHasSession(getConnectionStates(), target)) {
       pendingActiveSessionContext = target;
@@ -870,7 +831,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       }
       running = true;
       unsubscribeConnections = subscribeConnectionStates(publish);
-      window.addEventListener("ghostex-web:activeSessionContext", onActiveSessionContext);
+      window.addEventListener('ghostex-web:activeSessionContext', onActiveSessionContext);
       uninstallNavigationHistoryHotkeys = installNavigationHistoryHotkeys({
         navigate: (direction) => void navigationHistory.navigate(direction),
         readHotkeys: () => settings.hotkeys,
@@ -884,7 +845,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       running = false;
       unsubscribeConnections?.();
       unsubscribeConnections = undefined;
-      window.removeEventListener("ghostex-web:activeSessionContext", onActiveSessionContext);
+      window.removeEventListener('ghostex-web:activeSessionContext', onActiveSessionContext);
       uninstallNavigationHistoryHotkeys?.();
       uninstallNavigationHistoryHotkeys = undefined;
     },
@@ -896,25 +857,22 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   };
 }
 
-function dispatchFocusSession(
-  target: SidebarSessionReference,
-  placementTargetSessionId?: string,
-): void {
+function dispatchFocusSession(target: SidebarSessionReference, placementTargetSessionId?: string): void {
   const detail: GhostexWebFocusSessionDetail = {
     ...target,
-    placement: "focusedPane",
+    placement: 'focusedPane',
     ...(placementTargetSessionId ? { placementTargetSessionId } : {}),
-    source: "sidebar",
+    source: 'sidebar',
   };
-  window.dispatchEvent(new CustomEvent("ghostex-web:focusSession", { detail }));
-  debugLog("focusSession", detail);
+  window.dispatchEvent(new CustomEvent('ghostex-web:focusSession', { detail }));
+  debugLog('focusSession', detail);
 }
 
 function createMergedSidebarGroups(
   states: readonly MachineConnectionState[],
   activeTarget: SidebarProjectReference | undefined,
   focusedTarget: SidebarSessionReference | undefined,
-  projectMetadataByMachineId: ReadonlyMap<string, MachineProjectMetadata>,
+  projectMetadataByMachineId: ReadonlyMap<string, MachineProjectMetadata>
 ): SidebarSessionGroup[] {
   return states.flatMap((state) => {
     const presentation = state.presentation;
@@ -922,13 +880,13 @@ function createMergedSidebarGroups(
       return [];
     }
     const projectMetadata = createProjectProjectionMetadata(
-      projectMetadataByMachineId.get(state.machine.machineId)?.projects ?? [],
+      projectMetadataByMachineId.get(state.machine.machineId)?.projects ?? []
     );
-    if (state.machine.machineId === "local") {
+    if (state.machine.machineId === 'local') {
       return createGxserverPresentationSidebarGroups({
-        activeProjectId: activeTarget?.machineId === "local" ? activeTarget.projectId : undefined,
+        activeProjectId: activeTarget?.machineId === 'local' ? activeTarget.projectId : undefined,
         chatProjectIds: projectMetadata.chatProjectIds,
-        focusedSessionId: focusedTarget?.machineId === "local" ? focusedTarget.sessionId : undefined,
+        focusedSessionId: focusedTarget?.machineId === 'local' ? focusedTarget.sessionId : undefined,
         hiddenProjectIds: projectMetadata.hiddenProjectIds,
         presentation,
         projectOverlays: projectMetadata.projectOverlays,
@@ -939,14 +897,13 @@ function createMergedSidebarGroups(
 
     const sessionsByProject = createGxserverPresentationSessionsByProjectFromGroups({ presentation });
     return orderGxserverPresentationSidebarProjects(
-      presentation.projects.filter((project) => !projectMetadata.hiddenProjectIds.has(project.projectId)),
+      presentation.projects.filter((project) => !projectMetadata.hiddenProjectIds.has(project.projectId))
     ).map((project) => {
       const machineId = state.machine.machineId;
       const group = createGxserverPresentationSidebarGroup({
         activeProjectId: activeTarget?.machineId === machineId ? activeTarget.projectId : undefined,
         createProjectGroupId: (projectId) => createSidebarGroupId(machineId, projectId),
-        createProjectSessionId: (projectId, sessionId) =>
-          createSidebarSessionId(machineId, projectId, sessionId),
+        createProjectSessionId: (projectId, sessionId) => createSidebarSessionId(machineId, projectId, sessionId),
         focusedSessionId: focusedTarget?.machineId === machineId ? focusedTarget.sessionId : undefined,
         project,
         resolveAgentIcon,
@@ -972,9 +929,7 @@ function createMergedSidebarGroups(
   });
 }
 
-function createProjectProjectionMetadata(
-  projects: readonly GxserverProjectDomainState[],
-): {
+function createProjectProjectionMetadata(projects: readonly GxserverProjectDomainState[]): {
   chatProjectIds: ReadonlySet<string>;
   hiddenProjectIds: ReadonlySet<string>;
   projectOverlays: readonly GxserverPresentationSidebarProjectOverlay[];
@@ -988,11 +943,7 @@ function createProjectProjectionMetadata(
     if (isChatProject || isQuickProject) {
       chatProjectIds.add(project.projectId);
     }
-    if (
-      project.isRecentProject
-      || project.visibility === "hidden"
-      || project.systemKind === "remoteAttachCarrier"
-    ) {
+    if (project.isRecentProject || project.visibility === 'hidden' || project.systemKind === 'remoteAttachCarrier') {
       hiddenProjectIds.add(project.projectId);
     }
     projectOverlays.push({
@@ -1010,10 +961,11 @@ function isChatDomainProject(project: GxserverProjectDomainState): boolean {
   if (project.launchSettings.isChat === true) {
     return true;
   }
-  const path = project.path?.replace(/\\/gu, "/").replace(/\/+$/u, "");
-  return Boolean(path) && (
-    /(?:^|\/)(?:ghostex|\.ghostex(?:-[^/]+)?|\.active)\/chats(?:\/|$)/u.test(path!)
-    || /^~\/(?:ghostex|\.ghostex(?:-[^/]+)?|\.active)\/chats(?:\/|$)/u.test(path!)
+  const path = project.path?.replace(/\\/gu, '/').replace(/\/+$/u, '');
+  return (
+    Boolean(path) &&
+    (/(?:^|\/)(?:ghostex|\.ghostex(?:-[^/]+)?|\.active)\/chats(?:\/|$)/u.test(path!) ||
+      /^~\/(?:ghostex|\.ghostex(?:-[^/]+)?|\.active)\/chats(?:\/|$)/u.test(path!))
   );
 }
 
@@ -1023,16 +975,12 @@ function createWebSidebarHud(
   remoteHud: GxserverSidebarHudResponse | undefined,
   states: readonly MachineConnectionState[],
   recentProjectsByMachineId: ReadonlyMap<string, MachineRecentProjects>,
-  settings: ghostexSettings,
+  settings: ghostexSettings
 ): SidebarHudState {
-  const hud = createSidebarHudState(createDefaultSessionGridSnapshot(), "plain-dark");
+  const hud = createSidebarHudState(createDefaultSessionGridSnapshot(), 'plain-dark');
   const visibleSessions = groups.flatMap((group) => group.sessions.filter((session) => session.isVisible));
   const focusedSessionId = focusedTarget
-    ? createSidebarSessionId(
-        focusedTarget.machineId,
-        focusedTarget.projectId,
-        focusedTarget.sessionId,
-      )
+    ? createSidebarSessionId(focusedTarget.machineId, focusedTarget.projectId, focusedTarget.sessionId)
     : undefined;
   const focusedSession = groups
     .flatMap((group) => group.sessions)
@@ -1041,16 +989,13 @@ function createWebSidebarHud(
     ...hud,
     agents:
       remoteHud?.agents.map((agent) => ({
-          ...agent,
-          icon: resolveAgentIcon(agent.icon ?? agent.agentId),
-        })) ?? hud.agents,
+        ...agent,
+        icon: resolveAgentIcon(agent.icon ?? agent.agentId),
+      })) ?? hud.agents,
     appIconPickerUnavailable: true,
-    commands: remoteHud?.commands as SidebarHudState["commands"] ?? hud.commands,
-    focusedSessionTitle:
-      focusedSession?.displayTitle ?? focusedSession?.primaryTitle ?? focusedSession?.alias,
-    recentProjects: states.flatMap(
-      (state) => recentProjectsByMachineId.get(state.machine.machineId)?.projects ?? [],
-    ),
+    commands: (remoteHud?.commands as SidebarHudState['commands']) ?? hud.commands,
+    focusedSessionTitle: focusedSession?.displayTitle ?? focusedSession?.primaryTitle ?? focusedSession?.alias,
+    recentProjects: states.flatMap((state) => recentProjectsByMachineId.get(state.machine.machineId)?.projects ?? []),
     settings: {
       ...settings,
       remoteMachines: createRemoteMachineSettings(states),
@@ -1061,25 +1006,25 @@ function createWebSidebarHud(
 
 function createRecentProjectsSignature(state: MachineConnectionState | undefined): string {
   if (!state) {
-    return "missing";
+    return 'missing';
   }
   return [
     state.status,
     ...(state.presentation?.projects.map((project) => `${project.projectId}:${project.updatedAt}`) ?? []),
-  ].join("|");
+  ].join('|');
 }
 
 function resolveRecentProjectsMachineState(
   states: readonly MachineConnectionState[],
-  machineId: string | undefined,
+  machineId: string | undefined
 ): MachineConnectionState | undefined {
-  const requestedMachineId = machineId ?? "local";
+  const requestedMachineId = machineId ?? 'local';
   return states.find((state) => state.machine.machineId === requestedMachineId);
 }
 
 function createWebRecentProjects(
   state: MachineConnectionState,
-  recentProjects: readonly GxserverRecentProjectDomainState[],
+  recentProjects: readonly GxserverRecentProjectDomainState[]
 ): SidebarRecentProject[] {
   const machineId = state.machine.machineId;
   return recentProjects.flatMap((project) => {
@@ -1092,37 +1037,37 @@ function createWebRecentProjects(
     const icon = normalizeWorkspaceProjectIcon(project.icon);
     const iconDataUrl = normalizeWorkspaceProjectIconDataUrl(project.iconDataUrl);
     const themeColor = normalizeWorkspaceThemeColor(project.themeColor);
-    return [{
-      ...(icon ? { icon } : {}),
-      ...(iconDataUrl ? { iconDataUrl } : {}),
-      ...(project.recentClosedAt ? { recentClosedAt: project.recentClosedAt } : {}),
-      ...(machineId === "local"
-        ? {}
-        : { remoteMachineId: machineId, remoteMachineName: state.machine.label }),
-      ...(themeColor ? { themeColor } : {}),
-      path,
-      projectId: createSidebarProjectId(machineId, projectId),
-      sessionCount: Number.isFinite(project.sessionCount)
-        ? Math.max(0, Math.floor(project.sessionCount))
-        : 0,
-      title,
-    }];
+    return [
+      {
+        ...(icon ? { icon } : {}),
+        ...(iconDataUrl ? { iconDataUrl } : {}),
+        ...(project.recentClosedAt ? { recentClosedAt: project.recentClosedAt } : {}),
+        ...(machineId === 'local' ? {} : { remoteMachineId: machineId, remoteMachineName: state.machine.label }),
+        ...(themeColor ? { themeColor } : {}),
+        path,
+        projectId: createSidebarProjectId(machineId, projectId),
+        sessionCount: Number.isFinite(project.sessionCount) ? Math.max(0, Math.floor(project.sessionCount)) : 0,
+        title,
+      },
+    ];
   });
 }
 
-function createRemoteMachineSettings(
-  states: readonly MachineConnectionState[],
-): RemoteMachineSettings[] {
-  return states.flatMap((state) => state.machine.machineId === "local"
-    ? []
-    : [{
-        id: state.machine.machineId,
-        name: state.machine.label,
-        sshHost: new URL(state.machine.baseUrl).hostname,
-      }]);
+function createRemoteMachineSettings(states: readonly MachineConnectionState[]): RemoteMachineSettings[] {
+  return states.flatMap((state) =>
+    state.machine.machineId === 'local'
+      ? []
+      : [
+          {
+            id: state.machine.machineId,
+            name: state.machine.label,
+            sshHost: new URL(state.machine.baseUrl).hostname,
+          },
+        ]
+  );
 }
 
-function resolveAgentIcon(agentName: string | undefined): SidebarAgentButton["icon"] {
+function resolveAgentIcon(agentName: string | undefined): SidebarAgentButton['icon'] {
   const direct = getSidebarAgentIconById(agentName);
   if (direct) {
     return direct;
@@ -1131,94 +1076,89 @@ function resolveAgentIcon(agentName: string | undefined): SidebarAgentButton["ic
   if (!normalized) {
     return undefined;
   }
-  return DEFAULT_SIDEBAR_AGENTS.find((agent) =>
-    agent.agentId === normalized
-    || agent.name.trim().toLowerCase() === normalized
-    || agent.icon === normalized
+  return DEFAULT_SIDEBAR_AGENTS.find(
+    (agent) =>
+      agent.agentId === normalized || agent.name.trim().toLowerCase() === normalized || agent.icon === normalized
   )?.icon;
 }
 
 function publishMachineStatuses(
   states: readonly MachineConnectionState[],
-  messageSource: WebSidebarMessageSource,
+  messageSource: WebSidebarMessageSource
 ): void {
   for (const state of states) {
-    if (state.machine.machineId === "local") {
+    if (state.machine.machineId === 'local') {
       continue;
     }
     messageSource.postMessage({
       machineId: state.machine.machineId,
       ...(state.error ? { message: state.error } : {}),
       state: state.status,
-      type: "remoteMachineStatus",
+      type: 'remoteMachineStatus',
     });
   }
 }
 
 function reconcileActiveTarget(
   target: SidebarProjectReference | undefined,
-  states: readonly MachineConnectionState[],
+  states: readonly MachineConnectionState[]
 ): SidebarProjectReference | undefined {
   return target && presentationHasProject(states, target) ? target : primaryProjectTarget(states);
 }
 
 function reconcileFocusedTarget(
   target: SidebarSessionReference | undefined,
-  states: readonly MachineConnectionState[],
+  states: readonly MachineConnectionState[]
 ): SidebarSessionReference | undefined {
   return target && presentationHasSession(states, target) ? target : undefined;
 }
 
-function primaryProjectTarget(
-  states: readonly MachineConnectionState[],
-): SidebarProjectReference | undefined {
-  const primary = states.find((state) => state.machine.machineId === "local" && state.presentation)
-    ?? states.find((state) => state.presentation);
+function primaryProjectTarget(states: readonly MachineConnectionState[]): SidebarProjectReference | undefined {
+  const primary =
+    states.find((state) => state.machine.machineId === 'local' && state.presentation) ??
+    states.find((state) => state.presentation);
   const projectId = primary?.presentation?.projects[0]?.projectId;
   return primary && projectId ? { machineId: primary.machine.machineId, projectId } : undefined;
 }
 
-function presentationHasProject(
-  states: readonly MachineConnectionState[],
-  target: SidebarProjectReference,
-): boolean {
-  return states.some((state) =>
-    state.machine.machineId === target.machineId
-    && state.presentation?.projects.some((project) => project.projectId === target.projectId),
+function presentationHasProject(states: readonly MachineConnectionState[], target: SidebarProjectReference): boolean {
+  return states.some(
+    (state) =>
+      state.machine.machineId === target.machineId &&
+      state.presentation?.projects.some((project) => project.projectId === target.projectId)
   );
 }
 
-function presentationHasSession(
-  states: readonly MachineConnectionState[],
-  target: SidebarSessionReference,
-): boolean {
+function presentationHasSession(states: readonly MachineConnectionState[], target: SidebarSessionReference): boolean {
   return findPresentationSession(states, target) !== undefined;
 }
 
 function findPresentationSession(
   states: readonly MachineConnectionState[],
-  target: SidebarSessionReference,
+  target: SidebarSessionReference
 ): GxserverPresentationSession | undefined {
   return states
     .find((state) => state.machine.machineId === target.machineId)
-    ?.presentation?.sessions.find((session) =>
-      session.projectId === target.projectId && session.sessionId === target.sessionId,
+    ?.presentation?.sessions.find(
+      (session) => session.projectId === target.projectId && session.sessionId === target.sessionId
     );
 }
 
 function projectSessions(
   states: readonly MachineConnectionState[],
-  target: SidebarProjectReference,
+  target: SidebarProjectReference
 ): readonly GxserverPresentationSession[] {
-  return states
-    .find((state) => state.machine.machineId === target.machineId)
-    ?.presentation?.sessions.filter((session) => session.projectId === target.projectId) ?? [];
+  return (
+    states
+      .find((state) => state.machine.machineId === target.machineId)
+      ?.presentation?.sessions.filter((session) => session.projectId === target.projectId) ?? []
+  );
 }
 
 function lifecycleParams(target: SidebarSessionReference): Record<string, unknown> {
   return {
     projectId: target.projectId,
-    reason: "ghostex-web-sidebar",
+    reason: 'ghostex-web-sidebar',
     sessionId: target.sessionId,
   };
 }
@@ -1233,38 +1173,31 @@ function lifecycleParams(target: SidebarSessionReference): Record<string, unknow
 function createNavigationHistoryEntry(
   states: readonly MachineConnectionState[],
   activeTarget: SidebarProjectReference | undefined,
-  focusedTarget: SidebarSessionReference | undefined,
+  focusedTarget: SidebarSessionReference | undefined
 ): NavigationHistoryEntry | undefined {
   if (!activeTarget) {
     return undefined;
   }
   const state = states.find((candidate) => candidate.machine.machineId === activeTarget.machineId);
-  const project = state?.presentation?.projects.find(
-    (candidate) => candidate.projectId === activeTarget.projectId,
-  );
+  const project = state?.presentation?.projects.find((candidate) => candidate.projectId === activeTarget.projectId);
   if (!project) {
     return undefined;
   }
-  const session = focusedTarget
-    && focusedTarget.machineId === activeTarget.machineId
-    && focusedTarget.projectId === activeTarget.projectId
-    ? findPresentationSession(states, focusedTarget)
-    : undefined;
-  const sessionTitle = session
-    ? session.displayTitle ?? session.primaryTitle ?? session.title
-    : undefined;
+  const session =
+    focusedTarget &&
+    focusedTarget.machineId === activeTarget.machineId &&
+    focusedTarget.projectId === activeTarget.projectId
+      ? findPresentationSession(states, focusedTarget)
+      : undefined;
+  const sessionTitle = session ? (session.displayTitle ?? session.primaryTitle ?? session.title) : undefined;
   return {
     groupId: createSidebarGroupId(activeTarget.machineId, activeTarget.projectId),
     projectId: createSidebarProjectId(activeTarget.machineId, activeTarget.projectId),
     ...(project.title ? { projectLabel: project.title } : {}),
     ...(focusedTarget && session
       ? {
-        sessionId: createSidebarSessionId(
-          focusedTarget.machineId,
-          focusedTarget.projectId,
-          focusedTarget.sessionId,
-        ),
-      }
+          sessionId: createSidebarSessionId(focusedTarget.machineId, focusedTarget.projectId, focusedTarget.sessionId),
+        }
       : {}),
     ...(sessionTitle ? { sessionLabel: sessionTitle } : {}),
   };
@@ -1272,13 +1205,13 @@ function createNavigationHistoryEntry(
 
 function lifecycleRpc(
   target: SidebarSessionReference,
-  endpoint: "/api/killSession" | "/api/sleepSession" | "/api/wakeSession",
+  endpoint: '/api/killSession' | '/api/sleepSession' | '/api/wakeSession'
 ): Promise<unknown> {
   return rpcForMachine(target.machineId, endpoint, lifecycleParams(target));
 }
 
 function debugLog(event: string, detail: unknown): void {
-  if (window.localStorage.getItem(DEBUG_SIDEBAR_STORAGE_KEY) === "1") {
+  if (window.localStorage.getItem(DEBUG_SIDEBAR_STORAGE_KEY) === '1') {
     console.info(`[ghostex-web sidebar] ${event} ${JSON.stringify(detail)}`);
   }
 }

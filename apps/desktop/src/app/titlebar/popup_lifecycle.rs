@@ -275,5 +275,4 @@ impl GhostexGpuiApp {
             }
         }
     }
-
 }

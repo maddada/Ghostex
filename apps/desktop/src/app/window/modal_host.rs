@@ -2,8 +2,8 @@
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use crate::*;
 use crate::app::helpers::*;
+use crate::*;
 
 pub(crate) struct GpuiAppModalHostWindow {
     pub(crate) current_modal: GpuiAppModalKind,
@@ -68,7 +68,10 @@ impl GpuiAppModalHostWindow {
         });
         let (prepaint_background, background) = match find_theme.as_deref() {
             Some("light") => (CEF_LIGHT_PREPAINT_BACKGROUND_COLOR, rgb(0xfdfdfd).into()),
-            Some(_) => (CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR, rgb(0x111111).into()),
+            Some(_) => (
+                CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR,
+                rgb(0x111111).into(),
+            ),
             None => (CEF_DARK_PREPAINT_BACKGROUND_COLOR, titlebar_background()),
         };
         let surface = CefSurface::try_new(
@@ -85,7 +88,9 @@ impl GpuiAppModalHostWindow {
             None,
             None,
             None,
-            is_find_prompts.then_some(sidebar_gxserver_bootstrap).flatten(),
+            is_find_prompts
+                .then_some(sidebar_gxserver_bootstrap)
+                .flatten(),
             None,
             None,
             app_served_resource_scope,

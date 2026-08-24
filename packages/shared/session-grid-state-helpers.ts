@@ -17,7 +17,7 @@ import {
   type SessionRecord,
   type SessionTitleSource,
   type VisibleSessionCount,
-} from "./session-grid-contract";
+} from './session-grid-contract';
 
 export function dedupeSessionIds(sessionIds: readonly string[]): string[] {
   const uniqueSessionIds = new Set<string>();
@@ -36,7 +36,7 @@ export function dedupeSessionIds(sessionIds: readonly string[]): string[] {
 export function findDirectionalNeighbor(
   sessions: SessionRecord[],
   currentSession: SessionRecord,
-  direction: SessionGridDirection,
+  direction: SessionGridDirection
 ): SessionRecord | undefined {
   const candidates = sessions.filter((session) => {
     if (session.sessionId === currentSession.sessionId) {
@@ -44,13 +44,13 @@ export function findDirectionalNeighbor(
     }
 
     switch (direction) {
-      case "up":
+      case 'up':
         return session.column === currentSession.column && session.row < currentSession.row;
-      case "right":
+      case 'right':
         return session.row === currentSession.row && session.column > currentSession.column;
-      case "down":
+      case 'down':
         return session.column === currentSession.column && session.row > currentSession.row;
-      case "left":
+      case 'left':
         return session.row === currentSession.row && session.column < currentSession.column;
     }
   });
@@ -70,13 +70,13 @@ export function findDirectionalNeighbor(
     }
 
     switch (direction) {
-      case "up":
+      case 'up':
         return session.row < currentSession.row;
-      case "right":
+      case 'right':
         return session.column > currentSession.column;
-      case "down":
+      case 'down':
         return session.row > currentSession.row;
-      case "left":
+      case 'left':
         return session.column < currentSession.column;
     }
   });
@@ -89,17 +89,12 @@ export function findDirectionalNeighbor(
   })[0];
 }
 
-export function replaceFocusedVisibleSession(
-  snapshot: SessionGridSnapshot,
-  sessionId: string,
-): string[] {
+export function replaceFocusedVisibleSession(snapshot: SessionGridSnapshot, sessionId: string): string[] {
   if (snapshot.visibleSessionIds.length === 0) {
     return [sessionId];
   }
 
-  const focusedIndex = snapshot.focusedSessionId
-    ? snapshot.visibleSessionIds.indexOf(snapshot.focusedSessionId)
-    : -1;
+  const focusedIndex = snapshot.focusedSessionId ? snapshot.visibleSessionIds.indexOf(snapshot.focusedSessionId) : -1;
   if (focusedIndex < 0) {
     return [...snapshot.visibleSessionIds.slice(0, -1), sessionId];
   }
@@ -113,7 +108,7 @@ export function normalizeVisibleSessionIds(
   orderedSessions: readonly SessionRecord[],
   visibleSessionIds: readonly string[],
   desiredVisibleSize: number,
-  focusedSessionId?: string,
+  focusedSessionId?: string
 ): string[] {
   if (desiredVisibleSize <= 0 || orderedSessions.length === 0) {
     return [];
@@ -121,7 +116,7 @@ export function normalizeVisibleSessionIds(
 
   const orderedSessionIds = orderedSessions.map((session) => session.sessionId);
   const normalizedVisibleIds = dedupeSessionIds(
-    visibleSessionIds.filter((sessionId) => orderedSessionIds.includes(sessionId)),
+    visibleSessionIds.filter((sessionId) => orderedSessionIds.includes(sessionId))
   );
   if (
     focusedSessionId &&
@@ -132,9 +127,7 @@ export function normalizeVisibleSessionIds(
   }
 
   while (normalizedVisibleIds.length < desiredVisibleSize) {
-    const nextSessionId = orderedSessionIds.find(
-      (sessionId) => !normalizedVisibleIds.includes(sessionId),
-    );
+    const nextSessionId = orderedSessionIds.find((sessionId) => !normalizedVisibleIds.includes(sessionId));
     if (!nextSessionId) {
       break;
     }
@@ -157,17 +150,14 @@ export function normalizeVisibleSessionIds(
 
   const windowStart = Math.max(
     0,
-    Math.min(
-      focusedIndex - desiredVisibleSize + 1,
-      normalizedVisibleIds.length - desiredVisibleSize,
-    ),
+    Math.min(focusedIndex - desiredVisibleSize + 1, normalizedVisibleIds.length - desiredVisibleSize)
   );
   return normalizedVisibleIds.slice(windowStart, windowStart + desiredVisibleSize);
 }
 
 export function normalizeFullscreenRestoreVisibleCount(
   fullscreenRestoreVisibleCount: VisibleSessionCount | undefined,
-  visibleCount: VisibleSessionCount,
+  visibleCount: VisibleSessionCount
 ): VisibleSessionCount | undefined {
   if (visibleCount !== 1 || fullscreenRestoreVisibleCount === undefined) {
     return undefined;
@@ -178,7 +168,7 @@ export function normalizeFullscreenRestoreVisibleCount(
 
 export function restoreLayoutVisibleCountInSnapshot(
   snapshot: SessionGridSnapshot,
-  normalizeSessionGridSnapshot: (snapshot: SessionGridSnapshot) => SessionGridSnapshot,
+  normalizeSessionGridSnapshot: (snapshot: SessionGridSnapshot) => SessionGridSnapshot
 ): SessionGridSnapshot {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
   if (!isSessionGridFocusModeActive(normalizedSnapshot)) {
@@ -195,11 +185,7 @@ export function restoreLayoutVisibleCountInSnapshot(
 export function reindexSessionsInOrder(sessions: readonly SessionRecord[]): SessionRecord[] {
   return sessions.map((session, index) => {
     const position = getSlotPosition(index);
-    if (
-      session.slotIndex === index &&
-      session.row === position.row &&
-      session.column === position.column
-    ) {
+    if (session.slotIndex === index && session.row === position.row && session.column === position.column) {
       return session;
     }
 
@@ -217,13 +203,9 @@ export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
   const defaultAlias = createSessionAlias(sessionNumber, session.slotIndex, session.displayId);
   const defaultTitle = DEFAULT_TERMINAL_SESSION_TITLE;
   const alias =
-    typeof session.alias === "string" && session.alias.trim().length > 0
-      ? session.alias.trim()
-      : defaultAlias;
+    typeof session.alias === 'string' && session.alias.trim().length > 0 ? session.alias.trim() : defaultAlias;
   const title =
-    typeof session.title === "string" && session.title.trim().length > 0
-      ? session.title.trim()
-      : defaultTitle;
+    typeof session.title === 'string' && session.title.trim().length > 0 ? session.title.trim() : defaultTitle;
   const displayId = formatSessionDisplayId(session.displayId ?? sessionNumber - 1);
   const titleSource = normalizeSessionTitleSource(session, title);
   /**
@@ -232,23 +214,19 @@ export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
    * because slept terminals dispose their native surface and cannot remain in a
    * live detached window.
    */
-  const isPoppedOut =
-    session.isSleeping === true ? undefined : session.isPoppedOut === true || undefined;
+  const isPoppedOut = session.isSleeping === true ? undefined : session.isPoppedOut === true || undefined;
 
-  if (session.kind === "browser" && typeof session.browser.url === "string") {
+  if (session.kind === 'browser' && typeof session.browser.url === 'string') {
     return {
       ...session,
       alias,
       browser: {
-        faviconDataUrl:
-          typeof session.browser.faviconDataUrl === "string"
-            ? session.browser.faviconDataUrl
-            : undefined,
+        faviconDataUrl: typeof session.browser.faviconDataUrl === 'string' ? session.browser.faviconDataUrl : undefined,
         url: session.browser.url,
       },
       displayId,
       isPoppedOut,
-      kind: "browser",
+      kind: 'browser',
       lastAccessedAt: normalizeSessionLifecycleTimestamp(session.lastAccessedAt),
       lastStartedAt: normalizeSessionLifecycleTimestamp(session.lastStartedAt),
       title,
@@ -259,49 +237,40 @@ export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
   return {
     ...session,
     alias,
-    agentName: normalizeTerminalSessionAgentName(
-      session.kind === "terminal" ? session.agentName : undefined,
-    ),
-    commandTitle: normalizeTerminalCommandTitle(
-      session.kind === "terminal" ? session.commandTitle : undefined,
-    ),
-    closeAfterDone:
-      session.kind === "terminal" && session.closeAfterDone === true ? true : undefined,
+    agentName: normalizeTerminalSessionAgentName(session.kind === 'terminal' ? session.agentName : undefined),
+    commandTitle: normalizeTerminalCommandTitle(session.kind === 'terminal' ? session.commandTitle : undefined),
+    closeAfterDone: session.kind === 'terminal' && session.closeAfterDone === true ? true : undefined,
     delayedSendDeadlineAt: normalizeTerminalDelayedSendDeadlineAt(
-      session.kind === "terminal" ? session.delayedSendDeadlineAt : undefined,
+      session.kind === 'terminal' ? session.delayedSendDeadlineAt : undefined
     ),
     delayedSendRemainingMs: normalizeTerminalDelayedSendRemainingMs(
-      session.kind === "terminal" ? session.delayedSendRemainingMs : undefined,
+      session.kind === 'terminal' ? session.delayedSendRemainingMs : undefined
     ),
     agentSessionId: normalizeTerminalAgentSessionIdentity(
-      session.kind === "terminal" ? session.agentSessionId : undefined,
+      session.kind === 'terminal' ? session.agentSessionId : undefined
     ),
     agentSessionPath: normalizeTerminalAgentSessionIdentity(
-      session.kind === "terminal" ? session.agentSessionPath : undefined,
+      session.kind === 'terminal' ? session.agentSessionPath : undefined
     ),
     displayId,
     isPoppedOut,
-    kind: "terminal",
+    kind: 'terminal',
     lastAccessedAt: normalizeSessionLifecycleTimestamp(session.lastAccessedAt),
     lastActivityAt: normalizeTerminalSessionLastActivityAt(
-      session.kind === "terminal" ? session.lastActivityAt : undefined,
+      session.kind === 'terminal' ? session.lastActivityAt : undefined
     ),
     lastStartedAt: normalizeSessionLifecycleTimestamp(session.lastStartedAt),
     restoreActivity: normalizeTerminalRestoreActivity(
-      session.kind === "terminal" ? session.restoreActivity : undefined,
+      session.kind === 'terminal' ? session.restoreActivity : undefined
     ),
-    terminalEngine: normalizeTerminalEngine(
-      session.kind === "terminal" ? session.terminalEngine : undefined,
-    ),
+    terminalEngine: normalizeTerminalEngine(session.kind === 'terminal' ? session.terminalEngine : undefined),
     sessionPersistenceName: normalizeTerminalSessionPersistenceName(
-      session.kind === "terminal"
-        ? (session.sessionPersistenceName ?? session.tmuxSessionName)
-        : undefined,
+      session.kind === 'terminal' ? (session.sessionPersistenceName ?? session.tmuxSessionName) : undefined
     ),
     sessionPersistenceProvider: normalizeTerminalSessionPersistenceProvider(
-      session.kind === "terminal" ? session.sessionPersistenceProvider : undefined,
+      session.kind === 'terminal' ? session.sessionPersistenceProvider : undefined
     ),
-    surface: normalizeTerminalSurface(session.kind === "terminal" ? session.surface : undefined),
+    surface: normalizeTerminalSurface(session.kind === 'terminal' ? session.surface : undefined),
     title,
     titleSource,
   };
@@ -335,12 +304,12 @@ function normalizeTerminalSessionLastActivityAt(value: string | undefined): stri
   return normalized;
 }
 
-function normalizeTerminalRestoreActivity(value: string | undefined): "attention" | "working" | undefined {
-  return value === "attention" || value === "working" ? value : undefined;
+function normalizeTerminalRestoreActivity(value: string | undefined): 'attention' | 'working' | undefined {
+  return value === 'attention' || value === 'working' ? value : undefined;
 }
 
 function normalizeTerminalCommandTitle(value: string | undefined): string | undefined {
-  const normalized = value?.trim().replace(/\s+/g, " ");
+  const normalized = value?.trim().replace(/\s+/g, ' ');
   return normalized ? normalized : undefined;
 }
 
@@ -361,28 +330,24 @@ function normalizeTerminalSessionPersistenceName(value: string | undefined): str
   return normalized ? normalized : undefined;
 }
 
-function normalizeSessionTitleSource(
-  session: SessionRecord,
-  title: string,
-): SessionTitleSource | undefined {
+function normalizeSessionTitleSource(session: SessionRecord, title: string): SessionTitleSource | undefined {
   const candidateSource = session.titleSource;
   if (
-    candidateSource === "browser-auto" ||
-    candidateSource === "generated" ||
-    candidateSource === "placeholder" ||
-    candidateSource === "terminal-auto" ||
-    candidateSource === "user"
+    candidateSource === 'browser-auto' ||
+    candidateSource === 'generated' ||
+    candidateSource === 'placeholder' ||
+    candidateSource === 'terminal-auto' ||
+    candidateSource === 'user'
   ) {
     return candidateSource;
   }
   if (
-    session.kind === "terminal" &&
-    (session as SessionRecord & { titleAutoCapturedFromTerminal?: boolean })
-      .titleAutoCapturedFromTerminal === true
+    session.kind === 'terminal' &&
+    (session as SessionRecord & { titleAutoCapturedFromTerminal?: boolean }).titleAutoCapturedFromTerminal === true
   ) {
-    return "terminal-auto";
+    return 'terminal-auto';
   }
-  return getVisiblePrimaryTitle(title) ? undefined : "placeholder";
+  return getVisiblePrimaryTitle(title) ? undefined : 'placeholder';
 }
 
 export function revealSessionId(snapshot: SessionGridSnapshot, sessionId: string): string[] {
@@ -400,12 +365,12 @@ export function revealSessionId(snapshot: SessionGridSnapshot, sessionId: string
 function getDirectionalDistance(
   candidate: SessionRecord,
   currentSession: SessionRecord,
-  direction: SessionGridDirection,
+  direction: SessionGridDirection
 ): number {
   const rowDistance = Math.abs(candidate.row - currentSession.row);
   const columnDistance = Math.abs(candidate.column - currentSession.column);
 
-  if (direction === "up" || direction === "down") {
+  if (direction === 'up' || direction === 'down') {
     return rowDistance * GRID_COLUMN_COUNT + columnDistance;
   }
 

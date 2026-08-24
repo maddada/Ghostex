@@ -4,7 +4,6 @@
 
 use crate::*;
 
-
 #[derive(Clone)]
 pub(crate) struct WorkspaceModel {
     pub(crate) terminal_sessions: Vec<TerminalSession>,
@@ -15,7 +14,6 @@ pub(crate) struct WorkspaceModel {
     pub(crate) next_split_id: u64,
     pub(crate) next_session_id: u64,
 }
-
 
 impl WorkspaceModel {
     pub(crate) fn empty_default() -> Self {
@@ -141,7 +139,10 @@ impl WorkspaceModel {
     }
 
     #[allow(dead_code)] // no live caller: startup eligibility is decided by the surface-host mount path
-    pub(crate) fn make_mounting_session_startup_eligible(&mut self, session_id: TerminalSessionId) -> bool {
+    pub(crate) fn make_mounting_session_startup_eligible(
+        &mut self,
+        session_id: TerminalSessionId,
+    ) -> bool {
         let Some(session) = self
             .terminal_sessions
             .iter_mut()
@@ -179,7 +180,9 @@ impl WorkspaceModel {
             })
     }
 
-    pub(crate) fn visible_selected_mounting_startup_candidates(&self) -> Vec<AgentsTerminalStartupRecord> {
+    pub(crate) fn visible_selected_mounting_startup_candidates(
+        &self,
+    ) -> Vec<AgentsTerminalStartupRecord> {
         /*
         CDXC:GPUITerminalStartupBoundary 2026-06-22-23:50:
         Only rendered Agents leaves whose selected shell session is startup-eligible Mounting are startup candidates. Inactive tabs, hidden Focus-mode leaves, Running mount slots, failed placeholders, sleeping/restored/popped-out placeholders before activation, sleeping wake and popped-out reattach activations, restored presentation-only Mounting sessions, and missing-session tabs must not create startup records, duplicate popped-out runtimes, or real mount slots. Explicit restored-unmounted activation is the materialization exception and enters the existing startup pipeline.
@@ -200,7 +203,9 @@ impl WorkspaceModel {
             .collect()
     }
 
-    pub(crate) fn rendered_terminal_startup_body_slots(&self) -> Vec<AgentsTerminalStartupBodySlotId> {
+    pub(crate) fn rendered_terminal_startup_body_slots(
+        &self,
+    ) -> Vec<AgentsTerminalStartupBodySlotId> {
         /*
         CDXC:GPUITerminalStartupGeometry 2026-06-23-00:10:
         Startup body slots identify only visible selected startup-eligible Mounting Agents terminal bodies for runtime launch preparation. They intentionally do not reuse `AgentsTerminalBodyMountSlotId`, because real Ghostty mount slots, Running host maps, and surface owners must remain restricted to visible selected Running sessions. Explicit restored-unmounted materialization may get a startup body slot; sleeping wake, popped-out reattach, and restored presentation-only Mounting after restart must not get hidden startup hosts.
@@ -220,7 +225,9 @@ impl WorkspaceModel {
             .collect()
     }
 
-    pub(crate) fn rendered_terminal_parked_owner_body_slots(&self) -> Vec<AgentsTerminalBodyMountSlotId> {
+    pub(crate) fn rendered_terminal_parked_owner_body_slots(
+        &self,
+    ) -> Vec<AgentsTerminalBodyMountSlotId> {
         /*
         CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
         Parked-owner reattach geometry is recorded only for visible selected Mounting Agents bodies that are not startup-eligible. This keeps sleeping wake and popped-out reattach out of startup maps while giving the runtime owner-transfer path the current body rectangle it needs before it can honestly move an exact parked owner back to Running.
@@ -297,7 +304,10 @@ impl WorkspaceModel {
             .collect()
     }
 
-    pub(crate) fn is_current_terminal_body_mount_slot(&self, slot_id: AgentsTerminalBodyMountSlotId) -> bool {
+    pub(crate) fn is_current_terminal_body_mount_slot(
+        &self,
+        slot_id: AgentsTerminalBodyMountSlotId,
+    ) -> bool {
         self.rendered_terminal_body_mount_slots()
             .into_iter()
             .any(|current_slot_id| current_slot_id == slot_id)
@@ -326,7 +336,10 @@ impl WorkspaceModel {
         }
     }
 
-    pub(crate) fn active_session_in_pane(&self, pane_id: WorkspacePaneId) -> Option<TerminalSessionId> {
+    pub(crate) fn active_session_in_pane(
+        &self,
+        pane_id: WorkspacePaneId,
+    ) -> Option<TerminalSessionId> {
         self.find_leaf(pane_id)
             .and_then(|leaf| leaf.tab_group.active_session_id())
     }
@@ -376,7 +389,10 @@ impl WorkspaceModel {
                 .is_some_and(|leaf| leaf.tab_group.has_session(session_id))
     }
 
-    pub(crate) fn pane_id_for_session(&self, session_id: TerminalSessionId) -> Option<WorkspacePaneId> {
+    pub(crate) fn pane_id_for_session(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<WorkspacePaneId> {
         self.leaf_order().into_iter().find(|pane_id| {
             self.find_leaf(*pane_id)
                 .is_some_and(|leaf| leaf.tab_group.has_session(session_id))
@@ -475,7 +491,11 @@ impl WorkspaceModel {
         self.close_tab(pane_id, session_id)
     }
 
-    pub(crate) fn close_tab(&mut self, pane_id: WorkspacePaneId, session_id: TerminalSessionId) -> bool {
+    pub(crate) fn close_tab(
+        &mut self,
+        pane_id: WorkspacePaneId,
+        session_id: TerminalSessionId,
+    ) -> bool {
         if !self.session_belongs_to_pane(pane_id, session_id) {
             return false;
         }
@@ -605,7 +625,11 @@ impl WorkspaceModel {
         }
     }
 
-    pub(crate) fn set_session_sleeping(&mut self, session_id: TerminalSessionId, is_sleeping: bool) -> bool {
+    pub(crate) fn set_session_sleeping(
+        &mut self,
+        session_id: TerminalSessionId,
+        is_sleeping: bool,
+    ) -> bool {
         let Some(session) = self
             .terminal_sessions
             .iter_mut()
@@ -694,7 +718,11 @@ impl WorkspaceModel {
             })
     }
 
-    pub(crate) fn can_close_tab(&self, pane_id: WorkspacePaneId, session_id: TerminalSessionId) -> bool {
+    pub(crate) fn can_close_tab(
+        &self,
+        pane_id: WorkspacePaneId,
+        session_id: TerminalSessionId,
+    ) -> bool {
         self.session_belongs_to_pane(pane_id, session_id)
     }
 
@@ -1152,7 +1180,9 @@ impl WorkspaceModel {
         Some(pane_id)
     }
 
-    pub(crate) fn append_mounting_session_bottom_row(&mut self) -> (WorkspacePaneId, TerminalSessionId) {
+    pub(crate) fn append_mounting_session_bottom_row(
+        &mut self,
+    ) -> (WorkspacePaneId, TerminalSessionId) {
         /*
         CDXC:GPUIAgentsTerminalLifecycle 2026-06-22-23:33:
         Full-width secondary terminal creation must append below the whole Agents workspace, not split the clicked pane. Keep the existing split/tab tree intact as the top branch, create a new bottom-row leaf with one selected Mounting terminal, focus that leaf, and clear Agents Focus mode so the row is visible without creating fake Running state, command-pane sessions, processes, libghostty surfaces, command text, stdout/stderr, or terminal content.
@@ -1853,4 +1883,3 @@ impl WorkspaceModel {
         }
     }
 }
-

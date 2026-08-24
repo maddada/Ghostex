@@ -1,9 +1,9 @@
-import { create } from "zustand";
-import { createDefaultSidebarAgentButtons } from "../shared/sidebar-agents";
-import { createDefaultSidebarCommandButtons } from "../shared/sidebar-commands";
-import { DEFAULT_COMPLETION_SOUND, getCompletionSoundLabel } from "../shared/completion-sound";
-import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings } from "../shared/ghostex-settings";
-import { createDefaultSidebarGitState, type SidebarGitFileDiffDraft } from "../shared/sidebar-git";
+import { create } from 'zustand';
+import { createDefaultSidebarAgentButtons } from '../shared/sidebar-agents';
+import { createDefaultSidebarCommandButtons } from '../shared/sidebar-commands';
+import { DEFAULT_COMPLETION_SOUND, getCompletionSoundLabel } from '../shared/completion-sound';
+import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings } from '../shared/ghostex-settings';
+import { createDefaultSidebarGitState, type SidebarGitFileDiffDraft } from '../shared/sidebar-git';
 import type {
   SidebarCommandRunStateClearedMessage,
   SidebarCommandRunStateChangedMessage,
@@ -20,14 +20,14 @@ import type {
   SidebarSessionItem,
   SidebarSessionPresentationChangedMessage,
   SidebarSessionStateMessage,
-} from "../shared/session-grid-contract";
+} from '../shared/session-grid-contract';
 import {
   applySidebarCommandRunStateChangedMessage,
   reconcileSidebarCommandRunFeedbackStates,
   type SidebarCommandRunFeedbackState,
-} from "./command-run-feedback";
+} from './command-run-feedback';
 
-export type SidebarGroupRecord = Omit<SidebarSessionGroup, "sessions">;
+export type SidebarGroupRecord = Omit<SidebarSessionGroup, 'sessions'>;
 
 type SidebarStoreDataState = {
   commandRunStates: Record<string, SidebarCommandRunFeedbackState>;
@@ -52,7 +52,7 @@ type SidebarStoreDataState = {
   workspaceGroupIds: string[];
 };
 
-export type SidebarFocusedSessionScrollSuppressionReason = "sessionClose";
+export type SidebarFocusedSessionScrollSuppressionReason = 'sessionClose';
 
 export type SidebarFocusedSessionScrollSuppression = {
   expiresAtMs: number;
@@ -73,15 +73,10 @@ type SidebarStoreActions = {
   applySidebarMessage: (message: SidebarHydrateMessage | SidebarSessionStateMessage) => void;
   clearCommandRunState: (commandId: string) => void;
   clearFocusedSessionScrollSuppression: () => void;
-  consumeFocusedSessionScrollSuppression: (
-    nowMs?: number,
-  ) => SidebarFocusedSessionScrollSuppression | undefined;
+  consumeFocusedSessionScrollSuppression: (nowMs?: number) => SidebarFocusedSessionScrollSuppression | undefined;
   reset: () => void;
   setDaemonSessionsState: (message: SidebarDaemonSessionsStateMessage | undefined) => void;
-  suppressNextFocusedSessionScroll: (
-    reason: SidebarFocusedSessionScrollSuppressionReason,
-    nowMs?: number,
-  ) => void;
+  suppressNextFocusedSessionScroll: (reason: SidebarFocusedSessionScrollSuppressionReason, nowMs?: number) => void;
   setGitCommitDraft: (message: SidebarPromptGitCommitMessage | undefined) => void;
   setGitFileDiffDraft: (draft: SidebarGitFileDiffDraft | undefined) => void;
 };
@@ -105,7 +100,7 @@ export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
        * The client store must match the shared/native default so sidebar
        * sessions start sorted by last activity before the first hydrate message.
        */
-      activeSessionsSortMode: "lastActivity",
+      activeSessionsSortMode: 'lastActivity',
       agentManagerZoomPercent: 100,
       agents: createDefaultSidebarAgentButtons(),
       commands: createDefaultSidebarCommandButtons(),
@@ -127,7 +122,7 @@ export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
       renameSessionOnDoubleClick: false,
       showCloseButtonOnSessionCards: DEFAULT_ghostex_SETTINGS.showCloseButtonOnSessionCards,
       theme: getInitialSidebarTheme(),
-      viewMode: "grid",
+      viewMode: 'grid',
       visibleCount: 1,
       visibleSlotLabels: [],
     },
@@ -139,7 +134,7 @@ export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
     pinnedPrompts: [],
     previousSessions: [],
     revision: 0,
-    scratchPadContent: "",
+    scratchPadContent: '',
     sessionIdsByGroup: {},
     sessionsById: {},
     workspaceGroupIds: [],
@@ -165,7 +160,7 @@ export const useSidebarStore = create<SidebarStoreState>((set, get) => ({
     set((state) => {
       const nextCommandRunState = applySidebarCommandRunStateChangedMessage(
         state.commandRunStates[message.commandId],
-        message,
+        message
       );
       if (state.commandRunStates[message.commandId] === nextCommandRunState) {
         return state;
@@ -187,8 +182,8 @@ export const useSidebarStore = create<SidebarStoreState>((set, get) => ({
   },
   applyOrderSyncResultMessage: (message) => {
     set({
-      latestAgentOrderSyncResult: message.kind === "agent" ? message : undefined,
-      latestCommandOrderSyncResult: message.kind === "command" ? message : undefined,
+      latestAgentOrderSyncResult: message.kind === 'agent' ? message : undefined,
+      latestCommandOrderSyncResult: message.kind === 'command' ? message : undefined,
     });
   },
   applyLocalFocus: (groupId, sessionId) => {
@@ -224,9 +219,7 @@ export const useSidebarStore = create<SidebarStoreState>((set, get) => ({
   },
   clearFocusedSessionScrollSuppression: () => {
     set((state) =>
-      state.focusedSessionScrollSuppression === undefined
-        ? state
-        : { focusedSessionScrollSuppression: undefined },
+      state.focusedSessionScrollSuppression === undefined ? state : { focusedSessionScrollSuppression: undefined }
     );
   },
   consumeFocusedSessionScrollSuppression: (nowMs = Date.now()) => {
@@ -268,15 +261,15 @@ export function resetSidebarStore() {
   useSidebarStore.getState().reset();
 }
 
-function getInitialSidebarTheme(): SidebarHudState["theme"] {
-  if (typeof document === "undefined") {
-    return "dark-blue";
+function getInitialSidebarTheme(): SidebarHudState['theme'] {
+  if (typeof document === 'undefined') {
+    return 'dark-blue';
   }
 
-  return document.body.classList.contains("vscode-light") ||
-    document.body.classList.contains("vscode-high-contrast-light")
-    ? "light-blue"
-    : "dark-blue";
+  return document.body.classList.contains('vscode-light') ||
+    document.body.classList.contains('vscode-high-contrast-light')
+    ? 'light-blue'
+    : 'dark-blue';
 }
 
 /*
@@ -303,42 +296,30 @@ function normalizeHydratedSidebarHud(hud: SidebarHudState): SidebarHudState {
     ...hud,
     projectSettingsProjects: hud.projectSettingsProjects ?? [],
     recentProjects: hud.recentProjects ?? [],
-    settings:
-      hud.settings === undefined
-        ? undefined
-        : { ...hud.settings, ...normalizeghostexSettings(hud.settings) },
+    settings: hud.settings === undefined ? undefined : { ...hud.settings, ...normalizeghostexSettings(hud.settings) },
   };
 }
 
 function applySidebarMessageState(
   state: SidebarStoreState,
-  message: SidebarHydrateMessage | SidebarSessionStateMessage,
+  message: SidebarHydrateMessage | SidebarSessionStateMessage
 ): Partial<SidebarStoreState> | SidebarStoreState {
   if (message.revision < state.revision) {
     return state;
   }
 
-  const localFirstFiltered = filterLocallyHiddenSidebarSessions(
-    message.groups,
-    state.localHiddenSessionIds,
-  );
+  const localFirstFiltered = filterLocallyHiddenSidebarSessions(message.groups, state.localHiddenSessionIds);
   const localSleepApplied = applyLocalSessionSleepingOverrides(
     localFirstFiltered.groups,
-    state.localSessionSleepingOverrides,
+    state.localSessionSleepingOverrides
   );
-  const reconciledGroups = reconcilePendingFocusedSession(
-    localSleepApplied.groups,
-    state.pendingFocusedSessionId,
-  );
+  const reconciledGroups = reconcilePendingFocusedSession(localSleepApplied.groups, state.pendingFocusedSessionId);
   const normalizedGroups = normalizeSidebarGroups(state, reconciledGroups.groups);
-  const nextHud = preserveSidebarHudReferences(
-    state.hud,
-    normalizeHydratedSidebarHud(message.hud),
-  );
+  const nextHud = preserveSidebarHudReferences(state.hud, normalizeHydratedSidebarHud(message.hud));
   return {
     commandRunStates: reconcileSidebarCommandRunFeedbackStates(
       state.commandRunStates,
-      message.hud.commands.map((command) => command.commandId),
+      message.hud.commands.map((command) => command.commandId)
     ),
     groupOrder: normalizedGroups.groupOrder,
     groupsById: normalizedGroups.groupsById,
@@ -358,20 +339,17 @@ function applySidebarMessageState(
 
 function applyHudChangedMessageState(
   state: SidebarStoreState,
-  message: SidebarHudChangedMessage,
+  message: SidebarHudChangedMessage
 ): Partial<SidebarStoreState> | SidebarStoreState {
   if (message.revision < state.revision) {
     return state;
   }
 
-  const nextHud = preserveSidebarHudReferences(
-    state.hud,
-    normalizeHydratedSidebarHud(message.hud),
-  );
+  const nextHud = preserveSidebarHudReferences(state.hud, normalizeHydratedSidebarHud(message.hud));
   return {
     commandRunStates: reconcileSidebarCommandRunFeedbackStates(
       state.commandRunStates,
-      message.hud.commands.map((command) => command.commandId),
+      message.hud.commands.map((command) => command.commandId)
     ),
     hud: nextHud,
     revision: message.revision,
@@ -380,7 +358,7 @@ function applyHudChangedMessageState(
 
 function applyGroupsChangedMessageState(
   state: SidebarStoreState,
-  message: SidebarGroupsChangedMessage,
+  message: SidebarGroupsChangedMessage
 ): Partial<SidebarStoreState> | SidebarStoreState {
   if (message.revision < state.revision) {
     return state;
@@ -388,20 +366,16 @@ function applyGroupsChangedMessageState(
 
   const removedGroupIds = new Set(message.removedGroupIds ?? []);
   const removedSessionIds = new Set(message.removedSessionIds ?? []);
-  const localFirstFiltered = filterPatchLocallyHiddenSidebarSessions(
-    message.groups,
-    state,
-    removedSessionIds,
-  );
+  const localFirstFiltered = filterPatchLocallyHiddenSidebarSessions(message.groups, state, removedSessionIds);
   const localSleepApplied = applyPatchLocalSessionSleepingOverrides(
     localFirstFiltered.groups,
     state,
-    removedSessionIds,
+    removedSessionIds
   );
   const patchContainsPendingFocusedSession =
     state.pendingFocusedSessionId !== undefined &&
     localSleepApplied.groups.some((group) =>
-      (group.sessions ?? []).some((session) => session.sessionId === state.pendingFocusedSessionId),
+      (group.sessions ?? []).some((session) => session.sessionId === state.pendingFocusedSessionId)
     );
   const reconciledGroups = patchContainsPendingFocusedSession
     ? reconcilePendingFocusedSession(localSleepApplied.groups, state.pendingFocusedSessionId)
@@ -464,9 +438,7 @@ function applyGroupsChangedMessageState(
         continue;
       }
       ensureSessionIdsByGroup();
-      sessionIdsByGroup[groupId] = groupSessionIds.filter(
-        (sessionId) => !removedSessionIds.has(sessionId),
-      );
+      sessionIdsByGroup[groupId] = groupSessionIds.filter((sessionId) => !removedSessionIds.has(sessionId));
     }
   }
 
@@ -507,7 +479,7 @@ function applyGroupsChangedMessageState(
     : message.groupOrder;
   const nextWorkspaceGroupIds = nextGroupOrder.filter((groupId) => {
     const group = groupsById[groupId];
-    return group !== undefined && group.kind !== "browser";
+    return group !== undefined && group.kind !== 'browser';
   });
   return {
     groupOrder: nextGroupOrder,
@@ -531,10 +503,7 @@ function applyGroupsChangedMessageState(
  * Preserve unchanged HUD slice references so unrelated session changes do not
  * look like fresh modal props and reset open drafts.
  */
-function preserveSidebarHudReferences(
-  previousHud: SidebarHudState,
-  nextHud: SidebarHudState,
-): SidebarHudState {
+function preserveSidebarHudReferences(previousHud: SidebarHudState, nextHud: SidebarHudState): SidebarHudState {
   let mergedHud = nextHud;
   const preserveIfEqual = <Key extends keyof SidebarHudState>(key: Key) => {
     if (!haveSameSerializableValue(previousHud[key], nextHud[key])) {
@@ -546,17 +515,17 @@ function preserveSidebarHudReferences(
     mergedHud[key] = previousHud[key];
   };
 
-  preserveIfEqual("agents");
-  preserveIfEqual("commands");
-  preserveIfEqual("commandsByProject");
-  preserveIfEqual("commandSessionIndicators");
-  preserveIfEqual("git");
-  preserveIfEqual("pendingAgentIds");
-  preserveIfEqual("projectSettingsProjects");
-  preserveIfEqual("projectWorktrees");
-  preserveIfEqual("recentProjects");
-  preserveIfEqual("settings");
-  preserveIfEqual("visibleSlotLabels");
+  preserveIfEqual('agents');
+  preserveIfEqual('commands');
+  preserveIfEqual('commandsByProject');
+  preserveIfEqual('commandSessionIndicators');
+  preserveIfEqual('git');
+  preserveIfEqual('pendingAgentIds');
+  preserveIfEqual('projectSettingsProjects');
+  preserveIfEqual('projectWorktrees');
+  preserveIfEqual('recentProjects');
+  preserveIfEqual('settings');
+  preserveIfEqual('visibleSlotLabels');
 
   return haveSameSerializableValue(previousHud, mergedHud) ? previousHud : mergedHud;
 }
@@ -568,7 +537,7 @@ function haveSameSerializableValue(left: unknown, right: unknown): boolean {
   if (typeof left !== typeof right) {
     return false;
   }
-  if (typeof left !== "object" || left === null || right === null) {
+  if (typeof left !== 'object' || left === null || right === null) {
     return false;
   }
   if (Array.isArray(left) || Array.isArray(right)) {
@@ -590,7 +559,7 @@ function haveSameSerializableValue(left: unknown, right: unknown): boolean {
 
 function applySessionPresentationMessageState(
   state: SidebarStoreState,
-  message: SidebarSessionPresentationChangedMessage,
+  message: SidebarSessionPresentationChangedMessage
 ): Partial<SidebarStoreState> | SidebarStoreState {
   if (message.revision !== undefined && message.revision < state.revision) {
     return state;
@@ -605,7 +574,7 @@ function applySessionPresentationMessageState(
   if (sleepingOverride !== undefined) {
     const hostConfirmedOverride =
       message.session.isSleeping === sleepingOverride &&
-      message.session.lifecycleState === (sleepingOverride ? "sleeping" : "running");
+      message.session.lifecycleState === (sleepingOverride ? 'sleeping' : 'running');
     if (hostConfirmedOverride) {
       nextLocalSessionSleepingOverrides = { ...state.localSessionSleepingOverrides };
       delete nextLocalSessionSleepingOverrides[message.session.sessionId];
@@ -634,7 +603,7 @@ function applySessionPresentationMessageState(
 
 function hideSessionLocallyState(
   state: SidebarStoreState,
-  sessionId: string,
+  sessionId: string
 ): Partial<SidebarStoreState> | SidebarStoreState {
   if (!state.sessionsById[sessionId] && state.localHiddenSessionIds[sessionId]) {
     return state;
@@ -662,8 +631,7 @@ function hideSessionLocallyState(
       ...state.localHiddenSessionIds,
       [sessionId]: true,
     },
-    pendingFocusedSessionId:
-      state.pendingFocusedSessionId === sessionId ? undefined : state.pendingFocusedSessionId,
+    pendingFocusedSessionId: state.pendingFocusedSessionId === sessionId ? undefined : state.pendingFocusedSessionId,
     sessionIdsByGroup: didChangeSessionOrder ? nextSessionIdsByGroup : state.sessionIdsByGroup,
     sessionsById: nextSessionsById,
   };
@@ -671,7 +639,7 @@ function hideSessionLocallyState(
 
 function hideSessionsLocallyState(
   state: SidebarStoreState,
-  sessionIds: readonly string[],
+  sessionIds: readonly string[]
 ): Partial<SidebarStoreState> | SidebarStoreState {
   const hiddenSessionIds = Array.from(new Set(sessionIds));
   if (hiddenSessionIds.length === 0) {
@@ -679,7 +647,7 @@ function hideSessionsLocallyState(
   }
 
   const existingTargetIds = hiddenSessionIds.filter(
-    (sessionId) => state.sessionsById[sessionId] || !state.localHiddenSessionIds[sessionId],
+    (sessionId) => state.sessionsById[sessionId] || !state.localHiddenSessionIds[sessionId]
   );
   if (existingTargetIds.length === 0) {
     return state;
@@ -721,7 +689,7 @@ function hideSessionsLocallyState(
 
 function filterLocallyHiddenSidebarSessions(
   groups: readonly SidebarSessionGroup[],
-  localHiddenSessionIds: Record<string, true>,
+  localHiddenSessionIds: Record<string, true>
 ): {
   groups: SidebarSessionGroup[];
   localHiddenSessionIds: Record<string, true>;
@@ -735,7 +703,7 @@ function filterLocallyHiddenSidebarSessions(
   }
 
   const incomingSessionIds = new Set(
-    groups.flatMap((group) => (group.sessions ?? []).map((session) => session.sessionId)),
+    groups.flatMap((group) => (group.sessions ?? []).map((session) => session.sessionId))
   );
   const nextLocalHiddenSessionIds: Record<string, true> = {};
   for (const sessionId of hiddenIds) {
@@ -768,13 +736,13 @@ function filterLocallyHiddenSidebarSessions(
 function filterPatchLocallyHiddenSidebarSessions(
   groups: readonly SidebarSessionGroup[],
   state: SidebarStoreState,
-  removedSessionIds: ReadonlySet<string>,
+  removedSessionIds: ReadonlySet<string>
 ): {
   groups: SidebarSessionGroup[];
   localHiddenSessionIds: Record<string, true>;
 } {
   const incomingSessionIds = new Set(
-    groups.flatMap((group) => (group.sessions ?? []).map((session) => session.sessionId)),
+    groups.flatMap((group) => (group.sessions ?? []).map((session) => session.sessionId))
   );
   const filtered = filterLocallyHiddenSidebarSessions(groups, state.localHiddenSessionIds);
   const nextLocalHiddenSessionIds = { ...state.localHiddenSessionIds };
@@ -796,18 +764,15 @@ function filterPatchLocallyHiddenSidebarSessions(
 function applyPatchLocalSessionSleepingOverrides(
   groups: readonly SidebarSessionGroup[],
   state: SidebarStoreState,
-  removedSessionIds: ReadonlySet<string>,
+  removedSessionIds: ReadonlySet<string>
 ): {
   groups: SidebarSessionGroup[];
   localSessionSleepingOverrides: Record<string, boolean>;
 } {
   const incomingSessionIds = new Set(
-    groups.flatMap((group) => (group.sessions ?? []).map((session) => session.sessionId)),
+    groups.flatMap((group) => (group.sessions ?? []).map((session) => session.sessionId))
   );
-  const localSleepApplied = applyLocalSessionSleepingOverrides(
-    groups,
-    state.localSessionSleepingOverrides,
-  );
+  const localSleepApplied = applyLocalSessionSleepingOverrides(groups, state.localSessionSleepingOverrides);
   const nextLocalSessionSleepingOverrides = { ...state.localSessionSleepingOverrides };
   for (const sessionId of incomingSessionIds) {
     delete nextLocalSessionSleepingOverrides[sessionId];
@@ -827,7 +792,7 @@ function applyPatchLocalSessionSleepingOverrides(
 function setSessionSleepingLocallyState(
   state: SidebarStoreState,
   sessionId: string,
-  sleeping: boolean,
+  sleeping: boolean
 ): Partial<SidebarStoreState> | SidebarStoreState {
   const session = state.sessionsById[sessionId];
   if (!session && state.localSessionSleepingOverrides[sessionId] === sleeping) {
@@ -857,7 +822,7 @@ function setSessionSleepingLocallyState(
 
 function applyLocalSessionSleepingOverrides(
   groups: readonly SidebarSessionGroup[],
-  localSessionSleepingOverrides: Record<string, boolean>,
+  localSessionSleepingOverrides: Record<string, boolean>
 ): {
   groups: SidebarSessionGroup[];
   localSessionSleepingOverrides: Record<string, boolean>;
@@ -871,7 +836,7 @@ function applyLocalSessionSleepingOverrides(
   }
 
   const incomingSessionIds = new Set(
-    groups.flatMap((group) => (group.sessions ?? []).map((session) => session.sessionId)),
+    groups.flatMap((group) => (group.sessions ?? []).map((session) => session.sessionId))
   );
   const nextOverrides: Record<string, boolean> = {};
   for (const [sessionId, sleeping] of overrideEntries) {
@@ -911,22 +876,19 @@ function applyLocalSessionSleepingOverrides(
   };
 }
 
-function applyLocalSessionSleepingOverride(
-  session: SidebarSessionItem,
-  sleeping: boolean,
-): SidebarSessionItem {
+function applyLocalSessionSleepingOverride(session: SidebarSessionItem, sleeping: boolean): SidebarSessionItem {
   return {
     ...session,
     isRunning: sleeping ? false : true,
     isSleeping: sleeping,
-    lifecycleState: sleeping ? "sleeping" : "running",
+    lifecycleState: sleeping ? 'sleeping' : 'running',
   };
 }
 
 function applyLocalFocusState(
   state: SidebarStoreState,
   groupId: string,
-  sessionId: string,
+  sessionId: string
 ): Partial<SidebarStoreState> | SidebarStoreState {
   if (!state.groupsById[groupId] || !state.sessionsById[sessionId]) {
     return state;
@@ -960,9 +922,7 @@ function applyLocalFocusState(
 
       const isFocused = isActiveGroup && candidateSessionId === sessionId;
       const isVisible =
-        group.kind !== "browser" && isActiveGroup && candidateSessionId === sessionId
-          ? true
-          : session.isVisible;
+        group.kind !== 'browser' && isActiveGroup && candidateSessionId === sessionId ? true : session.isVisible;
       if (session.isFocused === isFocused && session.isVisible === isVisible) {
         continue;
       }
@@ -996,13 +956,9 @@ function applyLocalFocusState(
 function normalizeSidebarGroups(
   previousState: Pick<
     SidebarStoreDataState,
-    | "groupOrder"
-    | "groupsById"
-    | "sessionIdsByGroup"
-    | "sessionsById"
-    | "workspaceGroupIds"
+    'groupOrder' | 'groupsById' | 'sessionIdsByGroup' | 'sessionsById' | 'workspaceGroupIds'
   >,
-  groups: readonly SidebarSessionGroup[],
+  groups: readonly SidebarSessionGroup[]
 ) {
   const nextGroupOrder = groups.map((group) => group.groupId);
   const nextWorkspaceGroupIds: string[] = [];
@@ -1013,16 +969,14 @@ function normalizeSidebarGroups(
   for (const group of groups) {
     const groupSessions = group.sessions ?? [];
 
-    if (group.kind !== "browser") {
+    if (group.kind !== 'browser') {
       nextWorkspaceGroupIds.push(group.groupId);
     }
 
     const previousGroup = previousState.groupsById[group.groupId];
     const nextGroup = toSidebarGroupRecord(group);
     nextGroupsById[group.groupId] =
-      previousGroup && haveSameSidebarGroupRecord(previousGroup, nextGroup)
-        ? previousGroup
-        : nextGroup;
+      previousGroup && haveSameSidebarGroupRecord(previousGroup, nextGroup) ? previousGroup : nextGroup;
 
     const nextSessionIds = groupSessions.map((session) => session.sessionId);
     const previousSessionIds = previousState.sessionIdsByGroup[group.groupId];
@@ -1034,9 +988,7 @@ function normalizeSidebarGroups(
     for (const session of groupSessions) {
       const previousSession = previousState.sessionsById[session.sessionId];
       nextSessionsById[session.sessionId] =
-        previousSession && haveSameSidebarSessionItem(previousSession, session)
-          ? previousSession
-          : session;
+        previousSession && haveSameSidebarSessionItem(previousSession, session) ? previousSession : session;
     }
   }
 
@@ -1055,7 +1007,7 @@ function normalizeSidebarGroups(
 
 function reconcilePendingFocusedSession(
   groups: readonly SidebarSessionGroup[],
-  pendingFocusedSessionId: string | undefined,
+  pendingFocusedSessionId: string | undefined
 ): {
   groups: SidebarSessionGroup[];
   pendingFocusedSessionId: string | undefined;
@@ -1068,7 +1020,7 @@ function reconcilePendingFocusedSession(
   }
 
   const containingGroup = groups.find((group) =>
-    (group.sessions ?? []).some((session) => session.sessionId === pendingFocusedSessionId),
+    (group.sessions ?? []).some((session) => session.sessionId === pendingFocusedSessionId)
   );
   if (!containingGroup) {
     return {
@@ -1078,7 +1030,7 @@ function reconcilePendingFocusedSession(
   }
 
   const isConfirmed = (containingGroup.sessions ?? []).some(
-    (session) => session.sessionId === pendingFocusedSessionId && session.isFocused,
+    (session) => session.sessionId === pendingFocusedSessionId && session.isFocused
   );
   if (isConfirmed) {
     return {
@@ -1097,9 +1049,7 @@ function reconcilePendingFocusedSession(
           ...session,
           isFocused: isActiveGroup && session.sessionId === pendingFocusedSessionId,
           isVisible:
-            group.kind !== "browser" &&
-            isActiveGroup &&
-            session.sessionId === pendingFocusedSessionId
+            group.kind !== 'browser' && isActiveGroup && session.sessionId === pendingFocusedSessionId
               ? true
               : session.isVisible,
         })),
@@ -1150,8 +1100,8 @@ function haveSameSidebarGroupRecord(left: SidebarGroupRecord, right: SidebarGrou
 }
 
 function haveSameSidebarRemoteMachineContext(
-  left: SidebarGroupRecord["remoteMachineContext"],
-  right: SidebarGroupRecord["remoteMachineContext"],
+  left: SidebarGroupRecord['remoteMachineContext'],
+  right: SidebarGroupRecord['remoteMachineContext']
 ): boolean {
   if (!left || !right) {
     return left === right;
@@ -1160,8 +1110,8 @@ function haveSameSidebarRemoteMachineContext(
 }
 
 function haveSameSidebarProjectContext(
-  left: SidebarGroupRecord["projectContext"],
-  right: SidebarGroupRecord["projectContext"],
+  left: SidebarGroupRecord['projectContext'],
+  right: SidebarGroupRecord['projectContext']
 ): boolean {
   if (!left || !right) {
     return left === right;
@@ -1207,8 +1157,8 @@ function haveSameSidebarProjectContext(
  * object for it; a reference check would keep the pre-probe row forever.
  */
 function haveSameSidebarSessionGitStatus(
-  left: SidebarSessionItem["gitStatus"],
-  right: SidebarSessionItem["gitStatus"],
+  left: SidebarSessionItem['gitStatus'],
+  right: SidebarSessionItem['gitStatus']
 ): boolean {
   if (left === right) {
     return true;
@@ -1258,8 +1208,7 @@ function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSess
     left.delayedSendDeadlineAt === right.delayedSendDeadlineAt &&
     left.delayedSendRemainingLabel === right.delayedSendRemainingLabel &&
     left.delayedSendRemainingMs === right.delayedSendRemainingMs &&
-    left.sendWhenAllProjectSessionsStopActive ===
-      right.sendWhenAllProjectSessionsStopActive &&
+    left.sendWhenAllProjectSessionsStopActive === right.sendWhenAllProjectSessionsStopActive &&
     left.sendWhenAgentStopsActive === right.sendWhenAgentStopsActive &&
     left.detail === right.detail &&
     left.displayTitle === right.displayTitle &&

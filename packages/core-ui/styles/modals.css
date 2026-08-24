@@ -66,14 +66,14 @@ html:has(body.app-modal-host-native-window-body) {
  * dialog once. Their modal host body/root must be intrinsic-height containers
  * during that first render; Settings keeps the legacy viewport-sized root.
  */
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"],
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"] #root {
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'],
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] #root {
   height: fit-content;
   min-height: fit-content;
 }
 
-.app-modal-host-native-window-body [data-slot="dialog-overlay"],
-.app-modal-host-native-window-body [data-slot="dialog-content"],
+.app-modal-host-native-window-body [data-slot='dialog-overlay'],
+.app-modal-host-native-window-body [data-slot='dialog-content'],
 .app-modal-host-native-window-body .confirm-modal-root,
 .app-modal-host-native-window-body .confirm-modal-backdrop,
 .app-modal-host-native-window-body .confirm-modal {
@@ -81,12 +81,12 @@ html:has(body.app-modal-host-native-window-body) {
   background-color: var(--app-modal-background) !important;
 }
 
-.app-modal-host-native-window-body [data-slot="dialog-overlay"] {
+.app-modal-host-native-window-body [data-slot='dialog-overlay'] {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
 
-.app-modal-host-native-window-body [data-slot="dialog-content"],
+.app-modal-host-native-window-body [data-slot='dialog-content'],
 .app-modal-host-native-window-body .confirm-modal {
   border-color: var(--app-modal-background) !important;
   box-shadow: none !important;
@@ -95,8 +95,8 @@ html:has(body.app-modal-host-native-window-body) {
   --tw-ring-offset-color: var(--app-modal-background) !important;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"] [data-slot="dialog-content"],
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"] .confirm-modal {
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] [data-slot='dialog-content'],
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .confirm-modal {
   height: fit-content;
   max-height: none;
 }
@@ -148,10 +148,10 @@ html:has(body.app-modal-host-native-window-body) {
  * This includes legacy inputs, shadcn inputs, textareas, contenteditable boxes,
  * and role=textbox controls.
  */
-.app-modal-host-body input:not([type="button"]):not([type="submit"]):not([type="reset"]),
+.app-modal-host-body input:not([type='button']):not([type='submit']):not([type='reset']),
 .app-modal-host-body textarea,
-.app-modal-host-body [contenteditable="true"],
-.app-modal-host-body [role="textbox"] {
+.app-modal-host-body [contenteditable='true'],
+.app-modal-host-body [role='textbox'] {
   cursor: default !important;
 }
 
@@ -172,13 +172,13 @@ html:has(body.app-modal-host-native-window-body) {
  * scrim. Use 65% black across legacy and shadcn modal overlays.
  */
 .app-modal-host-body .confirm-modal-backdrop,
-.app-modal-host-body [data-slot="dialog-overlay"] {
+.app-modal-host-body [data-slot='dialog-overlay'] {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: rgb(0 0 0 / 65%);
 }
 
-[data-slot="dialog-overlay"] {
+[data-slot='dialog-overlay'] {
   background: rgb(0 0 0 / 65%);
 }
 
@@ -188,8 +188,8 @@ html:has(body.app-modal-host-native-window-body) {
  * perform the reveal and keep React dialogs at their final visual state so
  * Settings does not flash through Radix's initial opacity/zoom animation.
  */
-.app-modal-host-body [data-slot="dialog-overlay"],
-.app-modal-host-body [data-slot="dialog-content"],
+.app-modal-host-body [data-slot='dialog-overlay'],
+.app-modal-host-body [data-slot='dialog-content'],
 .app-modal-host-body .confirm-modal-root,
 .app-modal-host-body .confirm-modal-backdrop,
 .app-modal-host-body .confirm-modal {
@@ -378,7 +378,7 @@ html:has(body.app-modal-host-native-window-body) {
   padding-top: 4px;
 }
 
-.configure-agents-footer [data-slot="button"] {
+.configure-agents-footer [data-slot='button'] {
   font-size: 14px;
 }
 
@@ -406,7 +406,7 @@ html:has(body.app-modal-host-native-window-body) {
     opacity 160ms ease;
 }
 
-.configure-agents-list-item[data-dragging="true"] {
+.configure-agents-list-item[data-dragging='true'] {
   opacity: 0.64;
 }
 
@@ -550,8 +550,7 @@ html:has(body.app-modal-host-native-window-body) {
   max-height: calc(100vh - 16px);
   max-width: min(654px, 100%);
   overflow: hidden;
-  padding: var(--previous-sessions-modal-padding-top)
-    var(--previous-sessions-modal-padding-x)
+  padding: var(--previous-sessions-modal-padding-top) var(--previous-sessions-modal-padding-x)
     var(--previous-sessions-modal-padding-bottom);
   width: min(654px, 100%);
 }
@@ -611,7 +610,7 @@ html:has(body.app-modal-host-native-window-body) {
   max-height: calc(100vh - 16px);
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"] .previous-sessions-modal {
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .previous-sessions-modal {
   max-height: calc(100vh - 16px);
 }
 
@@ -644,7 +643,6 @@ html:has(body.app-modal-host-native-window-body) {
   max-width: min(840px, 100%);
   width: min(840px, 100%);
 }
-
 
 .daemon-sessions-toolbar {
   display: grid;
@@ -739,7 +737,7 @@ html:has(body.app-modal-host-native-window-body) {
   transition: transform 120ms ease;
 }
 
-.daemon-collapsible-chevron[data-expanded="true"] {
+.daemon-collapsible-chevron[data-expanded='true'] {
   transform: rotate(90deg);
 }
 
@@ -835,11 +833,11 @@ html:has(body.app-modal-host-native-window-body) {
   padding: 13px;
 }
 
-.daemon-session-card[data-collapsed="true"] {
+.daemon-session-card[data-collapsed='true'] {
   gap: 0;
 }
 
-.daemon-session-card[data-current-workspace="true"] {
+.daemon-session-card[data-current-workspace='true'] {
   border-color: color-mix(in srgb, var(--app-button-background) 52%, var(--app-border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-button-background) 12%, transparent);
 }
@@ -1002,11 +1000,11 @@ html:has(body.app-modal-host-native-window-body) {
   outline: none;
 }
 
-.previous-sessions-search-shell[data-has-query="true"] .previous-sessions-search-input {
+.previous-sessions-search-shell[data-has-query='true'] .previous-sessions-search-input {
   padding-right: 66px;
 }
 
-.previous-sessions-search-shell[data-has-query="true"] .session-search-clear-button {
+.previous-sessions-search-shell[data-has-query='true'] .session-search-clear-button {
   right: 32px;
 }
 
@@ -1085,12 +1083,12 @@ html:has(body.app-modal-host-native-window-body) {
   outline: none;
 }
 
-.previous-sessions-favorites-toggle[data-selected="true"] {
+.previous-sessions-favorites-toggle[data-selected='true'] {
   background: color-mix(in srgb, var(--app-foreground) 10%, transparent);
   color: color-mix(in srgb, #ffdf75 78%, #c78b12 22%);
 }
 
-.previous-sessions-tag-filter-toggle[data-selected="true"] {
+.previous-sessions-tag-filter-toggle[data-selected='true'] {
   color: var(--app-foreground);
 }
 
@@ -1117,11 +1115,11 @@ html:has(body.app-modal-host-native-window-body) {
   z-index: 1302;
 }
 
-.previous-sessions-tag-filter-check[data-visible="false"] {
+.previous-sessions-tag-filter-check[data-visible='false'] {
   opacity: 0;
 }
 
-.previous-sessions-tag-filter-item[data-selected="true"] {
+.previous-sessions-tag-filter-item[data-selected='true'] {
   color: var(--app-foreground);
 }
 
@@ -1237,8 +1235,8 @@ html:has(body.app-modal-host-native-window-body) {
 
 .recent-projects-row:hover,
 .recent-projects-row:focus-visible,
-.recent-projects-row[data-search-selected="true"],
-.recent-projects-row[data-context-menu-open="true"] {
+.recent-projects-row[data-search-selected='true'],
+.recent-projects-row[data-context-menu-open='true'] {
   background: var(--muted, #202020);
   outline: none;
 }
@@ -1534,7 +1532,7 @@ html:has(body.app-modal-host-native-window-body) {
   letter-spacing: 0;
 }
 
-.hotkeys-modal-input[aria-invalid="true"] {
+.hotkeys-modal-input[aria-invalid='true'] {
   border-color: color-mix(in srgb, var(--vscode-errorForeground, #f87171) 76%, var(--app-border));
 }
 
@@ -1691,7 +1689,7 @@ html:has(body.app-modal-host-native-window-body) {
   width: min(560px, calc(100vw - 2rem));
 }
 
-.command-config-modal-shadcn [data-slot="dialog-title"] {
+.command-config-modal-shadcn [data-slot='dialog-title'] {
   /* CDXC:CodexModalRestyle 2026-08-24:
      The Codex-style modal language drops bold chrome everywhere: dialog titles
      render at the regular weight and small section labels stop above 500. */
@@ -1699,7 +1697,7 @@ html:has(body.app-modal-host-native-window-body) {
   font-weight: 400;
 }
 
-.command-config-modal-shadcn [data-slot="field-label"],
+.command-config-modal-shadcn [data-slot='field-label'],
 .command-config-modal-shadcn .command-config-label {
   color: var(--foreground);
   font-size: 14px;
@@ -1708,13 +1706,13 @@ html:has(body.app-modal-host-native-window-body) {
   text-transform: none;
 }
 
-.command-config-modal-shadcn [data-slot="dialog-description"] {
+.command-config-modal-shadcn [data-slot='dialog-description'] {
   line-height: 1.55;
 }
 
-.command-config-modal-shadcn [data-slot="button"],
-.command-config-modal-shadcn [data-slot="input"],
-.command-config-modal-shadcn [data-slot="select-trigger"],
+.command-config-modal-shadcn [data-slot='button'],
+.command-config-modal-shadcn [data-slot='input'],
+.command-config-modal-shadcn [data-slot='select-trigger'],
 .command-config-modal-shadcn .command-config-textarea-shadcn,
 .command-config-modal-shadcn .command-icon-picker-trigger,
 .command-config-modal-shadcn .command-icon-picker-search {
@@ -1723,8 +1721,8 @@ html:has(body.app-modal-host-native-window-body) {
   letter-spacing: 0;
 }
 
-.command-config-modal-shadcn [data-slot="input"]:is(:focus, :focus-visible),
-.command-config-modal-shadcn [data-slot="textarea"]:is(:focus, :focus-visible),
+.command-config-modal-shadcn [data-slot='input']:is(:focus, :focus-visible),
+.command-config-modal-shadcn [data-slot='textarea']:is(:focus, :focus-visible),
 .command-config-modal-shadcn .command-config-input:is(:focus, :focus-visible),
 .command-config-modal-shadcn .command-config-textarea-shadcn:is(:focus, :focus-visible),
 .command-config-modal-shadcn .command-icon-picker-search:is(:focus, :focus-visible),
@@ -1822,14 +1820,14 @@ html:has(body.app-modal-host-native-window-body) {
    * Hide the commit modal close control so users exit commit review through
    * the explicit footer actions instead of an extra top-right dismissal button.
    */
-  --git-review-mono-font: "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --git-review-mono-font: 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   height: min(900px, calc(100vh - 1rem));
   max-height: min(900px, calc(100vh - 1rem));
   max-width: min(1480px, calc(100vw - 1rem));
   width: min(1480px, calc(100vw - 1rem));
 }
 
-.git-commit-modal-shadcn [data-slot="dialog-close"] {
+.git-commit-modal-shadcn [data-slot='dialog-close'] {
   display: none !important;
 }
 
@@ -1864,11 +1862,11 @@ html:has(body.app-modal-host-native-window-body) {
   overflow: hidden;
 }
 
-.git-commit-modal-left[data-has-message="true"] {
+.git-commit-modal-left[data-has-message='true'] {
   grid-template-rows: minmax(0, 1fr) minmax(150px, 0.28fr) auto;
 }
 
-.git-commit-modal-left[data-has-message="true"] .command-config-field {
+.git-commit-modal-left[data-has-message='true'] .command-config-field {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -2028,7 +2026,7 @@ html:has(body.app-modal-host-native-window-body) {
   outline: none;
 }
 
-.git-commit-files-show-all-button[data-active="true"] {
+.git-commit-files-show-all-button[data-active='true'] {
   background: color-mix(in srgb, var(--foreground) 12%, transparent);
   border-color: color-mix(in srgb, var(--foreground) 28%, transparent);
 }
@@ -2160,7 +2158,7 @@ html:has(body.app-modal-host-native-window-body) {
 .git-commit-files-summary {
   display: flex;
   flex: none;
-  font-family: var(--git-review-mono-font, "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 13px;
   font-weight: 800;
   gap: 4px;
@@ -2206,7 +2204,7 @@ html:has(body.app-modal-host-native-window-body) {
   min-height: 28px;
 }
 
-.git-commit-modal-shadcn .changed-files-tree-row[data-selected="true"] {
+.git-commit-modal-shadcn .changed-files-tree-row[data-selected='true'] {
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
   color: color-mix(in srgb, var(--foreground) 96%, var(--muted-foreground) 4%);
 }
@@ -2216,14 +2214,14 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .git-commit-modal-shadcn .changed-files-tree-name {
-  font-family: var(--git-review-mono-font, "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 11px;
   font-weight: 500;
 }
 
 .git-commit-modal-shadcn .changed-files-tree-stat,
 .git-commit-modal-shadcn .changed-files-tree-excluded {
-  font-family: var(--git-review-mono-font, "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 10px;
   font-weight: 650;
 }
@@ -2251,7 +2249,7 @@ html:has(body.app-modal-host-native-window-body) {
 .git-commit-modal-shadcn .command-config-checkbox:checked::after {
   border: solid var(--primary-foreground);
   border-width: 0 2px 2px 0;
-  content: "";
+  content: '';
   height: 8px;
   left: 5px;
   position: absolute;
@@ -2423,7 +2421,7 @@ html:has(body.app-modal-host-native-window-body) {
 .worktree-delete-branch-checkbox:checked::after {
   border: solid var(--primary-foreground);
   border-width: 0 2px 2px 0;
-  content: "";
+  content: '';
   height: 8px;
   left: 5px;
   position: absolute;
@@ -2575,7 +2573,7 @@ html:has(body.app-modal-host-native-window-body) {
 .worktree-rename-branch-checkbox:checked::after {
   border: solid var(--primary-foreground);
   border-width: 0 2px 2px 0;
-  content: "";
+  content: '';
   height: 8px;
   left: 5px;
   position: absolute;
@@ -2638,7 +2636,7 @@ html:has(body.app-modal-host-native-window-body) {
    * Standalone file diffs share the same floating 5px hover scrollbar and
    * SF Mono patch typography as the inline commit diff.
    */
-  --git-review-mono-font: "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --git-review-mono-font: 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   height: min(820px, calc(100vh - 2rem));
   max-height: min(820px, calc(100vh - 2rem));
   max-width: min(1180px, calc(100vw - 2rem));
@@ -2666,7 +2664,7 @@ html:has(body.app-modal-host-native-window-body) {
 .git-file-diff-modal-path {
   color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
   display: block;
-  font-family: var(--git-review-mono-font, "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 12px;
   font-weight: 600;
   min-width: 0;
@@ -2678,7 +2676,7 @@ html:has(body.app-modal-host-native-window-body) {
 .git-file-diff-modal-stats {
   display: inline-flex;
   flex: none;
-  font-family: var(--git-review-mono-font, "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 11px;
   font-weight: 650;
   gap: 4px;
@@ -2699,7 +2697,7 @@ html:has(body.app-modal-host-native-window-body) {
   min-width: 0;
 }
 
-.git-file-diff-panel[data-has-toolbar="true"] {
+.git-file-diff-panel[data-has-toolbar='true'] {
   gap: 10px;
 }
 
@@ -2724,7 +2722,7 @@ html:has(body.app-modal-host-native-window-body) {
   display: inline-flex;
 }
 
-.git-file-diff-control-button[data-active="true"] {
+.git-file-diff-control-button[data-active='true'] {
   background: color-mix(in srgb, var(--foreground) 12%, transparent) !important;
   border-color: color-mix(in srgb, var(--foreground) 28%, transparent) !important;
   color: var(--foreground) !important;
@@ -2765,7 +2763,7 @@ html:has(body.app-modal-host-native-window-body) {
   overflow: hidden;
 }
 
-.git-file-diff-surface[data-wrap-lines="true"] {
+.git-file-diff-surface[data-wrap-lines='true'] {
   min-width: 0;
   width: 100%;
 }
@@ -2786,40 +2784,40 @@ html:has(body.app-modal-host-native-window-body) {
   background: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
-.git-file-diff-line[data-kind="addition"] {
+.git-file-diff-line[data-kind='addition'] {
   background: color-mix(in srgb, #16a34a 16%, transparent);
 }
 
-.git-file-diff-split-line[data-kind="addition"] {
+.git-file-diff-split-line[data-kind='addition'] {
   background: color-mix(in srgb, #16a34a 10%, transparent);
 }
 
-.git-file-diff-line[data-kind="deletion"] {
+.git-file-diff-line[data-kind='deletion'] {
   background: color-mix(in srgb, #ef4444 16%, transparent);
 }
 
-.git-file-diff-split-line[data-kind="deletion"] {
+.git-file-diff-split-line[data-kind='deletion'] {
   background: color-mix(in srgb, #ef4444 10%, transparent);
 }
 
-.git-file-diff-line[data-kind="hunk"] {
+.git-file-diff-line[data-kind='hunk'] {
   background: color-mix(in srgb, #3b82f6 16%, transparent);
   color: color-mix(in srgb, #93c5fd 88%, var(--foreground) 12%);
 }
 
-.git-file-diff-line[data-kind="metadata"] {
+.git-file-diff-line[data-kind='metadata'] {
   background: color-mix(in srgb, var(--foreground) 5%, transparent);
   color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground) 38%);
 }
 
-.git-file-diff-line[data-kind="raw"] {
+.git-file-diff-line[data-kind='raw'] {
   color: var(--muted-foreground);
 }
 
 .git-file-diff-line-number {
   border-right: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   color: color-mix(in srgb, var(--muted-foreground) 76%, transparent);
-  font-family: var(--git-review-mono-font, "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 11px;
   font-weight: 500;
   padding: 3px 10px 3px 8px;
@@ -2829,7 +2827,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-file-diff-line-content {
   color: inherit;
-  font-family: var(--git-review-mono-font, "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.55;
@@ -2880,12 +2878,12 @@ html:has(body.app-modal-host-native-window-body) {
   color: color-mix(in srgb, #89ddff 78%, var(--foreground) 22%);
 }
 
-.git-file-diff-surface[data-wrap-lines="true"] .git-file-diff-line-content {
+.git-file-diff-surface[data-wrap-lines='true'] .git-file-diff-line-content {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.git-file-diff-surface[data-wrap-lines="true"] .git-file-diff-split-line {
+.git-file-diff-surface[data-wrap-lines='true'] .git-file-diff-split-line {
   grid-template-columns: 56px minmax(0, 1fr) 56px minmax(0, 1fr);
 }
 
@@ -2965,7 +2963,7 @@ html:has(body.app-modal-host-native-window-body) {
  * input pinned at the top and let Radix size the popover to the trigger so the
 	 * selector still reads like a dropdown in the configuration form.
 	 */
-.command-icon-picker-menu [data-slot="command"] {
+.command-icon-picker-menu [data-slot='command'] {
   background: transparent;
   border-radius: 0;
   padding: 0;
@@ -2997,8 +2995,8 @@ html:has(body.app-modal-host-native-window-body) {
 
 .command-icon-picker-option:hover,
 .command-icon-picker-option:focus-visible,
-.command-icon-picker-option[data-checked="true"],
-.command-icon-picker-option[data-selected="true"] {
+.command-icon-picker-option[data-checked='true'],
+.command-icon-picker-option[data-selected='true'] {
   /*
    * CDXC:SettingsDropdowns 2026-06-16-17:05:
    * The Settings action icon dropdown should highlight hovered, focused, and
@@ -3069,7 +3067,7 @@ html:has(body.app-modal-host-native-window-body) {
   position: relative;
 }
 
-.ghostex-app-toast[data-sonner-toast][data-styled="true"] [data-icon] {
+.ghostex-app-toast[data-sonner-toast][data-styled='true'] [data-icon] {
   align-items: flex-start;
   align-self: flex-start;
   margin-top: 2px;
@@ -3088,11 +3086,13 @@ html:has(body.app-modal-host-native-window-body) {
    */
   animation: ghostex-toast-spinner 850ms linear infinite;
   background: color-mix(in srgb, var(--app-foreground) 88%, white 12%);
-  content: "";
+  content: '';
   height: 16px;
   pointer-events: none;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 1.75a6.25 6.25 0 1 1-4.42 1.83' fill='none' stroke='black' stroke-linecap='round' stroke-width='2'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 1.75a6.25 6.25 0 1 1-4.42 1.83' fill='none' stroke='black' stroke-linecap='round' stroke-width='2'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 1.75a6.25 6.25 0 1 1-4.42 1.83' fill='none' stroke='black' stroke-linecap='round' stroke-width='2'/%3E%3C/svg%3E")
+    center / 16px 16px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 1.75a6.25 6.25 0 1 1-4.42 1.83' fill='none' stroke='black' stroke-linecap='round' stroke-width='2'/%3E%3C/svg%3E")
+    center / 16px 16px no-repeat;
   position: absolute;
   right: 18px;
   top: 18px;
@@ -3183,7 +3183,7 @@ html:has(body.app-modal-host-native-window-body) {
   white-space: normal;
 }
 
-.session-rename-modal-shadcn [data-slot="dialog-close"] {
+.session-rename-modal-shadcn [data-slot='dialog-close'] {
   /*
    * CDXC:SidebarRename 2026-06-13-12:45:
    * Align the close button with the tightened modal insets so it lines up with
@@ -3194,7 +3194,7 @@ html:has(body.app-modal-host-native-window-body) {
   top: 8px;
 }
 
-.session-rename-modal-shadcn [data-slot="dialog-footer"] [data-slot="button"]:disabled {
+.session-rename-modal-shadcn [data-slot='dialog-footer'] [data-slot='button']:disabled {
   /*
    * CDXC:SidebarRename 2026-06-13-12:00:
    * A disabled Generate Name/Rename action should not read as a half-faded
@@ -3207,7 +3207,7 @@ html:has(body.app-modal-host-native-window-body) {
   opacity: 1;
 }
 
-.session-rename-modal-shadcn [data-slot="dialog-footer"] [data-slot="button"]:not(:disabled) {
+.session-rename-modal-shadcn [data-slot='dialog-footer'] [data-slot='button']:not(:disabled) {
   /*
    * CDXC:SidebarRename 2026-06-13-13:30:
    * Rename and (when text is long enough to enable it) Generate Name are the
@@ -3219,7 +3219,7 @@ html:has(body.app-modal-host-native-window-body) {
   color: #111111;
 }
 
-.session-rename-modal-shadcn [data-slot="dialog-footer"] [data-slot="button"]:not(:disabled):hover {
+.session-rename-modal-shadcn [data-slot='dialog-footer'] [data-slot='button']:not(:disabled):hover {
   background: color-mix(in srgb, #ffffff 88%, #000000);
   border-color: color-mix(in srgb, #ffffff 88%, #000000);
   color: #111111;
@@ -3251,7 +3251,7 @@ html:has(body.app-modal-host-native-window-body) {
   width: 100vw;
 }
 
-.app-modal-host-native-window-body .session-rename-modal-shadcn [data-slot="dialog-close"] {
+.app-modal-host-native-window-body .session-rename-modal-shadcn [data-slot='dialog-close'] {
   right: 24px;
   top: 24px;
 }
@@ -3269,7 +3269,7 @@ html:has(body.app-modal-host-native-window-body) {
 .app-modal-host-native-window-body
   .session-rename-modal-shadcn
   .session-rename-field-group
-  > [data-slot="field"]:first-child {
+  > [data-slot='field']:first-child {
   flex: 0 0 auto;
   min-height: auto;
 }
@@ -3301,7 +3301,7 @@ html:has(body.app-modal-host-native-window-body) {
 .app-modal-host-native-window-body
   .add-repository-modal-shadcn
   .session-rename-field-group
-  > [data-slot="field"]:first-child {
+  > [data-slot='field']:first-child {
   flex: 0 0 auto;
   min-height: auto;
 }
@@ -3344,7 +3344,7 @@ html:has(body.app-modal-host-native-window-body) {
   width: 100vw;
 }
 
-.app-modal-host-native-window-body .worktree-create-modal-shadcn [data-slot="dialog-close"] {
+.app-modal-host-native-window-body .worktree-create-modal-shadcn [data-slot='dialog-close'] {
   right: 17px;
   top: 17px;
 }
@@ -3374,7 +3374,7 @@ html:has(body.app-modal-host-native-window-body) {
   width: 100vw;
 }
 
-.app-modal-host-native-window-body .portless-setup-modal-shadcn [data-slot="dialog-close"] {
+.app-modal-host-native-window-body .portless-setup-modal-shadcn [data-slot='dialog-close'] {
   right: 24px;
   top: 24px;
 }
@@ -3406,7 +3406,7 @@ html:has(body.app-modal-host-native-window-body) {
   margin-top: 0;
 }
 
-.portless-setup-modal-actions [data-slot="button"] {
+.portless-setup-modal-actions [data-slot='button'] {
   min-width: 0;
   width: 100%;
 }
@@ -3444,7 +3444,7 @@ html:has(body.app-modal-host-native-window-body) {
   border-radius: var(--delayed-send-radius-section) !important;
 }
 
-.delayed-send-modal-shadcn [data-slot="card"] {
+.delayed-send-modal-shadcn [data-slot='card'] {
   background: var(--delayed-send-panel);
   border: 1px solid var(--delayed-send-hairline);
   border-radius: var(--delayed-send-radius-section) !important;
@@ -3453,61 +3453,56 @@ html:has(body.app-modal-host-native-window-body) {
   box-shadow: none;
 }
 
-.delayed-send-modal-shadcn :is(
-    [data-slot="button"],
-    [data-slot="input"],
-    [data-slot="select-trigger"]
-  ) {
+.delayed-send-modal-shadcn :is([data-slot='button'], [data-slot='input'], [data-slot='select-trigger']) {
   border-radius: var(--delayed-send-radius-control) !important;
   font-weight: 400;
   height: var(--delayed-send-control-height);
   min-height: var(--delayed-send-control-height);
 }
 
-.delayed-send-modal-shadcn :is([data-slot="input"], [data-slot="select-trigger"]) {
+.delayed-send-modal-shadcn :is([data-slot='input'], [data-slot='select-trigger']) {
   background: var(--delayed-send-raised);
   border: 1px solid var(--delayed-send-hairline);
   color: var(--foreground);
 }
 
 .delayed-send-modal-shadcn
-  :is([data-slot="input"], [data-slot="select-trigger"]):hover:not(:disabled, :focus, :focus-visible) {
+  :is([data-slot='input'], [data-slot='select-trigger']):hover:not(:disabled, :focus, :focus-visible) {
   background: var(--delayed-send-raised-hover);
 }
 
-.delayed-send-modal-shadcn [data-slot="switch"],
-.delayed-send-modal-shadcn [data-slot="switch-thumb"] {
+.delayed-send-modal-shadcn [data-slot='switch'],
+.delayed-send-modal-shadcn [data-slot='switch-thumb'] {
   border-radius: var(--delayed-send-radius-pill) !important;
 }
 
-.delayed-send-modal-shadcn [data-slot="dialog-title"] {
+.delayed-send-modal-shadcn [data-slot='dialog-title'] {
   font-size: 16px;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.3;
 }
 
-.delayed-send-modal-shadcn [data-slot="dialog-description"],
-.delayed-send-modal-shadcn [data-slot="card-description"] {
+.delayed-send-modal-shadcn [data-slot='dialog-description'],
+.delayed-send-modal-shadcn [data-slot='card-description'] {
   color: var(--muted-foreground);
   font-size: 13px;
   font-weight: 400;
 }
 
-.delayed-send-modal-shadcn [data-slot="card-title"] {
+.delayed-send-modal-shadcn [data-slot='card-title'] {
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0;
 }
 
-.delayed-send-modal-shadcn [data-slot="field-label"] {
+.delayed-send-modal-shadcn [data-slot='field-label'] {
   color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 500;
 }
 
-.delayed-send-modal-shadcn
-  [data-slot="card-description"].delayed-send-automation-status-active {
+.delayed-send-modal-shadcn [data-slot='card-description'].delayed-send-automation-status-active {
   color: var(--ghostex-accent, #38bdf8);
 }
 
@@ -3517,14 +3512,14 @@ html:has(body.app-modal-host-native-window-body) {
  * --app-dropdown-background with `!important` at the same specificity and from
  * a later sheet, so this rule qualifies with the slot attribute to win.
  */
-[data-slot="select-content"].delayed-send-select-content {
+[data-slot='select-content'].delayed-send-select-content {
   background: #161616 !important;
   background-color: #161616 !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 8px !important;
 }
 
-.delayed-send-select-content [data-slot="select-item"] {
+.delayed-send-select-content [data-slot='select-item'] {
   border-radius: 6px !important;
   font-weight: 400;
 }
@@ -3628,7 +3623,7 @@ html:has(body.app-modal-host-native-window-body) {
   margin: 0;
 }
 
-.delayed-send-close-card [data-slot="card-description"] {
+.delayed-send-close-card [data-slot='card-description'] {
   white-space: nowrap;
 }
 
@@ -3659,7 +3654,7 @@ html:has(body.app-modal-host-native-window-body) {
   gap: 10px;
 }
 
-.add-repository-folder-row [data-slot="input"] {
+.add-repository-folder-row [data-slot='input'] {
   min-width: 0;
 }
 
@@ -3708,7 +3703,7 @@ html:has(body.app-modal-host-native-window-body) {
 .add-repository-option-checkbox:checked::after {
   border: solid var(--primary-foreground);
   border-width: 0 2px 2px 0;
-  content: "";
+  content: '';
   height: 8px;
   left: 5px;
   position: absolute;
@@ -3764,7 +3759,7 @@ html:has(body.app-modal-host-native-window-body) {
   white-space: pre-wrap;
 }
 
-.session-rename-modal-shadcn [data-slot="textarea"] {
+.session-rename-modal-shadcn [data-slot='textarea'] {
   font-family: inherit;
   font-size: 14px;
   line-height: 1.45;
@@ -3772,7 +3767,7 @@ html:has(body.app-modal-host-native-window-body) {
   resize: vertical;
 }
 
-.worktree-create-modal-shadcn [data-slot="textarea"] {
+.worktree-create-modal-shadcn [data-slot='textarea'] {
   min-height: 150px;
 }
 
@@ -3793,7 +3788,7 @@ html:has(body.app-modal-host-native-window-body) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.worktree-create-mode-toggle [data-slot="button"] {
+.worktree-create-mode-toggle [data-slot='button'] {
   min-width: 0;
 }
 
@@ -3954,18 +3949,18 @@ html:has(body.app-modal-host-native-window-body) {
   max-height: min(342px, 52vh);
 }
 
-.projects-settings-selector-option[data-slot="command-item"] {
+.projects-settings-selector-option[data-slot='command-item'] {
   align-items: center;
   gap: 10px;
   min-height: 48px;
   padding: 8px 10px;
 }
 
-.projects-settings-selector-option[data-slot="command-item"] > svg:first-child {
+.projects-settings-selector-option[data-slot='command-item'] > svg:first-child {
   color: color-mix(in srgb, var(--app-muted) 78%, var(--app-foreground) 22%);
 }
 
-.projects-settings-selector-option[data-checked="true"] .projects-settings-selector-option-name {
+.projects-settings-selector-option[data-checked='true'] .projects-settings-selector-option-name {
   color: var(--app-foreground);
 }
 
@@ -4007,15 +4002,15 @@ html:has(body.app-modal-host-native-window-body) {
   padding: 0 8px;
 }
 
-.settings-portless-status-badge[data-status="active"] {
+.settings-portless-status-badge[data-status='active'] {
   color: color-mix(in srgb, #6ee7b7 78%, var(--app-foreground) 22%);
 }
 
-.settings-portless-status-badge[data-status="failed"] {
+.settings-portless-status-badge[data-status='failed'] {
   color: color-mix(in srgb, #f87171 82%, var(--app-foreground) 18%);
 }
 
-.settings-portless-status-badge[data-status="needsSetup"] {
+.settings-portless-status-badge[data-status='needsSetup'] {
   color: color-mix(in srgb, #facc15 82%, var(--app-foreground) 18%);
 }
 
@@ -4044,7 +4039,7 @@ html:has(body.app-modal-host-native-window-body) {
   flex: 0 0 172px;
 }
 
-.settings-portless-protocol-toggle [data-slot="toggle-group-item"] {
+.settings-portless-protocol-toggle [data-slot='toggle-group-item'] {
   flex: 1;
 }
 
@@ -4055,7 +4050,7 @@ html:has(body.app-modal-host-native-window-body) {
   justify-content: flex-end;
 }
 
-.settings-portless-actions [data-slot="button"] {
+.settings-portless-actions [data-slot='button'] {
   gap: 6px;
 }
 
@@ -4120,7 +4115,7 @@ html:has(body.app-modal-host-native-window-body) {
   background: color-mix(in srgb, var(--app-background) 44%, transparent);
   border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
   color: color-mix(in srgb, var(--app-foreground) 88%, var(--app-muted) 12%);
-  font-family: var(--settings-mono-font, "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  font-family: var(--settings-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 11px;
   min-width: 0;
   overflow: hidden;
@@ -4577,11 +4572,11 @@ html:has(body.app-modal-host-native-window-body) {
   ) !important;
 }
 
-.remote-project-picker-dialog .remote-project-picker-input[data-slot="command-input"] {
+.remote-project-picker-dialog .remote-project-picker-input[data-slot='command-input'] {
   padding-left: var(--remote-project-picker-input-inline-padding);
 }
 
-.remote-project-picker-dialog .remote-project-picker-input[data-slot="command-input"]:not(.pr-20):not(.pr-36) {
+.remote-project-picker-dialog .remote-project-picker-input[data-slot='command-input']:not(.pr-20):not(.pr-36) {
   padding-right: var(--remote-project-picker-input-inline-padding);
 }
 
@@ -4592,16 +4587,16 @@ html:has(body.app-modal-host-native-window-body) {
  * locked native window. Keep headers and actions stable by capping only the
  * editable or high-volume content regions and letting those regions scroll.
  */
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"] .session-rename-textarea {
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .session-rename-textarea {
   max-height: min(220px, 42vh);
   overflow-y: auto;
   resize: none;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
+.app-modal-host-native-window-body[data-app-modal-fit-height='true']
   .worktree-create-modal-shadcn
-  [data-slot="textarea"],
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
+  [data-slot='textarea'],
+.app-modal-host-native-window-body[data-app-modal-fit-height='true']
   .agent-config-modal-shadcn
   .command-config-textarea-shadcn {
   max-height: min(200px, 36vh);
@@ -4609,59 +4604,51 @@ html:has(body.app-modal-host-native-window-body) {
   resize: none;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .first-user-message-textarea {
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .first-user-message-textarea {
   height: min(320px, 48vh);
   max-height: min(320px, 48vh);
   overflow-y: auto;
   resize: none;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
+.app-modal-host-native-window-body[data-app-modal-fit-height='true']
   .worktree-create-modal-shadcn
   .session-rename-field-group,
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
+.app-modal-host-native-window-body[data-app-modal-fit-height='true']
   .add-repository-modal-shadcn
   .session-rename-field-group,
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
+.app-modal-host-native-window-body[data-app-modal-fit-height='true']
   .agent-config-modal-shadcn
-  > [data-slot="field-group"] {
+  > [data-slot='field-group'] {
   max-height: min(520px, calc(100vh - 150px));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 2px;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .add-repository-error,
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .add-repository-warning {
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .add-repository-error,
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .add-repository-warning {
   max-height: min(160px, 24vh);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .previous-sessions-modal-body,
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .worktree-delete-modal-body,
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .remote-gxserver-install-modal-body,
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .portless-setup-modal-body {
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .previous-sessions-modal-body,
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .worktree-delete-modal-body,
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .remote-gxserver-install-modal-body,
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .portless-setup-modal-body {
   max-height: min(420px, calc(100vh - 150px));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .previous-sessions-modal-body {
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .previous-sessions-modal-body {
   max-height: min(476px, calc(100vh - 92px));
 }
 
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
+.app-modal-host-native-window-body[data-app-modal-fit-height='true']
   .remote-project-picker-dialog
-  [data-slot="command-list"] {
+  [data-slot='command-list'] {
   max-height: min(28rem, calc(100vh - 72px)) !important;
 }
 
@@ -4676,41 +4663,40 @@ html:has(body.app-modal-host-native-window-body) {
  * Keep these bespoke Settings surfaces tied to the subtle radius tokens:
  * 2px compact, 3px normal, 7px large, and adaptive 7px/10%.
  */
-.ghostex-settings-shadcn :is(
-  .projects-settings-selector-trigger,
-  .projects-settings-selector-popover,
-  .settings-portless-control-row,
-  .settings-portless-domain-hostname,
-  .settings-portless-domains,
-  .settings-portless-status-badge,
-  .settings-portless-status-row,
-  .settings-management-help-button,
-  .settings-management-icon,
-  .settings-management-row,
-  .settings-modal-section,
-  .settings-project-command-card,
-  .settings-remote-machine-card,
-  .settings-remote-machine-empty,
-  .settings-remote-machine-input,
-  .settings-project-command-textarea
-) {
+.ghostex-settings-shadcn
+  :is(
+    .projects-settings-selector-trigger,
+    .projects-settings-selector-popover,
+    .settings-portless-control-row,
+    .settings-portless-domain-hostname,
+    .settings-portless-domains,
+    .settings-portless-status-badge,
+    .settings-portless-status-row,
+    .settings-management-help-button,
+    .settings-management-icon,
+    .settings-management-row,
+    .settings-modal-section,
+    .settings-project-command-card,
+    .settings-remote-machine-card,
+    .settings-remote-machine-empty,
+    .settings-remote-machine-input,
+    .settings-project-command-textarea
+  ) {
   border-radius: var(--settings-radius-control);
 }
 
-.ghostex-settings-shadcn :is(
-  .projects-settings-selector-icon,
-  .projects-settings-selector-option[data-slot="command-item"] > svg:first-child,
-  .settings-remote-machine-add-icon,
-  .settings-remote-machine-empty-icon
-) {
+.ghostex-settings-shadcn
+  :is(
+    .projects-settings-selector-icon,
+    .projects-settings-selector-option[data-slot='command-item'] > svg:first-child,
+    .settings-remote-machine-add-icon,
+    .settings-remote-machine-empty-icon
+  ) {
   border-radius: var(--settings-radius-adaptive);
 }
 
-.ghostex-settings-shadcn :is(
-  .settings-project-command-card,
-  .settings-remote-machine-card,
-  .settings-remote-machine-empty
-) {
+.ghostex-settings-shadcn
+  :is(.settings-project-command-card, .settings-remote-machine-card, .settings-remote-machine-empty) {
   border-radius: var(--settings-radius-section);
 }
 
@@ -4736,19 +4722,15 @@ html:has(body.app-modal-host-native-window-body) {
  * it is removed for every dialog hosted in a GPUI fixed-frame modal window.
  * macOS-hosted modals keep their close button.
  */
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"] [data-slot="dialog-close"] {
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true'] [data-slot='dialog-close'] {
   display: none;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"] [data-slot="dialog-content"],
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"]
-  .session-rename-modal-shadcn,
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"]
-  .worktree-create-modal-shadcn,
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"]
-  .add-repository-modal-shadcn,
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"]
-  .agent-config-modal-shadcn {
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true'] [data-slot='dialog-content'],
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true'] .session-rename-modal-shadcn,
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true'] .worktree-create-modal-shadcn,
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true'] .add-repository-modal-shadcn,
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true'] .agent-config-modal-shadcn {
   max-height: 100vh;
   overflow-y: auto;
 }
@@ -4758,8 +4740,8 @@ html:has(body.app-modal-host-native-window-body) {
  * modals whose textarea is meant to fill the window (Scratch Pad, Commit
  * message) keep their own sizing.
  */
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"]
-  [data-slot="textarea"]:not(.scratch-pad-textarea):not(.git-commit-modal-textarea) {
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true']
+  [data-slot='textarea']:not(.scratch-pad-textarea):not(.git-commit-modal-textarea) {
   max-height: min(220px, 42vh);
   overflow-y: auto;
   resize: none;
@@ -4773,7 +4755,7 @@ html:has(body.app-modal-host-native-window-body) {
  * scroll inside the editor without turning the field group, agent selector, or
  * action area into a scrolling region.
  */
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"]
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true']
   .session-rename-modal-shadcn
   .session-rename-textarea {
   field-sizing: fixed;
@@ -4796,20 +4778,14 @@ html:has(body.app-modal-host-native-window-body) {
  * writing surface rather than a compact form field.
  */
 .app-modal-host-native-window-body
-  :is(
-    [data-slot="textarea"],
-    .session-rename-textarea,
-    .scratch-pad-textarea
-  ):not(.git-commit-modal-textarea) {
+  :is([data-slot='textarea'], .session-rename-textarea, .scratch-pad-textarea):not(.git-commit-modal-textarea) {
   scrollbar-width: auto;
 }
 
 .app-modal-host-native-window-body
-  :is(
-    [data-slot="textarea"],
-    .session-rename-textarea,
-    .scratch-pad-textarea
-  ):not(.git-commit-modal-textarea)::-webkit-scrollbar {
+  :is([data-slot='textarea'], .session-rename-textarea, .scratch-pad-textarea):not(
+    .git-commit-modal-textarea
+  )::-webkit-scrollbar {
   background: transparent;
   display: block;
   height: 2px;
@@ -4817,20 +4793,16 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .app-modal-host-native-window-body
-  :is(
-    [data-slot="textarea"],
-    .session-rename-textarea,
-    .scratch-pad-textarea
-  ):not(.git-commit-modal-textarea)::-webkit-scrollbar-track {
+  :is([data-slot='textarea'], .session-rename-textarea, .scratch-pad-textarea):not(
+    .git-commit-modal-textarea
+  )::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .app-modal-host-native-window-body
-  :is(
-    [data-slot="textarea"],
-    .session-rename-textarea,
-    .scratch-pad-textarea
-  ):not(.git-commit-modal-textarea)::-webkit-scrollbar-thumb {
+  :is([data-slot='textarea'], .session-rename-textarea, .scratch-pad-textarea):not(
+    .git-commit-modal-textarea
+  )::-webkit-scrollbar-thumb {
   background-color: #585858;
   border-radius: 999px;
 }
@@ -4840,13 +4812,13 @@ html:has(body.app-modal-host-native-window-body) {
  * textarea's right edge. The transparent right half of the 4px scrollbar owns
  * the offset without moving the textarea border or changing the thumb width.
  */
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"]
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true']
   .session-rename-modal-shadcn
   .session-rename-textarea::-webkit-scrollbar {
   width: 4px;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fixed-window="true"]
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true']
   .session-rename-modal-shadcn
   .session-rename-textarea::-webkit-scrollbar-thumb {
   background-clip: content-box;

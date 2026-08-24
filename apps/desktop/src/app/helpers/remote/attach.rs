@@ -235,7 +235,9 @@ pub(crate) enum GpuiRemoteAttachOpenIntent {
     CreatedByThisAction,
 }
 
-pub(crate) fn gpui_validate_remote_attach_metadata(result: &serde_json::Value) -> Result<(), String> {
+pub(crate) fn gpui_validate_remote_attach_metadata(
+    result: &serde_json::Value,
+) -> Result<(), String> {
     let attach = result
         .get("attach")
         .ok_or_else(|| "Remote attach metadata is unavailable.".to_string())?;
@@ -358,7 +360,9 @@ pub(crate) fn gpui_noninteractive_login_shell_remote_command(command: &str) -> S
     )
 }
 
-pub(crate) fn gpui_remote_ghostex_attach_command(reference: &GpuiRemoteAttachSessionReference) -> String {
+pub(crate) fn gpui_remote_ghostex_attach_command(
+    reference: &GpuiRemoteAttachSessionReference,
+) -> String {
     let mut parts = vec![
         "attach".to_string(),
         "--session-id".to_string(),
@@ -382,4 +386,3 @@ pub(crate) fn gpui_remote_ghostex_attach_command(reference: &GpuiRemoteAttachSes
     ]
     .join("; ")
 }
-

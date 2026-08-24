@@ -1,10 +1,7 @@
-import { useMemo } from "react";
-import {
-  resolveSidebarV2SnoozePresets,
-  type SidebarV2SnoozePreset,
-} from "../../shared/sidebar-v2-snooze";
-import { SidebarContextMenuPortal } from "../sidebar-context-menu-portal";
-import type { WebviewApi } from "../webview-api";
+import { useMemo } from 'react';
+import { resolveSidebarV2SnoozePresets, type SidebarV2SnoozePreset } from '../../shared/sidebar-v2-snooze';
+import { SidebarContextMenuPortal } from '../sidebar-context-menu-portal';
+import type { WebviewApi } from '../webview-api';
 
 /*
  * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -60,15 +57,15 @@ export function SidebarV2SnoozePopover({
 
   return (
     <SidebarContextMenuPortal
-      menuClassName="session-context-menu sidebar-v2-snooze-popover"
+      menuClassName='session-context-menu sidebar-v2-snooze-popover'
       menuStyle={{ left: `${position.clientX}px`, top: `${position.clientY}px` }}
       onDismiss={onDismiss}
       vscode={vscode}
     >
-      <div className="session-context-menu-section">
+      <div className='session-context-menu-section'>
         {presets.map((preset) => (
           <button
-            className="session-context-menu-item sidebar-v2-snooze-preset"
+            className='session-context-menu-item sidebar-v2-snooze-preset'
             data-snooze-preset={preset.id}
             key={preset.id}
             onClick={(event) => {
@@ -77,11 +74,11 @@ export function SidebarV2SnoozePopover({
               onDismiss();
               onSelectPreset(preset);
             }}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <span className="sidebar-v2-snooze-preset-label">{preset.label}</span>
-            <span className="sidebar-v2-snooze-preset-when">{preset.whenLabel}</span>
+            <span className='sidebar-v2-snooze-preset-label'>{preset.label}</span>
+            <span className='sidebar-v2-snooze-preset-when'>{preset.whenLabel}</span>
           </button>
         ))}
       </div>

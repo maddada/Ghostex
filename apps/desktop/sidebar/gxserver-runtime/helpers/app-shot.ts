@@ -8,30 +8,23 @@ import {
   GPUI_SIDEBAR_NATIVE_APP_SHOT_MESSAGE_VERSION,
   GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_TYPE,
   GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_VERSION,
-} from "../constants";
-import type { GpuiNativeAppShotCapture } from "../types-and-protocol";
-import { normalizeNonEmptyString } from "./records";
-import {
-  createGpuiRemotePresentationSessionId,
-  parseGpuiRemotePresentationSessionId,
-} from "./remote-presentation";
-import {
-  parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type { GxserverPresentationSnapshot } from "@/packages/shared/gxserver-protocol";
-import type { SidebarSessionItem } from "@/packages/shared/session-grid-contract";
+} from '../constants';
+import type { GpuiNativeAppShotCapture } from '../types-and-protocol';
+import { normalizeNonEmptyString } from './records';
+import { createGpuiRemotePresentationSessionId, parseGpuiRemotePresentationSessionId } from './remote-presentation';
+import { parseGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { GxserverPresentationSnapshot } from '@/packages/shared/gxserver-protocol';
+import type { SidebarSessionItem } from '@/packages/shared/session-grid-contract';
 
-export function normalizeGpuiNativeAppShotPromptResult(
-  value: unknown,
-): { ok: boolean; sessionId: string } | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+export function normalizeGpuiNativeAppShotPromptResult(value: unknown): { ok: boolean; sessionId: string } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
   if (
     record.type !== GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_TYPE ||
     record.version !== GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_VERSION ||
-    typeof record.ok !== "boolean"
+    typeof record.ok !== 'boolean'
   ) {
     return undefined;
   }
@@ -40,7 +33,7 @@ export function normalizeGpuiNativeAppShotPromptResult(
 }
 
 export function nativeAppShotPromptSessionIdForSidebarSession(
-  session: SidebarSessionItem | undefined,
+  session: SidebarSessionItem | undefined
 ): string | undefined {
   if (!session) {
     return undefined;
@@ -50,15 +43,13 @@ export function nativeAppShotPromptSessionIdForSidebarSession(
     return createGpuiRemotePresentationSessionId(
       remoteSession.machineId,
       remoteSession.projectId,
-      remoteSession.sessionId,
+      remoteSession.sessionId
     );
   }
   return localGxserverSessionIdForSidebarSession(session);
 }
 
-export function localGxserverSessionIdForSidebarSession(
-  session: SidebarSessionItem | undefined,
-): string | undefined {
+export function localGxserverSessionIdForSidebarSession(session: SidebarSessionItem | undefined): string | undefined {
   if (!session || parseGpuiRemotePresentationSessionId(session.sessionId)) {
     return undefined;
   }
@@ -70,7 +61,7 @@ export function localGxserverSessionIdForSidebarSession(
 
 export function localGxserverProjectIdForSidebarSession(
   session: SidebarSessionItem,
-  presentation: GxserverPresentationSnapshot | undefined,
+  presentation: GxserverPresentationSnapshot | undefined
 ): string | undefined {
   const scopedSession = parseGxserverPresentationProjectSessionId(session.sessionId);
   if (scopedSession?.projectId) {
@@ -82,23 +73,21 @@ export function localGxserverProjectIdForSidebarSession(
     : undefined;
 }
 
-export function isNativeAppShotAgentSession(
-  session: SidebarSessionItem | undefined,
-): session is SidebarSessionItem {
+export function isNativeAppShotAgentSession(session: SidebarSessionItem | undefined): session is SidebarSessionItem {
   if (!session) {
     return false;
   }
-  if (session.sessionKind !== "terminal" || session.isSleeping === true) {
+  if (session.sessionKind !== 'terminal' || session.isSleeping === true) {
     return false;
   }
-  if (session.lifecycleState === "sleeping" || session.isLive !== true) {
+  if (session.lifecycleState === 'sleeping' || session.isLive !== true) {
     return false;
   }
   return Boolean(session.agentIcon);
 }
 
 export function normalizeGpuiNativeAppShotCapture(value: unknown): GpuiNativeAppShotCapture | undefined {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return undefined;
   }
   const record = value as Record<string, unknown>;
@@ -142,14 +131,14 @@ export function normalizeGpuiNativeAppShotCapture(value: unknown): GpuiNativeApp
 
 export function normalizeGpuiNativeAppShotImagePath(value: unknown): string | undefined {
   const path = normalizeGpuiNativeAppShotString(value, 4096);
-  if (!path || (!path.startsWith("~/") && !path.startsWith("/"))) {
+  if (!path || (!path.startsWith('~/') && !path.startsWith('/'))) {
     return undefined;
   }
   return path;
 }
 
 export function normalizeGpuiNativeAppShotString(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
   const text = value.trim();
@@ -160,7 +149,7 @@ export function normalizeGpuiNativeAppShotString(value: unknown, maxLength: numb
 }
 
 export function normalizeGpuiNativeAppShotDimension(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0 || value > 100_000) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0 || value > 100_000) {
     return undefined;
   }
   return value;
@@ -168,19 +157,16 @@ export function normalizeGpuiNativeAppShotDimension(value: unknown): number | un
 
 export function normalizeGpuiNativeAppShotTrigger(value: unknown): string | undefined {
   const trigger = normalizeGpuiNativeAppShotString(value, 80);
-  return trigger === "both-command" ||
-    trigger === "both-shift" ||
-    trigger === "both-option" ||
-    trigger === "double-left-shift" ||
-    trigger === "double-left-option"
+  return trigger === 'both-command' ||
+    trigger === 'both-shift' ||
+    trigger === 'both-option' ||
+    trigger === 'double-left-shift' ||
+    trigger === 'double-left-option'
     ? trigger
     : undefined;
 }
 
-export function formatGpuiNativeAppShotPrompt(
-  appShot: GpuiNativeAppShotCapture,
-  includeMetadata: boolean,
-): string {
+export function formatGpuiNativeAppShotPrompt(appShot: GpuiNativeAppShotCapture, includeMetadata: boolean): string {
   const metadataLines = [`App: ${appShot.appName}`];
   if (appShot.bundleIdentifier) {
     metadataLines.push(`Bundle ID: ${appShot.bundleIdentifier}`);
@@ -203,7 +189,7 @@ export function formatGpuiNativeAppShotPrompt(
   */
   const promptLines = [`[Image #1](${appShot.imagePath})`];
   if (includeMetadata) {
-    promptLines.push("Metadata:", ...metadataLines);
+    promptLines.push('Metadata:', ...metadataLines);
   }
-  return `\n${promptLines.join("\n")}\n`;
+  return `\n${promptLines.join('\n')}\n`;
 }

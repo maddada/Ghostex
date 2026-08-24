@@ -10,10 +10,7 @@
   /* Warm accent for matched characters, matching the terminal picker's bold
      yellow highlight while staying legible on the chat surface's background. */
   --ghostex-find-match: #e3b341;
-  font-family: var(
-    --ghostex-find-font-family,
-    var(--vscode-font-family, ui-sans-serif, system-ui, sans-serif)
-  );
+  font-family: var(--ghostex-find-font-family, var(--vscode-font-family, ui-sans-serif, system-ui, sans-serif));
 }
 
 /* The gpui Find page wraps the view in .native-sidebar-shell, whose implicit

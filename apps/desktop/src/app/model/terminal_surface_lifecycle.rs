@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn confirmed_agents_terminal_ghostty_surface_close_slots(
     workspace: &WorkspaceModel,
@@ -42,7 +41,6 @@ pub(crate) fn confirmed_agents_terminal_ghostty_surface_close_slots(
     confirmed_slots
 }
 
-
 #[cfg(target_os = "macos")]
 #[allow(dead_code)] // no caller: the live path uses the same-named GhostexGpuiApp method in app/focus.rs
 pub(crate) fn consume_confirmed_agents_terminal_ghostty_surface_closes(
@@ -67,7 +65,6 @@ pub(crate) fn consume_confirmed_agents_terminal_ghostty_surface_closes(
     }
     changed
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn consume_exited_agents_terminal_ghostty_surfaces(
@@ -107,7 +104,6 @@ pub(crate) fn consume_exited_agents_terminal_ghostty_surfaces(
     changed
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn consume_confirmed_command_terminal_ghostty_surface_closes(
     command_pane: &mut CommandPaneModel,
@@ -141,7 +137,6 @@ pub(crate) fn consume_confirmed_command_terminal_ghostty_surface_closes(
     }
     changed
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn consume_exited_command_terminal_ghostty_surfaces(
@@ -188,7 +183,6 @@ pub(crate) fn consume_exited_command_terminal_ghostty_surfaces(
     cleanup
 }
 
-
 pub(crate) fn focused_agents_terminal_surface_mount_slot(
     active_mode: TitlebarMode,
     shell_focus: ShellFocusTarget,
@@ -211,7 +205,6 @@ pub(crate) fn focused_agents_terminal_surface_mount_slot(
         .find(|slot_id| slot_id.pane_id == focused_pane_id)
 }
 
-
 pub(crate) fn focused_project_editor_companion_terminal_surface_mount_slot(
     active_mode: TitlebarMode,
     shell_focus: ShellFocusTarget,
@@ -228,7 +221,6 @@ pub(crate) fn focused_project_editor_companion_terminal_surface_mount_slot(
         session_id: selected_session_id?,
     })
 }
-
 
 pub(crate) fn agents_terminal_surface_focus_states_for_slots(
     active_mode: TitlebarMode,
@@ -247,7 +239,6 @@ pub(crate) fn agents_terminal_surface_focus_states_for_slots(
         .collect()
 }
 
-
 pub(crate) fn command_terminal_runtime_session_id(
     slot_id: CommandTerminalBodyMountSlotId,
 ) -> AgentsTerminalRuntimeSessionId {
@@ -262,7 +253,6 @@ pub(crate) fn command_terminal_runtime_session_id(
             | (slot_id.session_id.0 & 0xFFFF_FFFF),
     )
 }
-
 
 pub(crate) fn command_terminal_runtime_session_id_from_gxserver_key(
     key: &GpuiLocalWorkspaceSessionKey,
@@ -292,7 +282,6 @@ pub(crate) fn command_terminal_runtime_session_id_from_gxserver_key(
     )
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn command_terminal_config_request_with_launch_payload_source(
     slot_id: CommandTerminalBodyMountSlotId,
@@ -316,7 +305,6 @@ pub(crate) fn command_terminal_config_request_with_launch_payload_source(
     })
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn agents_terminal_config_request_with_launch_payload_source(
     slot_id: AgentsTerminalBodyMountSlotId,
@@ -339,7 +327,6 @@ pub(crate) fn agents_terminal_config_request_with_launch_payload_source(
     })
 }
 
-
 pub(crate) fn focused_command_terminal_surface_mount_slot(
     shell_focus: ShellFocusTarget,
     command_pane: &CommandPaneModel,
@@ -360,7 +347,6 @@ pub(crate) fn focused_command_terminal_surface_mount_slot(
         .is_current_terminal_body_mount_slot(slot_id)
         .then_some(slot_id)
 }
-
 
 /// Press-any-key wake for sleeping Agents bodies mirrors the command-pane
 /// rule: only the visible focused pane's selected sleeping tab wakes, and only
@@ -393,7 +379,6 @@ pub(crate) fn focused_sleeping_agents_placeholder_wake_target(
         .then_some((pane_id, session_id))
 }
 
-
 pub(crate) fn focused_sleeping_command_placeholder_wake_target(
     shell_focus: ShellFocusTarget,
     command_pane: &CommandPaneModel,
@@ -423,7 +408,6 @@ pub(crate) fn focused_sleeping_command_placeholder_wake_target(
         .then_some((body_owner.group_id, body_owner.session_id))
 }
 
-
 pub(crate) fn terminal_close_confirm_surface_signature(
     family: TerminalCloseConfirmSurfaceFamily,
 ) -> TerminalCloseConfirmSurfaceSignature {
@@ -447,7 +431,6 @@ pub(crate) fn terminal_close_confirm_surface_signature(
         confirm_action_label: "Close Terminal",
     }
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn pending_agents_terminal_close_confirm_for_slot(
@@ -477,7 +460,6 @@ pub(crate) fn pending_agents_terminal_close_confirm_for_slot(
     })
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn pending_command_terminal_close_confirm_for_slot(
     command_pane: &CommandPaneModel,
@@ -502,11 +484,9 @@ pub(crate) fn pending_command_terminal_close_confirm_for_slot(
     })
 }
 
-
 pub(crate) fn terminal_session_title_for_id(_id: TerminalSessionId) -> String {
     "Terminal Session".to_string()
 }
-
 
 pub(crate) fn command_session_title_for_id(_id: CommandSessionId) -> String {
     /*
@@ -515,7 +495,6 @@ pub(crate) fn command_session_title_for_id(_id: CommandSessionId) -> String {
     */
     COMMAND_PANE_DEFAULT_SESSION_TITLE.to_string()
 }
-
 
 pub(crate) fn gpui_command_pane_sidebar_indicator_text(value: &str) -> Option<String> {
     let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");

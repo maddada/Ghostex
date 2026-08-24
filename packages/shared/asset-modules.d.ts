@@ -1,4 +1,4 @@
-declare module "*.css" {
+declare module '*.css' {
   const cssUrl: string;
   export default cssUrl;
   /*
@@ -9,17 +9,17 @@ declare module "*.css" {
    */
 }
 
-declare module "*.svg" {
+declare module '*.svg' {
   const svgUrl: string;
   export default svgUrl;
 }
 
-declare module "*.webp" {
+declare module '*.webp' {
   const webpUrl: string;
   export default webpUrl;
 }
 
-declare module "*.png" {
+declare module '*.png' {
   const pngUrl: string;
   export default pngUrl;
   /*

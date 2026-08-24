@@ -13,29 +13,29 @@
  * never from a job author's hand-written duplicate.
  */
 
-import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { createHash } from 'node:crypto';
+import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { buildProductProvenance } from "./provenance.mjs";
-import { validatePlan } from "./plan.mjs";
-import { shortFingerprint } from "./fingerprint.mjs";
+import { buildProductProvenance } from './provenance.mjs';
+import { validatePlan } from './plan.mjs';
+import { shortFingerprint } from './fingerprint.mjs';
 
-export const PROVENANCE_FILE_NAME = "provenance.json";
+export const PROVENANCE_FILE_NAME = 'provenance.json';
 
 export function readReleasePlan(env = process.env) {
   const inline = env.GHOSTEX_RELEASE_PLAN;
   const file = env.GHOSTEX_RELEASE_PLAN_FILE;
-  const text = inline && inline.trim() ? inline : file ? readFileSync(file, "utf8") : "";
+  const text = inline && inline.trim() ? inline : file ? readFileSync(file, 'utf8') : '';
   if (!text.trim()) {
-    throw new Error("GHOSTEX_RELEASE_PLAN (or GHOSTEX_RELEASE_PLAN_FILE) is required to write provenance");
+    throw new Error('GHOSTEX_RELEASE_PLAN (or GHOSTEX_RELEASE_PLAN_FILE) is required to write provenance');
   }
   return validatePlan(JSON.parse(text));
 }
 
 function sha256File(filePath) {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
 }
 
 /*
@@ -64,13 +64,13 @@ export function verifyManifestArtifacts({ directory, manifest }) {
 }
 
 export function productProvenanceForDirectory({ directory, env = process.env, plan, reusedFrom = null }) {
-  const manifestPath = path.join(directory, "manifest.json");
+  const manifestPath = path.join(directory, 'manifest.json');
   if (!existsSync(manifestPath)) throw new Error(`No manifest.json in ${directory}`);
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/u, ""));
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8').replace(/^\uFEFF/u, ''));
   const product = manifest.platform;
   const entry = plan.products?.[product];
   if (!entry) throw new Error(`The release plan has no entry for ${product}`);
-  if (entry.action === "skip") throw new Error(`${product} is skipped by the plan but produced an artifact`);
+  if (entry.action === 'skip') throw new Error(`${product} is skipped by the plan but produced an artifact`);
   if (manifest.version !== plan.version) {
     throw new Error(`${product} manifest is version ${manifest.version}; the plan releases ${plan.version}`);
   }
@@ -79,9 +79,9 @@ export function productProvenanceForDirectory({ directory, env = process.env, pl
   const runId = Number(env.GITHUB_RUN_ID ?? 0);
   const sourceSha = env.GHOSTEX_RELEASE_SOURCE_SHA || env.GITHUB_SHA || plan.sourceSha;
 
-  if (entry.action === "build") {
+  if (entry.action === 'build') {
     return buildProductProvenance({
-      action: "built",
+      action: 'built',
       algorithmRevision: plan.algorithmRevision,
       artifacts,
       fingerprint: entry.fingerprint,
@@ -99,7 +99,7 @@ export function productProvenanceForDirectory({ directory, env = process.env, pl
   const reuse = entry.reuse;
   if (!reusedFrom) throw new Error(`${product} is reused; provenance requires the verified reuse evidence`);
   return buildProductProvenance({
-    action: "reused",
+    action: 'reused',
     algorithmRevision: plan.algorithmRevision,
     artifacts,
     fingerprint: entry.fingerprint,
@@ -124,42 +124,41 @@ export function writeProductProvenance({ directory, env = process.env, plan, reu
 export function renderProvenanceMarkdown(record, { cacheHits = [], retries = [], timings = [] } = {}) {
   const lines = [];
   lines.push(`### ${record.product} — ${record.action.toUpperCase()}`);
-  lines.push("");
+  lines.push('');
   lines.push(`- Fingerprint \`${shortFingerprint(record.fingerprint)}\` (${record.algorithmRevision})`);
   lines.push(`- Release version \`${record.releaseVersion}\`, product version \`${record.productVersion}\``);
   if (record.reusedFrom) {
-    const origin =
-      record.reusedFrom.tier === "release" ? record.reusedFrom.tag : `run ${record.reusedFrom.runId}`;
-    lines.push(`- Reused from ${origin}; verified ${record.reusedFrom.verifiedChecks.join(", ")}`);
+    const origin = record.reusedFrom.tier === 'release' ? record.reusedFrom.tag : `run ${record.reusedFrom.runId}`;
+    lines.push(`- Reused from ${origin}; verified ${record.reusedFrom.verifiedChecks.join(', ')}`);
   } else {
     lines.push(`- Built by run \`${record.originRunId}\` from \`${record.originSourceSha.slice(0, 12)}\``);
   }
   for (const artifact of record.artifacts) {
     lines.push(`- \`${artifact.name}\` — ${artifact.size} bytes, sha256 \`${shortFingerprint(artifact.sha256)}…\``);
   }
-  for (const cache of cacheHits) lines.push(`- Cache \`${cache.name}\`: ${cache.hit ? "hit" : "miss"}`);
+  for (const cache of cacheHits) lines.push(`- Cache \`${cache.name}\`: ${cache.hit ? 'hit' : 'miss'}`);
   for (const timing of timings) lines.push(`- ${timing.name}: ${timing.seconds}s`);
   for (const retry of retries) lines.push(`- Retry \`${retry.rule}\` x${retry.attempts} (${retry.label})`);
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 export function parseWriteProvenanceArgs(argv) {
   const options = { directory: null, ifPlanned: false, reusedFromFile: null };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--if-planned") {
+    if (argument === '--if-planned') {
       options.ifPlanned = true;
-    } else if (argument === "--dir") {
+    } else if (argument === '--dir') {
       options.directory = argv[index + 1];
       index += 1;
-    } else if (argument === "--reused-from") {
+    } else if (argument === '--reused-from') {
       options.reusedFromFile = argv[index + 1];
       index += 1;
     } else {
       throw new Error(`Unknown option: ${argument}`);
     }
   }
-  if (!options.directory) throw new Error("--dir <artifact-directory> is required");
+  if (!options.directory) throw new Error('--dir <artifact-directory> is required');
   return options;
 }
 
@@ -172,15 +171,15 @@ function main() {
    * Direct callers omit it and get a hard error for an unplanned platform.
    */
   if (options.ifPlanned) {
-    const manifestPath = path.join(options.directory, "manifest.json");
+    const manifestPath = path.join(options.directory, 'manifest.json');
     if (!existsSync(manifestPath)) return;
-    const platform = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/u, "")).platform;
-    if (!plan.products?.[platform] || plan.products[platform].action === "skip") {
+    const platform = JSON.parse(readFileSync(manifestPath, 'utf8').replace(/^\uFEFF/u, '')).platform;
+    if (!plan.products?.[platform] || plan.products[platform].action === 'skip') {
       process.stdout.write(`PROVENANCE skipped: ${platform} is not a planned release product\n`);
       return;
     }
   }
-  const reusedFrom = options.reusedFromFile ? JSON.parse(readFileSync(options.reusedFromFile, "utf8")) : null;
+  const reusedFrom = options.reusedFromFile ? JSON.parse(readFileSync(options.reusedFromFile, 'utf8')) : null;
   const record = writeProductProvenance({ directory: options.directory, plan, reusedFrom });
   process.stdout.write(`PROVENANCE ${record.product} ${record.action} ${record.fingerprint}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) {

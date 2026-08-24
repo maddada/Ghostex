@@ -7,20 +7,20 @@ import {
   clampVisibleSessionCount,
   createSessionRecord,
   getOrderedSessions,
-} from "./session-grid-contract";
+} from './session-grid-contract';
 import {
   dedupeSessionIds,
   findDirectionalNeighbor,
   reindexSessionsInOrder,
   replaceFocusedVisibleSession,
   revealSessionId,
-} from "./session-grid-state-helpers";
-import { normalizeSessionGridSnapshot } from "./session-grid-state-normalize";
+} from './session-grid-state-helpers';
+import { normalizeSessionGridSnapshot } from './session-grid-state-normalize';
 
 export function createSessionInSnapshot(
   snapshot: SessionGridSnapshot,
   sessionNumber: number,
-  options?: CreateSessionRecordOptions,
+  options?: CreateSessionRecordOptions
 ): {
   session?: SessionRecord;
   snapshot: SessionGridSnapshot;
@@ -30,7 +30,7 @@ export function createSessionInSnapshot(
 
   const session = createSessionRecord(sessionNumber, orderedSessions.length, options);
   const sessions = reindexSessionsInOrder([...orderedSessions, session]);
-  const shouldCreateInBackground = options?.initialPresentation === "background";
+  const shouldCreateInBackground = options?.initialPresentation === 'background';
   const visibleSessionIds = shouldCreateInBackground
     ? normalizedSnapshot.visibleSessionIds
     : normalizedSnapshot.visibleSessionIds.length < normalizedSnapshot.visibleCount
@@ -41,9 +41,7 @@ export function createSessionInSnapshot(
     session,
     snapshot: normalizeSessionGridSnapshot({
       ...normalizedSnapshot,
-      focusedSessionId: shouldCreateInBackground
-        ? normalizedSnapshot.focusedSessionId
-        : session.sessionId,
+      focusedSessionId: shouldCreateInBackground ? normalizedSnapshot.focusedSessionId : session.sessionId,
       sessions,
       visibleSessionIds,
     }),
@@ -52,23 +50,17 @@ export function createSessionInSnapshot(
 
 export function focusDirectionInSnapshot(
   snapshot: SessionGridSnapshot,
-  direction: SessionGridDirection,
+  direction: SessionGridDirection
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
   const currentSession = normalizedSnapshot.focusedSessionId
-    ? normalizedSnapshot.sessions.find(
-        (session) => session.sessionId === normalizedSnapshot.focusedSessionId,
-      )
+    ? normalizedSnapshot.sessions.find((session) => session.sessionId === normalizedSnapshot.focusedSessionId)
     : undefined;
   if (!currentSession) {
     return { changed: false, snapshot: normalizedSnapshot };
   }
 
-  const nextSession = findDirectionalNeighbor(
-    normalizedSnapshot.sessions,
-    currentSession,
-    direction,
-  );
+  const nextSession = findDirectionalNeighbor(normalizedSnapshot.sessions, currentSession, direction);
   if (!nextSession) {
     return { changed: false, snapshot: normalizedSnapshot };
   }
@@ -78,19 +70,16 @@ export function focusDirectionInSnapshot(
 
 export function focusVisibleDirectionInSnapshot(
   snapshot: SessionGridSnapshot,
-  direction: SessionGridDirection,
+  direction: SessionGridDirection
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
-  const focusVisibleSessionIds = getPaneFocusSessionIdsForDirection(
-    snapshot,
-    normalizedSnapshot,
-  );
+  const focusVisibleSessionIds = getPaneFocusSessionIdsForDirection(snapshot, normalizedSnapshot);
   const visibleSessionIds = new Set(focusVisibleSessionIds);
   const paneFocusTarget = getDirectionalVisiblePaneFocusTarget(
     normalizedSnapshot.paneLayout,
     normalizedSnapshot.focusedSessionId,
     visibleSessionIds,
-    direction,
+    direction
   );
   if (paneFocusTarget.currentInPaneLayout) {
     if (!paneFocusTarget.sessionId) {
@@ -102,16 +91,10 @@ export function focusVisibleDirectionInSnapshot(
      * Visible native pane tab groups are the directional focus regions users see on screen.
      * Resolve macOS focus-arrow moves from paneLayout geometry before using legacy grid row/column data, because tab groups can contain sessions whose stored slot coordinates no longer match their visible left/right pane position.
      */
-    return focusVisibleSessionIdInSnapshot(
-      normalizedSnapshot,
-      paneFocusTarget.sessionId,
-      focusVisibleSessionIds,
-    );
+    return focusVisibleSessionIdInSnapshot(normalizedSnapshot, paneFocusTarget.sessionId, focusVisibleSessionIds);
   }
 
-  const visibleSessions = normalizedSnapshot.sessions.filter((session) =>
-    visibleSessionIds.has(session.sessionId),
-  );
+  const visibleSessions = normalizedSnapshot.sessions.filter((session) => visibleSessionIds.has(session.sessionId));
   const currentSession = normalizedSnapshot.focusedSessionId
     ? visibleSessions.find((session) => session.sessionId === normalizedSnapshot.focusedSessionId)
     : undefined;
@@ -129,16 +112,12 @@ export function focusVisibleDirectionInSnapshot(
    * macOS directional focus hotkeys are spatial focus moves within the already visible native pane set.
    * They must not reuse generic session reveal behavior, because that swaps hidden/offscreen sessions into visibleSessionIds and changes the visible session tabs.
    */
-  return focusVisibleSessionIdInSnapshot(
-    normalizedSnapshot,
-    nextSession.sessionId,
-    focusVisibleSessionIds,
-  );
+  return focusVisibleSessionIdInSnapshot(normalizedSnapshot, nextSession.sessionId, focusVisibleSessionIds);
 }
 
 export function focusSessionInSnapshot(
   snapshot: SessionGridSnapshot,
-  sessionId: string,
+  sessionId: string
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
   const hasSession = normalizedSnapshot.sessions.some((session) => session.sessionId === sessionId);
@@ -157,23 +136,19 @@ export function focusSessionInSnapshot(
 }
 
 function setActiveSessionInPaneLayout(
-  layout: SessionGridSnapshot["paneLayout"],
-  sessionId: string,
-): SessionGridSnapshot["paneLayout"] {
+  layout: SessionGridSnapshot['paneLayout'],
+  sessionId: string
+): SessionGridSnapshot['paneLayout'] {
   if (!layout) {
     return undefined;
   }
-  if (layout.kind === "tabs") {
-    return layout.sessionIds.includes(sessionId)
-      ? { ...layout, activeSessionId: sessionId }
-      : layout;
+  if (layout.kind === 'tabs') {
+    return layout.sessionIds.includes(sessionId) ? { ...layout, activeSessionId: sessionId } : layout;
   }
-  if (layout.kind === "split") {
+  if (layout.kind === 'split') {
     return {
       ...layout,
-      children: layout.children.map(
-        (child) => setActiveSessionInPaneLayout(child, sessionId) ?? child,
-      ),
+      children: layout.children.map((child) => setActiveSessionInPaneLayout(child, sessionId) ?? child),
     };
   }
   return layout;
@@ -182,7 +157,7 @@ function setActiveSessionInPaneLayout(
 function focusVisibleSessionIdInSnapshot(
   normalizedSnapshot: SessionGridSnapshot,
   sessionId: string,
-  visibleSessionIds: string[],
+  visibleSessionIds: string[]
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   return {
     changed: normalizedSnapshot.focusedSessionId !== sessionId,
@@ -190,9 +165,7 @@ function focusVisibleSessionIdInSnapshot(
       ...normalizedSnapshot,
       focusedSessionId: sessionId,
       paneLayout: setActiveSessionInPaneLayout(normalizedSnapshot.paneLayout, sessionId),
-      visibleCount: clampVisibleSessionCount(
-        Math.max(normalizedSnapshot.visibleCount, visibleSessionIds.length),
-      ),
+      visibleCount: clampVisibleSessionCount(Math.max(normalizedSnapshot.visibleCount, visibleSessionIds.length)),
       visibleSessionIds,
     },
   };
@@ -200,11 +173,11 @@ function focusVisibleSessionIdInSnapshot(
 
 function getExactVisibleSessionIdsForFocus(
   snapshot: SessionGridSnapshot,
-  normalizedSnapshot: SessionGridSnapshot,
+  normalizedSnapshot: SessionGridSnapshot
 ): string[] {
   const sessionIds = new Set(normalizedSnapshot.sessions.map((session) => session.sessionId));
   const exactVisibleSessionIds = dedupeSessionIds(
-    snapshot.visibleSessionIds.filter((sessionId) => sessionIds.has(sessionId)),
+    snapshot.visibleSessionIds.filter((sessionId) => sessionIds.has(sessionId))
   );
   if (exactVisibleSessionIds.length > 0) {
     /**
@@ -219,30 +192,25 @@ function getExactVisibleSessionIdsForFocus(
 
 function getPaneFocusSessionIdsForDirection(
   snapshot: SessionGridSnapshot,
-  normalizedSnapshot: SessionGridSnapshot,
+  normalizedSnapshot: SessionGridSnapshot
 ): string[] {
   const exactVisibleSessionIds = getExactVisibleSessionIdsForFocus(snapshot, normalizedSnapshot);
   const paneLayout = normalizedSnapshot.paneLayout;
   if (!paneLayout) {
     return exactVisibleSessionIds;
   }
-  if (
-    normalizedSnapshot.visibleCount === 1 &&
-    normalizedSnapshot.fullscreenRestoreVisibleCount !== undefined
-  ) {
+  if (normalizedSnapshot.visibleCount === 1 && normalizedSnapshot.fullscreenRestoreVisibleCount !== undefined) {
     return exactVisibleSessionIds;
   }
 
   const exactVisibleSessionIdSet = new Set(exactVisibleSessionIds);
   const awakeSessionIds = new Set(
-    normalizedSnapshot.sessions
-      .filter((session) => session.isSleeping !== true)
-      .map((session) => session.sessionId),
+    normalizedSnapshot.sessions.filter((session) => session.isSleeping !== true).map((session) => session.sessionId)
   );
   const paneOwnerSessionIds = collectPaneLayoutFocusOwnerSessionIds(
     paneLayout,
     exactVisibleSessionIdSet,
-    awakeSessionIds,
+    awakeSessionIds
   );
   if (paneOwnerSessionIds.length <= exactVisibleSessionIds.length) {
     return exactVisibleSessionIds;
@@ -268,10 +236,10 @@ type VisiblePaneFocusRect = {
 };
 
 function getDirectionalVisiblePaneFocusTarget(
-  layout: SessionGridSnapshot["paneLayout"],
+  layout: SessionGridSnapshot['paneLayout'],
   focusedSessionId: string | undefined,
   visibleSessionIds: Set<string>,
-  direction: SessionGridDirection,
+  direction: SessionGridDirection
 ): { currentInPaneLayout: boolean; sessionId?: string } {
   if (!layout || !focusedSessionId) {
     return { currentInPaneLayout: false };
@@ -295,19 +263,17 @@ function getDirectionalVisiblePaneFocusTarget(
 function collectVisiblePaneFocusRects(
   layout: SessionPaneLayoutNode,
   visibleSessionIds: Set<string>,
-  rect: Pick<VisiblePaneFocusRect, "bottom" | "left" | "right" | "top">,
+  rect: Pick<VisiblePaneFocusRect, 'bottom' | 'left' | 'right' | 'top'>
 ): VisiblePaneFocusRect[] {
-  if (layout.kind === "leaf") {
+  if (layout.kind === 'leaf') {
     if (!visibleSessionIds.has(layout.sessionId)) {
       return [];
     }
     return [createVisiblePaneFocusRect(layout.sessionId, [layout.sessionId], rect)];
   }
 
-  if (layout.kind === "tabs") {
-    const visibleTabSessionIds = layout.sessionIds.filter((sessionId) =>
-      visibleSessionIds.has(sessionId),
-    );
+  if (layout.kind === 'tabs') {
+    const visibleTabSessionIds = layout.sessionIds.filter((sessionId) => visibleSessionIds.has(sessionId));
     if (visibleTabSessionIds.length === 0) {
       return [];
     }
@@ -323,28 +289,23 @@ function collectVisiblePaneFocusRects(
    * Directional focus geometry must match the native visible pane layout.
    * Hidden paneLayout nodes keep their tree position for session restoration, but they do not occupy focus-navigation space once they are absent from visibleSessionIds.
    */
-  const visibleChildren = layout.children.filter((child) =>
-    paneLayoutNodeHasVisibleSession(child, visibleSessionIds),
-  );
+  const visibleChildren = layout.children.filter((child) => paneLayoutNodeHasVisibleSession(child, visibleSessionIds));
   const childRects = getSplitChildRects(
     visibleChildren.length,
     layout.direction,
     visibleChildren.length === layout.children.length ? layout.ratio : undefined,
-    rect,
+    rect
   );
   return visibleChildren.flatMap((child, index) =>
-    collectVisiblePaneFocusRects(child, visibleSessionIds, childRects[index] ?? rect),
+    collectVisiblePaneFocusRects(child, visibleSessionIds, childRects[index] ?? rect)
   );
 }
 
-function paneLayoutNodeHasVisibleSession(
-  layout: SessionPaneLayoutNode,
-  visibleSessionIds: Set<string>,
-): boolean {
-  if (layout.kind === "leaf") {
+function paneLayoutNodeHasVisibleSession(layout: SessionPaneLayoutNode, visibleSessionIds: Set<string>): boolean {
+  if (layout.kind === 'leaf') {
     return visibleSessionIds.has(layout.sessionId);
   }
-  if (layout.kind === "tabs") {
+  if (layout.kind === 'tabs') {
     return layout.sessionIds.some((sessionId) => visibleSessionIds.has(sessionId));
   }
   return layout.children.some((child) => paneLayoutNodeHasVisibleSession(child, visibleSessionIds));
@@ -353,15 +314,15 @@ function paneLayoutNodeHasVisibleSession(
 function collectPaneLayoutFocusOwnerSessionIds(
   layout: SessionPaneLayoutNode,
   exactVisibleSessionIds: ReadonlySet<string>,
-  awakeSessionIds: ReadonlySet<string>,
+  awakeSessionIds: ReadonlySet<string>
 ): string[] {
-  if (layout.kind === "leaf") {
+  if (layout.kind === 'leaf') {
     return awakeSessionIds.has(layout.sessionId) ? [layout.sessionId] : [];
   }
 
-  if (layout.kind === "tabs") {
+  if (layout.kind === 'tabs') {
     const visibleTabSessionIds = layout.sessionIds.filter(
-      (sessionId) => exactVisibleSessionIds.has(sessionId) && awakeSessionIds.has(sessionId),
+      (sessionId) => exactVisibleSessionIds.has(sessionId) && awakeSessionIds.has(sessionId)
     );
     if (
       layout.activeSessionId &&
@@ -376,21 +337,19 @@ function collectPaneLayoutFocusOwnerSessionIds(
     if (layout.activeSessionId && awakeSessionIds.has(layout.activeSessionId)) {
       return [layout.activeSessionId];
     }
-    const awakeTabSessionId = layout.sessionIds.find((sessionId) =>
-      awakeSessionIds.has(sessionId),
-    );
+    const awakeTabSessionId = layout.sessionIds.find((sessionId) => awakeSessionIds.has(sessionId));
     return awakeTabSessionId ? [awakeTabSessionId] : [];
   }
 
   return layout.children.flatMap((child) =>
-    collectPaneLayoutFocusOwnerSessionIds(child, exactVisibleSessionIds, awakeSessionIds),
+    collectPaneLayoutFocusOwnerSessionIds(child, exactVisibleSessionIds, awakeSessionIds)
   );
 }
 
 function createVisiblePaneFocusRect(
   sessionId: string,
   sessionIds: string[],
-  rect: Pick<VisiblePaneFocusRect, "bottom" | "left" | "right" | "top">,
+  rect: Pick<VisiblePaneFocusRect, 'bottom' | 'left' | 'right' | 'top'>
 ): VisiblePaneFocusRect {
   return {
     ...rect,
@@ -403,18 +362,18 @@ function createVisiblePaneFocusRect(
 
 function getSplitChildRects(
   childCount: number,
-  direction: Extract<SessionPaneLayoutNode, { kind: "split" }>["direction"],
+  direction: Extract<SessionPaneLayoutNode, { kind: 'split' }>['direction'],
   ratio: number | undefined,
-  rect: Pick<VisiblePaneFocusRect, "bottom" | "left" | "right" | "top">,
-): Pick<VisiblePaneFocusRect, "bottom" | "left" | "right" | "top">[] {
+  rect: Pick<VisiblePaneFocusRect, 'bottom' | 'left' | 'right' | 'top'>
+): Pick<VisiblePaneFocusRect, 'bottom' | 'left' | 'right' | 'top'>[] {
   if (childCount === 0) {
     return [];
   }
 
   const ratios = getSplitChildRatios(childCount, ratio);
-  let cursor = direction === "horizontal" ? rect.left : rect.top;
+  let cursor = direction === 'horizontal' ? rect.left : rect.top;
   return ratios.map((ratio) => {
-    if (direction === "horizontal") {
+    if (direction === 'horizontal') {
       const width = (rect.right - rect.left) * ratio;
       const childRect = { ...rect, left: cursor, right: cursor + width };
       cursor += width;
@@ -429,7 +388,7 @@ function getSplitChildRects(
 }
 
 function getSplitChildRatios(childCount: number, ratio: number | undefined): number[] {
-  if (childCount === 2 && typeof ratio === "number" && ratio > 0 && ratio < 1) {
+  if (childCount === 2 && typeof ratio === 'number' && ratio > 0 && ratio < 1) {
     return [ratio, 1 - ratio];
   }
   return Array.from({ length: childCount }, () => 1 / childCount);
@@ -438,7 +397,7 @@ function getSplitChildRatios(childCount: number, ratio: number | undefined): num
 function findDirectionalPaneFocusRect(
   panes: VisiblePaneFocusRect[],
   currentPane: VisiblePaneFocusRect,
-  direction: SessionGridDirection,
+  direction: SessionGridDirection
 ): VisiblePaneFocusRect | undefined {
   const epsilon = 0.000001;
   const candidates = panes
@@ -450,11 +409,11 @@ function findDirectionalPaneFocusRect(
       }
 
       const crossDistance =
-        direction === "left" || direction === "right"
+        direction === 'left' || direction === 'right'
           ? Math.abs(pane.centerY - currentPane.centerY)
           : Math.abs(pane.centerX - currentPane.centerX);
       const rangesOverlap =
-        direction === "left" || direction === "right"
+        direction === 'left' || direction === 'right'
           ? rangesIntersect(currentPane.top, currentPane.bottom, pane.top, pane.bottom)
           : rangesIntersect(currentPane.left, currentPane.right, pane.left, pane.right);
       /**
@@ -471,9 +430,7 @@ function findDirectionalPaneFocusRect(
         score: (rangesOverlap ? 0 : 1000) + Math.max(primaryGap, 0) * 100 + crossDistance,
       };
     })
-    .filter((candidate): candidate is { pane: VisiblePaneFocusRect; score: number } =>
-      Boolean(candidate),
-    )
+    .filter((candidate): candidate is { pane: VisiblePaneFocusRect; score: number } => Boolean(candidate))
     .sort((a, b) => a.score - b.score);
 
   return candidates[0]?.pane;
@@ -482,15 +439,15 @@ function findDirectionalPaneFocusRect(
 function getPanePrimaryGap(
   currentPane: VisiblePaneFocusRect,
   pane: VisiblePaneFocusRect,
-  direction: SessionGridDirection,
+  direction: SessionGridDirection
 ): number {
-  if (direction === "left") {
+  if (direction === 'left') {
     return currentPane.left - pane.right;
   }
-  if (direction === "right") {
+  if (direction === 'right') {
     return pane.left - currentPane.right;
   }
-  if (direction === "up") {
+  if (direction === 'up') {
     return currentPane.top - pane.bottom;
   }
   return pane.top - currentPane.bottom;

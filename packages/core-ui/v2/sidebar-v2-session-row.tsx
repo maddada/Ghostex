@@ -10,27 +10,24 @@ import {
   IconPinnedOff,
   IconServer,
   IconArrowBackUp,
-} from "@tabler/icons-react";
+} from '@tabler/icons-react';
 import {
   useEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-} from "react";
-import { PointerSensor } from "@dnd-kit/dom";
-import { useSortable } from "@dnd-kit/react/sortable";
-import type {
-  SidebarSessionGitStatus,
-  SidebarSessionItem,
-} from "../../shared/session-grid-contract";
-import type { SidebarV2Status } from "../../shared/sidebar-v2-status";
-import { AppTooltip } from "../app-tooltip";
-import { createSessionDragData } from "../sidebar-dnd";
-import { getSidebarReorderActivationConstraints } from "../sidebar-reorder-activation";
-import { formatSessionHeadingText } from "../session-card-content";
-import { SidebarV2ProjectIcon, SidebarV2SessionIcon } from "./sidebar-v2-icons";
-import type { SidebarV2ProjectIdentity } from "./sidebar-v2-view-model";
+} from 'react';
+import { PointerSensor } from '@dnd-kit/dom';
+import { useSortable } from '@dnd-kit/react/sortable';
+import type { SidebarSessionGitStatus, SidebarSessionItem } from '../../shared/session-grid-contract';
+import type { SidebarV2Status } from '../../shared/sidebar-v2-status';
+import { AppTooltip } from '../app-tooltip';
+import { createSessionDragData } from '../sidebar-dnd';
+import { getSidebarReorderActivationConstraints } from '../sidebar-reorder-activation';
+import { formatSessionHeadingText } from '../session-card-content';
+import { SidebarV2ProjectIcon, SidebarV2SessionIcon } from './sidebar-v2-icons';
+import type { SidebarV2ProjectIdentity } from './sidebar-v2-view-model';
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -54,7 +51,7 @@ import type { SidebarV2ProjectIdentity } from "./sidebar-v2-view-model";
  *   readable and stays findable.
  */
 
-export type SidebarV2SessionRowVariant = "card" | "slim";
+export type SidebarV2SessionRowVariant = 'card' | 'slim';
 
 /**
  * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -63,7 +60,7 @@ export type SidebarV2SessionRowVariant = "card" | "slim";
  * un-settle, a snoozed row offers wake, and an inbox row offers settle+snooze.
  * `"none"` is for rows with no agent lifecycle at all (browser tabs).
  */
-export type SidebarV2SessionRowLifecycleAction = "none" | "settle" | "unsettle" | "wake";
+export type SidebarV2SessionRowLifecycleAction = 'none' | 'settle' | 'unsettle' | 'wake';
 
 export type SidebarV2SessionRowLifecycle = {
   action: SidebarV2SessionRowLifecycleAction;
@@ -86,7 +83,7 @@ export type SidebarV2SessionRowLifecycle = {
 export type SidebarV2SessionRowProps = {
   dragGroupId?: string;
   dragIndex?: number;
-  dropPosition?: "after" | "before";
+  dropPosition?: 'after' | 'before';
   /** Extra label rendered instead of the status label on slim shelf rows. */
   slimLabel?: string;
   /**
@@ -130,7 +127,7 @@ export type SidebarV2SessionRowProps = {
 };
 
 const SIDEBAR_V2_NO_LIFECYCLE: SidebarV2SessionRowLifecycle = {
-  action: "none",
+  action: 'none',
   isPending: false,
   isWoke: false,
   onSettle: () => undefined,
@@ -141,7 +138,7 @@ const SIDEBAR_V2_NO_LIFECYCLE: SidebarV2SessionRowLifecycle = {
 };
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest("button, a, input") !== null;
+  return target instanceof Element && target.closest('button, a, input') !== null;
 }
 
 const sidebarV2PinnedSessionSensors = [
@@ -149,9 +146,7 @@ const sidebarV2PinnedSessionSensors = [
     activationConstraints: getSidebarReorderActivationConstraints,
     preventActivation(event, source) {
       const target = event.target instanceof Element ? event.target : undefined;
-      return Boolean(
-        target && target !== source.element && target.closest("button, a, input, textarea, select"),
-      );
+      return Boolean(target && target !== source.element && target.closest('button, a, input, textarea, select'));
     },
   }),
 ];
@@ -170,21 +165,21 @@ type SidebarV2GitDisplay = {
   hasDiff: boolean;
   prNumber?: number;
   /** `"unknown"` when gxserver reported a number without a state. */
-  prState: "closed" | "draft" | "merged" | "open" | "unknown";
+  prState: 'closed' | 'draft' | 'merged' | 'open' | 'unknown';
   /** Composed hover text: branch, PR state, diff — whatever exists. */
   tooltip: string;
 };
 
-const SIDEBAR_V2_PR_STATE_LABELS: Record<SidebarV2GitDisplay["prState"], string> = {
-  closed: "Closed",
-  draft: "Draft",
-  merged: "Merged",
-  open: "Open",
-  unknown: "Pull request",
+const SIDEBAR_V2_PR_STATE_LABELS: Record<SidebarV2GitDisplay['prState'], string> = {
+  closed: 'Closed',
+  draft: 'Draft',
+  merged: 'Merged',
+  open: 'Open',
+  unknown: 'Pull request',
 };
 
 function nonNegativeCount(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
 }
 
 /**
@@ -194,32 +189,30 @@ function nonNegativeCount(value: number | undefined): number {
  * must produce NO line rather than an empty one.
  */
 export function resolveSidebarV2GitDisplay(
-  gitStatus: SidebarSessionGitStatus | undefined,
+  gitStatus: SidebarSessionGitStatus | undefined
 ): SidebarV2GitDisplay | undefined {
   if (!gitStatus) {
     return undefined;
   }
-  const branch = gitStatus.branch?.trim() ?? "";
+  const branch = gitStatus.branch?.trim() ?? '';
   const prNumber =
-    typeof gitStatus.prNumber === "number" && Number.isFinite(gitStatus.prNumber)
+    typeof gitStatus.prNumber === 'number' && Number.isFinite(gitStatus.prNumber)
       ? Math.trunc(gitStatus.prNumber)
       : undefined;
   const additions = nonNegativeCount(gitStatus.additions);
   const deletions = nonNegativeCount(gitStatus.deletions);
   const hasDiff = additions > 0 || deletions > 0;
-  if (branch === "" && prNumber === undefined && !hasDiff) {
+  if (branch === '' && prNumber === undefined && !hasDiff) {
     return undefined;
   }
-  const prState = prNumber === undefined ? "unknown" : (gitStatus.prState ?? "unknown");
+  const prState = prNumber === undefined ? 'unknown' : (gitStatus.prState ?? 'unknown');
   const tooltip = [
-    branch === "" ? undefined : branch,
-    prNumber === undefined
-      ? undefined
-      : `#${prNumber} · ${SIDEBAR_V2_PR_STATE_LABELS[prState]}`,
+    branch === '' ? undefined : branch,
+    prNumber === undefined ? undefined : `#${prNumber} · ${SIDEBAR_V2_PR_STATE_LABELS[prState]}`,
     hasDiff ? `+${additions} −${deletions}` : undefined,
   ]
     .filter((part): part is string => part !== undefined)
-    .join(" · ");
+    .join(' · ');
   return { additions, branch, deletions, hasDiff, prNumber, prState, tooltip };
 }
 
@@ -236,9 +229,9 @@ function PrBadge({ git }: { git: SidebarV2GitDisplay }) {
   return (
     <span
       aria-label={`#${git.prNumber} · ${SIDEBAR_V2_PR_STATE_LABELS[git.prState]}`}
-      className="sidebar-v2-row-pr"
+      className='sidebar-v2-row-pr'
       data-pr-state={git.prState}
-      data-sidebar-v2-pr="true"
+      data-sidebar-v2-pr='true'
     >
       {`#${git.prNumber}`}
     </span>
@@ -247,17 +240,10 @@ function PrBadge({ git }: { git: SidebarV2GitDisplay }) {
 
 function StatusLabel({ status }: { status: SidebarV2Status }) {
   return (
-    <span
-      className="sidebar-v2-status"
-      data-hue={status.hue}
-      data-kind={status.kind}
-      data-pulse={String(status.pulse)}
-    >
-      {status.kind === "working" ? (
-        <IconCircleDashed aria-hidden="true" size={16} stroke={1.8} />
-      ) : null}
-      {status.kind === "done" ? <IconCircleCheck aria-hidden="true" size={16} stroke={1.8} /> : null}
-      <span role="status">{status.label}</span>
+    <span className='sidebar-v2-status' data-hue={status.hue} data-kind={status.kind} data-pulse={String(status.pulse)}>
+      {status.kind === 'working' ? <IconCircleDashed aria-hidden='true' size={16} stroke={1.8} /> : null}
+      {status.kind === 'done' ? <IconCircleCheck aria-hidden='true' size={16} stroke={1.8} /> : null}
+      <span role='status'>{status.label}</span>
     </span>
   );
 }
@@ -292,32 +278,27 @@ export function SidebarV2SessionRow({
   const [renameDraft, setRenameDraft] = useState(headingText);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCommittedRef = useRef(false);
-  const isBrowser = session.kind === "browser" || session.sessionKind === "browser";
+  const isBrowser = session.kind === 'browser' || session.sessionKind === 'browser';
   const isPinned = session.isPinned === true;
   const isPinnedDragEnabled =
-    pinnedReorderEnabled &&
-    isPinned &&
-    !isBrowser &&
-    !isMenuOpen &&
-    !isRenaming &&
-    Boolean(dragGroupId);
+    pinnedReorderEnabled && isPinned && !isBrowser && !isMenuOpen && !isRenaming && Boolean(dragGroupId);
   const sortable = useSortable({
-    accept: "session",
-    data: createSessionDragData(dragGroupId ?? "", session.sessionId),
+    accept: 'session',
+    data: createSessionDragData(dragGroupId ?? '', session.sessionId),
     disabled: !isPinnedDragEnabled,
-    feedback: "clone",
-    group: dragGroupId ?? "",
+    feedback: 'clone',
+    group: dragGroupId ?? '',
     id: session.sessionId,
     index: dragIndex,
     sensors: sidebarV2PinnedSessionSensors,
-    type: "session",
+    type: 'session',
   });
   /*
    * In-flight rows (working, or blocked on the user) are not the user's
    * problem yet, so they soften to 70% until hovered. `recede` from the shared
    * status resolver covers the resting rows; the two treatments stack.
    */
-  const isInFlight = status.kind === "working" || status.kind === "approval" || status.kind === "input";
+  const isInFlight = status.kind === 'working' || status.kind === 'approval' || status.kind === 'input';
   const shouldRecede = status.recede && !isActive;
 
   useEffect(() => {
@@ -356,19 +337,19 @@ export function SidebarV2SessionRow({
 
   const title = isRenaming ? (
     <input
-      className="sidebar-v2-row-rename-input"
+      className='sidebar-v2-row-rename-input'
       onBlur={commitRename}
       onChange={(event) => setRenameDraft(event.target.value)}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         event.stopPropagation();
-        if (event.key === "Enter") {
+        if (event.key === 'Enter') {
           event.preventDefault();
           commitRename();
           return;
         }
-        if (event.key === "Escape") {
+        if (event.key === 'Escape') {
           event.preventDefault();
           cancelRename();
         }
@@ -377,7 +358,7 @@ export function SidebarV2SessionRow({
       value={renameDraft}
     />
   ) : (
-    <span className="sidebar-v2-row-title">{headingText}</span>
+    <span className='sidebar-v2-row-title'>{headingText}</span>
   );
 
   /*
@@ -396,9 +377,9 @@ export function SidebarV2SessionRow({
     <>
       {lifecycle.showSnooze ? (
         <button
-          aria-label="Snooze session"
-          className="sidebar-v2-row-action"
-          data-lifecycle-action="snooze"
+          aria-label='Snooze session'
+          className='sidebar-v2-row-action'
+          data-lifecycle-action='snooze'
           disabled={lifecycle.isPending}
           onClick={(event) => {
             event.preventDefault();
@@ -406,58 +387,58 @@ export function SidebarV2SessionRow({
             const bounds = event.currentTarget.getBoundingClientRect();
             lifecycle.onSnooze({ clientX: bounds.left, clientY: bounds.bottom + 4 });
           }}
-          type="button"
+          type='button'
         >
-          <IconClock aria-hidden="true" size={14} stroke={1.8} />
+          <IconClock aria-hidden='true' size={14} stroke={1.8} />
         </button>
       ) : null}
-      {lifecycle.action === "settle" ? (
+      {lifecycle.action === 'settle' ? (
         <button
-          aria-label="Settle session"
-          className="sidebar-v2-row-action sidebar-v2-row-action-labelled"
-          data-lifecycle-action="settle"
+          aria-label='Settle session'
+          className='sidebar-v2-row-action sidebar-v2-row-action-labelled'
+          data-lifecycle-action='settle'
           disabled={lifecycle.isPending}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
             lifecycle.onSettle();
           }}
-          type="button"
+          type='button'
         >
-          <IconCheck aria-hidden="true" size={14} stroke={2} />
-          {variant === "card" ? <span>Settle</span> : null}
+          <IconCheck aria-hidden='true' size={14} stroke={2} />
+          {variant === 'card' ? <span>Settle</span> : null}
         </button>
       ) : null}
-      {lifecycle.action === "unsettle" ? (
+      {lifecycle.action === 'unsettle' ? (
         <button
-          aria-label="Un-settle session"
-          className="sidebar-v2-row-action"
-          data-lifecycle-action="unsettle"
+          aria-label='Un-settle session'
+          className='sidebar-v2-row-action'
+          data-lifecycle-action='unsettle'
           disabled={lifecycle.isPending}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
             lifecycle.onUnsettle();
           }}
-          type="button"
+          type='button'
         >
-          <IconArrowBackUp aria-hidden="true" size={14} stroke={1.8} />
+          <IconArrowBackUp aria-hidden='true' size={14} stroke={1.8} />
         </button>
       ) : null}
-      {lifecycle.action === "wake" ? (
+      {lifecycle.action === 'wake' ? (
         <button
-          aria-label="Wake session now"
-          className="sidebar-v2-row-action"
-          data-lifecycle-action="wake"
+          aria-label='Wake session now'
+          className='sidebar-v2-row-action'
+          data-lifecycle-action='wake'
           disabled={lifecycle.isPending}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
             lifecycle.onWake();
           }}
-          type="button"
+          type='button'
         >
-          <IconAlarmOff aria-hidden="true" size={14} stroke={1.8} />
+          <IconAlarmOff aria-hidden='true' size={14} stroke={1.8} />
         </button>
       ) : null}
     </>
@@ -474,20 +455,20 @@ export function SidebarV2SessionRow({
    *   Ghostex, so a button that duplicates it only competed with the verbs.
    */
   const actions = (
-    <span className="sidebar-v2-row-actions">
+    <span className='sidebar-v2-row-actions'>
       {isPinned ? (
         <button
-          aria-label="Unpin session"
-          className="sidebar-v2-row-action"
-          data-row-action="unpin"
+          aria-label='Unpin session'
+          className='sidebar-v2-row-action'
+          data-row-action='unpin'
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
             onTogglePinned(false);
           }}
-          type="button"
+          type='button'
         >
-          <IconPinnedOff aria-hidden="true" size={14} stroke={1.8} />
+          <IconPinnedOff aria-hidden='true' size={14} stroke={1.8} />
         </button>
       ) : null}
       {lifecycleActions}
@@ -510,20 +491,15 @@ export function SidebarV2SessionRow({
   const restingSlot = (() => {
     if (lifecycle.wakeLabel !== undefined) {
       return (
-        <span className="sidebar-v2-wake-label" data-lifecycle-label="wake">
+        <span className='sidebar-v2-wake-label' data-lifecycle-label='wake'>
           {lifecycle.wakeLabel}
         </span>
       );
     }
-    if (lifecycle.isWoke && (status.kind === "idle" || status.kind === "done")) {
+    if (lifecycle.isWoke && (status.kind === 'idle' || status.kind === 'done')) {
       return (
-        <span
-          aria-label="Woke from snooze"
-          className="sidebar-v2-woke"
-          data-lifecycle-label="woke"
-          role="status"
-        >
-          <IconAlarm aria-hidden="true" size={14} stroke={1.8} />
+        <span aria-label='Woke from snooze' className='sidebar-v2-woke' data-lifecycle-label='woke' role='status'>
+          <IconAlarm aria-hidden='true' size={14} stroke={1.8} />
           Woke
         </span>
       );
@@ -540,13 +516,8 @@ export function SidebarV2SessionRow({
     return (
       <>
         {lifecycle.isWoke ? (
-          <span
-            aria-label="Woke from snooze"
-            className="sidebar-v2-woke-mark"
-            data-lifecycle-mark="woke"
-            role="img"
-          >
-            <IconAlarm aria-hidden="true" size={13} stroke={1.8} />
+          <span aria-label='Woke from snooze' className='sidebar-v2-woke-mark' data-lifecycle-mark='woke' role='img'>
+            <IconAlarm aria-hidden='true' size={13} stroke={1.8} />
           </span>
         ) : null}
         <StatusLabel status={status} />
@@ -563,11 +534,11 @@ export function SidebarV2SessionRow({
    * outside badge would sit half under the chips on every hover. Cards
    * keep their badge on the git line, which the bar never reaches.
    */
-  const slimPrBadge = variant === "slim" && git ? <PrBadge git={git} /> : null;
+  const slimPrBadge = variant === 'slim' && git ? <PrBadge git={git} /> : null;
 
   const rightSlot = (
-    <span className="sidebar-v2-row-slot">
-      <span className="sidebar-v2-row-slot-status">
+    <span className='sidebar-v2-row-slot'>
+      <span className='sidebar-v2-row-slot-status'>
         {/*
          * 2026-07-30 (UX batch):
          * A pinned row's resting mark. The pin CONTROL is hover-only and only
@@ -577,13 +548,8 @@ export function SidebarV2SessionRow({
          * hover, so line 1 still does not reflow across the reveal.
          */}
         {isPinned ? (
-          <span
-            aria-label="Pinned"
-            className="sidebar-v2-row-pin-mark"
-            data-sidebar-v2-pinned="true"
-            role="img"
-          >
-            <IconPinned aria-hidden="true" size={12} stroke={1.8} />
+          <span aria-label='Pinned' className='sidebar-v2-row-pin-mark' data-sidebar-v2-pinned='true' role='img'>
+            <IconPinned aria-hidden='true' size={12} stroke={1.8} />
           </span>
         ) : null}
         {slimPrBadge}
@@ -617,15 +583,14 @@ export function SidebarV2SessionRow({
    * blank reserved row.
    */
   const machineBadgeName = machineName?.trim() || project?.machineName?.trim();
-  const hasMetaRow =
-    variant === "card" && (git !== undefined || Boolean(machineBadgeName));
-  const hasProjectLine = variant === "card" && project !== undefined;
+  const hasMetaRow = variant === 'card' && (git !== undefined || Boolean(machineBadgeName));
+  const hasProjectLine = variant === 'card' && project !== undefined;
   const cardLineCount = 1 + (hasProjectLine ? 1 : 0) + (hasMetaRow ? 1 : 0);
 
   return (
     <li
-      className="sidebar-v2-row-item"
-      data-card-lines={variant === "card" ? String(cardLineCount) : undefined}
+      className='sidebar-v2-row-item'
+      data-card-lines={variant === 'card' ? String(cardLineCount) : undefined}
       data-dragging={String(Boolean(sortable.isDragging))}
       data-drop-position={sortable.isDragging ? undefined : dropPosition}
       data-pinned-reorderable={String(isPinnedDragEnabled)}
@@ -639,17 +604,17 @@ export function SidebarV2SessionRow({
        * model and row backgrounds/edges belong to interaction state alone.
        */}
       <div
-        className="sidebar-v2-row"
+        className='sidebar-v2-row'
         data-active={String(isActive)}
         data-in-flight={String(isInFlight)}
         data-lifecycle-action={lifecycle.action}
-        data-lifecycle-state={session.isSleeping === true ? "sleeping" : "running"}
+        data-lifecycle-state={session.isSleeping === true ? 'sleeping' : 'running'}
         data-menu-open={String(isMenuOpen)}
         data-pinned={String(isPinned)}
         data-recede={String(shouldRecede)}
         data-session-id={session.sessionId}
         data-sidebar-session-id={session.sessionId}
-        data-sidebar-v2-row="true"
+        data-sidebar-v2-row='true'
         data-status-kind={status.kind}
         data-variant={variant}
         data-woke={String(lifecycle.isWoke)}
@@ -685,33 +650,33 @@ export function SidebarV2SessionRow({
           if (event.target !== event.currentTarget) {
             return;
           }
-          if (event.key !== "Enter" && event.key !== " ") {
+          if (event.key !== 'Enter' && event.key !== ' ') {
             return;
           }
           event.preventDefault();
           onActivate(event);
         }}
-        role="button"
+        role='button'
         tabIndex={0}
       >
-        {variant === "card" ? (
+        {variant === 'card' ? (
           <>
             {project ? (
-              <div className="sidebar-v2-row-line" data-line="project">
+              <div className='sidebar-v2-row-line' data-line='project'>
                 {showProjectIcons ? (
                   <SidebarV2ProjectIcon
                     discoveredIconDataUrl={project.discoveredIconDataUrl}
-                    fallback={project.isWorktree ? "worktree" : "folder"}
+                    fallback={project.isWorktree ? 'worktree' : 'folder'}
                     icon={project.icon}
                     iconDataUrl={project.iconDataUrl}
                     title={project.title}
                   />
                 ) : null}
-                <span className="sidebar-v2-row-project">{project.title}</span>
+                <span className='sidebar-v2-row-project'>{project.title}</span>
                 {rightSlot}
               </div>
             ) : null}
-            <div className="sidebar-v2-row-line" data-line="title">
+            <div className='sidebar-v2-row-line' data-line='title'>
               <SidebarV2SessionIcon
                 agentIcon={session.agentIcon}
                 faviconDataUrl={session.faviconDataUrl}
@@ -726,39 +691,35 @@ export function SidebarV2SessionRow({
               {project ? null : rightSlot}
             </div>
             {hasMetaRow ? (
-              <div
-                className="sidebar-v2-row-line"
-                data-line="meta"
-                data-meta={git ? "git" : "machine"}
-              >
+              <div className='sidebar-v2-row-line' data-line='meta' data-meta={git ? 'git' : 'machine'}>
                 {git ? (
                   <AppTooltip content={git.tooltip}>
-                    <span className="sidebar-v2-row-git" data-sidebar-v2-git="true">
-                    {git.branch === "" ? (
-                      <span className="sidebar-v2-row-git-spacer" />
-                    ) : (
-                      <span className="sidebar-v2-row-branch">
-                        <IconGitBranch aria-hidden="true" size={12} stroke={1.8} />
-                        <span className="sidebar-v2-row-branch-name">{git.branch}</span>
-                      </span>
-                    )}
-                    <PrBadge git={git} />
-                    {/*
-                     * A 0/0 diff is silence, not "no changes yet": the pair is
-                     * dropped entirely rather than rendered as +0 −0.
-                     */}
-                    {git.hasDiff ? (
-                      <span className="sidebar-v2-row-diff">
-                        <span className="sidebar-v2-row-diff-added">{`+${git.additions}`}</span>
-                        <span className="sidebar-v2-row-diff-removed">{`−${git.deletions}`}</span>
-                      </span>
-                    ) : null}
+                    <span className='sidebar-v2-row-git' data-sidebar-v2-git='true'>
+                      {git.branch === '' ? (
+                        <span className='sidebar-v2-row-git-spacer' />
+                      ) : (
+                        <span className='sidebar-v2-row-branch'>
+                          <IconGitBranch aria-hidden='true' size={12} stroke={1.8} />
+                          <span className='sidebar-v2-row-branch-name'>{git.branch}</span>
+                        </span>
+                      )}
+                      <PrBadge git={git} />
+                      {/*
+                       * A 0/0 diff is silence, not "no changes yet": the pair is
+                       * dropped entirely rather than rendered as +0 −0.
+                       */}
+                      {git.hasDiff ? (
+                        <span className='sidebar-v2-row-diff'>
+                          <span className='sidebar-v2-row-diff-added'>{`+${git.additions}`}</span>
+                          <span className='sidebar-v2-row-diff-removed'>{`−${git.deletions}`}</span>
+                        </span>
+                      ) : null}
                     </span>
                   </AppTooltip>
                 ) : null}
                 {machineBadgeName ? (
-                  <span className="sidebar-v2-row-machine" data-sidebar-v2-machine="true">
-                    <IconServer aria-hidden="true" size={14} stroke={1.8} />
+                  <span className='sidebar-v2-row-machine' data-sidebar-v2-machine='true'>
+                    <IconServer aria-hidden='true' size={14} stroke={1.8} />
                     {machineBadgeName}
                   </span>
                 ) : null}

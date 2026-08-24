@@ -303,9 +303,11 @@ pub(crate) struct GhosttyKitFunctionTable {
     surface_needs_confirm_quit: unsafe fn(ffi::ghostty_surface_t) -> bool,
     surface_binding_action: unsafe fn(ffi::ghostty_surface_t, *const c_char, usize) -> bool,
     surface_process_exited: unsafe fn(ffi::ghostty_surface_t) -> bool,
-    #[allow(dead_code)] // ghostty surface FFI vtable entry kept complete; nothing reads this metadata back today
+    #[allow(dead_code)]
+    // ghostty surface FFI vtable entry kept complete; nothing reads this metadata back today
     surface_foreground_pid: unsafe fn(ffi::ghostty_surface_t) -> u64,
-    #[allow(dead_code)] // ghostty surface FFI vtable entry kept complete; nothing reads this metadata back today
+    #[allow(dead_code)]
+    // ghostty surface FFI vtable entry kept complete; nothing reads this metadata back today
     surface_tty_name: unsafe fn(ffi::ghostty_surface_t) -> ffi::ghostty_string_s,
     surface_key_translation_mods:
         unsafe fn(ffi::ghostty_surface_t, ffi::ghostty_input_mods_e) -> ffi::ghostty_input_mods_e,
@@ -1528,10 +1530,12 @@ impl GhosttyRuntimeCallbackState {
 
 pub(crate) struct GhosttyAppOwner {
     app: NonNull<c_void>,
-    #[allow(dead_code)] // ownership handle: held so the ghostty app keeps its config/runtime-config alive for the C side, never read from Rust
+    #[allow(dead_code)]
+    // ownership handle: held so the ghostty app keeps its config/runtime-config alive for the C side, never read from Rust
     config: GhosttyConfigOwner,
     runtime_state: Box<GhosttyRuntimeCallbackState>,
-    #[allow(dead_code)] // ownership handle: held so the ghostty app keeps its config/runtime-config alive for the C side, never read from Rust
+    #[allow(dead_code)]
+    // ownership handle: held so the ghostty app keeps its config/runtime-config alive for the C side, never read from Rust
     runtime_config: ffi::ghostty_runtime_config_s,
     functions: GhosttyKitFunctionTable,
     latest_focus_state: Option<bool>,

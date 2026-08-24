@@ -11,18 +11,15 @@
  * downgrades the product to `build`; it never weakens a check.
  */
 
-import { PRODUCTS, TRUSTED_REPO, productDefinition } from "./product-inputs.mjs";
-import { FINGERPRINT_ALGORITHM_REVISION } from "./fingerprint.mjs";
+import { PRODUCTS, TRUSTED_REPO, productDefinition } from './product-inputs.mjs';
+import { FINGERPRINT_ALGORITHM_REVISION } from './fingerprint.mjs';
 
 export const PROVENANCE_SCHEMA_VERSION = 1;
 export const RELEASE_PROVENANCE_SCHEMA_VERSION = 1;
-export const REUSE_CHECKS = Object.freeze(["fingerprint", "digest", "origin", "attestation"]);
-export const RELEASE_WORKFLOW_NAME = "Release Ghostex";
-export const AMEND_EXISTING_WORKFLOW_NAME = "Amend existing Ghostex release";
-export const ALLOWED_RELEASE_WORKFLOW_NAMES = Object.freeze([
-  RELEASE_WORKFLOW_NAME,
-  AMEND_EXISTING_WORKFLOW_NAME,
-]);
+export const REUSE_CHECKS = Object.freeze(['fingerprint', 'digest', 'origin', 'attestation']);
+export const RELEASE_WORKFLOW_NAME = 'Release Ghostex';
+export const AMEND_EXISTING_WORKFLOW_NAME = 'Amend existing Ghostex release';
+export const ALLOWED_RELEASE_WORKFLOW_NAMES = Object.freeze([RELEASE_WORKFLOW_NAME, AMEND_EXISTING_WORKFLOW_NAME]);
 
 export function isAllowedReleaseWorkflowName(name) {
   return ALLOWED_RELEASE_WORKFLOW_NAMES.includes(name);
@@ -32,14 +29,14 @@ const sha256Pattern = /^[0-9a-f]{64}$/u;
 const commitPattern = /^[0-9a-f]{40}$/u;
 const versionPattern = /^\d+\.\d+\.\d+$/u;
 const releaseTagPattern = /^v\d+\.\d+\.\d+$/u;
-const signingModes = new Set(["developer-id+notarized", "authenticode", "unsigned", "android-keystore"]);
+const signingModes = new Set(['developer-id+notarized', 'authenticode', 'unsigned', 'android-keystore']);
 
 function fail(message) {
   throw new Error(`Invalid release provenance: ${message}`);
 }
 
 function requireString(value, label, pattern) {
-  if (typeof value !== "string" || value.length === 0) fail(`${label} must be a non-empty string`);
+  if (typeof value !== 'string' || value.length === 0) fail(`${label} must be a non-empty string`);
   if (pattern && !pattern.test(value)) fail(`${label} must match ${pattern}`);
   return value;
 }
@@ -50,23 +47,23 @@ function requireInteger(value, label) {
 }
 
 function requireBoolean(value, label) {
-  if (typeof value !== "boolean") fail(`${label} must be a boolean`);
+  if (typeof value !== 'boolean') fail(`${label} must be a boolean`);
   return value;
 }
 
 function requireObject(value, label) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) fail(`${label} must be an object`);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label} must be an object`);
   return value;
 }
 
 export function releaseProvenanceAssetName(version) {
-  requireString(version, "version", versionPattern);
+  requireString(version, 'version', versionPattern);
   return `release-provenance-${version}.json`;
 }
 
 export function normalizedAssetDigest(digest) {
-  if (typeof digest !== "string") return "";
-  return digest.startsWith("sha256:") ? digest.slice("sha256:".length) : digest;
+  if (typeof digest !== 'string') return '';
+  return digest.startsWith('sha256:') ? digest.slice('sha256:'.length) : digest;
 }
 
 export function buildProductProvenance({
@@ -108,78 +105,78 @@ export function buildProductProvenance({
     sourceSha,
     versionStamped: Boolean(definition.versionStamped),
   };
-  const mode = signing ?? (typeof definition.signing?.mode === "string" ? definition.signing.mode : null);
+  const mode = signing ?? (typeof definition.signing?.mode === 'string' ? definition.signing.mode : null);
   if (mode) record.signing = { mode };
   return validateProductProvenance(record);
 }
 
 export function validateProductProvenance(input, { expect = {} } = {}) {
-  const record = requireObject(input, "product record");
-  if (record.schemaVersion !== PROVENANCE_SCHEMA_VERSION) fail("schemaVersion must equal 1");
-  requireString(record.algorithmRevision, "algorithmRevision");
-  const product = requireString(record.product, "product");
+  const record = requireObject(input, 'product record');
+  if (record.schemaVersion !== PROVENANCE_SCHEMA_VERSION) fail('schemaVersion must equal 1');
+  requireString(record.algorithmRevision, 'algorithmRevision');
+  const product = requireString(record.product, 'product');
   if (!PRODUCTS[product]) fail(`product ${product} is not a known release product`);
   const definition = productDefinition(product);
-  requireString(record.fingerprint, "fingerprint", sha256Pattern);
-  if (record.action !== "built" && record.action !== "reused") fail('action must be "built" or "reused"');
-  requireBoolean(record.versionStamped, "versionStamped");
+  requireString(record.fingerprint, 'fingerprint', sha256Pattern);
+  if (record.action !== 'built' && record.action !== 'reused') fail('action must be "built" or "reused"');
+  requireBoolean(record.versionStamped, 'versionStamped');
   if (record.versionStamped !== Boolean(definition.versionStamped)) {
     fail(`versionStamped must equal the declared value for ${product}`);
   }
-  requireString(record.releaseVersion, "releaseVersion", versionPattern);
-  requireString(record.productVersion, "productVersion", versionPattern);
-  requireString(record.sourceSha, "sourceSha", commitPattern);
-  requireString(record.originTag, "originTag", releaseTagPattern);
-  requireInteger(record.originRunId, "originRunId");
-  requireString(record.originSourceSha, "originSourceSha", commitPattern);
+  requireString(record.releaseVersion, 'releaseVersion', versionPattern);
+  requireString(record.productVersion, 'productVersion', versionPattern);
+  requireString(record.sourceSha, 'sourceSha', commitPattern);
+  requireString(record.originTag, 'originTag', releaseTagPattern);
+  requireInteger(record.originRunId, 'originRunId');
+  requireString(record.originSourceSha, 'originSourceSha', commitPattern);
 
-  const platform = requireObject(record.platform, "platform");
-  requireString(platform.os, "platform.os");
-  requireString(platform.arch, "platform.arch");
-  requireString(platform.runnerLabel, "platform.runnerLabel");
+  const platform = requireObject(record.platform, 'platform');
+  requireString(platform.os, 'platform.os');
+  requireString(platform.arch, 'platform.arch');
+  requireString(platform.runnerLabel, 'platform.runnerLabel');
   if (platform.os !== definition.platform.os || platform.arch !== definition.platform.arch) {
     fail(`platform must equal ${definition.platform.os}/${definition.platform.arch} for ${product}`);
   }
 
   if (record.signing !== undefined) {
-    const signing = requireObject(record.signing, "signing");
+    const signing = requireObject(record.signing, 'signing');
     if (!signingModes.has(signing.mode)) fail(`signing.mode ${signing.mode} is not a known signing mode`);
   }
 
-  const inputs = requireObject(record.inputs, "inputs");
-  if (!Array.isArray(inputs.paths)) fail("inputs.paths must be an array");
+  const inputs = requireObject(record.inputs, 'inputs');
+  if (!Array.isArray(inputs.paths)) fail('inputs.paths must be an array');
   for (const entry of inputs.paths) {
-    const pathEntry = requireObject(entry, "inputs.paths entry");
-    requireString(pathEntry.pathspec, "inputs.paths[].pathspec");
-    requireString(pathEntry.digest, "inputs.paths[].digest", sha256Pattern);
-    requireInteger(pathEntry.entryCount, "inputs.paths[].entryCount");
+    const pathEntry = requireObject(entry, 'inputs.paths entry');
+    requireString(pathEntry.pathspec, 'inputs.paths[].pathspec');
+    requireString(pathEntry.digest, 'inputs.paths[].digest', sha256Pattern);
+    requireInteger(pathEntry.entryCount, 'inputs.paths[].entryCount');
   }
-  requireObject(inputs.values, "inputs.values");
-  requireObject(inputs.composed, "inputs.composed");
+  requireObject(inputs.values, 'inputs.values');
+  requireObject(inputs.composed, 'inputs.composed');
 
   if (!Array.isArray(record.artifacts) || record.artifacts.length === 0) {
-    fail("artifacts must be a non-empty array");
+    fail('artifacts must be a non-empty array');
   }
   for (const artifact of record.artifacts) {
-    const entry = requireObject(artifact, "artifacts entry");
-    requireString(entry.name, "artifacts[].name");
-    if (entry.name.includes("/") || entry.name.includes("\\") || entry.name.includes("..")) {
+    const entry = requireObject(artifact, 'artifacts entry');
+    requireString(entry.name, 'artifacts[].name');
+    if (entry.name.includes('/') || entry.name.includes('\\') || entry.name.includes('..')) {
       fail(`artifacts[].name must be a plain file name, got ${entry.name}`);
     }
-    requireString(entry.sha256, "artifacts[].sha256", sha256Pattern);
-    requireInteger(entry.size, "artifacts[].size");
+    requireString(entry.sha256, 'artifacts[].sha256', sha256Pattern);
+    requireInteger(entry.size, 'artifacts[].size');
   }
 
-  if (record.action === "built") {
-    if (record.productVersion !== record.releaseVersion) fail("a built product version must equal the release version");
-    if (record.originTag !== `v${record.releaseVersion}`) fail("a built product must originate from this release tag");
-    if (record.reusedFrom !== null) fail("a built product must not carry reusedFrom");
+  if (record.action === 'built') {
+    if (record.productVersion !== record.releaseVersion) fail('a built product version must equal the release version');
+    if (record.originTag !== `v${record.releaseVersion}`) fail('a built product must originate from this release tag');
+    if (record.reusedFrom !== null) fail('a built product must not carry reusedFrom');
   } else {
-    const reusedFrom = requireObject(record.reusedFrom, "reusedFrom");
-    if (reusedFrom.tier !== "release" && reusedFrom.tier !== "run") fail('reusedFrom.tier must be "release" or "run"');
-    if (reusedFrom.tier === "release") requireString(reusedFrom.tag, "reusedFrom.tag", releaseTagPattern);
-    if (reusedFrom.tier === "run") requireInteger(reusedFrom.runId, "reusedFrom.runId");
-    if (!Array.isArray(reusedFrom.verifiedChecks)) fail("reusedFrom.verifiedChecks must be an array");
+    const reusedFrom = requireObject(record.reusedFrom, 'reusedFrom');
+    if (reusedFrom.tier !== 'release' && reusedFrom.tier !== 'run') fail('reusedFrom.tier must be "release" or "run"');
+    if (reusedFrom.tier === 'release') requireString(reusedFrom.tag, 'reusedFrom.tag', releaseTagPattern);
+    if (reusedFrom.tier === 'run') requireInteger(reusedFrom.runId, 'reusedFrom.runId');
+    if (!Array.isArray(reusedFrom.verifiedChecks)) fail('reusedFrom.verifiedChecks must be an array');
     for (const check of REUSE_CHECKS) {
       if (!reusedFrom.verifiedChecks.includes(check)) fail(`reusedFrom.verifiedChecks is missing ${check}`);
     }
@@ -208,7 +205,7 @@ export function validateProductProvenance(input, { expect = {} } = {}) {
       [...list]
         .map((artifact) => `${artifact.name}\0${artifact.sha256}\0${artifact.size}`)
         .sort()
-        .join("|");
+        .join('|');
     if (asKey(expect.manifestArtifacts) !== asKey(record.artifacts)) {
       fail(`artifacts must equal the manifest artifacts for ${product}`);
     }
@@ -242,19 +239,19 @@ export function buildReleaseProvenance({
 }
 
 export function validateReleaseProvenance(input) {
-  const record = requireObject(input, "release provenance");
-  if (record.schemaVersion !== RELEASE_PROVENANCE_SCHEMA_VERSION) fail("schemaVersion must equal 1");
-  requireString(record.algorithmRevision, "algorithmRevision");
-  const version = requireString(record.version, "version", versionPattern);
+  const record = requireObject(input, 'release provenance');
+  if (record.schemaVersion !== RELEASE_PROVENANCE_SCHEMA_VERSION) fail('schemaVersion must equal 1');
+  requireString(record.algorithmRevision, 'algorithmRevision');
+  const version = requireString(record.version, 'version', versionPattern);
   if (record.tag !== `v${version}`) fail(`tag must equal v${version}`);
-  requireString(record.sourceSha, "sourceSha", commitPattern);
-  requireInteger(record.workflowRunId, "workflowRunId");
-  requireString(record.publishedAt, "publishedAt");
-  const products = requireObject(record.products, "products");
+  requireString(record.sourceSha, 'sourceSha', commitPattern);
+  requireInteger(record.workflowRunId, 'workflowRunId');
+  requireString(record.publishedAt, 'publishedAt');
+  const products = requireObject(record.products, 'products');
   for (const [product, productRecord] of Object.entries(products)) {
     validateProductProvenance(productRecord, { expect: { product, releaseVersion: version } });
   }
-  requireObject(record.components, "components");
+  requireObject(record.components, 'components');
   return record;
 }
 
@@ -275,13 +272,13 @@ export function buildReuseIndex({ baselines = [], sourceRun = null } = {}) {
   };
 
   const ordered = [...baselines].sort((left, right) => {
-    const leftTime = Date.parse(left.publishedAt ?? "") || 0;
-    const rightTime = Date.parse(right.publishedAt ?? "") || 0;
+    const leftTime = Date.parse(left.publishedAt ?? '') || 0;
+    const rightTime = Date.parse(right.publishedAt ?? '') || 0;
     return rightTime - leftTime;
   });
   for (const baseline of ordered) {
     const provenance = baseline.provenance;
-    if (!provenance || typeof provenance !== "object") continue;
+    if (!provenance || typeof provenance !== 'object') continue;
     for (const [product, record] of Object.entries(provenance.products ?? {})) {
       push(product, {
         assets: baseline.assets ?? [],
@@ -292,7 +289,7 @@ export function buildReuseIndex({ baselines = [], sourceRun = null } = {}) {
         repo: baseline.repo ?? TRUSTED_REPO,
         runId: record?.originRunId ?? null,
         tag: baseline.tag ?? provenance.tag ?? null,
-        tier: "release",
+        tier: 'release',
       });
     }
   }
@@ -320,7 +317,7 @@ export function buildReuseIndex({ baselines = [], sourceRun = null } = {}) {
         repo: sourceRun.repo ?? TRUSTED_REPO,
         runId: sourceRun.runId ?? null,
         tag: null,
-        tier: "run",
+        tier: 'run',
         workflowName: sourceRun.workflowName ?? null,
       });
     }
@@ -333,19 +330,17 @@ function checkOrigin(candidate, evidence) {
   if (candidate.repo !== TRUSTED_REPO) {
     failures.push(`origin repository ${candidate.repo} is not ${TRUSTED_REPO}`);
   }
-  if (candidate.tier === "release") {
-    if (candidate.draft) failures.push("origin release is a draft");
+  if (candidate.tier === 'release') {
+    if (candidate.draft) failures.push('origin release is a draft');
     if (!candidate.tag || !releaseTagPattern.test(candidate.tag)) {
-      failures.push(`origin tag ${candidate.tag ?? "(missing)"} is not a published release tag`);
+      failures.push(`origin tag ${candidate.tag ?? '(missing)'} is not a published release tag`);
     }
-  } else if (candidate.tier === "run") {
+  } else if (candidate.tier === 'run') {
     if (!isAllowedReleaseWorkflowName(candidate.workflowName)) {
-      failures.push(
-        `origin run workflow ${candidate.workflowName ?? "(unknown)"} is not a Ghostex release workflow`,
-      );
+      failures.push(`origin run workflow ${candidate.workflowName ?? '(unknown)'} is not a Ghostex release workflow`);
     }
-    if (candidate.event !== "workflow_dispatch") {
-      failures.push(`origin run event ${candidate.event ?? "(unknown)"} is not workflow_dispatch`);
+    if (candidate.event !== 'workflow_dispatch') {
+      failures.push(`origin run event ${candidate.event ?? '(unknown)'} is not workflow_dispatch`);
     }
     /*
      * The run-level conclusion only proves the run *finished*; it is not
@@ -357,10 +352,10 @@ function checkOrigin(candidate, evidence) {
      * each retry because *other* jobs in the same run had failed.
      */
     const conclusion = candidate.conclusion ?? null;
-    if (!["success", "failure", "cancelled"].includes(conclusion)) {
-      failures.push(`origin run conclusion ${conclusion ?? "(unknown)"} is not a completed release run`);
+    if (!['success', 'failure', 'cancelled'].includes(conclusion)) {
+      failures.push(`origin run conclusion ${conclusion ?? '(unknown)'} is not a completed release run`);
     }
-    if (candidate.artifactExpired) failures.push("origin run artifacts have expired");
+    if (candidate.artifactExpired) failures.push('origin run artifacts have expired');
     if (candidate.artifactMissing) {
       failures.push("origin run never uploaded this product's package artifact");
     }
@@ -369,9 +364,9 @@ function checkOrigin(candidate, evidence) {
   }
   const originCommit = candidate.commit ?? candidate.record?.originSourceSha ?? null;
   if (!originCommit || !commitPattern.test(originCommit)) {
-    failures.push("origin commit is missing");
-  } else if (typeof evidence.isAncestor !== "function") {
-    failures.push("no ancestry oracle was provided");
+    failures.push('origin commit is missing');
+  } else if (typeof evidence.isAncestor !== 'function') {
+    failures.push('no ancestry oracle was provided');
   } else if (!evidence.isAncestor(originCommit)) {
     failures.push(`origin commit ${originCommit.slice(0, 12)} is not an ancestor of the source commit`);
   }
@@ -410,7 +405,7 @@ function checkDigest(record, evidence, { requireBothSources }) {
 }
 
 function checkAttestation(record, evidence) {
-  if (typeof evidence.attestationVerified !== "function") return { failures: [], pending: true };
+  if (typeof evidence.attestationVerified !== 'function') return { failures: [], pending: true };
   const failures = [];
   for (const artifact of record.artifacts) {
     const verified = evidence.attestationVerified(artifact.name, record);
@@ -459,30 +454,30 @@ export function verifyReuseCandidate({
     if (record.productVersion !== releaseVersion || record.releaseVersion !== releaseVersion) {
       failures.push(`${productId} is version-stamped and cannot be reused from ${record.releaseVersion}`);
     }
-    if (candidate.tier === "release" && candidate.tag !== `v${releaseVersion}`) {
+    if (candidate.tier === 'release' && candidate.tag !== `v${releaseVersion}`) {
       failures.push(`${productId} is version-stamped and cannot be reused across releases`);
     }
   }
-  if (definition.sideFiles?.length && candidate.tier !== "run") {
+  if (definition.sideFiles?.length && candidate.tier !== 'run') {
     failures.push(`${productId} publishes side files and can only be reused from the same run`);
   }
 
-  if (record.fingerprint === fingerprint) verifiedChecks.push("fingerprint");
+  if (record.fingerprint === fingerprint) verifiedChecks.push('fingerprint');
   else failures.push(`fingerprint ${record.fingerprint.slice(0, 12)} != ${String(fingerprint).slice(0, 12)}`);
 
   const originFailures = checkOrigin(candidate, evidence);
-  if (originFailures.length === 0) verifiedChecks.push("origin");
+  if (originFailures.length === 0) verifiedChecks.push('origin');
   else failures.push(...originFailures);
 
   const digestResult = checkDigest(record, evidence, { requireBothSources: requireAll });
   if (digestResult.failures.length > 0) failures.push(...digestResult.failures);
-  else if (digestResult.pending) pendingChecks.push("digest");
-  else verifiedChecks.push("digest");
+  else if (digestResult.pending) pendingChecks.push('digest');
+  else verifiedChecks.push('digest');
 
   const attestationResult = checkAttestation(record, evidence);
   if (attestationResult.failures.length > 0) failures.push(...attestationResult.failures);
-  else if (attestationResult.pending) pendingChecks.push("attestation");
-  else verifiedChecks.push("attestation");
+  else if (attestationResult.pending) pendingChecks.push('attestation');
+  else verifiedChecks.push('attestation');
 
   const ok = failures.length === 0 && (!requireAll || pendingChecks.length === 0);
   return { failures, ok, pendingChecks, record, verifiedChecks };

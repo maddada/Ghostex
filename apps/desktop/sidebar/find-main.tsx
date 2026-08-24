@@ -1,6 +1,6 @@
-import { createRoot } from "react-dom/client";
-import "@/packages/core-ui/styles.css";
-import { GXSERVER_PROTOCOL_VERSION } from "@/packages/shared/gxserver-protocol";
+import { createRoot } from 'react-dom/client';
+import '@/packages/core-ui/styles.css';
+import { GXSERVER_PROTOCOL_VERSION } from '@/packages/shared/gxserver-protocol';
 import type {
   ReadAgentPromptTextParams,
   ReadAgentPromptTextResult,
@@ -10,9 +10,9 @@ import type {
   SearchAgentPromptsResult,
   ToggleAgentPromptFavoriteParams,
   ToggleAgentPromptFavoriteResult,
-} from "@/packages/shared/agent-prompt-search";
-import { FindPromptsView } from "@/packages/core-ui/find/find-prompts-view";
-import type { FindPromptsTransport } from "@/packages/core-ui/find/find-prompts-transport";
+} from '@/packages/shared/agent-prompt-search';
+import { FindPromptsView } from '@/packages/core-ui/find/find-prompts-view';
+import type { FindPromptsTransport } from '@/packages/core-ui/find/find-prompts-transport';
 
 /*
 CDXC:AgentHistorySearchModal 2026-08-23:
@@ -45,19 +45,16 @@ function findBridgeNamespace(): FindBridgeNamespace {
 }
 
 function validatedBootstrap(
-  candidate: FindGxserverBootstrap | undefined,
+  candidate: FindGxserverBootstrap | undefined
 ): { authToken: string; baseUrl: string } | undefined {
   if (!candidate) {
     return undefined;
   }
-  if (
-    candidate.protocolVersion !== undefined &&
-    candidate.protocolVersion !== GXSERVER_PROTOCOL_VERSION
-  ) {
+  if (candidate.protocolVersion !== undefined && candidate.protocolVersion !== GXSERVER_PROTOCOL_VERSION) {
     return undefined;
   }
-  const baseUrl = typeof candidate.baseUrl === "string" ? candidate.baseUrl.trim() : "";
-  const authToken = typeof candidate.authToken === "string" ? candidate.authToken : "";
+  const baseUrl = typeof candidate.baseUrl === 'string' ? candidate.baseUrl.trim() : '';
+  const authToken = typeof candidate.authToken === 'string' ? candidate.authToken : '';
   if (!baseUrl || !authToken) {
     return undefined;
   }
@@ -90,7 +87,7 @@ function waitForBootstrap(): Promise<{ authToken: string; baseUrl: string }> {
         return;
       }
       if (attempt >= BOOTSTRAP_MAX_ATTEMPTS) {
-        reject(new Error("The Ghostex server bootstrap did not arrive."));
+        reject(new Error('The Ghostex server bootstrap did not arrive.'));
         return;
       }
       window.setTimeout(() => poll(attempt + 1), BOOTSTRAP_RETRY_DELAY_MS);
@@ -102,16 +99,16 @@ function waitForBootstrap(): Promise<{ authToken: string; baseUrl: string }> {
 async function rpc<TResult>(
   bootstrap: { authToken: string; baseUrl: string },
   path: string,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): Promise<TResult> {
   const response = await fetch(`${bootstrap.baseUrl}${path}`, {
     body: JSON.stringify({ params, protocolVersion: GXSERVER_PROTOCOL_VERSION }),
     headers: {
       authorization: `Bearer ${bootstrap.authToken}`,
-      "content-type": "application/json",
-      "x-gxserver-protocol-version": String(GXSERVER_PROTOCOL_VERSION),
+      'content-type': 'application/json',
+      'x-gxserver-protocol-version': String(GXSERVER_PROTOCOL_VERSION),
     },
-    method: "POST",
+    method: 'POST',
   });
   let body: unknown;
   try {
@@ -120,13 +117,12 @@ async function rpc<TResult>(
     body = undefined;
   }
   const envelope = body as
-    | { error?: { message?: string }; message?: string; ok?: boolean; result?: TResult }
-    | undefined;
+    { error?: { message?: string }; message?: string; ok?: boolean; result?: TResult } | undefined;
   if (!response.ok || !envelope || envelope.ok !== true) {
     const message =
-      (envelope && typeof envelope.error?.message === "string" && envelope.error.message) ||
-      (envelope && typeof envelope.message === "string" && envelope.message) ||
-      `gxserver rejected ${path} (${response.status > 0 ? response.status : "no response"}).`;
+      (envelope && typeof envelope.error?.message === 'string' && envelope.error.message) ||
+      (envelope && typeof envelope.message === 'string' && envelope.message) ||
+      `gxserver rejected ${path} (${response.status > 0 ? response.status : 'no response'}).`;
     throw new Error(message);
   }
   return envelope.result as TResult;
@@ -141,26 +137,23 @@ function postFindHostAction(action: string, fields?: Record<string, unknown>): v
     webkit?: { messageHandlers?: { ghostexAppModalHost?: AppModalHostMessageHandler } };
   };
   target.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage(
-    JSON.stringify({ action, type: "findPromptsHostAction", ...fields }),
+    JSON.stringify({ action, type: 'findPromptsHostAction', ...fields })
   );
 }
 
-function createGpuiFindPromptsTransport(bootstrap: {
-  authToken: string;
-  baseUrl: string;
-}): FindPromptsTransport {
+function createGpuiFindPromptsTransport(bootstrap: { authToken: string; baseUrl: string }): FindPromptsTransport {
   return {
     close() {
-      postFindHostAction("close");
+      postFindHostAction('close');
     },
     async copyText(text) {
       await navigator.clipboard.writeText(text);
     },
     async focusSession(params) {
-      postFindHostAction("focusSession", params);
+      postFindHostAction('focusSession', params);
     },
     async launchSession(plan) {
-      postFindHostAction("launchSession", {
+      postFindHostAction('launchSession', {
         agent: plan.agent,
         command: plan.commandLine,
         cwd: plan.cwd,
@@ -169,87 +162,84 @@ function createGpuiFindPromptsTransport(bootstrap: {
       });
     },
     readText(params: ReadAgentPromptTextParams) {
-      return rpc<ReadAgentPromptTextResult>(bootstrap, "/api/readAgentPromptText", { ...params });
+      return rpc<ReadAgentPromptTextResult>(bootstrap, '/api/readAgentPromptText', { ...params });
     },
     resolveLaunch(params: ResolveAgentPromptLaunchParams) {
-      return rpc<ResolveAgentPromptLaunchResult>(bootstrap, "/api/resolveAgentPromptLaunch", {
+      return rpc<ResolveAgentPromptLaunchResult>(bootstrap, '/api/resolveAgentPromptLaunch', {
         ...params,
       });
     },
     search(params: SearchAgentPromptsParams) {
-      return rpc<SearchAgentPromptsResult>(bootstrap, "/api/searchAgentPrompts", { ...params });
+      return rpc<SearchAgentPromptsResult>(bootstrap, '/api/searchAgentPrompts', { ...params });
     },
     toggleFavorite(params: ToggleAgentPromptFavoriteParams) {
-      return rpc<ToggleAgentPromptFavoriteResult>(bootstrap, "/api/toggleAgentPromptFavorite", {
+      return rpc<ToggleAgentPromptFavoriteResult>(bootstrap, '/api/toggleAgentPromptFavorite', {
         ...params,
       });
     },
   };
 }
 
-function applyDocumentFindTheme(theme: "dark" | "light"): void {
+function applyDocumentFindTheme(theme: 'dark' | 'light'): void {
   document.documentElement.style.colorScheme = theme;
-  document.documentElement.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#111111";
-  document.body.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#111111";
+  document.documentElement.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#111111';
+  document.body.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#111111';
 }
 
 function applyDocumentFindFontFamily(fontFamily: string): void {
   const normalized = fontFamily.trim();
   if (normalized) {
-    document.documentElement.style.setProperty("--ghostex-find-font-family", normalized);
+    document.documentElement.style.setProperty('--ghostex-find-font-family', normalized);
   } else {
-    document.documentElement.style.removeProperty("--ghostex-find-font-family");
+    document.documentElement.style.removeProperty('--ghostex-find-font-family');
   }
 }
 
 function renderFailure(root: ReturnType<typeof createRoot>, message: string): void {
   root.render(
-    <div className="native-sidebar-shell gpui-find-prompts">
-      <div className="ghostex-find-scope flex h-full flex-col items-center justify-center gap-1 px-6 text-center">
-        <div className="text-sm font-medium text-foreground">Find unavailable</div>
-        <div className="text-[13px] text-muted-foreground">{message}</div>
+    <div className='native-sidebar-shell gpui-find-prompts'>
+      <div className='ghostex-find-scope flex h-full flex-col items-center justify-center gap-1 px-6 text-center'>
+        <div className='text-sm font-medium text-foreground'>Find unavailable</div>
+        <div className='text-[13px] text-muted-foreground'>{message}</div>
       </div>
-    </div>,
+    </div>
   );
 }
 
-const rootElement = document.getElementById("root");
+const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Ghostex find root element was not found.");
+  throw new Error('Ghostex find root element was not found.');
 }
 const root = createRoot(rootElement);
 const searchParams = new URLSearchParams(window.location.search);
-const findTheme: "dark" | "light" = searchParams.get("theme") === "light" ? "light" : "dark";
+const findTheme: 'dark' | 'light' = searchParams.get('theme') === 'light' ? 'light' : 'dark';
 /*
 Accept All is a daemon-owned policy — gxserver applies the same setting `gx f`
 reads — so this surface deliberately does not carry one. The query param stays
 available only as an explicit override for a host that needs one.
 */
-const acceptAllParam = searchParams.get("acceptAll");
-const acceptAll = acceptAllParam === null ? undefined : acceptAllParam === "true";
+const acceptAllParam = searchParams.get('acceptAll');
+const acceptAll = acceptAllParam === null ? undefined : acceptAllParam === 'true';
 
-document.body.dataset.sidebarTheme = findTheme === "light" ? "plain-light" : "plain-dark";
-document.body.classList.add(findTheme === "light" ? "vscode-light" : "vscode-dark", "native-sidebar-body");
-if (findTheme === "dark") {
-  document.documentElement.classList.add("dark");
+document.body.dataset.sidebarTheme = findTheme === 'light' ? 'plain-light' : 'plain-dark';
+document.body.classList.add(findTheme === 'light' ? 'vscode-light' : 'vscode-dark', 'native-sidebar-body');
+if (findTheme === 'dark') {
+  document.documentElement.classList.add('dark');
 }
 applyDocumentFindTheme(findTheme);
-applyDocumentFindFontFamily(searchParams.get("fontFamily") ?? "");
+applyDocumentFindFontFamily(searchParams.get('fontFamily') ?? '');
 
 waitForBootstrap()
   .then((bootstrap) => {
     root.render(
-      <div className="native-sidebar-shell gpui-find-prompts">
-        <FindPromptsView
-          acceptAll={acceptAll}
-          transport={createGpuiFindPromptsTransport(bootstrap)}
-        />
-      </div>,
+      <div className='native-sidebar-shell gpui-find-prompts'>
+        <FindPromptsView acceptAll={acceptAll} transport={createGpuiFindPromptsTransport(bootstrap)} />
+      </div>
     );
   })
   .catch(() => {
     renderFailure(
       root,
-      "The Ghostex server is not reachable from this window. Switch back to the terminal and try again.",
+      'The Ghostex server is not reachable from this window. Switch back to the terminal and try again.'
     );
   });

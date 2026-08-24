@@ -4,8 +4,8 @@
  * settings-modal modules. They live here so a module can resolve a section
  * anchor without importing settings-modal.tsx back.
  */
-import { type RefObject } from "react";
-import { type MainSettingsScrollTargetId, type MainSettingsSectionRefs } from "./types";
+import { type RefObject } from 'react';
+import { type MainSettingsScrollTargetId, type MainSettingsSectionRefs } from './types';
 
 export function getActiveSettingsModalScrollViewport(dialogElement: HTMLElement | null): HTMLElement | null {
   return (
@@ -17,7 +17,7 @@ export function getActiveSettingsModalScrollViewport(dialogElement: HTMLElement 
 
 export function getMainSettingsSectionRef(
   sectionId: MainSettingsScrollTargetId,
-  refs: MainSettingsSectionRefs,
+  refs: MainSettingsSectionRefs
 ): RefObject<HTMLDivElement | null> {
   return refs[sectionId];
 }

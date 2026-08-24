@@ -1,26 +1,26 @@
-@import "./styles/shadcn.generated.css";
-@import "./styles/theme.css";
-@import "./styles/toolbar.css";
-@import "./styles/commands.css";
-@import "./styles/group-panels.css";
-@import "./styles/groups.css";
-@import "./styles/modals.css";
-@import "./styles/agents-hub.css";
-@import "./styles/session-cards.css";
-@import "./styles/session-chrome.css";
-@import "./styles/session-overlays.css";
-@import "./styles/workspace-theme.css";
-@import "./styles/pets.css";
-@import "./styles/hierarchy-panels.css";
-@import "./styles/chat.css";
-@import "./styles/find.css";
+@import './styles/shadcn.generated.css';
+@import './styles/theme.css';
+@import './styles/toolbar.css';
+@import './styles/commands.css';
+@import './styles/group-panels.css';
+@import './styles/groups.css';
+@import './styles/modals.css';
+@import './styles/agents-hub.css';
+@import './styles/session-cards.css';
+@import './styles/session-chrome.css';
+@import './styles/session-overlays.css';
+@import './styles/workspace-theme.css';
+@import './styles/pets.css';
+@import './styles/hierarchy-panels.css';
+@import './styles/chat.css';
+@import './styles/find.css';
 /*
  * CDXC:SidebarV2 2026-07-29:
  * Sidebar V2 imports LAST so its `[data-sidebar-version="v2"]`-scoped rules win
  * over the shared sidebar sheets they deliberately re-specify. The scope
  * attribute exists only on the V2 root, so this import is inert for V1.
  */
-@import "./styles/sidebar-v2.css";
+@import './styles/sidebar-v2.css';
 
 /**
  * CDXC:ContextMenus 2026-05-11-01:39
@@ -40,10 +40,10 @@
  * --app-dropdown-background so Dark 1 uses #191919, Dark 2 preserves #0e0e0e,
  * and Light can render shadcn/Base UI overlay content on light surfaces.
  */
-[data-slot="dropdown-menu-content"],
-[data-slot="dropdown-menu-sub-content"],
-[data-slot="popover-content"],
-[data-slot="select-content"],
+[data-slot='dropdown-menu-content'],
+[data-slot='dropdown-menu-sub-content'],
+[data-slot='popover-content'],
+[data-slot='select-content'],
 .command-icon-picker-menu,
 .git-action-menu,
 .quick-action-menu,
@@ -53,10 +53,10 @@
   border: 1px solid var(--ghostex-tooltip-border, rgba(255, 255, 255, 0.12)) !important;
 }
 
-[data-slot="dropdown-menu-checkbox-item"],
-[data-slot="dropdown-menu-item"],
-[data-slot="dropdown-menu-radio-item"],
-[data-slot="dropdown-menu-sub-trigger"],
+[data-slot='dropdown-menu-checkbox-item'],
+[data-slot='dropdown-menu-item'],
+[data-slot='dropdown-menu-radio-item'],
+[data-slot='dropdown-menu-sub-trigger'],
 .command-icon-picker-option,
 .git-action-menu-item,
 .group-agent-menu-item,
@@ -133,7 +133,7 @@
  * role="button" session rows.
  */
 button,
-[role="button"] {
+[role='button'] {
   cursor: default !important;
 }
 
@@ -176,7 +176,7 @@ body {
    and Switch also render buttons with data-slot attributes; resetting all of
    them strips their shadcn backgrounds and makes dropdowns blend into the
    settings modal. */
-.ghostex-settings-shadcn button[data-slot="button"] {
+.ghostex-settings-shadcn button[data-slot='button'] {
   background: revert-layer;
   border: revert-layer;
   border-radius: var(--settings-radius-control);
@@ -195,7 +195,7 @@ body {
   font-weight: 400;
 }
 
-.ghostex-settings-shadcn button[data-slot="button"]:disabled {
+.ghostex-settings-shadcn button[data-slot='button']:disabled {
   cursor: revert-layer;
   opacity: revert-layer;
 }
@@ -277,8 +277,8 @@ body {
  * elevation from their own modal background so the redesign does not paint
  * black panels on a white surface.
  */
-.ghostex-settings-shadcn[data-sidebar-theme="plain-light"],
-.ghostex-settings-shadcn[data-sidebar-theme^="light-"] {
+.ghostex-settings-shadcn[data-sidebar-theme='plain-light'],
+.ghostex-settings-shadcn[data-sidebar-theme^='light-'] {
   --settings-surface: var(--app-modal-background);
   --settings-raised: color-mix(in srgb, var(--app-modal-background) 95%, #000000 5%);
   --settings-raised-hover: color-mix(in srgb, var(--app-modal-background) 90%, #000000 10%);
@@ -306,17 +306,17 @@ body {
   padding: 4px !important;
 }
 
-.settings-select-content [data-slot="select-item"] {
+.settings-select-content [data-slot='select-item'] {
   border-radius: 6px !important;
   font-size: 0.8125rem;
   font-weight: 400;
   min-height: 1.75rem;
 }
 
-.settings-select-content [data-slot="select-item"]:is(:hover, :focus, :focus-visible),
-.settings-select-content [data-slot="select-item"][aria-selected="true"],
-.settings-select-content [data-slot="select-item"][data-highlighted],
-.settings-select-content [data-slot="select-item"][data-selected] {
+.settings-select-content [data-slot='select-item']:is(:hover, :focus, :focus-visible),
+.settings-select-content [data-slot='select-item'][aria-selected='true'],
+.settings-select-content [data-slot='select-item'][data-highlighted],
+.settings-select-content [data-slot='select-item'][data-selected] {
   background: #232323 !important;
   color: var(--accent-foreground);
   outline: none;
@@ -329,8 +329,8 @@ body {
  * instead of filling the row a second shade of grey. Base UI marks it with
  * `data-selected`; `data-highlighted` is the separate hover/keyboard state.
  */
-.settings-select-content [data-slot="select-item"][data-selected],
-.settings-select-content [data-slot="select-item"][aria-selected="true"] {
+.settings-select-content [data-slot='select-item'][data-selected],
+.settings-select-content [data-slot='select-item'][aria-selected='true'] {
   color: var(--ghostex-accent, #38bdf8) !important;
 }
 
@@ -345,38 +345,38 @@ body {
   input,
   textarea,
   select,
-  [role="button"],
-  [data-slot="button"],
-  [data-slot="button-group"],
-  [data-slot="button-group-text"],
-  [data-slot="card"],
-  [data-slot="command"],
-  [data-slot="command-item"],
-  [data-slot="dialog-content"],
-  [data-slot="dropdown-menu-content"],
-  [data-slot="dropdown-menu-item"],
-  [data-slot="dropdown-menu-checkbox-item"],
-  [data-slot="dropdown-menu-radio-item"],
-  [data-slot="dropdown-menu-sub-content"],
-  [data-slot="dropdown-menu-sub-trigger"],
-  [data-slot="empty"],
-  [data-slot="empty-icon"],
-  [data-slot="field-label"],
-  [data-slot="input-group"],
-  [data-slot="popover-content"],
-  [data-slot="select-content"],
-  [data-slot="select-item"],
-  [data-slot="select-trigger"],
-  [data-slot="slider-thumb"],
-  [data-slot="slider-track"],
-  [data-slot="switch"],
-  [data-slot="switch-thumb"],
-  [data-slot="tabs-list"],
-  [data-slot="tabs-trigger"],
-  [data-slot="textarea"],
-  [data-slot="toggle"],
-  [data-slot="toggle-group"],
-  [data-slot="tooltip-content"],
+  [role='button'],
+  [data-slot='button'],
+  [data-slot='button-group'],
+  [data-slot='button-group-text'],
+  [data-slot='card'],
+  [data-slot='command'],
+  [data-slot='command-item'],
+  [data-slot='dialog-content'],
+  [data-slot='dropdown-menu-content'],
+  [data-slot='dropdown-menu-item'],
+  [data-slot='dropdown-menu-checkbox-item'],
+  [data-slot='dropdown-menu-radio-item'],
+  [data-slot='dropdown-menu-sub-content'],
+  [data-slot='dropdown-menu-sub-trigger'],
+  [data-slot='empty'],
+  [data-slot='empty-icon'],
+  [data-slot='field-label'],
+  [data-slot='input-group'],
+  [data-slot='popover-content'],
+  [data-slot='select-content'],
+  [data-slot='select-item'],
+  [data-slot='select-trigger'],
+  [data-slot='slider-thumb'],
+  [data-slot='slider-track'],
+  [data-slot='switch'],
+  [data-slot='switch-thumb'],
+  [data-slot='tabs-list'],
+  [data-slot='tabs-trigger'],
+  [data-slot='textarea'],
+  [data-slot='toggle'],
+  [data-slot='toggle-group'],
+  [data-slot='tooltip-content'],
   .app-modal-host-body,
   .command-icon-picker-menu,
   .command-icon-picker-option,
@@ -394,8 +394,8 @@ body {
   border-radius: 0;
 }
 
-.app-modal-host-body [data-slot="dialog-content"],
-[data-slot="dialog-content"] {
+.app-modal-host-body [data-slot='dialog-content'],
+[data-slot='dialog-content'] {
   border-radius: 0;
 }
 
@@ -411,18 +411,18 @@ body {
 .ghostex-session-chat-scope :is(input, textarea),
 .ghostex-session-chat-popup,
 .ghostex-session-chat-scope
-  :is(button, [role="button"], [data-slot="button"]):not(
-    [data-slot="session-chat-host-action"]
-  ):not(.ghostex-chat-expansion-rail),
+  :is(button, [role='button'], [data-slot='button']):not([data-slot='session-chat-host-action']):not(
+    .ghostex-chat-expansion-rail
+  ),
 .ghostex-session-chat-popup
   :is(
     button,
-    [role="button"],
-    [data-slot="dropdown-menu-item"],
-    [data-slot="dropdown-menu-checkbox-item"],
-    [data-slot="dropdown-menu-radio-item"],
-    [data-slot="dropdown-menu-sub-trigger"],
-    [data-slot="dropdown-menu-sub-content"]
+    [role='button'],
+    [data-slot='dropdown-menu-item'],
+    [data-slot='dropdown-menu-checkbox-item'],
+    [data-slot='dropdown-menu-radio-item'],
+    [data-slot='dropdown-menu-sub-trigger'],
+    [data-slot='dropdown-menu-sub-content']
   ) {
   border-radius: calc(var(--radius, 0.625rem) - 2px);
 }
@@ -448,7 +448,7 @@ body {
  * The modal shell is the Codex modal surface (#161616) rather than the app
  * window background, so raised cards inside it have something to sit on.
  */
-.ghostex-settings-shadcn[data-slot="dialog-content"] {
+.ghostex-settings-shadcn[data-slot='dialog-content'] {
   background-color: var(--settings-surface) !important;
   border: 1px solid var(--settings-hairline);
   border-radius: var(--settings-radius-section);
@@ -497,7 +497,7 @@ body {
   background: var(--app-dropdown-background, var(--app-modal-background));
   box-sizing: border-box;
   color: var(--quick-access-item-color);
-  font-family: var(--font-sans, "Inter Variable", sans-serif);
+  font-family: var(--font-sans, 'Inter Variable', sans-serif);
   font-size: var(--quick-access-item-font-size);
   letter-spacing: 0;
   line-height: var(--quick-access-item-line-height);
@@ -518,7 +518,11 @@ body {
   background: transparent;
   border: 0;
   border-radius: 0;
-  color: color-mix(in srgb, var(--app-muted, var(--muted-foreground)) 82%, var(--app-foreground, var(--foreground)) 18%);
+  color: color-mix(
+    in srgb,
+    var(--app-muted, var(--muted-foreground)) 82%,
+    var(--app-foreground, var(--foreground)) 18%
+  );
   cursor: pointer;
   display: flex;
   font-family: inherit;
@@ -545,7 +549,7 @@ body {
   outline: none;
 }
 
-.quick-access-tab[data-active="true"] {
+.quick-access-tab[data-active='true'] {
   background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 10%, transparent);
   color: var(--app-foreground, var(--foreground));
 }
@@ -563,15 +567,15 @@ body {
   font-weight: 500;
 }
 
-.ghostex-command-palette-dialog [data-slot="command"] {
+.ghostex-command-palette-dialog [data-slot='command'] {
   padding: 0 0 4px;
 }
 
-.quick-access-surface [data-slot="command-input-wrapper"] {
+.quick-access-surface [data-slot='command-input-wrapper'] {
   padding: 8px 3px 0;
 }
 
-.quick-access-surface [data-slot="command-input-wrapper"] [data-slot="input-group"] {
+.quick-access-surface [data-slot='command-input-wrapper'] [data-slot='input-group'] {
   background: color-mix(
     in srgb,
     var(--app-dropdown-background, var(--app-modal-background)) 76%,
@@ -601,7 +605,7 @@ body {
 
 .quick-access-session-scope-toggle:hover,
 .quick-access-session-scope-toggle:focus-visible,
-.quick-access-session-scope-toggle[data-selected="true"] {
+.quick-access-session-scope-toggle[data-selected='true'] {
   background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 10%, transparent);
   color: var(--app-foreground, var(--foreground));
   outline: none;
@@ -614,9 +618,9 @@ body {
   opacity: 0.58;
 }
 
-.quick-access-surface [data-slot="command-input"],
-.quick-access-surface [data-slot="quick-access-search-input"],
-.quick-access-surface [data-slot="command-item"] {
+.quick-access-surface [data-slot='command-input'],
+.quick-access-surface [data-slot='quick-access-search-input'],
+.quick-access-surface [data-slot='command-item'] {
   color: var(--quick-access-item-color);
   font-family: inherit;
   font-size: var(--quick-access-item-font-size);
@@ -625,7 +629,7 @@ body {
   line-height: var(--quick-access-item-line-height);
 }
 
-[data-slot="command-input-clear"] {
+[data-slot='command-input-clear'] {
   appearance: none;
   background: transparent !important;
   border: 0 !important;
@@ -633,13 +637,13 @@ body {
   outline: none;
 }
 
-[data-slot="command-input-clear"]:hover,
-[data-slot="command-input-clear"]:focus-visible {
+[data-slot='command-input-clear']:hover,
+[data-slot='command-input-clear']:focus-visible {
   background: transparent !important;
   box-shadow: none !important;
 }
 
-.ghostex-command-palette-dialog [data-slot="command-group"] {
+.ghostex-command-palette-dialog [data-slot='command-group'] {
   padding: var(--quick-access-list-padding-y) var(--quick-access-list-padding-x);
 }
 
@@ -649,7 +653,7 @@ body {
   padding: var(--quick-access-row-padding-y) var(--quick-access-row-padding-x);
 }
 
-.ghostex-command-palette-dialog [data-slot="command-item"] {
+.ghostex-command-palette-dialog [data-slot='command-item'] {
   box-sizing: border-box;
   height: var(--quick-access-row-height);
   min-height: var(--quick-access-row-height);
@@ -701,7 +705,7 @@ body {
 }
 
 .quick-access-surface.previous-sessions-modal
-  .session-history-card:is([data-visible="true"], [data-focused="true"])
+  .session-history-card:is([data-visible='true'], [data-focused='true'])
   .session-alias-heading {
   color: var(--quick-access-item-color);
 }
@@ -715,9 +719,7 @@ body {
 }
 
 .quick-access-surface.previous-sessions-modal .session-history-frame .session-floating-agent-icon,
-.quick-access-surface.previous-sessions-modal
-  .session-history-frame
-  .session-floating-agent-tabler-icon {
+.quick-access-surface.previous-sessions-modal .session-history-frame .session-floating-agent-tabler-icon {
   left: 12px;
   opacity: 0.5;
 }
@@ -809,8 +811,8 @@ body {
 }
 
 .ghostex-stashed-prompt-item:hover .ghostex-stashed-prompt-stripe,
-.ghostex-stashed-prompt-item[data-selected="true"] .ghostex-stashed-prompt-stripe,
-.ghostex-stashed-prompt-item[data-tag-menu-open="true"] .ghostex-stashed-prompt-stripe {
+.ghostex-stashed-prompt-item[data-selected='true'] .ghostex-stashed-prompt-stripe,
+.ghostex-stashed-prompt-item[data-tag-menu-open='true'] .ghostex-stashed-prompt-stripe {
   opacity: 1;
 }
 
@@ -931,7 +933,7 @@ body {
 
 .ghostex-stashed-prompt-item:hover .ghostex-stashed-prompt-actions,
 .ghostex-stashed-prompt-item:focus-within .ghostex-stashed-prompt-actions,
-.ghostex-stashed-prompt-item[data-tag-menu-open="true"] .ghostex-stashed-prompt-actions {
+.ghostex-stashed-prompt-item[data-tag-menu-open='true'] .ghostex-stashed-prompt-actions {
   display: flex;
 }
 
@@ -943,7 +945,7 @@ body {
  0x0, and the whole menu jumps to the window's top-left corner as soon as the
  pointer reaches it.
 */
-.ghostex-stashed-prompt-item[data-tag-menu-open="true"] {
+.ghostex-stashed-prompt-item[data-tag-menu-open='true'] {
   background: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
@@ -962,11 +964,11 @@ body {
 
 .ghostex-stashed-prompt-item:hover .ghostex-stashed-prompt-favorite-mark,
 .ghostex-stashed-prompt-item:focus-within .ghostex-stashed-prompt-favorite-mark,
-.ghostex-stashed-prompt-item[data-tag-menu-open="true"] .ghostex-stashed-prompt-favorite-mark {
+.ghostex-stashed-prompt-item[data-tag-menu-open='true'] .ghostex-stashed-prompt-favorite-mark {
   display: none;
 }
 
-.ghostex-stashed-prompt-action-favorite[data-active="true"] {
+.ghostex-stashed-prompt-action-favorite[data-active='true'] {
   color: var(--ghostex-stashed-prompt-favorite, #e3b341);
 }
 
@@ -1024,13 +1026,9 @@ body {
  continuing rather than ending on a clipped pill.
 */
 .ghostex-stashed-prompt-tag-rail-wrap::after {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--app-dropdown-background, var(--app-modal-background)) 82%
-  );
+  background: linear-gradient(90deg, transparent, var(--app-dropdown-background, var(--app-modal-background)) 82%);
   bottom: 8px;
-  content: "";
+  content: '';
   pointer-events: none;
   position: absolute;
   right: 42px;
@@ -1068,7 +1066,7 @@ body {
   outline: none;
 }
 
-.ghostex-stashed-prompt-tag-pill[data-active="true"] {
+.ghostex-stashed-prompt-tag-pill[data-active='true'] {
   background: color-mix(in srgb, var(--ghostex-tag-color) 22%, transparent);
   border-color: color-mix(in srgb, var(--ghostex-tag-color) 52%, transparent);
   color: var(--foreground);
@@ -1100,12 +1098,12 @@ body {
   border: 1px solid color-mix(in srgb, var(--muted-foreground) 70%, transparent);
 }
 
-.ghostex-stashed-prompt-tag-pill-untagged[data-active="true"] {
+.ghostex-stashed-prompt-tag-pill-untagged[data-active='true'] {
   background: color-mix(in srgb, var(--foreground) 14%, transparent);
   border-color: color-mix(in srgb, var(--foreground) 34%, transparent);
 }
 
-.ghostex-stashed-prompt-tag-pill-untagged[data-active="true"] .ghostex-stashed-prompt-tag-dot {
+.ghostex-stashed-prompt-tag-pill-untagged[data-active='true'] .ghostex-stashed-prompt-tag-dot {
   border-color: color-mix(in srgb, var(--foreground) 70%, transparent);
 }
 
@@ -1120,7 +1118,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.ghostex-stashed-prompt-tag-pill[data-active="true"] .ghostex-stashed-prompt-tag-count {
+.ghostex-stashed-prompt-tag-pill[data-active='true'] .ghostex-stashed-prompt-tag-count {
   color: color-mix(in srgb, var(--foreground) 70%, transparent);
 }
 
@@ -1188,7 +1186,7 @@ body {
   width: 18px;
 }
 
-.ghostex-stashed-prompt-tag-swatch[data-active="true"] {
+.ghostex-stashed-prompt-tag-swatch[data-active='true'] {
   border-color: var(--foreground);
 }
 
@@ -1239,18 +1237,14 @@ body {
   opacity: 0;
 }
 
-.ghostex-stashed-prompt-tag-menu-item[data-active="true"] .ghostex-stashed-prompt-tag-menu-check {
+.ghostex-stashed-prompt-tag-menu-item[data-active='true'] .ghostex-stashed-prompt-tag-menu-check {
   opacity: 1;
 }
 
 .ghostex-stashed-prompts-stash-hint {
   align-items: center;
   appearance: none;
-  background: color-mix(
-    in srgb,
-    var(--foreground) 9%,
-    var(--app-dropdown-background, var(--app-modal-background))
-  );
+  background: color-mix(in srgb, var(--foreground) 9%, var(--app-dropdown-background, var(--app-modal-background)));
   border: 1px solid color-mix(in srgb, var(--foreground) 18%, var(--border));
   border-radius: 9999px !important;
   bottom: 10px;
@@ -1267,11 +1261,7 @@ body {
 
 .ghostex-stashed-prompts-stash-hint:hover,
 .ghostex-stashed-prompts-stash-hint:focus-visible {
-  background: color-mix(
-    in srgb,
-    var(--foreground) 14%,
-    var(--app-dropdown-background, var(--app-modal-background))
-  );
+  background: color-mix(in srgb, var(--foreground) 14%, var(--app-dropdown-background, var(--app-modal-background)));
   color: var(--foreground);
   outline: none;
 }
@@ -1525,7 +1515,7 @@ body {
   height: 0.1875rem;
 }
 
-.ghostex-settings-shadcn .first-launch-setup-progress-dot[data-active="true"] {
+.ghostex-settings-shadcn .first-launch-setup-progress-dot[data-active='true'] {
   background: var(--settings-accent);
 }
 
@@ -1902,7 +1892,7 @@ body {
   padding: 0 0.75rem;
 }
 
-.ghostex-settings-shadcn .first-launch-setup-preset-button[data-active="true"] {
+.ghostex-settings-shadcn .first-launch-setup-preset-button[data-active='true'] {
   /*
    CDXC:ModalRedesign 2026-08-24:
    The selected preset is marked by the accent on its label plus a brightened
@@ -1993,7 +1983,7 @@ body {
 .ghostex-settings-shadcn .first-launch-setup-preference-usage-list li::before {
   background: color-mix(in srgb, var(--settings-accent) 60%, var(--muted-foreground));
   border-radius: var(--settings-radius-pill);
-  content: "";
+  content: '';
   height: 0.25rem;
   left: 0.125rem;
   position: absolute;
@@ -2037,7 +2027,7 @@ body {
 .ghostex-settings-shadcn .first-launch-setup-checkbox:checked::after {
   border: solid #0e0e0e;
   border-width: 0 2px 2px 0;
-  content: "";
+  content: '';
   height: 9px;
   left: 5px;
   position: absolute;
@@ -2079,7 +2069,7 @@ body {
   padding: 0.875rem 1rem;
 }
 
-.ghostex-settings-shadcn .first-launch-setup-command-card[data-installed="true"] {
+.ghostex-settings-shadcn .first-launch-setup-command-card[data-installed='true'] {
   border-color: color-mix(in srgb, var(--success, #22c55e) 30%, var(--settings-hairline));
 }
 
@@ -2099,14 +2089,7 @@ body {
   border-radius: var(--settings-radius-control);
   color: var(--foreground);
   display: block;
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 0.75rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -2120,7 +2103,7 @@ body {
   gap: 0.5rem;
 }
 
-.ghostex-settings-shadcn .first-launch-setup-command-card[data-installed="true"] .first-launch-setup-command-label svg {
+.ghostex-settings-shadcn .first-launch-setup-command-card[data-installed='true'] .first-launch-setup-command-label svg {
   color: var(--success, #22c55e);
 }
 
@@ -3053,7 +3036,7 @@ body {
   scrollbar-gutter: stable;
 }
 
-.ghostex-settings-shadcn .settings-main-scroll [data-slot="scroll-area-viewport"] {
+.ghostex-settings-shadcn .settings-main-scroll [data-slot='scroll-area-viewport'] {
   padding-bottom: 3.75rem;
 }
 
@@ -3073,10 +3056,7 @@ body {
   */
   box-sizing: border-box;
   margin-inline: auto;
-  max-width: calc(
-    var(--settings-content-max-width, 770px) +
-      2 * var(--settings-content-inline-padding, 1.25rem)
-  );
+  max-width: calc(var(--settings-content-max-width, 770px) + 2 * var(--settings-content-inline-padding, 1.25rem));
   width: 100%;
 }
 
@@ -3107,7 +3087,7 @@ body {
   width: 100%;
 }
 
-.ghostex-settings-shadcn .settings-sidebar-tabs-list[data-slot="tabs-list"] {
+.ghostex-settings-shadcn .settings-sidebar-tabs-list[data-slot='tabs-list'] {
   /*
    * CDXC:ScrollFades 2026-06-19-14:16:
    * Settings section navigation can scroll independently from the main page.
@@ -3166,7 +3146,7 @@ body {
   color: var(--accent-foreground);
 }
 
-.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"] {
+.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot='tabs-trigger'] {
   background: transparent !important;
   border: 0 !important;
   border-radius: var(--settings-radius-menu-item) !important;
@@ -3189,7 +3169,7 @@ body {
   min-width: 0;
 }
 
-.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"]:hover {
+.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot='tabs-trigger']:hover {
   background: transparent !important;
   color: var(--foreground) !important;
 }
@@ -3199,15 +3179,14 @@ body {
  * The selected page is the one nav element that carries the accent, so the
  * rail can be scanned without a bold weight or a saturated fill.
  */
-.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"][data-active],
-.ghostex-settings-shadcn
-  .settings-sidebar-tab-trigger[data-slot="tabs-trigger"][data-active]:hover {
+.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot='tabs-trigger'][data-active],
+.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot='tabs-trigger'][data-active]:hover {
   background: transparent !important;
   color: var(--ghostex-accent, #38bdf8) !important;
   font-weight: 500 !important;
 }
 
-.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"]::after {
+.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot='tabs-trigger']::after {
   display: none;
 }
 
@@ -3401,9 +3380,9 @@ body {
   color: var(--muted-foreground);
 }
 
-.ghostex-settings-shadcn .settings-sidebar-subsection-button[data-active="true"],
-.ghostex-settings-shadcn .settings-sidebar-subsection-button[data-active="true"]:hover,
-.ghostex-settings-shadcn .settings-sidebar-subsection-button[data-active="true"]:focus-visible {
+.ghostex-settings-shadcn .settings-sidebar-subsection-button[data-active='true'],
+.ghostex-settings-shadcn .settings-sidebar-subsection-button[data-active='true']:hover,
+.ghostex-settings-shadcn .settings-sidebar-subsection-button[data-active='true']:focus-visible {
   background: transparent !important;
   color: var(--foreground);
   font-weight: 500;
@@ -3456,7 +3435,7 @@ body {
  * Settings no longer uses this top tab rail; Settings page navigation lives in
  * the left sidebar instead.
  */
-.app-modal-tab-rail[data-slot="tabs-list"] {
+.app-modal-tab-rail[data-slot='tabs-list'] {
   background: transparent !important;
   border: 1px solid #252525 !important;
   border-radius: 0 !important;
@@ -3469,7 +3448,7 @@ body {
   width: 100%;
 }
 
-.app-modal-tab-rail [data-slot="tabs-trigger"] {
+.app-modal-tab-rail [data-slot='tabs-trigger'] {
   border: 0 !important;
   border-radius: 0 !important;
   color: color-mix(in srgb, var(--foreground) 75%, transparent) !important;
@@ -3480,16 +3459,16 @@ body {
   width: 100%;
 }
 
-.app-modal-tab-rail [data-slot="tabs-trigger"] + [data-slot="tabs-trigger"] {
+.app-modal-tab-rail [data-slot='tabs-trigger'] + [data-slot='tabs-trigger'] {
   border-left: 1px solid #252525 !important;
 }
 
-.app-modal-tab-rail [data-slot="tabs-trigger"]:hover {
+.app-modal-tab-rail [data-slot='tabs-trigger']:hover {
   background: transparent !important;
   color: var(--foreground) !important;
 }
 
-.app-modal-tab-rail [data-slot="tabs-trigger"][data-active] {
+.app-modal-tab-rail [data-slot='tabs-trigger'][data-active] {
   background: color-mix(in srgb, var(--foreground) 12%, transparent) !important;
   color: var(--foreground) !important;
   font-weight: 500 !important;
@@ -3524,10 +3503,7 @@ body {
    */
   box-sizing: border-box;
   margin-inline: auto;
-  max-width: calc(
-    var(--settings-content-max-width, 770px) +
-      2 * var(--settings-content-inline-padding, 1.25rem)
-  );
+  max-width: calc(var(--settings-content-max-width, 770px) + 2 * var(--settings-content-inline-padding, 1.25rem));
   padding-inline: var(--settings-content-inline-padding, 1.25rem);
   width: 100%;
 }
@@ -3581,9 +3557,9 @@ body {
   box-shadow: none;
 }
 
-.ghostex-settings-shadcn [data-slot="input"]:is(:focus, :focus-visible),
-.ghostex-settings-shadcn [data-slot="textarea"]:is(:focus, :focus-visible),
-.ghostex-settings-shadcn [data-slot="select-trigger"]:is(:focus, :focus-visible),
+.ghostex-settings-shadcn [data-slot='input']:is(:focus, :focus-visible),
+.ghostex-settings-shadcn [data-slot='textarea']:is(:focus, :focus-visible),
+.ghostex-settings-shadcn [data-slot='select-trigger']:is(:focus, :focus-visible),
 .ghostex-settings-shadcn .group-title-input:is(:focus, :focus-visible),
 .ghostex-settings-shadcn .settings-management-edit-button:focus-visible {
   /*
@@ -3638,35 +3614,35 @@ body {
   }
 }
 
-.ghostex-settings-shadcn [data-slot="button"],
-.ghostex-settings-shadcn [data-slot="button-group"],
-.ghostex-settings-shadcn [data-slot="button-group-text"],
-.ghostex-settings-shadcn [data-slot="card"],
-.ghostex-settings-shadcn [data-slot="command"],
-.ghostex-settings-shadcn [data-slot="command-item"],
-.ghostex-settings-shadcn [data-slot="dropdown-menu-content"],
-.ghostex-settings-shadcn [data-slot="dropdown-menu-item"],
-.ghostex-settings-shadcn [data-slot="dropdown-menu-sub-content"],
-.ghostex-settings-shadcn [data-slot="dropdown-menu-sub-trigger"],
-.ghostex-settings-shadcn [data-slot="empty"],
-.ghostex-settings-shadcn [data-slot="empty-icon"],
-.ghostex-settings-shadcn [data-slot="field-label"],
-.ghostex-settings-shadcn [data-slot="input"],
-.ghostex-settings-shadcn [data-slot="input-group"],
-.ghostex-settings-shadcn [data-slot="popover-content"],
-.ghostex-settings-shadcn [data-slot="select-content"],
-.ghostex-settings-shadcn [data-slot="select-item"],
-.ghostex-settings-shadcn [data-slot="select-trigger"],
-.ghostex-settings-shadcn [data-slot="slider-thumb"],
-.ghostex-settings-shadcn [data-slot="slider-track"],
-.ghostex-settings-shadcn [data-slot="switch"],
-.ghostex-settings-shadcn [data-slot="switch-thumb"],
-.ghostex-settings-shadcn [data-slot="tabs-list"],
-.ghostex-settings-shadcn [data-slot="tabs-trigger"],
-.ghostex-settings-shadcn [data-slot="textarea"],
-.ghostex-settings-shadcn [data-slot="toggle"],
-.ghostex-settings-shadcn [data-slot="toggle-group"],
-.ghostex-settings-shadcn [data-slot="tooltip-content"],
+.ghostex-settings-shadcn [data-slot='button'],
+.ghostex-settings-shadcn [data-slot='button-group'],
+.ghostex-settings-shadcn [data-slot='button-group-text'],
+.ghostex-settings-shadcn [data-slot='card'],
+.ghostex-settings-shadcn [data-slot='command'],
+.ghostex-settings-shadcn [data-slot='command-item'],
+.ghostex-settings-shadcn [data-slot='dropdown-menu-content'],
+.ghostex-settings-shadcn [data-slot='dropdown-menu-item'],
+.ghostex-settings-shadcn [data-slot='dropdown-menu-sub-content'],
+.ghostex-settings-shadcn [data-slot='dropdown-menu-sub-trigger'],
+.ghostex-settings-shadcn [data-slot='empty'],
+.ghostex-settings-shadcn [data-slot='empty-icon'],
+.ghostex-settings-shadcn [data-slot='field-label'],
+.ghostex-settings-shadcn [data-slot='input'],
+.ghostex-settings-shadcn [data-slot='input-group'],
+.ghostex-settings-shadcn [data-slot='popover-content'],
+.ghostex-settings-shadcn [data-slot='select-content'],
+.ghostex-settings-shadcn [data-slot='select-item'],
+.ghostex-settings-shadcn [data-slot='select-trigger'],
+.ghostex-settings-shadcn [data-slot='slider-thumb'],
+.ghostex-settings-shadcn [data-slot='slider-track'],
+.ghostex-settings-shadcn [data-slot='switch'],
+.ghostex-settings-shadcn [data-slot='switch-thumb'],
+.ghostex-settings-shadcn [data-slot='tabs-list'],
+.ghostex-settings-shadcn [data-slot='tabs-trigger'],
+.ghostex-settings-shadcn [data-slot='textarea'],
+.ghostex-settings-shadcn [data-slot='toggle'],
+.ghostex-settings-shadcn [data-slot='toggle-group'],
+.ghostex-settings-shadcn [data-slot='tooltip-content'],
 .ghostex-settings-shadcn .command-icon-picker-option,
 .ghostex-settings-shadcn .first-launch-setup-preference-card,
 .ghostex-settings-shadcn .first-launch-setup-preference-command-preview,
@@ -3694,17 +3670,17 @@ body {
  * Switches and slider tracks are pills, and portaled/inline menu rows use the
  * 6px menu-item radius rather than the 8px control radius.
  */
-.ghostex-settings-shadcn [data-slot="slider-track"],
-.ghostex-settings-shadcn [data-slot="slider-thumb"],
-.ghostex-settings-shadcn [data-slot="switch"],
-.ghostex-settings-shadcn [data-slot="switch-thumb"] {
+.ghostex-settings-shadcn [data-slot='slider-track'],
+.ghostex-settings-shadcn [data-slot='slider-thumb'],
+.ghostex-settings-shadcn [data-slot='switch'],
+.ghostex-settings-shadcn [data-slot='switch-thumb'] {
   border-radius: var(--settings-radius-pill) !important;
 }
 
-.ghostex-settings-shadcn [data-slot="command-item"],
-.ghostex-settings-shadcn [data-slot="dropdown-menu-item"],
-.ghostex-settings-shadcn [data-slot="dropdown-menu-sub-trigger"],
-.ghostex-settings-shadcn [data-slot="select-item"],
+.ghostex-settings-shadcn [data-slot='command-item'],
+.ghostex-settings-shadcn [data-slot='dropdown-menu-item'],
+.ghostex-settings-shadcn [data-slot='dropdown-menu-sub-trigger'],
+.ghostex-settings-shadcn [data-slot='select-item'],
 .ghostex-settings-shadcn .command-icon-picker-option {
   border-radius: var(--settings-radius-menu-item);
 }
@@ -3714,11 +3690,11 @@ body {
   border-radius: var(--settings-radius-compact);
 }
 
-.ghostex-settings-shadcn[data-slot="dialog-content"],
-.ghostex-settings-shadcn [data-slot="card"],
-.ghostex-settings-shadcn [data-slot="dialog-content"],
-.ghostex-settings-shadcn [data-slot="empty"],
-.ghostex-settings-shadcn [data-slot="popover-content"],
+.ghostex-settings-shadcn[data-slot='dialog-content'],
+.ghostex-settings-shadcn [data-slot='card'],
+.ghostex-settings-shadcn [data-slot='dialog-content'],
+.ghostex-settings-shadcn [data-slot='empty'],
+.ghostex-settings-shadcn [data-slot='popover-content'],
 .ghostex-settings-shadcn .first-launch-setup-preference-card,
 .ghostex-settings-shadcn .settings-section-card {
   border-radius: var(--settings-radius-section) !important;
@@ -3726,9 +3702,9 @@ body {
 
 .ghostex-settings-shadcn .settings-management-icon,
 .ghostex-settings-shadcn .settings-open-target-icon,
-.ghostex-settings-shadcn [class*="size-"],
-.ghostex-settings-shadcn [class*=" w-10"],
-.ghostex-settings-shadcn [class*=" h-10"] {
+.ghostex-settings-shadcn [class*='size-'],
+.ghostex-settings-shadcn [class*=' w-10'],
+.ghostex-settings-shadcn [class*=' h-10'] {
   border-radius: var(--settings-radius-adaptive);
 }
 
@@ -3740,17 +3716,17 @@ body {
  * default to 32px; Input defaults to 36px, so it is pinned down here rather
  * than at each of the ~90 call sites.
  */
-.ghostex-settings-shadcn [data-slot="input"],
-.ghostex-settings-shadcn [data-slot="select-trigger"],
-.ghostex-settings-shadcn [data-slot="toggle"],
-.ghostex-settings-shadcn [data-slot="toggle-group-item"] {
+.ghostex-settings-shadcn [data-slot='input'],
+.ghostex-settings-shadcn [data-slot='select-trigger'],
+.ghostex-settings-shadcn [data-slot='toggle'],
+.ghostex-settings-shadcn [data-slot='toggle-group-item'] {
   font-size: 0.8125rem;
   height: var(--settings-control-height);
   min-height: var(--settings-control-height);
 }
 
-.ghostex-settings-shadcn [data-slot="button"],
-.ghostex-settings-shadcn [data-slot="textarea"] {
+.ghostex-settings-shadcn [data-slot='button'],
+.ghostex-settings-shadcn [data-slot='textarea'] {
   font-size: 0.8125rem;
 }
 
@@ -3760,11 +3736,11 @@ body {
  * 12px descriptions in the muted tone, so a settings page reads as one column
  * of text rather than three competing sizes.
  */
-.ghostex-settings-shadcn [data-slot="field-label"] {
+.ghostex-settings-shadcn [data-slot='field-label'] {
   font-size: 0.8125rem;
 }
 
-.ghostex-settings-shadcn [data-slot="field-description"] {
+.ghostex-settings-shadcn [data-slot='field-description'] {
   color: var(--muted-foreground);
   font-size: 0.75rem;
   line-height: 1.45;
@@ -3776,36 +3752,36 @@ body {
  * card, and the selected segment lifts to the hover tone and takes the accent
  * label instead of a heavier weight.
  */
-.ghostex-settings-shadcn [data-slot="toggle-group-item"] {
+.ghostex-settings-shadcn [data-slot='toggle-group-item'] {
   background: color-mix(in srgb, var(--settings-raised-hover) 55%, transparent);
   border-color: var(--settings-hairline);
   color: color-mix(in srgb, var(--foreground) 82%, transparent);
 }
 
-.ghostex-settings-shadcn [data-slot="toggle-group-item"]:hover {
+.ghostex-settings-shadcn [data-slot='toggle-group-item']:hover {
   background: var(--settings-raised-hover);
   color: var(--foreground);
 }
 
-.ghostex-settings-shadcn [data-slot="toggle-group-item"][data-pressed],
-.ghostex-settings-shadcn [data-slot="toggle-group-item"][data-state="on"],
-.ghostex-settings-shadcn [data-slot="toggle-group-item"][aria-pressed="true"] {
+.ghostex-settings-shadcn [data-slot='toggle-group-item'][data-pressed],
+.ghostex-settings-shadcn [data-slot='toggle-group-item'][data-state='on'],
+.ghostex-settings-shadcn [data-slot='toggle-group-item'][aria-pressed='true'] {
   background: var(--settings-raised-hover);
   color: var(--ghostex-accent, #38bdf8);
 }
 
-.ghostex-settings-shadcn [data-slot="input"],
-.ghostex-settings-shadcn [data-slot="textarea"] {
+.ghostex-settings-shadcn [data-slot='input'],
+.ghostex-settings-shadcn [data-slot='textarea'] {
   background: color-mix(in srgb, var(--settings-raised) 82%, transparent);
   border: 1px solid var(--settings-hairline);
 }
 
-.ghostex-settings-shadcn [data-slot="select-trigger"] {
+.ghostex-settings-shadcn [data-slot='select-trigger'] {
   background: var(--settings-raised);
   border: 1px solid var(--settings-hairline);
 }
 
-.ghostex-settings-shadcn [data-slot="select-trigger"]:hover {
+.ghostex-settings-shadcn [data-slot='select-trigger']:hover {
   background: var(--settings-raised-hover);
 }
 
@@ -3814,13 +3790,13 @@ body {
  * Switches are pills on the raised card tone, and an enabled switch is the one
  * control that carries the accent so an "on" row can be spotted while scanning.
  */
-.ghostex-settings-shadcn [data-slot="switch"] {
+.ghostex-settings-shadcn [data-slot='switch'] {
   background: var(--settings-raised-hover);
   border: 1px solid var(--settings-hairline);
 }
 
-.ghostex-settings-shadcn [data-slot="switch"][data-checked],
-.ghostex-settings-shadcn [data-slot="switch"][data-state="checked"] {
+.ghostex-settings-shadcn [data-slot='switch'][data-checked],
+.ghostex-settings-shadcn [data-slot='switch'][data-state='checked'] {
   background: var(--ghostex-accent, #38bdf8);
   border-color: transparent;
 }
@@ -3850,10 +3826,10 @@ body {
     th,
     legend,
     summary,
-    [data-slot="alert-title"],
-    [data-slot="card-title"],
-    [data-slot="dialog-title"],
-    [data-slot="tabs-trigger"]
+    [data-slot='alert-title'],
+    [data-slot='card-title'],
+    [data-slot='dialog-title'],
+    [data-slot='tabs-trigger']
   ) {
   font-weight: 500;
 }
@@ -4213,7 +4189,7 @@ body {
   outline: none;
 }
 
-.quick-access-surface .quick-access-tab[data-active="true"] {
+.quick-access-surface .quick-access-tab[data-active='true'] {
   background: var(--settings-raised);
   color: var(--ghostex-accent, #38bdf8);
   font-weight: 500;
@@ -4237,7 +4213,7 @@ body {
 
 /* Search field ------------------------------------------------------------ */
 
-.quick-access-surface [data-slot="command-input-wrapper"] {
+.quick-access-surface [data-slot='command-input-wrapper'] {
   padding: 6px 6px 2px;
 }
 
@@ -4245,7 +4221,7 @@ body {
  * CommandInput and QuickAccessSearchInput both render InputGroup with h-9.
  * Quick Access uses the redesign's single 32px control height instead.
  */
-.quick-access-surface [data-slot="command-input-wrapper"] [data-slot="input-group"] {
+.quick-access-surface [data-slot='command-input-wrapper'] [data-slot='input-group'] {
   background: var(--settings-raised) !important;
   border: 1px solid var(--settings-hairline);
   border-radius: var(--settings-radius-control);
@@ -4253,14 +4229,12 @@ body {
   min-height: var(--settings-control-height, 2rem);
 }
 
-.quick-access-surface
-  [data-slot="command-input-wrapper"]:focus-within
-  [data-slot="input-group"] {
+.quick-access-surface [data-slot='command-input-wrapper']:focus-within [data-slot='input-group'] {
   border-color: var(--settings-focus-border-color, rgba(255, 255, 255, 0.34));
 }
 
-.quick-access-surface [data-slot="command-input"],
-.quick-access-surface [data-slot="quick-access-search-input"] {
+.quick-access-surface [data-slot='command-input'],
+.quick-access-surface [data-slot='quick-access-search-input'] {
   font-size: 13px;
 }
 
@@ -4281,7 +4255,7 @@ body {
  * rewrites to the 8px control radius with !important. Quick Access rows are
  * list rows, not controls, so they take the 6px menu-item radius the same way.
  */
-.quick-access-surface [data-slot="command-item"],
+.quick-access-surface [data-slot='command-item'],
 .quick-access-surface .recent-projects-row,
 .quick-access-surface .session-history-card {
   border-radius: var(--settings-radius-menu-item) !important;
@@ -4291,8 +4265,8 @@ body {
  * cmdk marks the active row with `data-selected`, which Tailwind fills with
  * `bg-muted`. Every Quick Access list highlights on the same raised tone.
  */
-.quick-access-surface [data-slot="command-item"][data-selected="true"],
-.quick-access-surface [data-slot="command-item"]:hover {
+.quick-access-surface [data-slot='command-item'][data-selected='true'],
+.quick-access-surface [data-slot='command-item']:hover {
   background: var(--settings-raised);
 }
 
@@ -4304,8 +4278,8 @@ body {
 
 .quick-access-surface .recent-projects-row:hover,
 .quick-access-surface .recent-projects-row:focus-visible,
-.quick-access-surface .recent-projects-row[data-search-selected="true"],
-.quick-access-surface .recent-projects-row[data-context-menu-open="true"] {
+.quick-access-surface .recent-projects-row[data-search-selected='true'],
+.quick-access-surface .recent-projects-row[data-context-menu-open='true'] {
   background: var(--settings-raised);
   outline: none;
 }
@@ -4334,9 +4308,7 @@ body {
 }
 
 .quick-access-surface.previous-sessions-modal .session-history-project-label,
-.quick-access-surface.previous-sessions-modal
-  .session-history-card
-  .session-last-interaction-time {
+.quick-access-surface.previous-sessions-modal .session-history-card .session-last-interaction-time {
   font-size: 11px;
   line-height: 18px;
 }
@@ -4370,15 +4342,13 @@ body {
   color: var(--foreground);
 }
 
-.quick-access-surface .quick-access-session-scope-toggle[data-selected="true"] {
+.quick-access-surface .quick-access-session-scope-toggle[data-selected='true'] {
   background: transparent;
   color: var(--ghostex-accent, #38bdf8);
 }
 
-.quick-access-surface
-  .quick-access-session-scope-toggle[data-selected="true"]:hover,
-.quick-access-surface
-  .quick-access-session-scope-toggle[data-selected="true"]:focus-visible {
+.quick-access-surface .quick-access-session-scope-toggle[data-selected='true']:hover,
+.quick-access-surface .quick-access-session-scope-toggle[data-selected='true']:focus-visible {
   background: var(--settings-raised-hover);
 }
 
@@ -4402,7 +4372,7 @@ body {
   color: var(--foreground);
 }
 
-.quick-access-surface .previous-sessions-tag-filter-toggle[data-selected="true"] {
+.quick-access-surface .previous-sessions-tag-filter-toggle[data-selected='true'] {
   background: transparent;
   color: var(--ghostex-accent, #38bdf8);
 }
@@ -4440,8 +4410,7 @@ body {
   outline: none;
 }
 
-.previous-sessions-tag-filter-menu
-  .previous-sessions-tag-filter-item[data-selected="true"] {
+.previous-sessions-tag-filter-menu .previous-sessions-tag-filter-item[data-selected='true'] {
   color: var(--ghostex-accent, #38bdf8);
 }
 
@@ -4515,7 +4484,7 @@ body {
  * The Saved Prompts tag popover is portaled like the session tag filter, so it
  * restates the same popup surface.
  */
-.ghostex-stashed-prompt-tag-popover[data-slot="popover-content"] {
+.ghostex-stashed-prompt-tag-popover[data-slot='popover-content'] {
   backdrop-filter: none;
   background: #161616 !important;
   background-color: #161616 !important;
@@ -4532,13 +4501,11 @@ body {
 }
 
 .ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-menu-item:hover,
-.ghostex-stashed-prompt-tag-popover
-  .ghostex-stashed-prompt-tag-menu-item:focus-visible {
+.ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-menu-item:focus-visible {
   background: #232323;
 }
 
-.ghostex-stashed-prompt-tag-popover
-  .ghostex-stashed-prompt-tag-menu-item[data-active="true"] {
+.ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-menu-item[data-active='true'] {
   color: var(--ghostex-accent, #38bdf8);
 }
 

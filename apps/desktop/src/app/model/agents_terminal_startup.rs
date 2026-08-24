@@ -5,20 +5,18 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TerminalSessionId(pub(crate) u64);
-
 
 /*
 CDXC:GPUITerminalRuntimeIdentity 2026-06-22-23:24:
 Phase 3 separates process-lifetime Agents terminal runtime identity from durable shell `TerminalSessionId` and pane/body mount slots. Runtime ids bind Ghostty owners to the current app process only; they are not user-facing titles, not logs, not shell-state fields, and restored shell sessions intentionally receive fresh runtime ids.
 */
 pub(crate) struct AgentsTerminalRuntimeSessionRegistry {
-    pub(crate) runtime_ids_by_shell_session: HashMap<TerminalSessionId, AgentsTerminalRuntimeSessionId>,
+    pub(crate) runtime_ids_by_shell_session:
+        HashMap<TerminalSessionId, AgentsTerminalRuntimeSessionId>,
     pub(crate) next_runtime_session_id: u64,
 }
-
 
 /*
 CDXC:GPUIAgentsTerminalRuntimePerProject 2026-08-05:
@@ -34,10 +32,10 @@ pub(crate) struct ParkedAgentsTerminalRuntime {
     pub(crate) runtime_sessions: AgentsTerminalRuntimeSessionRegistry,
     pub(crate) gpui_engine_terminals:
         HashMap<TerminalSessionId, terminal_gpui_engine::GpuiEngineTerminalRecord>,
-    pub(crate) runtime_osc_states: HashMap<AgentsTerminalRuntimeSessionId, GpuiTerminalRuntimeOscState>,
+    pub(crate) runtime_osc_states:
+        HashMap<AgentsTerminalRuntimeSessionId, GpuiTerminalRuntimeOscState>,
     pub(crate) gpui_engine_close_confirms: HashSet<AgentsTerminalBodyMountSlotId>,
 }
-
 
 impl Default for AgentsTerminalRuntimeSessionRegistry {
     fn default() -> Self {
@@ -47,7 +45,6 @@ impl Default for AgentsTerminalRuntimeSessionRegistry {
         }
     }
 }
-
 
 impl AgentsTerminalRuntimeSessionRegistry {
     pub(crate) fn new() -> Self {
@@ -107,20 +104,17 @@ impl AgentsTerminalRuntimeSessionRegistry {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AgentsTerminalStartupBodySlotId {
     pub(crate) pane_id: WorkspacePaneId,
     pub(crate) session_id: TerminalSessionId,
 }
 
-
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct AgentsTerminalStartupBodyGeometry {
     pub(crate) bounds: Bounds<Pixels>,
     pub(crate) scale_factor: f32,
 }
-
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct AgentsTerminalStartupLaunchPlan {
@@ -132,13 +126,11 @@ pub(crate) struct AgentsTerminalStartupLaunchPlan {
     pub(crate) scale_factor: f32,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AgentsTerminalStartupHostPreservationKey {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
     pub(crate) startup_body_slot_id: AgentsTerminalStartupBodySlotId,
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AgentsTerminalStartupRecord {
@@ -146,7 +138,6 @@ pub(crate) struct AgentsTerminalStartupRecord {
     pub(crate) shell_session_id: TerminalSessionId,
     pub(crate) startup_body_geometry_available: bool,
 }
-
 
 impl AgentsTerminalStartupRecord {
     pub(crate) fn startup_body_slot_id(self) -> AgentsTerminalStartupBodySlotId {
@@ -157,14 +148,12 @@ impl AgentsTerminalStartupRecord {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AgentsTerminalStartupCompletionIntent {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
     pub(crate) shell_session_id: TerminalSessionId,
     pub(crate) startup_body_slot_id: AgentsTerminalStartupBodySlotId,
 }
-
 
 impl AgentsTerminalStartupCompletionIntent {
     pub(crate) fn from_record(
@@ -179,13 +168,11 @@ impl AgentsTerminalStartupCompletionIntent {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AgentsTerminalStartupReadinessSignalPreparation {
     pub(crate) completion_intent: AgentsTerminalStartupCompletionIntent,
     pub(crate) surface_metadata: terminal_ghostty_surface::GhosttySurfaceMetadataSnapshot,
 }
-
 
 impl AgentsTerminalStartupReadinessSignalPreparation {
     pub(crate) fn new(
@@ -202,7 +189,6 @@ impl AgentsTerminalStartupReadinessSignalPreparation {
     }
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct AgentsTerminalStartupReadinessHandoffPlan {
@@ -210,7 +196,6 @@ pub(crate) struct AgentsTerminalStartupReadinessHandoffPlan {
     pub(crate) startup_launch_plan: AgentsTerminalStartupLaunchPlan,
     pub(crate) mount_slot_id: AgentsTerminalBodyMountSlotId,
 }
-
 
 #[cfg(target_os = "macos")]
 impl AgentsTerminalStartupReadinessHandoffPlan {
@@ -223,7 +208,6 @@ impl AgentsTerminalStartupReadinessHandoffPlan {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(crate) enum AgentsTerminalStartupCompletionSignal {
@@ -234,7 +218,6 @@ pub(crate) enum AgentsTerminalStartupCompletionSignal {
         completion_intent: AgentsTerminalStartupCompletionIntent,
     },
 }
-
 
 impl AgentsTerminalStartupCompletionSignal {
     pub(crate) fn completion_intent(self) -> AgentsTerminalStartupCompletionIntent {
@@ -257,7 +240,6 @@ impl AgentsTerminalStartupCompletionSignal {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(crate) enum AgentsTerminalStartupResult {
@@ -268,7 +250,6 @@ pub(crate) enum AgentsTerminalStartupResult {
         completion_intent: AgentsTerminalStartupCompletionIntent,
     },
 }
-
 
 impl AgentsTerminalStartupResult {
     pub(crate) fn completion_intent(self) -> AgentsTerminalStartupCompletionIntent {
@@ -290,7 +271,6 @@ impl AgentsTerminalStartupResult {
         }
     }
 }
-
 
 /*
 CDXC:GPUITerminalStartupBoundary 2026-06-22-23:50:
@@ -331,7 +311,6 @@ pub(crate) struct AgentsTerminalStartupCoordinator {
         HashMap<AgentsTerminalRuntimeSessionId, AgentsTerminalStartupReadinessSignalPreparation>,
 }
 
-
 impl Default for AgentsTerminalStartupCoordinator {
     fn default() -> Self {
         Self {
@@ -342,7 +321,6 @@ impl Default for AgentsTerminalStartupCoordinator {
         }
     }
 }
-
 
 impl AgentsTerminalStartupCoordinator {
     pub(crate) fn new() -> Self {
@@ -778,7 +756,6 @@ impl AgentsTerminalStartupCoordinator {
     }
 }
 
-
 pub(crate) fn derive_agents_terminal_startup_launch_plans(
     agents_workspace_visible: bool,
     workspace: &WorkspaceModel,
@@ -837,7 +814,6 @@ pub(crate) fn derive_agents_terminal_startup_launch_plans(
         .collect()
 }
 
-
 pub(crate) fn derive_agents_terminal_startup_host_preservation_keys(
     agents_workspace_visible: bool,
     workspace: &WorkspaceModel,
@@ -881,7 +857,6 @@ pub(crate) fn derive_agents_terminal_startup_host_preservation_keys(
         })
         .collect()
 }
-
 
 pub(crate) fn derive_agents_terminal_startup_completion_intents(
     agents_workspace_visible: bool,
@@ -927,7 +902,6 @@ pub(crate) fn derive_agents_terminal_startup_completion_intents(
         .collect()
 }
 
-
 pub(crate) fn prune_agents_terminal_startup_body_slot_geometries(
     agents_workspace_visible: bool,
     agents_workspace: &WorkspaceModel,
@@ -943,7 +917,6 @@ pub(crate) fn prune_agents_terminal_startup_body_slot_geometries(
     };
     startup_body_geometries.retain(|slot_id, _| current_slot_ids.contains(slot_id));
 }
-
 
 pub(crate) fn record_agents_terminal_startup_body_slot_geometry(
     agents_workspace_visible: bool,
@@ -975,7 +948,6 @@ pub(crate) fn record_agents_terminal_startup_body_slot_geometry(
     }
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_terminal_ghostty_surface_config_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
@@ -993,14 +965,12 @@ pub(crate) fn gpui_terminal_ghostty_surface_config_from_shared_settings(
     )
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn current_gpui_terminal_ghostty_surface_config()
 -> terminal_ghostty_surface::GhosttySurfaceTerminalConfig {
     let settings = shared_settings::shared_sidebar_settings_snapshot();
     gpui_terminal_ghostty_surface_config_from_shared_settings(&settings)
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn reconcile_agents_terminal_startup_host_config_requests<F>(
@@ -1090,7 +1060,6 @@ pub(crate) fn reconcile_agents_terminal_startup_host_config_requests<F>(
     startup_host_native_views.retain(|slot_id, _| startup_config_requests.contains_key(slot_id));
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn drop_agents_terminal_startup_ghostty_surface_owners_before_host_reconcile(
     startup_surface_owners: &mut HashMap<
@@ -1136,7 +1105,6 @@ pub(crate) fn drop_agents_terminal_startup_ghostty_surface_owners_before_host_re
         startup_surface_owners.remove(&slot_id);
     }
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn reconcile_agents_terminal_startup_ghostty_surface_owners<F>(
@@ -1257,7 +1225,6 @@ pub(crate) fn reconcile_agents_terminal_startup_ghostty_surface_owners<F>(
     }
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn agents_terminal_startup_surface_metadata_snapshots(
     startup_surface_owners: &HashMap<
@@ -1290,7 +1257,6 @@ pub(crate) fn agents_terminal_startup_surface_metadata_snapshots(
         .collect()
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn failed_agents_terminal_startup_results_from_metadata(
     startup_coordinator: &AgentsTerminalStartupCoordinator,
@@ -1322,7 +1288,6 @@ pub(crate) fn failed_agents_terminal_startup_results_from_metadata(
         .collect()
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn sync_agents_terminal_startup_readiness_signal_preparations(
     startup_coordinator: &mut AgentsTerminalStartupCoordinator,
@@ -1336,7 +1301,6 @@ pub(crate) fn sync_agents_terminal_startup_readiness_signal_preparations(
 ) {
     startup_coordinator.sync_startup_readiness_signal_preparations(metadata_snapshots);
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn prune_agents_terminal_startup_runtime_state_for_completion_intent(
@@ -1370,7 +1334,6 @@ pub(crate) fn prune_agents_terminal_startup_runtime_state_for_completion_intent(
     startup_launch_payload_source.remove_payload_for_completion_intent(completion_intent);
 }
 
-
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn prune_agents_terminal_startup_runtime_state_for_completion_intent(
     startup_body_geometries: &mut HashMap<
@@ -1384,7 +1347,6 @@ pub(crate) fn prune_agents_terminal_startup_runtime_state_for_completion_intent(
     startup_launch_payload_source.remove_payload_for_completion_intent(completion_intent);
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn agents_terminal_attachment_plan_for_startup_handoff(
     handoff_plan: AgentsTerminalStartupReadinessHandoffPlan,
@@ -1397,7 +1359,6 @@ pub(crate) fn agents_terminal_attachment_plan_for_startup_handoff(
         bounds: handoff_plan.startup_launch_plan.bounds,
     }
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn transfer_ready_agents_terminal_startup_handoff(
@@ -1512,7 +1473,6 @@ pub(crate) fn transfer_ready_agents_terminal_startup_handoff(
     startup_body_geometries.remove(&startup_body_slot_id);
     true
 }
-
 
 pub(crate) fn activate_agents_terminal_placeholder_with_runtime_attempt_identity(
     workspace: &mut WorkspaceModel,

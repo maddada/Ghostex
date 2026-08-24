@@ -464,5 +464,4 @@ impl GhostexGpuiApp {
             })
             .into_any_element()
     }
-
 }

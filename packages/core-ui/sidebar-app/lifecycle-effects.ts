@@ -1,25 +1,18 @@
-import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
-import type { ExtensionToSidebarMessage } from "../../shared/session-grid-contract";
-import type { ghostexSettings } from "../../shared/ghostex-settings";
+import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import type { ExtensionToSidebarMessage } from '../../shared/session-grid-contract';
+import type { ghostexSettings } from '../../shared/ghostex-settings';
 import {
   getSidebarTitlebarForegroundForBackground,
   getSidebarTitlebarGradientColors,
-} from "../../shared/ghostex-settings";
-import {
-  getWorkspaceThemeForeground,
-  normalizeWorkspaceThemeColor,
-} from "../../shared/workspace-project-appearance";
-import { postSidebarRefreshDebugLog } from "../sidebar-refresh-debug-log";
-import { useSidebarStore } from "../sidebar-store";
-import type { WebviewApi } from "../webview-api";
-import { readSidebarUiCollapseState, summarizeSidebarUiCollapseRead } from "./collapse-state";
-import type { SidebarCollapseStateLogger } from "./collapse-actions";
-import { getSidebarStartupElapsedMs } from "./session-ordering";
-import type {
-  ReferenceSidebarSectionId,
-  SidebarEventSource,
-  SidebarSessionsById,
-} from "./types";
+} from '../../shared/ghostex-settings';
+import { getWorkspaceThemeForeground, normalizeWorkspaceThemeColor } from '../../shared/workspace-project-appearance';
+import { postSidebarRefreshDebugLog } from '../sidebar-refresh-debug-log';
+import { useSidebarStore } from '../sidebar-store';
+import type { WebviewApi } from '../webview-api';
+import { readSidebarUiCollapseState, summarizeSidebarUiCollapseRead } from './collapse-state';
+import type { SidebarCollapseStateLogger } from './collapse-actions';
+import { getSidebarStartupElapsedMs } from './session-ordering';
+import type { ReferenceSidebarSectionId, SidebarEventSource, SidebarSessionsById } from './types';
 
 export const SIDEBAR_STARTUP_INTERACTION_BLOCK_MS = 1500;
 
@@ -81,11 +74,11 @@ export function useSidebarStartupDiagnosticEffects({
     The mount/unmount diagnostic must describe the React app lifetime only. Including effect-event callbacks in this dependency list made every hydrate render look like an app remount in persistent logs, hiding the real refresh cadence and adding avoidable Debugging Mode noise.
     */
     const instanceId = refreshDebugInstanceIdRef.current;
-    postSidebarStartupReproLog("appMounted", {
+    postSidebarStartupReproLog('appMounted', {
       elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
       startupInteractionBlockMs: SIDEBAR_STARTUP_INTERACTION_BLOCK_MS,
     });
-    postSidebarRefreshLifecycleLog("appMounted", {
+    postSidebarRefreshLifecycleLog('appMounted', {
       elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
       instanceId,
       revision: useSidebarStore.getState().revision,
@@ -93,11 +86,11 @@ export function useSidebarStartupDiagnosticEffects({
     });
 
     return () => {
-      postSidebarStartupReproLog("appUnmounted", {
+      postSidebarStartupReproLog('appUnmounted', {
         elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
         finalRevision: useSidebarStore.getState().revision,
       });
-      postSidebarRefreshLifecycleLog("appUnmounted", {
+      postSidebarRefreshLifecycleLog('appUnmounted', {
         elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
         finalRevision: useSidebarStore.getState().revision,
         instanceId,
@@ -107,15 +100,12 @@ export function useSidebarStartupDiagnosticEffects({
   }, []);
 
   useEffect(() => {
-    if (
-      !sidebarCollapseDiagnosticLoggingEnabled ||
-      didLogInitialUiCollapseStateReadRef.current
-    ) {
+    if (!sidebarCollapseDiagnosticLoggingEnabled || didLogInitialUiCollapseStateReadRef.current) {
       return;
     }
 
     didLogInitialUiCollapseStateReadRef.current = true;
-    postSidebarCollapseStateLog("initialRead", {
+    postSidebarCollapseStateLog('initialRead', {
       ...summarizeSidebarUiCollapseRead(initialUiCollapseStateRead),
       currentCollapsedGroupCount: Object.keys(collapsedGroupsById).length,
       groupCount: groupOrder.length,
@@ -148,14 +138,14 @@ export function useSidebarStartupDiagnosticEffects({
     }
 
     lastSidebarStartupRenderStateKeyRef.current = renderStateKey;
-    postSidebarStartupReproLog("renderState", renderState);
-    postSidebarRefreshDebugLog(sidebarRefreshDiagnosticLoggingEnabled, vscode, "renderStateChanged", {
+    postSidebarStartupReproLog('renderState', renderState);
+    postSidebarRefreshDebugLog(sidebarRefreshDiagnosticLoggingEnabled, vscode, 'renderStateChanged', {
       ...renderState,
       instanceId: refreshDebugInstanceIdRef.current,
     });
     if (hasAppliedHydrateRef.current && renderState.sessionCount === 0) {
-      postSidebarStartupReproLog("emptyStateAfterHydrate", renderState);
-      postSidebarRefreshDebugLog(sidebarRefreshDiagnosticLoggingEnabled, vscode, "emptyStateAfterHydrate", {
+      postSidebarStartupReproLog('emptyStateAfterHydrate', renderState);
+      postSidebarRefreshDebugLog(sidebarRefreshDiagnosticLoggingEnabled, vscode, 'emptyStateAfterHydrate', {
         ...renderState,
         instanceId: refreshDebugInstanceIdRef.current,
       });
@@ -195,12 +185,12 @@ export function useSidebarHostMessageListeners({
       }
     };
 
-    messageSource.addEventListener("message", handleMessage);
+    messageSource.addEventListener('message', handleMessage);
 
     return () => {
-      messageSource.removeEventListener("message", handleMessage);
+      messageSource.removeEventListener('message', handleMessage);
     };
-  }, [ handleWindowMessage, messageSource ]);
+  }, [handleWindowMessage, messageSource]);
 
   useEffect(() => {
     if (!nativeHostEventSource) {
@@ -213,9 +203,9 @@ export function useSidebarHostMessageListeners({
       }
 
       handleWindowMessage(
-        new MessageEvent<ExtensionToSidebarMessage>("message", {
+        new MessageEvent<ExtensionToSidebarMessage>('message', {
           data: event.detail,
-        }),
+        })
       );
     };
 
@@ -226,19 +216,17 @@ export function useSidebarHostMessageListeners({
      * CDXC:Hotkeys 2026-06-12-12:33:
      * The native sidebar wrapper owns typed nativeHotkey host events. Allow that wrapper to disable this shared listener so Cmd+T creates one terminal tab instead of running both the wrapper action and the shared SidebarApp createSession bridge.
      */
-    nativeHostEventSource.addEventListener("ghostex-native-host-event", handleNativeHostEvent);
+    nativeHostEventSource.addEventListener('ghostex-native-host-event', handleNativeHostEvent);
 
     return () => {
-      nativeHostEventSource.removeEventListener("ghostex-native-host-event", handleNativeHostEvent);
+      nativeHostEventSource.removeEventListener('ghostex-native-host-event', handleNativeHostEvent);
     };
-  }, [ handleWindowMessage, nativeHostEventSource ]);
+  }, [handleWindowMessage, nativeHostEventSource]);
 }
 
 export type SidebarTimeoutCleanupOptions = {
   completionFlashTimeoutBySessionIdRef: RefObject<Map<string, number>>;
-  referenceSectionAnimationTimeoutsRef: RefObject<
-    Partial<Record<ReferenceSidebarSectionId, number>>
-  >;
+  referenceSectionAnimationTimeoutsRef: RefObject<Partial<Record<ReferenceSidebarSectionId, number>>>;
 };
 
 /* Clears the completion-flash and section-animation timers when the app unmounts. */
@@ -277,7 +265,7 @@ export function useSidebarStartupInteractionBlock({
 }: SidebarStartupInteractionBlockOptions) {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      postSidebarStartupReproLog("interactionBlockReleased", {
+      postSidebarStartupReproLog('interactionBlockReleased', {
         elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
         revision: useSidebarStore.getState().revision,
       });
@@ -311,13 +299,12 @@ export function useSidebarDocumentChromeEffects({
   useEffect(() => {
     document.body.dataset.sidebarTheme = theme;
     const normalizedThemeColor = normalizeWorkspaceThemeColor(customThemeColor);
-    const customSidebarTitlebarColorsEnabled =
-      effectiveSettings.customSidebarTitlebarColorsEnabled === true;
+    const customSidebarTitlebarColorsEnabled = effectiveSettings.customSidebarTitlebarColorsEnabled === true;
     const customSidebarTitlebarForegroundColor = getSidebarTitlebarForegroundForBackground(
-      effectiveSettings.customSidebarTitlebarBackgroundColor,
+      effectiveSettings.customSidebarTitlebarBackgroundColor
     );
     const customSidebarTitlebarGradientColors = getSidebarTitlebarGradientColors(
-      effectiveSettings.customSidebarTitlebarBackgroundColor,
+      effectiveSettings.customSidebarTitlebarBackgroundColor
     );
     if (normalizedThemeColor) {
       /**
@@ -326,16 +313,16 @@ export function useSidebarDocumentChromeEffects({
        * keep the preset data-sidebar-theme as fallback, but publish validated
        * CSS variables so the app-level theme surfaces derive from the color.
        */
-      document.body.dataset.sidebarCustomTheme = "true";
-      document.body.style.setProperty("--workspace-sidebar-theme-color", normalizedThemeColor);
+      document.body.dataset.sidebarCustomTheme = 'true';
+      document.body.style.setProperty('--workspace-sidebar-theme-color', normalizedThemeColor);
       document.body.style.setProperty(
-        "--workspace-sidebar-theme-foreground",
-        getWorkspaceThemeForeground(normalizedThemeColor),
+        '--workspace-sidebar-theme-foreground',
+        getWorkspaceThemeForeground(normalizedThemeColor)
       );
     } else {
       delete document.body.dataset.sidebarCustomTheme;
-      document.body.style.removeProperty("--workspace-sidebar-theme-color");
-      document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
+      document.body.style.removeProperty('--workspace-sidebar-theme-color');
+      document.body.style.removeProperty('--workspace-sidebar-theme-foreground');
     }
 
     /**
@@ -343,7 +330,7 @@ export function useSidebarDocumentChromeEffects({
      * The accent color is a plain always-on chrome token, so publish it next to
      * the theme variables instead of gating it behind the custom chrome toggle.
      */
-    document.body.style.setProperty("--ghostex-accent", effectiveSettings.accentColor);
+    document.body.style.setProperty('--ghostex-accent', effectiveSettings.accentColor);
 
     if (customSidebarTitlebarColorsEnabled) {
       /**
@@ -363,42 +350,42 @@ export function useSidebarDocumentChromeEffects({
        * explicit gradient stop variables while keeping the solid background
        * token for row/card contrast calculations.
        */
-      document.body.dataset.customSidebarTitlebarColors = "true";
+      document.body.dataset.customSidebarTitlebarColors = 'true';
       document.body.style.setProperty(
-        "--custom-sidebar-titlebar-foreground-color",
-        customSidebarTitlebarForegroundColor,
+        '--custom-sidebar-titlebar-foreground-color',
+        customSidebarTitlebarForegroundColor
       );
       document.body.style.setProperty(
-        "--custom-sidebar-titlebar-background-color",
-        effectiveSettings.customSidebarTitlebarBackgroundColor,
+        '--custom-sidebar-titlebar-background-color',
+        effectiveSettings.customSidebarTitlebarBackgroundColor
       );
       document.body.style.setProperty(
-        "--custom-sidebar-titlebar-gradient-top-color",
-        customSidebarTitlebarGradientColors.sidebarTop,
+        '--custom-sidebar-titlebar-gradient-top-color',
+        customSidebarTitlebarGradientColors.sidebarTop
       );
       document.body.style.setProperty(
-        "--custom-sidebar-titlebar-gradient-bottom-color",
-        customSidebarTitlebarGradientColors.sidebarBottom,
+        '--custom-sidebar-titlebar-gradient-bottom-color',
+        customSidebarTitlebarGradientColors.sidebarBottom
       );
     } else {
       delete document.body.dataset.customSidebarTitlebarColors;
-      document.body.style.removeProperty("--custom-sidebar-titlebar-foreground-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-background-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-top-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-bottom-color");
+      document.body.style.removeProperty('--custom-sidebar-titlebar-foreground-color');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-background-color');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-gradient-top-color');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-gradient-bottom-color');
     }
 
     return () => {
       delete document.body.dataset.sidebarTheme;
       delete document.body.dataset.sidebarCustomTheme;
       delete document.body.dataset.customSidebarTitlebarColors;
-      document.body.style.removeProperty("--workspace-sidebar-theme-color");
-      document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
-      document.body.style.removeProperty("--ghostex-accent");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-foreground-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-background-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-top-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-bottom-color");
+      document.body.style.removeProperty('--workspace-sidebar-theme-color');
+      document.body.style.removeProperty('--workspace-sidebar-theme-foreground');
+      document.body.style.removeProperty('--ghostex-accent');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-foreground-color');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-background-color');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-gradient-top-color');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-gradient-bottom-color');
     };
   }, [
     customThemeColor,
@@ -409,10 +396,10 @@ export function useSidebarDocumentChromeEffects({
   ]);
 
   useEffect(() => {
-    document.body.style.setProperty("--ghostex-agent-manager-zoom", `${agentManagerZoomPercent}%`);
+    document.body.style.setProperty('--ghostex-agent-manager-zoom', `${agentManagerZoomPercent}%`);
 
     return () => {
-      document.body.style.removeProperty("--ghostex-agent-manager-zoom");
+      document.body.style.removeProperty('--ghostex-agent-manager-zoom');
     };
-  }, [ agentManagerZoomPercent ]);
+  }, [agentManagerZoomPercent]);
 }

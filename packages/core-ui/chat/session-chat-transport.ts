@@ -18,13 +18,10 @@ import type {
   GxserverSessionChatQueueResult,
   GxserverSessionChatRemoveQueuedPromptResult,
   SessionChatSendKey,
-} from "../../shared/session-chat";
+} from '../../shared/session-chat';
 
 export interface SessionChatTransport {
-  read(params: {
-    limit?: number;
-    beforeOffset?: number;
-  }): Promise<GxserverReadSessionChatResult>;
+  read(params: { limit?: number; beforeOffset?: number }): Promise<GxserverReadSessionChatResult>;
   /** Lists skills gxserver resolved for this session's stored agent identity. */
   readSkills?(): Promise<GxserverReadSessionChatSkillsResult>;
   /**
@@ -56,10 +53,7 @@ export interface SessionChatTransport {
    * without an upload path (e.g. the mobile WebView) omit this, which
    * disables the composer's image paste.
    */
-  saveImage?(params: {
-    base64Data: string;
-    suggestedName?: string;
-  }): Promise<GxserverSaveSessionChatImageResult>;
+  saveImage?(params: { base64Data: string; suggestedName?: string }): Promise<GxserverSaveSessionChatImageResult>;
   /**
    * Saves any attached file's bytes into Ghostex storage on the session's machine
    * and returns the absolute path for the "[File #N](path)" reference. Hosts
@@ -88,9 +82,7 @@ export interface SessionChatTransport {
    * image" uses a browser download instead.
    */
   saveImageAs?(params: { base64Data: string; suggestedName: string }): Promise<void>;
-  answerPrompt(
-    params: Omit<GxserverAnswerSessionChatPromptParams, "projectId" | "sessionId">,
-  ): Promise<void>;
+  answerPrompt(params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>): Promise<void>;
   interrupt(): Promise<void>;
   /*
   Ghostex prompt queue + synced composer draft (plan 016). Every method here is
@@ -121,9 +113,7 @@ export interface SessionChatTransport {
    * Deletes a row and returns it, so Edit can pull the removed text into the
    * composer in the same round trip. Hosts without it hide Delete and Edit.
    */
-  removeQueuedPrompt?(params: {
-    promptId: string;
-  }): Promise<GxserverSessionChatRemoveQueuedPromptResult>;
+  removeQueuedPrompt?(params: { promptId: string }): Promise<GxserverSessionChatRemoveQueuedPromptResult>;
   /**
    * Commits a drag-to-reorder with the full id list, head first. Hosts without
    * it render the rows without drag handles instead of animating a reorder
@@ -135,9 +125,7 @@ export interface SessionChatTransport {
    * like pressing Enter. Hosts without it hide the per-row Send now control;
    * the row still drains on its own at the next idle window.
    */
-  sendQueuedPrompt?(params: {
-    promptId: string;
-  }): Promise<GxserverSendSessionChatQueuedPromptResult>;
+  sendQueuedPrompt?(params: { promptId: string }): Promise<GxserverSendSessionChatQueuedPromptResult>;
   /**
    * Pushes the unsent composer text to gxserver so other devices see it.
    * Called on blur / session switch / unmount / backgrounding, never per

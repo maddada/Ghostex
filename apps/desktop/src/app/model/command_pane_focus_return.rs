@@ -5,13 +5,11 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct CommandPaneAppModalReturnFocusTarget {
     pub(crate) group_id: CommandPaneGroupId,
     pub(crate) session_id: CommandSessionId,
 }
-
 
 pub(crate) fn command_pane_apply_app_modal_return_focus_target(
     command_pane: &mut CommandPaneModel,
@@ -29,7 +27,6 @@ pub(crate) fn command_pane_apply_app_modal_return_focus_target(
     command_pane.select_session_in_group(target.group_id, target.session_id)
 }
 
-
 pub(crate) fn restore_command_pane_app_modal_return_focus(
     command_pane: &mut CommandPaneModel,
     target: CommandPaneAppModalReturnFocusTarget,
@@ -41,7 +38,6 @@ pub(crate) fn restore_command_pane_app_modal_return_focus(
     command_pane_apply_app_modal_return_focus_target(command_pane, target)
 }
 
-
 pub(crate) fn command_pane_mounted_slot_for_session(
     command_pane: &CommandPaneModel,
     session_id: CommandSessionId,
@@ -52,7 +48,6 @@ pub(crate) fn command_pane_mounted_slot_for_session(
         .find(|slot_id| slot_id.session_id == session_id)
 }
 
-
 pub(crate) fn command_pane_group_for_session(
     command_pane: &CommandPaneModel,
     session_id: CommandSessionId,
@@ -62,7 +57,6 @@ pub(crate) fn command_pane_group_for_session(
         .into_iter()
         .find_map(|(group_id, candidate)| (candidate == session_id).then_some(group_id))
 }
-
 
 pub(crate) fn gpui_app_modal_command_return_focus_target_for_session(
     command_pane: &CommandPaneModel,
@@ -77,7 +71,6 @@ pub(crate) fn gpui_app_modal_command_return_focus_target_for_session(
             session_id,
         })
 }
-
 
 pub(crate) fn gpui_app_modal_sidebar_command_live_command_tab(
     command_pane: &CommandPaneModel,
@@ -100,14 +93,14 @@ pub(crate) fn gpui_app_modal_sidebar_command_live_command_tab(
         .then_some((group_id, session_id))
 }
 
-
-pub(crate) fn gpui_app_modal_requires_live_requested_command_session(modal: GpuiAppModalKind) -> bool {
+pub(crate) fn gpui_app_modal_requires_live_requested_command_session(
+    modal: GpuiAppModalKind,
+) -> bool {
     matches!(
         modal,
         GpuiAppModalKind::RenameSession | GpuiAppModalKind::DelayedSend
     )
 }
-
 
 pub(crate) fn gpui_app_modal_requested_live_command_session_id(
     modal: GpuiAppModalKind,
@@ -128,7 +121,6 @@ pub(crate) fn gpui_app_modal_requested_live_command_session_id(
         .map(|target| target.session_id)
 }
 
-
 pub(crate) fn gpui_app_modal_has_required_live_command_session(
     modal: GpuiAppModalKind,
     open_message: &serde_json::Value,
@@ -138,7 +130,6 @@ pub(crate) fn gpui_app_modal_has_required_live_command_session(
         || gpui_app_modal_requested_live_command_session_id(modal, open_message, command_pane)
             .is_some()
 }
-
 
 pub(crate) fn gpui_app_modal_command_return_focus_target(
     modal: GpuiAppModalKind,
@@ -167,7 +158,6 @@ pub(crate) fn gpui_app_modal_command_return_focus_target(
     gpui_app_modal_command_return_focus_target_for_session(command_pane, session_id)
 }
 
-
 pub(crate) fn gpui_app_modal_command_return_focus_target_for_active_modal(
     existing: Option<CommandPaneAppModalReturnFocusTarget>,
     incoming: Option<CommandPaneAppModalReturnFocusTarget>,
@@ -179,8 +169,9 @@ pub(crate) fn gpui_app_modal_command_return_focus_target_for_active_modal(
     existing.or(incoming)
 }
 
-
-pub(crate) fn gpui_command_close_after_done_session_marked_done(session: &CommandTerminalSession) -> bool {
+pub(crate) fn gpui_command_close_after_done_session_marked_done(
+    session: &CommandTerminalSession,
+) -> bool {
     /*
     CDXC:GPUICommandCloseAfterDone 2026-06-25-15:24:
     GPUI command Close After Done mirrors native's terminal-scoped watcher for command-pane Actions: Attention is done/error, and action-owned tabs become done once their live run is no longer Working. Generic idle command placeholders without an Action identity are not treated as done.
@@ -196,7 +187,6 @@ pub(crate) fn gpui_command_close_after_done_session_marked_done(session: &Comman
         && session.activity != CommandTerminalActivity::Working
 }
 
-
 pub(crate) fn gpui_command_close_after_done_runtime_timer_member(
     command_pane: &CommandPaneModel,
     session_id: CommandSessionId,
@@ -210,7 +200,6 @@ pub(crate) fn gpui_command_close_after_done_runtime_timer_member(
         .session(session_id)
         .map(|session| (group_id, session))
 }
-
 
 pub(crate) fn gpui_command_close_after_done_timer_should_count_down(
     command_pane: &CommandPaneModel,
@@ -228,7 +217,6 @@ pub(crate) fn gpui_command_close_after_done_timer_should_count_down(
     )
 }
 
-
 pub(crate) fn gpui_command_close_after_done_stale_runtime_timer_session_ids(
     command_pane: &CommandPaneModel,
     close_after_done_timers: &HashMap<CommandSessionId, GpuiCommandCloseAfterDoneTimer>,
@@ -242,14 +230,12 @@ pub(crate) fn gpui_command_close_after_done_stale_runtime_timer_session_ids(
         .collect()
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiCommandCloseAfterDoneToggleTarget {
     ArmLiveSession,
     ClearStoredSession,
     NoOp,
 }
-
 
 pub(crate) fn gpui_command_close_after_done_toggle_target(
     command_pane: &CommandPaneModel,
@@ -272,7 +258,6 @@ pub(crate) fn gpui_command_close_after_done_toggle_target(
     }
 }
 
-
 pub(crate) fn command_session_is_reusable_for_action(session: &CommandTerminalSession) -> bool {
     /*
     CDXC:GPUICommandPaneActions 2026-08-08:
@@ -284,7 +269,6 @@ pub(crate) fn command_session_is_reusable_for_action(session: &CommandTerminalSe
     */
     session.activity == CommandTerminalActivity::Idle
 }
-
 
 pub(crate) fn focused_command_pane_close_after_done_target(
     shell_focus: ShellFocusTarget,

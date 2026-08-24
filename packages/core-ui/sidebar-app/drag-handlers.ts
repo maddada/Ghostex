@@ -1,27 +1,27 @@
-import { move } from "@dnd-kit/helpers";
-import type { DragDropEventHandlers } from "@dnd-kit/react";
-import { useCallback, useEffectEvent, type Dispatch, type RefObject, type SetStateAction } from "react";
-import type { DiagnosticLoggingScenarioId, RemoteMachineSettings } from "../../shared/ghostex-settings";
+import { move } from '@dnd-kit/helpers';
+import type { DragDropEventHandlers } from '@dnd-kit/react';
+import { useCallback, useEffectEvent, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import type { DiagnosticLoggingScenarioId, RemoteMachineSettings } from '../../shared/ghostex-settings';
 import {
   moveSidebarV2GroupRows,
   projectSidebarV2GroupOrderByMachine,
   type SidebarV2GroupOrderRow,
-} from "../../shared/sidebar-v2-group-order";
-import { setSidebarTooltipsSuppressedForDrag } from "../app-tooltip";
+} from '../../shared/sidebar-v2-group-order';
+import { setSidebarTooltipsSuppressedForDrag } from '../app-tooltip';
 import {
   getClientPoint,
   getSidebarDropData,
   moveSessionIdsByDropTarget,
   type SidebarGroupDropTarget,
   type SidebarSessionDropTarget,
-} from "../sidebar-dnd";
+} from '../sidebar-dnd';
 import {
   moveProjectsToSidebarCollection,
   reorderSidebarProjectCollectionDefinitions,
   reorderSidebarProjectCollections,
   type SidebarProjectCollectionsState,
-} from "../project-collections";
-import type { WebviewApi } from "../webview-api";
+} from '../project-collections';
+import type { WebviewApi } from '../webview-api';
 import {
   areSameGroupDropTarget,
   areSameRemoteMachineDropTarget,
@@ -54,24 +54,24 @@ import {
   type SidebarProjectCollectionDropTarget,
   type SidebarRemoteMachineDropTarget,
   type SidebarSessionPointerDragState,
-} from "./drag-drop-geometry";
+} from './drag-drop-geometry';
 import type {
   SidebarGroupDragPreview,
   SidebarProjectCollectionDragPreview,
   SidebarRemoteMachineDragPreview,
-} from "./drag-ghosts";
+} from './drag-ghosts';
 import {
   createPinnedFirstSessionOrder,
   findSessionGroupId,
   haveSameSessionOrder,
   haveSameSessionSet,
-} from "./session-ordering";
+} from './session-ordering';
 import type {
   SessionIdsByGroup,
   SidebarGroupsById,
   SidebarProjectCollectionRenderItem,
   SidebarSessionsById,
-} from "./types";
+} from './types';
 
 export type SidebarDragHandlersOptions = {
   authoritativeSessionIdsByGroup: SessionIdsByGroup;
@@ -84,18 +84,11 @@ export type SidebarDragHandlersOptions = {
   groupsById: SidebarGroupsById;
   isManualActiveSessionsSort: boolean;
   isSidebarV2GroupedActive: boolean;
-  moveRemoteMachineSection: (
-    remoteMachineId: string,
-    target: SidebarRemoteMachineDropTarget,
-  ) => void;
+  moveRemoteMachineSection: (remoteMachineId: string, target: SidebarRemoteMachineDropTarget) => void;
   pinnedSessionDropTargetLogKeyRef: RefObject<string | undefined>;
   pointerDownSessionTargetRef: RefObject<SidebarPointerDownSessionTarget | undefined>;
   postPinnedSessionReorderLog: (event: string, details: unknown) => void;
-  postSidebarDebugLog: (
-    scenarioId: DiagnosticLoggingScenarioId,
-    event: string,
-    details: unknown,
-  ) => void;
+  postSidebarDebugLog: (scenarioId: DiagnosticLoggingScenarioId, event: string, details: unknown) => void;
   projectCollectionIdByProjectId: ReadonlyMap<string, string>;
   projectCollections: SidebarProjectCollectionsState;
   remoteMachines: readonly RemoteMachineSettings[];
@@ -107,20 +100,12 @@ export type SidebarDragHandlersOptions = {
   setGroupDropIndicator: Dispatch<SetStateAction<SidebarGroupDropTarget | undefined>>;
   setIsProjectReorderDragActive: Dispatch<SetStateAction<boolean>>;
   setPinnedSessionDropIndicator: Dispatch<SetStateAction<SidebarSessionDropTarget | undefined>>;
-  setProjectCollectionDragPreview: Dispatch<
-    SetStateAction<SidebarProjectCollectionDragPreview | undefined>
-  >;
-  setProjectCollectionDropIndicator: Dispatch<
-    SetStateAction<SidebarProjectCollectionDropTarget | undefined>
-  >;
+  setProjectCollectionDragPreview: Dispatch<SetStateAction<SidebarProjectCollectionDragPreview | undefined>>;
+  setProjectCollectionDropIndicator: Dispatch<SetStateAction<SidebarProjectCollectionDropTarget | undefined>>;
   setProjectCollections: Dispatch<SetStateAction<SidebarProjectCollectionsState>>;
   setProjectUngroupDropIndicatorScopeId: Dispatch<SetStateAction<string | undefined>>;
-  setRemoteMachineDragPreview: Dispatch<
-    SetStateAction<SidebarRemoteMachineDragPreview | undefined>
-  >;
-  setRemoteMachineDropIndicator: Dispatch<
-    SetStateAction<SidebarRemoteMachineDropTarget | undefined>
-  >;
+  setRemoteMachineDragPreview: Dispatch<SetStateAction<SidebarRemoteMachineDragPreview | undefined>>;
+  setRemoteMachineDropIndicator: Dispatch<SetStateAction<SidebarRemoteMachineDropTarget | undefined>>;
   setSessionDropIndicator: Dispatch<SetStateAction<SidebarSessionDropTarget | undefined>>;
   sidebarV2GroupIdsByMachineId: Record<string, string[]>;
   sidebarV2GroupOrderRowsRef: RefObject<readonly SidebarV2GroupOrderRow[]>;
@@ -190,9 +175,9 @@ export function useSidebarDragHandlers({
     if (isSidebarV2GroupedActive) {
       return sidebarV2GroupOrderRowsRef.current.map((row) => row.groupId);
     }
-    const machineId = groupsById[ sourceGroupId ]?.remoteMachineContext?.machineId;
+    const machineId = groupsById[sourceGroupId]?.remoteMachineContext?.machineId;
     if (machineId) {
-      return remoteProjectGroupIdsByMachineId[ machineId ] ?? [];
+      return remoteProjectGroupIdsByMachineId[machineId] ?? [];
     }
     return groupIdsRef.current;
   };
@@ -217,14 +202,13 @@ export function useSidebarDragHandlers({
   const sidebarV2GroupNoOpTargetForSource = (sourceGroupId: string) =>
     isSidebarV2GroupedActive
       ? (target: SidebarGroupDropTarget) =>
-        moveSidebarV2GroupRows(sidebarV2GroupOrderRowsRef.current, sourceGroupId, target) ===
-        undefined
+          moveSidebarV2GroupRows(sidebarV2GroupOrderRowsRef.current, sourceGroupId, target) === undefined
       : undefined;
 
   const updateSessionDropIndicator = useEffectEvent(
-    (event: Parameters<NonNullable<DragDropEventHandlers[ "onDragOver" ]>>[ 0 ]) => {
+    (event: Parameters<NonNullable<DragDropEventHandlers['onDragOver']>>[0]) => {
       const sourceData = getSidebarDropData(event.operation.source);
-      if (sourceData?.kind === "remote-machine") {
+      if (sourceData?.kind === 'remote-machine') {
         setGroupDropIndicator(undefined);
         setPinnedSessionDropIndicator(undefined);
         setProjectCollectionDropIndicator(undefined);
@@ -234,96 +218,86 @@ export function useSidebarDragHandlers({
           getDragNativeEvent(event),
           remoteMachines.map((machine) => machine.id),
           sourceData.remoteMachineId,
-          getSidebarDropData(event.operation.target),
+          getSidebarDropData(event.operation.target)
         );
         setRemoteMachineDropIndicator((previous) =>
           areSameRemoteMachineDropTarget(previous, resolvedRemoteMachineDropTarget)
             ? previous
-            : resolvedRemoteMachineDropTarget,
+            : resolvedRemoteMachineDropTarget
         );
         return;
       }
 
       setRemoteMachineDropIndicator(undefined);
-      if (sourceData?.kind === "group") {
+      if (sourceData?.kind === 'group') {
         setPinnedSessionDropIndicator(undefined);
         setSessionDropIndicator(undefined);
         const nativeEvent = getDragNativeEvent(event);
-        const sourceProjectId =
-          groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
+        const sourceProjectId = groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
         const resolvedUngroupDropScopeId =
           sourceProjectId && projectCollectionIdByProjectId.has(sourceProjectId)
-            ? resolveProjectUngroupDropScopeFromPoint(
-              nativeEvent,
-              sourceData.groupId,
-              groupsById,
-            )
+            ? resolveProjectUngroupDropScopeFromPoint(nativeEvent, sourceData.groupId, groupsById)
             : undefined;
         const resolvedGroupDropTarget = resolvedUngroupDropScopeId
           ? undefined
           : resolveGroupDropTargetFromPoint(
-            nativeEvent,
-            groupDragCandidateIdsForSource(sourceData.groupId),
-            groupsById,
-            getSidebarDropData(event.operation.target),
-            sourceData,
-            sidebarV2GroupNoOpTargetForSource(sourceData.groupId),
-          );
+              nativeEvent,
+              groupDragCandidateIdsForSource(sourceData.groupId),
+              groupsById,
+              getSidebarDropData(event.operation.target),
+              sourceData,
+              sidebarV2GroupNoOpTargetForSource(sourceData.groupId)
+            );
         setProjectUngroupDropIndicatorScopeId((previous) =>
-          previous === resolvedUngroupDropScopeId ? previous : resolvedUngroupDropScopeId,
+          previous === resolvedUngroupDropScopeId ? previous : resolvedUngroupDropScopeId
         );
         setGroupDropIndicator((previous) =>
-          areSameGroupDropTarget(previous, resolvedGroupDropTarget)
-            ? previous
-            : resolvedGroupDropTarget,
+          areSameGroupDropTarget(previous, resolvedGroupDropTarget) ? previous : resolvedGroupDropTarget
         );
         return;
       }
 
       setGroupDropIndicator(undefined);
       setProjectUngroupDropIndicatorScopeId(undefined);
-      if (sourceData?.kind === "project-collection") {
+      if (sourceData?.kind === 'project-collection') {
         setPinnedSessionDropIndicator(undefined);
         setSessionDropIndicator(undefined);
         const resolvedCollectionDropTarget = resolveProjectCollectionDropTargetFromPoint(
           getDragNativeEvent(event),
           displayedProjectCollectionItems.flatMap((item) =>
-            item.kind === "collection" ? [item.collection.collectionId] : [],
+            item.kind === 'collection' ? [item.collection.collectionId] : []
           ),
           sourceData.collectionId,
-          getSidebarDropData(event.operation.target),
+          getSidebarDropData(event.operation.target)
         );
         setProjectCollectionDropIndicator((previous) =>
           previous?.collectionId === resolvedCollectionDropTarget?.collectionId &&
           previous?.position === resolvedCollectionDropTarget?.position
             ? previous
-            : resolvedCollectionDropTarget,
+            : resolvedCollectionDropTarget
         );
         return;
       }
 
       setProjectCollectionDropIndicator(undefined);
-      if (sourceData?.kind !== "session") {
+      if (sourceData?.kind !== 'session') {
         setPinnedSessionDropIndicator(undefined);
         setSessionDropIndicator(undefined);
         return;
       }
 
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
+      if (sessionsById[sourceData.sessionId]?.isPinned === true) {
         setSessionDropIndicator(undefined);
         const resolvedPinnedSessionDropTarget = resolvePinnedSessionDropTargetFromPoint(
           getDragNativeEvent(event),
           sourceData,
           sessionIdsByGroupRef.current,
-          sessionsById,
+          sessionsById
         );
-        const pinnedTargetLogKey = createPinnedSessionDropTargetLogKey(
-          sourceData,
-          resolvedPinnedSessionDropTarget,
-        );
+        const pinnedTargetLogKey = createPinnedSessionDropTargetLogKey(sourceData, resolvedPinnedSessionDropTarget);
         if (pinnedSessionDropTargetLogKeyRef.current !== pinnedTargetLogKey) {
           pinnedSessionDropTargetLogKeyRef.current = pinnedTargetLogKey;
-          postPinnedSessionReorderLog("targetChanged", {
+          postPinnedSessionReorderLog('targetChanged', {
             point: getClientPoint(getDragNativeEvent(event)),
             resolvedPinnedSessionDropTarget,
             sourceData,
@@ -332,14 +306,14 @@ export function useSidebarDragHandlers({
               sessionIdsByGroupRef.current,
               effectiveSessionIdsByGroup,
               authoritativeSessionIdsByGroup,
-              sessionsById,
+              sessionsById
             ),
           });
         }
         setPinnedSessionDropIndicator((previous) =>
           areSameSessionDropTarget(previous, resolvedPinnedSessionDropTarget)
             ? previous
-            : resolvedPinnedSessionDropTarget,
+            : resolvedPinnedSessionDropTarget
         );
         return;
       }
@@ -349,7 +323,7 @@ export function useSidebarDragHandlers({
         getDragNativeEvent(event),
         sessionIdsByGroupRef.current,
         getSidebarDropData(event.operation.target),
-        sourceData,
+        sourceData
       );
 
       /*
@@ -363,9 +337,9 @@ export function useSidebarDragHandlers({
       setSessionDropIndicator((previous) =>
         areSameSessionDropTarget(previous, resolvedSessionDropTarget ?? undefined)
           ? previous
-          : resolvedSessionDropTarget ?? undefined,
+          : (resolvedSessionDropTarget ?? undefined)
       );
-    },
+    }
   );
 
   const handleDragStart = ((event) => {
@@ -374,16 +348,12 @@ export function useSidebarDragHandlers({
     const sourceData = getSidebarDropData(event.operation.source);
     const pointerDownSessionTarget = pointerDownSessionTargetRef.current;
     setIsProjectReorderDragActive(
-      sourceData?.kind === "group" ||
-        sourceData?.kind === "project-collection" ||
-        sourceData?.kind === "remote-machine",
+      sourceData?.kind === 'group' || sourceData?.kind === 'project-collection' || sourceData?.kind === 'remote-machine'
     );
-    if (sourceData?.kind === "group") {
+    if (sourceData?.kind === 'group') {
       const point = getClientPoint(nativeEvent);
-      const group = groupsById[ sourceData.groupId ];
-      const headerMetrics = point
-        ? getProjectGroupDragHeaderMetrics(sourceData.groupId, point)
-        : undefined;
+      const group = groupsById[sourceData.groupId];
+      const headerMetrics = point ? getProjectGroupDragHeaderMetrics(sourceData.groupId, point) : undefined;
       /**
        * CDXC:ProjectDragPreview 2026-05-21-11:45:
        * Project drag ghosts should be anchored to the live cursor and should
@@ -400,24 +370,24 @@ export function useSidebarDragHandlers({
       setGroupDragPreview(
         point && headerMetrics && group?.projectContext
           ? {
-            groupId: sourceData.groupId,
-            isCollapsed: collapsedGroupsById[ sourceData.groupId ] === true,
-            left: headerMetrics.left,
-            pointerOffsetY: headerMetrics.pointerOffsetY,
-            themeColor: group.projectContext.themeColor,
-            title: group.title,
-            top: headerMetrics.top,
-            width: headerMetrics.width,
-          }
-          : undefined,
+              groupId: sourceData.groupId,
+              isCollapsed: collapsedGroupsById[sourceData.groupId] === true,
+              left: headerMetrics.left,
+              pointerOffsetY: headerMetrics.pointerOffsetY,
+              themeColor: group.projectContext.themeColor,
+              title: group.title,
+              top: headerMetrics.top,
+              width: headerMetrics.width,
+            }
+          : undefined
       );
     } else {
       setGroupDragPreview(undefined);
     }
-    if (sourceData?.kind === "project-collection") {
+    if (sourceData?.kind === 'project-collection') {
       const point = getClientPoint(nativeEvent);
       const collection = projectCollections.collections.find(
-        (candidate) => candidate.collectionId === sourceData.collectionId,
+        (candidate) => candidate.collectionId === sourceData.collectionId
       );
       const metrics = point
         ? getProjectCollectionDragMetrics(event.operation.source, sourceData.collectionId)
@@ -425,46 +395,41 @@ export function useSidebarDragHandlers({
       setProjectCollectionDragPreview(
         point && metrics && collection
           ? {
-            collectionId: sourceData.collectionId,
-            color: collection.color,
-            left: metrics.left,
-            pointerOffsetY: point.y - metrics.top,
-            title: collection.title,
-            top: metrics.top,
-            width: metrics.width,
-          }
-          : undefined,
+              collectionId: sourceData.collectionId,
+              color: collection.color,
+              left: metrics.left,
+              pointerOffsetY: point.y - metrics.top,
+              title: collection.title,
+              top: metrics.top,
+              width: metrics.width,
+            }
+          : undefined
       );
     } else {
       setProjectCollectionDragPreview(undefined);
     }
-    if (sourceData?.kind === "remote-machine") {
+    if (sourceData?.kind === 'remote-machine') {
       const point = getClientPoint(nativeEvent);
-      const machine = remoteMachines.find(
-        (candidate) => candidate.id === sourceData.remoteMachineId,
-      );
-      const metrics = point
-        ? getRemoteMachineDragHeaderMetrics(sourceData.remoteMachineId, point)
-        : undefined;
+      const machine = remoteMachines.find((candidate) => candidate.id === sourceData.remoteMachineId);
+      const metrics = point ? getRemoteMachineDragHeaderMetrics(sourceData.remoteMachineId, point) : undefined;
       setRemoteMachineDragPreview(
         point && metrics && machine
           ? {
-            collapsed:
-              collapsedRemoteMachineSectionsById[sourceData.remoteMachineId] === true,
-            left: metrics.left,
-            machineId: sourceData.remoteMachineId,
-            pointerOffsetY: metrics.pointerOffsetY,
-            title: machine.name,
-            top: metrics.top,
-            width: metrics.width,
-          }
-          : undefined,
+              collapsed: collapsedRemoteMachineSectionsById[sourceData.remoteMachineId] === true,
+              left: metrics.left,
+              machineId: sourceData.remoteMachineId,
+              pointerOffsetY: metrics.pointerOffsetY,
+              title: machine.name,
+              top: metrics.top,
+              width: metrics.width,
+            }
+          : undefined
       );
     } else {
       setRemoteMachineDragPreview(undefined);
     }
     sessionPointerDragStateRef.current =
-      sourceData?.kind === "session"
+      sourceData?.kind === 'session'
         ? createSessionPointerDragState(sourceData, pointerDownSessionTarget, nativeEvent)
         : undefined;
     pinnedSessionDropTargetLogKeyRef.current = undefined;
@@ -476,14 +441,14 @@ export function useSidebarDragHandlers({
     setSessionDropIndicator(undefined);
     if (
       pointerDownSessionTarget &&
-      sessionsById[ pointerDownSessionTarget.sessionId ]?.isPinned === true &&
+      sessionsById[pointerDownSessionTarget.sessionId]?.isPinned === true &&
       !(
-        sourceData?.kind === "session" &&
+        sourceData?.kind === 'session' &&
         sourceData.groupId === pointerDownSessionTarget.groupId &&
         sourceData.sessionId === pointerDownSessionTarget.sessionId
       )
     ) {
-      postPinnedSessionReorderLog("dragStartSourceMismatch", {
+      postPinnedSessionReorderLog('dragStartSourceMismatch', {
         point: getClientPoint(nativeEvent),
         pointerDownSessionTarget,
         sourceData,
@@ -491,19 +456,19 @@ export function useSidebarDragHandlers({
         state: createPinnedSessionReorderDebugState(
           {
             groupId: pointerDownSessionTarget.groupId,
-            kind: "session",
+            kind: 'session',
             sessionId: pointerDownSessionTarget.sessionId,
           },
           sessionIdsByGroupRef.current,
           effectiveSessionIdsByGroup,
           authoritativeSessionIdsByGroup,
-          sessionsById,
+          sessionsById
         ),
         targetData: getSidebarDropData(event.operation.target),
       });
     }
-    if (sourceData?.kind === "session" && sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-      postPinnedSessionReorderLog("dragStart", {
+    if (sourceData?.kind === 'session' && sessionsById[sourceData.sessionId]?.isPinned === true) {
+      postPinnedSessionReorderLog('dragStart', {
         point: getClientPoint(nativeEvent),
         pointerDownSessionTarget,
         sourceData,
@@ -512,19 +477,19 @@ export function useSidebarDragHandlers({
           sessionIdsByGroupRef.current,
           effectiveSessionIdsByGroup,
           authoritativeSessionIdsByGroup,
-          sessionsById,
+          sessionsById
         ),
         targetData: getSidebarDropData(event.operation.target),
       });
     }
-    postSidebarDebugLog("native.pane.reorder", "session.dragStart", {
+    postSidebarDebugLog('native.pane.reorder', 'session.dragStart', {
       nativeEventType: nativeEvent?.type,
       pointerDragState: sessionPointerDragStateRef.current,
       point: getClientPoint(nativeEvent),
       sourceData,
       targetData: getSidebarDropData(event.operation.target),
     });
-  }) satisfies DragDropEventHandlers[ "onDragStart" ];
+  }) satisfies DragDropEventHandlers['onDragStart'];
 
   const handleDragMove = ((event) => {
     const nativeEvent = getDragNativeEvent(event);
@@ -533,7 +498,7 @@ export function useSidebarDragHandlers({
     updateGroupDragPreviewFromEvent(setRemoteMachineDragPreview, nativeEvent);
     updateSessionPointerDragState(sessionPointerDragStateRef.current, nativeEvent);
     updateSessionDropIndicator(event);
-  }) satisfies DragDropEventHandlers[ "onDragMove" ];
+  }) satisfies DragDropEventHandlers['onDragMove'];
 
   const handleDragOver = ((event) => {
     const nativeEvent = getDragNativeEvent(event);
@@ -542,7 +507,7 @@ export function useSidebarDragHandlers({
     updateGroupDragPreviewFromEvent(setRemoteMachineDragPreview, nativeEvent);
     updateSessionPointerDragState(sessionPointerDragStateRef.current, nativeEvent);
     updateSessionDropIndicator(event);
-  }) satisfies DragDropEventHandlers[ "onDragOver" ];
+  }) satisfies DragDropEventHandlers['onDragOver'];
 
   const handleDragEnd = ((event) => {
     setSidebarTooltipsSuppressedForDrag(false);
@@ -567,15 +532,10 @@ export function useSidebarDragHandlers({
     updateSessionPointerDragState(sessionPointerDragState, nativeEvent);
     sessionPointerDragStateRef.current = undefined;
     const resolvedSessionDropTarget =
-      sourceData?.kind === "session"
-        ? resolveSessionDropTargetFromPoint(
-          nativeEvent,
-          currentSessionIdsByGroup,
-          targetData,
-          sourceData,
-        )
+      sourceData?.kind === 'session'
+        ? resolveSessionDropTargetFromPoint(nativeEvent, currentSessionIdsByGroup, targetData, sourceData)
         : undefined;
-    postSidebarDebugLog("native.pane.reorder", "session.dragEnd", {
+    postSidebarDebugLog('native.pane.reorder', 'session.dragEnd', {
       canceled: event.canceled,
       nativeEventType: nativeEvent?.type,
       pointerDragState: sessionPointerDragState,
@@ -588,7 +548,7 @@ export function useSidebarDragHandlers({
       return;
     }
 
-    if (sourceData.kind === "project-collection") {
+    if (sourceData.kind === 'project-collection') {
       setProjectCollectionDropIndicator(undefined);
       if (event.canceled) {
         return;
@@ -608,15 +568,15 @@ export function useSidebarDragHandlers({
        * same pattern project rows use via resolveGroupDropTargetFromPoint.
        */
       const collectionItems = displayedProjectCollectionItems.filter(
-        (item): item is Extract<SidebarProjectCollectionRenderItem, { kind: "collection" }> =>
-          item.kind === "collection",
+        (item): item is Extract<SidebarProjectCollectionRenderItem, { kind: 'collection' }> =>
+          item.kind === 'collection'
       );
       const collectionIds = collectionItems.map((item) => item.collection.collectionId);
       const resolvedCollectionDropTarget = resolveProjectCollectionDropTargetFromPoint(
         nativeEvent,
         collectionIds,
         sourceData.collectionId,
-        targetData,
+        targetData
       );
       if (!resolvedCollectionDropTarget) {
         return;
@@ -624,26 +584,24 @@ export function useSidebarDragHandlers({
       const nextCollectionIds = moveCollectionIdToDropTarget(
         collectionIds,
         sourceData.collectionId,
-        resolvedCollectionDropTarget,
+        resolvedCollectionDropTarget
       );
       if (!nextCollectionIds) {
         return;
       }
 
-      const collectionItemById = new Map(
-        collectionItems.map((item) => [item.collection.collectionId, item]),
-      );
+      const collectionItemById = new Map(collectionItems.map((item) => [item.collection.collectionId, item]));
       let nextCollectionIndex = 0;
       const nextRenderItems = displayedProjectCollectionItems.map((item) => {
-        if (item.kind !== "collection") {
+        if (item.kind !== 'collection') {
           return item;
         }
         const collectionId = nextCollectionIds[nextCollectionIndex];
         nextCollectionIndex += 1;
-        return collectionId ? collectionItemById.get(collectionId) ?? item : item;
+        return collectionId ? (collectionItemById.get(collectionId) ?? item) : item;
       });
       const nextGroupIds = nextRenderItems.flatMap((item) =>
-        item.kind === "collection" ? item.groupIds : [item.groupId],
+        item.kind === 'collection' ? item.groupIds : [item.groupId]
       );
       if (haveSameSessionOrder(currentGroupIds, nextGroupIds)) {
         return;
@@ -656,17 +614,17 @@ export function useSidebarDragHandlers({
       setProjectCollections((previous) =>
         reorderSidebarProjectCollections(
           reorderSidebarProjectCollectionDefinitions(previous, nextCollectionIds),
-          nextProjectIds,
-        ),
+          nextProjectIds
+        )
       );
       vscode.postMessage({
         groupIds: nextGroupIds,
-        type: "syncGroupOrder",
+        type: 'syncGroupOrder',
       });
       return;
     }
 
-    if (sourceData.kind === "remote-machine") {
+    if (sourceData.kind === 'remote-machine') {
       if (event.canceled) {
         return;
       }
@@ -674,7 +632,7 @@ export function useSidebarDragHandlers({
         nativeEvent,
         remoteMachines.map((machine) => machine.id),
         sourceData.remoteMachineId,
-        targetData,
+        targetData
       );
       if (!resolvedRemoteMachineDropTarget) {
         return;
@@ -683,7 +641,7 @@ export function useSidebarDragHandlers({
       return;
     }
 
-    if (sourceData.kind === "group") {
+    if (sourceData.kind === 'group') {
       if (event.canceled) {
         return;
       }
@@ -714,7 +672,7 @@ export function useSidebarDragHandlers({
           groupsById,
           targetData,
           sourceData,
-          sidebarV2GroupNoOpTargetForSource(sourceData.groupId),
+          sidebarV2GroupNoOpTargetForSource(sourceData.groupId)
         );
         if (!resolvedTarget) {
           return;
@@ -728,7 +686,7 @@ export function useSidebarDragHandlers({
         for (const machineGroupIds of Object.values(projectedOrders)) {
           vscode.postMessage({
             groupIds: machineGroupIds,
-            type: "syncGroupOrder",
+            type: 'syncGroupOrder',
           });
         }
         return;
@@ -741,41 +699,32 @@ export function useSidebarDragHandlers({
        * host persists the per-machine order. Collections apply to local
        * projects only.
        */
-      const remoteMachineId = groupsById[ sourceData.groupId ]?.remoteMachineContext?.machineId;
+      const remoteMachineId = groupsById[sourceData.groupId]?.remoteMachineContext?.machineId;
       if (remoteMachineId) {
-        const machineGroupIds = remoteProjectGroupIdsByMachineId[ remoteMachineId ] ?? [];
-        const sourceProjectId =
-          groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
+        const machineGroupIds = remoteProjectGroupIdsByMachineId[remoteMachineId] ?? [];
+        const sourceProjectId = groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
         const resolvedUngroupDropScopeId = resolveProjectUngroupDropScopeFromPoint(
           nativeEvent,
           sourceData.groupId,
-          groupsById,
+          groupsById
         );
         if (
           sourceProjectId &&
           projectCollectionIdByProjectId.has(sourceProjectId) &&
           resolvedUngroupDropScopeId === createRemoteProjectListScopeId(remoteMachineId)
         ) {
-          const nextMachineGroupIds = moveProjectGroupFamilyToEnd(
-            machineGroupIds,
-            sourceData.groupId,
-            groupsById,
-          );
+          const nextMachineGroupIds = moveProjectGroupFamilyToEnd(machineGroupIds, sourceData.groupId, groupsById);
           setProjectCollections((previous) =>
             moveProjectsToSidebarCollection(
               previous,
-              getProjectCollectionFamilyProjectIds(
-                sourceProjectId,
-                machineGroupIds,
-                groupsById,
-              ),
-              undefined,
-            ),
+              getProjectCollectionFamilyProjectIds(sourceProjectId, machineGroupIds, groupsById),
+              undefined
+            )
           );
           if (!haveSameSessionOrder(machineGroupIds, nextMachineGroupIds)) {
             vscode.postMessage({
               groupIds: nextMachineGroupIds,
-              type: "syncGroupOrder",
+              type: 'syncGroupOrder',
             });
           }
           return;
@@ -785,7 +734,7 @@ export function useSidebarDragHandlers({
           machineGroupIds,
           groupsById,
           targetData,
-          sourceData,
+          sourceData
         );
         if (!resolvedRemoteDropTarget) {
           return;
@@ -794,50 +743,41 @@ export function useSidebarDragHandlers({
           machineGroupIds,
           sourceData.groupId,
           resolvedRemoteDropTarget,
-          groupsById,
+          groupsById
         );
         if (haveSameSessionOrder(machineGroupIds, nextMachineGroupIds)) {
           return;
         }
         vscode.postMessage({
           groupIds: nextMachineGroupIds,
-          type: "syncGroupOrder",
+          type: 'syncGroupOrder',
         });
         return;
       }
 
-      const sourceProjectId =
-        groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
+      const sourceProjectId = groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
       const resolvedUngroupDropScopeId = resolveProjectUngroupDropScopeFromPoint(
         nativeEvent,
         sourceData.groupId,
-        groupsById,
+        groupsById
       );
       if (
         sourceProjectId &&
         projectCollectionIdByProjectId.has(sourceProjectId) &&
         resolvedUngroupDropScopeId === LOCAL_PROJECT_LIST_SCOPE_ID
       ) {
-        const nextGroupIds = moveProjectGroupFamilyToEnd(
-          currentGroupIds,
-          sourceData.groupId,
-          groupsById,
-        );
+        const nextGroupIds = moveProjectGroupFamilyToEnd(currentGroupIds, sourceData.groupId, groupsById);
         setProjectCollections((previous) =>
           moveProjectsToSidebarCollection(
             previous,
-            getProjectCollectionFamilyProjectIds(
-              sourceProjectId,
-              currentGroupIds,
-              groupsById,
-            ),
-            undefined,
-          ),
+            getProjectCollectionFamilyProjectIds(sourceProjectId, currentGroupIds, groupsById),
+            undefined
+          )
         );
         if (!haveSameSessionOrder(currentGroupIds, nextGroupIds)) {
           vscode.postMessage({
             groupIds: nextGroupIds,
-            type: "syncGroupOrder",
+            type: 'syncGroupOrder',
           });
         }
         return;
@@ -847,18 +787,13 @@ export function useSidebarDragHandlers({
         currentGroupIds,
         groupsById,
         targetData,
-        sourceData,
+        sourceData
       );
       const isProjectGroupOrder =
         createProjectGroupOrderItems(currentGroupIds, groupsById).length === currentGroupIds.length;
       const nextGroupIds = resolvedGroupDropTarget
-        ? moveGroupIdsByProjectDropTarget(
-          currentGroupIds,
-          sourceData.groupId,
-          resolvedGroupDropTarget,
-          groupsById,
-        )
-        : targetData?.kind === "group" && !isProjectGroupOrder
+        ? moveGroupIdsByProjectDropTarget(currentGroupIds, sourceData.groupId, resolvedGroupDropTarget, groupsById)
+        : targetData?.kind === 'group' && !isProjectGroupOrder
           ? move(currentGroupIds, event)
           : currentGroupIds;
       if (haveSameSessionOrder(currentGroupIds, nextGroupIds)) {
@@ -867,14 +802,13 @@ export function useSidebarDragHandlers({
 
       if (enableProjectCollections && resolvedGroupDropTarget) {
         const sourceProjectId = groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
-        const targetProjectId =
-          groupsById[resolvedGroupDropTarget.groupId]?.projectContext?.editor.projectId;
+        const targetProjectId = groupsById[resolvedGroupDropTarget.groupId]?.projectContext?.editor.projectId;
         if (sourceProjectId && targetProjectId) {
           const targetCollectionId = projectCollectionIdByProjectId.get(targetProjectId);
           const sourceFamilyProjectIds = getProjectCollectionFamilyProjectIds(
             sourceProjectId,
             currentGroupIds,
-            groupsById,
+            groupsById
           );
           const nextProjectIds = nextGroupIds.flatMap((groupId) => {
             const projectId = groupsById[groupId]?.projectContext?.editor.projectId;
@@ -882,37 +816,33 @@ export function useSidebarDragHandlers({
           });
           setProjectCollections((previous) =>
             reorderSidebarProjectCollections(
-              moveProjectsToSidebarCollection(
-                previous,
-                sourceFamilyProjectIds,
-                targetCollectionId,
-              ),
-              nextProjectIds,
-            ),
+              moveProjectsToSidebarCollection(previous, sourceFamilyProjectIds, targetCollectionId),
+              nextProjectIds
+            )
           );
         }
       }
 
       vscode.postMessage({
         groupIds: nextGroupIds,
-        type: "syncGroupOrder",
+        type: 'syncGroupOrder',
       });
       return;
     }
 
-    if (sourceData.kind !== "session") {
+    if (sourceData.kind !== 'session') {
       return;
     }
 
     if (sessionPointerDragState?.startPoint && !sessionPointerDragState.didMove) {
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-        postPinnedSessionReorderLog("dragEndIgnoredWithoutPointerMovement", {
+      if (sessionsById[sourceData.sessionId]?.isPinned === true) {
+        postPinnedSessionReorderLog('dragEndIgnoredWithoutPointerMovement', {
           point: getClientPoint(nativeEvent),
           pointerDragState: sessionPointerDragState,
           sourceData,
         });
       }
-      postSidebarDebugLog("native.pane.reorder", "session.dragEndIgnoredWithoutPointerMovement", {
+      postSidebarDebugLog('native.pane.reorder', 'session.dragEndIgnoredWithoutPointerMovement', {
         point: getClientPoint(nativeEvent),
         sourceData,
       });
@@ -920,8 +850,8 @@ export function useSidebarDragHandlers({
     }
 
     if (event.canceled) {
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-        postPinnedSessionReorderLog("dragEndCanceled", {
+      if (sessionsById[sourceData.sessionId]?.isPinned === true) {
+        postPinnedSessionReorderLog('dragEndCanceled', {
           point: getClientPoint(nativeEvent),
           sourceData,
           targetData,
@@ -930,20 +860,20 @@ export function useSidebarDragHandlers({
       return;
     }
 
-    if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
+    if (sessionsById[sourceData.sessionId]?.isPinned === true) {
       const resolvedPinnedSessionDropTarget = resolvePinnedSessionDropTargetFromPoint(
         nativeEvent,
         sourceData,
         currentSessionIdsByGroup,
-        sessionsById,
+        sessionsById
       );
-      postPinnedSessionReorderLog("dragEndResolved", {
+      postPinnedSessionReorderLog('dragEndResolved', {
         point: getClientPoint(nativeEvent),
         resolution: createPinnedSessionDropResolutionDebugState(
           nativeEvent,
           sourceData,
           currentSessionIdsByGroup,
-          sessionsById,
+          sessionsById
         ),
         resolvedPinnedSessionDropTarget,
         resolvedSessionDropTarget,
@@ -953,37 +883,37 @@ export function useSidebarDragHandlers({
           currentSessionIdsByGroup,
           previousSessionIdsByGroup,
           authoritativeSessionIdsByGroup,
-          sessionsById,
+          sessionsById
         ),
         targetData,
       });
       if (!resolvedPinnedSessionDropTarget) {
-        postPinnedSessionReorderLog("dragEndSkipped", {
-          reason: "noPinnedDropTarget",
+        postPinnedSessionReorderLog('dragEndSkipped', {
+          reason: 'noPinnedDropTarget',
           sourceData,
           targetData,
         });
         return;
       }
 
-      const previousPinnedSessionIds = (previousSessionIdsByGroup[ sourceData.groupId ] ?? []).filter(
-        (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
+      const previousPinnedSessionIds = (previousSessionIdsByGroup[sourceData.groupId] ?? []).filter(
+        (sessionId) => sessionsById[sessionId]?.isPinned === true
       );
       const nextPinnedSessionIds = movePinnedSessionIdsByDropTarget(
         previousPinnedSessionIds,
         sourceData.sessionId,
-        resolvedPinnedSessionDropTarget,
+        resolvedPinnedSessionDropTarget
       );
       if (
         haveSameSessionOrder(previousPinnedSessionIds, nextPinnedSessionIds) ||
         !haveSameSessionSet(previousPinnedSessionIds, nextPinnedSessionIds)
       ) {
-        postPinnedSessionReorderLog("dragEndSkipped", {
+        postPinnedSessionReorderLog('dragEndSkipped', {
           nextPinnedSessionIds,
           previousPinnedSessionIds,
           reason: haveSameSessionOrder(previousPinnedSessionIds, nextPinnedSessionIds)
-            ? "samePinnedOrder"
-            : "pinnedSetMismatch",
+            ? 'samePinnedOrder'
+            : 'pinnedSetMismatch',
           resolvedPinnedSessionDropTarget,
           sourceData,
         });
@@ -998,18 +928,18 @@ export function useSidebarDragHandlers({
        * non-pinned project sessions in their authoritative order.
        */
       const nextSessionIds = createPinnedFirstSessionOrder(
-        (authoritativeSessionIdsByGroup[ sourceData.groupId ] ?? []).length > 0
-          ? (authoritativeSessionIdsByGroup[ sourceData.groupId ] ?? [])
-          : (previousSessionIdsByGroup[ sourceData.groupId ] ?? []),
+        (authoritativeSessionIdsByGroup[sourceData.groupId] ?? []).length > 0
+          ? (authoritativeSessionIdsByGroup[sourceData.groupId] ?? [])
+          : (previousSessionIdsByGroup[sourceData.groupId] ?? []),
         nextPinnedSessionIds,
-        sessionsById,
+        sessionsById
       );
       vscode.postMessage({
         groupId: sourceData.groupId,
         sessionIds: nextSessionIds,
-        type: "syncSessionOrder",
+        type: 'syncSessionOrder',
       });
-      postPinnedSessionReorderLog("syncSessionOrderPosted", {
+      postPinnedSessionReorderLog('syncSessionOrderPosted', {
         nextPinnedSessionIds,
         nextSessionIds,
         previousPinnedSessionIds,
@@ -1029,17 +959,13 @@ export function useSidebarDragHandlers({
 
     const nextSessionIdsByGroup =
       resolvedSessionDropTarget !== undefined
-        ? moveSessionIdsByDropTarget(
-          currentSessionIdsByGroup,
-          sourceData.sessionId,
-          resolvedSessionDropTarget,
-        )
+        ? moveSessionIdsByDropTarget(currentSessionIdsByGroup, sourceData.sessionId, resolvedSessionDropTarget)
         : move(currentSessionIdsByGroup, event);
     const nextListedSessionIds = new Set(Object.values(nextSessionIdsByGroup).flat());
     const omittedSessionIds = Object.values(currentSessionIdsByGroup)
       .flat()
       .filter((sessionId) => !nextListedSessionIds.has(sessionId));
-    postSidebarDebugLog("native.pane.reorder", "session.dragComputedOrder", {
+    postSidebarDebugLog('native.pane.reorder', 'session.dragComputedOrder', {
       currentSessionIdsByGroup,
       nextSessionIdsByGroup,
       omittedSessionIds,
@@ -1054,7 +980,7 @@ export function useSidebarDragHandlers({
     }
 
     if (previousGroupId !== nextGroupId) {
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
+      if (sessionsById[sourceData.sessionId]?.isPinned === true) {
         /**
          * CDXC:PinnedSessions 2026-05-28-12:04:
          * Project pinned sessions are only reorderable inside their owning
@@ -1065,7 +991,7 @@ export function useSidebarDragHandlers({
         return;
       }
 
-      const targetIndex = nextSessionIdsByGroup[ nextGroupId ]?.indexOf(sourceData.sessionId);
+      const targetIndex = nextSessionIdsByGroup[nextGroupId]?.indexOf(sourceData.sessionId);
       if (targetIndex == null || targetIndex < 0) {
         return;
       }
@@ -1074,21 +1000,21 @@ export function useSidebarDragHandlers({
         groupId: nextGroupId,
         sessionId: sourceData.sessionId,
         targetIndex,
-        type: "moveSessionToGroup",
+        type: 'moveSessionToGroup',
       });
       return;
     }
 
     if (!isManualActiveSessionsSort) {
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-        const authoritativeSessionIds = authoritativeSessionIdsByGroup[ nextGroupId ] ?? [];
-        const previousSessionIds = previousSessionIdsByGroup[ nextGroupId ] ?? [];
-        const nextDisplaySessionIds = nextSessionIdsByGroup[ nextGroupId ] ?? [];
+      if (sessionsById[sourceData.sessionId]?.isPinned === true) {
+        const authoritativeSessionIds = authoritativeSessionIdsByGroup[nextGroupId] ?? [];
+        const previousSessionIds = previousSessionIdsByGroup[nextGroupId] ?? [];
+        const nextDisplaySessionIds = nextSessionIdsByGroup[nextGroupId] ?? [];
         const nextPinnedSessionIds = nextDisplaySessionIds.filter(
-          (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
+          (sessionId) => sessionsById[sessionId]?.isPinned === true
         );
         const previousPinnedSessionIds = previousSessionIds.filter(
-          (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
+          (sessionId) => sessionsById[sessionId]?.isPinned === true
         );
         if (
           !haveSameSessionOrder(previousPinnedSessionIds, nextPinnedSessionIds) &&
@@ -1106,17 +1032,17 @@ export function useSidebarDragHandlers({
             sessionIds: createPinnedFirstSessionOrder(
               authoritativeSessionIds.length > 0 ? authoritativeSessionIds : previousSessionIds,
               nextPinnedSessionIds,
-              sessionsById,
+              sessionsById
             ),
-            type: "syncSessionOrder",
+            type: 'syncSessionOrder',
           });
         }
       }
       return;
     }
 
-    const previousSessionIds = previousSessionIdsByGroup[ nextGroupId ] ?? [];
-    const nextSessionIds = nextSessionIdsByGroup[ nextGroupId ] ?? [];
+    const previousSessionIds = previousSessionIdsByGroup[nextGroupId] ?? [];
+    const nextSessionIds = nextSessionIdsByGroup[nextGroupId] ?? [];
     if (haveSameSessionOrder(previousSessionIds, nextSessionIds)) {
       return;
     }
@@ -1124,9 +1050,9 @@ export function useSidebarDragHandlers({
     vscode.postMessage({
       groupId: nextGroupId,
       sessionIds: nextSessionIds,
-      type: "syncSessionOrder",
+      type: 'syncSessionOrder',
     });
-  }) satisfies DragDropEventHandlers[ "onDragEnd" ];
+  }) satisfies DragDropEventHandlers['onDragEnd'];
 
   return {
     handleDragEnd,

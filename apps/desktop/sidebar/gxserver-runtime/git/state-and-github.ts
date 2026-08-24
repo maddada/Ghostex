@@ -9,8 +9,8 @@ import {
   GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS,
   GPUI_SIDEBAR_BOOTSTRAP_RETRY_DELAY_MS,
   GPUI_SIDEBAR_GIT_HUB_DEFERRED_PROBE_DELAY_MS,
-} from "../constants";
-import type { GpuiSidebarRuntime } from "../core";
+} from '../constants';
+import type { GpuiSidebarRuntime } from '../core';
 import {
   createGpuiTitlebarGitMenuStatePayload,
   mergeGpuiGitChangedFiles,
@@ -22,20 +22,20 @@ import {
   parseGpuiGitStatusPorcelainFiles,
   parseGpuiTitlebarGitAction,
   summarizeGpuiGitChangedFiles,
-} from "../helpers/git";
-import { isGpuiPresentationQuickDomainProject } from "../helpers/presentation-projection";
-import { stringFromRecord } from "../helpers/records";
+} from '../helpers/git';
+import { isGpuiPresentationQuickDomainProject } from '../helpers/presentation-projection';
+import { stringFromRecord } from '../helpers/records';
 import {
   createGpuiRemotePresentationGroupId,
   parseGpuiRemotePresentationGroupId,
-} from "../helpers/remote-presentation";
-import { normalizeGpuiProjectPath, normalizeGpuiWorktreeParentProjectId } from "../helpers/worktrees";
-import type { GpuiRemoteProjectScope, GpuiSidebarGitHubState } from "../types-and-protocol";
-import type { GxserverProjectDomainState } from "@/packages/shared/gxserver-protocol";
-import { parseGitZeroDelimitedPaths } from "@/packages/shared/project-diff-stats";
-import type { SidebarToExtensionMessage } from "@/packages/shared/session-grid-contract";
-import type { SidebarGitState } from "@/packages/shared/sidebar-git";
-import { createDefaultSidebarGitState } from "@/packages/shared/sidebar-git";
+} from '../helpers/remote-presentation';
+import { normalizeGpuiProjectPath, normalizeGpuiWorktreeParentProjectId } from '../helpers/worktrees';
+import type { GpuiRemoteProjectScope, GpuiSidebarGitHubState } from '../types-and-protocol';
+import type { GxserverProjectDomainState } from '@/packages/shared/gxserver-protocol';
+import { parseGitZeroDelimitedPaths } from '@/packages/shared/project-diff-stats';
+import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
+import type { SidebarGitState } from '@/packages/shared/sidebar-git';
+import { createDefaultSidebarGitState } from '@/packages/shared/sidebar-git';
 
 export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
   postTitlebarGitMenuState(this: GpuiSidebarRuntime, attempt = 0): void {
@@ -44,7 +44,7 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
       this.titlebarGitMenuStateRetryId = undefined;
     }
     const postTitlebarGitMenuState = window.ghostexGpui?.postTitlebarGitMenuState;
-    if (typeof postTitlebarGitMenuState !== "function") {
+    if (typeof postTitlebarGitMenuState !== 'function') {
       if (attempt < GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS) {
         this.titlebarGitMenuStateRetryId = window.setTimeout(() => {
           this.postTitlebarGitMenuState(attempt + 1);
@@ -65,14 +65,14 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     if (!action) {
       return;
     }
-    if (action === "refresh") {
+    if (action === 'refresh') {
       this.refreshTitlebarGitMenuState();
       return;
     }
     void this.runSidebarGitAction({
       ...(this.activeGroupId ? { groupId: this.activeGroupId } : {}),
       action,
-      type: "runSidebarGitAction",
+      type: 'runSidebarGitAction',
     });
   },
 
@@ -88,7 +88,7 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     if (this.activeGroupId && parseGpuiRemotePresentationGroupId(this.activeGroupId)) {
       void this.refreshGitStateForMessage({
         groupId: this.activeGroupId,
-        type: "refreshGitState",
+        type: 'refreshGitState',
       });
       return;
     }
@@ -129,14 +129,13 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
    * Git preferences are patched straight onto `this.gitState` when the user
    * changes them, and GitHub CLI results carry their own longer-lived lease.
    */
-  applyLiveGitStateOverlays(this: GpuiSidebarRuntime,
+  applyLiveGitStateOverlays(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
-    state: SidebarGitState,
+    state: SidebarGitState
   ): SidebarGitState {
     const preferences = this.gitPreferencesForProject(project);
-    const gitHubState = state.isRepo
-      ? this.gitHubStateMemoByProjectId.peek(project.projectId)
-      : undefined;
+    const gitHubState = state.isRepo ? this.gitHubStateMemoByProjectId.peek(project.projectId) : undefined;
     return {
       ...state,
       ...(gitHubState ?? {}),
@@ -146,26 +145,29 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     };
   },
 
-  async refreshGitState(this: GpuiSidebarRuntime, {
-    deferGitHub = false,
-    force = false,
-    project = this.activeDomainProject(),
-    publishBusy = false,
-    toastOnFailure = false,
-  }: {
-    /**
-     * Leave `gh --version` / `gh pr view` out of the fan-out and publish the
-     * memoized GitHub state instead, scheduling a probe once the local Git
-     * state is out. Only background and switch-driven refreshes set this;
-     * every caller that reads `pr` / `hasGitHubCli` off the returned state
-     * keeps the synchronous probe.
-     */
-    deferGitHub?: boolean;
-    force?: boolean;
-    project?: GxserverProjectDomainState;
-    publishBusy?: boolean;
-    toastOnFailure?: boolean;
-  } = {}): Promise<SidebarGitState> {
+  async refreshGitState(
+    this: GpuiSidebarRuntime,
+    {
+      deferGitHub = false,
+      force = false,
+      project = this.activeDomainProject(),
+      publishBusy = false,
+      toastOnFailure = false,
+    }: {
+      /**
+       * Leave `gh --version` / `gh pr view` out of the fan-out and publish the
+       * memoized GitHub state instead, scheduling a probe once the local Git
+       * state is out. Only background and switch-driven refreshes set this;
+       * every caller that reads `pr` / `hasGitHubCli` off the returned state
+       * keeps the synchronous probe.
+       */
+      deferGitHub?: boolean;
+      force?: boolean;
+      project?: GxserverProjectDomainState;
+      publishBusy?: boolean;
+      toastOnFailure?: boolean;
+    } = {}
+  ): Promise<SidebarGitState> {
     if (!project) {
       this.gitState = createDefaultSidebarGitState();
       this.publishHudPatch();
@@ -186,8 +188,9 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     return nextState;
   },
 
-  async refreshGitStateForMessage(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "refreshGitState" }>,
+  async refreshGitStateForMessage(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'refreshGitState' }>
   ): Promise<void> {
     /*
     CDXC:GPUISidebarGit 2026-06-24-21:26:
@@ -196,19 +199,16 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     const explicitScope = Boolean(message.groupId?.trim() || message.projectId?.trim());
     const remoteScope = this.resolveGitPreferenceRemoteScope(message);
     if (remoteScope) {
-      const activeRemoteGroupId = createGpuiRemotePresentationGroupId(
-        remoteScope.machineId,
-        remoteScope.projectId,
-      );
+      const activeRemoteGroupId = createGpuiRemotePresentationGroupId(remoteScope.machineId, remoteScope.projectId);
       if (this.activeGroupId === activeRemoteGroupId) {
         const preferences = this.gitPreferencesForPresentationProject(
-          this.findRemotePresentationProject(remoteScope) ?? remoteScope.project,
+          this.findRemotePresentationProject(remoteScope) ?? remoteScope.project
         );
         this.gitState = {
           ...createDefaultSidebarGitState(
             preferences.primaryAction,
             preferences.confirmCommit,
-            preferences.generateCommitBody,
+            preferences.generateCommitBody
           ),
           isBusy: true,
         };
@@ -222,17 +222,16 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
       return;
     }
     if (explicitScope && this.isGitPreferenceRemoteScope(message)) {
-      this.postRemoteToast("warning", "Remote Git unavailable", {
-        description: "Reconnect the remote machine before refreshing Git state.",
+      this.postRemoteToast('warning', 'Remote Git unavailable', {
+        description: 'Reconnect the remote machine before refreshing Git state.',
       });
       return;
     }
     const project =
-      this.resolveGitPreferenceLocalProject(message) ??
-      (explicitScope ? undefined : this.activeDomainProject());
+      this.resolveGitPreferenceLocalProject(message) ?? (explicitScope ? undefined : this.activeDomainProject());
     if (!project) {
-      this.postGitToast("warning", "Git unavailable", {
-        description: "No active gxserver project is available.",
+      this.postGitToast('warning', 'Git unavailable', {
+        description: 'No active gxserver project is available.',
       });
       return;
     }
@@ -244,14 +243,15 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     });
   },
 
-  async readSidebarGitState(this: GpuiSidebarRuntime,
+  async readSidebarGitState(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
-    options: { deferGitHub?: boolean; publishBusy?: boolean; toastOnFailure?: boolean } = {},
+    options: { deferGitHub?: boolean; publishBusy?: boolean; toastOnFailure?: boolean } = {}
   ): Promise<SidebarGitState> {
     const baseState = createDefaultSidebarGitState(
       this.gitPreferencesForProject(project).primaryAction,
       this.gitPreferencesForProject(project).confirmCommit,
-      this.gitPreferencesForProject(project).generateCommitBody,
+      this.gitPreferencesForProject(project).generateCommitBody
     );
     if (
       !this.client ||
@@ -266,8 +266,8 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
       this.publishHudPatch();
     }
     try {
-      const repoCheck = await this.runGitAction(project, { action: "isInsideWorkTree" });
-      if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
+      const repoCheck = await this.runGitAction(project, { action: 'isInsideWorkTree' });
+      if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== 'true') {
         return this.memoizeSidebarGitState(project, {
           ...baseState,
           hasCheckedGitHubRemote: true,
@@ -283,19 +283,16 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
       overlaid, and `scheduleDeferredGitHubProbe` fills in a fresh one shortly
       after, once the attach traffic has drained.
       */
-      const [branch, status, diff, untrackedFiles, upstream, remotes, originRemote, gitHubState] =
-        await Promise.all([
-          this.runGitAction(project, { action: "branch" }),
-          this.runGitAction(project, { action: "statusPorcelain" }),
-          this.runGitAction(project, { action: "diffNumstat" }),
-          this.runGitAction(project, { action: "listUntracked" }),
-          this.runGitAction(project, { action: "upstreamCounts" }),
-          this.runGitAction(project, { action: "listRemotes" }),
-          this.runGitAction(project, { action: "getOriginRemoteUrl" }),
-          options.deferGitHub === true
-            ? this.memoizedGitHubState(project)
-            : this.readGitHubState(project),
-        ]);
+      const [branch, status, diff, untrackedFiles, upstream, remotes, originRemote, gitHubState] = await Promise.all([
+        this.runGitAction(project, { action: 'branch' }),
+        this.runGitAction(project, { action: 'statusPorcelain' }),
+        this.runGitAction(project, { action: 'diffNumstat' }),
+        this.runGitAction(project, { action: 'listUntracked' }),
+        this.runGitAction(project, { action: 'upstreamCounts' }),
+        this.runGitAction(project, { action: 'listRemotes' }),
+        this.runGitAction(project, { action: 'getOriginRemoteUrl' }),
+        options.deferGitHub === true ? this.memoizedGitHubState(project) : this.readGitHubState(project),
+      ]);
       if (options.deferGitHub === true) {
         this.scheduleDeferredGitHubProbeIfStale(project);
       }
@@ -326,10 +323,8 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
         deletions: totals.deletions,
         hasCheckedGitHubRemote: true,
         hasGitHubCli: gitHubState.hasGitHubCli,
-        hasGitHubRemote:
-          originRemote.exitCode === 0 &&
-          normalizeGpuiGitHubRemoteUrl(originRemote.stdout) !== undefined,
-        hasOriginRemote: remotes.stdout.split(/\s+/).includes("origin"),
+        hasGitHubRemote: originRemote.exitCode === 0 && normalizeGpuiGitHubRemoteUrl(originRemote.stdout) !== undefined,
+        hasOriginRemote: remotes.stdout.split(/\s+/).includes('origin'),
         hasUpstream: upstream.exitCode === 0,
         hasWorkingTreeChanges: status.stdout.trim().length > 0,
         isBusy: false,
@@ -337,12 +332,12 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
         files,
         isWorktree: normalizeGpuiWorktreeParentProjectId(project.worktree) !== undefined,
         pr: gitHubState.pr,
-        worktreeName: stringFromRecord(project.worktree, "name"),
+        worktreeName: stringFromRecord(project.worktree, 'name'),
       });
     } catch {
       if (options.toastOnFailure) {
-        this.postGitToast("error", "Could not refresh Git state", {
-          description: "gxserver could not inspect the selected project.",
+        this.postGitToast('error', 'Could not refresh Git state', {
+          description: 'gxserver could not inspect the selected project.',
         });
       }
       /*
@@ -360,21 +355,23 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
    * Remember a freshly computed Git state for this project so a switch back to
    * it inside the memo TTL publishes without issuing any RPC.
    */
-  memoizeSidebarGitState(this: GpuiSidebarRuntime,
+  memoizeSidebarGitState(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
-    state: SidebarGitState,
+    state: SidebarGitState
   ): SidebarGitState {
     this.gitStateMemoByProjectId.set(project.projectId, state, Date.now());
     return state;
   },
 
   /** Run the GitHub CLI probes and memoize the pair under the longer lease. */
-  async readGitHubState(this: GpuiSidebarRuntime,
-    project: GxserverProjectDomainState,
+  async readGitHubState(
+    this: GpuiSidebarRuntime,
+    project: GxserverProjectDomainState
   ): Promise<GpuiSidebarGitHubState> {
     const [ghVersion, pr] = await Promise.all([
-      this.runGitHubAction(project, { action: "version" }),
-      this.runGitHubAction(project, { action: "prView" }),
+      this.runGitHubAction(project, { action: 'version' }),
+      this.runGitHubAction(project, { action: 'prView' }),
     ]);
     const gitHubState: GpuiSidebarGitHubState = {
       hasGitHubCli: ghVersion.exitCode === 0,
@@ -393,9 +390,7 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
    * probe lands.
    */
   memoizedGitHubState(this: GpuiSidebarRuntime, project: GxserverProjectDomainState): GpuiSidebarGitHubState {
-    return (
-      this.gitHubStateMemoByProjectId.peek(project.projectId) ?? { hasGitHubCli: false, pr: null }
-    );
+    return this.gitHubStateMemoByProjectId.peek(project.projectId) ?? { hasGitHubCli: false, pr: null };
   },
 
   /**
@@ -444,35 +439,35 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     }
   },
 
-  async readRemoteSidebarGitState(this: GpuiSidebarRuntime,
-    remoteScope: GpuiRemoteProjectScope,
+  async readRemoteSidebarGitState(
+    this: GpuiSidebarRuntime,
+    remoteScope: GpuiRemoteProjectScope
   ): Promise<SidebarGitState> {
     const remotePreferences = this.gitPreferencesForPresentationProject(
-      this.findRemotePresentationProject(remoteScope) ?? remoteScope.project,
+      this.findRemotePresentationProject(remoteScope) ?? remoteScope.project
     );
     const baseState = createDefaultSidebarGitState(
       remotePreferences.primaryAction,
       remotePreferences.confirmCommit,
-      remotePreferences.generateCommitBody,
+      remotePreferences.generateCommitBody
     );
     try {
-      const repoCheck = await this.runRemoteGitAction(remoteScope, { action: "isInsideWorkTree" });
-      if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
+      const repoCheck = await this.runRemoteGitAction(remoteScope, { action: 'isInsideWorkTree' });
+      if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== 'true') {
         return { ...baseState, hasCheckedGitHubRemote: true, isRepo: false };
       }
 
-      const [branch, status, diff, untrackedFiles, upstream, remotes, originRemote, ghVersion, pr] =
-        await Promise.all([
-          this.runRemoteGitAction(remoteScope, { action: "branch" }),
-          this.runRemoteGitAction(remoteScope, { action: "statusPorcelain" }),
-          this.runRemoteGitAction(remoteScope, { action: "diffNumstat" }),
-          this.runRemoteGitAction(remoteScope, { action: "listUntracked" }),
-          this.runRemoteGitAction(remoteScope, { action: "upstreamCounts" }),
-          this.runRemoteGitAction(remoteScope, { action: "listRemotes" }),
-          this.runRemoteGitAction(remoteScope, { action: "getOriginRemoteUrl" }),
-          this.runRemoteGitHubAction(remoteScope, { action: "version" }),
-          this.runRemoteGitHubAction(remoteScope, { action: "prView" }),
-        ]);
+      const [branch, status, diff, untrackedFiles, upstream, remotes, originRemote, ghVersion, pr] = await Promise.all([
+        this.runRemoteGitAction(remoteScope, { action: 'branch' }),
+        this.runRemoteGitAction(remoteScope, { action: 'statusPorcelain' }),
+        this.runRemoteGitAction(remoteScope, { action: 'diffNumstat' }),
+        this.runRemoteGitAction(remoteScope, { action: 'listUntracked' }),
+        this.runRemoteGitAction(remoteScope, { action: 'upstreamCounts' }),
+        this.runRemoteGitAction(remoteScope, { action: 'listRemotes' }),
+        this.runRemoteGitAction(remoteScope, { action: 'getOriginRemoteUrl' }),
+        this.runRemoteGitHubAction(remoteScope, { action: 'version' }),
+        this.runRemoteGitHubAction(remoteScope, { action: 'prView' }),
+      ]);
       const files = mergeGpuiGitChangedFiles([
         ...parseGpuiGitNumstatFiles(diff.stdout),
         ...parseGpuiGitStatusPorcelainFiles(status.stdout),
@@ -491,8 +486,7 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
       ]);
       const totals = summarizeGpuiGitChangedFiles(files);
       const upstreamParts = upstream.exitCode === 0 ? upstream.stdout.trim().split(/\s+/) : [];
-      const presentationProject =
-        this.findRemotePresentationProject(remoteScope) ?? remoteScope.project;
+      const presentationProject = this.findRemotePresentationProject(remoteScope) ?? remoteScope.project;
       return {
         ...baseState,
         additions: totals.additions,
@@ -503,26 +497,21 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
         files,
         hasCheckedGitHubRemote: true,
         hasGitHubCli: ghVersion.exitCode === 0,
-        hasGitHubRemote:
-          originRemote.exitCode === 0 &&
-          normalizeGpuiGitHubRemoteUrl(originRemote.stdout) !== undefined,
-        hasOriginRemote: remotes.stdout.split(/\s+/).includes("origin"),
+        hasGitHubRemote: originRemote.exitCode === 0 && normalizeGpuiGitHubRemoteUrl(originRemote.stdout) !== undefined,
+        hasOriginRemote: remotes.stdout.split(/\s+/).includes('origin'),
         hasUpstream: upstream.exitCode === 0,
         hasWorkingTreeChanges: status.stdout.trim().length > 0,
         isBusy: false,
         isRepo: true,
-        isWorktree:
-          normalizeGpuiWorktreeParentProjectId(presentationProject.worktree) !== undefined,
+        isWorktree: normalizeGpuiWorktreeParentProjectId(presentationProject.worktree) !== undefined,
         pr: parseGpuiGitHubPullRequest(pr.stdout, pr.exitCode === 0),
-        worktreeName:
-          stringFromRecord(presentationProject.worktree, "name") ?? presentationProject.title,
+        worktreeName: stringFromRecord(presentationProject.worktree, 'name') ?? presentationProject.title,
       };
     } catch {
-      this.postRemoteToast("warning", "Remote Git unavailable", {
-        description: "The remote gxserver could not inspect the selected project.",
+      this.postRemoteToast('warning', 'Remote Git unavailable', {
+        description: 'The remote gxserver could not inspect the selected project.',
       });
       return { ...baseState, hasCheckedGitHubRemote: true, isBusy: false, isRepo: false };
     }
   },
-
 };

@@ -3,44 +3,39 @@ import {
   getSidebarTitlebarForegroundForBackground,
   normalizeghostexSettings,
   type KeepAwakeDurationMinutes,
-} from "@/packages/shared/ghostex-settings";
-import { normalizeghostexHotkeySettings } from "@/packages/shared/ghostex-hotkeys";
-import { resolveSidebarTheme } from "@/packages/shared/session-grid-contract";
-import { createDefaultSidebarProjectDiffStats } from "@/packages/shared/project-diff-stats";
-import { formatSidebarHotkeyLabel } from "@/packages/core-ui/hotkey-label";
+} from '@/packages/shared/ghostex-settings';
+import { normalizeghostexHotkeySettings } from '@/packages/shared/ghostex-hotkeys';
+import { resolveSidebarTheme } from '@/packages/shared/session-grid-contract';
+import { createDefaultSidebarProjectDiffStats } from '@/packages/shared/project-diff-stats';
+import { formatSidebarHotkeyLabel } from '@/packages/core-ui/hotkey-label';
 import {
   createDefaultSidebarGitState,
   type SidebarGitAction,
   type SidebarGitState,
-} from "@/packages/shared/sidebar-git";
+} from '@/packages/shared/sidebar-git';
 import {
   KEEP_AWAKE_RUNTIME_CHANGED_EVENT,
   KEEP_AWAKE_RUNTIME_STORAGE_KEY,
   KEEP_AWAKE_RUNTIME_SYNC_STORAGE_KEY,
   TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX,
   TITLEBAR_TIPS_READ_STORAGE_KEY,
-} from "./constants";
+} from './constants';
 import {
   normalizeTitlebarUpdateDownloadProgress,
   runNativeKeepAwakeLidSleepPrevention,
   runNativeProcess,
-} from "./native-bridge";
-import {
-  isRecord,
-  normalizeTitlebarMode,
-  parseSharedSettings,
-  resolveInitialTitlebarMode,
-} from "./settings-io";
+} from './native-bridge';
+import { isRecord, normalizeTitlebarMode, parseSharedSettings, resolveInitialTitlebarMode } from './settings-io';
 import type {
   KeepAwakeRuntimeState,
   KeepAwakeRuntimeSyncState,
   TitlebarKeepAwakeSettings,
   TitlebarProjectState,
-} from "./types";
+} from './types';
 
 export function mergeTitlebarProjectState(
   current: TitlebarProjectState,
-  state: Partial<TitlebarProjectState>,
+  state: Partial<TitlebarProjectState>
 ): TitlebarProjectState {
   const customSidebarTitlebarBackgroundColor =
     state.customSidebarTitlebarBackgroundColor ?? current.customSidebarTitlebarBackgroundColor;
@@ -51,10 +46,7 @@ export function mergeTitlebarProjectState(
   return {
     ...current,
     ...state,
-    activeMode:
-      state.activeMode === undefined
-        ? current.activeMode
-        : normalizeTitlebarMode(state.activeMode),
+    activeMode: state.activeMode === undefined ? current.activeMode : normalizeTitlebarMode(state.activeMode),
     agentHookStatus: state.agentHookStatus ?? current.agentHookStatus,
     ghostexCliStatus: state.ghostexCliStatus ?? current.ghostexCliStatus,
     portless: state.portless ?? current.portless,
@@ -80,20 +72,18 @@ export function mergeTitlebarProjectState(
     customSidebarTitlebarColorsEnabled:
       state.customSidebarTitlebarColorsEnabled ?? current.customSidebarTitlebarColorsEnabled,
     customSidebarTitlebarForegroundColor: getSidebarTitlebarForegroundForBackground(
-      customSidebarTitlebarBackgroundColor,
+      customSidebarTitlebarBackgroundColor
     ),
     customSidebarTitlebarBackgroundColor,
     sidebarActions: state.sidebarActions ?? current.sidebarActions,
     sidebarSide: state.sidebarSide ?? current.sidebarSide,
-    sessionPersistenceProvider:
-      state.sessionPersistenceProvider ?? current.sessionPersistenceProvider,
-    toggleSidebarHotkeyLabel:
-      state.toggleSidebarHotkeyLabel ?? current.toggleSidebarHotkeyLabel,
+    sessionPersistenceProvider: state.sessionPersistenceProvider ?? current.sessionPersistenceProvider,
+    toggleSidebarHotkeyLabel: state.toggleSidebarHotkeyLabel ?? current.toggleSidebarHotkeyLabel,
     workspaceOpenTargets: state.workspaceOpenTargets ?? current.workspaceOpenTargets,
     isFocusModeActive: state.isFocusModeActive ?? current.isFocusModeActive,
     promptEditorOpen: state.promptEditorOpen ?? current.promptEditorOpen,
     updateAvailable: state.updateAvailable ?? current.updateAvailable,
-    updateDownloadProgress: Object.prototype.hasOwnProperty.call(state, "updateDownloadProgress")
+    updateDownloadProgress: Object.prototype.hasOwnProperty.call(state, 'updateDownloadProgress')
       ? normalizeTitlebarUpdateDownloadProgress(state.updateDownloadProgress)
       : current.updateDownloadProgress,
     updateDownloading: state.updateDownloading ?? current.updateDownloading,
@@ -103,7 +93,7 @@ export function mergeTitlebarProjectState(
 export function resolveTitlebarGitStateForMerge(
   current: SidebarGitState,
   incoming: SidebarGitState | undefined,
-  projectIdentity: Pick<TitlebarProjectState, "projectId" | "projectPath">,
+  projectIdentity: Pick<TitlebarProjectState, 'projectId' | 'projectPath'>
 ): SidebarGitState {
   const cached = readCachedTitlebarGitState(projectIdentity);
   if (incoming === undefined) {
@@ -130,20 +120,17 @@ export function resolveTitlebarGitStateForMerge(
 
 export function shouldHydrateMissingTitlebarGitStateFromCache(
   current: SidebarGitState,
-  cached: SidebarGitState | undefined,
+  cached: SidebarGitState | undefined
 ): cached is SidebarGitState {
   return cached !== undefined && !isCacheableTitlebarGitState(current);
 }
 
 export function shouldUseCachedTitlebarGitState(
   incoming: SidebarGitState,
-  cached: SidebarGitState | undefined,
+  cached: SidebarGitState | undefined
 ): cached is SidebarGitState {
   return (
-    cached !== undefined &&
-    incoming.isBusy &&
-    incoming.branch === null &&
-    (cached.branch !== null || cached.isRepo)
+    cached !== undefined && incoming.isBusy && incoming.branch === null && (cached.branch !== null || cached.isRepo)
   );
 }
 
@@ -156,23 +143,18 @@ export function cacheTitlebarGitState(state: TitlebarProjectState): void {
 }
 
 export function isCacheableTitlebarGitState(state: SidebarGitState): boolean {
-  return (
-    state.isRepo ||
-    state.hasCheckedGitHubRemote ||
-    state.branch !== null ||
-    state.files.length > 0
-  );
+  return state.isRepo || state.hasCheckedGitHubRemote || state.branch !== null || state.files.length > 0;
 }
 
 export function readCachedTitlebarGitState(
-  projectIdentity: Pick<TitlebarProjectState, "projectId" | "projectPath">,
+  projectIdentity: Pick<TitlebarProjectState, 'projectId' | 'projectPath'>
 ): SidebarGitState | undefined {
   const cacheKey = titlebarGitStateCacheKey(projectIdentity);
   if (cacheKey === undefined) {
     return undefined;
   }
   try {
-    const parsed = JSON.parse(localStorage.getItem(cacheKey) || "null");
+    const parsed = JSON.parse(localStorage.getItem(cacheKey) || 'null');
     return normalizeCachedTitlebarGitState(parsed);
   } catch {
     return undefined;
@@ -189,7 +171,7 @@ export function normalizeCachedTitlebarGitState(value: unknown): SidebarGitState
     additions: readCachedTitlebarNumber(value.additions),
     aheadCount: readCachedTitlebarNumber(value.aheadCount),
     behindCount: readCachedTitlebarNumber(value.behindCount),
-    branch: typeof value.branch === "string" ? value.branch : null,
+    branch: typeof value.branch === 'string' ? value.branch : null,
     confirmSuggestedCommit: value.confirmSuggestedCommit === true,
     deletions: readCachedTitlebarNumber(value.deletions),
     generateCommitBody: value.generateCommitBody !== false,
@@ -205,77 +187,71 @@ export function normalizeCachedTitlebarGitState(value: unknown): SidebarGitState
     isWorktree: value.isWorktree === true,
     pr: normalizeCachedTitlebarGitPullRequest(value.pr),
     primaryAction: normalizeCachedTitlebarGitAction(value.primaryAction, baseState.primaryAction),
-    worktreeName: typeof value.worktreeName === "string" ? value.worktreeName : undefined,
+    worktreeName: typeof value.worktreeName === 'string' ? value.worktreeName : undefined,
   };
 }
 
-export function normalizeCachedTitlebarGitAction(
-  value: unknown,
-  fallback: SidebarGitAction,
-): SidebarGitAction {
-  return value === "commit" ||
-    value === "push" ||
-    value === "pr" ||
-    value === "syncRemote" ||
-    value === "syncMain" ||
-    value === "multiRelease" ||
-    value === "release"
+export function normalizeCachedTitlebarGitAction(value: unknown, fallback: SidebarGitAction): SidebarGitAction {
+  return value === 'commit' ||
+    value === 'push' ||
+    value === 'pr' ||
+    value === 'syncRemote' ||
+    value === 'syncMain' ||
+    value === 'multiRelease' ||
+    value === 'release'
     ? value
     : fallback;
 }
 
-export function normalizeCachedTitlebarGitPullRequest(value: unknown): SidebarGitState["pr"] {
+export function normalizeCachedTitlebarGitPullRequest(value: unknown): SidebarGitState['pr'] {
   if (
     !isRecord(value) ||
-    typeof value.title !== "string" ||
-    typeof value.url !== "string" ||
-    (value.state !== "open" && value.state !== "closed" && value.state !== "merged")
+    typeof value.title !== 'string' ||
+    typeof value.url !== 'string' ||
+    (value.state !== 'open' && value.state !== 'closed' && value.state !== 'merged')
   ) {
     return null;
   }
   return {
-    number:
-      typeof value.number === "number" && Number.isFinite(value.number)
-        ? value.number
-        : undefined,
+    number: typeof value.number === 'number' && Number.isFinite(value.number) ? value.number : undefined,
     state: value.state,
     title: value.title,
     url: value.url,
   };
 }
 
-export function normalizeCachedTitlebarGitFiles(value: unknown): SidebarGitState["files"] {
+export function normalizeCachedTitlebarGitFiles(value: unknown): SidebarGitState['files'] {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.flatMap((file) => {
-    if (!isRecord(file) || typeof file.path !== "string") {
+    if (!isRecord(file) || typeof file.path !== 'string') {
       return [];
     }
-    return [{
-      additions: readCachedTitlebarNumber(file.additions),
-      deletions: readCachedTitlebarNumber(file.deletions),
-      path: file.path,
-    }];
+    return [
+      {
+        additions: readCachedTitlebarNumber(file.additions),
+        deletions: readCachedTitlebarNumber(file.deletions),
+        path: file.path,
+      },
+    ];
   });
 }
 
 export function readCachedTitlebarNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 export function titlebarGitStateCacheKey(
-  projectIdentity: Pick<TitlebarProjectState, "projectId" | "projectPath">,
+  projectIdentity: Pick<TitlebarProjectState, 'projectId' | 'projectPath'>
 ): string | undefined {
   const projectKey = projectIdentity.projectId || projectIdentity.projectPath;
-  return projectKey
-    ? `${TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX}${encodeURIComponent(projectKey)}`
-    : undefined;
+  return projectKey ? `${TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX}${encodeURIComponent(projectKey)}` : undefined;
 }
 
 export function formatToggleSidebarTooltipLabel(hotkey: string | undefined): string {
   if (!hotkey) {
-    return "";
+    return '';
   }
   /*
    * CDXC:SidebarCollapse 2026-06-15-13:34:
@@ -287,8 +263,8 @@ export function formatToggleSidebarTooltipLabel(hotkey: string | undefined): str
 }
 
 export function createInitialProjectState(bootstrap: Record<string, unknown>): TitlebarProjectState {
-  const projectPath = typeof bootstrap.cwd === "string" ? bootstrap.cwd : "";
-  const pathParts = projectPath.split("/").filter(Boolean);
+  const projectPath = typeof bootstrap.cwd === 'string' ? bootstrap.cwd : '';
+  const pathParts = projectPath.split('/').filter(Boolean);
   const sharedSettingsJson = isRecord(bootstrap.sharedSidebarStorage)
     ? bootstrap.sharedSidebarStorage.settings
     : undefined;
@@ -316,40 +292,38 @@ export function createInitialProjectState(bootstrap: Record<string, unknown>): T
     diffStats: createDefaultSidebarProjectDiffStats(false),
     editorIsOpen: false,
     editorIsSleeping: false,
-    editorStatus: "idle",
+    editorStatus: 'idle',
     git: createDefaultSidebarGitState(),
     gxserverDaemon: {
       alwaysStart: true,
-      state: "unknown",
+      state: 'unknown',
     },
     hotkeys: settings.hotkeys,
     keepAwake: createTitlebarKeepAwakeSettings(settings),
     projectEditorCompanionPaneHidden: false,
     projectIsQuick: false,
     projectName:
-      (typeof bootstrap.workspaceName === "string" && bootstrap.workspaceName) ||
+      (typeof bootstrap.workspaceName === 'string' && bootstrap.workspaceName) ||
       pathParts[pathParts.length - 1] ||
-      "Ghostex",
+      'Ghostex',
     projectPath,
     petOverlayEnabled: settings.petOverlayEnabled,
     resourceGroups: [],
-    sidebarTheme: resolveSidebarTheme(settings.sidebarTheme, "dark"),
+    sidebarTheme: resolveSidebarTheme(settings.sidebarTheme, 'dark'),
     customSidebarTitlebarColorsEnabled: settings.customSidebarTitlebarColorsEnabled,
     customSidebarTitlebarForegroundColor: getSidebarTitlebarForegroundForBackground(
-      settings.customSidebarTitlebarBackgroundColor,
+      settings.customSidebarTitlebarBackgroundColor
     ),
     customSidebarTitlebarBackgroundColor: settings.customSidebarTitlebarBackgroundColor,
     sidebarCollapsed: bootstrap.sidebarCollapsed === true,
-    sidebarSide: bootstrap.sidebarSide === "right" ? "right" : settings.sidebarSide,
+    sidebarSide: bootstrap.sidebarSide === 'right' ? 'right' : settings.sidebarSide,
     sidebarActions: {
       commands: [],
     },
     showProjectEditorDiffFileCount: settings.showProjectEditorDiffFileCount,
     sessionPersistenceProvider: settings.sessionPersistenceProvider,
     webLinkOpenTarget: settings.webLinkOpenTarget,
-    toggleSidebarHotkeyLabel: formatToggleSidebarTooltipLabel(
-      settings.hotkeys.toggleSidebarCollapsed,
-    ),
+    toggleSidebarHotkeyLabel: formatToggleSidebarTooltipLabel(settings.hotkeys.toggleSidebarCollapsed),
     workspaceOpenTargets: {
       availability: settings.workspaceOpenTargetAvailability,
       customTargets: settings.customWorkspaceOpenTargets,
@@ -398,21 +372,14 @@ export function readInitialTitlebarUpdateDownloadProgress(bootstrap: Record<stri
    * bridge value over bootstrap because `null` is an intentional clear when
    * Sparkle leaves the download phase.
    */
-  if (
-    Object.prototype.hasOwnProperty.call(
-      window,
-      "__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOAD_PROGRESS__",
-    )
-  ) {
-    return normalizeTitlebarUpdateDownloadProgress(
-      window.__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOAD_PROGRESS__,
-    );
+  if (Object.prototype.hasOwnProperty.call(window, '__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOAD_PROGRESS__')) {
+    return normalizeTitlebarUpdateDownloadProgress(window.__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOAD_PROGRESS__);
   }
   return normalizeTitlebarUpdateDownloadProgress(bootstrap.updateDownloadProgress);
 }
 
 export function createTitlebarKeepAwakeSettings(
-  settings: ReturnType<typeof normalizeghostexSettings>,
+  settings: ReturnType<typeof normalizeghostexSettings>
 ): TitlebarKeepAwakeSettings {
   /*
    * CDXC:ExperimentalFeatures 2026-06-28-07:41:
@@ -442,7 +409,7 @@ export function createTitlebarKeepAwakeSettings(
 
 export function readStoredKeepAwakeRuntime(): KeepAwakeRuntimeState | undefined {
   try {
-    const parsed = JSON.parse(localStorage.getItem(KEEP_AWAKE_RUNTIME_STORAGE_KEY) || "null");
+    const parsed = JSON.parse(localStorage.getItem(KEEP_AWAKE_RUNTIME_STORAGE_KEY) || 'null');
     return parseKeepAwakeRuntimeState(parsed);
   } catch {
     return undefined;
@@ -453,10 +420,8 @@ export function parseKeepAwakeRuntimeState(value: unknown): KeepAwakeRuntimeStat
   if (!isRecord(value)) {
     return undefined;
   }
-  const pid = typeof value.pid === "number" ? value.pid : Number.NaN;
-  const durationMinutes = typeof value.durationMinutes === "number"
-    ? value.durationMinutes
-    : Number.NaN;
+  const pid = typeof value.pid === 'number' ? value.pid : Number.NaN;
+  const durationMinutes = typeof value.durationMinutes === 'number' ? value.durationMinutes : Number.NaN;
   if (
     !Number.isFinite(pid) ||
     pid <= 0 ||
@@ -466,20 +431,20 @@ export function parseKeepAwakeRuntimeState(value: unknown): KeepAwakeRuntimeStat
   }
   return {
     durationMinutes: durationMinutes as KeepAwakeDurationMinutes,
-    fireAtMs: typeof value.fireAtMs === "number" ? value.fireAtMs : undefined,
+    fireAtMs: typeof value.fireAtMs === 'number' ? value.fireAtMs : undefined,
     pid,
-    source: value.source === "automatic" ? "automatic" : "manual",
-    startedAtMs: typeof value.startedAtMs === "number" ? value.startedAtMs : Date.now(),
+    source: value.source === 'automatic' ? 'automatic' : 'manual',
+    startedAtMs: typeof value.startedAtMs === 'number' ? value.startedAtMs : Date.now(),
   };
 }
 
 export function readKeepAwakeRuntimeSyncState(raw: string | null): KeepAwakeRuntimeSyncState | undefined {
   try {
-    const parsed = JSON.parse(raw || "null");
+    const parsed = JSON.parse(raw || 'null');
     if (!isRecord(parsed)) {
       return undefined;
     }
-    const hasRuntime = Object.prototype.hasOwnProperty.call(parsed, "runtime");
+    const hasRuntime = Object.prototype.hasOwnProperty.call(parsed, 'runtime');
     const runtime = parseKeepAwakeRuntimeState(parsed.runtime);
     return {
       ...(hasRuntime ? { runtime: runtime ?? null } : {}),
@@ -497,21 +462,23 @@ export function publishKeepAwakeRuntimeSync(state: KeepAwakeRuntimeSyncState): v
     updatedAtMs: Date.now(),
   };
   localStorage.setItem(KEEP_AWAKE_RUNTIME_SYNC_STORAGE_KEY, JSON.stringify(payload));
-  window.dispatchEvent(new CustomEvent<KeepAwakeRuntimeSyncState>(KEEP_AWAKE_RUNTIME_CHANGED_EVENT, {
-    detail: {
-      runtime: state.runtime,
-      suppressAutoStart: state.suppressAutoStart,
-    },
-  }));
+  window.dispatchEvent(
+    new CustomEvent<KeepAwakeRuntimeSyncState>(KEEP_AWAKE_RUNTIME_CHANGED_EVENT, {
+      detail: {
+        runtime: state.runtime,
+        suppressAutoStart: state.suppressAutoStart,
+      },
+    })
+  );
 }
 
 export function readStoredTitlebarTipIds(): Set<string> {
   try {
-    const parsed = JSON.parse(localStorage.getItem(TITLEBAR_TIPS_READ_STORAGE_KEY) || "[]");
+    const parsed = JSON.parse(localStorage.getItem(TITLEBAR_TIPS_READ_STORAGE_KEY) || '[]');
     if (!Array.isArray(parsed)) {
       return new Set();
     }
-    return new Set(parsed.filter((id): id is string => typeof id === "string" && id.length > 0));
+    return new Set(parsed.filter((id): id is string => typeof id === 'string' && id.length > 0));
   } catch {
     return new Set();
   }
@@ -523,7 +490,7 @@ export function writeStoredTitlebarTipIds(ids: Set<string>) {
 
 export async function applyKeepAwakeLidSleepPrevention(
   enabled: boolean,
-  options: { installIfNeeded?: boolean } = {},
+  options: { installIfNeeded?: boolean } = {}
 ): Promise<boolean> {
   /**
    * CDXC:TitlebarKeepAwake 2026-05-28-19:28:
@@ -538,11 +505,11 @@ export async function applyKeepAwakeLidSleepPrevention(
       installIfNeeded: options.installIfNeeded,
     });
     if (result.exitCode !== 0) {
-      console.warn("Failed to update lid-close sleep prevention", result.stderr || result.stdout);
+      console.warn('Failed to update lid-close sleep prevention', result.stderr || result.stdout);
       return false;
     }
   } catch (error) {
-    console.warn("Failed to update lid-close sleep prevention", error);
+    console.warn('Failed to update lid-close sleep prevention', error);
     return false;
   }
   return true;
@@ -568,20 +535,20 @@ export async function readKeepAwakePowerSnapshot(options: {
     hidden checks skip system_profiler, pmset battery, or low-power reads when no
     rule can act on that value.
     */
-    const result = await runNativeProcess("/bin/sh", [
-      "-lc",
+    const result = await runNativeProcess('/bin/sh', [
+      '-lc',
       [
         options.includeBattery
           ? "battery=$(/usr/bin/pmset -g batt 2>/dev/null | /usr/bin/awk -F';' '/InternalBattery/ {gsub(/[^0-9]/, \"\", $1); print $1; exit}')"
-          : "battery=",
+          : 'battery=',
         options.includeLowPowerMode
           ? "low=$(/usr/bin/pmset -g 2>/dev/null | /usr/bin/awk '/lowpowermode/ {print $2; exit}')"
-          : "low=",
+          : 'low=',
         options.includeExternalDisplay
           ? "displays=$(/usr/sbin/system_profiler SPDisplaysDataType 2>/dev/null | /usr/bin/awk '/Resolution:/ {count++} END {print count+0}')"
-          : "displays=0",
-        "/bin/echo \"battery=${battery:-};low=${low:-};displays=${displays:-0}\"",
-      ].join("; "),
+          : 'displays=0',
+        '/bin/echo "battery=${battery:-};low=${low:-};displays=${displays:-0}"',
+      ].join('; '),
     ]);
     if (result.exitCode !== 0) {
       return undefined;
@@ -589,21 +556,21 @@ export async function readKeepAwakePowerSnapshot(options: {
     const fields = new Map(
       result.stdout
         .trim()
-        .split(";")
+        .split(';')
         .map((field) => {
-          const [key, value = ""] = field.split("=");
+          const [key, value = ''] = field.split('=');
           return [key, value] as const;
-        }),
+        })
     );
-    const batteryPercent = Number(fields.get("battery"));
-    const displays = Number(fields.get("displays"));
+    const batteryPercent = Number(fields.get('battery'));
+    const displays = Number(fields.get('displays'));
     return {
       batteryPercent: Number.isFinite(batteryPercent) ? batteryPercent : undefined,
       externalDisplayConnected: Number.isFinite(displays) && displays > 1,
-      lowPowerMode: fields.get("low") === "1",
+      lowPowerMode: fields.get('low') === '1',
     };
   } catch (error) {
-    console.warn("Failed to read keep-awake power state", error);
+    console.warn('Failed to read keep-awake power state', error);
     return undefined;
   }
 }

@@ -14,9 +14,7 @@ export function createRemoteProjectId(reference: RemoteProjectReference): string
   return `remote:${reference.machineId}:project:${reference.projectId}`;
 }
 
-export function createRemoteTerminalSessionId(
-  reference: RemoteTerminalSessionReference,
-): string {
+export function createRemoteTerminalSessionId(reference: RemoteTerminalSessionReference): string {
   return `remote:${reference.machineId}:session:${reference.projectId}:${reference.sessionId}`;
 }
 
@@ -28,9 +26,7 @@ export function parseRemoteProjectId(projectId: string): RemoteProjectReference 
   return { machineId: match[1]!, projectId: match[2]! };
 }
 
-export function parseRemoteTerminalSessionId(
-  sessionId: string,
-): RemoteTerminalSessionReference | undefined {
+export function parseRemoteTerminalSessionId(sessionId: string): RemoteTerminalSessionReference | undefined {
   const match = REMOTE_SESSION_ID_PATTERN.exec(sessionId);
   if (!match) {
     return undefined;
@@ -39,8 +35,7 @@ export function parseRemoteTerminalSessionId(
 }
 
 export type ActiveTerminalSelection =
-  | ({ remote: false } & { projectId: string; sessionId: string })
-  | ({ remote: true } & RemoteTerminalSessionReference);
+  ({ remote: false } & { projectId: string; sessionId: string }) | ({ remote: true } & RemoteTerminalSessionReference);
 
 /**
  * Resolves the active terminal identity carried by the GPUI presentation-focus

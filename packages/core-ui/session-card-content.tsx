@@ -6,7 +6,7 @@ import {
   IconTerminal2,
   IconWorld,
   IconX,
-} from "@tabler/icons-react";
+} from '@tabler/icons-react';
 import {
   cloneElement,
   useEffect,
@@ -19,61 +19,58 @@ import {
   type ReactElement,
   type ReactNode,
   type RefObject,
-} from "react";
-import { createPortal } from "react-dom";
-import { TOOLTIP_MOTION_CLASS_NAME } from "../components/ui/tooltip-config";
-import { cn } from "@/packages/components/utils";
-import {
-  DEFAULT_TERMINAL_SESSION_TITLE,
-  type SidebarSessionItem,
-} from "../shared/session-grid-contract";
-import { getSidebarAgentNameByIcon, type SidebarAgentIcon } from "../shared/sidebar-agents";
-import { AGENT_LOGOS, COLORED_AGENT_LOGOS } from "./agent-logos";
+} from 'react';
+import { createPortal } from 'react-dom';
+import { TOOLTIP_MOTION_CLASS_NAME } from '../components/ui/tooltip-config';
+import { cn } from '@/packages/components/utils';
+import { DEFAULT_TERMINAL_SESSION_TITLE, type SidebarSessionItem } from '../shared/session-grid-contract';
+import { getSidebarAgentNameByIcon, type SidebarAgentIcon } from '../shared/sidebar-agents';
+import { AGENT_LOGOS, COLORED_AGENT_LOGOS } from './agent-logos';
 import {
   getEffectiveSessionTag,
   getSidebarSessionTagLabel,
   SessionTagIcon,
   type SidebarSessionTag,
-} from "./session-tag-ui";
+} from './session-tag-ui';
 import {
   AppTooltip,
   areSidebarTooltipsSuppressed,
   SIDEBAR_TOOLTIP_DISMISS_EVENT,
   SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
-} from "./app-tooltip";
-import { formatRelativeTime } from "./relative-time";
-import { TOOLTIP_DELAY_MS } from "./tooltip-delay";
-import { useRelativeTimeTick } from "./use-relative-time-tick";
+} from './app-tooltip';
+import { formatRelativeTime } from './relative-time';
+import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { useRelativeTimeTick } from './use-relative-time-tick';
 
 const SESSION_TOOLTIP_VIEWPORT_MARGIN_PX = 8;
 const SESSION_TOOLTIP_TRIGGER_OFFSET_PX = 8;
-const CLOSE_AFTER_DONE_ARMED_REMAINING_LABEL = "03:00";
+const CLOSE_AFTER_DONE_ARMED_REMAINING_LABEL = '03:00';
 
 const AGENT_SECONDARY_LABELS: Record<SidebarAgentIcon, readonly string[]> = {
-  "amp-cli": ["amp", "amp cli"],
-  "antigravity-cli": ["agy", "antigravity", "antigravity cli"],
-  browser: ["browser"],
-  claude: ["claude", "claude code"],
-  codebuddy: ["codebuddy", "code buddy"],
-  "cursor-cli": ["cursor", "cursor agent", "cursor cli", "cursor-agent"],
-  codex: ["codex", "codex cli", "openai codex"],
-  copilot: ["copilot", "github copilot"],
-  "factory-droid": ["droid", "factory droid"],
-  gemini: ["gemini"],
-  "grok-build": ["grok", "grok build"],
-  "hermes-agent": ["hermes", "hermes agent"],
-  kiro: ["kiro", "kiro cli", "kiro-cli"],
-  omp: ["omp"],
-  opencode: ["open code", "opencode"],
-  pi: ["pi", "π"],
-  qoder: ["qoder", "qodercli"],
-  "rovo-dev": ["rovo", "rovo dev", "rovodev"],
+  'amp-cli': ['amp', 'amp cli'],
+  'antigravity-cli': ['agy', 'antigravity', 'antigravity cli'],
+  browser: ['browser'],
+  claude: ['claude', 'claude code'],
+  codebuddy: ['codebuddy', 'code buddy'],
+  'cursor-cli': ['cursor', 'cursor agent', 'cursor cli', 'cursor-agent'],
+  codex: ['codex', 'codex cli', 'openai codex'],
+  copilot: ['copilot', 'github copilot'],
+  'factory-droid': ['droid', 'factory droid'],
+  gemini: ['gemini'],
+  'grok-build': ['grok', 'grok build'],
+  'hermes-agent': ['hermes', 'hermes agent'],
+  kiro: ['kiro', 'kiro cli', 'kiro-cli'],
+  omp: ['omp'],
+  opencode: ['open code', 'opencode'],
+  pi: ['pi', 'π'],
+  qoder: ['qoder', 'qodercli'],
+  'rovo-dev': ['rovo', 'rovo dev', 'rovodev'],
 };
 
 let activeOverflowTooltipId: symbol | undefined;
 let activeOverflowTooltipClose: (() => void) | undefined;
-const TERMINAL_TITLE_MARKER = "∗";
-const UNSYNCED_TITLE_LABEL = "(Unsynced title)";
+const TERMINAL_TITLE_MARKER = '∗';
+const UNSYNCED_TITLE_LABEL = '(Unsynced title)';
 const GHOST_PLACEHOLDER_TITLE_PATTERN = /^👻(?:\s+Terminal Session)?$/u;
 const FILESYSTEM_PATH_TOOLTIP_PATTERN =
   /(?:^|\s)(?:~\/|\/(?:Applications|Library|System|Users|Volumes|etc|home|opt|private|tmp|usr|var)\/|[A-Za-z]:[\\/]|file:\/\/)/u;
@@ -81,13 +78,13 @@ const FILESYSTEM_PATH_TOOLTIP_PATTERN =
 type SessionTooltipStateInput = Partial<
   Pick<
     SidebarSessionItem,
-    | "isLive"
-    | "isRunning"
-    | "isSleeping"
-    | "lifecycleState"
-    | "nativePaneState"
-    | "providerSessionState"
-    | "sessionPersistenceProvider"
+    | 'isLive'
+    | 'isRunning'
+    | 'isSleeping'
+    | 'lifecycleState'
+    | 'nativePaneState'
+    | 'providerSessionState'
+    | 'sessionPersistenceProvider'
   >
 >;
 
@@ -127,10 +124,7 @@ export function SessionCardContent({
   const showHeaderLoadingSpinner = session.isReloading === true || isGeneratingFirstPromptTitle;
   const showTerminalSessionIcon = !hideHeaderAgentIcon && shouldShowTerminalSessionIcon(session);
   const shouldAllowFullWidthTitle =
-    timerTrailingLabel === undefined &&
-    !showLastActiveTime &&
-    !showLastInteractionTime &&
-    !trailingPrefix;
+    timerTrailingLabel === undefined && !showLastActiveTime && !showLastInteractionTime && !trailingPrefix;
   /**
    * CDXC:DelayedSend 2026-05-30-08:33:
    * Active Delayed Send timers should show exactly one sidebar clock, in the
@@ -189,18 +183,17 @@ export function SessionCardContent({
    * full card width. Do not keep the header agent icon's trailing column in
    * that mode; the leading floating icon still carries session identity.
    */
-  const defaultTrailingDisplay =
-    timerTrailingLabel || (showLastInteractionTime && trailingTimeLabel) ? "time" : "icon";
+  const defaultTrailingDisplay = timerTrailingLabel || (showLastInteractionTime && trailingTimeLabel) ? 'time' : 'icon';
   const shouldKeepLoadingIconVisible = showHeaderLoadingSpinner && hasHeaderAgentIcon;
   const hoverTrailingDisplay = shouldKeepLoadingIconVisible
-    ? "icon"
-    : defaultTrailingDisplay === "icon"
+    ? 'icon'
+    : defaultTrailingDisplay === 'icon'
       ? trailingTimeLabel
-        ? "time"
-        : "icon"
+        ? 'time'
+        : 'icon'
       : hasHeaderAgentIcon
-        ? "icon"
-        : "time";
+        ? 'icon'
+        : 'time';
   /**
    * CDXC:SidebarSessions 2026-05-09-16:55
    * Session rows expose close as hover chrome for project and chat cards. The
@@ -214,34 +207,29 @@ export function SessionCardContent({
    */
   const canCloseFromCard = showCloseButton && Boolean(onClose) && timerTrailingLabel === undefined;
   const hasSessionHeadTrailing =
-    Boolean(trailingPrefix) ||
-    Boolean(trailingTimeLabel) ||
-    hasHeaderAgentIcon ||
-    canCloseFromCard;
+    Boolean(trailingPrefix) || Boolean(trailingTimeLabel) || hasHeaderAgentIcon || canCloseFromCard;
 
   return (
     <>
-      <div className="session-head" data-title-full-width={String(shouldAllowFullWidthTitle)}>
+      <div className='session-head' data-title-full-width={String(shouldAllowFullWidthTitle)}>
         {/**
          * CDXC:PreviousSessions 2026-05-09-17:44
          * Previous Sessions rows use this shared sidebar title row but must not
          * show the agent icon in the trailing slot. Their trailing slot is
          * reserved for Last Active, matching the confirmed modal layout.
          */}
-        <div className="session-alias-heading" ref={aliasHeadingRef}>
+        <div className='session-alias-heading' ref={aliasHeadingRef}>
           {headingText}
         </div>
         {hasSessionHeadTrailing ? (
           <div
-            className="session-head-trailing"
+            className='session-head-trailing'
             data-default-trailing-display={defaultTrailingDisplay}
             data-hover-trailing-display={hoverTrailingDisplay}
             data-timer-trailing={String(timerTrailingLabel !== undefined)}
           >
             {trailingPrefix}
-            {trailingTimeLabel ? (
-              <div className="session-last-interaction-time">{trailingTimeLabel}</div>
-            ) : null}
+            {trailingTimeLabel ? <div className='session-last-interaction-time'>{trailingTimeLabel}</div> : null}
             {hasHeaderAgentIcon ? (
               <SessionHeaderAgentIcon
                 agentIcon={session.agentIcon}
@@ -255,27 +243,23 @@ export function SessionCardContent({
             ) : null}
             {canCloseFromCard ? (
               <button
-                aria-label="Close session"
-                className="session-card-close-button"
+                aria-label='Close session'
+                className='session-card-close-button'
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                   onClose?.();
                 }}
-                type="button"
+                type='button'
               >
-                <IconX aria-hidden="true" size={14} stroke={1.8} />
+                <IconX aria-hidden='true' size={14} stroke={1.8} />
               </button>
             ) : null}
           </div>
         ) : null}
       </div>
       {isGeneratingFirstPromptTitle ? (
-        <div
-          className="session-title-generation-overlay"
-          role="status"
-          aria-label="Generating title"
-        >
+        <div className='session-title-generation-overlay' role='status' aria-label='Generating title'>
           {/**
            * CDXC:SessionTitleLoading 2026-05-08-09:07
            * First-prompt title generation should look like the real sidebar
@@ -283,9 +267,9 @@ export function SessionCardContent({
            * progress cue through looping dots, so it must not render the extra
            * left-side spinner that made the row typography feel mismatched.
            */}
-          <span className="session-title-generation-overlay-label">
+          <span className='session-title-generation-overlay-label'>
             Generating title
-            <span className="session-title-generation-overlay-dots" aria-hidden="true">
+            <span className='session-title-generation-overlay-dots' aria-hidden='true'>
               <span>.</span>
               <span>.</span>
               <span>.</span>
@@ -300,12 +284,12 @@ export function SessionCardContent({
 function getSessionCardTimerTrailingLabel(
   session: Pick<
     SidebarSessionItem,
-    | "closeAfterDone"
-    | "closeAfterDoneDeadlineAt"
-    | "closeAfterDoneRemainingLabel"
-    | "delayedSendDeadlineAt"
-    | "delayedSendRemainingLabel"
-  >,
+    | 'closeAfterDone'
+    | 'closeAfterDoneDeadlineAt'
+    | 'closeAfterDoneRemainingLabel'
+    | 'delayedSendDeadlineAt'
+    | 'delayedSendRemainingLabel'
+  >
 ): string | undefined {
   if (session.delayedSendRemainingLabel) {
     /*
@@ -314,9 +298,7 @@ function getSessionCardTimerTrailingLabel(
      * its tooltip instead of rendering prose in the session button's compact
      * trailing-time slot.
      */
-    return isDelayedSendWaitingLabel(session.delayedSendRemainingLabel)
-      ? undefined
-      : session.delayedSendRemainingLabel;
+    return isDelayedSendWaitingLabel(session.delayedSendRemainingLabel) ? undefined : session.delayedSendRemainingLabel;
   }
   if (session.delayedSendDeadlineAt) {
     return formatSessionTimerDeadlineCountdown(session.delayedSendDeadlineAt);
@@ -331,20 +313,20 @@ function getSessionCardTimerTrailingLabel(
 }
 
 function isDelayedSendWaitingLabel(remainingLabel: string): boolean {
-  return remainingLabel === "Waiting for agent" || remainingLabel === "Waiting for agents";
+  return remainingLabel === 'Waiting for agent' || remainingLabel === 'Waiting for agents';
 }
 
 function getDelayedSendTooltipText(remainingLabel?: string): string {
-  if (remainingLabel === "Waiting for agent") {
-    return "Delayed Send: the prompt will be sent when the agent finishes working";
+  if (remainingLabel === 'Waiting for agent') {
+    return 'Delayed Send: the prompt will be sent when the agent finishes working';
   }
-  if (remainingLabel === "Waiting for agents") {
-    return "Delayed Send: the prompt will be sent when all agents finish working";
+  if (remainingLabel === 'Waiting for agents') {
+    return 'Delayed Send: the prompt will be sent when all agents finish working';
   }
   if (remainingLabel) {
     return `Delayed Send: the prompt will be sent in ${remainingLabel}`;
   }
-  return "Delayed Send is scheduled";
+  return 'Delayed Send is scheduled';
 }
 
 function formatSessionTimerDeadlineCountdown(deadlineAt: string): string | undefined {
@@ -357,10 +339,10 @@ function formatSessionTimerCountdown(delayMs: number): string {
   const hours = Math.floor(totalSeconds / 3_600);
   const minutes = Math.floor((totalSeconds % 3_600) / 60);
   const seconds = totalSeconds % 60;
-  const paddedMinutes = String(minutes).padStart(2, "0");
-  const paddedSeconds = String(seconds).padStart(2, "0");
+  const paddedMinutes = String(minutes).padStart(2, '0');
+  const paddedSeconds = String(seconds).padStart(2, '0');
   if (hours > 0) {
-    return `${String(hours).padStart(2, "0")}:${paddedMinutes}:${paddedSeconds}`;
+    return `${String(hours).padStart(2, '0')}:${paddedMinutes}:${paddedSeconds}`;
   }
   return `${paddedMinutes}:${paddedSeconds}`;
 }
@@ -376,39 +358,39 @@ export function getSessionCardTitleTooltip({
   alwaysShowStateTooltip?: boolean;
   session: Pick<
     SidebarSessionItem,
-    | "activityLabel"
-    | "agentIcon"
-    | "agentSessionId"
-    | "alias"
-    | "closeAfterDone"
-    | "closeAfterDoneRemainingLabel"
-    | "delayedSendRemainingLabel"
-    | "detail"
-    | "displayTitle"
-    | "displayTitleTooltip"
-    | "firstUserMessage"
-    | "isFavorite"
-    | "kind"
-    | "isPrimaryTitleTerminalTitle"
-    | "primaryTitle"
-    | "sessionKind"
-    | "sessionTag"
-    | "sessionRoutingId"
-    | "sessionPersistenceName"
-    | "sessionPersistenceProvider"
-    | "sessionNumber"
-    | "terminalTitle"
+    | 'activityLabel'
+    | 'agentIcon'
+    | 'agentSessionId'
+    | 'alias'
+    | 'closeAfterDone'
+    | 'closeAfterDoneRemainingLabel'
+    | 'delayedSendRemainingLabel'
+    | 'detail'
+    | 'displayTitle'
+    | 'displayTitleTooltip'
+    | 'firstUserMessage'
+    | 'isFavorite'
+    | 'kind'
+    | 'isPrimaryTitleTerminalTitle'
+    | 'primaryTitle'
+    | 'sessionKind'
+    | 'sessionTag'
+    | 'sessionRoutingId'
+    | 'sessionPersistenceName'
+    | 'sessionPersistenceProvider'
+    | 'sessionNumber'
+    | 'terminalTitle'
   > &
     SessionTooltipStateInput & {
-    projectName?: string;
-    projectPath?: string;
-  };
+      projectName?: string;
+      projectPath?: string;
+    };
   showDebugSessionNumbers: boolean;
   showSessionDetails?: boolean;
 }): {
   headingText: string;
   tooltip?: string;
-  tooltipWhen: "always" | "overflow";
+  tooltipWhen: 'always' | 'overflow';
 } {
   const headingText = formatSessionHeadingText({
     agentIcon: session.agentIcon,
@@ -467,13 +449,8 @@ export function getSessionCardTitleTooltip({
    */
   const sessionIdTooltipValue = session.sessionRoutingId?.trim() || session.sessionNumber?.trim();
   const sessionIdTooltip =
-    showDebugSessionNumbers && sessionIdTooltipValue
-      ? `ID: ${sessionIdTooltipValue}`
-      : undefined;
-  const agentSessionIdTooltip = getCapturedAgentSessionIdTooltipText(
-    session,
-    showDebugSessionNumbers,
-  );
+    showDebugSessionNumbers && sessionIdTooltipValue ? `ID: ${sessionIdTooltipValue}` : undefined;
+  const agentSessionIdTooltip = getCapturedAgentSessionIdTooltipText(session, showDebugSessionNumbers);
   const tooltipMetadata = [
     /*
      * CDXC:DelayedSend 2026-05-21-12:21:
@@ -481,9 +458,7 @@ export function getSessionCardTitleTooltip({
      * directly below the title, even when the user is not hovering the clock
      * icon itself, so pending Enter timing is visible from the normal card hover.
      */
-    session.delayedSendRemainingLabel
-      ? getDelayedSendTooltipText(session.delayedSendRemainingLabel)
-      : undefined,
+    session.delayedSendRemainingLabel ? getDelayedSendTooltipText(session.delayedSendRemainingLabel) : undefined,
     /*
      * CDXC:CloseAfterDone 2026-06-15-21:00:
      * Close After Done uses the same leading clock slot as Delayed Send, but
@@ -493,18 +468,16 @@ export function getSessionCardTitleTooltip({
     session.closeAfterDoneRemainingLabel
       ? `Close After Done in ${session.closeAfterDoneRemainingLabel}`
       : session.closeAfterDone
-        ? "Close After Done armed"
+        ? 'Close After Done armed'
         : undefined,
     getSessionStateTooltipText(session, showDebugSessionNumbers || alwaysShowStateTooltip),
     getSessionTooltipSecondaryText(session),
     ...(showSessionDetails ? getSessionDetailsTooltipLines(session) : []),
     agentSessionIdTooltip,
-    sessionIdTooltip
-      ? undefined
-      : getSessionPersistenceTooltipText(session, showDebugSessionNumbers),
+    sessionIdTooltip ? undefined : getSessionPersistenceTooltipText(session, showDebugSessionNumbers),
   ]
     .filter((value): value is string => Boolean(value))
-    .join("\n");
+    .join('\n');
   const titleTooltip = buildSessionTitleTooltip({
     headingText: fullTooltipHeadingText,
     secondaryText: tooltipMetadata,
@@ -523,8 +496,8 @@ export function getSessionCardTitleTooltip({
 }
 
 function getCapturedAgentSessionIdTooltipText(
-  session: Pick<SidebarSessionItem, "agentSessionId">,
-  showDebugSessionNumbers: boolean,
+  session: Pick<SidebarSessionItem, 'agentSessionId'>,
+  showDebugSessionNumbers: boolean
 ): string | undefined {
   if (!showDebugSessionNumbers) {
     return undefined;
@@ -534,8 +507,8 @@ function getCapturedAgentSessionIdTooltipText(
 }
 
 function formatSessionTagTooltipHeadingText(
-  session: Pick<SidebarSessionItem, "isFavorite" | "sessionTag">,
-  headingText: string,
+  session: Pick<SidebarSessionItem, 'isFavorite' | 'sessionTag'>,
+  headingText: string
 ): string {
   const sessionTag = getEffectiveSessionTag(session);
   const label = getSidebarSessionTagLabel(sessionTag);
@@ -562,7 +535,7 @@ function getFullSessionTooltipHeadingText({
    * CDXC:SessionTooltips 2026-05-15-15:57:
    * Active and Previous session-card tooltips must show the full human title line when the visible session title has already been shortened with an ellipsis. First-prompt auto titles can preserve only the shortened card label, so use the saved first user message as the full tooltip heading only when it clearly starts with the displayed truncated prefix.
    */
-  const normalizedFirstUserMessage = firstUserMessage?.trim().replace(/\s+/g, " ");
+  const normalizedFirstUserMessage = firstUserMessage?.trim().replace(/\s+/g, ' ');
   if (!normalizedFirstUserMessage) {
     return headingText;
   }
@@ -572,7 +545,7 @@ function getFullSessionTooltipHeadingText({
     ? headingText.slice(0, -unsyncedLabelSuffix.length)
     : headingText;
   const normalizedHeading = headingWithoutUnsyncedLabel.trim();
-  const truncatedPrefix = normalizedHeading.replace(/(?:\.\.\.|…)$/u, "").trim();
+  const truncatedPrefix = normalizedHeading.replace(/(?:\.\.\.|…)$/u, '').trim();
   if (
     truncatedPrefix.length > 0 &&
     truncatedPrefix.length < normalizedFirstUserMessage.length &&
@@ -582,9 +555,7 @@ function getFullSessionTooltipHeadingText({
     const fullHeading = normalizedHeading.startsWith(TERMINAL_TITLE_MARKER)
       ? `${TERMINAL_TITLE_MARKER} ${normalizedFirstUserMessage}`
       : normalizedFirstUserMessage;
-    return headingText.endsWith(unsyncedLabelSuffix)
-      ? `${fullHeading} ${UNSYNCED_TITLE_LABEL}`
-      : fullHeading;
+    return headingText.endsWith(unsyncedLabelSuffix) ? `${fullHeading} ${UNSYNCED_TITLE_LABEL}` : fullHeading;
   }
 
   return headingText;
@@ -603,15 +574,15 @@ export function formatSessionHeadingText({
   terminalTitle,
 }: Pick<
   SidebarSessionItem,
-  | "agentIcon"
-  | "alias"
-  | "displayTitle"
-  | "displayTitleTooltip"
-  | "kind"
-  | "isPrimaryTitleTerminalTitle"
-  | "primaryTitle"
-  | "sessionKind"
-  | "terminalTitle"
+  | 'agentIcon'
+  | 'alias'
+  | 'displayTitle'
+  | 'displayTitleTooltip'
+  | 'kind'
+  | 'isPrimaryTitleTerminalTitle'
+  | 'primaryTitle'
+  | 'sessionKind'
+  | 'terminalTitle'
 > & {
   includeUnsyncedTitleLabel?: boolean;
 }): string {
@@ -622,7 +593,7 @@ export function formatSessionHeadingText({
     gxserver presentation rows are dumb-rendered title strings. When `displayTitle` is present, React must not compare titleSource, terminalTitle, or placeholder state locally; the server already applied the shared title rules and unsynced marker.
     */
     return includeUnsyncedTitleLabel
-      ? normalizeDisplayTitle(displayTitleTooltip) ?? gxserverDisplayTitle
+      ? (normalizeDisplayTitle(displayTitleTooltip) ?? gxserverDisplayTitle)
       : gxserverDisplayTitle;
   }
 
@@ -633,7 +604,7 @@ export function formatSessionHeadingText({
   const normalizedTerminalTitle = terminalHeadingTitle.text;
   const baseHeadingTitle = normalizedPrimaryTitle ? primaryHeadingTitle : aliasHeadingTitle;
   const baseHeadingText = baseHeadingTitle.text || alias;
-  const isBrowserSession = kind === "browser" || sessionKind === "browser";
+  const isBrowserSession = kind === 'browser' || sessionKind === 'browser';
   if (baseHeadingTitle.isGhostPlaceholder) {
     return formatNonPersistentSessionHeadingText(baseHeadingText, includeUnsyncedTitleLabel);
   }
@@ -651,14 +622,11 @@ export function formatSessionHeadingText({
 }
 
 function normalizeDisplayTitle(title: string | undefined): string | undefined {
-  const normalizedTitle = title?.trim().replace(/\s+/g, " ");
+  const normalizedTitle = title?.trim().replace(/\s+/g, ' ');
   return normalizedTitle || undefined;
 }
 
-function formatNonPersistentSessionHeadingText(
-  headingText: string,
-  includeUnsyncedTitleLabel: boolean,
-): string {
+function formatNonPersistentSessionHeadingText(headingText: string, includeUnsyncedTitleLabel: boolean): string {
   return includeUnsyncedTitleLabel
     ? `${TERMINAL_TITLE_MARKER} ${headingText} ${UNSYNCED_TITLE_LABEL}`
     : `${TERMINAL_TITLE_MARKER} ${headingText}`;
@@ -668,7 +636,7 @@ function normalizeSessionCardHeadingTitle(title: string | undefined): {
   isGhostPlaceholder: boolean;
   text?: string;
 } {
-  const normalizedTitle = title?.trim().replace(/\s+/g, " ");
+  const normalizedTitle = title?.trim().replace(/\s+/g, ' ');
   if (!normalizedTitle) {
     return { isGhostPlaceholder: false };
   }
@@ -709,30 +677,27 @@ export function buildSessionTitleTooltip({
    * authored line breaks visible while making row boundaries readable after
    * wrapping.
    */
-  const uniqueLines = [headingText, secondaryText, sessionIdTooltip].reduce<string[]>(
-    (lines, block) => {
-      const normalizedBlockLines =
-        block
-          ?.split(/\r?\n/u)
-          .map((line) => line.trim())
-          .filter(Boolean) ?? [];
+  const uniqueLines = [headingText, secondaryText, sessionIdTooltip].reduce<string[]>((lines, block) => {
+    const normalizedBlockLines =
+      block
+        ?.split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean) ?? [];
 
-      return normalizedBlockLines.reduce<string[]>((nextLines, normalizedLine) => {
-        if (nextLines.includes(normalizedLine)) {
-          return nextLines;
-        }
+    return normalizedBlockLines.reduce<string[]>((nextLines, normalizedLine) => {
+      if (nextLines.includes(normalizedLine)) {
+        return nextLines;
+      }
 
-        return [...nextLines, normalizedLine];
-      }, lines);
-    },
-    [],
-  );
+      return [...nextLines, normalizedLine];
+    }, lines);
+  }, []);
 
-  return uniqueLines.join("\n\n");
+  return uniqueLines.join('\n\n');
 }
 
 export function getSessionTooltipSecondaryText(
-  session: Pick<SidebarSessionItem, "activityLabel" | "agentIcon" | "detail" | "terminalTitle">,
+  session: Pick<SidebarSessionItem, 'activityLabel' | 'agentIcon' | 'detail' | 'terminalTitle'>
 ): string | undefined {
   const detail = stripAgentTooltipText(session.detail, session.agentIcon);
   if (detail && !containsFilesystemPath(detail)) {
@@ -754,10 +719,7 @@ function containsFilesystemPath(value: string): boolean {
   return FILESYSTEM_PATH_TOOLTIP_PATTERN.test(value);
 }
 
-function getSessionStateTooltipText(
-  session: SessionTooltipStateInput,
-  showStateTooltip: boolean,
-): string | undefined {
+function getSessionStateTooltipText(session: SessionTooltipStateInput, showStateTooltip: boolean): string | undefined {
   if (!showStateTooltip) {
     return undefined;
   }
@@ -785,38 +747,33 @@ function getSessionStateTooltipLabel(session: SessionTooltipStateInput): string 
     return undefined;
   }
 
-  const hasLoadedSurface =
-    session.nativePaneState === "mounted" || session.nativePaneState === "mounting";
+  const hasLoadedSurface = session.nativePaneState === 'mounted' || session.nativePaneState === 'mounting';
   if (hasLoadedSurface) {
-    return "Active in app";
+    return 'Active in app';
   }
 
-  if (session.providerSessionState === "exists") {
-    return "Active, not loaded";
+  if (session.providerSessionState === 'exists') {
+    return 'Active, not loaded';
   }
 
-  if (session.isSleeping === true || session.lifecycleState === "sleeping") {
-    return "Sleeping";
+  if (session.isSleeping === true || session.lifecycleState === 'sleeping') {
+    return 'Sleeping';
   }
 
-  if (session.providerSessionState === "unknown" || session.lifecycleState === "error") {
-    return "Unknown";
+  if (session.providerSessionState === 'unknown' || session.lifecycleState === 'error') {
+    return 'Unknown';
   }
 
-  if (
-    session.isLive === true ||
-    session.isRunning === true ||
-    session.lifecycleState === "running"
-  ) {
-    return "Active in app";
+  if (session.isLive === true || session.isRunning === true || session.lifecycleState === 'running') {
+    return 'Active in app';
   }
 
-  if (session.providerSessionState === "missing" && session.sessionPersistenceProvider) {
-    return "Not started";
+  if (session.providerSessionState === 'missing' && session.sessionPersistenceProvider) {
+    return 'Not started';
   }
 
-  if (session.lifecycleState === "done" || session.isRunning === false || session.isLive === false) {
-    return "Done";
+  if (session.lifecycleState === 'done' || session.isRunning === false || session.isLive === false) {
+    return 'Done';
   }
 
   return undefined;
@@ -832,24 +789,24 @@ export function getSessionTitleTooltipOptions({
   titleTooltip: string;
 }): {
   tooltip?: string;
-  tooltipWhen: "always" | "overflow";
+  tooltipWhen: 'always' | 'overflow';
 } {
   const hasTooltipMetadata = titleTooltip !== headingText;
   if (alwaysShowTitleTooltip || hasTooltipMetadata) {
     return {
       tooltip: titleTooltip,
-      tooltipWhen: "always",
+      tooltipWhen: 'always',
     };
   }
 
   return {
     tooltip: undefined,
-    tooltipWhen: "overflow",
+    tooltipWhen: 'overflow',
   };
 }
 
 type SessionAgentIconProps = {
-  agentIcon: SidebarSessionItem["agentIcon"];
+  agentIcon: SidebarSessionItem['agentIcon'];
   closeAfterDone?: boolean;
   closeAfterDoneDeadlineAt?: string;
   closeAfterDoneRemainingLabel?: string;
@@ -873,13 +830,13 @@ type SessionAgentIconProps = {
    */
   queuedPromptFailedCount?: number;
   sessionPersistenceName?: string;
-  sessionPersistenceProvider?: SidebarSessionItem["sessionPersistenceProvider"];
+  sessionPersistenceProvider?: SidebarSessionItem['sessionPersistenceProvider'];
   showTerminalIcon?: boolean;
 };
 
 type SessionAgentLogoStyle = CSSProperties & {
-  "--session-agent-logo": string;
-  "--session-agent-logo-colored": string;
+  '--session-agent-logo': string;
+  '--session-agent-logo-colored': string;
 };
 
 type SessionAgentIconDecorationProps = SessionAgentIconProps & {
@@ -899,10 +856,10 @@ function SessionAgentIconDecoration({
   tablerClassName,
 }: SessionAgentIconDecorationProps) {
   if (isReloading || isGeneratingFirstPromptTitle) {
-    return <IconLoader2 aria-hidden="true" className={loadingClassName} size={14} stroke={1.8} />;
+    return <IconLoader2 aria-hidden='true' className={loadingClassName} size={14} stroke={1.8} />;
   }
 
-  if (agentIcon === "browser") {
+  if (agentIcon === 'browser') {
     if (faviconDataUrl) {
       /**
        * CDXC:BrowserPanes 2026-05-03-11:28
@@ -917,23 +874,17 @@ function SessionAgentIconDecoration({
        */
       return (
         <img
-          alt=""
-          aria-hidden="true"
+          alt=''
+          aria-hidden='true'
           className={tablerClassName}
-          data-agent-icon="browser"
-          data-icon-variant="favicon"
+          data-agent-icon='browser'
+          data-icon-variant='favicon'
           src={faviconDataUrl}
         />
       );
     }
     return (
-      <IconWorld
-        aria-hidden="true"
-        className={tablerClassName}
-        data-agent-icon="browser"
-        size={14}
-        stroke={1.8}
-      />
+      <IconWorld aria-hidden='true' className={tablerClassName} data-agent-icon='browser' size={14} stroke={1.8} />
     );
   }
 
@@ -945,13 +896,7 @@ function SessionAgentIconDecoration({
      * non-agent icon instead of leaving the Agent Icon slot blank.
      */
     return (
-      <IconTerminal2
-        aria-hidden="true"
-        className={tablerClassName}
-        data-agent-icon="terminal"
-        size={14}
-        stroke={1.8}
-      />
+      <IconTerminal2 aria-hidden='true' className={tablerClassName} data-agent-icon='terminal' size={14} stroke={1.8} />
     );
   }
 
@@ -967,18 +912,11 @@ function SessionAgentIconDecoration({
      * Favorite state must not feed this style, so favorite rows keep the same
      * agent logo colors as non-favorite rows.
      */
-    "--session-agent-logo": `url("${AGENT_LOGOS[agentIcon]}")`,
-    "--session-agent-logo-colored": `url("${COLORED_AGENT_LOGOS[agentIcon]}")`,
+    '--session-agent-logo': `url("${AGENT_LOGOS[agentIcon]}")`,
+    '--session-agent-logo-colored': `url("${COLORED_AGENT_LOGOS[agentIcon]}")`,
   };
 
-  return (
-    <span
-      aria-hidden="true"
-      className={className}
-      data-agent-icon={agentIcon}
-      style={agentLogoStyle}
-    />
-  );
+  return <span aria-hidden='true' className={className} data-agent-icon={agentIcon} style={agentLogoStyle} />;
 }
 
 export function SessionFloatingAgentIcon({
@@ -1017,18 +955,11 @@ export function SessionFloatingAgentIcon({
   Delayed Send clock above the session card.
   */
   const queuedPromptBadge = (
-    <SessionQueuedPromptBadge
-      count={queuedPromptCount}
-      failedCount={queuedPromptFailedCount}
-    />
+    <SessionQueuedPromptBadge count={queuedPromptCount} failedCount={queuedPromptFailedCount} />
   );
   const hasActiveDelayedSend = Boolean(delayedSendRemainingLabel || delayedSendDeadlineAt);
-  const hasActiveCloseAfterDone = Boolean(
-    closeAfterDone || closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt,
-  );
-  const isCloseAfterDoneCountingDown = Boolean(
-    closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt,
-  );
+  const hasActiveCloseAfterDone = Boolean(closeAfterDone || closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt);
+  const isCloseAfterDoneCountingDown = Boolean(closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt);
 
   if (hasActiveDelayedSend) {
     /*
@@ -1037,9 +968,9 @@ export function SessionFloatingAgentIcon({
     */
     return (
       <>
-        <span aria-hidden="true" className="session-floating-icon-anchor" />
+        <span aria-hidden='true' className='session-floating-icon-anchor' />
         <DelayedSendSidebarIcon
-          className="session-floating-agent-tabler-icon session-delayed-send-agent-icon"
+          className='session-floating-agent-tabler-icon session-delayed-send-agent-icon'
           onClick={onDelayedSendClick}
           remainingLabel={delayedSendRemainingLabel}
         />
@@ -1058,10 +989,10 @@ export function SessionFloatingAgentIcon({
     */
     return (
       <>
-        <span aria-hidden="true" className="session-floating-icon-anchor" />
+        <span aria-hidden='true' className='session-floating-icon-anchor' />
         <CloseAfterDoneSidebarIcon
           className={`session-floating-agent-tabler-icon session-close-after-done-agent-icon${
-            isCloseAfterDoneCountingDown ? " session-close-after-done-agent-icon-countdown" : ""
+            isCloseAfterDoneCountingDown ? ' session-close-after-done-agent-icon-countdown' : ''
           }`}
           onClick={onCloseAfterDoneClick}
           remainingLabel={closeAfterDoneRemainingLabel}
@@ -1073,26 +1004,22 @@ export function SessionFloatingAgentIcon({
 
   return (
     <>
-      <span aria-hidden="true" className="session-floating-icon-anchor" />
-      {onPinnedClick ? (
-        <SessionPinnedFloatingButton isPinned={isPinned} onPinnedClick={onPinnedClick} />
-      ) : null}
-      {effectiveSessionTag ? (
-        <SessionTagSidebarIcon sessionTag={effectiveSessionTag} />
-      ) : null}
+      <span aria-hidden='true' className='session-floating-icon-anchor' />
+      {onPinnedClick ? <SessionPinnedFloatingButton isPinned={isPinned} onPinnedClick={onPinnedClick} /> : null}
+      {effectiveSessionTag ? <SessionTagSidebarIcon sessionTag={effectiveSessionTag} /> : null}
       <SessionAgentIconDecoration
         agentIcon={agentIcon}
-        className="session-floating-agent-icon"
+        className='session-floating-agent-icon'
         faviconDataUrl={faviconDataUrl}
         isFavorite={isFavorite}
-        loadingClassName="session-floating-reloading-icon"
+        loadingClassName='session-floating-reloading-icon'
         showTerminalIcon={showTerminalIcon}
-        tablerClassName="session-floating-agent-tabler-icon"
+        tablerClassName='session-floating-agent-tabler-icon'
       />
       <SessionPersistenceProviderBadge
         sessionPersistenceName={sessionPersistenceName}
         sessionPersistenceProvider={sessionPersistenceProvider}
-        slot="floating"
+        slot='floating'
       />
       {queuedPromptBadge}
     </>
@@ -1108,14 +1035,8 @@ rather than widening the badge into the session title.
 */
 const SESSION_QUEUED_PROMPT_BADGE_MAX_COUNT = 99;
 
-function SessionQueuedPromptBadge({
-  count,
-  failedCount,
-}: {
-  count?: number;
-  failedCount?: number;
-}) {
-  if (typeof count !== "number" || !Number.isFinite(count) || count < 1) {
+function SessionQueuedPromptBadge({ count, failedCount }: { count?: number; failedCount?: number }) {
+  if (typeof count !== 'number' || !Number.isFinite(count) || count < 1) {
     return null;
   }
 
@@ -1129,15 +1050,14 @@ function SessionQueuedPromptBadge({
   yellow badge of the same digit count are the same geometry and cannot reflow
   the icon slot.
   */
-  const hasFailed =
-    typeof failedCount === "number" && Number.isFinite(failedCount) && failedCount > 0;
+  const hasFailed = typeof failedCount === 'number' && Number.isFinite(failedCount) && failedCount > 0;
 
   return (
     <span
-      aria-hidden="true"
-      className="session-queued-prompt-badge"
+      aria-hidden='true'
+      className='session-queued-prompt-badge'
       data-queued-prompt-count={String(roundedCount)}
-      data-queued-prompt-failed={hasFailed ? "true" : undefined}
+      data-queued-prompt-failed={hasFailed ? 'true' : undefined}
     >
       {roundedCount > SESSION_QUEUED_PROMPT_BADGE_MAX_COUNT
         ? `${SESSION_QUEUED_PROMPT_BADGE_MAX_COUNT}+`
@@ -1153,15 +1073,15 @@ function SessionPinnedFloatingButton({
   isPinned: boolean;
   onPinnedClick: (pinned: boolean) => void;
 }) {
-  const pointerGestureRef = useRef<
-    { didMove: boolean; pointerId: number; startX: number; startY: number } | undefined
-  >(undefined);
+  const pointerGestureRef = useRef<{ didMove: boolean; pointerId: number; startX: number; startY: number } | undefined>(
+    undefined
+  );
 
   return (
     <button
-      aria-label={isPinned ? "Unpin session" : "Pin session"}
+      aria-label={isPinned ? 'Unpin session' : 'Pin session'}
       aria-pressed={isPinned}
-      className="session-pinned-floating-button"
+      className='session-pinned-floating-button'
       data-pinned={String(isPinned)}
       onClick={(event) => {
         event.preventDefault();
@@ -1204,9 +1124,9 @@ function SessionPinnedFloatingButton({
         gesture.didMove = distanceX > 3 || distanceY > 3;
       }}
       tabIndex={isPinned ? 0 : -1}
-      type="button"
+      type='button'
     >
-      <IconPin aria-hidden="true" size={15} stroke={1.9} />
+      <IconPin aria-hidden='true' size={15} stroke={1.9} />
     </button>
   );
 }
@@ -1220,7 +1140,7 @@ function SessionTagSidebarIcon({ sessionTag }: { sessionTag: SidebarSessionTag }
    */
   return (
     <SessionTagIcon
-      className="session-floating-agent-tabler-icon session-tag-agent-icon"
+      className='session-floating-agent-tabler-icon session-tag-agent-icon'
       fillFavorite
       size={15}
       stroke={1.9}
@@ -1242,18 +1162,18 @@ function SessionHeaderAgentIcon({
     <>
       <SessionAgentIconDecoration
         agentIcon={agentIcon}
-        className="session-header-agent-icon"
+        className='session-header-agent-icon'
         faviconDataUrl={faviconDataUrl}
         isGeneratingFirstPromptTitle={isGeneratingFirstPromptTitle}
         isReloading={isReloading}
-        loadingClassName="session-header-reloading-icon"
+        loadingClassName='session-header-reloading-icon'
         showTerminalIcon={showTerminalIcon}
-        tablerClassName="session-header-agent-tabler-icon"
+        tablerClassName='session-header-agent-tabler-icon'
       />
       <SessionPersistenceProviderBadge
         sessionPersistenceName={sessionPersistenceName}
         sessionPersistenceProvider={sessionPersistenceProvider}
-        slot="header"
+        slot='header'
       />
     </>
   );
@@ -1268,9 +1188,7 @@ function CloseAfterDoneSidebarIcon({
   onClick?: () => void;
   remainingLabel?: string;
 }) {
-  const tooltip = remainingLabel
-    ? `Close After Done in ${remainingLabel}`
-    : "Close After Done armed";
+  const tooltip = remainingLabel ? `Close After Done in ${remainingLabel}` : 'Close After Done armed';
   return (
     <AppTooltip content={tooltip}>
       <button
@@ -1280,9 +1198,9 @@ function CloseAfterDoneSidebarIcon({
           event.stopPropagation();
           onClick?.();
         }}
-        type="button"
+        type='button'
       >
-        <IconClock aria-hidden="true" size={16} stroke={1.9} />
+        <IconClock aria-hidden='true' size={16} stroke={1.9} />
       </button>
     </AppTooltip>
   );
@@ -1317,9 +1235,9 @@ function DelayedSendSidebarIcon({
           event.stopPropagation();
           onClick?.();
         }}
-        type="button"
+        type='button'
       >
-        <IconClock aria-hidden="true" size={16} stroke={1.9} />
+        <IconClock aria-hidden='true' size={16} stroke={1.9} />
       </button>
     </AppTooltip>
   );
@@ -1331,8 +1249,8 @@ function SessionPersistenceProviderBadge({
   slot,
 }: {
   sessionPersistenceName?: string;
-  sessionPersistenceProvider?: SidebarSessionItem["sessionPersistenceProvider"];
-  slot: "floating" | "header";
+  sessionPersistenceProvider?: SidebarSessionItem['sessionPersistenceProvider'];
+  slot: 'floating' | 'header';
 }) {
   /**
    * CDXC:SessionPersistence 2026-05-15-15:32:
@@ -1347,45 +1265,38 @@ function SessionPersistenceProviderBadge({
 }
 
 function getSessionDetailsTooltipLines(
-  session: Pick<SidebarSessionItem, "agentIcon" | "sessionKind" | "sessionPersistenceProvider"> & {
+  session: Pick<SidebarSessionItem, 'agentIcon' | 'sessionKind' | 'sessionPersistenceProvider'> & {
     projectName?: string;
     projectPath?: string;
-  },
+  }
 ): string[] {
   const agentName = getSessionDetailsAgentName(session);
   const projectLabel = getSessionDetailsProjectLabel(session);
-  const providerLabel = session.sessionPersistenceProvider ?? "none";
+  const providerLabel = session.sessionPersistenceProvider ?? 'none';
 
   return [`Agent: ${agentName}`, `Project: ${projectLabel}`, `Provider: ${providerLabel}`];
 }
 
-function getSessionDetailsAgentName(
-  session: Pick<SidebarSessionItem, "agentIcon" | "sessionKind">,
-): string {
+function getSessionDetailsAgentName(session: Pick<SidebarSessionItem, 'agentIcon' | 'sessionKind'>): string {
   if (session.agentIcon) {
     return getSidebarAgentNameByIcon(session.agentIcon) ?? session.agentIcon;
   }
 
-  if (session.sessionKind === "browser") {
-    return "Browser";
+  if (session.sessionKind === 'browser') {
+    return 'Browser';
   }
 
-  return "None";
+  return 'None';
 }
 
-function getSessionDetailsProjectLabel({
-  projectName,
-}: {
-  projectName?: string;
-  projectPath?: string;
-}): string {
+function getSessionDetailsProjectLabel({ projectName }: { projectName?: string; projectPath?: string }): string {
   const normalizedProjectName = projectName?.trim();
-  return normalizedProjectName || "None";
+  return normalizedProjectName || 'None';
 }
 
 function getSessionPersistenceTooltipText(
-  session: Pick<SidebarSessionItem, "sessionPersistenceName" | "sessionPersistenceProvider">,
-  showDebugSessionNumbers: boolean,
+  session: Pick<SidebarSessionItem, 'sessionPersistenceName' | 'sessionPersistenceProvider'>,
+  showDebugSessionNumbers: boolean
 ): string | undefined {
   if (!showDebugSessionNumbers) {
     return undefined;
@@ -1396,17 +1307,13 @@ function getSessionPersistenceTooltipText(
   return `${session.sessionPersistenceProvider} session: ${session.sessionPersistenceName}`;
 }
 
-export function shouldShowTerminalSessionIcon(
-  session: Pick<SidebarSessionItem, "agentIcon" | "sessionKind">,
-): boolean {
-  return (
-    !session.agentIcon && (session.sessionKind === undefined || session.sessionKind === "terminal")
-  );
+export function shouldShowTerminalSessionIcon(session: Pick<SidebarSessionItem, 'agentIcon' | 'sessionKind'>): boolean {
+  return !session.agentIcon && (session.sessionKind === undefined || session.sessionKind === 'terminal');
 }
 
 function stripAgentTooltipText(
   value: string | undefined,
-  agentIcon: SidebarSessionItem["agentIcon"],
+  agentIcon: SidebarSessionItem['agentIcon']
 ): string | undefined {
   const normalizedValue = value?.trim();
   if (!normalizedValue) {
@@ -1418,9 +1325,9 @@ function stripAgentTooltipText(
   }
 
   const normalizedAgentLabels = Array.from(
-    new Set([getSidebarAgentNameByIcon(agentIcon), ...AGENT_SECONDARY_LABELS[agentIcon]]),
+    new Set([getSidebarAgentNameByIcon(agentIcon), ...AGENT_SECONDARY_LABELS[agentIcon]])
   )
-    .filter((label): label is string => typeof label === "string")
+    .filter((label): label is string => typeof label === 'string')
     .map((label) => label.trim())
     .filter((label) => label.length > 0)
     .sort((left, right) => right.length - left.length);
@@ -1464,7 +1371,7 @@ type OverflowTooltipTextProps = {
   textRef?: RefObject<HTMLDivElement | null>;
   text: string;
   tooltip?: string;
-  tooltipWhen?: "always" | "overflow";
+  tooltipWhen?: 'always' | 'overflow';
 };
 
 type SessionTooltipPosition = {
@@ -1479,14 +1386,14 @@ export function OverflowTooltipText({
   text,
   textRef,
   tooltip,
-  tooltipWhen = "overflow",
+  tooltipWhen = 'overflow',
 }: OverflowTooltipTextProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState<SessionTooltipPosition>();
   const openTimeoutIdRef = useRef<number | undefined>(undefined);
   const shellRef = useRef<HTMLDivElement>(null);
   const tooltipPopupRef = useRef<HTMLDivElement>(null);
-  const tooltipIdRef = useRef(Symbol("overflowTooltip"));
+  const tooltipIdRef = useRef(Symbol('overflowTooltip'));
   const tooltipContent = tooltip ?? text;
 
   const clearOpenTimeout = () => {
@@ -1527,7 +1434,7 @@ export function OverflowTooltipText({
       setIsOpen(false);
       return;
     }
-    const shouldOpen = tooltipWhen === "always" ? Boolean(tooltip ?? text) : hasOverflow();
+    const shouldOpen = tooltipWhen === 'always' ? Boolean(tooltip ?? text) : hasOverflow();
     if (!shouldOpen) {
       setIsOpen(false);
       return;
@@ -1557,16 +1464,10 @@ export function OverflowTooltipText({
       }
     };
     window.addEventListener(SIDEBAR_TOOLTIP_DISMISS_EVENT, handleSidebarTooltipDismiss);
-    window.addEventListener(
-      SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
-      handleSidebarTooltipSuppressionChanged,
-    );
+    window.addEventListener(SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT, handleSidebarTooltipSuppressionChanged);
     return () => {
       window.removeEventListener(SIDEBAR_TOOLTIP_DISMISS_EVENT, handleSidebarTooltipDismiss);
-      window.removeEventListener(
-        SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
-        handleSidebarTooltipSuppressionChanged,
-      );
+      window.removeEventListener(SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT, handleSidebarTooltipSuppressionChanged);
       clearOpenTimeout();
       if (activeOverflowTooltipId === tooltipIdRef.current) {
         activeOverflowTooltipId = undefined;
@@ -1598,18 +1499,11 @@ export function OverflowTooltipText({
       const preferredTop = belowTop;
       const top = Math.max(
         SESSION_TOOLTIP_VIEWPORT_MARGIN_PX,
-        Math.min(
-          preferredTop,
-          window.innerHeight - SESSION_TOOLTIP_VIEWPORT_MARGIN_PX - tooltipBounds.height,
-        ),
+        Math.min(preferredTop, window.innerHeight - SESSION_TOOLTIP_VIEWPORT_MARGIN_PX - tooltipBounds.height)
       );
 
       setTooltipPosition((previousPosition) => {
-        if (
-          previousPosition?.left === left &&
-          previousPosition.top === top &&
-          previousPosition.width === width
-        ) {
+        if (previousPosition?.left === left && previousPosition.top === top && previousPosition.width === width) {
           return previousPosition;
         }
 
@@ -1618,11 +1512,11 @@ export function OverflowTooltipText({
     };
 
     updateTooltipPosition();
-    window.addEventListener("resize", updateTooltipPosition);
-    window.addEventListener("scroll", updateTooltipPosition, true);
+    window.addEventListener('resize', updateTooltipPosition);
+    window.addEventListener('scroll', updateTooltipPosition, true);
 
     const resizeObserver =
-      typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(updateTooltipPosition);
+      typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(updateTooltipPosition);
     const triggerElement = getTriggerElement();
     if (triggerElement) {
       resizeObserver?.observe(triggerElement);
@@ -1632,8 +1526,8 @@ export function OverflowTooltipText({
     }
 
     return () => {
-      window.removeEventListener("resize", updateTooltipPosition);
-      window.removeEventListener("scroll", updateTooltipPosition, true);
+      window.removeEventListener('resize', updateTooltipPosition);
+      window.removeEventListener('scroll', updateTooltipPosition, true);
       resizeObserver?.disconnect();
     };
   }, [isOpen, textRef, tooltipContent]);
@@ -1684,33 +1578,27 @@ export function OverflowTooltipText({
    * viewport identically.
    */
   return (
-    <div className="session-local-tooltip-shell" ref={shellRef}>
+    <div className='session-local-tooltip-shell' ref={shellRef}>
       {trigger}
       {isOpen && tooltipContent
         ? createPortal(
             <div
-              className={cn("session-local-tooltip-popup", TOOLTIP_MOTION_CLASS_NAME)}
-              data-side="bottom"
-              data-state="delayed-open"
+              className={cn('session-local-tooltip-popup', TOOLTIP_MOTION_CLASS_NAME)}
+              data-side='bottom'
+              data-state='delayed-open'
               ref={tooltipPopupRef}
-              role="tooltip"
+              role='tooltip'
               style={
                 {
-                  "--session-local-tooltip-left": tooltipPosition
-                    ? `${tooltipPosition.left}px`
-                    : "0px",
-                  "--session-local-tooltip-top": tooltipPosition
-                    ? `${tooltipPosition.top}px`
-                    : "0px",
-                  "--session-local-tooltip-width": tooltipPosition
-                    ? `${tooltipPosition.width}px`
-                    : "max-content",
+                  '--session-local-tooltip-left': tooltipPosition ? `${tooltipPosition.left}px` : '0px',
+                  '--session-local-tooltip-top': tooltipPosition ? `${tooltipPosition.top}px` : '0px',
+                  '--session-local-tooltip-width': tooltipPosition ? `${tooltipPosition.width}px` : 'max-content',
                 } as CSSProperties
               }
             >
               {renderSessionLocalTooltipContent(tooltipContent)}
             </div>,
-            document.body,
+            document.body
           )
         : null}
     </div>
@@ -1729,7 +1617,7 @@ function renderSessionLocalTooltipContent(content: string): ReactNode {
 
   return lines.map((line, index) => (
     <span
-      className={index === 0 ? "session-local-tooltip-title" : "session-local-tooltip-meta"}
+      className={index === 0 ? 'session-local-tooltip-title' : 'session-local-tooltip-meta'}
       key={`${index}-${line}`}
     >
       {line}
@@ -1739,7 +1627,7 @@ function renderSessionLocalTooltipContent(content: string): ReactNode {
 
 function chainEventHandlers<Event>(
   originalHandler: ((event: Event) => void) | undefined,
-  nextHandler: (event: Event) => void,
+  nextHandler: (event: Event) => void
 ): (event: Event) => void {
   return (event) => {
     originalHandler?.(event);

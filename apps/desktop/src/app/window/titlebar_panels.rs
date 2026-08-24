@@ -2,8 +2,8 @@
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use crate::*;
 use crate::app::helpers::*;
+use crate::*;
 
 pub(crate) struct GpuiTitlebarAnchoredDropdownState {
     pub(crate) position: Point<Pixels>,
@@ -53,7 +53,9 @@ pub(crate) fn log_gpui_titlebar_popup_repro(event: &str, details: serde_json::Va
     let _ = (event, details);
 }
 
-pub(crate) fn gpui_titlebar_popup_bounds_diagnostic(bounds: Option<Bounds<Pixels>>) -> serde_json::Value {
+pub(crate) fn gpui_titlebar_popup_bounds_diagnostic(
+    bounds: Option<Bounds<Pixels>>,
+) -> serde_json::Value {
     bounds.map_or(serde_json::Value::Null, |bounds| {
         serde_json::json!({
             "height": bounds.size.height.as_f32(),
@@ -2426,7 +2428,10 @@ pub(crate) fn gpui_titlebar_native_process_request_from_message(
     })
 }
 
-pub(crate) fn gpui_titlebar_native_process_request_is_allowed(executable: &str, args: &[String]) -> bool {
+pub(crate) fn gpui_titlebar_native_process_request_is_allowed(
+    executable: &str,
+    args: &[String],
+) -> bool {
     match executable {
         "/bin/ps" => gpui_titlebar_native_process_ps_args_are_allowed(args),
         "/usr/sbin/lsof" => gpui_titlebar_native_process_lsof_args_are_allowed(args),

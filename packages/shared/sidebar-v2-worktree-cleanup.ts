@@ -1,4 +1,4 @@
-import type { SidebarV2Session } from "./sidebar-v2-session";
+import type { SidebarV2Session } from './sidebar-v2-session';
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
@@ -13,11 +13,11 @@ delete path can agree without re-walking sessions.
 */
 
 /** Temp branch namespace for lazily created V2 worktrees: `ghostex/<8hex>`. */
-export const SIDEBAR_V2_TEMP_BRANCH_PREFIX = "ghostex/";
+export const SIDEBAR_V2_TEMP_BRANCH_PREFIX = 'ghostex/';
 
 const TEMP_BRANCH_PATTERN = /^ghostex\/[0-9a-f]{8}$/;
 
-export type SidebarV2WorktreeSession = Pick<SidebarV2Session, "sessionId" | "worktreePath"> & {
+export type SidebarV2WorktreeSession = Pick<SidebarV2Session, 'sessionId' | 'worktreePath'> & {
   /**
    * CDXC:SidebarV2Worktree 2026-07-29:
    * The session's working directory, which EVERY session carries from its first
@@ -45,14 +45,12 @@ export function normalizeWorktreePath(path: string | null | undefined): string |
  * different path here; resolving that is the daemon's job, and it is the same
  * caveat the rest of this flow carries.
  */
-export function normalizeWorktreePathForComparison(
-  path: string | null | undefined,
-): string | null {
+export function normalizeWorktreePathForComparison(path: string | null | undefined): string | null {
   const trimmed = normalizeWorktreePath(path);
   if (trimmed === null) {
     return null;
   }
-  const stripped = trimmed.replace(/[/\\]+$/, "");
+  const stripped = trimmed.replace(/[/\\]+$/, '');
   return stripped.length > 0 ? stripped : trimmed;
 }
 
@@ -67,7 +65,7 @@ function worktreeSharingKey(session: SidebarV2WorktreeSession): string | null {
  */
 export function resolveOrphanedWorktreePathForSession(
   sessions: readonly SidebarV2WorktreeSession[],
-  sessionId: string,
+  sessionId: string
 ): string | null {
   const target = sessions.find((session) => session.sessionId === sessionId);
   if (!target) {
@@ -80,7 +78,7 @@ export function resolveOrphanedWorktreePathForSession(
 
   const targetKey = normalizeWorktreePathForComparison(targetWorktreePath);
   const isShared = sessions.some(
-    (session) => session.sessionId !== sessionId && worktreeSharingKey(session) === targetKey,
+    (session) => session.sessionId !== sessionId && worktreeSharingKey(session) === targetKey
   );
   return isShared ? null : targetWorktreePath;
 }
@@ -92,7 +90,7 @@ export function resolveOrphanedWorktreePathForSession(
  */
 export function resolveOrphanedWorktreePathsForSessions(
   sessions: readonly SidebarV2WorktreeSession[],
-  removedSessionIds: readonly string[],
+  removedSessionIds: readonly string[]
 ): string[] {
   const removedIds = new Set(removedSessionIds);
   const survivingPaths = new Set(
@@ -101,7 +99,7 @@ export function resolveOrphanedWorktreePathsForSessions(
       .flatMap((session) => {
         const key = worktreeSharingKey(session);
         return key ? [key] : [];
-      }),
+      })
   );
 
   const orphaned: string[] = [];
@@ -125,7 +123,7 @@ export function resolveOrphanedWorktreePathsForSessions(
     worktree" copy in the delete confirm. */
 export function findSessionsUsingWorktreePath(
   sessions: readonly SidebarV2WorktreeSession[],
-  worktreePath: string,
+  worktreePath: string
 ): SidebarV2WorktreeSession[] {
   const normalized = normalizeWorktreePathForComparison(worktreePath);
   if (!normalized) {
@@ -141,8 +139,8 @@ export function formatWorktreePathForDisplay(worktreePath: string): string {
   if (!trimmed) {
     return worktreePath;
   }
-  const normalized = trimmed.replaceAll("\\", "/").replace(/\/+$/, "");
-  const lastSegment = normalized.split("/").at(-1)?.trim() ?? "";
+  const normalized = trimmed.replaceAll('\\', '/').replace(/\/+$/, '');
+  const lastSegment = normalized.split('/').at(-1)?.trim() ?? '';
   return lastSegment.length > 0 ? lastSegment : trimmed;
 }
 
@@ -178,12 +176,10 @@ export function isSidebarV2ManagedWorktreeBranch(branch: string | null | undefin
  * own — every session has a cwd, and a branch name says nothing about which
  * folder is on disk.
  */
-export function resolveSidebarV2ManagedWorktreePath(
-  session: {
-    cwd?: string | null;
-    gitStatus?: { branch?: string | null } | undefined;
-  },
-): string | null {
+export function resolveSidebarV2ManagedWorktreePath(session: {
+  cwd?: string | null;
+  gitStatus?: { branch?: string | null } | undefined;
+}): string | null {
   if (!isSidebarV2ManagedWorktreeBranch(session.gitStatus?.branch)) {
     return null;
   }

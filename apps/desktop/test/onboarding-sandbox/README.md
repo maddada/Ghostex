@@ -38,7 +38,7 @@ file, force-open any modal, and read the annotated event log.
 
 ## How the real modals render
 
-The onboarding modals are the *real* production React components: each fake NSPanel is an
+The onboarding modals are the _real_ production React components: each fake NSPanel is an
 iframe pointing at `/modal-window.html?windowId=…`, whose entry
 (`src/modal-window/modal-window-main.ts`) sets up the host contract and then dynamically
 imports `apps/desktop/views/modal-host.tsx` unchanged.
@@ -59,10 +59,10 @@ Transport between the sandbox page and each iframe is same-origin `window.postMe
 with an `__onboardingSandbox` marker (the modal host re-emits some transient results over
 plain `postMessage`, so unmarked messages are ignored):
 
-| direction | envelope |
-| --- | --- |
-| parent → iframe | `{__onboardingSandbox: "deliver", windowId, detail}` |
-| iframe → parent | `{__onboardingSandbox: "outbound", windowId, message}` |
+| direction       | envelope                                                          |
+| --------------- | ----------------------------------------------------------------- |
+| parent → iframe | `{__onboardingSandbox: "deliver", windowId, detail}`              |
+| iframe → parent | `{__onboardingSandbox: "outbound", windowId, message}`            |
 | iframe → parent | `{__onboardingSandbox: "iframeReady", windowId}` (shim installed) |
 
 `src/bridge/modal-connections.ts` owns the parent side:
@@ -111,7 +111,7 @@ The sandbox mirrors that:
   "Simulated f press (host key injection in the real app)".
 
 **Why the dev server needs HTTPS/HTTP-2** (measured 2026-08-18): YouTube's media protocol
-POSTs segment requests with a *streaming* request body, and Chrome only sends those over
+POSTs segment requests with a _streaming_ request body, and Chrome only sends those over
 HTTP/2+. Over the original HTTP/1.1 dev server every segment failed with
 `net::ERR_ALPN_NEGOTIATION_FAILED` and the player spun forever; left unproxied instead,
 the same segments are CORS-blocked (googlevideo sends no `access-control-allow-origin`
@@ -120,7 +120,7 @@ for this origin). With TLS + h2 enabled the video really plays: verified with
 `/gv/`, and a decoded frame read back from a canvas.
 
 Remaining caveats: the page's own ad/telemetry pings to `googleads.g.doubleclick.net`
-fail (cross-origin, deliberately not proxied) and log `ERR_FAILED` *inside the iframe*;
+fail (cross-origin, deliberately not proxied) and log `ERR_FAILED` _inside the iframe_;
 headless screenshots show the video area black because headless Chrome does not composite
 video frames into captures, even though the frames decode.
 

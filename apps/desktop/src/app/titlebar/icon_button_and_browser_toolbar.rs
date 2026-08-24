@@ -373,5 +373,4 @@ impl GhostexGpuiApp {
                     .child(self.render_browser_toolbar_overflow_button(pane_id, cx)),
             )
     }
-
 }

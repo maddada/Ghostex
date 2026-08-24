@@ -1,21 +1,21 @@
-import { DEFAULT_AGENT_MANAGER_ZOOM_PERCENT } from "../session-grid-contract-core";
-import { DEFAULT_COMMANDS_PANEL_HEIGHT_PX } from "../session-grid-contract-session";
-import { DEFAULT_COMPLETION_SOUND } from "../completion-sound";
-import { DEFAULT_ghostex_HOTKEYS } from "../ghostex-hotkeys";
-import { DEFAULT_WORKSPACE_OPEN_TARGET_AVAILABILITY } from "../workspace-open-targets";
-import { DEFAULT_PET_ID } from "../pets";
-import { DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS } from "../session-tags";
-import { DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS } from "./diagnostic-logging";
-import { DEFAULT_WEB_LINK_OPEN_TARGET } from "./option-tables";
-import { SIDEBAR_SETTINGS_PRESET_SETTINGS } from "./presets";
-import { DEFAULT_SETTINGS_MODAL_NAVIGATION_STATE } from "./settings-modal-navigation";
-import { DEFAULT_TERMINAL_DEV_SERVER_IGNORED_PORT_RULES } from "./terminal-dev-servers";
+import { DEFAULT_AGENT_MANAGER_ZOOM_PERCENT } from '../session-grid-contract-core';
+import { DEFAULT_COMMANDS_PANEL_HEIGHT_PX } from '../session-grid-contract-session';
+import { DEFAULT_COMPLETION_SOUND } from '../completion-sound';
+import { DEFAULT_ghostex_HOTKEYS } from '../ghostex-hotkeys';
+import { DEFAULT_WORKSPACE_OPEN_TARGET_AVAILABILITY } from '../workspace-open-targets';
+import { DEFAULT_PET_ID } from '../pets';
+import { DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS } from '../session-tags';
+import { DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS } from './diagnostic-logging';
+import { DEFAULT_WEB_LINK_OPEN_TARGET } from './option-tables';
+import { SIDEBAR_SETTINGS_PRESET_SETTINGS } from './presets';
+import { DEFAULT_SETTINGS_MODAL_NAVIGATION_STATE } from './settings-modal-navigation';
+import { DEFAULT_TERMINAL_DEV_SERVER_IGNORED_PORT_RULES } from './terminal-dev-servers';
 import {
   DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
   DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
   DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_FOREGROUND_COLOR,
   getSidebarTitlebarBackgroundForDarkness,
-} from "./titlebar-color";
+} from './titlebar-color';
 import {
   DEFAULT_ACCENT_COLOR,
   DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
@@ -26,7 +26,7 @@ import {
   type PromptEditorBackend,
   type WebLinkOpenTarget,
   type ghostexSettings,
-} from "./types";
+} from './types';
 
 export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   /**
@@ -34,7 +34,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Action-completion feedback should use the plain shamisen sound by default;
    * shamisen reverb remains available from Settings for users who prefer it.
    */
-  actionCompletionSound: "shamisen",
+  actionCompletionSound: 'shamisen',
   gpuiTitlebarActionCommandByProject: {},
   gpuiTitlebarOpenTargetByProject: {},
   /**
@@ -44,7 +44,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * enabling the beta feature is a single explicit toggle.
    */
   appShotsEnabled: false,
-  appShotsHotkey: "both-command",
+  appShotsHotkey: 'both-command',
   /*
    * CDXC:AppShots 2026-06-29-02:59:
    * App Shot prompts should paste only the image link by default. Window metadata is useful for debugging and context-heavy cases, but it must be an explicit Settings opt-in so routine image prompts stay compact.
@@ -58,20 +58,20 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   agentAcceptAllEnabled: true,
   agentManagerZoomPercent: DEFAULT_AGENT_MANAGER_ZOOM_PERCENT,
-  defaultPromptAgentId: "codex",
-  sessionTitleGenerationAgent: "codex",
-  customSessionTitleGenerationCommand: "",
+  defaultPromptAgentId: 'codex',
+  sessionTitleGenerationAgent: 'codex',
+  customSessionTitleGenerationCommand: '',
   /**
    * Browser feedback always uses Agentation. Keep the normalized field for
    * compatibility with older host payloads, but do not expose it in Settings.
    */
-  browserFeedbackTool: "agentation",
+  browserFeedbackTool: 'agentation',
   /**
    * CDXC:BrowserPanes 2026-05-27-07:24
    * Browser actions should no longer expose or route through Chrome Canary attachment.
    * Normalize all browser-action launches to in-workspace browser panes so Settings and native startup do not preserve the old external Canary path.
    */
-  browserOpenMode: "browser-pane",
+  browserOpenMode: 'browser-pane',
   /**
    * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
    * In-app link routing is the default so cmd-clicked web links land in the
@@ -144,10 +144,10 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * files and generic Open in IDE actions stay readable. They are no longer
    * exposed in Settings or used by Agents Hub, which opens files in Source.
    */
-  customDefaultEditorCommand: "",
+  customDefaultEditorCommand: '',
   // CDXC:AppIconPicker 2026-06-25-21:50: New installs use the default bundled app icon (empty source id).
-  appIconSourceId: "",
-  defaultEditorCommand: "code",
+  appIconSourceId: '',
+  defaultEditorCommand: 'code',
   /**
    * CDXC:ProjectDiffStats 2026-05-16-08:46:
    * Users can hide the project-header +added/-removed git summary completely
@@ -158,8 +158,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Recommended is the default sidebar preset, so new settings show project-header
    * git stats while keeping the changed-file count off unless the user enables it.
    */
-  hideProjectHeaderDiffStats:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideProjectHeaderDiffStats,
+  hideProjectHeaderDiffStats: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideProjectHeaderDiffStats,
   /**
    * CDXC:DocsSidebar 2026-06-30-19:47:
    * Additional Docs scan folders remain opt-in beyond the built-in ./docs,
@@ -167,24 +166,23 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * A configured Docs directory adds its own tree on top of whatever this
    * lists (CDXC:DocsRootAdditive).
    */
-  manageAdditionalDocsFolders: "",
+  manageAdditionalDocsFolders: '',
   /**
    * CDXC:GlobalProjectDefaults 2026-08-02:
    * New installs ship every Global Default empty so project resolution stays
    * byte-for-byte identical to the pre-feature behavior until a user fills one in.
    */
-  globalWorktreeCommand: "",
-  globalBeadsDisplayKey: "",
-  globalBeadsDirectory: "",
-  globalDocsDirectory: "",
+  globalWorktreeCommand: '',
+  globalBeadsDisplayKey: '',
+  globalBeadsDirectory: '',
+  globalDocsDirectory: '',
   /**
    * CDXC:ProjectDiffStats 2026-05-15-14:33:
    * Project-header git stats should hide the changed-file count by default and
    * show only added/removed line counts. Users can opt back into the file
    * number from Settings when they want the full diff summary.
    */
-  showProjectEditorDiffFileCount:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.showProjectEditorDiffFileCount,
+  showProjectEditorDiffFileCount: SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.showProjectEditorDiffFileCount,
   /**
    * CDXC:ProjectDiffStats 2026-05-27-09:25:
    * Match Starship-style tracked line counts by default. Users can opt in to
@@ -227,8 +225,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Recommended is the first-run preset and keeps session agent icons visible
    * while showing detailed sidebar status chrome.
    */
-  hideSessionAgentIconUntilHover:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideSessionAgentIconUntilHover,
+  hideSessionAgentIconUntilHover: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideSessionAgentIconUntilHover,
   /**
    * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
    * Preserve the existing monochrome sidebar until users opt into colored
@@ -246,15 +243,13 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * visible in the default Codex and Detailed presets even when agent icons are
    * hover-only, while Minimal can hide favicons until hover for a quieter list.
    */
-  hideBrowserFaviconUntilHover:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideBrowserFaviconUntilHover,
+  hideBrowserFaviconUntilHover: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideBrowserFaviconUntilHover,
   /**
    * CDXC:SidebarSessions 2026-05-09-17:00
    * Session-card close controls should be available out of the box. Users can
    * still turn the hover chrome off from Settings when they want quieter cards.
    */
-  showCloseButtonOnSessionCards:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showCloseButtonOnSessionCards,
+  showCloseButtonOnSessionCards: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showCloseButtonOnSessionCards,
   /**
    * CDXC:SidebarSessions 2026-06-13-15:42
    * Recommended is the default sidebar style and hides session-card Last Active
@@ -262,8 +257,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * want the timestamp back, and the setting must not affect project-header git
    * diff stats.
    */
-  hideLastActiveTimeOnSessionCards:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards,
+  hideLastActiveTimeOnSessionCards: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards,
   showSessionCloseContextMenuAction: false,
   showSessionCommandCopyActions: false,
   showSessionDetailsCopyAction: false,
@@ -374,8 +368,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * readable, but no current native or GPUI presentation should consume it.
    */
   hideFloatingSessionStatusIndicators: false,
-  hideMenuBarSessionStatusIndicators:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideMenuBarSessionStatusIndicators,
+  hideMenuBarSessionStatusIndicators: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideMenuBarSessionStatusIndicators,
   petOverlayEnabled: false,
   selectedPetId: DEFAULT_PET_ID,
   /**
@@ -388,7 +381,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * the floating badge from macOS and GPUI. Do not expose it in Settings or
    * send it through native/GPUI status payloads.
    */
-  sessionStatusIndicatorSize: "medium",
+  sessionStatusIndicatorSize: 'medium',
   /**
    * CDXC:SessionPersistence 2026-05-05-07:28
    * Terminal persistence is provider-selected. Off preserves the direct
@@ -404,7 +397,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * CDXC:SessionPersistence 2026-05-26-13:41:
    * New installs should start with zmx persistence enabled by default because zmx is the recommended provider for continuing Ghostex-created sessions from other devices.
    */
-  sessionPersistenceProvider: "zmx",
+  sessionPersistenceProvider: 'zmx',
   /**
    * CDXC:SessionPersistence 2026-05-23-00:50:
    * The session-id pane overlay preference is configurable, and the
@@ -417,19 +410,19 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * identifiers unless they explicitly enable the pane overlay.
    */
   showSessionIdInTerminalPanes: false,
-  preferredAgentInterface: "terminal",
+  preferredAgentInterface: 'terminal',
   /**
    * CDXC:SidebarV2 2026-07-29:
    * The classic sidebar stays the default for every user. Sidebar V2 must be
    * chosen explicitly, so a settings file without this key keeps V1 behavior.
    */
-  sidebarVersion: "v1",
+  sidebarVersion: 'v1',
   /**
    * CDXC:SidebarV2 2026-07-29:
    * Sidebar V2 opens as one flat, position-stable inbox. Group by Project is
    * the opt-in sub-mode.
    */
-  sidebarV2Layout: "flat",
+  sidebarV2Layout: 'flat',
   /**
    * CDXC:SidebarV2Lifecycle 2026-07-29:
    * Three days is the agreed default window, and it matches
@@ -448,7 +441,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * The plain "+" keeps its historic meaning until the user asks otherwise, so
    * an untouched settings file starts instant local sessions exactly as today.
    */
-  newSessionsDefaultEnvMode: "local",
+  newSessionsDefaultEnvMode: 'local',
   /**
    * CDXC:SidebarPlacement 2026-05-06-17:32
    * Sidebar side is a first-class setting so users can choose left or right
@@ -458,7 +451,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Cmd+B is reserved for complete sidebar collapse, so sidebar side placement
    * should remain an explicit setting or user-assigned command.
    */
-  sidebarSide: "left",
+  sidebarSide: 'left',
   sidebarCollapseAnimationDurationMs: DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   /**
    * CDXC:SidebarChrome 2026-06-05-04:40:
@@ -468,7 +461,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   sidebarDefaultWidthPx: DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
   projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
-  sidebarProjectGroupStyle: "branched",
+  sidebarProjectGroupStyle: 'branched',
   sidebarGroupsOpacityPercent: 0,
   sidebarProjectsOpacityPercent: 0,
   expandCollapsedProjectsOnJump: true,
@@ -478,9 +471,9 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Theme selection is disabled again until the full theme system is ready.
    * Use Dark 2 as the active app theme and present it to users as Dark Gray.
    */
-  sidebarTheme: "dark-2",
-  sessionChatTheme: "dark",
-  sessionChatFontFamily: "",
+  sidebarTheme: 'dark-2',
+  sessionChatTheme: 'dark',
+  sessionChatFontFamily: '',
   sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   sessionChatVerboseMode: false,
   /**
@@ -528,13 +521,11 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   customSidebarTitlebarColorsEnabled: true,
   customSidebarTitlebarForegroundColor: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_FOREGROUND_COLOR,
-  customSidebarTitlebarBackgroundTintColor:
-    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
-  customSidebarTitlebarBackgroundDarknessPercent:
-    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
+  customSidebarTitlebarBackgroundTintColor: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
+  customSidebarTitlebarBackgroundDarknessPercent: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
   customSidebarTitlebarBackgroundColor: getSidebarTitlebarBackgroundForDarkness(
     DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
-    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
+    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR
   ),
   accentColor: DEFAULT_ACCENT_COLOR,
   /**
@@ -544,18 +535,18 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * height expansion, 15 MB scrollback, no copy-on-select, and one-to-one
    * precision/discrete mouse scrolling.
    */
-  terminalCursorStyle: "bar",
+  terminalCursorStyle: 'bar',
   terminalCursorStyleBlink: true,
-  terminalEngine: "ghostty-native",
-  windowsTerminalBackend: "wsl",
-  windowsWslDistribution: "",
-  terminalFontFamily: "JetBrains Mono",
+  terminalEngine: 'ghostty-native',
+  windowsTerminalBackend: 'wsl',
+  windowsWslDistribution: '',
+  terminalFontFamily: 'JetBrains Mono',
   terminalFontSize: 13,
   terminalFontWeight: 300,
-  terminalGhosttyTheme: "GitHub Dark",
-  terminalBackgroundImage: "",
+  terminalGhosttyTheme: 'GitHub Dark',
+  terminalBackgroundImage: '',
   terminalBackgroundImageOpacity: 1,
-  terminalBackgroundImageFit: "cover",
+  terminalBackgroundImageFit: 'cover',
   terminalLetterSpacing: 0,
   terminalLineHeight: 1.2,
   terminalPaneHorizontalPaddingPx: DEFAULT_TERMINAL_PANE_PADDING_PX,
@@ -571,13 +562,13 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   tmuxMode: false,
   terminalScrollToBottomWhenTyping: true,
   terminalScrollbackLimitMb: 15,
-  terminalCopyOnSelect: "false",
-  terminalConfirmCloseSurface: "false",
+  terminalCopyOnSelect: 'false',
+  terminalConfirmCloseSurface: 'false',
   terminalClipboardTrimTrailingSpaces: true,
   terminalClipboardPasteProtection: true,
   terminalPastePreviewableImages: true,
   terminalMouseHideWhileTyping: false,
-  terminalScrollbar: "system",
+  terminalScrollbar: 'system',
   /**
    * CDXC:TerminalDevServers 2026-06-23-19:22:
    * New installs should discover local dev servers from terminal output and start with no ignored ports.
@@ -594,7 +585,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * currently hidden and disabled.
    */
   portlessEnabled: false,
-  portlessProtocol: "https",
+  portlessProtocol: 'https',
   /**
    * CDXC:PromptEditorBackend 2026-05-13-15:58
    * Ctrl+G rich prompt editing originally defaulted to the floating Monaco editor.
@@ -605,8 +596,8 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * CDXC:PromptEditorBackend 2026-06-30-00:08:
    * Settings must expose only Monaco and the user's machine default editor. Removed gte and custom selections migrate to inherit so Ctrl+G stops injecting a Ghostex-owned editor command when users choose the machine default path.
    */
-  promptEditorBackend: "monaco",
-  customPromptEditorCommand: "code --wait",
+  promptEditorBackend: 'monaco',
+  customPromptEditorCommand: 'code --wait',
   /**
    * CDXC:GtePromptEditing 2026-05-22-09:56
    * The boolean mirrors keep legacy Ctrl+G prompt-editor settings readable while promptEditorBackend remains the source of truth for launch behavior.
@@ -617,12 +608,12 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   richPromptEditingWithGte: false,
   useGteForCtrlGPromptEditing: false,
   hotkeys: DEFAULT_ghostex_HOTKEYS,
-  workspaceActivePaneBorderColor: "#3b82f6",
+  workspaceActivePaneBorderColor: '#3b82f6',
   /**
    * CDXC:WorkspaceLayout 2026-06-07-16:53:
    * Black is the fallback workspace background when Ghostty has no readable terminal background. Native layout sync treats this default as automatic so the macOS workarea can use the loaded Ghostty `background` color instead of forcing a separate app gray.
    */
-  workspaceBackgroundColor: "#000000",
+  workspaceBackgroundColor: '#000000',
   clickToWakeSleepingSessions: true,
   /**
    * CDXC:TitlebarOpenIn 2026-05-11-00:22
@@ -650,5 +641,5 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   workspacePaneGap: 0,
   remoteMachines: [],
   commandsPanelDefaultHeightPx: DEFAULT_COMMANDS_PANEL_HEIGHT_PX,
-  commandsPanelSide: "bottom",
+  commandsPanelSide: 'bottom',
 };

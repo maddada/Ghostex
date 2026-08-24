@@ -4,7 +4,6 @@
 
 use crate::*;
 
-
 pub(crate) struct GpuiShellLayoutState {
     pub(crate) active_mode: TitlebarMode,
     pub(crate) shell_focus: ShellFocusTarget,
@@ -13,13 +12,15 @@ pub(crate) struct GpuiShellLayoutState {
     pub(crate) agents_workspace: WorkspaceModel,
     pub(crate) agents_workspace_project_id: Option<String>,
     pub(crate) parked_agents_workspaces_by_project: HashMap<String, serde_json::Value>,
-    pub(crate) local_workspace_session_mappings: HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
+    pub(crate) local_workspace_session_mappings:
+        HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
     pub(crate) remote_attach_sessions: HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
     pub(crate) agents_chat_mode_sessions: HashSet<TerminalSessionId>,
     pub(crate) command_pane: CommandPaneModel,
     pub(crate) command_pane_project_id: Option<String>,
     pub(crate) parked_command_panes_by_project: HashMap<String, serde_json::Value>,
-    pub(crate) command_startup_activity_restore_intents: Vec<GpuiCommandStartupActivityRestoreIntent>,
+    pub(crate) command_startup_activity_restore_intents:
+        Vec<GpuiCommandStartupActivityRestoreIntent>,
     pub(crate) command_delayed_send_restore_timers: Vec<GpuiCommandDelayedSendRestoreTimer>,
     pub(crate) agents_delayed_send_restore_intents: Vec<GpuiAgentsDelayedSendRestoreIntent>,
     pub(crate) pending_command_gxserver_cleanup: HashSet<GpuiLocalWorkspaceSessionKey>,
@@ -30,7 +31,6 @@ pub(crate) struct GpuiShellLayoutState {
     pub(crate) browser_tabs_project_id: Option<String>,
     pub(crate) parked_browser_tabs_by_project: HashMap<String, BrowserTabModel>,
 }
-
 
 impl GpuiShellLayoutState {
     pub(crate) fn shell_default_from_shared_settings(
@@ -429,4 +429,3 @@ impl GpuiShellLayoutState {
         })
     }
 }
-

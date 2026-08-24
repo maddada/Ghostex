@@ -1,8 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use gpui::{
-    App,
-};
+use gpui::App;
 
 use crate::app::helpers::*;
 use crate::*;
@@ -159,4 +157,3 @@ pub(crate) fn ghostex_gpui_main_menus_for_source_focus(
         ]),
     ]
 }
-

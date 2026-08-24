@@ -84,17 +84,17 @@ export interface AddProjectAddResult {
   readonly projectId?: string;
 }
 
-export type AddProjectProviderId = "azure-devops" | "bitbucket" | "github" | "gitlab";
-export type AddProjectSourceId = AddProjectProviderId | "url";
+export type AddProjectProviderId = 'azure-devops' | 'bitbucket' | 'github' | 'gitlab';
+export type AddProjectSourceId = AddProjectProviderId | 'url';
 
-export type AddProjectProviderAuthStatus = "authenticated" | "unauthenticated" | "unknown";
+export type AddProjectProviderAuthStatus = 'authenticated' | 'unauthenticated' | 'unknown';
 /**
  * Mirrors gxserver's `GxserverSourceControlDiscoveryStatus` (Part A) plus a
  * generic `error`: `missing` means the provider CLI is not installed on that
  * machine, `unsupported` means gxserver has no implementation for the provider
  * at all (Bitbucket / Azure DevOps today).
  */
-export type AddProjectProviderStatus = "available" | "error" | "missing" | "unsupported";
+export type AddProjectProviderStatus = 'available' | 'error' | 'missing' | 'unsupported';
 
 export interface AddProjectProviderDiscovery {
   readonly auth?: {
@@ -149,7 +149,7 @@ export interface AddProjectClonePreview {
   readonly cloneUrl: string;
   readonly destinationBlocked: boolean;
   readonly destinationExists: boolean;
-  readonly destinationExistsKind?: "directory" | "file" | "other";
+  readonly destinationExistsKind?: 'directory' | 'file' | 'other';
   readonly destinationFolderName: string;
   readonly destinationIsEmpty?: boolean;
   readonly destinationPath: string;
@@ -169,7 +169,7 @@ export interface AddProjectCloneJobInput {
 }
 
 /** Mirrors gxserver's `GxserverRepositoryCloneJobState` (Part A) verbatim. */
-export type AddProjectCloneJobState = "canceled" | "completed" | "failed" | "running";
+export type AddProjectCloneJobState = 'canceled' | 'completed' | 'failed' | 'running';
 
 /**
  * A projection of gxserver's `GxserverRepositoryCloneJobStatus`: field names are
@@ -190,16 +190,12 @@ export interface AddProjectModalCallbacks {
   readonly addProject: (input: AddProjectAddInput) => Promise<AddProjectAddResult>;
   readonly browse: (input: AddProjectBrowseInput) => Promise<AddProjectBrowseResult | null>;
   readonly cancelCloneJob?: (input: AddProjectCloneJobInput) => Promise<void>;
-  readonly createDirectory: (
-    input: AddProjectCreateDirectoryInput,
-  ) => Promise<AddProjectCreateDirectoryResult>;
+  readonly createDirectory: (input: AddProjectCreateDirectoryInput) => Promise<AddProjectCreateDirectoryResult>;
   readonly discoverSourceControl: (input: {
     readonly machineId: string;
   }) => Promise<AddProjectSourceControlDiscovery | null>;
   readonly listMachineOptions: () => Promise<readonly AddProjectMachineOption[]>;
-  readonly lookupRepository: (
-    input: AddProjectRepositoryLookupInput,
-  ) => Promise<AddProjectRepositoryInfo>;
+  readonly lookupRepository: (input: AddProjectRepositoryLookupInput) => Promise<AddProjectRepositoryInfo>;
   readonly previewClone: (input: AddProjectClonePreviewInput) => Promise<AddProjectClonePreview>;
   readonly readCloneJob: (input: AddProjectCloneJobInput) => Promise<AddProjectCloneJob>;
   readonly startClone: (input: AddProjectCloneStartInput) => Promise<AddProjectCloneJobHandle>;

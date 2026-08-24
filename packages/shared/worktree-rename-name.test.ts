@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from 'vitest';
 import {
   WORKTREE_RENAME_NAME_CHARACTER_ERROR,
   WORKTREE_RENAME_NAME_SEPARATOR_ERROR,
@@ -6,11 +6,11 @@ import {
   normalizeWorktreeRenameName,
   worktreeRenameFolderSlug,
   worktreeRenameNameError,
-} from "./worktree-rename-name";
+} from './worktree-rename-name';
 
-describe("worktreeRenameNameError", () => {
-  test("accepts every shape git accepts for a branch", () => {
-    for (const name of ["feat/kanban-assignee", "x/y/z", "a-b_c.d", "ABC/Def", "release/1.0"]) {
+describe('worktreeRenameNameError', () => {
+  test('accepts every shape git accepts for a branch', () => {
+    for (const name of ['feat/kanban-assignee', 'x/y/z', 'a-b_c.d', 'ABC/Def', 'release/1.0']) {
       expect(worktreeRenameNameError(name), name).toBeUndefined();
     }
   });
@@ -26,57 +26,57 @@ describe("worktreeRenameNameError", () => {
      * alone would pass.
      */
     for (const name of [
-      "-abc",
-      "/feat",
-      ".hidden",
-      "a b",
-      "a~b",
-      "a^b",
-      "a:b",
-      "a?b",
-      "a*b",
-      "a[b",
-      "a\\b",
-      "a@{b",
-      "ünïcode",
-      "feat/.hidden",
-      "feat/x.lock",
-      "a.",
+      '-abc',
+      '/feat',
+      '.hidden',
+      'a b',
+      'a~b',
+      'a^b',
+      'a:b',
+      'a?b',
+      'a*b',
+      'a[b',
+      'a\\b',
+      'a@{b',
+      'ünïcode',
+      'feat/.hidden',
+      'feat/x.lock',
+      'a.',
     ]) {
       expect(worktreeRenameNameError(name), name).toBe(WORKTREE_RENAME_NAME_CHARACTER_ERROR);
     }
   });
 
-  test("treats an empty name as an error rather than a request to auto-name", () => {
+  test('treats an empty name as an error rather than a request to auto-name', () => {
     /*
      * CDXC:WorktreeRename 2026-08-09-18:40:
      * The create flow's branch field reads empty as "gxserver picks the name".
      * Rename has no such fallback: there is nothing to rename to, so empty is a
      * hard validation failure and Rename stays disabled.
      */
-    expect(worktreeRenameNameError("")).toBe(WORKTREE_RENAME_NAME_CHARACTER_ERROR);
-    expect(worktreeRenameNameError("   ")).toBe(WORKTREE_RENAME_NAME_CHARACTER_ERROR);
+    expect(worktreeRenameNameError('')).toBe(WORKTREE_RENAME_NAME_CHARACTER_ERROR);
+    expect(worktreeRenameNameError('   ')).toBe(WORKTREE_RENAME_NAME_CHARACTER_ERROR);
   });
 
-  test("rejects the separator shapes git refuses", () => {
-    for (const name of ["a..b", "feat//x", "feat/x/"]) {
+  test('rejects the separator shapes git refuses', () => {
+    for (const name of ['a..b', 'feat//x', 'feat/x/']) {
       expect(worktreeRenameNameError(name), name).toBe(WORKTREE_RENAME_NAME_SEPARATOR_ERROR);
     }
   });
 
-  test("caps the name at 200 characters", () => {
-    expect(worktreeRenameNameError("a".repeat(200))).toBeUndefined();
-    expect(worktreeRenameNameError("a".repeat(201))).toBe(WORKTREE_RENAME_NAME_TOO_LONG_ERROR);
+  test('caps the name at 200 characters', () => {
+    expect(worktreeRenameNameError('a'.repeat(200))).toBeUndefined();
+    expect(worktreeRenameNameError('a'.repeat(201))).toBe(WORKTREE_RENAME_NAME_TOO_LONG_ERROR);
   });
 
-  test("validates the trimmed value", () => {
-    expect(normalizeWorktreeRenameName("  feat/x  ")).toBe("feat/x");
-    expect(worktreeRenameNameError("  feat/x  ")).toBeUndefined();
+  test('validates the trimmed value', () => {
+    expect(normalizeWorktreeRenameName('  feat/x  ')).toBe('feat/x');
+    expect(worktreeRenameNameError('  feat/x  ')).toBeUndefined();
   });
 });
 
-describe("worktreeRenameFolderSlug", () => {
-  test("folds path separators into hyphens without lowercasing", () => {
+describe('worktreeRenameFolderSlug', () => {
+  test('folds path separators into hyphens without lowercasing', () => {
     /*
      * CDXC:WorktreeRename 2026-08-09-18:40:
      * The branch keeps the typed name verbatim while the folder gets this slug,
@@ -85,17 +85,15 @@ describe("worktreeRenameFolderSlug", () => {
      * lowercasing a name the user typed here would silently rename their folder
      * to something they did not ask for.
      */
-    expect(worktreeRenameFolderSlug("feat/kanban-assignee")).toBe("feat-kanban-assignee");
-    expect(worktreeRenameFolderSlug("feat/UI-Polish")).toBe("feat-UI-Polish");
+    expect(worktreeRenameFolderSlug('feat/kanban-assignee')).toBe('feat-kanban-assignee');
+    expect(worktreeRenameFolderSlug('feat/UI-Polish')).toBe('feat-UI-Polish');
   });
 
-  test("truncates long names on a hyphen boundary and never trails a hyphen", () => {
-    const slug = worktreeRenameFolderSlug(
-      "rewrite-the-entire-presentation-snapshot-projection-pipeline-for-sidebar",
-    );
+  test('truncates long names on a hyphen boundary and never trails a hyphen', () => {
+    const slug = worktreeRenameFolderSlug('rewrite-the-entire-presentation-snapshot-projection-pipeline-for-sidebar');
 
     expect(slug.length).toBeLessThanOrEqual(48);
-    expect(slug.endsWith("-")).toBe(false);
-    expect(slug.startsWith("rewrite-the-entire-presentation-snapshot")).toBe(true);
+    expect(slug.endsWith('-')).toBe(false);
+    expect(slug.startsWith('rewrite-the-entire-presentation-snapshot')).toBe(true);
   });
 });

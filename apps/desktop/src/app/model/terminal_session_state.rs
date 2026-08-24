@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 /*
 CDXC:GPUIAgentsTerminalStartupState 2026-06-22-23:50:
 Failed Agents terminal startup is a first-class presentation state so the tab survives launch failure with clear retry UI. The durable shell state stores only the safe `startup-failed` slug; runtime ids, launch errors, command text, cwd/path, env, process ids, stdout/stderr, and terminal content remain runtime-only or absent.
@@ -19,7 +18,6 @@ pub(crate) enum TerminalSessionPresentationState {
     RestoredUnmounted,
     PoppedOutPlaceholder,
 }
-
 
 impl TerminalSessionPresentationState {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -133,7 +131,6 @@ impl TerminalSessionPresentationState {
     }
 }
 
-
 /*
 CDXC:GPUIAgentsTabStatus 2026-06-22-16:27:
 Agents running-tab dots must use semantic placeholder state from the macOS sidebar vocabulary instead of arbitrary session-id colors. Persist only the safe shell metadata: idle/working/attention activity plus a Delayed Send boolean; never persist deadlines, labels, command text, paths, stdout/stderr, terminal content, tokens, or user-owned titles.
@@ -145,13 +142,11 @@ pub(crate) enum AgentTerminalActivity {
     Attention,
 }
 
-
 impl Default for AgentTerminalActivity {
     fn default() -> Self {
         Self::Idle
     }
 }
-
 
 impl AgentTerminalActivity {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -172,7 +167,6 @@ impl AgentTerminalActivity {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AgentTerminalTabStatus {
     Idle,
@@ -180,7 +174,6 @@ pub(crate) enum AgentTerminalTabStatus {
     Attention,
     DelayedSend,
 }
-
 
 impl AgentTerminalTabStatus {
     pub(crate) fn element_slug(self) -> &'static str {
@@ -192,7 +185,6 @@ impl AgentTerminalTabStatus {
         }
     }
 }
-
 
 pub(crate) fn agent_terminal_tab_status(
     activity: AgentTerminalActivity,
@@ -208,7 +200,6 @@ pub(crate) fn agent_terminal_tab_status(
         }
     }
 }
-
 
 #[derive(Clone)]
 pub(crate) struct TerminalSession {
@@ -239,13 +230,11 @@ pub(crate) struct TerminalSession {
     pub(crate) zmx_session_name: Option<String>,
 }
 
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum AgentsWorkspaceSessionKind {
     #[default]
     Terminal,
 }
-
 
 impl AgentsWorkspaceSessionKind {
     pub(crate) fn from_sidebar_kind(kind: &str) -> Option<Self> {
@@ -261,7 +250,6 @@ impl AgentsWorkspaceSessionKind {
         }
     }
 }
-
 
 impl TerminalSession {
     pub(crate) fn placeholder(
@@ -309,7 +297,10 @@ impl TerminalSession {
             && self.startup_eligible_when_mounting
     }
 
-    pub(crate) fn set_presentation_state(&mut self, presentation_state: TerminalSessionPresentationState) {
+    pub(crate) fn set_presentation_state(
+        &mut self,
+        presentation_state: TerminalSessionPresentationState,
+    ) {
         self.set_presentation_state_with_startup_eligibility(
             presentation_state,
             presentation_state == TerminalSessionPresentationState::Mounting,

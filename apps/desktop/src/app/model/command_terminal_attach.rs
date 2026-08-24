@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiCommandTerminalCreateInput {
     pub(crate) command_id: Option<String>,
@@ -16,13 +15,11 @@ pub(crate) struct GpuiCommandTerminalCreateInput {
     pub(crate) title: String,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiCommandTerminalCreateInputResolution {
     Ready(GpuiCommandTerminalCreateInput),
     NotReady,
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiCommandTerminalAttachPlan {

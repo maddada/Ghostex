@@ -1,17 +1,17 @@
-import type { SidebarAgentIcon } from "../shared/sidebar-agents";
+import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 import type {
   SidebarPreviousSessionItem,
   SidebarSessionGroup,
   SidebarSessionItem,
-} from "../shared/session-grid-contract";
+} from '../shared/session-grid-contract';
 
 export type SidebarStoryGroup = Omit<
   SidebarSessionGroup,
-  "isFocusModeActive" | "layoutVisibleCount" | "viewMode" | "visibleCount"
+  'isFocusModeActive' | 'layoutVisibleCount' | 'viewMode' | 'visibleCount'
 >;
 
 export function createStorySession({
-  activity = "idle",
+  activity = 'idle',
   activityLabel,
   alias,
   agentIcon,
@@ -25,7 +25,7 @@ export function createStorySession({
   shortcutLabel,
   terminalTitle,
 }: {
-  activity?: SidebarSessionItem["activity"];
+  activity?: SidebarSessionItem['activity'];
   activityLabel?: string;
   alias: string;
   agentIcon?: SidebarAgentIcon;
@@ -66,7 +66,7 @@ export function cloneGroups(groups: readonly SidebarStoryGroup[]): SidebarStoryG
 }
 
 export function createStoryPreviousSession({
-  activity = "idle",
+  activity = 'idle',
   alias,
   closedAt = new Date().toISOString(),
   detail,
@@ -77,7 +77,7 @@ export function createStoryPreviousSession({
   shortcutLabel,
   terminalTitle,
 }: {
-  activity?: SidebarSessionItem["activity"];
+  activity?: SidebarSessionItem['activity'];
   alias: string;
   closedAt?: string;
   detail?: string;
@@ -109,15 +109,10 @@ export function createStoryPreviousSession({
 }
 
 export function getFocusedSessionTitle(groups: readonly SidebarSessionGroup[]): string | undefined {
-  const focusedSession = groups
-    .flatMap((group) => group.sessions)
-    .find((session) => session.isFocused);
+  const focusedSession = groups.flatMap((group) => group.sessions).find((session) => session.isFocused);
 
   return focusedSession
-    ? (focusedSession.alias ??
-        focusedSession.terminalTitle ??
-        focusedSession.primaryTitle ??
-        focusedSession.detail)
+    ? (focusedSession.alias ?? focusedSession.terminalTitle ?? focusedSession.primaryTitle ?? focusedSession.detail)
     : undefined;
 }
 

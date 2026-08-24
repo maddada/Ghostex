@@ -120,7 +120,7 @@
   width: 2px;
   border-radius: 999px;
   background: #88bfff;
-  content: "";
+  content: '';
 }
 
 .workspace-tab__agent {
@@ -132,7 +132,7 @@
   justify-content: center;
   border-radius: 4px;
   color: #d4d4d4;
-  font-family: "SF Mono", "JetBrains Mono", monospace;
+  font-family: 'SF Mono', 'JetBrains Mono', monospace;
   font-size: 7px;
   font-weight: 700;
 }
@@ -454,7 +454,7 @@
   flex-direction: column;
   gap: 6px;
   color: rgba(255, 255, 255, 0.48);
-  font-family: "SF Mono", "JetBrains Mono", monospace;
+  font-family: 'SF Mono', 'JetBrains Mono', monospace;
   font-size: 12px;
 }
 

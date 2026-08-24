@@ -1,64 +1,58 @@
-import { useState } from "react";
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import {
-  FirstLaunchSetupModal,
-  type FirstLaunchSetupPage,
-} from "./first-launch-setup-modal";
-import { DEFAULT_ghostex_SETTINGS, type ghostexSettings } from "../shared/ghostex-settings";
-import type {
-  SidebarAgentHookStatusMessage,
-  SidebarGhostexCliStatusMessage,
-} from "../shared/session-grid-contract";
-import { DEFAULT_SIDEBAR_AGENTS } from "../shared/sidebar-agents";
+import { useState } from 'react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { FirstLaunchSetupModal, type FirstLaunchSetupPage } from './first-launch-setup-modal';
+import { DEFAULT_ghostex_SETTINGS, type ghostexSettings } from '../shared/ghostex-settings';
+import type { SidebarAgentHookStatusMessage, SidebarGhostexCliStatusMessage } from '../shared/session-grid-contract';
+import { DEFAULT_SIDEBAR_AGENTS } from '../shared/sidebar-agents';
 
 const initialHookStatus: SidebarAgentHookStatusMessage = {
   agents: DEFAULT_SIDEBAR_AGENTS.map((agent, index) => {
-    const status = index < 4 ? "installed" : index < 10 ? "missing" : "cliMissing";
+    const status = index < 4 ? 'installed' : index < 10 ? 'missing' : 'cliMissing';
     return {
       agentId: agent.agentId,
-      cliCommand: agent.command.split(" ")[0] ?? agent.command,
-      cliInstalled: status !== "cliMissing",
+      cliCommand: agent.command.split(' ')[0] ?? agent.command,
+      cliInstalled: status !== 'cliMissing',
       detail:
-        status === "installed"
-          ? "Hook config is installed."
-          : status === "cliMissing"
-            ? "CLI was not found on PATH."
-            : "Hook config is not installed yet.",
-      hookInstalled: status === "installed",
+        status === 'installed'
+          ? 'Hook config is installed.'
+          : status === 'cliMissing'
+            ? 'CLI was not found on PATH.'
+            : 'Hook config is not installed yet.',
+      hookInstalled: status === 'installed',
       paths: [`~/.ghostex/mock-hooks/${agent.agentId}.json`],
       status,
     };
   }),
-  generatedAt: "2026-05-26T06:23:00.000Z",
-  hookStateDirectory: "~/.ghostexterm",
-  notifyHookPath: "~/.ghostexterm/notify-agent-status.js",
-  type: "agentHookStatus",
+  generatedAt: '2026-05-26T06:23:00.000Z',
+  hookStateDirectory: '~/.ghostexterm',
+  notifyHookPath: '~/.ghostexterm/notify-agent-status.js',
+  type: 'agentHookStatus',
 };
 
 const installedCliStatus: SidebarGhostexCliStatusMessage = {
   agentOrchestrationSkillInstalled: true,
-  agentOrchestrationSkillPath: "/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md",
+  agentOrchestrationSkillPath: '/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md',
   browserSkillInstalled: true,
-  browserSkillPath: "/Users/madda/agents/skills/ghostex-browser-use/SKILL.md",
+  browserSkillPath: '/Users/madda/agents/skills/ghostex-browser-use/SKILL.md',
   computerUseSkillInstalled: true,
-  computerUseSkillPath: "/Users/madda/agents/skills/ghostex-computer-use/SKILL.md",
+  computerUseSkillPath: '/Users/madda/agents/skills/ghostex-computer-use/SKILL.md',
   embeddedBrowserSkillInstalled: true,
-  embeddedBrowserSkillPath:
-    "/Users/madda/agents/skills/ghostex-embedded-browser-use/SKILL.md",
+  embeddedBrowserSkillPath: '/Users/madda/agents/skills/ghostex-embedded-browser-use/SKILL.md',
   cuaAppInstalled: true,
   cuaDriverInstalled: true,
-  cuaDriverPath: "/Users/madda/.local/bin/cua-driver",
-  detail: "Ghostex CLI is installed automatically with the app. Use ghostex for the full command or gx for the short alias. Browser MCP skill is installed for agents.",
+  cuaDriverPath: '/Users/madda/.local/bin/cua-driver',
+  detail:
+    'Ghostex CLI is installed automatically with the app. Use ghostex for the full command or gx for the short alias. Browser MCP skill is installed for agents.',
   generateTitleSkillInstalled: true,
-  generateTitleSkillPath: "/Users/madda/agents/skills/ghostex-auto-rename-session/SKILL.md",
-  generatedAt: "2026-05-26T13:12:00.000Z",
-  ghostexPath: "/opt/homebrew/bin/ghostex",
+  generateTitleSkillPath: '/Users/madda/agents/skills/ghostex-auto-rename-session/SKILL.md',
+  generatedAt: '2026-05-26T13:12:00.000Z',
+  ghostexPath: '/opt/homebrew/bin/ghostex',
   gxBlockedByExistingCommand: false,
   gxUsable: false,
   installed: true,
   moveCodexSessionSkillInstalled: true,
-  moveCodexSessionSkillPath: "/Users/madda/agents/skills/ghostex-move-codex-session/SKILL.md",
-  type: "ghostexCliStatus",
+  moveCodexSessionSkillPath: '/Users/madda/agents/skills/ghostex-move-codex-session/SKILL.md',
+  type: 'ghostexCliStatus',
 };
 
 const missingCliStatus: SidebarGhostexCliStatusMessage = {
@@ -68,14 +62,15 @@ const missingCliStatus: SidebarGhostexCliStatusMessage = {
   embeddedBrowserSkillInstalled: false,
   cuaAppInstalled: false,
   cuaDriverInstalled: false,
-  detail: "Ghostex CLI auto-install did not find a usable ghostex command on PATH. Ghostex Browser Use and Ghostex Computer Use are not installed yet.",
+  detail:
+    'Ghostex CLI auto-install did not find a usable ghostex command on PATH. Ghostex Browser Use and Ghostex Computer Use are not installed yet.',
   generateTitleSkillInstalled: false,
-  generatedAt: "2026-05-27T04:17:00.000Z",
+  generatedAt: '2026-05-27T04:17:00.000Z',
   gxBlockedByExistingCommand: false,
   gxUsable: false,
   installed: false,
   moveCodexSessionSkillInstalled: false,
-  type: "ghostexCliStatus",
+  type: 'ghostexCliStatus',
 };
 
 function installedHookStatus(): SidebarAgentHookStatusMessage {
@@ -85,28 +80,27 @@ function installedHookStatus(): SidebarAgentHookStatusMessage {
       agent.cliInstalled
         ? {
             ...agent,
-            detail: "Hook config is installed.",
+            detail: 'Hook config is installed.',
             hookInstalled: true,
-            status: "installed",
+            status: 'installed',
           }
-        : agent,
+        : agent
     ),
   };
 }
 
 function FirstLaunchSetupModalStory({
   cliInstalled = true,
-  initialPage = "hooks",
+  initialPage = 'hooks',
 }: {
   cliInstalled?: boolean;
   initialPage?: FirstLaunchSetupPage;
 }) {
   const [settings, setSettings] = useState<ghostexSettings>(DEFAULT_ghostex_SETTINGS);
-  const [agentHookStatus, setAgentHookStatus] =
-    useState<SidebarAgentHookStatusMessage>(initialHookStatus);
+  const [agentHookStatus, setAgentHookStatus] = useState<SidebarAgentHookStatusMessage>(initialHookStatus);
   const [agentHookStatusLoading, setAgentHookStatusLoading] = useState(false);
   const [ghostexCliStatus, setGhostexCliStatus] = useState<SidebarGhostexCliStatusMessage>(
-    cliInstalled ? installedCliStatus : missingCliStatus,
+    cliInstalled ? installedCliStatus : missingCliStatus
   );
   const [ghostexCliStatusLoading, setGhostexCliStatusLoading] = useState(false);
 
@@ -119,7 +113,7 @@ function FirstLaunchSetupModalStory({
   };
 
   return (
-    <div className="first-launch-setup-story-frame">
+    <div className='first-launch-setup-story-frame'>
       <FirstLaunchSetupModal
         agentHookStatus={agentHookStatus}
         agentHookStatusLoading={agentHookStatusLoading}
@@ -135,9 +129,8 @@ function FirstLaunchSetupModalStory({
             setGhostexCliStatus({
               ...ghostexCliStatus,
               embeddedBrowserSkillInstalled: true,
-              embeddedBrowserSkillPath:
-                "/Users/madda/agents/skills/ghostex-embedded-browser-use/SKILL.md",
-              detail: "Ghostex Embedded Browser Use skill is installed for agents.",
+              embeddedBrowserSkillPath: '/Users/madda/agents/skills/ghostex-embedded-browser-use/SKILL.md',
+              detail: 'Ghostex Embedded Browser Use skill is installed for agents.',
             });
             setGhostexCliStatusLoading(false);
           }, 500);
@@ -148,8 +141,8 @@ function FirstLaunchSetupModalStory({
             setGhostexCliStatus({
               ...ghostexCliStatus,
               browserSkillInstalled: true,
-              browserSkillPath: "/Users/madda/agents/skills/ghostex-browser-use/SKILL.md",
-              detail: "Ghostex Browser Use skill is installed for agents.",
+              browserSkillPath: '/Users/madda/agents/skills/ghostex-browser-use/SKILL.md',
+              detail: 'Ghostex Browser Use skill is installed for agents.',
             });
             setGhostexCliStatusLoading(false);
           }, 500);
@@ -160,8 +153,8 @@ function FirstLaunchSetupModalStory({
             setGhostexCliStatus({
               ...ghostexCliStatus,
               computerUseSkillInstalled: true,
-              computerUseSkillPath: "/Users/madda/agents/skills/ghostex-computer-use/SKILL.md",
-              detail: "Ghostex Computer Use skill is installed for agents.",
+              computerUseSkillPath: '/Users/madda/agents/skills/ghostex-computer-use/SKILL.md',
+              detail: 'Ghostex Computer Use skill is installed for agents.',
             });
             setGhostexCliStatusLoading(false);
           }, 500);
@@ -172,9 +165,8 @@ function FirstLaunchSetupModalStory({
             setGhostexCliStatus({
               ...ghostexCliStatus,
               agentOrchestrationSkillInstalled: true,
-              agentOrchestrationSkillPath:
-                "/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md",
-              detail: "Ghostex Agent Orchestration skill is installed for agents.",
+              agentOrchestrationSkillPath: '/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md',
+              detail: 'Ghostex Agent Orchestration skill is installed for agents.',
             });
             setGhostexCliStatusLoading(false);
           }, 500);
@@ -185,8 +177,8 @@ function FirstLaunchSetupModalStory({
             setGhostexCliStatus({
               ...ghostexCliStatus,
               generateTitleSkillInstalled: true,
-              generateTitleSkillPath: "/Users/madda/agents/skills/ghostex-auto-rename-session/SKILL.md",
-              detail: "Ghostex Auto Rename Session skill is installed for agents.",
+              generateTitleSkillPath: '/Users/madda/agents/skills/ghostex-auto-rename-session/SKILL.md',
+              detail: 'Ghostex Auto Rename Session skill is installed for agents.',
             });
             setGhostexCliStatusLoading(false);
           }, 500);
@@ -198,10 +190,10 @@ function FirstLaunchSetupModalStory({
               ...ghostexCliStatus,
               cuaAppInstalled: true,
               computerUseSkillInstalled: true,
-              computerUseSkillPath: "/Users/madda/agents/skills/ghostex-computer-use/SKILL.md",
+              computerUseSkillPath: '/Users/madda/agents/skills/ghostex-computer-use/SKILL.md',
               cuaDriverInstalled: true,
-              cuaDriverPath: "/Users/madda/.local/bin/cua-driver",
-              detail: "Ghostex Computer Use is installed.",
+              cuaDriverPath: '/Users/madda/.local/bin/cua-driver',
+              detail: 'Ghostex Computer Use is installed.',
             });
             setGhostexCliStatusLoading(false);
           }, 500);
@@ -211,12 +203,10 @@ function FirstLaunchSetupModalStory({
           window.setTimeout(() => {
             setGhostexCliStatus({
               ...installedCliStatus,
-              agentOrchestrationSkillInstalled:
-                ghostexCliStatus.agentOrchestrationSkillInstalled,
+              agentOrchestrationSkillInstalled: ghostexCliStatus.agentOrchestrationSkillInstalled,
               browserSkillInstalled: ghostexCliStatus.browserSkillInstalled,
               computerUseSkillInstalled: ghostexCliStatus.computerUseSkillInstalled,
-              embeddedBrowserSkillInstalled:
-                ghostexCliStatus.embeddedBrowserSkillInstalled,
+              embeddedBrowserSkillInstalled: ghostexCliStatus.embeddedBrowserSkillInstalled,
               generateTitleSkillInstalled: ghostexCliStatus.generateTitleSkillInstalled,
             });
             setGhostexCliStatusLoading(false);
@@ -234,23 +224,18 @@ function FirstLaunchSetupModalStory({
           window.setTimeout(() => setGhostexCliStatusLoading(false), 350);
         }}
         settings={settings}
-        theme="dark-blue"
+        theme='dark-blue'
       />
     </div>
   );
 }
 
 const meta = {
-  title: "Sidebar/First Launch Setup Modal",
+  title: 'Sidebar/First Launch Setup Modal',
   parameters: {
-    layout: "fullscreen",
+    layout: 'fullscreen',
   },
-  render: (args) => (
-    <FirstLaunchSetupModalStory
-      cliInstalled={args.cliInstalled}
-      initialPage={args.initialPage}
-    />
-  ),
+  render: (args) => <FirstLaunchSetupModalStory cliInstalled={args.cliInstalled} initialPage={args.initialPage} />,
 } satisfies Meta;
 
 export default meta;
@@ -267,83 +252,83 @@ type Story = StoryObj<typeof meta>;
 export const Video: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "video",
+    initialPage: 'video',
   },
 };
 
 export const Intro: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "welcome",
+    initialPage: 'welcome',
   },
 };
 
 export const Skills: Story = {
   args: {
     cliInstalled: false,
-    initialPage: "skills",
+    initialPage: 'skills',
   },
 };
 
 export const Ready: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "ready",
+    initialPage: 'ready',
   },
 };
 
 export const Preferences: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "preferences",
+    initialPage: 'preferences',
   },
 };
 
 export const Hooks: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "hooks",
+    initialPage: 'hooks',
   },
 };
 
 export const Cli: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "cli",
+    initialPage: 'cli',
   },
 };
 
 export const CliNeedsInstall: Story = {
   args: {
     cliInstalled: false,
-    initialPage: "cli",
+    initialPage: 'cli',
   },
 };
 
 export const GuideBrowserControl: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "browserControl",
+    initialPage: 'browserControl',
   },
 };
 
 export const GuideDesktopCua: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "desktopCua",
+    initialPage: 'desktopCua',
   },
 };
 
 export const GuideAgentsSessions: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "agentsSessions",
+    initialPage: 'agentsSessions',
   },
 };
 
 export const GuideRemoteAccess: Story = {
   args: {
     cliInstalled: true,
-    initialPage: "remoteAccess",
+    initialPage: 'remoteAccess',
   },
 };

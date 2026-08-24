@@ -1,7 +1,4 @@
-import {
-  DEFAULT_ghostex_SETTINGS,
-  normalizeghostexSettings,
-} from "@/packages/shared/ghostex-settings";
+import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings } from '@/packages/shared/ghostex-settings';
 import {
   BOARD_SORT_OPTIONS,
   DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
@@ -14,17 +11,17 @@ import {
   type BoardSortOption,
   type ProjectBoardViewPreferences,
   type TshirtSize,
-} from "../project-board-shared";
-import { type ProjectBoardStartLocation } from "@/packages/shared/bead-conversation-links";
+} from '../project-board-shared';
+import { type ProjectBoardStartLocation } from '@/packages/shared/bead-conversation-links';
 
-export const PROJECT_BOARD_COMMAND_COMPLETED_EVENT = "ghostex-project-board-command-completed";
+export const PROJECT_BOARD_COMMAND_COMPLETED_EVENT = 'ghostex-project-board-command-completed';
 export const PROJECT_BOARD_AUTO_REFRESH_INTERVAL_MS = 8_000;
 export const PROJECT_BOARD_GENERATED_TITLE_DELAY_MS = 2_000;
 export const PROJECT_BOARD_GENERATED_TITLE_IDLE_TIMEOUT_MS = 10_000;
 export const PROJECT_BOARD_DRAFT_TITLE_MAX_LENGTH = 39;
 export const PROJECT_BOARD_MAX_DEPENDENCY_OPTIONS = 600;
 export const PROJECT_BOARD_MAX_VISIBLE_TICKETS_PER_COLUMN = 120;
-export const NATIVE_SETTINGS_STORAGE_KEY = "ghostex-native-settings";
+export const NATIVE_SETTINGS_STORAGE_KEY = 'ghostex-native-settings';
 
 /*
  * CDXC:Automations 2026-07-01-03:24:
@@ -39,7 +36,7 @@ export const NATIVE_SETTINGS_STORAGE_KEY = "ghostex-native-settings";
  * Automate and the Quick Automations Overview keep their existing policy.
  */
 export function readExperimentalFeaturesEnabled(searchParams: URLSearchParams): boolean {
-  if (searchParams.get("automationExperimental") === "false") {
+  if (searchParams.get('automationExperimental') === 'false') {
     return true;
   }
   const storedSettingsJson = window.localStorage.getItem(NATIVE_SETTINGS_STORAGE_KEY);
@@ -50,11 +47,11 @@ export function readExperimentalFeaturesEnabled(searchParams: URLSearchParams): 
       return DEFAULT_ghostex_SETTINGS.showBetaFeatures;
     }
   }
-  const urlValue = searchParams.get("showBetaFeatures");
-  if (urlValue === "true") {
+  const urlValue = searchParams.get('showBetaFeatures');
+  if (urlValue === 'true') {
     return true;
   }
-  if (urlValue === "false") {
+  if (urlValue === 'false') {
     return false;
   }
   return DEFAULT_ghostex_SETTINGS.showBetaFeatures;
@@ -63,7 +60,7 @@ export function readExperimentalFeaturesEnabled(searchParams: URLSearchParams): 
 export function readProjectBoardViewPreferences(): ProjectBoardViewPreferences {
   try {
     return normalizeProjectBoardViewPreferences(
-      JSON.parse(window.localStorage.getItem(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY) || "null"),
+      JSON.parse(window.localStorage.getItem(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY) || 'null')
     );
   } catch {
     return DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES;
@@ -74,25 +71,26 @@ export const PROJECT_BOARD_START_LOCATION_SELECT_ITEMS: ReadonlyArray<{
   label: string;
   value: ProjectBoardStartLocation;
 }> = [
-  { label: "Current project", value: "currentProject" },
-  { label: "New worktree", value: "newWorktree" },
+  { label: 'Current project', value: 'currentProject' },
+  { label: 'New worktree', value: 'newWorktree' },
 ];
 export const PROJECT_BOARD_PRIORITY_SELECT_ITEMS = PRIORITY_OPTIONS.map((option) => ({
   label: option.label,
   value: option.value,
 }));
 export const PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS: Array<{ label: string; value: BoardPriorityFilter }> = [
-  { label: "All priorities", value: "all" },
+  { label: 'All priorities', value: 'all' },
   ...PROJECT_BOARD_PRIORITY_SELECT_ITEMS,
 ];
-export const PROJECT_BOARD_TSHIRT_SELECT_ITEMS: Array<{ label: string; value: TshirtSize | "none" }> = [
-  { label: "None", value: "none" },
+export const PROJECT_BOARD_TSHIRT_SELECT_ITEMS: Array<{ label: string; value: TshirtSize | 'none' }> = [
+  { label: 'None', value: 'none' },
   ...TSHIRT_OPTIONS.map((option) => ({ label: option.label, value: option.label })),
 ];
 export const PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS: Array<{ label: string; value: BoardEstimateFilter }> = [
-  { label: "All estimates", value: "all" },
+  { label: 'All estimates', value: 'all' },
   ...PROJECT_BOARD_TSHIRT_SELECT_ITEMS,
 ];
-export const PROJECT_BOARD_SORT_SELECT_ITEMS: Array<{ label: string; value: BoardSortOption }> =
-  BOARD_SORT_OPTIONS.map((option) => ({ label: option.label, value: option.value }));
+export const PROJECT_BOARD_SORT_SELECT_ITEMS: Array<{ label: string; value: BoardSortOption }> = BOARD_SORT_OPTIONS.map(
+  (option) => ({ label: option.label, value: option.value })
+);
 export const PROJECT_AUTOMATION_TRIAGE_RECENT_COMPLETED_LIMIT = 5;

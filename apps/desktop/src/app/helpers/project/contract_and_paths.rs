@@ -9,7 +9,9 @@ use std::{env, path::PathBuf, time::Duration};
 use crate::app::helpers::*;
 use crate::*;
 
-pub(crate) fn gpui_project_context_from_env_bridge_value(value: Option<&str>) -> GpuiProjectContext {
+pub(crate) fn gpui_project_context_from_env_bridge_value(
+    value: Option<&str>,
+) -> GpuiProjectContext {
     GpuiProjectContext::from_project_is_quick_bridge(value == Some("true"))
 }
 
@@ -352,4 +354,3 @@ pub(crate) fn ghostex_state_root() -> PathBuf {
 pub(crate) fn gpui_workspace_shell_state_path() -> PathBuf {
     ghostex_state_root().join("gpui-workspace-shell-state.json")
 }
-

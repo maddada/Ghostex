@@ -1,46 +1,43 @@
-import { type RefObject } from "react";
-import { Command } from "@/packages/components/ui/command";
-import { Empty } from "@/packages/components/ui/empty";
-import { type SettingsModalTab } from "../settings-modal-tabs";
-import { IconSettings } from "@tabler/icons-react";
-import { type WebLinkOpenTarget } from "../../shared/ghostex-settings";
-import { DEFAULT_SIDEBAR_AGENTS } from "../../shared/sidebar-agents";
-import {
-  GHOSTEX_HOTKEY_DEFINITIONS,
-  type ghostexHotkeyActionId,
-} from "../../shared/ghostex-hotkeys";
+import { type RefObject } from 'react';
+import { Command } from '@/packages/components/ui/command';
+import { Empty } from '@/packages/components/ui/empty';
+import { type SettingsModalTab } from '../settings-modal-tabs';
+import { IconSettings } from '@tabler/icons-react';
+import { type WebLinkOpenTarget } from '../../shared/ghostex-settings';
+import { DEFAULT_SIDEBAR_AGENTS } from '../../shared/sidebar-agents';
+import { GHOSTEX_HOTKEY_DEFINITIONS, type ghostexHotkeyActionId } from '../../shared/ghostex-hotkeys';
 
 export function getHotkeySettingsSectionId(
-  definition: (typeof GHOSTEX_HOTKEY_DEFINITIONS)[number],
+  definition: (typeof GHOSTEX_HOTKEY_DEFINITIONS)[number]
 ): HotkeySettingsSectionId {
   switch (definition.action.kind) {
-    case "focusedPaneAction":
-    case "renameActiveSession":
-    case "splitFocusedPane":
-    case "terminalToolbarAction":
-      return "paneActions";
-    case "focusAdjacentGroup":
-    case "focusDirection":
-      return "navigation";
-    case "focusSessionSlot":
-      return definition.action.slotNumber > 0 ? "sessionSlots" : "navigation";
-    case "jumpToProject":
-      return "projects";
-    case "runActionSlot":
-      return "actions";
+    case 'focusedPaneAction':
+    case 'renameActiveSession':
+    case 'splitFocusedPane':
+    case 'terminalToolbarAction':
+      return 'paneActions';
+    case 'focusAdjacentGroup':
+    case 'focusDirection':
+      return 'navigation';
+    case 'focusSessionSlot':
+      return definition.action.slotNumber > 0 ? 'sessionSlots' : 'navigation';
+    case 'jumpToProject':
+      return 'projects';
+    case 'runActionSlot':
+      return 'actions';
     default:
-      return "general";
+      return 'general';
   }
 }
 
 export const HOTKEY_SETTINGS_SECTIONS: readonly HotkeySettingsSectionDefinition[] = (
   [
-    { id: "general", title: "General" },
-    { id: "paneActions", title: "Pane Actions" },
-    { id: "navigation", title: "Navigation" },
-    { id: "projects", title: "Projects" },
-    { id: "sessionSlots", title: "Session Slots" },
-    { id: "actions", title: "Actions" },
+    { id: 'general', title: 'General' },
+    { id: 'paneActions', title: 'Pane Actions' },
+    { id: 'navigation', title: 'Navigation' },
+    { id: 'projects', title: 'Projects' },
+    { id: 'sessionSlots', title: 'Session Slots' },
+    { id: 'actions', title: 'Actions' },
   ] as const
 ).map((section) => ({
   ...section,
@@ -50,9 +47,9 @@ export const HOTKEY_SETTINGS_SECTIONS: readonly HotkeySettingsSectionDefinition[
    * silently disappearing until this modal's former hand-maintained ID lists
    * are updated separately.
    */
-  ids: GHOSTEX_HOTKEY_DEFINITIONS.filter(
-    (definition) => getHotkeySettingsSectionId(definition) === section.id,
-  ).map((definition) => definition.id),
+  ids: GHOSTEX_HOTKEY_DEFINITIONS.filter((definition) => getHotkeySettingsSectionId(definition) === section.id).map(
+    (definition) => definition.id
+  ),
 }));
 
 export type SettingSearchDefinition = {
@@ -115,15 +112,9 @@ export type HotkeySettingsDefinitionById = ReadonlyMap<
   (typeof GHOSTEX_HOTKEY_DEFINITIONS)[number]
 >;
 
-export type HotkeySettingsSectionRefs = Record<
-  HotkeySettingsSectionId,
-  RefObject<HTMLDivElement | null>
->;
+export type HotkeySettingsSectionRefs = Record<HotkeySettingsSectionId, RefObject<HTMLDivElement | null>>;
 
-export type HotkeySettingsSectionSearches = Record<
-  HotkeySettingsSectionId,
-  SettingsSectionSearchResult
->;
+export type HotkeySettingsSectionSearches = Record<HotkeySettingsSectionId, SettingsSectionSearchResult>;
 
 export type SettingModificationProps = {
   advanced?: boolean;
@@ -132,43 +123,38 @@ export type SettingModificationProps = {
 };
 
 export type MainSettingsSectionId =
-  | "agents"
-  | "appearance"
-  | "chat"
-  | "sidebar"
-  | "terminal"
-  | "tools"
-  | "statusIndicators"
-  | "notifications"
-  | "system"
-  | "advanced";
+  | 'agents'
+  | 'appearance'
+  | 'chat'
+  | 'sidebar'
+  | 'terminal'
+  | 'tools'
+  | 'statusIndicators'
+  | 'notifications'
+  | 'system'
+  | 'advanced';
 
 export type MainSettingsScrollTargetId =
   | MainSettingsSectionId
-  | "theming"
+  | 'theming'
   // CDXC:AppIconPicker 2026-06-25-21:50: App Icon is an appearance section that sits next to Theming.
-  | "appIcon"
-  | "sidebarTags"
-  | "sessionCards"
-  | "debugging"
-  | "terminalBehavior"
-  | "terminalScrolling"
-  | "terminalDevServers"
-  | "builtInFeatures"
-  | "browser"
-  | "editor"
-  | "autoSleep"
-  | "power"
-  | "sounds"
-  | "storage"
-  | "beta";
+  | 'appIcon'
+  | 'sidebarTags'
+  | 'sessionCards'
+  | 'debugging'
+  | 'terminalBehavior'
+  | 'terminalScrolling'
+  | 'terminalDevServers'
+  | 'builtInFeatures'
+  | 'browser'
+  | 'editor'
+  | 'autoSleep'
+  | 'power'
+  | 'sounds'
+  | 'storage'
+  | 'beta';
 
-
-
-export type MainSettingsSectionRefs = Record<
-  MainSettingsScrollTargetId,
-  RefObject<HTMLDivElement | null>
->;
+export type MainSettingsSectionRefs = Record<MainSettingsScrollTargetId, RefObject<HTMLDivElement | null>>;
 
 /*
  * CDXC:DebuggingSettings 2026-06-28-18:14:
@@ -178,19 +164,14 @@ export type MainSettingsSectionRefs = Record<
  * rows on screen.
  */
 export const DEBUGGING_MODE_DEPENDENT_SETTING_KEYS = [
-  "diagnosticLogging",
-  "showSessionCommandCopyActions",
-  "showSessionDetailsCopyAction",
+  'diagnosticLogging',
+  'showSessionCommandCopyActions',
+  'showSessionDetailsCopyAction',
 ] as const;
-export const DEBUGGING_MODE_DEPENDENT_SETTING_KEY_SET = new Set<string>(
-  DEBUGGING_MODE_DEPENDENT_SETTING_KEYS,
-);
+export const DEBUGGING_MODE_DEPENDENT_SETTING_KEY_SET = new Set<string>(DEBUGGING_MODE_DEPENDENT_SETTING_KEYS);
 
-export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
-  MainSettingsSectionId,
-  readonly string[]
-> = {
-  agents: ["agentAcceptAllEnabled"],
+export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, readonly string[]> = {
+  agents: ['agentAcceptAllEnabled'],
   /*
    * CDXC:SettingsNavigation 2026-06-30-01:23:
    * General Settings should expose fewer sidebar destinations. Group related
@@ -206,18 +187,18 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
    * Settings should not expose a standalone Workspace section header or workspace sidebar destination. Active Pane Border belongs with General appearance tuning, Terminal Background and click-to-wake belong with Terminal controls, Command Pane Default Height belongs beside the other default size reset value, and Auto Sleep moves under System.
    */
   appearance: [
-    "sidebarTheme",
-    "customSidebarTitlebarBackgroundDarknessPercent",
-    "customSidebarTitlebarBackgroundTintColor",
-    "workspaceActivePaneBorderColor",
-    "appIconSourceId",
+    'sidebarTheme',
+    'customSidebarTitlebarBackgroundDarknessPercent',
+    'customSidebarTitlebarBackgroundTintColor',
+    'workspaceActivePaneBorderColor',
+    'appIconSourceId',
   ],
   chat: [
-    "preferredAgentInterface",
-    "sessionChatTheme",
-    "sessionChatFontFamily",
-    "sessionChatTranscriptWidthPercent",
-    "sessionChatVerboseMode",
+    'preferredAgentInterface',
+    'sessionChatTheme',
+    'sessionChatFontFamily',
+    'sessionChatTranscriptWidthPercent',
+    'sessionChatVerboseMode',
   ],
   sidebar: [
     /*
@@ -225,10 +206,10 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
      * Sidebar version stays near the top of General, ahead of its own V2-only
      * sub-settings.
      */
-    "sidebarVersion",
-    "sidebarV2Layout",
-    "sidebarAutoSettleAfterDays",
-    "sidebarSettingsPreset",
+    'sidebarVersion',
+    'sidebarV2Layout',
+    'sidebarAutoSettleAfterDays',
+    'sidebarSettingsPreset',
     /*
      * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
      * Every setting mutated by a sidebar preset must be visible directly below
@@ -240,26 +221,26 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
      * Project git-stat display controls belong with Sidebar settings because they change sidebar project rows, not editor behavior.
      * Use changed-file wording for the file-count toggle so it does not read like an editor-pane setting.
      */
-    "showProjectIcons",
-    "hideSessionAgentIconUntilHover",
-    "hideBrowserFaviconUntilHover",
-    "showCloseButtonOnSessionCards",
-    "hideLastActiveTimeOnSessionCards",
-    "hideProjectHeaderDiffStats",
-    "showProjectEditorDiffFileCount",
-    "hideMenuBarSessionStatusIndicators",
-    "sidebarSide",
-    "sidebarCollapseAnimationDurationMs",
-    "sidebarDefaultWidthPx",
-    "commandsPanelDefaultHeightPx",
-    "commandsPanelSide",
-    "projectSessionListCollapsedCount",
-    "agentManagerZoomPercent",
-    "createSessionOnSidebarDoubleClick",
-    "renameSessionOnDoubleClick",
-    "useColoredSessionAgentIcons",
-    "showSessionCloseContextMenuAction",
-    "sidebarSessionTagListItems",
+    'showProjectIcons',
+    'hideSessionAgentIconUntilHover',
+    'hideBrowserFaviconUntilHover',
+    'showCloseButtonOnSessionCards',
+    'hideLastActiveTimeOnSessionCards',
+    'hideProjectHeaderDiffStats',
+    'showProjectEditorDiffFileCount',
+    'hideMenuBarSessionStatusIndicators',
+    'sidebarSide',
+    'sidebarCollapseAnimationDurationMs',
+    'sidebarDefaultWidthPx',
+    'commandsPanelDefaultHeightPx',
+    'commandsPanelSide',
+    'projectSessionListCollapsedCount',
+    'agentManagerZoomPercent',
+    'createSessionOnSidebarDoubleClick',
+    'renameSessionOnDoubleClick',
+    'useColoredSessionAgentIcons',
+    'showSessionCloseContextMenuAction',
+    'sidebarSessionTagListItems',
   ],
   /*
    * CDXC:StatusIndicators 2026-05-20-12:00:
@@ -275,48 +256,45 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
    * floating pet settings without exposing the removed floating badge toggle or
    * size selector.
    */
-  statusIndicators: [
-    "petOverlayEnabled",
-    "selectedPetId",
-  ],
+  statusIndicators: ['petOverlayEnabled', 'selectedPetId'],
   terminal: [
-    "ghosttySettingsActions",
-    "terminalGhosttyTheme",
-    "workspaceBackgroundColor",
-    "terminalBackgroundImage",
-    "terminalBackgroundImageOpacity",
-    "terminalBackgroundImageFit",
-    "terminalFontFamily",
-    "terminalFontSize",
-    "terminalFontWeight",
-    "terminalLineHeight",
-    "terminalLetterSpacing",
-    "terminalPaneHorizontalPaddingPx",
-    "terminalPaneVerticalPaddingPx",
-    "terminalCursorStyle",
-    "terminalCursorStyleBlink",
-    "sessionPersistenceProvider",
-    "clickToWakeSleepingSessions",
-    "showSessionIdInTerminalPanes",
-    "showNotificationOnTerminalBell",
-    "promptEditorBackend",
-    "terminalScrollbackLimitMb",
-    "terminalCopyOnSelect",
-    "terminalConfirmCloseSurface",
-    "terminalClipboardTrimTrailingSpaces",
-    "terminalClipboardPasteProtection",
-    "terminalPastePreviewableImages",
-    "terminalMouseHideWhileTyping",
-    "terminalScrollbar",
-    "terminalMouseScrollMultiplierPrecision",
-    "terminalMouseScrollMultiplierDiscrete",
-    "terminalScrollToBottomWhenTyping",
+    'ghosttySettingsActions',
+    'terminalGhosttyTheme',
+    'workspaceBackgroundColor',
+    'terminalBackgroundImage',
+    'terminalBackgroundImageOpacity',
+    'terminalBackgroundImageFit',
+    'terminalFontFamily',
+    'terminalFontSize',
+    'terminalFontWeight',
+    'terminalLineHeight',
+    'terminalLetterSpacing',
+    'terminalPaneHorizontalPaddingPx',
+    'terminalPaneVerticalPaddingPx',
+    'terminalCursorStyle',
+    'terminalCursorStyleBlink',
+    'sessionPersistenceProvider',
+    'clickToWakeSleepingSessions',
+    'showSessionIdInTerminalPanes',
+    'showNotificationOnTerminalBell',
+    'promptEditorBackend',
+    'terminalScrollbackLimitMb',
+    'terminalCopyOnSelect',
+    'terminalConfirmCloseSurface',
+    'terminalClipboardTrimTrailingSpaces',
+    'terminalClipboardPasteProtection',
+    'terminalPastePreviewableImages',
+    'terminalMouseHideWhileTyping',
+    'terminalScrollbar',
+    'terminalMouseScrollMultiplierPrecision',
+    'terminalMouseScrollMultiplierDiscrete',
+    'terminalScrollToBottomWhenTyping',
   ],
   tools: [
-    "webLinkOpenTarget",
-    "codeServerLinkVscodeUserConfig",
-    "codeServerUseVscodeInsidersUserConfig",
-    "showUntrackedProjectDiffWhenNoTrackedChanges",
+    'webLinkOpenTarget',
+    'codeServerLinkVscodeUserConfig',
+    'codeServerUseVscodeInsidersUserConfig',
+    'showUntrackedProjectDiffWhenNoTrackedChanges',
     /*
      * CDXC:TerminalDevServers 2026-06-23-19:22:
      * Dev-server discovery preferences belong under Terminal settings because they govern terminal-output detection, while remaining separate from Ghostty config-backed terminal emulator controls.
@@ -324,157 +302,139 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
      * CDXC:WebLinkOpenTarget 2026-08-19:
      * Where a detected URL opens is no longer a Dev Servers row; it reads the Browser section's single web-link target.
      */
-    "terminalDevServerDetectionEnabled",
-    "terminalDevServerIgnoredPortRules",
+    'terminalDevServerDetectionEnabled',
+    'terminalDevServerIgnoredPortRules',
   ],
   notifications: [
-    "completionBellEnabled",
-    "completionSound",
-    "showMacOSAttentionNotifications",
-    "attentionNotificationActions",
-    "actionCompletionSound",
+    'completionBellEnabled',
+    'completionSound',
+    'showMacOSAttentionNotifications',
+    'attentionNotificationActions',
+    'actionCompletionSound',
   ],
   system: [
-    "autoSleepCodeEditorEnabled",
-    "autoSleepCodeEditorIdleMinutes",
-    "autoSleepGitEditorEnabled",
-    "autoSleepGitEditorIdleMinutes",
-    "autoSleepProjectEditorEnabled",
-    "autoSleepProjectEditorIdleMinutes",
-    "autoSleepBrowserSessionsEnabled",
-    "autoSleepBrowserIdleMinutes",
-    "autoSleepAgentSessionsEnabled",
-    "autoSleepAgentIdleMinutes",
-    "autoSleepRequireAgentResumeCommand",
-    "autoSleepFavoriteAgentSessions",
-    "hideKeepAwakeTitlebarControl",
-    "keepAwakeDefaultDurationMinutes",
-    "keepAwakeAllowDisplaySleep",
-    "keepAwakePreventLidSleep",
-    "keepAwakeActivateOnLaunch",
-    "keepAwakeActivateOnExternalDisplay",
-    "keepAwakeWhileWorkingSessions",
-    "keepAwakeDeactivateBelowBatteryThreshold",
-    "keepAwakeBatteryThresholdPercent",
-    "keepAwakeDeactivateOnLowPowerMode",
-    "keepAwakeDeactivateOnUserSwitch",
-    "ghostexFolderStats",
+    'autoSleepCodeEditorEnabled',
+    'autoSleepCodeEditorIdleMinutes',
+    'autoSleepGitEditorEnabled',
+    'autoSleepGitEditorIdleMinutes',
+    'autoSleepProjectEditorEnabled',
+    'autoSleepProjectEditorIdleMinutes',
+    'autoSleepBrowserSessionsEnabled',
+    'autoSleepBrowserIdleMinutes',
+    'autoSleepAgentSessionsEnabled',
+    'autoSleepAgentIdleMinutes',
+    'autoSleepRequireAgentResumeCommand',
+    'autoSleepFavoriteAgentSessions',
+    'hideKeepAwakeTitlebarControl',
+    'keepAwakeDefaultDurationMinutes',
+    'keepAwakeAllowDisplaySleep',
+    'keepAwakePreventLidSleep',
+    'keepAwakeActivateOnLaunch',
+    'keepAwakeActivateOnExternalDisplay',
+    'keepAwakeWhileWorkingSessions',
+    'keepAwakeDeactivateBelowBatteryThreshold',
+    'keepAwakeBatteryThresholdPercent',
+    'keepAwakeDeactivateOnLowPowerMode',
+    'keepAwakeDeactivateOnUserSwitch',
+    'ghostexFolderStats',
   ],
   /*
    * CDXC:DebuggingSettings 2026-06-15-21:34:
    * Debugging controls belong in a dedicated bottom Settings section so support-oriented logging and session metadata copy actions are grouped away from everyday Workspace and Session Cards preferences.
    */
-  advanced: [
-    "showBetaFeatures",
-    "debuggingMode",
-    ...DEBUGGING_MODE_DEPENDENT_SETTING_KEYS,
-  ],
+  advanced: ['showBetaFeatures', 'debuggingMode', ...DEBUGGING_MODE_DEPENDENT_SETTING_KEYS],
 };
 
 export const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
   ...MAIN_SETTINGS_SECTION_SETTING_KEYS,
   theming: [
-    "sidebarTheme",
-    "customSidebarTitlebarBackgroundDarknessPercent",
-    "customSidebarTitlebarBackgroundTintColor",
+    'sidebarTheme',
+    'customSidebarTitlebarBackgroundDarknessPercent',
+    'customSidebarTitlebarBackgroundTintColor',
   ],
   // CDXC:AppIconPicker 2026-06-25-21:50: App Icon owns the persisted Dock icon source id selection.
-  appIcon: ["appIconSourceId"],
-  sidebarTags: ["sidebarSessionTagListItems"],
-  sessionCards: [
-    "useColoredSessionAgentIcons",
-    "showSessionCloseContextMenuAction",
-  ],
-  debugging: [
-    "debuggingMode",
-    ...DEBUGGING_MODE_DEPENDENT_SETTING_KEYS,
-  ],
+  appIcon: ['appIconSourceId'],
+  sidebarTags: ['sidebarSessionTagListItems'],
+  sessionCards: ['useColoredSessionAgentIcons', 'showSessionCloseContextMenuAction'],
+  debugging: ['debuggingMode', ...DEBUGGING_MODE_DEPENDENT_SETTING_KEYS],
   terminalBehavior: [
-    "terminalScrollbackLimitMb",
-    "terminalCopyOnSelect",
-    "terminalConfirmCloseSurface",
-    "terminalClipboardTrimTrailingSpaces",
-    "terminalClipboardPasteProtection",
-    "terminalPastePreviewableImages",
-    "terminalMouseHideWhileTyping",
-    "terminalScrollbar",
+    'terminalScrollbackLimitMb',
+    'terminalCopyOnSelect',
+    'terminalConfirmCloseSurface',
+    'terminalClipboardTrimTrailingSpaces',
+    'terminalClipboardPasteProtection',
+    'terminalPastePreviewableImages',
+    'terminalMouseHideWhileTyping',
+    'terminalScrollbar',
   ],
   terminalScrolling: [
-    "terminalMouseScrollMultiplierPrecision",
-    "terminalMouseScrollMultiplierDiscrete",
-    "terminalScrollToBottomWhenTyping",
+    'terminalMouseScrollMultiplierPrecision',
+    'terminalMouseScrollMultiplierDiscrete',
+    'terminalScrollToBottomWhenTyping',
   ],
-  terminalDevServers: [
-    "terminalDevServerDetectionEnabled",
-    "terminalDevServerIgnoredPortRules",
-  ],
-  builtInFeatures: [
-    "codeViewTabHidden",
-    "kanbanViewTabHidden",
-    "automateViewTabHidden",
-    "docsViewTabHidden",
-  ],
-  browser: ["webLinkOpenTarget"],
+  terminalDevServers: ['terminalDevServerDetectionEnabled', 'terminalDevServerIgnoredPortRules'],
+  builtInFeatures: ['codeViewTabHidden', 'kanbanViewTabHidden', 'automateViewTabHidden', 'docsViewTabHidden'],
+  browser: ['webLinkOpenTarget'],
   editor: [
-    "codeServerLinkVscodeUserConfig",
-    "codeServerUseVscodeInsidersUserConfig",
-    "showUntrackedProjectDiffWhenNoTrackedChanges",
+    'codeServerLinkVscodeUserConfig',
+    'codeServerUseVscodeInsidersUserConfig',
+    'showUntrackedProjectDiffWhenNoTrackedChanges',
   ],
   autoSleep: [
-    "autoSleepCodeEditorEnabled",
-    "autoSleepCodeEditorIdleMinutes",
-    "autoSleepGitEditorEnabled",
-    "autoSleepGitEditorIdleMinutes",
-    "autoSleepProjectEditorEnabled",
-    "autoSleepProjectEditorIdleMinutes",
-    "autoSleepBrowserSessionsEnabled",
-    "autoSleepBrowserIdleMinutes",
-    "autoSleepAgentSessionsEnabled",
-    "autoSleepAgentIdleMinutes",
-    "autoSleepRequireAgentResumeCommand",
-    "autoSleepFavoriteAgentSessions",
+    'autoSleepCodeEditorEnabled',
+    'autoSleepCodeEditorIdleMinutes',
+    'autoSleepGitEditorEnabled',
+    'autoSleepGitEditorIdleMinutes',
+    'autoSleepProjectEditorEnabled',
+    'autoSleepProjectEditorIdleMinutes',
+    'autoSleepBrowserSessionsEnabled',
+    'autoSleepBrowserIdleMinutes',
+    'autoSleepAgentSessionsEnabled',
+    'autoSleepAgentIdleMinutes',
+    'autoSleepRequireAgentResumeCommand',
+    'autoSleepFavoriteAgentSessions',
   ],
   power: [
-    "hideKeepAwakeTitlebarControl",
-    "keepAwakeDefaultDurationMinutes",
-    "keepAwakeAllowDisplaySleep",
-    "keepAwakePreventLidSleep",
-    "keepAwakeActivateOnLaunch",
-    "keepAwakeActivateOnExternalDisplay",
-    "keepAwakeWhileWorkingSessions",
-    "keepAwakeDeactivateBelowBatteryThreshold",
-    "keepAwakeBatteryThresholdPercent",
-    "keepAwakeDeactivateOnLowPowerMode",
-    "keepAwakeDeactivateOnUserSwitch",
+    'hideKeepAwakeTitlebarControl',
+    'keepAwakeDefaultDurationMinutes',
+    'keepAwakeAllowDisplaySleep',
+    'keepAwakePreventLidSleep',
+    'keepAwakeActivateOnLaunch',
+    'keepAwakeActivateOnExternalDisplay',
+    'keepAwakeWhileWorkingSessions',
+    'keepAwakeDeactivateBelowBatteryThreshold',
+    'keepAwakeBatteryThresholdPercent',
+    'keepAwakeDeactivateOnLowPowerMode',
+    'keepAwakeDeactivateOnUserSwitch',
   ],
   sounds: [
-    "completionBellEnabled",
-    "completionSound",
-    "showMacOSAttentionNotifications",
-    "attentionNotificationActions",
-    "actionCompletionSound",
+    'completionBellEnabled',
+    'completionSound',
+    'showMacOSAttentionNotifications',
+    'attentionNotificationActions',
+    'actionCompletionSound',
   ],
-  storage: ["ghostexFolderStats"],
-  beta: ["showBetaFeatures"],
+  storage: ['ghostexFolderStats'],
+  beta: ['showBetaFeatures'],
 } satisfies Record<MainSettingsScrollTargetId, readonly string[]>;
 
 export type MainSettingsSubsectionId =
-  | "appIcon"
-  | "autoSleep"
-  | "beta"
-  | "browser"
-  | "debugging"
-  | "editor"
-  | "power"
-  | "sessionCards"
-  | "sidebar"
-  | "sidebarTags"
-  | "storage"
-  | "terminal"
-  | "terminalBehavior"
-  | "terminalDevServers"
-  | "terminalScrolling"
-  | "theming";
+  | 'appIcon'
+  | 'autoSleep'
+  | 'beta'
+  | 'browser'
+  | 'debugging'
+  | 'editor'
+  | 'power'
+  | 'sessionCards'
+  | 'sidebar'
+  | 'sidebarTags'
+  | 'storage'
+  | 'terminal'
+  | 'terminalBehavior'
+  | 'terminalDevServers'
+  | 'terminalScrolling'
+  | 'theming';
 
 export type MainSettingsSubsectionNavigationItem = {
   id: MainSettingsSubsectionId;
@@ -493,46 +453,43 @@ export const MAIN_SETTINGS_SUBSECTION_NAVIGATION: Partial<
   Record<MainSettingsSectionId, readonly MainSettingsSubsectionNavigationItem[]>
 > = {
   advanced: [
-    { id: "beta", title: "Experimental" },
-    { id: "debugging", title: "Debugging" },
+    { id: 'beta', title: 'Experimental' },
+    { id: 'debugging', title: 'Debugging' },
   ],
   appearance: [
-    { id: "theming", title: "Theming" },
-    { id: "appIcon", title: "App Icon" },
+    { id: 'theming', title: 'Theming' },
+    { id: 'appIcon', title: 'App Icon' },
   ],
   sidebar: [
-    { id: "sidebar", title: "Sidebar" },
-    { id: "sessionCards", title: "Session Cards" },
-    { id: "sidebarTags", title: "Sidebar Tags" },
+    { id: 'sidebar', title: 'Sidebar' },
+    { id: 'sessionCards', title: 'Session Cards' },
+    { id: 'sidebarTags', title: 'Sidebar Tags' },
   ],
   system: [
-    { id: "autoSleep", title: "Auto Sleep" },
-    { id: "power", title: "Power" },
-    { id: "storage", title: "Storage" },
+    { id: 'autoSleep', title: 'Auto Sleep' },
+    { id: 'power', title: 'Power' },
+    { id: 'storage', title: 'Storage' },
   ],
   terminal: [
-    { id: "terminal", title: "Terminal" },
-    { id: "terminalBehavior", title: "Terminal Behavior" },
-    { id: "terminalScrolling", title: "Terminal Scrolling" },
+    { id: 'terminal', title: 'Terminal' },
+    { id: 'terminalBehavior', title: 'Terminal Behavior' },
+    { id: 'terminalScrolling', title: 'Terminal Scrolling' },
   ],
   tools: [
-    { id: "browser", title: "Browser" },
-    { id: "editor", title: "Editor" },
-    { id: "terminalDevServers", title: "Dev Servers" },
+    { id: 'browser', title: 'Browser' },
+    { id: 'editor', title: 'Editor' },
+    { id: 'terminalDevServers', title: 'Dev Servers' },
   ],
 };
 
-export const MAIN_SETTINGS_SUBSECTION_PARENT_IDS: Partial<
-  Record<MainSettingsScrollTargetId, MainSettingsSectionId>
-> = Object.fromEntries(
-  (
-    Object.entries(MAIN_SETTINGS_SUBSECTION_NAVIGATION) as Array<
-      [MainSettingsSectionId, readonly MainSettingsSubsectionNavigationItem[]]
-    >
-  ).flatMap(([sectionId, subsections]) =>
-    subsections.map((subsection) => [subsection.id, sectionId] as const),
-  ),
-);
+export const MAIN_SETTINGS_SUBSECTION_PARENT_IDS: Partial<Record<MainSettingsScrollTargetId, MainSettingsSectionId>> =
+  Object.fromEntries(
+    (
+      Object.entries(MAIN_SETTINGS_SUBSECTION_NAVIGATION) as Array<
+        [MainSettingsSectionId, readonly MainSettingsSubsectionNavigationItem[]]
+      >
+    ).flatMap(([sectionId, subsections]) => subsections.map((subsection) => [subsection.id, sectionId] as const))
+  );
 
 /*
  * CDXC:SettingsNavigation 2026-08-19:
@@ -540,13 +497,8 @@ export const MAIN_SETTINGS_SUBSECTION_PARENT_IDS: Partial<
  * can highlight itself. The rail's top-level row still highlights by group, so
  * map the tracked anchor back to the group that owns it.
  */
-export function getMainSettingsSectionGroupId(
-  scrollTargetId: MainSettingsScrollTargetId,
-): MainSettingsSectionId {
-  return (
-    MAIN_SETTINGS_SUBSECTION_PARENT_IDS[scrollTargetId] ??
-    (scrollTargetId as MainSettingsSectionId)
-  );
+export function getMainSettingsSectionGroupId(scrollTargetId: MainSettingsScrollTargetId): MainSettingsSectionId {
+  return MAIN_SETTINGS_SUBSECTION_PARENT_IDS[scrollTargetId] ?? (scrollTargetId as MainSettingsSectionId);
 }
 
 /**
@@ -556,28 +508,24 @@ export function getMainSettingsSectionGroupId(
  * CDXC:SidebarSessionRename 2026-06-28-02:24:
  * The click-delay disclosure should render as a Settings row subtitle below the primary label instead of being embedded in parentheses in the label text, so the control title stays scannable while the tradeoff remains visible.
  */
-export const RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_LABEL = "Double-click session cards to rename";
+export const RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_LABEL = 'Double-click session cards to rename';
 export const RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_SUBTITLE =
-  "Makes clicking on a session respond a bit slower so we can detect the double click";
+  'Makes clicking on a session respond a bit slower so we can detect the double click';
 
-export type DiagnosticLoggingDurationValue = "off" | "15m" | "1h" | "always";
+export type DiagnosticLoggingDurationValue = 'off' | '15m' | '1h' | 'always';
 
 export const DIAGNOSTIC_LOGGING_DURATION_OPTIONS: ReadonlyArray<{
   label: string;
   value: DiagnosticLoggingDurationValue;
 }> = [
-  { label: "Off", value: "off" },
-  { label: "15 min", value: "15m" },
-  { label: "1 hour", value: "1h" },
-  { label: "Always", value: "always" },
+  { label: 'Off', value: 'off' },
+  { label: '15 min', value: '15m' },
+  { label: '1 hour', value: '1h' },
+  { label: 'Always', value: 'always' },
 ];
 
-export const DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION: DiagnosticLoggingDurationValue = "1h";
-export const DIAGNOSTIC_LOGGING_GROUPS: readonly ["macOS", "GPUI", "gxserver"] = [
-  "macOS",
-  "GPUI",
-  "gxserver",
-];
+export const DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION: DiagnosticLoggingDurationValue = '1h';
+export const DIAGNOSTIC_LOGGING_GROUPS: readonly ['macOS', 'GPUI', 'gxserver'] = ['macOS', 'GPUI', 'gxserver'];
 
 /*
  * CDXC:SettingsAdvanced 2026-06-16-01:35:
@@ -621,82 +569,77 @@ export const DIAGNOSTIC_LOGGING_GROUPS: readonly ["macOS", "GPUI", "gxserver"] =
  *
  */
 export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
-  "sidebarDefaultWidthPx",
-  "projectSessionListCollapsedCount",
-  "createSessionOnSidebarDoubleClick",
-  "showSessionCloseContextMenuAction",
-  "workspaceActivePaneBorderColor",
-  "workspaceBackgroundColor",
-  "terminalBackgroundImage",
-  "terminalBackgroundImageOpacity",
-  "terminalBackgroundImageFit",
-  "clickToWakeSleepingSessions",
-  "commandsPanelDefaultHeightPx",
-  "ghosttySettingsActions",
-  "terminalFontWeight",
-  "terminalLineHeight",
-  "terminalLetterSpacing",
-  "terminalCursorStyleBlink",
-  "showSessionIdInTerminalPanes",
-  "promptEditorBackend",
-  "terminalScrollbackLimitMb",
-  "terminalCopyOnSelect",
-  "terminalConfirmCloseSurface",
-  "terminalClipboardTrimTrailingSpaces",
-  "terminalClipboardPasteProtection",
-  "terminalPastePreviewableImages",
-  "terminalMouseHideWhileTyping",
-  "terminalScrollbar",
-  "terminalMouseScrollMultiplierPrecision",
-  "terminalMouseScrollMultiplierDiscrete",
-  "terminalScrollToBottomWhenTyping",
-  "codeServerUseVscodeInsidersUserConfig",
-  "codeServerLinkVscodeUserConfig",
+  'sidebarDefaultWidthPx',
+  'projectSessionListCollapsedCount',
+  'createSessionOnSidebarDoubleClick',
+  'showSessionCloseContextMenuAction',
+  'workspaceActivePaneBorderColor',
+  'workspaceBackgroundColor',
+  'terminalBackgroundImage',
+  'terminalBackgroundImageOpacity',
+  'terminalBackgroundImageFit',
+  'clickToWakeSleepingSessions',
+  'commandsPanelDefaultHeightPx',
+  'ghosttySettingsActions',
+  'terminalFontWeight',
+  'terminalLineHeight',
+  'terminalLetterSpacing',
+  'terminalCursorStyleBlink',
+  'showSessionIdInTerminalPanes',
+  'promptEditorBackend',
+  'terminalScrollbackLimitMb',
+  'terminalCopyOnSelect',
+  'terminalConfirmCloseSurface',
+  'terminalClipboardTrimTrailingSpaces',
+  'terminalClipboardPasteProtection',
+  'terminalPastePreviewableImages',
+  'terminalMouseHideWhileTyping',
+  'terminalScrollbar',
+  'terminalMouseScrollMultiplierPrecision',
+  'terminalMouseScrollMultiplierDiscrete',
+  'terminalScrollToBottomWhenTyping',
+  'codeServerUseVscodeInsidersUserConfig',
+  'codeServerLinkVscodeUserConfig',
   /*
    * CDXC:AppIconPicker 2026-06-28-06:05:
    * Custom Dock icons are advanced appearance personalization. Keep the control searchable, but hide it from normal Settings browsing and place it below Editor so it does not compete with daily sidebar/theme controls.
    */
-  "appIconSourceId",
-  "showUntrackedProjectDiffWhenNoTrackedChanges",
-  "autoSleepCodeEditorEnabled",
-  "autoSleepCodeEditorIdleMinutes",
-  "autoSleepGitEditorEnabled",
-  "autoSleepGitEditorIdleMinutes",
-  "autoSleepProjectEditorEnabled",
-  "autoSleepProjectEditorIdleMinutes",
-  "autoSleepBrowserSessionsEnabled",
-  "autoSleepBrowserIdleMinutes",
-  "autoSleepAgentSessionsEnabled",
-  "autoSleepAgentIdleMinutes",
-  "autoSleepRequireAgentResumeCommand",
-  "autoSleepFavoriteAgentSessions",
-  "hideKeepAwakeTitlebarControl",
-  "keepAwakeDefaultDurationMinutes",
-  "keepAwakeAllowDisplaySleep",
-  "keepAwakePreventLidSleep",
-  "keepAwakeActivateOnLaunch",
-  "keepAwakeActivateOnExternalDisplay",
-  "keepAwakeWhileWorkingSessions",
-  "keepAwakeDeactivateBelowBatteryThreshold",
-  "keepAwakeBatteryThresholdPercent",
-  "keepAwakeDeactivateOnLowPowerMode",
-  "keepAwakeDeactivateOnUserSwitch",
-  "attentionNotificationActions",
-  "ghostexFolderStats",
-  "showBetaFeatures",
-  "debuggingMode",
-  "diagnosticLogging",
-  "showSessionCommandCopyActions",
-  "showSessionDetailsCopyAction",
+  'appIconSourceId',
+  'showUntrackedProjectDiffWhenNoTrackedChanges',
+  'autoSleepCodeEditorEnabled',
+  'autoSleepCodeEditorIdleMinutes',
+  'autoSleepGitEditorEnabled',
+  'autoSleepGitEditorIdleMinutes',
+  'autoSleepProjectEditorEnabled',
+  'autoSleepProjectEditorIdleMinutes',
+  'autoSleepBrowserSessionsEnabled',
+  'autoSleepBrowserIdleMinutes',
+  'autoSleepAgentSessionsEnabled',
+  'autoSleepAgentIdleMinutes',
+  'autoSleepRequireAgentResumeCommand',
+  'autoSleepFavoriteAgentSessions',
+  'hideKeepAwakeTitlebarControl',
+  'keepAwakeDefaultDurationMinutes',
+  'keepAwakeAllowDisplaySleep',
+  'keepAwakePreventLidSleep',
+  'keepAwakeActivateOnLaunch',
+  'keepAwakeActivateOnExternalDisplay',
+  'keepAwakeWhileWorkingSessions',
+  'keepAwakeDeactivateBelowBatteryThreshold',
+  'keepAwakeBatteryThresholdPercent',
+  'keepAwakeDeactivateOnLowPowerMode',
+  'keepAwakeDeactivateOnUserSwitch',
+  'attentionNotificationActions',
+  'ghostexFolderStats',
+  'showBetaFeatures',
+  'debuggingMode',
+  'diagnosticLogging',
+  'showSessionCommandCopyActions',
+  'showSessionDetailsCopyAction',
 ]);
 
 export type HotkeySettingsSectionId =
-  | "general"
-  | "paneActions"
-  | "navigation"
-  | "projects"
-  | "sessionSlots"
-  | "actions";
+  'general' | 'paneActions' | 'navigation' | 'projects' | 'sessionSlots' | 'actions';
 
 export type HotkeySettingsSectionDefinition = {
   ids: readonly ghostexHotkeyActionId[];

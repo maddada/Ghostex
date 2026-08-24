@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
-import { IconX } from "@tabler/icons-react";
-import { Button } from "@/packages/components/ui/button";
-import { cn } from "@/packages/components/utils";
-import { AppTooltip } from "./app-tooltip";
+import { useEffect, useState } from 'react';
+import { IconX } from '@tabler/icons-react';
+import { Button } from '@/packages/components/ui/button';
+import { cn } from '@/packages/components/utils';
+import { AppTooltip } from './app-tooltip';
 import {
   ghostexHotkeyTextFromKeyboardEvent,
   isReservedghostexHotkeyText,
   normalizeHotkeyText,
-} from "../shared/ghostex-hotkeys";
-import { formatSidebarHotkeyLabel } from "./hotkey-label";
+} from '../shared/ghostex-hotkeys';
+import { formatSidebarHotkeyLabel } from './hotkey-label';
 
 export type HotkeyRecorderFieldProps = {
   ariaInvalid?: boolean;
@@ -28,37 +28,35 @@ export function HotkeyRecorderField({
   originalHotkey,
 }: HotkeyRecorderFieldProps) {
   const [isRecording, setIsRecording] = useState(false);
-  const [reservedHotkey, setReservedHotkey] = useState("");
+  const [reservedHotkey, setReservedHotkey] = useState('');
   const normalizedHotkey = normalizeHotkeyText(hotkey);
   const normalizedOriginalHotkey = normalizeHotkeyText(originalHotkey);
-  const originalHotkeyLabel = formatSidebarHotkeyLabel(normalizedOriginalHotkey) || "Unassigned";
+  const originalHotkeyLabel = formatSidebarHotkeyLabel(normalizedOriginalHotkey) || 'Unassigned';
   const isModified = normalizedHotkey !== normalizedOriginalHotkey;
-  const recordingLabel = reservedHotkey
-    ? `${formatSidebarHotkeyLabel(reservedHotkey)} is reserved`
-    : "Press Shortcut";
+  const recordingLabel = reservedHotkey ? `${formatSidebarHotkeyLabel(reservedHotkey)} is reserved` : 'Press Shortcut';
   const label = isRecording ? recordingLabel : formatSidebarHotkeyLabel(normalizedHotkey);
 
   useEffect(() => {
     if (!isRecording) {
-      setReservedHotkey("");
+      setReservedHotkey('');
       return;
     }
     const recordPhysicalHotkey = (event: KeyboardEvent) => {
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         setIsRecording(false);
         return;
       }
       if (
-        (event.key === "Backspace" || event.key === "Delete") &&
+        (event.key === 'Backspace' || event.key === 'Delete') &&
         !event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.shiftKey
       ) {
         setIsRecording(false);
-        onChange("");
+        onChange('');
         return;
       }
       const recordedHotkey = ghostexHotkeyTextFromKeyboardEvent(event);
@@ -85,71 +83,68 @@ export function HotkeyRecorderField({
       setIsRecording(false);
       onChange(recordedHotkey);
     };
-    document.addEventListener("keydown", recordPhysicalHotkey, { capture: true });
-    return () => document.removeEventListener("keydown", recordPhysicalHotkey, { capture: true });
+    document.addEventListener('keydown', recordPhysicalHotkey, { capture: true });
+    return () => document.removeEventListener('keydown', recordPhysicalHotkey, { capture: true });
   }, [isRecording, onChange]);
 
   return (
     <div
-      data-hotkey-recorder="true"
-      data-recording={isRecording ? "true" : undefined}
-      className="group/hotkey-recorder relative w-full"
+      data-hotkey-recorder='true'
+      data-recording={isRecording ? 'true' : undefined}
+      className='group/hotkey-recorder relative w-full'
     >
       <Button
         aria-invalid={ariaInvalid}
-        className={cn(
-          "h-8 w-full justify-start overflow-hidden px-3 pr-9 font-mono text-[13px]",
-          className,
-        )}
+        className={cn('h-8 w-full justify-start overflow-hidden px-3 pr-9 font-mono text-[13px]', className)}
         id={id}
         onClick={() => {
           setIsRecording((recording) => !recording);
         }}
-        type="button"
-        variant="outline"
+        type='button'
+        variant='outline'
       >
-        <span className="truncate">{label || "Unassigned"}</span>
+        <span className='truncate'>{label || 'Unassigned'}</span>
       </Button>
       {isModified || normalizedHotkey ? (
-        <div className="pointer-events-none absolute top-1/2 right-1.5 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-focus-within/hotkey-recorder:pointer-events-auto group-focus-within/hotkey-recorder:opacity-100 group-hover/hotkey-recorder:pointer-events-auto group-hover/hotkey-recorder:opacity-100">
+        <div className='pointer-events-none absolute top-1/2 right-1.5 z-10 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-focus-within/hotkey-recorder:pointer-events-auto group-focus-within/hotkey-recorder:opacity-100 group-hover/hotkey-recorder:pointer-events-auto group-hover/hotkey-recorder:opacity-100'>
           {isModified ? (
             <AppTooltip content={`Reset to ${originalHotkeyLabel}`}>
               <Button
                 aria-label={`Reset hotkey to ${originalHotkeyLabel}`}
-                className="h-6 rounded-none border border-border bg-background/95 px-2 font-mono text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+                className='h-6 rounded-none border border-border bg-background/95 px-2 font-mono text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground'
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                   setIsRecording(false);
                   onChange(normalizedOriginalHotkey);
                 }}
-                type="button"
-                variant="outline"
+                type='button'
+                variant='outline'
               >
                 {originalHotkeyLabel}
               </Button>
             </AppTooltip>
           ) : null}
           {normalizedHotkey ? (
-            <AppTooltip content="Remove hotkey">
+            <AppTooltip content='Remove hotkey'>
               <Button
-                aria-label="Remove hotkey"
-                className="size-6 rounded-none border border-border bg-background/95 p-0 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+                aria-label='Remove hotkey'
+                className='size-6 rounded-none border border-border bg-background/95 p-0 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground'
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                   setIsRecording(false);
-                  onChange("");
+                  onChange('');
                 }}
-                size="icon-xs"
-                type="button"
-                variant="outline"
+                size='icon-xs'
+                type='button'
+                variant='outline'
               >
                 {/* CDXC:Hotkeys 2026-05-11-09:06
                     The remove affordance is a real button inside the hotkey field,
                     revealed only when that field is hovered or focused so hotkey rows
                     stay quiet until the user targets a specific binding. */}
-                <IconX aria-hidden="true" className="size-4" />
+                <IconX aria-hidden='true' className='size-4' />
               </Button>
             </AppTooltip>
           ) : null}

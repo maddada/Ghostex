@@ -21,7 +21,7 @@ function getTrackMetrics(view: EditorView, trackHeight: number): TrackMetrics {
     return {
       drawableHeight: trackHeight,
       fileEndY: trackHeight,
-      showFileEndLine: false
+      showFileEndLine: false,
     };
   }
 
@@ -30,7 +30,7 @@ function getTrackMetrics(view: EditorView, trackHeight: number): TrackMetrics {
     return {
       drawableHeight: trackHeight,
       fileEndY: trackHeight,
-      showFileEndLine: false
+      showFileEndLine: false,
     };
   }
 
@@ -57,7 +57,7 @@ function getTrackMetrics(view: EditorView, trackHeight: number): TrackMetrics {
   return {
     drawableHeight: Math.max(0, fileEndY),
     fileEndY,
-    showFileEndLine: fileEndY > 0 && fileEndY < trackHeight
+    showFileEndLine: fileEndY > 0 && fileEndY < trackHeight,
   };
 }
 
@@ -82,7 +82,7 @@ interface GitDiffOverviewRulerOptions {
 export function createGitDiffOverviewRulerController({
   view,
   getMode,
-  isGitChangesVisible
+  isGitChangesVisible,
 }: GitDiffOverviewRulerOptions): GitDiffOverviewRulerController {
   let destroyed = false;
   let host: HTMLElement | null = null;
@@ -198,7 +198,7 @@ export function createGitDiffOverviewRulerController({
         top,
         height: bottom - top,
         added: segment.added,
-        modified: segment.modified
+        modified: segment.modified,
       });
     }
 
@@ -209,9 +209,9 @@ export function createGitDiffOverviewRulerController({
       trackHeight,
       trackMetrics.fileEndY,
       trackMetrics.showFileEndLine ? 1 : 0,
-      pixelSegments.map((segment) => (
-        `${segment.top}:${segment.height}:${segment.added ? 1 : 0}:${segment.modified ? 1 : 0}`
-      )).join(',')
+      pixelSegments
+        .map((segment) => `${segment.top}:${segment.height}:${segment.added ? 1 : 0}:${segment.modified ? 1 : 0}`)
+        .join(','),
     ].join('|');
 
     if (renderKey === lastRenderKey) {
@@ -290,6 +290,6 @@ export function createGitDiffOverviewRulerController({
         host.remove();
         host = null;
       }
-    }
+    },
   };
 }

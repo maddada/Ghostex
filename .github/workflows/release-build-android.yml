@@ -3,11 +3,19 @@ name: Release build - React Native Android
 on:
   workflow_dispatch:
     inputs:
-      version: { description: "Semver release version", required: true, type: string }
-      source_sha: { description: "Immutable application source commit", required: true, type: string }
-      channel: { description: "Release channel", required: true, default: stable, type: choice, options: [stable, prerelease, test] }
-      update_sparkle: { description: "Whether assembly may eventually update Sparkle", required: true, default: true, type: boolean }
-      prerequisite_run_id: { description: "Optional prerequisite workflow run", required: false, type: string }
+      version: { description: 'Semver release version', required: true, type: string }
+      source_sha: { description: 'Immutable application source commit', required: true, type: string }
+      channel:
+        {
+          description: 'Release channel',
+          required: true,
+          default: stable,
+          type: choice,
+          options: [stable, prerelease, test],
+        }
+      update_sparkle:
+        { description: 'Whether assembly may eventually update Sparkle', required: true, default: true, type: boolean }
+      prerequisite_run_id: { description: 'Optional prerequisite workflow run', required: false, type: string }
 
 permissions:
   actions: write
@@ -114,5 +122,5 @@ jobs:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-android
           path: build/stage/android
       - name: Stage immutable package and metadata
-        env: { GH_TOKEN: "${{ github.token }}" }
+        env: { GH_TOKEN: '${{ github.token }}' }
         run: node tooling/release-resumable.mjs stage-package-and-advance "${{ inputs.version }}" "${{ inputs.source_sha }}" android build/stage/android "$(git rev-parse HEAD)" "${{ inputs.channel }}" "${{ inputs.update_sparkle }}"

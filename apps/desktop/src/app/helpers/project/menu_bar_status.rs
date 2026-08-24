@@ -100,7 +100,8 @@ pub(crate) fn unregister_gpui_workspace_power_events_callback_target() {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_workspace_power_events_callback_target() -> Option<GpuiWorkspacePowerEventsCallbackTarget> {
+pub(crate) fn gpui_workspace_power_events_callback_target()
+-> Option<GpuiWorkspacePowerEventsCallbackTarget> {
     GPUI_WORKSPACE_POWER_EVENTS_CALLBACK_TARGET.with(|target| target.borrow().clone())
 }
 
@@ -126,7 +127,9 @@ pub(crate) fn queue_gpui_workspace_terminal_escape_pressed(native_view: *mut std
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn queue_gpui_terminal_prompt_editor_shortcut(native_view: *mut std::ffi::c_void) -> bool {
+pub(crate) fn queue_gpui_terminal_prompt_editor_shortcut(
+    native_view: *mut std::ffi::c_void,
+) -> bool {
     let Some(target) = gpui_terminal_key_event_callback_target_for_native_view(native_view) else {
         return false;
     };
@@ -221,4 +224,3 @@ pub(crate) fn queue_gpui_workspace_did_wake() {
         })
         .detach();
 }
-

@@ -1,5 +1,5 @@
-import type { SidebarSessionTag } from "../../shared/session-grid-contract";
-import type { WebviewApi } from "../webview-api";
+import type { SidebarSessionTag } from '../../shared/session-grid-contract';
+import type { WebviewApi } from '../webview-api';
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -14,12 +14,12 @@ import type { WebviewApi } from "../webview-api";
 /** Activate a session. Identical for terminal, agent, and browser rows:
     the host resolves the surface from the session id, exactly as V1 relies on. */
 export function postSidebarV2FocusSession(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "focusSession" });
+  vscode.postMessage({ sessionId, type: 'focusSession' });
 }
 
 /** Zoom the session's pane tab group (context-menu Focus in V1). */
 export function postSidebarV2FocusSessionMode(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "focusSessionMode" });
+  vscode.postMessage({ sessionId, type: 'focusSessionMode' });
 }
 
 /**
@@ -27,12 +27,8 @@ export function postSidebarV2FocusSessionMode(vscode: WebviewApi, sessionId: str
  * modal posts this exact message, so V2's inline editor is the same command
  * with the dialog step removed.
  */
-export function postSidebarV2RenameSession(
-  vscode: WebviewApi,
-  sessionId: string,
-  title: string,
-): void {
-  vscode.postMessage({ sessionId, title, type: "renameSession" });
+export function postSidebarV2RenameSession(vscode: WebviewApi, sessionId: string, title: string): void {
+  vscode.postMessage({ sessionId, title, type: 'renameSession' });
 }
 
 /**
@@ -46,30 +42,22 @@ export function postSidebarV2RenameSession(
 export function postSidebarV2GenerateSessionTitle(
   vscode: WebviewApi,
   sessionId: string,
-  firstUserMessage: string,
+  firstUserMessage: string
 ): void {
   vscode.postMessage({
     sessionId,
     shouldGenerateTitle: true,
     title: firstUserMessage,
-    type: "renameSession",
+    type: 'renameSession',
   });
 }
 
-export function postSidebarV2SetSessionSleeping(
-  vscode: WebviewApi,
-  sessionId: string,
-  sleeping: boolean,
-): void {
-  vscode.postMessage({ sessionId, sleeping, type: "setSessionSleeping" });
+export function postSidebarV2SetSessionSleeping(vscode: WebviewApi, sessionId: string, sleeping: boolean): void {
+  vscode.postMessage({ sessionId, sleeping, type: 'setSessionSleeping' });
 }
 
-export function postSidebarV2SetSessionPinned(
-  vscode: WebviewApi,
-  sessionId: string,
-  pinned: boolean,
-): void {
-  vscode.postMessage({ pinned, sessionId, type: "setSessionPinned" });
+export function postSidebarV2SetSessionPinned(vscode: WebviewApi, sessionId: string, pinned: boolean): void {
+  vscode.postMessage({ pinned, sessionId, type: 'setSessionPinned' });
 }
 
 /*
@@ -81,33 +69,29 @@ export function postSidebarV2SetSessionPinned(
  * reload) or with a clipboard/modal side effect it owns outright.
  */
 export function postSidebarV2CopyResumeCommand(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "copyResumeCommand" });
+  vscode.postMessage({ sessionId, type: 'copyResumeCommand' });
 }
 
 export function postSidebarV2CopyAttachCommand(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "copyAttachCommand" });
+  vscode.postMessage({ sessionId, type: 'copyAttachCommand' });
 }
 
 /** The clipboard text is built in the sidebar (it is the rendered row's own
     facts) and only the finished string travels to the host, exactly as V1. */
-export function postSidebarV2CopySessionDetails(
-  vscode: WebviewApi,
-  sessionId: string,
-  detailsText: string,
-): void {
-  vscode.postMessage({ detailsText, sessionId, type: "copySessionDetails" });
+export function postSidebarV2CopySessionDetails(vscode: WebviewApi, sessionId: string, detailsText: string): void {
+  vscode.postMessage({ detailsText, sessionId, type: 'copySessionDetails' });
 }
 
 export function postSidebarV2ToggleCloseAfterDone(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "toggleCloseAfterDone" });
+  vscode.postMessage({ sessionId, type: 'toggleCloseAfterDone' });
 }
 
 export function postSidebarV2ForkSession(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "forkSession" });
+  vscode.postMessage({ sessionId, type: 'forkSession' });
 }
 
 export function postSidebarV2FullReloadSession(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "fullReloadSession" });
+  vscode.postMessage({ sessionId, type: 'fullReloadSession' });
 }
 
 /** `undefined` is the CLEAR: the contract's explicit "no tag" value is `null`,
@@ -115,9 +99,9 @@ export function postSidebarV2FullReloadSession(vscode: WebviewApi, sessionId: st
 export function postSidebarV2SetSessionTag(
   vscode: WebviewApi,
   sessionId: string,
-  tag: SidebarSessionTag | undefined,
+  tag: SidebarSessionTag | undefined
 ): void {
-  vscode.postMessage({ sessionId, sessionTag: tag ?? null, type: "setSessionTag" });
+  vscode.postMessage({ sessionId, sessionTag: tag ?? null, type: 'setSessionTag' });
 }
 
 /*
@@ -133,23 +117,19 @@ export function postSidebarV2SetSessionTag(
  * a row that jumps out and back.
  */
 export function postSidebarV2SettleSession(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "settleSession" });
+  vscode.postMessage({ sessionId, type: 'settleSession' });
 }
 
 export function postSidebarV2UnsettleSession(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "unsettleSession" });
+  vscode.postMessage({ sessionId, type: 'unsettleSession' });
 }
 
-export function postSidebarV2SnoozeSession(
-  vscode: WebviewApi,
-  sessionId: string,
-  snoozedUntil: string,
-): void {
-  vscode.postMessage({ sessionId, snoozedUntil, type: "snoozeSession" });
+export function postSidebarV2SnoozeSession(vscode: WebviewApi, sessionId: string, snoozedUntil: string): void {
+  vscode.postMessage({ sessionId, snoozedUntil, type: 'snoozeSession' });
 }
 
 export function postSidebarV2UnsnoozeSession(vscode: WebviewApi, sessionId: string): void {
-  vscode.postMessage({ sessionId, type: "unsnoozeSession" });
+  vscode.postMessage({ sessionId, type: 'unsnoozeSession' });
 }
 
 /*
@@ -171,7 +151,7 @@ export function postSidebarV2CreateWorktreeSession(
     projectId: string;
     requestId: string;
     startFromOrigin?: boolean;
-  },
+  }
 ): void {
   vscode.postMessage({
     ...(input.agentId ? { agentId: input.agentId } : {}),
@@ -181,7 +161,7 @@ export function postSidebarV2CreateWorktreeSession(
     projectId: input.projectId,
     requestId: input.requestId,
     ...(input.startFromOrigin === true ? { startFromOrigin: true } : {}),
-    type: "createWorktreeSession",
+    type: 'createWorktreeSession',
   });
 }
 
@@ -192,13 +172,13 @@ export function postSidebarV2RemoveSessionWorktree(
     projectId: string;
     requestId: string;
     worktreePath: string;
-  },
+  }
 ): void {
   vscode.postMessage({
     ...(input.force === true ? { force: true } : {}),
     projectId: input.projectId,
     requestId: input.requestId,
-    type: "removeSessionWorktree",
+    type: 'removeSessionWorktree',
     worktreePath: input.worktreePath,
   });
 }
@@ -211,12 +191,12 @@ export function postSidebarV2RemoveSessionWorktree(
  */
 export function postSidebarV2RequestProjectWorktrees(
   vscode: WebviewApi,
-  input: { projectId?: string; requestId: string },
+  input: { projectId?: string; requestId: string }
 ): void {
   vscode.postMessage({
     ...(input.projectId ? { projectId: input.projectId } : {}),
     requestId: input.requestId,
-    type: "requestProjectWorktrees",
+    type: 'requestProjectWorktrees',
   });
 }
 
@@ -228,7 +208,7 @@ export function postSidebarV2RequestProjectWorktrees(
  */
 export function postSidebarV2CloseSession(vscode: WebviewApi, sessionId: string): void {
   globalThis.setTimeout(() => {
-    vscode.postMessage({ sessionId, type: "closeSession" });
+    vscode.postMessage({ sessionId, type: 'closeSession' });
   }, 0);
 }
 
@@ -244,11 +224,8 @@ export function postSidebarV2CloseSession(vscode: WebviewApi, sessionId: string)
  * would leave the merged row alive on its other members, which is exactly the
  * "I closed it and it is still there" report this fixes.
  */
-export function postSidebarV2CloseWorkspaceProjects(
-  vscode: WebviewApi,
-  groupIds: readonly string[],
-): void {
+export function postSidebarV2CloseWorkspaceProjects(vscode: WebviewApi, groupIds: readonly string[]): void {
   for (const groupId of groupIds) {
-    vscode.postMessage({ groupId, type: "closeWorkspaceProjectForGroup" });
+    vscode.postMessage({ groupId, type: 'closeWorkspaceProjectForGroup' });
   }
 }

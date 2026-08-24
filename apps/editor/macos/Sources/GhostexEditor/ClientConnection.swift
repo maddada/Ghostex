@@ -17,7 +17,8 @@ final class ClientConnection {
     self.fileDescriptor = fileDescriptor
     self.daemon = daemon
     self.readQueue = readQueue
-    self.writeQueue = DispatchQueue(label: "com.madda.ghostex.editor.connection.\(id.uuidString).write")
+    self.writeQueue = DispatchQueue(
+      label: "com.madda.ghostex.editor.connection.\(id.uuidString).write")
   }
 
   func start() {
@@ -142,7 +143,8 @@ final class ClientConnection {
     }
 
     do {
-      guard let object = try JSONSerialization.jsonObject(with: trimmedLine) as? [String: Any] else {
+      guard let object = try JSONSerialization.jsonObject(with: trimmedLine) as? [String: Any]
+      else {
         sendError("request must be a JSON object")
         return
       }

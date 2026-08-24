@@ -1,14 +1,12 @@
-import type { SidebarStoryWorkspace } from "@/packages/core-ui/sidebar-story-workspace";
-import type { SidebarSessionGroup } from "@/packages/shared/session-grid-contract";
-import { normalizeWorkspaceProjectIconDataUrl } from "@/packages/shared/workspace-project-appearance";
+import type { SidebarStoryWorkspace } from '@/packages/core-ui/sidebar-story-workspace';
+import type { SidebarSessionGroup } from '@/packages/shared/session-grid-contract';
+import { normalizeWorkspaceProjectIconDataUrl } from '@/packages/shared/workspace-project-appearance';
 
-type ExplicitSidebarProjectContext = NonNullable<
-  SidebarStoryWorkspace["groupMetadataById"][string]["projectContext"]
->;
-type ExplicitLiveSidebarProjectContext = NonNullable<SidebarSessionGroup["projectContext"]>;
+type ExplicitSidebarProjectContext = NonNullable<SidebarStoryWorkspace['groupMetadataById'][string]['projectContext']>;
+type ExplicitLiveSidebarProjectContext = NonNullable<SidebarSessionGroup['projectContext']>;
 
-const GPUI_QUICK_AUTOMATIONS_PROJECT_ID = "quick-automations";
-const GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE = "Automations Overview";
+const GPUI_QUICK_AUTOMATIONS_PROJECT_ID = 'quick-automations';
+const GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE = 'Automations Overview';
 
 /**
  * CDXC:GPUIProjectSidebarBridge 2026-06-23-19:19:
@@ -24,7 +22,7 @@ export type GpuiSidebarActiveProjectSurfaceIds = {
 
 export type GpuiSidebarActiveProjectContextPayload = {
   version: 1;
-  type: "ghostex.gpui.sidebar.activeProjectContext";
+  type: 'ghostex.gpui.sidebar.activeProjectContext';
   activeProject: {
     activeProjectId: string | null;
     displayName: string;
@@ -48,7 +46,7 @@ export type GpuiSidebarActiveProjectGroupsInput = {
 };
 
 export function createGpuiSidebarActiveProjectSurfaceIds(
-  surfaceIds: GpuiSidebarActiveProjectSurfaceIds = {},
+  surfaceIds: GpuiSidebarActiveProjectSurfaceIds = {}
 ): GpuiSidebarActiveProjectSurfaceIds {
   const strictSurfaceIds: GpuiSidebarActiveProjectSurfaceIds = {};
 
@@ -88,14 +86,10 @@ export function createGpuiSidebarActiveProjectSurfaceIds(
  * Kanban, Automate, and Manage surface identities may use the same native project-editor id format as macOS, but only from the explicit projectContext.editor.projectId value. Kanban receives the tasks-mode id, Automate receives the automate-mode id, and Manage receives the manage-mode id for real project payloads. This bridge still does not send Browser ids, readiness, URLs, paths beyond the explicit in-memory project path, filesystem probes, or fallback localhost state.
  */
 export function createGpuiSidebarActiveProjectContextPayload(
-  workspace: SidebarStoryWorkspace,
+  workspace: SidebarStoryWorkspace
 ): GpuiSidebarActiveProjectContextPayload {
-  const activeGroup = workspace.snapshot.groups.find(
-    (group) => group.groupId === workspace.snapshot.activeGroupId,
-  );
-  const activeGroupMetadata = activeGroup
-    ? workspace.groupMetadataById[activeGroup.groupId]
-    : undefined;
+  const activeGroup = workspace.snapshot.groups.find((group) => group.groupId === workspace.snapshot.activeGroupId);
+  const activeGroupMetadata = activeGroup ? workspace.groupMetadataById[activeGroup.groupId] : undefined;
   const projectContext = activeGroupMetadata?.projectContext;
 
   if (activeGroup && projectContext && activeGroupMetadata?.isChatCollection !== true) {
@@ -151,7 +145,7 @@ function createGpuiProjectPayloadFromActiveGroup({
 
   return {
     version: 1,
-    type: "ghostex.gpui.sidebar.activeProjectContext",
+    type: 'ghostex.gpui.sidebar.activeProjectContext',
     activeProject: {
       activeProjectId: editorProjectId,
       displayName: activeGroupTitle,
@@ -172,7 +166,7 @@ function createGpuiProjectPayloadFromActiveGroup({
 }
 
 function isQuickAutomationsProjectContext(
-  projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext,
+  projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext
 ): boolean {
   return explicitEditorProjectId(projectContext) === GPUI_QUICK_AUTOMATIONS_PROJECT_ID;
 }
@@ -187,7 +181,7 @@ function createGpuiQuickAutomationsOverviewPayload(): GpuiSidebarActiveProjectCo
   */
   return {
     version: 1,
-    type: "ghostex.gpui.sidebar.activeProjectContext",
+    type: 'ghostex.gpui.sidebar.activeProjectContext',
     activeProject: {
       activeProjectId: GPUI_QUICK_AUTOMATIONS_PROJECT_ID,
       displayName: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE,
@@ -203,10 +197,7 @@ function createGpuiQuickAutomationsOverviewPayload(): GpuiSidebarActiveProjectCo
         manage: false,
       },
       surfaceIds: createGpuiSidebarActiveProjectSurfaceIds({
-        automateBoardId: nativeProjectEditorSurfaceId(
-          GPUI_QUICK_AUTOMATIONS_PROJECT_ID,
-          "automate",
-        ),
+        automateBoardId: nativeProjectEditorSurfaceId(GPUI_QUICK_AUTOMATIONS_PROJECT_ID, 'automate'),
       }),
     },
   };
@@ -215,10 +206,10 @@ function createGpuiQuickAutomationsOverviewPayload(): GpuiSidebarActiveProjectCo
 function createGpuiQuickProjectlessPayload(): GpuiSidebarActiveProjectContextPayload {
   return {
     version: 1,
-    type: "ghostex.gpui.sidebar.activeProjectContext",
+    type: 'ghostex.gpui.sidebar.activeProjectContext',
     activeProject: {
       activeProjectId: null,
-      displayName: "Quick",
+      displayName: 'Quick',
       projectIconDataUrl: null,
       projectPath: null,
       selectionOwnerProjectId: null,
@@ -236,19 +227,17 @@ function createGpuiQuickProjectlessPayload(): GpuiSidebarActiveProjectContextPay
 }
 
 function explicitProjectIconDataUrl(
-  projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext,
+  projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext
 ): string | null {
-  return normalizeWorkspaceProjectIconDataUrl(
-    (projectContext as { iconDataUrl?: unknown }).iconDataUrl,
-  ) ?? null;
+  return normalizeWorkspaceProjectIconDataUrl((projectContext as { iconDataUrl?: unknown }).iconDataUrl) ?? null;
 }
 
 function explicitInMemoryProjectPath(
-  projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext,
+  projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext
 ): string | null {
   const projectPath = (projectContext as { path?: unknown }).path;
 
-  if (typeof projectPath !== "string" || projectPath.trim().length === 0) {
+  if (typeof projectPath !== 'string' || projectPath.trim().length === 0) {
     return null;
   }
 
@@ -256,12 +245,11 @@ function explicitInMemoryProjectPath(
 }
 
 function explicitEditorProjectId(
-  projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext,
+  projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext
 ): string | null {
-  const projectId = (projectContext as { editor?: { projectId?: unknown } }).editor
-    ?.projectId;
+  const projectId = (projectContext as { editor?: { projectId?: unknown } }).editor?.projectId;
 
-  if (typeof projectId !== "string" || projectId.trim().length === 0) {
+  if (typeof projectId !== 'string' || projectId.trim().length === 0) {
     return null;
   }
 
@@ -270,7 +258,7 @@ function explicitEditorProjectId(
 
 function explicitSelectionOwnerProjectId(
   projectContext: ExplicitSidebarProjectContext | ExplicitLiveSidebarProjectContext,
-  editorProjectId: string,
+  editorProjectId: string
 ): string {
   /*
    * Titlebar selection preferences belong to the main project family. The
@@ -278,9 +266,8 @@ function explicitSelectionOwnerProjectId(
    * its parent id directly and never infer family identity from paths, names,
    * Git state, or group labels.
    */
-  const parentProjectId = (projectContext as { worktree?: { parentProjectId?: unknown } })
-    .worktree?.parentProjectId;
-  return typeof parentProjectId === "string" && parentProjectId.trim().length > 0
+  const parentProjectId = (projectContext as { worktree?: { parentProjectId?: unknown } }).worktree?.parentProjectId;
+  return typeof parentProjectId === 'string' && parentProjectId.trim().length > 0
     ? parentProjectId.trim()
     : editorProjectId;
 }
@@ -288,15 +275,12 @@ function explicitSelectionOwnerProjectId(
 function explicitProjectSurfaceIds(editorProjectId: string): GpuiSidebarActiveProjectSurfaceIds {
   return createGpuiSidebarActiveProjectSurfaceIds({
     sourceWorkareaId: editorProjectId,
-    kanbanBoardId: nativeProjectEditorSurfaceId(editorProjectId, "tasks"),
-    automateBoardId: nativeProjectEditorSurfaceId(editorProjectId, "automate"),
-    manageWorkspaceId: nativeProjectEditorSurfaceId(editorProjectId, "manage"),
+    kanbanBoardId: nativeProjectEditorSurfaceId(editorProjectId, 'tasks'),
+    automateBoardId: nativeProjectEditorSurfaceId(editorProjectId, 'automate'),
+    manageWorkspaceId: nativeProjectEditorSurfaceId(editorProjectId, 'manage'),
   });
 }
 
-function nativeProjectEditorSurfaceId(
-  projectId: string,
-  mode: "tasks" | "automate" | "manage",
-): string {
+function nativeProjectEditorSurfaceId(projectId: string, mode: 'tasks' | 'automate' | 'manage'): string {
   return `project-editor:${encodeURIComponent(projectId)}:${mode}`;
 }

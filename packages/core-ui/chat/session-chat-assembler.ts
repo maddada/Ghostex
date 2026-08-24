@@ -7,17 +7,14 @@
 // applyAppends output deep-equals a full rebuild over base ++ all-appends for
 // every prefix.
 
-import {
-  SESSION_CHAT_SOURCE_PRIORITY,
-  type SessionChatMessage,
-} from "../../shared/session-chat";
+import { SESSION_CHAT_SOURCE_PRIORITY, type SessionChatMessage } from '../../shared/session-chat';
 
-const STREAMING_ID = "streaming";
-const PENDING_PREFIX = "pending:";
-const LAUNCH_PENDING_PREFIX = "launch-pending:";
+const STREAMING_ID = 'streaming';
+const PENDING_PREFIX = 'pending:';
+const LAUNCH_PENDING_PREFIX = 'launch-pending:';
 
 function stableStringify(value: unknown): string {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return value;
   }
   try {
@@ -30,15 +27,15 @@ function stableStringify(value: unknown): string {
 function nonTextBlockDigest(message: SessionChatMessage): string {
   const parts: string[] = [];
   for (const block of message.blocks) {
-    if (block.type === "tool-call") {
+    if (block.type === 'tool-call') {
       parts.push(`call:${block.name}:${stableStringify(block.input)}`);
-    } else if (block.type === "tool-result") {
+    } else if (block.type === 'tool-result') {
       parts.push(`result:${block.output}`);
-    } else if (block.type === "image-ref") {
-      parts.push(`image:${block.path ?? block.url ?? block.alt ?? ""}`);
+    } else if (block.type === 'image-ref') {
+      parts.push(`image:${block.path ?? block.url ?? block.alt ?? ''}`);
     }
   }
-  return parts.join("|");
+  return parts.join('|');
 }
 
 export function sessionChatTurnKey(message: SessionChatMessage): string {
@@ -46,21 +43,18 @@ export function sessionChatTurnKey(message: SessionChatMessage): string {
     return `turn:${message.turnId}`;
   }
   const text = message.blocks
-    .filter((block) => block.type === "text")
+    .filter((block) => block.type === 'text')
     .map((block) => block.text)
-    .join(" ")
+    .join(' ')
     .toLowerCase()
-    .replace(/\s+/g, " ")
+    .replace(/\s+/g, ' ')
     .trim();
   return `${message.role}:${text}:${nonTextBlockDigest(message)}`;
 }
 
 /** Strict >: an equal-priority cross-source duplicate never replaces. */
 function supersedes(candidate: SessionChatMessage, existing: SessionChatMessage): boolean {
-  return (
-    SESSION_CHAT_SOURCE_PRIORITY[candidate.source] >
-    SESSION_CHAT_SOURCE_PRIORITY[existing.source]
-  );
+  return SESSION_CHAT_SOURCE_PRIORITY[candidate.source] > SESSION_CHAT_SOURCE_PRIORITY[existing.source];
 }
 
 // --- Shadowed ids -----------------------------------------------------------
@@ -92,10 +86,7 @@ export function sessionChatShadowedId(message: SessionChatMessage): string {
  * (as opposed to the same row re-emitted by another read path). The transcript
  * byte offset answers that exactly; content is the fallback signal.
  */
-export function sessionChatIdCollides(
-  existing: SessionChatMessage,
-  incoming: SessionChatMessage,
-): boolean {
+export function sessionChatIdCollides(existing: SessionChatMessage, incoming: SessionChatMessage): boolean {
   if (existing.id !== incoming.id) {
     return false;
   }
@@ -109,7 +100,7 @@ function replaceEntry(
   byId: Map<string, SessionChatMessage>,
   byTurn: Map<string, SessionChatMessage>,
   previous: SessionChatMessage,
-  next: SessionChatMessage,
+  next: SessionChatMessage
 ): void {
   byId.delete(previous.id);
   byTurn.delete(sessionChatTurnKey(previous));
@@ -124,7 +115,7 @@ function replaceEntry(
 function mergeOne(
   byId: Map<string, SessionChatMessage>,
   byTurn: Map<string, SessionChatMessage>,
-  incoming: SessionChatMessage,
+  incoming: SessionChatMessage
 ): SessionChatMessage | null {
   let message = incoming;
   const existingById = byId.get(message.id);
@@ -175,9 +166,7 @@ const arrivalOrder = new WeakMap<SessionChatMessage, number>();
  * re-run on every update: positions are re-derived from the current list, so a
  * prepended history page renumbers the rows it precedes.
  */
-export function stampSessionChatArrivalOrder(
-  messages: readonly SessionChatMessage[],
-): void {
+export function stampSessionChatArrivalOrder(messages: readonly SessionChatMessage[]): void {
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i];
     if (message) {
@@ -186,10 +175,7 @@ export function stampSessionChatArrivalOrder(
   }
 }
 
-function inheritSessionChatArrivalOrder(
-  from: SessionChatMessage,
-  to: SessionChatMessage,
-): void {
+function inheritSessionChatArrivalOrder(from: SessionChatMessage, to: SessionChatMessage): void {
   const index = arrivalOrder.get(from);
   if (index !== undefined) {
     arrivalOrder.set(to, index);
@@ -205,19 +191,13 @@ export function sessionChatMessageSortRank(message: SessionChatMessage): number 
   if (message.id === STREAMING_ID) {
     return 1;
   }
-  if (
-    message.id.startsWith(PENDING_PREFIX) ||
-    message.id.startsWith(LAUNCH_PENDING_PREFIX)
-  ) {
+  if (message.id.startsWith(PENDING_PREFIX) || message.id.startsWith(LAUNCH_PENDING_PREFIX)) {
     return 2;
   }
   return 0;
 }
 
-export function compareSessionChatMessages(
-  a: SessionChatMessage,
-  b: SessionChatMessage,
-): number {
+export function compareSessionChatMessages(a: SessionChatMessage, b: SessionChatMessage): number {
   const rankA = sessionChatMessageSortRank(a);
   const rankB = sessionChatMessageSortRank(b);
   if (rankA !== rankB) {
@@ -244,9 +224,7 @@ export function compareSessionChatMessages(
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-export function orderSessionChatMessages(
-  messages: readonly SessionChatMessage[],
-): SessionChatMessage[] {
+export function orderSessionChatMessages(messages: readonly SessionChatMessage[]): SessionChatMessage[] {
   return [...messages].sort(compareSessionChatMessages);
 }
 
@@ -261,16 +239,10 @@ export interface SessionChatAssemblySources {
   client?: readonly SessionChatMessage[];
 }
 
-export function assembleSessionChatMessages(
-  sources: SessionChatAssemblySources,
-): SessionChatMessage[] {
+export function assembleSessionChatMessages(sources: SessionChatAssemblySources): SessionChatMessage[] {
   // Highest priority FIRST so a later lower-priority duplicate is dropped,
   // not applied.
-  const ordered = [
-    ...(sources.transcript ?? []),
-    ...(sources.hook ?? []),
-    ...(sources.client ?? []),
-  ];
+  const ordered = [...(sources.transcript ?? []), ...(sources.hook ?? []), ...(sources.client ?? [])];
   const byId = new Map<string, SessionChatMessage>();
   const byTurn = new Map<string, SessionChatMessage>();
   for (const message of ordered) {
@@ -294,7 +266,7 @@ export function createIncrementalSessionChatAssembler(): IncrementalSessionChatA
 /** Canonical rebuild; byte-for-byte equals assembleSessionChatMessages. */
 export function resetIncrementalSessionChatAssembler(
   assembler: IncrementalSessionChatAssembler,
-  base: readonly SessionChatMessage[],
+  base: readonly SessionChatMessage[]
 ): void {
   assembler.byId = new Map();
   assembler.byTurn = new Map();
@@ -304,10 +276,7 @@ export function resetIncrementalSessionChatAssembler(
   assembler.messages = [...assembler.byId.values()].sort(compareSessionChatMessages);
 }
 
-function isTailAppend(
-  current: readonly SessionChatMessage[],
-  incoming: readonly SessionChatMessage[],
-): boolean {
+function isTailAppend(current: readonly SessionChatMessage[], incoming: readonly SessionChatMessage[]): boolean {
   const last = current.at(-1);
   if (!last) {
     return true;
@@ -326,7 +295,7 @@ function isTailAppend(
 
 export function applySessionChatAppends(
   assembler: IncrementalSessionChatAssembler,
-  incoming: readonly SessionChatMessage[],
+  incoming: readonly SessionChatMessage[]
 ): SessionChatMessage[] {
   if (incoming.length === 0) {
     return assembler.messages;
@@ -358,7 +327,7 @@ export function applySessionChatAppends(
 export function sessionChatSharesPrefix(
   transcript: readonly SessionChatMessage[],
   applied: readonly SessionChatMessage[],
-  length: number,
+  length: number
 ): boolean {
   for (let i = 0; i < length; i += 1) {
     if (transcript[i] !== applied[i]) {

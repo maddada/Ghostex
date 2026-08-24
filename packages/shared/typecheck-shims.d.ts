@@ -4,11 +4,11 @@
  * some source files still reference their modules. These ambient declarations
  * keep repo-wide typecheck focused on local source correctness.
  */
-declare module "three" {
+declare module 'three' {
   const three: any;
   export = three;
 }
 
-declare module "vite-plus/test" {
-  export * from "vitest";
+declare module 'vite-plus/test' {
+  export * from 'vitest';
 }

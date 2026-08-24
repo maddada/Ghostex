@@ -151,7 +151,10 @@ pub(crate) fn gpui_remote_ports_link_host(ssh_host: &str) -> String {
     }
 }
 
-pub(crate) fn gpui_remote_ports_page_html(ssh_host: &str, ports: &[GpuiRemoteListeningPort]) -> String {
+pub(crate) fn gpui_remote_ports_page_html(
+    ssh_host: &str,
+    ports: &[GpuiRemoteListeningPort],
+) -> String {
     let escaped_host = gpui_remote_ports_page_html_escape(ssh_host);
     let link_host = gpui_remote_ports_page_html_escape(&gpui_remote_ports_link_host(ssh_host));
     let mut reachable_rows = String::new();
@@ -218,4 +221,3 @@ pub(crate) fn gpui_remote_ports_page_html(ssh_host: &str, ports: &[GpuiRemoteLis
          {reachable_rows}{loopback_section}</body></html>"
     )
 }
-

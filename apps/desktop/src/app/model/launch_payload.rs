@@ -4,14 +4,12 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AgentsTerminalStartupLaunchPayloadSourceKey {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
     pub(crate) shell_session_id: TerminalSessionId,
     pub(crate) startup_body_slot_id: AgentsTerminalStartupBodySlotId,
 }
-
 
 impl AgentsTerminalStartupLaunchPayloadSourceKey {
     pub(crate) fn from_launch_plan(plan: AgentsTerminalStartupLaunchPlan) -> Self {
@@ -23,7 +21,6 @@ impl AgentsTerminalStartupLaunchPayloadSourceKey {
     }
 }
 
-
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct AgentsTerminalStartupExplicitLaunchPayload {
     pub(crate) working_directory: Option<String>,
@@ -32,7 +29,6 @@ pub(crate) struct AgentsTerminalStartupExplicitLaunchPayload {
     pub(crate) initial_input: Option<String>,
     pub(crate) wait_after_command: bool,
 }
-
 
 impl AgentsTerminalStartupExplicitLaunchPayload {
     pub(crate) fn to_ghostty_launch_payload(
@@ -51,7 +47,6 @@ impl AgentsTerminalStartupExplicitLaunchPayload {
     }
 }
 
-
 #[derive(Default)]
 pub(crate) struct AgentsTerminalStartupLaunchPayloadSource {
     pub(crate) explicit_payloads_by_startup_key: HashMap<
@@ -59,7 +54,6 @@ pub(crate) struct AgentsTerminalStartupLaunchPayloadSource {
         AgentsTerminalStartupExplicitLaunchPayload,
     >,
 }
-
 
 impl AgentsTerminalStartupLaunchPayloadSource {
     pub(crate) fn new_empty() -> Self {
@@ -141,13 +135,11 @@ impl AgentsTerminalStartupLaunchPayloadSource {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AgentsTerminalLaunchPayloadSourceKey {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
     pub(crate) body_mount_slot_id: AgentsTerminalBodyMountSlotId,
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct AgentsTerminalExplicitLaunchPayload {
@@ -157,7 +149,6 @@ pub(crate) struct AgentsTerminalExplicitLaunchPayload {
     pub(crate) initial_input: Option<String>,
     pub(crate) wait_after_command: bool,
 }
-
 
 impl AgentsTerminalExplicitLaunchPayload {
     pub(crate) fn to_ghostty_launch_payload(
@@ -176,13 +167,11 @@ impl AgentsTerminalExplicitLaunchPayload {
     }
 }
 
-
 #[derive(Default)]
 pub(crate) struct AgentsTerminalLaunchPayloadSource {
     pub(crate) explicit_payloads_by_agents_key:
         HashMap<AgentsTerminalLaunchPayloadSourceKey, AgentsTerminalExplicitLaunchPayload>,
 }
-
 
 impl AgentsTerminalLaunchPayloadSource {
     pub(crate) fn new_empty() -> Self {
@@ -268,13 +257,11 @@ impl AgentsTerminalLaunchPayloadSource {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ProjectEditorCompanionTerminalLaunchPayloadSourceKey {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
     pub(crate) body_mount_slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
 }
-
 
 /*
 CDXC:GPUIProjectEditorCompanionAttach 2026-07-06:
@@ -292,7 +279,6 @@ pub(crate) struct ProjectEditorCompanionTerminalLaunchPayloadSource {
         AgentsTerminalExplicitLaunchPayload,
     >,
 }
-
 
 impl ProjectEditorCompanionTerminalLaunchPayloadSource {
     pub(crate) fn new_empty() -> Self {
@@ -362,13 +348,11 @@ impl ProjectEditorCompanionTerminalLaunchPayloadSource {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct CommandTerminalLaunchPayloadSourceKey {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
     pub(crate) body_mount_slot_id: CommandTerminalBodyMountSlotId,
 }
-
 
 impl CommandTerminalLaunchPayloadSourceKey {
     pub(crate) fn from_mount_slot(slot_id: CommandTerminalBodyMountSlotId) -> Self {
@@ -379,7 +363,6 @@ impl CommandTerminalLaunchPayloadSourceKey {
     }
 }
 
-
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct CommandTerminalExplicitLaunchPayload {
     pub(crate) working_directory: Option<String>,
@@ -388,7 +371,6 @@ pub(crate) struct CommandTerminalExplicitLaunchPayload {
     pub(crate) initial_input: Option<String>,
     pub(crate) wait_after_command: bool,
 }
-
 
 impl CommandTerminalExplicitLaunchPayload {
     pub(crate) fn to_ghostty_launch_payload(
@@ -407,13 +389,11 @@ impl CommandTerminalExplicitLaunchPayload {
     }
 }
 
-
 #[derive(Default)]
 pub(crate) struct CommandTerminalLaunchPayloadSource {
     pub(crate) explicit_payloads_by_command_key:
         HashMap<CommandTerminalLaunchPayloadSourceKey, CommandTerminalExplicitLaunchPayload>,
 }
-
 
 impl CommandTerminalLaunchPayloadSource {
     pub(crate) fn new_empty() -> Self {
@@ -477,13 +457,11 @@ impl CommandTerminalLaunchPayloadSource {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TerminalCloseConfirmSurfaceFamily {
     Agents,
     Command,
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TerminalCloseConfirmSurfaceSignature {
@@ -493,14 +471,12 @@ pub(crate) struct TerminalCloseConfirmSurfaceSignature {
     pub(crate) confirm_action_label: &'static str,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TerminalCloseConfirmDialogKey {
     Agents(AgentsTerminalBodyMountSlotId),
     Command(CommandTerminalBodyMountSlotId),
 }
-
 
 #[cfg(target_os = "macos")]
 impl TerminalCloseConfirmDialogKey {
@@ -512,7 +488,6 @@ impl TerminalCloseConfirmDialogKey {
     }
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PendingAgentsTerminalCloseConfirm {
@@ -520,13 +495,12 @@ pub(crate) struct PendingAgentsTerminalCloseConfirm {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Default)]
 pub(crate) struct AgentsTerminalCloseConfirmState {
-    pub(crate) pending_by_slot: HashMap<AgentsTerminalBodyMountSlotId, PendingAgentsTerminalCloseConfirm>,
+    pub(crate) pending_by_slot:
+        HashMap<AgentsTerminalBodyMountSlotId, PendingAgentsTerminalCloseConfirm>,
 }
-
 
 #[cfg(target_os = "macos")]
 impl AgentsTerminalCloseConfirmState {
@@ -685,7 +659,6 @@ impl AgentsTerminalCloseConfirmState {
     }
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PendingCommandTerminalCloseConfirm {
@@ -693,13 +666,12 @@ pub(crate) struct PendingCommandTerminalCloseConfirm {
     pub(crate) runtime_session_id: AgentsTerminalRuntimeSessionId,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Default)]
 pub(crate) struct CommandTerminalCloseConfirmState {
-    pub(crate) pending_by_slot: HashMap<CommandTerminalBodyMountSlotId, PendingCommandTerminalCloseConfirm>,
+    pub(crate) pending_by_slot:
+        HashMap<CommandTerminalBodyMountSlotId, PendingCommandTerminalCloseConfirm>,
 }
-
 
 #[cfg(target_os = "macos")]
 impl CommandTerminalCloseConfirmState {
@@ -847,4 +819,3 @@ impl CommandTerminalCloseConfirmState {
         (pending == current).then_some(slot_id)
     }
 }
-

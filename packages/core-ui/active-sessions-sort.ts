@@ -3,4 +3,4 @@ export {
   getDisplaySessionIdsInOrder,
   type CreateDisplaySessionLayoutOptions,
   type SessionIdsByGroup,
-} from "../shared/active-sessions-sort";
+} from '../shared/active-sessions-sort';

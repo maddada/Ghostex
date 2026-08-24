@@ -43,7 +43,7 @@ export type SidebarV2GroupOrderRow = {
 export type SidebarV2GroupOrderDropTarget = {
   /** Representative id of the row the insertion boundary belongs to. */
   groupId: string;
-  position: "after" | "before";
+  position: 'after' | 'before';
 };
 
 export type SidebarV2GroupOrderProjectionInput = {
@@ -68,7 +68,7 @@ export type SidebarV2GroupOrderProjectionInput = {
 export function moveSidebarV2GroupRows(
   rows: readonly SidebarV2GroupOrderRow[],
   sourceGroupId: string,
-  target: SidebarV2GroupOrderDropTarget,
+  target: SidebarV2GroupOrderDropTarget
 ): SidebarV2GroupOrderRow[] | undefined {
   if (target.groupId === sourceGroupId) {
     return undefined;
@@ -82,7 +82,7 @@ export function moveSidebarV2GroupRows(
   if (anchorIndex < 0) {
     return undefined;
   }
-  const insertionIndex = target.position === "before" ? anchorIndex : anchorIndex + 1;
+  const insertionIndex = target.position === 'before' ? anchorIndex : anchorIndex + 1;
   const next = [...withoutSource];
   next.splice(insertionIndex, 0, rows[sourceIndex]);
   return next.every((row, index) => row.groupId === rows[index]?.groupId) ? undefined : next;
@@ -98,7 +98,7 @@ export function moveSidebarV2GroupRows(
  * nothing about that machine's order.
  */
 export function projectSidebarV2GroupOrderByMachine(
-  input: SidebarV2GroupOrderProjectionInput,
+  input: SidebarV2GroupOrderProjectionInput
 ): Record<string, string[]> {
   const nextRows = moveSidebarV2GroupRows(input.rows, input.sourceGroupId, input.target);
   if (!nextRows) {
@@ -118,9 +118,7 @@ export function projectSidebarV2GroupOrderByMachine(
      * the member list is representative-first (a cross-machine convention), and
      * imposing it here would reorder a project against its own worktrees.
      */
-    const movingIds = machineGroupIds.filter((groupId) =>
-      sourceRow.memberGroupIds.includes(groupId),
-    );
+    const movingIds = machineGroupIds.filter((groupId) => sourceRow.memberGroupIds.includes(groupId));
     if (movingIds.length === 0) {
       continue;
     }

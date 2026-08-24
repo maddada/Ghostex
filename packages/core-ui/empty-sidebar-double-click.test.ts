@@ -1,8 +1,5 @@
-import { describe, expect, test, vi } from "vitest";
-import {
-  isEmptySidebarDoubleClick,
-  SIDEBAR_EMPTY_SPACE_BLOCKER_SELECTOR,
-} from "./empty-sidebar-double-click";
+import { describe, expect, test, vi } from 'vitest';
+import { isEmptySidebarDoubleClick, SIDEBAR_EMPTY_SPACE_BLOCKER_SELECTOR } from './empty-sidebar-double-click';
 
 class FakeNode {}
 
@@ -54,18 +51,18 @@ const originalNode = globalThis.Node;
 
 function installFakeDom(): FakeDocument {
   const fakeDocument: FakeDocument = {
-    body: new FakeElement("body"),
+    body: new FakeElement('body'),
     createElement: (tagName: string) => new FakeElement(tagName),
   };
-  Object.defineProperty(globalThis, "Node", {
+  Object.defineProperty(globalThis, 'Node', {
     configurable: true,
     value: FakeNode,
   });
-  Object.defineProperty(globalThis, "Element", {
+  Object.defineProperty(globalThis, 'Element', {
     configurable: true,
     value: FakeElement,
   });
-  Object.defineProperty(globalThis, "document", {
+  Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: fakeDocument,
   });
@@ -73,15 +70,15 @@ function installFakeDom(): FakeDocument {
 }
 
 function restoreFakeDom(): void {
-  Object.defineProperty(globalThis, "Node", {
+  Object.defineProperty(globalThis, 'Node', {
     configurable: true,
     value: originalNode,
   });
-  Object.defineProperty(globalThis, "Element", {
+  Object.defineProperty(globalThis, 'Element', {
     configurable: true,
     value: originalElement,
   });
-  Object.defineProperty(globalThis, "document", {
+  Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: originalDocument,
   });
@@ -93,22 +90,22 @@ function matchesSidebarBlockerSelector(element: FakeElement, selector: string): 
   }
 
   return (
-    ["button", "input", "select", "textarea", "a"].includes(element.tagName) ||
+    ['button', 'input', 'select', 'textarea', 'a'].includes(element.tagName) ||
     element.dataset.emptySpaceBlocking !== undefined
   );
 }
 
-describe("isEmptySidebarDoubleClick", () => {
-  test("should allow double clicks that land in unoccupied sidebar gutter space", () => {
+describe('isEmptySidebarDoubleClick', () => {
+  test('should allow double clicks that land in unoccupied sidebar gutter space', () => {
     const fakeDocument = installFakeDom();
-    const currentTarget = document.createElement("div");
-    const content = document.createElement("div");
+    const currentTarget = document.createElement('div');
+    const content = document.createElement('div');
 
     currentTarget.append(content);
     fakeDocument.body.append(currentTarget);
 
     const elementsFromPointMock = vi.fn(() => [content, currentTarget, document.body]);
-    Object.defineProperty(document, "elementsFromPoint", {
+    Object.defineProperty(document, 'elementsFromPoint', {
       configurable: true,
       value: elementsFromPointMock,
     });
@@ -119,24 +116,24 @@ describe("isEmptySidebarDoubleClick", () => {
         clientY: 48,
         currentTarget,
         target: content,
-      }),
+      })
     ).toBe(true);
 
     expect(elementsFromPointMock).toHaveBeenCalledWith(120, 48);
     restoreFakeDom();
   });
 
-  test("should block double clicks when a non-empty sidebar surface is under the pointer", () => {
+  test('should block double clicks when a non-empty sidebar surface is under the pointer', () => {
     const fakeDocument = installFakeDom();
-    const currentTarget = document.createElement("div");
-    const groupSurface = document.createElement("section");
-    const emptyArea = document.createElement("div");
+    const currentTarget = document.createElement('div');
+    const groupSurface = document.createElement('section');
+    const emptyArea = document.createElement('div');
 
-    groupSurface.dataset.emptySpaceBlocking = "true";
+    groupSurface.dataset.emptySpaceBlocking = 'true';
     currentTarget.append(groupSurface, emptyArea);
     fakeDocument.body.append(currentTarget);
 
-    Object.defineProperty(document, "elementsFromPoint", {
+    Object.defineProperty(document, 'elementsFromPoint', {
       configurable: true,
       value: vi.fn(() => [groupSurface, currentTarget, document.body]),
     });
@@ -147,21 +144,21 @@ describe("isEmptySidebarDoubleClick", () => {
         clientY: 24,
         currentTarget,
         target: emptyArea,
-      }),
+      })
     ).toBe(false);
     restoreFakeDom();
   });
 
-  test("should fall back to target ancestry when point-based hit testing is unavailable", () => {
+  test('should fall back to target ancestry when point-based hit testing is unavailable', () => {
     const fakeDocument = installFakeDom();
-    const currentTarget = document.createElement("div");
-    const emptyArea = document.createElement("div");
-    const button = document.createElement("button");
+    const currentTarget = document.createElement('div');
+    const emptyArea = document.createElement('div');
+    const button = document.createElement('button');
 
     currentTarget.append(emptyArea, button);
     fakeDocument.body.append(currentTarget);
 
-    Object.defineProperty(document, "elementsFromPoint", {
+    Object.defineProperty(document, 'elementsFromPoint', {
       configurable: true,
       value: undefined,
     });
@@ -172,7 +169,7 @@ describe("isEmptySidebarDoubleClick", () => {
         clientY: 0,
         currentTarget,
         target: emptyArea,
-      }),
+      })
     ).toBe(true);
     expect(button.closest(SIDEBAR_EMPTY_SPACE_BLOCKER_SELECTOR)).toBe(button);
     expect(
@@ -181,7 +178,7 @@ describe("isEmptySidebarDoubleClick", () => {
         clientY: 0,
         currentTarget,
         target: button,
-      }),
+      })
     ).toBe(false);
     restoreFakeDom();
   });

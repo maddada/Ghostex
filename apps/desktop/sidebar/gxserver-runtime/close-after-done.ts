@@ -7,25 +7,23 @@ import {
   GPUI_CLOSE_AFTER_DONE_DELAY_MS,
   GPUI_DELAYED_SEND_MAX_DELAY_MS,
   GPUI_DELAYED_SEND_MIN_DELAY_MS,
-} from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
+} from './constants';
+import type { GpuiSidebarRuntime } from './core';
 import {
   formatGpuiCloseAfterDoneCountdown,
   formatGpuiDelayedSendDelay,
   isGpuiCloseAfterDonePresentationSessionDone,
   writeStoredGpuiCloseAfterDoneSessionIds,
-} from "./helpers/close-after-done";
-import { parseGpuiRemotePresentationSessionId } from "./helpers/remote-presentation";
-import type { GpuiCloseAfterDoneTimer } from "./types-and-protocol";
+} from './helpers/close-after-done';
+import { parseGpuiRemotePresentationSessionId } from './helpers/remote-presentation';
+import type { GpuiCloseAfterDoneTimer } from './types-and-protocol';
 import type {
   GxserverPresentationCloseAfterDoneProjection,
   GxserverPresentationDelayedSendProjection,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import {
-  parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type { GxserverPresentationSession } from "@/packages/shared/gxserver-protocol";
-import type { SidebarToExtensionMessage } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import { parseGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { GxserverPresentationSession } from '@/packages/shared/gxserver-protocol';
+import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -37,7 +35,9 @@ reports as a circular base type. `gpuiSidebarRuntimeCloseAfterDoneMethodsShapeCh
 at the bottom of this file is what keeps the two in step.
 */
 export interface GpuiSidebarRuntimeCloseAfterDoneMethods {
-  scheduleRemoteDelayedSend(message: Extract<SidebarToExtensionMessage, { type: "scheduleDelayedSend" }>): Promise<void>;
+  scheduleRemoteDelayedSend(
+    message: Extract<SidebarToExtensionMessage, { type: 'scheduleDelayedSend' }>
+  ): Promise<void>;
   cancelRemoteDelayedSend(sessionId: string): Promise<void>;
   toggleCloseAfterDone(sessionId: string): void;
   findPresentationSessionRowForSidebarSessionId(sessionId: string): GxserverPresentationSession | undefined;
@@ -55,9 +55,9 @@ export interface GpuiSidebarRuntimeCloseAfterDoneMethods {
 }
 
 export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
-
-  async scheduleRemoteDelayedSend(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "scheduleDelayedSend" }>,
+  async scheduleRemoteDelayedSend(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'scheduleDelayedSend' }>
   ): Promise<void> {
     /*
     CDXC:GPUIRemoteDelayedSend 2026-08-17:
@@ -71,26 +71,22 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
       return;
     }
     const session = this.findRemotePresentationSession(reference);
-    if (!session || (session.kind !== "terminal" && session.kind !== "agent")) {
-      this.postSidebarActionToast(
-        "info",
-        "Delayed Send is only available for remote terminal sessions.",
-      );
+    if (!session || (session.kind !== 'terminal' && session.kind !== 'agent')) {
+      this.postSidebarActionToast('info', 'Delayed Send is only available for remote terminal sessions.');
       return;
     }
 
-    const trigger: "afterDelay" | "agentStops" | "allAgentsStop" = message.sendWhenAllProjectSessionsStop
-      ? "allAgentsStop"
+    const trigger: 'afterDelay' | 'agentStops' | 'allAgentsStop' = message.sendWhenAllProjectSessionsStop
+      ? 'allAgentsStop'
       : message.sendWhenAgentStops
-        ? "agentStops"
-        : "afterDelay";
+        ? 'agentStops'
+        : 'afterDelay';
     let delayMs: number | undefined;
     let description: string;
-    if (trigger === "allAgentsStop") {
-      description =
-        "Presses Enter after all agents in the project have finished working for 10 seconds.";
-    } else if (trigger === "agentStops") {
-      description = "Presses Enter after this agent has finished working for 10 seconds.";
+    if (trigger === 'allAgentsStop') {
+      description = 'Presses Enter after all agents in the project have finished working for 10 seconds.';
+    } else if (trigger === 'agentStops') {
+      description = 'Presses Enter after this agent has finished working for 10 seconds.';
     } else {
       delayMs = message.delayMs;
       if (
@@ -100,26 +96,23 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
         delayMs > GPUI_DELAYED_SEND_MAX_DELAY_MS ||
         delayMs % GPUI_DELAYED_SEND_MIN_DELAY_MS !== 0
       ) {
-        this.postSidebarActionToast(
-          "warning",
-          "Choose a Delayed Send timer between 1 minute and 24 days.",
-        );
+        this.postSidebarActionToast('warning', 'Choose a Delayed Send timer between 1 minute and 24 days.');
         return;
       }
       description = `Presses Enter in ${formatGpuiDelayedSendDelay(delayMs)}.`;
     }
 
     try {
-      await this.requestRemoteGxserver(reference.machineId, "/api/scheduleDelayedSend", {
+      await this.requestRemoteGxserver(reference.machineId, '/api/scheduleDelayedSend', {
         ...(delayMs === undefined ? {} : { delayMs }),
         projectId: reference.projectId,
-        ...(trigger === "allAgentsStop" ? { sendWhenAllProjectSessionsStop: true } : {}),
-        ...(trigger === "agentStops" ? { sendWhenAgentStops: true } : {}),
+        ...(trigger === 'allAgentsStop' ? { sendWhenAllProjectSessionsStop: true } : {}),
+        ...(trigger === 'agentStops' ? { sendWhenAgentStops: true } : {}),
         sessionId: reference.sessionId,
       });
-      this.postSidebarActionToast("info", "Delayed Send scheduled", { description });
+      this.postSidebarActionToast('info', 'Delayed Send scheduled', { description });
     } catch (error) {
-      this.postRemoteToast("error", "Delayed Send unavailable", {
+      this.postRemoteToast('error', 'Delayed Send unavailable', {
         description: error instanceof Error ? error.message : String(error),
       });
     }
@@ -133,18 +126,18 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
     try {
       const result = await this.requestRemoteGxserver<{ changed?: boolean }>(
         reference.machineId,
-        "/api/cancelDelayedSend",
+        '/api/cancelDelayedSend',
         {
           projectId: reference.projectId,
           sessionId: reference.sessionId,
-        },
+        }
       );
       this.postSidebarActionToast(
-        "info",
-        result.changed === true ? "Delayed Send canceled" : "No Delayed Send timer is active",
+        'info',
+        result.changed === true ? 'Delayed Send canceled' : 'No Delayed Send timer is active'
       );
     } catch (error) {
-      this.postRemoteToast("error", "Delayed Send could not be canceled", {
+      this.postRemoteToast('error', 'Delayed Send could not be canceled', {
         description: error instanceof Error ? error.message : String(error),
       });
     }
@@ -153,29 +146,27 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
   toggleCloseAfterDone(this: GpuiSidebarRuntime, sessionId: string): void {
     const session = this.findPresentationSessionRowForSidebarSessionId(sessionId);
     if (!session) {
-      this.postSidebarActionToast(
-        "info",
-        "Close After Done is only available for terminal sessions.",
-      );
+      this.postSidebarActionToast('info', 'Close After Done is only available for terminal sessions.');
       return;
     }
     if (this.closeAfterDoneTimersBySessionId.has(sessionId)) {
       this.clearCloseAfterDoneTimer(sessionId);
-      this.publishPresentation("patch");
-      this.postSidebarActionToast("info", "Close After Done canceled");
+      this.publishPresentation('patch');
+      this.postSidebarActionToast('info', 'Close After Done canceled');
       return;
     }
     this.closeAfterDoneTimersBySessionId.set(sessionId, {});
     this.persistCloseAfterDoneSessionIds();
     this.refreshCloseAfterDoneTimer(sessionId, Date.now());
-    this.publishPresentation("patch");
-    this.postSidebarActionToast("info", "Close After Done enabled", {
-      description: "Closes after Done stays visible for 3m.",
+    this.publishPresentation('patch');
+    this.postSidebarActionToast('info', 'Close After Done enabled', {
+      description: 'Closes after Done stays visible for 3m.',
     });
   },
 
-  findPresentationSessionRowForSidebarSessionId(this: GpuiSidebarRuntime,
-    sessionId: string,
+  findPresentationSessionRowForSidebarSessionId(
+    this: GpuiSidebarRuntime,
+    sessionId: string
   ): GxserverPresentationSession | undefined {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
@@ -186,8 +177,7 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
       return undefined;
     }
     return this.presentation?.sessions.find(
-      (session) =>
-        session.projectId === reference.projectId && session.sessionId === reference.sessionId,
+      (session) => session.projectId === reference.projectId && session.sessionId === reference.sessionId
     );
   },
 
@@ -252,11 +242,11 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
     const session = this.findPresentationSessionRowForSidebarSessionId(sessionId);
     if (!session || !isGpuiCloseAfterDonePresentationSessionDone(session)) {
       this.resetCloseAfterDoneCountdown(sessionId, timer);
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
       return;
     }
     this.clearCloseAfterDoneTimer(sessionId);
-    void this.transitionSession(sessionId, "close");
+    void this.transitionSession(sessionId, 'close');
   },
 
   clearCloseAfterDoneTimer(this: GpuiSidebarRuntime, sessionId: string): void {
@@ -282,15 +272,12 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
         this.stopCloseAfterDoneCountdownTickerIfIdle();
         return;
       }
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
     }, 1_000);
   },
 
   stopCloseAfterDoneCountdownTickerIfIdle(this: GpuiSidebarRuntime): void {
-    if (
-      this.hasActiveCloseAfterDoneCountdown() ||
-      this.closeAfterDoneCountdownTickerId === undefined
-    ) {
+    if (this.hasActiveCloseAfterDoneCountdown() || this.closeAfterDoneCountdownTickerId === undefined) {
       return;
     }
     window.clearInterval(this.closeAfterDoneCountdownTickerId);
@@ -306,8 +293,9 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
     return false;
   },
 
-  getCloseAfterDoneProjection(this: GpuiSidebarRuntime,
-    sessionId: string,
+  getCloseAfterDoneProjection(
+    this: GpuiSidebarRuntime,
+    sessionId: string
   ): GxserverPresentationCloseAfterDoneProjection | undefined {
     const timer = this.closeAfterDoneTimersBySessionId.get(sessionId);
     if (!timer) {
@@ -325,8 +313,9 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
     };
   },
 
-  getDelayedSendProjection(this: GpuiSidebarRuntime,
-    sessionId: string,
+  getDelayedSendProjection(
+    this: GpuiSidebarRuntime,
+    sessionId: string
   ): GxserverPresentationDelayedSendProjection | undefined {
     const delayedSend = this.workspaceSessionDelayedSends.get(sessionId);
     if (!delayedSend) {
@@ -338,11 +327,11 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
       remainingMs: delayedSend.delayedSendRemainingMs,
       sendWhenAllProjectSessionsStopActive:
         delayedSend.sendWhenAllProjectSessionsStopActive === true ? true : undefined,
-      sendWhenAgentStopsActive:
-        delayedSend.sendWhenAgentStopsActive === true ? true : undefined,
+      sendWhenAgentStopsActive: delayedSend.sendWhenAgentStopsActive === true ? true : undefined,
     };
   },
 };
 
-const gpuiSidebarRuntimeCloseAfterDoneMethodsShapeCheck: GpuiSidebarRuntimeCloseAfterDoneMethods = gpuiSidebarRuntimeCloseAfterDoneMethods;
+const gpuiSidebarRuntimeCloseAfterDoneMethodsShapeCheck: GpuiSidebarRuntimeCloseAfterDoneMethods =
+  gpuiSidebarRuntimeCloseAfterDoneMethods;
 void gpuiSidebarRuntimeCloseAfterDoneMethodsShapeCheck;

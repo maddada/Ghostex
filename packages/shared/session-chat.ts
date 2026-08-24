@@ -25,46 +25,36 @@ export type {
   SessionChatDraft,
   SessionChatQueuedPrompt,
   SessionChatQueuedPromptState,
-} from "./session-chat-queue";
+} from './session-chat-queue';
 
-import type {
-  SessionChatDraft,
-  SessionChatQueuedPrompt,
-} from "./session-chat-queue";
+import type { SessionChatDraft, SessionChatQueuedPrompt } from './session-chat-queue';
 
-export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
-  "claude",
-  "openclaude",
-  "codex",
-  "grok",
-  "pi",
-  "omp",
-]);
+export const SESSION_CHAT_SUPPORTED_AGENTS = new Set(['claude', 'openclaude', 'codex', 'grok', 'pi', 'omp']);
 
-export type SessionChatTranscriptAgent = "claude" | "codex" | "grok" | "pi";
+export type SessionChatTranscriptAgent = 'claude' | 'codex' | 'grok' | 'pi';
 
 export function resolveSessionChatTranscriptAgent(
   agentId: string | null | undefined,
-  agentIcon?: string | null,
+  agentIcon?: string | null
 ): SessionChatTranscriptAgent | null {
   const candidates = [agentId, agentIcon];
   for (const candidate of candidates) {
     const normalized = candidate?.trim().toLowerCase();
-    if (normalized === "claude" || normalized === "openclaude") return "claude";
-    if (normalized === "codex") return "codex";
-    if (normalized === "grok" || normalized === "grok-build") return "grok";
-    if (normalized === "pi" || normalized === "omp") return "pi";
+    if (normalized === 'claude' || normalized === 'openclaude') return 'claude';
+    if (normalized === 'codex') return 'codex';
+    if (normalized === 'grok' || normalized === 'grok-build') return 'grok';
+    if (normalized === 'pi' || normalized === 'omp') return 'pi';
   }
   return null;
 }
 
-export type SessionChatSource = "transcript" | "hook" | "client";
+export type SessionChatSource = 'transcript' | 'hook' | 'client';
 
 /** Visual palette for the shared chat surface, independent of app chrome. */
-export type SessionChatTheme = "light" | "dark";
+export type SessionChatTheme = 'light' | 'dark';
 
 export function normalizeSessionChatTheme(value: unknown): SessionChatTheme {
-  return value === "light" ? "light" : "dark";
+  return value === 'light' ? 'light' : 'dark';
 }
 
 // Higher wins when the same message id/turn arrives from two sources.
@@ -74,42 +64,34 @@ export const SESSION_CHAT_SOURCE_PRIORITY: Record<SessionChatSource, number> = {
   client: 1,
 };
 
-export type SessionChatRole =
-  | "user"
-  | "assistant"
-  | "reasoning"
-  | "tool"
-  | "system";
+export type SessionChatRole = 'user' | 'assistant' | 'reasoning' | 'tool' | 'system';
 
 export interface SessionChatTextBlock {
-  type: "text";
+  type: 'text';
   text: string;
 }
 
 export interface SessionChatToolCallBlock {
-  type: "tool-call";
+  type: 'tool-call';
   name: string;
   input: unknown;
 }
 
 export interface SessionChatToolResultBlock {
-  type: "tool-result";
+  type: 'tool-result';
   output: string;
   isError?: boolean;
 }
 
 export interface SessionChatImageRefBlock {
-  type: "image-ref";
+  type: 'image-ref';
   path?: string;
   url?: string;
   alt?: string;
 }
 
 export type SessionChatBlock =
-  | SessionChatTextBlock
-  | SessionChatToolCallBlock
-  | SessionChatToolResultBlock
-  | SessionChatImageRefBlock;
+  SessionChatTextBlock | SessionChatToolCallBlock | SessionChatToolResultBlock | SessionChatImageRefBlock;
 
 export interface SessionChatMessage {
   /** Stable across re-reads: record uuid/payload id, else `${filePath}:${byteOffset16}`. */
@@ -146,10 +128,7 @@ export interface SessionChatMessage {
   queued?: boolean;
 }
 
-export type SessionChatTurnLifecycleState =
-  | "working"
-  | "completed"
-  | "interrupted";
+export type SessionChatTurnLifecycleState = 'working' | 'completed' | 'interrupted';
 
 export interface SessionChatTurnLifecycle {
   state: SessionChatTurnLifecycleState;
@@ -157,14 +136,7 @@ export interface SessionChatTurnLifecycle {
   timestamp: number | null;
 }
 
-export type SessionChatStatus =
-  | "loading"
-  | "ready"
-  | "working"
-  | "empty"
-  | "starting"
-  | "error"
-  | "unsupported";
+export type SessionChatStatus = 'loading' | 'ready' | 'working' | 'empty' | 'starting' | 'error' | 'unsupported';
 
 export interface SessionChatQuestionOption {
   label: string;
@@ -179,8 +151,7 @@ export interface SessionChatQuestion {
 }
 
 export type SessionChatInteractivePrompt =
-  | { kind: "question"; questions: SessionChatQuestion[] }
-  | { kind: "approval"; tool: string; summary?: string };
+  { kind: 'question'; questions: SessionChatQuestion[] } | { kind: 'approval'; tool: string; summary?: string };
 
 /** One answer per question, by 0-based option indices plus optional free text. */
 export interface SessionChatQuestionSelection {
@@ -204,7 +175,7 @@ export interface SessionChatDetectedChoice {
   /** The agent-reported label (`Fable 5`), shown verbatim. */
   label: string;
   /** Evidence source; absent only when talking to an older daemon. */
-  source?: "terminal" | "transcript";
+  source?: 'terminal' | 'transcript';
 }
 
 export interface SessionChatDetectedOptions {
@@ -236,7 +207,7 @@ not.
 export interface SessionChatTerminalNoticeAction {
   id: string;
   label: string;
-  kind: "switchToTerminal" | "sendKeys";
+  kind: 'switchToTerminal' | 'sendKeys';
   /** Raw bytes for `sendKeys`, written verbatim through answerSessionChatPrompt. */
   send?: string;
 }
@@ -275,14 +246,14 @@ export interface SessionChatTerminalNotice {
    * unknown kind generically — title/detail/severity are self-sufficient.
    */
   kind: string;
-  severity: "error" | "warning" | "info";
+  severity: 'error' | 'warning' | 'info';
   /** Short human line, e.g. "Codex login expired". */
   title: string;
   /** One or two sentences of guidance, including quoted terminal evidence. */
   detail?: string;
   /** SGR-stripped last visible lines (trimmed, capped ~2000 chars). */
   screenTail?: string;
-  source: "screen" | "watchdog";
+  source: 'screen' | 'watchdog';
   /** ISO-8601 millis; also the key a client's local dismissal remembers. */
   detectedAt: string;
   actions?: SessionChatTerminalNoticeAction[];
@@ -494,7 +465,7 @@ export interface GxserverReadSessionChatResult {
   error?: string;
 }
 
-export type SessionChatSkillSourceKind = "global" | "pluginCache" | "repository";
+export type SessionChatSkillSourceKind = 'global' | 'pluginCache' | 'repository';
 
 export interface SessionChatSkill {
   /** Display/mention name, matching the skill folder shown by Agents Hub. */
@@ -537,7 +508,7 @@ export interface GxserverReadSessionChatFilesResult {
  * expressible as text. `shift-tab` is Claude Code's permission-mode cycle;
  * shifted arrows adjust Codex reasoning effort.
  */
-export type SessionChatSendKey = "shift-tab" | "shift-up" | "shift-down";
+export type SessionChatSendKey = 'shift-tab' | 'shift-up' | 'shift-down';
 
 export interface GxserverSendSessionChatMessageParams {
   projectId: string;
@@ -623,7 +594,7 @@ export interface GxserverReadSessionChatImageResult {
 export interface GxserverAnswerSessionChatPromptParams {
   projectId: string;
   sessionId: string;
-  kind: "question" | "approval" | "terminalChoice";
+  kind: 'question' | 'approval' | 'terminalChoice';
   /** For questions: one entry per question. */
   selections?: SessionChatQuestionSelection[];
   /** For approvals: the raw byte string of the chosen option ("1" allow, "" deny). */
@@ -671,7 +642,7 @@ export interface GxserverHandoffSessionChatDraftResult {
 // ---------------------------------------------------------------------------
 
 export interface GxserverSubscribeSessionChatMessage {
-  type: "subscribeSessionChat";
+  type: 'subscribeSessionChat';
   projectId: string;
   sessionId: string;
   /**
@@ -685,7 +656,7 @@ export interface GxserverSubscribeSessionChatMessage {
 }
 
 export interface GxserverUnsubscribeSessionChatMessage {
-  type: "unsubscribeSessionChat";
+  type: 'unsubscribeSessionChat';
   projectId: string;
   sessionId: string;
 }
@@ -708,7 +679,7 @@ interface SessionChatFrameBase {
 }
 
 export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
-  type: "sessionChatSnapshot";
+  type: 'sessionChatSnapshot';
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
   hasMore: boolean;
@@ -756,7 +727,7 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
 }
 
 export interface GxserverSessionChatAppendedEvent extends SessionChatFrameBase {
-  type: "sessionChatAppended";
+  type: 'sessionChatAppended';
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
   /**
@@ -770,7 +741,7 @@ export interface GxserverSessionChatAppendedEvent extends SessionChatFrameBase {
 }
 
 export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
-  type: "sessionChatReplaced";
+  type: 'sessionChatReplaced';
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
   hasMore: boolean;
@@ -818,7 +789,7 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
 }
 
 export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
-  type: "sessionChatState";
+  type: 'sessionChatState';
   status: SessionChatStatus;
   lifecycle?: SessionChatTurnLifecycle;
   prompt?: SessionChatInteractivePrompt;
@@ -868,14 +839,12 @@ export type GxserverSessionChatEvent =
   | GxserverSessionChatReplacedEvent
   | GxserverSessionChatStateEvent;
 
-export function isSessionChatEventType(
-  type: string,
-): type is GxserverSessionChatEvent["type"] {
+export function isSessionChatEventType(type: string): type is GxserverSessionChatEvent['type'] {
   return (
-    type === "sessionChatSnapshot" ||
-    type === "sessionChatAppended" ||
-    type === "sessionChatReplaced" ||
-    type === "sessionChatState"
+    type === 'sessionChatSnapshot' ||
+    type === 'sessionChatAppended' ||
+    type === 'sessionChatReplaced' ||
+    type === 'sessionChatState'
   );
 }
 
@@ -889,4 +858,4 @@ CDXC:AgentHistorySearch 2026-08-20:
 body on exactly the same terms as chat: the terminal parks rather than closing,
 and only one surface can own the pane at a time.
 */
-export type SessionSurfaceMode = "terminal" | "chat";
+export type SessionSurfaceMode = 'terminal' | 'chat';

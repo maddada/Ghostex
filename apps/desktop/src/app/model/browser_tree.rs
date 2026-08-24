@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 pub(crate) fn collect_browser_leaf_ids(node: &BrowserNode, pane_ids: &mut Vec<BrowserPaneId>) {
     match node {
         BrowserNode::Leaf(leaf) => {
@@ -20,7 +19,6 @@ pub(crate) fn collect_browser_leaf_ids(node: &BrowserNode, pane_ids: &mut Vec<Br
     }
 }
 
-
 pub(crate) fn collect_browser_tab_ids(node: &BrowserNode, tab_ids: &mut Vec<BrowserTabId>) {
     match node {
         BrowserNode::Leaf(leaf) => {
@@ -33,7 +31,6 @@ pub(crate) fn collect_browser_tab_ids(node: &BrowserNode, tab_ids: &mut Vec<Brow
     }
 }
 
-
 pub(crate) fn collect_browser_split_ids(node: &BrowserNode, split_ids: &mut Vec<BrowserSplitId>) {
     match node {
         BrowserNode::Leaf(_) => {}
@@ -45,7 +42,6 @@ pub(crate) fn collect_browser_split_ids(node: &BrowserNode, split_ids: &mut Vec<
     }
 }
 
-
 pub(crate) fn first_browser_leaf_id(node: &BrowserNode) -> Option<BrowserPaneId> {
     match node {
         BrowserNode::Leaf(leaf) if !leaf.tab_group.tabs.is_empty() => Some(leaf.pane_id),
@@ -56,7 +52,6 @@ pub(crate) fn first_browser_leaf_id(node: &BrowserNode) -> Option<BrowserPaneId>
     }
 }
 
-
 pub(crate) fn first_browser_tab_id(node: &BrowserNode) -> Option<BrowserTabId> {
     match node {
         BrowserNode::Leaf(leaf) => leaf.tab_group.tabs.first().map(|tab| tab.tab_id),
@@ -66,15 +61,16 @@ pub(crate) fn first_browser_tab_id(node: &BrowserNode) -> Option<BrowserTabId> {
     }
 }
 
-
-pub(crate) fn find_browser_leaf(node: &BrowserNode, pane_id: BrowserPaneId) -> Option<&BrowserLeaf> {
+pub(crate) fn find_browser_leaf(
+    node: &BrowserNode,
+    pane_id: BrowserPaneId,
+) -> Option<&BrowserLeaf> {
     match node {
         BrowserNode::Leaf(leaf) => (leaf.pane_id == pane_id).then_some(leaf),
         BrowserNode::Split(split) => find_browser_leaf(&split.first, pane_id)
             .or_else(|| find_browser_leaf(&split.second, pane_id)),
     }
 }
-
 
 pub(crate) fn find_browser_leaf_mut(
     node: &mut BrowserNode,
@@ -87,8 +83,10 @@ pub(crate) fn find_browser_leaf_mut(
     }
 }
 
-
-pub(crate) fn find_browser_split(node: &BrowserNode, split_id: BrowserSplitId) -> Option<&BrowserSplit> {
+pub(crate) fn find_browser_split(
+    node: &BrowserNode,
+    split_id: BrowserSplitId,
+) -> Option<&BrowserSplit> {
     match node {
         BrowserNode::Leaf(_) => None,
         BrowserNode::Split(split) if split.id == split_id => Some(split),
@@ -96,7 +94,6 @@ pub(crate) fn find_browser_split(node: &BrowserNode, split_id: BrowserSplitId) -
             .or_else(|| find_browser_split(&split.second, split_id)),
     }
 }
-
 
 pub(crate) fn find_browser_split_mut(
     node: &mut BrowserNode,
@@ -116,8 +113,10 @@ pub(crate) fn find_browser_split_mut(
     }
 }
 
-
-pub(crate) fn find_browser_leaf_id_for_tab(node: &BrowserNode, tab_id: BrowserTabId) -> Option<BrowserPaneId> {
+pub(crate) fn find_browser_leaf_id_for_tab(
+    node: &BrowserNode,
+    tab_id: BrowserTabId,
+) -> Option<BrowserPaneId> {
     match node {
         BrowserNode::Leaf(leaf) if leaf.tab_group.has_tab(tab_id) => Some(leaf.pane_id),
         BrowserNode::Leaf(_) => None,
@@ -126,11 +125,9 @@ pub(crate) fn find_browser_leaf_id_for_tab(node: &BrowserNode, tab_id: BrowserTa
     }
 }
 
-
 pub(crate) fn browser_node_contains_pane(node: &BrowserNode, pane_id: BrowserPaneId) -> bool {
     find_browser_leaf(node, pane_id).is_some()
 }
-
 
 pub(crate) fn insert_browser_leaf_split(
     node: &mut BrowserNode,
@@ -184,7 +181,6 @@ pub(crate) fn insert_browser_leaf_split(
     }
 }
 
-
 pub(crate) fn collapse_empty_browser_leaf(node: &mut BrowserNode, pane_id: BrowserPaneId) -> bool {
     let mut replacement = None;
     let is_empty = match node {
@@ -207,13 +203,11 @@ pub(crate) fn collapse_empty_browser_leaf(node: &mut BrowserNode, pane_id: Brows
     }
 }
 
-
 pub(crate) fn take_browser_node(node: &mut Box<BrowserNode>) -> BrowserNode {
     let mut replacement = Box::new(browser_dummy_node());
     std::mem::swap(node, &mut replacement);
     *replacement
 }
-
 
 pub(crate) fn browser_dummy_node() -> BrowserNode {
     BrowserNode::Leaf(BrowserLeaf {
@@ -224,7 +218,6 @@ pub(crate) fn browser_dummy_node() -> BrowserNode {
         },
     })
 }
-
 
 pub(crate) fn browser_node_axis_pane_count(node: &BrowserNode, axis: WorkspaceSplitAxis) -> usize {
     match node {

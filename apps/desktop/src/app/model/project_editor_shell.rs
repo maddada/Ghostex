@@ -5,13 +5,11 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProjectEditorLifecycleState {
     Awake,
     Sleeping,
 }
-
 
 impl ProjectEditorLifecycleState {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -30,13 +28,11 @@ impl ProjectEditorLifecycleState {
     }
 }
 
-
 #[derive(Clone, Copy)]
 pub(crate) struct ProjectEditorModeLifecycle {
     pub(crate) state: ProjectEditorLifecycleState,
     pub(crate) recency: u64,
 }
-
 
 #[derive(Default)]
 pub(crate) struct ProjectEditorAutoSleepEpochs {
@@ -46,7 +42,6 @@ pub(crate) struct ProjectEditorAutoSleepEpochs {
     pub(crate) automate: u64,
     pub(crate) manage: u64,
 }
-
 
 impl ProjectEditorAutoSleepEpochs {
     pub(crate) fn epoch(&self, mode: TitlebarMode) -> Option<u64> {
@@ -74,7 +69,6 @@ impl ProjectEditorAutoSleepEpochs {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProjectEditorAutoSleepPolicySnapshot {
     pub(crate) source: Option<Duration>,
@@ -84,14 +78,15 @@ pub(crate) struct ProjectEditorAutoSleepPolicySnapshot {
     pub(crate) manage: Option<Duration>,
 }
 
-
 impl ProjectEditorAutoSleepPolicySnapshot {
     pub(crate) fn read_current() -> Self {
         let settings = shared_settings::shared_sidebar_settings_snapshot();
         Self::from_shared_settings(&settings)
     }
 
-    pub(crate) fn from_shared_settings(settings: &shared_settings::SharedSidebarSettingsSnapshot) -> Self {
+    pub(crate) fn from_shared_settings(
+        settings: &shared_settings::SharedSidebarSettingsSnapshot,
+    ) -> Self {
         Self {
             source: project_editor_auto_sleep_duration(TitlebarMode::Source, settings),
             browser: project_editor_auto_sleep_duration(TitlebarMode::Browser, settings),
@@ -112,7 +107,6 @@ impl ProjectEditorAutoSleepPolicySnapshot {
         }
     }
 }
-
 
 /*
 CDXC:GPUIProjectViewMemory 2026-08-07:
@@ -137,7 +131,6 @@ pub(crate) struct GpuiProjectViewState {
     pub(crate) companion_focused_slot: ProjectEditorCompanionTerminalSlot,
 }
 
-
 pub(crate) struct ProjectEditorShellModel {
     pub(crate) left_companion_visible: bool,
     pub(crate) left_companion_width_ratio: f32,
@@ -150,7 +143,6 @@ pub(crate) struct ProjectEditorShellModel {
     pub(crate) manage_lifecycle: ProjectEditorModeLifecycle,
     pub(crate) next_lifecycle_recency: u64,
 }
-
 
 impl ProjectEditorShellModel {
     pub(crate) fn shell_default() -> Self {
@@ -210,7 +202,10 @@ impl ProjectEditorShellModel {
         }
     }
 
-    pub(crate) fn lifecycle_mut(&mut self, mode: TitlebarMode) -> Option<&mut ProjectEditorModeLifecycle> {
+    pub(crate) fn lifecycle_mut(
+        &mut self,
+        mode: TitlebarMode,
+    ) -> Option<&mut ProjectEditorModeLifecycle> {
         match mode {
             TitlebarMode::Source => Some(&mut self.source_lifecycle),
             TitlebarMode::Browser => Some(&mut self.browser_lifecycle),
@@ -378,7 +373,6 @@ impl ProjectEditorShellModel {
     }
 }
 
-
 impl ProjectEditorModeLifecycle {
     pub(crate) fn sleeping() -> Self {
         Self {
@@ -387,7 +381,6 @@ impl ProjectEditorModeLifecycle {
         }
     }
 }
-
 
 pub(crate) fn project_editor_modes() -> [TitlebarMode; 5] {
     [
@@ -399,8 +392,9 @@ pub(crate) fn project_editor_modes() -> [TitlebarMode; 5] {
     ]
 }
 
-
-pub(crate) fn project_view_state_to_shell_state_json(state: &GpuiProjectViewState) -> serde_json::Value {
+pub(crate) fn project_view_state_to_shell_state_json(
+    state: &GpuiProjectViewState,
+) -> serde_json::Value {
     serde_json::json!({
         "activeMode": state.active_mode.element_slug(),
         "companionVisible": state.companion_visible,
@@ -420,8 +414,9 @@ pub(crate) fn project_view_state_to_shell_state_json(state: &GpuiProjectViewStat
     })
 }
 
-
-pub(crate) fn project_view_state_from_shell_state(value: &serde_json::Value) -> Option<GpuiProjectViewState> {
+pub(crate) fn project_view_state_from_shell_state(
+    value: &serde_json::Value,
+) -> Option<GpuiProjectViewState> {
     let object = value.as_object()?;
     let active_mode = object
         .get("activeMode")
@@ -451,8 +446,9 @@ pub(crate) fn project_view_state_from_shell_state(value: &serde_json::Value) -> 
     })
 }
 
-
-pub(crate) fn project_editor_shell_to_shell_state_json(model: &ProjectEditorShellModel) -> serde_json::Value {
+pub(crate) fn project_editor_shell_to_shell_state_json(
+    model: &ProjectEditorShellModel,
+) -> serde_json::Value {
     serde_json::json!({
         "leftCompanionVisible": model.left_companion_visible,
         "leftCompanionWidthRatio": json_number_f32(project_editor_companion_width_ratio(
@@ -466,7 +462,6 @@ pub(crate) fn project_editor_shell_to_shell_state_json(model: &ProjectEditorShel
         "nextLifecycleRecency": model.next_lifecycle_recency,
     })
 }
-
 
 pub(crate) fn project_editor_shell_from_shell_state(
     value: &serde_json::Value,
@@ -510,7 +505,6 @@ pub(crate) fn project_editor_shell_from_shell_state(
     Some(model)
 }
 
-
 pub(crate) fn project_editor_lifecycle_to_shell_state_json(
     model: &ProjectEditorShellModel,
 ) -> serde_json::Value {
@@ -528,7 +522,6 @@ pub(crate) fn project_editor_lifecycle_to_shell_state_json(
             .collect(),
     )
 }
-
 
 pub(crate) fn project_editor_lifecycle_from_shell_state(
     value: &serde_json::Value,
@@ -558,11 +551,9 @@ pub(crate) fn project_editor_lifecycle_from_shell_state(
     )
 }
 
-
 pub(crate) fn project_editor_companion_width_ratio(ratio: f32) -> f32 {
     ratio.clamp(0.10, 0.85)
 }
-
 
 pub(crate) fn project_editor_companion_width_ratio_for_span(ratio: f32, content_span: f32) -> f32 {
     let content_span = content_span.max(1.0);

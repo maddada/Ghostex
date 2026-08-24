@@ -1,14 +1,11 @@
-import type { Dispatch, SetStateAction } from "react";
-import {
-  hashSidebarCollapseDebugId,
-  summarizeSidebarCollapseDebugGroupIds,
-} from "../sidebar-collapse-state-debug";
-import type { ProjectSessionListCollapsedState } from "../project-session-list-toggle";
+import type { Dispatch, SetStateAction } from 'react';
+import { hashSidebarCollapseDebugId, summarizeSidebarCollapseDebugGroupIds } from '../sidebar-collapse-state-debug';
+import type { ProjectSessionListCollapsedState } from '../project-session-list-toggle';
 
 export type SidebarCollapseStateLogger = (
   event: string,
   details: Record<string, unknown>,
-  options?: { enabled?: boolean; },
+  options?: { enabled?: boolean }
 ) => void;
 
 export type SidebarCollapseActionsOptions = {
@@ -40,9 +37,9 @@ export function useSidebarCollapseActions({
   setCollapsedRemoteMachineSectionsById,
 }: SidebarCollapseActionsOptions) {
   const setGroupCollapsed = (groupId: string, collapsed: boolean) => {
-    const wasCollapsed = collapsedGroupsById[ groupId ] === true;
+    const wasCollapsed = collapsedGroupsById[groupId] === true;
     const collapsedGroupCountBefore = Object.keys(collapsedGroupsById).length;
-    postSidebarCollapseStateLog("groupToggle", {
+    postSidebarCollapseStateLog('groupToggle', {
       changed: wasCollapsed !== collapsed,
       collapsed,
       collapsedGroupCountBefore,
@@ -54,22 +51,22 @@ export function useSidebarCollapseActions({
     });
     setCollapsedGroupsById((previous) => {
       if (collapsed) {
-        if (previous[ groupId ]) {
+        if (previous[groupId]) {
           return previous;
         }
 
         return {
           ...previous,
-          [ groupId ]: true,
+          [groupId]: true,
         };
       }
 
-      if (!previous[ groupId ]) {
+      if (!previous[groupId]) {
         return previous;
       }
 
       const next = { ...previous };
-      delete next[ groupId ];
+      delete next[groupId];
       return next;
     });
   };
@@ -78,9 +75,9 @@ export function useSidebarCollapseActions({
     const targetGroupSet = new Set(groupIds);
     const collapsedGroupCountBefore = Object.keys(collapsedGroupsById).length;
     const changedGroupCount = groupIds.filter(
-      (groupId) => collapsedGroupsById[ groupId ] !== (collapsed ? true : undefined),
+      (groupId) => collapsedGroupsById[groupId] !== (collapsed ? true : undefined)
     ).length;
-    postSidebarCollapseStateLog("groupsBulkToggle", {
+    postSidebarCollapseStateLog('groupsBulkToggle', {
       changedGroupCount,
       collapsed,
       collapsedGroupCountBefore,
@@ -94,8 +91,8 @@ export function useSidebarCollapseActions({
         const next = { ...previous };
         let changed = false;
         for (const groupId of groupIds) {
-          if (!next[ groupId ]) {
-            next[ groupId ] = true;
+          if (!next[groupId]) {
+            next[groupId] = true;
             changed = true;
           }
         }
@@ -104,9 +101,9 @@ export function useSidebarCollapseActions({
 
       let next: Record<string, true> | undefined;
       for (const groupId of groupIds) {
-        if (previous[ groupId ]) {
+        if (previous[groupId]) {
           next ??= { ...previous };
-          delete next[ groupId ];
+          delete next[groupId];
         }
       }
       return next ?? previous;
@@ -116,13 +113,13 @@ export function useSidebarCollapseActions({
   const setProjectCollectionCollapsed = (collectionKey: string, collapsed: boolean) => {
     setCollapsedProjectCollectionsByKey((previous) => {
       if (collapsed) {
-        return previous[ collectionKey ] ? previous : { ...previous, [ collectionKey ]: true };
+        return previous[collectionKey] ? previous : { ...previous, [collectionKey]: true };
       }
-      if (!previous[ collectionKey ]) {
+      if (!previous[collectionKey]) {
         return previous;
       }
       const next = { ...previous };
-      delete next[ collectionKey ];
+      delete next[collectionKey];
       return next;
     });
   };
@@ -130,20 +127,20 @@ export function useSidebarCollapseActions({
   const setProjectSessionListCollapsed = (projectId: string, collapsed: boolean) => {
     setCollapsedProjectSessionListsById((previous) => {
       if (collapsed) {
-        return previous[ projectId ] ? previous : { ...previous, [ projectId ]: true };
+        return previous[projectId] ? previous : { ...previous, [projectId]: true };
       }
-      if (!previous[ projectId ]) {
+      if (!previous[projectId]) {
         return previous;
       }
       const next = { ...previous };
-      delete next[ projectId ];
+      delete next[projectId];
       return next;
     });
   };
 
   const setRemoteMachineSectionCollapsed = (machineId: string, collapsed: boolean) => {
-    const wasCollapsed = collapsedRemoteMachineSectionsById[ machineId ] === true;
-    postSidebarCollapseStateLog("remoteMachineSectionToggle", {
+    const wasCollapsed = collapsedRemoteMachineSectionsById[machineId] === true;
+    postSidebarCollapseStateLog('remoteMachineSectionToggle', {
       changed: wasCollapsed !== collapsed,
       collapsed,
       machineHash: hashSidebarCollapseDebugId(machineId),
@@ -157,22 +154,22 @@ export function useSidebarCollapseActions({
      */
     setCollapsedRemoteMachineSectionsById((previous) => {
       if (collapsed) {
-        if (previous[ machineId ]) {
+        if (previous[machineId]) {
           return previous;
         }
 
         return {
           ...previous,
-          [ machineId ]: true,
+          [machineId]: true,
         };
       }
 
-      if (!previous[ machineId ]) {
+      if (!previous[machineId]) {
         return previous;
       }
 
       const next = { ...previous };
-      delete next[ machineId ];
+      delete next[machineId];
       return next;
     });
   };

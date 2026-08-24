@@ -11,26 +11,20 @@
  * rather than comparing incomparable digests.
  */
 
-import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
-import {
-  NODES,
-  nodeIdsInDependencyOrder,
-  nodePathspecs,
-  nodeValues,
-  nodeDefinition,
-} from "./product-inputs.mjs";
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { NODES, nodeIdsInDependencyOrder, nodePathspecs, nodeValues, nodeDefinition } from './product-inputs.mjs';
 
 /* fp4 (2026-08-23): added the linux-tar-x64 product to the input map. */
-export const FINGERPRINT_ALGORITHM_REVISION = "fp4";
+export const FINGERPRINT_ALGORITHM_REVISION = 'fp4';
 
-const EXCLUDE_PREFIX = ":(exclude)";
-const PROJECTIONS = new Set(["package-json"]);
+const EXCLUDE_PREFIX = ':(exclude)';
+const PROJECTIONS = new Set(['package-json']);
 
 function sha256Hex(update) {
-  const digest = createHash("sha256");
+  const digest = createHash('sha256');
   update(digest);
-  return digest.digest("hex");
+  return digest.digest('hex');
 }
 
 /*
@@ -42,9 +36,9 @@ function sha256Hex(update) {
 export function normalizePathspec(pathspec) {
   const negative = pathspec.startsWith(EXCLUDE_PREFIX);
   let prefix = negative ? pathspec.slice(EXCLUDE_PREFIX.length) : pathspec;
-  prefix = prefix.replace(/\/\*\*$/u, "").replace(/\/$/u, "");
+  prefix = prefix.replace(/\/\*\*$/u, '').replace(/\/$/u, '');
   if (prefix.length === 0) throw new Error(`Empty pathspec: ${JSON.stringify(pathspec)}`);
-  if (prefix.includes("*") || prefix.includes("?") || prefix.includes("[")) {
+  if (prefix.includes('*') || prefix.includes('?') || prefix.includes('[')) {
     throw new Error(`Unsupported glob in pathspec ${JSON.stringify(pathspec)}; use "dir/**" or an exact path`);
   }
   return { negative, prefix };
@@ -57,9 +51,9 @@ function matchesPrefix(entryPath, prefix) {
 /* Parse `git ls-tree -r --full-tree -z <sha>` output into sorted entries. */
 export function parseTreeEntries(output) {
   const entries = [];
-  for (const record of output.split("\0")) {
+  for (const record of output.split('\0')) {
     if (!record) continue;
-    const tabIndex = record.indexOf("\t");
+    const tabIndex = record.indexOf('\t');
     if (tabIndex < 0) throw new Error(`Malformed git ls-tree record: ${JSON.stringify(record)}`);
     const [mode, type, objectId] = record.slice(0, tabIndex).split(/\s+/u);
     const entryPath = record.slice(tabIndex + 1);
@@ -74,33 +68,33 @@ export function parseTreeEntries(output) {
 
 export function createGitTreeReader({ repoRoot = process.cwd(), run = spawnSync } = {}) {
   const treeCache = new Map();
-  const gitArgs = (args) => ["-C", repoRoot, ...args];
-  const capture = (args, { encoding = "utf8", maxBuffer = 256 * 1024 * 1024 } = {}) => {
-    const result = run("git", gitArgs(args), { encoding, maxBuffer });
+  const gitArgs = (args) => ['-C', repoRoot, ...args];
+  const capture = (args, { encoding = 'utf8', maxBuffer = 256 * 1024 * 1024 } = {}) => {
+    const result = run('git', gitArgs(args), { encoding, maxBuffer });
     if (result.error) throw result.error;
     if (result.status !== 0) {
-      const detail = (result.stderr ?? "").toString().trim();
-      throw new Error(`git ${args.join(" ")} failed${detail ? `: ${detail}` : ""}`);
+      const detail = (result.stderr ?? '').toString().trim();
+      throw new Error(`git ${args.join(' ')} failed${detail ? `: ${detail}` : ''}`);
     }
     return result.stdout;
   };
   return {
     isAncestor(ancestor, descendant) {
-      const result = run("git", gitArgs(["merge-base", "--is-ancestor", ancestor, descendant]), { encoding: "utf8" });
+      const result = run('git', gitArgs(['merge-base', '--is-ancestor', ancestor, descendant]), { encoding: 'utf8' });
       if (result.error) throw result.error;
       return result.status === 0;
     },
     listTree(sourceSha) {
       if (!treeCache.has(sourceSha)) {
-        treeCache.set(sourceSha, parseTreeEntries(capture(["ls-tree", "-r", "--full-tree", "-z", sourceSha])));
+        treeCache.set(sourceSha, parseTreeEntries(capture(['ls-tree', '-r', '--full-tree', '-z', sourceSha])));
       }
       return treeCache.get(sourceSha);
     },
     readObject(objectId) {
-      return Buffer.from(capture(["cat-file", "blob", objectId], { encoding: "buffer" }));
+      return Buffer.from(capture(['cat-file', 'blob', objectId], { encoding: 'buffer' }));
     },
     resolve(revision) {
-      return capture(["rev-parse", revision]).trim();
+      return capture(['rev-parse', revision]).trim();
     },
   };
 }
@@ -111,7 +105,7 @@ export function createGitTreeReader({ repoRoot = process.cwd(), run = spawnSync 
  * that are not version-stamped.
  */
 export function projectPackageJson(contents) {
-  const parsed = JSON.parse(contents.toString("utf8"));
+  const parsed = JSON.parse(contents.toString('utf8'));
   const projected = {
     dependencies: parsed.dependencies ?? {},
     devDependencies: parsed.devDependencies ?? {},
@@ -123,18 +117,18 @@ export function projectPackageJson(contents) {
 }
 
 export function canonicalJson(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(',')}]`;
   const keys = Object.keys(value).sort();
-  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
 }
 
 function entryIdentity(entry, projection, readObject) {
   if (!projection) return entry.objectId;
   if (!PROJECTIONS.has(projection)) throw new Error(`Unknown fingerprint projection: ${projection}`);
-  if (entry.type !== "blob") throw new Error(`Projection ${projection} requires a blob at ${entry.path}`);
+  if (entry.type !== 'blob') throw new Error(`Projection ${projection} requires a blob at ${entry.path}`);
   const contents = readObject(entry.objectId);
-  const normalized = projection === "package-json" ? projectPackageJson(contents) : contents.toString("utf8");
+  const normalized = projection === 'package-json' ? projectPackageJson(contents) : contents.toString('utf8');
   return `proj:${projection}:${sha256Hex((digest) => digest.update(normalized))}`;
 }
 
@@ -168,7 +162,7 @@ export function resolvePathspecs({ entries, pathspecs, readObject }) {
 
   const identityCache = new Map();
   const identityFor = (entry, projection) => {
-    const key = `${entry.path}\0${projection ?? ""}`;
+    const key = `${entry.path}\0${projection ?? ''}`;
     if (!identityCache.has(key)) identityCache.set(key, entryIdentity(entry, projection, readObject));
     return identityCache.get(key);
   };
@@ -192,7 +186,7 @@ export function resolvePathspecs({ entries, pathspecs, readObject }) {
     });
   }
   const unionRecords = [...union.values()].sort((left, right) =>
-    left.entry.path < right.entry.path ? -1 : left.entry.path > right.entry.path ? 1 : 0,
+    left.entry.path < right.entry.path ? -1 : left.entry.path > right.entry.path ? 1 : 0
   );
   return { byPathspec, negatives, unionRecords };
 }
@@ -227,7 +221,7 @@ export function computeNodeFingerprint({
     for (const negative of resolved.negatives) digest.update(`exclude\0${negative.declaration.pathspec}\0`);
     for (const key of Object.keys(values).sort()) digest.update(`value\0${key}\0${values[key]}\0`);
     for (const key of Object.keys(composed).sort()) digest.update(`composed\0${key}\0${composed[key]}\0`);
-    digest.update(`version\0${versionStamped ? releaseVersion : "(none)"}\0`);
+    digest.update(`version\0${versionStamped ? releaseVersion : '(none)'}\0`);
   });
   return {
     fingerprint,
@@ -321,12 +315,12 @@ export function explainFingerprintDifference(current, baseline) {
 
 export function describeFingerprintDifference(difference) {
   const parts = [];
-  if (difference.paths.length > 0) parts.push(difference.paths.join(", "));
-  if (difference.values.length > 0) parts.push(`values ${difference.values.join(", ")}`);
-  if (difference.composed.length > 0) parts.push(`embedded ${difference.composed.join(", ")}`);
-  return parts.join("; ");
+  if (difference.paths.length > 0) parts.push(difference.paths.join(', '));
+  if (difference.values.length > 0) parts.push(`values ${difference.values.join(', ')}`);
+  if (difference.composed.length > 0) parts.push(`embedded ${difference.composed.join(', ')}`);
+  return parts.join('; ');
 }
 
 export function shortFingerprint(fingerprint) {
-  return typeof fingerprint === "string" ? fingerprint.slice(0, 12) : "";
+  return typeof fingerprint === 'string' ? fingerprint.slice(0, 12) : '';
 }

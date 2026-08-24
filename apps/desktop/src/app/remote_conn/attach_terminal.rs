@@ -540,6 +540,4 @@ impl GhostexGpuiApp {
         );
         cx.notify();
     }
-
 }
-

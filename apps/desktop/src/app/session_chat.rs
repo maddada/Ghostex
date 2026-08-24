@@ -1060,7 +1060,10 @@ impl GhostexGpuiApp {
     instead of waiting for the next unrelated event, and drop the request if
     Docs never comes up.
     */
-    pub(crate) fn schedule_pending_docs_file_open_delivery(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn schedule_pending_docs_file_open_delivery(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         cx.spawn(async move |this, cx| {
             for _ in 0..PENDING_DOCS_FILE_OPEN_MAX_ATTEMPTS {
                 cx.background_executor()

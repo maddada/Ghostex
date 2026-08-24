@@ -97,7 +97,11 @@ impl GpuiAgentsHubCatalogBuilder {
         }));
     }
 
-    pub(crate) fn file_item(&mut self, candidate_path: &Path, root_path: &Path) -> Option<serde_json::Value> {
+    pub(crate) fn file_item(
+        &mut self,
+        candidate_path: &Path,
+        root_path: &Path,
+    ) -> Option<serde_json::Value> {
         let resolved = self.valid_catalog_file(candidate_path)?;
         if self.seen_files.contains(&resolved) {
             return None;
@@ -859,4 +863,3 @@ pub(crate) fn gpui_empty_agents_hub_catalog_build() -> GpuiAgentsHubCatalogBuild
         open_paths: HashSet::new(),
     }
 }
-

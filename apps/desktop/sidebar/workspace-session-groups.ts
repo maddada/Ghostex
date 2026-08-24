@@ -14,11 +14,10 @@
  * MAX_GROUP_COUNT groups including its implicit main (project) group.
  */
 
-export const GPUI_WORKSPACE_SESSION_GROUPS_STORAGE_KEY =
-  "ghostex-gpui-workspace-session-groups";
+export const GPUI_WORKSPACE_SESSION_GROUPS_STORAGE_KEY = 'ghostex-gpui-workspace-session-groups';
 export const GPUI_WORKSPACE_SESSION_GROUP_MAX_COUNT = 20;
 
-const GPUI_WORKSPACE_SESSION_SUBGROUP_ID_PREFIX = "gpui-wsg:";
+const GPUI_WORKSPACE_SESSION_SUBGROUP_ID_PREFIX = 'gpui-wsg:';
 
 export type GpuiWorkspaceSessionSubgroup = {
   groupId: string;
@@ -40,21 +39,16 @@ export function createEmptyGpuiWorkspaceSessionGroupsState(): GpuiWorkspaceSessi
   return { projectOrder: [], projects: {} };
 }
 
-export function createGpuiWorkspaceSessionSubgroupId(
-  projectId: string,
-  groupId: string,
-): string {
+export function createGpuiWorkspaceSessionSubgroupId(projectId: string, groupId: string): string {
   return `${GPUI_WORKSPACE_SESSION_SUBGROUP_ID_PREFIX}${encodeURIComponent(projectId)}:${groupId}`;
 }
 
-export function parseGpuiWorkspaceSessionSubgroupId(
-  value: string,
-): { groupId: string; projectId: string } | undefined {
+export function parseGpuiWorkspaceSessionSubgroupId(value: string): { groupId: string; projectId: string } | undefined {
   if (!value.startsWith(GPUI_WORKSPACE_SESSION_SUBGROUP_ID_PREFIX)) {
     return undefined;
   }
   const rest = value.slice(GPUI_WORKSPACE_SESSION_SUBGROUP_ID_PREFIX.length);
-  const separator = rest.indexOf(":");
+  const separator = rest.indexOf(':');
   if (separator <= 0 || separator === rest.length - 1) {
     return undefined;
   }
@@ -68,17 +62,14 @@ export function parseGpuiWorkspaceSessionSubgroupId(
   }
 }
 
-function projectGroups(
-  state: GpuiWorkspaceSessionGroupsState,
-  projectId: string,
-): GpuiProjectWorkspaceGroups {
+function projectGroups(state: GpuiWorkspaceSessionGroupsState, projectId: string): GpuiProjectWorkspaceGroups {
   return state.projects[projectId] ?? { groups: [], nextGroupNumber: 2 };
 }
 
 function withProjectGroups(
   state: GpuiWorkspaceSessionGroupsState,
   projectId: string,
-  next: GpuiProjectWorkspaceGroups,
+  next: GpuiProjectWorkspaceGroups
 ): GpuiWorkspaceSessionGroupsState {
   const projects = { ...state.projects };
   if (next.groups.length === 0 && next.nextGroupNumber === 2) {
@@ -91,7 +82,7 @@ function withProjectGroups(
 
 export function getGpuiWorkspaceSessionSubgroups(
   state: GpuiWorkspaceSessionGroupsState,
-  projectId: string,
+  projectId: string
 ): readonly GpuiWorkspaceSessionSubgroup[] {
   return state.projects[projectId]?.groups ?? [];
 }
@@ -99,17 +90,15 @@ export function getGpuiWorkspaceSessionSubgroups(
 export function findGpuiWorkspaceSessionSubgroupForSession(
   state: GpuiWorkspaceSessionGroupsState,
   projectId: string,
-  sessionId: string,
+  sessionId: string
 ): GpuiWorkspaceSessionSubgroup | undefined {
-  return projectGroups(state, projectId).groups.find((group) =>
-    group.sessionIds.includes(sessionId),
-  );
+  return projectGroups(state, projectId).groups.find((group) => group.sessionIds.includes(sessionId));
 }
 
 export function createGpuiWorkspaceSessionSubgroup(
   state: GpuiWorkspaceSessionGroupsState,
   projectId: string,
-  initialSessionId?: string,
+  initialSessionId?: string
 ): { groupId?: string; state: GpuiWorkspaceSessionGroupsState } {
   const current = projectGroups(state, projectId);
   if (current.groups.length + 1 >= GPUI_WORKSPACE_SESSION_GROUP_MAX_COUNT) {
@@ -117,9 +106,7 @@ export function createGpuiWorkspaceSessionSubgroup(
   }
   const groupNumber = current.nextGroupNumber;
   const groupId = `group-${groupNumber}`;
-  const withoutSession = initialSessionId
-    ? removeSessionFromSubgroups(current, initialSessionId)
-    : current;
+  const withoutSession = initialSessionId ? removeSessionFromSubgroups(current, initialSessionId) : current;
   const next: GpuiProjectWorkspaceGroups = {
     groups: [
       ...withoutSession.groups,
@@ -138,7 +125,7 @@ export function renameGpuiWorkspaceSessionSubgroup(
   state: GpuiWorkspaceSessionGroupsState,
   projectId: string,
   groupId: string,
-  title: string,
+  title: string
 ): GpuiWorkspaceSessionGroupsState {
   const trimmed = title.trim();
   if (!trimmed) {
@@ -151,9 +138,7 @@ export function renameGpuiWorkspaceSessionSubgroup(
   const next: GpuiProjectWorkspaceGroups = {
     ...current,
     groups: current.groups.map((group) =>
-      group.groupId === groupId && group.title !== trimmed
-        ? { ...group, title: trimmed }
-        : group,
+      group.groupId === groupId && group.title !== trimmed ? { ...group, title: trimmed } : group
     ),
   };
   return withProjectGroups(state, projectId, next);
@@ -162,7 +147,7 @@ export function renameGpuiWorkspaceSessionSubgroup(
 export function removeGpuiWorkspaceSessionSubgroup(
   state: GpuiWorkspaceSessionGroupsState,
   projectId: string,
-  groupId: string,
+  groupId: string
 ): GpuiWorkspaceSessionGroupsState {
   const current = projectGroups(state, projectId);
   if (!current.groups.some((group) => group.groupId === groupId)) {
@@ -180,7 +165,7 @@ export function moveGpuiWorkspaceSessionToSubgroup(
   projectId: string,
   sessionId: string,
   targetGroupId: string | undefined,
-  targetIndex?: number,
+  targetIndex?: number
 ): GpuiWorkspaceSessionGroupsState {
   const current = projectGroups(state, projectId);
   const withoutSession = removeSessionFromSubgroups(current, sessionId);
@@ -198,9 +183,7 @@ export function moveGpuiWorkspaceSessionToSubgroup(
       }
       const sessionIds = [...group.sessionIds];
       const clampedIndex =
-        targetIndex === undefined
-          ? sessionIds.length
-          : Math.max(0, Math.min(targetIndex, sessionIds.length));
+        targetIndex === undefined ? sessionIds.length : Math.max(0, Math.min(targetIndex, sessionIds.length));
       sessionIds.splice(clampedIndex, 0, sessionId);
       return { ...group, sessionIds };
     }),
@@ -211,7 +194,7 @@ export function moveGpuiWorkspaceSessionToSubgroup(
 export function syncGpuiWorkspaceSessionSubgroupOrder(
   state: GpuiWorkspaceSessionGroupsState,
   projectId: string,
-  orderedGroupIds: readonly string[],
+  orderedGroupIds: readonly string[]
 ): GpuiWorkspaceSessionGroupsState {
   const current = projectGroups(state, projectId);
   if (current.groups.length === 0) {
@@ -234,7 +217,7 @@ export function syncGpuiWorkspaceSessionOrderInSubgroup(
   state: GpuiWorkspaceSessionGroupsState,
   projectId: string,
   groupId: string,
-  sessionIds: readonly string[],
+  sessionIds: readonly string[]
 ): GpuiWorkspaceSessionGroupsState {
   const current = projectGroups(state, projectId);
   const group = current.groups.find((candidate) => candidate.groupId === groupId);
@@ -248,9 +231,7 @@ export function syncGpuiWorkspaceSessionOrderInSubgroup(
   const next: GpuiProjectWorkspaceGroups = {
     ...current,
     groups: current.groups.map((candidate) =>
-      candidate.groupId === groupId
-        ? { ...candidate, sessionIds: [...ordered, ...remaining] }
-        : candidate,
+      candidate.groupId === groupId ? { ...candidate, sessionIds: [...ordered, ...remaining] } : candidate
     ),
   };
   return withProjectGroups(state, projectId, next);
@@ -259,7 +240,7 @@ export function syncGpuiWorkspaceSessionOrderInSubgroup(
 export function pruneGpuiWorkspaceSessionSubgroups(
   state: GpuiWorkspaceSessionGroupsState,
   projectId: string,
-  existingSessionIds: ReadonlySet<string>,
+  existingSessionIds: ReadonlySet<string>
 ): GpuiWorkspaceSessionGroupsState {
   const current = state.projects[projectId];
   if (!current) {
@@ -267,9 +248,7 @@ export function pruneGpuiWorkspaceSessionSubgroups(
   }
   let changed = false;
   const groups = current.groups.map((group) => {
-    const sessionIds = group.sessionIds.filter((sessionId) =>
-      existingSessionIds.has(sessionId),
-    );
+    const sessionIds = group.sessionIds.filter((sessionId) => existingSessionIds.has(sessionId));
     if (sessionIds.length === group.sessionIds.length) {
       return group;
     }
@@ -284,7 +263,7 @@ export function pruneGpuiWorkspaceSessionSubgroups(
 
 export function syncGpuiWorkspaceProjectOrder(
   state: GpuiWorkspaceSessionGroupsState,
-  orderedProjectIds: readonly string[],
+  orderedProjectIds: readonly string[]
 ): GpuiWorkspaceSessionGroupsState {
   const deduped = [...new Set(orderedProjectIds)];
   if (
@@ -298,7 +277,7 @@ export function syncGpuiWorkspaceProjectOrder(
 
 export function orderGpuiWorkspaceProjects<TProject extends { projectId: string }>(
   projects: readonly TProject[],
-  projectOrder: readonly string[],
+  projectOrder: readonly string[]
 ): TProject[] {
   if (projectOrder.length === 0) {
     return [...projects];
@@ -319,7 +298,7 @@ export function orderGpuiWorkspaceProjects<TProject extends { projectId: string 
 
 function removeSessionFromSubgroups(
   current: GpuiProjectWorkspaceGroups,
-  sessionId: string,
+  sessionId: string
 ): GpuiProjectWorkspaceGroups {
   if (!current.groups.some((group) => group.sessionIds.includes(sessionId))) {
     return current;
@@ -329,25 +308,21 @@ function removeSessionFromSubgroups(
     groups: current.groups.map((group) =>
       group.sessionIds.includes(sessionId)
         ? { ...group, sessionIds: group.sessionIds.filter((id) => id !== sessionId) }
-        : group,
+        : group
     ),
   };
 }
 
-export function parseGpuiWorkspaceSessionGroupsState(
-  parsed: unknown,
-): GpuiWorkspaceSessionGroupsState {
-  if (typeof parsed !== "object" || parsed === null) {
+export function parseGpuiWorkspaceSessionGroupsState(parsed: unknown): GpuiWorkspaceSessionGroupsState {
+  if (typeof parsed !== 'object' || parsed === null) {
     return createEmptyGpuiWorkspaceSessionGroupsState();
   }
   const record = parsed as { projectOrder?: unknown; projects?: unknown };
   const projectOrder = Array.isArray(record.projectOrder)
-    ? record.projectOrder.filter(
-        (value): value is string => typeof value === "string" && value.length > 0,
-      )
+    ? record.projectOrder.filter((value): value is string => typeof value === 'string' && value.length > 0)
     : [];
   const projects: Record<string, GpuiProjectWorkspaceGroups> = {};
-  if (typeof record.projects === "object" && record.projects !== null) {
+  if (typeof record.projects === 'object' && record.projects !== null) {
     for (const [projectId, value] of Object.entries(record.projects)) {
       const normalized = normalizeStoredProjectGroups(value);
       if (normalized) {
@@ -358,9 +333,7 @@ export function parseGpuiWorkspaceSessionGroupsState(
   return { projectOrder, projects };
 }
 
-export function isEmptyGpuiWorkspaceSessionGroupsState(
-  state: GpuiWorkspaceSessionGroupsState,
-): boolean {
+export function isEmptyGpuiWorkspaceSessionGroupsState(state: GpuiWorkspaceSessionGroupsState): boolean {
   return state.projectOrder.length === 0 && Object.keys(state.projects).length === 0;
 }
 
@@ -376,55 +349,46 @@ export function readStoredGpuiWorkspaceSessionGroupsState(): GpuiWorkspaceSessio
   }
 }
 
-export function writeStoredGpuiWorkspaceSessionGroupsState(
-  state: GpuiWorkspaceSessionGroupsState,
-): void {
+export function writeStoredGpuiWorkspaceSessionGroupsState(state: GpuiWorkspaceSessionGroupsState): void {
   try {
     if (state.projectOrder.length === 0 && Object.keys(state.projects).length === 0) {
       window.localStorage.removeItem(GPUI_WORKSPACE_SESSION_GROUPS_STORAGE_KEY);
       return;
     }
-    window.localStorage.setItem(
-      GPUI_WORKSPACE_SESSION_GROUPS_STORAGE_KEY,
-      JSON.stringify(state),
-    );
+    window.localStorage.setItem(GPUI_WORKSPACE_SESSION_GROUPS_STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Storage availability must never gate sidebar group behavior.
   }
 }
 
 function normalizeStoredProjectGroups(value: unknown): GpuiProjectWorkspaceGroups | undefined {
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== 'object' || value === null) {
     return undefined;
   }
   const record = value as { groups?: unknown; nextGroupNumber?: unknown };
   const groups: GpuiWorkspaceSessionSubgroup[] = [];
   if (Array.isArray(record.groups)) {
     for (const entry of record.groups) {
-      if (typeof entry !== "object" || entry === null) {
+      if (typeof entry !== 'object' || entry === null) {
         continue;
       }
       const group = entry as { groupId?: unknown; sessionIds?: unknown; title?: unknown };
-      if (typeof group.groupId !== "string" || !group.groupId) {
+      if (typeof group.groupId !== 'string' || !group.groupId) {
         continue;
       }
       groups.push({
         groupId: group.groupId,
         sessionIds: Array.isArray(group.sessionIds)
           ? group.sessionIds.filter(
-              (sessionId): sessionId is string =>
-                typeof sessionId === "string" && sessionId.length > 0,
+              (sessionId): sessionId is string => typeof sessionId === 'string' && sessionId.length > 0
             )
           : [],
-        title:
-          typeof group.title === "string" && group.title.trim()
-            ? group.title
-            : group.groupId,
+        title: typeof group.title === 'string' && group.title.trim() ? group.title : group.groupId,
       });
     }
   }
   const nextGroupNumber =
-    typeof record.nextGroupNumber === "number" &&
+    typeof record.nextGroupNumber === 'number' &&
     Number.isInteger(record.nextGroupNumber) &&
     record.nextGroupNumber >= 2
       ? record.nextGroupNumber
@@ -433,7 +397,7 @@ function normalizeStoredProjectGroups(value: unknown): GpuiProjectWorkspaceGroup
           ...groups.map((group) => {
             const match = /^group-(\d+)$/.exec(group.groupId);
             return match ? Number.parseInt(match[1], 10) + 1 : 2;
-          }),
+          })
         );
   if (groups.length === 0 && nextGroupNumber === 2) {
     return undefined;

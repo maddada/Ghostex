@@ -374,11 +374,7 @@ impl GhostexGpuiApp {
                         // main-window toast, so it would sit behind the modal
                         // that is still covering the window.
                         this.close_gpui_app_modal_window_and_restore_command_focus(cx);
-                        this.copy_path_for_disabled_project_workarea(
-                            &file_path,
-                            "Code",
-                            cx,
-                        );
+                        this.copy_path_for_disabled_project_workarea(&file_path, "Code", cx);
                         return;
                     }
                     let project_path = pending.project_path.clone();
@@ -505,5 +501,4 @@ impl GhostexGpuiApp {
         );
         self.dispatch_gpui_app_modal_toast("warning", "Unsupported on this OS", message, cx);
     }
-
 }

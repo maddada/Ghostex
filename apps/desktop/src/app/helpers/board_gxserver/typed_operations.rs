@@ -95,7 +95,10 @@ pub(crate) fn gxserver_post_typed_operation(
     Ok((status_code, gxserver_http_response_body(headers, body)?))
 }
 
-pub(crate) fn gxserver_get_typed_operation(path: &str, timeout: Duration) -> Result<(u16, String), String> {
+pub(crate) fn gxserver_get_typed_operation(
+    path: &str,
+    timeout: Duration,
+) -> Result<(u16, String), String> {
     /*
     CDXC:GPUISettingsStatusBridge 2026-06-24-11:40:
     GPUI Settings reads gxserver health through the same localhost/token/protocol boundary as typed POST operations. Health reads must stay GET-only, short-timeout, response-unlogged, and limited to `/api/` paths so Portless HUD hydration does not introduce a second daemon client.
@@ -199,7 +202,8 @@ pub(crate) fn reconcile_gpui_gxserver_agent_settings_with_daemon()
     }
 }
 
-pub(crate) fn read_gpui_gxserver_agent_settings() -> Result<GpuiGxserverReadAgentSettingsResult, String> {
+pub(crate) fn read_gpui_gxserver_agent_settings()
+-> Result<GpuiGxserverReadAgentSettingsResult, String> {
     /*
     CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-12:14:
     Startup/open-time reconciliation reads the daemon's canonical agent-settings row through the same typed localhost RPC envelope as save-time sync. Parse only `isPersisted`, `agentAcceptAllEnabled`, and `defaultPromptAgentId`; failures remain local `Result` values and never create fallback daemon state or leak raw gxserver responses.
@@ -412,4 +416,3 @@ pub(crate) fn gxserver_find_crlf(bytes: &[u8], start: usize) -> Option<usize> {
         .position(|window| window == b"\r\n")
         .map(|offset| start + offset)
 }
-

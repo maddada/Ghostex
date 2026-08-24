@@ -1,14 +1,14 @@
 export type BundledGhostexAgentSkillId =
-  | "browserUse"
-  | "embeddedBrowserUse"
-  | "computerUse"
-  | "agentOrchestration"
-  | "fable56Orchestration"
-  | "findPrevSession"
-  | "generateTitle"
-  | "moveCodexSession";
+  | 'browserUse'
+  | 'embeddedBrowserUse'
+  | 'computerUse'
+  | 'agentOrchestration'
+  | 'fable56Orchestration'
+  | 'findPrevSession'
+  | 'generateTitle'
+  | 'moveCodexSession';
 
-export type BundledGhostexAgentSkillTier = "recommended" | "optional";
+export type BundledGhostexAgentSkillTier = 'recommended' | 'optional';
 
 export type BundledGhostexAgentSkill = {
   command: string;
@@ -26,7 +26,7 @@ export type BundledGhostexAgentSkill = {
   tier: BundledGhostexAgentSkillTier;
 };
 
-export const GHOSTEX_CUA_PROJECT_URL = "https://github.com/trycua/cua";
+export const GHOSTEX_CUA_PROJECT_URL = 'https://github.com/trycua/cua';
 
 /**
  * CDXC:AgentSkills 2026-05-31-09:18:
@@ -41,77 +41,77 @@ export const GHOSTEX_CUA_PROJECT_URL = "https://github.com/trycua/cua";
  */
 export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] = [
   {
-    command: "ghostex computer-use install-skill",
+    command: 'ghostex computer-use install-skill',
     description:
-      "Teaches agents the Ghostex-named workflow for native macOS app automation through Cua Driver, including Accessibility and Screen Recording requirements.",
-    id: "computerUse",
-    name: "Ghostex Computer Use",
+      'Teaches agents the Ghostex-named workflow for native macOS app automation through Cua Driver, including Accessibility and Screen Recording requirements.',
+    id: 'computerUse',
+    name: 'Ghostex Computer Use',
     requiresCuaDriver: true,
-    skillName: "ghostex-computer-use",
-    tier: "recommended",
+    skillName: 'ghostex-computer-use',
+    tier: 'recommended',
   },
   {
-    command: "ghostex browser-use install-skill",
+    command: 'ghostex browser-use install-skill',
     description:
       "Teaches agents to inspect and operate supported external browser pages through Cua Driver's typed browser tools.",
-    id: "browserUse",
-    name: "Ghostex Browser Use",
+    id: 'browserUse',
+    name: 'Ghostex Browser Use',
     requiresCuaDriver: true,
-    skillName: "ghostex-browser-use",
-    tier: "recommended",
+    skillName: 'ghostex-browser-use',
+    tier: 'recommended',
   },
   {
-    command: "ghostex browser install-skill",
+    command: 'ghostex browser install-skill',
     description:
-      "Teaches agents to inspect Ghostex embedded browser panes, read console logs, capture screenshots, and interact with pages through the embedded browser MCP server.",
-    id: "embeddedBrowserUse",
-    name: "Ghostex Embedded Browser Use",
-    skillName: "ghostex-embedded-browser-use",
-    tier: "recommended",
+      'Teaches agents to inspect Ghostex embedded browser panes, read console logs, capture screenshots, and interact with pages through the embedded browser MCP server.',
+    id: 'embeddedBrowserUse',
+    name: 'Ghostex Embedded Browser Use',
+    skillName: 'ghostex-embedded-browser-use',
+    tier: 'recommended',
   },
   {
-    command: "ghostex agent-orchestration install-skill",
+    command: 'ghostex agent-orchestration install-skill',
     description:
-      "Teaches agents to coordinate Ghostex sessions through supported CLI commands for creating panes, sending messages, reading output, and checking status.",
-    id: "agentOrchestration",
-    name: "Ghostex Agent Orchestration",
-    skillName: "ghostex-agent-orchestration",
-    tier: "optional",
+      'Teaches agents to coordinate Ghostex sessions through supported CLI commands for creating panes, sending messages, reading output, and checking status.',
+    id: 'agentOrchestration',
+    name: 'Ghostex Agent Orchestration',
+    skillName: 'ghostex-agent-orchestration',
+    tier: 'optional',
   },
   {
-    command: "ghostex fable-5.6-orchestration install-skill",
+    command: 'ghostex fable-5.6-orchestration install-skill',
     description:
-      "Teaches agents a plan-implement-verify pipeline over Ghostex panes: plan inline with Fable, launch a Codex gpt-5.6 worker pane per phase, then verify with a Fable pane and spawn fixers until verification passes.",
-    id: "fable56Orchestration",
-    name: "Ghostex Fable 5.6 Orchestration",
-    skillName: "ghostex-fable-5.6-orchestration",
-    tier: "optional",
+      'Teaches agents a plan-implement-verify pipeline over Ghostex panes: plan inline with Fable, launch a Codex gpt-5.6 worker pane per phase, then verify with a Fable pane and spawn fixers until verification passes.',
+    id: 'fable56Orchestration',
+    name: 'Ghostex Fable 5.6 Orchestration',
+    skillName: 'ghostex-fable-5.6-orchestration',
+    tier: 'optional',
   },
   {
-    command: "ghostex find-prev-session install-skill",
+    command: 'ghostex find-prev-session install-skill',
     description:
       "Teaches agents to find, inspect, resume, or fork previous Claude Code, Codex, Pi, OpenCode, Cursor Agent, and Grok sessions with Ghostex's bundled Zehn search.",
-    id: "findPrevSession",
-    name: "Ghostex Find Previous Session",
-    skillName: "ghostex-find-prev-session",
-    tier: "optional",
+    id: 'findPrevSession',
+    name: 'Ghostex Find Previous Session',
+    skillName: 'ghostex-find-prev-session',
+    tier: 'optional',
   },
   {
-    command: "ghostex generate-title install-skill",
+    command: 'ghostex generate-title install-skill',
     description:
-      "Teaches agents how to generate concise Ghostex session titles and submit the rename command in the current session.",
-    id: "generateTitle",
-    name: "Ghostex Auto Rename Session",
-    skillName: "ghostex-auto-rename-session",
-    tier: "optional",
+      'Teaches agents how to generate concise Ghostex session titles and submit the rename command in the current session.',
+    id: 'generateTitle',
+    name: 'Ghostex Auto Rename Session',
+    skillName: 'ghostex-auto-rename-session',
+    tier: 'optional',
   },
   {
-    command: "ghostex move-codex-session install-skill",
+    command: 'ghostex move-codex-session install-skill',
     description:
-      "Teaches agents how to fork a Codex conversation into another folder with the correct session id, target root, and optional full-access mode.",
-    id: "moveCodexSession",
-    name: "Ghostex Move Codex Session",
-    skillName: "ghostex-move-codex-session",
-    tier: "optional",
+      'Teaches agents how to fork a Codex conversation into another folder with the correct session id, target root, and optional full-access mode.',
+    id: 'moveCodexSession',
+    name: 'Ghostex Move Codex Session',
+    skillName: 'ghostex-move-codex-session',
+    tier: 'optional',
   },
 ];

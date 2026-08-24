@@ -167,4 +167,3 @@ pub(crate) fn gpui_uninstall_bundled_agent_skill(skill_name: &str) -> Result<boo
             .to_string()
     })
 }
-

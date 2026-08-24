@@ -1,4 +1,4 @@
-import type { CompletionSoundSetting } from "../shared/completion-sound";
+import type { CompletionSoundSetting } from '../shared/completion-sound';
 
 type CompletionSoundLogger = (event: string, details?: unknown) => void;
 
@@ -10,20 +10,17 @@ declare global {
 }
 
 const audioBySound = new Map<CompletionSoundSetting, HTMLAudioElement>();
-const decodedBufferPromiseBySound = new Map<
-  CompletionSoundSetting,
-  Promise<AudioBuffer | undefined>
->();
+const decodedBufferPromiseBySound = new Map<CompletionSoundSetting, Promise<AudioBuffer | undefined>>();
 let audioContext: AudioContext | undefined;
 
 export async function prepareCompletionSoundPlayback(log?: CompletionSoundLogger): Promise<void> {
   const context = getAudioContext();
   if (!context) {
-    log?.("completionSound.audioContextUnsupported");
+    log?.('completionSound.audioContextUnsupported');
     return;
   }
 
-  if (context.state === "running") {
+  if (context.state === 'running') {
     return;
   }
 
@@ -33,23 +30,20 @@ export async function prepareCompletionSoundPlayback(log?: CompletionSoundLogger
     source.buffer = context.createBuffer(1, 1, context.sampleRate);
     source.connect(context.destination);
     source.start();
-    log?.("completionSound.audioContextUnlocked", {
+    log?.('completionSound.audioContextUnlocked', {
       state: context.state,
     });
   } catch (error) {
-    log?.("completionSound.audioContextUnlockFailed", {
+    log?.('completionSound.audioContextUnlockFailed', {
       error: error instanceof Error ? error.message : String(error),
       state: context.state,
     });
   }
 }
 
-export async function playCompletionSound(
-  sound: CompletionSoundSetting,
-  log?: CompletionSoundLogger,
-): Promise<void> {
+export async function playCompletionSound(sound: CompletionSoundSetting, log?: CompletionSoundLogger): Promise<void> {
   const context = getAudioContext();
-  if (context?.state === "running") {
+  if (context?.state === 'running') {
     const buffer = await getDecodedBuffer(sound, context, log);
     if (!buffer) {
       return;
@@ -59,15 +53,15 @@ export async function playCompletionSound(
     source.buffer = buffer;
     source.connect(context.destination);
     source.start();
-    log?.("completionSound.played", {
-      mode: "audioContext",
+    log?.('completionSound.played', {
+      mode: 'audioContext',
       sound,
     });
     return;
   }
 
   if (context) {
-    log?.("completionSound.audioContextLockedAtPlay", {
+    log?.('completionSound.audioContextLockedAtPlay', {
       sound,
       state: context.state,
     });
@@ -75,7 +69,7 @@ export async function playCompletionSound(
 
   const audio = getAudio(sound);
   if (!audio) {
-    log?.("completionSound.missingAudio", {
+    log?.('completionSound.missingAudio', {
       hasSoundUrl: Boolean(window.__ghostex_SOUND_URLS__?.[sound]),
       sound,
     });
@@ -87,14 +81,14 @@ export async function playCompletionSound(
 
   try {
     await audio.play();
-    log?.("completionSound.played", {
+    log?.('completionSound.played', {
       currentTime: audio.currentTime,
-      mode: "htmlAudio",
+      mode: 'htmlAudio',
       sound,
       src: audio.currentSrc || audio.src,
     });
   } catch (error) {
-    log?.("completionSound.playFailed", {
+    log?.('completionSound.playFailed', {
       error: error instanceof Error ? error.message : String(error),
       sound,
       src: audio.currentSrc || audio.src,
@@ -124,7 +118,7 @@ function getAudio(sound: CompletionSoundSetting): HTMLAudioElement | undefined {
   }
 
   const audio = new Audio(url);
-  audio.preload = "auto";
+  audio.preload = 'auto';
   audioBySound.set(sound, audio);
   return audio;
 }
@@ -132,7 +126,7 @@ function getAudio(sound: CompletionSoundSetting): HTMLAudioElement | undefined {
 async function getDecodedBuffer(
   sound: CompletionSoundSetting,
   context: AudioContext,
-  log?: CompletionSoundLogger,
+  log?: CompletionSoundLogger
 ): Promise<AudioBuffer | undefined> {
   const existingPromise = decodedBufferPromiseBySound.get(sound);
   if (existingPromise) {
@@ -141,20 +135,20 @@ async function getDecodedBuffer(
 
   const url = window.__ghostex_SOUND_URLS__?.[sound];
   if (!url) {
-    log?.("completionSound.missingAudio", {
+    log?.('completionSound.missingAudio', {
       hasSoundUrl: false,
       sound,
     });
     return undefined;
   }
 
-  const resolvedDecodePromise = url.startsWith("data:")
+  const resolvedDecodePromise = url.startsWith('data:')
     ? context.decodeAudioData(dataUrlToArrayBuffer(url)).catch((error) => {
         decodedBufferPromiseBySound.delete(sound);
-        log?.("completionSound.decodeFailed", {
+        log?.('completionSound.decodeFailed', {
           error: error instanceof Error ? error.message : String(error),
           sound,
-          url: "data:",
+          url: 'data:',
         });
         return undefined;
       })
@@ -169,7 +163,7 @@ async function getDecodedBuffer(
         })
         .catch((error) => {
           decodedBufferPromiseBySound.delete(sound);
-          log?.("completionSound.decodeFailed", {
+          log?.('completionSound.decodeFailed', {
             error: error instanceof Error ? error.message : String(error),
             sound,
             url,
@@ -181,9 +175,9 @@ async function getDecodedBuffer(
 }
 
 function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
-  const commaIndex = dataUrl.indexOf(",");
+  const commaIndex = dataUrl.indexOf(',');
   if (commaIndex < 0) {
-    throw new Error("Invalid data URL");
+    throw new Error('Invalid data URL');
   }
 
   const metadata = dataUrl.slice(0, commaIndex);

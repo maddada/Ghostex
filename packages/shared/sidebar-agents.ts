@@ -1,7 +1,4 @@
-import {
-  normalizeAgentAcceptAllMode,
-  type AgentAcceptAllMode,
-} from "./sidebar-agent-accept-all";
+import { normalizeAgentAcceptAllMode, type AgentAcceptAllMode } from './sidebar-agent-accept-all';
 const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
   /**
    * CDXC:SidebarAgents 2026-05-15-15:25:
@@ -11,16 +8,16 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * Amp CLI so the top of the menu matches the expected daily-selection flow.
    */
   {
-    agentId: "codex",
-    command: "codex",
-    icon: "codex",
-    name: "Codex",
+    agentId: 'codex',
+    command: 'codex',
+    icon: 'codex',
+    name: 'Codex',
   },
   {
-    agentId: "claude",
-    command: "claude",
-    icon: "claude",
-    name: "Claude",
+    agentId: 'claude',
+    command: 'claude',
+    icon: 'claude',
+    name: 'Claude',
   },
   /**
    * CDXC:SidebarAgents 2026-05-19-09:10:
@@ -30,10 +27,10 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * visually aligned with the existing Cursor open-target branding.
    */
   {
-    agentId: "cursor",
-    command: "cursor-agent",
-    icon: "cursor-cli",
-    name: "Cursor CLI",
+    agentId: 'cursor',
+    command: 'cursor-agent',
+    icon: 'cursor-cli',
+    name: 'Cursor CLI',
   },
   /**
    * CDXC:PiAgent 2026-05-15-15:25:
@@ -44,28 +41,28 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * executable name while keeping `pi` as the command.
    */
   {
-    agentId: "pi",
-    command: "pi",
-    icon: "pi",
-    name: "Pi Agent",
+    agentId: 'pi',
+    command: 'pi',
+    icon: 'pi',
+    name: 'Pi Agent',
   },
   {
-    agentId: "opencode",
-    command: "opencode",
-    icon: "opencode",
-    name: "OpenCode",
+    agentId: 'opencode',
+    command: 'opencode',
+    icon: 'opencode',
+    name: 'OpenCode',
   },
   {
-    agentId: "gemini",
-    command: "gemini",
-    icon: "gemini",
-    name: "Gemini",
+    agentId: 'gemini',
+    command: 'gemini',
+    icon: 'gemini',
+    name: 'Gemini',
   },
   {
-    agentId: "copilot",
-    command: "copilot",
-    icon: "copilot",
-    name: "Copilot",
+    agentId: 'copilot',
+    command: 'copilot',
+    icon: 'copilot',
+    name: 'Copilot',
   },
   /**
    * CDXC:SidebarAgents 2026-05-15-12:41:
@@ -74,10 +71,10 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * while keeping the display label explicit enough to distinguish the vendor.
    */
   {
-    agentId: "droid",
-    command: "droid",
-    icon: "factory-droid",
-    name: "Factory Droid",
+    agentId: 'droid',
+    command: 'droid',
+    icon: 'factory-droid',
+    name: 'Factory Droid',
   },
   /**
    * CDXC:SidebarAgents 2026-05-15-12:45:
@@ -86,10 +83,10 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * with `grok`, so use that executable while keeping the product name visible.
    */
   {
-    agentId: "grok",
-    command: "grok",
-    icon: "grok-build",
-    name: "Grok Build",
+    agentId: 'grok',
+    command: 'grok',
+    icon: 'grok-build',
+    name: 'Grok Build',
   },
   /**
    * CDXC:SidebarAgents 2026-05-19-14:40:
@@ -98,10 +95,10 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * logomark path from the official icon as a mask-friendly sidebar asset.
    */
   {
-    agentId: "antigravity",
-    command: "agy",
-    icon: "antigravity-cli",
-    name: "Antigravity CLI",
+    agentId: 'antigravity',
+    command: 'agy',
+    icon: 'antigravity-cli',
+    name: 'Antigravity CLI',
   },
   /**
    * CDXC:SidebarAgents 2026-05-19-09:10:
@@ -110,10 +107,10 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * so the sidebar launcher matches Amp's CLI branding.
    */
   {
-    agentId: "amp",
-    command: "amp",
-    icon: "amp-cli",
-    name: "Amp CLI",
+    agentId: 'amp',
+    command: 'amp',
+    icon: 'amp-cli',
+    name: 'Amp CLI',
   },
   /**
    * CDXC:SidebarAgents 2026-07-02-14:05:
@@ -123,10 +120,10 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * the launcher shows it by default like the other first-class engines.
    */
   {
-    agentId: "hermes-agent",
-    command: "hermes",
-    icon: "hermes-agent",
-    name: "Hermes Agent",
+    agentId: 'hermes-agent',
+    command: 'hermes',
+    icon: 'hermes-agent',
+    name: 'Hermes Agent',
   },
   /**
    * CDXC:SessionRestore 2026-05-23-00:25:
@@ -135,25 +132,25 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * explicitly enables or configures them.
    */
   {
-    agentId: "rovodev",
-    command: "acli rovodev run",
+    agentId: 'rovodev',
+    command: 'acli rovodev run',
     hiddenByDefault: true,
-    icon: "rovo-dev",
-    name: "Rovo Dev",
+    icon: 'rovo-dev',
+    name: 'Rovo Dev',
   },
   {
-    agentId: "codebuddy",
-    command: "codebuddy",
+    agentId: 'codebuddy',
+    command: 'codebuddy',
     hiddenByDefault: true,
-    icon: "codebuddy",
-    name: "CodeBuddy",
+    icon: 'codebuddy',
+    name: 'CodeBuddy',
   },
   {
-    agentId: "qoder",
-    command: "qodercli",
+    agentId: 'qoder',
+    command: 'qodercli',
     hiddenByDefault: true,
-    icon: "qoder",
-    name: "Qoder",
+    icon: 'qoder',
+    name: 'Qoder',
   },
   /*
    * CDXC:AgentHooks 2026-06-11-22:19:
@@ -163,29 +160,27 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
    * same provider set that the server can install.
    */
   {
-    agentId: "kiro",
-    command: "kiro-cli chat --agent ghostex",
+    agentId: 'kiro',
+    command: 'kiro-cli chat --agent ghostex',
     hiddenByDefault: true,
-    icon: "kiro",
-    name: "Kiro CLI",
+    icon: 'kiro',
+    name: 'Kiro CLI',
   },
   {
-    agentId: "omp",
-    command: "omp",
+    agentId: 'omp',
+    command: 'omp',
     hiddenByDefault: true,
-    icon: "omp",
-    name: "OMP",
+    icon: 'omp',
+    name: 'OMP',
   },
 ] as const;
 
 export const DEFAULT_SIDEBAR_AGENTS = DEFAULT_SIDEBAR_AGENT_DEFINITIONS;
 
 export type DefaultSidebarAgent = (typeof DEFAULT_SIDEBAR_AGENT_DEFINITIONS)[number];
-export type DefaultSidebarAgentId = DefaultSidebarAgent["agentId"];
-export type SidebarAgentIcon = "browser" | DefaultSidebarAgent["icon"];
-export type DefaultSidebarAgentCommandOverrides = Partial<
-  Record<DefaultSidebarAgentId, string | null>
->;
+export type DefaultSidebarAgentId = DefaultSidebarAgent['agentId'];
+export type SidebarAgentIcon = 'browser' | DefaultSidebarAgent['icon'];
+export type DefaultSidebarAgentCommandOverrides = Partial<Record<DefaultSidebarAgentId, string | null>>;
 
 export type SidebarAgentButton = {
   acceptAllMode?: AgentAcceptAllMode;
@@ -214,13 +209,13 @@ export type StoredSidebarAgent = {
  * rename modal.
  */
 export function sidebarAgentIconSupportsSessionHistoryTitleGeneration(
-  icon: SidebarAgentIcon | string | undefined,
+  icon: SidebarAgentIcon | string | undefined
 ): boolean {
-  return icon === "claude" || icon === "codex" || icon === "cursor-cli";
+  return icon === 'claude' || icon === 'codex' || icon === 'cursor-cli';
 }
 
 export function createSidebarAgentSelectItems(
-  agents: readonly Pick<SidebarAgentButton, "agentId" | "name">[],
+  agents: readonly Pick<SidebarAgentButton, 'agentId' | 'name'>[]
 ): Array<{ label: string; value: string }> {
   /*
    * CDXC:PromptAgents 2026-05-30-07:46:
@@ -235,10 +230,10 @@ export function createSidebarAgentSelectItems(
 }
 
 export function createDefaultSidebarAgentButtons(
-  commandOverrides: DefaultSidebarAgentCommandOverrides = {},
+  commandOverrides: DefaultSidebarAgentCommandOverrides = {}
 ): SidebarAgentButton[] {
   return DEFAULT_SIDEBAR_AGENTS.flatMap((agent) =>
-    "hiddenByDefault" in agent && agent.hiddenByDefault === true
+    'hiddenByDefault' in agent && agent.hiddenByDefault === true
       ? []
       : [
           {
@@ -248,22 +243,22 @@ export function createDefaultSidebarAgentButtons(
             isDefault: true,
             name: agent.name,
           },
-        ],
+        ]
   );
 }
 
 export function createSidebarAgentButtons(
   storedAgents: readonly StoredSidebarAgent[],
   storedOrder: readonly string[] = [],
-  commandOverrides: DefaultSidebarAgentCommandOverrides = {},
+  commandOverrides: DefaultSidebarAgentCommandOverrides = {}
 ): SidebarAgentButton[] {
   const enabledStoredAgents = storedAgents.filter(
-    (agent) => !agent.isDefault || isDefaultSidebarAgentId(agent.agentId),
+    (agent) => !agent.isDefault || isDefaultSidebarAgentId(agent.agentId)
   );
   const storedAgentById = new Map(enabledStoredAgents.map((agent) => [agent.agentId, agent]));
   const defaultButtons = DEFAULT_SIDEBAR_AGENTS.flatMap((agent) => {
     const storedAgent = storedAgentById.get(agent.agentId);
-    if (!storedAgent && "hiddenByDefault" in agent && agent.hiddenByDefault === true) {
+    if (!storedAgent && 'hiddenByDefault' in agent && agent.hiddenByDefault === true) {
       return [];
     }
     if (storedAgent?.hidden === true) {
@@ -313,17 +308,13 @@ export function isDefaultSidebarAgentId(agentId: string): boolean {
   return DEFAULT_SIDEBAR_AGENTS.some((agent) => agent.agentId === agentId);
 }
 
-export function getDefaultSidebarAgentById(
-  agentId: string | undefined,
-): DefaultSidebarAgent | undefined {
+export function getDefaultSidebarAgentById(agentId: string | undefined): DefaultSidebarAgent | undefined {
   const normalizedAgentId = agentId?.trim().toLowerCase();
   return DEFAULT_SIDEBAR_AGENTS.find((agent) => agent.agentId === normalizedAgentId);
 }
 
-export function getDefaultSidebarAgentByIcon(
-  icon: SidebarAgentIcon | undefined,
-): DefaultSidebarAgent | undefined {
-  if (!icon || icon === "browser") {
+export function getDefaultSidebarAgentByIcon(icon: SidebarAgentIcon | undefined): DefaultSidebarAgent | undefined {
+  if (!icon || icon === 'browser') {
     return undefined;
   }
 
@@ -335,8 +326,8 @@ export function getSidebarAgentIconById(agentId: string | undefined): SidebarAge
 }
 
 export function getSidebarAgentNameByIcon(icon: SidebarAgentIcon | undefined): string | undefined {
-  if (icon === "browser") {
-    return "Browser";
+  if (icon === 'browser') {
+    return 'Browser';
   }
 
   return DEFAULT_SIDEBAR_AGENTS.find((agent) => agent.icon === icon)?.name;
@@ -349,17 +340,17 @@ export function getSidebarAgentNameByIcon(icon: SidebarAgentIcon | undefined): s
  * and be persisted through native terminal-title sync.
  */
 const TERMINAL_TITLE_SESSION_SYNC_AGENT_IDS = new Set<DefaultSidebarAgentId>([
-  "antigravity",
-  "claude",
-  "codex",
-  "copilot",
-  "cursor",
-  "gemini",
-  "hermes-agent",
-  "opencode",
-  "pi",
-  "qoder",
-  "rovodev",
+  'antigravity',
+  'claude',
+  'codex',
+  'copilot',
+  'cursor',
+  'gemini',
+  'hermes-agent',
+  'opencode',
+  'pi',
+  'qoder',
+  'rovodev',
 ]);
 
 export function supportsTerminalTitleSessionSync(agentName: string | undefined): boolean {
@@ -373,46 +364,42 @@ export function supportsTerminalTitleSessionSync(agentName: string | undefined):
   }
 
   if (
-    normalizedAgentName === "claude code" ||
-    normalizedAgentName === "codex cli" ||
-    normalizedAgentName === "agy" ||
-    normalizedAgentName === "antigravity cli" ||
-    normalizedAgentName === "cursor agent" ||
-    normalizedAgentName === "cursor cli" ||
-    normalizedAgentName === "cursor-agent" ||
-    normalizedAgentName === "github copilot" ||
-    normalizedAgentName === "hermes" ||
-    normalizedAgentName === "hermes agent" ||
-    normalizedAgentName === "open code" ||
-    normalizedAgentName === "qodercli" ||
-    normalizedAgentName === "rovo" ||
-    normalizedAgentName === "rovo dev" ||
-    normalizedAgentName === "π"
+    normalizedAgentName === 'claude code' ||
+    normalizedAgentName === 'codex cli' ||
+    normalizedAgentName === 'agy' ||
+    normalizedAgentName === 'antigravity cli' ||
+    normalizedAgentName === 'cursor agent' ||
+    normalizedAgentName === 'cursor cli' ||
+    normalizedAgentName === 'cursor-agent' ||
+    normalizedAgentName === 'github copilot' ||
+    normalizedAgentName === 'hermes' ||
+    normalizedAgentName === 'hermes agent' ||
+    normalizedAgentName === 'open code' ||
+    normalizedAgentName === 'qodercli' ||
+    normalizedAgentName === 'rovo' ||
+    normalizedAgentName === 'rovo dev' ||
+    normalizedAgentName === 'π'
   ) {
     return true;
   }
 
   const defaultAgent = DEFAULT_SIDEBAR_AGENTS.find(
-    (agent) =>
-      agent.agentId === normalizedAgentName ||
-      agent.name.trim().toLowerCase() === normalizedAgentName,
+    (agent) => agent.agentId === normalizedAgentName || agent.name.trim().toLowerCase() === normalizedAgentName
   );
-  return defaultAgent
-    ? TERMINAL_TITLE_SESSION_SYNC_AGENT_IDS.has(defaultAgent.agentId)
-    : false;
+  return defaultAgent ? TERMINAL_TITLE_SESSION_SYNC_AGENT_IDS.has(defaultAgent.agentId) : false;
 }
 
 export function shouldPreferTerminalTitleForAgentIcon(icon: SidebarAgentIcon | undefined): boolean {
   return (
-    icon === "antigravity-cli" ||
-    icon === "claude" ||
-    icon === "codex" ||
-    icon === "cursor-cli" ||
-    icon === "hermes-agent" ||
-    icon === "opencode" ||
-    icon === "pi" ||
-    icon === "qoder" ||
-    icon === "rovo-dev"
+    icon === 'antigravity-cli' ||
+    icon === 'claude' ||
+    icon === 'codex' ||
+    icon === 'cursor-cli' ||
+    icon === 'hermes-agent' ||
+    icon === 'opencode' ||
+    icon === 'pi' ||
+    icon === 'qoder' ||
+    icon === 'rovo-dev'
   );
 }
 
@@ -425,7 +412,7 @@ export function normalizeStoredSidebarAgents(candidate: unknown): StoredSidebarA
   const seenAgentIds = new Set<string>();
 
   for (const item of candidate) {
-    if (!item || typeof item !== "object") {
+    if (!item || typeof item !== 'object') {
       continue;
     }
 
@@ -435,8 +422,7 @@ export function normalizeStoredSidebarAgents(candidate: unknown): StoredSidebarA
     const command = partialItem.command?.trim();
     const icon = isSidebarAgentIcon(partialItem.icon) ? partialItem.icon : undefined;
     const acceptAllMode = normalizeAgentAcceptAllMode(partialItem.acceptAllMode);
-    const isDefault =
-      partialItem.isDefault === true || (agentId ? isDefaultSidebarAgentId(agentId) : false);
+    const isDefault = partialItem.isDefault === true || (agentId ? isDefaultSidebarAgentId(agentId) : false);
     const hidden = partialItem.hidden === true;
 
     if (!agentId || !name || !command || seenAgentIds.has(agentId)) {
@@ -467,7 +453,7 @@ export function normalizeStoredSidebarAgentOrder(candidate: unknown): string[] {
   const seenAgentIds = new Set<string>();
 
   for (const item of candidate) {
-    if (typeof item !== "string") {
+    if (typeof item !== 'string') {
       continue;
     }
 
@@ -484,14 +470,11 @@ export function normalizeStoredSidebarAgentOrder(candidate: unknown): string[] {
 }
 
 function isSidebarAgentIcon(candidate: unknown): candidate is SidebarAgentIcon {
-  if (candidate === "browser") {
+  if (candidate === 'browser') {
     return true;
   }
 
-  return (
-    typeof candidate === "string" &&
-    DEFAULT_SIDEBAR_AGENTS.some((agent) => agent.icon === candidate)
-  );
+  return typeof candidate === 'string' && DEFAULT_SIDEBAR_AGENTS.some((agent) => agent.icon === candidate);
 }
 
 function getDefaultSidebarAgentName(agentId: string, storedName: string): string {
@@ -502,10 +485,10 @@ function getDefaultSidebarAgentName(agentId: string, storedName: string): string
 
   const normalizedStoredName = storedName.trim().toLowerCase();
   if (
-    (agentId === "codex" && normalizedStoredName === "codex cli") ||
-    (agentId === "claude" && normalizedStoredName === "claude code") ||
-    (agentId === "cursor" && normalizedStoredName === "cursor") ||
-    (agentId === "pi" && normalizedStoredName === "pi")
+    (agentId === 'codex' && normalizedStoredName === 'codex cli') ||
+    (agentId === 'claude' && normalizedStoredName === 'claude code') ||
+    (agentId === 'cursor' && normalizedStoredName === 'cursor') ||
+    (agentId === 'pi' && normalizedStoredName === 'pi')
   ) {
     return defaultName;
   }
@@ -515,7 +498,7 @@ function getDefaultSidebarAgentName(agentId: string, storedName: string): string
 
 function orderSidebarAgentButtons(
   buttons: readonly SidebarAgentButton[],
-  storedOrder: readonly string[],
+  storedOrder: readonly string[]
 ): SidebarAgentButton[] {
   const buttonById = new Map(buttons.map((button) => [button.agentId, button] as const));
   const orderedButtons: SidebarAgentButton[] = [];

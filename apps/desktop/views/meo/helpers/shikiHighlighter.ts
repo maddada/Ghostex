@@ -31,30 +31,46 @@ const LANG_LOADERS: Record<string, () => Promise<{ default: unknown }>> = {
   swift: () => import('@shikijs/langs/swift'),
   bash: () => import('@shikijs/langs/bash'),
   powerquery: () => import('@shikijs/langs/powerquery'),
-  yaml: () => import('@shikijs/langs/yaml')
+  yaml: () => import('@shikijs/langs/yaml'),
 };
 
 const MEO_TO_SHIKI_LANG: Record<string, string> = {
-  javascript: 'javascript', js: 'javascript',
+  javascript: 'javascript',
+  js: 'javascript',
   jsx: 'jsx',
-  typescript: 'typescript', ts: 'typescript',
+  typescript: 'typescript',
+  ts: 'typescript',
   tsx: 'tsx',
-  python: 'python', py: 'python',
+  python: 'python',
+  py: 'python',
   css: 'css',
-  html: 'html', htm: 'html',
+  html: 'html',
+  htm: 'html',
   json: 'json',
-  markdown: 'markdown', md: 'markdown',
-  rust: 'rust', rs: 'rust',
-  go: 'go', golang: 'go',
+  markdown: 'markdown',
+  md: 'markdown',
+  rust: 'rust',
+  rs: 'rust',
+  go: 'go',
+  golang: 'go',
   java: 'java',
   sql: 'sql',
-  csharp: 'csharp', cs: 'csharp', 'c#': 'csharp',
-  cpp: 'cpp', 'c++': 'cpp',
+  csharp: 'csharp',
+  cs: 'csharp',
+  'c#': 'csharp',
+  cpp: 'cpp',
+  'c++': 'cpp',
   c: 'c',
   swift: 'swift',
-  bash: 'bash', sh: 'bash', shell: 'bash', zsh: 'bash',
-  powerquery: 'powerquery', pq: 'powerquery', m: 'powerquery',
-  yaml: 'yaml', yml: 'yaml'
+  bash: 'bash',
+  sh: 'bash',
+  shell: 'bash',
+  zsh: 'bash',
+  powerquery: 'powerquery',
+  pq: 'powerquery',
+  m: 'powerquery',
+  yaml: 'yaml',
+  yml: 'yaml',
 };
 
 export function resolveShikiLang(info: string | null | undefined): string | null {
@@ -92,13 +108,13 @@ function computeThemeMeta(theme: RawVscodeTheme): ShikiThemeMeta {
   }
   return {
     bracketColors,
-    unexpectedBracket: colors['editorBracketHighlight.unexpectedBracket.foreground'] || '#FF1212'
+    unexpectedBracket: colors['editorBracketHighlight.unexpectedBracket.foreground'] || '#FF1212',
   };
 }
 
 let themeMeta: ShikiThemeMeta = {
   bracketColors: DEFAULT_BRACKET_COLORS_DARK,
-  unexpectedBracket: '#FF1212'
+  unexpectedBracket: '#FF1212',
 };
 
 export function getShikiThemeMeta(): ShikiThemeMeta {
@@ -172,20 +188,20 @@ function toShikiTheme(theme: RawVscodeTheme) {
     colors: theme.colors ?? {},
     settings: (theme.tokenColors as any[]) ?? [],
     fg: theme.colors?.['editor.foreground'],
-    bg: theme.colors?.['editor.background']
+    bg: theme.colors?.['editor.background'],
   };
 }
 
 async function createHighlighter(theme: RawVscodeTheme): Promise<HighlighterCore> {
   const [{ createHighlighterCore }, { createOnigurumaEngine }] = await Promise.all([
     import('shiki/core'),
-    import('shiki/engine/oniguruma')
+    import('shiki/engine/oniguruma'),
   ]);
   loadedLangs.clear();
   return createHighlighterCore({
     themes: [toShikiTheme(theme) as any],
     langs: [],
-    engine: await createOnigurumaEngine(import('shiki/wasm'))
+    engine: await createOnigurumaEngine(import('shiki/wasm')),
   });
 }
 
@@ -245,7 +261,7 @@ async function tokenizeAndCache(key: string, lang: string, code: string): Promis
       const { tokens } = highlighter.codeToTokens(code, {
         lang,
         theme: THEME_NAME,
-        includeExplanation: 'scopeName'
+        includeExplanation: 'scopeName',
       });
       const mapped: ShikiToken[][] = tokens.map((line) =>
         line.map((token) => ({
@@ -253,7 +269,7 @@ async function tokenizeAndCache(key: string, lang: string, code: string): Promis
           content: token.content,
           color: token.color,
           fontStyle: token.fontStyle,
-          isStringComment: tokenIsStringComment(token as any)
+          isStringComment: tokenIsStringComment(token as any),
         }))
       );
       if (tokenCache.size >= CACHE_LIMIT) {

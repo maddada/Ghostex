@@ -13,9 +13,6 @@ export function nextSessionChatLimit(current: number): number {
  * Client heuristic after a read: a full window implies more history. The
  * server's exact hasMore (on frames/read results) is preferred when present.
  */
-export function hasMoreSessionChatHistory(
-  returnedCount: number,
-  requestedLimit: number,
-): boolean {
+export function hasMoreSessionChatHistory(returnedCount: number, requestedLimit: number): boolean {
   return returnedCount >= requestedLimit;
 }

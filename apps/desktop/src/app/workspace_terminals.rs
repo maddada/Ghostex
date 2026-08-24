@@ -549,7 +549,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn resume_restored_workspace_surfaced_terminals(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn resume_restored_workspace_surfaced_terminals(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUIWorkspaceSessionReattach 2026-08-07:
         A restored workspace keeps the sessions its panes surfaced at quit, but
@@ -606,7 +609,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn project_view_states_for_shell_state(&self) -> HashMap<String, GpuiProjectViewState> {
+    pub(crate) fn project_view_states_for_shell_state(
+        &self,
+    ) -> HashMap<String, GpuiProjectViewState> {
         /*
         CDXC:GPUIProjectViewMemory 2026-08-07:
         The live project's view is only in the app fields, never in the map, so
@@ -629,7 +634,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn apply_project_view_state_for_active_project(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn apply_project_view_state_for_active_project(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUIProjectViewMemory 2026-08-07:
         Restore the incoming project's own workarea and companion arrangement.

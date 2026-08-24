@@ -1,17 +1,14 @@
-import { startTransition, useEffect, useRef, useState } from "react";
-import type {
-  SidebarHydrateMessage,
-  SidebarToExtensionMessage,
-} from "../shared/session-grid-contract";
-import { SidebarApp } from "./sidebar-app";
-import { logSidebarDebug } from "./sidebar-debug";
+import { startTransition, useEffect, useRef, useState } from 'react';
+import type { SidebarHydrateMessage, SidebarToExtensionMessage } from '../shared/session-grid-contract';
+import { SidebarApp } from './sidebar-app';
+import { logSidebarDebug } from './sidebar-debug';
 import {
   createSidebarStoryMessage,
   createSidebarStoryWorkspace,
   reduceSidebarStoryWorkspace,
   type SidebarStoryWorkspace,
-} from "./sidebar-story-workspace";
-import type { WebviewApi } from "./webview-api";
+} from './sidebar-story-workspace';
+import type { WebviewApi } from './webview-api';
 
 export type SidebarStoryHarnessProps = {
   message: SidebarHydrateMessage;
@@ -36,7 +33,7 @@ export function SidebarStoryHarness({ message, onWorkspaceChange }: SidebarStory
     postMessage(nextMessage) {
       sidebarStoryMessages.push(nextMessage);
 
-      if (nextMessage.type === "sidebarDebugLog") {
+      if (nextMessage.type === 'sidebarDebugLog') {
         logSidebarDebug(true, `storybook ${nextMessage.event}`, nextMessage.details);
       }
 
@@ -71,7 +68,7 @@ export function SidebarStoryHarness({ message, onWorkspaceChange }: SidebarStory
   useEffect(() => {
     const nextMessage = createSidebarStoryMessage(workspace);
     const timeoutId = window.setTimeout(() => {
-      window.postMessage(nextMessage, "*");
+      window.postMessage(nextMessage, '*');
     }, 0);
 
     return () => {
@@ -88,16 +85,16 @@ export function SidebarStoryHarness({ message, onWorkspaceChange }: SidebarStory
        * header and stack as direct flex children, and scroll/overflow bugs only
        * reproduce accurately when Storybook keeps that layout contract.
        */
-      style={{ display: "contents" }}
+      style={{ display: 'contents' }}
     >
-      <SidebarApp enableProjectCollections={true} vscode={vscode} windowScopeId="storybook" />
+      <SidebarApp enableProjectCollections={true} vscode={vscode} windowScopeId='storybook' />
     </div>
   );
 }
 
 function scheduleStoryWorkspaceUpdate(callback: () => void) {
   window.setTimeout(() => {
-    if (typeof window.requestAnimationFrame !== "function") {
+    if (typeof window.requestAnimationFrame !== 'function') {
       callback();
       return;
     }

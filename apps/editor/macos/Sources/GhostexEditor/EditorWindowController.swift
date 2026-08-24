@@ -10,7 +10,9 @@ final class WeakEditorScriptMessageHandler: NSObject, WKScriptMessageHandler {
     super.init()
   }
 
-  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+  func userContentController(
+    _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
+  ) {
     target?.userContentController(userContentController, didReceive: message)
   }
 }
@@ -36,11 +38,11 @@ final class EditorWindowController: NSObject, NSWindowDelegate, WKScriptMessageH
 
     let script = WKUserScript(
       source: """
-      Object.defineProperty(window, "__require", {
-        configurable: true,
-        get: function() { return window.require; }
-      });
-      """,
+        Object.defineProperty(window, "__require", {
+          configurable: true,
+          get: function() { return window.require; }
+        });
+        """,
       injectionTime: .atDocumentStart,
       forMainFrameOnly: true
     )
@@ -117,13 +119,13 @@ final class EditorWindowController: NSObject, NSWindowDelegate, WKScriptMessageH
 
   func requestWebSaveAndClose() {
     let javascript = """
-    document.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "s",
-      metaKey: true,
-      bubbles: true,
-      cancelable: true
-    }));
-    """
+      document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "s",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true
+      }));
+      """
     webView.evaluateJavaScript(javascript)
   }
 
@@ -135,8 +137,8 @@ final class EditorWindowController: NSObject, NSWindowDelegate, WKScriptMessageH
       return
     }
     let javascript = """
-    window.dispatchEvent(new CustomEvent("ghostex-editor-host-message", { detail: \(json) }));
-    """
+      window.dispatchEvent(new CustomEvent("ghostex-editor-host-message", { detail: \(json) }));
+      """
     webView.evaluateJavaScript(javascript)
   }
 
@@ -150,7 +152,8 @@ final class EditorWindowController: NSObject, NSWindowDelegate, WKScriptMessageH
     if hasPresented {
       daemon?.saveWindowFrame(window)
     }
-    webView.configuration.userContentController.removeScriptMessageHandler(forName: "ghostexEditorHost")
+    webView.configuration.userContentController.removeScriptMessageHandler(
+      forName: "ghostexEditorHost")
     webView.stopLoading()
     window.delegate = nil
     window.contentView = nil
@@ -187,7 +190,9 @@ final class EditorWindowController: NSObject, NSWindowDelegate, WKScriptMessageH
     return false
   }
 
-  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+  func userContentController(
+    _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
+  ) {
     guard message.name == "ghostexEditorHost",
       let body = message.body as? [String: Any],
       let type = body["type"] as? String

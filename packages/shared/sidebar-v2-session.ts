@@ -2,7 +2,7 @@ import {
   getSidebarSessionLifecycleState,
   type SidebarSessionGroup,
   type SidebarSessionItem,
-} from "./session-grid-contract-sidebar";
+} from './session-grid-contract-sidebar';
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
@@ -28,23 +28,23 @@ The P2 lifecycle fields (`settledAt`, `settledOverride`, `snoozedUntil`,
 to real server state once gxserver publishes it.
 */
 
-export type SidebarV2Activity = "attention" | "idle" | "working";
+export type SidebarV2Activity = 'attention' | 'idle' | 'working';
 
 /** Amber sub-classification of `activity: "attention"`. gxserver does not
     distinguish approval from input yet, so this is optional and resolves to
     "input" when absent. */
-export type SidebarV2AttentionKind = "approval" | "input";
+export type SidebarV2AttentionKind = 'approval' | 'input';
 
-export type SidebarV2LifecycleState = "done" | "error" | "running" | "sleeping";
+export type SidebarV2LifecycleState = 'done' | 'error' | 'running' | 'sleeping';
 
-export type SidebarV2SessionKind = "browser" | "terminal";
+export type SidebarV2SessionKind = 'browser' | 'terminal';
 
 /** Server-owned settle pin (P2). "settled" forces the settled shelf, "active"
     pins a session into the inbox and suppresses auto-settle. */
-export type SidebarV2SettledOverride = "active" | "settled";
+export type SidebarV2SettledOverride = 'active' | 'settled';
 
 /** Pull-request state for a session's worktree branch (P3). */
-export type SidebarV2ChangeRequestState = "closed" | "merged" | "open";
+export type SidebarV2ChangeRequestState = 'closed' | 'merged' | 'open';
 
 export type SidebarV2Session = {
   activity: SidebarV2Activity;
@@ -81,14 +81,14 @@ export type SidebarV2SessionSource = SidebarSessionItem &
   Partial<
     Pick<
       SidebarV2Session,
-      | "attentionKind"
-      | "createdAt"
-      | "projectId"
-      | "settledAt"
-      | "settledOverride"
-      | "snoozedAt"
-      | "snoozedUntil"
-      | "worktreePath"
+      | 'attentionKind'
+      | 'createdAt'
+      | 'projectId'
+      | 'settledAt'
+      | 'settledOverride'
+      | 'snoozedAt'
+      | 'snoozedUntil'
+      | 'worktreePath'
     >
   >;
 
@@ -96,14 +96,14 @@ export type SidebarV2SessionSource = SidebarSessionItem &
 export type SidebarV2SessionOverrides = Partial<
   Pick<
     SidebarV2Session,
-    | "attentionKind"
-    | "createdAt"
-    | "projectId"
-    | "settledAt"
-    | "settledOverride"
-    | "snoozedAt"
-    | "snoozedUntil"
-    | "worktreePath"
+    | 'attentionKind'
+    | 'createdAt'
+    | 'projectId'
+    | 'settledAt'
+    | 'settledOverride'
+    | 'snoozedAt'
+    | 'snoozedUntil'
+    | 'worktreePath'
   >
 >;
 
@@ -119,7 +119,7 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): T {
 
 export function toSidebarV2Session(
   session: SidebarV2SessionSource,
-  overrides: SidebarV2SessionOverrides = {},
+  overrides: SidebarV2SessionOverrides = {}
 ): SidebarV2Session {
   const merged: SidebarV2Session = {
     activity: session.activity,
@@ -131,7 +131,7 @@ export function toSidebarV2Session(
     lifecycleState: getSidebarSessionLifecycleState(session),
     projectId: overrides.projectId ?? session.projectId,
     sessionId: session.sessionId,
-    sessionKind: session.sessionKind ?? (session.kind === "browser" ? "browser" : undefined),
+    sessionKind: session.sessionKind ?? (session.kind === 'browser' ? 'browser' : undefined),
     settledAt: overrides.settledAt ?? session.settledAt,
     settledOverride: overrides.settledOverride ?? session.settledOverride,
     snoozedAt: overrides.snoozedAt ?? session.snoozedAt,
@@ -152,26 +152,24 @@ export type SidebarV2GroupAdapterOptions = {
  * grouped-mode placement.
  */
 export function toSidebarV2SessionsFromGroup(
-  group: Pick<SidebarSessionGroup, "groupId" | "sessions">,
-  options: SidebarV2GroupAdapterOptions = {},
+  group: Pick<SidebarSessionGroup, 'groupId' | 'sessions'>,
+  options: SidebarV2GroupAdapterOptions = {}
 ): SidebarV2Session[] {
   return group.sessions.map((session) =>
     toSidebarV2Session(session, {
       projectId: group.groupId,
       ...options.overridesBySessionId?.get(session.sessionId),
-    }),
+    })
   );
 }
 
 export function toSidebarV2SessionsFromGroups(
-  groups: readonly Pick<SidebarSessionGroup, "groupId" | "sessions">[],
-  options: SidebarV2GroupAdapterOptions = {},
+  groups: readonly Pick<SidebarSessionGroup, 'groupId' | 'sessions'>[],
+  options: SidebarV2GroupAdapterOptions = {}
 ): SidebarV2Session[] {
   return groups.flatMap((group) => toSidebarV2SessionsFromGroup(group, options));
 }
 
-export function isSidebarV2BrowserSession(
-  session: Pick<SidebarV2Session, "sessionKind">,
-): boolean {
-  return session.sessionKind === "browser";
+export function isSidebarV2BrowserSession(session: Pick<SidebarV2Session, 'sessionKind'>): boolean {
+  return session.sessionKind === 'browser';
 }

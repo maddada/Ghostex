@@ -22,7 +22,7 @@
 /** Same delay the real host waits after the page loads before pressing `f`. */
 export const TUTORIAL_VIDEO_FULLSCREEN_KEY_DELAY_MS = 1_500;
 
-const FULLSCREEN_STYLE_ID = "sandbox-tutorial-video-fullscreen";
+const FULLSCREEN_STYLE_ID = 'sandbox-tutorial-video-fullscreen';
 
 /*
  * What the player itself does on `f`: the video surface takes over the whole
@@ -80,20 +80,18 @@ type FrameGlobal = Window & typeof globalThis;
 
 function dispatchFKey(frameWindow: FrameGlobal, frameDocument: Document): void {
   const target =
-    frameDocument.querySelector<HTMLElement>("#movie_player") ??
-    frameDocument.body ??
-    frameDocument.documentElement;
-  for (const type of ["keydown", "keyup"] as const) {
+    frameDocument.querySelector<HTMLElement>('#movie_player') ?? frameDocument.body ?? frameDocument.documentElement;
+  for (const type of ['keydown', 'keyup'] as const) {
     target.dispatchEvent(
       new frameWindow.KeyboardEvent(type, {
         bubbles: true,
         cancelable: true,
-        code: "KeyF",
+        code: 'KeyF',
         composed: true,
-        key: "f",
+        key: 'f',
         keyCode: 70,
         which: 70,
-      } as KeyboardEventInit),
+      } as KeyboardEventInit)
     );
   }
 }
@@ -106,7 +104,7 @@ function applyFullscreenLayout(frameDocument: Document): boolean {
   if (!head) {
     return false;
   }
-  const style = frameDocument.createElement("style");
+  const style = frameDocument.createElement('style');
   style.id = FULLSCREEN_STYLE_ID;
   style.textContent = FULLSCREEN_STYLE;
   head.append(style);
@@ -120,7 +118,7 @@ function applyFullscreenLayout(frameDocument: Document): boolean {
 export function simulateTutorialVideoFullscreenKey(
   windowId: string,
   iframe: HTMLIFrameElement,
-  onEvent: (event: TutorialVideoSimulationEvent) => void,
+  onEvent: (event: TutorialVideoSimulationEvent) => void
 ): void {
   if (simulatedWindowIds.has(windowId)) {
     return;
@@ -131,18 +129,18 @@ export function simulateTutorialVideoFullscreenKey(
     const frameDocument = iframe.contentDocument;
     if (!frameWindow || !frameDocument) {
       onEvent({
-        label: "Simulated f press skipped — the video document is unreachable",
+        label: 'Simulated f press skipped — the video document is unreachable',
         detail:
-          "The proxied watch page must stay same-origin for the sandbox to reach into it; a cross-origin navigation (consent redirect) would break this.",
+          'The proxied watch page must stay same-origin for the sandbox to reach into it; a cross-origin navigation (consent redirect) would break this.',
       });
       return;
     }
     dispatchFKey(frameWindow, frameDocument);
-    const playerFound = Boolean(frameDocument.querySelector("#movie_player"));
+    const playerFound = Boolean(frameDocument.querySelector('#movie_player'));
     const layoutApplied = applyFullscreenLayout(frameDocument);
-    frameWindow.dispatchEvent(new frameWindow.Event("resize"));
+    frameWindow.dispatchEvent(new frameWindow.Event('resize'));
     onEvent({
-      label: "Simulated f press (host key injection in the real app)",
+      label: 'Simulated f press (host key injection in the real app)',
       detail: `Dispatched f keydown/keyup into the watch document ${TUTORIAL_VIDEO_FULLSCREEN_KEY_DELAY_MS}ms after load, then enforced the press OUTCOME (player fills the window) because browsers refuse fullscreen from untrusted events — the real app's trusted CEF key press does not have that restriction. Player element found: ${playerFound}; fullscreen layout applied: ${layoutApplied}.`,
     });
   }, TUTORIAL_VIDEO_FULLSCREEN_KEY_DELAY_MS);

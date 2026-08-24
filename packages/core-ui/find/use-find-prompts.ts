@@ -8,26 +8,26 @@ them per keystroke, so the client asks for a page around the selection and pages
 as the selection walks off the edge.
 */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   FindPromptAgent,
   FindPromptAgentFacet,
   FindPromptProjectFacet,
   FindPromptRow,
   ResolveAgentPromptLaunchResult,
-} from "../../shared/agent-prompt-search";
-import type { FindPromptsTransport } from "./find-prompts-transport";
+} from '../../shared/agent-prompt-search';
+import type { FindPromptsTransport } from './find-prompts-transport';
 
 /** Rows fetched per page. Big enough that arrow-key walking rarely pages. */
 export const FIND_PROMPTS_PAGE_SIZE = 120;
 /** Keystroke settle time before re-querying; the server ranks in ~100ms. */
 export const FIND_PROMPTS_QUERY_DEBOUNCE_MS = 120;
 
-export type FindPromptsOverlay = "agent" | "fork" | "project" | null;
+export type FindPromptsOverlay = 'agent' | 'fork' | 'project' | null;
 
 export interface FindPromptsNotice {
   detail?: string;
-  kind: "error" | "info";
+  kind: 'error' | 'info';
   message: string;
 }
 
@@ -94,15 +94,12 @@ function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
-  return typeof error === "string" && error ? error : "Unknown error";
+  return typeof error === 'string' && error ? error : 'Unknown error';
 }
 
-export function useFindPrompts({
-  acceptAll,
-  transport,
-}: UseFindPromptsOptions): FindPromptsController {
-  const [query, setQueryState] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+export function useFindPrompts({ acceptAll, transport }: UseFindPromptsOptions): FindPromptsController {
+  const [query, setQueryState] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [agents, setAgents] = useState<ReadonlySet<FindPromptAgent>>(() => new Set());
   const [project, setProjectState] = useState<string | null>(null);
   const [groupByDay, setGroupByDayState] = useState(false);
@@ -134,7 +131,7 @@ export function useFindPrompts({
 
   const filterKey = useMemo(
     () => JSON.stringify([debouncedQuery, [...agents].sort(), project, groupByDay, refreshToken]),
-    [agents, debouncedQuery, groupByDay, project, refreshToken],
+    [agents, debouncedQuery, groupByDay, project, refreshToken]
   );
 
   // Changing the query or a filter restarts at the top, exactly like the
@@ -177,14 +174,14 @@ export function useFindPrompts({
           result.opencodeError
             ? {
                 detail: result.opencodeError,
-                kind: "info",
-                message: "opencode history could not be read.",
+                kind: 'info',
+                message: 'opencode history could not be read.',
               }
-            : null,
+            : null
         );
       } catch (error) {
         if (sequence === requestSequence.current) {
-          setNotice({ detail: errorMessage(error), kind: "error", message: "Search failed." });
+          setNotice({ detail: errorMessage(error), kind: 'error', message: 'Search failed.' });
         }
       } finally {
         if (sequence === requestSequence.current) {
@@ -192,7 +189,7 @@ export function useFindPrompts({
         }
       }
     },
-    [agents, debouncedQuery, groupByDay, project, transport],
+    [agents, debouncedQuery, groupByDay, project, transport]
   );
 
   useEffect(() => {
@@ -256,14 +253,14 @@ export function useFindPrompts({
         return Number.isFinite(next) && next >= 0 ? next : 0;
       });
     },
-    [matched],
+    [matched]
   );
 
   const selectRow = useCallback(
     (index: number) => {
       setSelection(Math.max(0, Math.min(Math.max(matched - 1, 0), index)));
     },
-    [matched],
+    [matched]
   );
 
   /*
@@ -302,7 +299,7 @@ export function useFindPrompts({
       }
       selectRow(Math.max(0, windowOffset - 1));
     },
-    [moveSelection, rows, selectRow, selection, windowOffset],
+    [moveSelection, rows, selectRow, selection, windowOffset]
   );
 
   const setQuery = useCallback((next: string) => setQueryState(next), []);
@@ -335,30 +332,26 @@ export function useFindPrompts({
     const nextFavorite = !selectedRow.favorite;
     // Paint immediately; the list re-ranks on the next search because favorites
     // form a tier above every score.
-    setRows((current) =>
-      current.map((row) => (row.key === key ? { ...row, favorite: nextFavorite } : row)),
-    );
+    setRows((current) => current.map((row) => (row.key === key ? { ...row, favorite: nextFavorite } : row)));
     try {
       await transport.toggleFavorite({ favorite: nextFavorite, key });
     } catch (error) {
-      setRows((current) =>
-        current.map((row) => (row.key === key ? { ...row, favorite: !nextFavorite } : row)),
-      );
+      setRows((current) => current.map((row) => (row.key === key ? { ...row, favorite: !nextFavorite } : row)));
       setNotice({
         detail: errorMessage(error),
-        kind: "error",
-        message: "Could not update the favorite.",
+        kind: 'error',
+        message: 'Could not update the favorite.',
       });
     }
   }, [selectedRow, transport]);
 
   const applyLaunchPlan = useCallback(
     async (plan: ResolveAgentPromptLaunchResult) => {
-      if (plan.mode === "focus") {
+      if (plan.mode === 'focus') {
         if (!transport.focusSession) {
           setNotice({
-            kind: "info",
-            message: "That conversation is already open in Ghostex.",
+            kind: 'info',
+            message: 'That conversation is already open in Ghostex.',
           });
           return;
         }
@@ -369,15 +362,15 @@ export function useFindPrompts({
       if (!transport.launchSession) {
         setNotice({
           detail: plan.commandLine,
-          kind: "info",
-          message: "This surface cannot open sessions; run the command yourself.",
+          kind: 'info',
+          message: 'This surface cannot open sessions; run the command yourself.',
         });
         return;
       }
       await transport.launchSession(plan);
       transport.close?.();
     },
-    [transport],
+    [transport]
   );
 
   const resumeSelected = useCallback(async () => {
@@ -386,13 +379,13 @@ export function useFindPrompts({
     }
     try {
       const plan = await transport.resolveLaunch({
-        action: "resume",
+        action: 'resume',
         key: selectedRow.key,
         ...(acceptAll === undefined ? {} : { acceptAll }),
       });
       await applyLaunchPlan(plan);
     } catch (error) {
-      setNotice({ detail: errorMessage(error), kind: "error", message: "Could not resume." });
+      setNotice({ detail: errorMessage(error), kind: 'error', message: 'Could not resume.' });
     }
   }, [acceptAll, applyLaunchPlan, selectedRow, transport]);
 
@@ -404,17 +397,17 @@ export function useFindPrompts({
       setOverlay(null);
       try {
         const plan = await transport.resolveLaunch({
-          action: "fork",
+          action: 'fork',
           forkAgent: agent,
           key: selectedRow.key,
           ...(acceptAll === undefined ? {} : { acceptAll }),
         });
         await applyLaunchPlan(plan);
       } catch (error) {
-        setNotice({ detail: errorMessage(error), kind: "error", message: "Could not fork." });
+        setNotice({ detail: errorMessage(error), kind: 'error', message: 'Could not fork.' });
       }
     },
-    [acceptAll, applyLaunchPlan, selectedRow, transport],
+    [acceptAll, applyLaunchPlan, selectedRow, transport]
   );
 
   const copySelected = useCallback(async () => {
@@ -423,14 +416,14 @@ export function useFindPrompts({
       return;
     }
     if (!transport.copyText) {
-      setNotice({ kind: "info", message: "This surface has no clipboard access." });
+      setNotice({ kind: 'info', message: 'This surface has no clipboard access.' });
       return;
     }
     try {
       await transport.copyText(text);
-      setNotice({ kind: "info", message: "Prompt copied to the clipboard." });
+      setNotice({ kind: 'info', message: 'Prompt copied to the clipboard.' });
     } catch (error) {
-      setNotice({ detail: errorMessage(error), kind: "error", message: "Could not copy." });
+      setNotice({ detail: errorMessage(error), kind: 'error', message: 'Could not copy.' });
     }
   }, [selectedRow, selectedText, transport]);
 
@@ -451,10 +444,7 @@ export function useFindPrompts({
     moveSelection,
     notice,
     openExpandedPrompt: useCallback(() => setExpandedPrompt(true), []),
-    openOverlay: useCallback(
-      (next: Exclude<FindPromptsOverlay, null>) => setOverlay(next),
-      [],
-    ),
+    openOverlay: useCallback((next: Exclude<FindPromptsOverlay, null>) => setOverlay(next), []),
     overlay,
     previewFocused,
     project,

@@ -1,37 +1,28 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   extractChangelogSectionFromText,
   onDemandAssetNames,
   releaseBuildVersion,
   validateGhostexCask,
-} from "./release-ghostex.mjs";
-import { validateMacosAppBundle } from "./validate-macos-app-bundle.mjs";
-import { validateOnDemandManifestV2 } from "./release-gpui/on-demand-manifest.mjs";
-import { inspectRelease, verifyPublishedComponent } from "./release-gpui/publish-component.mjs";
-import {
-  validateWindowsUpdateFeed,
-  windowsUpdateArtifactNames,
-} from "./release-gpui/windows-update-feed.mjs";
-import {
-  releaseProvenanceAssetName,
-  validateReleaseProvenance,
-} from "./release-gpui/provenance.mjs";
-import {
-  customerDownloadEntries,
-  renderIosAvailabilityNotes,
-} from "./release-gpui/customer-downloads.mjs";
+} from './release-ghostex.mjs';
+import { validateMacosAppBundle } from './validate-macos-app-bundle.mjs';
+import { validateOnDemandManifestV2 } from './release-gpui/on-demand-manifest.mjs';
+import { inspectRelease, verifyPublishedComponent } from './release-gpui/publish-component.mjs';
+import { validateWindowsUpdateFeed, windowsUpdateArtifactNames } from './release-gpui/windows-update-feed.mjs';
+import { releaseProvenanceAssetName, validateReleaseProvenance } from './release-gpui/provenance.mjs';
+import { customerDownloadEntries, renderIosAvailabilityNotes } from './release-gpui/customer-downloads.mjs';
 import {
   crossReleaseReuseOrigins,
   productOriginLabel,
   renderReleaseProvenanceReport,
   verifyReleaseProvenanceAgainstAssets,
-} from "./release-gpui/publish-provenance.mjs";
+} from './release-gpui/publish-provenance.mjs';
 
 /*
  CDXC:ReleaseAutomation 2026-07-02-14:10:
@@ -42,12 +33,10 @@ import {
  downloads the live DMG only when no verified local copy exists.
 */
 
-const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
-const githubRepo = "maddada/Ghostex";
+const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+const githubRepo = 'maddada/Ghostex';
 export const MAX_RELEASE_DMG_BYTES = 300 * 1024 * 1024;
-const subrepoCandidates = [
-  "apps/mobile/app", "crossplatform", ".dependencies/zmx",
-];
+const subrepoCandidates = ['apps/mobile/app', 'crossplatform', '.dependencies/zmx'];
 
 function usage() {
   return `
@@ -84,29 +73,29 @@ function parseArgs(argv) {
   const positional = [];
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === "--help" || arg === "-h") {
+    if (arg === '--help' || arg === '-h') {
       options.help = true;
-    } else if (arg === "--dmg") {
+    } else if (arg === '--dmg') {
       options.dmg = argv[index + 1];
       if (!options.dmg) {
-        throw new Error("--dmg requires a path.");
+        throw new Error('--dmg requires a path.');
       }
       index += 1;
-    } else if (arg === "--skip-repo") {
+    } else if (arg === '--skip-repo') {
       options.skipRepo = true;
-    } else if (arg === "--skip-brew") {
+    } else if (arg === '--skip-brew') {
       options.skipBrew = true;
-    } else if (arg === "--skip-brew-fetch") {
+    } else if (arg === '--skip-brew-fetch') {
       options.skipBrewFetch = true;
-    } else if (arg === "--skip-android") {
+    } else if (arg === '--skip-android') {
       options.skipAndroid = true;
-    } else if (arg === "--skip-sparkle") {
+    } else if (arg === '--skip-sparkle') {
       options.skipSparkle = true;
-    } else if (arg === "--skip-dmg") {
+    } else if (arg === '--skip-dmg') {
       options.skipDmg = true;
-    } else if (arg === "--skip-subrepos") {
+    } else if (arg === '--skip-subrepos') {
       options.skipSubrepos = true;
-    } else if (arg.startsWith("-")) {
+    } else if (arg.startsWith('-')) {
       throw new Error(`Unknown option: ${arg}`);
     } else {
       positional.push(arg);
@@ -115,8 +104,8 @@ function parseArgs(argv) {
   if (options.help) {
     return options;
   }
-  if (positional.length !== 1 || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(positional[0] ?? "")) {
-    throw new Error("Pass exactly one semver version, for example 5.5.0.");
+  if (positional.length !== 1 || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(positional[0] ?? '')) {
+    throw new Error('Pass exactly one semver version, for example 5.5.0.');
   }
   options.version = positional[0];
   return options;
@@ -124,25 +113,25 @@ function parseArgs(argv) {
 
 function runCommand(command, { timeoutMs = 120_000, cwd = repoRoot } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(command, { cwd, env: process.env, shell: true, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
+    const child = spawn(command, { cwd, env: process.env, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
     let settled = false;
     const timeout = setTimeout(() => {
       if (settled) {
         return;
       }
       settled = true;
-      child.kill("SIGTERM");
+      child.kill('SIGTERM');
       resolve({ code: 124, stderr: `${stderr}\n(timed out after ${timeoutMs}ms)`, stdout });
     }, timeoutMs);
-    child.stdout.on("data", (chunk) => {
+    child.stdout.on('data', (chunk) => {
       stdout += chunk.toString();
     });
-    child.stderr.on("data", (chunk) => {
+    child.stderr.on('data', (chunk) => {
       stderr += chunk.toString();
     });
-    child.on("error", (error) => {
+    child.on('error', (error) => {
       if (settled) {
         return;
       }
@@ -150,7 +139,7 @@ function runCommand(command, { timeoutMs = 120_000, cwd = repoRoot } = {}) {
       clearTimeout(timeout);
       resolve({ code: 127, stderr: String(error.message ?? error), stdout });
     });
-    child.on("close", (code) => {
+    child.on('close', (code) => {
       if (settled) {
         return;
       }
@@ -169,13 +158,13 @@ async function capture(command, options = {}) {
   return result.stdout.trim();
 }
 
-async function githubContent(repo, filePath, ref = "main") {
+async function githubContent(repo, filePath, ref = 'main') {
   const response = await capture(
-    `env -u GH_TOKEN -u GITHUB_TOKEN gh api ${shellQuote(`repos/${repo}/contents/${filePath}?ref=${ref}`)}`,
+    `env -u GH_TOKEN -u GITHUB_TOKEN gh api ${shellQuote(`repos/${repo}/contents/${filePath}?ref=${ref}`)}`
   );
-  const encoded = JSON.parse(response).content?.replace(/\s/gu, "") ?? "";
+  const encoded = JSON.parse(response).content?.replace(/\s/gu, '') ?? '';
   if (!encoded) throw new Error(`GitHub returned no content for ${repo}/${filePath}@${ref}`);
-  return Buffer.from(encoded, "base64").toString("utf8");
+  return Buffer.from(encoded, 'base64').toString('utf8');
 }
 
 function shellQuote(value) {
@@ -184,7 +173,7 @@ function shellQuote(value) {
 
 function parseAssetSha(asset) {
   const digest = asset?.digest;
-  return typeof digest === "string" && digest.startsWith("sha256:") ? digest.slice("sha256:".length) : null;
+  return typeof digest === 'string' && digest.startsWith('sha256:') ? digest.slice('sha256:'.length) : null;
 }
 
 function formatMiB(bytes) {
@@ -194,7 +183,7 @@ function formatMiB(bytes) {
 export function enforceReleaseDmgBudget(bytes) {
   if (bytes > MAX_RELEASE_DMG_BYTES) {
     throw new Error(
-      `New-shape DMG is ${formatMiB(bytes)}, exceeding the ${formatMiB(MAX_RELEASE_DMG_BYTES)} release budget.`,
+      `New-shape DMG is ${formatMiB(bytes)}, exceeding the ${formatMiB(MAX_RELEASE_DMG_BYTES)} release budget.`
     );
   }
   return bytes;
@@ -207,23 +196,26 @@ async function check(name, fn) {
   try {
     const detail = await fn();
     if (detail === SKIPPED) {
-      results.push({ detail: "", durationMs: Date.now() - startedAt, name, status: "SKIP" });
-    } else if (detail && typeof detail === "object" && detail.warn) {
-      results.push({ detail: detail.warn, durationMs: Date.now() - startedAt, name, status: "WARN" });
+      results.push({ detail: '', durationMs: Date.now() - startedAt, name, status: 'SKIP' });
+    } else if (detail && typeof detail === 'object' && detail.warn) {
+      results.push({ detail: detail.warn, durationMs: Date.now() - startedAt, name, status: 'WARN' });
     } else {
-      results.push({ detail: detail ?? "", durationMs: Date.now() - startedAt, name, status: "PASS" });
+      results.push({ detail: detail ?? '', durationMs: Date.now() - startedAt, name, status: 'PASS' });
     }
   } catch (error) {
     results.push({
-      detail: String(error?.message ?? error).split("\n").slice(0, 3).join(" | "),
+      detail: String(error?.message ?? error)
+        .split('\n')
+        .slice(0, 3)
+        .join(' | '),
       durationMs: Date.now() - startedAt,
       name,
-      status: "FAIL",
+      status: 'FAIL',
     });
   }
 }
 
-const SKIPPED = Symbol("skipped");
+const SKIPPED = Symbol('skipped');
 
 function formatDuration(durationMs) {
   const seconds = durationMs / 1000;
@@ -242,37 +234,37 @@ async function main() {
   const startedAt = Date.now();
   console.log(`Ghostex final live verification for ${version} (build ${buildVersion})`);
 
-  await check("repo-clean", async () => {
+  await check('repo-clean', async () => {
     if (options.skipRepo) {
       return SKIPPED;
     }
-    const status = await capture("git status --porcelain --untracked-files=all");
+    const status = await capture('git status --porcelain --untracked-files=all');
     if (status) {
-      throw new Error(`Worktree is dirty:\n${status.split(/\r?\n/).slice(0, 6).join(", ")}`);
+      throw new Error(`Worktree is dirty:\n${status.split(/\r?\n/).slice(0, 6).join(', ')}`);
     }
-    return "clean";
+    return 'clean';
   });
 
-  await check("tag-at-head", async () => {
+  await check('tag-at-head', async () => {
     if (options.skipRepo) {
       return SKIPPED;
     }
-    const tags = await capture("git tag --points-at HEAD");
+    const tags = await capture('git tag --points-at HEAD');
     if (!tags.split(/\r?\n/).includes(`v${version}`)) {
-      throw new Error(`v${version} does not point at HEAD (tags at HEAD: ${tags || "none"}).`);
+      throw new Error(`v${version} does not point at HEAD (tags at HEAD: ${tags || 'none'}).`);
     }
     return `v${version} at HEAD`;
   });
 
   let releaseAssets = [];
-  let releaseBody = "";
-  await check("github-release", async () => {
+  let releaseBody = '';
+  await check('github-release', async () => {
     const json = await capture(
-      `env -u GH_TOKEN -u GITHUB_TOKEN gh release view ${shellQuote(`v${version}`)} --repo ${shellQuote(githubRepo)} --json tagName,url,assets,body`,
+      `env -u GH_TOKEN -u GITHUB_TOKEN gh release view ${shellQuote(`v${version}`)} --repo ${shellQuote(githubRepo)} --json tagName,url,assets,body`
     );
     const release = JSON.parse(json);
     releaseAssets = release.assets ?? [];
-    releaseBody = release.body ?? "";
+    releaseBody = release.body ?? '';
     const dmgName = `ghostex-${version}-arm64.dmg`;
     if (!releaseAssets.some((asset) => asset.name === dmgName)) {
       throw new Error(`Release is missing ${dmgName}.`);
@@ -283,19 +275,24 @@ async function main() {
   const dmgAsset = releaseAssets.find((asset) => asset.name === `ghostex-${version}-arm64.dmg`);
   const dmgDigest = parseAssetSha(dmgAsset);
 
-  await check("customer-downloads", async () => {
-    const groups = customerDownloadEntries(version, releaseAssets.map((asset) => asset.name));
+  await check('customer-downloads', async () => {
+    const groups = customerDownloadEntries(
+      version,
+      releaseAssets.map((asset) => asset.name)
+    );
     const downloads = groups.flatMap((group) => group.downloads);
-    if (downloads.length === 0) throw new Error("Release has no customer-facing download assets.");
+    if (downloads.length === 0) throw new Error('Release has no customer-facing download assets.');
     const missing = downloads.filter((download) => !releaseBody.includes(download.url));
     if (missing.length > 0) {
-      throw new Error(`Release notes are missing customer download links: ${missing.map((item) => item.label).join(", ")}`);
+      throw new Error(
+        `Release notes are missing customer download links: ${missing.map((item) => item.label).join(', ')}`
+      );
     }
-    const hasAndroidDownload = groups.some((group) => group.title === "Android");
+    const hasAndroidDownload = groups.some((group) => group.title === 'Android');
     if (hasAndroidDownload && !releaseBody.includes(renderIosAvailabilityNotes())) {
-      throw new Error("Release notes are missing the iOS TestFlight Discord instructions.");
+      throw new Error('Release notes are missing the iOS TestFlight Discord instructions.');
     }
-    return `${downloads.length} direct customer download links${hasAndroidDownload ? " plus iOS TestFlight instructions" : ""}`;
+    return `${downloads.length} direct customer download links${hasAndroidDownload ? ' plus iOS TestFlight instructions' : ''}`;
   });
 
   /*
@@ -307,7 +304,7 @@ async function main() {
    "byte-identical re-publication" has to mean to a user.
   */
   let releaseProvenance = null;
-  await check("provenance", async () => {
+  await check('provenance', async () => {
     const assetName = releaseProvenanceAssetName(version);
     if (!releaseAssets.some((asset) => asset.name === assetName)) {
       return {
@@ -317,11 +314,9 @@ async function main() {
     const temporary = await mkdtemp(path.join(tmpdir(), `ghostex-provenance-verify-${version}-`));
     await capture(
       `env -u GH_TOKEN -u GITHUB_TOKEN gh release download ${shellQuote(`v${version}`)} ` +
-        `--repo ${shellQuote(githubRepo)} --pattern ${shellQuote(assetName)} --dir ${shellQuote(temporary)}`,
+        `--repo ${shellQuote(githubRepo)} --pattern ${shellQuote(assetName)} --dir ${shellQuote(temporary)}`
     );
-    releaseProvenance = validateReleaseProvenance(
-      JSON.parse(await readFile(path.join(temporary, assetName), "utf8")),
-    );
+    releaseProvenance = validateReleaseProvenance(JSON.parse(await readFile(path.join(temporary, assetName), 'utf8')));
     if (releaseProvenance.version !== version || releaseProvenance.tag !== `v${version}`) {
       throw new Error(`${assetName} records ${releaseProvenance.tag}, not v${version}.`);
     }
@@ -334,7 +329,7 @@ async function main() {
       releaseProvenance,
       version,
     });
-    if (failures.length > 0) throw new Error(failures.slice(0, 4).join(" | "));
+    if (failures.length > 0) throw new Error(failures.slice(0, 4).join(' | '));
 
     /* A cross-release reuse must byte-match the release it names. */
     const origins = crossReleaseReuseOrigins(releaseProvenance);
@@ -345,8 +340,8 @@ async function main() {
       const originRelease = JSON.parse(
         await capture(
           `env -u GH_TOKEN -u GITHUB_TOKEN gh release view ${shellQuote(origin.tag)} ` +
-            `--repo ${shellQuote(githubRepo)} --json assets`,
-        ),
+            `--repo ${shellQuote(githubRepo)} --json assets`
+        )
       );
       for (const artifact of origin.artifacts) {
         const originAsset = (originRelease.assets ?? []).find((asset) => asset.name === artifact.name);
@@ -354,17 +349,17 @@ async function main() {
         if (!originAsset || originSha !== artifact.sha256) {
           throw new Error(
             `${origin.product} claims ${artifact.name} is unchanged since ${origin.tag}, but that release publishes ` +
-              `${originSha ?? "no such asset"}.`,
+              `${originSha ?? 'no such asset'}.`
           );
         }
       }
     }
     const counts = Object.values(releaseProvenance.products).reduce(
       (totals, record) => ({
-        built: totals.built + (record.action === "built" ? 1 : 0),
-        reused: totals.reused + (record.action === "reused" ? 1 : 0),
+        built: totals.built + (record.action === 'built' ? 1 : 0),
+        reused: totals.reused + (record.action === 'reused' ? 1 : 0),
       }),
-      { built: 0, reused: 0 },
+      { built: 0, reused: 0 }
     );
     return (
       `${counts.built} built, ${counts.reused} reused (${origins.length} cross-release origin(s) byte-matched), ` +
@@ -375,24 +370,25 @@ async function main() {
   const provenanceFor = (product) => releaseProvenance?.products?.[product] ?? null;
   const describeProduct = (product) => {
     const record = provenanceFor(product);
-    if (!record) return "";
+    if (!record) return '';
     return ` [${record.action}, ${productOriginLabel(record)}]`;
   };
   const describeArtifact = (assetName) => {
     const record = Object.values(releaseProvenance?.products ?? {}).find((candidate) =>
-      candidate.artifacts.some((artifact) => artifact.name === assetName),
+      candidate.artifacts.some((artifact) => artifact.name === assetName)
     );
-    return record ? describeProduct(record.product) : "";
+    return record ? describeProduct(record.product) : '';
   };
 
-  await check("windows-update-feeds", async () => {
-    const arches = ["x64", "arm64"].filter((arch) => {
+  await check('windows-update-feeds', async () => {
+    const arches = ['x64', 'arm64'].filter((arch) => {
       const names = windowsUpdateArtifactNames(version, arch);
-      return [names.installer, names.portable, names.feed, names.fullPackage]
-        .some((name) => releaseAssets.some((asset) => asset.name === name));
+      return [names.installer, names.portable, names.feed, names.fullPackage].some((name) =>
+        releaseAssets.some((asset) => asset.name === name)
+      );
     });
     if (arches.length === 0) {
-      return { warn: "Release has no Velopack Windows update channels (legacy or Windows-excluded release)." };
+      return { warn: 'Release has no Velopack Windows update channels (legacy or Windows-excluded release).' };
     }
     const temporary = await mkdtemp(path.join(tmpdir(), `ghostex-windows-update-verify-${version}-`));
     const validated = [];
@@ -415,19 +411,17 @@ async function main() {
       }
       await capture(
         `env -u GH_TOKEN -u GITHUB_TOKEN gh release download ${shellQuote(`v${version}`)} ` +
-          `--repo ${shellQuote(githubRepo)} --pattern ${shellQuote(names.feed)} --dir ${shellQuote(temporary)}`,
+          `--repo ${shellQuote(githubRepo)} --pattern ${shellQuote(names.feed)} --dir ${shellQuote(temporary)}`
       );
       const result = validateWindowsUpdateFeed({
         arch,
         artifacts: channelAssets,
-        feedText: await readFile(path.join(temporary, names.feed), "utf8"),
+        feedText: await readFile(path.join(temporary, names.feed), 'utf8'),
         version,
       });
-      validated.push(
-        `${result.channel}${result.delta ? " with delta" : " full"}${describeProduct(`windows-${arch}`)}`,
-      );
+      validated.push(`${result.channel}${result.delta ? ' with delta' : ' full'}${describeProduct(`windows-${arch}`)}`);
     }
-    return validated.join(", ");
+    return validated.join(', ');
   });
 
   const onDemandReleaseAssets = onDemandAssetNames
@@ -435,17 +429,17 @@ async function main() {
     .filter(Boolean);
   const expectOnDemand = onDemandReleaseAssets.length === onDemandAssetNames.length;
 
-  await check("on-demand-assets", async () => {
+  await check('on-demand-assets', async () => {
     if (releaseAssets.length === 0) {
-      throw new Error("GitHub release assets were not readable.");
+      throw new Error('GitHub release assets were not readable.');
     }
     if (!expectOnDemand) {
       if (onDemandReleaseAssets.length > 0) {
         throw new Error(
-          `Release has only ${onDemandReleaseAssets.length}/${onDemandAssetNames.length} on-demand assets: ${onDemandReleaseAssets.map((asset) => asset.name).join(", ")}.`,
+          `Release has only ${onDemandReleaseAssets.length}/${onDemandAssetNames.length} on-demand assets: ${onDemandReleaseAssets.map((asset) => asset.name).join(', ')}.`
         );
       }
-      return { warn: "No on-demand assets on this release (legacy bundled-payload release)." };
+      return { warn: 'No on-demand assets on this release (legacy bundled-payload release).' };
     }
     for (const asset of onDemandReleaseAssets) {
       if (!parseAssetSha(asset)) {
@@ -458,38 +452,38 @@ async function main() {
      the bytes came from. The digests themselves were already matched against the
      provenance record and against the origin release above.
     */
-    return onDemandReleaseAssets.map((asset) => `${asset.name}${describeArtifact(asset.name)}`).join(", ");
+    return onDemandReleaseAssets.map((asset) => `${asset.name}${describeArtifact(asset.name)}`).join(', ');
   });
 
   let changelogNotes = null;
-  await check("changelog-section", async () => {
-    const changelog = await readFile(path.join(repoRoot, "CHANGELOG.md"), "utf8");
+  await check('changelog-section', async () => {
+    const changelog = await readFile(path.join(repoRoot, 'CHANGELOG.md'), 'utf8');
     changelogNotes = extractChangelogSectionFromText(changelog, version);
-    return "present with Major/Minor bullets";
+    return 'present with Major/Minor bullets';
   });
 
   let liveSignature = null;
-  await check("live-appcast", async () => {
+  await check('live-appcast', async () => {
     if (options.skipSparkle) {
       return SKIPPED;
     }
-    const appcastPath = path.join(await mkdtemp(path.join(tmpdir(), `ghostex-verify-${version}-`)), "appcast.xml");
-    await writeFile(appcastPath, await githubContent(githubRepo, "appcast.xml"));
+    const appcastPath = path.join(await mkdtemp(path.join(tmpdir(), `ghostex-verify-${version}-`)), 'appcast.xml');
+    await writeFile(appcastPath, await githubContent(githubRepo, 'appcast.xml'));
     await capture(`xmllint --noout ${shellQuote(appcastPath)}`);
     const topVersion = await capture(
-      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='version'])[1])" ${shellQuote(appcastPath)}`,
+      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='version'])[1])" ${shellQuote(appcastPath)}`
     );
     const topShortVersion = await capture(
-      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='shortVersionString'])[1])" ${shellQuote(appcastPath)}`,
+      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='shortVersionString'])[1])" ${shellQuote(appcastPath)}`
     );
     const topUrl = await capture(
-      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='enclosure']/@url)[1])" ${shellQuote(appcastPath)}`,
+      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='enclosure']/@url)[1])" ${shellQuote(appcastPath)}`
     );
     liveSignature = await capture(
-      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='enclosure']/@*[local-name()='edSignature'])[1])" ${shellQuote(appcastPath)}`,
+      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='enclosure']/@*[local-name()='edSignature'])[1])" ${shellQuote(appcastPath)}`
     );
     const embeddedNotes = await capture(
-      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='description'])[1])" ${shellQuote(appcastPath)}`,
+      `xmllint --xpath "string((//*[local-name()='item'][1]/*[local-name()='description'])[1])" ${shellQuote(appcastPath)}`
     );
     const expectedUrl = `https://github.com/${githubRepo}/releases/download/v${version}/ghostex-${version}-arm64.dmg`;
     if (topVersion !== String(buildVersion) || topShortVersion !== version) {
@@ -499,15 +493,15 @@ async function main() {
       throw new Error(`Top enclosure URL is ${topUrl}.`);
     }
     if (!liveSignature) {
-      throw new Error("Top enclosure has no EdDSA signature.");
+      throw new Error('Top enclosure has no EdDSA signature.');
     }
     const notesProbe = changelogNotes
       ?.split(/\r?\n/)
       .map((line) => line.trim())
-      .find((line) => line.startsWith("- ") && line !== "- Major" && line !== "- Minor" && line !== "- GPUI")
+      .find((line) => line.startsWith('- ') && line !== '- Major' && line !== '- Minor' && line !== '- GPUI')
       ?.slice(2);
     if (!embeddedNotes.trim()) {
-      throw new Error("Top item has empty embedded release notes.");
+      throw new Error('Top item has empty embedded release notes.');
     }
     if (notesProbe && !embeddedNotes.includes(notesProbe)) {
       throw new Error(`Embedded notes do not contain expected changelog text: ${notesProbe}`);
@@ -515,14 +509,14 @@ async function main() {
     return `top item ${version} (${buildVersion}) with embedded notes`;
   });
 
-  await check("homebrew-cask", async () => {
+  await check('homebrew-cask', async () => {
     if (options.skipBrew) {
       return SKIPPED;
     }
     if (!dmgDigest) {
-      throw new Error("GitHub reported no DMG digest to validate the cask sha256 against.");
+      throw new Error('GitHub reported no DMG digest to validate the cask sha256 against.');
     }
-    const liveCask = await githubContent("maddada/homebrew-tap", "Casks/ghostex.rb");
+    const liveCask = await githubContent('maddada/homebrew-tap', 'Casks/ghostex.rb');
     validateGhostexCask(liveCask, { sha256: dmgDigest, version });
     return `live cask at ${version}, arm64-only, :ventura`;
   });
@@ -532,27 +526,27 @@ async function main() {
   if (dmgPath && !existsSync(dmgPath)) {
     throw new Error(`--dmg does not exist: ${dmgPath}`);
   }
-  await check("homebrew-commands", async () => {
+  await check('homebrew-commands', async () => {
     if (options.skipBrew) {
       return SKIPPED;
     }
-    await capture("HOMEBREW_NO_INSTALL_FROM_API=1 brew info --cask maddada/tap/ghostex", { timeoutMs: 300_000 });
-    const catOutput = await capture("HOMEBREW_NO_INSTALL_FROM_API=1 brew cat --cask maddada/tap/ghostex", {
+    await capture('HOMEBREW_NO_INSTALL_FROM_API=1 brew info --cask maddada/tap/ghostex', { timeoutMs: 300_000 });
+    const catOutput = await capture('HOMEBREW_NO_INSTALL_FROM_API=1 brew cat --cask maddada/tap/ghostex', {
       timeoutMs: 300_000,
     });
     validateGhostexCask(catOutput, { sha256: dmgDigest, version });
     if (options.skipBrewFetch || dmgPath) {
-      return dmgPath ? "brew info/cat validated; supplied DMG reused" : "brew info/cat validated; fetch skipped";
+      return dmgPath ? 'brew info/cat validated; supplied DMG reused' : 'brew info/cat validated; fetch skipped';
     }
-    await capture("HOMEBREW_NO_INSTALL_FROM_API=1 brew fetch --force --cask --arch=arm maddada/tap/ghostex", {
+    await capture('HOMEBREW_NO_INSTALL_FROM_API=1 brew fetch --force --cask --arch=arm maddada/tap/ghostex', {
       timeoutMs: 900_000,
     });
-    const brewCache = await capture("brew --cache --cask maddada/tap/ghostex");
+    const brewCache = await capture('brew --cache --cask maddada/tap/ghostex');
     if (existsSync(brewCache)) dmgPath = brewCache;
-    return dmgPath ? "brew info/cat/fetch validated; cached DMG reused" : "brew info/cat/fetch validated";
+    return dmgPath ? 'brew info/cat/fetch validated; cached DMG reused' : 'brew info/cat/fetch validated';
   });
 
-  await check("dmg-artifact", async () => {
+  await check('dmg-artifact', async () => {
     if (options.skipDmg) {
       return SKIPPED;
     }
@@ -560,7 +554,7 @@ async function main() {
       const downloadPath = path.join(tmpdir(), `ghostex-${version}-final-verify.dmg`);
       await capture(
         `curl -fsSL ${shellQuote(`https://github.com/${githubRepo}/releases/download/v${version}/ghostex-${version}-arm64.dmg`)} -o ${shellQuote(downloadPath)}`,
-        { timeoutMs: 1_800_000 },
+        { timeoutMs: 1_800_000 }
       );
       dmgPath = downloadPath;
     }
@@ -572,70 +566,70 @@ async function main() {
     return `${path.basename(dmgPath)} ${formatMiB(dmgBytes)} (${sha.slice(0, 12)}...)`;
   });
 
-  await check("sparkle-signature", async () => {
+  await check('sparkle-signature', async () => {
     if (options.skipSparkle || options.skipDmg) {
       return SKIPPED;
     }
     if (!dmgPath || !liveSignature) {
-      throw new Error("DMG path or live signature unavailable.");
+      throw new Error('DMG path or live signature unavailable.');
     }
     const findCommand = [
-      "find",
-      shellQuote(path.join(repoRoot, "build/arm64/SourcePackages/artifacts/sparkle")),
-      shellQuote(path.join(repoRoot, "build/SourcePackages/artifacts/sparkle")),
+      'find',
+      shellQuote(path.join(repoRoot, 'build/arm64/SourcePackages/artifacts/sparkle')),
+      shellQuote(path.join(repoRoot, 'build/SourcePackages/artifacts/sparkle')),
       "'/tmp/ghostex-xcodebuild/SourcePackages/artifacts/sparkle'",
       "-path '*/Sparkle/bin/sign_update' -print -quit 2>/dev/null",
-    ].join(" ");
+    ].join(' ');
     const signUpdate = (await runCommand(findCommand)).stdout.trim();
     if (!signUpdate) {
-      return { warn: "Sparkle sign_update tool not found locally; signature not re-verified against the DMG." };
+      return { warn: 'Sparkle sign_update tool not found locally; signature not re-verified against the DMG.' };
     }
     await capture(`${shellQuote(signUpdate)} --verify ${shellQuote(dmgPath)} ${shellQuote(liveSignature)}`);
-    return "live EdDSA signature verifies the DMG bytes";
+    return 'live EdDSA signature verifies the DMG bytes';
   });
 
   let sealedManifestV2 = null;
-  await check("dmg-bundle-validation", async () => {
+  await check('dmg-bundle-validation', async () => {
     if (options.skipDmg) {
       return SKIPPED;
     }
     if (!dmgPath) {
-      throw new Error("No DMG available to mount.");
+      throw new Error('No DMG available to mount.');
     }
     const attachOutput = await capture(`hdiutil attach -nobrowse -readonly ${shellQuote(dmgPath)}`);
-    const mountPoint = attachOutput.split("\n").filter(Boolean).at(-1)?.split(/\t+/).at(-1)?.trim();
-    if (!mountPoint || !mountPoint.startsWith("/Volumes/")) {
+    const mountPoint = attachOutput.split('\n').filter(Boolean).at(-1)?.split(/\t+/).at(-1)?.trim();
+    if (!mountPoint || !mountPoint.startsWith('/Volumes/')) {
       throw new Error(`Could not parse mount point from hdiutil output.`);
     }
     try {
-      const appPath = path.join(mountPoint, "ghostex.app");
+      const appPath = path.join(mountPoint, 'ghostex.app');
       await capture(`codesign --verify --deep --strict --verbose=2 ${shellQuote(appPath)}`, { timeoutMs: 600_000 });
       const shortVersion = await capture(
-        `plutil -extract CFBundleShortVersionString raw ${shellQuote(path.join(appPath, "Contents/Info.plist"))}`,
+        `plutil -extract CFBundleShortVersionString raw ${shellQuote(path.join(appPath, 'Contents/Info.plist'))}`
       );
       const bundleVersion = await capture(
-        `plutil -extract CFBundleVersion raw ${shellQuote(path.join(appPath, "Contents/Info.plist"))}`,
+        `plutil -extract CFBundleVersion raw ${shellQuote(path.join(appPath, 'Contents/Info.plist'))}`
       );
       if (shortVersion !== version || bundleVersion !== String(buildVersion)) {
         throw new Error(`Mounted app is ${shortVersion} (${bundleVersion}); expected ${version} (${buildVersion}).`);
       }
 
-      const manifestPath = path.join(appPath, "Contents/Resources/Web/on-demand-resources.json");
-      const manifest = existsSync(manifestPath) ? JSON.parse(await readFile(manifestPath, "utf8")) : null;
+      const manifestPath = path.join(appPath, 'Contents/Resources/Web/on-demand-resources.json');
+      const manifest = existsSync(manifestPath) ? JSON.parse(await readFile(manifestPath, 'utf8')) : null;
       const isNewBundleShape = manifest?.schemaVersion === 2;
       await validateMacosAppBundle({
         allowLegacyBundleShape: !isNewBundleShape,
-        appName: "Ghostex",
+        appName: 'Ghostex',
         appPath,
-        arch: "arm64",
+        arch: 'arm64',
       });
       const installedKiB = Number.parseInt(
         (await capture(`du -sk ${shellQuote(appPath)} | awk '{print $1}'`)).trim(),
-        10,
+        10
       );
       const installedBytes = installedKiB * 1024;
       if (expectOnDemand) {
-        if (!manifest) throw new Error("Mounted app has no sealed on-demand manifest.");
+        if (!manifest) throw new Error('Mounted app has no sealed on-demand manifest.');
         if (manifest.version !== version) {
           throw new Error(`Sealed on-demand manifest records ${manifest.version}; expected ${version}.`);
         }
@@ -644,19 +638,19 @@ async function main() {
           const liveSha = parseAssetSha(asset);
           if (!sealed || sealed.sha256 !== liveSha) {
             throw new Error(
-              `Sealed checksum for ${asset.name} (${sealed?.sha256 ?? "missing"}) does not match the live asset digest (${liveSha}).`,
+              `Sealed checksum for ${asset.name} (${sealed?.sha256 ?? 'missing'}) does not match the live asset digest (${liveSha}).`
             );
           }
         }
       } else if (existsSync(manifestPath)) {
-        throw new Error("Mounted app declares on-demand assets but the release has none.");
+        throw new Error('Mounted app declares on-demand assets but the release has none.');
       }
       if (!isNewBundleShape) {
         return {
           warn:
             `Expected difference: ${version} uses the legacy bundled-runtime shape; ` +
             `installed app ${formatMiB(installedBytes)}, DMG ${formatMiB(dmgBytes)}. ` +
-            "The 300 MiB DMG budget starts with manifest v2 releases.",
+            'The 300 MiB DMG budget starts with manifest v2 releases.',
         };
       }
       sealedManifestV2 = validateOnDemandManifestV2(manifest);
@@ -670,10 +664,10 @@ async function main() {
     }
   });
 
-  await check("component-tags", async () => {
+  await check('component-tags', async () => {
     if (options.skipDmg) return SKIPPED;
     if (!sealedManifestV2) {
-      return { warn: "Expected difference: legacy release has no manifest v2 component tags to verify." };
+      return { warn: 'Expected difference: legacy release has no manifest v2 component tags to verify.' };
     }
     for (const component of Object.values(sealedManifestV2.components)) {
       verifyPublishedComponent({
@@ -684,54 +678,57 @@ async function main() {
     return `${Object.keys(sealedManifestV2.components).length} component tag(s) match sealed digests and sizes`;
   });
 
-  await check("component-download-unpack", async () => {
+  await check('component-download-unpack', async () => {
     if (options.skipDmg) return SKIPPED;
     if (!sealedManifestV2) {
-      return { warn: "Expected difference: legacy release has no component tarball to spot-check." };
+      return { warn: 'Expected difference: legacy release has no component tarball to spot-check.' };
     }
     const candidates = Object.values(sealedManifestV2.components).flatMap((component) =>
-      Object.values(component.platforms).map((asset) => ({ component, asset })),
+      Object.values(component.platforms).map((asset) => ({ component, asset }))
     );
     const selected = candidates.sort((left, right) => left.asset.sizeBytes - right.asset.sizeBytes)[0];
-    if (!selected) throw new Error("Manifest v2 contains no component asset to spot-check.");
+    if (!selected) throw new Error('Manifest v2 contains no component asset to spot-check.');
     const temporary = await mkdtemp(path.join(tmpdir(), `ghostex-component-verify-${version}-`));
     const archivePath = path.join(temporary, selected.asset.assetName);
-    const extractPath = path.join(temporary, "unpacked");
+    const extractPath = path.join(temporary, 'unpacked');
     await capture(
       `env -u GH_TOKEN -u GITHUB_TOKEN gh release download ${shellQuote(selected.component.downloadTag)} ` +
         `--repo ${shellQuote(githubRepo)} --pattern ${shellQuote(selected.asset.assetName)} --dir ${shellQuote(temporary)}`,
-      { timeoutMs: 1_800_000 },
+      { timeoutMs: 1_800_000 }
     );
     const downloadedSha = await capture(`shasum -a 256 ${shellQuote(archivePath)} | awk '{print $1}'`);
     if (downloadedSha !== selected.asset.sha256) {
-      throw new Error(`Downloaded ${selected.asset.assetName} digest ${downloadedSha} does not match the sealed manifest.`);
+      throw new Error(
+        `Downloaded ${selected.asset.assetName} digest ${downloadedSha} does not match the sealed manifest.`
+      );
     }
     const listing = await capture(`tar -tzf ${shellQuote(archivePath)}`);
-    const unsafe = listing.split(/\r?\n/u).find((entry) => entry.startsWith("/") || entry.split("/").includes(".."));
+    const unsafe = listing.split(/\r?\n/u).find((entry) => entry.startsWith('/') || entry.split('/').includes('..'));
     if (unsafe) throw new Error(`Unsafe component archive entry: ${unsafe}`);
     await mkdir(extractPath);
     await capture(`tar -xzf ${shellQuote(archivePath)} -C ${shellQuote(extractPath)}`);
-    if ((await readdir(extractPath)).length === 0) throw new Error(`${selected.asset.assetName} unpacked to an empty directory.`);
+    if ((await readdir(extractPath)).length === 0)
+      throw new Error(`${selected.asset.assetName} unpacked to an empty directory.`);
     return `${selected.asset.assetName} downloaded, SHA-verified, and unpacked`;
   });
 
-  await check("android-apk", async () => {
+  await check('android-apk', async () => {
     if (options.skipAndroid) {
       return SKIPPED;
     }
-    const apkAsset = releaseAssets.find((asset) => asset.name === "ghostex-android.apk");
+    const apkAsset = releaseAssets.find((asset) => asset.name === 'ghostex-android.apk');
     if (!apkAsset) {
-      throw new Error("Release is missing ghostex-android.apk.");
+      throw new Error('Release is missing ghostex-android.apk.');
     }
     const apkSha = parseAssetSha(apkAsset);
     if (!apkSha) {
-      return { warn: "GitHub reported no digest for ghostex-android.apk; checksum not cross-checked." };
+      return { warn: 'GitHub reported no digest for ghostex-android.apk; checksum not cross-checked.' };
     }
     /* A reused APK is still checked through live asset metadata and provenance. */
-    return `APK digest ${apkSha.slice(0, 12)}... verified from the live asset${describeProduct("android")}`;
+    return `APK digest ${apkSha.slice(0, 12)}... verified from the live asset${describeProduct('android')}`;
   });
 
-  await check("subrepos-clean", async () => {
+  await check('subrepos-clean', async () => {
     if (options.skipSubrepos) {
       return SKIPPED;
     }
@@ -741,14 +738,10 @@ async function main() {
       if (!existsSync(repoPath)) {
         continue;
       }
-      const topLevelResult = await runCommand(
-        `git -C ${shellQuote(repoPath)} rev-parse --show-toplevel`,
-        { timeoutMs: 10_000 },
-      );
-      if (
-        topLevelResult.code !== 0 ||
-        path.resolve(topLevelResult.stdout.trim()) !== path.resolve(repoPath)
-      ) {
+      const topLevelResult = await runCommand(`git -C ${shellQuote(repoPath)} rev-parse --show-toplevel`, {
+        timeoutMs: 10_000,
+      });
+      if (topLevelResult.code !== 0 || path.resolve(topLevelResult.stdout.trim()) !== path.resolve(repoPath)) {
         continue;
       }
       const status = await capture(`git -C ${shellQuote(repoPath)} status --porcelain --untracked-files=all`);
@@ -757,37 +750,39 @@ async function main() {
       }
     }
     if (problems.length > 0) {
-      throw new Error(`Dirty subrepos: ${problems.join(", ")}`);
+      throw new Error(`Dirty subrepos: ${problems.join(', ')}`);
     }
-    return "all clean";
+    return 'all clean';
   });
 
-  console.log("");
+  console.log('');
   const nameWidth = Math.max(...results.map((result) => result.name.length)) + 2;
   for (const result of results) {
     console.log(
-      `${result.status.padEnd(4)}  ${result.name.padEnd(nameWidth)} ${formatDuration(result.durationMs).padStart(8)}  ${result.detail}`,
+      `${result.status.padEnd(4)}  ${result.name.padEnd(nameWidth)} ${formatDuration(result.durationMs).padStart(8)}  ${result.detail}`
     );
   }
   if (releaseProvenance) {
-    console.log("");
+    console.log('');
     console.log(renderReleaseProvenanceReport(releaseProvenance));
   }
-  const failed = results.filter((result) => result.status === "FAIL");
+  const failed = results.filter((result) => result.status === 'FAIL');
   if (failed.length > 0) {
-    console.error(`\nFinal verification FAILED (${failed.map((result) => result.name).join(", ")}) in ${formatDuration(Date.now() - startedAt)}.`);
+    console.error(
+      `\nFinal verification FAILED (${failed.map((result) => result.name).join(', ')}) in ${formatDuration(Date.now() - startedAt)}.`
+    );
     process.exitCode = 1;
     return;
   }
-  const warned = results.filter((result) => result.status === "WARN");
+  const warned = results.filter((result) => result.status === 'WARN');
   console.log(
-    `\nFinal verification PASSED in ${formatDuration(Date.now() - startedAt)}${warned.length > 0 ? ` with ${warned.length} warning(s)` : ""}.`,
+    `\nFinal verification PASSED in ${formatDuration(Date.now() - startedAt)}${warned.length > 0 ? ` with ${warned.length} warning(s)` : ''}.`
   );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
-    console.error("");
+    console.error('');
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });

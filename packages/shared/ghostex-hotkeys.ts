@@ -1,55 +1,55 @@
-import type { SessionGridDirection, TerminalViewMode } from "./session-grid-contract-core";
+import type { SessionGridDirection, TerminalViewMode } from './session-grid-contract-core';
 
 export type ghostexHotkeyActionId =
-  | "attachFileOrFolder"
-  | "closeAfterDone"
-  | "closeFocusedSession"
-  | "createSession"
-  | "delayedSend"
-  | "exportTranscript"
-  | "forkSession"
-  | "mergeAllTabs"
-  | "openCommandPalette"
-  | "openSessionSearchPalette"
-  | "openBrowserPane"
-  | "openSettings"
-  | "openHotkeys"
-  | "moveSidebar"
-  | "openCommandsPanel"
-  | "openPlugins"
-  | "popOutPane"
-  | "promptEditor"
-  | "reloadSession"
-  | "renameActiveSession"
-  | "rotatePanesClockwise"
-  | "sleepFocusedSession"
-  | "scrollTerminalToBottom"
-  | "scrollTerminalToTop"
-  | "stashPrompt"
-  | "stashedPrompts"
-  | "toggleChatView"
-  | "openFindPrompts"
-  | "toggleCompanionPane"
-  | "toggleAgentActions"
-  | "toggleSidebarCollapsed"
-  | "wakeFocusedSession"
-  | "focusPreviousGroup"
-  | "focusNextGroup"
-  | "navigateHistoryBack"
-  | "navigateHistoryForward"
-  | "focusPreviousSession"
-  | "focusNextSession"
-  | "focusUp"
-  | "focusRight"
-  | "focusDown"
-  | "focusLeft"
-  | "splitMore"
-  | "splitMoreDown"
-  | "switchAgentsView"
-  | "switchSourceView"
-  | "switchGitHubView"
-  | "switchKanbanView"
-  | "switchManageView"
+  | 'attachFileOrFolder'
+  | 'closeAfterDone'
+  | 'closeFocusedSession'
+  | 'createSession'
+  | 'delayedSend'
+  | 'exportTranscript'
+  | 'forkSession'
+  | 'mergeAllTabs'
+  | 'openCommandPalette'
+  | 'openSessionSearchPalette'
+  | 'openBrowserPane'
+  | 'openSettings'
+  | 'openHotkeys'
+  | 'moveSidebar'
+  | 'openCommandsPanel'
+  | 'openPlugins'
+  | 'popOutPane'
+  | 'promptEditor'
+  | 'reloadSession'
+  | 'renameActiveSession'
+  | 'rotatePanesClockwise'
+  | 'sleepFocusedSession'
+  | 'scrollTerminalToBottom'
+  | 'scrollTerminalToTop'
+  | 'stashPrompt'
+  | 'stashedPrompts'
+  | 'toggleChatView'
+  | 'openFindPrompts'
+  | 'toggleCompanionPane'
+  | 'toggleAgentActions'
+  | 'toggleSidebarCollapsed'
+  | 'wakeFocusedSession'
+  | 'focusPreviousGroup'
+  | 'focusNextGroup'
+  | 'navigateHistoryBack'
+  | 'navigateHistoryForward'
+  | 'focusPreviousSession'
+  | 'focusNextSession'
+  | 'focusUp'
+  | 'focusRight'
+  | 'focusDown'
+  | 'focusLeft'
+  | 'splitMore'
+  | 'splitMoreDown'
+  | 'switchAgentsView'
+  | 'switchSourceView'
+  | 'switchGitHubView'
+  | 'switchKanbanView'
+  | 'switchManageView'
   | `runActionSlot${1 | 2 | 3 | 4 | 5}`
   | `jumpToProject${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`
   | `focusSessionSlot${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
@@ -57,54 +57,57 @@ export type ghostexHotkeyActionId =
 export type ghostexHotkeySettings = Partial<Record<ghostexHotkeyActionId, string>>;
 
 export type ghostexFocusedPaneAction =
-  | "closeAfterDone"
-  | "closeFocusedSession"
-  | "delayedSend"
-  | "forkSession"
-  | "mergeAllTabs"
-  | "openBrowserPane"
-  | "popOutPane"
-  | "reloadSession"
-  | "rotatePanesClockwise"
-  | "sleepFocusedSession"
-  | "wakeFocusedSession";
+  | 'closeAfterDone'
+  | 'closeFocusedSession'
+  | 'delayedSend'
+  | 'forkSession'
+  | 'mergeAllTabs'
+  | 'openBrowserPane'
+  | 'popOutPane'
+  | 'reloadSession'
+  | 'rotatePanesClockwise'
+  | 'sleepFocusedSession'
+  | 'wakeFocusedSession';
 
 export type ghostexTerminalToolbarAction =
-  | "attachFileOrFolder"
-  | "exportTranscript"
-  | "promptEditor"
-  | "scrollTerminalToBottom"
-  | "scrollTerminalToTop"
-  | "stashPrompt"
-  | "stashedPrompts"
-  | "toggleAgentActions"
-  | "toggleChatView";
-
+  | 'attachFileOrFolder'
+  | 'exportTranscript'
+  | 'promptEditor'
+  | 'scrollTerminalToBottom'
+  | 'scrollTerminalToTop'
+  | 'stashPrompt'
+  | 'stashedPrompts'
+  | 'toggleAgentActions'
+  | 'toggleChatView';
 
 export type ghostexHotkeyAction =
-  | { id: ghostexHotkeyActionId; kind: "createSession" }
-  | { id: ghostexHotkeyActionId; kind: "focusAdjacentGroup"; direction: -1 | 1 }
-  | { id: ghostexHotkeyActionId; kind: "focusDirection"; direction: SessionGridDirection }
-  | { id: ghostexHotkeyActionId; kind: "focusSessionSlot"; slotNumber: number }
-  | { id: ghostexHotkeyActionId; kind: "focusedPaneAction"; focusedPaneAction: ghostexFocusedPaneAction }
-  | { id: ghostexHotkeyActionId; kind: "jumpToProject"; projectIndex: number }
-  | { direction: "back" | "forward"; id: ghostexHotkeyActionId; kind: "navigateHistory" }
-  | { id: ghostexHotkeyActionId; kind: "moveSidebar" }
-  | { id: ghostexHotkeyActionId; kind: "openCommandPalette" }
-  | { id: ghostexHotkeyActionId; kind: "openSessionSearchPalette" }
-  | { id: ghostexHotkeyActionId; kind: "openCommandsPanel" }
-  | { id: ghostexHotkeyActionId; kind: "openDocsFoldersSettings" }
-  | { id: ghostexHotkeyActionId; kind: "openSettings" }
-  | { id: ghostexHotkeyActionId; kind: "openFindPrompts" }
-  | { id: ghostexHotkeyActionId; kind: "openHotkeys" }
-  | { id: ghostexHotkeyActionId; kind: "renameActiveSession" }
-  | { id: ghostexHotkeyActionId; kind: "runActionSlot"; slotNumber: number }
-  | { id: ghostexHotkeyActionId; kind: "setViewMode"; viewMode: TerminalViewMode }
-  | { id: ghostexHotkeyActionId; kind: "switchWorkareaView"; view: "agents" | "github" | "kanban" | "manage" | "source" }
-  | { id: ghostexHotkeyActionId; kind: "terminalToolbarAction"; terminalToolbarAction: ghostexTerminalToolbarAction }
-  | { id: ghostexHotkeyActionId; kind: "toggleCompanionPane" }
-  | { id: ghostexHotkeyActionId; kind: "toggleSidebarCollapsed" }
-  | { direction: "horizontal" | "vertical"; id: ghostexHotkeyActionId; kind: "splitFocusedPane" };
+  | { id: ghostexHotkeyActionId; kind: 'createSession' }
+  | { id: ghostexHotkeyActionId; kind: 'focusAdjacentGroup'; direction: -1 | 1 }
+  | { id: ghostexHotkeyActionId; kind: 'focusDirection'; direction: SessionGridDirection }
+  | { id: ghostexHotkeyActionId; kind: 'focusSessionSlot'; slotNumber: number }
+  | { id: ghostexHotkeyActionId; kind: 'focusedPaneAction'; focusedPaneAction: ghostexFocusedPaneAction }
+  | { id: ghostexHotkeyActionId; kind: 'jumpToProject'; projectIndex: number }
+  | { direction: 'back' | 'forward'; id: ghostexHotkeyActionId; kind: 'navigateHistory' }
+  | { id: ghostexHotkeyActionId; kind: 'moveSidebar' }
+  | { id: ghostexHotkeyActionId; kind: 'openCommandPalette' }
+  | { id: ghostexHotkeyActionId; kind: 'openSessionSearchPalette' }
+  | { id: ghostexHotkeyActionId; kind: 'openCommandsPanel' }
+  | { id: ghostexHotkeyActionId; kind: 'openDocsFoldersSettings' }
+  | { id: ghostexHotkeyActionId; kind: 'openSettings' }
+  | { id: ghostexHotkeyActionId; kind: 'openFindPrompts' }
+  | { id: ghostexHotkeyActionId; kind: 'openHotkeys' }
+  | { id: ghostexHotkeyActionId; kind: 'renameActiveSession' }
+  | { id: ghostexHotkeyActionId; kind: 'runActionSlot'; slotNumber: number }
+  | { id: ghostexHotkeyActionId; kind: 'setViewMode'; viewMode: TerminalViewMode }
+  | {
+      id: ghostexHotkeyActionId;
+      kind: 'switchWorkareaView';
+      view: 'agents' | 'github' | 'kanban' | 'manage' | 'source';
+    }
+  | { id: ghostexHotkeyActionId; kind: 'terminalToolbarAction'; terminalToolbarAction: ghostexTerminalToolbarAction }
+  | { id: ghostexHotkeyActionId; kind: 'toggleCompanionPane' }
+  | { id: ghostexHotkeyActionId; kind: 'toggleSidebarCollapsed' }
+  | { direction: 'horizontal' | 'vertical'; id: ghostexHotkeyActionId; kind: 'splitFocusedPane' };
 
 export type ghostexHotkeyDefinition = {
   action: ghostexHotkeyAction;
@@ -125,7 +128,7 @@ export type ghostexHotkeyDefinition = {
  */
 export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
-    action: { id: "createSession", kind: "createSession" },
+    action: { id: 'createSession', kind: 'createSession' },
     /**
      * CDXC:Hotkeys 2026-05-11-09:26
      * Default hotkeys should prefer plain Cmd chords so the app feels like a
@@ -135,14 +138,14 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * CDXC:Hotkeys 2026-06-06-04:36:
      * Cmd+T is the default New Terminal Tab action. It creates a terminal tab in the focused workspace split pane, immediately after the currently focused tab.
      */
-    defaultKey: "cmd+t",
-    description: "Create a terminal session.",
-    id: "createSession",
-    retiredDefaultKeys: ["cmd+n"],
-    title: "Create Session",
+    defaultKey: 'cmd+t',
+    description: 'Create a terminal session.',
+    id: 'createSession',
+    retiredDefaultKeys: ['cmd+n'],
+    title: 'Create Session',
   },
   {
-    action: { id: "openCommandPalette", kind: "openCommandPalette" },
+    action: { id: 'openCommandPalette', kind: 'openCommandPalette' },
     /**
      * CDXC:CommandPalette 2026-06-13-10:26:
      * Cmd+Shift+P is the default command-palette shortcut for the macOS app. It
@@ -152,93 +155,93 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * CDXC:CommandPalette 2026-06-13-22:18:
      * Cmd+Shift+P opens Ghostex Quick Access directly on its Commands tab.
      */
-    defaultKey: "cmd+shift+p",
-    description: "Open Ghostex Quick Access on Commands.",
-    id: "openCommandPalette",
-    retiredDefaultKeys: ["cmd+k"],
-    title: "Open Quick Access: Commands",
+    defaultKey: 'cmd+shift+p',
+    description: 'Open Ghostex Quick Access on Commands.',
+    id: 'openCommandPalette',
+    retiredDefaultKeys: ['cmd+k'],
+    title: 'Open Quick Access: Commands',
   },
   {
-    action: { id: "openSessionSearchPalette", kind: "openSessionSearchPalette" },
+    action: { id: 'openSessionSearchPalette', kind: 'openSessionSearchPalette' },
     /**
      * CDXC:CommandPalette 2026-06-13-22:18:
      * Cmd+P opens Ghostex Quick Access directly on Recent Sessions. Users can
      * rebind it separately because session recovery and command finding are
      * distinct habits.
      */
-    defaultKey: "cmd+p",
-    description: "Open Ghostex Quick Access on Recent Sessions.",
-    id: "openSessionSearchPalette",
-    title: "Open Quick Access: Recent Sessions",
+    defaultKey: 'cmd+p',
+    description: 'Open Ghostex Quick Access on Recent Sessions.',
+    id: 'openSessionSearchPalette',
+    title: 'Open Quick Access: Recent Sessions',
   },
   {
-    action: { id: "openCommandsPanel", kind: "openCommandsPanel" },
-    defaultKey: "f12",
-    description: "Open the project command terminal panel.",
-    id: "openCommandsPanel",
-    title: "Open Commands Panel",
+    action: { id: 'openCommandsPanel', kind: 'openCommandsPanel' },
+    defaultKey: 'f12',
+    description: 'Open the project command terminal panel.',
+    id: 'openCommandsPanel',
+    title: 'Open Commands Panel',
   },
   {
-    action: { id: "openSettings", kind: "openSettings" },
-    defaultKey: "cmd+,",
-    description: "Open app settings.",
-    id: "openSettings",
-    title: "Open Settings",
+    action: { id: 'openSettings', kind: 'openSettings' },
+    defaultKey: 'cmd+,',
+    description: 'Open app settings.',
+    id: 'openSettings',
+    title: 'Open Settings',
   },
   {
-    action: { id: "openHotkeys", kind: "openHotkeys" },
+    action: { id: 'openHotkeys', kind: 'openHotkeys' },
     /**
      * CDXC:Hotkeys 2026-06-19-00:35:
      * The far-right titlebar Settings menu advertises Cmd+. beside Hotkeys. Make Hotkeys a real configurable app shortcut so the menu label, Settings editor, sidebar dispatch, and terminal-focused AppKit dispatch all describe the same behavior.
      */
-    defaultKey: "cmd+.",
-    description: "Open app hotkeys.",
-    id: "openHotkeys",
-    title: "Hotkeys",
+    defaultKey: 'cmd+.',
+    description: 'Open app hotkeys.',
+    id: 'openHotkeys',
+    title: 'Hotkeys',
   },
   {
-    action: { id: "toggleSidebarCollapsed", kind: "toggleSidebarCollapsed" },
+    action: { id: 'toggleSidebarCollapsed', kind: 'toggleSidebarCollapsed' },
     /**
      * CDXC:SidebarCollapse 2026-06-12-02:23:
      * Cmd+B should completely collapse or expand the native sidebar chrome. Keep this separate from sidebar placement so the same shortcut never moves the sidebar between left and right sides.
      */
-    defaultKey: "cmd+b",
-    description: "Collapse or expand the sidebar.",
-    id: "toggleSidebarCollapsed",
-    title: "Toggle Sidebar",
+    defaultKey: 'cmd+b',
+    description: 'Collapse or expand the sidebar.',
+    id: 'toggleSidebarCollapsed',
+    title: 'Toggle Sidebar',
   },
   {
-    action: { id: "toggleCompanionPane", kind: "toggleCompanionPane" },
+    action: { id: 'toggleCompanionPane', kind: 'toggleCompanionPane' },
     /**
      * CDXC:ProjectEditorCompanion 2026-07-29-05:03:
      * Cmd+Option+B toggles the project-editor companion independently from the main app sidebar. Collapsing transfers focus to the active Code, Browser, Kanban, Automate, or Docs pane; expanding restores and focuses the companion.
      */
-    defaultKey: "cmd+alt+b",
-    description: "Collapse or expand the project companion pane.",
-    id: "toggleCompanionPane",
-    title: "Toggle Companion Pane",
+    defaultKey: 'cmd+alt+b',
+    description: 'Collapse or expand the project companion pane.',
+    id: 'toggleCompanionPane',
+    title: 'Toggle Companion Pane',
   },
   {
-    action: { id: "moveSidebar", kind: "moveSidebar" },
+    action: { id: 'moveSidebar', kind: 'moveSidebar' },
     /**
      * CDXC:SidebarCollapse 2026-06-12-02:23:
      * Sidebar side switching remains configurable, but it must be unassigned by default now that Cmd+B is the complete sidebar collapse toggle.
      */
-    defaultKey: "",
-    description: "Move the sidebar to the other side.",
-    id: "moveSidebar",
-    retiredDefaultKeys: ["cmd+b"],
-    title: "Move Sidebar",
+    defaultKey: '',
+    description: 'Move the sidebar to the other side.',
+    id: 'moveSidebar',
+    retiredDefaultKeys: ['cmd+b'],
+    title: 'Move Sidebar',
   },
   {
-    action: { id: "renameActiveSession", kind: "renameActiveSession" },
-    defaultKey: "cmd+r",
-    description: "Rename the focused session.",
-    id: "renameActiveSession",
-    title: "Rename Active Session",
+    action: { id: 'renameActiveSession', kind: 'renameActiveSession' },
+    defaultKey: 'cmd+r',
+    description: 'Rename the focused session.',
+    id: 'renameActiveSession',
+    title: 'Rename Active Session',
   },
   {
-    action: { focusedPaneAction: "openBrowserPane", id: "openBrowserPane", kind: "focusedPaneAction" },
+    action: { focusedPaneAction: 'openBrowserPane', id: 'openBrowserPane', kind: 'focusedPaneAction' },
     /**
      * CDXC:CommandPalette 2026-05-17-01:32:
      * Pane context-menu actions should also be command-palette commands with
@@ -248,22 +251,24 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * CDXC:Hotkeys 2026-06-06-04:36:
      * Cmd+N is the default New Browser Tab action. It opens the browser as the next tab in the focused workspace split pane instead of creating a separate split or app window.
      */
-    defaultKey: "cmd+n",
-    description: "Open a browser tab beside the focused tab.",
-    id: "openBrowserPane",
-    retiredDefaultKeys: ["ctrl+shift+b"],
-    title: "Open Browser Pane",
+    defaultKey: 'cmd+n',
+    description: 'Open a browser tab beside the focused tab.',
+    id: 'openBrowserPane',
+    retiredDefaultKeys: ['ctrl+shift+b'],
+    title: 'Open Browser Pane',
   },
-  ...([
-    ["switchAgentsView", "agents", "alt+1", "Agents"],
-    ["switchSourceView", "source", "alt+2", "Source"],
-    ["switchGitHubView", "github", "alt+3", "GitHub"],
-    ["switchKanbanView", "kanban", "alt+4", "Kanban"],
-    ["switchManageView", "manage", "alt+5", "Docs"],
-  ] as const).map(([id, view, defaultKey, title]) => ({
+  ...(
+    [
+      ['switchAgentsView', 'agents', 'alt+1', 'Agents'],
+      ['switchSourceView', 'source', 'alt+2', 'Source'],
+      ['switchGitHubView', 'github', 'alt+3', 'GitHub'],
+      ['switchKanbanView', 'kanban', 'alt+4', 'Kanban'],
+      ['switchManageView', 'manage', 'alt+5', 'Docs'],
+    ] as const
+  ).map(([id, view, defaultKey, title]) => ({
     action: {
       id,
-      kind: "switchWorkareaView" as const,
+      kind: 'switchWorkareaView' as const,
       view,
     },
     /**
@@ -284,98 +289,98 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   })),
   {
     action: {
-      focusedPaneAction: "rotatePanesClockwise",
-      id: "rotatePanesClockwise",
-      kind: "focusedPaneAction",
+      focusedPaneAction: 'rotatePanesClockwise',
+      id: 'rotatePanesClockwise',
+      kind: 'focusedPaneAction',
     },
     /**
      * CDXC:CommandPalette 2026-05-17-01:34:
      * Rotate and Reload defaults are intentionally swapped so Ctrl+Shift+L
      * rotates the layout while Ctrl+Shift+R keeps the common reload mnemonic.
      */
-    defaultKey: "ctrl+shift+l",
-    description: "Rotate panes clockwise in the focused group.",
-    id: "rotatePanesClockwise",
-    title: "Rotate Panes Clockwise",
-    windowsLinuxDefaultKey: "cmd+alt+l",
+    defaultKey: 'ctrl+shift+l',
+    description: 'Rotate panes clockwise in the focused group.',
+    id: 'rotatePanesClockwise',
+    title: 'Rotate Panes Clockwise',
+    windowsLinuxDefaultKey: 'cmd+alt+l',
   },
   {
-    action: { focusedPaneAction: "mergeAllTabs", id: "mergeAllTabs", kind: "focusedPaneAction" },
-    defaultKey: "ctrl+shift+m",
+    action: { focusedPaneAction: 'mergeAllTabs', id: 'mergeAllTabs', kind: 'focusedPaneAction' },
+    defaultKey: 'ctrl+shift+m',
     description: "Merge the focused group's panes into one tabbed pane.",
-    id: "mergeAllTabs",
-    title: "Merge All Tabs",
-    windowsLinuxDefaultKey: "cmd+alt+m",
+    id: 'mergeAllTabs',
+    title: 'Merge All Tabs',
+    windowsLinuxDefaultKey: 'cmd+alt+m',
   },
   {
-    action: { focusedPaneAction: "delayedSend", id: "delayedSend", kind: "focusedPaneAction" },
-    defaultKey: "ctrl+shift+s",
-    description: "Open delayed actions for the focused terminal session.",
-    id: "delayedSend",
-    title: "Delayed Actions",
-    windowsLinuxDefaultKey: "cmd+alt+s",
+    action: { focusedPaneAction: 'delayedSend', id: 'delayedSend', kind: 'focusedPaneAction' },
+    defaultKey: 'ctrl+shift+s',
+    description: 'Open delayed actions for the focused terminal session.',
+    id: 'delayedSend',
+    title: 'Delayed Actions',
+    windowsLinuxDefaultKey: 'cmd+alt+s',
   },
   {
-    action: { focusedPaneAction: "closeAfterDone", id: "closeAfterDone", kind: "focusedPaneAction" },
+    action: { focusedPaneAction: 'closeAfterDone', id: 'closeAfterDone', kind: 'focusedPaneAction' },
     /**
      * CDXC:FocusedSessionActions 2026-06-19-15:43:
      * Focused-session commands that already exist in native pane menus should also be configurable hotkey actions and command-palette rows. Close After Done starts unassigned so adding discoverability does not introduce a new default shortcut.
      */
-    defaultKey: "",
-    description: "Toggle Close After Done for the focused terminal session.",
-    id: "closeAfterDone",
-    title: "Close After Done",
+    defaultKey: '',
+    description: 'Toggle Close After Done for the focused terminal session.',
+    id: 'closeAfterDone',
+    title: 'Close After Done',
   },
   {
     action: {
-      id: "promptEditor",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "promptEditor",
+      id: 'promptEditor',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'promptEditor',
     },
-    defaultKey: "ctrl+g",
-    description: "Open the prompt editor for the focused terminal.",
-    id: "promptEditor",
-    title: "Prompt Editor",
-    windowsLinuxDefaultKey: "cmd+shift+g",
+    defaultKey: 'ctrl+g',
+    description: 'Open the prompt editor for the focused terminal.',
+    id: 'promptEditor',
+    title: 'Prompt Editor',
+    windowsLinuxDefaultKey: 'cmd+shift+g',
   },
   {
     action: {
-      id: "attachFileOrFolder",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "attachFileOrFolder",
+      id: 'attachFileOrFolder',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'attachFileOrFolder',
     },
-    defaultKey: "",
-    description: "Attach a file or folder to the focused terminal.",
-    id: "attachFileOrFolder",
-    title: "Attach File or Folder",
+    defaultKey: '',
+    description: 'Attach a file or folder to the focused terminal.',
+    id: 'attachFileOrFolder',
+    title: 'Attach File or Folder',
   },
   {
     action: {
-      id: "stashPrompt",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "stashPrompt",
+      id: 'stashPrompt',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'stashPrompt',
     },
-    defaultKey: "",
-    description: "Stash the current prompt in the focused agent terminal.",
-    id: "stashPrompt",
-    title: "Stash Prompt",
+    defaultKey: '',
+    description: 'Stash the current prompt in the focused agent terminal.',
+    id: 'stashPrompt',
+    title: 'Stash Prompt',
   },
   {
     action: {
-      id: "stashedPrompts",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "stashedPrompts",
+      id: 'stashedPrompts',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'stashedPrompts',
     },
-    defaultKey: "alt+shift+s",
-    description: "Open stashed prompts for the focused agent session.",
-    id: "stashedPrompts",
-    title: "Stashed Prompts",
+    defaultKey: 'alt+shift+s',
+    description: 'Open stashed prompts for the focused agent session.',
+    id: 'stashedPrompts',
+    title: 'Stashed Prompts',
   },
   {
     action: {
-      id: "exportTranscript",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "exportTranscript",
+      id: 'exportTranscript',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'exportTranscript',
     },
     /**
      * CDXC:ExportTranscript 2026-08-20:
@@ -385,27 +390,27 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * the other Agent Actions menu rows (Stash Prompt, Attach File or Folder),
      * so it cannot claim a chord users already rely on.
      */
-    defaultKey: "",
+    defaultKey: '',
     description: "Export the focused agent session's transcript to a markdown file.",
-    id: "exportTranscript",
-    title: "Export Transcript",
+    id: 'exportTranscript',
+    title: 'Export Transcript',
   },
   {
     action: {
-      id: "toggleAgentActions",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "toggleAgentActions",
+      id: 'toggleAgentActions',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'toggleAgentActions',
     },
-    defaultKey: "",
+    defaultKey: '',
     description: "Show or hide the focused terminal's Agent Actions buttons.",
-    id: "toggleAgentActions",
-    title: "Toggle Agent Actions",
+    id: 'toggleAgentActions',
+    title: 'Toggle Agent Actions',
   },
   {
     action: {
-      id: "toggleChatView",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "toggleChatView",
+      id: 'toggleChatView',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'toggleChatView',
     },
     /**
      * CDXC:SessionChatView 2026-07-31:
@@ -414,14 +419,14 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * Alt+G keeps the chat toggle compact, and the same action id must always
      * be able to toggle a chat-mode session back to its terminal.
      */
-    defaultKey: "alt+g",
-    description: "Toggle between the terminal and chat view for the focused agent session.",
-    id: "toggleChatView",
-    retiredDefaultKeys: ["ctrl+shift+j", "cmd+alt+j", "ctrl+shift+g", "cmd+alt+g"],
-    title: "Toggle Chat View",
+    defaultKey: 'alt+g',
+    description: 'Toggle between the terminal and chat view for the focused agent session.',
+    id: 'toggleChatView',
+    retiredDefaultKeys: ['ctrl+shift+j', 'cmd+alt+j', 'ctrl+shift+g', 'cmd+alt+g'],
+    title: 'Toggle Chat View',
   },
   {
-    action: { id: "openFindPrompts", kind: "openFindPrompts" },
+    action: { id: 'openFindPrompts', kind: 'openFindPrompts' },
     /**
      * CDXC:AgentHistorySearch 2026-08-20:
      * Find is the GUI for `gx f`: it swaps the focused pane for a searchable
@@ -429,114 +434,114 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * dispatched natively like Chat View, so the same id always toggles back
      * out of Find even while the terminal is hidden behind it.
      */
-    defaultKey: "alt+f",
-    description: "Search every prompt you have sent to an agent, then resume or fork it.",
-    id: "openFindPrompts",
-    title: "Find Prompts",
+    defaultKey: 'alt+f',
+    description: 'Search every prompt you have sent to an agent, then resume or fork it.',
+    id: 'openFindPrompts',
+    title: 'Find Prompts',
   },
   {
     action: {
-      id: "scrollTerminalToTop",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "scrollTerminalToTop",
+      id: 'scrollTerminalToTop',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'scrollTerminalToTop',
     },
-    defaultKey: "",
-    description: "Scroll the focused terminal to the top.",
-    id: "scrollTerminalToTop",
-    title: "Scroll Terminal to Top",
+    defaultKey: '',
+    description: 'Scroll the focused terminal to the top.',
+    id: 'scrollTerminalToTop',
+    title: 'Scroll Terminal to Top',
   },
   {
     action: {
-      id: "scrollTerminalToBottom",
-      kind: "terminalToolbarAction",
-      terminalToolbarAction: "scrollTerminalToBottom",
+      id: 'scrollTerminalToBottom',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'scrollTerminalToBottom',
     },
-    defaultKey: "",
-    description: "Scroll the focused terminal to the bottom.",
-    id: "scrollTerminalToBottom",
-    title: "Scroll Terminal to Bottom",
+    defaultKey: '',
+    description: 'Scroll the focused terminal to the bottom.',
+    id: 'scrollTerminalToBottom',
+    title: 'Scroll Terminal to Bottom',
   },
   {
-    action: { focusedPaneAction: "forkSession", id: "forkSession", kind: "focusedPaneAction" },
-    defaultKey: "ctrl+shift+f",
-    description: "Fork the focused session.",
-    id: "forkSession",
-    title: "Fork Session",
-    windowsLinuxDefaultKey: "cmd+alt+f",
+    action: { focusedPaneAction: 'forkSession', id: 'forkSession', kind: 'focusedPaneAction' },
+    defaultKey: 'ctrl+shift+f',
+    description: 'Fork the focused session.',
+    id: 'forkSession',
+    title: 'Fork Session',
+    windowsLinuxDefaultKey: 'cmd+alt+f',
   },
   {
-    action: { focusedPaneAction: "reloadSession", id: "reloadSession", kind: "focusedPaneAction" },
-    defaultKey: "ctrl+shift+r",
-    description: "Reload the focused session.",
-    id: "reloadSession",
-    title: "Reload Session",
-    windowsLinuxDefaultKey: "cmd+alt+r",
+    action: { focusedPaneAction: 'reloadSession', id: 'reloadSession', kind: 'focusedPaneAction' },
+    defaultKey: 'ctrl+shift+r',
+    description: 'Reload the focused session.',
+    id: 'reloadSession',
+    title: 'Reload Session',
+    windowsLinuxDefaultKey: 'cmd+alt+r',
   },
   {
     action: {
-      focusedPaneAction: "sleepFocusedSession",
-      id: "sleepFocusedSession",
-      kind: "focusedPaneAction",
+      focusedPaneAction: 'sleepFocusedSession',
+      id: 'sleepFocusedSession',
+      kind: 'focusedPaneAction',
     },
-    defaultKey: "",
-    description: "Sleep the focused terminal session.",
-    id: "sleepFocusedSession",
-    retiredDefaultKeys: ["alt+shift+s"],
-    title: "Sleep Focused Session",
+    defaultKey: '',
+    description: 'Sleep the focused terminal session.',
+    id: 'sleepFocusedSession',
+    retiredDefaultKeys: ['alt+shift+s'],
+    title: 'Sleep Focused Session',
   },
   {
     action: {
-      focusedPaneAction: "wakeFocusedSession",
-      id: "wakeFocusedSession",
-      kind: "focusedPaneAction",
+      focusedPaneAction: 'wakeFocusedSession',
+      id: 'wakeFocusedSession',
+      kind: 'focusedPaneAction',
     },
     /**
      * CDXC:FocusedSessionActions 2026-06-19-15:43:
      * Wake is the inverse focused-session lifecycle command. Keep it unassigned by default but available in Hotkeys and command palette so sleeping focused tabs can be restored without a row-specific sidebar click.
      */
-    defaultKey: "",
-    description: "Wake the focused sleeping terminal session.",
-    id: "wakeFocusedSession",
-    title: "Wake Focused Session",
+    defaultKey: '',
+    description: 'Wake the focused sleeping terminal session.',
+    id: 'wakeFocusedSession',
+    title: 'Wake Focused Session',
   },
   {
     action: {
-      focusedPaneAction: "closeFocusedSession",
-      id: "closeFocusedSession",
-      kind: "focusedPaneAction",
+      focusedPaneAction: 'closeFocusedSession',
+      id: 'closeFocusedSession',
+      kind: 'focusedPaneAction',
     },
     /**
      * CDXC:FocusedSessionActions 2026-06-19-15:43:
      * Close is already available from pane/tab chrome and Cmd+W, but it should be bindable and runnable from the command palette without claiming a second default shortcut.
      */
-    defaultKey: "",
-    description: "Close the focused pane or session.",
-    id: "closeFocusedSession",
-    title: "Close Focused Session",
+    defaultKey: '',
+    description: 'Close the focused pane or session.',
+    id: 'closeFocusedSession',
+    title: 'Close Focused Session',
   },
   {
-    action: { focusedPaneAction: "popOutPane", id: "popOutPane", kind: "focusedPaneAction" },
-    defaultKey: "ctrl+shift+o",
-    description: "Pop out or restore the focused pane.",
-    id: "popOutPane",
-    title: "Pop Out Pane",
-    windowsLinuxDefaultKey: "cmd+alt+o",
+    action: { focusedPaneAction: 'popOutPane', id: 'popOutPane', kind: 'focusedPaneAction' },
+    defaultKey: 'ctrl+shift+o',
+    description: 'Pop out or restore the focused pane.',
+    id: 'popOutPane',
+    title: 'Pop Out Pane',
+    windowsLinuxDefaultKey: 'cmd+alt+o',
   },
   {
-    action: { direction: -1, id: "focusPreviousGroup", kind: "focusAdjacentGroup" },
-    defaultKey: "cmd+[",
-    description: "Focus the previous group.",
-    id: "focusPreviousGroup",
-    retiredDefaultKeys: ["cmd+shift+["],
-    title: "Previous Group",
+    action: { direction: -1, id: 'focusPreviousGroup', kind: 'focusAdjacentGroup' },
+    defaultKey: 'cmd+[',
+    description: 'Focus the previous group.',
+    id: 'focusPreviousGroup',
+    retiredDefaultKeys: ['cmd+shift+['],
+    title: 'Previous Group',
   },
   {
-    action: { direction: 1, id: "focusNextGroup", kind: "focusAdjacentGroup" },
-    defaultKey: "cmd+]",
-    description: "Focus the next group.",
-    id: "focusNextGroup",
-    retiredDefaultKeys: ["cmd+shift+]"],
-    title: "Next Group",
+    action: { direction: 1, id: 'focusNextGroup', kind: 'focusAdjacentGroup' },
+    defaultKey: 'cmd+]',
+    description: 'Focus the next group.',
+    id: 'focusNextGroup',
+    retiredDefaultKeys: ['cmd+shift+]'],
+    title: 'Next Group',
   },
   /**
    * CDXC:NavigationHistory 2026-08-19:
@@ -549,24 +554,24 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
    * Windows/Linux substitution those entries use.
    */
   {
-    action: { direction: "back", id: "navigateHistoryBack", kind: "navigateHistory" },
-    defaultKey: "cmd+ctrl+[",
-    description: "Go back to the previously active session or project.",
-    id: "navigateHistoryBack",
-    title: "Back",
-    windowsLinuxDefaultKey: "cmd+alt+[",
+    action: { direction: 'back', id: 'navigateHistoryBack', kind: 'navigateHistory' },
+    defaultKey: 'cmd+ctrl+[',
+    description: 'Go back to the previously active session or project.',
+    id: 'navigateHistoryBack',
+    title: 'Back',
+    windowsLinuxDefaultKey: 'cmd+alt+[',
   },
   {
-    action: { direction: "forward", id: "navigateHistoryForward", kind: "navigateHistory" },
-    defaultKey: "cmd+ctrl+]",
-    description: "Go forward again after going back.",
-    id: "navigateHistoryForward",
-    title: "Forward",
-    windowsLinuxDefaultKey: "cmd+alt+]",
+    action: { direction: 'forward', id: 'navigateHistoryForward', kind: 'navigateHistory' },
+    defaultKey: 'cmd+ctrl+]',
+    description: 'Go forward again after going back.',
+    id: 'navigateHistoryForward',
+    title: 'Forward',
+    windowsLinuxDefaultKey: 'cmd+alt+]',
   },
   {
-    action: { id: "focusPreviousSession", kind: "focusSessionSlot", slotNumber: -1 },
-    alternateDefaultKeys: ["cmd+shift+["],
+    action: { id: 'focusPreviousSession', kind: 'focusSessionSlot', slotNumber: -1 },
+    alternateDefaultKeys: ['cmd+shift+['],
     /**
      * CDXC:Hotkeys 2026-06-13-19:36:
      * Cmd+Shift+[ and Cmd+Shift+] remain supported alongside Cmd+Shift+Tab and Cmd+Tab, but both shortcut families are focused split-pane tab switchers.
@@ -574,26 +579,26 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * CDXC:Hotkeys 2026-06-13-20:08:
      * Previous/next tab traversal must stay inside the active pane's tab group and include sleeping placeholder tabs, then native dispatch applies the same select/wake/attach logic as clicking that tab.
      */
-    defaultKey: "cmd+shift+tab",
-    description: "Select the previous tab in the focused split pane.",
-    id: "focusPreviousSession",
-    retiredDefaultKeys: ["cmd+["],
-    title: "Previous Tab",
+    defaultKey: 'cmd+shift+tab',
+    description: 'Select the previous tab in the focused split pane.',
+    id: 'focusPreviousSession',
+    retiredDefaultKeys: ['cmd+['],
+    title: 'Previous Tab',
   },
   {
-    action: { id: "focusNextSession", kind: "focusSessionSlot", slotNumber: 0 },
-    alternateDefaultKeys: ["cmd+shift+]"],
-    defaultKey: "cmd+tab",
-    description: "Select the next tab in the focused split pane.",
-    id: "focusNextSession",
-    retiredDefaultKeys: ["cmd+]"],
-    title: "Next Tab",
+    action: { id: 'focusNextSession', kind: 'focusSessionSlot', slotNumber: 0 },
+    alternateDefaultKeys: ['cmd+shift+]'],
+    defaultKey: 'cmd+tab',
+    description: 'Select the next tab in the focused split pane.',
+    id: 'focusNextSession',
+    retiredDefaultKeys: ['cmd+]'],
+    title: 'Next Tab',
   },
-  ...(["up", "right", "down", "left"] as const).map((direction) => ({
+  ...(['up', 'right', 'down', 'left'] as const).map((direction) => ({
     action: {
       direction,
       id: `focus${capitalize(direction)}` as ghostexHotkeyActionId,
-      kind: "focusDirection" as const,
+      kind: 'focusDirection' as const,
     },
     /**
      * CDXC:Hotkeys 2026-05-15-13:31:
@@ -609,7 +614,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((projectIndex) => ({
     action: {
       id: `jumpToProject${projectIndex}` as ghostexHotkeyActionId,
-      kind: "jumpToProject" as const,
+      kind: 'jumpToProject' as const,
       projectIndex,
     },
     /**
@@ -626,7 +631,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((slotNumber) => ({
     action: {
       id: `focusSessionSlot${slotNumber}` as ghostexHotkeyActionId,
-      kind: "focusSessionSlot" as const,
+      kind: 'focusSessionSlot' as const,
       slotNumber,
     },
     defaultKey: `cmd+${slotNumber}`,
@@ -637,7 +642,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   ...[1, 2, 3, 4, 5].map((slotNumber) => ({
     action: {
       id: `runActionSlot${slotNumber}` as ghostexHotkeyActionId,
-      kind: "runActionSlot" as const,
+      kind: 'runActionSlot' as const,
       slotNumber,
     },
     /**
@@ -653,29 +658,29 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     windowsLinuxDefaultKey: `cmd+shift+${slotNumber}`,
   })),
   {
-    action: { direction: "horizontal", id: "splitMore", kind: "splitFocusedPane" },
+    action: { direction: 'horizontal', id: 'splitMore', kind: 'splitFocusedPane' },
     /**
      * CDXC:NativeSplits 2026-05-10-18:30
      * Cmd+D creates a real terminal session beside the focused pane instead of
      * only increasing the visible split count. This matches terminal split
      * muscle memory and lets users immediately send work into the new pane.
      */
-    defaultKey: "cmd+d",
-    description: "Create a terminal beside the focused pane.",
-    id: "splitMore",
-    title: "Split Sideways",
+    defaultKey: 'cmd+d',
+    description: 'Create a terminal beside the focused pane.',
+    id: 'splitMore',
+    title: 'Split Sideways',
   },
   {
-    action: { direction: "vertical", id: "splitMoreDown", kind: "splitFocusedPane" },
-    defaultKey: "cmd+shift+d",
-    description: "Create a terminal below the focused pane.",
-    id: "splitMoreDown",
-    title: "Split Downwards",
+    action: { direction: 'vertical', id: 'splitMoreDown', kind: 'splitFocusedPane' },
+    defaultKey: 'cmd+shift+d',
+    description: 'Create a terminal below the focused pane.',
+    id: 'splitMoreDown',
+    title: 'Split Downwards',
   },
 ];
 
 export const DEFAULT_ghostex_HOTKEYS: ghostexHotkeySettings = Object.fromEntries(
-  GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition.defaultKey]),
+  GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition.defaultKey])
 );
 
 /**
@@ -691,16 +696,14 @@ export const DEFAULT_ghostex_HOTKEYS: ghostexHotkeySettings = Object.fromEntries
  * spells Ctrl+K, which the terminal still passes through as its control
  * code, so reserving it there would strip working bindings for nothing.
  */
-const GHOSTEX_RESERVED_HOTKEY_CHORDS: Readonly<
-  Record<ghostexHotkeyPlatform, readonly string[]>
-> = {
+const GHOSTEX_RESERVED_HOTKEY_CHORDS: Readonly<Record<ghostexHotkeyPlatform, readonly string[]>> = {
   linux: [],
-  mac: ["cmd+k"],
+  mac: ['cmd+k'],
   windows: [],
 };
 
 export function getReservedghostexHotkeyChords(
-  platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform(),
+  platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform()
 ): readonly string[] {
   return GHOSTEX_RESERVED_HOTKEY_CHORDS[platform];
 }
@@ -712,9 +715,9 @@ export function getReservedghostexHotkeyChords(
  */
 export function isReservedghostexHotkeyText(
   value: string,
-  platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform(),
+  platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform()
 ): boolean {
-  const [openingChord] = normalizeHotkeyText(value).split(" ");
+  const [openingChord] = normalizeHotkeyText(value).split(' ');
   return Boolean(openingChord) && getReservedghostexHotkeyChords(platform).includes(openingChord);
 }
 
@@ -724,27 +727,21 @@ export function normalizeghostexHotkeySettings(candidate: unknown): ghostexHotke
   const normalized: ghostexHotkeySettings = {};
   for (const definition of GHOSTEX_HOTKEY_DEFINITIONS) {
     const platformDefaultKey =
-      platform === "mac"
-        ? definition.defaultKey
-        : definition.windowsLinuxDefaultKey ?? definition.defaultKey;
+      platform === 'mac' ? definition.defaultKey : (definition.windowsLinuxDefaultKey ?? definition.defaultKey);
     const value = source[definition.id] ?? readLegacyProjectJumpHotkey(source, definition.id);
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       /**
        * CDXC:Hotkeys 2026-05-11-09:06
        * Users can remove any hotkey from Settings. A missing setting still
        * means "use the default", but an explicitly blank string means the
        * command is intentionally unassigned.
        */
-      const hotkeyText = value.trim() ? normalizeHotkeyText(value) : "";
+      const hotkeyText = value.trim() ? normalizeHotkeyText(value) : '';
       const isRetiredDefault = definition.retiredDefaultKeys?.includes(hotkeyText) ?? false;
       const isMacDefaultOnOtherPlatform =
-        platform !== "mac"
-        && Boolean(definition.windowsLinuxDefaultKey)
-        && hotkeyText === definition.defaultKey;
+        platform !== 'mac' && Boolean(definition.windowsLinuxDefaultKey) && hotkeyText === definition.defaultKey;
       normalized[definition.id] =
-        isRetiredDefault
-        || isMacDefaultOnOtherPlatform
-        || isReservedghostexHotkeyText(hotkeyText, platform)
+        isRetiredDefault || isMacDefaultOnOtherPlatform || isReservedghostexHotkeyText(hotkeyText, platform)
           ? platformDefaultKey
           : hotkeyText;
       continue;
@@ -754,10 +751,7 @@ export function normalizeghostexHotkeySettings(candidate: unknown): ghostexHotke
   return normalized;
 }
 
-function readLegacyProjectJumpHotkey(
-  source: Record<string, unknown>,
-  actionId: ghostexHotkeyActionId,
-): unknown {
+function readLegacyProjectJumpHotkey(source: Record<string, unknown>, actionId: ghostexHotkeyActionId): unknown {
   const match = /^jumpToProject([1-5])$/u.exec(actionId);
   if (!match) {
     return undefined;
@@ -777,7 +771,7 @@ export function getghostexHotkeyActionById(id: string): ghostexHotkeyAction | un
 
 export function getghostexHotkeyActionIdForKey(
   hotkeys: ghostexHotkeySettings,
-  hotkeyText: string,
+  hotkeyText: string
 ): ghostexHotkeyActionId | undefined {
   const normalizedHotkeyText = normalizeHotkeyText(hotkeyText);
   const matchedDefinition = Object.entries(hotkeys).find(([, value]) => value === normalizedHotkeyText);
@@ -785,8 +779,7 @@ export function getghostexHotkeyActionIdForKey(
     return matchedDefinition[0] as ghostexHotkeyActionId;
   }
   return GHOSTEX_HOTKEY_DEFINITIONS.find(
-    (definition) =>
-      definition.alternateDefaultKeys?.includes(normalizedHotkeyText) && hotkeys[definition.id] !== "",
+    (definition) => definition.alternateDefaultKeys?.includes(normalizedHotkeyText) && hotkeys[definition.id] !== ''
   )?.id;
 }
 
@@ -794,42 +787,42 @@ export function normalizeHotkeyText(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/⌘|command/g, "cmd")
-    .replace(/⌥|option/g, "alt")
-    .replace(/⌃|control/g, "ctrl")
-    .replace(/⇧|shift/g, "shift")
-    .replace(/\bmod\b/g, "cmd")
-    .replace(/\s+/g, " ")
-    .split(" ")
+    .replace(/⌘|command/g, 'cmd')
+    .replace(/⌥|option/g, 'alt')
+    .replace(/⌃|control/g, 'ctrl')
+    .replace(/⇧|shift/g, 'shift')
+    .replace(/\bmod\b/g, 'cmd')
+    .replace(/\s+/g, ' ')
+    .split(' ')
     .map(normalizeHotkeyChordText)
-    .join(" ");
+    .join(' ');
 }
 
 const SHIFTED_DIGIT_KEYS: Record<string, string> = {
-  "!": "1",
-  "@": "2",
-  "#": "3",
-  $: "4",
-  "%": "5",
-  "^": "6",
-  "&": "7",
-  "*": "8",
-  "(": "9",
-  ")": "0",
+  '!': '1',
+  '@': '2',
+  '#': '3',
+  $: '4',
+  '%': '5',
+  '^': '6',
+  '&': '7',
+  '*': '8',
+  '(': '9',
+  ')': '0',
 };
 
 const SHIFTED_SYMBOL_KEYS: Record<string, string> = {
-  "{": "[",
-  "}": "]",
+  '{': '[',
+  '}': ']',
 };
 
 function normalizeHotkeyChordText(chord: string): string {
-  const parts = chord.split("+").filter(Boolean);
+  const parts = chord.split('+').filter(Boolean);
   const key = parts.at(-1);
   if (!key) {
     return chord;
   }
-  if (parts.includes("alt") && key === "ß") {
+  if (parts.includes('alt') && key === 'ß') {
     /**
      * CDXC:Hotkeys 2026-07-30:
      * The old Settings recorder serialized KeyboardEvent.key. On macOS,
@@ -838,9 +831,9 @@ function normalizeHotkeyChordText(chord: string): string {
      * (`"ß".toUpperCase()` is `"SS"`). Normalize the persisted legacy value
      * to the physical key spelling used by the corrected recorder.
      */
-    parts[parts.length - 1] = "s";
+    parts[parts.length - 1] = 's';
   }
-  if (parts.includes("shift") && SHIFTED_DIGIT_KEYS[key]) {
+  if (parts.includes('shift') && SHIFTED_DIGIT_KEYS[key]) {
     /**
      * CDXC:ActionsHotkeys 2026-05-26-13:20:
      * Browser/WebKit keydown events report Ctrl+Shift+1 as "ctrl+shift+!" while
@@ -850,7 +843,7 @@ function normalizeHotkeyChordText(chord: string): string {
      */
     parts[parts.length - 1] = SHIFTED_DIGIT_KEYS[key];
   }
-  if (parts.includes("shift") && SHIFTED_SYMBOL_KEYS[key]) {
+  if (parts.includes('shift') && SHIFTED_SYMBOL_KEYS[key]) {
     /**
      * CDXC:Hotkeys 2026-06-07-14:24:
      * WebKit reports Cmd+Shift+[ and Cmd+Shift+] as the shifted glyphs "{" and
@@ -860,84 +853,79 @@ function normalizeHotkeyChordText(chord: string): string {
      */
     parts[parts.length - 1] = SHIFTED_SYMBOL_KEYS[key];
   }
-  return parts.join("+");
+  return parts.join('+');
 }
 
-export type ghostexHotkeyPlatform = "linux" | "mac" | "windows";
+export type ghostexHotkeyPlatform = 'linux' | 'mac' | 'windows';
 
 export function detectghostexHotkeyPlatform(): ghostexHotkeyPlatform {
-  if (typeof navigator === "undefined") {
-    return "mac";
+  if (typeof navigator === 'undefined') {
+    return 'mac';
   }
-  const platform = navigator.platform?.toLowerCase() ?? "";
-  const userAgent = navigator.userAgent?.toLowerCase() ?? "";
-  if (platform.includes("mac") || userAgent.includes("mac")) {
-    return "mac";
+  const platform = navigator.platform?.toLowerCase() ?? '';
+  const userAgent = navigator.userAgent?.toLowerCase() ?? '';
+  if (platform.includes('mac') || userAgent.includes('mac')) {
+    return 'mac';
   }
-  if (platform.includes("win") || userAgent.includes("win")) {
-    return "windows";
+  if (platform.includes('win') || userAgent.includes('win')) {
+    return 'windows';
   }
-  return "linux";
+  return 'linux';
 }
 
 export function ghostexHotkeyTextFromKeyboardEvent(
-  event: Pick<
-    KeyboardEvent,
-    "altKey" | "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey"
-  >,
-  platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform(),
+  event: Pick<KeyboardEvent, 'altKey' | 'code' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'>,
+  platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform()
 ): string | undefined {
   const key = physicalHotkeyKeyFromKeyboardEvent(event);
   if (!key) {
     return undefined;
   }
   const parts: string[] = [];
-  if (platform === "mac" ? event.metaKey : event.ctrlKey) {
-    parts.push("cmd");
+  if (platform === 'mac' ? event.metaKey : event.ctrlKey) {
+    parts.push('cmd');
   }
-  if (platform === "mac" && event.ctrlKey) {
-    parts.push("ctrl");
+  if (platform === 'mac' && event.ctrlKey) {
+    parts.push('ctrl');
   }
   if (event.altKey) {
-    parts.push("alt");
+    parts.push('alt');
   }
   if (event.shiftKey) {
-    parts.push("shift");
+    parts.push('shift');
   }
   parts.push(key);
-  return normalizeHotkeyText(parts.join("+"));
+  return normalizeHotkeyText(parts.join('+'));
 }
 
 const PHYSICAL_HOTKEY_KEYS_BY_CODE: Readonly<Record<string, string>> = {
-  ArrowDown: "down",
-  ArrowLeft: "left",
-  ArrowRight: "right",
-  ArrowUp: "up",
-  Backquote: "`",
-  Backslash: "\\",
-  BracketLeft: "[",
-  BracketRight: "]",
-  Comma: ",",
-  Delete: "delete",
-  End: "end",
-  Enter: "enter",
-  Equal: "=",
-  Escape: "escape",
-  Home: "home",
-  Minus: "-",
-  PageDown: "pagedown",
-  PageUp: "pageup",
-  Period: ".",
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  ArrowUp: 'up',
+  Backquote: '`',
+  Backslash: '\\',
+  BracketLeft: '[',
+  BracketRight: ']',
+  Comma: ',',
+  Delete: 'delete',
+  End: 'end',
+  Enter: 'enter',
+  Equal: '=',
+  Escape: 'escape',
+  Home: 'home',
+  Minus: '-',
+  PageDown: 'pagedown',
+  PageUp: 'pageup',
+  Period: '.',
   Quote: "'",
-  Semicolon: ";",
-  Slash: "/",
-  Space: "space",
-  Tab: "tab",
+  Semicolon: ';',
+  Slash: '/',
+  Space: 'space',
+  Tab: 'tab',
 };
 
-function physicalHotkeyKeyFromKeyboardEvent(
-  event: Pick<KeyboardEvent, "code" | "key">,
-): string | undefined {
+function physicalHotkeyKeyFromKeyboardEvent(event: Pick<KeyboardEvent, 'code' | 'key'>): string | undefined {
   const letterMatch = /^Key([A-Z])$/u.exec(event.code);
   if (letterMatch) {
     return letterMatch[1]?.toLowerCase();
@@ -954,13 +942,13 @@ function physicalHotkeyKeyFromKeyboardEvent(
     return physicalKey;
   }
   switch (event.key) {
-    case "Alt":
-    case "AltGraph":
-    case "Control":
-    case "Dead":
-    case "Meta":
-    case "Shift":
-    case "Unidentified":
+    case 'Alt':
+    case 'AltGraph':
+    case 'Control':
+    case 'Dead':
+    case 'Meta':
+    case 'Shift':
+    case 'Unidentified':
       return undefined;
     default:
       return event.key.length === 1 ? event.key.toLowerCase() : event.key.toLowerCase();
@@ -972,5 +960,5 @@ function capitalize(value: string): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

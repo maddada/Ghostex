@@ -212,7 +212,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn check_gpui_keep_awake_power_rules_in_background(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn check_gpui_keep_awake_power_rules_in_background(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         #[cfg(target_os = "macos")]
         {
             let Some(options) = self.gpui_keep_awake_power_probe_options() else {
@@ -239,7 +242,9 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn gpui_keep_awake_power_probe_options(&self) -> Option<GpuiKeepAwakePowerProbeOptions> {
+    pub(crate) fn gpui_keep_awake_power_probe_options(
+        &self,
+    ) -> Option<GpuiKeepAwakePowerProbeOptions> {
         let settings =
             shared_settings::shared_sidebar_settings_snapshot().keep_awake_titlebar_settings();
         let include_external_display = settings.titlebar_control_visible()
@@ -341,5 +346,4 @@ impl GhostexGpuiApp {
         }
         stopped
     }
-
 }

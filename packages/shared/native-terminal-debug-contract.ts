@@ -1,4 +1,4 @@
-import type { SidebarHydrateMessage } from "./session-grid-contract";
+import type { SidebarHydrateMessage } from './session-grid-contract';
 
 export type NativeTerminalDebugProjection = {
   alias?: string;
@@ -19,7 +19,7 @@ export type NativeTerminalDebugMoveAction = {
   currentLocation?: string;
   desiredVisibleIndex?: number;
   detail?: string;
-  event?: "complete" | "fallback" | "start";
+  event?: 'complete' | 'fallback' | 'start';
   kind: string;
   sessionId?: string;
   startedAt: string;
@@ -27,10 +27,7 @@ export type NativeTerminalDebugMoveAction = {
   timestamp?: string;
 };
 
-export type NativeTerminalDebugProcessAssociation = Record<
-  string,
-  boolean | number | string | undefined
->;
+export type NativeTerminalDebugProcessAssociation = Record<string, boolean | number | string | undefined>;
 
 export type NativeTerminalDebugLayout = {
   activeTerminalName?: string;
@@ -56,13 +53,13 @@ export type NativeTerminalDebugBackendState = {
 export type NativeTerminalDebugPanelState = {
   backend: NativeTerminalDebugBackendState;
   observedAt: string;
-  sidebar: Pick<SidebarHydrateMessage, "groups" | "hud">;
+  sidebar: Pick<SidebarHydrateMessage, 'groups' | 'hud'>;
   workspaceId: string;
 };
 
 export type NativeTerminalDebugHydrateMessage = {
   state: NativeTerminalDebugPanelState;
-  type: "hydrate";
+  type: 'hydrate';
 };
 
 export type ExtensionToNativeTerminalDebugMessage = NativeTerminalDebugHydrateMessage;

@@ -183,7 +183,10 @@ pub fn run(args: &[String]) -> i32 {
     let outcome = match action.kind {
         ActionKind::ResumeSession => actions::resume_session(&rec, options.accept_all),
         ActionKind::Copy => actions::copy_to_clipboard(&rec.text).map(|_| {
-            println!("\x1b[90m→ copied {} prompt to clipboard\x1b[0m", rec.agent.label());
+            println!(
+                "\x1b[90m→ copied {} prompt to clipboard\x1b[0m",
+                rec.agent.label()
+            );
         }),
         ActionKind::View => actions::view_prompt(&rec),
         ActionKind::Fork => actions::fork_session(&rec, action.fork_agent),
@@ -205,7 +208,11 @@ fn usage_error(msg: &str) -> i32 {
 
 fn push_sanitized(out: &mut String, text: &str) {
     for ch in text.chars() {
-        out.push(if ch == '\n' || ch == '\t' || ch == '\r' { ' ' } else { ch });
+        out.push(if ch == '\n' || ch == '\t' || ch == '\r' {
+            ' '
+        } else {
+            ch
+        });
     }
 }
 

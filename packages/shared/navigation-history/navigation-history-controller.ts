@@ -37,14 +37,14 @@ import {
   type NavigationHistoryEntry,
   type NavigationHistoryState,
   type NavigationHistoryUiState,
-} from "./navigation-history-contract";
+} from './navigation-history-contract';
 
 export type NavigationHistoryRpc = (
   path:
     | typeof NAVIGATION_HISTORY_READ_ENDPOINT
     | typeof NAVIGATION_HISTORY_VISIT_ENDPOINT
     | typeof NAVIGATION_HISTORY_NAVIGATE_ENDPOINT,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ) => Promise<unknown>;
 
 export type NavigationHistoryControllerOptions = {
@@ -233,9 +233,7 @@ export class NavigationHistoryController {
         return;
       }
       this.applyState(normalizeNavigationHistoryState(response));
-      const target = normalizeNavigationHistoryEntry(
-        (response as { target?: unknown } | undefined)?.target,
-      );
+      const target = normalizeNavigationHistoryEntry((response as { target?: unknown } | undefined)?.target);
       if (!target) {
         return;
       }
@@ -320,7 +318,7 @@ export class NavigationHistoryController {
   private async sendVisit(
     rpc: NavigationHistoryRpc,
     entry: NavigationHistoryEntry,
-    replaceCurrent: boolean,
+    replaceCurrent: boolean
   ): Promise<void> {
     try {
       const response = await rpc(NAVIGATION_HISTORY_VISIT_ENDPOINT, {

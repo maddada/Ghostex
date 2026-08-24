@@ -14,27 +14,26 @@ import {
   type SimAgentState,
   type SimEnvState,
   type SimHookState,
-} from "../state/types";
+} from '../state/types';
 
-export function createAgentStates(
-  cliInstalled: boolean,
-  hookState: SimHookState,
-): Record<SimAgentId, SimAgentState> {
-  return Object.fromEntries(
-    SIM_AGENT_IDS.map((agentId) => [agentId, { cliInstalled, hookState }]),
-  ) as Record<SimAgentId, SimAgentState>;
+export function createAgentStates(cliInstalled: boolean, hookState: SimHookState): Record<SimAgentId, SimAgentState> {
+  return Object.fromEntries(SIM_AGENT_IDS.map((agentId) => [agentId, { cliInstalled, hookState }])) as Record<
+    SimAgentId,
+    SimAgentState
+  >;
 }
 
 export function createBundledSkills(installed: boolean): Record<BundledSkillId, boolean> {
-  return Object.fromEntries(
-    BUNDLED_SKILL_IDS.map((skillId) => [skillId, installed]),
-  ) as Record<BundledSkillId, boolean>;
+  return Object.fromEntries(BUNDLED_SKILL_IDS.map((skillId) => [skillId, installed])) as Record<
+    BundledSkillId,
+    boolean
+  >;
 }
 
 export function createDefaultEnv(): SimEnvState {
   return {
-    platform: "macos",
-    agents: createAgentStates(false, "notInstalled"),
+    platform: 'macos',
+    agents: createAgentStates(false, 'notInstalled'),
     ghostexCli: { installed: false, gxUsable: false, gxBlockedByExistingCommand: false },
     bundledSkills: createBundledSkills(false),
     cuaDriver: {
@@ -43,7 +42,7 @@ export function createDefaultEnv(): SimEnvState {
       accessibilityPermission: false,
       screenRecordingPermission: false,
     },
-    gxserver: { scenario: "healthyToolsAvailable", respawnFixesHealth: true },
+    gxserver: { scenario: 'healthyToolsAvailable', respawnFixesHealth: true },
     projectCount: 0,
     updateAvailable: false,
     settings: { debuggingMode: false, sessionPersistenceOff: false },

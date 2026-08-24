@@ -6,21 +6,21 @@ use std::collections::HashMap;
 
 use gpui::AnyElement;
 use gpui::App;
+use gpui::AppContext as _;
 use gpui::Entity;
+use gpui::Focusable as _;
+use gpui::InteractiveElement as _;
 use gpui::MouseButton;
 use gpui::MouseDownEvent;
 use gpui::MouseUpEvent;
+use gpui::ParentElement as _;
+use gpui::Styled as _;
 use gpui::Window;
 use gpui::div;
 use gpui::px;
 use gpui_component::h_flex;
 use gpui_component::input::InputEvent;
 use gpui_component::input::InputState;
-use gpui::AppContext as _;
-use gpui::Focusable as _;
-use gpui::InteractiveElement as _;
-use gpui::ParentElement as _;
-use gpui::Styled as _;
 
 use crate::app::consts::*;
 use crate::app::helpers::*;
@@ -29,7 +29,10 @@ use crate::*;
 
 impl GhostexGpuiApp {
     #[cfg(target_os = "macos")]
-    pub(crate) fn agents_terminal_slot_hovers_link(&self, slot_id: AgentsTerminalBodyMountSlotId) -> bool {
+    pub(crate) fn agents_terminal_slot_hovers_link(
+        &self,
+        slot_id: AgentsTerminalBodyMountSlotId,
+    ) -> bool {
         self.agents_terminal_ghostty_surfaces
             .get(&slot_id)
             .map(|surface| surface.runtime_session_id())
@@ -44,11 +47,17 @@ impl GhostexGpuiApp {
     // macOS; without native surfaces no slot can report a hovered link (the
     // GPUI engine draws its own hover underline inside the element).
     #[cfg(not(target_os = "macos"))]
-    pub(crate) fn agents_terminal_slot_hovers_link(&self, _slot_id: AgentsTerminalBodyMountSlotId) -> bool {
+    pub(crate) fn agents_terminal_slot_hovers_link(
+        &self,
+        _slot_id: AgentsTerminalBodyMountSlotId,
+    ) -> bool {
         false
     }
 
-    pub(crate) fn command_terminal_slot_hovers_link(&self, slot_id: CommandTerminalBodyMountSlotId) -> bool {
+    pub(crate) fn command_terminal_slot_hovers_link(
+        &self,
+        slot_id: CommandTerminalBodyMountSlotId,
+    ) -> bool {
         self.command_terminal_runtime_osc_states
             .get(&command_terminal_runtime_session_id(slot_id))
             .is_some_and(|state| state.hovered_link_url.is_some())
@@ -160,7 +169,10 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn start_search_in_focused_terminal_surface(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+    pub(crate) fn start_search_in_focused_terminal_surface(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         if self.start_search_in_focused_gpui_engine_terminal(cx) {
             return true;
         }
@@ -198,7 +210,10 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(not(target_os = "macos"))]
-    pub(crate) fn start_search_in_focused_terminal_surface(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+    pub(crate) fn start_search_in_focused_terminal_surface(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         self.start_search_in_focused_gpui_engine_terminal(cx)
     }
 
@@ -387,7 +402,11 @@ impl GhostexGpuiApp {
     /// focus. Shell focus stays on the terminal pane while the search bar is
     /// open, so terminal key routing that is derived from shell focus must
     /// consult this before treating a keystroke as terminal input.
-    pub(crate) fn terminal_search_input_owns_keyboard_focus(&self, window: &Window, cx: &App) -> bool {
+    pub(crate) fn terminal_search_input_owns_keyboard_focus(
+        &self,
+        window: &Window,
+        cx: &App,
+    ) -> bool {
         self.terminal_search_inputs
             .values()
             .any(|input| input.read(cx).focus_handle(cx).is_focused(window))
@@ -396,7 +415,11 @@ impl GhostexGpuiApp {
     /// Keeps one live search input per terminal with an active Ghostty search
     /// state, mirrors Ghostty-provided needles into the field, and applies a
     /// pending open-focus so Cmd+F immediately types into the bar like macOS.
-    pub(crate) fn sync_terminal_search_inputs(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn sync_terminal_search_inputs(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let mut active_needles: HashMap<AgentsTerminalRuntimeSessionId, String> = HashMap::new();
         for (runtime_session_id, state) in self
             .agents_terminal_runtime_osc_states
@@ -671,5 +694,4 @@ impl GhostexGpuiApp {
         #[cfg(not(target_os = "macos"))]
         None
     }
-
 }

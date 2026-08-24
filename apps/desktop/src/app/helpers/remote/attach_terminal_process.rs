@@ -168,4 +168,3 @@ pub(crate) fn gpui_remote_attach_terminal_process_command(
     }
     format!("/bin/zsh -c {}", gpui_shell_single_quote(body.trim_end()))
 }
-

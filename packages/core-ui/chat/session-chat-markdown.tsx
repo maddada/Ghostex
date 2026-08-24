@@ -28,7 +28,7 @@ import {
   IconInfoCircle,
   IconMessageReport,
   IconTextWrap,
-} from "@tabler/icons-react";
+} from '@tabler/icons-react';
 import {
   Children,
   Component,
@@ -47,23 +47,23 @@ import {
   type ComponentProps,
   type CSSProperties,
   type ReactNode,
-} from "react";
-import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { Button } from "../../components/ui/button";
+} from 'react';
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Button } from '../../components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../components/ui/dropdown-menu";
-import { AppTooltip } from "../app-tooltip";
+} from '../../components/ui/dropdown-menu';
+import { AppTooltip } from '../app-tooltip';
 import {
   remarkSessionChatCodeMeta,
   sessionChatFenceMeta,
   sessionChatFenceTitle,
   sessionChatFenceTitleIcon,
-} from "./session-chat-code-fence-meta";
+} from './session-chat-code-fence-meta';
 import {
   estimateSessionChatHighlightSize,
   highlightSessionChatCode,
@@ -73,12 +73,9 @@ import {
   sessionChatHighlightCacheKey,
   sessionChatHighlighter,
   type SessionChatCodeLanguage,
-} from "./session-chat-code-highlight";
-import {
-  readSessionChatCodeWrapDefault,
-  writeSessionChatCodeWrapDefault,
-} from "./session-chat-code-wrap";
-import { remarkSessionChatDetails } from "./session-chat-details";
+} from './session-chat-code-highlight';
+import { readSessionChatCodeWrapDefault, writeSessionChatCodeWrapDefault } from './session-chat-code-wrap';
+import { remarkSessionChatDetails } from './session-chat-details';
 import {
   remarkSessionChatInlineCode,
   resolveSessionChatFenceTitleFilePath,
@@ -87,32 +84,22 @@ import {
   sessionChatFilePathIcon,
   sessionChatFilePathTitle,
   type SessionChatFilePathRef,
-} from "./session-chat-file-paths";
-import {
-  remarkSessionChatGithubAlerts,
-  type SessionChatAlertKind,
-} from "./session-chat-github-alerts";
+} from './session-chat-file-paths';
+import { remarkSessionChatGithubAlerts, type SessionChatAlertKind } from './session-chat-github-alerts';
 import {
   isSessionChatImageHref,
   SessionChatInlineImage,
   sessionChatImageTargetForHref,
   useSessionChatImageViewer,
   type SessionChatImageViewerApi,
-} from "./session-chat-image-viewer";
-import {
-  classifySessionChatLinkHref,
-  useSessionChatHostLinks,
-  type SessionChatHostLinks,
-} from "./session-chat-links";
+} from './session-chat-image-viewer';
+import { classifySessionChatLinkHref, useSessionChatHostLinks, type SessionChatHostLinks } from './session-chat-links';
 import {
   SESSION_CHAT_COPY_CODE_ATTRIBUTE,
   sessionChatTableToCsv,
   sessionChatTableToMarkdown,
-} from "./session-chat-table-clipboard";
-import {
-  remarkSessionChatHardBreaks,
-  sessionChatUserMarkdownSource,
-} from "./session-chat-user-text";
+} from './session-chat-table-clipboard';
+import { remarkSessionChatHardBreaks, sessionChatUserMarkdownSource } from './session-chat-user-text';
 
 /*
  * Order matters in one place: remarkSessionChatDetails runs before the three
@@ -137,44 +124,38 @@ const REMARK_PLUGINS = [
  */
 const CHAT_TEXT_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkSessionChatHardBreaks];
 
-
 /**
  * GitHub's five alert kinds, with GitHub's own labels and colour families. The
  * colours live in chat.css so both chat themes can carry their own value; this
  * side only picks the label and the icon.
  */
-const ALERT_PRESENTATIONS: Record<
-  SessionChatAlertKind,
-  { Icon: typeof IconInfoCircle; label: string }
-> = {
-  caution: { Icon: IconAlertOctagon, label: "Caution" },
-  important: { Icon: IconMessageReport, label: "Important" },
-  note: { Icon: IconInfoCircle, label: "Note" },
-  tip: { Icon: IconBulb, label: "Tip" },
-  warning: { Icon: IconAlertTriangle, label: "Warning" },
+const ALERT_PRESENTATIONS: Record<SessionChatAlertKind, { Icon: typeof IconInfoCircle; label: string }> = {
+  caution: { Icon: IconAlertOctagon, label: 'Caution' },
+  important: { Icon: IconMessageReport, label: 'Important' },
+  note: { Icon: IconInfoCircle, label: 'Note' },
+  tip: { Icon: IconBulb, label: 'Tip' },
+  warning: { Icon: IconAlertTriangle, label: 'Warning' },
 };
 
 function alertPresentation(
-  kind: unknown,
+  kind: unknown
 ): { Icon: typeof IconInfoCircle; kind: SessionChatAlertKind; label: string } | null {
-  if (typeof kind !== "string") return null;
+  if (typeof kind !== 'string') return null;
   const presentation = ALERT_PRESENTATIONS[kind as SessionChatAlertKind];
-  return presentation
-    ? { ...presentation, kind: kind as SessionChatAlertKind }
-    : null;
+  return presentation ? { ...presentation, kind: kind as SessionChatAlertKind } : null;
 }
 
 function nodeText(node: ReactNode): string {
-  if (typeof node === "string" || typeof node === "number") {
+  if (typeof node === 'string' || typeof node === 'number') {
     return String(node);
   }
   if (Array.isArray(node)) {
-    return node.map(nodeText).join("");
+    return node.map(nodeText).join('');
   }
   if (isValidElement<{ children?: ReactNode }>(node)) {
     return nodeText(node.props.children);
   }
-  return "";
+  return '';
 }
 
 /**
@@ -185,14 +166,11 @@ function nodeText(node: ReactNode): string {
  * rail. Only the list that needs it pays: `undefined` leaves the stylesheet's
  * default in place, so the common short list keeps the tight indent.
  */
-function sessionChatOrderedListGutter(
-  itemCount: number,
-  start: number | undefined,
-): CSSProperties | undefined {
-  const first = typeof start === "number" && Number.isFinite(start) ? start : 1;
+function sessionChatOrderedListGutter(itemCount: number, start: number | undefined): CSSProperties | undefined {
+  const first = typeof start === 'number' && Number.isFinite(start) ? start : 1;
   const digits = String(Math.abs(first + Math.max(itemCount - 1, 0))).length;
   // One extra character for the "." and the space after it.
-  return digits > 2 ? ({ "--chat-list-gutter": `${digits + 1}ch` } as CSSProperties) : undefined;
+  return digits > 2 ? ({ '--chat-list-gutter': `${digits + 1}ch` } as CSSProperties) : undefined;
 }
 
 /*
@@ -220,28 +198,23 @@ interface CodeHighlightBoundaryState {
   renderedKey: string;
 }
 
-class CodeHighlightBoundary extends Component<
-  CodeHighlightBoundaryProps,
-  CodeHighlightBoundaryState
-> {
+class CodeHighlightBoundary extends Component<CodeHighlightBoundaryProps, CodeHighlightBoundaryState> {
   override state: CodeHighlightBoundaryState = {
     failed: false,
     renderedKey: this.props.resetKey,
   };
 
-  static getDerivedStateFromError(): Pick<CodeHighlightBoundaryState, "failed"> {
+  static getDerivedStateFromError(): Pick<CodeHighlightBoundaryState, 'failed'> {
     return { failed: true };
   }
 
   static getDerivedStateFromProps(
     props: CodeHighlightBoundaryProps,
-    state: CodeHighlightBoundaryState,
+    state: CodeHighlightBoundaryState
   ): CodeHighlightBoundaryState | null {
     // New content in the same slot deserves a fresh attempt; one bad fence must
     // not leave that position permanently unhighlighted.
-    return state.renderedKey === props.resetKey
-      ? null
-      : { failed: false, renderedKey: props.resetKey };
+    return state.renderedKey === props.resetKey ? null : { failed: false, renderedKey: props.resetKey };
   }
 
   override render(): ReactNode {
@@ -252,12 +225,7 @@ class CodeHighlightBoundary extends Component<
 function ShikiCodeHtml({ html }: { html: string }) {
   // Shiki output is generated from the fence's own text by a tokenizer that
   // escapes it; nothing user-authored reaches the DOM as markup.
-  return (
-    <div
-      className="ghostex-chat-markdown-shiki"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+  return <div className='ghostex-chat-markdown-shiki' dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function UncachedShikiCode({
@@ -275,20 +243,13 @@ function UncachedShikiCode({
   // registered; the Suspense fallback above is the plain block, so first paint
   // is never blocked on Shiki.
   const core = use(sessionChatHighlighter(language));
-  const html = useMemo(
-    () => highlightSessionChatCode(core, code, language),
-    [code, core, language],
-  );
+  const html = useMemo(() => highlightSessionChatCode(core, code, language), [code, core, language]);
 
   useEffect(() => {
     if (html === null || cacheKey === null) {
       return;
     }
-    sessionChatHighlightCache.set(
-      cacheKey,
-      html,
-      estimateSessionChatHighlightSize(html, code),
-    );
+    sessionChatHighlightCache.set(cacheKey, html, estimateSessionChatHighlightSize(html, code));
   }, [cacheKey, code, html]);
 
   return html === null ? <>{fallback}</> : <ShikiCodeHtml html={html} />;
@@ -322,9 +283,7 @@ function ShikiCodeBody({
    * today's without colour.
    */
   const deferredCode = useDeferredValue(code);
-  const cacheKey = isStreaming
-    ? null
-    : sessionChatHighlightCacheKey(code, language);
+  const cacheKey = isStreaming ? null : sessionChatHighlightCacheKey(code, language);
   const cached = cacheKey === null ? null : sessionChatHighlightCache.get(cacheKey);
   if (cached !== null) {
     return <ShikiCodeHtml html={cached} />;
@@ -336,12 +295,7 @@ function ShikiCodeBody({
   return (
     <CodeHighlightBoundary fallback={fallback} resetKey={`${language}:${code.length}`}>
       <Suspense fallback={fallback}>
-        <UncachedShikiCode
-          cacheKey={cacheKey}
-          code={code}
-          fallback={fallback}
-          language={language}
-        />
+        <UncachedShikiCode cacheKey={cacheKey} code={code} fallback={fallback} language={language} />
       </Suspense>
     </CodeHighlightBoundary>
   );
@@ -368,27 +322,19 @@ function MarkdownCodeBlockTitle({
   title: string | null;
 }) {
   if (title === null) {
-    return <span className="ghostex-chat-markdown-codeblock-language">{language}</span>;
+    return <span className='ghostex-chat-markdown-codeblock-language'>{language}</span>;
   }
   const Icon = sessionChatFenceTitleIcon(title);
   // Split on the title as the agent wrote it, so the `:line` a fence quoted
   // stays attached to the filename rather than becoming a separate box.
-  const separator =
-    reference === null ? -1 : Math.max(title.lastIndexOf("/"), title.lastIndexOf("\\"));
+  const separator = reference === null ? -1 : Math.max(title.lastIndexOf('/'), title.lastIndexOf('\\'));
   return (
-    <span className="ghostex-chat-markdown-codeblock-title">
-      <Icon
-        aria-hidden="true"
-        className="ghostex-chat-markdown-codeblock-title-icon"
-        size={13}
-        stroke={1.8}
-      />
+    <span className='ghostex-chat-markdown-codeblock-title'>
+      <Icon aria-hidden='true' className='ghostex-chat-markdown-codeblock-title-icon' size={13} stroke={1.8} />
       {separator < 0 ? null : (
-        <span className="ghostex-chat-markdown-codeblock-title-parent">
-          {title.slice(0, separator)}
-        </span>
+        <span className='ghostex-chat-markdown-codeblock-title-parent'>{title.slice(0, separator)}</span>
       )}
-      <span className="ghostex-chat-markdown-codeblock-title-name">
+      <span className='ghostex-chat-markdown-codeblock-title-name'>
         {separator < 0 ? title : title.slice(separator)}
       </span>
     </span>
@@ -411,7 +357,7 @@ function OpenFenceFileButton({
   openFile,
   reference,
 }: {
-  openFile: NonNullable<SessionChatHostLinks["openFile"]>;
+  openFile: NonNullable<SessionChatHostLinks['openFile']>;
   reference: SessionChatFilePathRef;
 }) {
   const label = `Open ${sessionChatFilePathTitle(reference)}`;
@@ -420,16 +366,16 @@ function OpenFenceFileButton({
       <Button
         aria-label={label}
         onClick={() => openFile(reference.path, reference.position)}
-        size="icon-xs"
-        variant="ghost"
+        size='icon-xs'
+        variant='ghost'
       >
-        <IconExternalLink aria-hidden="true" data-icon="inline-start" stroke={1.9} />
+        <IconExternalLink aria-hidden='true' data-icon='inline-start' stroke={1.9} />
       </Button>
     </AppTooltip>
   );
 }
 
-function MarkdownCodeBlock({ children, node }: ComponentProps<"pre"> & ExtraProps) {
+function MarkdownCodeBlock({ children, node }: ComponentProps<'pre'> & ExtraProps) {
   const [copied, setCopied] = useState(false);
   /*
    * Wrapping is the block's own state, seeded from the last choice made
@@ -439,22 +385,18 @@ function MarkdownCodeBlock({ children, node }: ComponentProps<"pre"> & ExtraProp
    */
   const [wrapped, setWrapped] = useState(readSessionChatCodeWrapDefault);
   const codeNode = Children.toArray(children)[0];
-  const className = isValidElement<{ className?: string }>(codeNode)
-    ? codeNode.props.className
-    : undefined;
+  const className = isValidElement<{ className?: string }>(codeNode) ? codeNode.props.className : undefined;
   const fenceInfo = className?.match(/language-([^\s]+)/)?.[1];
-  const language = fenceInfo ?? "code";
+  const language = fenceInfo ?? 'code';
   // The raw fence text, trailing newline included, is what Shiki must see: the
   // plain <pre> renders that newline as a final empty line, so dropping it
   // would make the block jump a row shorter the moment highlighting lands.
   const source = nodeText(children);
-  const text = source.replace(/\n$/, "");
+  const text = source.replace(/\n$/, '');
   // Hosts that cannot load the highlighter at all (the mobile webview has no
   // origin to load anything from) build the flag as false, so no fence even
   // starts a load that cannot succeed.
-  const shikiLanguage = SESSION_CHAT_HIGHLIGHTING_AVAILABLE
-    ? resolveSessionChatCodeLanguage(fenceInfo)
-    : null;
+  const shikiLanguage = SESSION_CHAT_HIGHLIGHTING_AVAILABLE ? resolveSessionChatCodeLanguage(fenceInfo) : null;
   // Unlabelled and unsupported fences are a normal outcome, not a failure:
   // they stay exactly as they render today.
   const plainBlock = <pre>{children}</pre>;
@@ -467,30 +409,18 @@ function MarkdownCodeBlock({ children, node }: ComponentProps<"pre"> & ExtraProp
    * growing a third that would do nothing.
    */
   const openFile = useSessionChatHostLinks()?.openFile;
-  const titleReference =
-    title === null ? null : resolveSessionChatFenceTitleFilePath(title);
-  const wrapLabel = wrapped ? "Stop wrapping lines" : "Wrap lines";
-  const copyLabel = copied ? "Copied" : "Copy code";
+  const titleReference = title === null ? null : resolveSessionChatFenceTitleFilePath(title);
+  const wrapLabel = wrapped ? 'Stop wrapping lines' : 'Wrap lines';
+  const copyLabel = copied ? 'Copied' : 'Copy code';
 
   return (
     // data-wrap drives the wrapping rule in chat.css, which is written against
     // any <pre> inside this block — the plain one and the <pre class="shiki">
     // Shiki swaps in for it alike.
-    <div
-      className="ghostex-chat-markdown-codeblock"
-      data-wrap={wrapped ? "true" : "false"}
-    >
-      <div className="ghostex-chat-markdown-codeblock-header">
-        <MarkdownCodeBlockTitle
-          language={language}
-          reference={titleReference}
-          title={title}
-        />
-        <span
-          aria-label="Code block actions"
-          className="ghostex-chat-markdown-codeblock-actions"
-          role="toolbar"
-        >
+    <div className='ghostex-chat-markdown-codeblock' data-wrap={wrapped ? 'true' : 'false'}>
+      <div className='ghostex-chat-markdown-codeblock-header'>
+        <MarkdownCodeBlockTitle language={language} reference={titleReference} title={title} />
+        <span aria-label='Code block actions' className='ghostex-chat-markdown-codeblock-actions' role='toolbar'>
           <AppTooltip content={wrapLabel}>
             <Button
               aria-label={wrapLabel}
@@ -499,15 +429,13 @@ function MarkdownCodeBlock({ children, node }: ComponentProps<"pre"> & ExtraProp
                 setWrapped(!wrapped);
                 writeSessionChatCodeWrapDefault(!wrapped);
               }}
-              size="icon-xs"
-              variant="ghost"
+              size='icon-xs'
+              variant='ghost'
             >
-              <IconTextWrap aria-hidden="true" data-icon="inline-start" stroke={1.9} />
+              <IconTextWrap aria-hidden='true' data-icon='inline-start' stroke={1.9} />
             </Button>
           </AppTooltip>
-          {openFile && titleReference ? (
-            <OpenFenceFileButton openFile={openFile} reference={titleReference} />
-          ) : null}
+          {openFile && titleReference ? <OpenFenceFileButton openFile={openFile} reference={titleReference} /> : null}
           <AppTooltip content={copyLabel}>
             <Button
               aria-label={copyLabel}
@@ -518,13 +446,13 @@ function MarkdownCodeBlock({ children, node }: ComponentProps<"pre"> & ExtraProp
                   window.setTimeout(() => setCopied(false), 1200);
                 });
               }}
-              size="icon-xs"
-              variant="ghost"
+              size='icon-xs'
+              variant='ghost'
             >
               {copied ? (
-                <IconCheck aria-hidden="true" data-icon="inline-start" stroke={1.9} />
+                <IconCheck aria-hidden='true' data-icon='inline-start' stroke={1.9} />
               ) : (
-                <IconCopy aria-hidden="true" data-icon="inline-start" stroke={1.9} />
+                <IconCopy aria-hidden='true' data-icon='inline-start' stroke={1.9} />
               )}
             </Button>
           </AppTooltip>
@@ -533,11 +461,7 @@ function MarkdownCodeBlock({ children, node }: ComponentProps<"pre"> & ExtraProp
       {shikiLanguage === null ? (
         plainBlock
       ) : (
-        <ShikiCodeBody
-          code={source}
-          fallback={plainBlock}
-          language={shikiLanguage}
-        />
+        <ShikiCodeBody code={source} fallback={plainBlock} language={shikiLanguage} />
       )}
     </div>
   );
@@ -558,7 +482,7 @@ function FileChip({
   openFile,
   reference,
 }: {
-  openFile: NonNullable<SessionChatHostLinks["openFile"]>;
+  openFile: NonNullable<SessionChatHostLinks['openFile']>;
   reference: SessionChatFilePathRef;
 }) {
   const { detail, name, parent } = sessionChatFilePathChipLabel(reference);
@@ -567,27 +491,18 @@ function FileChip({
   return (
     <AppTooltip content={title}>
       <button
-        className="ghostex-chat-markdown-file-chip"
+        className='ghostex-chat-markdown-file-chip'
         onClick={() => openFile(reference.path, reference.position)}
-        type="button"
+        type='button'
         // The chip can be truncated on screen, so it declares the inline code
         // it stands for: copying a table cell that holds one yields the whole
         // path the agent wrote, however much of it was visible.
         {...{ [SESSION_CHAT_COPY_CODE_ATTRIBUTE]: title }}
       >
-        <Icon
-          aria-hidden="true"
-          className="ghostex-chat-markdown-file-chip-icon"
-          size={13}
-          stroke={1.8}
-        />
-        {parent === "" ? null : (
-          <span className="ghostex-chat-markdown-file-chip-parent">{parent}</span>
-        )}
-        <span className="ghostex-chat-markdown-file-chip-name">{name}</span>
-        {detail === "" ? null : (
-          <span className="ghostex-chat-markdown-file-chip-detail">{detail}</span>
-        )}
+        <Icon aria-hidden='true' className='ghostex-chat-markdown-file-chip-icon' size={13} stroke={1.8} />
+        {parent === '' ? null : <span className='ghostex-chat-markdown-file-chip-parent'>{parent}</span>}
+        <span className='ghostex-chat-markdown-file-chip-name'>{name}</span>
+        {detail === '' ? null : <span className='ghostex-chat-markdown-file-chip-detail'>{detail}</span>}
       </button>
     </AppTooltip>
   );
@@ -613,7 +528,7 @@ function FileChip({
  * the source, so what lands on the clipboard is what is on screen — chips
  * included (session-chat-table-clipboard.ts).
  */
-function MarkdownTable({ children, node: _node, ...props }: ComponentProps<"table"> & ExtraProps) {
+function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'table'> & ExtraProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -633,9 +548,9 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<"tabl
     const table = tableRef.current;
     if (!scroller || !table) return undefined;
     const measure = (): void => {
-      const clipped = [
-        ...table.querySelectorAll(".ghostex-chat-markdown-table-cell"),
-      ].some((cell) => cell.scrollWidth > cell.clientWidth + 1);
+      const clipped = [...table.querySelectorAll('.ghostex-chat-markdown-table-cell')].some(
+        (cell) => cell.scrollWidth > cell.clientWidth + 1
+      );
       setExpandable(clipped || scroller.scrollWidth > scroller.clientWidth + 1);
     };
     measure();
@@ -654,10 +569,7 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<"tabl
       const columnWidths: number[] = [];
       for (const row of table.rows) {
         [...row.cells].forEach((cell, column) => {
-          columnWidths[column] = Math.max(
-            columnWidths[column] ?? 0,
-            cell.getBoundingClientRect().width,
-          );
+          columnWidths[column] = Math.max(columnWidths[column] ?? 0, cell.getBoundingClientRect().width);
         });
       }
       // The header row is where a column's width is decided, so pinning it
@@ -670,75 +582,55 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<"tabl
     setExpanded(!expanded);
   }, [expanded]);
 
-  const copyTable = useCallback((format: "csv" | "markdown"): void => {
+  const copyTable = useCallback((format: 'csv' | 'markdown'): void => {
     const table = tableRef.current;
     if (!table) return;
-    const text =
-      format === "csv"
-        ? sessionChatTableToCsv(table)
-        : sessionChatTableToMarkdown(table);
+    const text = format === 'csv' ? sessionChatTableToCsv(table) : sessionChatTableToMarkdown(table);
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
     });
   }, []);
 
-  const expandLabel = expanded ? "Collapse cells" : "Expand cells";
-  const copyLabel = copied ? "Copied" : "Copy table";
+  const expandLabel = expanded ? 'Collapse cells' : 'Expand cells';
+  const copyLabel = copied ? 'Copied' : 'Copy table';
 
   return (
     // data-expanded drives the cell cap in chat.css; the wrapper, not the
     // table, is what the actions sit under and what the scroller lives in.
-    <div
-      className="ghostex-chat-markdown-table"
-      data-expanded={expanded ? "true" : "false"}
-    >
-      <div className="ghostex-chat-markdown-table-scroll" ref={scrollRef}>
+    <div className='ghostex-chat-markdown-table' data-expanded={expanded ? 'true' : 'false'}>
+      <div className='ghostex-chat-markdown-table-scroll' ref={scrollRef}>
         <table {...props} ref={tableRef}>
           {children}
         </table>
       </div>
-      <span
-        aria-label="Table actions"
-        className="ghostex-chat-markdown-table-actions"
-        role="toolbar"
-      >
+      <span aria-label='Table actions' className='ghostex-chat-markdown-table-actions' role='toolbar'>
         {expandable || expanded ? (
           <AppTooltip content={expandLabel}>
             <Button
               aria-label={expandLabel}
               aria-pressed={expanded}
               onClick={toggleExpanded}
-              size="icon-xs"
-              variant="ghost"
+              size='icon-xs'
+              variant='ghost'
             >
               {expanded ? (
-                <IconArrowsMinimize aria-hidden="true" stroke={1.9} />
+                <IconArrowsMinimize aria-hidden='true' stroke={1.9} />
               ) : (
-                <IconArrowsMaximize aria-hidden="true" stroke={1.9} />
+                <IconArrowsMaximize aria-hidden='true' stroke={1.9} />
               )}
             </Button>
           </AppTooltip>
         ) : null}
         <DropdownMenu>
           <AppTooltip content={copyLabel}>
-            <DropdownMenuTrigger
-              render={<Button aria-label={copyLabel} size="icon-xs" variant="ghost" />}
-            >
-              {copied ? (
-                <IconCheck aria-hidden="true" stroke={1.9} />
-              ) : (
-                <IconCopy aria-hidden="true" stroke={1.9} />
-              )}
+            <DropdownMenuTrigger render={<Button aria-label={copyLabel} size='icon-xs' variant='ghost' />}>
+              {copied ? <IconCheck aria-hidden='true' stroke={1.9} /> : <IconCopy aria-hidden='true' stroke={1.9} />}
             </DropdownMenuTrigger>
           </AppTooltip>
-          <DropdownMenuContent align="end" side="top">
-            <DropdownMenuItem onClick={() => copyTable("markdown")}>
-              Copy as Markdown
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => copyTable("csv")}>
-              Copy as CSV
-            </DropdownMenuItem>
+          <DropdownMenuContent align='end' side='top'>
+            <DropdownMenuItem onClick={() => copyTable('markdown')}>Copy as Markdown</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => copyTable('csv')}>Copy as CSV</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </span>
@@ -756,12 +648,12 @@ function MarkdownTableCell({
   children,
   node: _node,
   ...props
-}: ComponentProps<"td"> & ExtraProps & { as: "td" | "th" }) {
+}: ComponentProps<'td'> & ExtraProps & { as: 'td' | 'th' }) {
   const { as, ...cellProps } = props;
   const Cell = as;
   return (
     <Cell {...cellProps}>
-      <span className="ghostex-chat-markdown-table-cell">{children}</span>
+      <span className='ghostex-chat-markdown-table-cell'>{children}</span>
     </Cell>
   );
 }
@@ -777,17 +669,12 @@ function MarkdownTableCell({
  * uncontrolled `<details>` would be at the mercy of whether reconciliation
  * happens to touch the attribute the reader just toggled.
  */
-function MarkdownDetails({
-  children,
-  node: _node,
-  open,
-  ...props
-}: ComponentProps<"details"> & ExtraProps) {
+function MarkdownDetails({ children, node: _node, open, ...props }: ComponentProps<'details'> & ExtraProps) {
   const [isOpen, setIsOpen] = useState(open === true);
   return (
     <details
       {...props}
-      className="ghostex-chat-markdown-details"
+      className='ghostex-chat-markdown-details'
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
       open={isOpen}
     >
@@ -797,40 +684,28 @@ function MarkdownDetails({
 }
 
 /** The disclosure's own row: the chevron the rest of the chat uses, then the label. */
-function MarkdownSummary({
-  children,
-  node: _node,
-  ...props
-}: ComponentProps<"summary"> & ExtraProps) {
+function MarkdownSummary({ children, node: _node, ...props }: ComponentProps<'summary'> & ExtraProps) {
   return (
-    <summary {...props} className="ghostex-chat-markdown-details-summary">
-      <IconChevronRight
-        aria-hidden="true"
-        className="ghostex-chat-markdown-details-chevron"
-        size={14}
-        stroke={2}
-      />
-      <span className="ghostex-chat-markdown-details-summary-text">{children}</span>
+    <summary {...props} className='ghostex-chat-markdown-details-summary'>
+      <IconChevronRight aria-hidden='true' className='ghostex-chat-markdown-details-chevron' size={14} stroke={2} />
+      <span className='ghostex-chat-markdown-details-summary-text'>{children}</span>
     </summary>
   );
 }
 
 function markdownComponents(
   viewer: SessionChatImageViewerApi | null,
-  hostLinks: SessionChatHostLinks | null,
+  hostLinks: SessionChatHostLinks | null
 ): Components {
   return {
     details: MarkdownDetails,
     pre: MarkdownCodeBlock,
     summary: MarkdownSummary,
     table: MarkdownTable,
-    td: (props) => <MarkdownTableCell {...props} as="td" />,
-    th: (props) => <MarkdownTableCell {...props} as="th" />,
+    td: (props) => <MarkdownTableCell {...props} as='td' />,
+    th: (props) => <MarkdownTableCell {...props} as='th' />,
     ol: ({ children, node, start, style, ...props }) => {
-      const items =
-        node?.children.filter(
-          (child) => child.type === "element" && child.tagName === "li",
-        ).length ?? 0;
+      const items = node?.children.filter((child) => child.type === 'element' && child.tagName === 'li').length ?? 0;
       const gutter = sessionChatOrderedListGutter(items, start);
       return (
         <ol {...props} start={start} style={gutter ? { ...style, ...gutter } : style}>
@@ -859,14 +734,10 @@ function markdownComponents(
       if (!reference) {
         return plain;
       }
-      return (
-        <FileChip openFile={openFile} reference={reference} />
-      );
+      return <FileChip openFile={openFile} reference={reference} />;
     },
     blockquote: ({ children, node: _node, ...props }) => {
-      const alert = alertPresentation(
-        (props as Record<string, unknown>)["data-alert"],
-      );
+      const alert = alertPresentation((props as Record<string, unknown>)['data-alert']);
       if (!alert) {
         return <blockquote {...props}>{children}</blockquote>;
       }
@@ -874,12 +745,8 @@ function markdownComponents(
       // is ordinary text sitting under a coloured title — only the border and
       // the title carry the colour.
       return (
-        <div
-          className="ghostex-chat-markdown-alert"
-          data-alert={alert.kind}
-          role="note"
-        >
-          <div className="ghostex-chat-markdown-alert-title">
+        <div className='ghostex-chat-markdown-alert' data-alert={alert.kind} role='note'>
+          <div className='ghostex-chat-markdown-alert-title'>
             <alert.Icon aria-hidden size={15} stroke={2} />
             {alert.label}
           </div>
@@ -888,7 +755,7 @@ function markdownComponents(
       );
     },
     a: ({ children, href, node, ...props }) => {
-      if (typeof href !== "string" || href === "") {
+      if (typeof href !== 'string' || href === '') {
         return <>{children}</>;
       }
       /*
@@ -908,7 +775,7 @@ function markdownComponents(
        */
       const properties = node?.properties;
       if (properties?.dataFootnoteRef != null || properties?.dataFootnoteBackref != null) {
-        const footnoteId = href.startsWith("#") ? href.slice(1) : null;
+        const footnoteId = href.startsWith('#') ? href.slice(1) : null;
         return (
           // Spread rather than picked apart: remark puts the data attribute the
           // chip styling matches on, the id the ↩ comes back to, and the
@@ -921,10 +788,8 @@ function markdownComponents(
               if (!footnoteId) {
                 return;
               }
-              const message = event.currentTarget.closest(".ghostex-chat-markdown");
-              message
-                ?.querySelector(`#${CSS.escape(footnoteId)}`)
-                ?.scrollIntoView({ block: "center" });
+              const message = event.currentTarget.closest('.ghostex-chat-markdown');
+              message?.querySelector(`#${CSS.escape(footnoteId)}`)?.scrollIntoView({ block: 'center' });
             }}
           >
             {children}
@@ -935,18 +800,14 @@ function markdownComponents(
         const target = sessionChatImageTargetForHref(href);
         if (viewer.canOpen(target)) {
           return (
-            <button
-              className="ghostex-chat-image-link"
-              onClick={() => viewer.open(target)}
-              type="button"
-            >
+            <button className='ghostex-chat-image-link' onClick={() => viewer.open(target)} type='button'>
               {children}
             </button>
           );
         }
       }
       const target = classifySessionChatLinkHref(href);
-      if (target.kind === "url") {
+      if (target.kind === 'url') {
         const openUrl = hostLinks?.openUrl;
         if (openUrl) {
           return (
@@ -966,33 +827,29 @@ function markdownComponents(
           );
         }
         return (
-          <a href={target.url} rel="noreferrer" target="_blank">
+          <a href={target.url} rel='noreferrer' target='_blank'>
             {children}
           </a>
         );
       }
-      if (target.kind === "file" && hostLinks?.openFile) {
+      if (target.kind === 'file' && hostLinks?.openFile) {
         const openFile = hostLinks.openFile;
         return (
           <AppTooltip content={target.path}>
-            <button
-              className="ghostex-chat-file-link"
-              onClick={() => openFile(target.path)}
-              type="button"
-            >
+            <button className='ghostex-chat-file-link' onClick={() => openFile(target.path)} type='button'>
               {children}
             </button>
           </AppTooltip>
         );
       }
       return (
-        <AppTooltip content={target.kind === "file" ? target.path : undefined}>
+        <AppTooltip content={target.kind === 'file' ? target.path : undefined}>
           <span>{children}</span>
         </AppTooltip>
       );
     },
     img: ({ alt, src }) => {
-      if (viewer && typeof src === "string" && src !== "") {
+      if (viewer && typeof src === 'string' && src !== '') {
         const target = {
           ...sessionChatImageTargetForHref(src),
           ...(alt ? { alt } : {}),
@@ -1003,12 +860,8 @@ function markdownComponents(
           return (
             <SessionChatInlineImage
               fallback={
-                <button
-                  className="ghostex-chat-image-link"
-                  onClick={() => viewer.open(target)}
-                  type="button"
-                >
-                  {alt || "Image"}
+                <button className='ghostex-chat-image-link' onClick={() => viewer.open(target)} type='button'>
+                  {alt || 'Image'}
                 </button>
               }
               target={target}
@@ -1016,7 +869,7 @@ function markdownComponents(
           );
         }
       }
-      return <img alt={alt ?? ""} src={src ?? ""} />;
+      return <img alt={alt ?? ''} src={src ?? ''} />;
     },
   };
 }
@@ -1044,18 +897,12 @@ export function SessionChatMarkdown({
 }) {
   const viewer = useSessionChatImageViewer();
   const hostLinks = useSessionChatHostLinks();
-  const components = useMemo(
-    () => markdownComponents(viewer, hostLinks),
-    [hostLinks, viewer],
-  );
+  const components = useMemo(() => markdownComponents(viewer, hostLinks), [hostLinks, viewer]);
   const source = chatText ? sessionChatUserMarkdownSource(markdown) : markdown;
   return (
     <SessionChatMarkdownStreamingContext value={isStreaming}>
-      <div className="ghostex-chat-markdown">
-        <ReactMarkdown
-          components={components}
-          remarkPlugins={chatText ? CHAT_TEXT_REMARK_PLUGINS : REMARK_PLUGINS}
-        >
+      <div className='ghostex-chat-markdown'>
+        <ReactMarkdown components={components} remarkPlugins={chatText ? CHAT_TEXT_REMARK_PLUGINS : REMARK_PLUGINS}>
           {source}
         </ReactMarkdown>
       </div>

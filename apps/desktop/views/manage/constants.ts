@@ -1,13 +1,13 @@
-import { type AppState } from "@excalidraw/excalidraw/types";
-import { ManageQuickLabel } from "./types";
+import { type AppState } from '@excalidraw/excalidraw/types';
+import { ManageQuickLabel } from './types';
 
-export const MANAGE_FILES_RESPONSE_EVENT = "ghostex-manage-files-response";
-export const MANAGE_FILES_CHANGED_EVENT = "ghostex-manage-files-changed";
-export const MANAGE_DRAG_DATA_TYPE = "application/x-ghostex-manage-path";
+export const MANAGE_FILES_RESPONSE_EVENT = 'ghostex-manage-files-response';
+export const MANAGE_FILES_CHANGED_EVENT = 'ghostex-manage-files-changed';
+export const MANAGE_DRAG_DATA_TYPE = 'application/x-ghostex-manage-path';
 export const MANAGE_BRIDGE_TIMEOUT_MS = 15_000;
-export const MANAGE_DOCS_ROOT_PATH = "docs";
+export const MANAGE_DOCS_ROOT_PATH = 'docs';
 export const MANAGE_SELECTION_MAX_LENGTH = 700;
-export const MANAGE_ANNOTATIONS_SIDECAR_PATH = ".ghostex/manage-annotations.json";
+export const MANAGE_ANNOTATIONS_SIDECAR_PATH = '.ghostex/manage-annotations.json';
 export const MANAGE_ANNOTATION_SCHEMA_VERSION = 1;
 export const MANAGE_ANNOTATION_IMAGE_MAX_BYTES = 512 * 1024;
 export const MANAGE_ANNOTATION_MAX_IMAGES = 4;
@@ -22,24 +22,24 @@ export const MANAGE_SIDEBAR_DEFAULT_WIDTH = 292;
 export const MANAGE_SIDEBAR_MIN_WIDTH = 230;
 export const MANAGE_SIDEBAR_MAX_WIDTH = 560;
 export const MANAGE_FLOATING_SIDEBAR_MAX_WIDTH = 690;
-export const MANAGE_SIDEBAR_SIDE_STORAGE_KEY = "ghostex.manage.sidebarSide";
-export const MANAGE_SIDEBAR_WIDTH_STORAGE_KEY = "ghostex.manage.sidebarWidth";
+export const MANAGE_SIDEBAR_SIDE_STORAGE_KEY = 'ghostex.manage.sidebarSide';
+export const MANAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'ghostex.manage.sidebarWidth';
 /*
  * CDXC:ManageDrawings 2026-06-28-04:56:
  * Manage Excalidraw uses Excalidraw's dark theme, where the visually dark canvas is serialized as viewBackgroundColor #ffffff. Default new drawings to that saved value so created artifacts open with the same dark-looking background users get after choosing a dark canvas inside Excalidraw.
  */
-export const MANAGE_EXCALIDRAW_CANVAS_BACKGROUND = "#ffffff";
+export const MANAGE_EXCALIDRAW_CANVAS_BACKGROUND = '#ffffff';
 /*
  * CDXC:ManageDrawings 2026-06-28-01:43:
  * Manage should keep Excalidraw in dark mode so drawings match the macOS app's dark workarea instead of reopening through Excalidraw's light scheme. Apply the theme at the editor boundary so existing files and newly created artifacts render dark.
  */
-export const MANAGE_EXCALIDRAW_CANVAS_THEME: AppState["theme"] = "dark";
-export const MANAGE_COMMENT_ANNOTATION_COLOR = "#e2b340";
-export const MANAGE_REDLINE_ANNOTATION_COLOR = "#fda4af";
-export const MANAGE_DISMISS_TOOLBAR_COLOR = "#f87171";
+export const MANAGE_EXCALIDRAW_CANVAS_THEME: AppState['theme'] = 'dark';
+export const MANAGE_COMMENT_ANNOTATION_COLOR = '#e2b340';
+export const MANAGE_REDLINE_ANNOTATION_COLOR = '#fda4af';
+export const MANAGE_DISMISS_TOOLBAR_COLOR = '#f87171';
 export const MANAGE_SELECTION_TOOLBAR_EDGE_MARGIN = 18;
 export const MANAGE_SELECTION_TOOLBAR_WIDTH_ESTIMATE = 228;
-export const MANAGE_MEO_CONTENT_MAX_WIDTH = "800px";
+export const MANAGE_MEO_CONTENT_MAX_WIDTH = '800px';
 
 /*
  * CDXC:ManageMarkdownToolbar 2026-06-28-06:00:
@@ -62,13 +62,13 @@ export const MANAGE_MEO_CONTENT_MAX_WIDTH = "800px";
  * CDXC:ManageMarkdownTheme 2026-06-28-07:10:
  * Inline backtick code in Manage Docs should share the #2a2d30 code-block background and use a lighter orange than the previous #e8912c code token.
  */
-export const MANAGE_MEO_HEADING_COLOR = "#42a5f5";
-export const MANAGE_MEO_CODE_COLOR = "#f2b35f";
-export const MANAGE_MEO_VARIABLE_COLOR = "#e5e7eb";
-export const MANAGE_MEO_CODE_BLOCK_BACKGROUND = "#2a2d30";
+export const MANAGE_MEO_HEADING_COLOR = '#42a5f5';
+export const MANAGE_MEO_CODE_COLOR = '#f2b35f';
+export const MANAGE_MEO_VARIABLE_COLOR = '#e5e7eb';
+export const MANAGE_MEO_CODE_BLOCK_BACKGROUND = '#2a2d30';
 
 export const MANAGE_QUICK_LABELS: ManageQuickLabel[] = [
-  { color: "#a78bfa", id: "clarify", text: "Clarify" },
-  { color: "#f59e0b", id: "needs-tests", text: "Needs tests" },
-  { color: "#86efac", id: "looks-good", text: "Looks good" },
+  { color: '#a78bfa', id: 'clarify', text: 'Clarify' },
+  { color: '#f59e0b', id: 'needs-tests', text: 'Needs tests' },
+  { color: '#86efac', id: 'looks-good', text: 'Looks good' },
 ];

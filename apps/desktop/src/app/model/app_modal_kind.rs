@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiAppModalKind {
     AddProject,
@@ -40,7 +39,6 @@ pub(crate) enum GpuiAppModalKind {
     DiscoverGhostex,
     UpdateAvailable,
 }
-
 
 impl GpuiAppModalKind {
     pub(crate) fn from_modal_id(value: &str) -> Option<Self> {
@@ -395,8 +393,9 @@ impl GpuiAppModalKind {
     }
 }
 
-
-pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(action_id: &str) -> Option<GpuiAppModalKind> {
+pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
+    action_id: &str,
+) -> Option<GpuiAppModalKind> {
     /*
     CDXC:GPUICommandPalette 2026-06-26-23:04:
     `runGhostexHotkeyAction` needs an explicit app-modal allowlist after shell, pane, sidebar, focus, and action-slot routes have run. Map the separate Quick Access command/session entry actions and legacy sidebar modal ids here without treating every unknown hotkey id as a modal candidate.

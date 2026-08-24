@@ -13,13 +13,13 @@
  * The key/cert are generated on demand into `dev-cert/` (gitignored, never
  * shipped, dev-server only). Browsers show the usual self-signed warning once.
  */
-import { spawnSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const CERT_DIR_NAME = "dev-cert";
-const CERT_FILE = "localhost-cert.pem";
-const KEY_FILE = "localhost-key.pem";
+const CERT_DIR_NAME = 'dev-cert';
+const CERT_FILE = 'localhost-cert.pem';
+const KEY_FILE = 'localhost-key.pem';
 
 export interface SandboxDevCertificate {
   cert: Buffer;
@@ -38,25 +38,25 @@ export function sandboxDevCertificate(sandboxRoot: string): SandboxDevCertificat
   if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
     fs.mkdirSync(certDir, { recursive: true });
     const result = spawnSync(
-      "openssl",
+      'openssl',
       [
-        "req",
-        "-x509",
-        "-newkey",
-        "rsa:2048",
-        "-nodes",
-        "-days",
-        "825",
-        "-subj",
-        "/CN=localhost",
-        "-addext",
-        "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1",
-        "-keyout",
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-days',
+        '825',
+        '-subj',
+        '/CN=localhost',
+        '-addext',
+        'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1',
+        '-keyout',
         keyPath,
-        "-out",
+        '-out',
         certPath,
       ],
-      { encoding: "utf8" },
+      { encoding: 'utf8' }
     );
     if (result.status !== 0) {
       return null;

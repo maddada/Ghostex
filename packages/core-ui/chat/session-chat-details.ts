@@ -80,18 +80,17 @@ const DETAILS_HINT = /<\/?(?:details|summary)\b/i;
  * separate tokens rather than one paired match because an agent's summary and
  * its body are often split across mdast nodes by a blank line.
  */
-const DETAILS_TOKEN =
-  /<details(\s[^>]*?)?\s*>|<\/details\s*>|<summary(?:\s[^>]*?)?\s*>|<\/summary\s*>/gi;
+const DETAILS_TOKEN = /<details(\s[^>]*?)?\s*>|<\/details\s*>|<summary(?:\s[^>]*?)?\s*>|<\/summary\s*>/gi;
 
 /** `open`, `open=""`, `open="open"` — HTML's three spellings of the same flag. */
 const OPEN_ATTRIBUTE = /(?:^|\s)open(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*))?(?=\s|$)/i;
 
 type DetailsToken =
-  | { attributes: string; kind: "details-open" }
-  | { kind: "details-close" }
-  | { kind: "raw"; text: string }
-  | { kind: "summary-close" }
-  | { kind: "summary-open" };
+  | { attributes: string; kind: 'details-open' }
+  | { kind: 'details-close' }
+  | { kind: 'raw'; text: string }
+  | { kind: 'summary-close' }
+  | { kind: 'summary-open' };
 
 /**
  * Splits one `html` node's text into disclosure tags and the text between them.
@@ -100,28 +99,28 @@ type DetailsToken =
  */
 function scanDisclosureTags(value: string): DetailsToken[] {
   const tokens: DetailsToken[] = [];
-  const pattern = new RegExp(DETAILS_TOKEN.source, "gi");
+  const pattern = new RegExp(DETAILS_TOKEN.source, 'gi');
   let cursor = 0;
   let match = pattern.exec(value);
   while (match !== null) {
     if (match.index > cursor) {
-      tokens.push({ kind: "raw", text: value.slice(cursor, match.index) });
+      tokens.push({ kind: 'raw', text: value.slice(cursor, match.index) });
     }
     cursor = match.index + match[0].length;
     const tag = match[0].toLowerCase();
-    if (tag.startsWith("</details")) {
-      tokens.push({ kind: "details-close" });
-    } else if (tag.startsWith("</summary")) {
-      tokens.push({ kind: "summary-close" });
-    } else if (tag.startsWith("<details")) {
-      tokens.push({ attributes: match[1] ?? "", kind: "details-open" });
+    if (tag.startsWith('</details')) {
+      tokens.push({ kind: 'details-close' });
+    } else if (tag.startsWith('</summary')) {
+      tokens.push({ kind: 'summary-close' });
+    } else if (tag.startsWith('<details')) {
+      tokens.push({ attributes: match[1] ?? '', kind: 'details-open' });
     } else {
-      tokens.push({ kind: "summary-open" });
+      tokens.push({ kind: 'summary-open' });
     }
     match = pattern.exec(value);
   }
   if (tokens.length > 0 && cursor < value.length) {
-    tokens.push({ kind: "raw", text: value.slice(cursor) });
+    tokens.push({ kind: 'raw', text: value.slice(cursor) });
   }
   return tokens;
 }
@@ -145,7 +144,7 @@ function detailsNode(frame: DetailsFrame): MarkdownAstNode {
   // A summary that is a single paragraph is unwrapped, so `<summary>` holds
   // phrasing content the way the HTML spec expects rather than a stray block.
   const summary =
-    frame.summary.length === 1 && frame.summary[0]?.type === "paragraph"
+    frame.summary.length === 1 && frame.summary[0]?.type === 'paragraph'
       ? (frame.summary[0]?.children ?? [])
       : frame.summary;
   return {
@@ -153,26 +152,26 @@ function detailsNode(frame: DetailsFrame): MarkdownAstNode {
       {
         // An agent who opens a disclosure and never names it still gets a
         // clickable row; a blank summary would be an invisible control.
-        children: summary.length > 0 ? summary : [{ type: "text", value: "Details" }],
-        data: { hName: "summary" },
-        type: "sessionChatDetailsSummary",
+        children: summary.length > 0 ? summary : [{ type: 'text', value: 'Details' }],
+        data: { hName: 'summary' },
+        type: 'sessionChatDetailsSummary',
       },
       {
         children: frame.body,
         data: {
-          hName: "div",
-          hProperties: { className: ["ghostex-chat-markdown-details-body"] },
+          hName: 'div',
+          hProperties: { className: ['ghostex-chat-markdown-details-body'] },
         },
-        type: "sessionChatDetailsBody",
+        type: 'sessionChatDetailsBody',
       },
     ],
     data: {
-      hName: "details",
+      hName: 'details',
       // `open` is the only attribute carried across; everything else an agent
       // wrote on the tag is dropped rather than reproduced.
       hProperties: frame.open ? { open: true } : {},
     },
-    type: "sessionChatDetails",
+    type: 'sessionChatDetails',
   };
 }
 
@@ -180,15 +179,9 @@ function detailsNode(frame: DetailsFrame): MarkdownAstNode {
  * Rewrites one parent's children, turning disclosure tags into `details` nodes
  * and leaving everything else — including every other scrap of HTML — alone.
  */
-function foldDisclosures(
-  children: MarkdownAstNode[],
-  parse: (value: string) => MarkdownAstNode[],
-): MarkdownAstNode[] {
+function foldDisclosures(children: MarkdownAstNode[], parse: (value: string) => MarkdownAstNode[]): MarkdownAstNode[] {
   const hasTag = children.some(
-    (child) =>
-      child.type === "html" &&
-      typeof child.value === "string" &&
-      DETAILS_HINT.test(child.value),
+    (child) => child.type === 'html' && typeof child.value === 'string' && DETAILS_HINT.test(child.value)
   );
   if (!hasTag) return children;
 
@@ -205,18 +198,18 @@ function foldDisclosures(
   };
 
   const emitRaw = (text: string): void => {
-    if (text.trim() === "") return;
+    if (text.trim() === '') return;
     if (stack.length === 0) {
       // Outside a disclosure this is still whatever the agent typed, and it
       // keeps rendering as the literal text it renders as today.
-      output.push({ type: "html", value: text });
+      output.push({ type: 'html', value: text });
       return;
     }
     for (const node of parse(text)) emit(node);
   };
 
   for (const child of children) {
-    if (child.type !== "html" || typeof child.value !== "string") {
+    if (child.type !== 'html' || typeof child.value !== 'string') {
       emit(child);
       continue;
     }
@@ -229,7 +222,7 @@ function foldDisclosures(
     }
     for (const token of tokens) {
       switch (token.kind) {
-        case "details-open":
+        case 'details-open':
           stack.push({
             body: [],
             open: OPEN_ATTRIBUTE.test(token.attributes),
@@ -238,36 +231,36 @@ function foldDisclosures(
             summarySeen: false,
           });
           break;
-        case "details-close": {
+        case 'details-close': {
           const frame = stack.pop();
           if (!frame) {
             // A close with nothing open is a typo, not a disclosure.
-            output.push({ type: "html", value: "</details>" });
+            output.push({ type: 'html', value: '</details>' });
             break;
           }
           emit(detailsNode(frame));
           break;
         }
-        case "summary-open": {
+        case 'summary-open': {
           const frame = stack[stack.length - 1];
           if (!frame || frame.summarySeen) {
-            emitRaw("<summary>");
+            emitRaw('<summary>');
             break;
           }
           frame.summaryOpen = true;
           frame.summarySeen = true;
           break;
         }
-        case "summary-close": {
+        case 'summary-close': {
           const frame = stack[stack.length - 1];
           if (!frame?.summaryOpen) {
-            emitRaw("</summary>");
+            emitRaw('</summary>');
             break;
           }
           frame.summaryOpen = false;
           break;
         }
-        case "raw":
+        case 'raw':
           emitRaw(token.text);
           break;
       }
@@ -287,8 +280,7 @@ function foldDisclosures(
 }
 
 export function remarkSessionChatDetails(this: MarkdownParser) {
-  const parse = (value: string): MarkdownAstNode[] =>
-    this.parse(value).children ?? [];
+  const parse = (value: string): MarkdownAstNode[] => this.parse(value).children ?? [];
   return (tree: MarkdownAstNode): void => {
     const visit = (node: MarkdownAstNode): void => {
       if (!node.children) return;

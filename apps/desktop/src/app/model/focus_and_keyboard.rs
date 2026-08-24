@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShellFocusTarget {
     /*
@@ -26,14 +25,12 @@ pub(crate) enum ShellFocusTarget {
     ProjectEditorCompanion(TitlebarMode),
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FirstResponderTerminalSurface {
     Agents(TerminalSessionId),
     Command(CommandSessionId),
     ProjectEditorCompanion(TerminalSessionId),
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FirstResponderCefSurface {
@@ -46,7 +43,6 @@ pub(crate) enum FirstResponderCefSurface {
     SessionChat(TerminalSessionId),
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FirstResponderTarget {
     TerminalSurface(FirstResponderTerminalSurface),
@@ -55,7 +51,6 @@ pub(crate) enum FirstResponderTarget {
     Other,
     None,
 }
-
 
 /*
 CDXC:GPUIKeyboardRouter 2026-07-24:
@@ -75,7 +70,6 @@ pub(crate) enum GpuiKeyboardOwner {
     CompositedTerminal(GpuiEngineTerminalEventTarget),
     FirstResponder(FirstResponderTarget),
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -97,7 +91,6 @@ pub(crate) enum GpuiCapturedKeyRoute {
     },
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiApplicationKeyboardCommand {
@@ -106,7 +99,6 @@ pub(crate) enum GpuiApplicationKeyboardCommand {
     MinimizeWindow,
     Quit,
 }
-
 
 #[cfg(target_os = "macos")]
 impl GpuiApplicationKeyboardCommand {
@@ -119,7 +111,6 @@ impl GpuiApplicationKeyboardCommand {
         }
     }
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone, Debug)]
@@ -140,14 +131,12 @@ pub(crate) enum GpuiNativeKeyboardDispatch {
     },
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkspacePaneBorderState {
     Neutral,
     Focused,
     Attention,
 }
-
 
 #[derive(Clone, Copy)]
 pub(crate) struct SidebarFocusBorderHandoff {
@@ -156,13 +145,11 @@ pub(crate) struct SidebarFocusBorderHandoff {
     pub(crate) started_at: Instant,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPanePaletteOpenDecision {
     OpenAndFocus,
     FocusVisible,
 }
-
 
 pub(crate) fn command_pane_palette_open_decision(
     command_pane_expanded: bool,
@@ -179,7 +166,6 @@ pub(crate) fn command_pane_palette_open_decision(
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WorkspaceFocusDirection {
     Left,
@@ -188,9 +174,10 @@ pub(crate) enum WorkspaceFocusDirection {
     Down,
 }
 
-
 impl WorkspaceFocusDirection {
-    pub(crate) fn from_command_palette_directional_focus_action_id(action_id: &str) -> Option<Self> {
+    pub(crate) fn from_command_palette_directional_focus_action_id(
+        action_id: &str,
+    ) -> Option<Self> {
         /*
         CDXC:GPUICommandPalette 2026-06-26-07:33:
         Shared command-palette directional focus rows post `focusUp`, `focusRight`, `focusDown`, and `focusLeft` through `runGhostexHotkeyAction`. Keep this mapper exact so the handler can dispatch to the existing workspace directional-focus route without inventing separate focus semantics or absorbing unrelated hotkey ids.
@@ -209,15 +196,15 @@ impl WorkspaceFocusDirection {
     }
 }
 
-
 #[derive(Clone, Copy)]
 pub(crate) enum FocusedTerminalSplitDirection {
     Right,
     Down,
 }
 
-
-pub(crate) fn command_pane_focused_split_axis(direction: FocusedTerminalSplitDirection) -> WorkspaceSplitAxis {
+pub(crate) fn command_pane_focused_split_axis(
+    direction: FocusedTerminalSplitDirection,
+) -> WorkspaceSplitAxis {
     /*
     CDXC:GPUIFocusedSplits 2026-06-25-16:05:
     macOS command-panel split hotkeys log the requested direction but force command panes to horizontal split placement. Mirror that rule in GPUI so Cmd+Shift+D inside the command pane does not create a vertical command split.
@@ -229,7 +216,6 @@ pub(crate) fn command_pane_focused_split_axis(direction: FocusedTerminalSplitDir
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SpatialFocusTarget {
     AgentsPane(WorkspacePaneId),
@@ -240,7 +226,6 @@ pub(crate) enum SpatialFocusTarget {
     CommandPaneGroup(CommandPaneGroupId),
 }
 
-
 #[derive(Clone, Copy)]
 pub(crate) struct FocusCandidate {
     pub(crate) target: SpatialFocusTarget,
@@ -248,13 +233,11 @@ pub(crate) struct FocusCandidate {
     pub(crate) order: usize,
 }
 
-
 #[derive(Clone, Copy)]
 pub(crate) struct ProjectEditorFocusBounds {
     pub(crate) mode: TitlebarMode,
     pub(crate) bounds: Bounds<Pixels>,
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SpatialFocusOutcome {
@@ -263,8 +246,9 @@ pub(crate) enum SpatialFocusOutcome {
     BoundsUnavailable,
 }
 
-
-pub(crate) fn pane_focus_bounds_from_child_bounds(child_bounds: &[Bounds<Pixels>]) -> Option<Bounds<Pixels>> {
+pub(crate) fn pane_focus_bounds_from_child_bounds(
+    child_bounds: &[Bounds<Pixels>],
+) -> Option<Bounds<Pixels>> {
     let mut bounds_iter = child_bounds
         .iter()
         .filter(|bounds| bounds.size.width.as_f32() > 1.0 && bounds.size.height.as_f32() > 1.0);
@@ -295,14 +279,12 @@ pub(crate) fn pane_focus_bounds_from_child_bounds(child_bounds: &[Bounds<Pixels>
     ))
 }
 
-
 pub(crate) fn focus_bounds_center(bounds: Bounds<Pixels>) -> (f32, f32) {
     (
         bounds.origin.x.as_f32() + bounds.size.width.as_f32() / 2.0,
         bounds.origin.y.as_f32() + bounds.size.height.as_f32() / 2.0,
     )
 }
-
 
 pub(crate) fn spatial_focus_score(
     current_bounds: Bounds<Pixels>,
@@ -333,7 +315,6 @@ pub(crate) fn spatial_focus_score(
 
     Some((primary_distance, secondary_distance, squared_distance))
 }
-
 
 pub(crate) fn nearest_spatial_focus_target(
     current_bounds: Bounds<Pixels>,
@@ -367,7 +348,6 @@ pub(crate) fn nearest_spatial_focus_target(
         .map(|(target, _, _, _, _)| target)
 }
 
-
 pub(crate) fn render_order_focus_target(
     targets: &[SpatialFocusTarget],
     current_target: Option<SpatialFocusTarget>,
@@ -396,7 +376,6 @@ pub(crate) fn render_order_focus_target(
     }
 }
 
-
 pub(crate) fn workspace_render_order_focus_targets(
     pane_ids: Vec<WorkspacePaneId>,
     command_is_expanded: bool,
@@ -419,7 +398,6 @@ pub(crate) fn workspace_render_order_focus_targets(
     targets
 }
 
-
 pub(crate) fn command_pane_render_order_focus_targets(
     is_expanded: bool,
     has_sessions: bool,
@@ -434,7 +412,6 @@ pub(crate) fn command_pane_render_order_focus_targets(
         .map(SpatialFocusTarget::CommandPaneGroup)
         .collect()
 }
-
 
 pub(crate) fn project_editor_render_order_focus_targets_for_state(
     mode: TitlebarMode,

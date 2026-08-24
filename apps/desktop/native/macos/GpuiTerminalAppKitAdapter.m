@@ -4,8 +4,8 @@
 #if __has_include(<UniformTypeIdentifiers/UniformTypeIdentifiers.h>)
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #endif
-#import <stdint.h>
 #import <stdbool.h>
+#import <stdint.h>
 
 enum {
   GhostexGpuiGhosttyModsNone = 0,
@@ -26,70 +26,105 @@ enum {
   GhostexGpuiGhosttyActionRepeat = 2,
 };
 
-extern int GhostexGpuiTerminalNativeViewKeyTranslationMods(void* nativeView, int mods);
+extern int GhostexGpuiTerminalNativeViewKeyTranslationMods(void *nativeView,
+                                                           int mods);
 extern int GhostexGpuiTerminalHandleNativeKeyEvent(
-  void* nativeView,
-  int action,
-  int mods,
-  int consumedMods,
-  uint32_t keycode,
-  const char* text,
-  uint32_t unshiftedCodepoint,
-  int composing);
+    void *nativeView, int action, int mods, int consumedMods, uint32_t keycode,
+    const char *text, uint32_t unshiftedCodepoint, int composing);
 extern int GhostexGpuiTerminalNativeKeyEventIsBinding(
-  void* nativeView,
-  int action,
-  int mods,
-  int consumedMods,
-  uint32_t keycode,
-  const char* text,
-  uint32_t unshiftedCodepoint,
-  int composing);
-extern int GhostexGpuiTerminalHandlePromptEditorShortcut(void* nativeView);
-extern int GhostexGpuiTerminalInsertDroppedText(void* nativeView, const char* bytes, uintptr_t len);
-extern int GhostexGpuiTerminalInsertCommittedText(void* nativeView, const char* bytes, uintptr_t len);
-extern int GhostexGpuiTerminalSetPreeditText(void* nativeView, const char* bytes, uintptr_t len);
-extern int GhostexGpuiTerminalGetImePoint(void* nativeView, double* x, double* y, double* width, double* height);
+    void *nativeView, int action, int mods, int consumedMods, uint32_t keycode,
+    const char *text, uint32_t unshiftedCodepoint, int composing);
+extern int GhostexGpuiTerminalHandlePromptEditorShortcut(void *nativeView);
+extern int GhostexGpuiTerminalInsertDroppedText(void *nativeView,
+                                                const char *bytes,
+                                                uintptr_t len);
+extern int GhostexGpuiTerminalInsertCommittedText(void *nativeView,
+                                                  const char *bytes,
+                                                  uintptr_t len);
+extern int GhostexGpuiTerminalSetPreeditText(void *nativeView,
+                                             const char *bytes, uintptr_t len);
+extern int GhostexGpuiTerminalGetImePoint(void *nativeView, double *x,
+                                          double *y, double *width,
+                                          double *height);
 
 /*
  CDXC:GPUTerminalAppKitAdapter 2026-06-22-20:58:
- Future real terminal adapters must supply the existing AppKit terminal NSView. This GPUI-local boundary may only position, show, hide, or focus that non-null view using exact terminal body bounds and the parent view's flipped-coordinate convention; it must not create terminal views, transparent overlays, hit-test routing, synthetic input routing, terminal processes, GhosttyKit calls, or persistent logs.
+ Future real terminal adapters must supply the existing AppKit terminal NSView.
+ This GPUI-local boundary may only position, show, hide, or focus that non-null
+ view using exact terminal body bounds and the parent view's flipped-coordinate
+ convention; it must not create terminal views, transparent overlays, hit-test
+ routing, synthetic input routing, terminal processes, GhosttyKit calls, or
+ persistent logs.
 
  CDXC:GPUTerminalAppKitAdapter 2026-06-22-21:42:
- Slice 108 creates only the terminal host NSView ownership boundary: an explicit parent NSView receives one normal hidden black child inside GPUI's measured terminal body bounds. The child view must remain ordinary AppKit layout, with no overlays, broad hitTest overrides, synthetic event routing, transparent hidden hit regions, Ghostty/libghostty calls, process lifecycle, logging, or app wiring.
+ Slice 108 creates only the terminal host NSView ownership boundary: an explicit
+ parent NSView receives one normal hidden black child inside GPUI's measured
+ terminal body bounds. The child view must remain ordinary AppKit layout, with
+ no overlays, broad hitTest overrides, synthetic event routing, transparent
+ hidden hit regions, Ghostty/libghostty calls, process lifecycle, logging, or
+ app wiring.
 
  CDXC:GPUTerminalAppKitAdapter 2026-06-22-23:11:
- Slice 115 first-responder handoff may call `makeFirstResponder` only for the exact App-owned terminal host NSView supplied by Rust after a real focused Agents Ghostty surface is mounted. Do not expand this shim into hit-test overrides, pre-dispatch routing, synthetic input, transparent overlays, terminal lifecycle, logging, or fallback view creation.
+ Slice 115 first-responder handoff may call `makeFirstResponder` only for the
+ exact App-owned terminal host NSView supplied by Rust after a real focused
+ Agents Ghostty surface is mounted. Do not expand this shim into hit-test
+ overrides, pre-dispatch routing, synthetic input, transparent overlays,
+ terminal lifecycle, logging, or fallback view creation.
 
  CDXC:GPUITerminalNativeKeyBridge 2026-06-24-20:58:
- The GPUI host view is the exact AppKit responder for mounted Ghostty terminals because GPUI key events do not expose the native macOS keycode required for Return, Backspace, arrows, modifiers, and bindings. Forward only synchronous key primitives from this child view to Rust; do not add root/window routing, transparent overlays, hit-test overrides, command text logging, terminal-content capture, or persistent state.
+ The GPUI host view is the exact AppKit responder for mounted Ghostty terminals
+ because GPUI key events do not expose the native macOS keycode required for
+ Return, Backspace, arrows, modifiers, and bindings. Forward only synchronous
+ key primitives from this child view to Rust; do not add root/window routing,
+ transparent overlays, hit-test overrides, command text logging,
+ terminal-content capture, or persistent state.
 
  CDXC:GPUITerminalFileDrop 2026-06-27-03:32:
- Direct terminal file and image drops for Agents and command-pane terminals must use the real mounted host view as the drag destination and insert only transient formatted text through Rust. Keep this path free of overlays, hit-test routing, persistent logging, and file persistence so drag/drop matches native Swift terminal pane behavior.
+ Direct terminal file and image drops for Agents and command-pane terminals must
+ use the real mounted host view as the drag destination and insert only
+ transient formatted text through Rust. Keep this path free of overlays,
+ hit-test routing, persistent logging, and file persistence so drag/drop matches
+ native Swift terminal pane behavior.
 
  CDXC:GPUITerminalIME 2026-06-27-03:46:
- Agents and command-pane Ghostty host views must use AppKit NSTextInputClient for printable, Space, dead-key, and CJK composition while command/control shortcuts remain raw only when no marked text exists. Keep marked text and per-key committed text runtime-only, route committed/preedit bytes and candidate geometry synchronously through the exact host-view Rust callbacks, and do not add overlays, hit-test routing, Escape sidebands during composition, logs, persistence, command-text storage, terminal content capture, or focused-surface fallback.
+ Agents and command-pane Ghostty host views must use AppKit NSTextInputClient
+ for printable, Space, dead-key, and CJK composition while command/control
+ shortcuts remain raw only when no marked text exists. Keep marked text and
+ per-key committed text runtime-only, route committed/preedit bytes and
+ candidate geometry synchronously through the exact host-view Rust callbacks,
+ and do not add overlays, hit-test routing, Escape sidebands during composition,
+ logs, persistence, command-text storage, terminal content capture, or
+ focused-surface fallback.
  */
 static int GhostexGpuiTerminalGhosttyMods(NSEventModifierFlags flags) {
   int mods = GhostexGpuiGhosttyModsNone;
 
-  if ((flags & NSEventModifierFlagShift) != 0) mods |= GhostexGpuiGhosttyModsShift;
-  if ((flags & NSEventModifierFlagControl) != 0) mods |= GhostexGpuiGhosttyModsCtrl;
-  if ((flags & NSEventModifierFlagOption) != 0) mods |= GhostexGpuiGhosttyModsAlt;
-  if ((flags & NSEventModifierFlagCommand) != 0) mods |= GhostexGpuiGhosttyModsSuper;
-  if ((flags & NSEventModifierFlagCapsLock) != 0) mods |= GhostexGpuiGhosttyModsCaps;
+  if ((flags & NSEventModifierFlagShift) != 0)
+    mods |= GhostexGpuiGhosttyModsShift;
+  if ((flags & NSEventModifierFlagControl) != 0)
+    mods |= GhostexGpuiGhosttyModsCtrl;
+  if ((flags & NSEventModifierFlagOption) != 0)
+    mods |= GhostexGpuiGhosttyModsAlt;
+  if ((flags & NSEventModifierFlagCommand) != 0)
+    mods |= GhostexGpuiGhosttyModsSuper;
+  if ((flags & NSEventModifierFlagCapsLock) != 0)
+    mods |= GhostexGpuiGhosttyModsCaps;
 
-  if ((flags & NX_DEVICERSHIFTKEYMASK) != 0) mods |= GhostexGpuiGhosttyModsShiftRight;
-  if ((flags & NX_DEVICERCTLKEYMASK) != 0) mods |= GhostexGpuiGhosttyModsCtrlRight;
-  if ((flags & NX_DEVICERALTKEYMASK) != 0) mods |= GhostexGpuiGhosttyModsAltRight;
-  if ((flags & NX_DEVICERCMDKEYMASK) != 0) mods |= GhostexGpuiGhosttyModsSuperRight;
+  if ((flags & NX_DEVICERSHIFTKEYMASK) != 0)
+    mods |= GhostexGpuiGhosttyModsShiftRight;
+  if ((flags & NX_DEVICERCTLKEYMASK) != 0)
+    mods |= GhostexGpuiGhosttyModsCtrlRight;
+  if ((flags & NX_DEVICERALTKEYMASK) != 0)
+    mods |= GhostexGpuiGhosttyModsAltRight;
+  if ((flags & NX_DEVICERCMDKEYMASK) != 0)
+    mods |= GhostexGpuiGhosttyModsSuperRight;
 
   return mods;
 }
 
-static NSEventModifierFlags GhostexGpuiTerminalTranslatedModifierFlags(
-  NSEventModifierFlags originalFlags,
-  int translatedMods) {
+static NSEventModifierFlags
+GhostexGpuiTerminalTranslatedModifierFlags(NSEventModifierFlags originalFlags,
+                                           int translatedMods) {
   NSEventModifierFlags flags = originalFlags;
 
   if ((translatedMods & GhostexGpuiGhosttyModsShift) != 0) {
@@ -116,7 +151,7 @@ static NSEventModifierFlags GhostexGpuiTerminalTranslatedModifierFlags(
   return flags;
 }
 
-static uint32_t GhostexGpuiTerminalFirstUnicodeScalar(NSString* value) {
+static uint32_t GhostexGpuiTerminalFirstUnicodeScalar(NSString *value) {
   if (value.length == 0) {
     return 0;
   }
@@ -132,19 +167,19 @@ static uint32_t GhostexGpuiTerminalFirstUnicodeScalar(NSString* value) {
   return (uint32_t)first;
 }
 
-static uint32_t GhostexGpuiTerminalUnshiftedCodepoint(NSEvent* event) {
+static uint32_t GhostexGpuiTerminalUnshiftedCodepoint(NSEvent *event) {
   if (event.type != NSEventTypeKeyDown && event.type != NSEventTypeKeyUp) {
     return 0;
   }
 
-  NSString* characters = [event charactersByApplyingModifiers:0];
+  NSString *characters = [event charactersByApplyingModifiers:0];
   return GhostexGpuiTerminalFirstUnicodeScalar(characters);
 }
 
-static NSString* GhostexGpuiTerminalCharactersForEvent(
-  NSEvent* event,
-  NSEventModifierFlags translationFlags) {
-  NSString* characters = nil;
+static NSString *
+GhostexGpuiTerminalCharactersForEvent(NSEvent *event,
+                                      NSEventModifierFlags translationFlags) {
+  NSString *characters = nil;
   if (translationFlags == event.modifierFlags) {
     characters = event.characters;
   } else {
@@ -156,7 +191,8 @@ static NSString* GhostexGpuiTerminalCharactersForEvent(
 
   uint32_t scalar = GhostexGpuiTerminalFirstUnicodeScalar(characters);
   if (characters.length == 1 && scalar < 0x20) {
-    return [event charactersByApplyingModifiers:(translationFlags & ~NSEventModifierFlagControl)];
+    return [event charactersByApplyingModifiers:(translationFlags &
+                                                 ~NSEventModifierFlagControl)];
   }
   if (characters.length == 1 && scalar >= 0xF700 && scalar <= 0xF8FF) {
     return nil;
@@ -165,52 +201,61 @@ static NSString* GhostexGpuiTerminalCharactersForEvent(
   return characters;
 }
 
-static const char* GhostexGpuiTerminalKeyTextCString(NSString* text) {
+static const char *GhostexGpuiTerminalKeyTextCString(NSString *text) {
   if (text.length == 0) {
     return NULL;
   }
 
-  const char* value = text.UTF8String;
+  const char *value = text.UTF8String;
   if (!value || ((unsigned char)value[0]) < 0x20) {
     return NULL;
   }
   return value;
 }
 
-static BOOL GhostexGpuiTerminalShouldBypassTextInput(NSEvent* event, BOOL hasMarkedText) {
+static BOOL GhostexGpuiTerminalShouldBypassTextInput(NSEvent *event,
+                                                     BOOL hasMarkedText) {
   if (hasMarkedText) {
     return NO;
   }
 
-  NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
-  return (flags & NSEventModifierFlagCommand) != 0 || (flags & NSEventModifierFlagControl) != 0;
+  NSEventModifierFlags flags =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  return (flags & NSEventModifierFlagCommand) != 0 ||
+         (flags & NSEventModifierFlagControl) != 0;
 }
 
-static NSEvent* GhostexGpuiTerminalTranslatedTextInputEvent(
-  NSEvent* event,
-  NSEventModifierFlags translationFlags) {
+static NSEvent *GhostexGpuiTerminalTranslatedTextInputEvent(
+    NSEvent *event, NSEventModifierFlags translationFlags) {
   if (translationFlags == event.modifierFlags) {
     return event;
   }
 
-  NSEvent* translatedEvent = [NSEvent keyEventWithType:event.type
-                                             location:event.locationInWindow
-                                        modifierFlags:translationFlags
-                                            timestamp:event.timestamp
-                                         windowNumber:event.windowNumber
-                                              context:nil
-                                           characters:[event charactersByApplyingModifiers:translationFlags] ?: @""
-                          charactersIgnoringModifiers:event.charactersIgnoringModifiers ?: @""
-                                            isARepeat:event.isARepeat
-                                              keyCode:event.keyCode];
+  NSEvent *translatedEvent =
+      [NSEvent keyEventWithType:event.type
+                             location:event.locationInWindow
+                        modifierFlags:translationFlags
+                            timestamp:event.timestamp
+                         windowNumber:event.windowNumber
+                              context:nil
+                           characters:[event charactersByApplyingModifiers:
+                                                 translationFlags]
+                                          ?: @""
+          charactersIgnoringModifiers:event.charactersIgnoringModifiers ?: @""
+                            isARepeat:event.isARepeat
+                              keyCode:event.keyCode];
   return translatedEvent ?: event;
 }
 
-static int GhostexGpuiTerminalConsumedTextInputMods(NSEventModifierFlags flags) {
-  return GhostexGpuiTerminalGhosttyMods(flags & ~(NSEventModifierFlagControl | NSEventModifierFlagCommand));
+static int
+GhostexGpuiTerminalConsumedTextInputMods(NSEventModifierFlags flags) {
+  return GhostexGpuiTerminalGhosttyMods(
+      flags & ~(NSEventModifierFlagControl | NSEventModifierFlagCommand));
 }
 
-static BOOL GhostexGpuiTerminalShouldSuppressComposingControlInput(NSString* text, BOOL composing) {
+static BOOL
+GhostexGpuiTerminalShouldSuppressComposingControlInput(NSString *text,
+                                                       BOOL composing) {
   if (!composing || text.length == 0) {
     return NO;
   }
@@ -222,7 +267,7 @@ static BOOL GhostexGpuiTerminalShouldSuppressComposingControlInput(NSString* tex
   return NO;
 }
 
-static NSString* GhostexGpuiTerminalTextInputString(id string) {
+static NSString *GhostexGpuiTerminalTextInputString(id string) {
   /*
    CDXC:GPUITerminalNativeImeBridge 2026-07-03-00:58:
    AppKit's hardware text-input pipeline can pass insertText:/setMarkedText: a
@@ -232,10 +277,10 @@ static NSString* GhostexGpuiTerminalTextInputString(id string) {
    with no text, which encodes to nothing outside the kitty keyboard protocol.
    */
   if ([string isKindOfClass:[NSString class]]) {
-    return [(NSString*)string copy];
+    return [(NSString *)string copy];
   }
   if ([string isKindOfClass:[NSAttributedString class]]) {
-    return [[(NSAttributedString*)string string] copy] ?: @"";
+    return [[(NSAttributedString *)string string] copy] ?: @"";
   }
   return @"";
 }
@@ -245,10 +290,10 @@ static NSPasteboardType GhostexGpuiTerminalFileURLPasteboardType(void) {
 }
 
 static NSPasteboardType GhostexGpuiTerminalLegacyFilenamesPasteboardType(void) {
-  return (NSPasteboardType)@"NSFilenamesPboardType";
+  return (NSPasteboardType) @"NSFilenamesPboardType";
 }
 
-static NSArray<NSString*>* GhostexGpuiTerminalRegisteredDragTypes(void) {
+static NSArray<NSString *> *GhostexGpuiTerminalRegisteredDragTypes(void) {
   return @[
     GhostexGpuiTerminalFileURLPasteboardType(),
     NSPasteboardTypeString,
@@ -256,7 +301,10 @@ static NSArray<NSString*>* GhostexGpuiTerminalRegisteredDragTypes(void) {
   ];
 }
 
-static BOOL GhostexGpuiTerminalAppendUniquePath(NSMutableArray<NSString*>* paths, NSMutableSet<NSString*>* seen, NSString* path) {
+static BOOL
+GhostexGpuiTerminalAppendUniquePath(NSMutableArray<NSString *> *paths,
+                                    NSMutableSet<NSString *> *seen,
+                                    NSString *path) {
   if (path.length == 0 || [seen containsObject:path]) {
     return NO;
   }
@@ -265,23 +313,28 @@ static BOOL GhostexGpuiTerminalAppendUniquePath(NSMutableArray<NSString*>* paths
   return YES;
 }
 
-static NSArray<NSString*>* GhostexGpuiTerminalStringDroppedPaths(NSString* value) {
+static NSArray<NSString *> *
+GhostexGpuiTerminalStringDroppedPaths(NSString *value) {
   if (value.length == 0) {
     return @[];
   }
 
-  NSMutableArray<NSString*>* paths = [NSMutableArray array];
-  NSArray<NSString*>* candidates = [value componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
-  NSFileManager* fileManager = [NSFileManager defaultManager];
+  NSMutableArray<NSString *> *paths = [NSMutableArray array];
+  NSArray<NSString *> *candidates =
+      [value componentsSeparatedByCharactersInSet:[NSCharacterSet
+                                                      newlineCharacterSet]];
+  NSFileManager *fileManager = [NSFileManager defaultManager];
 
-  for (NSString* candidate in candidates) {
-    NSString* trimmed = [candidate stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+  for (NSString *candidate in candidates) {
+    NSString *trimmed =
+        [candidate stringByTrimmingCharactersInSet:[NSCharacterSet
+                                                       whitespaceCharacterSet]];
     if (trimmed.length == 0) {
       continue;
     }
 
     if ([trimmed hasPrefix:@"file://"]) {
-      NSURL* url = [NSURL URLWithString:trimmed];
+      NSURL *url = [NSURL URLWithString:trimmed];
       if (url.isFileURL) {
         [paths addObject:url.path];
         continue;
@@ -300,37 +353,43 @@ static NSArray<NSString*>* GhostexGpuiTerminalStringDroppedPaths(NSString* value
   return paths;
 }
 
-static NSArray<NSString*>* GhostexGpuiTerminalDroppedPaths(NSPasteboard* pasteboard) {
-  NSMutableArray<NSString*>* paths = [NSMutableArray array];
-  NSMutableSet<NSString*>* seen = [NSMutableSet set];
+static NSArray<NSString *> *
+GhostexGpuiTerminalDroppedPaths(NSPasteboard *pasteboard) {
+  NSMutableArray<NSString *> *paths = [NSMutableArray array];
+  NSMutableSet<NSString *> *seen = [NSMutableSet set];
 
-  NSArray* urlObjects = [pasteboard readObjectsForClasses:@[[NSURL class]] options:nil];
+  NSArray *urlObjects = [pasteboard readObjectsForClasses:@[ [NSURL class] ]
+                                                  options:nil];
   for (id object in urlObjects) {
     if (![object isKindOfClass:[NSURL class]]) {
       continue;
     }
-    NSURL* url = (NSURL*)object;
+    NSURL *url = (NSURL *)object;
     if (url.isFileURL) {
       GhostexGpuiTerminalAppendUniquePath(paths, seen, url.path);
     }
   }
 
-  for (NSPasteboardItem* item in pasteboard.pasteboardItems ?: @[]) {
-    NSString* fileURLString = [item stringForType:GhostexGpuiTerminalFileURLPasteboardType()];
+  for (NSPasteboardItem *item in pasteboard.pasteboardItems ?: @[]) {
+    NSString *fileURLString =
+        [item stringForType:GhostexGpuiTerminalFileURLPasteboardType()];
     if (fileURLString.length == 0) {
-      fileURLString = [item stringForType:(NSPasteboardType)@"public.file-url"];
+      fileURLString =
+          [item stringForType:(NSPasteboardType) @"public.file-url"];
     }
-    NSURL* url = fileURLString.length > 0 ? [NSURL URLWithString:fileURLString] : nil;
+    NSURL *url =
+        fileURLString.length > 0 ? [NSURL URLWithString:fileURLString] : nil;
     if (url.isFileURL) {
       GhostexGpuiTerminalAppendUniquePath(paths, seen, url.path);
     }
   }
 
-  id filenames = [pasteboard propertyListForType:GhostexGpuiTerminalLegacyFilenamesPasteboardType()];
+  id filenames = [pasteboard
+      propertyListForType:GhostexGpuiTerminalLegacyFilenamesPasteboardType()];
   if ([filenames isKindOfClass:[NSArray class]]) {
-    for (id value in (NSArray*)filenames) {
+    for (id value in (NSArray *)filenames) {
       if ([value isKindOfClass:[NSString class]]) {
-        GhostexGpuiTerminalAppendUniquePath(paths, seen, (NSString*)value);
+        GhostexGpuiTerminalAppendUniquePath(paths, seen, (NSString *)value);
       }
     }
   }
@@ -339,15 +398,16 @@ static NSArray<NSString*>* GhostexGpuiTerminalDroppedPaths(NSPasteboard* pastebo
     return paths;
   }
 
-  NSArray<NSString*>* stringPaths = GhostexGpuiTerminalStringDroppedPaths([pasteboard stringForType:NSPasteboardTypeString]);
-  for (NSString* path in stringPaths) {
+  NSArray<NSString *> *stringPaths = GhostexGpuiTerminalStringDroppedPaths(
+      [pasteboard stringForType:NSPasteboardTypeString]);
+  for (NSString *path in stringPaths) {
     GhostexGpuiTerminalAppendUniquePath(paths, seen, path);
   }
   return paths;
 }
 
-static NSSet<NSString*>* GhostexGpuiTerminalImageExtensions(void) {
-  static NSSet<NSString*>* extensions = nil;
+static NSSet<NSString *> *GhostexGpuiTerminalImageExtensions(void) {
+  static NSSet<NSString *> *extensions = nil;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     extensions = [NSSet setWithArray:@[
@@ -367,19 +427,20 @@ static NSSet<NSString*>* GhostexGpuiTerminalImageExtensions(void) {
   return extensions;
 }
 
-static BOOL GhostexGpuiTerminalIsImageFilePath(NSString* path) {
-  if (path.length == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+static BOOL GhostexGpuiTerminalIsImageFilePath(NSString *path) {
+  if (path.length == 0 ||
+      ![[NSFileManager defaultManager] fileExistsAtPath:path]) {
     return NO;
   }
 
-  NSString* fileExtension = path.pathExtension.lowercaseString;
+  NSString *fileExtension = path.pathExtension.lowercaseString;
   if ([GhostexGpuiTerminalImageExtensions() containsObject:fileExtension]) {
     return YES;
   }
 
 #if __has_include(<UniformTypeIdentifiers/UniformTypeIdentifiers.h>)
   if (@available(macOS 11.0, *)) {
-    UTType* type = [UTType typeWithFilenameExtension:fileExtension];
+    UTType *type = [UTType typeWithFilenameExtension:fileExtension];
     if ([type conformsToType:UTTypeImage]) {
       return YES;
     }
@@ -389,13 +450,17 @@ static BOOL GhostexGpuiTerminalIsImageFilePath(NSString* path) {
   return NO;
 }
 
-static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths) {
-  NSMutableArray<NSString*>* entries = [NSMutableArray arrayWithCapacity:paths.count];
+static NSString *
+GhostexGpuiTerminalDropInsertionText(NSArray<NSString *> *paths) {
+  NSMutableArray<NSString *> *entries =
+      [NSMutableArray arrayWithCapacity:paths.count];
   NSUInteger imageNumber = 1;
 
-  for (NSString* path in paths) {
+  for (NSString *path in paths) {
     if (GhostexGpuiTerminalIsImageFilePath(path)) {
-      [entries addObject:[NSString stringWithFormat:@"[Image #%lu](%@)", (unsigned long)imageNumber, path]];
+      [entries addObject:[NSString stringWithFormat:@"[Image #%lu](%@)",
+                                                    (unsigned long)imageNumber,
+                                                    path]];
       imageNumber += 1;
     } else {
       [entries addObject:path];
@@ -406,11 +471,11 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
 }
 
 @interface GhostexGpuiTerminalHostView : NSView <NSTextInputClient> {
-  NSString* _markedText;
+  NSString *_markedText;
   NSRange _markedTextRange;
   NSRange _selectedTextRange;
-  NSMutableArray<NSString*>* _keyTextAccumulator;
-  NSNumber* _lastPerformKeyEventTimestamp;
+  NSMutableArray<NSString *> *_keyTextAccumulator;
+  NSNumber *_lastPerformKeyEventTimestamp;
 }
 @end
 
@@ -434,81 +499,88 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   return YES;
 }
 
-- (BOOL)acceptsFirstMouse:(NSEvent*)event {
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
   (void)event;
   return YES;
 }
 
 - (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
-  return GhostexGpuiTerminalDroppedPaths(sender.draggingPasteboard).count > 0 ? NSDragOperationCopy : NSDragOperationNone;
+  return GhostexGpuiTerminalDroppedPaths(sender.draggingPasteboard).count > 0
+             ? NSDragOperationCopy
+             : NSDragOperationNone;
 }
 
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
-  return GhostexGpuiTerminalDroppedPaths(sender.draggingPasteboard).count > 0 ? NSDragOperationCopy : NSDragOperationNone;
+  return GhostexGpuiTerminalDroppedPaths(sender.draggingPasteboard).count > 0
+             ? NSDragOperationCopy
+             : NSDragOperationNone;
 }
 
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
-  NSArray<NSString*>* paths = GhostexGpuiTerminalDroppedPaths(sender.draggingPasteboard);
+  NSArray<NSString *> *paths =
+      GhostexGpuiTerminalDroppedPaths(sender.draggingPasteboard);
   if (paths.count == 0) {
     return NO;
   }
 
-  NSString* insertionText = GhostexGpuiTerminalDropInsertionText(paths);
-  NSData* data = [insertionText dataUsingEncoding:NSUTF8StringEncoding];
+  NSString *insertionText = GhostexGpuiTerminalDropInsertionText(paths);
+  NSData *data = [insertionText dataUsingEncoding:NSUTF8StringEncoding];
   if (data.length == 0) {
     return NO;
   }
 
-  NSWindow* window = self.window;
+  NSWindow *window = self.window;
   if (window) {
     [window makeFirstResponder:self];
   }
 
-  return GhostexGpuiTerminalInsertDroppedText((__bridge void*)self, data.bytes, (uintptr_t)data.length) != 0;
+  return GhostexGpuiTerminalInsertDroppedText((__bridge void *)self, data.bytes,
+                                              (uintptr_t)data.length) != 0;
 }
 
-- (BOOL)sendKeyEvent:(NSEvent*)event
+- (BOOL)sendKeyEvent:(NSEvent *)event
               action:(int)action
          includeText:(BOOL)includeText
            composing:(BOOL)composing
         consumedMods:(int)consumedMods
-                text:(NSString*)text {
-  const char* textValue = includeText ? GhostexGpuiTerminalKeyTextCString(text) : NULL;
+                text:(NSString *)text {
+  const char *textValue =
+      includeText ? GhostexGpuiTerminalKeyTextCString(text) : NULL;
   return GhostexGpuiTerminalHandleNativeKeyEvent(
-           (__bridge void*)self,
-           action,
-           GhostexGpuiTerminalGhosttyMods(event.modifierFlags),
-           consumedMods,
-           (uint32_t)event.keyCode,
-           textValue,
-           GhostexGpuiTerminalUnshiftedCodepoint(event),
-           composing ? 1 : 0) != 0;
+             (__bridge void *)self, action,
+             GhostexGpuiTerminalGhosttyMods(event.modifierFlags), consumedMods,
+             (uint32_t)event.keyCode, textValue,
+             GhostexGpuiTerminalUnshiftedCodepoint(event),
+             composing ? 1 : 0) != 0;
 }
 
-- (BOOL)insertCommittedText:(NSString*)text {
+- (BOOL)insertCommittedText:(NSString *)text {
   if (text.length == 0) {
     return NO;
   }
 
-  NSData* data = [text dataUsingEncoding:NSUTF8StringEncoding];
+  NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
   if (data.length == 0) {
     return NO;
   }
 
-  return GhostexGpuiTerminalInsertCommittedText((__bridge void*)self, data.bytes, (uintptr_t)data.length) != 0;
+  return GhostexGpuiTerminalInsertCommittedText(
+             (__bridge void *)self, data.bytes, (uintptr_t)data.length) != 0;
 }
 
-- (BOOL)setPreeditText:(NSString*)text {
+- (BOOL)setPreeditText:(NSString *)text {
   if (text.length == 0) {
-    return GhostexGpuiTerminalSetPreeditText((__bridge void*)self, NULL, 0) != 0;
+    return GhostexGpuiTerminalSetPreeditText((__bridge void *)self, NULL, 0) !=
+           0;
   }
 
-  NSData* data = [text dataUsingEncoding:NSUTF8StringEncoding];
+  NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
   if (data.length == 0) {
     return NO;
   }
 
-  return GhostexGpuiTerminalSetPreeditText((__bridge void*)self, data.bytes, (uintptr_t)data.length) != 0;
+  return GhostexGpuiTerminalSetPreeditText((__bridge void *)self, data.bytes,
+                                           (uintptr_t)data.length) != 0;
 }
 
 - (void)syncPreeditClearIfNeeded:(BOOL)clearIfNeeded {
@@ -529,7 +601,8 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   return NSMakeRange(location, MIN(range.length, length - location));
 }
 
-- (NSRange)intersectionOfRange:(NSRange)range withMarkedRangeFound:(BOOL*)found {
+- (NSRange)intersectionOfRange:(NSRange)range
+          withMarkedRangeFound:(BOOL *)found {
   if (range.location == NSNotFound || _markedTextRange.location == NSNotFound) {
     if (found) {
       *found = NO;
@@ -552,17 +625,25 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   return NSMakeRange(start, end - start);
 }
 
-- (void)keyDown:(NSEvent*)event {
+- (void)keyDown:(NSEvent *)event {
   _lastPerformKeyEventTimestamp = nil;
   int mods = GhostexGpuiTerminalGhosttyMods(event.modifierFlags);
-  int translatedMods = GhostexGpuiTerminalNativeViewKeyTranslationMods((__bridge void*)self, mods);
+  int translatedMods = GhostexGpuiTerminalNativeViewKeyTranslationMods(
+      (__bridge void *)self, mods);
   NSEventModifierFlags translationFlags =
-    GhostexGpuiTerminalTranslatedModifierFlags(event.modifierFlags, translatedMods);
+      GhostexGpuiTerminalTranslatedModifierFlags(event.modifierFlags,
+                                                 translatedMods);
   int consumedMods = GhostexGpuiTerminalConsumedTextInputMods(translationFlags);
-  int action = event.isARepeat ? GhostexGpuiGhosttyActionRepeat : GhostexGpuiGhosttyActionPress;
+  int action = event.isARepeat ? GhostexGpuiGhosttyActionRepeat
+                               : GhostexGpuiGhosttyActionPress;
 
   if (GhostexGpuiTerminalShouldBypassTextInput(event, [self hasMarkedText])) {
-    if ([self sendKeyEvent:event action:action includeText:NO composing:NO consumedMods:consumedMods text:nil]) {
+    if ([self sendKeyEvent:event
+                    action:action
+               includeText:NO
+                 composing:NO
+              consumedMods:consumedMods
+                      text:nil]) {
       return;
     }
 
@@ -571,37 +652,51 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   }
 
   BOOL markedTextBefore = [self hasMarkedText];
-  NSEvent* translationEvent = GhostexGpuiTerminalTranslatedTextInputEvent(event, translationFlags);
+  NSEvent *translationEvent =
+      GhostexGpuiTerminalTranslatedTextInputEvent(event, translationFlags);
   _keyTextAccumulator = [NSMutableArray array];
-  [self interpretKeyEvents:@[translationEvent]];
-  NSArray<NSString*>* accumulatedText = [_keyTextAccumulator copy];
+  [self interpretKeyEvents:@[ translationEvent ]];
+  NSArray<NSString *> *accumulatedText = [_keyTextAccumulator copy];
   _keyTextAccumulator = nil;
   [self syncPreeditClearIfNeeded:markedTextBefore];
 
   BOOL composing = [self hasMarkedText] || markedTextBefore;
   if (accumulatedText.count > 0) {
-    for (NSString* text in accumulatedText) {
-      if (GhostexGpuiTerminalShouldSuppressComposingControlInput(text, composing)) {
+    for (NSString *text in accumulatedText) {
+      if (GhostexGpuiTerminalShouldSuppressComposingControlInput(text,
+                                                                 composing)) {
         continue;
       }
       if (markedTextBefore) {
         [self insertCommittedText:text];
       } else {
-        [self sendKeyEvent:event action:action includeText:YES composing:NO consumedMods:consumedMods text:text];
+        [self sendKeyEvent:event
+                    action:action
+               includeText:YES
+                 composing:NO
+              consumedMods:consumedMods
+                      text:text];
       }
     }
     return;
   }
 
-  if (GhostexGpuiTerminalShouldSuppressComposingControlInput(event.characters, composing)) {
+  if (GhostexGpuiTerminalShouldSuppressComposingControlInput(event.characters,
+                                                             composing)) {
     return;
   }
 
-  NSString* text = GhostexGpuiTerminalCharactersForEvent(translationEvent, translationEvent.modifierFlags);
-  [self sendKeyEvent:event action:action includeText:!composing composing:composing consumedMods:consumedMods text:text];
+  NSString *text = GhostexGpuiTerminalCharactersForEvent(
+      translationEvent, translationEvent.modifierFlags);
+  [self sendKeyEvent:event
+              action:action
+         includeText:!composing
+           composing:composing
+        consumedMods:consumedMods
+                text:text];
 }
 
-- (BOOL)performKeyEquivalent:(NSEvent*)event {
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
   /*
    CDXC:GPUITerminalNativeKeyBridge 2026-07-11:
    AppKit dispatches Command/Control key equivalents before keyDown and may
@@ -623,48 +718,45 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
    Option/Control/Command variants on the binding and menu paths below.
    */
   NSEventModifierFlags independentFlags =
-    event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   NSEventModifierFlags tabTraversalFlags =
-    independentFlags & ~(NSEventModifierFlagShift | NSEventModifierFlagCapsLock);
+      independentFlags &
+      ~(NSEventModifierFlagShift | NSEventModifierFlagCapsLock);
   if (event.keyCode == kVK_Tab && tabTraversalFlags == 0) {
     [self keyDown:event];
     return YES;
   }
 
-  NSString* characters = event.characters;
-  const char* text = characters.length > 0 ? characters.UTF8String : NULL;
+  NSString *characters = event.characters;
+  const char *text = characters.length > 0 ? characters.UTF8String : NULL;
   int mods = GhostexGpuiTerminalGhosttyMods(event.modifierFlags);
-  int consumedMods = GhostexGpuiTerminalConsumedTextInputMods(event.modifierFlags);
+  int consumedMods =
+      GhostexGpuiTerminalConsumedTextInputMods(event.modifierFlags);
   if (GhostexGpuiTerminalNativeKeyEventIsBinding(
-        (__bridge void*)self,
-        GhostexGpuiGhosttyActionPress,
-        mods,
-        consumedMods,
-        (uint32_t)event.keyCode,
-        text,
-        GhostexGpuiTerminalUnshiftedCodepoint(event),
-        0) != 0) {
+          (__bridge void *)self, GhostexGpuiGhosttyActionPress, mods,
+          consumedMods, (uint32_t)event.keyCode, text,
+          GhostexGpuiTerminalUnshiftedCodepoint(event), 0) != 0) {
     [self keyDown:event];
     return YES;
   }
 
-  NSString* equivalent = nil;
+  NSString *equivalent = nil;
   NSEventModifierFlags flags =
-    event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   if ([event.charactersIgnoringModifiers isEqualToString:@"\r"] &&
       (flags & NSEventModifierFlagControl) != 0) {
     equivalent = @"\r";
   } else if ([event.charactersIgnoringModifiers isEqualToString:@"/"] &&
              (flags & NSEventModifierFlagControl) != 0 &&
-             (flags & (NSEventModifierFlagShift |
-                       NSEventModifierFlagCommand |
+             (flags & (NSEventModifierFlagShift | NSEventModifierFlagCommand |
                        NSEventModifierFlagOption)) == 0) {
     equivalent = @"_";
   } else {
     if (event.timestamp == 0) {
       return NO;
     }
-    if ((flags & (NSEventModifierFlagCommand | NSEventModifierFlagControl)) == 0) {
+    if ((flags & (NSEventModifierFlagCommand | NSEventModifierFlagControl)) ==
+        0) {
       _lastPerformKeyEventTimestamp = nil;
       return NO;
     }
@@ -679,7 +771,7 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
     }
   }
 
-  NSEvent* finalEvent = [NSEvent keyEventWithType:NSEventTypeKeyDown
+  NSEvent *finalEvent = [NSEvent keyEventWithType:NSEventTypeKeyDown
                                          location:event.locationInWindow
                                     modifierFlags:event.modifierFlags
                                         timestamp:event.timestamp
@@ -697,52 +789,50 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   return YES;
 }
 
-- (void)keyUp:(NSEvent*)event {
+- (void)keyUp:(NSEvent *)event {
   if (GhostexGpuiTerminalHandleNativeKeyEvent(
-        (__bridge void*)self,
-        GhostexGpuiGhosttyActionRelease,
-        GhostexGpuiTerminalGhosttyMods(event.modifierFlags),
-        GhostexGpuiTerminalGhosttyMods(
-          event.modifierFlags & ~(NSEventModifierFlagControl | NSEventModifierFlagCommand)),
-        (uint32_t)event.keyCode,
-        NULL,
-        GhostexGpuiTerminalUnshiftedCodepoint(event),
-        0) != 0) {
+          (__bridge void *)self, GhostexGpuiGhosttyActionRelease,
+          GhostexGpuiTerminalGhosttyMods(event.modifierFlags),
+          GhostexGpuiTerminalGhosttyMods(
+              event.modifierFlags &
+              ~(NSEventModifierFlagControl | NSEventModifierFlagCommand)),
+          (uint32_t)event.keyCode, NULL,
+          GhostexGpuiTerminalUnshiftedCodepoint(event), 0) != 0) {
     return;
   }
 
   [super keyUp:event];
 }
 
-- (void)flagsChanged:(NSEvent*)event {
+- (void)flagsChanged:(NSEvent *)event {
   if ([self hasMarkedText]) {
     return;
   }
 
   int mod = GhostexGpuiGhosttyModsNone;
   switch (event.keyCode) {
-    case 0x39:
-      mod = GhostexGpuiGhosttyModsCaps;
-      break;
-    case 0x38:
-    case 0x3C:
-      mod = GhostexGpuiGhosttyModsShift;
-      break;
-    case 0x3B:
-    case 0x3E:
-      mod = GhostexGpuiGhosttyModsCtrl;
-      break;
-    case 0x3A:
-    case 0x3D:
-      mod = GhostexGpuiGhosttyModsAlt;
-      break;
-    case 0x37:
-    case 0x36:
-      mod = GhostexGpuiGhosttyModsSuper;
-      break;
-    default:
-      [super flagsChanged:event];
-      return;
+  case 0x39:
+    mod = GhostexGpuiGhosttyModsCaps;
+    break;
+  case 0x38:
+  case 0x3C:
+    mod = GhostexGpuiGhosttyModsShift;
+    break;
+  case 0x3B:
+  case 0x3E:
+    mod = GhostexGpuiGhosttyModsCtrl;
+    break;
+  case 0x3A:
+  case 0x3D:
+    mod = GhostexGpuiGhosttyModsAlt;
+    break;
+  case 0x37:
+  case 0x36:
+    mod = GhostexGpuiGhosttyModsSuper;
+    break;
+  default:
+    [super flagsChanged:event];
+    return;
   }
 
   int mods = GhostexGpuiTerminalGhosttyMods(event.modifierFlags);
@@ -750,20 +840,20 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   if ((mods & mod) != 0) {
     bool sidePressed = true;
     switch (event.keyCode) {
-      case 0x3C:
-        sidePressed = (event.modifierFlags & NX_DEVICERSHIFTKEYMASK) != 0;
-        break;
-      case 0x3E:
-        sidePressed = (event.modifierFlags & NX_DEVICERCTLKEYMASK) != 0;
-        break;
-      case 0x3D:
-        sidePressed = (event.modifierFlags & NX_DEVICERALTKEYMASK) != 0;
-        break;
-      case 0x36:
-        sidePressed = (event.modifierFlags & NX_DEVICERCMDKEYMASK) != 0;
-        break;
-      default:
-        break;
+    case 0x3C:
+      sidePressed = (event.modifierFlags & NX_DEVICERSHIFTKEYMASK) != 0;
+      break;
+    case 0x3E:
+      sidePressed = (event.modifierFlags & NX_DEVICERCTLKEYMASK) != 0;
+      break;
+    case 0x3D:
+      sidePressed = (event.modifierFlags & NX_DEVICERALTKEYMASK) != 0;
+      break;
+    case 0x36:
+      sidePressed = (event.modifierFlags & NX_DEVICERCMDKEYMASK) != 0;
+      break;
+    default:
+      break;
     }
     if (sidePressed) {
       action = GhostexGpuiGhosttyActionPress;
@@ -771,15 +861,11 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   }
 
   if (GhostexGpuiTerminalHandleNativeKeyEvent(
-        (__bridge void*)self,
-        action,
-        mods,
-        GhostexGpuiTerminalGhosttyMods(
-          event.modifierFlags & ~(NSEventModifierFlagControl | NSEventModifierFlagCommand)),
-        (uint32_t)event.keyCode,
-        NULL,
-        0,
-        0) != 0) {
+          (__bridge void *)self, action, mods,
+          GhostexGpuiTerminalGhosttyMods(
+              event.modifierFlags &
+              ~(NSEventModifierFlagControl | NSEventModifierFlagCommand)),
+          (uint32_t)event.keyCode, NULL, 0, 0) != 0) {
     return;
   }
 
@@ -788,7 +874,7 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
 
 - (void)insertText:(id)string replacementRange:(NSRange)replacementRange {
   (void)replacementRange;
-  NSString* text = GhostexGpuiTerminalTextInputString(string);
+  NSString *text = GhostexGpuiTerminalTextInputString(string);
   [self unmarkText];
   if (text.length == 0) {
     return;
@@ -802,10 +888,14 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   [self insertCommittedText:text];
 }
 
-- (void)setMarkedText:(id)string selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange {
+- (void)setMarkedText:(id)string
+        selectedRange:(NSRange)selectedRange
+     replacementRange:(NSRange)replacementRange {
   (void)replacementRange;
   _markedText = GhostexGpuiTerminalTextInputString(string);
-  _markedTextRange = _markedText.length == 0 ? NSMakeRange(NSNotFound, 0) : NSMakeRange(0, _markedText.length);
+  _markedTextRange = _markedText.length == 0
+                         ? NSMakeRange(NSNotFound, 0)
+                         : NSMakeRange(0, _markedText.length);
   _selectedTextRange = [self clampedMarkedTextRange:selectedRange];
   if (!_keyTextAccumulator) {
     [self syncPreeditClearIfNeeded:YES];
@@ -835,20 +925,25 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   return _selectedTextRange;
 }
 
-- (NSArray<NSAttributedStringKey>*)validAttributesForMarkedText {
+- (NSArray<NSAttributedStringKey> *)validAttributesForMarkedText {
   return @[];
 }
 
-- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
+- (NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range
+                                                actualRange:(NSRangePointer)
+                                                                actualRange {
   if (![self hasMarkedText]) {
     if (actualRange) {
       *actualRange = NSMakeRange(0, 0);
     }
-    return range.location == 0 && range.length == 0 ? [[NSAttributedString alloc] initWithString:@""] : nil;
+    return range.location == 0 && range.length == 0
+               ? [[NSAttributedString alloc] initWithString:@""]
+               : nil;
   }
 
   BOOL found = NO;
-  NSRange safeRange = [self intersectionOfRange:range withMarkedRangeFound:&found];
+  NSRange safeRange = [self intersectionOfRange:range
+                           withMarkedRangeFound:&found];
   if (!found) {
     return nil;
   }
@@ -856,28 +951,37 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
   if (actualRange) {
     *actualRange = safeRange;
   }
-  return [[NSAttributedString alloc] initWithString:[_markedText substringWithRange:safeRange]];
+  return [[NSAttributedString alloc]
+      initWithString:[_markedText substringWithRange:safeRange]];
 }
 
-- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange {
+- (NSRect)firstRectForCharacterRange:(NSRange)range
+                         actualRange:(NSRangePointer)actualRange {
   if (actualRange) {
-    *actualRange = [self hasMarkedText] ? [self clampedMarkedTextRange:range] : NSMakeRange(0, 0);
+    *actualRange = [self hasMarkedText] ? [self clampedMarkedTextRange:range]
+                                        : NSMakeRange(0, 0);
   }
 
   double x = 0.0;
   double y = 0.0;
   double width = 0.0;
   double height = 0.0;
-  if (GhostexGpuiTerminalGetImePoint((__bridge void*)self, &x, &y, &width, &height) != 0) {
-    NSPoint viewPoint = NSMakePoint((CGFloat)x, NSHeight(self.bounds) - (CGFloat)y);
+  if (GhostexGpuiTerminalGetImePoint((__bridge void *)self, &x, &y, &width,
+                                     &height) != 0) {
+    NSPoint viewPoint =
+        NSMakePoint((CGFloat)x, NSHeight(self.bounds) - (CGFloat)y);
     NSPoint windowPoint = [self convertPoint:viewPoint toView:nil];
-    NSPoint screenPoint = self.window ? [self.window convertPointToScreen:windowPoint] : windowPoint;
-    return NSMakeRect(screenPoint.x, screenPoint.y - (CGFloat)height, (CGFloat)width, (CGFloat)height);
+    NSPoint screenPoint = self.window
+                              ? [self.window convertPointToScreen:windowPoint]
+                              : windowPoint;
+    return NSMakeRect(screenPoint.x, screenPoint.y - (CGFloat)height,
+                      (CGFloat)width, (CGFloat)height);
   }
 
   NSRect localRect = NSMakeRect(NSMinX(self.bounds), NSMinY(self.bounds), 1, 1);
   NSRect windowRect = [self convertRect:localRect toView:nil];
-  return self.window ? [self.window convertRectToScreen:windowRect] : windowRect;
+  return self.window ? [self.window convertRectToScreen:windowRect]
+                     : windowRect;
 }
 
 - (NSUInteger)characterIndexForPoint:(NSPoint)point {
@@ -891,9 +995,8 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
     return;
   }
 
-  NSEvent* currentEvent = NSApp.currentEvent;
-  if (_lastPerformKeyEventTimestamp &&
-      currentEvent &&
+  NSEvent *currentEvent = NSApp.currentEvent;
+  if (_lastPerformKeyEventTimestamp && currentEvent &&
       _lastPerformKeyEventTimestamp.doubleValue == currentEvent.timestamp) {
     [NSApp sendEvent:currentEvent];
   }
@@ -901,12 +1004,9 @@ static NSString* GhostexGpuiTerminalDropInsertionText(NSArray<NSString*>* paths)
 
 @end
 
-static NSRect GhostexGpuiTerminalFrameInParent(
-  NSView* parent,
-  double x,
-  double y,
-  double width,
-  double height) {
+static NSRect GhostexGpuiTerminalFrameInParent(NSView *parent, double x,
+                                               double y, double width,
+                                               double height) {
   CGFloat nativeWidth = MAX((CGFloat)0.0, (CGFloat)width);
   CGFloat nativeHeight = MAX((CGFloat)0.0, (CGFloat)height);
   CGFloat nativeY = (CGFloat)y;
@@ -917,58 +1017,48 @@ static NSRect GhostexGpuiTerminalFrameInParent(
   return NSMakeRect((CGFloat)x, nativeY, nativeWidth, nativeHeight);
 }
 
-void* GhostexGpuiTerminalCreateHostNativeView(
-  void* parentView,
-  double x,
-  double y,
-  double width,
-  double height) {
-  NSView* parent = (__bridge NSView*)parentView;
+void *GhostexGpuiTerminalCreateHostNativeView(void *parentView, double x,
+                                              double y, double width,
+                                              double height) {
+  NSView *parent = (__bridge NSView *)parentView;
   if (!parent) {
     return NULL;
   }
 
-  NSView* hostView = [[GhostexGpuiTerminalHostView alloc] initWithFrame:GhostexGpuiTerminalFrameInParent(
-    parent,
-    x,
-    y,
-    width,
-    height)];
+  NSView *hostView = [[GhostexGpuiTerminalHostView alloc]
+      initWithFrame:GhostexGpuiTerminalFrameInParent(parent, x, y, width,
+                                                     height)];
   [hostView registerForDraggedTypes:GhostexGpuiTerminalRegisteredDragTypes()];
   hostView.hidden = YES;
   hostView.wantsLayer = YES;
   hostView.layer.backgroundColor = [NSColor blackColor].CGColor;
   [parent addSubview:hostView];
 
-  return (__bridge_retained void*)hostView;
+  return (__bridge_retained void *)hostView;
 }
 
-void GhostexGpuiTerminalDestroyHostNativeView(void* nativeView) {
+void GhostexGpuiTerminalDestroyHostNativeView(void *nativeView) {
   if (!nativeView) {
     return;
   }
 
-  NSView* view = (__bridge_transfer NSView*)nativeView;
+  NSView *view = (__bridge_transfer NSView *)nativeView;
   [view removeFromSuperview];
 }
 
-void GhostexGpuiTerminalSetNativeViewFrame(
-  void* nativeView,
-  double x,
-  double y,
-  double width,
-  double height) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiTerminalSetNativeViewFrame(void *nativeView, double x, double y,
+                                           double width, double height) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
 
-  NSView* parent = [view superview];
+  NSView *parent = [view superview];
   view.frame = GhostexGpuiTerminalFrameInParent(parent, x, y, width, height);
 }
 
-void GhostexGpuiTerminalShowNativeView(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiTerminalShowNativeView(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
@@ -976,8 +1066,8 @@ void GhostexGpuiTerminalShowNativeView(void* nativeView) {
   view.hidden = NO;
 }
 
-void GhostexGpuiTerminalHideNativeView(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiTerminalHideNativeView(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
@@ -985,13 +1075,13 @@ void GhostexGpuiTerminalHideNativeView(void* nativeView) {
   view.hidden = YES;
 }
 
-void GhostexGpuiTerminalFocusNativeView(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiTerminalFocusNativeView(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
 
-  NSWindow* window = [view window];
+  NSWindow *window = [view window];
   if (!window) {
     return;
   }

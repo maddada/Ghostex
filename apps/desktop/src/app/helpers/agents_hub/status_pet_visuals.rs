@@ -220,7 +220,10 @@ pub(crate) fn gpui_pet_overlay_animation_duration_ms(
         .sum()
 }
 
-pub(crate) fn gpui_pet_overlay_frame_duration_ms(frame: GpuiPetOverlayAnimationFrame, slow_idle: bool) -> u64 {
+pub(crate) fn gpui_pet_overlay_frame_duration_ms(
+    frame: GpuiPetOverlayAnimationFrame,
+    slow_idle: bool,
+) -> u64 {
     if slow_idle {
         frame
             .duration_ms
@@ -253,39 +256,57 @@ pub(crate) fn gpui_pet_overlay_spritesheet_image(pet_id: &str) -> Option<Arc<Ima
     match pet_id {
         "boo" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_BOO_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/boo-spritesheet-codexpethub-8a8161fb.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/boo-spritesheet-codexpethub-8a8161fb.webp"
+            ),
         )),
         "bsod" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_BSOD_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/bsod-spritesheet-v4-BRrRVy1T.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/bsod-spritesheet-v4-BRrRVy1T.webp"
+            ),
         )),
         "codex" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_CODEX_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/codex-spritesheet-v4-Bl6P89d_.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/codex-spritesheet-v4-Bl6P89d_.webp"
+            ),
         )),
         "dewey" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_DEWEY_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/dewey-spritesheet-v4-gAYk_M9g.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/dewey-spritesheet-v4-gAYk_M9g.webp"
+            ),
         )),
         "fireball" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_FIREBALL_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/fireball-spritesheet-v4-BtU8R9Qp.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/fireball-spritesheet-v4-BtU8R9Qp.webp"
+            ),
         )),
         "null-signal" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_NULL_SIGNAL_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/null-signal-spritesheet-v4-CCoTR-8t.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/null-signal-spritesheet-v4-CCoTR-8t.webp"
+            ),
         )),
         "rocky" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_ROCKY_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/rocky-spritesheet-v4-3RlTi26B.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/rocky-spritesheet-v4-3RlTi26B.webp"
+            ),
         )),
         "seedy" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_SEEDY_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/seedy-spritesheet-v4-CdlE_fn9.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/seedy-spritesheet-v4-CdlE_fn9.webp"
+            ),
         )),
         "stacky" => Some(gpui_pet_overlay_cached_spritesheet(
             &GPUI_PET_OVERLAY_STACKY_IMAGE,
-            include_bytes!("../../../../../../packages/core-ui/assets/pets/stacky-spritesheet-v4-CaUJd4fY.webp"),
+            include_bytes!(
+                "../../../../../../packages/core-ui/assets/pets/stacky-spritesheet-v4-CaUJd4fY.webp"
+            ),
         )),
         _ => None,
     }
@@ -299,4 +320,3 @@ pub(crate) fn gpui_pet_overlay_cached_spritesheet(
         .get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Webp, bytes.to_vec())))
         .clone()
 }
-

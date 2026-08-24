@@ -27,7 +27,7 @@ import {
   nodeDefinition,
   productDefinition,
   validateProductGraph,
-} from "./product-inputs.mjs";
+} from './product-inputs.mjs';
 import {
   FINGERPRINT_ALGORITHM_REVISION,
   computeFingerprints,
@@ -35,61 +35,61 @@ import {
   explainFingerprintDifference,
   identityRevisionInputsDigest,
   shortFingerprint,
-} from "./fingerprint.mjs";
-import { buildReuseIndex, reuseDescriptor, verifyReuseCandidate } from "./provenance.mjs";
+} from './fingerprint.mjs';
+import { buildReuseIndex, reuseDescriptor, verifyReuseCandidate } from './provenance.mjs';
 
 export const PLAN_SCHEMA_VERSION = 1;
-export const PRODUCT_ACTIONS = Object.freeze(["build", "reuse", "skip"]);
+export const PRODUCT_ACTIONS = Object.freeze(['build', 'reuse', 'skip']);
 export const DEFAULT_BASELINE_COUNT = 12;
 
 /* Measured job durations (release 7.7, run 31648691822); used only for reporting. */
 const PRODUCT_RUNNER_MINUTES = Object.freeze({
   android: 15,
-  "gxserver-linux-arm64": 18,
-  "gxserver-linux-x64": 22,
-  "gxserver-wsl-windows-arm64": 1,
-  "gxserver-wsl-windows-x64": 1,
-  "linux-deb-x64": 14,
-  "linux-rpm-x64": 14,
-  "linux-tar-x64": 14,
-  "macos-arm64": 34,
-  "windows-arm64": 27,
-  "windows-x64": 25,
+  'gxserver-linux-arm64': 18,
+  'gxserver-linux-x64': 22,
+  'gxserver-wsl-windows-arm64': 1,
+  'gxserver-wsl-windows-x64': 1,
+  'linux-deb-x64': 14,
+  'linux-rpm-x64': 14,
+  'linux-tar-x64': 14,
+  'macos-arm64': 34,
+  'windows-arm64': 27,
+  'windows-x64': 25,
 });
 
 const REUSE_JOB_MINUTES = 1;
 
 function versionPatternOk(version) {
-  return /^\d+\.\d+\.\d+$/u.test(version ?? "");
+  return /^\d+\.\d+\.\d+$/u.test(version ?? '');
 }
 
 export function scopeFromEnv(env = process.env) {
   const flag = (name, fallback = false) => {
     const value = env[name];
-    if (value === undefined || value === "") return fallback;
-    return value === "true" || value === "1";
+    if (value === undefined || value === '') return fallback;
+    return value === 'true' || value === '1';
   };
   return defaultScope({
-    android: flag("GHOSTEX_RELEASE_ANDROID"),
-    gxserverLinuxArm64: flag("GHOSTEX_RELEASE_GXSERVER_LINUX_ARM64"),
-    gxserverLinuxX64: flag("GHOSTEX_RELEASE_GXSERVER_LINUX_X64"),
-    gxserverWslWindowsArm64: flag("GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64"),
-    gxserverWslWindowsX64: flag("GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64"),
-    linuxDeb: flag("GHOSTEX_RELEASE_LINUX_DEB"),
-    linuxRpm: flag("GHOSTEX_RELEASE_LINUX_RPM"),
-    linuxTar: flag("GHOSTEX_RELEASE_LINUX_TAR"),
-    macos: flag("GHOSTEX_RELEASE_MACOS"),
-    prerelease: flag("GHOSTEX_RELEASE_PRERELEASE"),
-    signWindows: flag("GHOSTEX_RELEASE_SIGN_WINDOWS"),
-    updateSparkle: flag("GHOSTEX_RELEASE_UPDATE_SPARKLE"),
-    windowsArm64: flag("GHOSTEX_RELEASE_WINDOWS_ARM64"),
-    windowsX64: flag("GHOSTEX_RELEASE_WINDOWS_X64"),
+    android: flag('GHOSTEX_RELEASE_ANDROID'),
+    gxserverLinuxArm64: flag('GHOSTEX_RELEASE_GXSERVER_LINUX_ARM64'),
+    gxserverLinuxX64: flag('GHOSTEX_RELEASE_GXSERVER_LINUX_X64'),
+    gxserverWslWindowsArm64: flag('GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64'),
+    gxserverWslWindowsX64: flag('GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64'),
+    linuxDeb: flag('GHOSTEX_RELEASE_LINUX_DEB'),
+    linuxRpm: flag('GHOSTEX_RELEASE_LINUX_RPM'),
+    linuxTar: flag('GHOSTEX_RELEASE_LINUX_TAR'),
+    macos: flag('GHOSTEX_RELEASE_MACOS'),
+    prerelease: flag('GHOSTEX_RELEASE_PRERELEASE'),
+    signWindows: flag('GHOSTEX_RELEASE_SIGN_WINDOWS'),
+    updateSparkle: flag('GHOSTEX_RELEASE_UPDATE_SPARKLE'),
+    windowsArm64: flag('GHOSTEX_RELEASE_WINDOWS_ARM64'),
+    windowsX64: flag('GHOSTEX_RELEASE_WINDOWS_X64'),
   });
 }
 
 function candidateLabel(candidate) {
-  if (candidate.tier === "release") return candidate.tag ?? "an earlier release";
-  return `run ${candidate.runId ?? "(unknown)"}`;
+  if (candidate.tier === 'release') return candidate.tag ?? 'an earlier release';
+  return `run ${candidate.runId ?? '(unknown)'}`;
 }
 
 /*
@@ -99,17 +99,17 @@ function candidateLabel(candidate) {
  * first, because Actions artifacts expire and release assets do not.
  */
 function orderCandidates(candidates, { versionStamped }) {
-  const releases = candidates.filter((candidate) => candidate.tier === "release");
-  const runs = candidates.filter((candidate) => candidate.tier === "run");
+  const releases = candidates.filter((candidate) => candidate.tier === 'release');
+  const runs = candidates.filter((candidate) => candidate.tier === 'run');
   return versionStamped ? [...runs, ...releases] : [...releases, ...runs];
 }
 
 function buildReason({ algorithmRevision, candidates, currentInputs, definition, version }) {
-  if (candidates.length === 0) return "no provenance baseline for this product; building";
+  if (candidates.length === 0) return 'no provenance baseline for this product; building';
   const comparable = candidates.find((candidate) => candidate.record?.algorithmRevision === algorithmRevision);
   if (!comparable) {
-    const revisions = [...new Set(candidates.map((candidate) => candidate.record?.algorithmRevision ?? "(none)"))];
-    return `provenance algorithm revision ${revisions.join(", ")} != ${algorithmRevision}; building`;
+    const revisions = [...new Set(candidates.map((candidate) => candidate.record?.algorithmRevision ?? '(none)'))];
+    return `provenance algorithm revision ${revisions.join(', ')} != ${algorithmRevision}; building`;
   }
   const difference = explainFingerprintDifference(currentInputs, comparable.record.inputs);
   const described = describeFingerprintDifference(difference);
@@ -142,27 +142,27 @@ function planProduct({
   const definition = productDefinition(productId);
   const computed = fingerprints.get(productId);
   const entry = {
-    action: "skip",
+    action: 'skip',
     fingerprint: computed.fingerprint,
     inputs: computed.inputs,
-    reason: "",
+    reason: '',
     requested: isProductRequested(productId, scope),
     reuse: null,
     rejectedReuse: [],
   };
 
   if (!entry.requested) {
-    entry.reason = "not in the requested release scope";
+    entry.reason = 'not in the requested release scope';
     return entry;
   }
   if (forceAll) {
-    entry.action = "build";
-    entry.reason = "force-all requested; rebuilding every in-scope product";
+    entry.action = 'build';
+    entry.reason = 'force-all requested; rebuilding every in-scope product';
     return entry;
   }
   if (forcedProducts.includes(productId)) {
-    entry.action = "build";
-    entry.reason = "explicitly forced by the operator";
+    entry.action = 'build';
+    entry.reason = 'explicitly forced by the operator';
     return entry;
   }
 
@@ -174,9 +174,7 @@ function planProduct({
       algorithmRevision,
       candidate,
       evidence: {
-        assetMetadata: assetMetadata
-          ? (name, record) => assetMetadata({ candidate, name, record })
-          : undefined,
+        assetMetadata: assetMetadata ? (name, record) => assetMetadata({ candidate, name, record }) : undefined,
         attestationVerified: attestationVerified
           ? (name, record) => attestationVerified({ candidate, name, record })
           : undefined,
@@ -187,16 +185,16 @@ function planProduct({
       releaseVersion: version,
     });
     if (verification.ok) {
-      entry.action = "reuse";
+      entry.action = 'reuse';
       entry.reuse = reuseDescriptor({ candidate, verification });
-      const digest = shortFingerprint(entry.reuse.artifacts[0]?.sha256 ?? "");
-      entry.reason = `all relevant inputs match ${candidateLabel(candidate)}${digest ? ` (sha256 ${digest}…)` : ""}`;
+      const digest = shortFingerprint(entry.reuse.artifacts[0]?.sha256 ?? '');
+      entry.reason = `all relevant inputs match ${candidateLabel(candidate)}${digest ? ` (sha256 ${digest}…)` : ''}`;
       return entry;
     }
     entry.rejectedReuse.push({ origin: candidateLabel(candidate), reasons: verification.failures });
   }
 
-  entry.action = "build";
+  entry.action = 'build';
   entry.reason = buildReason({
     algorithmRevision,
     candidates,
@@ -205,10 +203,10 @@ function planProduct({
     version,
   });
   const fingerprintMatched = entry.rejectedReuse.find((rejected) =>
-    rejected.reasons.every((reason) => !reason.startsWith("fingerprint ")),
+    rejected.reasons.every((reason) => !reason.startsWith('fingerprint '))
   );
   if (fingerprintMatched) {
-    entry.reason = `reuse candidate ${fingerprintMatched.origin} rejected: ${fingerprintMatched.reasons.join("; ")}`;
+    entry.reason = `reuse candidate ${fingerprintMatched.origin} rejected: ${fingerprintMatched.reasons.join('; ')}`;
   }
   return entry;
 }
@@ -216,7 +214,7 @@ function planProduct({
 function planComponents({ componentIdentities, componentTagState, entries, products, readObject }) {
   const required = new Map(COMPONENT_IDS.map((component) => [component, new Set()]));
   for (const [productId, entry] of Object.entries(products)) {
-    if (entry.action !== "build") continue;
+    if (entry.action !== 'build') continue;
     for (const [component, platforms] of Object.entries(componentPlatformRequirements(productId))) {
       for (const platform of platforms) required.get(component)?.add(platform);
     }
@@ -231,11 +229,11 @@ function planComponents({ componentIdentities, componentTagState, entries, produ
       ? identityRevisionInputsDigest({ entries, nodeId: component, readObject })
       : null;
     const entry = {
-      action: "skip",
+      action: 'skip',
       componentVersion,
       downloadTag: componentVersion ? `${component}-${componentVersion}` : null,
       identityRevisionInputsDigest: currentIdentityDigest,
-      reason: "no building product requires this component",
+      reason: 'no building product requires this component',
       requiredPlatforms,
     };
     if (requiredPlatforms.length === 0) {
@@ -249,17 +247,17 @@ function planComponents({ componentIdentities, componentTagState, entries, produ
       state.identityRevisionInputsDigest &&
       state.identityRevisionInputsDigest !== currentIdentityDigest
     ) {
-      entry.action = "build";
-      entry.reason = "component identity revision inputs changed since the published component";
+      entry.action = 'build';
+      entry.reason = 'component identity revision inputs changed since the published component';
     } else if (!componentVersion) {
-      entry.action = "build";
-      entry.reason = "component identity is unknown at planning time";
+      entry.action = 'build';
+      entry.reason = 'component identity is unknown at planning time';
     } else if (missing.length === 0) {
-      entry.action = "reuse";
-      entry.reason = `${entry.downloadTag} already has ${requiredPlatforms.join(", ")}`;
+      entry.action = 'reuse';
+      entry.reason = `${entry.downloadTag} already has ${requiredPlatforms.join(', ')}`;
     } else {
-      entry.action = "build";
-      entry.reason = `component tag missing ${missing.join(", ")}`;
+      entry.action = 'build';
+      entry.reason = `component tag missing ${missing.join(', ')}`;
     }
     plan[component] = entry;
   }
@@ -267,34 +265,34 @@ function planComponents({ componentIdentities, componentTagState, entries, produ
 }
 
 function componentJobAction({ arch, components, products }) {
-  const consumers = ["macos-arm64", `windows-${arch}`];
-  const needed = consumers.some((productId) => products[productId]?.action === "build");
-  if (!needed) return "skip";
-  const component = components["code-server"];
-  if (!component) return "build";
+  const consumers = ['macos-arm64', `windows-${arch}`];
+  const needed = consumers.some((productId) => products[productId]?.action === 'build');
+  if (!needed) return 'skip';
+  const component = components['code-server'];
+  if (!component) return 'build';
   const published = new Set(Object.keys(component.publishedPlatforms ?? {}));
-  if (component.action === "reuse" || published.has(`linux-${arch}`)) return "reuse";
-  return "build";
+  if (component.action === 'reuse' || published.has(`linux-${arch}`)) return 'reuse';
+  return 'build';
 }
 
 function planJobs({ components, products }) {
-  const action = (productId) => products[productId]?.action ?? "skip";
-  const linuxPackages = ["deb", "rpm", "tar"].filter((format) => action(`linux-${format}-x64`) === "build");
+  const action = (productId) => products[productId]?.action ?? 'skip';
+  const linuxPackages = ['deb', 'rpm', 'tar'].filter((format) => action(`linux-${format}-x64`) === 'build');
   return {
-    android: action("android"),
-    code_server_arm64: componentJobAction({ arch: "arm64", components, products }),
-    code_server_x64: componentJobAction({ arch: "x64", components, products }),
-    gxserver_arm64: action("gxserver-linux-arm64"),
-    gxserver_x64: action("gxserver-linux-x64"),
+    android: action('android'),
+    code_server_arm64: componentJobAction({ arch: 'arm64', components, products }),
+    code_server_x64: componentJobAction({ arch: 'x64', components, products }),
+    gxserver_arm64: action('gxserver-linux-arm64'),
+    gxserver_x64: action('gxserver-linux-x64'),
     linux_packages: linuxPackages,
-    linux_x64: linuxPackages.length > 0 ? "build" : "skip",
-    macos: action("macos-arm64"),
-    reuse_matrix: PRODUCT_IDS.filter((productId) => action(productId) === "reuse"),
-    validate_windows: action("windows-x64") === "build" || action("windows-arm64") === "build",
-    windows_arm64: action("windows-arm64"),
-    windows_x64: action("windows-x64"),
-    wsl_arm64: action("gxserver-wsl-windows-arm64"),
-    wsl_x64: action("gxserver-wsl-windows-x64"),
+    linux_x64: linuxPackages.length > 0 ? 'build' : 'skip',
+    macos: action('macos-arm64'),
+    reuse_matrix: PRODUCT_IDS.filter((productId) => action(productId) === 'reuse'),
+    validate_windows: action('windows-x64') === 'build' || action('windows-arm64') === 'build',
+    windows_arm64: action('windows-arm64'),
+    windows_x64: action('windows-x64'),
+    wsl_arm64: action('gxserver-wsl-windows-arm64'),
+    wsl_x64: action('gxserver-wsl-windows-x64'),
   };
 }
 
@@ -308,11 +306,11 @@ function planJobs({ components, products }) {
  * set carries its own already-correct feed.
  */
 function planFeeds({ products, scope }) {
-  const macosInRelease = (products["macos-arm64"]?.action ?? "skip") !== "skip";
+  const macosInRelease = (products['macos-arm64']?.action ?? 'skip') !== 'skip';
   return {
     homebrew: macosInRelease,
     sparkle: macosInRelease && Boolean(scope.updateSparkle) && !scope.prerelease,
-    windowsFeeds: ["x64", "arm64"].filter((arch) => products[`windows-${arch}`]?.action === "build"),
+    windowsFeeds: ['x64', 'arm64'].filter((arch) => products[`windows-${arch}`]?.action === 'build'),
   };
 }
 
@@ -322,8 +320,8 @@ function planEstimates({ products }) {
   for (const productId of PRODUCT_IDS) {
     const minutes = PRODUCT_RUNNER_MINUTES[productId] ?? 0;
     const action = products[productId]?.action;
-    if (action === "build") built += minutes;
-    else if (action === "reuse") saved += Math.max(0, minutes - REUSE_JOB_MINUTES);
+    if (action === 'build') built += minutes;
+    else if (action === 'reuse') saved += Math.max(0, minutes - REUSE_JOB_MINUTES);
   }
   return { builtRunnerMinutes: built, savedRunnerMinutes: saved };
 }
@@ -349,11 +347,11 @@ export function computePlan({
   version,
 }) {
   validateProductGraph();
-  if (!versionPatternOk(version)) throw new Error("Release version must be MAJOR.MINOR.PATCH");
-  if (typeof sourceSha !== "string" || !/^[0-9a-f]{40}$/u.test(sourceSha)) {
-    throw new Error("Source SHA must be a full 40-character commit id");
+  if (!versionPatternOk(version)) throw new Error('Release version must be MAJOR.MINOR.PATCH');
+  if (typeof sourceSha !== 'string' || !/^[0-9a-f]{40}$/u.test(sourceSha)) {
+    throw new Error('Source SHA must be a full 40-character commit id');
   }
-  if (!Array.isArray(entries)) throw new Error("Plan requires the git tree entries of the source commit");
+  if (!Array.isArray(entries)) throw new Error('Plan requires the git tree entries of the source commit');
   for (const productId of forcedProducts) productDefinition(productId);
   if (reuseFromRunId !== null && sourceRun && String(sourceRun.runId) !== String(reuseFromRunId)) {
     throw new Error(`--reuse-from-run ${reuseFromRunId} does not match the supplied source run ${sourceRun.runId}`);
@@ -385,8 +383,8 @@ export function computePlan({
     entry.publishedPlatforms = componentTagState[component]?.platforms ?? {};
   }
 
-  const expectedPlatforms = PRODUCT_IDS.filter((productId) => products[productId].action !== "skip");
-  if (expectedPlatforms.length === 0) throw new Error("At least one platform must be enabled");
+  const expectedPlatforms = PRODUCT_IDS.filter((productId) => products[productId].action !== 'skip');
+  if (expectedPlatforms.length === 0) throw new Error('At least one platform must be enabled');
 
   const plan = {
     algorithmRevision,
@@ -413,20 +411,20 @@ export function computePlan({
 }
 
 export function validatePlan(input) {
-  const plan = input && typeof input === "object" ? input : null;
-  if (!plan) throw new Error("Invalid release plan: not an object");
+  const plan = input && typeof input === 'object' ? input : null;
+  if (!plan) throw new Error('Invalid release plan: not an object');
   const bad = (message) => {
     throw new Error(`Invalid release plan: ${message}`);
   };
-  if (plan.schemaVersion !== PLAN_SCHEMA_VERSION) bad("schemaVersion must equal 1");
-  if (!versionPatternOk(plan.version)) bad("version must be MAJOR.MINOR.PATCH");
-  if (typeof plan.algorithmRevision !== "string" || !plan.algorithmRevision) bad("algorithmRevision is required");
+  if (plan.schemaVersion !== PLAN_SCHEMA_VERSION) bad('schemaVersion must equal 1');
+  if (!versionPatternOk(plan.version)) bad('version must be MAJOR.MINOR.PATCH');
+  if (typeof plan.algorithmRevision !== 'string' || !plan.algorithmRevision) bad('algorithmRevision is required');
   for (const productId of PRODUCT_IDS) {
     const entry = plan.products?.[productId];
     if (!entry) bad(`products.${productId} is missing`);
     if (!PRODUCT_ACTIONS.includes(entry.action)) bad(`products.${productId}.action is invalid`);
-    if (typeof entry.reason !== "string" || entry.reason.length === 0) bad(`products.${productId}.reason is empty`);
-    if (entry.action === "reuse") {
+    if (typeof entry.reason !== 'string' || entry.reason.length === 0) bad(`products.${productId}.reason is empty`);
+    if (entry.action === 'reuse') {
       if (!entry.reuse) bad(`products.${productId} is reused without a reuse descriptor`);
       const definition = productDefinition(productId);
       if (definition.versionStamped && entry.reuse.productVersion !== plan.version) {
@@ -438,23 +436,23 @@ export function validatePlan(input) {
     } else if (entry.reuse) {
       bad(`products.${productId} is ${entry.action} but carries a reuse descriptor`);
     }
-    if (entry.action !== "skip" && !entry.requested) bad(`products.${productId} acts on an unrequested product`);
+    if (entry.action !== 'skip' && !entry.requested) bad(`products.${productId} acts on an unrequested product`);
   }
-  const expected = PRODUCT_IDS.filter((productId) => plan.products[productId].action !== "skip");
+  const expected = PRODUCT_IDS.filter((productId) => plan.products[productId].action !== 'skip');
   if (JSON.stringify(expected) !== JSON.stringify(plan.expectedPlatforms ?? [])) {
-    bad("expectedPlatforms does not match the resolved product actions");
+    bad('expectedPlatforms does not match the resolved product actions');
   }
-  if (plan.feeds?.sparkle && plan.products["macos-arm64"].action === "skip") {
-    bad("Sparkle may only advance when macOS is part of the release");
+  if (plan.feeds?.sparkle && plan.products['macos-arm64'].action === 'skip') {
+    bad('Sparkle may only advance when macOS is part of the release');
   }
-  if (plan.feeds?.homebrew && plan.products["macos-arm64"].action === "skip") {
-    bad("Homebrew may only be updated when macOS is part of the release");
+  if (plan.feeds?.homebrew && plan.products['macos-arm64'].action === 'skip') {
+    bad('Homebrew may only be updated when macOS is part of the release');
   }
   return plan;
 }
 
 function padRight(value, width) {
-  return value.length >= width ? value : value + " ".repeat(width - value.length);
+  return value.length >= width ? value : value + ' '.repeat(width - value.length);
 }
 
 /* The operator-facing dry-run table (§11.1). */
@@ -463,54 +461,52 @@ export function renderPlanText(plan) {
   lines.push(`Ghostex release plan — ${plan.version}`);
   lines.push(`Source        ${plan.sourceSha}`);
   lines.push(
-    `Baselines     ${plan.baselineTags.length > 0 ? plan.baselineTags.join(", ") : "(none)"}  ` +
-      `(${plan.baselinesInspected} releases inspected, ${plan.baselinesWithProvenance} with provenance)`,
+    `Baselines     ${plan.baselineTags.length > 0 ? plan.baselineTags.join(', ') : '(none)'}  ` +
+      `(${plan.baselinesInspected} releases inspected, ${plan.baselinesWithProvenance} with provenance)`
   );
-  const mode = plan.forceAll ? "force-all" : "change-aware";
+  const mode = plan.forceAll ? 'force-all' : 'change-aware';
   lines.push(
-    `Mode          ${mode}   (force-all: ${plan.forceAll ? "yes" : "no"}, ` +
-      `forced: ${plan.forcedProducts.length > 0 ? plan.forcedProducts.join(",") : "none"}, ` +
-      `reuse-from-run: ${plan.reuseFromRunId ?? "none"})`,
+    `Mode          ${mode}   (force-all: ${plan.forceAll ? 'yes' : 'no'}, ` +
+      `forced: ${plan.forcedProducts.length > 0 ? plan.forcedProducts.join(',') : 'none'}, ` +
+      `reuse-from-run: ${plan.reuseFromRunId ?? 'none'})`
   );
   lines.push(`Algorithm     ${plan.algorithmRevision}`);
-  lines.push("");
-  lines.push(`${padRight("PRODUCT", 29)}${padRight("ACTION", 8)}REASON`);
+  lines.push('');
+  lines.push(`${padRight('PRODUCT', 29)}${padRight('ACTION', 8)}REASON`);
   for (const productId of PRODUCT_IDS) {
     const entry = plan.products[productId];
     lines.push(`${padRight(productId, 29)}${padRight(entry.action.toUpperCase(), 8)}${entry.reason}`);
   }
-  lines.push("");
-  lines.push(`${padRight("COMPONENT", 14)}${padRight("VERSION", 30)}${padRight("ACTION", 8)}REASON`);
+  lines.push('');
+  lines.push(`${padRight('COMPONENT', 14)}${padRight('VERSION', 30)}${padRight('ACTION', 8)}REASON`);
   for (const component of COMPONENT_IDS) {
     const entry = plan.components[component];
-    const version = entry.componentVersion ?? "(unknown)";
+    const version = entry.componentVersion ?? '(unknown)';
     lines.push(
       `${padRight(component, 14)}${padRight(version.length > 28 ? `${version.slice(0, 27)}…` : version, 30)}` +
-        `${padRight(entry.action.toUpperCase(), 8)}${entry.reason}`,
+        `${padRight(entry.action.toUpperCase(), 8)}${entry.reason}`
     );
   }
-  lines.push("");
+  lines.push('');
   lines.push(
-    `FEEDS         sparkle=${plan.feeds.sparkle ? "update" : "hold"}  ` +
-      `homebrew=${plan.feeds.homebrew ? "update" : "hold"}  ` +
-      `windows-feeds=${plan.feeds.windowsFeeds.length > 0 ? plan.feeds.windowsFeeds.join(",") : "none"}`,
+    `FEEDS         sparkle=${plan.feeds.sparkle ? 'update' : 'hold'}  ` +
+      `homebrew=${plan.feeds.homebrew ? 'update' : 'hold'}  ` +
+      `windows-feeds=${plan.feeds.windowsFeeds.length > 0 ? plan.feeds.windowsFeeds.join(',') : 'none'}`
   );
   const jobNames = Object.entries(plan.jobs)
-    .filter(([name, value]) => !["reuse_matrix", "linux_packages", "linux_x64"].includes(name) && value === "build")
+    .filter(([name, value]) => !['reuse_matrix', 'linux_packages', 'linux_x64'].includes(name) && value === 'build')
     .map(([name]) => name);
   if (plan.jobs.linux_packages.length > 0) {
-    jobNames.push(`linux_x64(${plan.jobs.linux_packages.join(",")})`);
+    jobNames.push(`linux_x64(${plan.jobs.linux_packages.join(',')})`);
   }
-  if (plan.jobs.validate_windows) jobNames.unshift("validate_windows");
-  lines.push(`JOBS          ${jobNames.join(", ") || "(none)"}`);
-  lines.push(
-    `              reuse[${plan.jobs.reuse_matrix.join(", ") || "none"}]`,
-  );
+  if (plan.jobs.validate_windows) jobNames.unshift('validate_windows');
+  lines.push(`JOBS          ${jobNames.join(', ') || '(none)'}`);
+  lines.push(`              reuse[${plan.jobs.reuse_matrix.join(', ') || 'none'}]`);
   lines.push(
     `SAVED         ~${plan.estimates.savedRunnerMinutes} runner-minutes vs a full matrix ` +
-      `(${plan.estimates.builtRunnerMinutes} minutes of build work planned)`,
+      `(${plan.estimates.builtRunnerMinutes} minutes of build work planned)`
   );
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 export function planSummaryLine(plan) {

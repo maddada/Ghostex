@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   extractChangelogSectionFromText,
   releaseBuildVersion,
   validateMajorMinorReleaseNotes,
-} from "./release-ghostex.mjs";
+} from './release-ghostex.mjs';
 
 /*
  CDXC:ReleaseAutomation 2026-07-02-14:10:
@@ -19,20 +19,18 @@ import {
  gates once in its remote prepare job.
 */
 
-const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
-const githubRepo = "maddada/Ghostex";
-const subrepoCandidates = [
-  "apps/mobile/app", "crossplatform", ".dependencies/zmx",
-];
+const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+const githubRepo = 'maddada/Ghostex';
+const subrepoCandidates = ['apps/mobile/app', 'crossplatform', '.dependencies/zmx'];
 
 const highConfidenceSecretPatterns = [
-  { label: "private key block", regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  { label: "GitHub token", regex: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b/ },
-  { label: "GitHub fine-grained token", regex: /\bgithub_pat_[A-Za-z0-9_]{22,}\b/ },
-  { label: "AWS access key id", regex: /\bAKIA[0-9A-Z]{16}\b/ },
-  { label: "Slack token", regex: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/ },
-  { label: "Anthropic key", regex: /\bsk-ant-[A-Za-z0-9-]{20,}\b/ },
-  { label: "Google API key", regex: /\bAIza[0-9A-Za-z_-]{35}\b/ },
+  { label: 'private key block', regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
+  { label: 'GitHub token', regex: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b/ },
+  { label: 'GitHub fine-grained token', regex: /\bgithub_pat_[A-Za-z0-9_]{22,}\b/ },
+  { label: 'AWS access key id', regex: /\bAKIA[0-9A-Z]{16}\b/ },
+  { label: 'Slack token', regex: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/ },
+  { label: 'Anthropic key', regex: /\bsk-ant-[A-Za-z0-9-]{20,}\b/ },
+  { label: 'Google API key', regex: /\bAIza[0-9A-Za-z_-]{35}\b/ },
 ];
 
 const genericSecretPattern = /(?:password|passwd|secret|api[_-]?key|auth[_-]?token)\s*[:=]\s*["'][^"']{12,}["']/i;
@@ -62,7 +60,7 @@ function parseArgs(argv) {
   const options = {
     cargo: false,
     freezeSeconds: 45,
-    releaseBranch: "main",
+    releaseBranch: 'main',
     skipCredentials: false,
     skipFreeze: false,
     skipTests: false,
@@ -72,31 +70,31 @@ function parseArgs(argv) {
   const positional = [];
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === "--help" || arg === "-h") {
+    if (arg === '--help' || arg === '-h') {
       options.help = true;
-    } else if (arg === "--cargo") {
+    } else if (arg === '--cargo') {
       options.cargo = true;
-    } else if (arg === "--skip-tests") {
+    } else if (arg === '--skip-tests') {
       options.skipTests = true;
-    } else if (arg === "--skip-typecheck") {
+    } else if (arg === '--skip-typecheck') {
       options.skipTypecheck = true;
-    } else if (arg === "--skip-credentials") {
+    } else if (arg === '--skip-credentials') {
       options.skipCredentials = true;
-    } else if (arg === "--skip-freeze") {
+    } else if (arg === '--skip-freeze') {
       options.skipFreeze = true;
-    } else if (arg === "--freeze-seconds") {
-      options.freezeSeconds = Number.parseInt(argv[index + 1] ?? "", 10);
+    } else if (arg === '--freeze-seconds') {
+      options.freezeSeconds = Number.parseInt(argv[index + 1] ?? '', 10);
       if (!Number.isFinite(options.freezeSeconds) || options.freezeSeconds < 0) {
-        throw new Error("--freeze-seconds requires a non-negative integer.");
+        throw new Error('--freeze-seconds requires a non-negative integer.');
       }
       index += 1;
-    } else if (arg === "--release-branch") {
+    } else if (arg === '--release-branch') {
       options.releaseBranch = argv[index + 1]?.trim();
       if (!options.releaseBranch) {
-        throw new Error("--release-branch requires a branch name.");
+        throw new Error('--release-branch requires a branch name.');
       }
       index += 1;
-    } else if (arg.startsWith("-")) {
+    } else if (arg.startsWith('-')) {
       throw new Error(`Unknown option: ${arg}`);
     } else {
       positional.push(arg);
@@ -105,8 +103,8 @@ function parseArgs(argv) {
   if (options.help) {
     return options;
   }
-  if (positional.length !== 1 || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(positional[0] ?? "")) {
-    throw new Error("Pass exactly one semver version, for example 5.5.0.");
+  if (positional.length !== 1 || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(positional[0] ?? '')) {
+    throw new Error('Pass exactly one semver version, for example 5.5.0.');
   }
   options.version = positional[0];
   return options;
@@ -118,26 +116,26 @@ function runCommand(command, { timeoutMs = 60_000, cwd = repoRoot, env } = {}) {
       cwd,
       env: { ...process.env, ...(env ?? {}) },
       shell: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
-    let stdout = "";
-    let stderr = "";
+    let stdout = '';
+    let stderr = '';
     let settled = false;
     const timeout = setTimeout(() => {
       if (settled) {
         return;
       }
       settled = true;
-      child.kill("SIGTERM");
+      child.kill('SIGTERM');
       resolve({ code: 124, stdout, stderr: `${stderr}\n(timed out after ${timeoutMs}ms)` });
     }, timeoutMs);
-    child.stdout.on("data", (chunk) => {
+    child.stdout.on('data', (chunk) => {
       stdout += chunk.toString();
     });
-    child.stderr.on("data", (chunk) => {
+    child.stderr.on('data', (chunk) => {
       stderr += chunk.toString();
     });
-    child.on("error", (error) => {
+    child.on('error', (error) => {
       if (settled) {
         return;
       }
@@ -145,7 +143,7 @@ function runCommand(command, { timeoutMs = 60_000, cwd = repoRoot, env } = {}) {
       clearTimeout(timeout);
       resolve({ code: 127, stdout, stderr: String(error.message ?? error) });
     });
-    child.on("close", (code) => {
+    child.on('close', (code) => {
       if (settled) {
         return;
       }
@@ -164,49 +162,51 @@ async function capture(command, options = {}) {
   return result.stdout.trim();
 }
 
-function pass(detail = "") {
-  return { detail, status: "PASS" };
+function pass(detail = '') {
+  return { detail, status: 'PASS' };
 }
 
 function warn(detail) {
-  return { detail, status: "WARN" };
+  return { detail, status: 'WARN' };
 }
 
 function fail(detail) {
-  return { detail, status: "FAIL" };
+  return { detail, status: 'FAIL' };
 }
 
 function shortOutput(text, lines = 6) {
-  return String(text ?? "")
+  return String(text ?? '')
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, lines)
-    .join(" | ");
+    .join(' | ');
 }
 
 async function checkBranch(options) {
-  const branch = await capture("git branch --show-current");
+  const branch = await capture('git branch --show-current');
   if (branch !== options.releaseBranch) {
-    return fail(`On ${branch || "(detached HEAD)"}; release branch is ${options.releaseBranch}.`);
+    return fail(`On ${branch || '(detached HEAD)'}; release branch is ${options.releaseBranch}.`);
   }
   return pass(branch);
 }
 
 async function checkWorktreeClean() {
-  const status = await capture("git status --porcelain --untracked-files=all");
+  const status = await capture('git status --porcelain --untracked-files=all');
   if (status) {
     return fail(`Worktree is dirty:\n${shortOutput(status, 12)}`);
   }
-  return pass("clean");
+  return pass('clean');
 }
 
 async function checkSyncedWithOrigin(options) {
   await capture(`git fetch origin ${options.releaseBranch} --tags`, { timeoutMs: 120_000 });
-  const head = await capture("git rev-parse HEAD");
+  const head = await capture('git rev-parse HEAD');
   const origin = await capture(`git rev-parse origin/${options.releaseBranch}`);
   if (head !== origin) {
-    return fail(`HEAD ${head.slice(0, 10)} != origin/${options.releaseBranch} ${origin.slice(0, 10)}. Push release-bound commits first.`);
+    return fail(
+      `HEAD ${head.slice(0, 10)} != origin/${options.releaseBranch} ${origin.slice(0, 10)}. Push release-bound commits first.`
+    );
   }
   return pass(head.slice(0, 10));
 }
@@ -215,32 +215,34 @@ async function checkTagMissing(options) {
   const localTag = await capture(`git tag --list 'v${options.version}'`);
   const remoteTag = await capture(`git ls-remote --tags origin 'refs/tags/v${options.version}'`, { timeoutMs: 60_000 });
   if (localTag || remoteTag) {
-    return fail(`Tag v${options.version} already exists ${localTag ? "locally" : "on origin"}.`);
+    return fail(`Tag v${options.version} already exists ${localTag ? 'locally' : 'on origin'}.`);
   }
-  return pass("absent");
+  return pass('absent');
 }
 
 async function checkReleaseMissing(options) {
   const result = await runCommand(
     `env -u GH_TOKEN -u GITHUB_TOKEN gh release view 'v${options.version}' --repo '${githubRepo}'`,
-    { timeoutMs: 60_000 },
+    { timeoutMs: 60_000 }
   );
   if (result.code === 0) {
     return fail(`GitHub release v${options.version} already exists.`);
   }
-  return pass("absent");
+  return pass('absent');
 }
 
 async function checkChangelog(options) {
-  const changelog = await readFile(path.join(repoRoot, "CHANGELOG.md"), "utf8");
+  const changelog = await readFile(path.join(repoRoot, 'CHANGELOG.md'), 'utf8');
   const notes = extractChangelogSectionFromText(changelog, options.version);
   validateMajorMinorReleaseNotes(notes, options.version);
-  return pass(`${notes.split(/\r?\n/).filter((line) => line.trim().startsWith("- ") || line.trim().startsWith("  - ")).length} bullets`);
+  return pass(
+    `${notes.split(/\r?\n/).filter((line) => line.trim().startsWith('- ') || line.trim().startsWith('  - ')).length} bullets`
+  );
 }
 
 async function checkSparkleBuildNumber(options) {
   const buildVersion = releaseBuildVersion(options.version);
-  const xml = await readFile(path.join(repoRoot, "appcast.xml"), "utf8");
+  const xml = await readFile(path.join(repoRoot, 'appcast.xml'), 'utf8');
   let maxVersion = 0;
   for (const match of xml.matchAll(/<sparkle:version>(\d+)<\/sparkle:version>/g)) {
     maxVersion = Math.max(maxVersion, Number.parseInt(match[1], 10));
@@ -273,15 +275,17 @@ async function checkSubrepos() {
     }
   }
   if (problems.length > 0) {
-    return fail(problems.join("; "));
+    return fail(problems.join('; '));
   }
-  return pass("clean and pushed");
+  return pass('clean and pushed');
 }
 
 async function checkSecretScan() {
-  const previousTag = await capture("git tag --sort=-version:refname | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+$' | head -n 1");
+  const previousTag = await capture(
+    "git tag --sort=-version:refname | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+$' | head -n 1"
+  );
   if (!previousTag) {
-    return warn("No previous release tag found; skipped changed-file secret scan.");
+    return warn('No previous release tag found; skipped changed-file secret scan.');
   }
   const changedOutput = await capture(`git diff --name-only '${previousTag}'..HEAD`);
   const changedFiles = changedOutput.split(/\r?\n/).filter(Boolean);
@@ -294,7 +298,7 @@ async function checkSecretScan() {
     }
     let content;
     try {
-      content = await readFile(filePath, "utf8");
+      content = await readFile(filePath, 'utf8');
     } catch {
       continue;
     }
@@ -308,122 +312,124 @@ async function checkSecretScan() {
     }
   }
   if (findings.length > 0) {
-    return fail(`Possible secrets in changed files: ${findings.join("; ")}`);
+    return fail(`Possible secrets in changed files: ${findings.join('; ')}`);
   }
   if (warnings.length > 0) {
-    return warn(`Generic credential-like assignments (review before release): ${warnings.slice(0, 8).join(", ")}`);
+    return warn(`Generic credential-like assignments (review before release): ${warnings.slice(0, 8).join(', ')}`);
   }
   return pass(`${changedFiles.length} changed files since ${previousTag}`);
 }
 
 async function checkRemoteLinuxPackages() {
   const problems = [];
-  for (const arch of ["x64", "arm64"]) {
-    const workflowPath = path.join(repoRoot, ".github", "workflows", `release-build-gxserver-${arch}.yml`);
+  for (const arch of ['x64', 'arm64']) {
+    const workflowPath = path.join(repoRoot, '.github', 'workflows', `release-build-gxserver-${arch}.yml`);
     if (!existsSync(workflowPath)) {
       problems.push(`${arch}: missing Actions workflow`);
       continue;
     }
-    const workflow = await readFile(workflowPath, "utf8");
+    const workflow = await readFile(workflowPath, 'utf8');
     if (!workflow.includes(`build-remote-gxserver-linux-release.sh --arch ${arch}`)) {
       problems.push(`${arch}: workflow does not build its pinned architecture`);
     }
     if (!workflow.includes('GHOSTEX_REQUIRE_BEADS_SMOKE: "1"')) {
       problems.push(`${arch}: workflow does not require the packaged Beads embedded-Dolt smoke test`);
     }
-    if (arch === "arm64" && !workflow.includes("runs-on: ubuntu-24.04-arm")) {
-      problems.push("arm64: workflow does not use a native ARM64 runner for the packaged Beads smoke test");
+    if (arch === 'arm64' && !workflow.includes('runs-on: ubuntu-24.04-arm')) {
+      problems.push('arm64: workflow does not use a native ARM64 runner for the packaged Beads smoke test');
     }
-    if (!workflow.includes("stage-package-and-advance")) {
+    if (!workflow.includes('stage-package-and-advance')) {
       problems.push(`${arch}: workflow does not stage and advance durable release state`);
     }
   }
-  const buildScript = path.join(repoRoot, "tooling", "build-remote-gxserver-linux-release.sh");
-  if (!existsSync(buildScript)) problems.push("missing shared gxserver build script");
+  const buildScript = path.join(repoRoot, 'tooling', 'build-remote-gxserver-linux-release.sh');
+  if (!existsSync(buildScript)) problems.push('missing shared gxserver build script');
   if (problems.length > 0) {
-    return fail(problems.join("; "));
+    return fail(problems.join('; '));
   }
-  return pass("x64 and ARM64 builds are pinned to independent Actions jobs");
+  return pass('x64 and ARM64 builds are pinned to independent Actions jobs');
 }
 
 async function checkGhAuth() {
-  const result = await runCommand("env -u GH_TOKEN -u GITHUB_TOKEN gh auth status -h github.com", { timeoutMs: 30_000 });
+  const result = await runCommand('env -u GH_TOKEN -u GITHUB_TOKEN gh auth status -h github.com', {
+    timeoutMs: 30_000,
+  });
   if (result.code !== 0) {
     return fail(`gh auth status failed: ${shortOutput(result.stderr || result.stdout)}`);
   }
-  return pass("authenticated");
+  return pass('authenticated');
 }
 
 async function checkSigningIdentity() {
-  const identity = process.env.GHOSTEX_CODE_SIGN_IDENTITY?.trim() || "Developer ID Application: Mohamad Youssef (KTKP595G3B)";
-  const result = await runCommand("security find-identity -v -p codesigning", { timeoutMs: 20_000 });
+  const identity =
+    process.env.GHOSTEX_CODE_SIGN_IDENTITY?.trim() || 'Developer ID Application: Mohamad Youssef (KTKP595G3B)';
+  const result = await runCommand('security find-identity -v -p codesigning', { timeoutMs: 20_000 });
   if (result.code === 0 && result.stdout.includes(identity)) {
-    return pass("visible in this shell");
+    return pass('visible in this shell');
   }
-  return warn("Not visible locally; the canonical Actions workflow uses its isolated repository secrets.");
+  return warn('Not visible locally; the canonical Actions workflow uses its isolated repository secrets.');
 }
 
 async function checkNotaryProfile() {
-  const result = await runCommand(
-    "xcrun notarytool history --keychain-profile notarytool-profile | head -n 4",
-    { timeoutMs: 45_000 },
-  );
+  const result = await runCommand('xcrun notarytool history --keychain-profile notarytool-profile | head -n 4', {
+    timeoutMs: 45_000,
+  });
   if (result.code === 0) {
-    return pass("notarytool-profile reachable");
+    return pass('notarytool-profile reachable');
   }
-  return warn("Notary profile not reachable locally; the canonical Actions workflow uses repository secrets.");
+  return warn('Notary profile not reachable locally; the canonical Actions workflow uses repository secrets.');
 }
 
 async function checkSparkleKey() {
   const findCommand = [
-    "find",
-    `'${path.join(repoRoot, "build/arm64/SourcePackages/artifacts/sparkle")}'`,
-    `'${path.join(repoRoot, "build/SourcePackages/artifacts/sparkle")}'`,
+    'find',
+    `'${path.join(repoRoot, 'build/arm64/SourcePackages/artifacts/sparkle')}'`,
+    `'${path.join(repoRoot, 'build/SourcePackages/artifacts/sparkle')}'`,
     "'/tmp/ghostex-xcodebuild/SourcePackages/artifacts/sparkle'",
     "-path '*/Sparkle/bin/generate_appcast' -print -quit 2>/dev/null | xargs dirname 2>/dev/null",
-  ].join(" ");
+  ].join(' ');
   const result = await runCommand(findCommand, { timeoutMs: 20_000 });
   const sparkleBinDir = result.stdout.trim();
   if (!sparkleBinDir) {
-    return warn("Sparkle tools not found locally; the canonical Actions workflow restores its pinned tools.");
+    return warn('Sparkle tools not found locally; the canonical Actions workflow restores its pinned tools.');
   }
-  const keyResult = await runCommand(`'${path.join(sparkleBinDir, "generate_keys")}' -p`, { timeoutMs: 20_000 });
+  const keyResult = await runCommand(`'${path.join(sparkleBinDir, 'generate_keys')}' -p`, { timeoutMs: 20_000 });
   if (keyResult.code !== 0) {
     return warn(`generate_keys -p failed: ${shortOutput(keyResult.stderr)}`);
   }
-  if (!keyResult.stdout.includes("AGWDPeMqfhmbjt8Pbk+VTC9fDfXAYq+cZoLGCYuGn70=")) {
-    return fail("Sparkle public key does not match the app SUPublicEDKey. Do not sign appcasts with this key.");
+  if (!keyResult.stdout.includes('AGWDPeMqfhmbjt8Pbk+VTC9fDfXAYq+cZoLGCYuGn70=')) {
+    return fail('Sparkle public key does not match the app SUPublicEDKey. Do not sign appcasts with this key.');
   }
-  return pass("EdDSA key matches");
+  return pass('EdDSA key matches');
 }
 
 async function checkTypecheck() {
-  const result = await runCommand("bun run typecheck", { timeoutMs: 8 * 60 * 1000 });
+  const result = await runCommand('bun run typecheck', { timeoutMs: 8 * 60 * 1000 });
   if (result.code !== 0) {
     return fail(shortOutput(result.stderr || result.stdout, 10));
   }
-  return pass("tsc clean");
+  return pass('tsc clean');
 }
 
 async function checkReleaseTests() {
-  const result = await runCommand("bun run release:test", { timeoutMs: 12 * 60 * 1000 });
+  const result = await runCommand('bun run release:test', { timeoutMs: 12 * 60 * 1000 });
   if (result.code !== 0) {
     return fail(shortOutput(result.stderr || result.stdout, 12));
   }
-  const summary = result.stdout.match(/Tests?\s+\d+ passed[^\n]*/)?.[0] ?? "passed";
+  const summary = result.stdout.match(/Tests?\s+\d+ passed[^\n]*/)?.[0] ?? 'passed';
   return pass(summary);
 }
 
 async function checkCargo() {
-  for (const crate of ["server", "apps/desktop"]) {
-    const result = await runCommand(`cargo check --manifest-path '${path.join(repoRoot, crate, "Cargo.toml")}'`, {
+  for (const crate of ['server', 'apps/desktop']) {
+    const result = await runCommand(`cargo check --manifest-path '${path.join(repoRoot, crate, 'Cargo.toml')}'`, {
       timeoutMs: 15 * 60 * 1000,
     });
     if (result.code !== 0) {
       return fail(`${crate}: ${shortOutput(result.stderr, 8)}`);
     }
   }
-  return pass("server and gpui check clean");
+  return pass('server and gpui check clean');
 }
 
 async function runChecks(checks) {
@@ -437,7 +443,7 @@ async function runChecks(checks) {
         outcome = fail(String(error?.message ?? error));
       }
       return { durationMs: Date.now() - startedAt, name, ...outcome };
-    }),
+    })
   );
 }
 
@@ -452,24 +458,30 @@ function formatDuration(durationMs) {
 function printResults(results) {
   const nameWidth = Math.max(...results.map((result) => result.name.length)) + 2;
   for (const result of results) {
-    const marker = result.status === "PASS" ? "PASS" : result.status === "WARN" ? "WARN" : "FAIL";
-    console.log(`${marker}  ${result.name.padEnd(nameWidth)} ${formatDuration(result.durationMs).padStart(8)}  ${result.detail}`);
+    const marker = result.status === 'PASS' ? 'PASS' : result.status === 'WARN' ? 'WARN' : 'FAIL';
+    console.log(
+      `${marker}  ${result.name.padEnd(nameWidth)} ${formatDuration(result.durationMs).padStart(8)}  ${result.detail}`
+    );
   }
 }
 
 async function freezeWindow(options) {
-  const headBefore = await capture("git rev-parse HEAD");
+  const headBefore = await capture('git rev-parse HEAD');
   console.log(`\n==> Freeze window: verifying the worktree stays clean for ${options.freezeSeconds}s...`);
   await new Promise((resolve) => setTimeout(resolve, options.freezeSeconds * 1000));
-  const status = await capture("git status --porcelain --untracked-files=all");
-  const headAfter = await capture("git rev-parse HEAD");
+  const status = await capture('git status --porcelain --untracked-files=all');
+  const headAfter = await capture('git rev-parse HEAD');
   if (status) {
-    throw new Error(`Worktree changed during the freeze window:\n${shortOutput(status, 12)}\nInspect, commit, push, and rerun preflight.`);
+    throw new Error(
+      `Worktree changed during the freeze window:\n${shortOutput(status, 12)}\nInspect, commit, push, and rerun preflight.`
+    );
   }
   if (headBefore !== headAfter) {
-    throw new Error(`HEAD moved during the freeze window (${headBefore.slice(0, 10)} -> ${headAfter.slice(0, 10)}). Rerun preflight.`);
+    throw new Error(
+      `HEAD moved during the freeze window (${headBefore.slice(0, 10)} -> ${headAfter.slice(0, 10)}). Rerun preflight.`
+    );
   }
-  console.log("Freeze window passed: worktree stable.");
+  console.log('Freeze window passed: worktree stable.');
 }
 
 async function main() {
@@ -483,45 +495,47 @@ async function main() {
   console.log(`Ghostex fast release preflight for ${options.version} (build ${releaseBuildVersion(options.version)})`);
 
   const fastChecks = [
-    { fn: () => checkBranch(options), name: "branch" },
-    { fn: () => checkWorktreeClean(), name: "worktree-clean" },
-    { fn: () => checkSyncedWithOrigin(options), name: "synced-with-origin" },
-    { fn: () => checkTagMissing(options), name: "tag-missing" },
-    { fn: () => checkReleaseMissing(options), name: "github-release-missing" },
-    { fn: () => checkChangelog(options), name: "changelog-major-minor" },
-    { fn: () => checkSparkleBuildNumber(options), name: "sparkle-build-number" },
-    { fn: () => checkSubrepos(), name: "subrepos-clean" },
-    { fn: () => checkSecretScan(), name: "secret-scan" },
-    { fn: () => checkRemoteLinuxPackages(), name: "remote-linux-packages" },
-    { fn: () => checkSparkleKey(), name: "sparkle-key" },
+    { fn: () => checkBranch(options), name: 'branch' },
+    { fn: () => checkWorktreeClean(), name: 'worktree-clean' },
+    { fn: () => checkSyncedWithOrigin(options), name: 'synced-with-origin' },
+    { fn: () => checkTagMissing(options), name: 'tag-missing' },
+    { fn: () => checkReleaseMissing(options), name: 'github-release-missing' },
+    { fn: () => checkChangelog(options), name: 'changelog-major-minor' },
+    { fn: () => checkSparkleBuildNumber(options), name: 'sparkle-build-number' },
+    { fn: () => checkSubrepos(), name: 'subrepos-clean' },
+    { fn: () => checkSecretScan(), name: 'secret-scan' },
+    { fn: () => checkRemoteLinuxPackages(), name: 'remote-linux-packages' },
+    { fn: () => checkSparkleKey(), name: 'sparkle-key' },
   ];
   if (!options.skipCredentials) {
     fastChecks.push(
-      { fn: () => checkGhAuth(), name: "gh-auth" },
-      { fn: () => checkSigningIdentity(), name: "signing-identity" },
-      { fn: () => checkNotaryProfile(), name: "notary-profile" },
+      { fn: () => checkGhAuth(), name: 'gh-auth' },
+      { fn: () => checkSigningIdentity(), name: 'signing-identity' },
+      { fn: () => checkNotaryProfile(), name: 'notary-profile' }
     );
   }
 
   const heavyChecks = [];
   if (!options.skipTypecheck) {
-    heavyChecks.push({ fn: () => checkTypecheck(), name: "typecheck" });
+    heavyChecks.push({ fn: () => checkTypecheck(), name: 'typecheck' });
   }
   if (!options.skipTests) {
-    heavyChecks.push({ fn: () => checkReleaseTests(), name: "release-tests" });
+    heavyChecks.push({ fn: () => checkReleaseTests(), name: 'release-tests' });
   }
   if (options.cargo) {
-    heavyChecks.push({ fn: () => checkCargo(), name: "cargo-check" });
+    heavyChecks.push({ fn: () => checkCargo(), name: 'cargo-check' });
   }
 
   const [fastResults, heavyResults] = await Promise.all([runChecks(fastChecks), runChecks(heavyChecks)]);
   const results = [...fastResults, ...heavyResults];
-  console.log("");
+  console.log('');
   printResults(results);
 
-  const failed = results.filter((result) => result.status === "FAIL");
+  const failed = results.filter((result) => result.status === 'FAIL');
   if (failed.length > 0) {
-    console.error(`\nPreflight FAILED: ${failed.map((result) => result.name).join(", ")} (${formatDuration(Date.now() - startedAt)} total)`);
+    console.error(
+      `\nPreflight FAILED: ${failed.map((result) => result.name).join(', ')} (${formatDuration(Date.now() - startedAt)} total)`
+    );
     process.exitCode = 1;
     return;
   }
@@ -530,15 +544,15 @@ async function main() {
     await freezeWindow(options);
   }
 
-  const warned = results.filter((result) => result.status === "WARN");
+  const warned = results.filter((result) => result.status === 'WARN');
   console.log(
-    `\nPreflight PASSED in ${formatDuration(Date.now() - startedAt)}${warned.length > 0 ? ` with ${warned.length} warning(s)` : ""}. Canonical dispatch: bun run release:actions -- ${options.version}.`,
+    `\nPreflight PASSED in ${formatDuration(Date.now() - startedAt)}${warned.length > 0 ? ` with ${warned.length} warning(s)` : ''}. Canonical dispatch: bun run release:actions -- ${options.version}.`
   );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
-    console.error("");
+    console.error('');
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });

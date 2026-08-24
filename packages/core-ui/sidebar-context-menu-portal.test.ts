@@ -1,22 +1,22 @@
-import { describe, expect, test } from "vitest";
-import { getSidebarContextMenuBackdropRetarget } from "./sidebar-context-menu-portal";
+import { describe, expect, test } from 'vitest';
+import { getSidebarContextMenuBackdropRetarget } from './sidebar-context-menu-portal';
 
 function createBackdrop() {
-  const containedTarget = { role: "contained" } as Element;
+  const containedTarget = { role: 'contained' } as Element;
   const backdrop = {
     contains: (target: Element) => target === containedTarget,
     style: {
-      pointerEvents: "auto",
+      pointerEvents: 'auto',
     },
   } as unknown as HTMLElement;
 
   return { backdrop, containedTarget };
 }
 
-describe("getSidebarContextMenuBackdropRetarget", () => {
-  test("temporarily removes backdrop pointer targeting while finding the row underneath", () => {
+describe('getSidebarContextMenuBackdropRetarget', () => {
+  test('temporarily removes backdrop pointer targeting while finding the row underneath', () => {
     const { backdrop } = createBackdrop();
-    const rowTarget = { role: "session-row" } as Element;
+    const rowTarget = { role: 'session-row' } as Element;
     const pointerEventsDuringLookup: string[] = [];
 
     const retarget = getSidebarContextMenuBackdropRetarget({
@@ -31,11 +31,11 @@ describe("getSidebarContextMenuBackdropRetarget", () => {
     });
 
     expect(retarget).toBe(rowTarget);
-    expect(pointerEventsDuringLookup).toEqual(["none"]);
-    expect(backdrop.style.pointerEvents).toBe("auto");
+    expect(pointerEventsDuringLookup).toEqual(['none']);
+    expect(backdrop.style.pointerEvents).toBe('auto');
   });
 
-  test("does not retarget context menus back into the existing backdrop", () => {
+  test('does not retarget context menus back into the existing backdrop', () => {
     const { backdrop, containedTarget } = createBackdrop();
 
     expect(
@@ -44,7 +44,7 @@ describe("getSidebarContextMenuBackdropRetarget", () => {
         clientX: 1,
         clientY: 2,
         elementFromPoint: () => backdrop,
-      }),
+      })
     ).toBeUndefined();
 
     expect(
@@ -53,7 +53,7 @@ describe("getSidebarContextMenuBackdropRetarget", () => {
         clientX: 1,
         clientY: 2,
         elementFromPoint: () => containedTarget,
-      }),
+      })
     ).toBeUndefined();
   });
 });

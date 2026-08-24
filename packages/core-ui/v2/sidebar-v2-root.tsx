@@ -1,43 +1,39 @@
-import { IconFolders, IconLayoutList } from "@tabler/icons-react";
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { IconFolders, IconLayoutList } from '@tabler/icons-react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   SidebarNewSessionEnvMode,
   SidebarProjectGroupingMode,
   SidebarV2Layout,
   SidebarVersion,
   ghostexSettings,
-} from "../../shared/ghostex-settings";
-import { createSidebarV2ProjectGroupingSettings } from "../../shared/sidebar-v2-logical-project";
-import type { SidebarAgentButton } from "../../shared/sidebar-agents";
+} from '../../shared/ghostex-settings';
+import { createSidebarV2ProjectGroupingSettings } from '../../shared/sidebar-v2-logical-project';
+import type { SidebarAgentButton } from '../../shared/sidebar-agents';
 import type {
   SidebarSessionItem,
   SidebarSessionLifecycleCapabilities,
   SidebarSessionTagFilter,
-} from "../../shared/session-grid-contract";
+} from '../../shared/session-grid-contract';
 import {
   normalizeWorktreePathForComparison,
   resolveOrphanedWorktreePathForSession,
   resolveSidebarV2ManagedWorktreePath,
-} from "../../shared/sidebar-v2-worktree-cleanup";
+} from '../../shared/sidebar-v2-worktree-cleanup';
 import {
   canSettleSidebarV2Session,
   canSnoozeSidebarV2Session,
   sidebarV2SessionWokeAtMs,
   type SidebarV2LifecycleCapabilities,
-} from "../../shared/sidebar-v2-lifecycle";
-import type { SidebarV2Session } from "../../shared/sidebar-v2-session";
-import { formatSidebarV2SnoozeWakeLabel } from "../../shared/sidebar-v2-snooze";
-import { reconcileSidebarV2CreationOrder } from "../../shared/sidebar-v2-sort";
-import {
-  firstValidTimestampMs,
-  resolveSidebarV2Status,
-  type SidebarV2Status,
-} from "../../shared/sidebar-v2-status";
-import { buildSidebarSessionDetailsClipboardText } from "../../shared/session-details-copy";
-import { openAppModal } from "../app-modal-host-bridge";
-import type { SidebarV2GroupOrderRow } from "../../shared/sidebar-v2-group-order";
-import type { SidebarGroupDropTarget, SidebarSessionDropTarget } from "../sidebar-dnd";
-import type { SidebarGroupRecord } from "../sidebar-store";
+} from '../../shared/sidebar-v2-lifecycle';
+import type { SidebarV2Session } from '../../shared/sidebar-v2-session';
+import { formatSidebarV2SnoozeWakeLabel } from '../../shared/sidebar-v2-snooze';
+import { reconcileSidebarV2CreationOrder } from '../../shared/sidebar-v2-sort';
+import { firstValidTimestampMs, resolveSidebarV2Status, type SidebarV2Status } from '../../shared/sidebar-v2-status';
+import { buildSidebarSessionDetailsClipboardText } from '../../shared/session-details-copy';
+import { openAppModal } from '../app-modal-host-bridge';
+import type { SidebarV2GroupOrderRow } from '../../shared/sidebar-v2-group-order';
+import type { SidebarGroupDropTarget, SidebarSessionDropTarget } from '../sidebar-dnd';
+import type { SidebarGroupRecord } from '../sidebar-store';
 /*
  * CDXC:SidebarV2ContextMenuParity 2026-07-30:
  * The ONE thing V2 borrows from the V1 card: its exported, pure eligibility
@@ -45,16 +41,16 @@ import type { SidebarGroupRecord } from "../sidebar-store";
  * the two session menus from drifting apart about which agents can fork, which
  * sessions can be resumed from a copied command, and what a remote row may do.
  */
-import { getSidebarSessionContextMenuEligibility } from "../sortable-session-card";
-import type { WebviewApi } from "../webview-api";
-import { useSidebarV2Clock } from "./sidebar-v2-clock";
+import { getSidebarSessionContextMenuEligibility } from '../sortable-session-card';
+import type { WebviewApi } from '../webview-api';
+import { useSidebarV2Clock } from './sidebar-v2-clock';
 import {
   SidebarV2ContextMenu,
   createSidebarV2ContextMenuSections,
   createSidebarV2ProjectGroupMenuSections,
   type SidebarV2ContextMenuPosition,
-} from "./sidebar-v2-context-menu";
-import { SidebarV2ProjectGroupSection } from "./sidebar-v2-group-header";
+} from './sidebar-v2-context-menu';
+import { SidebarV2ProjectGroupSection } from './sidebar-v2-group-header';
 import {
   postSidebarV2CloseSession,
   postSidebarV2CloseWorkspaceProjects,
@@ -78,27 +74,24 @@ import {
   postSidebarV2ToggleCloseAfterDone,
   postSidebarV2UnsettleSession,
   postSidebarV2UnsnoozeSession,
-} from "./sidebar-v2-messages";
-import { SidebarV2ScopeMenu } from "./sidebar-v2-scope-menu";
-import { SidebarV2SessionRow, type SidebarV2SessionRowLifecycle } from "./sidebar-v2-session-row";
-import { SidebarV2Shelf } from "./sidebar-v2-shelf";
-import { SidebarV2SnoozePopover } from "./sidebar-v2-snooze-popover";
-import {
-  SidebarV2CreateButton,
-  type SidebarV2CreateButtonPosition,
-} from "./sidebar-v2-create-button";
-import { SidebarV2WorktreeCleanupPrompt } from "./sidebar-v2-worktree-cleanup-prompt";
+} from './sidebar-v2-messages';
+import { SidebarV2ScopeMenu } from './sidebar-v2-scope-menu';
+import { SidebarV2SessionRow, type SidebarV2SessionRowLifecycle } from './sidebar-v2-session-row';
+import { SidebarV2Shelf } from './sidebar-v2-shelf';
+import { SidebarV2SnoozePopover } from './sidebar-v2-snooze-popover';
+import { SidebarV2CreateButton, type SidebarV2CreateButtonPosition } from './sidebar-v2-create-button';
+import { SidebarV2WorktreeCleanupPrompt } from './sidebar-v2-worktree-cleanup-prompt';
 import {
   SidebarV2WorktreePopover,
   type SidebarV2WorktreeDraft,
   type SidebarV2WorktreeEventSource,
-} from "./sidebar-v2-worktree-popover";
+} from './sidebar-v2-worktree-popover';
 import {
   SIDEBAR_V2_ALL_SCOPE_ID,
   createSidebarV2ViewModel,
   type SidebarV2GroupModel,
   type SidebarV2ProjectIdentity,
-} from "./sidebar-v2-view-model";
+} from './sidebar-v2-view-model';
 
 /**
  * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -194,9 +187,7 @@ export type SidebarV2RootProps = {
   lifecycleCapabilities?: SidebarSessionLifecycleCapabilities;
   /** Per-remote-machine capability, keyed by `remoteMachineContext.machineId`.
       A connected machine missing from this map is treated as incapable. */
-  lifecycleCapabilitiesByMachineId?: Readonly<
-    Record<string, SidebarSessionLifecycleCapabilities>
-  >;
+  lifecycleCapabilitiesByMachineId?: Readonly<Record<string, SidebarSessionLifecycleCapabilities>>;
   /**
    * CDXC:SidebarV2Worktree 2026-07-29:
    * Where host answers arrive. SidebarApp listens on this same source, and gpui
@@ -247,9 +238,7 @@ export type SidebarV2RootProps = {
    * to re-derive the merge semantics of a patch, and so clearing an override
    * (back to the automatic rule) is expressible as an absent key.
    */
-  onSetProjectGroupingOverrides?: (
-    overrides: Readonly<Record<string, SidebarProjectGroupingMode>>,
-  ) => void;
+  onSetProjectGroupingOverrides?: (overrides: Readonly<Record<string, SidebarProjectGroupingMode>>) => void;
   /** Return to the classic sidebar from inside V2's own chrome. */
   onSetSidebarVersion: (sidebarVersion: SidebarVersion) => void;
   /** Pointer-resolved insertion boundary from SidebarApp's shared DnD pipeline. */
@@ -389,9 +378,7 @@ export function SidebarV2Root({
    * pending flag by itself; the timeout below covers the idempotent no-op case
    * where no delta will ever arrive.
    */
-  const [pendingLifecycleBySessionId, setPendingLifecycleBySessionId] = useState<
-    Readonly<Record<string, string>>
-  >({});
+  const [pendingLifecycleBySessionId, setPendingLifecycleBySessionId] = useState<Readonly<Record<string, string>>>({});
   /*
    * Shelf defaults keep Settled open (it is the recent history you
    * scroll back through), Snoozed stays shut (you asked not to see it).
@@ -404,8 +391,7 @@ export function SidebarV2Root({
    * user submitted. Refs shadow both request ids so the result listener can be
    * subscribed once instead of re-subscribing on every keystroke.
    */
-  const [worktreePopoverState, setWorktreePopoverState] =
-    useState<SidebarV2WorktreePopoverState>();
+  const [worktreePopoverState, setWorktreePopoverState] = useState<SidebarV2WorktreePopoverState>();
   const [pendingWorktreeRequestId, setPendingWorktreeRequestId] = useState<string>();
   const [worktreeErrorMessage, setWorktreeErrorMessage] = useState<string>();
   const [cleanupState, setCleanupState] = useState<SidebarV2WorktreeCleanupState>();
@@ -419,9 +405,7 @@ export function SidebarV2Root({
    * overrides keyed `groupId:tone` so a project the user never touched keeps
    * the shared defaults instead of being seeded with a stale snapshot.
    */
-  const [projectShelfOverrides, setProjectShelfOverrides] = useState<
-    Readonly<Record<string, boolean>>
-  >({});
+  const [projectShelfOverrides, setProjectShelfOverrides] = useState<Readonly<Record<string, boolean>>>({});
 
   /*
    * First-seen registry. `createdAt` from gxserver is authoritative whenever it
@@ -453,9 +437,7 @@ export function SidebarV2Root({
     for (const groupId of groupIds) {
       const machineId = groupsById[groupId]?.remoteMachineContext?.machineId;
       const capabilities =
-        machineId === undefined
-          ? lifecycleCapabilities
-          : lifecycleCapabilitiesByMachineId?.[machineId];
+        machineId === undefined ? lifecycleCapabilities : lifecycleCapabilitiesByMachineId?.[machineId];
       resolved[groupId] = {
         settle: capabilities?.sessionSettlement === true,
         snooze: capabilities?.sessionSnooze === true,
@@ -480,9 +462,7 @@ export function SidebarV2Root({
     for (const groupId of groupIds) {
       const machineId = groupsById[groupId]?.remoteMachineContext?.machineId;
       const capabilities =
-        machineId === undefined
-          ? lifecycleCapabilities
-          : lifecycleCapabilitiesByMachineId?.[machineId];
+        machineId === undefined ? lifecycleCapabilities : lifecycleCapabilitiesByMachineId?.[machineId];
       resolved[groupId] = capabilities?.sessionGitStatus === true;
     }
     return resolved;
@@ -500,17 +480,13 @@ export function SidebarV2Root({
     for (const groupId of groupIds) {
       const machineId = groupsById[groupId]?.remoteMachineContext?.machineId;
       const capabilities =
-        machineId === undefined
-          ? lifecycleCapabilities
-          : lifecycleCapabilitiesByMachineId?.[machineId];
+        machineId === undefined ? lifecycleCapabilities : lifecycleCapabilitiesByMachineId?.[machineId];
       /*
        * A worktree needs a real code project to cut from, so the Quick
        * collection and any group without project context can never offer it,
        * however capable its daemon is.
        */
-      resolved[groupId] =
-        capabilities?.worktreeSessions === true &&
-        groupsById[groupId]?.projectContext !== undefined;
+      resolved[groupId] = capabilities?.worktreeSessions === true && groupsById[groupId]?.projectContext !== undefined;
     }
     return resolved;
   }, [groupIds, groupsById, lifecycleCapabilities, lifecycleCapabilitiesByMachineId]);
@@ -539,25 +515,17 @@ export function SidebarV2Root({
       const machineId = groupsById[groupId]?.remoteMachineContext?.machineId;
       if (machineId === undefined) {
         resolved[groupId] =
-          autoSettleAfterDays === undefined
-            ? settings.sidebarAutoSettleAfterDays
-            : autoSettleAfterDays;
+          autoSettleAfterDays === undefined ? settings.sidebarAutoSettleAfterDays : autoSettleAfterDays;
         continue;
       }
       resolved[groupId] = autoSettleAfterDaysByMachineId?.[machineId] ?? null;
     }
     return resolved;
-  }, [
-    autoSettleAfterDays,
-    autoSettleAfterDaysByMachineId,
-    groupIds,
-    groupsById,
-    settings.sidebarAutoSettleAfterDays,
-  ]);
+  }, [autoSettleAfterDays, autoSettleAfterDaysByMachineId, groupIds, groupsById, settings.sidebarAutoSettleAfterDays]);
 
   const projectGrouping = useMemo(
     () => createSidebarV2ProjectGroupingSettings(settings.sidebarProjectGroupingOverrides),
-    [settings.sidebarProjectGroupingOverrides],
+    [settings.sidebarProjectGroupingOverrides]
   );
 
   const viewModel = useMemo(
@@ -587,7 +555,7 @@ export function SidebarV2Root({
       sessionIdsByGroup,
       settings.sidebarAutoSettleAfterDays,
       sessionsById,
-    ],
+    ]
   );
 
   /*
@@ -600,15 +568,15 @@ export function SidebarV2Root({
    */
   const groupOrderRows = useMemo<readonly SidebarV2GroupOrderRow[]>(
     () =>
-      layout === "byProject"
+      layout === 'byProject'
         ? viewModel.groups
-          .filter((group) => !group.isQuick)
-          .map((group) => ({
-            groupId: group.groupId,
-            memberGroupIds: group.memberGroupIds,
-          }))
+            .filter((group) => !group.isQuick)
+            .map((group) => ({
+              groupId: group.groupId,
+              memberGroupIds: group.memberGroupIds,
+            }))
         : [],
-    [layout, viewModel.groups],
+    [layout, viewModel.groups]
   );
   useEffect(() => {
     onGroupedRowsChange?.(groupOrderRows);
@@ -651,9 +619,7 @@ export function SidebarV2Root({
     if (activeGroupId === undefined) {
       return undefined;
     }
-    return (sessionIdsByGroup[activeGroupId] ?? []).find(
-      (sessionId) => sessionsById[sessionId]?.isFocused === true,
-    );
+    return (sessionIdsByGroup[activeGroupId] ?? []).find((sessionId) => sessionsById[sessionId]?.isFocused === true);
   }, [groupIds, groupsById, sessionIdsByGroup, sessionsById]);
 
   const resolveStatus = (session: SidebarV2Session): SidebarV2Status => {
@@ -682,10 +648,7 @@ export function SidebarV2Root({
    * agent button uses, with the same last-used agent. V2 adds the worktree
    * branch beside it, never in front of it.
    */
-  const configuredAgents = useMemo(
-    () => (agents ?? []).filter((agent) => agent.command?.trim()),
-    [agents],
-  );
+  const configuredAgents = useMemo(() => (agents ?? []).filter((agent) => agent.command?.trim()), [agents]);
   const primaryAgent =
     configuredAgents.find((agent) => agent.agentId === primaryAgentId) ??
     configuredAgents.find((agent) => agent.isDefault) ??
@@ -706,13 +669,9 @@ export function SidebarV2Root({
       return scopeId;
     }
     const activeGroupId = groupIds.find(
-      (groupId) =>
-        groupsById[groupId]?.isActive === true && worktreeCapabilityByGroupId[groupId] === true,
+      (groupId) => groupsById[groupId]?.isActive === true && worktreeCapabilityByGroupId[groupId] === true
     );
-    return (
-      activeGroupId ??
-      groupIds.find((groupId) => worktreeCapabilityByGroupId[groupId] === true)
-    );
+    return activeGroupId ?? groupIds.find((groupId) => worktreeCapabilityByGroupId[groupId] === true);
   }, [groupIds, groupsById, scopeId, worktreeCapabilityByGroupId]);
 
   /*
@@ -728,14 +687,11 @@ export function SidebarV2Root({
    * the only correct answer rather than a silent downgrade.
    */
   const headerCreateGroupId = useMemo(() => {
-    const isProjectGroup = (groupId: string): boolean =>
-      groupsById[groupId]?.projectContext !== undefined;
+    const isProjectGroup = (groupId: string): boolean => groupsById[groupId]?.projectContext !== undefined;
     if (scopeId !== SIDEBAR_V2_ALL_SCOPE_ID && isProjectGroup(scopeId)) {
       return scopeId;
     }
-    const activeGroupId = groupIds.find(
-      (groupId) => groupsById[groupId]?.isActive === true && isProjectGroup(groupId),
-    );
+    const activeGroupId = groupIds.find((groupId) => groupsById[groupId]?.isActive === true && isProjectGroup(groupId));
     return activeGroupId ?? groupIds.find(isProjectGroup);
   }, [groupIds, groupsById, scopeId]);
 
@@ -747,10 +703,7 @@ export function SidebarV2Root({
     onRunAgent(launchAgent, groupId);
   };
 
-  const openWorktreePopover = (
-    position: SidebarV2CreateButtonPosition,
-    groupId: string | undefined,
-  ) => {
+  const openWorktreePopover = (position: SidebarV2CreateButtonPosition, groupId: string | undefined) => {
     if (!groupId) {
       return;
     }
@@ -759,7 +712,7 @@ export function SidebarV2Root({
   };
 
   const submitWorktreeSession = (groupId: string, draft: SidebarV2WorktreeDraft) => {
-    const requestId = createSidebarV2RequestId("sidebar-v2-worktree");
+    const requestId = createSidebarV2RequestId('sidebar-v2-worktree');
     pendingWorktreeRequestIdRef.current = requestId;
     setPendingWorktreeRequestId(requestId);
     setWorktreeErrorMessage(undefined);
@@ -809,7 +762,7 @@ export function SidebarV2Root({
           ? { cwd: item.cwd, sessionId: item.sessionId }
           : { cwd: item.cwd, sessionId: item.sessionId, worktreePath };
       }),
-    [sessionsById],
+    [sessionsById]
   );
 
   const groupIdForSession = (sessionId: string): string | undefined =>
@@ -846,7 +799,7 @@ export function SidebarV2Root({
       setCleanupState(undefined);
       return;
     }
-    const requestId = createSidebarV2RequestId("sidebar-v2-worktree-remove");
+    const requestId = createSidebarV2RequestId('sidebar-v2-worktree-remove');
     cleanupRequestIdRef.current = requestId;
     setCleanupState({
       ...state,
@@ -875,10 +828,10 @@ export function SidebarV2Root({
     const source: SidebarV2WorktreeEventSource = messageSource ?? window;
     const handleMessage = (event: Event) => {
       const data = (event as MessageEvent<Record<string, unknown> | undefined>).data;
-      if (!data || typeof data !== "object") {
+      if (!data || typeof data !== 'object') {
         return;
       }
-      if (data.type === "worktreeSessionResult") {
+      if (data.type === 'worktreeSessionResult') {
         if (data.requestId !== pendingWorktreeRequestIdRef.current) {
           return;
         }
@@ -890,13 +843,11 @@ export function SidebarV2Root({
           return;
         }
         setWorktreeErrorMessage(
-          typeof data.error === "string" && data.error.trim()
-            ? data.error
-            : "Could not create the worktree session.",
+          typeof data.error === 'string' && data.error.trim() ? data.error : 'Could not create the worktree session.'
         );
         return;
       }
-      if (data.type !== "sessionWorktreeRemovalResult") {
+      if (data.type !== 'sessionWorktreeRemovalResult') {
         return;
       }
       if (data.requestId !== cleanupRequestIdRef.current) {
@@ -904,7 +855,7 @@ export function SidebarV2Root({
       }
       cleanupRequestIdRef.current = undefined;
       const warnings = Array.isArray(data.warnings)
-        ? data.warnings.filter((warning): warning is string => typeof warning === "string")
+        ? data.warnings.filter((warning): warning is string => typeof warning === 'string')
         : undefined;
       setCleanupState((previous) => {
         if (!previous) {
@@ -919,17 +870,15 @@ export function SidebarV2Root({
         return {
           ...previous,
           errorMessage:
-            typeof data.error === "string" && data.error.trim()
-              ? data.error
-              : "Could not remove the worktree.",
+            typeof data.error === 'string' && data.error.trim() ? data.error : 'Could not remove the worktree.',
           requestId: undefined,
           warnings,
         };
       });
     };
-    source.addEventListener("message", handleMessage);
+    source.addEventListener('message', handleMessage);
     return () => {
-      source.removeEventListener("message", handleMessage);
+      source.removeEventListener('message', handleMessage);
     };
   }, [messageSource]);
 
@@ -940,12 +889,9 @@ export function SidebarV2Root({
    * control re-enables without any explicit acknowledgement channel.
    */
   const lifecycleSignature = (session: SidebarV2Session): string =>
-    [
-      session.settledOverride ?? "",
-      session.settledAt ?? "",
-      session.snoozedUntil ?? "",
-      session.snoozedAt ?? "",
-    ].join("|");
+    [session.settledOverride ?? '', session.settledAt ?? '', session.snoozedUntil ?? '', session.snoozedAt ?? ''].join(
+      '|'
+    );
 
   const isLifecyclePending = (session: SidebarV2Session): boolean =>
     pendingLifecycleBySessionId[session.sessionId] === lifecycleSignature(session);
@@ -977,12 +923,10 @@ export function SidebarV2Root({
   const wakeSession = (session: SidebarV2Session) =>
     runLifecycleCommand(session, () => postSidebarV2UnsnoozeSession(vscode, session.sessionId));
   const snoozeSession = (session: SidebarV2Session, snoozedUntil: string) =>
-    runLifecycleCommand(session, () =>
-      postSidebarV2SnoozeSession(vscode, session.sessionId, snoozedUntil),
-    );
+    runLifecycleCommand(session, () => postSidebarV2SnoozeSession(vscode, session.sessionId, snoozedUntil));
 
   const sessionCapabilities = (session: SidebarV2Session): SidebarV2LifecycleCapabilities =>
-    viewModel.capabilitiesByGroupId[session.projectId ?? ""] ?? { settle: false, snooze: false };
+    viewModel.capabilitiesByGroupId[session.projectId ?? ''] ?? { settle: false, snooze: false };
 
   /**
    * The hover-slot lifecycle contract for one row. `shelf` is where the row is
@@ -992,8 +936,8 @@ export function SidebarV2Root({
    */
   const resolveRowLifecycle = (
     session: SidebarV2Session,
-    shelf: "inbox" | "settled" | "snoozed",
-    options: { isBrowser: boolean },
+    shelf: 'inbox' | 'settled' | 'snoozed',
+    options: { isBrowser: boolean }
   ): SidebarV2SessionRowLifecycle => {
     const capabilities = sessionCapabilities(session);
     const wakeAtMs = firstValidTimestampMs(session.snoozedUntil);
@@ -1004,12 +948,11 @@ export function SidebarV2Root({
        * `snoozedUntil` for ~24h after the wake precisely so this indicator can
        * survive the trip; it is the client that decides when it stops helping.
        */
-      session.sessionId !== activeSessionId &&
-      sidebarV2SessionWokeAtMs(session, { capabilities, nowMs }) !== null;
+      session.sessionId !== activeSessionId && sidebarV2SessionWokeAtMs(session, { capabilities, nowMs }) !== null;
 
     if (options.isBrowser) {
       return {
-        action: "none",
+        action: 'none',
         isPending: false,
         isWoke: false,
         onSettle: () => undefined,
@@ -1021,33 +964,28 @@ export function SidebarV2Root({
     }
 
     const action =
-      shelf === "settled"
+      shelf === 'settled'
         ? capabilities.settle
-          ? "unsettle"
-          : "none"
-        : shelf === "snoozed"
+          ? 'unsettle'
+          : 'none'
+        : shelf === 'snoozed'
           ? capabilities.snooze
-            ? "wake"
-            : "none"
+            ? 'wake'
+            : 'none'
           : canSettleSidebarV2Session(session, { capabilities })
-            ? "settle"
-            : "none";
+            ? 'settle'
+            : 'none';
 
     return {
       action,
       isPending: isLifecyclePending(session),
       isWoke,
       onSettle: () => settleSession(session),
-      onSnooze: (position) =>
-        setSnoozeMenuState({ position, sessionId: session.sessionId }),
+      onSnooze: (position) => setSnoozeMenuState({ position, sessionId: session.sessionId }),
       onUnsettle: () => unsettleSession(session),
       onWake: () => wakeSession(session),
-      showSnooze:
-        shelf === "inbox" && canSnoozeSidebarV2Session(session, { capabilities }),
-      wakeLabel:
-        shelf === "snoozed" && wakeAtMs !== null
-          ? formatSidebarV2SnoozeWakeLabel(wakeAtMs, nowMs)
-          : undefined,
+      showSnooze: shelf === 'inbox' && canSnoozeSidebarV2Session(session, { capabilities }),
+      wakeLabel: shelf === 'snoozed' && wakeAtMs !== null ? formatSidebarV2SnoozeWakeLabel(wakeAtMs, nowMs) : undefined,
     };
   };
 
@@ -1055,25 +993,23 @@ export function SidebarV2Root({
     session: SidebarV2Session,
     options: {
       project?: SidebarV2ProjectIdentity;
-      shelf?: "inbox" | "settled" | "snoozed";
+      shelf?: 'inbox' | 'settled' | 'snoozed';
       slimLabel?: string;
-      variant: "card" | "slim";
-    },
+      variant: 'card' | 'slim';
+    }
   ) => {
     const item = sessionsById[session.sessionId];
     if (!item) {
       return null;
     }
-    const isBrowser = item.kind === "browser" || item.sessionKind === "browser";
+    const isBrowser = item.kind === 'browser' || item.sessionKind === 'browser';
     const dragGroupId = session.projectId;
     return (
       <SidebarV2SessionRow
         dragGroupId={dragGroupId}
-        dragIndex={
-          dragGroupId ? (sessionIdsByGroup[dragGroupId] ?? []).indexOf(session.sessionId) : 0
-        }
+        dragIndex={dragGroupId ? (sessionIdsByGroup[dragGroupId] ?? []).indexOf(session.sessionId) : 0}
         dropPosition={
-          pinnedSessionDropIndicator?.kind === "session" &&
+          pinnedSessionDropIndicator?.kind === 'session' &&
           pinnedSessionDropIndicator.groupId === dragGroupId &&
           pinnedSessionDropIndicator.sessionId === session.sessionId
             ? pinnedSessionDropIndicator.position
@@ -1085,19 +1021,12 @@ export function SidebarV2Root({
          * rows are handed `undefined` and are therefore byte-identical to rows
          * from a session with no git data at all.
          */
-        gitStatus={
-          gitStatusCapabilityByGroupId[session.projectId ?? ""] === true
-            ? item.gitStatus
-            : undefined
-        }
+        gitStatus={gitStatusCapabilityByGroupId[session.projectId ?? ''] === true ? item.gitStatus : undefined}
         isActive={session.sessionId === activeSessionId}
-        isMenuOpen={
-          menuState?.sessionId === session.sessionId ||
-          snoozeMenuState?.sessionId === session.sessionId
-        }
+        isMenuOpen={menuState?.sessionId === session.sessionId || snoozeMenuState?.sessionId === session.sessionId}
         isRenaming={renamingSessionId === session.sessionId}
         key={session.sessionId}
-        lifecycle={resolveRowLifecycle(session, options.shelf ?? "inbox", { isBrowser })}
+        lifecycle={resolveRowLifecycle(session, options.shelf ?? 'inbox', { isBrowser })}
         /*
          * CDXC:SidebarV2LogicalProjects 2026-07-29:
          * The badge is resolved from the row's OWN host group, never from the
@@ -1106,7 +1035,7 @@ export function SidebarV2Root({
          * badge is to say which one each row came from. Local groups carry no
          * machine name, so local rows get no badge.
          */
-        machineName={viewModel.projectsByGroupId[session.projectId ?? ""]?.machineName}
+        machineName={viewModel.projectsByGroupId[session.projectId ?? '']?.machineName}
         onActivate={() => activateSession(session.sessionId)}
         onOpenMenu={(position) => setMenuState({ position, sessionId: session.sessionId })}
         onRenameCancel={() => setRenamingSessionId(undefined)}
@@ -1116,9 +1045,7 @@ export function SidebarV2Root({
         }}
         onRenameStart={() => setRenamingSessionId(session.sessionId)}
         onTogglePinned={(pinned) => postSidebarV2SetSessionPinned(vscode, session.sessionId, pinned)}
-        pinnedReorderEnabled={
-          options.shelf === undefined && !isPinnedSessionReorderDisabled
-        }
+        pinnedReorderEnabled={options.shelf === undefined && !isPinnedSessionReorderDisabled}
         project={options.project}
         session={item}
         showProjectIcons={showProjectIcons}
@@ -1178,7 +1105,7 @@ export function SidebarV2Root({
       return undefined;
     }
     const projectPath = normalizeWorktreePathForComparison(
-      groupId === undefined ? undefined : groupsById[groupId]?.projectContext?.path,
+      groupId === undefined ? undefined : groupsById[groupId]?.projectContext?.path
     );
     return projectPath !== null && projectPath === cwd ? undefined : branch;
   })();
@@ -1197,10 +1124,7 @@ export function SidebarV2Root({
    * - the two copy flags are user settings; both default OFF, so an untouched
    *   install sees no copy items in either sidebar.
    */
-  const menuGroup =
-    menuState === undefined
-      ? undefined
-      : groupsById[groupIdForSession(menuState.sessionId) ?? ""];
+  const menuGroup = menuState === undefined ? undefined : groupsById[groupIdForSession(menuState.sessionId) ?? ''];
   const menuEligibility = menuSession
     ? getSidebarSessionContextMenuEligibility({
         isProjectSessionListMoreRow: false,
@@ -1222,7 +1146,7 @@ export function SidebarV2Root({
     viewModel.flat.snoozed.length === 0 &&
     viewModel.browserSessions.length === 0;
   const groupedIsEmpty = viewModel.groups.every((group) => group.sessionCount === 0);
-  const isEmpty = layout === "flat" ? flatIsEmpty : groupedIsEmpty || viewModel.groups.length === 0;
+  const isEmpty = layout === 'flat' ? flatIsEmpty : groupedIsEmpty || viewModel.groups.length === 0;
 
   const emptyState = (() => {
     /*
@@ -1239,32 +1163,26 @@ export function SidebarV2Root({
     if (isSearchFiltering) {
       const trimmedQuery = searchQuery.trim();
       return (
-        <p className="sidebar-v2-empty-message">
-          {trimmedQuery ? `No sessions match “${trimmedQuery}”` : "No sessions match your search"}
+        <p className='sidebar-v2-empty-message'>
+          {trimmedQuery ? `No sessions match “${trimmedQuery}”` : 'No sessions match your search'}
         </p>
       );
     }
     if (selectedSessionTagFilters.length > 0) {
-      return <p className="sidebar-v2-empty-message">No sessions match the selected tags</p>;
+      return <p className='sidebar-v2-empty-message'>No sessions match the selected tags</p>;
     }
     if (scopedProjectLabel !== undefined && viewModel.hasAnySession) {
-      return (
-        <p className="sidebar-v2-empty-message">{`No sessions in ${scopedProjectLabel} yet`}</p>
-      );
+      return <p className='sidebar-v2-empty-message'>{`No sessions in ${scopedProjectLabel} yet`}</p>;
     }
     return (
       <>
-        <p className="sidebar-v2-empty-message">No sessions yet</p>
+        <p className='sidebar-v2-empty-message'>No sessions yet</p>
         {/*
          * The escape hatch lives in the empty state on purpose: an empty V2
          * inbox is the one moment where a user can reasonably wonder whether
          * the new sidebar lost their sessions.
          */}
-        <button
-          className="sidebar-v2-empty-action"
-          onClick={() => onSetSidebarVersion("v1")}
-          type="button"
-        >
+        <button className='sidebar-v2-empty-action' onClick={() => onSetSidebarVersion('v1')} type='button'>
           Switch back to the classic sidebar
         </button>
       </>
@@ -1292,22 +1210,15 @@ export function SidebarV2Root({
    * statement about the group the user acted on, and widening it would let one
    * click scatter rows the user never touched.
    */
-  const setGroupGroupingMode = (
-    group: SidebarV2GroupModel,
-    mode: SidebarProjectGroupingMode,
-  ) => {
+  const setGroupGroupingMode = (group: SidebarV2GroupModel, mode: SidebarProjectGroupingMode) => {
     if (!onSetProjectGroupingOverrides) {
       return;
     }
     const affectedGroups =
-      mode === "separate" || !group.repositoryCanonicalKey
+      mode === 'separate' || !group.repositoryCanonicalKey
         ? [group]
-        : viewModel.groups.filter(
-            (candidate) => candidate.repositoryCanonicalKey === group.repositoryCanonicalKey,
-          );
-    const overrideKeys = [
-      ...new Set(affectedGroups.flatMap((affected) => affected.groupingOverrideKeys)),
-    ];
+        : viewModel.groups.filter((candidate) => candidate.repositoryCanonicalKey === group.repositoryCanonicalKey);
+    const overrideKeys = [...new Set(affectedGroups.flatMap((affected) => affected.groupingOverrideKeys))];
     if (overrideKeys.length === 0) {
       return;
     }
@@ -1344,45 +1255,39 @@ export function SidebarV2Root({
       const record = groupsById[memberGroupId];
       return (
         record?.projectContext !== undefined &&
-        (record.projectContext.canRemoveProject === true ||
-          record.remoteMachineContext !== undefined)
+        (record.projectContext.canRemoveProject === true || record.remoteMachineContext !== undefined)
       );
     });
 
   const groupMenuSections = groupMenuGroup
     ? createSidebarV2ProjectGroupMenuSections(
-      {
-        /*
-         * The grouping submenu needs BOTH a mergeable repository and a caller
-         * that can persist the choice; without the writer it would be a radio
-         * group that forgets. Close Project stands on its own gate below, so a
-         * non-git project still gets a menu.
-         */
-        canGroupAcrossMachines:
-          groupMenuGroup.canGroupAcrossMachines && onSetProjectGroupingOverrides !== undefined,
-        ...(groupMenuGroup.groupingMode ? { groupingMode: groupMenuGroup.groupingMode } : {}),
-      },
-      {
-        onCloseProject:
-          closableMemberGroupIds(groupMenuGroup).length > 0
-            ? () =>
-                postSidebarV2CloseWorkspaceProjects(
-                  vscode,
-                  closableMemberGroupIds(groupMenuGroup),
-                )
-            : undefined,
-        onSetGroupingMode: (mode) => setGroupGroupingMode(groupMenuGroup, mode),
-      },
-    )
+        {
+          /*
+           * The grouping submenu needs BOTH a mergeable repository and a caller
+           * that can persist the choice; without the writer it would be a radio
+           * group that forgets. Close Project stands on its own gate below, so a
+           * non-git project still gets a menu.
+           */
+          canGroupAcrossMachines: groupMenuGroup.canGroupAcrossMachines && onSetProjectGroupingOverrides !== undefined,
+          ...(groupMenuGroup.groupingMode ? { groupingMode: groupMenuGroup.groupingMode } : {}),
+        },
+        {
+          onCloseProject:
+            closableMemberGroupIds(groupMenuGroup).length > 0
+              ? () => postSidebarV2CloseWorkspaceProjects(vscode, closableMemberGroupIds(groupMenuGroup))
+              : undefined,
+          onSetGroupingMode: (mode) => setGroupGroupingMode(groupMenuGroup, mode),
+        }
+      )
     : [];
 
-  const isProjectShelfExpanded = (groupId: string, tone: "settled" | "snoozed") =>
-    projectShelfOverrides[`${groupId}:${tone}`] ?? (tone === "settled" ? true : false);
-  const toggleProjectShelf = (groupId: string, tone: "settled" | "snoozed") => {
+  const isProjectShelfExpanded = (groupId: string, tone: 'settled' | 'snoozed') =>
+    projectShelfOverrides[`${groupId}:${tone}`] ?? (tone === 'settled' ? true : false);
+  const toggleProjectShelf = (groupId: string, tone: 'settled' | 'snoozed') => {
     const key = `${groupId}:${tone}`;
     setProjectShelfOverrides((previous) => ({
       ...previous,
-      [key]: !(previous[key] ?? (tone === "settled" ? true : false)),
+      [key]: !(previous[key] ?? (tone === 'settled' ? true : false)),
     }));
   };
 
@@ -1397,42 +1302,36 @@ export function SidebarV2Root({
        */}
       <SidebarV2Shelf
         count={group.partition.snoozed.length}
-        isExpanded={isProjectShelfExpanded(group.groupId, "snoozed")}
-        label="Snoozed"
-        onToggle={() => toggleProjectShelf(group.groupId, "snoozed")}
-        tone="snoozed"
+        isExpanded={isProjectShelfExpanded(group.groupId, 'snoozed')}
+        label='Snoozed'
+        onToggle={() => toggleProjectShelf(group.groupId, 'snoozed')}
+        tone='snoozed'
       >
         {group.partition.snoozed.map((session) =>
-          renderRow(session, { shelf: "snoozed", slimLabel: "Snoozed", variant: "slim" }),
+          renderRow(session, { shelf: 'snoozed', slimLabel: 'Snoozed', variant: 'slim' })
         )}
       </SidebarV2Shelf>
       <SidebarV2Shelf
         count={group.partition.settled.length}
-        isExpanded={isProjectShelfExpanded(group.groupId, "settled")}
-        label="Settled"
-        onToggle={() => toggleProjectShelf(group.groupId, "settled")}
-        tone="settled"
+        isExpanded={isProjectShelfExpanded(group.groupId, 'settled')}
+        label='Settled'
+        onToggle={() => toggleProjectShelf(group.groupId, 'settled')}
+        tone='settled'
       >
-        {group.partition.settled.map((session) =>
-          renderRow(session, { shelf: "settled", variant: "slim" }),
-        )}
+        {group.partition.settled.map((session) => renderRow(session, { shelf: 'settled', variant: 'slim' }))}
       </SidebarV2Shelf>
     </>
   );
 
   return (
-    <div
-      className="sidebar-v2-root"
-      data-sidebar-v2-layout={layout}
-      data-sidebar-version="v2"
-    >
-      <div className="sidebar-v2-toolbar">
+    <div className='sidebar-v2-root' data-sidebar-v2-layout={layout} data-sidebar-version='v2'>
+      <div className='sidebar-v2-toolbar'>
         {/*
          * The scope dropdown belongs to flat mode only: grouped mode already
          * states every project as a header, so scoping it would be two
          * competing answers to the same question.
          */}
-        {layout === "flat" ? (
+        {layout === 'flat' ? (
           <SidebarV2ScopeMenu
             onSelectScope={setScopeId}
             options={viewModel.scopeOptions}
@@ -1441,19 +1340,19 @@ export function SidebarV2Root({
             vscode={vscode}
           />
         ) : (
-          <span className="sidebar-v2-toolbar-label">Grouped by project</span>
+          <span className='sidebar-v2-toolbar-label'>Grouped by project</span>
         )}
         <button
-          aria-label={layout === "byProject" ? "Show a flat inbox" : "Group by project"}
-          aria-pressed={layout === "byProject"}
-          className="sidebar-v2-layout-toggle"
-          onClick={() => onSetLayout(layout === "byProject" ? "flat" : "byProject")}
-          type="button"
+          aria-label={layout === 'byProject' ? 'Show a flat inbox' : 'Group by project'}
+          aria-pressed={layout === 'byProject'}
+          className='sidebar-v2-layout-toggle'
+          onClick={() => onSetLayout(layout === 'byProject' ? 'flat' : 'byProject')}
+          type='button'
         >
-          {layout === "byProject" ? (
-            <IconLayoutList aria-hidden="true" size={15} stroke={1.8} />
+          {layout === 'byProject' ? (
+            <IconLayoutList aria-hidden='true' size={15} stroke={1.8} />
           ) : (
-            <IconFolders aria-hidden="true" size={15} stroke={1.8} />
+            <IconFolders aria-hidden='true' size={15} stroke={1.8} />
           )}
         </button>
         {/*
@@ -1481,9 +1380,7 @@ export function SidebarV2Root({
             onCreateInstantSession={() => runInstantSession(headerCreateGroupId)}
             onCreateQuickBrowserTab={onCreateQuickBrowserTab}
             onCreateQuickTerminal={onCreateQuickTerminal}
-            onOpenWorktreePopover={(position) =>
-              openWorktreePopover(position, headerWorktreeGroupId)
-            }
+            onOpenWorktreePopover={(position) => openWorktreePopover(position, headerWorktreeGroupId)}
             onSetDefaultEnvMode={onSetNewSessionsDefaultEnvMode}
             primaryAgentId={primaryAgent.agentId}
             vscode={vscode}
@@ -1491,8 +1388,8 @@ export function SidebarV2Root({
         ) : null}
       </div>
 
-      {layout === "flat" ? (
-        <ul className="sidebar-v2-list" role="list">
+      {layout === 'flat' ? (
+        <ul className='sidebar-v2-list' role='list'>
           {/*
            * CDXC:SidebarV2 2026-07-29:
            * Browser tabs get their own flat-mode section instead of sitting in
@@ -1511,51 +1408,49 @@ export function SidebarV2Root({
           <SidebarV2Shelf
             count={viewModel.browserSessions.length}
             isExpanded={isBrowserExpanded}
-            label="Browser"
+            label='Browser'
             onToggle={() => setIsBrowserExpanded((previous) => !previous)}
-            tone="browser"
+            tone='browser'
           >
             {viewModel.browserSessions.map((session) =>
               renderRow(session, {
-                project: viewModel.projectsByGroupId[session.projectId ?? ""],
-                variant: "card",
-              }),
+                project: viewModel.projectsByGroupId[session.projectId ?? ''],
+                variant: 'card',
+              })
             )}
           </SidebarV2Shelf>
           {viewModel.flat.active.map((session, sessionIndex) => (
             <Fragment key={session.sessionId}>
               {renderRow(session, {
-                project: viewModel.projectsByGroupId[session.projectId ?? ""],
-                variant: "card",
+                project: viewModel.projectsByGroupId[session.projectId ?? ''],
+                variant: 'card',
               })}
               {session.isPinned === true &&
               viewModel.flat.active[sessionIndex + 1] !== undefined &&
               viewModel.flat.active[sessionIndex + 1]?.isPinned !== true ? (
-                <li aria-hidden className="pinned-sessions-divider" />
+                <li aria-hidden className='pinned-sessions-divider' />
               ) : null}
             </Fragment>
           ))}
           <SidebarV2Shelf
             count={viewModel.flat.snoozed.length}
             isExpanded={isSnoozedExpanded}
-            label="Snoozed"
+            label='Snoozed'
             onToggle={() => setIsSnoozedExpanded((previous) => !previous)}
-            tone="snoozed"
+            tone='snoozed'
           >
             {viewModel.flat.snoozed.map((session) =>
-              renderRow(session, { shelf: "snoozed", slimLabel: "Snoozed", variant: "slim" }),
+              renderRow(session, { shelf: 'snoozed', slimLabel: 'Snoozed', variant: 'slim' })
             )}
           </SidebarV2Shelf>
           <SidebarV2Shelf
             count={viewModel.flat.settled.length}
             isExpanded={isSettledExpanded}
-            label="Settled"
+            label='Settled'
             onToggle={() => setIsSettledExpanded((previous) => !previous)}
-            tone="settled"
+            tone='settled'
           >
-            {viewModel.flat.settled.map((session) =>
-              renderRow(session, { shelf: "settled", variant: "slim" }),
-            )}
+            {viewModel.flat.settled.map((session) => renderRow(session, { shelf: 'settled', variant: 'slim' }))}
           </SidebarV2Shelf>
         </ul>
       ) : (
@@ -1566,16 +1461,12 @@ export function SidebarV2Root({
          * the headers compensate for) apply to V2's grouped list verbatim
          * instead of being re-derived under a V2-only classname.
          */
-        <div className="sidebar-v2-groups group-list workspace-group-list reference-project-group-list">
+        <div className='sidebar-v2-groups group-list workspace-group-list reference-project-group-list'>
           {viewModel.groups.map((group, groupIndex) => {
             const isCollapsed = collapsedGroupsById[group.groupId] === true;
             return (
               <SidebarV2ProjectGroupSection
-                dropPosition={
-                  groupDropIndicator?.groupId === group.groupId
-                    ? groupDropIndicator.position
-                    : undefined
-                }
+                dropPosition={groupDropIndicator?.groupId === group.groupId ? groupDropIndicator.position : undefined}
                 group={group}
                 headerActions={
                   onRunAgent && primaryAgent ? (
@@ -1584,18 +1475,14 @@ export function SidebarV2Root({
                       defaultEnvMode={settings.newSessionsDefaultEnvMode}
                       label={`New ${primaryAgent.name} session in ${group.title}`}
                       onCreateInstantSession={() => runInstantSession(group.groupId)}
-                      onOpenWorktreePopover={(position) =>
-                        openWorktreePopover(position, group.groupId)
-                      }
+                      onOpenWorktreePopover={(position) => openWorktreePopover(position, group.groupId)}
                       onSetDefaultEnvMode={onSetNewSessionsDefaultEnvMode}
                       vscode={vscode}
                     />
                   ) : null
                 }
                 index={groupIndex}
-                isActive={group.memberGroupIds.some(
-                  (memberGroupId) => groupsById[memberGroupId]?.isActive === true,
-                )}
+                isActive={group.memberGroupIds.some((memberGroupId) => groupsById[memberGroupId]?.isActive === true)}
                 isCollapsed={isCollapsed}
                 containsActiveSession={
                   activeSessionId !== undefined &&
@@ -1636,7 +1523,7 @@ export function SidebarV2Root({
                 onResolveMissingProjectFolder={() => {
                   vscode.postMessage({
                     groupId: group.groupId,
-                    type: "createProjectTerminal",
+                    type: 'createProjectTerminal',
                   });
                 }}
                 onSetCollapsed={(collapsed) => onSetGroupCollapsed(group.groupId, collapsed)}
@@ -1652,25 +1539,25 @@ export function SidebarV2Root({
                     : undefined
                 }
               >
-                <ul className="sidebar-v2-list" role="list">
-                    {/*
-                     * CDXC:ProjectBrowserTabs 2026-05-16-12:59 (V1 parity):
-                     * Browser rows stay above the agent/terminal rows inside a
-                     * project group, exactly as the classic sidebar renders
-                     * them today.
-                     */}
-                    {group.browserSessions.map((session) => renderRow(session, { variant: "card" }))}
-                    {group.partition.active.map((session, sessionIndex) => (
-                      <Fragment key={session.sessionId}>
-                        {renderRow(session, { variant: "card" })}
-                        {session.isPinned === true &&
-                        group.partition.active[sessionIndex + 1] !== undefined &&
-                        group.partition.active[sessionIndex + 1]?.isPinned !== true ? (
-                          <li aria-hidden className="pinned-sessions-divider" />
-                        ) : null}
-                      </Fragment>
-                    ))}
-                    {renderProjectShelf(group)}
+                <ul className='sidebar-v2-list' role='list'>
+                  {/*
+                   * CDXC:ProjectBrowserTabs 2026-05-16-12:59 (V1 parity):
+                   * Browser rows stay above the agent/terminal rows inside a
+                   * project group, exactly as the classic sidebar renders
+                   * them today.
+                   */}
+                  {group.browserSessions.map((session) => renderRow(session, { variant: 'card' }))}
+                  {group.partition.active.map((session, sessionIndex) => (
+                    <Fragment key={session.sessionId}>
+                      {renderRow(session, { variant: 'card' })}
+                      {session.isPinned === true &&
+                      group.partition.active[sessionIndex + 1] !== undefined &&
+                      group.partition.active[sessionIndex + 1]?.isPinned !== true ? (
+                        <li aria-hidden className='pinned-sessions-divider' />
+                      ) : null}
+                    </Fragment>
+                  ))}
+                  {renderProjectShelf(group)}
                 </ul>
               </SidebarV2ProjectGroupSection>
             );
@@ -1678,7 +1565,7 @@ export function SidebarV2Root({
         </div>
       )}
 
-      {emptyState ? <div className="sidebar-v2-empty">{emptyState}</div> : null}
+      {emptyState ? <div className='sidebar-v2-empty'>{emptyState}</div> : null}
 
       {menuState && menuSession ? (
         <SidebarV2ContextMenu
@@ -1695,10 +1582,8 @@ export function SidebarV2Root({
                * path.
                */
               onClose: () => closeSession(menuSession.sessionId),
-              onCloseAfterDone: () =>
-                postSidebarV2ToggleCloseAfterDone(vscode, menuSession.sessionId),
-              onCopyAttachCommand: () =>
-                postSidebarV2CopyAttachCommand(vscode, menuSession.sessionId),
+              onCloseAfterDone: () => postSidebarV2ToggleCloseAfterDone(vscode, menuSession.sessionId),
+              onCopyAttachCommand: () => postSidebarV2CopyAttachCommand(vscode, menuSession.sessionId),
               /*
                * The clipboard text is built from the RENDERED row plus its group,
                * exactly as V1 builds it, so the same session copies the same
@@ -1708,10 +1593,9 @@ export function SidebarV2Root({
                 postSidebarV2CopySessionDetails(
                   vscode,
                   menuSession.sessionId,
-                  buildSidebarSessionDetailsClipboardText(menuSession, menuGroup),
+                  buildSidebarSessionDetailsClipboardText(menuSession, menuGroup)
                 ),
-              onCopyResumeCommand: () =>
-                postSidebarV2CopyResumeCommand(vscode, menuSession.sessionId),
+              onCopyResumeCommand: () => postSidebarV2CopyResumeCommand(vscode, menuSession.sessionId),
               /*
                * CDXC:SidebarV2ContextMenuParity 2026-07-30:
                * Delayed Send and the 1st-message viewer are the two items whose
@@ -1726,15 +1610,14 @@ export function SidebarV2Root({
                   closeAfterDoneActive: menuSession.closeAfterDone === true,
                   delayedSendDeadlineAt: menuSession.delayedSendDeadlineAt,
                   delayedSendRemainingLabel: menuSession.delayedSendRemainingLabel,
-                  modal: "delayedSend",
-                  sendWhenAllProjectSessionsStopActive:
-                    menuSession.sendWhenAllProjectSessionsStopActive === true,
+                  modal: 'delayedSend',
+                  sendWhenAllProjectSessionsStopActive: menuSession.sendWhenAllProjectSessionsStopActive === true,
                   sendWhenAgentStopsActive: menuSession.sendWhenAgentStopsActive === true,
                   sessionId: menuSession.sessionId,
                   supportsSendWhenAgentStops: true,
                   supportsSendWhenAllProjectSessionsStop: true,
                   title: sidebarV2SessionModalTitle(menuSession),
-                  type: "open",
+                  type: 'open',
                 }),
               onFocusMode: () => postSidebarV2FocusSessionMode(vscode, menuSession.sessionId),
               onFork: () => postSidebarV2ForkSession(vscode, menuSession.sessionId),
@@ -1756,16 +1639,11 @@ export function SidebarV2Root({
                   }
                 : undefined,
               onRename: () => setRenamingSessionId(menuSession.sessionId),
-              onSetPinned: (pinned) =>
-                postSidebarV2SetSessionPinned(vscode, menuSession.sessionId, pinned),
-              onSetSessionTag: (tag) =>
-                postSidebarV2SetSessionTag(vscode, menuSession.sessionId, tag),
-              onSetSleeping: (sleeping) =>
-                postSidebarV2SetSessionSleeping(vscode, menuSession.sessionId, sleeping),
+              onSetPinned: (pinned) => postSidebarV2SetSessionPinned(vscode, menuSession.sessionId, pinned),
+              onSetSessionTag: (tag) => postSidebarV2SetSessionTag(vscode, menuSession.sessionId, tag),
+              onSetSleeping: (sleeping) => postSidebarV2SetSessionSleeping(vscode, menuSession.sessionId, sleeping),
               onSettle: menuV2Session ? () => settleSession(menuV2Session) : undefined,
-              onSnooze: menuV2Session
-                ? (preset) => snoozeSession(menuV2Session, preset.snoozedUntil)
-                : undefined,
+              onSnooze: menuV2Session ? (preset) => snoozeSession(menuV2Session, preset.snoozedUntil) : undefined,
               onUnsettle: menuV2Session ? () => unsettleSession(menuV2Session) : undefined,
               onViewFirstMessage: () => {
                 const message = menuSession.firstUserMessage?.trim();
@@ -1774,9 +1652,9 @@ export function SidebarV2Root({
                 }
                 openAppModal({
                   message,
-                  modal: "firstUserMessage",
+                  modal: 'firstUserMessage',
                   title: sidebarV2SessionModalTitle(menuSession),
-                  type: "open",
+                  type: 'open',
                 });
               },
               onWake: menuV2Session ? () => wakeSession(menuV2Session) : undefined,
@@ -1794,14 +1672,10 @@ export function SidebarV2Root({
                      * membership keeps the menu and the list in agreement.
                      */
                     isSettled: viewModel.groups.some((group) =>
-                      group.partition.settled.some(
-                        (entry) => entry.sessionId === menuV2Session.sessionId,
-                      ),
+                      group.partition.settled.some((entry) => entry.sessionId === menuV2Session.sessionId)
                     ),
                     isSnoozed: viewModel.groups.some((group) =>
-                      group.partition.snoozed.some(
-                        (entry) => entry.sessionId === menuV2Session.sessionId,
-                      ),
+                      group.partition.snoozed.some((entry) => entry.sessionId === menuV2Session.sessionId)
                     ),
                     supportsSettle: sessionCapabilities(menuV2Session).settle,
                     supportsSnooze: sessionCapabilities(menuV2Session).snooze,
@@ -1810,7 +1684,7 @@ export function SidebarV2Root({
               nowMs,
               sessionTagListItems: settings.sidebarSessionTagListItems,
               worktreeBranch: menuWorktreeBranch,
-            },
+            }
           )}
           vscode={vscode}
         />
@@ -1833,7 +1707,7 @@ export function SidebarV2Root({
            * labels. Naming the variant is what keeps that difference V1's rather
            * than this mount's.
            */
-          variant="projectGroup"
+          variant='projectGroup'
           vscode={vscode}
         />
       ) : null}
@@ -1872,8 +1746,7 @@ export function SidebarV2Root({
                * create command is addressed by the sidebar group id. Both come
                * from the same group record, so neither side has to guess.
                */
-              projectId:
-                groupsById[worktreePopoverState.groupId]?.projectContext?.editor.projectId,
+              projectId: groupsById[worktreePopoverState.groupId]?.projectContext?.editor.projectId,
               requestId,
             })
           }

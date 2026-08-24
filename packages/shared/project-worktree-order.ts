@@ -10,7 +10,7 @@ export type ProjectWorktreeOrderItem = {
 
 export type ProjectWorktreeDropTarget = {
   orderId: string;
-  position: "after" | "before";
+  position: 'after' | 'before';
 };
 
 /*
@@ -19,9 +19,7 @@ export type ProjectWorktreeDropTarget = {
  * project drag carries its worktrees underneath it in their existing order, and
  * a worktree can only be reordered inside that same main-project family.
  */
-export function orderProjectsWithWorktrees<T extends ProjectWorktreeOrderItem>(
-  projects: readonly T[],
-): T[] {
+export function orderProjectsWithWorktrees<T extends ProjectWorktreeOrderItem>(projects: readonly T[]): T[] {
   const chatProjects = projects.filter((project) => project.isChat === true || project.isQuick === true);
   const codeProjects = projects.filter((project) => project.isChat !== true && project.isQuick !== true);
   return [...chatProjects, ...orderCodeProjectsWithWorktrees(codeProjects)];
@@ -30,7 +28,7 @@ export function orderProjectsWithWorktrees<T extends ProjectWorktreeOrderItem>(
 export function moveProjectsWithWorktrees<T extends ProjectWorktreeOrderItem>(
   projects: readonly T[],
   sourceOrderId: string,
-  target: ProjectWorktreeDropTarget,
+  target: ProjectWorktreeDropTarget
 ): T[] {
   if (!canDropProjectWithWorktrees(projects, sourceOrderId, target)) {
     return [...projects];
@@ -42,21 +40,17 @@ export function moveProjectsWithWorktrees<T extends ProjectWorktreeOrderItem>(
     return [...projects];
   }
 
-  const insertIndex = targetIndex + (target.position === "after" ? 1 : 0);
+  const insertIndex = targetIndex + (target.position === 'after' ? 1 : 0);
   const adjustedInsertIndex = insertIndex > sourceIndex ? insertIndex - 1 : insertIndex;
   const nextProjects = projects.filter((project) => getProjectOrderId(project) !== sourceOrderId);
-  nextProjects.splice(
-    clampProjectIndex(adjustedInsertIndex, nextProjects.length),
-    0,
-    projects[sourceIndex]!,
-  );
+  nextProjects.splice(clampProjectIndex(adjustedInsertIndex, nextProjects.length), 0, projects[sourceIndex]!);
   return orderProjectsWithWorktrees(nextProjects);
 }
 
 export function canDropProjectWithWorktrees<T extends ProjectWorktreeOrderItem>(
   projects: readonly T[],
   sourceOrderId: string,
-  target: ProjectWorktreeDropTarget,
+  target: ProjectWorktreeDropTarget
 ): boolean {
   const projectsByOrderId = createProjectOrderIdMap(projects);
   const sourceProject = projectsByOrderId.get(sourceOrderId);
@@ -66,21 +60,15 @@ export function canDropProjectWithWorktrees<T extends ProjectWorktreeOrderItem>(
   }
 
   const projectsByProjectId = createProjectIdMap(projects);
-  const sourceFamilyParentId = resolveProjectWorktreeFamilyParentId(
-    sourceProject.projectId,
-    projectsByProjectId,
-  );
-  const targetFamilyParentId = resolveProjectWorktreeFamilyParentId(
-    targetProject.projectId,
-    projectsByProjectId,
-  );
+  const sourceFamilyParentId = resolveProjectWorktreeFamilyParentId(sourceProject.projectId, projectsByProjectId);
+  const targetFamilyParentId = resolveProjectWorktreeFamilyParentId(targetProject.projectId, projectsByProjectId);
 
   if (!sourceFamilyParentId) {
     return targetFamilyParentId !== sourceProject.projectId;
   }
 
   if (targetProject.projectId === sourceFamilyParentId) {
-    return target.position === "after";
+    return target.position === 'after';
   }
 
   return targetFamilyParentId === sourceFamilyParentId;
@@ -90,18 +78,13 @@ export function getProjectOrderId(project: ProjectWorktreeOrderItem): string {
   return project.orderId ?? project.projectId;
 }
 
-function orderCodeProjectsWithWorktrees<T extends ProjectWorktreeOrderItem>(
-  projects: readonly T[],
-): T[] {
+function orderCodeProjectsWithWorktrees<T extends ProjectWorktreeOrderItem>(projects: readonly T[]): T[] {
   const projectsByProjectId = createProjectIdMap(projects);
   const worktreeProjectIds = new Set<string>();
   const worktreesByParentProjectId = new Map<string, T[]>();
 
   for (const project of projects) {
-    const familyParentId = resolveProjectWorktreeFamilyParentId(
-      project.projectId,
-      projectsByProjectId,
-    );
+    const familyParentId = resolveProjectWorktreeFamilyParentId(project.projectId, projectsByProjectId);
     if (!familyParentId || !projectsByProjectId.has(familyParentId)) {
       continue;
     }
@@ -129,7 +112,7 @@ function orderCodeProjectsWithWorktrees<T extends ProjectWorktreeOrderItem>(
 
 function resolveProjectWorktreeFamilyParentId<T extends ProjectWorktreeOrderItem>(
   projectId: string,
-  projectsByProjectId: ReadonlyMap<string, T>,
+  projectsByProjectId: ReadonlyMap<string, T>
 ): string | undefined {
   const directParentId = projectsByProjectId.get(projectId)?.worktree?.parentProjectId?.trim();
   if (!directParentId) {
@@ -151,15 +134,11 @@ function resolveProjectWorktreeFamilyParentId<T extends ProjectWorktreeOrderItem
   return directParentId;
 }
 
-function createProjectIdMap<T extends ProjectWorktreeOrderItem>(
-  projects: readonly T[],
-): Map<string, T> {
+function createProjectIdMap<T extends ProjectWorktreeOrderItem>(projects: readonly T[]): Map<string, T> {
   return new Map(projects.map((project) => [project.projectId, project]));
 }
 
-function createProjectOrderIdMap<T extends ProjectWorktreeOrderItem>(
-  projects: readonly T[],
-): Map<string, T> {
+function createProjectOrderIdMap<T extends ProjectWorktreeOrderItem>(projects: readonly T[]): Map<string, T> {
   return new Map(projects.map((project) => [getProjectOrderId(project), project]));
 }
 

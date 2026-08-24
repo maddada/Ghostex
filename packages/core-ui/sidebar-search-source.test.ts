@@ -1,10 +1,7 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 
-const referenceChromeSource = readFileSync(
-  new URL("./sidebar-app/reference-chrome.tsx", import.meta.url),
-  "utf8",
-);
+const referenceChromeSource = readFileSync(new URL('./sidebar-app/reference-chrome.tsx', import.meta.url), 'utf8');
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -14,8 +11,8 @@ function sourceBetween(source: string, start: string, end: string): string {
   return source.slice(startIndex, endIndex);
 }
 
-describe("sidebar search source", () => {
-  test("opens Quick Access Search from a stable nav-row button", () => {
+describe('sidebar search source', () => {
+  test('opens Quick Access Search from a stable nav-row button', () => {
     /*
      * CDXC:SidebarSearch 2026-06-19-13:52:
      * The top Search entry remains a stable nav-row button and opens the shared
@@ -24,18 +21,18 @@ describe("sidebar search source", () => {
      */
     const searchItemSource = sourceBetween(
       referenceChromeSource,
-      "function SidebarReferenceSearchNavItem({",
-      "function SidebarReferenceNavButton({",
+      'function SidebarReferenceSearchNavItem({',
+      'function SidebarReferenceNavButton({'
     );
 
     expect(searchItemSource).toContain('className="reference-sidebar-search-slot"');
     expect(searchItemSource).toContain('className="reference-sidebar-nav-button"');
-    expect(searchItemSource).toContain("onClick={onSearch}");
+    expect(searchItemSource).toContain('onClick={onSearch}');
     expect(searchItemSource).toContain('<span className="reference-sidebar-nav-label">Search</span>');
-    expect(searchItemSource).toContain("<IconSearch");
-    expect(searchItemSource).toContain("reference-sidebar-search-icon");
-    expect(searchItemSource).toContain("reference-sidebar-nav-shortcut");
-    expect(searchItemSource).not.toContain("reference-sidebar-inline-search-input");
-    expect(searchItemSource).not.toContain("<SidebarSessionSearchField");
+    expect(searchItemSource).toContain('<IconSearch');
+    expect(searchItemSource).toContain('reference-sidebar-search-icon');
+    expect(searchItemSource).toContain('reference-sidebar-nav-shortcut');
+    expect(searchItemSource).not.toContain('reference-sidebar-inline-search-input');
+    expect(searchItemSource).not.toContain('<SidebarSessionSearchField');
   });
 });

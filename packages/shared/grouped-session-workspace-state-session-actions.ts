@@ -4,7 +4,7 @@ import {
   type SessionRecord,
   type TerminalViewMode,
   type VisibleSessionCount,
-} from "./session-grid-contract";
+} from './session-grid-contract';
 import {
   createSessionInSnapshot,
   focusSessionInSnapshot,
@@ -15,24 +15,24 @@ import {
   setViewModeInSnapshot,
   setVisibleCountInSnapshot,
   toggleFullscreenSessionInSnapshot,
-} from "./session-grid-state";
-import { reorderGroupSessions } from "./session-order-reorder";
+} from './session-grid-state';
+import { reorderGroupSessions } from './session-order-reorder';
 import {
   claimNextSessionDisplayId,
   findGroupContainingSession,
   updateActiveGroupSnapshot,
   updateGroup,
   updateOwningGroupSnapshot,
-} from "./grouped-session-workspace-state-helpers";
+} from './grouped-session-workspace-state-helpers';
 import {
   getActiveGroup,
   getGroupById,
   normalizeGroupedSessionWorkspaceSnapshot,
-} from "./grouped-session-workspace-state-core";
+} from './grouped-session-workspace-state-core';
 
 export function createSessionInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  options?: CreateSessionRecordOptions,
+  options?: CreateSessionRecordOptions
 ): {
   session?: SessionRecord;
   snapshot: GroupedSessionWorkspaceSnapshot;
@@ -44,14 +44,10 @@ export function createSessionInWorkspace(
   }
 
   const nextDisplayId = claimNextSessionDisplayId(normalizedSnapshot);
-  const result = createSessionInSnapshot(
-    activeGroup.snapshot,
-    normalizedSnapshot.nextSessionNumber,
-    {
-      ...options,
-      displayId: nextDisplayId.displayId,
-    } as CreateSessionRecordOptions & { displayId: string },
-  );
+  const result = createSessionInSnapshot(activeGroup.snapshot, normalizedSnapshot.nextSessionNumber, {
+    ...options,
+    displayId: nextDisplayId.displayId,
+  } as CreateSessionRecordOptions & { displayId: string });
   if (!result.session) {
     return { snapshot: normalizedSnapshot };
   }
@@ -69,7 +65,7 @@ export function createSessionInWorkspace(
 
 export function focusSessionInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  sessionId: string,
+  sessionId: string
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
   const location = findGroupContainingSession(normalizedSnapshot, sessionId);
@@ -91,20 +87,20 @@ export function focusSessionInWorkspace(
 export function renameSessionAliasInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
   sessionId: string,
-  alias: string,
+  alias: string
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   return updateOwningGroupSnapshot(snapshot, sessionId, (groupSnapshot) =>
-    renameSessionAliasInSnapshot(groupSnapshot, sessionId, alias),
+    renameSessionAliasInSnapshot(groupSnapshot, sessionId, alias)
   );
 }
 
 export function setSessionTitleInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
   sessionId: string,
-  title: string,
+  title: string
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   return updateOwningGroupSnapshot(snapshot, sessionId, (groupSnapshot) =>
-    setSessionTitleInSnapshot(groupSnapshot, sessionId, title),
+    setSessionTitleInSnapshot(groupSnapshot, sessionId, title)
   );
 }
 
@@ -112,52 +108,52 @@ export function setBrowserSessionMetadataInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
   sessionId: string,
   title: string,
-  url: string,
+  url: string
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   return updateOwningGroupSnapshot(snapshot, sessionId, (groupSnapshot) =>
-    setBrowserSessionMetadataInSnapshot(groupSnapshot, sessionId, title, url),
+    setBrowserSessionMetadataInSnapshot(groupSnapshot, sessionId, title, url)
   );
 }
 
 export function removeSessionInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  sessionId: string,
+  sessionId: string
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   return updateOwningGroupSnapshot(snapshot, sessionId, (groupSnapshot) =>
-    removeSessionInSnapshot(groupSnapshot, sessionId),
+    removeSessionInSnapshot(groupSnapshot, sessionId)
   );
 }
 
 export function setVisibleCountInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  visibleCount: VisibleSessionCount,
+  visibleCount: VisibleSessionCount
 ): GroupedSessionWorkspaceSnapshot {
   return updateActiveGroupSnapshot(snapshot, getActiveGroup, (groupSnapshot) =>
-    setVisibleCountInSnapshot(groupSnapshot, visibleCount),
+    setVisibleCountInSnapshot(groupSnapshot, visibleCount)
   );
 }
 
 export function toggleFullscreenSessionInWorkspace(
-  snapshot: GroupedSessionWorkspaceSnapshot,
+  snapshot: GroupedSessionWorkspaceSnapshot
 ): GroupedSessionWorkspaceSnapshot {
   return updateActiveGroupSnapshot(snapshot, getActiveGroup, (groupSnapshot) =>
-    toggleFullscreenSessionInSnapshot(groupSnapshot),
+    toggleFullscreenSessionInSnapshot(groupSnapshot)
   );
 }
 
 export function setViewModeInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  viewMode: TerminalViewMode,
+  viewMode: TerminalViewMode
 ): GroupedSessionWorkspaceSnapshot {
   return updateActiveGroupSnapshot(snapshot, getActiveGroup, (groupSnapshot) =>
-    setViewModeInSnapshot(groupSnapshot, viewMode),
+    setViewModeInSnapshot(groupSnapshot, viewMode)
   );
 }
 
 export function syncSessionOrderInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
   groupId: string,
-  sessionIds: readonly string[],
+  sessionIds: readonly string[]
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
   const group = getGroupById(normalizedSnapshot, groupId);

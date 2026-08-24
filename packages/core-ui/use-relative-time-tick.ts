@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 export function useRelativeTimeTick(enabled: boolean, intervalMs = 1_000): number {
   const [tick, setTick] = useState(() => Date.now());

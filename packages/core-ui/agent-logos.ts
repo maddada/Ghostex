@@ -1,23 +1,23 @@
-import ampCliLogo from "./assets/amp-cli.svg" with { type: "text" };
-import antigravityCliLogo from "./assets/antigravity-cli.svg" with { type: "text" };
-import browserLogo from "./assets/browser.svg" with { type: "text" };
-import claudeLogo from "./assets/claude.svg" with { type: "text" };
-import codebuddyLogo from "./assets/codebuddy.svg" with { type: "text" };
-import cursorCliLogo from "./assets/cursor-cli.svg" with { type: "text" };
-import codexLogo from "./assets/codex.svg" with { type: "text" };
-import copilotLogo from "./assets/copilot.svg" with { type: "text" };
-import factoryDroidLogo from "./assets/factory-droid.svg" with { type: "text" };
-import geminiLogo from "./assets/gemini.svg" with { type: "text" };
-import grokBuildLogo from "./assets/grok-build.svg" with { type: "text" };
-import hermesAgentLogo from "./assets/hermes-agent.svg" with { type: "text" };
-import kiroLogo from "./assets/kiro.svg" with { type: "text" };
-import ompLogo from "./assets/omp.svg" with { type: "text" };
-import opencodeLogo from "./assets/opencode.svg" with { type: "text" };
-import piLogo from "./assets/pi.svg" with { type: "text" };
-import qoderLogo from "./assets/qoder.svg" with { type: "text" };
-import rovoDevLogo from "./assets/rovo-dev.svg" with { type: "text" };
-import type { SidebarAgentIcon } from "../shared/sidebar-agents";
-import type { CSSProperties } from "react";
+import ampCliLogo from './assets/amp-cli.svg' with { type: 'text' };
+import antigravityCliLogo from './assets/antigravity-cli.svg' with { type: 'text' };
+import browserLogo from './assets/browser.svg' with { type: 'text' };
+import claudeLogo from './assets/claude.svg' with { type: 'text' };
+import codebuddyLogo from './assets/codebuddy.svg' with { type: 'text' };
+import cursorCliLogo from './assets/cursor-cli.svg' with { type: 'text' };
+import codexLogo from './assets/codex.svg' with { type: 'text' };
+import copilotLogo from './assets/copilot.svg' with { type: 'text' };
+import factoryDroidLogo from './assets/factory-droid.svg' with { type: 'text' };
+import geminiLogo from './assets/gemini.svg' with { type: 'text' };
+import grokBuildLogo from './assets/grok-build.svg' with { type: 'text' };
+import hermesAgentLogo from './assets/hermes-agent.svg' with { type: 'text' };
+import kiroLogo from './assets/kiro.svg' with { type: 'text' };
+import ompLogo from './assets/omp.svg' with { type: 'text' };
+import opencodeLogo from './assets/opencode.svg' with { type: 'text' };
+import piLogo from './assets/pi.svg' with { type: 'text' };
+import qoderLogo from './assets/qoder.svg' with { type: 'text' };
+import rovoDevLogo from './assets/rovo-dev.svg' with { type: 'text' };
+import type { SidebarAgentIcon } from '../shared/sidebar-agents';
+import type { CSSProperties } from 'react';
 
 /**
  * CDXC:AgentDetection 2026-04-27-07:07
@@ -31,18 +31,18 @@ import type { CSSProperties } from "react";
  * keep both forms valid instead of using bundler-specific import query syntax.
  */
 function svgTextToDataUrl(svgText: string): string {
-  if (svgText.startsWith("data:image/svg+xml,")) {
+  if (svgText.startsWith('data:image/svg+xml,')) {
     return svgText;
   }
   return `data:image/svg+xml,${encodeURIComponent(svgText)}`;
 }
 
 function svgTextFromMaybeDataUrl(svgText: string): string {
-  if (!svgText.startsWith("data:image/svg+xml,")) {
+  if (!svgText.startsWith('data:image/svg+xml,')) {
     return svgText;
   }
 
-  const commaIndex = svgText.indexOf(",");
+  const commaIndex = svgText.indexOf(',');
   if (commaIndex === -1) {
     return svgText;
   }
@@ -57,8 +57,8 @@ function svgTextFromMaybeDataUrl(svgText: string): string {
 function svgTextToColorizedDataUrl(svgText: string, color: string): string {
   const rawSvgText = svgTextFromMaybeDataUrl(svgText);
   const withRootColor = rawSvgText.replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
-    const colorAttribute = /\scolor=/i.test(attributes) ? "" : ` color="${color}"`;
-    const fillAttribute = /\sfill=/i.test(attributes) ? "" : ` fill="${color}"`;
+    const colorAttribute = /\scolor=/i.test(attributes) ? '' : ` color="${color}"`;
+    const fillAttribute = /\sfill=/i.test(attributes) ? '' : ` fill="${color}"`;
     return `<svg${attributes}${colorAttribute}${fillAttribute}>`;
   });
   const colorizedSvgText = withRootColor
@@ -72,24 +72,24 @@ function svgTextToColorizedDataUrl(svgText: string, color: string): string {
 }
 
 export const AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
-  "amp-cli": svgTextToDataUrl(ampCliLogo),
-  "antigravity-cli": svgTextToDataUrl(antigravityCliLogo),
+  'amp-cli': svgTextToDataUrl(ampCliLogo),
+  'antigravity-cli': svgTextToDataUrl(antigravityCliLogo),
   browser: svgTextToDataUrl(browserLogo),
   claude: svgTextToDataUrl(claudeLogo),
   codebuddy: svgTextToDataUrl(codebuddyLogo),
-  "cursor-cli": svgTextToDataUrl(cursorCliLogo),
+  'cursor-cli': svgTextToDataUrl(cursorCliLogo),
   codex: svgTextToDataUrl(codexLogo),
   copilot: svgTextToDataUrl(copilotLogo),
-  "factory-droid": svgTextToDataUrl(factoryDroidLogo),
+  'factory-droid': svgTextToDataUrl(factoryDroidLogo),
   gemini: svgTextToDataUrl(geminiLogo),
-  "grok-build": svgTextToDataUrl(grokBuildLogo),
-  "hermes-agent": svgTextToDataUrl(hermesAgentLogo),
+  'grok-build': svgTextToDataUrl(grokBuildLogo),
+  'hermes-agent': svgTextToDataUrl(hermesAgentLogo),
   kiro: svgTextToDataUrl(kiroLogo),
   omp: svgTextToDataUrl(ompLogo),
   opencode: svgTextToDataUrl(opencodeLogo),
   pi: svgTextToDataUrl(piLogo),
   qoder: svgTextToDataUrl(qoderLogo),
-  "rovo-dev": svgTextToDataUrl(rovoDevLogo),
+  'rovo-dev': svgTextToDataUrl(rovoDevLogo),
 };
 
 /**
@@ -100,24 +100,24 @@ export const AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
  * session card.
  */
 export const AGENT_LOGO_COLORS: Record<SidebarAgentIcon, string> = {
-  "amp-cli": "#ffffff",
-  "antigravity-cli": "#749bff",
-  browser: "#82b7ff",
-  claude: "#d97757",
-  codebuddy: "#72d6ff",
-  "cursor-cli": "#edecec",
-  codex: "#ffffff",
-  copilot: "#ffffff",
-  "factory-droid": "#ff7a1a",
-  gemini: "#8b9aff",
-  "grok-build": "#ffffff",
-  "hermes-agent": "#f3c46b",
-  kiro: "#a6e3ff",
-  omp: "#a663ed",
-  opencode: "#6d96c0",
-  pi: "#c8ff62",
-  qoder: "#a991ff",
-  "rovo-dev": "#4fc3a1",
+  'amp-cli': '#ffffff',
+  'antigravity-cli': '#749bff',
+  browser: '#82b7ff',
+  claude: '#d97757',
+  codebuddy: '#72d6ff',
+  'cursor-cli': '#edecec',
+  codex: '#ffffff',
+  copilot: '#ffffff',
+  'factory-droid': '#ff7a1a',
+  gemini: '#8b9aff',
+  'grok-build': '#ffffff',
+  'hermes-agent': '#f3c46b',
+  kiro: '#a6e3ff',
+  omp: '#a663ed',
+  opencode: '#6d96c0',
+  pi: '#c8ff62',
+  qoder: '#a991ff',
+  'rovo-dev': '#4fc3a1',
 };
 
 /**
@@ -128,33 +128,24 @@ export const AGENT_LOGO_COLORS: Record<SidebarAgentIcon, string> = {
  * invisible on the dark macOS sidebar.
  */
 export const COLORED_AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
-  "amp-cli": svgTextToColorizedDataUrl(ampCliLogo, AGENT_LOGO_COLORS["amp-cli"]),
-  "antigravity-cli": svgTextToColorizedDataUrl(
-    antigravityCliLogo,
-    AGENT_LOGO_COLORS["antigravity-cli"],
-  ),
+  'amp-cli': svgTextToColorizedDataUrl(ampCliLogo, AGENT_LOGO_COLORS['amp-cli']),
+  'antigravity-cli': svgTextToColorizedDataUrl(antigravityCliLogo, AGENT_LOGO_COLORS['antigravity-cli']),
   browser: svgTextToColorizedDataUrl(browserLogo, AGENT_LOGO_COLORS.browser),
   claude: svgTextToColorizedDataUrl(claudeLogo, AGENT_LOGO_COLORS.claude),
   codebuddy: svgTextToColorizedDataUrl(codebuddyLogo, AGENT_LOGO_COLORS.codebuddy),
-  "cursor-cli": svgTextToColorizedDataUrl(cursorCliLogo, AGENT_LOGO_COLORS["cursor-cli"]),
+  'cursor-cli': svgTextToColorizedDataUrl(cursorCliLogo, AGENT_LOGO_COLORS['cursor-cli']),
   codex: svgTextToColorizedDataUrl(codexLogo, AGENT_LOGO_COLORS.codex),
   copilot: svgTextToColorizedDataUrl(copilotLogo, AGENT_LOGO_COLORS.copilot),
-  "factory-droid": svgTextToColorizedDataUrl(
-    factoryDroidLogo,
-    AGENT_LOGO_COLORS["factory-droid"],
-  ),
+  'factory-droid': svgTextToColorizedDataUrl(factoryDroidLogo, AGENT_LOGO_COLORS['factory-droid']),
   gemini: svgTextToColorizedDataUrl(geminiLogo, AGENT_LOGO_COLORS.gemini),
-  "grok-build": svgTextToColorizedDataUrl(grokBuildLogo, AGENT_LOGO_COLORS["grok-build"]),
-  "hermes-agent": svgTextToColorizedDataUrl(
-    hermesAgentLogo,
-    AGENT_LOGO_COLORS["hermes-agent"],
-  ),
+  'grok-build': svgTextToColorizedDataUrl(grokBuildLogo, AGENT_LOGO_COLORS['grok-build']),
+  'hermes-agent': svgTextToColorizedDataUrl(hermesAgentLogo, AGENT_LOGO_COLORS['hermes-agent']),
   kiro: svgTextToColorizedDataUrl(kiroLogo, AGENT_LOGO_COLORS.kiro),
   omp: svgTextToColorizedDataUrl(ompLogo, AGENT_LOGO_COLORS.omp),
   opencode: svgTextToColorizedDataUrl(opencodeLogo, AGENT_LOGO_COLORS.opencode),
   pi: svgTextToColorizedDataUrl(piLogo, AGENT_LOGO_COLORS.pi),
   qoder: svgTextToColorizedDataUrl(qoderLogo, AGENT_LOGO_COLORS.qoder),
-  "rovo-dev": svgTextToColorizedDataUrl(rovoDevLogo, AGENT_LOGO_COLORS["rovo-dev"]),
+  'rovo-dev': svgTextToColorizedDataUrl(rovoDevLogo, AGENT_LOGO_COLORS['rovo-dev']),
 };
 
 /**
@@ -164,13 +155,13 @@ export const COLORED_AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
  * legacy lime mask color.
  */
 export function getBrandAgentLogoStyle(icon: SidebarAgentIcon): CSSProperties {
-  if (icon === "omp") {
+  if (icon === 'omp') {
     return {
-      backgroundColor: "transparent",
+      backgroundColor: 'transparent',
       backgroundImage: `url("${AGENT_LOGOS[icon]}")`,
-      backgroundPosition: "center",
-      backgroundRepeat: "no-repeat",
-      backgroundSize: "contain",
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      backgroundSize: 'contain',
     };
   }
 

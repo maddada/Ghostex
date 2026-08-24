@@ -6,20 +6,20 @@
  * hooks stay identical between them.
  */
 
-import { useMemo, useState } from "react";
-import { AddProjectModal } from "./add-project-modal";
+import { useMemo, useState } from 'react';
+import { AddProjectModal } from './add-project-modal';
 import {
   createAddProjectStoryMocks,
   type AddProjectStoryMockOptions,
   type AddProjectStoryMocks,
-} from "./add-project-modal-mocks";
-import type { AddProjectAddResult, AddProjectProviderId } from "./types";
+} from './add-project-modal-mocks';
+import type { AddProjectAddResult, AddProjectProviderId } from './types';
 
 let latestStoryMocks: AddProjectStoryMocks | null = null;
 
 export function getAddProjectStoryMocks(): AddProjectStoryMocks {
   if (!latestStoryMocks) {
-    throw new Error("The add-project story harness has not mounted yet");
+    throw new Error('The add-project story harness has not mounted yet');
   }
   return latestStoryMocks;
 }
@@ -59,10 +59,10 @@ export function AddProjectStoryHarness({
 
   return (
     <div
-      className="flex h-screen w-screen flex-col gap-2 bg-background p-4 text-sm text-muted-foreground"
+      className='flex h-screen w-screen flex-col gap-2 bg-background p-4 text-sm text-muted-foreground'
       data-add-project-story-added={addedProjects.length}
-      data-add-project-story-open={isOpen ? "true" : "false"}
-      data-add-project-story-settings-provider={settingsProvider ?? ""}
+      data-add-project-story-open={isOpen ? 'true' : 'false'}
+      data-add-project-story-settings-provider={settingsProvider ?? ''}
     >
       <p>Add-project dialog harness.</p>
       {addedProjects.map((project) => (
@@ -72,10 +72,10 @@ export function AddProjectStoryHarness({
       ))}
       {isOpen ? null : (
         <button
-          className="w-fit border border-border px-2 py-1 text-foreground"
-          data-add-project-story-reopen=""
+          className='w-fit border border-border px-2 py-1 text-foreground'
+          data-add-project-story-reopen=''
           onClick={() => setIsOpen(true)}
-          type="button"
+          type='button'
         >
           Reopen
         </button>

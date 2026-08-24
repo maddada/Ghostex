@@ -118,7 +118,10 @@ impl GhostexGpuiApp {
         self.refresh_sidebar_gxserver_bootstrap(false, cx)
     }
 
-    pub(crate) fn replay_sidebar_gxserver_bootstrap(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+    pub(crate) fn replay_sidebar_gxserver_bootstrap(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         self.refresh_sidebar_gxserver_bootstrap(true, cx)
     }
 
@@ -306,7 +309,8 @@ impl GhostexGpuiApp {
         let Some(sidebar) = self.sidebar.clone() else {
             return false;
         };
-        let script = gpui_export_transcript_modal_command_script(&serde_json::Value::Object(message));
+        let script =
+            gpui_export_transcript_modal_command_script(&serde_json::Value::Object(message));
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
@@ -352,7 +356,10 @@ impl GhostexGpuiApp {
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
-    pub(crate) fn handle_gpui_pick_workspace_folder_message(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn handle_gpui_pick_workspace_folder_message(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: false,
             directories: true,
@@ -708,11 +715,7 @@ impl GhostexGpuiApp {
                 back the path instead of switching to a disabled workarea.
                 */
                 if !this.titlebar_mode_available(TitlebarMode::Source) {
-                    this.copy_path_for_disabled_project_workarea(
-                        &requested_path_text,
-                        "Code",
-                        cx,
-                    );
+                    this.copy_path_for_disabled_project_workarea(&requested_path_text, "Code", cx);
                     return;
                 }
                 this.switch_workarea_from_hotkey(TitlebarMode::Source, window, cx);
@@ -734,7 +737,10 @@ impl GhostexGpuiApp {
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
-    pub(crate) fn handle_gpui_pick_repository_folder_message(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn handle_gpui_pick_repository_folder_message(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: false,
             directories: true,
@@ -821,7 +827,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn handle_gpui_pick_terminal_background_image_message(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn handle_gpui_pick_terminal_background_image_message(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -848,7 +857,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn handle_gpui_pick_worktree_images_message(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn handle_gpui_pick_worktree_images_message(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -1094,7 +1106,10 @@ impl GhostexGpuiApp {
             Some(PendingSidebarBrowserTabReveal { project_id, tab_id });
     }
 
-    pub(crate) fn dispatch_pending_sidebar_browser_tab_reveal(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn dispatch_pending_sidebar_browser_tab_reveal(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let Some(pending) = self.pending_sidebar_browser_tab_reveal.take() else {
             return;
         };
@@ -1202,18 +1217,18 @@ impl GhostexGpuiApp {
         has never been told about. A pending reveal whose tab is missing from a
         published snapshot is dropped, because the tab it named is gone.
         */
-        let pending_reveal_is_published =
-            self.pending_sidebar_browser_tab_reveal
-                .as_ref()
-                .is_some_and(|pending| {
-                    let pending_tab_id = pending.tab_id.0.to_string();
-                    tabs.iter().any(|tab| {
-                        tab.get("projectId").and_then(serde_json::Value::as_str)
-                            == Some(pending.project_id.as_str())
-                            && tab.get("tabId").and_then(serde_json::Value::as_str)
-                                == Some(pending_tab_id.as_str())
-                    })
-                });
+        let pending_reveal_is_published = self
+            .pending_sidebar_browser_tab_reveal
+            .as_ref()
+            .is_some_and(|pending| {
+                let pending_tab_id = pending.tab_id.0.to_string();
+                tabs.iter().any(|tab| {
+                    tab.get("projectId").and_then(serde_json::Value::as_str)
+                        == Some(pending.project_id.as_str())
+                        && tab.get("tabId").and_then(serde_json::Value::as_str)
+                            == Some(pending_tab_id.as_str())
+                })
+            });
         let snapshot = serde_json::Value::Array(tabs).to_string();
         if self.sidebar_browser_tabs_snapshot == snapshot {
             if pending_reveal_is_published {
@@ -1510,7 +1525,10 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn render_sidebar_resize_divider(&self, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    pub(crate) fn render_sidebar_resize_divider(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
         let line_on_right = self.sidebar_side == GpuiSidebarSide::Left;
         div()
             .id("ghostex-gpui-sidebar-resize-divider")
@@ -1564,7 +1582,11 @@ impl GhostexGpuiApp {
             })
     }
 
-    pub(crate) fn set_sidebar_divider_hovering(&mut self, hovered: bool, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn set_sidebar_divider_hovering(
+        &mut self,
+        hovered: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.sidebar_divider_hovering == hovered {
             if !hovered && self.sidebar_divider_hover_visible {
                 self.sidebar_divider_hover_visible = false;

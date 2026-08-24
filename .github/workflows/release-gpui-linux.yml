@@ -33,7 +33,7 @@ on:
       plan:
         description: Resolved release plan JSON from the prepare job
         required: false
-        default: ""
+        default: ''
         type: string
   workflow_dispatch:
     inputs:
@@ -46,7 +46,7 @@ on:
         required: true
         default: deb,rpm,tar
         type: choice
-        options: [deb, rpm, tar, "deb,rpm", "deb,rpm,tar"]
+        options: [deb, rpm, tar, 'deb,rpm', 'deb,rpm,tar']
 
 permissions:
   attestations: write

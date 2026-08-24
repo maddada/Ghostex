@@ -8,10 +8,8 @@ import {
   GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_VERSION,
   GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_TYPE,
   GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_VERSION,
-} from "./constants";
-import type {
-  GxserverPresentationSidebarProjectOverlay,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from './constants';
+import type { GxserverPresentationSidebarProjectOverlay } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverFirstPromptTitleGenerationAgent,
   GxserverPresentationDelta,
@@ -20,19 +18,15 @@ import type {
   GxserverPresentationSnapshot,
   GxserverProjectDomainState,
   GxserverRendererCommand,
-} from "@/packages/shared/gxserver-protocol";
+} from '@/packages/shared/gxserver-protocol';
 import type {
   ExtensionToSidebarMessage,
   SidebarCommandSessionIndicator,
   SidebarRemoteMachineStatusMessage,
   SidebarSessionGroup,
   SidebarToExtensionMessage,
-} from "@/packages/shared/session-grid-contract";
-import type {
-  SidebarGitAction,
-  SidebarGitChangedFile,
-  SidebarGitState,
-} from "@/packages/shared/sidebar-git";
+} from '@/packages/shared/session-grid-contract';
+import type { SidebarGitAction, SidebarGitChangedFile, SidebarGitState } from '@/packages/shared/sidebar-git';
 
 export type GpuiGxserverBootstrap = {
   authToken?: string;
@@ -60,7 +54,7 @@ export type GpuiCommandPaneSessionSummary = {
   */
   isPaneOwner?: true;
   sessionId: string;
-  status: SidebarCommandSessionIndicator["status"];
+  status: SidebarCommandSessionIndicator['status'];
   title?: string;
 };
 
@@ -105,12 +99,7 @@ export type GpuiSidebarHostMessage =
   | Extract<
       SidebarToExtensionMessage,
       {
-        type:
-          | "cancelDelayedSend"
-          | "removeProject"
-          | "renameSession"
-          | "scheduleDelayedSend"
-          | "toggleCloseAfterDone";
+        type: 'cancelDelayedSend' | 'removeProject' | 'renameSession' | 'scheduleDelayedSend' | 'toggleCloseAfterDone';
       }
     >;
 
@@ -139,9 +128,7 @@ export type GhostexGpuiSidebarBridge = {
   onCommandPaletteRunSidebarCommand?: (payload: unknown) => void;
   onCommandPaletteSessionFocus?: (payload: unknown) => void;
   onCommandPaneSessionsChanged?: (sessions: readonly GpuiCommandPaneSessionSummary[]) => void;
-  onWorkspaceSessionDelayedSendsChanged?: (
-    sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[],
-  ) => void;
+  onWorkspaceSessionDelayedSendsChanged?: (sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[]) => void;
   onGxserverBootstrapChanged?: (bootstrap: GpuiGxserverBootstrap) => void;
   onExportTranscriptModalCommand?: (payload: unknown) => void;
   onGitCommitModalCommand?: (payload: unknown) => void;
@@ -226,10 +213,10 @@ declare global {
   }
 }
 
-export type GpuiSidebarRuntimeSnapshotKind = "hydrate" | "patch";
+export type GpuiSidebarRuntimeSnapshotKind = 'hydrate' | 'patch';
 
 export type GpuiWorkspaceTerminalLifecycleRequest = {
-  action: "close" | "sleep" | "wake";
+  action: 'close' | 'sleep' | 'wake';
   projectId: string;
   replacementProjectId?: string;
   replacementSessionId?: string;
@@ -256,7 +243,7 @@ export type GpuiSidebarGroupsPatch = {
 
 export type GpuiGxserverRpcSuccess<TResult> = {
   ok: true;
-  product: "gxserver";
+  product: 'gxserver';
   protocolVersion: number;
   result: TResult;
 };
@@ -266,7 +253,7 @@ export type GpuiProjectWorktreesResultMessage = {
   error?: string;
   ok: boolean;
   requestId: string;
-  type: "projectWorktreesResult";
+  type: 'projectWorktreesResult';
   worktrees?: unknown;
 };
 
@@ -274,15 +261,15 @@ export type GpuiSidebarRemotePresentationEvent = {
   payload:
     | {
         snapshot: GxserverPresentationSnapshot;
-        type: "presentationSnapshot";
+        type: 'presentationSnapshot';
       }
     | {
         delta: GxserverPresentationDelta;
         revision: number;
-        type: "presentationDelta";
+        type: 'presentationDelta';
       };
   remoteMachineId: string;
-  type: "remoteGxserverPresentation";
+  type: 'remoteGxserverPresentation';
 };
 
 export type GpuiSidebarRemoteGxserverResponseEvent = {
@@ -291,15 +278,13 @@ export type GpuiSidebarRemoteGxserverResponseEvent = {
   remoteMachineId: string;
   requestId: string;
   result?: unknown;
-  type: "remoteGxserverResponse";
+  type: 'remoteGxserverResponse';
 };
 
 export type GpuiSidebarRemoteEvent =
-  | SidebarRemoteMachineStatusMessage
-  | GpuiSidebarRemoteGxserverResponseEvent
-  | GpuiSidebarRemotePresentationEvent;
+  SidebarRemoteMachineStatusMessage | GpuiSidebarRemoteGxserverResponseEvent | GpuiSidebarRemotePresentationEvent;
 
-export type GpuiSessionStatusIndicatorStatus = "attention" | "working" | "available";
+export type GpuiSessionStatusIndicatorStatus = 'attention' | 'working' | 'available';
 
 export type GpuiSessionStatusIndicatorCandidate = {
   hasRunningZmxBacking: boolean;
@@ -375,12 +360,12 @@ export type GpuiWorkspaceTabSessionSelectionPayload = {
 };
 
 export type GpuiActiveWorkspaceTabSessionPayload = {
-  activity: "idle" | "working" | "attention";
+  activity: 'idle' | 'working' | 'attention';
   agentIcon?: string;
   agentSessionId?: string;
   isGeneratingFirstPromptTitle: boolean;
   isSleeping: boolean;
-  kind: GxserverPresentationSession["kind"];
+  kind: GxserverPresentationSession['kind'];
   lifecycleState?: string;
   projectId: string;
   sessionId: string;
@@ -412,31 +397,31 @@ they are always published together (a `pr` from one probe can never pair with a
 */
 export type GpuiSidebarGitHubState = {
   hasGitHubCli: boolean;
-  pr: SidebarGitState["pr"];
+  pr: SidebarGitState['pr'];
 };
 
 export type GpuiSidebarNativeProjectPathAction =
-  | "copyRecentProjectPath"
-  | "openRecentProjectInFinder"
-  | "copyWorkspaceProjectPath"
-  | "openWorkspaceProjectInFinder"
-  | "openWorkspaceProjectInIde"
-  | "openActiveWorkspaceProjectInFinder"
-  | "openActiveWorkspaceProjectInVscode"
-  | "openActiveWorkspaceProjectInZed"
-  | "openExistingPullRequestInBrowser"
-  | "openSidebarGitChangedFileInIde"
-  | "copyRemoteProjectPath"
-  | "openRemoteProjectTerminal"
-  | "openRemoteWorkspaceProjectInIde"
-  | "openRemoteWorkspaceProjectInVscode"
-  | "openRemoteWorkspaceProjectInZed"
-  | "openRemoteExistingPullRequestInBrowser"
-  | "openRemoteSidebarGitChangedFileInIde"
-  | "openRemoteProjectPortsBrowser"
-  | "openRemoteSessionTerminal"
-  | "copyRemoteAttachCommand"
-  | "copyRemoteResumeCommand";
+  | 'copyRecentProjectPath'
+  | 'openRecentProjectInFinder'
+  | 'copyWorkspaceProjectPath'
+  | 'openWorkspaceProjectInFinder'
+  | 'openWorkspaceProjectInIde'
+  | 'openActiveWorkspaceProjectInFinder'
+  | 'openActiveWorkspaceProjectInVscode'
+  | 'openActiveWorkspaceProjectInZed'
+  | 'openExistingPullRequestInBrowser'
+  | 'openSidebarGitChangedFileInIde'
+  | 'copyRemoteProjectPath'
+  | 'openRemoteProjectTerminal'
+  | 'openRemoteWorkspaceProjectInIde'
+  | 'openRemoteWorkspaceProjectInVscode'
+  | 'openRemoteWorkspaceProjectInZed'
+  | 'openRemoteExistingPullRequestInBrowser'
+  | 'openRemoteSidebarGitChangedFileInIde'
+  | 'openRemoteProjectPortsBrowser'
+  | 'openRemoteSessionTerminal'
+  | 'copyRemoteAttachCommand'
+  | 'copyRemoteResumeCommand';
 
 export type GpuiTrustedExistingWorktreeList = {
   parentProjectId: string;
@@ -447,7 +432,7 @@ export type GpuiTrustedExistingWorktreeList = {
 };
 
 export type GpuiPendingGitCommitRequest = {
-  action: Extract<SidebarGitAction, "commit" | "pr" | "push">;
+  action: Extract<SidebarGitAction, 'commit' | 'pr' | 'push'>;
   files: SidebarGitChangedFile[];
   hasCommit: boolean;
   projectId: string;
@@ -526,8 +511,8 @@ export type GpuiExportedTranscriptResult = {
 };
 
 export type GpuiProjectDiffStatsRefreshTarget =
-  | { key: string; kind: "local"; project: GxserverProjectDomainState }
-  | { key: string; kind: "remote"; reference: GpuiRemoteProjectReference };
+  | { key: string; kind: 'local'; project: GxserverProjectDomainState }
+  | { key: string; kind: 'remote'; reference: GpuiRemoteProjectReference };
 
 export type GpuiRemoteProjectScope = GpuiRemoteProjectReference & {
   machineName?: string;
@@ -545,7 +530,7 @@ export type GpuiRemoteCreatePullRequestResult = {
 };
 
 export type GpuiRendererCommandHandler = (
-  command: GxserverRendererCommand,
+  command: GxserverRendererCommand
 ) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void;
 
 export type GpuiPresentationSubscription = {
@@ -568,18 +553,18 @@ export type GpuiWorktreeDeleteBranchMetadata = {
 };
 
 export type GpuiWorktreeModalCommand =
-  | Extract<SidebarToExtensionMessage, { type: "requestProjectWorktrees" }>
-  | Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>
-  | Extract<SidebarToExtensionMessage, { type: "confirmDeleteWorktree" }>
-  | Extract<SidebarToExtensionMessage, { type: "confirmRenameWorktree" }>
-  | Extract<SidebarToExtensionMessage, { type: "commitWorktreeBeforeDelete" }>;
+  | Extract<SidebarToExtensionMessage, { type: 'requestProjectWorktrees' }>
+  | Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>
+  | Extract<SidebarToExtensionMessage, { type: 'confirmDeleteWorktree' }>
+  | Extract<SidebarToExtensionMessage, { type: 'confirmRenameWorktree' }>
+  | Extract<SidebarToExtensionMessage, { type: 'commitWorktreeBeforeDelete' }>;
 
 export type GpuiGitCommitModalCommand =
-  | Extract<SidebarToExtensionMessage, { type: "confirmSidebarGitCommit" }>
-  | Extract<SidebarToExtensionMessage, { type: "confirmSidebarGitDirectMerge" }>
-  | Extract<SidebarToExtensionMessage, { type: "runSidebarGitMultipleCommits" }>
-  | Extract<SidebarToExtensionMessage, { type: "openSidebarGitChangedFileDiff" }>
-  | Extract<SidebarToExtensionMessage, { type: "cancelSidebarGitCommit" }>;
+  | Extract<SidebarToExtensionMessage, { type: 'confirmSidebarGitCommit' }>
+  | Extract<SidebarToExtensionMessage, { type: 'confirmSidebarGitDirectMerge' }>
+  | Extract<SidebarToExtensionMessage, { type: 'runSidebarGitMultipleCommits' }>
+  | Extract<SidebarToExtensionMessage, { type: 'openSidebarGitChangedFileDiff' }>
+  | Extract<SidebarToExtensionMessage, { type: 'cancelSidebarGitCommit' }>;
 
 export type GpuiCreatedProjectAgentSessionRecord = {
   agentSessionId?: string;
@@ -591,13 +576,13 @@ export type GpuiCreatedProjectAgentSessionRecord = {
 
 export type GpuiProjectBoardConversationRequest = {
   action:
-    | "appendDebugLog"
-    | "associateFocusedSession"
-    | "getState"
-    | "jumpToConversation"
-    | "showToast"
-    | "startWork"
-    | "unlinkConversation";
+    | 'appendDebugLog'
+    | 'associateFocusedSession'
+    | 'getState'
+    | 'jumpToConversation'
+    | 'showToast'
+    | 'startWork'
+    | 'unlinkConversation';
   agentId?: string;
   beadDisplayId?: string;
   beadId?: string;
@@ -638,16 +623,16 @@ export type GpuiWorkspaceSessionAttentionAcknowledgePayload = {
   sessionId: string;
 };
 
-export type GpuiSessionAttentionAcknowledgeReason = "native-focus" | "sidebar-focus" | "terminal-escape";
+export type GpuiSessionAttentionAcknowledgeReason = 'native-focus' | 'sidebar-focus' | 'terminal-escape';
 
 export type GpuiSessionAttentionTarget =
   | {
-      kind: "local";
+      kind: 'local';
       projectId: string;
       sessionId: string;
     }
   | {
-      kind: "remote";
+      kind: 'remote';
       machineId: string;
       projectId: string;
       sessionId: string;
@@ -655,12 +640,12 @@ export type GpuiSessionAttentionTarget =
 
 export type GpuiWorkspaceTerminalRuntimeActionPayload =
   | {
-      action: "exportTranscript" | "forkSession" | "fullReloadSession";
+      action: 'exportTranscript' | 'forkSession' | 'fullReloadSession';
       projectId: string;
       sessionId: string;
     }
-  | { action: "sleepAllDaemonSessions" }
-  | { action: "sleepInactiveSessions" };
+  | { action: 'sleepAllDaemonSessions' }
+  | { action: 'sleepInactiveSessions' };
 
 export type GpuiPresentationProjectProjectionMetadata = {
   chatProjectIds: ReadonlySet<string>;

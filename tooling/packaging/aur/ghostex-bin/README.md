@@ -9,11 +9,11 @@ yay -S ghostex-bin      # or: paru -S ghostex-bin
 
 ## What is in here
 
-| File | Purpose |
-| --- | --- |
-| `PKGBUILD.template` | The near-final PKGBUILD. `@PKGVER@`, `@SHA256@`, and `@LICENSE_SHA256@` are the only placeholders. |
-| `ghostex-bin.install` | pacman scriptlet shown on install/upgrade (the first-launch browser-runtime download note). |
-| `README.md` | This file. |
+| File                  | Purpose                                                                                            |
+| --------------------- | -------------------------------------------------------------------------------------------------- |
+| `PKGBUILD.template`   | The near-final PKGBUILD. `@PKGVER@`, `@SHA256@`, and `@LICENSE_SHA256@` are the only placeholders. |
+| `ghostex-bin.install` | pacman scriptlet shown on install/upgrade (the first-launch browser-runtime download note).        |
+| `README.md`           | This file.                                                                                         |
 
 `tooling/release-gpui/publish-aur.mjs` renders `PKGBUILD.template` into a final
 `PKGBUILD`, then **derives `.SRCINFO` by parsing that rendered PKGBUILD**. There
@@ -52,7 +52,7 @@ comparatively small and why `ghostex-bin.install` prints a note about it.
 
 ## One-time setup (must be done by hand, once, before automation works)
 
-The release pipeline can only *update* an AUR package that already exists.
+The release pipeline can only _update_ an AUR package that already exists.
 These four steps are manual and cannot be automated:
 
 1. **Create an AUR account** at <https://aur.archlinux.org/register>.
@@ -63,8 +63,8 @@ These four steps are manual and cannot be automated:
    ssh-keygen -t ed25519 -C "ghostex-aur-release-bot" -f ~/.ssh/ghostex_aur_ed25519 -N ""
    ```
 
-   Paste the contents of `~/.ssh/ghostex_aur_ed25519.pub` into *My Account →
-   SSH Public Key* on the AUR.
+   Paste the contents of `~/.ssh/ghostex_aur_ed25519.pub` into _My Account →
+   SSH Public Key_ on the AUR.
 
 3. **Submit the initial `ghostex-bin` repository.** The AUR creates a package
    repo on first push; there is no web form.
@@ -93,9 +93,9 @@ These four steps are manual and cannot be automated:
    ```
 
 4. **Add the `AUR_SSH_PRIVATE_KEY` GitHub secret.** In the `maddada/Ghostex`
-   repository, go to *Settings → Secrets and variables → Actions → New
-   repository secret*, name it `AUR_SSH_PRIVATE_KEY`, and paste the **private**
-   key (`~/.ssh/ghostex_aur_ed25519`, the file *without* `.pub`), including the
+   repository, go to _Settings → Secrets and variables → Actions → New
+   repository secret_, name it `AUR_SSH_PRIVATE_KEY`, and paste the **private**
+   key (`~/.ssh/ghostex_aur_ed25519`, the file _without_ `.pub`), including the
    `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END …-----` lines and the
    trailing newline.
 
@@ -165,34 +165,34 @@ Two rules:
 (`tooling/release-gpui/linux-deb.sh`), translated to the Arch package that owns
 each shared library. Keep the two in step when either changes.
 
-| Debian package | Arch package |
-| --- | --- |
-| `libasound2` | `alsa-lib` |
-| `libatk-bridge2.0-0`, `libatk1.0-0`, `libatspi2.0-0` | `at-spi2-core` (Arch merged `atk` and `at-spi2-atk` into it) |
-| `libc6` | `glibc` |
-| `libcairo2` | `cairo` |
-| `libcups2` | `libcups` (not `cups`) |
-| `libdbus-1-3` | `dbus` (a short-lived `libdbus` split was folded back in) |
-| `libdrm2` | `libdrm` |
-| `libexpat1` | `expat` |
-| `libfontconfig1` | `fontconfig` |
-| `libgbm1` | `mesa` |
-| `libglib2.0-0` | `glib2` |
-| `libgtk-3-0` | `gtk3` |
-| `libnspr4` | `nspr` |
-| `libnss3` | `nss` |
-| `libpango-1.0-0`, `libpangocairo-1.0-0` | `pango` |
-| `libx11-6`, `libx11-xcb1` | `libx11` (both sonames are in this one package) |
-| `libxcb1` | `libxcb` |
-| `libxcomposite1` | `libxcomposite` |
-| `libxdamage1` | `libxdamage` |
-| `libxext6` | `libxext` |
-| `libxfixes3` | `libxfixes` |
-| `libxkbcommon0` | `libxkbcommon` |
-| `libxrandr2` | `libxrandr` |
-| `libxshmfence1` | `libxshmfence` |
-| `wmctrl` | `wmctrl` (in `extra`, not AUR-only) |
-| — | `hicolor-icon-theme` (owns the theme directory this package's icon goes into) |
+| Debian package                                       | Arch package                                                                  |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `libasound2`                                         | `alsa-lib`                                                                    |
+| `libatk-bridge2.0-0`, `libatk1.0-0`, `libatspi2.0-0` | `at-spi2-core` (Arch merged `atk` and `at-spi2-atk` into it)                  |
+| `libc6`                                              | `glibc`                                                                       |
+| `libcairo2`                                          | `cairo`                                                                       |
+| `libcups2`                                           | `libcups` (not `cups`)                                                        |
+| `libdbus-1-3`                                        | `dbus` (a short-lived `libdbus` split was folded back in)                     |
+| `libdrm2`                                            | `libdrm`                                                                      |
+| `libexpat1`                                          | `expat`                                                                       |
+| `libfontconfig1`                                     | `fontconfig`                                                                  |
+| `libgbm1`                                            | `mesa`                                                                        |
+| `libglib2.0-0`                                       | `glib2`                                                                       |
+| `libgtk-3-0`                                         | `gtk3`                                                                        |
+| `libnspr4`                                           | `nspr`                                                                        |
+| `libnss3`                                            | `nss`                                                                         |
+| `libpango-1.0-0`, `libpangocairo-1.0-0`              | `pango`                                                                       |
+| `libx11-6`, `libx11-xcb1`                            | `libx11` (both sonames are in this one package)                               |
+| `libxcb1`                                            | `libxcb`                                                                      |
+| `libxcomposite1`                                     | `libxcomposite`                                                               |
+| `libxdamage1`                                        | `libxdamage`                                                                  |
+| `libxext6`                                           | `libxext`                                                                     |
+| `libxfixes3`                                         | `libxfixes`                                                                   |
+| `libxkbcommon0`                                      | `libxkbcommon`                                                                |
+| `libxrandr2`                                         | `libxrandr`                                                                   |
+| `libxshmfence1`                                      | `libxshmfence`                                                                |
+| `wmctrl`                                             | `wmctrl` (in `extra`, not AUR-only)                                           |
+| —                                                    | `hicolor-icon-theme` (owns the theme directory this package's icon goes into) |
 
 ## Known caveats
 

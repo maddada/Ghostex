@@ -15,9 +15,12 @@ use gpui::{Hsla, rgb};
 use crate::app::helpers::*;
 use crate::*;
 
-pub(crate) const GPUI_AGENT_HOOK_PRIORITY_STATUS_AGENT_IDS: [&str; 4] = ["codex", "claude", "opencode", "pi"];
+pub(crate) const GPUI_AGENT_HOOK_PRIORITY_STATUS_AGENT_IDS: [&str; 4] =
+    ["codex", "claude", "opencode", "pi"];
 
-pub(crate) fn gpui_ordered_agent_hook_status_agent_ids(requested: Option<Vec<String>>) -> Vec<String> {
+pub(crate) fn gpui_ordered_agent_hook_status_agent_ids(
+    requested: Option<Vec<String>>,
+) -> Vec<String> {
     let requested_ids = match requested {
         Some(ids) if !ids.is_empty() => ids,
         _ => GPUI_DEFAULT_SIDEBAR_AGENTS
@@ -287,4 +290,3 @@ pub(crate) fn gpui_session_chat_background_color() -> Hsla {
         rgb(0x0a0a0a).into()
     }
 }
-

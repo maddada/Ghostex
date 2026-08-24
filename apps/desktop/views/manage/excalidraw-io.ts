@@ -1,12 +1,11 @@
-import {
-  type AppState,
-  type BinaryFiles,
-} from "@excalidraw/excalidraw/types";
-import { type ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import { ExcalidrawFileData, isRecord } from "./types";
-import { MANAGE_EXCALIDRAW_CANVAS_BACKGROUND, MANAGE_EXCALIDRAW_CANVAS_THEME } from "./constants";
+import { type AppState, type BinaryFiles } from '@excalidraw/excalidraw/types';
+import { type ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
+import { ExcalidrawFileData, isRecord } from './types';
+import { MANAGE_EXCALIDRAW_CANVAS_BACKGROUND, MANAGE_EXCALIDRAW_CANVAS_THEME } from './constants';
 
-export function parseExcalidrawFile(content: string): { data: ExcalidrawFileData; ok: true } | { error: string; ok: false } {
+export function parseExcalidrawFile(
+  content: string
+): { data: ExcalidrawFileData; ok: true } | { error: string; ok: false } {
   const trimmed = content.trim();
   if (!trimmed) {
     return {
@@ -17,25 +16,25 @@ export function parseExcalidrawFile(content: string): { data: ExcalidrawFileData
   try {
     const value = JSON.parse(trimmed) as unknown;
     if (!isRecord(value)) {
-      return { error: "Drawing JSON must be an object.", ok: false };
+      return { error: 'Drawing JSON must be an object.', ok: false };
     }
-    if (value.type !== "excalidraw" && !Array.isArray(value.elements)) {
-      return { error: "Drawing JSON is missing scene elements.", ok: false };
+    if (value.type !== 'excalidraw' && !Array.isArray(value.elements)) {
+      return { error: 'Drawing JSON is missing scene elements.', ok: false };
     }
     return {
       data: {
         appState: isRecord(value.appState) ? value.appState : {},
         elements: Array.isArray(value.elements) ? (value.elements as ExcalidrawElement[]) : [],
         files: isRecord(value.files) ? (value.files as BinaryFiles) : {},
-        source: typeof value.source === "string" ? value.source : "https://excalidraw.com",
-        type: "excalidraw",
-        version: typeof value.version === "number" ? value.version : 2,
+        source: typeof value.source === 'string' ? value.source : 'https://excalidraw.com',
+        type: 'excalidraw',
+        version: typeof value.version === 'number' ? value.version : 2,
       },
       ok: true,
     };
   } catch (parseError) {
     return {
-      error: parseError instanceof Error ? parseError.message : "Drawing JSON is invalid.",
+      error: parseError instanceof Error ? parseError.message : 'Drawing JSON is invalid.',
       ok: false,
     };
   }
@@ -49,8 +48,8 @@ export function createEmptyExcalidrawFile(): ExcalidrawFileData {
     },
     elements: [],
     files: {},
-    source: "https://excalidraw.com",
-    type: "excalidraw",
+    source: 'https://excalidraw.com',
+    type: 'excalidraw',
     version: 2,
   };
 }
@@ -59,7 +58,7 @@ export function serializeExcalidrawFile(
   previousData: ExcalidrawFileData,
   elements: readonly ExcalidrawElement[],
   appState: AppState,
-  files: BinaryFiles,
+  files: BinaryFiles
 ): string {
   const savedAppState: Record<string, unknown> = {
     ...(previousData.appState ?? {}),
@@ -75,19 +74,19 @@ export function serializeExcalidrawFile(
       appState: savedAppState,
       elements,
       files,
-      source: previousData.source ?? "https://excalidraw.com",
-      type: "excalidraw",
+      source: previousData.source ?? 'https://excalidraw.com',
+      type: 'excalidraw',
       version: previousData.version ?? 2,
     },
     null,
-    2,
+    2
   );
 }
 
 export function createExcalidrawSceneSignature(
   elements: readonly ExcalidrawElement[],
   appState: AppState,
-  files: BinaryFiles,
+  files: BinaryFiles
 ): string {
   return JSON.stringify({
     appState: {
@@ -106,9 +105,9 @@ export function createExcalidrawSceneSignature(
   });
 }
 
-export function normalizeExcalidrawZoom(zoom: AppState["zoom"]): number {
-  if (typeof zoom === "object" && zoom !== null && "value" in zoom && typeof zoom.value === "number") {
+export function normalizeExcalidrawZoom(zoom: AppState['zoom']): number {
+  if (typeof zoom === 'object' && zoom !== null && 'value' in zoom && typeof zoom.value === 'number') {
     return zoom.value;
   }
-  return typeof zoom === "number" ? zoom : 1;
+  return typeof zoom === 'number' ? zoom : 1;
 }

@@ -27,7 +27,11 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    pub(crate) fn render_agents_workspace(&self, window: &Window, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_agents_workspace(
+        &self,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         /*
         CDXC:GPUIWorkspaceLayout 2026-06-22-05:11:
         Agents mode renders the workspace as GPUI native layout chrome: tab groups and split nodes own normal non-overlapping regions, every leaf keeps a tab bar even when it is the only pane, and Ghostty content is represented by black placeholder surfaces until libghostty integration lands.
@@ -337,5 +341,4 @@ impl GhostexGpuiApp {
             .child(self.render_terminal_body_slot(leaf, cx))
             .into_any_element()
     }
-
 }

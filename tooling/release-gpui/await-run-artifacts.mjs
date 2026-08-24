@@ -14,13 +14,13 @@
  * whole time.
  */
 
-import { spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { classifyError } from "./failure-classification.mjs";
-import { withRetryProfile } from "./retry.mjs";
+import { classifyError } from './failure-classification.mjs';
+import { withRetryProfile } from './retry.mjs';
 
 export const DEFAULT_TIMEOUT_MINUTES = 45;
 export const DEFAULT_POLL_SECONDS = 15;
@@ -52,43 +52,43 @@ export function parseAwaitArgs(argv) {
     names: [],
     pollSeconds: DEFAULT_POLL_SECONDS,
     producerPattern: null,
-    repo: process.env.GITHUB_REPOSITORY ?? "maddada/Ghostex",
-    runId: process.env.GITHUB_RUN_ID ?? "",
+    repo: process.env.GITHUB_REPOSITORY ?? 'maddada/Ghostex',
+    runId: process.env.GITHUB_RUN_ID ?? '',
     timeoutMinutes: DEFAULT_TIMEOUT_MINUTES,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     const value = argv[index + 1];
-    if (argument === "--names") {
-      options.names = String(value ?? "")
-        .split(",")
+    if (argument === '--names') {
+      options.names = String(value ?? '')
+        .split(',')
         .map((name) => name.trim())
         .filter(Boolean);
-    } else if (argument === "--dest") options.dest = value;
-    else if (argument === "--run-id") options.runId = value;
-    else if (argument === "--repo") options.repo = value;
-    else if (argument === "--timeout-minutes") options.timeoutMinutes = Number(value);
-    else if (argument === "--poll-seconds") options.pollSeconds = Number(value);
-    else if (argument === "--producer-pattern") options.producerPattern = new RegExp(String(value ?? ""), "u");
+    } else if (argument === '--dest') options.dest = value;
+    else if (argument === '--run-id') options.runId = value;
+    else if (argument === '--repo') options.repo = value;
+    else if (argument === '--timeout-minutes') options.timeoutMinutes = Number(value);
+    else if (argument === '--poll-seconds') options.pollSeconds = Number(value);
+    else if (argument === '--producer-pattern') options.producerPattern = new RegExp(String(value ?? ''), 'u');
     else throw new Error(`Unknown option: ${argument}`);
     index += 1;
   }
-  if (options.names.length === 0) throw new Error("--names <a,b> is required");
-  if (!/^\d+$/u.test(String(options.runId))) throw new Error("--run-id (or GITHUB_RUN_ID) is required");
+  if (options.names.length === 0) throw new Error('--names <a,b> is required');
+  if (!/^\d+$/u.test(String(options.runId))) throw new Error('--run-id (or GITHUB_RUN_ID) is required');
   if (!Number.isFinite(options.timeoutMinutes) || options.timeoutMinutes <= 0) {
-    throw new Error("--timeout-minutes must be a positive number");
+    throw new Error('--timeout-minutes must be a positive number');
   }
   return options;
 }
 
 /* Names of every non-expired artifact currently uploaded by the run. */
 export function listRunArtifacts({ repo, runId, run = spawnSync }) {
-  const result = run("gh", ["api", `repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`], {
-    encoding: "utf8",
+  const result = run('gh', ['api', `repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`], {
+    encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
   });
   if (result.status !== 0) {
-    throw new Error(`gh api artifacts failed: ${(result.stderr || result.stdout || "").trim()}`);
+    throw new Error(`gh api artifacts failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
   const payload = JSON.parse(result.stdout);
   return new Set((payload.artifacts ?? []).filter((artifact) => !artifact.expired).map((artifact) => artifact.name));
@@ -100,24 +100,24 @@ export function missingArtifacts(names, available) {
 
 /* Name/status/conclusion of every job in the run (latest attempt). */
 export function listRunJobs({ repo, runId, run = spawnSync }) {
-  const result = run("gh", ["api", `repos/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`], {
-    encoding: "utf8",
+  const result = run('gh', ['api', `repos/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`], {
+    encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
   });
   if (result.status !== 0) {
-    throw new Error(`gh api jobs failed: ${(result.stderr || result.stdout || "").trim()}`);
+    throw new Error(`gh api jobs failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
   const payload = JSON.parse(result.stdout);
   return (payload.jobs ?? []).map((job) => ({
     conclusion: job.conclusion ?? null,
-    name: job.name ?? "",
-    status: job.status ?? "",
+    name: job.name ?? '',
+    status: job.status ?? '',
   }));
 }
 
 function describeAvailable(available) {
   const names = [...available].sort();
-  return names.length > 0 ? names.join(", ") : "(none)";
+  return names.length > 0 ? names.join(', ') : '(none)';
 }
 
 function sleepSeconds(seconds) {
@@ -127,7 +127,7 @@ function sleepSeconds(seconds) {
 
 export async function awaitRunArtifacts(
   options,
-  { list = listRunArtifacts, listJobs = listRunJobs, sleep = sleepSeconds } = {},
+  { list = listRunArtifacts, listJobs = listRunJobs, sleep = sleepSeconds } = {}
 ) {
   const started = Date.now();
   const deadline = started + options.timeoutMinutes * 60_000;
@@ -148,12 +148,12 @@ export async function awaitRunArtifacts(
       if (consecutiveListFailures >= MAX_CONSECUTIVE_LIST_FAILURES) {
         throw new Error(
           `Could not list run ${options.runId} artifacts ${consecutiveListFailures} times in a row ` +
-            `(still waiting for ${pending.join(", ")}): ${message}`,
+            `(still waiting for ${pending.join(', ')}): ${message}`
         );
       }
       process.stdout.write(
         `::warning::Artifact listing attempt ${consecutiveListFailures}/${MAX_CONSECUTIVE_LIST_FAILURES} ` +
-          `failed, retrying: ${message}\n`,
+          `failed, retrying: ${message}\n`
       );
     }
     if (available) {
@@ -168,7 +168,7 @@ export async function awaitRunArtifacts(
         jobs = listJobs({ repo: options.repo, runId: options.runId });
       } catch (error) {
         process.stdout.write(
-          `::warning::Producer job listing failed, will retry: ${error instanceof Error ? error.message : String(error)}\n`,
+          `::warning::Producer job listing failed, will retry: ${error instanceof Error ? error.message : String(error)}\n`
         );
       }
       if (jobs) {
@@ -177,16 +177,16 @@ export async function awaitRunArtifacts(
           if (!warnedNoProducerMatch) {
             process.stdout.write(
               `::warning::No job of run ${options.runId} matches producer pattern ${options.producerPattern}; ` +
-                "falling back to the plain timeout\n",
+                'falling back to the plain timeout\n'
             );
             warnedNoProducerMatch = true;
           }
-        } else if (producers.every((job) => job.status === "completed")) {
-          const states = producers.map((job) => `${job.name} (${job.conclusion ?? "unknown"})`).join("; ");
+        } else if (producers.every((job) => job.status === 'completed')) {
+          const states = producers.map((job) => `${job.name} (${job.conclusion ?? 'unknown'})`).join('; ');
           throw new Error(
-            `Every producer job has completed but run ${options.runId} never uploaded: ${pending.join(", ")}. ` +
+            `Every producer job has completed but run ${options.runId} never uploaded: ${pending.join(', ')}. ` +
               `Producer jobs: ${states}. Artifacts the run did upload: ${describeAvailable(lastAvailable)}. ` +
-              "A near-miss name in that list means the artifact identity diverged between runners.",
+              'A near-miss name in that list means the artifact identity diverged between runners.'
           );
         }
       }
@@ -194,11 +194,11 @@ export async function awaitRunArtifacts(
     if (Date.now() >= deadline) {
       throw new Error(
         `Timed out after ${options.timeoutMinutes} minutes waiting for run ${options.runId} artifacts: ` +
-          `${pending.join(", ")}. Artifacts the run did upload: ${describeAvailable(lastAvailable)}`,
+          `${pending.join(', ')}. Artifacts the run did upload: ${describeAvailable(lastAvailable)}`
       );
     }
     if (!announced) {
-      process.stdout.write(`::notice::Waiting for run artifacts: ${pending.join(", ")}\n`);
+      process.stdout.write(`::notice::Waiting for run artifacts: ${pending.join(', ')}\n`);
       announced = true;
     }
     poll += 1;
@@ -215,7 +215,7 @@ export async function awaitRunArtifacts(
  */
 export function classifyArtifactDownloadFailure(error) {
   const classification = classifyError(error);
-  if (classification.category === "fatal") return classification;
+  if (classification.category === 'fatal') return classification;
   return { ...classification, retryable: true };
 }
 
@@ -225,18 +225,18 @@ export async function downloadRunArtifacts({ dest, names, repo, retryOverrides =
     await withRetryProfile(
       () => {
         const result = run(
-          "gh",
-          ["run", "download", String(runId), "--repo", repo, "--name", name, "--dir", path.join(dest, name)],
-          { encoding: "utf8", stdio: ["ignore", "inherit", "pipe"] },
+          'gh',
+          ['run', 'download', String(runId), '--repo', repo, '--name', name, '--dir', path.join(dest, name)],
+          { encoding: 'utf8', stdio: ['ignore', 'inherit', 'pipe'] }
         );
         if (result.error) throw result.error;
         if (result.status !== 0) {
-          throw new Error(`gh run download ${name} failed: ${(result.stderr ?? "").toString().trim()}`);
+          throw new Error(`gh run download ${name} failed: ${(result.stderr ?? '').toString().trim()}`);
         }
         return result;
       },
-      "github",
-      { classify: classifyArtifactDownloadFailure, label: `gh run download ${name}`, ...retryOverrides },
+      'github',
+      { classify: classifyArtifactDownloadFailure, label: `gh run download ${name}`, ...retryOverrides }
     );
   }
 }
@@ -245,11 +245,11 @@ async function main() {
   const options = parseAwaitArgs(process.argv.slice(2));
   const { waitedMs } = await awaitRunArtifacts(options);
   const seconds = Math.round(waitedMs / 1000);
-  process.stdout.write(`Run artifacts available after ${seconds}s: ${options.names.join(", ")}\n`);
+  process.stdout.write(`Run artifacts available after ${seconds}s: ${options.names.join(', ')}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
-      `- Awaited run artifacts (${options.names.join(", ")}): ${seconds}s\n`,
+      `- Awaited run artifacts (${options.names.join(', ')}): ${seconds}s\n`
     );
   }
   if (options.dest) {

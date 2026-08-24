@@ -25,17 +25,23 @@ const shellLanguage = StreamLanguage.define({
     if (stream.match(/^'[^']*'/)) return 'string';
     if (stream.match(/^\$\{[^}]+\}/)) return 'variableName';
     if (stream.match(/^\$[a-zA-Z_][a-zA-Z0-9_]*/)) return 'variableName';
-    if (stream.match(/^(if|then|else|elif|fi|for|do|done|while|case|esac|in|function|return|exit|echo|export|source|alias|unalias|cd|pwd|ls|grep|sed|awk|cat|printf|read|eval|local|declare|typeset|readonly|unset|shift|exec)\b/)) return 'keyword';
+    if (
+      stream.match(
+        /^(if|then|else|elif|fi|for|do|done|while|case|esac|in|function|return|exit|echo|export|source|alias|unalias|cd|pwd|ls|grep|sed|awk|cat|printf|read|eval|local|declare|typeset|readonly|unset|shift|exec)\b/
+      )
+    )
+      return 'keyword';
     if (stream.match(/^(true|false)\b/)) return 'bool';
     if (stream.match(/^\d+/)) return 'number';
     if (stream.match(/^[a-zA-Z_][a-zA-Z0-9_]*/)) return 'variableName';
     if (stream.match(/^[^"'#\s$`{|]+/)) return 'operator';
     stream.next();
     return null;
-  }
+  },
 });
 
-const powerQueryKeywords = /^(let|in|each|if|then|else|try|otherwise|error|and|or|not|as|is|type|meta|section|shared)\b/i;
+const powerQueryKeywords =
+  /^(let|in|each|if|then|else|try|otherwise|error|and|or|not|as|is|type|meta|section|shared)\b/i;
 const powerQueryHashKeywords = /^#(date|time|datetime|datetimezone|duration|table|binary|sections|shared)\b/i;
 
 function consumePowerQueryQuotedTail(stream: any): void {
@@ -148,36 +154,140 @@ const powerQueryLanguage = StreamLanguage.define({
 
     stream.next();
     return null;
-  }
+  },
 });
 
 const csharpKeywords = new Set([
-  "abstract", "as", "base", "break", "case", "catch", "checked", "class",
-  "const", "continue", "default", "delegate", "do", "else", "enum", "event",
-  "explicit", "extern", "finally", "fixed", "for", "foreach", "goto", "if",
-  "implicit", "in", "interface", "internal", "is", "lock", "namespace", "new",
-  "operator", "out", "override", "params", "private", "protected", "public",
-  "readonly", "ref", "return", "sealed", "sizeof", "stackalloc", "static",
-  "struct", "switch", "this", "throw", "try", "typeof", "unchecked", "unsafe",
-  "using", "virtual", "void", "volatile", "while",
-  "async", "await", "var", "dynamic", "yield", "when", "record", "init",
-  "required", "file", "scoped", "partial", "where", "select", "group", "into",
-  "let", "orderby", "join", "on", "equals", "by", "ascending", "descending",
-  "from", "global", "not", "and", "or", "with", "nameof"
+  'abstract',
+  'as',
+  'base',
+  'break',
+  'case',
+  'catch',
+  'checked',
+  'class',
+  'const',
+  'continue',
+  'default',
+  'delegate',
+  'do',
+  'else',
+  'enum',
+  'event',
+  'explicit',
+  'extern',
+  'finally',
+  'fixed',
+  'for',
+  'foreach',
+  'goto',
+  'if',
+  'implicit',
+  'in',
+  'interface',
+  'internal',
+  'is',
+  'lock',
+  'namespace',
+  'new',
+  'operator',
+  'out',
+  'override',
+  'params',
+  'private',
+  'protected',
+  'public',
+  'readonly',
+  'ref',
+  'return',
+  'sealed',
+  'sizeof',
+  'stackalloc',
+  'static',
+  'struct',
+  'switch',
+  'this',
+  'throw',
+  'try',
+  'typeof',
+  'unchecked',
+  'unsafe',
+  'using',
+  'virtual',
+  'void',
+  'volatile',
+  'while',
+  'async',
+  'await',
+  'var',
+  'dynamic',
+  'yield',
+  'when',
+  'record',
+  'init',
+  'required',
+  'file',
+  'scoped',
+  'partial',
+  'where',
+  'select',
+  'group',
+  'into',
+  'let',
+  'orderby',
+  'join',
+  'on',
+  'equals',
+  'by',
+  'ascending',
+  'descending',
+  'from',
+  'global',
+  'not',
+  'and',
+  'or',
+  'with',
+  'nameof',
 ]);
 
 const csharpBuiltinTypes = new Set([
-  "bool", "byte", "char", "decimal", "double", "float", "int", "long",
-  "object", "sbyte", "short", "string", "uint", "ulong", "ushort",
-  "nint", "nuint"
+  'bool',
+  'byte',
+  'char',
+  'decimal',
+  'double',
+  'float',
+  'int',
+  'long',
+  'object',
+  'sbyte',
+  'short',
+  'string',
+  'uint',
+  'ulong',
+  'ushort',
+  'nint',
+  'nuint',
 ]);
 
 const csharpTypeKeywords = new Set([
-  "class", "struct", "interface", "enum", "record", "new", "as", "is",
-  "typeof", "sizeof", "nameof", "delegate", "event", "where"
+  'class',
+  'struct',
+  'interface',
+  'enum',
+  'record',
+  'new',
+  'as',
+  'is',
+  'typeof',
+  'sizeof',
+  'nameof',
+  'delegate',
+  'event',
+  'where',
 ]);
 
-const csharpNamespaceKeywords = new Set(["namespace", "using"]);
+const csharpNamespaceKeywords = new Set(['namespace', 'using']);
 
 type CSharpState = {
   inBlockComment: boolean;
@@ -191,7 +301,7 @@ type CSharpState = {
 };
 
 const csharpLanguage = StreamLanguage.define({
-  name: "csharp",
+  name: 'csharp',
 
   startState: (): CSharpState => ({
     inBlockComment: false,
@@ -201,20 +311,20 @@ const csharpLanguage = StreamLanguage.define({
     expectTypeName: false,
     expectNamespace: false,
     afterDot: false,
-    inAttribute: false
+    inAttribute: false,
   }),
 
   token: (stream: any, state: CSharpState) => {
     // Handle multiline block comment
     if (state.inBlockComment) {
       while (!stream.eol()) {
-        if (stream.match("*/")) {
+        if (stream.match('*/')) {
           state.inBlockComment = false;
           break;
         }
         stream.next();
       }
-      return "comment";
+      return 'comment';
     }
 
     // Handle multiline verbatim string: @"..."
@@ -227,7 +337,7 @@ const csharpLanguage = StreamLanguage.define({
         }
         stream.next();
       }
-      return "string";
+      return 'string';
     }
 
     // Handle multiline raw string: """ ... """
@@ -240,7 +350,7 @@ const csharpLanguage = StreamLanguage.define({
         }
         stream.next();
       }
-      return "string";
+      return 'string';
     }
 
     if (stream.eatSpace()) return null;
@@ -248,80 +358,76 @@ const csharpLanguage = StreamLanguage.define({
     // Preprocessor directives
     if (stream.sol() && stream.match(/^#\s*[A-Za-z_]\w*/)) {
       stream.skipToEnd();
-      return "meta";
+      return 'meta';
     }
 
     // Comments
-    if (stream.match("//")) {
+    if (stream.match('//')) {
       stream.skipToEnd();
-      return "comment";
+      return 'comment';
     }
-    if (stream.match("/*")) {
+    if (stream.match('/*')) {
       state.inBlockComment = true;
-      return "comment";
+      return 'comment';
     }
 
     // Raw strings: """ ... """ or more quotes
     if (stream.match(/^"{3,}/)) {
       state.inRawString = true;
       state.rawQuoteCount = stream.current().length;
-      return "string";
+      return 'string';
     }
 
     // Verbatim interpolated strings: $@"..." or @$"..."
     if (stream.match(/^\$@"/) || stream.match(/^@\$"/)) {
       state.inVerbatimString = true;
-      return "string";
+      return 'string';
     }
 
     // Verbatim strings: @"..."
     if (stream.match(/^@"/)) {
       state.inVerbatimString = true;
-      return "string";
+      return 'string';
     }
 
     // Interpolated regular string
-    if (stream.match(/^\$"(?:[^"\\]|\\.)*"/)) return "string";
+    if (stream.match(/^\$"(?:[^"\\]|\\.)*"/)) return 'string';
 
     // Regular string
-    if (stream.match(/^"(?:[^"\\\r\n]|\\.)*"/)) return "string";
+    if (stream.match(/^"(?:[^"\\\r\n]|\\.)*"/)) return 'string';
 
     // Char literal: one char or one escape
-    if (stream.match(/^'(?:[^'\\\r\n]|\\.)'/)) return "string";
+    if (stream.match(/^'(?:[^'\\\r\n]|\\.)'/)) return 'string';
 
     // Hex before decimal
     if (stream.match(/^0[xX][0-9a-fA-F](?:[0-9a-fA-F_]*[0-9a-fA-F])?[uUlL]*/)) {
-      return "number";
+      return 'number';
     }
 
     // Binary
     if (stream.match(/^0[bB][01](?:[01_]*[01])?[uUlL]*/)) {
-      return "number";
+      return 'number';
     }
 
     // Decimal / float
-    if (
-      stream.match(
-        /^(?:\d(?:[\d_]*\d)?)(?:\.(?:\d(?:[\d_]*\d)?)?)?(?:[eE][+-]?\d(?:[\d_]*\d)?)?[fFdDmM]?/
-      )
-    ) {
-      return "number";
+    if (stream.match(/^(?:\d(?:[\d_]*\d)?)(?:\.(?:\d(?:[\d_]*\d)?)?)?(?:[eE][+-]?\d(?:[\d_]*\d)?)?[fFdDmM]?/)) {
+      return 'number';
     }
 
     // Attribute brackets: [Serializable], [HttpGet("...")]
-    if (stream.match("[")) {
+    if (stream.match('[')) {
       state.inAttribute = true;
-      return "squareBracket";
+      return 'squareBracket';
     }
-    if (stream.match("]")) {
+    if (stream.match(']')) {
       state.inAttribute = false;
-      return "squareBracket";
+      return 'squareBracket';
     }
 
     // Identifiers, including escaped identifiers like @class
     if (stream.match(/^@?[A-Za-z_]\w*/)) {
       const raw = stream.current();
-      const word = raw.startsWith("@") ? raw.slice(1) : raw;
+      const word = raw.startsWith('@') ? raw.slice(1) : raw;
       const next = stream.peek();
       const wasDot = state.afterDot;
       state.afterDot = false;
@@ -329,105 +435,105 @@ const csharpLanguage = StreamLanguage.define({
       if (csharpKeywords.has(word)) {
         state.expectTypeName = csharpTypeKeywords.has(word);
         state.expectNamespace = csharpNamespaceKeywords.has(word);
-        return "keyword";
+        return 'keyword';
       }
       if (csharpBuiltinTypes.has(word)) {
         state.expectTypeName = false;
         state.expectNamespace = false;
-        return "typeName";
+        return 'typeName';
       }
-      if (word === "true" || word === "false") {
+      if (word === 'true' || word === 'false') {
         state.expectTypeName = false;
-        return "bool";
+        return 'bool';
       }
-      if (word === "null") {
+      if (word === 'null') {
         state.expectTypeName = false;
-        return "atom";
+        return 'atom';
       }
 
       // Namespace: using System.Collections.Generic
       if (state.expectNamespace) {
-        return "namespace";
+        return 'namespace';
       }
 
       // Attribute name: [Serializable], [HttpGet]
       if (state.inAttribute) {
-        return "attributeName";
+        return 'attributeName';
       }
 
       // After a type-introducing keyword: new Foo, class Bar
       if (state.expectTypeName) {
         state.expectTypeName = false;
         // new Foo() — type followed by '(' is still a type (constructor)
-        return "typeName";
+        return 'typeName';
       }
 
-      const isUpperStart = word[0] >= "A" && word[0] <= "Z";
+      const isUpperStart = word[0] >= 'A' && word[0] <= 'Z';
 
       // Member access: obj.Method() or obj.Property
       if (wasDot) {
-        if (next === "(") return "variableName.function";
-        if (next === "<") return "typeName";
-        return "propertyName";
+        if (next === '(') return 'variableName.function';
+        if (next === '<') return 'typeName';
+        return 'propertyName';
       }
 
       // PascalCase followed by '<' — generic type: List<T>
-      if (isUpperStart && next === "<") {
-        return "typeName";
+      if (isUpperStart && next === '<') {
+        return 'typeName';
       }
 
       // Function call: Method(...)
-      if (next === "(") {
-        return "variableName.function";
+      if (next === '(') {
+        return 'variableName.function';
       }
 
       state.expectTypeName = false;
-      return "variableName";
+      return 'variableName';
     }
 
     // Dot — member access
-    if (stream.match(".")) {
+    if (stream.match('.')) {
       state.afterDot = true;
-      return "punctuation";
+      return 'punctuation';
     }
 
     // Colon — expect type name after ':' (inheritance, type constraints)
-    if (stream.match(":")) {
+    if (stream.match(':')) {
       state.expectTypeName = true;
-      return "punctuation";
+      return 'punctuation';
     }
 
     // Angle brackets — '<' expects type arg, '>' does not
-    if (stream.match("<")) {
+    if (stream.match('<')) {
       state.expectTypeName = true;
-      return "angleBracket";
+      return 'angleBracket';
     }
-    if (stream.match(">")) {
-      return "angleBracket";
+    if (stream.match('>')) {
+      return 'angleBracket';
     }
 
     // Comma inside generic args or after base types keeps expecting types
-    if (stream.match(",")) {
-      return "punctuation";
+    if (stream.match(',')) {
+      return 'punctuation';
     }
 
     // Parentheses and braces
-    if (stream.match(/^[()]/)) return "paren";
-    if (stream.match(/^[{}]/)) return "brace";
+    if (stream.match(/^[()]/)) return 'paren';
+    if (stream.match(/^[{}]/)) return 'brace';
 
     // Semicolon
-    if (stream.match(";")) {
+    if (stream.match(';')) {
       state.expectNamespace = false;
-      return "punctuation";
+      return 'punctuation';
     }
 
     // Lambda and other operators
-    if (stream.match("=>")) return "operator";
-    if (stream.match(/^[+\-*/%&|^!~?=<>]+/)) return "operator";
+    if (stream.match('=>')) return 'operator';
+    if (stream.match(/^[+\-*/%&|^!~?=<>]+/)) return 'operator';
 
     stream.next();
     return null;
-  }
+  },
 });
 
 const jsLanguage = javascript().language;
@@ -476,7 +582,7 @@ const languageMap: Record<string, any> = {
   zsh: shellLanguage,
   m: powerQueryLanguage,
   powerquery: powerQueryLanguage,
-  pq: powerQueryLanguage
+  pq: powerQueryLanguage,
 };
 
 export function resolveCodeLanguage(info: string | null | undefined): any {
@@ -513,7 +619,7 @@ export function insertCodeBlock(view: EditorView, selection: { from: number; to:
     const insert = `\n${leadingWhitespace}\`\`\`\n${selectedText}\n${leadingWhitespace}\`\`\`\n`;
     view.dispatch({
       changes: { from: selection.from, to: selection.to, insert },
-      selection: { anchor: selection.from + leadingWhitespace.length + 4 }
+      selection: { anchor: selection.from + leadingWhitespace.length + 4 },
     });
     return;
   }
@@ -523,7 +629,7 @@ export function insertCodeBlock(view: EditorView, selection: { from: number; to:
   const cursorPos = line.from + leadingWhitespace.length + 4;
   view.dispatch({
     changes: { from: line.from, to: line.to, insert },
-    selection: { anchor: cursorPos }
+    selection: { anchor: cursorPos },
   });
 }
 
@@ -548,7 +654,7 @@ function computeSourceCodeBlockLines(state: EditorState): any {
         line = state.doc.line(line.number + 1);
       }
       return false;
-    }
+    },
   });
 
   for (const block of getMermaidColonBlocks(state)) {
@@ -588,7 +694,7 @@ export const sourceCodeBlockField = StateField.define<any>({
       return lines;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });
 
 export function isFenceMarker(state: EditorState, from: number, to: number): boolean {
@@ -688,7 +794,7 @@ function addTopLineWidget(builder: any[], lineEnd: number, widget: WidgetType): 
   builder.push(
     Decoration.widget({
       widget,
-      side: 1
+      side: 1,
     }).range(lineEnd)
   );
 }
@@ -711,7 +817,15 @@ const quotedFenceOpeningLineRegex = /^[ \t]{0,3}(?:>[ \t]?)*[ \t]{0,3}(?:`{3,}|~
 const fenceLineRegex = /^[ \t]*[`~]{3,}.*$/;
 const quotedFencePrefixRegex = /^[ \t]{0,3}((?:>[ \t]?)*)[ \t]{0,3}(?:`{3,}|~{3,})/;
 
-export function addFenceOpeningLineMarker(builder: any[], state: EditorState, from: number, activeLines: Set<number>, addRange: Function, activeLineMarkerDeco: any, fenceMarkerDeco: any): void {
+export function addFenceOpeningLineMarker(
+  builder: any[],
+  state: EditorState,
+  from: number,
+  activeLines: Set<number>,
+  addRange: Function,
+  activeLineMarkerDeco: any,
+  fenceMarkerDeco: any
+): void {
   const line = state.doc.lineAt(from);
   const text = state.doc.sliceString(line.from, line.to);
   // Support fenced code opening lines nested inside blockquotes/callouts, e.g. "> ```ts".
@@ -754,7 +868,7 @@ export function addMermaidDiagram(builder: any[], state: EditorState, node: any)
     startLine: startLine.number,
     endLine: endLine.number,
     diagramText,
-    fullBlockText
+    fullBlockText,
   });
 }
 
@@ -792,7 +906,7 @@ export function addMermaidDiagramBlock(
   builder.push(
     Decoration.replace({
       widget,
-      block: true
+      block: true,
     }).range(contentStartLine.from, contentEndLine.to)
   );
 }

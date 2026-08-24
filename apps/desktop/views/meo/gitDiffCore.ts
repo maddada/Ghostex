@@ -56,9 +56,8 @@ function buildLcsMatrix(a: string[], b: string[]): { matrix: Uint32Array; rowSiz
     const rowIndex = i * rowSize;
     const nextRowIndex = (i + 1) * rowSize;
     for (let j = m - 1; j >= 0; j -= 1) {
-      matrix[rowIndex + j] = a[i] === b[j]
-        ? matrix[nextRowIndex + j + 1] + 1
-        : Math.max(matrix[nextRowIndex + j], matrix[rowIndex + j + 1]);
+      matrix[rowIndex + j] =
+        a[i] === b[j] ? matrix[nextRowIndex + j + 1] + 1 : Math.max(matrix[nextRowIndex + j], matrix[rowIndex + j + 1]);
     }
   }
 
@@ -103,10 +102,10 @@ export function lcsDiffRuns(baseLines: string[], currentLines: string[], limits:
     if (baseLines[i] === currentLines[j]) {
       const equalScore = matrix[(i + 1) * rowSize + (j + 1)] + 1;
       const optionalEqual = Math.max(deleteScore, insertScore) === equalScore;
-      const ambiguousRepeatedLine = optionalEqual && (
-        hasLaterLineOccurrence(baseLines, i, baseLines[i]) ||
-        hasLaterLineOccurrence(currentLines, j, currentLines[j])
-      );
+      const ambiguousRepeatedLine =
+        optionalEqual &&
+        (hasLaterLineOccurrence(baseLines, i, baseLines[i]) ||
+          hasLaterLineOccurrence(currentLines, j, currentLines[j]));
 
       if (!ambiguousRepeatedLine) {
         pushRun('equal', 1);
@@ -153,12 +152,7 @@ function mapEqualLineRun(mapping: Int32Array, baseStart: number, currentStart: n
   }
 }
 
-function applyRunsToMapping(
-  mapping: Int32Array,
-  runs: DiffRun[],
-  baseStart: number,
-  currentStart: number
-): void {
+function applyRunsToMapping(mapping: Int32Array, runs: DiffRun[], baseStart: number, currentStart: number): void {
   let baseLineNo = baseStart + 1;
   let currentLineNo = currentStart + 1;
   const applyPairedModifiedRunMap = (currentCount: number, baseCount: number) => {
@@ -299,11 +293,7 @@ function longestIncreasingAnchorSubsequence(pairs: AnchorPair[]): AnchorPair[] {
   return result;
 }
 
-function findPatienceAnchors(
-  baseLines: string[],
-  currentLines: string[],
-  segment: DiffSegment
-): AnchorPair[] {
+function findPatienceAnchors(baseLines: string[], currentLines: string[], segment: DiffSegment): AnchorPair[] {
   const uniqueBase = buildUniqueLinePositionMap(baseLines, segment.baseStart, segment.baseEnd);
   const uniqueCurrent = buildUniqueLinePositionMap(currentLines, segment.currentStart, segment.currentEnd);
   if (!uniqueBase.size || !uniqueCurrent.size) {
@@ -351,11 +341,7 @@ function buildSparseLinePositionIndex(
   return indexByLine;
 }
 
-function findWindowAnchors(
-  baseLines: string[],
-  currentLines: string[],
-  segment: DiffSegment
-): AnchorPair[] {
+function findWindowAnchors(baseLines: string[], currentLines: string[], segment: DiffSegment): AnchorPair[] {
   const baseLen = segment.baseEnd - segment.baseStart;
   const currentLen = segment.currentEnd - segment.currentStart;
   if (!baseLen || !currentLen) {
@@ -411,10 +397,7 @@ function findWindowAnchors(
   return longestIncreasingAnchorSubsequence(anchors);
 }
 
-function applyHeuristicPairedSegment(
-  mapping: Int32Array,
-  segment: DiffSegment
-): void {
+function applyHeuristicPairedSegment(mapping: Int32Array, segment: DiffSegment): void {
   const pairCount = Math.min(segment.baseEnd - segment.baseStart, segment.currentEnd - segment.currentStart);
   if (pairCount <= 0) {
     return;
@@ -450,7 +433,7 @@ function pushAnchoredGaps(
         baseStart: baseCursor,
         baseEnd: runStart.baseIndex,
         currentStart: currentCursor,
-        currentEnd: runStart.currentIndex
+        currentEnd: runStart.currentIndex,
       });
     }
 
@@ -465,7 +448,7 @@ function pushAnchoredGaps(
       baseStart: baseCursor,
       baseEnd: segment.baseEnd,
       currentStart: currentCursor,
-      currentEnd: segment.currentEnd
+      currentEnd: segment.currentEnd,
     });
   }
 
@@ -484,12 +467,14 @@ function buildCurrentToBaselineLineMapScalableFromLines(
   limits: DiffLcsLimits = {}
 ): Int32Array {
   const mapping = new Int32Array(currentLines.length + 1);
-  const stack: DiffSegment[] = [{
-    baseStart: 0,
-    baseEnd: baseLines.length,
-    currentStart: 0,
-    currentEnd: currentLines.length
-  }];
+  const stack: DiffSegment[] = [
+    {
+      baseStart: 0,
+      baseEnd: baseLines.length,
+      currentStart: 0,
+      currentEnd: currentLines.length,
+    },
+  ];
 
   while (stack.length > 0) {
     const rawSegment = stack.pop();
@@ -499,11 +484,7 @@ function buildCurrentToBaselineLineMapScalableFromLines(
 
     let { baseStart, baseEnd, currentStart, currentEnd } = rawSegment;
 
-    while (
-      baseStart < baseEnd &&
-      currentStart < currentEnd &&
-      baseLines[baseStart] === currentLines[currentStart]
-    ) {
+    while (baseStart < baseEnd && currentStart < currentEnd && baseLines[baseStart] === currentLines[currentStart]) {
       mapping[currentStart + 1] = baseStart + 1;
       baseStart += 1;
       currentStart += 1;

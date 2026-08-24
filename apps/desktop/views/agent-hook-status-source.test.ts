@@ -1,18 +1,18 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 
-const modalHostSource = readFileSync(new URL("./modal-host.tsx", import.meta.url), "utf8");
+const modalHostSource = readFileSync(new URL('./modal-host.tsx', import.meta.url), 'utf8');
 const contractSource = readFileSync(
-  new URL("../../../packages/shared/session-grid-contract-sidebar.ts", import.meta.url),
-  "utf8",
+  new URL('../../../packages/shared/session-grid-contract-sidebar.ts', import.meta.url),
+  'utf8'
 );
 const gxserverProtocolSource = readFileSync(
-  new URL("../../../packages/shared/gxserver-protocol.ts", import.meta.url),
-  "utf8",
+  new URL('../../../packages/shared/gxserver-protocol.ts', import.meta.url),
+  'utf8'
 );
 
-describe("agent hook status source", () => {
-  test("checks requested hook providers one at a time and prioritizes Codex, Claude, OpenCode, and Pi", () => {
+describe('agent hook status source', () => {
+  test('checks requested hook providers one at a time and prioritizes Codex, Claude, OpenCode, and Pi', () => {
     /*
      * CDXC:AgentHooks 2026-06-18-02:38:
      * First-launch can request the full supported hook set while native checks
@@ -25,12 +25,12 @@ describe("agent hook status source", () => {
      * must request its status in the priority group instead of waiting for lower
      * priority provider probes.
      */
-    expect(contractSource).toContain("agentIds?: readonly string[];");
-    expect(modalHostSource).toContain("vscode.postMessage({ agentIds, type: \"requestAgentHookStatus\" });");
-    expect(modalHostSource).toContain("vscode.postMessage({ agentIds, type: \"installAgentHooks\" });");
+    expect(contractSource).toContain('agentIds?: readonly string[];');
+    expect(modalHostSource).toContain('vscode.postMessage({ agentIds, type: "requestAgentHookStatus" });');
+    expect(modalHostSource).toContain('vscode.postMessage({ agentIds, type: "installAgentHooks" });');
   });
 
-  test("wires advanced Settings uninstall actions for hooks and bundled skills", () => {
+  test('wires advanced Settings uninstall actions for hooks and bundled skills', () => {
     /*
      * CDXC:AgentHooks 2026-06-18-02:54:
      * Advanced Settings should expose explicit uninstall actions for Ghostex
@@ -46,14 +46,12 @@ describe("agent hook status source", () => {
     expect(contractSource).toContain('"installAgentHooks"');
     expect(contractSource).toContain('"uninstallAgentHooks"');
     expect(contractSource).toContain('"uninstallBundledAgentSkills"');
-    expect(modalHostSource).toContain(
-      'vscode.postMessage({ agentIds, type: "uninstallAgentHooks" });',
-    );
+    expect(modalHostSource).toContain('vscode.postMessage({ agentIds, type: "uninstallAgentHooks" });');
     expect(modalHostSource).toContain('vscode.postMessage({ type: "uninstallBundledAgentSkills" });');
     expect(gxserverProtocolSource).toContain('"/api/uninstallAgentHooks"');
   });
 
-  test("does not keep a titlebar direct-install hook command", () => {
+  test('does not keep a titlebar direct-install hook command', () => {
     /*
      * CDXC:AgentHooks 2026-06-23-05:09:
      * The titlebar Tips hook warning deep-links to Settings instead of invoking

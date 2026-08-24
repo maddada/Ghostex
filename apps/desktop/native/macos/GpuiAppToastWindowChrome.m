@@ -1,13 +1,13 @@
 #import <AppKit/AppKit.h>
 
-void GhostexGpuiRemoveToastPopupWindowChrome(void* nativeView) {
+void GhostexGpuiRemoveToastPopupWindowChrome(void *nativeView) {
   @autoreleasepool {
     if (nativeView == NULL) {
       return;
     }
 
-    NSView* view = (__bridge NSView*)nativeView;
-    NSWindow* window = view.window;
+    NSView *view = (__bridge NSView *)nativeView;
+    NSWindow *window = view.window;
     if (window == nil) {
       return;
     }
@@ -28,7 +28,7 @@ void GhostexGpuiRemoveToastPopupWindowChrome(void* nativeView) {
     window.hasShadow = NO;
     [window invalidateShadow];
 
-    NSView* contentView = window.contentView;
+    NSView *contentView = window.contentView;
     contentView.wantsLayer = YES;
     contentView.layer.backgroundColor = NSColor.clearColor.CGColor;
     view.wantsLayer = YES;
@@ -45,14 +45,15 @@ void GhostexGpuiRemoveToastPopupWindowChrome(void* nativeView) {
  the user moves it, disappears with it on miniaturize/hide, and no longer draws
  over whatever app the user switched to.
  */
-void GhostexGpuiAttachToastPopupToMainWindow(void* toastNativeView, void* mainNativeView) {
+void GhostexGpuiAttachToastPopupToMainWindow(void *toastNativeView,
+                                             void *mainNativeView) {
   @autoreleasepool {
     if (toastNativeView == NULL || mainNativeView == NULL) {
       return;
     }
 
-    NSWindow* toastWindow = ((__bridge NSView*)toastNativeView).window;
-    NSWindow* mainWindow = ((__bridge NSView*)mainNativeView).window;
+    NSWindow *toastWindow = ((__bridge NSView *)toastNativeView).window;
+    NSWindow *mainWindow = ((__bridge NSView *)mainNativeView).window;
     if (toastWindow == nil || mainWindow == nil || toastWindow == mainWindow) {
       return;
     }
@@ -64,14 +65,14 @@ void GhostexGpuiAttachToastPopupToMainWindow(void* toastNativeView, void* mainNa
   }
 }
 
-void GhostexGpuiPrepareTitlebarPopupWindow(void* nativeView) {
+void GhostexGpuiPrepareTitlebarPopupWindow(void *nativeView) {
   @autoreleasepool {
     if (nativeView == NULL) {
       return;
     }
 
-    NSView* view = (__bridge NSView*)nativeView;
-    NSWindow* window = view.window;
+    NSView *view = (__bridge NSView *)nativeView;
+    NSWindow *window = view.window;
     if (window == nil) {
       return;
     }
@@ -84,7 +85,7 @@ void GhostexGpuiPrepareTitlebarPopupWindow(void* nativeView) {
        window, and a key-stealing panel makes the whole app look
        deactivated the moment the menu opens.
        */
-      ((NSPanel*)window).becomesKeyOnlyIfNeeded = YES;
+      ((NSPanel *)window).becomesKeyOnlyIfNeeded = YES;
       window.hidesOnDeactivate = NO;
     }
     [window orderFrontRegardless];

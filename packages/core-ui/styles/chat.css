@@ -12,7 +12,7 @@
  * the browser's synthetic emboldening are most of why the bold text stops
  * looking heavier than it should next to the body copy.
  */
-@import "@fontsource-variable/dm-sans/index.css";
+@import '@fontsource-variable/dm-sans/index.css';
 
 /*
  * CDXC:SessionChat 2026-07-31:
@@ -64,17 +64,17 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
 .ghostex-session-chat-popup {
   font-family: var(
     --ghostex-session-chat-font-family,
-    "DM Sans Variable",
-    "DM Sans",
+    'DM Sans Variable',
+    'DM Sans',
     -apple-system,
     BlinkMacSystemFont,
-    "Segoe UI",
+    'Segoe UI',
     system-ui,
     sans-serif
   );
 }
 
-.ghostex-session-chat-scope [data-slot="message-scroller-content"] {
+.ghostex-session-chat-scope [data-slot='message-scroller-content'] {
   width: calc(var(--ghostex-session-chat-transcript-width-percent, 75) * 1%);
   max-width: calc(100% - 60px);
 }
@@ -186,7 +186,7 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
  * narrow panes and phones never squeeze the conversation further.
  */
 @media (max-width: 1070px) {
-  .ghostex-session-chat-scope [data-slot="message-scroller-content"] {
+  .ghostex-session-chat-scope [data-slot='message-scroller-content'] {
     max-width: 100%;
     width: 100%;
   }
@@ -194,8 +194,8 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
 
 /* The chat palette is intentionally scoped to the conversation. The
    surrounding Ghostex shell remains dark even when chat content is light. */
-.ghostex-session-chat-scope[data-chat-theme="light"],
-body[data-session-chat-theme="light"] .ghostex-session-chat-popup {
+.ghostex-session-chat-scope[data-chat-theme='light'],
+body[data-session-chat-theme='light'] .ghostex-session-chat-popup {
   color-scheme: light;
   --background: oklch(99.2% 0 0);
   --foreground: oklch(27.4% 0.006 286.033);
@@ -244,8 +244,8 @@ body[data-session-chat-theme="light"] .ghostex-session-chat-popup {
   color: var(--foreground);
 }
 
-.ghostex-session-chat-scope[data-chat-theme="dark"],
-body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
+.ghostex-session-chat-scope[data-chat-theme='dark'],
+body[data-session-chat-theme='dark'] .ghostex-session-chat-popup {
   color-scheme: dark;
   --background: #0a0a0a;
   --foreground: #fcfcfc;
@@ -392,8 +392,8 @@ in. Retiring the dot leaves the gutter in place, so the structural rows
 (disclosures, tool rows) keep their shared axis and only the prose loses its
 leading glyph.
 */
-.ghostex-session-chat-scope[data-chat-bullets="off"],
-body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
+.ghostex-session-chat-scope[data-chat-bullets='off'],
+body[data-session-chat-bullets='off'] .ghostex-session-chat-popup {
   --chat-marker-bullet: 0rem;
 }
 
@@ -470,7 +470,7 @@ body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
 
 /* --- Conversation blocks ------------------------------------------------- */
 
-.ghostex-chat-user-bubble > [data-slot="bubble-content"] {
+.ghostex-chat-user-bubble > [data-slot='bubble-content'] {
   background: var(--accent);
   border-radius: 1rem;
   color: var(--foreground);
@@ -481,9 +481,7 @@ body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
    surfaces — the user's bubble and the composer — and they wear the same fill,
    so a message and the box you typed it in read as the same material sitting
    on the page. */
-.ghostex-session-chat-scope[data-chat-theme="dark"]
-  .ghostex-chat-user-bubble
-  > [data-slot="bubble-content"] {
+.ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-user-bubble > [data-slot='bubble-content'] {
   background: #141414;
   border-radius: 1rem;
   color: #fcfcfc;
@@ -527,7 +525,7 @@ body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
   align-self: start;
   background: currentColor;
   border-radius: 50%;
-  content: "";
+  content: '';
   height: var(--chat-marker-bullet);
   justify-self: center;
   width: var(--chat-marker-bullet);
@@ -629,9 +627,7 @@ body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
 /* Open, that same line is the heading of an expanded turn — and for a one-line
    thought it is the whole thought, so it has to be readable in full. Only the
    collapsed state trades completeness for a single row. */
-.ghostex-chat-thinking-trigger[aria-expanded="true"]
-  .ghostex-chat-thinking-text
-  > [data-ghostex-thinking-text] {
+.ghostex-chat-thinking-trigger[aria-expanded='true'] .ghostex-chat-thinking-text > [data-ghostex-thinking-text] {
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
@@ -666,9 +662,7 @@ and a copy still carries the markdown.
    positioned from the marker column rather than from a constant: half the
    5px rail to the left of the column's optical centre. */
 .ghostex-chat-thinking-detail {
-  margin-inline-start: calc(
-    var(--chat-marker-inset) + var(--chat-marker-slot) / 2 - 2.5px
-  );
+  margin-inline-start: calc(var(--chat-marker-inset) + var(--chat-marker-slot) / 2 - 2.5px);
 }
 
 .ghostex-chat-completed-turn,
@@ -750,7 +744,7 @@ and a copy still carries the markdown.
 .ghostex-chat-expansion-rail::before {
   background: color-mix(in srgb, var(--muted-foreground) 42%, transparent);
   bottom: 0;
-  content: "";
+  content: '';
   left: 50%;
   position: absolute;
   top: 0;
@@ -879,9 +873,7 @@ and a copy still carries the markdown.
 
 /* Same rail placement as the reasoning detail, from the same tokens. */
 .ghostex-chat-work-detail {
-  margin-inline-start: calc(
-    var(--chat-marker-inset) + var(--chat-marker-slot) / 2 - 2.5px
-  );
+  margin-inline-start: calc(var(--chat-marker-inset) + var(--chat-marker-slot) / 2 - 2.5px);
   margin-top: 0.25rem;
   padding-top: 0.125rem;
 }
@@ -939,7 +931,7 @@ the markdown block) rather than pinned to a tier of its own.
   padding: 0.5rem;
 }
 
-.ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-file-edit {
+.ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-file-edit {
   background: color-mix(in srgb, var(--input) 32%, transparent);
   border-color: transparent;
 }
@@ -986,14 +978,14 @@ the markdown block) rather than pinned to a tier of its own.
   border-radius: 9999px;
 }
 
-.ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-composer {
+.ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-composer {
   background: #141414;
 }
 
 /* The interactive prompt card stands in for the composer while a question is
    live, so it wears the same raised surface instead of disappearing into the
    conversation background (--card is the page background in this theme). */
-.ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-question-card {
+.ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-question-card {
   background: #141414;
 }
 
@@ -1115,19 +1107,31 @@ the markdown block) rather than pinned to a tier of its own.
    fill on the active row, and flattening it left the arrow keys moving an
    invisible selection — only the CSS `:hover` fill below ever showed, so the
    pickers read as mouse-only. */
-.ghostex-session-chat-scope[data-chat-theme="dark"]
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not([data-chat-picker-option]),
-body[data-session-chat-theme="dark"]
+.ghostex-session-chat-scope[data-chat-theme='dark']
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
+    .ghostex-chat-scroll-bottom-button
+  ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]),
+body[data-session-chat-theme='dark']
   .ghostex-session-chat-popup
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not([data-chat-picker-option]) {
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
+    .ghostex-chat-scroll-bottom-button
+  ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]) {
   background-color: transparent;
 }
 
-.ghostex-session-chat-scope[data-chat-theme="dark"]
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not([data-chat-picker-option]):not(:disabled):hover,
-body[data-session-chat-theme="dark"]
+.ghostex-session-chat-scope[data-chat-theme='dark']
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
+    .ghostex-chat-scroll-bottom-button
+  ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
+    :disabled
+  ):hover,
+body[data-session-chat-theme='dark']
   .ghostex-session-chat-popup
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not([data-chat-picker-option]):not(:disabled):hover {
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
+    .ghostex-chat-scroll-bottom-button
+  ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
+    :disabled
+  ):hover {
   background-color: #333333;
 }
 
@@ -1139,18 +1143,18 @@ body[data-session-chat-theme="dark"]
    and only the CSS :hover fill above ever showed — the pickers read as
    mouse-only. Hover now runs through the same highlight (the rows track the
    pointer into the same index), so both inputs share one visual. */
-.ghostex-chat-composer-picker [role="option"][data-highlighted="true"] {
+.ghostex-chat-composer-picker [role='option'][data-highlighted='true'] {
   background-color: var(--accent);
   color: var(--accent-foreground);
 }
 
-.ghostex-session-chat-scope[data-chat-theme="dark"]
+.ghostex-session-chat-scope[data-chat-theme='dark']
   .ghostex-chat-composer-picker
-  [role="option"][data-highlighted="true"],
-body[data-session-chat-theme="dark"]
+  [role='option'][data-highlighted='true'],
+body[data-session-chat-theme='dark']
   .ghostex-session-chat-popup
   .ghostex-chat-composer-picker
-  [role="option"][data-highlighted="true"] {
+  [role='option'][data-highlighted='true'] {
   background-color: #333333;
 }
 
@@ -1193,15 +1197,15 @@ so the swap barely moves the composer row.
   animation: ghostex-chat-pill-skeleton-pulse 1.4s ease-in-out infinite;
 }
 
-.ghostex-chat-pill-skeleton[data-pill="model"] {
+.ghostex-chat-pill-skeleton[data-pill='model'] {
   width: 3.25rem;
 }
 
-.ghostex-chat-pill-skeleton[data-pill="options"] {
+.ghostex-chat-pill-skeleton[data-pill='options'] {
   width: 2.25rem;
 }
 
-.ghostex-chat-pill-skeleton[data-pill="combined"] {
+.ghostex-chat-pill-skeleton[data-pill='combined'] {
   width: 5.5rem;
 }
 
@@ -1256,7 +1260,7 @@ so the swap barely moves the composer row.
    dragging across it. Scoped to the scroller viewport, so buttons, pills, and
    the rest of the chat chrome keep the native no-drag-select behavior.
    -webkit-touch-callout keeps the WebView long-press selection handles (RN). */
-[data-slot="message-scroller-viewport"] {
+[data-slot='message-scroller-viewport'] {
   -webkit-touch-callout: default;
   -webkit-user-select: text;
   user-select: text;
@@ -1269,12 +1273,12 @@ so the swap barely moves the composer row.
    reader scrolls, then fades back out a couple of seconds after the last
    scroll (the message list stamps data-user-scrolling). Autoscroll following
    live output never shows it. */
-[data-slot="message-scroller-viewport"] {
+[data-slot='message-scroller-viewport'] {
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 0.4s ease;
 }
 
-[data-slot="message-scroller-viewport"][data-user-scrolling]:not([data-autoscrolling]) {
+[data-slot='message-scroller-viewport'][data-user-scrolling]:not([data-autoscrolling]) {
   scrollbar-color: color-mix(in srgb, var(--foreground) 30%, transparent) transparent;
 }
 
@@ -1306,7 +1310,7 @@ so the swap barely moves the composer row.
   align-self: start;
   background: currentColor;
   border-radius: 50%;
-  content: "";
+  content: '';
   height: var(--chat-marker-bullet);
   justify-self: center;
   margin-block-start: var(--chat-marker-bullet-offset);
@@ -1346,7 +1350,7 @@ so the swap barely moves the composer row.
 }
 
 .ghostex-chat-suppressed-inline-label::after {
-  content: " · ";
+  content: ' · ';
   font-weight: 400;
 }
 
@@ -1372,7 +1376,7 @@ so the swap barely moves the composer row.
   scrollbar-width: thin;
 }
 
-.ghostex-chat-scroll-cap[data-expanded="true"] {
+.ghostex-chat-scroll-cap[data-expanded='true'] {
   max-height: none;
   overflow-y: visible;
 }
@@ -1526,7 +1530,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    gutter the marker would have used rather than by a constant that only happens
    to look right at the default 1.25rem — a task list written inside a widened
    ordered list keeps its boxes on the same text edge as everything else. */
-.ghostex-chat-markdown input[type="checkbox"] {
+.ghostex-chat-markdown input[type='checkbox'] {
   margin: 0 0.375rem 0 calc(-1 * var(--chat-list-gutter, 1.25rem));
   vertical-align: -0.1em;
 }
@@ -1552,13 +1556,23 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   margin: 1.25rem 0 0.5rem;
 }
 
-.ghostex-chat-markdown h1 { font-size: 1.25rem; }
-.ghostex-chat-markdown h2 { font-size: 1.125rem; }
-.ghostex-chat-markdown h3 { font-size: 1rem; }
+.ghostex-chat-markdown h1 {
+  font-size: 1.25rem;
+}
+.ghostex-chat-markdown h2 {
+  font-size: 1.125rem;
+}
+.ghostex-chat-markdown h3 {
+  font-size: 1rem;
+}
 .ghostex-chat-markdown h4,
 .ghostex-chat-markdown h5,
-.ghostex-chat-markdown h6 { font-size: 0.875rem; }
-.ghostex-chat-markdown h6 { color: var(--muted-foreground); }
+.ghostex-chat-markdown h6 {
+  font-size: 0.875rem;
+}
+.ghostex-chat-markdown h6 {
+  color: var(--muted-foreground);
+}
 
 .ghostex-chat-markdown :not(pre) > code {
   background: var(--chat-inline-code-surface, var(--muted));
@@ -1599,7 +1613,10 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   min-width: 0;
   padding: 0.1rem 0.35rem 0.1rem 0.28rem;
   text-align: left;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
   vertical-align: baseline;
 }
 
@@ -1608,11 +1625,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    which sits below the new resting surface and would read as a press. */
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover,
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible {
-  background: color-mix(
-    in srgb,
-    var(--info-foreground) 14%,
-    var(--chat-inline-code-surface, var(--muted))
-  );
+  background: color-mix(in srgb, var(--info-foreground) 14%, var(--chat-inline-code-surface, var(--muted)));
   border-color: color-mix(in srgb, var(--info-foreground) 45%, var(--border));
   color: var(--info-foreground);
   outline: none;
@@ -1625,10 +1638,8 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   transition: color 120ms ease;
 }
 
-.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover
-  .ghostex-chat-markdown-file-chip-icon,
-.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible
-  .ghostex-chat-markdown-file-chip-icon {
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover .ghostex-chat-markdown-file-chip-icon,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible .ghostex-chat-markdown-file-chip-icon {
   color: inherit;
 }
 
@@ -1665,7 +1676,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 }
 
 .ghostex-chat-markdown-file-chip-detail::before {
-  content: "·";
+  content: '·';
   margin-right: 0.25rem;
   opacity: 0.7;
 }
@@ -1746,7 +1757,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 
 /* The wrap toggle is the one piece of chat chrome that holds a state, so it
    has to look held: ghost buttons otherwise read identically pressed and not. */
-.ghostex-chat-markdown-codeblock-actions [aria-pressed="true"] {
+.ghostex-chat-markdown-codeblock-actions [aria-pressed='true'] {
   background: var(--accent);
   color: var(--foreground);
 }
@@ -1767,7 +1778,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    obey it; `anywhere` because the lines that need wrapping are long tokens —
    base64, a minified payload, a URL — that have no space to break at. Off, the
    overflow-x above is what carries them. */
-.ghostex-chat-markdown .ghostex-chat-markdown-codeblock[data-wrap="true"] pre {
+.ghostex-chat-markdown .ghostex-chat-markdown-codeblock[data-wrap='true'] pre {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -1793,13 +1804,13 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   background: transparent;
 }
 
-[data-chat-theme="light"] .ghostex-chat-markdown-shiki .shiki,
-[data-chat-theme="light"] .ghostex-chat-markdown-shiki .shiki span {
+[data-chat-theme='light'] .ghostex-chat-markdown-shiki .shiki,
+[data-chat-theme='light'] .ghostex-chat-markdown-shiki .shiki span {
   color: var(--shiki-light);
 }
 
-[data-chat-theme="dark"] .ghostex-chat-markdown-shiki .shiki,
-[data-chat-theme="dark"] .ghostex-chat-markdown-shiki .shiki span {
+[data-chat-theme='dark'] .ghostex-chat-markdown-shiki .shiki,
+[data-chat-theme='dark'] .ghostex-chat-markdown-shiki .shiki span {
   color: var(--shiki-dark);
 }
 
@@ -1826,23 +1837,23 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   padding-left: 0.8rem;
 }
 
-.ghostex-chat-markdown-alert[data-alert="note"] {
+.ghostex-chat-markdown-alert[data-alert='note'] {
   --alert-accent: var(--alert-note);
 }
 
-.ghostex-chat-markdown-alert[data-alert="tip"] {
+.ghostex-chat-markdown-alert[data-alert='tip'] {
   --alert-accent: var(--alert-tip);
 }
 
-.ghostex-chat-markdown-alert[data-alert="important"] {
+.ghostex-chat-markdown-alert[data-alert='important'] {
   --alert-accent: var(--alert-important);
 }
 
-.ghostex-chat-markdown-alert[data-alert="warning"] {
+.ghostex-chat-markdown-alert[data-alert='warning'] {
   --alert-accent: var(--alert-warning);
 }
 
-.ghostex-chat-markdown-alert[data-alert="caution"] {
+.ghostex-chat-markdown-alert[data-alert='caution'] {
   --alert-accent: var(--alert-caution);
 }
 
@@ -1914,7 +1925,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 }
 
 .ghostex-chat-markdown-details-summary::marker {
-  content: "";
+  content: '';
 }
 
 .ghostex-chat-markdown-details-summary:hover .ghostex-chat-markdown-details-chevron {
@@ -2095,17 +2106,17 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    `button { cursor: default !important }` never reaches it and no override is
    needed. `data-zoom="none"` is a picture already at full size: plain arrow,
    because clicking it does nothing. */
-.ghostex-chat-image-preview[data-zoom="in"] {
+.ghostex-chat-image-preview[data-zoom='in'] {
   cursor: zoom-in;
 }
 
-.ghostex-chat-image-preview[data-zoom="out"] {
+.ghostex-chat-image-preview[data-zoom='out'] {
   cursor: zoom-out;
 }
 
 /* Zoomed: the level's width is set inline and the height follows the aspect
    ratio, so both fitted caps have to come off. */
-.ghostex-chat-image-preview[data-zoomed="true"] {
+.ghostex-chat-image-preview[data-zoomed='true'] {
   max-height: none;
   max-width: none;
 }
@@ -2282,7 +2293,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   display: block;
 }
 
-.ghostex-chat-markdown-table[data-expanded="false"] .ghostex-chat-markdown-table-cell {
+.ghostex-chat-markdown-table[data-expanded='false'] .ghostex-chat-markdown-table-cell {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2291,7 +2302,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 /* Expanded lifts the cap on height, not on width: cells wrap in place instead
    of growing sideways. `anywhere` because what overflows a cell is usually one
    unbreakable token — a path, a URL, an id. */
-.ghostex-chat-markdown-table[data-expanded="true"] .ghostex-chat-markdown-table-cell {
+.ghostex-chat-markdown-table[data-expanded='true'] .ghostex-chat-markdown-table-cell {
   overflow-wrap: anywhere;
 }
 
@@ -2312,8 +2323,8 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 
 .ghostex-chat-markdown-table:hover .ghostex-chat-markdown-table-actions,
 .ghostex-chat-markdown-table:focus-within .ghostex-chat-markdown-table-actions,
-.ghostex-chat-markdown-table[data-expanded="true"] .ghostex-chat-markdown-table-actions,
-.ghostex-chat-markdown-table-actions:has([aria-expanded="true"]) {
+.ghostex-chat-markdown-table[data-expanded='true'] .ghostex-chat-markdown-table-actions,
+.ghostex-chat-markdown-table-actions:has([aria-expanded='true']) {
   opacity: 1;
 }
 
@@ -2325,7 +2336,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 
 /* Same reason as the code block's wrap toggle: a ghost button holding a state
    has to look held. */
-.ghostex-chat-markdown-table-actions [aria-pressed="true"] {
+.ghostex-chat-markdown-table-actions [aria-pressed='true'] {
   background: var(--accent);
   color: var(--foreground);
 }
@@ -2437,14 +2448,14 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   background: color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
-.ghostex-chat-queue-row[data-dragging="true"] {
+.ghostex-chat-queue-row[data-dragging='true'] {
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
   opacity: 0.85;
 }
 
 /* A row the scheduler already claimed is being delivered right now; it reads as
    busy and refuses edit / reorder / delete. */
-.ghostex-chat-queue-row[data-state="sending"] .ghostex-chat-queue-row-text {
+.ghostex-chat-queue-row[data-state='sending'] .ghostex-chat-queue-row-text {
   opacity: 0.7;
 }
 

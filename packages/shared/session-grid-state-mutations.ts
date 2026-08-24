@@ -4,16 +4,13 @@ import {
   type SessionRecord,
   type TerminalViewMode,
   type VisibleSessionCount,
-} from "./session-grid-contract";
-import {
-  reindexSessionsInOrder,
-  restoreLayoutVisibleCountInSnapshot,
-} from "./session-grid-state-helpers";
-import { normalizeSessionGridSnapshot } from "./session-grid-state-normalize";
+} from './session-grid-contract';
+import { reindexSessionsInOrder, restoreLayoutVisibleCountInSnapshot } from './session-grid-state-helpers';
+import { normalizeSessionGridSnapshot } from './session-grid-state-normalize';
 
 export function setVisibleCountInSnapshot(
   snapshot: SessionGridSnapshot,
-  visibleCount: VisibleSessionCount,
+  visibleCount: VisibleSessionCount
 ): SessionGridSnapshot {
   return normalizeSessionGridSnapshot({
     ...normalizeSessionGridSnapshot(snapshot),
@@ -22,9 +19,7 @@ export function setVisibleCountInSnapshot(
   });
 }
 
-export function toggleFullscreenSessionInSnapshot(
-  snapshot: SessionGridSnapshot,
-): SessionGridSnapshot {
+export function toggleFullscreenSessionInSnapshot(snapshot: SessionGridSnapshot): SessionGridSnapshot {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
   if (normalizedSnapshot.visibleCount === 1 && normalizedSnapshot.fullscreenRestoreVisibleCount) {
     return restoreLayoutVisibleCountInSnapshot(normalizedSnapshot, normalizeSessionGridSnapshot);
@@ -32,16 +27,12 @@ export function toggleFullscreenSessionInSnapshot(
 
   return normalizeSessionGridSnapshot({
     ...normalizedSnapshot,
-    fullscreenRestoreVisibleCount:
-      normalizedSnapshot.visibleCount > 1 ? normalizedSnapshot.visibleCount : undefined,
+    fullscreenRestoreVisibleCount: normalizedSnapshot.visibleCount > 1 ? normalizedSnapshot.visibleCount : undefined,
     visibleCount: 1,
   });
 }
 
-export function setViewModeInSnapshot(
-  snapshot: SessionGridSnapshot,
-  viewMode: TerminalViewMode,
-): SessionGridSnapshot {
+export function setViewModeInSnapshot(snapshot: SessionGridSnapshot, viewMode: TerminalViewMode): SessionGridSnapshot {
   return normalizeSessionGridSnapshot({
     ...restoreLayoutVisibleCountInSnapshot(snapshot, normalizeSessionGridSnapshot),
     viewMode,
@@ -50,7 +41,7 @@ export function setViewModeInSnapshot(
 
 export function syncSessionOrderInSnapshot(
   snapshot: SessionGridSnapshot,
-  sessionIds: readonly string[],
+  sessionIds: readonly string[]
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
   const currentSessionIds = normalizedSnapshot.sessions
@@ -76,10 +67,7 @@ export function syncSessionOrderInSnapshot(
   }
 
   const sessionById = new Map(
-    normalizedSnapshot.sessions.map((session): [string, SessionRecord] => [
-      session.sessionId,
-      session,
-    ]),
+    normalizedSnapshot.sessions.map((session): [string, SessionRecord] => [session.sessionId, session])
   );
   const sessions = reindexSessionsInOrder(
     sessionIds.map((sessionId) => {
@@ -88,20 +76,16 @@ export function syncSessionOrderInSnapshot(
         throw new Error(`Missing session for reorder: ${sessionId}`);
       }
       return session;
-    }),
+    })
   );
-  const visibleSessionIds = sessionIds.slice(
-    0,
-    Math.min(normalizedSnapshot.visibleCount, sessions.length),
-  );
+  const visibleSessionIds = sessionIds.slice(0, Math.min(normalizedSnapshot.visibleCount, sessions.length));
 
   return {
     changed: true,
     snapshot: normalizeSessionGridSnapshot({
       ...normalizedSnapshot,
       focusedSessionId:
-        normalizedSnapshot.focusedSessionId &&
-        visibleSessionIds.includes(normalizedSnapshot.focusedSessionId)
+        normalizedSnapshot.focusedSessionId && visibleSessionIds.includes(normalizedSnapshot.focusedSessionId)
           ? normalizedSnapshot.focusedSessionId
           : visibleSessionIds[0],
       sessions,
@@ -113,29 +97,29 @@ export function syncSessionOrderInSnapshot(
 export function renameSessionAliasInSnapshot(
   snapshot: SessionGridSnapshot,
   sessionId: string,
-  alias: string,
+  alias: string
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   const normalizedAlias = alias.trim();
   if (!normalizedAlias || isNumericSessionAlias(normalizedAlias)) {
     return { changed: false, snapshot: normalizeSessionGridSnapshot(snapshot) };
   }
 
-  return updateSession(snapshot, sessionId, normalizedAlias, "alias");
+  return updateSession(snapshot, sessionId, normalizedAlias, 'alias');
 }
 
 export function setSessionTitleInSnapshot(
   snapshot: SessionGridSnapshot,
   sessionId: string,
-  title: string,
+  title: string
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
-  return updateSession(snapshot, sessionId, title.trim(), "title");
+  return updateSession(snapshot, sessionId, title.trim(), 'title');
 }
 
 export function setBrowserSessionMetadataInSnapshot(
   snapshot: SessionGridSnapshot,
   sessionId: string,
   title: string,
-  url: string,
+  url: string
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
   const normalizedTitle = title.trim();
@@ -146,7 +130,7 @@ export function setBrowserSessionMetadataInSnapshot(
 
   let changed = false;
   const sessions = normalizedSnapshot.sessions.map((session) => {
-    if (session.sessionId !== sessionId || session.kind !== "browser") {
+    if (session.sessionId !== sessionId || session.kind !== 'browser') {
       return session;
     }
     if (session.title === normalizedTitle && session.browser.url === normalizedUrl) {
@@ -163,28 +147,22 @@ export function setBrowserSessionMetadataInSnapshot(
 
   return {
     changed,
-    snapshot: changed
-      ? normalizeSessionGridSnapshot({ ...normalizedSnapshot, sessions })
-      : normalizedSnapshot,
+    snapshot: changed ? normalizeSessionGridSnapshot({ ...normalizedSnapshot, sessions }) : normalizedSnapshot,
   };
 }
 
 export function removeSessionInSnapshot(
   snapshot: SessionGridSnapshot,
-  sessionId: string,
+  sessionId: string
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
-  if (
-    !normalizedSnapshot.sessions.some((session: SessionRecord) => session.sessionId === sessionId)
-  ) {
+  if (!normalizedSnapshot.sessions.some((session: SessionRecord) => session.sessionId === sessionId)) {
     return { changed: false, snapshot: normalizedSnapshot };
   }
 
-  const sessions = normalizedSnapshot.sessions.filter(
-    (session: SessionRecord) => session.sessionId !== sessionId,
-  );
+  const sessions = normalizedSnapshot.sessions.filter((session: SessionRecord) => session.sessionId !== sessionId);
   const visibleSessionIds = normalizedSnapshot.visibleSessionIds.filter(
-    (visibleSessionId) => visibleSessionId !== sessionId,
+    (visibleSessionId) => visibleSessionId !== sessionId
   );
 
   return {
@@ -205,7 +183,7 @@ function updateSession(
   snapshot: SessionGridSnapshot,
   sessionId: string,
   value: string,
-  key: "alias" | "title",
+  key: 'alias' | 'title'
 ): { changed: boolean; snapshot: SessionGridSnapshot } {
   const normalizedSnapshot = normalizeSessionGridSnapshot(snapshot);
   if (!value) {
@@ -224,8 +202,6 @@ function updateSession(
 
   return {
     changed,
-    snapshot: changed
-      ? normalizeSessionGridSnapshot({ ...normalizedSnapshot, sessions })
-      : normalizedSnapshot,
+    snapshot: changed ? normalizeSessionGridSnapshot({ ...normalizedSnapshot, sessions }) : normalizedSnapshot,
   };
 }

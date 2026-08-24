@@ -52,7 +52,9 @@ pub(crate) fn gpui_gxserver_recent_projects(timeout: Duration) -> Vec<serde_json
         .unwrap_or_default()
 }
 
-pub(crate) fn gpui_recent_project_from_gxserver(project: &serde_json::Value) -> Option<serde_json::Value> {
+pub(crate) fn gpui_recent_project_from_gxserver(
+    project: &serde_json::Value,
+) -> Option<serde_json::Value> {
     let project = project.as_object()?;
     let project_id = gpui_trimmed_json_string_field(project, "projectId")?;
     let title = gpui_trimmed_json_string_field(project, "title")?;
@@ -496,4 +498,3 @@ pub(crate) fn gpui_daemon_session_status_from_gxserver(
         _ => "disconnected",
     }
 }
-

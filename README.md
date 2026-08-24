@@ -79,6 +79,7 @@ Use Cmd/Ctrl + T for a new terminal, Cmd/Ctrl + D to split, and configurable sho
 ### Supports all of the popular Agent CLIs
 
 Ghostex works with Claude Code, Codex CLI, OpenCode, Pi Agent, Gemini, and all other Agent CLIs. <br/>
+
 ### Embedded Chromium Browser
 
 Comes with Annotations, Chrome Devtools MCP for Agents, Profiles.<br />
@@ -103,18 +104,21 @@ Put all your thoughts here then let an orchestrator agent manage subagents to ta
 ### Docs view for working with HTML/MD/Excalidraw!
 
 #### Collaborate with your agent on HTML prototypes, mockups, and explainers! Annotations system included!
+
 <img width="3456" height="2066" alt="2026-06-30_Ghostex_04-58-31@2x" src="https://github.com/user-attachments/assets/694293c1-139c-4269-8304-21ac561a01fd" />
 
 #### Full markdown editor + annotations that you can send to your agent to collaborate!
+
 <img width="3456" height="2066" alt="2026-06-30_Ghostex_10-03-18@2x" src="https://github.com/user-attachments/assets/41ab6a04-2a99-43d6-a22b-60d824f468fb" />
 
 #### Or even ask the Agent to draw an .excalidraw UI or diagram in the /docs folder:
+
 <img width="3456" height="2066" alt="2026-06-30_Ghostex_03-11-59@2x" src="https://github.com/user-attachments/assets/629ca0bb-b249-49e4-85d6-1834fcea1e88" />
 
 ### Search Previous Sessions from All Agent CLIs in 1 place
 
 Fuzzy search in all your previous sessions accross agents by typing a few words from your prompts
-Press enter to resume that session! Lots of filters available. Start it from the sidebar or run `ghostex find / gx f` to start it 
+Press enter to resume that session! Lots of filters available. Start it from the sidebar or run `ghostex find / gx f` to start it
 
 <img width="3456" height="2066" alt="image" src="https://github.com/user-attachments/assets/85bfd614-d352-4f30-8501-f2a47d001f88" />
 
@@ -148,35 +152,34 @@ See how many agents are running with just a glance at your menu bar. Click to ju
 
 ## Highlights
 
-| Feature | What it gives you |
-| --- | --- |
-| Ghostty terminals | Lower RAM use, better battery life, and stable agent CLI sessions. |
-| Native desktop shell | Rust/GPUI UI for performance-sensitive desktop behavior. |
-| Chromium CEF browser | Embedded browser panes with DevTools, profiles, and MCP access. |
-| Built-in IDE | VS Code-based editor for Markdown, PR review, files, and git work. |
-| Mobile access | iOS & Android app for checking and controlling live sessions. |
-| TUI mode | Use `ghostex` or `gx` to attach from another machine. |
-
+| Feature              | What it gives you                                                  |
+| -------------------- | ------------------------------------------------------------------ |
+| Ghostty terminals    | Lower RAM use, better battery life, and stable agent CLI sessions. |
+| Native desktop shell | Rust/GPUI UI for performance-sensitive desktop behavior.           |
+| Chromium CEF browser | Embedded browser panes with DevTools, profiles, and MCP access.    |
+| Built-in IDE         | VS Code-based editor for Markdown, PR review, files, and git work. |
+| Mobile access        | iOS & Android app for checking and controlling live sessions.      |
+| TUI mode             | Use `ghostex` or `gx` to attach from another machine.              |
 
 ## Comparison
 
-| Feature | Ghostex | Codex app | cmux |
-| --- | --- | --- | --- |
-| macOS support | Yes | Yes | Yes |
-| Windows support | Yes | Yes | No |
-| Linux support | Yes | No | No |
-| Open source | Yes | - | Yes |
-| Ghostty terminal | Yes | - | Yes |
-| Chromium Browser | Yes | Yes | No |
-| Fully featured IDE| Yes | - | - |
-| Built-in Computer use | Yes | Yes | - |
-| Built-in Browser use | Yes | Yes | Yes |
-| Use any model | Yes | - | Yes |
-| Cross Model Orchestration | Yes | - | Yes |
-| Rich Prompt Editor | Yes | N/A | - |
-| Android | Yes | Yes | - |
-| Appshots | Yes | Yes | - |
-| Automations | Yes | Yes | - |
+| Feature                   | Ghostex | Codex app | cmux |
+| ------------------------- | ------- | --------- | ---- |
+| macOS support             | Yes     | Yes       | Yes  |
+| Windows support           | Yes     | Yes       | No   |
+| Linux support             | Yes     | No        | No   |
+| Open source               | Yes     | -         | Yes  |
+| Ghostty terminal          | Yes     | -         | Yes  |
+| Chromium Browser          | Yes     | Yes       | No   |
+| Fully featured IDE        | Yes     | -         | -    |
+| Built-in Computer use     | Yes     | Yes       | -    |
+| Built-in Browser use      | Yes     | Yes       | Yes  |
+| Use any model             | Yes     | -         | Yes  |
+| Cross Model Orchestration | Yes     | -         | Yes  |
+| Rich Prompt Editor        | Yes     | N/A       | -    |
+| Android                   | Yes     | Yes       | -    |
+| Appshots                  | Yes     | Yes       | -    |
+| Automations               | Yes     | Yes       | -    |
 
 ## Main Features
 

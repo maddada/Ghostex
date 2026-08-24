@@ -1,10 +1,5 @@
 // @ts-nocheck
-import {
-  resolveTheme,
-  SYNTAX_TAG_SPECS,
-  type ThemeSettings,
-  themeColorKeys
-} from '../themeDefaults';
+import { resolveTheme, SYNTAX_TAG_SPECS, type ThemeSettings, themeColorKeys } from '../themeDefaults';
 
 const vscodeEditorFontFamily = 'var(--vscode-editor-font-family)';
 const vscodeEditorFontSize = 'var(--vscode-editor-font-size, 13px)';
@@ -13,11 +8,14 @@ const defaultHeadingFontWeight = '600';
 const headingSizeFallbacks = ['1.6em', '1.5em', '1.3em', '1.2em', '1.1em', '1em'] as const;
 
 const resolveEditorFontWeight = (): string => {
-  const rawEditorFontWeight = getComputedStyle(document.documentElement).getPropertyValue('--vscode-editor-font-weight').trim();
+  const rawEditorFontWeight = getComputedStyle(document.documentElement)
+    .getPropertyValue('--vscode-editor-font-weight')
+    .trim();
   return rawEditorFontWeight || 'normal';
 };
 
-const sanitizeThemeFontStyle = (value: string): string => `${value ?? ''}`.trim().replace(styleValueInjectionPattern, ' ');
+const sanitizeThemeFontStyle = (value: string): string =>
+  `${value ?? ''}`.trim().replace(styleValueInjectionPattern, ' ');
 
 const normalizeThemeLineHeight = (value: number | undefined, fallback: number): number => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -49,7 +47,12 @@ const parseCssRgbColor = (value: string): { r: number; g: number; b: number } | 
   if (!match?.[1]) {
     return null;
   }
-  const channels = match[1].split('/')[0]?.trim().split(/[\s,]+/).filter(Boolean) ?? [];
+  const channels =
+    match[1]
+      .split('/')[0]
+      ?.trim()
+      .split(/[\s,]+/)
+      .filter(Boolean) ?? [];
   const [r, g, b] = channels.slice(0, 3).map((channel) => Number.parseFloat(channel));
   if (![r, g, b].every(Number.isFinite)) {
     return null;
@@ -107,10 +110,7 @@ export const applyThemeSettings = (theme?: ThemeSettings): void => {
   const insetBackground = getInsetBackground(resolvedTheme.backgroundColor, resolvedTheme.colors.base03);
   rootStyle.setProperty('--meo-background', resolvedTheme.backgroundColor);
   rootStyle.setProperty('--meo-inset-background', insetBackground);
-  rootStyle.setProperty(
-    '--meo-code-background',
-    insetBackground
-  );
+  rootStyle.setProperty('--meo-code-background', insetBackground);
   rootStyle.setProperty(
     '--meo-code-block-active-line-bg-live',
     `color-mix(in srgb, ${resolvedTheme.backgroundColor} 88%, ${resolvedTheme.colors.base03} 12%)`
@@ -150,7 +150,7 @@ export const applyThemeSettings = (theme?: ThemeSettings): void => {
     normalizeThemeHeadingSize(resolvedTheme.fonts.h3FontSize, headingSizeFallbacks[2], 'em'),
     normalizeThemeHeadingSize(resolvedTheme.fonts.h4FontSize, headingSizeFallbacks[3], 'em'),
     normalizeThemeHeadingSize(resolvedTheme.fonts.h5FontSize, headingSizeFallbacks[4], 'em'),
-    normalizeThemeHeadingSize(resolvedTheme.fonts.h6FontSize, headingSizeFallbacks[5], 'em')
+    normalizeThemeHeadingSize(resolvedTheme.fonts.h6FontSize, headingSizeFallbacks[5], 'em'),
   ];
   const headingFontWeights = [
     normalizeThemeFontWeight(resolvedTheme.fonts.h1FontWeight, defaultHeadingFontWeight),
@@ -158,7 +158,7 @@ export const applyThemeSettings = (theme?: ThemeSettings): void => {
     normalizeThemeFontWeight(resolvedTheme.fonts.h3FontWeight, defaultHeadingFontWeight),
     normalizeThemeFontWeight(resolvedTheme.fonts.h4FontWeight, defaultHeadingFontWeight),
     normalizeThemeFontWeight(resolvedTheme.fonts.h5FontWeight, defaultHeadingFontWeight),
-    normalizeThemeFontWeight(resolvedTheme.fonts.h6FontWeight, defaultHeadingFontWeight)
+    normalizeThemeFontWeight(resolvedTheme.fonts.h6FontWeight, defaultHeadingFontWeight),
   ];
   const liveLineHeight = normalizeThemeLineHeight(resolvedTheme.fonts.liveLineHeight, 1.5);
   const sourceLineHeight = normalizeThemeLineHeight(resolvedTheme.fonts.sourceLineHeight, 1.5);

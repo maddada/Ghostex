@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import type { SidebarSessionItem } from "../shared/session-grid-contract";
+import { describe, expect, test } from 'vitest';
+import type { SidebarSessionItem } from '../shared/session-grid-contract';
 import {
   canSleepSidebarSession,
   createSleepBelowDebugDetails,
@@ -10,37 +10,37 @@ import {
   runSidebarBulkContextMenuActionInBackground,
   shouldFocusSidebarSessionOnPointerDown,
   shouldRenameSidebarSessionOnDoubleClick,
-} from "./sortable-session-card";
+} from './sortable-session-card';
 
-describe("getSessionCardAccessibleLabel", () => {
-  test("keeps session row labels independent from focused styling", () => {
+describe('getSessionCardAccessibleLabel', () => {
+  test('keeps session row labels independent from focused styling', () => {
     expect(
       getSessionCardAccessibleLabel({
         isFocused: false,
-        title: "Fix sidebar session rows",
-      }),
-    ).toBe("Fix sidebar session rows");
+        title: 'Fix sidebar session rows',
+      })
+    ).toBe('Fix sidebar session rows');
 
     expect(
       getSessionCardAccessibleLabel({
         isFocused: true,
-        title: "Fix sidebar session rows",
-      }),
-    ).toBe("Fix sidebar session rows, current session");
+        title: 'Fix sidebar session rows',
+      })
+    ).toBe('Fix sidebar session rows, current session');
   });
 
-  test("falls back to a stable label when the title is empty", () => {
+  test('falls back to a stable label when the title is empty', () => {
     expect(
       getSessionCardAccessibleLabel({
         isFocused: false,
-        title: " ",
-      }),
-    ).toBe("Session");
+        title: ' ',
+      })
+    ).toBe('Session');
   });
 });
 
-describe("getSessionTagSubmenuSections", () => {
-  test("uses default enabled and visible tag rows for the Tag as menu", () => {
+describe('getSessionTagSubmenuSections', () => {
+  test('uses default enabled and visible tag rows for the Tag as menu', () => {
     /*
      * CDXC:SessionTagFilters 2026-06-15-22:23:
      * Session context-menu tagging should mirror the Settings-controlled
@@ -48,69 +48,50 @@ describe("getSessionTagSubmenuSections", () => {
      * the filter menu and the Tag as assignment submenu.
      */
     expect(
-      getSessionTagSubmenuSections({})
-        .flatMap((section) => section.options.map((option) => option.value)),
-    ).toEqual([
-      "favorite",
-      "in-progress",
-      "testing",
-      "blocked",
-      "on-hold",
-      "done",
-      "research",
-      "design",
-    ]);
+      getSessionTagSubmenuSections({}).flatMap((section) => section.options.map((option) => option.value))
+    ).toEqual(['favorite', 'in-progress', 'testing', 'blocked', 'on-hold', 'done', 'research', 'design']);
   });
 
-  test("keeps the current hidden tag visible so it can be removed", () => {
+  test('keeps the current hidden tag visible so it can be removed', () => {
     expect(
-      getSessionTagSubmenuSections({ currentSessionTag: "bug" })
-        .flatMap((section) => section.options.map((option) => option.value)),
-    ).toEqual([
-      "favorite",
-      "in-progress",
-      "testing",
-      "blocked",
-      "on-hold",
-      "done",
-      "research",
-      "bug",
-      "design",
-    ]);
+      getSessionTagSubmenuSections({ currentSessionTag: 'bug' }).flatMap((section) =>
+        section.options.map((option) => option.value)
+      )
+    ).toEqual(['favorite', 'in-progress', 'testing', 'blocked', 'on-hold', 'done', 'research', 'bug', 'design']);
   });
 });
 
-describe("runSidebarBulkContextMenuActionInBackground", () => {
-  test("defers each bulk target onto the scheduler", () => {
+describe('runSidebarBulkContextMenuActionInBackground', () => {
+  test('defers each bulk target onto the scheduler', () => {
     const queuedOperations: Array<() => void> = [];
     const processedSessionIds: string[] = [];
 
     runSidebarBulkContextMenuActionInBackground(
-      ["session-2", "session-3"],
+      ['session-2', 'session-3'],
       (sessionId) => {
         processedSessionIds.push(sessionId);
       },
       (operation) => {
         queuedOperations.push(operation);
-      },
+      }
     );
 
     expect(processedSessionIds).toEqual([]);
     expect(queuedOperations).toHaveLength(1);
 
     queuedOperations.shift()?.();
-    expect(processedSessionIds).toEqual(["session-2"]);
+    expect(processedSessionIds).toEqual(['session-2']);
     expect(queuedOperations).toHaveLength(1);
 
     queuedOperations.shift()?.();
-    expect(processedSessionIds).toEqual(["session-2", "session-3"]);
+    expect(processedSessionIds).toEqual(['session-2', 'session-3']);
     expect(queuedOperations).toHaveLength(0);
   });
 
-  test("uses the clicked menu target list even if the caller mutates its array later", () => {
+  test('uses the clicked menu target list even if the caller mutates its array later', () => {
     const queuedOperations: Array<() => void> = [];
     const processedSessionIds: string[] = [];
-    const sessionIds = ["session-2"];
+    const sessionIds = ['session-2'];
 
     runSidebarBulkContextMenuActionInBackground(
       sessionIds,
@@ -119,37 +100,37 @@ describe("runSidebarBulkContextMenuActionInBackground", () => {
       },
       (operation) => {
         queuedOperations.push(operation);
-      },
+      }
     );
-    sessionIds.push("session-3");
+    sessionIds.push('session-3');
 
     queuedOperations.shift()?.();
 
-    expect(processedSessionIds).toEqual(["session-2"]);
+    expect(processedSessionIds).toEqual(['session-2']);
     expect(queuedOperations).toHaveLength(0);
   });
 });
 
-describe("resolveSessionCardSessionIdsBelow", () => {
-  test("materializes below actions from the shared group-provided session list", () => {
+describe('resolveSessionCardSessionIdsBelow', () => {
+  test('materializes below actions from the shared group-provided session list', () => {
     expect(
       resolveSessionCardSessionIdsBelow({
-        sessionIdsBelowSource: ["same-project-1", "same-project-2", "same-project-3"],
+        sessionIdsBelowSource: ['same-project-1', 'same-project-2', 'same-project-3'],
         sessionIdsBelowStartIndex: 1,
-      }),
-    ).toEqual(["same-project-2", "same-project-3"]);
+      })
+    ).toEqual(['same-project-2', 'same-project-3']);
   });
 
-  test("returns no below actions when the row has no later visible sessions", () => {
+  test('returns no below actions when the row has no later visible sessions', () => {
     expect(
       resolveSessionCardSessionIdsBelow({
-        sessionIdsBelowSource: ["same-project-1"],
+        sessionIdsBelowSource: ['same-project-1'],
         sessionIdsBelowStartIndex: 1,
-      }),
+      })
     ).toEqual([]);
   });
 
-  test("preserves remote scoped ids for native bulk below handling", () => {
+  test('preserves remote scoped ids for native bulk below handling', () => {
     /*
      * CDXC:RemoteContextMenu 2026-06-30-15:22:
      * Sleep below and Close below must pass scoped remote session ids through
@@ -159,20 +140,17 @@ describe("resolveSessionCardSessionIdsBelow", () => {
     expect(
       resolveSessionCardSessionIdsBelow({
         sessionIdsBelowSource: [
-          "local-session-1",
-          "remote:machine-1:session:project-1:remote-session-2",
-          "local-session-3",
+          'local-session-1',
+          'remote:machine-1:session:project-1:remote-session-2',
+          'local-session-3',
         ],
         sessionIdsBelowStartIndex: 1,
-      }),
-    ).toEqual([
-      "remote:machine-1:session:project-1:remote-session-2",
-      "local-session-3",
-    ]);
+      })
+    ).toEqual(['remote:machine-1:session:project-1:remote-session-2', 'local-session-3']);
   });
 });
 
-describe("shouldFocusSidebarSessionOnPointerDown", () => {
+describe('shouldFocusSidebarSessionOnPointerDown', () => {
   const baseInput = {
     altKey: false,
     button: 0,
@@ -185,11 +163,11 @@ describe("shouldFocusSidebarSessionOnPointerDown", () => {
     shiftKey: false,
   };
 
-  test("uses immediate pointer-down focus when double-click rename is disabled", () => {
+  test('uses immediate pointer-down focus when double-click rename is disabled', () => {
     expect(shouldFocusSidebarSessionOnPointerDown(baseInput)).toBe(true);
   });
 
-  test("waits for click semantics when the session row can start a drag", () => {
+  test('waits for click semantics when the session row can start a drag', () => {
     /*
      * CDXC:PinnedSessions 2026-07-01-00:47:
      * Last Active sorting keeps pinned project sessions draggable. Those rows
@@ -200,20 +178,20 @@ describe("shouldFocusSidebarSessionOnPointerDown", () => {
       shouldFocusSidebarSessionOnPointerDown({
         ...baseInput,
         isSessionDragActivationEnabled: true,
-      }),
+      })
     ).toBe(false);
   });
 
-  test("waits for click semantics when double-click rename is enabled", () => {
+  test('waits for click semantics when double-click rename is enabled', () => {
     expect(
       shouldFocusSidebarSessionOnPointerDown({
         ...baseInput,
         renameSessionOnDoubleClick: true,
-      }),
+      })
     ).toBe(false);
   });
 
-  test("keeps modified and non-primary pointer actions out of immediate focus", () => {
+  test('keeps modified and non-primary pointer actions out of immediate focus', () => {
     expect(shouldFocusSidebarSessionOnPointerDown({ ...baseInput, metaKey: true })).toBe(false);
     expect(shouldFocusSidebarSessionOnPointerDown({ ...baseInput, ctrlKey: true })).toBe(false);
     expect(shouldFocusSidebarSessionOnPointerDown({ ...baseInput, altKey: true })).toBe(false);
@@ -224,27 +202,27 @@ describe("shouldFocusSidebarSessionOnPointerDown", () => {
       shouldFocusSidebarSessionOnPointerDown({
         ...baseInput,
         isInteractiveDescendant: true,
-      }),
+      })
     ).toBe(false);
   });
 
-  test("does not immediate-focus placeholder rows", () => {
+  test('does not immediate-focus placeholder rows', () => {
     expect(
       shouldFocusSidebarSessionOnPointerDown({
         ...baseInput,
         isProjectSessionListMoreRow: true,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldFocusSidebarSessionOnPointerDown({
         ...baseInput,
         isProjectSessionListOverflowRow: true,
-      }),
+      })
     ).toBe(false);
   });
 });
 
-describe("shouldRenameSidebarSessionOnDoubleClick", () => {
+describe('shouldRenameSidebarSessionOnDoubleClick', () => {
   const baseInput = {
     isBrowserSession: false,
     isProjectSessionListMoreRow: false,
@@ -252,63 +230,61 @@ describe("shouldRenameSidebarSessionOnDoubleClick", () => {
     renameSessionOnDoubleClick: true,
   };
 
-  test("reserves session-card double-click for explicit rename", () => {
+  test('reserves session-card double-click for explicit rename', () => {
     expect(shouldRenameSidebarSessionOnDoubleClick(baseInput)).toBe(true);
     expect(
       shouldRenameSidebarSessionOnDoubleClick({
         ...baseInput,
         renameSessionOnDoubleClick: false,
-      }),
+      })
     ).toBe(false);
   });
 
-  test("does not rename browser or placeholder rows on double-click", () => {
+  test('does not rename browser or placeholder rows on double-click', () => {
     expect(
       shouldRenameSidebarSessionOnDoubleClick({
         ...baseInput,
         isBrowserSession: true,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldRenameSidebarSessionOnDoubleClick({
         ...baseInput,
         isProjectSessionListMoreRow: true,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldRenameSidebarSessionOnDoubleClick({
         ...baseInput,
         isProjectSessionListOverflowRow: true,
-      }),
+      })
     ).toBe(false);
   });
 });
 
-function createContextMenuSession(
-  overrides: Partial<SidebarSessionItem> = {},
-): SidebarSessionItem {
+function createContextMenuSession(overrides: Partial<SidebarSessionItem> = {}): SidebarSessionItem {
   return {
-    activity: "idle",
-    alias: "Session 1",
+    activity: 'idle',
+    alias: 'Session 1',
     column: 0,
     isFocused: false,
     isLive: true,
     isRunning: true,
     isSleeping: false,
     isVisible: true,
-    lifecycleState: "running",
-    nativePaneState: "mounted",
-    providerSessionState: "exists",
+    lifecycleState: 'running',
+    nativePaneState: 'mounted',
+    providerSessionState: 'exists',
     row: 0,
-    sessionId: "session-1",
-    sessionKind: "terminal",
-    shortcutLabel: "1",
+    sessionId: 'session-1',
+    sessionKind: 'terminal',
+    shortcutLabel: '1',
     ...overrides,
   };
 }
 
-describe("getSidebarSessionContextMenuEligibility", () => {
-  test("keeps shared remote terminal affordances visible without host-local capability guesses", () => {
+describe('getSidebarSessionContextMenuEligibility', () => {
+  test('keeps shared remote terminal affordances visible without host-local capability guesses', () => {
     /*
      * CDXC:RemoteSessionMenus 2026-06-30-15:22:
      * Remote terminal rows should retain the shared gxserver-backed context-menu
@@ -320,12 +296,12 @@ describe("getSidebarSessionContextMenuEligibility", () => {
         isProjectSessionListMoreRow: false,
         isRemoteSession: true,
         session: createContextMenuSession({
-          sessionPersistenceName: "remote-session",
-          sessionPersistenceProvider: "zmx",
+          sessionPersistenceName: 'remote-session',
+          sessionPersistenceProvider: 'zmx',
         }),
         showSessionCommandCopyActions: true,
         showSessionDetailsCopyAction: true,
-      }),
+      })
     ).toMatchObject({
       canCloseAfterDone: false,
       canCopyAttachCommand: true,
@@ -342,14 +318,14 @@ describe("getSidebarSessionContextMenuEligibility", () => {
     });
   });
 
-  test("uses local metadata gates for remote agent resume, attach, and fork", () => {
+  test('uses local metadata gates for remote agent resume, attach, and fork', () => {
     const eligibility = getSidebarSessionContextMenuEligibility({
       isProjectSessionListMoreRow: false,
       isRemoteSession: true,
       session: createContextMenuSession({
-        agentIcon: "codex",
-        sessionPersistenceName: "remote-codex",
-        sessionPersistenceProvider: "zmx",
+        agentIcon: 'codex',
+        sessionPersistenceName: 'remote-codex',
+        sessionPersistenceProvider: 'zmx',
       }),
       showSessionCommandCopyActions: true,
       showSessionDetailsCopyAction: true,
@@ -360,7 +336,7 @@ describe("getSidebarSessionContextMenuEligibility", () => {
     expect(eligibility.canForkSession).toBe(true);
   });
 
-  test("shows remote timer and pop-out actions only from explicit row capabilities", () => {
+  test('shows remote timer and pop-out actions only from explicit row capabilities', () => {
     const eligibility = getSidebarSessionContextMenuEligibility({
       isProjectSessionListMoreRow: false,
       isRemoteSession: true,
@@ -384,19 +360,19 @@ describe("getSidebarSessionContextMenuEligibility", () => {
         session: createContextMenuSession({
           canPopOutPane: true,
           isSleeping: true,
-          lifecycleState: "sleeping",
+          lifecycleState: 'sleeping',
         }),
         showSessionCommandCopyActions: true,
         showSessionDetailsCopyAction: true,
-      }).canPopOutPane,
+      }).canPopOutPane
     ).toBe(false);
   });
 
-  test("keeps local terminal timer and pop-out gates unchanged", () => {
+  test('keeps local terminal timer and pop-out gates unchanged', () => {
     const eligibility = getSidebarSessionContextMenuEligibility({
       isProjectSessionListMoreRow: false,
       isRemoteSession: false,
-      session: createContextMenuSession({ agentIcon: "codex" }),
+      session: createContextMenuSession({ agentIcon: 'codex' }),
       showSessionCommandCopyActions: true,
       showSessionDetailsCopyAction: true,
     });
@@ -407,13 +383,13 @@ describe("getSidebarSessionContextMenuEligibility", () => {
   });
 });
 
-describe("createSleepBelowDebugDetails", () => {
-  test("keeps Sleep below lag diagnostics free of user-owned content", () => {
+describe('createSleepBelowDebugDetails', () => {
+  test('keeps Sleep below lag diagnostics free of user-owned content', () => {
     const details = createSleepBelowDebugDetails({
-      clickedSessionKind: "terminal",
+      clickedSessionKind: 'terminal',
       debugInstanceId: 42,
       elapsedSinceRequestMs: 12.34,
-      event: "posted",
+      event: 'posted',
       flushDurationMs: 4.44,
       frameDelayMs: 17.19,
       postMessageDurationMs: 3.91,
@@ -425,11 +401,11 @@ describe("createSleepBelowDebugDetails", () => {
     });
 
     expect(details).toEqual({
-      action: "sleepBelow",
-      clickedSessionKind: "terminal",
+      action: 'sleepBelow',
+      clickedSessionKind: 'terminal',
       debugInstanceId: 42,
       elapsedSinceRequestMs: 12.3,
-      event: "posted",
+      event: 'posted',
       flushDurationMs: 4.4,
       frameDelayMs: 17.2,
       postMessageDurationMs: 3.9,
@@ -440,36 +416,27 @@ describe("createSleepBelowDebugDetails", () => {
       visibleBelowCount: 6,
     });
     expect(Object.keys(details).sort()).not.toEqual(
-      expect.arrayContaining([
-        "command",
-        "message",
-        "path",
-        "sessionId",
-        "sessionIds",
-        "text",
-        "title",
-        "url",
-      ]),
+      expect.arrayContaining(['command', 'message', 'path', 'sessionId', 'sessionIds', 'text', 'title', 'url'])
     );
   });
 });
 
-describe("canSleepSidebarSession", () => {
+describe('canSleepSidebarSession', () => {
   const baseSession: SidebarSessionItem = {
-    activity: "idle",
-    alias: "Session 1",
+    activity: 'idle',
+    alias: 'Session 1',
     isRunning: true,
     isSleeping: false,
-    kind: "terminal",
-    lifecycleState: "running",
-    primaryTitle: "Session 1",
-    sessionId: "session-1",
-    sessionKind: "terminal",
+    kind: 'terminal',
+    lifecycleState: 'running',
+    primaryTitle: 'Session 1',
+    sessionId: 'session-1',
+    sessionKind: 'terminal',
   };
 
-  test("skips already sleeping sessions from bulk sleep actions", () => {
+  test('skips already sleeping sessions from bulk sleep actions', () => {
     expect(canSleepSidebarSession(baseSession)).toBe(true);
     expect(canSleepSidebarSession({ ...baseSession, isSleeping: true })).toBe(false);
-    expect(canSleepSidebarSession({ ...baseSession, lifecycleState: "sleeping" })).toBe(false);
+    expect(canSleepSidebarSession({ ...baseSession, lifecycleState: 'sleeping' })).toBe(false);
   });
 });

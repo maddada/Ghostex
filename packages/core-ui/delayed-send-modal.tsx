@@ -7,16 +7,9 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
-} from "react";
-import { Button } from "@/packages/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/packages/components/ui/card";
+} from 'react';
+import { Button } from '@/packages/components/ui/button';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/packages/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -24,9 +17,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/packages/components/ui/dialog";
-import { Field, FieldGroup, FieldLabel } from "@/packages/components/ui/field";
-import { Input } from "@/packages/components/ui/input";
+} from '@/packages/components/ui/dialog';
+import { Field, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
+import { Input } from '@/packages/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -34,17 +27,17 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/packages/components/ui/select";
-import { Switch } from "@/packages/components/ui/switch";
-import { AGENT_LOGOS } from "./agent-logos";
-import type { SidebarAgentIcon } from "../shared/sidebar-agents";
+} from '@/packages/components/ui/select';
+import { Switch } from '@/packages/components/ui/switch';
+import { AGENT_LOGOS } from './agent-logos';
+import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 
 const MAX_DELAY_MS = 2_147_483_647;
 const SECOND_MS = 1_000;
 const MINUTE_MS = 60 * SECOND_MS;
 const HOUR_MS = 60 * MINUTE_MS;
 
-type DelayedSendTrigger = "afterDelay" | "agentStops" | "allAgentsStop";
+type DelayedSendTrigger = 'afterDelay' | 'agentStops' | 'allAgentsStop';
 
 export type DelayedSendModalProps = {
   agentIcon?: SidebarAgentIcon;
@@ -123,10 +116,10 @@ export function DelayedSendModal({
   supportsSendWhenAgentStops = false,
   supportsSendWhenAllProjectSessionsStop = false,
 }: DelayedSendModalProps) {
-  const [hours, setHours] = useState("0");
-  const [minutes, setMinutes] = useState("5");
+  const [hours, setHours] = useState('0');
+  const [minutes, setMinutes] = useState('5');
   const [sendEnterEnabled, setSendEnterEnabled] = useState(true);
-  const [trigger, setTrigger] = useState<DelayedSendTrigger>("afterDelay");
+  const [trigger, setTrigger] = useState<DelayedSendTrigger>('afterDelay');
   const [closeAfterDoneEnabled, setCloseAfterDoneEnabled] = useState(closeAfterDoneActive);
   const hoursInputId = useId();
   const minutesInputId = useId();
@@ -171,7 +164,7 @@ export function DelayedSendModal({
   const handleOpenAutoFocus = useCallback(
     (event: { preventDefault: () => void }) => {
       event.preventDefault();
-      if (sendEnterEnabled && trigger === "afterDelay") {
+      if (sendEnterEnabled && trigger === 'afterDelay') {
         scheduleMinutesFocus();
       }
     },
@@ -190,14 +183,12 @@ export function DelayedSendModal({
     const shouldSendWhenAllProjectSessionsStop =
       supportsSendWhenAllProjectSessionsStop && sendWhenAllProjectSessionsStopActive;
     const shouldSendWhenAgentStops =
-      !shouldSendWhenAllProjectSessionsStop &&
-      supportsSendWhenAgentStops &&
-      sendWhenAgentStopsActive;
+      !shouldSendWhenAllProjectSessionsStop && supportsSendWhenAgentStops && sendWhenAgentStopsActive;
     const initialTrigger: DelayedSendTrigger = shouldSendWhenAllProjectSessionsStop
-      ? "allAgentsStop"
+      ? 'allAgentsStop'
       : shouldSendWhenAgentStops
-        ? "agentStops"
-        : "afterDelay";
+        ? 'agentStops'
+        : 'afterDelay';
     setSendEnterEnabled(true);
     setTrigger(initialTrigger);
     setCloseAfterDoneEnabled(closeAfterDoneActive);
@@ -207,7 +198,7 @@ export function DelayedSendModal({
      * merely place a caret there, so typing immediately replaces the common
      * duration value without requiring Cmd+A or manual deletion.
      */
-    if (initialTrigger !== "afterDelay") {
+    if (initialTrigger !== 'afterDelay') {
       clearScheduledMinutesFocus();
     } else {
       scheduleMinutesFocus();
@@ -233,41 +224,37 @@ export function DelayedSendModal({
 
   const delayMs = getDelayMs(hours, minutes);
   const isValidDelay = delayMs >= MINUTE_MS && delayMs <= MAX_DELAY_MS;
-  const hasStatusTrigger = trigger !== "afterDelay";
+  const hasStatusTrigger = trigger !== 'afterDelay';
   const isValidSchedule = hasStatusTrigger || isValidDelay;
   const hasActiveSend = Boolean(
     delayedSendRemainingLabel || sendWhenAgentStopsActive || sendWhenAllProjectSessionsStopActive
   );
   const closeAfterDoneChanged = closeAfterDoneEnabled !== closeAfterDoneActive;
   const canDisableActiveSend = !hasActiveSend || Boolean(onCancelTimer);
-  const canSave = sendEnterEnabled
-    ? isValidSchedule
-    : canDisableActiveSend && (hasActiveSend || closeAfterDoneChanged);
-  const sendWhenAgentStops = trigger === "agentStops";
-  const sendWhenAllProjectSessionsStop = trigger === "allAgentsStop";
+  const canSave = sendEnterEnabled ? isValidSchedule : canDisableActiveSend && (hasActiveSend || closeAfterDoneChanged);
+  const sendWhenAgentStops = trigger === 'agentStops';
+  const sendWhenAllProjectSessionsStop = trigger === 'allAgentsStop';
   const trimmedSessionTitle = sessionTitle?.trim();
-  const sessionTargetLabel = trimmedSessionTitle || "Current agent session";
+  const sessionTargetLabel = trimmedSessionTitle || 'Current agent session';
   const agentIconStyle = agentIcon
-    ? ({ "--delayed-send-agent-logo": `url("${AGENT_LOGOS[agentIcon]}")` } as CSSProperties)
+    ? ({ '--delayed-send-agent-logo': `url("${AGENT_LOGOS[agentIcon]}")` } as CSSProperties)
     : undefined;
   const triggerOptions: { label: string; value: DelayedSendTrigger }[] = [
-    { label: "After a delay", value: "afterDelay" },
-    ...(supportsSendWhenAgentStops
-      ? [{ label: "When this agent finishes", value: "agentStops" as const }]
-      : []),
+    { label: 'After a delay', value: 'afterDelay' },
+    ...(supportsSendWhenAgentStops ? [{ label: 'When this agent finishes', value: 'agentStops' as const }] : []),
     ...(supportsSendWhenAllProjectSessionsStop
-      ? [{ label: "When all agents finish", value: "allAgentsStop" as const }]
+      ? [{ label: 'When all agents finish', value: 'allAgentsStop' as const }]
       : []),
   ];
   const sendAutomationDescription = !sendEnterEnabled
-    ? "No Enter keypress will be scheduled."
+    ? 'No Enter keypress will be scheduled.'
     : sendWhenAllProjectSessionsStopActive
-      ? "Active when all agents finish working."
+      ? 'Active when all agents finish working.'
       : sendWhenAgentStopsActive
-        ? "Active when this agent finishes working."
+        ? 'Active when this agent finishes working.'
         : delayedSendRemainingLabel
           ? `Active. Enter sends in ${delayedSendRemainingLabel}.`
-          : "Press Enter later using the selected trigger.";
+          : 'Press Enter later using the selected trigger.';
   /*
    * CDXC:CodexModalRestyle 2026-08-24:
    * The Codex-style language reserves the accent color for live status text, so
@@ -285,18 +272,14 @@ export function DelayedSendModal({
       onToggleCloseAfterDone();
     }
     if (sendEnterEnabled) {
-      onConfirm(
-        hasStatusTrigger ? undefined : delayMs,
-        sendWhenAgentStops,
-        sendWhenAllProjectSessionsStop
-      );
+      onConfirm(hasStatusTrigger ? undefined : delayMs, sendWhenAgentStops, sendWhenAllProjectSessionsStop);
     } else if (hasActiveSend) {
       onCancelTimer?.();
     }
   };
   const submitFromDurationInput = (event: KeyboardEvent<HTMLInputElement>) => {
     if (
-      event.key !== "Enter" ||
+      event.key !== 'Enter' ||
       event.nativeEvent.isComposing ||
       !sendEnterEnabled ||
       hasStatusTrigger ||
@@ -318,46 +301,40 @@ export function DelayedSendModal({
       open={isOpen}
     >
       <DialogContent
-        className="command-config-modal-shadcn delayed-send-modal-shadcn font-sans"
+        className='command-config-modal-shadcn delayed-send-modal-shadcn font-sans'
         onOpenAutoFocus={handleOpenAutoFocus}
         showCloseButton={false}
       >
-        <form className="delayed-send-form" onSubmit={submit}>
+        <form className='delayed-send-form' onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>Session Automations</DialogTitle>
-            <DialogDescription className="delayed-send-dialog-description">
+            <DialogDescription className='delayed-send-dialog-description'>
               <span>Configure automations for this agent session.</span>
-              <span className="delayed-send-session-target">
+              <span className='delayed-send-session-target'>
                 {agentIconStyle ? (
-                  <span
-                    aria-hidden="true"
-                    className="delayed-send-session-agent-icon"
-                    style={agentIconStyle}
-                  />
+                  <span aria-hidden='true' className='delayed-send-session-agent-icon' style={agentIconStyle} />
                 ) : null}
-                <span className="delayed-send-session-title">{sessionTargetLabel}</span>
+                <span className='delayed-send-session-title'>{sessionTargetLabel}</span>
               </span>
             </DialogDescription>
           </DialogHeader>
-          <div className="delayed-send-automation-stack">
-            <Card className="delayed-send-automation-card" size="sm">
+          <div className='delayed-send-automation-stack'>
+            <Card className='delayed-send-automation-card' size='sm'>
               <CardHeader>
                 <CardTitle>Send Enter</CardTitle>
                 <CardDescription
-                  className={
-                    sendAutomationIsActive ? "delayed-send-automation-status-active" : undefined
-                  }
+                  className={sendAutomationIsActive ? 'delayed-send-automation-status-active' : undefined}
                 >
                   {sendAutomationDescription}
                 </CardDescription>
                 <CardAction>
                   <Switch
-                    aria-label="Send Enter automation"
+                    aria-label='Send Enter automation'
                     checked={sendEnterEnabled}
                     id={sendEnterEnabledId}
                     onCheckedChange={(checked) => {
                       setSendEnterEnabled(checked);
-                      if (checked && trigger === "afterDelay") {
+                      if (checked && trigger === 'afterDelay') {
                         window.requestAnimationFrame(scheduleMinutesFocus);
                       } else {
                         clearScheduledMinutesFocus();
@@ -368,7 +345,7 @@ export function DelayedSendModal({
               </CardHeader>
               {sendEnterEnabled ? (
                 <CardContent>
-                  <FieldGroup className="delayed-send-field-group">
+                  <FieldGroup className='delayed-send-field-group'>
                     <Field>
                       <FieldLabel htmlFor={sendTriggerId}>Trigger</FieldLabel>
                       <Select
@@ -377,7 +354,7 @@ export function DelayedSendModal({
                         onValueChange={(value) => {
                           const nextTrigger = value as DelayedSendTrigger;
                           setTrigger(nextTrigger);
-                          if (nextTrigger === "afterDelay") {
+                          if (nextTrigger === 'afterDelay') {
                             window.requestAnimationFrame(scheduleMinutesFocus);
                           } else {
                             clearScheduledMinutesFocus();
@@ -385,13 +362,10 @@ export function DelayedSendModal({
                         }}
                         value={trigger}
                       >
-                        <SelectTrigger className="w-full" id={sendTriggerId}>
+                        <SelectTrigger className='w-full' id={sendTriggerId}>
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent
-                          alignItemWithTrigger={false}
-                          className="delayed-send-select-content"
-                        >
+                        <SelectContent alignItemWithTrigger={false} className='delayed-send-select-content'>
                           <SelectGroup>
                             {triggerOptions.map((option) => (
                               <SelectItem key={option.value} value={option.value}>
@@ -402,26 +376,26 @@ export function DelayedSendModal({
                         </SelectContent>
                       </Select>
                     </Field>
-                    <div className="delayed-send-trigger-detail-slot">
-                      {trigger === "afterDelay" ? (
-                        <div className="delayed-send-duration-grid">
+                    <div className='delayed-send-trigger-detail-slot'>
+                      {trigger === 'afterDelay' ? (
+                        <div className='delayed-send-duration-grid'>
                           <Field>
                             <FieldLabel htmlFor={hoursInputId}>Hours</FieldLabel>
                             <Input
-                              aria-label="Hours"
+                              aria-label='Hours'
                               id={hoursInputId}
                               min={0}
                               onChange={(event) => setHours(event.currentTarget.value)}
                               onKeyDown={submitFromDurationInput}
                               step={1}
-                              type="number"
+                              type='number'
                               value={hours}
                             />
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={minutesInputId}>Minutes</FieldLabel>
                             <Input
-                              aria-label="Minutes"
+                              aria-label='Minutes'
                               autoFocus
                               id={minutesInputId}
                               min={0}
@@ -430,16 +404,16 @@ export function DelayedSendModal({
                               onKeyDown={submitFromDurationInput}
                               ref={minutesInputRef}
                               step={1}
-                              type="number"
+                              type='number'
                               value={minutes}
                             />
                           </Field>
                         </div>
                       ) : (
-                        <p className="delayed-send-trigger-description">
-                          {trigger === "agentStops"
-                            ? "Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds."
-                            : "Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds."}
+                        <p className='delayed-send-trigger-description'>
+                          {trigger === 'agentStops'
+                            ? 'Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds.'
+                            : 'Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds.'}
                         </p>
                       )}
                     </div>
@@ -447,16 +421,13 @@ export function DelayedSendModal({
                 </CardContent>
               ) : null}
             </Card>
-            <Card
-              className="delayed-send-automation-card delayed-send-close-card"
-              size="sm"
-            >
+            <Card className='delayed-send-automation-card delayed-send-close-card' size='sm'>
               <CardHeader>
                 <CardTitle>Close session after Done</CardTitle>
                 <CardDescription>Closes this terminal 3 minutes after Done.</CardDescription>
                 <CardAction>
                   <Switch
-                    aria-label="Close session after Done"
+                    aria-label='Close session after Done'
                     checked={closeAfterDoneEnabled}
                     id={closeAfterDoneEnabledId}
                     onCheckedChange={setCloseAfterDoneEnabled}
@@ -465,16 +436,11 @@ export function DelayedSendModal({
               </CardHeader>
             </Card>
           </div>
-          <DialogFooter className="delayed-send-footer">
-            <Button
-              className="delayed-send-action-button"
-              onClick={onCancel}
-              type="button"
-              variant="outline"
-            >
+          <DialogFooter className='delayed-send-footer'>
+            <Button className='delayed-send-action-button' onClick={onCancel} type='button' variant='outline'>
               Cancel
             </Button>
-            <Button className="delayed-send-action-button" disabled={!canSave} type="submit">
+            <Button className='delayed-send-action-button' disabled={!canSave} type='submit'>
               Save changes
             </Button>
           </DialogFooter>

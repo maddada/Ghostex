@@ -262,4 +262,3 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
         "type": "ghostexCliStatus",
     })
 }
-

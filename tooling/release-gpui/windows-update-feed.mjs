@@ -1,7 +1,7 @@
-const SUPPORTED_WINDOWS_ARCHES = new Set(["x64", "arm64"]);
+const SUPPORTED_WINDOWS_ARCHES = new Set(['x64', 'arm64']);
 
 function requireString(value, field) {
-  if (typeof value !== "string" || !value.trim()) {
+  if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`Windows update feed has no ${field}.`);
   }
   return value.trim();
@@ -27,28 +27,28 @@ export function windowsUpdateArtifactNames(version, arch) {
 }
 
 function validatePackageEntry({ artifact, entry, expectedType, version }) {
-  if (entry.PackageId !== "Ghostex") {
-    throw new Error(`${artifact.name} feed entry has package ID ${entry.PackageId ?? "missing"}; expected Ghostex.`);
+  if (entry.PackageId !== 'Ghostex') {
+    throw new Error(`${artifact.name} feed entry has package ID ${entry.PackageId ?? 'missing'}; expected Ghostex.`);
   }
   if (entry.Version !== version) {
-    throw new Error(`${artifact.name} feed entry has version ${entry.Version ?? "missing"}; expected ${version}.`);
+    throw new Error(`${artifact.name} feed entry has version ${entry.Version ?? 'missing'}; expected ${version}.`);
   }
-  if (typeof entry.Type !== "string" || entry.Type.toLowerCase() !== expectedType.toLowerCase()) {
-    throw new Error(`${artifact.name} feed entry has type ${entry.Type ?? "missing"}; expected ${expectedType}.`);
+  if (typeof entry.Type !== 'string' || entry.Type.toLowerCase() !== expectedType.toLowerCase()) {
+    throw new Error(`${artifact.name} feed entry has type ${entry.Type ?? 'missing'}; expected ${expectedType}.`);
   }
-  if (!/^[0-9a-f]{40}$/iu.test(entry.SHA1 ?? "")) {
+  if (!/^[0-9a-f]{40}$/iu.test(entry.SHA1 ?? '')) {
     throw new Error(`${artifact.name} feed entry has an invalid SHA1.`);
   }
-  if (!/^[0-9a-f]{64}$/iu.test(entry.SHA256 ?? "")) {
+  if (!/^[0-9a-f]{64}$/iu.test(entry.SHA256 ?? '')) {
     throw new Error(`${artifact.name} feed entry has an invalid SHA256.`);
   }
   if (entry.SHA256.toLowerCase() !== artifact.sha256?.toLowerCase()) {
     throw new Error(`${artifact.name} feed SHA256 does not match the packaged artifact.`);
   }
   if (Number(entry.Size) !== Number(artifact.size)) {
-    throw new Error(`${artifact.name} feed size ${entry.Size ?? "missing"} does not match ${artifact.size}.`);
+    throw new Error(`${artifact.name} feed size ${entry.Size ?? 'missing'} does not match ${artifact.size}.`);
   }
-  if (expectedType.toLowerCase() === "full") {
+  if (expectedType.toLowerCase() === 'full') {
     requireString(entry.NotesMarkdown, `${artifact.name} release notes`);
   }
 }
@@ -76,7 +76,7 @@ export function validateWindowsUpdateFeed({ arch, artifacts, feedText, version }
   validatePackageEntry({
     artifact: byName.get(names.fullPackage),
     entry: fullEntry,
-    expectedType: "Full",
+    expectedType: 'Full',
     version,
   });
 
@@ -86,11 +86,11 @@ export function validateWindowsUpdateFeed({ arch, artifacts, feedText, version }
     throw new Error(`${names.feed} and the release disagree about ${names.deltaPackage}.`);
   }
   if (deltaArtifact) {
-    validatePackageEntry({ artifact: deltaArtifact, entry: deltaEntry, expectedType: "Delta", version });
+    validatePackageEntry({ artifact: deltaArtifact, entry: deltaEntry, expectedType: 'Delta', version });
   }
 
   for (const entry of currentEntries) {
-    if (entry.PackageId !== "Ghostex") continue;
+    if (entry.PackageId !== 'Ghostex') continue;
     if (!byName.has(entry.FileName)) {
       throw new Error(`${names.feed} references unpublished current package ${entry.FileName}.`);
     }

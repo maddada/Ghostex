@@ -5,13 +5,11 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct GpuiCommandDelayedSendTimer {
     pub(crate) deadline_at: SystemTime,
     pub(crate) generation: u64,
 }
-
 
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiAgentsSendWhenStoppedWatcher {
@@ -20,13 +18,11 @@ pub(crate) struct GpuiAgentsSendWhenStoppedWatcher {
     pub(crate) scope: GpuiAgentsSendWhenStoppedScope,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiAgentsSendWhenStoppedScope {
     Session,
     Project(String),
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GpuiAgentsDelayedSendTarget {
@@ -40,20 +36,17 @@ pub(crate) enum GpuiAgentsDelayedSendTarget {
     AgentsParkedNative(AgentsTerminalRuntimeSessionId),
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiCommandDelayedSendRestoreTimer {
     pub(crate) session_id: CommandSessionId,
     pub(crate) remaining_ms: u64,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiAgentsDelayedSendRestoreIntent {
     pub(crate) session_id: TerminalSessionId,
     pub(crate) trigger: GpuiAgentsDelayedSendRestoreTrigger,
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiAgentsDelayedSendRestoreTrigger {
@@ -62,13 +55,11 @@ pub(crate) enum GpuiAgentsDelayedSendRestoreTrigger {
     WhenAllAgentsFinishWorking { project_id: String },
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiCommandStartupActivityRestoreIntent {
     pub(crate) session_id: CommandSessionId,
     pub(crate) activity: CommandTerminalActivity,
 }
-
 
 impl GpuiCommandDelayedSendTimer {
     pub(crate) fn remaining_ms(self, now: SystemTime) -> u64 {
@@ -79,13 +70,11 @@ impl GpuiCommandDelayedSendTimer {
     }
 }
 
-
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct GpuiCommandCloseAfterDoneTimer {
     pub(crate) deadline_at: SystemTime,
     pub(crate) generation: u64,
 }
-
 
 impl GpuiCommandCloseAfterDoneTimer {
     pub(crate) fn remaining_ms(self, now: SystemTime) -> u64 {
@@ -95,7 +84,6 @@ impl GpuiCommandCloseAfterDoneTimer {
             .unwrap_or(0)
     }
 }
-
 
 pub(crate) fn gpui_command_delayed_send_duration_from_millis(delay_ms: u64) -> Option<Duration> {
     /*
@@ -111,7 +99,6 @@ pub(crate) fn gpui_command_delayed_send_duration_from_millis(delay_ms: u64) -> O
     Some(Duration::from_millis(delay_ms))
 }
 
-
 pub(crate) fn gpui_command_delayed_send_countdown_label(remaining_ms: u64) -> String {
     let total_seconds = remaining_ms.saturating_add(999) / 1_000;
     let hours = total_seconds / 3_600;
@@ -123,7 +110,6 @@ pub(crate) fn gpui_command_delayed_send_countdown_label(remaining_ms: u64) -> St
         format!("{minutes:02}:{seconds:02}")
     }
 }
-
 
 pub(crate) fn gpui_agents_send_when_stopped_remaining_label(
     watcher: &GpuiAgentsSendWhenStoppedWatcher,
@@ -146,7 +132,6 @@ pub(crate) fn gpui_agents_send_when_stopped_remaining_label(
     gpui_command_delayed_send_countdown_label(remaining.as_millis().min(u128::from(u64::MAX)) as u64)
 }
 
-
 pub(crate) fn gpui_command_delayed_send_body_badge_label(
     timer: Option<GpuiCommandDelayedSendTimer>,
     now: SystemTime,
@@ -157,7 +142,6 @@ pub(crate) fn gpui_command_delayed_send_body_badge_label(
     */
     timer.map(|timer| gpui_command_delayed_send_countdown_label(timer.remaining_ms(now)))
 }
-
 
 pub(crate) fn gpui_command_delayed_send_duration_label(duration: Duration) -> String {
     let total_seconds = duration.as_secs().max(1);
@@ -177,8 +161,9 @@ pub(crate) fn gpui_command_delayed_send_duration_label(duration: Duration) -> St
     parts.join(" ")
 }
 
-
-pub(crate) fn gpui_command_delayed_send_restore_remaining_ms(value: &serde_json::Value) -> Option<u64> {
+pub(crate) fn gpui_command_delayed_send_restore_remaining_ms(
+    value: &serde_json::Value,
+) -> Option<u64> {
     /*
     CDXC:GPUICommandDelayedSend 2026-06-25-16:41:
     Restored GPUI command Delayed Send timers should match macOS by resuming from a saved remaining-duration checkpoint, not by spending countdown time while the app is closed. Accept only bounded numeric milliseconds and keep command text, titles, terminal content, paths, runtime ids, and stdout/stderr out of the restart contract.
@@ -188,7 +173,6 @@ pub(crate) fn gpui_command_delayed_send_restore_remaining_ms(value: &serde_json:
         .then_some(remaining_ms)
 }
 
-
 pub(crate) fn gpui_command_delayed_send_restore_duration(remaining_ms: u64) -> Duration {
     /*
     CDXC:GPUICommandDelayedSend 2026-06-25-16:41:
@@ -197,13 +181,15 @@ pub(crate) fn gpui_command_delayed_send_restore_duration(remaining_ms: u64) -> D
     Duration::from_millis(remaining_ms.max(COMMAND_PANE_DELAYED_SEND_RESTORE_FIRE_GRACE_MS))
 }
 
-
-pub(crate) fn gpui_command_session_id_from_modal_value(value: &serde_json::Value) -> Option<CommandSessionId> {
+pub(crate) fn gpui_command_session_id_from_modal_value(
+    value: &serde_json::Value,
+) -> Option<CommandSessionId> {
     gpui_command_session_id_from_external_id(value.as_str()?)
 }
 
-
-pub(crate) fn gpui_command_session_rename_title_from_modal_value(value: &serde_json::Value) -> Option<String> {
+pub(crate) fn gpui_command_session_rename_title_from_modal_value(
+    value: &serde_json::Value,
+) -> Option<String> {
     /*
     CDXC:GPUICommandPaneRename 2026-06-25-16:33:
     The shared Rename Session modal already applies the normal sidebar rename normalization before posting. Revalidate the GPUI boundary by accepting only non-empty, non-control text and collapsing whitespace so direct bridge messages cannot store multiline terminal content as command-tab chrome.

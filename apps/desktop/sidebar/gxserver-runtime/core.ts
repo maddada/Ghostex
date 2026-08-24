@@ -3,21 +3,21 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import type { GpuiWorkspaceSessionGroupsState } from "../workspace-session-groups";
+import type { GpuiWorkspaceSessionGroupsState } from '../workspace-session-groups';
 import {
   createEmptyGpuiWorkspaceSessionGroupsState,
   parseGpuiWorkspaceSessionSubgroupId,
   readStoredGpuiWorkspaceSessionGroupsState,
-} from "../workspace-session-groups";
-import type { GpuiSidebarRuntimeAppShotAndMiscMethods } from "./app-shot-and-misc";
-import { gpuiSidebarRuntimeAppShotAndMiscMethods } from "./app-shot-and-misc";
-import type { GpuiSidebarRuntimeAttentionMethods } from "./attention-tracking";
-import { gpuiSidebarRuntimeAttentionMethods } from "./attention-tracking";
-import type { GpuiSidebarRuntimeAutoSleepMethods } from "./auto-sleep";
-import { gpuiSidebarRuntimeAutoSleepMethods } from "./auto-sleep";
-import { GpuiGxserverClient } from "./client";
-import type { GpuiSidebarRuntimeCloseAfterDoneMethods } from "./close-after-done";
-import { gpuiSidebarRuntimeCloseAfterDoneMethods } from "./close-after-done";
+} from '../workspace-session-groups';
+import type { GpuiSidebarRuntimeAppShotAndMiscMethods } from './app-shot-and-misc';
+import { gpuiSidebarRuntimeAppShotAndMiscMethods } from './app-shot-and-misc';
+import type { GpuiSidebarRuntimeAttentionMethods } from './attention-tracking';
+import { gpuiSidebarRuntimeAttentionMethods } from './attention-tracking';
+import type { GpuiSidebarRuntimeAutoSleepMethods } from './auto-sleep';
+import { gpuiSidebarRuntimeAutoSleepMethods } from './auto-sleep';
+import { GpuiGxserverClient } from './client';
+import type { GpuiSidebarRuntimeCloseAfterDoneMethods } from './close-after-done';
+import { gpuiSidebarRuntimeCloseAfterDoneMethods } from './close-after-done';
 import {
   GPUI_GXSERVER_CHATS_GROUP_ID,
   GPUI_REMOTE_MACHINE_PRESENTATION_CLEAR_STATES,
@@ -26,58 +26,58 @@ import {
   GPUI_REMOTE_MACHINE_RETRY_STATES,
   GPUI_SIDEBAR_NAVIGATION_HISTORY_COMMAND_EVENT_NAME,
   GPUI_SIDEBAR_REMOTE_EVENT_NAME,
-} from "./constants";
-import type { GpuiSidebarRuntimeExportTranscriptMethods } from "./export-transcript";
-import { gpuiSidebarRuntimeExportTranscriptMethods } from "./export-transcript";
-import type { GpuiSidebarRuntimeGitMethods } from "./git";
-import { gpuiSidebarRuntimeGitMethods } from "./git";
+} from './constants';
+import type { GpuiSidebarRuntimeExportTranscriptMethods } from './export-transcript';
+import { gpuiSidebarRuntimeExportTranscriptMethods } from './export-transcript';
+import type { GpuiSidebarRuntimeGitMethods } from './git';
+import { gpuiSidebarRuntimeGitMethods } from './git';
 import {
   createEmptyGpuiAppUserData,
   currentGpuiRuntimeSettings,
   hasSameGpuiRuntimeSettings,
-} from "./helpers/bootstrap";
+} from './helpers/bootstrap';
 import {
   gpuiBrowserSidebarSessionId,
   normalizeGpuiBrowserTabRevealRequest,
   normalizeGpuiBrowserTabs,
   normalizeGpuiDisplayedWorkspaceSessionIds,
-} from "./helpers/browser-tabs";
-import { readStoredGpuiCloseAfterDoneSessionIds } from "./helpers/close-after-done";
+} from './helpers/browser-tabs';
+import { readStoredGpuiCloseAfterDoneSessionIds } from './helpers/close-after-done';
 import {
   createGpuiSidebarHudState,
   hasSameGpuiCommandPaneSessions,
   normalizeGpuiCommandPaneSessions,
   normalizeGpuiWorkspaceSessionDelayedSends,
-} from "./helpers/command-pane";
+} from './helpers/command-pane';
 import {
   readStoredGpuiRemoteGroupOrder,
   readStoredGpuiRemoteLastSeenPresentations,
   readStoredGpuiRemoteRecentProjects,
-} from "./helpers/recent-projects";
-import { normalizeNonEmptyString } from "./helpers/records";
+} from './helpers/recent-projects';
+import { normalizeNonEmptyString } from './helpers/records';
 import {
   normalizeGpuiSidebarRemoteEvent,
   parseGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationSessionId,
-} from "./helpers/remote-presentation";
-import type { GpuiSidebarRuntimePresentationStreamMethods } from "./presentation-stream";
-import { gpuiSidebarRuntimePresentationStreamMethods } from "./presentation-stream";
-import type { GpuiSidebarRuntimePreviousSessionMethods } from "./previous-sessions";
-import { gpuiSidebarRuntimePreviousSessionMethods } from "./previous-sessions";
-import type { GpuiSidebarRuntimeProjectBoardMethods } from "./project-board";
-import { gpuiSidebarRuntimeProjectBoardMethods } from "./project-board";
-import type { GpuiSidebarRuntimeProjectAndCommandMethods } from "./projects-and-commands";
-import { gpuiSidebarRuntimeProjectAndCommandMethods } from "./projects-and-commands";
-import type { GpuiSidebarRuntimeRemoteMachineMethods } from "./remote-machines";
-import { gpuiSidebarRuntimeRemoteMachineMethods } from "./remote-machines";
-import type { GpuiSidebarRuntimeSessionCreateMethods } from "./session-create";
-import { gpuiSidebarRuntimeSessionCreateMethods } from "./session-create";
-import type { GpuiSidebarRuntimeSessionFocusMethods } from "./sessions-and-focus";
-import { gpuiSidebarRuntimeSessionFocusMethods } from "./sessions-and-focus";
-import type { GpuiSidebarRuntimeSidebarGroupMethods } from "./sidebar-groups";
-import { gpuiSidebarRuntimeSidebarGroupMethods } from "./sidebar-groups";
-import type { GpuiSidebarRuntimeTerminalLifecycleMethods } from "./terminal-lifecycle-queue";
-import { gpuiSidebarRuntimeTerminalLifecycleMethods } from "./terminal-lifecycle-queue";
+} from './helpers/remote-presentation';
+import type { GpuiSidebarRuntimePresentationStreamMethods } from './presentation-stream';
+import { gpuiSidebarRuntimePresentationStreamMethods } from './presentation-stream';
+import type { GpuiSidebarRuntimePreviousSessionMethods } from './previous-sessions';
+import { gpuiSidebarRuntimePreviousSessionMethods } from './previous-sessions';
+import type { GpuiSidebarRuntimeProjectBoardMethods } from './project-board';
+import { gpuiSidebarRuntimeProjectBoardMethods } from './project-board';
+import type { GpuiSidebarRuntimeProjectAndCommandMethods } from './projects-and-commands';
+import { gpuiSidebarRuntimeProjectAndCommandMethods } from './projects-and-commands';
+import type { GpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
+import { gpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
+import type { GpuiSidebarRuntimeSessionCreateMethods } from './session-create';
+import { gpuiSidebarRuntimeSessionCreateMethods } from './session-create';
+import type { GpuiSidebarRuntimeSessionFocusMethods } from './sessions-and-focus';
+import { gpuiSidebarRuntimeSessionFocusMethods } from './sessions-and-focus';
+import type { GpuiSidebarRuntimeSidebarGroupMethods } from './sidebar-groups';
+import { gpuiSidebarRuntimeSidebarGroupMethods } from './sidebar-groups';
+import type { GpuiSidebarRuntimeTerminalLifecycleMethods } from './terminal-lifecycle-queue';
+import { gpuiSidebarRuntimeTerminalLifecycleMethods } from './terminal-lifecycle-queue';
 import type {
   GpuiBrowserTabSummary,
   GpuiCloseAfterDoneTimer,
@@ -94,13 +94,13 @@ import type {
   GpuiValidatedGxserverBootstrap,
   GpuiWorkspaceSessionDelayedSendSummary,
   GpuiWorkspaceTerminalTitleChangedPayload,
-} from "./types-and-protocol";
-import type { GpuiSidebarRuntimeWorkspaceGroupMethods } from "./workspace-groups-sync";
-import { gpuiSidebarRuntimeWorkspaceGroupMethods } from "./workspace-groups-sync";
-import type { GpuiSidebarRuntimeWorktreeMethods } from "./worktrees";
-import { gpuiSidebarRuntimeWorktreeMethods } from "./worktrees";
-import type { WebviewApi } from "@/packages/core-ui/webview-api";
-import { reduceGxserverPresentationDelta } from "@/packages/shared/gxserver-presentation-cache";
+} from './types-and-protocol';
+import type { GpuiSidebarRuntimeWorkspaceGroupMethods } from './workspace-groups-sync';
+import { gpuiSidebarRuntimeWorkspaceGroupMethods } from './workspace-groups-sync';
+import type { GpuiSidebarRuntimeWorktreeMethods } from './worktrees';
+import { gpuiSidebarRuntimeWorktreeMethods } from './worktrees';
+import type { WebviewApi } from '@/packages/core-ui/webview-api';
+import { reduceGxserverPresentationDelta } from '@/packages/shared/gxserver-presentation-cache';
 import type {
   GxserverAppUserData,
   GxserverPresentationSnapshot,
@@ -108,14 +108,10 @@ import type {
   GxserverRecentProjectDomainState,
   GxserverSidebarHudResponse,
   GxserverSidebarProjectCollectionsState,
-} from "@/packages/shared/gxserver-protocol";
-import {
-  NAVIGATION_HISTORY_SCOPE_GPUI,
-} from "@/packages/shared/navigation-history/navigation-history-contract";
-import {
-  NavigationHistoryController,
-} from "@/packages/shared/navigation-history/navigation-history-controller";
-import type { SidebarProjectDiffStats } from "@/packages/shared/project-diff-stats";
+} from '@/packages/shared/gxserver-protocol';
+import { NAVIGATION_HISTORY_SCOPE_GPUI } from '@/packages/shared/navigation-history/navigation-history-contract';
+import { NavigationHistoryController } from '@/packages/shared/navigation-history/navigation-history-controller';
+import type { SidebarProjectDiffStats } from '@/packages/shared/project-diff-stats';
 import type {
   ExtensionToSidebarMessage,
   SidebarGroupsChangedMessage,
@@ -127,15 +123,15 @@ import type {
   SidebarPreviousSessionsResultMessage,
   SidebarSessionGroup,
   SidebarToExtensionMessage,
-} from "@/packages/shared/session-grid-contract";
-import { isSidebarCommandScope } from "@/packages/shared/sidebar-commands";
-import type { SidebarGitState } from "@/packages/shared/sidebar-git";
-import { createDefaultSidebarGitState } from "@/packages/shared/sidebar-git";
+} from '@/packages/shared/session-grid-contract';
+import { isSidebarCommandScope } from '@/packages/shared/sidebar-commands';
+import type { SidebarGitState } from '@/packages/shared/sidebar-git';
+import { createDefaultSidebarGitState } from '@/packages/shared/sidebar-git';
 import {
   SIDEBAR_GIT_HUB_MEMO_TTL_MS,
   SIDEBAR_GIT_STATE_MEMO_TTL_MS,
   SidebarGitTtlMemo,
-} from "@/packages/shared/sidebar-git-state-memo";
+} from '@/packages/shared/sidebar-git-state-memo';
 
 /*
 CDXC:GPUISidebarGxserverRuntime 2026-06-24-11:00:
@@ -228,7 +224,7 @@ export class GpuiSidebarLocalMessageSource {
   addEventListener(
     type: string,
     listener: EventListenerOrEventListenerObject | null,
-    options?: AddEventListenerOptions | boolean,
+    options?: AddEventListenerOptions | boolean
   ): void {
     this.eventTarget.addEventListener(type, listener, options);
   }
@@ -236,7 +232,7 @@ export class GpuiSidebarLocalMessageSource {
   removeEventListener(
     type: string,
     listener: EventListenerOrEventListenerObject | null,
-    options?: EventListenerOptions | boolean,
+    options?: EventListenerOptions | boolean
   ): void {
     this.eventTarget.removeEventListener(type, listener, options);
   }
@@ -249,12 +245,12 @@ export class GpuiSidebarLocalMessageSource {
       | SidebarHudChangedMessage
       | SidebarOrderSyncResultMessage
       | SidebarPreviousSessionsResultMessage
-      | GpuiProjectWorktreesResultMessage,
+      | GpuiProjectWorktreesResultMessage
   ): void {
     this.eventTarget.dispatchEvent(
-      new MessageEvent("message", {
+      new MessageEvent('message', {
         data: message,
-      }),
+      })
     );
   }
 }
@@ -269,7 +265,7 @@ export class GpuiSidebarRuntime {
 
   startLocalGxserver(): void {
     window.webkit?.messageHandlers?.ghostexNativeHost?.postMessage({
-      type: "startGxserverFromTitlebar",
+      type: 'startGxserverFromTitlebar',
     });
   }
 
@@ -279,7 +275,7 @@ export class GpuiSidebarRuntime {
         return;
       }
       window.webkit?.messageHandlers?.ghostexNativeHost?.postMessage({
-        type: "gxserverPresentationReady",
+        type: 'gxserverPresentationReady',
       });
     });
   }
@@ -325,10 +321,7 @@ export class GpuiSidebarRuntime {
   commandPaneSessions: GpuiCommandPaneSessionSummary[] = [];
   displayedWorkspaceSessionIds: string[] = [];
   workspaceSessionDelayedSends = new Map<string, GpuiWorkspaceSessionDelayedSendSummary>();
-  workspaceTerminalTitleObservations = new Map<
-    string,
-    GpuiWorkspaceTerminalTitleChangedPayload
-  >();
+  workspaceTerminalTitleObservations = new Map<string, GpuiWorkspaceTerminalTitleChangedPayload>();
   workspaceTerminalTitleSettleTimeouts = new Map<string, number>();
   domainProjects: GxserverProjectDomainState[] = [];
   focusedSessionId: string | undefined;
@@ -437,8 +430,7 @@ export class GpuiSidebarRuntime {
   visibleSessionIds = new Set<string>();
   didAutoMaterializeStartupSession = false;
   didConnectSavedRemoteMachinesOnStartup = false;
-  workspaceGroups: GpuiWorkspaceSessionGroupsState =
-    createEmptyGpuiWorkspaceSessionGroupsState();
+  workspaceGroups: GpuiWorkspaceSessionGroupsState = createEmptyGpuiWorkspaceSessionGroupsState();
   workspaceGroupsServerSyncTimeoutId: number | undefined;
   workspaceGroupsServerSyncPending = false;
   latestSidebarProjectCollectionsUpdate: GxserverSidebarProjectCollectionsState | undefined;
@@ -461,9 +453,9 @@ export class GpuiSidebarRuntime {
     window.addEventListener(GPUI_SIDEBAR_REMOTE_EVENT_NAME, this.handleGpuiSidebarRemoteEvent);
     window.addEventListener(
       GPUI_SIDEBAR_NAVIGATION_HISTORY_COMMAND_EVENT_NAME,
-      this.handleGpuiSidebarNavigationHistoryCommand,
+      this.handleGpuiSidebarNavigationHistoryCommand
     );
-    this.publishUnavailable("bootstrap-pending");
+    this.publishUnavailable('bootstrap-pending');
     this.tryStartFromInstalledBootstrap(0);
     this.startGpuiAutoSleepMonitor();
     this.startGitPollingDriver();
@@ -495,11 +487,11 @@ export class GpuiSidebarRuntime {
       provably an extension-to-sidebar message.
       */
       if (
-        message.type === "renameSession" ||
-        message.type === "scheduleDelayedSend" ||
-        message.type === "cancelDelayedSend" ||
-        message.type === "removeProject" ||
-        message.type === "toggleCloseAfterDone"
+        message.type === 'renameSession' ||
+        message.type === 'scheduleDelayedSend' ||
+        message.type === 'cancelDelayedSend' ||
+        message.type === 'removeProject' ||
+        message.type === 'toggleCloseAfterDone'
       ) {
         void this.handleSidebarMessage(message);
         return;
@@ -514,7 +506,7 @@ export class GpuiSidebarRuntime {
       }
       this.browserTabs = next;
       if (this.presentation) {
-        this.publishPresentation("patch");
+        this.publishPresentation('patch');
       }
     };
     gpuiBridge.onBrowserTabsChanged = applyBrowserTabs;
@@ -527,7 +519,7 @@ export class GpuiSidebarRuntime {
       this.messageSource.postMessage({
         requestId: request.requestId,
         sessionId: gpuiBrowserSidebarSessionId(request),
-        type: "revealSidebarSession",
+        type: 'revealSidebarSession',
       });
     };
     gpuiBridge.onWorkspaceTerminalLifecycleRequest = (payload) => {
@@ -540,9 +532,7 @@ export class GpuiSidebarRuntime {
       */
       this.handleOrQueueWorkspaceTerminalLifecycleRequest(payload);
     };
-    const applyCommandPaneSessions = (
-      sessions: readonly GpuiCommandPaneSessionSummary[] | undefined,
-    ) => {
+    const applyCommandPaneSessions = (sessions: readonly GpuiCommandPaneSessionSummary[] | undefined) => {
       /*
       CDXC:GPUICommandPane 2026-06-25-10:50:
       Rust owns GPUI command-pane session identity, activity, and active-tab state. The external bridge uses native-shaped `G...` local command-pane ids even though Rust internal shell state may still use numeric ids; the sidebar runtime only matches those sanitized summaries to current gxserver HUD command buttons by command id first and normalized title second, mirroring macOS without exposing command text, cwd, output, status-file paths, or shell-state JSON to React.
@@ -575,19 +565,17 @@ export class GpuiSidebarRuntime {
     gpuiBridge.onDisplayedWorkspaceSessionIdsChanged = applyDisplayedWorkspaceSessionIds;
     applyDisplayedWorkspaceSessionIds(gpuiBridge.displayedWorkspaceSessionIds);
     const applyWorkspaceSessionDelayedSends = (
-      sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[] | undefined,
+      sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[] | undefined
     ) => {
       const next = normalizeGpuiWorkspaceSessionDelayedSends(sessions);
       gpuiBridge.workspaceSessionDelayedSends = next;
       const nextBySessionId = new Map(next.map((session) => [session.sessionId, session]));
-      if (
-        JSON.stringify([...this.workspaceSessionDelayedSends.values()]) === JSON.stringify(next)
-      ) {
+      if (JSON.stringify([...this.workspaceSessionDelayedSends.values()]) === JSON.stringify(next)) {
         return;
       }
       this.workspaceSessionDelayedSends = nextBySessionId;
       if (this.presentation) {
-        this.publishPresentation("patch");
+        this.publishPresentation('patch');
       }
     };
     gpuiBridge.onWorkspaceSessionDelayedSendsChanged = applyWorkspaceSessionDelayedSends;
@@ -676,9 +664,7 @@ export class GpuiSidebarRuntime {
         this.handleGpuiStatusPetActivation(payload);
       }
     }
-    const pendingMenuBarProjectActivations = Array.isArray(
-      gpuiBridge.pendingMenuBarProjectActivations,
-    )
+    const pendingMenuBarProjectActivations = Array.isArray(gpuiBridge.pendingMenuBarProjectActivations)
       ? gpuiBridge.pendingMenuBarProjectActivations.splice(0)
       : [];
     if (pendingMenuBarProjectActivations.length > 0) {
@@ -690,9 +676,7 @@ export class GpuiSidebarRuntime {
         this.handleGpuiMenuBarProjectActivation(payload);
       }
     }
-    const pendingMenuBarSessionActivations = Array.isArray(
-      gpuiBridge.pendingMenuBarSessionActivations,
-    )
+    const pendingMenuBarSessionActivations = Array.isArray(gpuiBridge.pendingMenuBarSessionActivations)
       ? gpuiBridge.pendingMenuBarSessionActivations.splice(0)
       : [];
     if (pendingMenuBarSessionActivations.length > 0) {
@@ -705,24 +689,20 @@ export class GpuiSidebarRuntime {
       }
     }
     const pendingCommandPaletteSessionFocusRequests = Array.isArray(
-      gpuiBridge.pendingCommandPaletteSessionFocusRequests,
+      gpuiBridge.pendingCommandPaletteSessionFocusRequests
     )
       ? gpuiBridge.pendingCommandPaletteSessionFocusRequests.splice(0)
       : [];
     for (const payload of pendingCommandPaletteSessionFocusRequests) {
       void this.handleGpuiCommandPaletteSessionFocus(payload);
     }
-    const pendingCommandPaletteRunSidebarCommands = Array.isArray(
-      gpuiBridge.pendingCommandPaletteRunSidebarCommands,
-    )
+    const pendingCommandPaletteRunSidebarCommands = Array.isArray(gpuiBridge.pendingCommandPaletteRunSidebarCommands)
       ? gpuiBridge.pendingCommandPaletteRunSidebarCommands.splice(0)
       : [];
     for (const payload of pendingCommandPaletteRunSidebarCommands) {
       this.handleGpuiCommandPaletteRunSidebarCommand(payload);
     }
-    const pendingProjectBoardConversationRequests = Array.isArray(
-      gpuiBridge.pendingProjectBoardConversationRequests,
-    )
+    const pendingProjectBoardConversationRequests = Array.isArray(gpuiBridge.pendingProjectBoardConversationRequests)
       ? gpuiBridge.pendingProjectBoardConversationRequests.splice(0)
       : [];
     for (const payload of pendingProjectBoardConversationRequests) {
@@ -733,9 +713,7 @@ export class GpuiSidebarRuntime {
       */
       void this.handleGpuiProjectBoardConversationRequest(payload);
     }
-    const pendingWorkspaceTabSessionSelections = Array.isArray(
-      gpuiBridge.pendingWorkspaceTabSessionSelections,
-    )
+    const pendingWorkspaceTabSessionSelections = Array.isArray(gpuiBridge.pendingWorkspaceTabSessionSelections)
       ? gpuiBridge.pendingWorkspaceTabSessionSelections.splice(0)
       : [];
     if (pendingWorkspaceTabSessionSelections.length > 0) {
@@ -748,7 +726,7 @@ export class GpuiSidebarRuntime {
       }
     }
     const pendingWorkspaceTerminalLifecycleRequests = Array.isArray(
-      gpuiBridge.pendingWorkspaceTerminalLifecycleRequests,
+      gpuiBridge.pendingWorkspaceTerminalLifecycleRequests
     )
       ? gpuiBridge.pendingWorkspaceTerminalLifecycleRequests.splice(0)
       : [];
@@ -760,7 +738,7 @@ export class GpuiSidebarRuntime {
       void this.handleGpuiWorkspaceFolderPicked(payload);
     }
     const pendingWorkspaceSessionAttentionAcknowledgements = Array.isArray(
-      gpuiBridge.pendingWorkspaceSessionAttentionAcknowledgements,
+      gpuiBridge.pendingWorkspaceSessionAttentionAcknowledgements
     )
       ? gpuiBridge.pendingWorkspaceSessionAttentionAcknowledgements.splice(0)
       : [];
@@ -773,33 +751,27 @@ export class GpuiSidebarRuntime {
     for (const payload of pendingWorkspaceTerminalBells) {
       void this.handleGpuiWorkspaceTerminalBell(payload);
     }
-    const pendingWorkspaceTerminalTitleChanges = Array.isArray(
-      gpuiBridge.pendingWorkspaceTerminalTitleChanges,
-    )
+    const pendingWorkspaceTerminalTitleChanges = Array.isArray(gpuiBridge.pendingWorkspaceTerminalTitleChanges)
       ? gpuiBridge.pendingWorkspaceTerminalTitleChanges.splice(0)
       : [];
     for (const payload of pendingWorkspaceTerminalTitleChanges) {
       this.handleGpuiWorkspaceTerminalTitleChanged(payload);
     }
-    const pendingWorkspaceTerminalEscapePresses = Array.isArray(
-      gpuiBridge.pendingWorkspaceTerminalEscapePresses,
-    )
+    const pendingWorkspaceTerminalEscapePresses = Array.isArray(gpuiBridge.pendingWorkspaceTerminalEscapePresses)
       ? gpuiBridge.pendingWorkspaceTerminalEscapePresses.splice(0)
       : [];
     for (const payload of pendingWorkspaceTerminalEscapePresses) {
       this.handleGpuiWorkspaceTerminalEscapePressed(payload);
     }
     const pendingWorkspaceFirstPromptTitleGenerationCancels = Array.isArray(
-      gpuiBridge.pendingWorkspaceFirstPromptTitleGenerationCancels,
+      gpuiBridge.pendingWorkspaceFirstPromptTitleGenerationCancels
     )
       ? gpuiBridge.pendingWorkspaceFirstPromptTitleGenerationCancels.splice(0)
       : [];
     for (const payload of pendingWorkspaceFirstPromptTitleGenerationCancels) {
       void this.handleGpuiWorkspaceFirstPromptTitleGenerationCancel(payload);
     }
-    const pendingWorkspaceTerminalRuntimeActions = Array.isArray(
-      gpuiBridge.pendingWorkspaceTerminalRuntimeActions,
-    )
+    const pendingWorkspaceTerminalRuntimeActions = Array.isArray(gpuiBridge.pendingWorkspaceTerminalRuntimeActions)
       ? gpuiBridge.pendingWorkspaceTerminalRuntimeActions.splice(0)
       : [];
     for (const payload of pendingWorkspaceTerminalRuntimeActions) {
@@ -817,9 +789,7 @@ export class GpuiSidebarRuntime {
     for (const payload of pendingGitCommitModalCommands) {
       void this.handleGpuiGitCommitModalCommand(payload);
     }
-    const pendingExportTranscriptModalCommands = Array.isArray(
-      gpuiBridge.pendingExportTranscriptModalCommands,
-    )
+    const pendingExportTranscriptModalCommands = Array.isArray(gpuiBridge.pendingExportTranscriptModalCommands)
       ? gpuiBridge.pendingExportTranscriptModalCommands.splice(0)
       : [];
     for (const payload of pendingExportTranscriptModalCommands) {
@@ -831,9 +801,7 @@ export class GpuiSidebarRuntime {
     for (const payload of pendingWorktreeModalCommands) {
       this.handleGpuiWorktreeModalCommand(payload);
     }
-    const pendingNativeAppShotPromptResults = Array.isArray(
-      gpuiBridge.pendingNativeAppShotPromptResults,
-    )
+    const pendingNativeAppShotPromptResults = Array.isArray(gpuiBridge.pendingNativeAppShotPromptResults)
       ? gpuiBridge.pendingNativeAppShotPromptResults.splice(0)
       : [];
     for (const payload of pendingNativeAppShotPromptResults) {
@@ -862,7 +830,7 @@ export class GpuiSidebarRuntime {
       this.publishHudPatch();
       this.postGpuiStatusPetState();
       this.postActiveProjectContext();
-      void this.runGpuiAutoSleepMonitor("settings-change");
+      void this.runGpuiAutoSleepMonitor('settings-change');
     };
     gpuiBridge.onGxserverBootstrapChanged = (bootstrap) => {
       this.applyGxserverBootstrapChanged(bootstrap);
@@ -874,9 +842,9 @@ export class GpuiSidebarRuntime {
     if (!remoteEvent) {
       return;
     }
-    if (remoteEvent.type === "remoteMachineStatus") {
+    if (remoteEvent.type === 'remoteMachineStatus') {
       this.messageSource.postMessage(remoteEvent);
-      if (remoteEvent.state === "connected") {
+      if (remoteEvent.state === 'connected') {
         this.resetRemoteReconnect(remoteEvent.machineId);
       } else if (GPUI_REMOTE_MACHINE_RECONNECT_PROGRESS_STATES.has(remoteEvent.state)) {
         this.remoteReconnectInFlight.add(remoteEvent.machineId);
@@ -890,11 +858,7 @@ export class GpuiSidebarRuntime {
       if (GPUI_REMOTE_MACHINE_PRESENTATION_CLEAR_STATES.has(remoteEvent.state)) {
         const previousPresentation = this.remotePresentations.get(remoteEvent.machineId);
         if (previousPresentation) {
-          this.syncRemotePresentationAttentionTracking(
-            remoteEvent.machineId,
-            previousPresentation.sessions,
-            [],
-          );
+          this.syncRemotePresentationAttentionTracking(remoteEvent.machineId, previousPresentation.sessions, []);
         }
         this.remotePresentations.delete(remoteEvent.machineId);
         this.dropRemotePresentationSessionFocus(remoteEvent.machineId);
@@ -903,17 +867,16 @@ export class GpuiSidebarRuntime {
       return;
     }
 
-    if (remoteEvent.type === "remoteGxserverResponse") {
+    if (remoteEvent.type === 'remoteGxserverResponse') {
       this.resolveRemoteGxserverRequest(remoteEvent);
       return;
     }
 
-    if (remoteEvent.payload.type === "presentationSnapshot") {
-      const previousSessions =
-        this.remotePresentations.get(remoteEvent.remoteMachineId)?.sessions ?? [];
+    if (remoteEvent.payload.type === 'presentationSnapshot') {
+      const previousSessions = this.remotePresentations.get(remoteEvent.remoteMachineId)?.sessions ?? [];
       const snapshot = this.projectRemotePresentationAttentionAcknowledgementGuards(
         remoteEvent.remoteMachineId,
-        remoteEvent.payload.snapshot,
+        remoteEvent.payload.snapshot
       );
       const previous = this.remotePresentations.get(remoteEvent.remoteMachineId);
       if (previous && previous.revision > snapshot.revision) {
@@ -921,53 +884,34 @@ export class GpuiSidebarRuntime {
       }
       this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
       this.pruneRemoteWorkspaceGroupAssignments(remoteEvent.remoteMachineId, snapshot);
-      this.syncRemotePresentationAttentionTracking(
-        remoteEvent.remoteMachineId,
-        previousSessions,
-        snapshot.sessions,
-      );
+      this.syncRemotePresentationAttentionTracking(remoteEvent.remoteMachineId, previousSessions, snapshot.sessions);
       this.publishRemotePresentationPatch();
       return;
     }
 
     const previous = this.remotePresentations.get(remoteEvent.remoteMachineId);
     if (!previous) {
-      void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(
-        () => undefined,
-      );
+      void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
       return;
     }
     if (remoteEvent.payload.revision <= previous.revision) {
-      void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(
-        () => undefined,
-      );
+      void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
       return;
     }
     const snapshot = this.projectRemotePresentationAttentionAcknowledgementGuards(
       remoteEvent.remoteMachineId,
-      reduceGxserverPresentationDelta(
-        previous,
-        remoteEvent.payload.delta,
-        remoteEvent.payload.revision,
-      ),
+      reduceGxserverPresentationDelta(previous, remoteEvent.payload.delta, remoteEvent.payload.revision)
     );
     this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
     this.pruneRemoteWorkspaceGroupAssignments(remoteEvent.remoteMachineId, snapshot);
-    this.syncRemotePresentationAttentionTracking(
-      remoteEvent.remoteMachineId,
-      previous.sessions,
-      snapshot.sessions,
-    );
+    this.syncRemotePresentationAttentionTracking(remoteEvent.remoteMachineId, previous.sessions, snapshot.sessions);
     this.publishRemotePresentationPatch();
   };
 
   readonly handleGpuiSidebarNavigationHistoryCommand = (event: Event): void => {
     const detail = (event as CustomEvent<unknown>).detail;
-    const direction =
-      detail && typeof detail === "object"
-        ? (detail as { direction?: unknown }).direction
-        : undefined;
-    if (direction !== "back" && direction !== "forward") {
+    const direction = detail && typeof detail === 'object' ? (detail as { direction?: unknown }).direction : undefined;
+    if (direction !== 'back' && direction !== 'forward') {
       return;
     }
     void this.navigationHistory.navigate(direction);
@@ -975,22 +919,22 @@ export class GpuiSidebarRuntime {
 
   async handleSidebarMessage(message: SidebarToExtensionMessage): Promise<void> {
     switch (message.type) {
-      case "sidebarDebugLog":
+      case 'sidebarDebugLog':
         window.webkit?.messageHandlers?.ghostexNativeHost?.postMessage({
           details: message.details,
           event: message.event,
           scenarioId: message.scenarioId,
-          type: "sidebarDiagnosticLog",
+          type: 'sidebarDiagnosticLog',
         });
         return;
-      case "focusGroup":
+      case 'focusGroup':
         this.focusGroup(message.groupId, message);
         return;
-      case "focusSession":
+      case 'focusSession':
         await this.focusSession(message.sessionId, message);
         this.postSidebarSessionFocusConfirmation(message.sessionId);
         return;
-      case "focusSessionMode":
+      case 'focusSessionMode':
         if (parseGpuiRemotePresentationSessionId(message.sessionId)) {
           await this.focusSession(message.sessionId, message);
           this.postSidebarSessionFocusConfirmation(message.sessionId);
@@ -998,32 +942,32 @@ export class GpuiSidebarRuntime {
         }
         this.handleUnsupportedSidebarMessage(message);
         return;
-      case "createSession":
+      case 'createSession':
         await this.createSession();
         return;
-      case "createSessionInGroup":
+      case 'createSessionInGroup':
         await this.createSession(message.groupId);
         return;
-      case "createProjectTerminal":
+      case 'createProjectTerminal':
         await this.createProjectTerminal(message);
         return;
-      case "createChat":
+      case 'createChat':
         await this.createQuickTerminal();
         return;
-      case "openBrowserChat":
+      case 'openBrowserChat':
         this.openQuickBrowserTab();
         return;
-      case "openBrowserPaneInGroup":
+      case 'openBrowserPaneInGroup':
         this.openBrowserPaneInGroup(message.groupId);
         return;
-      case "runSidebarAgent":
+      case 'runSidebarAgent':
         if (message.groupId === GPUI_GXSERVER_CHATS_GROUP_ID) {
           await this.createQuickAgentSession(message.agentId);
           return;
         }
         await this.createAgentSession(message.agentId, message.groupId);
         return;
-      case "runSidebarCommand": {
+      case 'runSidebarCommand': {
         /*
         CDXC:GPUICommandPane 2026-06-26-05:22:
         Runtime command-pane messages can arrive from untyped CEF/renderer boundaries. Reject missing, non-string, or blank command ids before Action lookup so unsafe extra launch fields cannot make the selector path throw or reach the fixed command-action bridge.
@@ -1046,14 +990,14 @@ export class GpuiSidebarRuntime {
           this.handleUnsupportedSidebarMessage(message);
           return;
         }
-        this.runSidebarCommand(commandId, message, message.scope ?? "project");
+        this.runSidebarCommand(commandId, message, message.scope ?? 'project');
         return;
       }
-      case "runGhostexHotkeyAction": {
+      case 'runGhostexHotkeyAction': {
         this.postGhostexHotkeyAction(message);
         return;
       }
-      case "endSidebarCommandRun": {
+      case 'endSidebarCommandRun': {
         /*
         CDXC:GPUICommandPane 2026-06-26-05:22:
         Closing a command-pane Action run is command-id-only. Validate the selector at the runtime boundary so malformed renderer messages with command text, URLs, paths, cwd/env, logs, or output are unsupported no-ops instead of crashing before the run-end bridge can decline them.
@@ -1066,46 +1010,44 @@ export class GpuiSidebarRuntime {
         this.endSidebarCommandRun(commandId, message);
         return;
       }
-      case "setSessionSleeping":
+      case 'setSessionSleeping':
         await this.setSessionSleeping(message.sessionId, message.sleeping);
         return;
-      case "setSessionsSleeping":
+      case 'setSessionsSleeping':
         await this.setSessionsSleeping(message.sessionIds, message.sleeping);
         return;
-      case "setGroupSleeping":
+      case 'setGroupSleeping':
         await this.setGroupSleeping(message.groupId, message.sleeping);
         return;
-      case "closeSession":
-        await this.transitionSession(message.sessionId, "close");
+      case 'closeSession':
+        await this.transitionSession(message.sessionId, 'close');
         return;
-      case "closeSessions":
-        await Promise.all(
-          message.sessionIds.map((sessionId) => this.transitionSession(sessionId, "close")),
-        );
+      case 'closeSessions':
+        await Promise.all(message.sessionIds.map((sessionId) => this.transitionSession(sessionId, 'close')));
         return;
-      case "copySessionDetails":
+      case 'copySessionDetails':
         this.copySessionDetails(message);
         return;
-      case "fullReloadSession":
-      case "restartSession":
+      case 'fullReloadSession':
+      case 'restartSession':
         await this.fullReloadSession(message.sessionId);
         return;
-      case "fullReloadProjectZmxSessions":
+      case 'fullReloadProjectZmxSessions':
         await this.fullReloadProjectZmxSessions(message.groupId);
         return;
-      case "fullReloadGroup":
+      case 'fullReloadGroup':
         await this.fullReloadWorkspaceGroup(message.groupId);
         return;
-      case "toggleCloseAfterDone":
+      case 'toggleCloseAfterDone':
         this.toggleCloseAfterDone(message.sessionId);
         return;
-      case "scheduleDelayedSend":
+      case 'scheduleDelayedSend':
         await this.scheduleRemoteDelayedSend(message);
         return;
-      case "cancelDelayedSend":
+      case 'cancelDelayedSend':
         await this.cancelRemoteDelayedSend(message.sessionId);
         return;
-      case "openAutomationsPage":
+      case 'openAutomationsPage':
         /*
         CDXC:GPUIAutomationsOverview 2026-07-08:
         Mirror macOS `openQuickAutomationsPage`, `ensureQuickAutomationsProject`,
@@ -1115,34 +1057,34 @@ export class GpuiSidebarRuntime {
         */
         this.openQuickAutomationsPage();
         return;
-      case "closeInactiveProjectSessions":
+      case 'closeInactiveProjectSessions':
         await this.closeInactiveProjectSessions(message.groupId);
         return;
-      case "sleepInactiveProjectSessions":
+      case 'sleepInactiveProjectSessions':
         await this.sleepInactiveProjectSessions(message.groupId);
         return;
-      case "wakeProjectSleepingSessions":
+      case 'wakeProjectSleepingSessions':
         await this.wakeProjectSleepingSessions(message.groupId);
         return;
-      case "forkSession":
+      case 'forkSession':
         await this.forkSession(message.sessionId);
         return;
-      case "renameSession":
+      case 'renameSession':
         await this.renameSession(message);
         return;
-      case "setSessionFavorite":
+      case 'setSessionFavorite':
         await this.updateSessionFlags(message.sessionId, {
           isFavorite: message.favorite,
-          sessionTag: message.favorite ? "favorite" : null,
+          sessionTag: message.favorite ? 'favorite' : null,
         });
         return;
-      case "setSessionTag":
+      case 'setSessionTag':
         await this.updateSessionFlags(message.sessionId, {
-          isFavorite: message.sessionTag === "favorite",
+          isFavorite: message.sessionTag === 'favorite',
           sessionTag: message.sessionTag ?? null,
         });
         return;
-      case "setSessionPinned":
+      case 'setSessionPinned':
         await this.updateSessionFlags(message.sessionId, {
           isPinned: message.pinned,
         });
@@ -1156,286 +1098,277 @@ export class GpuiSidebarRuntime {
       (a working or blocked session cannot settle) that the client must not
       pre-empt.
       */
-      case "settleSession":
-        await this.runSessionLifecycleCommand(message.sessionId, "/api/settleSession", {});
+      case 'settleSession':
+        await this.runSessionLifecycleCommand(message.sessionId, '/api/settleSession', {});
         return;
-      case "unsettleSession":
-        await this.runSessionLifecycleCommand(message.sessionId, "/api/unsettleSession", {});
+      case 'unsettleSession':
+        await this.runSessionLifecycleCommand(message.sessionId, '/api/unsettleSession', {});
         return;
-      case "snoozeSession":
-        await this.runSessionLifecycleCommand(message.sessionId, "/api/snoozeSession", {
+      case 'snoozeSession':
+        await this.runSessionLifecycleCommand(message.sessionId, '/api/snoozeSession', {
           snoozedUntil: message.snoozedUntil,
         });
         return;
-      case "unsnoozeSession":
-        await this.runSessionLifecycleCommand(message.sessionId, "/api/unsnoozeSession", {});
+      case 'unsnoozeSession':
+        await this.runSessionLifecycleCommand(message.sessionId, '/api/unsnoozeSession', {});
         return;
-      case "syncSessionOrder":
+      case 'syncSessionOrder':
         if (parseGpuiWorkspaceSessionSubgroupId(message.groupId)) {
           this.syncWorkspaceSubgroupSessionOrder(message.groupId, message.sessionIds);
           return;
         }
         await this.syncSessionOrder(message.groupId, message.sessionIds);
         return;
-      case "createGroup":
+      case 'createGroup':
         this.createWorkspaceGroup(message.groupId);
         return;
-      case "createGroupFromSession":
+      case 'createGroupFromSession':
         this.createWorkspaceGroupFromSession(message.sessionId);
         return;
-      case "renameGroup":
+      case 'renameGroup':
         this.renameWorkspaceGroup(message.groupId, message.title);
         return;
-      case "closeGroup":
+      case 'closeGroup':
         await this.closeWorkspaceGroup(message.groupId);
         return;
-      case "moveSessionToGroup":
+      case 'moveSessionToGroup':
         this.moveSessionToWorkspaceGroup(message);
         return;
-      case "syncGroupOrder":
+      case 'syncGroupOrder':
         this.syncWorkspaceGroupOrder(message.groupIds);
         return;
-      case "updateSidebarProjectCollections":
+      case 'updateSidebarProjectCollections':
         if (message.remoteMachineId) {
-          await this.updateRemoteSidebarProjectCollections(
-            message.remoteMachineId,
-            message.state,
-          );
+          await this.updateRemoteSidebarProjectCollections(message.remoteMachineId, message.state);
           return;
         }
         this.queueSidebarProjectCollectionsServerSync(message.state);
         return;
-      case "requestPreviousSessions":
+      case 'requestPreviousSessions':
         await this.requestPreviousSessions(message);
         return;
-      case "searchPreviousSessionsByText":
+      case 'searchPreviousSessionsByText':
         this.searchPreviousSessionsByText();
         return;
-      case "restorePreviousSession":
+      case 'restorePreviousSession':
         await this.restorePreviousSession(message.historyId);
         return;
-      case "deletePreviousSession":
+      case 'deletePreviousSession':
         await this.deletePreviousSession(message.historyId);
         return;
-      case "copyAttachCommand": {
+      case 'copyAttachCommand': {
         const remoteSession = parseGpuiRemotePresentationSessionId(message.sessionId);
         if (remoteSession) {
-          this.postRemoteSessionNativeAction("copyRemoteAttachCommand", remoteSession, message);
+          this.postRemoteSessionNativeAction('copyRemoteAttachCommand', remoteSession, message);
           return;
         }
         this.handleUnsupportedSidebarMessage(message);
         return;
       }
-      case "copyResumeCommand": {
+      case 'copyResumeCommand': {
         const remoteSession = parseGpuiRemotePresentationSessionId(message.sessionId);
         if (remoteSession) {
-          this.postRemoteSessionNativeAction("copyRemoteResumeCommand", remoteSession, message);
+          this.postRemoteSessionNativeAction('copyRemoteResumeCommand', remoteSession, message);
           return;
         }
         this.handleUnsupportedSidebarMessage(message);
         return;
       }
-      case "requestProjectWorktrees":
+      case 'requestProjectWorktrees':
         await this.requestProjectWorktrees(message);
         return;
-      case "saveScratchPad":
+      case 'saveScratchPad':
         await this.saveScratchPad(message.content);
         return;
-      case "savePinnedPrompt":
+      case 'savePinnedPrompt':
         await this.savePinnedPrompt(message);
         return;
-      case "createProjectWorktree":
+      case 'createProjectWorktree':
         await this.createProjectWorktree(message);
         return;
-      case "createWorktreeSession":
+      case 'createWorktreeSession':
         await this.createWorktreeSession(message);
         return;
-      case "removeSessionWorktree":
+      case 'removeSessionWorktree':
         await this.removeSessionWorktree(message);
         return;
-      case "promptDeleteWorktreeForGroup":
+      case 'promptDeleteWorktreeForGroup':
         await this.promptDeleteWorktreeForGroup(message.groupId);
         return;
-      case "confirmDeleteWorktree":
+      case 'confirmDeleteWorktree':
         await this.confirmDeleteWorktree(message);
         return;
-      case "promptRenameWorktreeForGroup":
+      case 'promptRenameWorktreeForGroup':
         await this.promptRenameWorktreeForGroup(message.groupId);
         return;
-      case "confirmRenameWorktree":
+      case 'confirmRenameWorktree':
         await this.confirmRenameWorktree(message);
         return;
-      case "updateSettingsPatch":
+      case 'updateSettingsPatch':
         this.saveSidebarSettingsPatch(message);
         return;
-      case "openExternalUrl":
+      case 'openExternalUrl':
         this.openExternalUrl(message);
         return;
-      case "openSettings":
-        this.openAppModal("settings");
+      case 'openSettings':
+        this.openAppModal('settings');
         return;
-      case "openWorkspaceWelcome":
-        this.openAppModal("firstLaunchSetup");
+      case 'openWorkspaceWelcome':
+        this.openAppModal('firstLaunchSetup');
         return;
-      case "openHighlightedFeatures":
-      case "openGhostexTutorialVideo":
-        this.openAppModal("watchGhostexVideo");
+      case 'openHighlightedFeatures':
+      case 'openGhostexTutorialVideo':
+        this.openAppModal('watchGhostexVideo');
         return;
-      case "reconnectRemoteMachine":
+      case 'reconnectRemoteMachine':
         this.reconnectRemoteMachine(message.remoteMachineId, message.installApproved === true);
         return;
-      case "pickWorkspaceFolder":
+      case 'pickWorkspaceFolder':
         this.pickWorkspaceFolder(message);
         return;
-      case "removeProject":
+      case 'removeProject':
         await this.removeProject(message.projectId);
         return;
-      case "restoreRecentProject":
+      case 'restoreRecentProject':
         await this.restoreRecentProject(message.projectId);
         return;
-      case "removeRecentProject":
+      case 'removeRecentProject':
         await this.removeRecentProject(message.projectId);
         return;
-      case "copyRecentProjectPath":
+      case 'copyRecentProjectPath':
         {
           const remoteProject = parseGpuiRemotePresentationProjectId(message.projectId);
           if (remoteProject) {
-            this.postRemoteProjectNativeAction("copyRemoteProjectPath", remoteProject, message);
+            this.postRemoteProjectNativeAction('copyRemoteProjectPath', remoteProject, message);
             return;
           }
         }
-        this.postNativeProjectPathAction("copyRecentProjectPath", message.projectId, message);
+        this.postNativeProjectPathAction('copyRecentProjectPath', message.projectId, message);
         return;
-      case "openRecentProjectInFinder":
+      case 'openRecentProjectInFinder':
         {
           const remoteProject = parseGpuiRemotePresentationProjectId(message.projectId);
           if (remoteProject) {
-            this.postRemoteProjectNativeAction("openRemoteProjectTerminal", remoteProject, message);
+            this.postRemoteProjectNativeAction('openRemoteProjectTerminal', remoteProject, message);
             return;
           }
         }
-        this.postNativeProjectPathAction("openRecentProjectInFinder", message.projectId, message);
+        this.postNativeProjectPathAction('openRecentProjectInFinder', message.projectId, message);
         return;
-      case "openRecentProjectTerminal":
+      case 'openRecentProjectTerminal':
         {
           const remoteProject = parseGpuiRemotePresentationProjectId(message.projectId);
           if (remoteProject) {
-            this.postRemoteProjectNativeAction("openRemoteProjectTerminal", remoteProject, message);
+            this.postRemoteProjectNativeAction('openRemoteProjectTerminal', remoteProject, message);
           }
         }
         return;
-      case "closeWorkspaceProjectForGroup":
+      case 'closeWorkspaceProjectForGroup':
         await this.closeProjectForGroup(message.groupId);
         return;
-      case "copyWorkspaceProjectPathForGroup":
-        this.postProjectPathActionForGroup("copyWorkspaceProjectPath", message.groupId, message);
+      case 'copyWorkspaceProjectPathForGroup':
+        this.postProjectPathActionForGroup('copyWorkspaceProjectPath', message.groupId, message);
         return;
-      case "openWorkspaceProjectInFinderForGroup":
-        this.postProjectPathActionForGroup(
-          "openWorkspaceProjectInFinder",
-          message.groupId,
-          message,
-        );
+      case 'openWorkspaceProjectInFinderForGroup':
+        this.postProjectPathActionForGroup('openWorkspaceProjectInFinder', message.groupId, message);
         return;
-      case "openWorkspaceProjectInIdeForGroup":
-        this.postProjectPathActionForGroup("openWorkspaceProjectInIde", message.groupId, message);
+      case 'openWorkspaceProjectInIdeForGroup':
+        this.postProjectPathActionForGroup('openWorkspaceProjectInIde', message.groupId, message);
         return;
-      case "openActiveWorkspaceProjectInFinder":
-        this.postActiveProjectPathAction("openActiveWorkspaceProjectInFinder", message);
+      case 'openActiveWorkspaceProjectInFinder':
+        this.postActiveProjectPathAction('openActiveWorkspaceProjectInFinder', message);
         return;
-      case "openActiveWorkspaceProjectInIde":
-        if (message.targetApp !== "vscode" && message.targetApp !== "zed") {
+      case 'openActiveWorkspaceProjectInIde':
+        if (message.targetApp !== 'vscode' && message.targetApp !== 'zed') {
           this.handleUnsupportedSidebarMessage(message);
           return;
         }
         this.postActiveProjectPathAction(
-          message.targetApp === "vscode"
-            ? "openActiveWorkspaceProjectInVscode"
-            : "openActiveWorkspaceProjectInZed",
-          message,
+          message.targetApp === 'vscode' ? 'openActiveWorkspaceProjectInVscode' : 'openActiveWorkspaceProjectInZed',
+          message
         );
         return;
-      case "removeWorkspaceProjectForGroup":
+      case 'removeWorkspaceProjectForGroup':
         await this.removeProjectForGroup(message.groupId);
         return;
-      case "setProjectWorktreeCommand":
+      case 'setProjectWorktreeCommand':
         await this.updateProjectWorktreeCommand(message.projectId, message.command);
         return;
-      case "setProjectBeadsDisplayKey":
+      case 'setProjectBeadsDisplayKey':
         await this.updateProjectBeadsDisplayKey(message.projectId, message.displayKey);
         return;
-      case "setProjectBeadsDirectory":
+      case 'setProjectBeadsDirectory':
         await this.updateProjectBeadsDirectory(message.projectId, message.directory);
         return;
-      case "setProjectDocsDirectory":
+      case 'setProjectDocsDirectory':
         await this.updateProjectDocsDirectory(message.projectId, message.directory);
         return;
-      case "refreshGitState":
+      case 'refreshGitState':
         await this.refreshGitStateForMessage(message);
         return;
-      case "setSidebarGitPrimaryAction":
+      case 'setSidebarGitPrimaryAction':
         await this.persistGitPreferences({ primaryAction: message.action }, message);
         return;
-      case "setSidebarGitCommitConfirmationEnabled":
+      case 'setSidebarGitCommitConfirmationEnabled':
         await this.persistGitPreferences({ confirmCommit: message.enabled }, message);
         return;
-      case "setSidebarGitGenerateCommitBodyEnabled":
+      case 'setSidebarGitGenerateCommitBodyEnabled':
         await this.persistGitPreferences({ generateCommitBody: message.enabled }, message);
         return;
-      case "runSidebarGitAction":
+      case 'runSidebarGitAction':
         await this.runSidebarGitAction(message);
         return;
-      case "confirmSidebarGitCommit":
+      case 'confirmSidebarGitCommit':
         await this.confirmSidebarGitCommit(message);
         return;
-      case "cancelSidebarGitCommit":
+      case 'cancelSidebarGitCommit':
         this.pendingGitCommitRequests.delete(message.requestId);
         this.publishHudPatch();
         return;
-      case "runSidebarGitMultipleCommits":
+      case 'runSidebarGitMultipleCommits':
         await this.runSidebarGitMultipleCommits(message.requestId, message.agentId);
         return;
-      case "confirmSidebarGitDirectMerge":
+      case 'confirmSidebarGitDirectMerge':
         await this.confirmSidebarGitDirectMerge(message);
         return;
-      case "commitWorktreeBeforeDelete":
+      case 'commitWorktreeBeforeDelete':
         await this.runSidebarGitAction({
-          action: "commit",
+          action: 'commit',
           groupId: message.groupId,
-          type: "runSidebarGitAction",
+          type: 'runSidebarGitAction',
         });
         return;
-      case "openSidebarGitChangedFileDiff":
+      case 'openSidebarGitChangedFileDiff':
         await this.openSidebarGitChangedFileDiff(message.filePath, message.requestId);
         return;
-      case "openSidebarGitChangedFile":
+      case 'openSidebarGitChangedFile':
         await this.openSidebarGitChangedFileInIde(message);
         return;
-      case "saveSidebarAgent":
+      case 'saveSidebarAgent':
         await this.saveSidebarAgent(message);
         return;
-      case "deleteSidebarAgent":
+      case 'deleteSidebarAgent':
         await this.deleteSidebarAgent(message.agentId);
         return;
-      case "syncSidebarAgentOrder":
+      case 'syncSidebarAgentOrder':
         await this.syncSidebarAgentOrder(message.requestId, message.agentIds);
         return;
-      case "saveSidebarCommand":
+      case 'saveSidebarCommand':
         await this.saveSidebarCommand(message);
         return;
-      case "deleteSidebarCommand":
+      case 'deleteSidebarCommand':
         await this.deleteSidebarCommand(message.commandId);
         return;
-      case "syncSidebarCommandOrder":
+      case 'syncSidebarCommandOrder':
         await this.syncSidebarCommandOrder(message.requestId, message.commandIds);
         return;
-      case "saveGlobalSidebarCommand":
+      case 'saveGlobalSidebarCommand':
         await this.saveGlobalSidebarCommand(message);
         return;
-      case "deleteGlobalSidebarCommand":
+      case 'deleteGlobalSidebarCommand':
         await this.deleteGlobalSidebarCommand(message.commandId);
         return;
-      case "syncGlobalSidebarCommandOrder":
+      case 'syncGlobalSidebarCommandOrder':
         await this.syncGlobalSidebarCommandOrder(message.requestId, message.commandIds);
         return;
       default:
@@ -1469,7 +1402,8 @@ type-checks. It works without a circular-inference error only because every
 moved method carries an explicit return type annotation.
 */
 export interface GpuiSidebarRuntime
-  extends GpuiSidebarRuntimeGitMethods,
+  extends
+    GpuiSidebarRuntimeGitMethods,
     GpuiSidebarRuntimeWorktreeMethods,
     GpuiSidebarRuntimeSidebarGroupMethods,
     GpuiSidebarRuntimePresentationStreamMethods,

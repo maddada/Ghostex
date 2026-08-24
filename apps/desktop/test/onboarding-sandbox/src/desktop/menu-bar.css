@@ -38,7 +38,7 @@
   letter-spacing: 0.1px;
 }
 
-.sbx-menu-bar-app[data-launching="true"] {
+.sbx-menu-bar-app[data-launching='true'] {
   animation: sbx-menu-app-fade 1.1s ease-in-out infinite;
 }
 

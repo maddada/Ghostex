@@ -33,8 +33,8 @@ set -euo pipefail
 # default SDK cannot link arm64.
 
 if [[ $# -ne 1 ]]; then
-  echo "usage: $(basename "$0") <install-prefix>" >&2
-  exit 64
+	echo "usage: $(basename "$0") <install-prefix>" >&2
+	exit 64
 fi
 PREFIX="$1"
 
@@ -43,55 +43,55 @@ GHOSTTY_DIR="$ROOT_DIR/.dependencies/ghostty"
 REQUIRED_ZIG_MINOR="0.16"
 
 zig_matches() {
-  local candidate="$1"
-  [[ -x "$candidate" ]] || return 1
-  local version
-  version="$("$candidate" version 2>/dev/null)" || return 1
-  [[ "$version" == "$REQUIRED_ZIG_MINOR".* ]]
+	local candidate="$1"
+	[[ -x "$candidate" ]] || return 1
+	local version
+	version="$("$candidate" version 2>/dev/null)" || return 1
+	[[ "$version" == "$REQUIRED_ZIG_MINOR".* ]]
 }
 
 find_zig() {
-  if [[ -n "${GHOSTEX_ZIG:-}" ]]; then
-    if zig_matches "$GHOSTEX_ZIG"; then
-      printf '%s\n' "$GHOSTEX_ZIG"
-      return 0
-    fi
-    echo "GHOSTEX_ZIG ($GHOSTEX_ZIG) is not a Zig $REQUIRED_ZIG_MINOR.x binary." >&2
-    return 1
-  fi
+	if [[ -n "${GHOSTEX_ZIG:-}" ]]; then
+		if zig_matches "$GHOSTEX_ZIG"; then
+			printf '%s\n' "$GHOSTEX_ZIG"
+			return 0
+		fi
+		echo "GHOSTEX_ZIG ($GHOSTEX_ZIG) is not a Zig $REQUIRED_ZIG_MINOR.x binary." >&2
+		return 1
+	fi
 
-  local path_zig
-  if path_zig="$(command -v zig 2>/dev/null)" && zig_matches "$path_zig"; then
-    printf '%s\n' "$path_zig"
-    return 0
-  fi
+	local path_zig
+	if path_zig="$(command -v zig 2>/dev/null)" && zig_matches "$path_zig"; then
+		printf '%s\n' "$path_zig"
+		return 0
+	fi
 
-  # Homebrew's zig@0.16 is preferred over the mise tarball install: on
-  # macOS 27 (2026-07-11) the mise tarball install intermittently fails
-  # executable links against the Xcode 27 SDK with every libSystem symbol
-  # undefined, while the Homebrew build of the same version links cleanly.
-  local candidate
-  for candidate in /opt/homebrew/opt/zig@"$REQUIRED_ZIG_MINOR"/bin/zig \
-    "$HOME/.local/share/mise/installs/zig/$REQUIRED_ZIG_MINOR".*/bin/zig \
-    "$HOME/.local/share/mise/installs/zig/$REQUIRED_ZIG_MINOR".*/zig; do
-    if zig_matches "$candidate"; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done
+	# Homebrew's zig@0.16 is preferred over the mise tarball install: on
+	# macOS 27 (2026-07-11) the mise tarball install intermittently fails
+	# executable links against the Xcode 27 SDK with every libSystem symbol
+	# undefined, while the Homebrew build of the same version links cleanly.
+	local candidate
+	for candidate in /opt/homebrew/opt/zig@"$REQUIRED_ZIG_MINOR"/bin/zig \
+		"$HOME/.local/share/mise/installs/zig/$REQUIRED_ZIG_MINOR".*/bin/zig \
+		"$HOME/.local/share/mise/installs/zig/$REQUIRED_ZIG_MINOR".*/zig; do
+		if zig_matches "$candidate"; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
 
-  echo "No Zig $REQUIRED_ZIG_MINOR.x found. Install one (e.g. 'mise install zig@0.16.0') or set GHOSTEX_ZIG to a Zig $REQUIRED_ZIG_MINOR.x binary." >&2
-  return 1
+	echo "No Zig $REQUIRED_ZIG_MINOR.x found. Install one (e.g. 'mise install zig@0.16.0') or set GHOSTEX_ZIG to a Zig $REQUIRED_ZIG_MINOR.x binary." >&2
+	return 1
 }
 
 ZIG="$(find_zig)"
 GHOSTTY_APP_VERSION="$(
-  sed -n -E 's/^[[:space:]]*\.version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$GHOSTTY_DIR/build.zig.zon" \
-    | head -n 1
+	sed -n -E 's/^[[:space:]]*\.version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$GHOSTTY_DIR/build.zig.zon" |
+		head -n 1
 )"
 if [[ -z "$GHOSTTY_APP_VERSION" ]]; then
-  echo "Could not resolve Ghostty app version from $GHOSTTY_DIR/build.zig.zon." >&2
-  exit 1
+	echo "Could not resolve Ghostty app version from $GHOSTTY_DIR/build.zig.zon." >&2
+	exit 1
 fi
 
 cd "$GHOSTTY_DIR"
@@ -101,9 +101,9 @@ cd "$GHOSTTY_DIR"
 # SDKs keep arm64-macos in later sub-documents while the main document is
 # arm64e-only, so a whole-file grep reports false positives.
 sdk_exports_arm64() {
-  local tbd="$1/usr/lib/libSystem.tbd"
-  [[ -f "$tbd" ]] || return 1
-  sed -n '/^targets:/{p;q;}' "$tbd" | grep -Eq '(^|[ \[,])arm64-macos[] ,]'
+	local tbd="$1/usr/lib/libSystem.tbd"
+	[[ -f "$tbd" ]] || return 1
+	sed -n '/^targets:/{p;q;}' "$tbd" | grep -Eq '(^|[ \[,])arm64-macos[] ,]'
 }
 
 # CDXC:GPUILibghosttyVt 2026-07-11:
@@ -114,64 +114,64 @@ sdk_exports_arm64() {
 # declares arm64e-macos also declares arm64-macos. The dylib symbol tables
 # are identical for arm64/arm64e, so the patched stub links correctly.
 synthesize_arm64_sdk_overlay() {
-  local source_sdk="$1"
-  local overlay_sdk="$2"
-  rm -rf "$overlay_sdk"
-  mkdir -p "$overlay_sdk/usr/lib"
-  local entry name
-  for entry in "$source_sdk"/*; do
-    name="$(basename "$entry")"
-    [[ "$name" == "usr" ]] && continue
-    ln -s "$entry" "$overlay_sdk/$name"
-  done
-  for entry in "$source_sdk"/usr/*; do
-    name="$(basename "$entry")"
-    [[ "$name" == "lib" ]] && continue
-    ln -s "$entry" "$overlay_sdk/usr/$name"
-  done
-  for entry in "$source_sdk"/usr/lib/*; do
-    name="$(basename "$entry")"
-    [[ "$name" == "libSystem.tbd" ]] && continue
-    ln -s "$entry" "$overlay_sdk/usr/lib/$name"
-  done
-  sed -E '/(^|[ \[,])arm64-macos[] ,]/! s/arm64e-macos/arm64-macos, arm64e-macos/g' \
-    "$source_sdk/usr/lib/libSystem.tbd" > "$overlay_sdk/usr/lib/libSystem.tbd"
+	local source_sdk="$1"
+	local overlay_sdk="$2"
+	rm -rf "$overlay_sdk"
+	mkdir -p "$overlay_sdk/usr/lib"
+	local entry name
+	for entry in "$source_sdk"/*; do
+		name="$(basename "$entry")"
+		[[ "$name" == "usr" ]] && continue
+		ln -s "$entry" "$overlay_sdk/$name"
+	done
+	for entry in "$source_sdk"/usr/*; do
+		name="$(basename "$entry")"
+		[[ "$name" == "lib" ]] && continue
+		ln -s "$entry" "$overlay_sdk/usr/$name"
+	done
+	for entry in "$source_sdk"/usr/lib/*; do
+		name="$(basename "$entry")"
+		[[ "$name" == "libSystem.tbd" ]] && continue
+		ln -s "$entry" "$overlay_sdk/usr/lib/$name"
+	done
+	sed -E '/(^|[ \[,])arm64-macos[] ,]/! s/arm64e-macos/arm64-macos, arm64e-macos/g' \
+		"$source_sdk/usr/lib/libSystem.tbd" >"$overlay_sdk/usr/lib/libSystem.tbd"
 }
 
 if [[ "$(uname)" == "Darwin" ]] && ! sdk_exports_arm64 "$(/usr/bin/xcrun --sdk macosx --show-sdk-path 2>/dev/null)"; then
-  WRAPPER_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ghostex-xcrun.XXXXXX")"
-  trap 'rm -rf "$WRAPPER_DIR"' EXIT
-  MACOS_SDK=""
-  if [[ -d /Library/Developer/CommandLineTools/SDKs ]]; then
-    MACOS_SDK="$(
-      find /Library/Developer/CommandLineTools/SDKs -maxdepth 1 -type d -name 'MacOSX*.sdk' 2>/dev/null \
-        | while IFS= read -r sdk; do
-            if sdk_exports_arm64 "$sdk"; then
-              printf '%s\n' "$sdk"
-            fi
-          done \
-        | sort -Vr \
-        | head -n 1
-    )"
-  fi
-  if [[ -z "$MACOS_SDK" ]]; then
-    DEFAULT_SDK="$(/usr/bin/xcrun --sdk macosx --show-sdk-path 2>/dev/null)"
-    if [[ -z "$DEFAULT_SDK" || ! -f "$DEFAULT_SDK/usr/lib/libSystem.tbd" ]]; then
-      echo "No macOS SDK with arm64 libSystem exports was found, and no default macOS SDK is available to synthesize one from." >&2
-      exit 1
-    fi
-    OVERLAY_SDK="${PREFIX}-sdk-overlay/$(basename "$DEFAULT_SDK")"
-    if [[ ! -f "$OVERLAY_SDK/usr/lib/libSystem.tbd" ]] \
-      || [[ "$DEFAULT_SDK/usr/lib/libSystem.tbd" -nt "$OVERLAY_SDK/usr/lib/libSystem.tbd" ]]; then
-      synthesize_arm64_sdk_overlay "$DEFAULT_SDK" "$OVERLAY_SDK"
-    fi
-    if ! sdk_exports_arm64 "$OVERLAY_SDK"; then
-      echo "Failed to synthesize an arm64-capable SDK overlay from $DEFAULT_SDK." >&2
-      exit 1
-    fi
-    MACOS_SDK="$OVERLAY_SDK"
-  fi
-  cat > "$WRAPPER_DIR/xcrun" <<EOF
+	WRAPPER_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ghostex-xcrun.XXXXXX")"
+	trap 'rm -rf "$WRAPPER_DIR"' EXIT
+	MACOS_SDK=""
+	if [[ -d /Library/Developer/CommandLineTools/SDKs ]]; then
+		MACOS_SDK="$(
+			find /Library/Developer/CommandLineTools/SDKs -maxdepth 1 -type d -name 'MacOSX*.sdk' 2>/dev/null |
+				while IFS= read -r sdk; do
+					if sdk_exports_arm64 "$sdk"; then
+						printf '%s\n' "$sdk"
+					fi
+				done |
+				sort -Vr |
+				head -n 1
+		)"
+	fi
+	if [[ -z "$MACOS_SDK" ]]; then
+		DEFAULT_SDK="$(/usr/bin/xcrun --sdk macosx --show-sdk-path 2>/dev/null)"
+		if [[ -z "$DEFAULT_SDK" || ! -f "$DEFAULT_SDK/usr/lib/libSystem.tbd" ]]; then
+			echo "No macOS SDK with arm64 libSystem exports was found, and no default macOS SDK is available to synthesize one from." >&2
+			exit 1
+		fi
+		OVERLAY_SDK="${PREFIX}-sdk-overlay/$(basename "$DEFAULT_SDK")"
+		if [[ ! -f "$OVERLAY_SDK/usr/lib/libSystem.tbd" ]] ||
+			[[ "$DEFAULT_SDK/usr/lib/libSystem.tbd" -nt "$OVERLAY_SDK/usr/lib/libSystem.tbd" ]]; then
+			synthesize_arm64_sdk_overlay "$DEFAULT_SDK" "$OVERLAY_SDK"
+		fi
+		if ! sdk_exports_arm64 "$OVERLAY_SDK"; then
+			echo "Failed to synthesize an arm64-capable SDK overlay from $DEFAULT_SDK." >&2
+			exit 1
+		fi
+		MACOS_SDK="$OVERLAY_SDK"
+	fi
+	cat >"$WRAPPER_DIR/xcrun" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "\${1:-}" == "--sdk" && "\${2:-}" == "macosx" && "\${3:-}" == "--show-sdk-path" ]]; then
@@ -180,8 +180,8 @@ if [[ "\${1:-}" == "--sdk" && "\${2:-}" == "macosx" && "\${3:-}" == "--show-sdk-
 fi
 /usr/bin/xcrun "\$@"
 EOF
-  chmod +x "$WRAPPER_DIR/xcrun"
-  export PATH="$WRAPPER_DIR:$PATH"
+	chmod +x "$WRAPPER_DIR/xcrun"
+	export PATH="$WRAPPER_DIR:$PATH"
 fi
 
 # Ghostex patch (2026-07-11): cargo links only the STATIC libghostty-vt
@@ -193,9 +193,9 @@ fi
 # unconditional dylib emit failed the whole cargo build on machines without
 # an older Command Line Tools SDK even though the static archive builds fine.
 exec "$ZIG" build \
-  -Dversion-string="$GHOSTTY_APP_VERSION" \
-  -Demit-lib-vt=true \
-  -Demit-lib-vt-shared=false \
-  -Demit-xcframework=false \
-  -Doptimize=ReleaseSafe \
-  --prefix "$PREFIX"
+	-Dversion-string="$GHOSTTY_APP_VERSION" \
+	-Demit-lib-vt=true \
+	-Demit-lib-vt-shared=false \
+	-Demit-xcframework=false \
+	-Doptimize=ReleaseSafe \
+	--prefix "$PREFIX"

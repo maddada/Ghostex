@@ -1,7 +1,7 @@
-import { createRoot } from "react-dom/client";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Toaster, toast } from "sonner";
-import { AddProjectModal } from "@/packages/core-ui/add-project-modal/add-project-modal";
+import { createRoot } from 'react-dom/client';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Toaster, toast } from 'sonner';
+import { AddProjectModal } from '@/packages/core-ui/add-project-modal/add-project-modal';
 import type {
   AddProjectAddResult,
   AddProjectBrowseResult,
@@ -12,59 +12,44 @@ import type {
   AddProjectMachineOption,
   AddProjectRepositoryInfo,
   AddProjectSourceControlDiscovery,
-} from "@/packages/core-ui/add-project-modal/types";
-import { AgentConfigModal, type AgentConfigDraft } from "@/packages/core-ui/agent-config-modal";
-import { AgentsHubModal } from "@/packages/core-ui/agents-hub-modal";
-import { CommandPalette } from "@/packages/core-ui/command-palette";
-import { DaemonSessionsModal } from "@/packages/core-ui/daemon-sessions-modal";
-import { DelayedSendModal } from "@/packages/core-ui/delayed-send-modal";
-import { DiscoverGhostexModal } from "@/packages/core-ui/discover-ghostex-modal";
-import { FirstUserMessageModal } from "@/packages/core-ui/first-user-message-modal";
-import { PinnedPromptsModal } from "@/packages/core-ui/pinned-prompts-modal";
-import { StashedPromptsModal } from "@/packages/core-ui/stashed-prompts-modal";
-import {
-  PortlessSetupModal,
-  type PortlessSetupModalMode,
-} from "@/packages/core-ui/portless-setup-modal";
-import { PreviousSessionsModal } from "@/packages/core-ui/previous-sessions-modal";
-import { RecentProjectsModal } from "@/packages/core-ui/recent-projects-modal";
-import { RemoteGxserverInstallModal } from "@/packages/core-ui/remote-gxserver-install-modal";
-import { RemoteProjectPickerModal } from "@/packages/core-ui/remote-project-picker/remote-project-picker-modal";
-import type { RemoteFilesystemBrowseResult } from "@/packages/core-ui/remote-project-picker/remote-filesystem";
-import { ScratchPadModal } from "@/packages/core-ui/scratch-pad-modal";
+} from '@/packages/core-ui/add-project-modal/types';
+import { AgentConfigModal, type AgentConfigDraft } from '@/packages/core-ui/agent-config-modal';
+import { AgentsHubModal } from '@/packages/core-ui/agents-hub-modal';
+import { CommandPalette } from '@/packages/core-ui/command-palette';
+import { DaemonSessionsModal } from '@/packages/core-ui/daemon-sessions-modal';
+import { DelayedSendModal } from '@/packages/core-ui/delayed-send-modal';
+import { DiscoverGhostexModal } from '@/packages/core-ui/discover-ghostex-modal';
+import { FirstUserMessageModal } from '@/packages/core-ui/first-user-message-modal';
+import { PinnedPromptsModal } from '@/packages/core-ui/pinned-prompts-modal';
+import { StashedPromptsModal } from '@/packages/core-ui/stashed-prompts-modal';
+import { PortlessSetupModal, type PortlessSetupModalMode } from '@/packages/core-ui/portless-setup-modal';
+import { PreviousSessionsModal } from '@/packages/core-ui/previous-sessions-modal';
+import { RecentProjectsModal } from '@/packages/core-ui/recent-projects-modal';
+import { RemoteGxserverInstallModal } from '@/packages/core-ui/remote-gxserver-install-modal';
+import { RemoteProjectPickerModal } from '@/packages/core-ui/remote-project-picker/remote-project-picker-modal';
+import type { RemoteFilesystemBrowseResult } from '@/packages/core-ui/remote-project-picker/remote-filesystem';
+import { ScratchPadModal } from '@/packages/core-ui/scratch-pad-modal';
 import {
   SettingsModal,
   type MainSettingsInitialSectionId,
   type SettingsModalTab,
-} from "@/packages/core-ui/settings-modal";
-import { ExportTranscriptResultModal } from "@/packages/core-ui/export-transcript-result-modal";
-import { SessionRenameModal } from "@/packages/core-ui/session-rename-modal";
-import { WatchGhostexVideoModal } from "@/packages/core-ui/watch-ghostex-video-modal";
-import {
-  UpdateAvailableModal,
-  type UpdateAvailableModalState,
-} from "@/packages/core-ui/update-available-modal";
-import { FirstLaunchSetupModal } from "@/packages/core-ui/first-launch-setup-modal";
-import { GitFileDiffModal, type GitFileDiffModalDraft } from "@/packages/core-ui/git-file-diff-modal";
-import { GitCommitModal, type GitCommitModalDraft } from "@/packages/core-ui/git-commit-modal";
-import {
-  WorktreeDeleteModal,
-  type WorktreeDeleteModalDraft,
-} from "@/packages/core-ui/worktree-delete-modal";
-import {
-  WorktreeRenameModal,
-  type WorktreeRenameModalDraft,
-} from "@/packages/core-ui/worktree-rename-modal";
-import { WorktreeCreateModal } from "@/packages/core-ui/worktree-create-modal";
-import {
-  normalizeAppToastDescription,
-  type AppToastRequest,
-} from "@/packages/shared/app-toast-contract";
+} from '@/packages/core-ui/settings-modal';
+import { ExportTranscriptResultModal } from '@/packages/core-ui/export-transcript-result-modal';
+import { SessionRenameModal } from '@/packages/core-ui/session-rename-modal';
+import { WatchGhostexVideoModal } from '@/packages/core-ui/watch-ghostex-video-modal';
+import { UpdateAvailableModal, type UpdateAvailableModalState } from '@/packages/core-ui/update-available-modal';
+import { FirstLaunchSetupModal } from '@/packages/core-ui/first-launch-setup-modal';
+import { GitFileDiffModal, type GitFileDiffModalDraft } from '@/packages/core-ui/git-file-diff-modal';
+import { GitCommitModal, type GitCommitModalDraft } from '@/packages/core-ui/git-commit-modal';
+import { WorktreeDeleteModal, type WorktreeDeleteModalDraft } from '@/packages/core-ui/worktree-delete-modal';
+import { WorktreeRenameModal, type WorktreeRenameModalDraft } from '@/packages/core-ui/worktree-rename-modal';
+import { WorktreeCreateModal } from '@/packages/core-ui/worktree-create-modal';
+import { normalizeAppToastDescription, type AppToastRequest } from '@/packages/shared/app-toast-contract';
 import {
   sidebarAgentIconSupportsSessionHistoryTitleGeneration,
   type SidebarAgentButton,
   type SidebarAgentIcon,
-} from "@/packages/shared/sidebar-agents";
+} from '@/packages/shared/sidebar-agents';
 import type {
   ExtensionToSidebarMessage,
   SidebarAddProjectDialogOperation,
@@ -77,61 +62,58 @@ import type {
   // CDXC:AppIconPicker 2026-06-25-21:50: App Icon state flows to Settings through the modal-state relay.
   SidebarAppIconStateMessage,
   SidebarToExtensionMessage,
-} from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/session-grid-contract';
 import {
   getWorkspaceThemeForeground,
   normalizeWorkspaceThemeColor,
-} from "@/packages/shared/workspace-project-appearance";
-import {
-  installAppModalGlobalErrorLogging,
-  logAppModalError,
-} from "@/packages/core-ui/app-modal-error-log";
-import { postAppModalHostMessage } from "@/packages/core-ui/app-modal-host-bridge";
-import { MissingProjectFolderModal } from "@/packages/core-ui/missing-project-folder-modal";
-import { useSidebarStore } from "@/packages/core-ui/sidebar-store";
+} from '@/packages/shared/workspace-project-appearance';
+import { installAppModalGlobalErrorLogging, logAppModalError } from '@/packages/core-ui/app-modal-error-log';
+import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import { MissingProjectFolderModal } from '@/packages/core-ui/missing-project-folder-modal';
+import { useSidebarStore } from '@/packages/core-ui/sidebar-store';
 import {
   DEFAULT_ghostex_SETTINGS,
   isDiagnosticLoggingScenarioEnabled,
   SETTINGS_MODAL_NAVIGATION_TABS,
   type DiagnosticLoggingScenarioId,
-} from "@/packages/shared/ghostex-settings";
-import type { WebviewApi } from "@/packages/core-ui/webview-api";
-import "@/packages/core-ui/styles.css";
+} from '@/packages/shared/ghostex-settings';
+import type { WebviewApi } from '@/packages/core-ui/webview-api';
+import '@/packages/core-ui/styles.css';
 
 type AppModalKind =
-  | "addProject"
-  | "agentConfig"
-  | "agentsHub"
-  | "commandPalette"
-  | "configureActions"
-  | "configureAgents"
-  | "daemonSessions"
-  | "delayedSend"
-  | "discoverGhostex"
-  | "exportTranscriptResult"
-  | "watchGhostexVideo"
-  | "hotkeys"
-  | "missingProjectFolder"
-  | "gitCommit"
-  | "gitFileDiff"
-  | "deleteWorktree"
-  | "renameWorktree"
-  | "openTargets"
-  | "pinnedPrompts"
-  | "portlessSetup"
-  | "previousSessions"
-  | "recentProjects"
-  | "firstUserMessage"
-  | "remoteGxserverInstall"
-  | "remoteProjectPicker"
-  | "renameSession"
-  | "scratchPad"
-  | "settings"
-  | "stashedPrompts"
-  | "worktree"
-  | "tipsAndTricks"
-  | "updateAvailable"
-  | "firstLaunchSetup";
+  | 'addProject'
+  | 'agentConfig'
+  | 'agentsHub'
+  | 'commandPalette'
+  | 'configureActions'
+  | 'configureAgents'
+  | 'daemonSessions'
+  | 'delayedSend'
+  | 'discoverGhostex'
+  | 'exportTranscriptResult'
+  | 'watchGhostexVideo'
+  | 'hotkeys'
+  | 'missingProjectFolder'
+  | 'gitCommit'
+  | 'gitFileDiff'
+  | 'deleteWorktree'
+  | 'renameWorktree'
+  | 'openTargets'
+  | 'pinnedPrompts'
+  | 'portlessSetup'
+  | 'previousSessions'
+  | 'recentProjects'
+  | 'firstUserMessage'
+  | 'remoteGxserverInstall'
+  | 'remoteProjectPicker'
+  | 'renameSession'
+  | 'scratchPad'
+  | 'settings'
+  | 'stashedPrompts'
+  | 'worktree'
+  | 'tipsAndTricks'
+  | 'updateAvailable'
+  | 'firstLaunchSetup';
 
 /*
  * CDXC:GPUIAppModalScroll 2026-07-26-07:55:
@@ -143,7 +125,7 @@ type AppModalKind =
  * frame stays fixed after that fit, so the fixed-window stylesheet caps below
  * still own post-open content growth.
  */
-const GPUI_APP_MODAL_HOST_ID = "gpui";
+const GPUI_APP_MODAL_HOST_ID = 'gpui';
 
 /*
  * CDXC:AppModals 2026-06-30-16:08:
@@ -152,19 +134,19 @@ const GPUI_APP_MODAL_HOST_ID = "gpui";
  * this path because it remains a user-resizable fixed-size native window.
  */
 const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, string>> = {
-  agentConfig: ".agent-config-modal-shadcn",
-  delayedSend: ".delayed-send-modal-shadcn",
-  deleteWorktree: ".worktree-delete-modal-shadcn",
-  exportTranscriptResult: ".export-transcript-result-modal-shadcn",
-  firstUserMessage: ".first-user-message-modal",
-  missingProjectFolder: ".missing-project-folder-modal",
-  portlessSetup: ".portless-setup-modal-shadcn",
-  remoteGxserverInstall: ".remote-gxserver-install-modal",
-  remoteProjectPicker: ".remote-project-picker-dialog",
-  renameSession: ".session-rename-modal-shadcn",
-  renameWorktree: ".worktree-rename-modal-shadcn",
-  worktree: ".worktree-create-modal-shadcn",
-  updateAvailable: ".update-available-modal",
+  agentConfig: '.agent-config-modal-shadcn',
+  delayedSend: '.delayed-send-modal-shadcn',
+  deleteWorktree: '.worktree-delete-modal-shadcn',
+  exportTranscriptResult: '.export-transcript-result-modal-shadcn',
+  firstUserMessage: '.first-user-message-modal',
+  missingProjectFolder: '.missing-project-folder-modal',
+  portlessSetup: '.portless-setup-modal-shadcn',
+  remoteGxserverInstall: '.remote-gxserver-install-modal',
+  remoteProjectPicker: '.remote-project-picker-dialog',
+  renameSession: '.session-rename-modal-shadcn',
+  renameWorktree: '.worktree-rename-modal-shadcn',
+  worktree: '.worktree-create-modal-shadcn',
+  updateAvailable: '.update-available-modal',
 };
 
 /*
@@ -173,18 +155,13 @@ const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, s
  * element height puts the React shell at y=0. Top-aligned modals keep an
  * intentional WebView inset, so include that inset in the one-shot height.
  */
-const ONE_SHOT_NATIVE_FIT_HEIGHT_TOP_OFFSET_MODALS = new Set<AppModalKind>([
-  "previousSessions",
-  "remoteProjectPicker",
-]);
+const ONE_SHOT_NATIVE_FIT_HEIGHT_TOP_OFFSET_MODALS = new Set<AppModalKind>(['previousSessions', 'remoteProjectPicker']);
 
 function oneShotNativeFitHeightSelector(modal: AppModalKind): string | undefined {
   return ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS[modal];
 }
 
-function shouldUseOneShotNativeFitHeight(
-  modal: AppModalKind | null | undefined,
-): modal is AppModalKind {
+function shouldUseOneShotNativeFitHeight(modal: AppModalKind | null | undefined): modal is AppModalKind {
   return Boolean(modal && oneShotNativeFitHeightSelector(modal));
 }
 
@@ -198,24 +175,19 @@ function measureOneShotNativeFitHeight(modal: AppModalKind): number | undefined 
     return undefined;
   }
   const rect = element.getBoundingClientRect();
-  const topOffset = ONE_SHOT_NATIVE_FIT_HEIGHT_TOP_OFFSET_MODALS.has(modal)
-    ? Math.max(0, rect.top)
-    : 0;
+  const topOffset = ONE_SHOT_NATIVE_FIT_HEIGHT_TOP_OFFSET_MODALS.has(modal) ? Math.max(0, rect.top) : 0;
   const height = Math.ceil(Math.max(rect.height, element.offsetHeight) + topOffset);
   return Number.isFinite(height) && height > 0 ? height : undefined;
 }
 
-type AgentsHubCatalogMessage = Extract<ExtensionToSidebarMessage, { type: "agentsHubCatalog" }>;
-type AgentsHubFileContentMessage = Extract<
-  ExtensionToSidebarMessage,
-  { type: "agentsHubFileContent" }
->;
-type AgentHookStatusMessage = Extract<ExtensionToSidebarMessage, { type: "agentHookStatus" }>;
-type GhostexCliStatusMessage = Extract<ExtensionToSidebarMessage, { type: "ghostexCliStatus" }>;
-type OSIntegrationStatusMessage = Extract<ExtensionToSidebarMessage, { type: "osIntegrationStatus" }>;
-type PluginSettingsStatusMessage = Extract<ExtensionToSidebarMessage, { type: "pluginSettingsStatus" }>;
+type AgentsHubCatalogMessage = Extract<ExtensionToSidebarMessage, { type: 'agentsHubCatalog' }>;
+type AgentsHubFileContentMessage = Extract<ExtensionToSidebarMessage, { type: 'agentsHubFileContent' }>;
+type AgentHookStatusMessage = Extract<ExtensionToSidebarMessage, { type: 'agentHookStatus' }>;
+type GhostexCliStatusMessage = Extract<ExtensionToSidebarMessage, { type: 'ghostexCliStatus' }>;
+type OSIntegrationStatusMessage = Extract<ExtensionToSidebarMessage, { type: 'osIntegrationStatus' }>;
+type PluginSettingsStatusMessage = Extract<ExtensionToSidebarMessage, { type: 'pluginSettingsStatus' }>;
 // CDXC:AppIconPicker 2026-06-25-21:50: App Icon state message threaded through modal state into Settings.
-type AppIconStateMessage = Extract<ExtensionToSidebarMessage, { type: "appIconState" }>;
+type AppIconStateMessage = Extract<ExtensionToSidebarMessage, { type: 'appIconState' }>;
 
 type AppModalHostMessage =
   | {
@@ -255,7 +227,7 @@ type AppModalHostMessage =
       modal: AppModalKind;
       mode?: PortlessSetupModalMode;
       prewarm?: boolean;
-      protocol?: "https" | "http";
+      protocol?: 'https' | 'http';
       requestId?: string;
       sessionAgentIcon?: string;
       sessionId?: string;
@@ -272,42 +244,42 @@ type AppModalHostMessage =
       tutorialVideoEmbedUrl?: string;
       notesMarkdown?: string;
       portable?: boolean;
-      state?: "available" | "ready";
+      state?: 'available' | 'ready';
       version?: string;
-      type: "open";
+      type: 'open';
     }
-  | { type: "close" }
+  | { type: 'close' }
   | AppToastRequest
-  | { keepOpen?: boolean; type: "toastDismissed" }
-  | { initialPath?: string; type: "pickRepositoryFolder" }
-  | { path: string; type: "repositoryFolderPicked" }
+  | { keepOpen?: boolean; type: 'toastDismissed' }
+  | { initialPath?: string; type: 'pickRepositoryFolder' }
+  | { path: string; type: 'repositoryFolderPicked' }
   | {
       error?: string;
       ok: boolean;
       projectPath?: string;
       requestId: string;
-      type: "repositoryCloneResult";
+      type: 'repositoryCloneResult';
     }
   | {
       error?: string;
       ok: boolean;
       preview?: unknown;
       requestId: string;
-      type: "repositoryClonePreviewResult";
+      type: 'repositoryClonePreviewResult';
     }
   | {
       error?: string;
       ok: boolean;
       requestId: string;
       result?: RemoteFilesystemBrowseResult;
-      type: "remoteProjectDirectoryBrowseResult";
+      type: 'remoteProjectDirectoryBrowseResult';
     }
   | {
       error?: string;
       ok: boolean;
       projectPath?: string;
       requestId: string;
-      type: "remoteProjectAddResult";
+      type: 'remoteProjectAddResult';
     }
   | {
       /*
@@ -322,11 +294,11 @@ type AppModalHostMessage =
       ok: boolean;
       requestId: string;
       result?: unknown;
-      type: "addProjectDialogResult";
+      type: 'addProjectDialogResult';
     }
-  | { type: "pickWorktreeImages" }
-  | { paths: string[]; type: "worktreeImageFilesPicked" }
-  | { path: string; type: "terminalBackgroundImageFilePicked" }
+  | { type: 'pickWorktreeImages' }
+  | { paths: string[]; type: 'worktreeImageFilesPicked' }
+  | { path: string; type: 'terminalBackgroundImageFilePicked' }
   | {
       /*
        * CDXC:RemoteMachines 2026-08-19:
@@ -337,7 +309,7 @@ type AppModalHostMessage =
        */
       installed: boolean;
       remoteMachineId: string;
-      type: "remoteGxserverInstallState";
+      type: 'remoteGxserverInstallState';
       version?: string;
     }
   | {
@@ -345,12 +317,12 @@ type AppModalHostMessage =
       error?: string;
       ok: boolean;
       requestId: string;
-      type: "projectWorktreesResult";
+      type: 'projectWorktreesResult';
       worktrees?: unknown;
     }
-  | { details?: string; event: string; type: "debugLog" }
-  | { modal: AppModalKind; requestId?: string; type: "presented" }
-  | { message: unknown; type: "sidebarState" };
+  | { details?: string; event: string; type: 'debugLog' }
+  | { modal: AppModalKind; requestId?: string; type: 'presented' }
+  | { message: unknown; type: 'sidebarState' };
 
 type RenameSessionModalState = {
   initialTitle: string;
@@ -358,11 +330,11 @@ type RenameSessionModalState = {
   sessionId: string;
 };
 
-type PromptAgentModalKey = "gitCommit" | "renameSession";
+type PromptAgentModalKey = 'gitCommit' | 'renameSession';
 
 const PROMPT_AGENT_MODAL_STORAGE_KEYS: Record<PromptAgentModalKey, string> = {
-  gitCommit: "ghostex.promptAgent.gitCommit",
-  renameSession: "ghostex.promptAgent.renameSession",
+  gitCommit: 'ghostex.promptAgent.gitCommit',
+  renameSession: 'ghostex.promptAgent.renameSession',
 };
 
 type FirstUserMessageModalState = {
@@ -456,11 +428,10 @@ type WorktreeModalState = {
 
 type PortlessSetupModalState = {
   mode: PortlessSetupModalMode;
-  protocol: "https" | "http";
+  protocol: 'https' | 'http';
 };
 
-const APP_MODAL_CONTEXT_MENU_EDITABLE_SELECTOR =
-  "input, textarea, select, [contenteditable='true'], [role='textbox']";
+const APP_MODAL_CONTEXT_MENU_EDITABLE_SELECTOR = "input, textarea, select, [contenteditable='true'], [role='textbox']";
 
 function isEditableAppModalContextMenuTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
@@ -490,14 +461,14 @@ declare global {
       };
     };
     __ghostex_APP_MODAL_HOST_ID__?: string;
-    __ghostex_APP_MODAL_HOST_SURFACE__?: "main" | "nativeWindow";
+    __ghostex_APP_MODAL_HOST_SURFACE__?: 'main' | 'nativeWindow';
   }
 }
 
 const vscode: WebviewApi = {
   postMessage(message) {
     if (isAppModalDebugLoggingEnabled()) {
-      console.debug("[ghostex-app-modal-host] sidebarCommand", redactAppModalDebugMessage(message));
+      console.debug('[ghostex-app-modal-host] sidebarCommand', redactAppModalDebugMessage(message));
     }
     /**
      * CDXC:AppModals 2026-06-13-01:09:
@@ -505,16 +476,16 @@ const vscode: WebviewApi = {
      * commands still cross this full-window host before native dispatch. Keep a
      * single debug boundary for restore, delete, and direct text-search commands.
      */
-    postAppModalHostMessage({ message, type: "sidebarCommand" }, "AppModals:sidebarCommand");
+    postAppModalHostMessage({ message, type: 'sidebarCommand' }, 'AppModals:sidebarCommand');
   },
 };
 
 function redactAppModalDebugMessage(message: unknown): unknown {
   if (
-    typeof message === "object" &&
+    typeof message === 'object' &&
     message !== null &&
     !Array.isArray(message) &&
-    (message as { type?: unknown }).type === "saveRemoteMachinePassword"
+    (message as { type?: unknown }).type === 'saveRemoteMachinePassword'
   ) {
     /*
      * CDXC:RemoteMachines 2026-06-09-18:23:
@@ -524,7 +495,7 @@ function redactAppModalDebugMessage(message: unknown): unknown {
      */
     return {
       ...(message as Record<string, unknown>),
-      password: "[redacted]",
+      password: '[redacted]',
     };
   }
   return message;
@@ -536,11 +507,11 @@ function isDiagnosticLoggingEnabledForScenario(scenarioId: DiagnosticLoggingScen
 }
 
 function isAppModalDebugLoggingEnabled(): boolean {
-  return isDiagnosticLoggingEnabledForScenario("native.app.modal");
+  return isDiagnosticLoggingEnabledForScenario('native.app.modal');
 }
 
 function isRemoteGxserverInstallDebugLoggingEnabled(): boolean {
-  return isDiagnosticLoggingEnabledForScenario("native.remote.gxserver.install");
+  return isDiagnosticLoggingEnabledForScenario('native.remote.gxserver.install');
 }
 
 type AppModalDebugDetails = Record<string, string | number | boolean | null | undefined>;
@@ -561,9 +532,9 @@ function postAppModalDebugLog(event: string, details: AppModalDebugDetails) {
         ...details,
       }),
       event,
-      type: "debugLog",
+      type: 'debugLog',
     },
-    "AppModals:debug",
+    'AppModals:debug'
   );
 }
 
@@ -588,28 +559,28 @@ function postRemoteGxserverInstallDebugLog(event: string, details: AppModalDebug
         ...details,
       }),
       event,
-      type: "remoteGxserverInstallDebugLog",
+      type: 'remoteGxserverInstallDebugLog',
     },
-    "RemoteGxserverInstall:debug",
+    'RemoteGxserverInstall:debug'
   );
 }
 
 function notifyNativeModalClosed() {
-  postAppModalHostMessage({ type: "close" }, "AppModals:close");
+  postAppModalHostMessage({ type: 'close' }, 'AppModals:close');
 }
 
 function isSettingsModalKind(modal: AppModalKind | undefined): boolean {
   return (
-    modal === "settings" ||
-    modal === "configureAgents" ||
-    modal === "configureActions" ||
-    modal === "openTargets" ||
-    modal === "hotkeys"
+    modal === 'settings' ||
+    modal === 'configureAgents' ||
+    modal === 'configureActions' ||
+    modal === 'openTargets' ||
+    modal === 'hotkeys'
   );
 }
 
 function isFirstLaunchSetupModalKind(modal: AppModalKind | undefined): boolean {
-  return modal === "firstLaunchSetup" || modal === "tipsAndTricks";
+  return modal === 'firstLaunchSetup' || modal === 'tipsAndTricks';
 }
 
 function shouldApplySidebarStateBeforeModalOpen(modal: AppModalKind | undefined): boolean {
@@ -630,19 +601,19 @@ function getSettingsInitialTab(modal: AppModalKind | undefined): SettingsModalTa
    * app-modal host now routes Settings, Agents, Actions, and Hotkeys into one
    * tabbed Settings dialog so users have a single configuration surface.
    */
-  if (modal === "configureAgents") {
-    return "agents";
+  if (modal === 'configureAgents') {
+    return 'agents';
   }
-  if (modal === "configureActions") {
-    return "actions";
+  if (modal === 'configureActions') {
+    return 'actions';
   }
-  if (modal === "hotkeys") {
-    return "hotkeys";
+  if (modal === 'hotkeys') {
+    return 'hotkeys';
   }
-  if (modal === "openTargets") {
-    return "openTargets";
+  if (modal === 'openTargets') {
+    return 'openTargets';
   }
-  return "settings";
+  return 'settings';
 }
 
 /**
@@ -655,7 +626,7 @@ function getSettingsInitialTab(modal: AppModalKind | undefined): SettingsModalTa
 const SETTINGS_MODAL_TAB_SET = new Set<string>(SETTINGS_MODAL_NAVIGATION_TABS);
 
 function isSettingsModalTab(value: unknown): value is SettingsModalTab {
-  return typeof value === "string" && SETTINGS_MODAL_TAB_SET.has(value);
+  return typeof value === 'string' && SETTINGS_MODAL_TAB_SET.has(value);
 }
 
 function readPromptAgentModalOverride(modal: PromptAgentModalKey): string | undefined {
@@ -681,7 +652,7 @@ function clearPromptAgentModalOverrides(): void {
 function resolvePromptAgentModalSelection(
   agents: readonly SidebarAgentButton[],
   savedAgentId: string | undefined,
-  defaultAgentId: string | undefined,
+  defaultAgentId: string | undefined
 ): string | undefined {
   const commandAgents = agents.filter((agent) => agent.command?.trim());
   return (
@@ -691,38 +662,36 @@ function resolvePromptAgentModalSelection(
   );
 }
 
-function createRemoteProjectRequestId(kind: "add" | "browse"): string {
+function createRemoteProjectRequestId(kind: 'add' | 'browse'): string {
   return `remote-project-${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-function waitForRemoteProjectDirectoryBrowseResult(
-  requestId: string,
-): Promise<RemoteFilesystemBrowseResult> {
+function waitForRemoteProjectDirectoryBrowseResult(requestId: string): Promise<RemoteFilesystemBrowseResult> {
   return new Promise((resolve, reject) => {
     let timeoutId = 0;
     const handleMessage = (event: Event) => {
       const message = (event as CustomEvent<AppModalHostMessage>).detail;
       if (
         !message ||
-        typeof message !== "object" ||
-        message.type !== "remoteProjectDirectoryBrowseResult" ||
+        typeof message !== 'object' ||
+        message.type !== 'remoteProjectDirectoryBrowseResult' ||
         message.requestId !== requestId
       ) {
         return;
       }
       window.clearTimeout(timeoutId);
-      window.removeEventListener("ghostex-app-modal-host-message", handleMessage);
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
       if (!message.ok || !isRemoteFilesystemBrowseResult(message.result)) {
-        reject(new Error(message.error || "Remote directory browse failed."));
+        reject(new Error(message.error || 'Remote directory browse failed.'));
         return;
       }
       resolve(message.result);
     };
 
-    window.addEventListener("ghostex-app-modal-host-message", handleMessage);
+    window.addEventListener('ghostex-app-modal-host-message', handleMessage);
     timeoutId = window.setTimeout(() => {
-      window.removeEventListener("ghostex-app-modal-host-message", handleMessage);
-      reject(new Error("Remote directory browse timed out."));
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      reject(new Error('Remote directory browse timed out.'));
     }, 15_000);
   });
 }
@@ -734,22 +703,22 @@ function waitForRemoteProjectAddResult(requestId: string): Promise<void> {
       const message = (event as CustomEvent<AppModalHostMessage>).detail;
       if (
         !message ||
-        typeof message !== "object" ||
-        message.type !== "remoteProjectAddResult" ||
+        typeof message !== 'object' ||
+        message.type !== 'remoteProjectAddResult' ||
         message.requestId !== requestId
       ) {
         return;
       }
       window.clearTimeout(timeoutId);
-      window.removeEventListener("ghostex-app-modal-host-message", handleMessage);
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
       if (!message.ok) {
-        reject(new Error(message.error || "Remote project add failed."));
+        reject(new Error(message.error || 'Remote project add failed.'));
         return;
       }
       resolve();
     };
 
-    window.addEventListener("ghostex-app-modal-host-message", handleMessage);
+    window.addEventListener('ghostex-app-modal-host-message', handleMessage);
     /*
      * CDXC:AddProject 2026-07-30:
      * A remote add right after a reconnect has been measured at ~19s, so the
@@ -757,8 +726,8 @@ function waitForRemoteProjectAddResult(requestId: string): Promise<void> {
      * the machine. This waiter now matches the host's own 60s add budget.
      */
     timeoutId = window.setTimeout(() => {
-      window.removeEventListener("ghostex-app-modal-host-message", handleMessage);
-      reject(new Error("Remote project add timed out."));
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      reject(new Error('Remote project add timed out.'));
     }, ADD_PROJECT_DIALOG_ADD_TIMEOUT_MS);
   });
 }
@@ -789,7 +758,7 @@ function requestAddProjectDialogOperation(
   input: {
     machineId?: string;
     params?: SidebarAddProjectDialogRequestParams;
-  } = {},
+  } = {}
 ): Promise<unknown> {
   const requestId = createAddProjectRequestId(operation);
   const answer = new Promise<unknown>((resolve, reject) => {
@@ -798,25 +767,25 @@ function requestAddProjectDialogOperation(
       const message = (event as CustomEvent<AppModalHostMessage>).detail;
       if (
         !message ||
-        typeof message !== "object" ||
-        message.type !== "addProjectDialogResult" ||
+        typeof message !== 'object' ||
+        message.type !== 'addProjectDialogResult' ||
         message.requestId !== requestId
       ) {
         return;
       }
       window.clearTimeout(timeoutId);
-      window.removeEventListener("ghostex-app-modal-host-message", handleMessage);
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
       if (!message.ok) {
-        reject(new Error(message.error || "The request failed."));
+        reject(new Error(message.error || 'The request failed.'));
         return;
       }
       resolve(message.result);
     };
 
-    window.addEventListener("ghostex-app-modal-host-message", handleMessage);
+    window.addEventListener('ghostex-app-modal-host-message', handleMessage);
     timeoutId = window.setTimeout(() => {
-      window.removeEventListener("ghostex-app-modal-host-message", handleMessage);
-      reject(new Error("The machine did not answer in time."));
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      reject(new Error('The machine did not answer in time.'));
     }, timeoutMs);
   });
   vscode.postMessage({
@@ -824,7 +793,7 @@ function requestAddProjectDialogOperation(
     operation,
     ...(input.params ? { params: input.params } : {}),
     requestId,
-    type: "addProjectDialogRequest",
+    type: 'addProjectDialogRequest',
   });
   return answer;
 }
@@ -839,44 +808,41 @@ function requestAddProjectDialogOperation(
  */
 function readAddProjectResultObject(value: unknown, key: string): Record<string, unknown> {
   const container = value as Record<string, unknown> | null | undefined;
-  const entry = container && typeof container === "object" ? container[key] : undefined;
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-    throw new Error("The machine returned an unexpected answer.");
+  const entry = container && typeof container === 'object' ? container[key] : undefined;
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    throw new Error('The machine returned an unexpected answer.');
   }
   return entry as Record<string, unknown>;
 }
 
-function readAddProjectRequiredString(
-  source: Record<string, unknown>,
-  key: string,
-): string {
+function readAddProjectRequiredString(source: Record<string, unknown>, key: string): string {
   const value = source[key];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error("The machine returned an unexpected answer.");
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error('The machine returned an unexpected answer.');
   }
   return value;
 }
 
 function readAddProjectMachineOptions(value: unknown): readonly AddProjectMachineOption[] {
   const container = value as { machines?: unknown } | null | undefined;
-  const machines = container && typeof container === "object" ? container.machines : undefined;
+  const machines = container && typeof container === 'object' ? container.machines : undefined;
   if (!Array.isArray(machines)) {
-    throw new Error("Ghostex could not list its machines.");
+    throw new Error('Ghostex could not list its machines.');
   }
   return machines.map((machine) => {
     const record = machine as Record<string, unknown>;
     return {
-      ...(typeof record.description === "string" ? { description: record.description } : {}),
-      label: readAddProjectRequiredString(record, "label"),
-      machineId: readAddProjectRequiredString(record, "machineId"),
-      ...(typeof record.platform === "string" ? { platform: record.platform } : {}),
+      ...(typeof record.description === 'string' ? { description: record.description } : {}),
+      label: readAddProjectRequiredString(record, 'label'),
+      machineId: readAddProjectRequiredString(record, 'machineId'),
+      ...(typeof record.platform === 'string' ? { platform: record.platform } : {}),
     };
   });
 }
 
 function readAddProjectBrowseResult(value: unknown): AddProjectBrowseResult {
   if (!isRemoteFilesystemBrowseResult(value)) {
-    throw new Error("The machine returned an unexpected answer.");
+    throw new Error('The machine returned an unexpected answer.');
   }
   return { entries: value.entries, parentPath: value.parentPath };
 }
@@ -884,122 +850,105 @@ function readAddProjectBrowseResult(value: unknown): AddProjectBrowseResult {
 function readAddProjectCreateDirectoryResult(
   value: unknown,
   requestedParentPath: string,
-  requestedName: string,
+  requestedName: string
 ): AddProjectCreateDirectoryResult {
   const record = (value ?? {}) as Record<string, unknown>;
   return {
-    name: typeof record.name === "string" && record.name ? record.name : requestedName,
-    parentPath:
-      typeof record.parentPath === "string" && record.parentPath
-        ? record.parentPath
-        : requestedParentPath,
-    path: readAddProjectRequiredString(record, "path"),
+    name: typeof record.name === 'string' && record.name ? record.name : requestedName,
+    parentPath: typeof record.parentPath === 'string' && record.parentPath ? record.parentPath : requestedParentPath,
+    path: readAddProjectRequiredString(record, 'path'),
   };
 }
 
-function readAddProjectAddResult(
-  value: unknown,
-  machineId: string,
-  requestedPath: string,
-): AddProjectAddResult {
-  const project = readAddProjectResultObject(value, "project");
+function readAddProjectAddResult(value: unknown, machineId: string, requestedPath: string): AddProjectAddResult {
+  const project = readAddProjectResultObject(value, 'project');
   return {
     machineId,
-    path: typeof project.path === "string" && project.path ? project.path : requestedPath,
-    ...(typeof project.projectId === "string" ? { projectId: project.projectId } : {}),
+    path: typeof project.path === 'string' && project.path ? project.path : requestedPath,
+    ...(typeof project.projectId === 'string' ? { projectId: project.projectId } : {}),
   };
 }
 
 function readAddProjectDiscovery(value: unknown): AddProjectSourceControlDiscovery {
-  const discovery = readAddProjectResultObject(value, "discovery");
+  const discovery = readAddProjectResultObject(value, 'discovery');
   if (!Array.isArray(discovery.providers)) {
-    throw new Error("The machine returned an unexpected answer.");
+    throw new Error('The machine returned an unexpected answer.');
   }
   return discovery as unknown as AddProjectSourceControlDiscovery;
 }
 
 function readAddProjectRepositoryInfo(value: unknown): AddProjectRepositoryInfo {
-  const repository = readAddProjectResultObject(value, "repository");
+  const repository = readAddProjectResultObject(value, 'repository');
   return {
-    nameWithOwner: readAddProjectRequiredString(repository, "nameWithOwner"),
-    provider: readAddProjectRequiredString(
-      repository,
-      "provider",
-    ) as AddProjectRepositoryInfo["provider"],
-    sshUrl: readAddProjectRequiredString(repository, "sshUrl"),
-    url: readAddProjectRequiredString(repository, "url"),
+    nameWithOwner: readAddProjectRequiredString(repository, 'nameWithOwner'),
+    provider: readAddProjectRequiredString(repository, 'provider') as AddProjectRepositoryInfo['provider'],
+    sshUrl: readAddProjectRequiredString(repository, 'sshUrl'),
+    url: readAddProjectRequiredString(repository, 'url'),
   };
 }
 
 function readAddProjectCloneHandle(value: unknown): AddProjectCloneJobHandle {
-  const job = readAddProjectResultObject(value, "job");
-  return { jobId: readAddProjectRequiredString(job, "jobId") };
+  const job = readAddProjectResultObject(value, 'job');
+  return { jobId: readAddProjectRequiredString(job, 'jobId') };
 }
 
 function readAddProjectClonePreview(value: unknown): AddProjectClonePreview {
-  const preview = readAddProjectResultObject(value, "preview");
+  const preview = readAddProjectResultObject(value, 'preview');
   const destinationExistsKind = preview.destinationExistsKind;
   if (
     destinationExistsKind !== undefined &&
-    destinationExistsKind !== "directory" &&
-    destinationExistsKind !== "file" &&
-    destinationExistsKind !== "other"
+    destinationExistsKind !== 'directory' &&
+    destinationExistsKind !== 'file' &&
+    destinationExistsKind !== 'other'
   ) {
-    throw new Error("The machine returned an unexpected clone destination.");
+    throw new Error('The machine returned an unexpected clone destination.');
   }
   return {
-    ...(typeof preview.branchName === "string" ? { branchName: preview.branchName } : {}),
+    ...(typeof preview.branchName === 'string' ? { branchName: preview.branchName } : {}),
     cloneMainOnly: preview.cloneMainOnly === true,
-    cloneUrl: readAddProjectRequiredString(preview, "cloneUrl"),
+    cloneUrl: readAddProjectRequiredString(preview, 'cloneUrl'),
     destinationBlocked: preview.destinationBlocked === true,
     destinationExists: preview.destinationExists === true,
     ...(destinationExistsKind ? { destinationExistsKind } : {}),
-    destinationFolderName: readAddProjectRequiredString(preview, "destinationFolderName"),
-    ...(typeof preview.destinationIsEmpty === "boolean"
-      ? { destinationIsEmpty: preview.destinationIsEmpty }
-      : {}),
-    destinationPath: readAddProjectRequiredString(preview, "destinationPath"),
-    parentPath: readAddProjectRequiredString(preview, "parentPath"),
-    repositoryName: readAddProjectRequiredString(preview, "repositoryName"),
+    destinationFolderName: readAddProjectRequiredString(preview, 'destinationFolderName'),
+    ...(typeof preview.destinationIsEmpty === 'boolean' ? { destinationIsEmpty: preview.destinationIsEmpty } : {}),
+    destinationPath: readAddProjectRequiredString(preview, 'destinationPath'),
+    parentPath: readAddProjectRequiredString(preview, 'parentPath'),
+    repositoryName: readAddProjectRequiredString(preview, 'repositoryName'),
     shallowClone: preview.shallowClone === true,
-    ...(typeof preview.warning === "string" ? { warning: preview.warning } : {}),
+    ...(typeof preview.warning === 'string' ? { warning: preview.warning } : {}),
   };
 }
 
 function readAddProjectCloneJob(value: unknown): AddProjectCloneJob {
-  const job = readAddProjectResultObject(value, "job");
-  const state = readAddProjectRequiredString(job, "state");
-  if (
-    state !== "canceled" &&
-    state !== "completed" &&
-    state !== "failed" &&
-    state !== "running"
-  ) {
-    throw new Error("The machine returned an unexpected clone state.");
+  const job = readAddProjectResultObject(value, 'job');
+  const state = readAddProjectRequiredString(job, 'state');
+  if (state !== 'canceled' && state !== 'completed' && state !== 'failed' && state !== 'running') {
+    throw new Error('The machine returned an unexpected clone state.');
   }
   return {
-    ...(typeof job.error === "string" ? { error: job.error } : {}),
-    jobId: readAddProjectRequiredString(job, "jobId"),
-    ...(typeof job.message === "string" ? { message: job.message } : {}),
-    ...(typeof job.projectPath === "string" ? { projectPath: job.projectPath } : {}),
+    ...(typeof job.error === 'string' ? { error: job.error } : {}),
+    jobId: readAddProjectRequiredString(job, 'jobId'),
+    ...(typeof job.message === 'string' ? { message: job.message } : {}),
+    ...(typeof job.projectPath === 'string' ? { projectPath: job.projectPath } : {}),
     state,
   };
 }
 
 function isRemoteFilesystemBrowseResult(value: unknown): value is RemoteFilesystemBrowseResult {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return false;
   }
   const candidate = value as Partial<RemoteFilesystemBrowseResult>;
   return (
-    typeof candidate.parentPath === "string" &&
+    typeof candidate.parentPath === 'string' &&
     Array.isArray(candidate.entries) &&
     candidate.entries.every(
       (entry) =>
         Boolean(entry) &&
-        typeof entry === "object" &&
-        typeof (entry as { fullPath?: unknown }).fullPath === "string" &&
-        typeof (entry as { name?: unknown }).name === "string",
+        typeof entry === 'object' &&
+        typeof (entry as { fullPath?: unknown }).fullPath === 'string' &&
+        typeof (entry as { name?: unknown }).name === 'string'
     )
   );
 }
@@ -1054,24 +1003,18 @@ function AppModalHost() {
   const [isPreviousSessionsInitialLoadReady, setIsPreviousSessionsInitialLoadReady] = useState(false);
   const [isRecentProjectsInitialLoadReady, setIsRecentProjectsInitialLoadReady] = useState(false);
   const sentNativeFitHeightMeasurementKeysRef = useRef<Set<string>>(new Set());
-  const previousSettingsRenderStateLogRef = useRef("");
-  const previousFirstLaunchSetupRenderStateLogRef = useRef("");
-  const latestSettingsPresentedLogDetailsRef = useRef<
-    Record<string, string | number | boolean | null | undefined>
-  >({});
+  const previousSettingsRenderStateLogRef = useRef('');
+  const previousFirstLaunchSetupRenderStateLogRef = useRef('');
+  const latestSettingsPresentedLogDetailsRef = useRef<Record<string, string | number | boolean | null | undefined>>({});
   const latestFirstLaunchSetupPresentedLogDetailsRef = useRef<
     Record<string, string | number | boolean | null | undefined>
   >({});
   const settings = useSidebarStore((state) => state.hud.settings);
-  const appIconPickerUnavailable = useSidebarStore(
-    (state) => state.hud.appIconPickerUnavailable === true,
-  );
+  const appIconPickerUnavailable = useSidebarStore((state) => state.hud.appIconPickerUnavailable === true);
   const revision = useSidebarStore((state) => state.revision);
   const agents = useSidebarStore((state) => state.hud.agents);
   const commands = useSidebarStore((state) => state.hud.commands);
-  const projectSettingsProjects = useSidebarStore(
-    (state) => state.hud.projectSettingsProjects ?? [],
-  );
+  const projectSettingsProjects = useSidebarStore((state) => state.hud.projectSettingsProjects ?? []);
   const portless = useSidebarStore((state) => state.hud.portless);
   const customThemeColor = useSidebarStore((state) => state.hud.customThemeColor);
   const theme = useSidebarStore((state) => state.hud.theme);
@@ -1083,27 +1026,22 @@ function AppModalHost() {
     return (
       delayedSend.closeAfterDoneActive ??
       state.sessionsById[sessionId]?.closeAfterDone ??
-      state.hud.commandSessionIndicators.find((session) => session.sessionId === sessionId)
-        ?.closeAfterDone ??
+      state.hud.commandSessionIndicators.find((session) => session.sessionId === sessionId)?.closeAfterDone ??
       false
     );
   });
-  const [gitCommitPromptAgentId, setGitCommitPromptAgentId] = useState(() =>
-    readPromptAgentModalOverride("gitCommit"),
-  );
-  const [renamePromptAgentId, setRenamePromptAgentId] = useState(() =>
-    readPromptAgentModalOverride("renameSession"),
-  );
+  const [gitCommitPromptAgentId, setGitCommitPromptAgentId] = useState(() => readPromptAgentModalOverride('gitCommit'));
+  const [renamePromptAgentId, setRenamePromptAgentId] = useState(() => readPromptAgentModalOverride('renameSession'));
   const previousDefaultPromptAgentIdRef = useRef(settings?.defaultPromptAgentId);
   const resolvedGitCommitPromptAgentId = resolvePromptAgentModalSelection(
     agents,
     gitCommitPromptAgentId,
-    settings?.defaultPromptAgentId,
+    settings?.defaultPromptAgentId
   );
   const resolvedRenamePromptAgentId = resolvePromptAgentModalSelection(
     agents,
     renamePromptAgentId,
-    settings?.defaultPromptAgentId,
+    settings?.defaultPromptAgentId
   );
   /*
    * CDXC:GxserverAgentSettings 2026-06-19-08:58:
@@ -1163,8 +1101,8 @@ function AppModalHost() {
     isBaseActiveModalRenderable &&
     (!isSettingsModal || isSettingsRenderable) &&
     (!isFirstLaunchSetupModal || isFirstLaunchSetupRenderable) &&
-    (activeModal !== "previousSessions" || isPreviousSessionsInitialLoadReady) &&
-    (activeModal !== "recentProjects" || isRecentProjectsInitialLoadReady);
+    (activeModal !== 'previousSessions' || isPreviousSessionsInitialLoadReady) &&
+    (activeModal !== 'recentProjects' || isRecentProjectsInitialLoadReady);
   /*
    * CDXC:SettingsModalDiagnostics 2026-06-20-20:24:
    * Settings presented diagnostics must not add sidebar revision or hydration
@@ -1182,7 +1120,7 @@ function AppModalHost() {
     isActiveModalRenderable,
     isBaseActiveModalRenderable,
     isSettingsRenderable,
-    nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+    nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
     revision,
     settingsInitialTab,
   };
@@ -1194,13 +1132,13 @@ function AppModalHost() {
     isBaseActiveModalRenderable,
     isFirstLaunchSetupModal,
     isFirstLaunchSetupRenderable,
-    nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+    nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
     revision,
   };
 
   useEffect(() => {
     if (!isSettingsModalKind(activeModal)) {
-      previousSettingsRenderStateLogRef.current = "";
+      previousSettingsRenderStateLogRef.current = '';
       return;
     }
     const signature = JSON.stringify({
@@ -1213,7 +1151,7 @@ function AppModalHost() {
       isActiveModalRenderable,
       isBaseActiveModalRenderable,
       isSettingsRenderable,
-      nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+      nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
       revision,
       settingsInitialTab,
     });
@@ -1221,7 +1159,7 @@ function AppModalHost() {
       return;
     }
     previousSettingsRenderStateLogRef.current = signature;
-    postSettingsModalDebugLog("modalHost.settings.renderState", {
+    postSettingsModalDebugLog('modalHost.settings.renderState', {
       activeModal,
       hasNativeSettingsHydrated,
       hasSettings,
@@ -1231,7 +1169,7 @@ function AppModalHost() {
       isActiveModalRenderable,
       isBaseActiveModalRenderable,
       isSettingsRenderable,
-      nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+      nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
       revision,
       settingsInitialTab,
     });
@@ -1251,7 +1189,7 @@ function AppModalHost() {
 
   useEffect(() => {
     if (!isFirstLaunchSetupModalKind(activeModal)) {
-      previousFirstLaunchSetupRenderStateLogRef.current = "";
+      previousFirstLaunchSetupRenderStateLogRef.current = '';
       return;
     }
     /*
@@ -1267,21 +1205,21 @@ function AppModalHost() {
       isActiveModalRenderable,
       isBaseActiveModalRenderable,
       isFirstLaunchSetupRenderable,
-      nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+      nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
       revision,
     });
     if (previousFirstLaunchSetupRenderStateLogRef.current === signature) {
       return;
     }
     previousFirstLaunchSetupRenderStateLogRef.current = signature;
-    postAppModalDebugLog("modalHost.setup.renderState", {
+    postAppModalDebugLog('modalHost.setup.renderState', {
       activeModal,
       hasNativeSettingsHydrated,
       hasSettings,
       isActiveModalRenderable,
       isBaseActiveModalRenderable,
       isFirstLaunchSetupRenderable,
-      nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+      nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
       revision,
     });
   }, [
@@ -1295,7 +1233,7 @@ function AppModalHost() {
   ]);
 
   useEffect(() => {
-    if (activeModal !== "previousSessions") {
+    if (activeModal !== 'previousSessions') {
       setIsPreviousSessionsInitialLoadReady(false);
     }
   }, [activeModal]);
@@ -1305,7 +1243,7 @@ function AppModalHost() {
   }, []);
 
   useEffect(() => {
-    if (activeModal !== "recentProjects") {
+    if (activeModal !== 'recentProjects') {
       setIsRecentProjectsInitialLoadReady(false);
     }
   }, [activeModal]);
@@ -1334,12 +1272,12 @@ function AppModalHost() {
   }, [settings?.defaultPromptAgentId]);
 
   const updateGitCommitPromptAgentId = useCallback((agentId: string) => {
-    writePromptAgentModalOverride("gitCommit", agentId);
+    writePromptAgentModalOverride('gitCommit', agentId);
     setGitCommitPromptAgentId(agentId);
   }, []);
 
   const updateRenamePromptAgentId = useCallback((agentId: string) => {
-    writePromptAgentModalOverride("renameSession", agentId);
+    writePromptAgentModalOverride('renameSession', agentId);
     setRenamePromptAgentId(agentId);
   }, []);
 
@@ -1350,11 +1288,8 @@ function AppModalHost() {
   }, [activeModal]);
 
   useLayoutEffect(() => {
-    if (
-      window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow" &&
-      shouldUseOneShotNativeFitHeight(activeModal)
-    ) {
-      document.body.dataset.appModalFitHeight = "true";
+    if (window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow' && shouldUseOneShotNativeFitHeight(activeModal)) {
+      document.body.dataset.appModalFitHeight = 'true';
     } else {
       delete document.body.dataset.appModalFitHeight;
     }
@@ -1378,30 +1313,21 @@ function AppModalHost() {
     if (!activeModal || !isActiveModalRenderable) {
       return;
     }
-    const presentedMessage: { modal: AppModalKind; requestId?: string; type: "presented" } = {
+    const presentedMessage: { modal: AppModalKind; requestId?: string; type: 'presented' } = {
       modal: activeModal,
-      type: "presented",
+      type: 'presented',
     };
     if (activeModalRequestId) {
       presentedMessage.requestId = activeModalRequestId;
     }
     if (isSettingsModalKind(activeModal)) {
-      postSettingsModalDebugLog(
-        "modalHost.settings.presented.sent",
-        latestSettingsPresentedLogDetailsRef.current,
-      );
+      postSettingsModalDebugLog('modalHost.settings.presented.sent', latestSettingsPresentedLogDetailsRef.current);
     }
     if (isFirstLaunchSetupModalKind(activeModal)) {
-      postAppModalDebugLog(
-        "modalHost.setup.presented.sent",
-        latestFirstLaunchSetupPresentedLogDetailsRef.current,
-      );
+      postAppModalDebugLog('modalHost.setup.presented.sent', latestFirstLaunchSetupPresentedLogDetailsRef.current);
     }
-    if (
-      window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow" &&
-      shouldUseOneShotNativeFitHeight(activeModal)
-    ) {
-      const measurementKey = `${activeModal}:${activeModalRequestId ?? "none"}`;
+    if (window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow' && shouldUseOneShotNativeFitHeight(activeModal)) {
+      const measurementKey = `${activeModal}:${activeModalRequestId ?? 'none'}`;
       if (!sentNativeFitHeightMeasurementKeysRef.current.has(measurementKey)) {
         const measuredHeight = measureOneShotNativeFitHeight(activeModal);
         if (measuredHeight) {
@@ -1411,11 +1337,11 @@ function AppModalHost() {
             modal: AppModalKind;
             nativeWindowHostId?: string;
             requestId?: string;
-            type: "contentHeightMeasured";
+            type: 'contentHeightMeasured';
           } = {
             height: measuredHeight,
             modal: activeModal,
-            type: "contentHeightMeasured",
+            type: 'contentHeightMeasured',
           };
           if (window.__ghostex_APP_MODAL_HOST_ID__) {
             contentHeightMeasuredMessage.nativeWindowHostId = window.__ghostex_APP_MODAL_HOST_ID__;
@@ -1423,18 +1349,15 @@ function AppModalHost() {
           if (activeModalRequestId) {
             contentHeightMeasuredMessage.requestId = activeModalRequestId;
           }
-          postAppModalHostMessage(
-            contentHeightMeasuredMessage,
-            "AppModals:contentHeightMeasured",
-          );
+          postAppModalHostMessage(contentHeightMeasuredMessage, 'AppModals:contentHeightMeasured');
         }
       }
     }
-    postAppModalHostMessage(presentedMessage, "AppModals:presented");
+    postAppModalHostMessage(presentedMessage, 'AppModals:presented');
   }, [activeModal, activeModalRequestId, isActiveModalRenderable]);
 
   useEffect(() => {
-    if (activeModal !== "settings") {
+    if (activeModal !== 'settings') {
       setGhostexFolderStatsLoading(false);
     }
   }, [activeModal]);
@@ -1459,9 +1382,9 @@ function AppModalHost() {
       event.preventDefault();
     };
 
-    document.addEventListener("contextmenu", suppressModalWebviewContextMenu, true);
+    document.addEventListener('contextmenu', suppressModalWebviewContextMenu, true);
     return () => {
-      document.removeEventListener("contextmenu", suppressModalWebviewContextMenu, true);
+      document.removeEventListener('contextmenu', suppressModalWebviewContextMenu, true);
     };
   }, [activeModal]);
 
@@ -1496,15 +1419,15 @@ function AppModalHost() {
   }, [pluginSettingsStatus]);
 
   useEffect(() => {
-    if (activeModal !== "settings" || pluginSettingsStatus || pluginSettingsStatusLoading) {
+    if (activeModal !== 'settings' || pluginSettingsStatus || pluginSettingsStatusLoading) {
       return;
     }
     setPluginSettingsStatusLoading(true);
-    vscode.postMessage({ type: "requestPluginSettingsStatus" });
+    vscode.postMessage({ type: 'requestPluginSettingsStatus' });
   }, [activeModal, pluginSettingsStatus, pluginSettingsStatusLoading]);
 
   useEffect(() => {
-    if (activeModal !== "firstLaunchSetup" && activeModal !== "tipsAndTricks") {
+    if (activeModal !== 'firstLaunchSetup' && activeModal !== 'tipsAndTricks') {
       setGhostexCliStatusLoading(false);
       return;
     }
@@ -1522,7 +1445,7 @@ function AppModalHost() {
      * receive the same CLI status request while old menu messages are still in use.
      */
     setGhostexCliStatusLoading(true);
-    vscode.postMessage({ type: "requestGhostexCliStatus" });
+    vscode.postMessage({ type: 'requestGhostexCliStatus' });
   }, [activeModal, ghostexCliStatus, ghostexCliStatusLoading]);
 
   useEffect(() => {
@@ -1533,91 +1456,76 @@ function AppModalHost() {
      * onto the modal host body alongside the workspace theme variables. Before
      * the HUD settings arrive the normalized default is the correct value.
      */
-    document.body.style.setProperty(
-      "--ghostex-accent",
-      settings?.accentColor ?? DEFAULT_ghostex_SETTINGS.accentColor,
-    );
+    document.body.style.setProperty('--ghostex-accent', settings?.accentColor ?? DEFAULT_ghostex_SETTINGS.accentColor);
     const normalizedThemeColor = normalizeWorkspaceThemeColor(customThemeColor);
     if (normalizedThemeColor) {
-      document.body.dataset.sidebarCustomTheme = "true";
-      document.body.style.setProperty("--workspace-sidebar-theme-color", normalizedThemeColor);
+      document.body.dataset.sidebarCustomTheme = 'true';
+      document.body.style.setProperty('--workspace-sidebar-theme-color', normalizedThemeColor);
       document.body.style.setProperty(
-        "--workspace-sidebar-theme-foreground",
-        getWorkspaceThemeForeground(normalizedThemeColor),
+        '--workspace-sidebar-theme-foreground',
+        getWorkspaceThemeForeground(normalizedThemeColor)
       );
     } else {
       delete document.body.dataset.sidebarCustomTheme;
-      document.body.style.removeProperty("--workspace-sidebar-theme-color");
-      document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
+      document.body.style.removeProperty('--workspace-sidebar-theme-color');
+      document.body.style.removeProperty('--workspace-sidebar-theme-foreground');
     }
 
     return () => {
       delete document.body.dataset.sidebarTheme;
       delete document.body.dataset.sidebarCustomTheme;
-      document.body.style.removeProperty("--workspace-sidebar-theme-color");
-      document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
-      document.body.style.removeProperty("--ghostex-accent");
+      document.body.style.removeProperty('--workspace-sidebar-theme-color');
+      document.body.style.removeProperty('--workspace-sidebar-theme-foreground');
+      document.body.style.removeProperty('--ghostex-accent');
     };
   }, [customThemeColor, settings?.accentColor, theme]);
 
   return (
     <>
       <PreviousSessionsModal
-        isOpen={activeModal === "previousSessions"}
+        isOpen={activeModal === 'previousSessions'}
         onClose={closeModal}
         onInitialLoadReady={handlePreviousSessionsInitialLoadReady}
         shouldPreload={
-          activeModal === "commandPalette" ||
-          activeModal === "recentProjects" ||
-          activeModal === "stashedPrompts"
+          activeModal === 'commandPalette' || activeModal === 'recentProjects' || activeModal === 'stashedPrompts'
         }
         vscode={vscode}
       />
       <UpdateAvailableModal
-        isOpen={activeModal === "updateAvailable" && updateAvailable !== undefined}
+        isOpen={activeModal === 'updateAvailable' && updateAvailable !== undefined}
         onCancel={closeModal}
         onDownload={() => {
-          postAppModalHostMessage(
-            { type: "downloadGhostexUpdate" },
-            "AppModals:update:download",
-          );
+          postAppModalHostMessage({ type: 'downloadGhostexUpdate' }, 'AppModals:update:download');
         }}
         onRestart={() => {
-          postAppModalHostMessage(
-            { type: "restartAndUpdateGhostex" },
-            "AppModals:update:restart",
-          );
+          postAppModalHostMessage({ type: 'restartAndUpdateGhostex' }, 'AppModals:update:restart');
         }}
         update={updateAvailable}
       />
       <RecentProjectsModal
-        isOpen={activeModal === "recentProjects" && recentProjects !== undefined}
+        isOpen={activeModal === 'recentProjects' && recentProjects !== undefined}
         machineId={recentProjects?.machineId}
         machineName={recentProjects?.machineName}
         onClose={closeModal}
         onInitialLoadReady={handleRecentProjectsInitialLoadReady}
         vscode={vscode}
       />
-      <PinnedPromptsModal
-        isOpen={activeModal === "pinnedPrompts"}
-        onClose={closeModal}
-        vscode={vscode}
-      />
+      <PinnedPromptsModal isOpen={activeModal === 'pinnedPrompts'} onClose={closeModal} vscode={vscode} />
       <StashedPromptsModal
-        isOpen={activeModal === "stashedPrompts" && stashedPrompts !== undefined}
+        isOpen={activeModal === 'stashedPrompts' && stashedPrompts !== undefined}
         onClose={closeModal}
         projectId={stashedPrompts?.projectId}
         sessionId={stashedPrompts?.sessionId}
         vscode={vscode}
       />
       <FirstUserMessageModal
-        isOpen={activeModal === "firstUserMessage" && firstUserMessage !== undefined}
-        message={firstUserMessage?.message ?? ""}
+        isOpen={activeModal === 'firstUserMessage' && firstUserMessage !== undefined}
+        message={firstUserMessage?.message ?? ''}
         onClose={closeModal}
         title={firstUserMessage?.title}
       />
       <MissingProjectFolderModal
-        isOpen={activeModal === "missingProjectFolder" && missingProjectFolder !== undefined}
+        isOpen={activeModal === 'missingProjectFolder' && missingProjectFolder !== undefined}
         onCancel={closeModal}
         onLocate={() => {
           if (!missingProjectFolder) {
@@ -1625,7 +1533,7 @@ function AppModalHost() {
           }
           vscode.postMessage({
             projectId: missingProjectFolder.projectId,
-            type: "pickReplacementProjectFolder",
+            type: 'pickReplacementProjectFolder',
           });
         }}
         onRemove={() => {
@@ -1634,38 +1542,38 @@ function AppModalHost() {
           }
           vscode.postMessage({
             projectId: missingProjectFolder.projectId,
-            type: "removeProject",
+            type: 'removeProject',
           });
           closeModal();
         }}
-        projectName={missingProjectFolder?.projectName ?? "this project"}
-        projectPath={missingProjectFolder?.projectPath ?? ""}
+        projectName={missingProjectFolder?.projectName ?? 'this project'}
+        projectPath={missingProjectFolder?.projectPath ?? ''}
       />
       <RemoteGxserverInstallModal
-        isOpen={activeModal === "remoteGxserverInstall" && remoteGxserverInstall !== undefined}
-        machineName={remoteGxserverInstall?.remoteMachineName ?? "Remote"}
+        isOpen={activeModal === 'remoteGxserverInstall' && remoteGxserverInstall !== undefined}
+        machineName={remoteGxserverInstall?.remoteMachineName ?? 'Remote'}
         onApprove={() => {
           if (!remoteGxserverInstall) {
-            postRemoteGxserverInstallDebugLog("remoteGxserverInstall.approve.missingState", {
+            postRemoteGxserverInstallDebugLog('remoteGxserverInstall.approve.missingState', {
               activeModal: activeModal ?? null,
               hasRemoteGxserverInstall: false,
-              nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+              nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
             });
             return;
           }
-          postRemoteGxserverInstallDebugLog("remoteGxserverInstall.approve.clicked", {
+          postRemoteGxserverInstallDebugLog('remoteGxserverInstall.approve.clicked', {
             activeModal: activeModal ?? null,
             hasRemoteGxserverInstall: true,
             installApproved: true,
-            nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+            nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
             remoteMachineId: remoteGxserverInstall.remoteMachineId,
           });
           vscode.postMessage({
             installApproved: true,
             remoteMachineId: remoteGxserverInstall.remoteMachineId,
-            type: "reconnectRemoteMachine",
+            type: 'reconnectRemoteMachine',
           });
-          postRemoteGxserverInstallDebugLog("remoteGxserverInstall.approve.commandPosted", {
+          postRemoteGxserverInstallDebugLog('remoteGxserverInstall.approve.commandPosted', {
             activeModal: activeModal ?? null,
             installApproved: true,
             remoteMachineId: remoteGxserverInstall.remoteMachineId,
@@ -1676,18 +1584,18 @@ function AppModalHost() {
       />
       <RemoteProjectPickerModal
         initialQuery={remoteProjectPicker?.initialQuery}
-        isOpen={activeModal === "remoteProjectPicker" && remoteProjectPicker !== undefined}
-        machineName={remoteProjectPicker?.remoteMachineName ?? "Remote"}
+        isOpen={activeModal === 'remoteProjectPicker' && remoteProjectPicker !== undefined}
+        machineName={remoteProjectPicker?.remoteMachineName ?? 'Remote'}
         onAddProject={async (path) => {
           if (!remoteProjectPicker) {
             return;
           }
-          const requestId = createRemoteProjectRequestId("add");
+          const requestId = createRemoteProjectRequestId('add');
           vscode.postMessage({
             path,
             remoteMachineId: remoteProjectPicker.remoteMachineId,
             requestId,
-            type: "addRemoteProjectPath",
+            type: 'addRemoteProjectPath',
           });
           await waitForRemoteProjectAddResult(requestId);
         }}
@@ -1695,12 +1603,12 @@ function AppModalHost() {
           if (!remoteProjectPicker) {
             return null;
           }
-          const requestId = createRemoteProjectRequestId("browse");
+          const requestId = createRemoteProjectRequestId('browse');
           vscode.postMessage({
             partialPath: input.partialPath,
             remoteMachineId: remoteProjectPicker.remoteMachineId,
             requestId,
-            type: "browseRemoteProjectDirectories",
+            type: 'browseRemoteProjectDirectories',
           });
           return waitForRemoteProjectDirectoryBrowseResult(requestId);
         }}
@@ -1716,140 +1624,103 @@ function AppModalHost() {
       <AddProjectModal
         addProject={async ({ createIfMissing, machineId, path }) =>
           readAddProjectAddResult(
-            await requestAddProjectDialogOperation(
-              "add",
-              ADD_PROJECT_DIALOG_ADD_TIMEOUT_MS,
-              { machineId, params: { createIfMissing, path } },
-            ),
+            await requestAddProjectDialogOperation('add', ADD_PROJECT_DIALOG_ADD_TIMEOUT_MS, {
+              machineId,
+              params: { createIfMissing, path },
+            }),
             machineId,
-            path,
+            path
           )
         }
         browse={async ({ cwd, machineId, partialPath }) =>
           readAddProjectBrowseResult(
-            await requestAddProjectDialogOperation(
-              "browse",
-              ADD_PROJECT_DIALOG_BROWSE_TIMEOUT_MS,
-              { machineId, params: cwd ? { cwd, partialPath } : { partialPath } },
-            ),
+            await requestAddProjectDialogOperation('browse', ADD_PROJECT_DIALOG_BROWSE_TIMEOUT_MS, {
+              machineId,
+              params: cwd ? { cwd, partialPath } : { partialPath },
+            })
           )
         }
         cancelCloneJob={async ({ jobId, machineId }) => {
-          await requestAddProjectDialogOperation(
-            "cancelCloneJob",
-            ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS,
-            { machineId, params: { jobId } },
-          );
+          await requestAddProjectDialogOperation('cancelCloneJob', ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS, {
+            machineId,
+            params: { jobId },
+          });
         }}
         createDirectory={async ({ machineId, name, parentPath }) =>
           readAddProjectCreateDirectoryResult(
-            await requestAddProjectDialogOperation(
-              "createDirectory",
-              ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS,
-              { machineId, params: { name, parentPath } },
-            ),
+            await requestAddProjectDialogOperation('createDirectory', ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS, {
+              machineId,
+              params: { name, parentPath },
+            }),
             parentPath,
-            name,
+            name
           )
         }
         discoverSourceControl={async ({ machineId }) =>
           readAddProjectDiscovery(
-            await requestAddProjectDialogOperation(
-              "discoverSourceControl",
-              ADD_PROJECT_DIALOG_DISCOVERY_TIMEOUT_MS,
-              { machineId },
-            ),
+            await requestAddProjectDialogOperation('discoverSourceControl', ADD_PROJECT_DIALOG_DISCOVERY_TIMEOUT_MS, {
+              machineId,
+            })
           )
         }
         initialMachineId={addProject?.machineId}
-        isOpen={activeModal === "addProject" && addProject !== undefined}
+        isOpen={activeModal === 'addProject' && addProject !== undefined}
         listMachineOptions={async () =>
           readAddProjectMachineOptions(
-            await requestAddProjectDialogOperation(
-              "listMachines",
-              ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS,
-            ),
+            await requestAddProjectDialogOperation('listMachines', ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS)
           )
         }
         lookupRepository={async ({ machineId, provider, repository }) =>
           readAddProjectRepositoryInfo(
-            await requestAddProjectDialogOperation(
-              "lookupRepository",
-              ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT_MS,
-              { machineId, params: { provider, repository } },
-            ),
+            await requestAddProjectDialogOperation('lookupRepository', ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT_MS, {
+              machineId,
+              params: { provider, repository },
+            })
           )
         }
         onClose={closeModal}
-        previewClone={async ({
-          branchName,
-          cloneMainOnly,
-          destinationPath,
-          machineId,
-          remoteUrl,
-          shallowClone,
-        }) =>
+        previewClone={async ({ branchName, cloneMainOnly, destinationPath, machineId, remoteUrl, shallowClone }) =>
           readAddProjectClonePreview(
-            await requestAddProjectDialogOperation(
-              "previewClone",
-              ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT_MS,
-              {
-                machineId,
-                params: {
-                  branchName,
-                  cloneMainOnly,
-                  destinationPath,
-                  remoteUrl,
-                  shallowClone,
-                },
+            await requestAddProjectDialogOperation('previewClone', ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT_MS, {
+              machineId,
+              params: {
+                branchName,
+                cloneMainOnly,
+                destinationPath,
+                remoteUrl,
+                shallowClone,
               },
-            ),
+            })
           )
         }
         readCloneJob={async ({ jobId, machineId }) =>
           readAddProjectCloneJob(
-            await requestAddProjectDialogOperation(
-              "readCloneJob",
-              ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS,
-              { machineId, params: { jobId } },
-            ),
+            await requestAddProjectDialogOperation('readCloneJob', ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS, {
+              machineId,
+              params: { jobId },
+            })
           )
         }
-        startClone={async ({
-          branchName,
-          cloneMainOnly,
-          destinationPath,
-          machineId,
-          remoteUrl,
-          shallowClone,
-        }) =>
+        startClone={async ({ branchName, cloneMainOnly, destinationPath, machineId, remoteUrl, shallowClone }) =>
           readAddProjectCloneHandle(
-            await requestAddProjectDialogOperation(
-              "startClone",
-              ADD_PROJECT_DIALOG_ADD_TIMEOUT_MS,
-              {
-                machineId,
-                params: {
-                  branchName,
-                  cloneMainOnly,
-                  destinationPath,
-                  remoteUrl,
-                  shallowClone,
-                },
+            await requestAddProjectDialogOperation('startClone', ADD_PROJECT_DIALOG_ADD_TIMEOUT_MS, {
+              machineId,
+              params: {
+                branchName,
+                cloneMainOnly,
+                destinationPath,
+                remoteUrl,
+                shallowClone,
               },
-            ),
+            })
           )
         }
       />
-      <DaemonSessionsModal
-        isOpen={activeModal === "daemonSessions"}
-        onClose={closeModal}
-        vscode={vscode}
-      />
+      <DaemonSessionsModal isOpen={activeModal === 'daemonSessions'} onClose={closeModal} vscode={vscode} />
       <AgentsHubModal
         catalog={agentsHubCatalog}
         fileContent={agentsHubFileContent}
-        isOpen={activeModal === "agentsHub"}
+        isOpen={activeModal === 'agentsHub'}
         onClose={closeModal}
         vscode={vscode}
       />
@@ -1860,13 +1731,13 @@ function AppModalHost() {
        * The palette reads mirrored sidebar state here so its command list
        * remains current while the dialog is centered over the whole Ghostex
        * window.
-      */}
+       */}
       <CommandPalette
         commands={commands}
         hotkeys={settings?.hotkeys}
         initialQuery={commandPaletteInitialQuery}
         isInitialLoadResolved={hasNativeSettingsHydrated}
-        isOpen={activeModal === "commandPalette"}
+        isOpen={activeModal === 'commandPalette'}
         isPrewarm={isCommandPalettePrewarm}
         onOpenChange={(isOpen) => {
           if (!isOpen) {
@@ -1883,7 +1754,7 @@ function AppModalHost() {
         closeAfterDoneActive={delayedSendCloseAfterDoneActive}
         delayedSendDeadlineAt={delayedSend?.delayedSendDeadlineAt}
         delayedSendRemainingLabel={delayedSend?.delayedSendRemainingLabel}
-        isOpen={activeModal === "delayedSend" && delayedSend !== undefined}
+        isOpen={activeModal === 'delayedSend' && delayedSend !== undefined}
         onCancel={closeModal}
         onCancelTimer={() => {
           if (!delayedSend) {
@@ -1891,7 +1762,7 @@ function AppModalHost() {
           }
           vscode.postMessage({
             sessionId: delayedSend.sessionId,
-            type: "cancelDelayedSend",
+            type: 'cancelDelayedSend',
           });
           closeModal();
         }}
@@ -1904,7 +1775,7 @@ function AppModalHost() {
             sendWhenAllProjectSessionsStop,
             sendWhenAgentStops,
             sessionId: delayedSend.sessionId,
-            type: "scheduleDelayedSend",
+            type: 'scheduleDelayedSend',
           });
           closeModal();
         }}
@@ -1914,7 +1785,7 @@ function AppModalHost() {
           }
           vscode.postMessage({
             sessionId: delayedSend.sessionId,
-            type: "toggleCloseAfterDone",
+            type: 'toggleCloseAfterDone',
           });
           closeModal();
         }}
@@ -1922,27 +1793,25 @@ function AppModalHost() {
         sendWhenAgentStopsActive={delayedSend?.sendWhenAgentStopsActive}
         sessionTitle={delayedSend?.title}
         supportsSendWhenAgentStops={delayedSend?.supportsSendWhenAgentStops}
-        supportsSendWhenAllProjectSessionsStop={
-          delayedSend?.supportsSendWhenAllProjectSessionsStop
-        }
+        supportsSendWhenAllProjectSessionsStop={delayedSend?.supportsSendWhenAllProjectSessionsStop}
       />
       <GitCommitModal
         agents={agents}
         draft={
           gitCommit ?? {
-            confirmLabel: "Commit",
-            description: "",
+            confirmLabel: 'Commit',
+            description: '',
             changedFiles: [],
-            requestId: "",
+            requestId: '',
             showCommitMessage: true,
             suggestedBody: undefined,
-            suggestedSubject: "",
+            suggestedSubject: '',
           }
         }
-        isOpen={activeModal === "gitCommit" && gitCommit !== undefined}
+        isOpen={activeModal === 'gitCommit' && gitCommit !== undefined}
         fileDiffDraft={gitFileDiff}
         onCancel={(requestId) => {
-          vscode.postMessage({ requestId, type: "cancelSidebarGitCommit" });
+          vscode.postMessage({ requestId, type: 'cancelSidebarGitCommit' });
           closeModal();
         }}
         onConfirm={(requestId, message, options) => {
@@ -1953,7 +1822,7 @@ function AppModalHost() {
             filePaths: options.filePaths,
             message,
             requestId,
-            type: "confirmSidebarGitCommit",
+            type: 'confirmSidebarGitCommit',
           });
           closeModal();
         }}
@@ -1964,27 +1833,27 @@ function AppModalHost() {
             filePaths: options.filePaths,
             message,
             requestId,
-            type: "confirmSidebarGitDirectMerge",
+            type: 'confirmSidebarGitDirectMerge',
           });
           closeModal();
         }}
         onMultipleCommits={(requestId, agentId) => {
-          vscode.postMessage({ agentId, requestId, type: "runSidebarGitMultipleCommits" });
+          vscode.postMessage({ agentId, requestId, type: 'runSidebarGitMultipleCommits' });
           closeModal();
         }}
         onOpenFileDiff={(filePath, requestId) => {
-          vscode.postMessage({ filePath, requestId, type: "openSidebarGitChangedFileDiff" });
+          vscode.postMessage({ filePath, requestId, type: 'openSidebarGitChangedFileDiff' });
         }}
         onPromptAgentIdChange={updateGitCommitPromptAgentId}
         promptAgentId={resolvedGitCommitPromptAgentId}
         theme={theme}
       />
-      {activeModal === "gitCommit" ? null : (
+      {activeModal === 'gitCommit' ? null : (
         <GitFileDiffModal
           draft={
             gitFileDiff ?? {
-              filePath: "",
-              patch: "No diff is available for this file.",
+              filePath: '',
+              patch: 'No diff is available for this file.',
             }
           }
           isOpen={gitFileDiff !== undefined}
@@ -1997,18 +1866,18 @@ function AppModalHost() {
           worktreeDelete ?? {
             branch: null,
             canDeleteLocalBranch: false,
-            groupId: "",
+            groupId: '',
             hasChanges: false,
-            projectId: "",
+            projectId: '',
             remoteBranchExists: false,
-            statusSummary: "",
-            worktreeName: "worktree",
+            statusSummary: '',
+            worktreeName: 'worktree',
           }
         }
-        isOpen={activeModal === "deleteWorktree" && worktreeDelete !== undefined}
+        isOpen={activeModal === 'deleteWorktree' && worktreeDelete !== undefined}
         onCancel={closeModal}
         onCommit={(groupId) => {
-          vscode.postMessage({ groupId, type: "commitWorktreeBeforeDelete" });
+          vscode.postMessage({ groupId, type: 'commitWorktreeBeforeDelete' });
           closeModal();
         }}
         onDelete={(projectId, options) => {
@@ -2016,7 +1885,7 @@ function AppModalHost() {
             deleteLocalBranch: options.deleteLocalBranch,
             deleteRemoteBranch: options.deleteRemoteBranch,
             projectId,
-            type: "confirmDeleteWorktree",
+            type: 'confirmDeleteWorktree',
           });
           closeModal();
         }}
@@ -2025,23 +1894,23 @@ function AppModalHost() {
       <WorktreeRenameModal
         draft={
           worktreeRename ?? {
-            currentName: "",
-            currentPath: "",
-            parentFolderName: "",
-            parentProjectPath: "",
-            projectId: "",
+            currentName: '',
+            currentPath: '',
+            parentFolderName: '',
+            parentProjectPath: '',
+            projectId: '',
             renameBranchDefault: false,
-            worktreeName: "worktree",
+            worktreeName: 'worktree',
           }
         }
-        isOpen={activeModal === "renameWorktree" && worktreeRename !== undefined}
+        isOpen={activeModal === 'renameWorktree' && worktreeRename !== undefined}
         onCancel={closeModal}
         onRename={(projectId, options) => {
           vscode.postMessage({
             name: options.name,
             projectId,
             renameBranch: options.renameBranch,
-            type: "confirmRenameWorktree",
+            type: 'confirmRenameWorktree',
           });
           closeModal();
         }}
@@ -2067,22 +1936,20 @@ function AppModalHost() {
       <WorktreeCreateModal
         agents={agents}
         defaultAgentId={settings?.defaultPromptAgentId}
-        isOpen={activeModal === "worktree" && worktree !== undefined}
+        isOpen={activeModal === 'worktree' && worktree !== undefined}
         onCancel={closeModal}
         onConfirm={(draft) => {
           vscode.postMessage({
             agentId: draft.agentId,
-            baseBranch: draft.mode === "create" ? draft.baseBranch : undefined,
-            existingWorktreeKey:
-              draft.mode === "openExisting" ? draft.existingWorktreeKey : undefined,
-            existingWorktreePath:
-              draft.mode === "openExisting" ? draft.existingWorktreePath : undefined,
+            baseBranch: draft.mode === 'create' ? draft.baseBranch : undefined,
+            existingWorktreeKey: draft.mode === 'openExisting' ? draft.existingWorktreeKey : undefined,
+            existingWorktreePath: draft.mode === 'openExisting' ? draft.existingWorktreePath : undefined,
             mode: draft.mode,
             projectId: worktree?.projectId,
             projectPath: worktree?.projectPath,
             prompt: draft.prompt,
             remoteMachineId: worktree?.remoteMachineId,
-            type: "createProjectWorktree",
+            type: 'createProjectWorktree',
           } satisfies SidebarToExtensionMessage);
           closeModal();
         }}
@@ -2092,42 +1959,42 @@ function AppModalHost() {
             projectPath: worktree?.projectPath,
             remoteMachineId: worktree?.remoteMachineId,
             requestId,
-            type: "requestProjectWorktrees",
+            type: 'requestProjectWorktrees',
           } satisfies SidebarToExtensionMessage);
         }}
         projectName={worktree?.projectName}
       />
       <PortlessSetupModal
-        isOpen={activeModal === "portlessSetup" && portlessSetup !== undefined}
-        mode={portlessSetup?.mode ?? "firstSetup"}
+        isOpen={activeModal === 'portlessSetup' && portlessSetup !== undefined}
+        mode={portlessSetup?.mode ?? 'firstSetup'}
         onAdminAction={(action, protocol, requestId) => {
           vscode.postMessage({
             action,
             protocol,
             requestId,
-            type: "runPortlessSetupPromptAdminAction",
+            type: 'runPortlessSetupPromptAdminAction',
           } satisfies SidebarToExtensionMessage);
           closeModal();
         }}
         onCancel={() => {
-          vscode.postMessage({ type: "cancelPortlessSetupPrompt" } satisfies SidebarToExtensionMessage);
+          vscode.postMessage({ type: 'cancelPortlessSetupPrompt' } satisfies SidebarToExtensionMessage);
           closeModal();
         }}
         onDisable={() => {
           vscode.postMessage({
             enabled: false,
-            type: "setPortlessEnabled",
+            type: 'setPortlessEnabled',
           } satisfies SidebarToExtensionMessage);
           closeModal();
         }}
         onPostpone={() => {
-          vscode.postMessage({ type: "postponePortlessSetupPrompt" } satisfies SidebarToExtensionMessage);
+          vscode.postMessage({ type: 'postponePortlessSetupPrompt' } satisfies SidebarToExtensionMessage);
           closeModal();
         }}
-        protocol={portlessSetup?.protocol ?? "https"}
+        protocol={portlessSetup?.protocol ?? 'https'}
       />
       <ScratchPadModal
-        isOpen={activeModal === "scratchPad"}
+        isOpen={activeModal === 'scratchPad'}
         onClose={closeModal}
         onDebug={(event, details) => {
           /**
@@ -2140,14 +2007,14 @@ function AppModalHost() {
           vscode.postMessage({
             details,
             event,
-            scenarioId: "native.terminal.focus",
-            type: "sidebarDebugLog",
+            scenarioId: 'native.terminal.focus',
+            type: 'sidebarDebugLog',
           });
         }}
         onSave={(content) => {
           vscode.postMessage({
             content,
-            type: "saveScratchPad",
+            type: 'saveScratchPad',
           });
         }}
       />
@@ -2155,17 +2022,17 @@ function AppModalHost() {
         agentHookStatus={agentHookStatus}
         agentHookStatusLoading={agentHookStatusLoading}
         appIconPickerUnavailable={appIconPickerUnavailable}
-        automateIsExperimental={window.__ghostex_APP_MODAL_HOST_ID__ !== "gpui"}
+        automateIsExperimental={window.__ghostex_APP_MODAL_HOST_ID__ !== 'gpui'}
         initialSection={settingsInitialSection}
         initialRemoteMachineId={settingsInitialRemoteMachineId}
         initialSearchQuery={settingsInitialSearchQuery}
         initialTab={settingsInitialTab}
         isOpen={isSettingsRenderable}
-        onChange={(nextSettings, source = "settings:bulk") => {
+        onChange={(nextSettings, source = 'settings:bulk') => {
           vscode.postMessage({
             settings: nextSettings,
             source,
-            type: "updateSettings",
+            type: 'updateSettings',
           });
         }}
         onPatch={(patch, source) => {
@@ -2173,7 +2040,7 @@ function AppModalHost() {
             baseRevision: revision,
             patch,
             source,
-            type: "updateSettingsPatch",
+            type: 'updateSettingsPatch',
           });
         }}
         onGhosttySettingsAction={(action) => {
@@ -2181,50 +2048,50 @@ function AppModalHost() {
         }}
         onInstallGhostexCli={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installGhostexCli" });
+          vscode.postMessage({ type: 'installGhostexCli' });
         }}
         onInstallBrowserControl={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installBrowserControl" });
+          vscode.postMessage({ type: 'installBrowserControl' });
         }}
         onInstallBrowserUseSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installBrowserUseSkill" });
+          vscode.postMessage({ type: 'installBrowserUseSkill' });
         }}
         onInstallComputerUseSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installComputerUseSkill" });
+          vscode.postMessage({ type: 'installComputerUseSkill' });
         }}
         onInstallAgentOrchestrationSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installAgentOrchestrationSkill" });
+          vscode.postMessage({ type: 'installAgentOrchestrationSkill' });
         }}
         onInstallFable56OrchestrationSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installFable56OrchestrationSkill" });
+          vscode.postMessage({ type: 'installFable56OrchestrationSkill' });
         }}
         onInstallFindPrevSessionSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installFindPrevSessionSkill" });
+          vscode.postMessage({ type: 'installFindPrevSessionSkill' });
         }}
         onInstallGenerateTitleSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installGenerateTitleSkill" });
+          vscode.postMessage({ type: 'installGenerateTitleSkill' });
         }}
         onInstallMoveCodexSessionSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installMoveCodexSessionSkill" });
+          vscode.postMessage({ type: 'installMoveCodexSessionSkill' });
         }}
         onInstallCuaDriver={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installCuaDriver" });
+          vscode.postMessage({ type: 'installCuaDriver' });
         }}
         onSetOSIntegrationDefaults={(target) => {
           setOSIntegrationStatusLoading(true);
-          vscode.postMessage({ target, type: "setOSIntegrationDefaults" });
+          vscode.postMessage({ target, type: 'setOSIntegrationDefaults' });
         }}
         onPlayCompletionSound={(sound) => {
-          vscode.postMessage({ sound, type: "playCompletionSoundPreview" });
+          vscode.postMessage({ sound, type: 'playCompletionSoundPreview' });
         }}
         onOpenAccessibilityPreferences={() => {
           /**
@@ -2233,62 +2100,62 @@ function AppModalHost() {
            * directly for desktop integrations without enabling any removed
            * IDE attachment behavior.
            */
-          vscode.postMessage({ type: "openAccessibilityPreferences" });
+          vscode.postMessage({ type: 'openAccessibilityPreferences' });
         }}
         onOpenMacOSNotificationSettings={() => {
-          vscode.postMessage({ type: "openMacOSNotificationSettings" });
+          vscode.postMessage({ type: 'openMacOSNotificationSettings' });
         }}
         onOpenScreenRecordingPreferences={() => {
-          vscode.postMessage({ type: "openScreenRecordingPreferences" });
+          vscode.postMessage({ type: 'openScreenRecordingPreferences' });
         }}
         onOpenGhostexFolder={() => {
-          vscode.postMessage({ type: "openGhostexFolder" });
+          vscode.postMessage({ type: 'openGhostexFolder' });
         }}
         onRequestMacOSNotificationPermission={() => {
-          vscode.postMessage({ type: "requestMacOSNotificationPermission" });
+          vscode.postMessage({ type: 'requestMacOSNotificationPermission' });
         }}
         onRequestGhostexFolderStats={() => {
           setGhostexFolderStatsLoading(true);
-          vscode.postMessage({ type: "requestGhostexFolderStats" });
+          vscode.postMessage({ type: 'requestGhostexFolderStats' });
         }}
         onRequestAgentHookStatus={() => {
           setAgentHookStatusLoading(true);
-          vscode.postMessage({ type: "requestAgentHookStatus" });
+          vscode.postMessage({ type: 'requestAgentHookStatus' });
         }}
         onRequestGhostexCliStatus={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "requestGhostexCliStatus" });
+          vscode.postMessage({ type: 'requestGhostexCliStatus' });
         }}
         onRequestOSIntegrationStatus={() => {
           setOSIntegrationStatusLoading(true);
-          vscode.postMessage({ type: "requestOSIntegrationStatus" });
+          vscode.postMessage({ type: 'requestOSIntegrationStatus' });
         }}
         onRequestPluginSettingsStatus={() => {
           setPluginSettingsStatusLoading(true);
-          vscode.postMessage({ type: "requestPluginSettingsStatus" });
+          vscode.postMessage({ type: 'requestPluginSettingsStatus' });
         }}
         onReinstallPlugin={(pluginId) => {
           setPluginSettingsStatusLoading(true);
-          vscode.postMessage({ pluginId, type: "reinstallPlugin" });
+          vscode.postMessage({ pluginId, type: 'reinstallPlugin' });
         }}
         onInstallAgentHooks={() => {
           setAgentHookStatusLoading(true);
-          vscode.postMessage({ type: "installAgentHooks" });
+          vscode.postMessage({ type: 'installAgentHooks' });
         }}
         onUninstallAgentHooks={(agentIds) => {
           setAgentHookStatusLoading(true);
-          vscode.postMessage({ agentIds, type: "uninstallAgentHooks" });
+          vscode.postMessage({ agentIds, type: 'uninstallAgentHooks' });
         }}
         onUninstallBundledAgentSkill={(skillId) => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ skillId, type: "uninstallBundledAgentSkill" });
+          vscode.postMessage({ skillId, type: 'uninstallBundledAgentSkill' });
         }}
         onUninstallBundledAgentSkills={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "uninstallBundledAgentSkills" });
+          vscode.postMessage({ type: 'uninstallBundledAgentSkills' });
         }}
         onTestAgentTaskCompletion={() => {
-          vscode.postMessage({ type: "testAgentTaskCompletion" });
+          vscode.postMessage({ type: 'testAgentTaskCompletion' });
         }}
         onClose={closeModal}
         portless={portless}
@@ -2306,16 +2173,8 @@ function AppModalHost() {
         // CDXC:AppIconPicker 2026-06-25-21:50: Prop-driven App Icon state for Settings (mirrors osIntegrationStatus).
         appIconState={appIconState}
       />
-      <DiscoverGhostexModal
-        isOpen={activeModal === "discoverGhostex"}
-        onClose={closeModal}
-        theme={theme}
-      />
-      <WatchGhostexVideoModal
-        isOpen={activeModal === "watchGhostexVideo"}
-        onClose={closeModal}
-        theme={theme}
-      />
+      <DiscoverGhostexModal isOpen={activeModal === 'discoverGhostex'} onClose={closeModal} theme={theme} />
+      <WatchGhostexVideoModal isOpen={activeModal === 'watchGhostexVideo'} onClose={closeModal} theme={theme} />
       <FirstLaunchSetupModal
         agentHookStatus={agentHookStatus}
         agentHookStatusLoading={agentHookStatusLoading}
@@ -2326,72 +2185,72 @@ function AppModalHost() {
         onChange={(nextSettings) => {
           vscode.postMessage({
             settings: nextSettings,
-            source: "firstLaunch:preferences",
-            type: "updateSettings",
+            source: 'firstLaunch:preferences',
+            type: 'updateSettings',
           });
         }}
         onClose={closeModal}
         onInstallAgentHooks={(agentIds) => {
           setAgentHookStatusLoading(true);
-          vscode.postMessage({ agentIds, type: "installAgentHooks" });
+          vscode.postMessage({ agentIds, type: 'installAgentHooks' });
         }}
         onInstallGhostexCli={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installGhostexCli" });
+          vscode.postMessage({ type: 'installGhostexCli' });
         }}
         onInstallBrowserControl={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installBrowserControl" });
+          vscode.postMessage({ type: 'installBrowserControl' });
         }}
         onInstallBrowserUseSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installBrowserUseSkill" });
+          vscode.postMessage({ type: 'installBrowserUseSkill' });
         }}
         onInstallComputerUseSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installComputerUseSkill" });
+          vscode.postMessage({ type: 'installComputerUseSkill' });
         }}
         onInstallAgentOrchestrationSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installAgentOrchestrationSkill" });
+          vscode.postMessage({ type: 'installAgentOrchestrationSkill' });
         }}
         onInstallFable56OrchestrationSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installFable56OrchestrationSkill" });
+          vscode.postMessage({ type: 'installFable56OrchestrationSkill' });
         }}
         onInstallFindPrevSessionSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installFindPrevSessionSkill" });
+          vscode.postMessage({ type: 'installFindPrevSessionSkill' });
         }}
         onInstallGenerateTitleSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installGenerateTitleSkill" });
+          vscode.postMessage({ type: 'installGenerateTitleSkill' });
         }}
         onInstallMoveCodexSessionSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installMoveCodexSessionSkill" });
+          vscode.postMessage({ type: 'installMoveCodexSessionSkill' });
         }}
         onUninstallBundledAgentSkill={(skillId) => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ skillId, type: "uninstallBundledAgentSkill" });
+          vscode.postMessage({ skillId, type: 'uninstallBundledAgentSkill' });
         }}
         onInstallCuaDriver={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installCuaDriver" });
+          vscode.postMessage({ type: 'installCuaDriver' });
         }}
         onOpenAccessibilityPreferences={() => {
-          vscode.postMessage({ type: "openAccessibilityPreferences" });
+          vscode.postMessage({ type: 'openAccessibilityPreferences' });
         }}
         onOpenScreenRecordingPreferences={() => {
-          vscode.postMessage({ type: "openScreenRecordingPreferences" });
+          vscode.postMessage({ type: 'openScreenRecordingPreferences' });
         }}
         onRequestAgentHookStatus={(agentIds) => {
           setAgentHookStatusLoading(true);
-          vscode.postMessage({ agentIds, type: "requestAgentHookStatus" });
+          vscode.postMessage({ agentIds, type: 'requestAgentHookStatus' });
         }}
         onRequestGhostexCliStatus={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "requestGhostexCliStatus" });
+          vscode.postMessage({ type: 'requestGhostexCliStatus' });
         }}
         settings={settings}
         theme={theme}
@@ -2410,8 +2269,8 @@ function AppModalHost() {
           window.__ghostex_APP_MODAL_HOST_ID__ === GPUI_APP_MODAL_HOST_ID &&
           sidebarAgentIconSupportsSessionHistoryTitleGeneration(renameSession?.sessionAgentIcon)
         }
-        initialTitle={renameSession?.initialTitle ?? ""}
-        isOpen={activeModal === "renameSession" && renameSession !== undefined}
+        initialTitle={renameSession?.initialTitle ?? ''}
+        isOpen={activeModal === 'renameSession' && renameSession !== undefined}
         onCancel={closeModal}
         onConfirm={(title, options) => {
           if (!renameSession) {
@@ -2422,7 +2281,7 @@ function AppModalHost() {
             sessionId: renameSession.sessionId,
             ...(options?.shouldGenerateTitle ? { shouldGenerateTitle: true } : {}),
             title,
-            type: "renameSession",
+            type: 'renameSession',
           });
           closeModal();
         }}
@@ -2439,25 +2298,25 @@ function AppModalHost() {
       <ExportTranscriptResultModal
         agents={agents}
         defaultAgentId={exportTranscriptResult?.agentId}
-        isOpen={activeModal === "exportTranscriptResult" && exportTranscriptResult !== undefined}
+        isOpen={activeModal === 'exportTranscriptResult' && exportTranscriptResult !== undefined}
         onClose={closeModal}
         onRevealInFinder={
           exportTranscriptResult?.canReveal
             ? () => {
-                vscode.postMessage({ type: "revealExportedTranscript" });
+                vscode.postMessage({ type: 'revealExportedTranscript' });
                 closeModal();
               }
             : undefined
         }
         onStartNewConversation={(agentId) => {
-          vscode.postMessage({ agentId, type: "startExportedTranscriptConversation" });
+          vscode.postMessage({ agentId, type: 'startExportedTranscriptConversation' });
           closeModal();
         }}
-        path={exportTranscriptResult?.path ?? ""}
+        path={exportTranscriptResult?.path ?? ''}
       />
       <AgentConfigModal
         draft={config.agentDraft ?? createEmptyAgentDraft()}
-        isOpen={activeModal === "agentConfig" && config.agentDraft !== undefined}
+        isOpen={activeModal === 'agentConfig' && config.agentDraft !== undefined}
         onCancel={closeModal}
         onSave={(draft) => {
           vscode.postMessage({
@@ -2466,7 +2325,7 @@ function AppModalHost() {
             command: draft.command,
             icon: draft.icon,
             name: draft.name,
-            type: "saveSidebarAgent",
+            type: 'saveSidebarAgent',
           });
           closeModal();
         }}
@@ -2488,14 +2347,14 @@ function AppModalHost() {
        */}
       <Toaster
         offset={{ bottom: APP_MODAL_TOAST_BOTTOM_OFFSET_PX }}
-        position="bottom-center"
+        position='bottom-center'
         richColors
-        theme="dark"
+        theme='dark'
         toastOptions={{
           style: {
-            background: "var(--app-modal-background)",
-            border: "1px solid rgba(255, 255, 255, 0.14)",
-            color: "#f4f4f5",
+            background: 'var(--app-modal-background)',
+            border: '1px solid rgba(255, 255, 255, 0.14)',
+            color: '#f4f4f5',
           },
         }}
       />
@@ -2519,8 +2378,7 @@ function useModalStateFromNative() {
    */
   const [activeModalRequestId, setActiveModalRequestId] = useState<string>();
   const [agentsHubCatalog, setAgentsHubCatalog] = useState<AgentsHubCatalogMessage>();
-  const [agentsHubFileContent, setAgentsHubFileContent] =
-    useState<AgentsHubFileContentMessage>();
+  const [agentsHubFileContent, setAgentsHubFileContent] = useState<AgentsHubFileContentMessage>();
   const [config, setConfig] = useState<ConfigModalState>({});
   const [delayedSend, setDelayedSend] = useState<DelayedSendModalState>();
   const [firstUserMessage, setFirstUserMessage] = useState<FirstUserMessageModalState>();
@@ -2528,22 +2386,19 @@ function useModalStateFromNative() {
   const [gitFileDiff, setGitFileDiff] = useState<GitFileDiffModalDraft>();
   const [worktreeDelete, setWorktreeDelete] = useState<WorktreeDeleteModalDraft>();
   const [worktreeRename, setWorktreeRename] = useState<WorktreeRenameModalDraft>();
-  const [missingProjectFolder, setMissingProjectFolder] =
-    useState<MissingProjectFolderModalState>();
-  const [remoteGxserverInstall, setRemoteGxserverInstall] =
-    useState<RemoteGxserverInstallState>();
+  const [missingProjectFolder, setMissingProjectFolder] = useState<MissingProjectFolderModalState>();
+  const [remoteGxserverInstall, setRemoteGxserverInstall] = useState<RemoteGxserverInstallState>();
   const [remoteProjectPicker, setRemoteProjectPicker] = useState<RemoteProjectPickerState>();
   const [addProject, setAddProject] = useState<AddProjectModalState>();
   const [recentProjects, setRecentProjects] = useState<RecentProjectsModalState>();
   const [renameSession, setRenameSession] = useState<RenameSessionModalState>();
   const [stashedPrompts, setStashedPrompts] = useState<StashedPromptsModalState>();
-  const [exportTranscriptResult, setExportTranscriptResult] =
-    useState<ExportTranscriptResultModalState>();
+  const [exportTranscriptResult, setExportTranscriptResult] = useState<ExportTranscriptResultModalState>();
   const [worktree, setWorktree] = useState<WorktreeModalState>();
   const [portlessSetup, setPortlessSetup] = useState<PortlessSetupModalState>();
   const [updateAvailable, setUpdateAvailable] = useState<UpdateAvailableModalState>();
   const [agentHookStatus, setAgentHookStatus] = useState<AgentHookStatusMessage>();
-  const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState("");
+  const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState('');
   const [commandPaletteOpenRequestSequence, setCommandPaletteOpenRequestSequence] = useState(0);
   const [isCommandPalettePrewarm, setIsCommandPalettePrewarm] = useState(false);
   const [ghostexCliStatus, setGhostexCliStatus] = useState<GhostexCliStatusMessage>();
@@ -2552,11 +2407,8 @@ function useModalStateFromNative() {
   const [pluginSettingsStatus, setPluginSettingsStatus] = useState<PluginSettingsStatusMessage>();
   // CDXC:AppIconPicker 2026-06-25-21:50: Latest native App Icon state passed to Settings.
   const [appIconState, setAppIconState] = useState<AppIconStateMessage>();
-  const [tutorialVideoEmbedUrl, setTutorialVideoEmbedUrl] = useState<string | undefined>(
-    undefined,
-  );
-  const [settingsInitialSection, setSettingsInitialSection] =
-    useState<MainSettingsInitialSectionId>();
+  const [tutorialVideoEmbedUrl, setTutorialVideoEmbedUrl] = useState<string | undefined>(undefined);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<MainSettingsInitialSectionId>();
   const [settingsInitialRemoteMachineId, setSettingsInitialRemoteMachineId] = useState<string>();
   const [settingsInitialSearchQuery, setSettingsInitialSearchQuery] = useState<string>();
   const [settingsInitialTabOverride, setSettingsInitialTabOverride] = useState<SettingsModalTab>();
@@ -2591,7 +2443,7 @@ function useModalStateFromNative() {
     setAppIconState(undefined);
     setAgentsHubCatalog(undefined);
     setAgentsHubFileContent(undefined);
-    setCommandPaletteInitialQuery("");
+    setCommandPaletteInitialQuery('');
     setCommandPaletteOpenRequestSequence(0);
     setIsCommandPalettePrewarm(false);
     setSettingsInitialSection(undefined);
@@ -2624,11 +2476,11 @@ function useModalStateFromNative() {
     const handleMessage = (event: Event) => {
       try {
         const message = (event as CustomEvent<AppModalHostMessage>).detail;
-        if (!message || typeof message !== "object") {
+        if (!message || typeof message !== 'object') {
           return;
         }
 
-        if (message.type === "open") {
+        if (message.type === 'open') {
           const hasInlineSidebarStateMessage = message.latestSidebarStateMessage !== undefined;
           const shouldApplyInlineSidebarState = shouldApplySidebarStateBeforeModalOpen(message.modal);
           if (shouldApplyInlineSidebarState && hasInlineSidebarStateMessage) {
@@ -2643,7 +2495,7 @@ function useModalStateFromNative() {
              * The first-launch setup modal uses the same hydrated settings store,
              * so it must receive the inline native snapshot before activeModal is
              * set and before native waits for the React presented acknowledgement.
-            */
+             */
             applySidebarStateMessage(message.latestSidebarStateMessage);
           }
           const sidebarStateAtOpen = useSidebarStore.getState();
@@ -2652,39 +2504,34 @@ function useModalStateFromNative() {
               {
                 details: JSON.stringify({
                   hasSettings: sidebarStateAtOpen.hud.settings !== undefined,
-                  inlineSidebarStateApplied:
-                    shouldApplyInlineSidebarState && hasInlineSidebarStateMessage,
+                  inlineSidebarStateApplied: shouldApplyInlineSidebarState && hasInlineSidebarStateMessage,
                   modal: message.modal,
                   performanceNow: performance.now(),
                 }),
-                event: "modalHost.open.received",
-                type: "debugLog",
+                event: 'modalHost.open.received',
+                type: 'debugLog',
               },
-              "AppModals:debug",
+              'AppModals:debug'
             );
           }
           if (isSettingsModalKind(message.modal)) {
-            postSettingsModalDebugLog("modalHost.settings.open.received", {
+            postSettingsModalDebugLog('modalHost.settings.open.received', {
               activeModalBeforeOpen: activeModalRef.current ?? null,
               hasInitialRemoteMachineId:
-                typeof message.initialRemoteMachineId === "string" &&
-                message.initialRemoteMachineId.trim().length > 0,
-              hasInitialSearchQuery: typeof message.initialSearchQuery === "string",
+                typeof message.initialRemoteMachineId === 'string' && message.initialRemoteMachineId.trim().length > 0,
+              hasInitialSearchQuery: typeof message.initialSearchQuery === 'string',
               hasSettings: sidebarStateAtOpen.hud.settings !== undefined,
               hasInlineSidebarStateMessage: message.latestSidebarStateMessage !== undefined,
-              initialSection:
-                typeof message.initialSection === "string" ? message.initialSection : null,
+              initialSection: typeof message.initialSection === 'string' ? message.initialSection : null,
               initialTab: isSettingsModalTab(message.initialTab) ? message.initialTab : null,
               modal: message.modal,
-              nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+              nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
               revision: sidebarStateAtOpen.revision,
             });
           }
           if (isFirstLaunchSetupModalKind(message.modal)) {
             setTutorialVideoEmbedUrl(
-              typeof message.tutorialVideoEmbedUrl === "string"
-                ? message.tutorialVideoEmbedUrl
-                : undefined,
+              typeof message.tutorialVideoEmbedUrl === 'string' ? message.tutorialVideoEmbedUrl : undefined
             );
             /*
              * CDXC:FirstLaunchSetupDiagnostics 2026-06-29-22:08:
@@ -2692,14 +2539,14 @@ function useModalStateFromNative() {
              * hydrate has applied so a slow repro can tell whether React already
              * has settings state before renderability waits begin.
              */
-            postAppModalDebugLog("modalHost.setup.open.received", {
+            postAppModalDebugLog('modalHost.setup.open.received', {
               activeModalBeforeOpen: activeModalRef.current ?? null,
               hasInlineSidebarStateMessage,
               hasNativeSettingsHydrated: sidebarStateAtOpen.revision > 0,
               hasSettings: sidebarStateAtOpen.hud.settings !== undefined,
               inlineSidebarStateApplied: shouldApplyInlineSidebarState && hasInlineSidebarStateMessage,
               modal: message.modal,
-              nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow",
+              nativeWindowSurface: window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow',
               revision: sidebarStateAtOpen.revision,
             });
           }
@@ -2710,76 +2557,62 @@ function useModalStateFromNative() {
            * every non-addProject open simply clears it.
            */
           setAddProject(
-            message.modal === "addProject"
+            message.modal === 'addProject'
               ? {
                   machineId:
-                    typeof message.machineId === "string" && message.machineId.trim()
-                      ? message.machineId
-                      : undefined,
+                    typeof message.machineId === 'string' && message.machineId.trim() ? message.machineId : undefined,
                 }
-              : undefined,
+              : undefined
           );
           setRecentProjects(
-            message.modal === "recentProjects"
+            message.modal === 'recentProjects'
               ? {
-                  machineId:
-                    typeof message.machineId === "string" ? message.machineId : undefined,
-                  machineName:
-                    typeof message.machineName === "string" ? message.machineName : undefined,
+                  machineId: typeof message.machineId === 'string' ? message.machineId : undefined,
+                  machineName: typeof message.machineName === 'string' ? message.machineName : undefined,
                 }
-              : undefined,
+              : undefined
           );
           setStashedPrompts(
-            message.modal === "stashedPrompts"
+            message.modal === 'stashedPrompts'
               ? {
                   projectId:
-                    typeof message.projectId === "string" && message.projectId.trim()
-                      ? message.projectId
-                      : undefined,
+                    typeof message.projectId === 'string' && message.projectId.trim() ? message.projectId : undefined,
                   sessionId:
-                    typeof message.sessionId === "string" && message.sessionId.trim()
-                      ? message.sessionId
-                      : undefined,
+                    typeof message.sessionId === 'string' && message.sessionId.trim() ? message.sessionId : undefined,
                 }
-              : undefined,
+              : undefined
           );
           setExportTranscriptResult(
-            message.modal === "exportTranscriptResult" &&
-              typeof message.path === "string" &&
-              message.path.trim()
+            message.modal === 'exportTranscriptResult' && typeof message.path === 'string' && message.path.trim()
               ? {
-                  agentId:
-                    typeof message.agentId === "string" && message.agentId.trim()
-                      ? message.agentId
-                      : undefined,
+                  agentId: typeof message.agentId === 'string' && message.agentId.trim() ? message.agentId : undefined,
                   canReveal: message.canReveal === true,
                   path: message.path,
                 }
-              : undefined,
+              : undefined
           );
           setUpdateAvailable(
-            message.modal === "updateAvailable" &&
-              typeof message.version === "string" &&
-              (message.state === "available" || message.state === "ready")
+            message.modal === 'updateAvailable' &&
+              typeof message.version === 'string' &&
+              (message.state === 'available' || message.state === 'ready')
               ? {
-                  notesMarkdown:
-                    typeof message.notesMarkdown === "string" ? message.notesMarkdown : "",
+                  notesMarkdown: typeof message.notesMarkdown === 'string' ? message.notesMarkdown : '',
                   portable: message.portable === true,
                   state: message.state,
                   version: message.version,
                 }
-              : undefined,
+              : undefined
           );
-          if (message.modal === "missingProjectFolder") {
+          if (message.modal === 'missingProjectFolder') {
             if (
-              typeof message.projectId !== "string" ||
+              typeof message.projectId !== 'string' ||
               !message.projectId.trim() ||
-              typeof message.projectName !== "string" ||
+              typeof message.projectName !== 'string' ||
               !message.projectName.trim() ||
-              typeof message.projectPath !== "string" ||
+              typeof message.projectPath !== 'string' ||
               !message.projectPath.trim()
             ) {
-              throw new Error("Missing-project modal request is missing project details.");
+              throw new Error('Missing-project modal request is missing project details.');
             }
             setMissingProjectFolder({
               projectId: message.projectId,
@@ -2796,52 +2629,49 @@ function useModalStateFromNative() {
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "renameSession") {
+          } else if (message.modal === 'renameSession') {
             if (!message.sessionId) {
-              throw new Error("Rename modal request is missing sessionId.");
+              throw new Error('Rename modal request is missing sessionId.');
             }
             setRenameSession({
-              initialTitle: message.initialTitle ?? "",
-              sessionAgentIcon:
-                typeof message.sessionAgentIcon === "string"
-                  ? message.sessionAgentIcon
-                  : undefined,
+              initialTitle: message.initialTitle ?? '',
+              sessionAgentIcon: typeof message.sessionAgentIcon === 'string' ? message.sessionAgentIcon : undefined,
               sessionId: message.sessionId,
             });
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "firstUserMessage") {
-            if (typeof message.message !== "string" || !message.message.trim()) {
-              throw new Error("First message modal request is missing message text.");
+          } else if (message.modal === 'firstUserMessage') {
+            if (typeof message.message !== 'string' || !message.message.trim()) {
+              throw new Error('First message modal request is missing message text.');
             }
             setFirstUserMessage({
               message: message.message,
-              title: typeof message.title === "string" ? message.title : undefined,
+              title: typeof message.title === 'string' ? message.title : undefined,
             });
             setConfig({});
             setDelayedSend(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "remoteGxserverInstall") {
+          } else if (message.modal === 'remoteGxserverInstall') {
             if (
-              typeof message.remoteMachineId !== "string" ||
+              typeof message.remoteMachineId !== 'string' ||
               !message.remoteMachineId.trim() ||
-              typeof message.remoteMachineName !== "string" ||
+              typeof message.remoteMachineName !== 'string' ||
               !message.remoteMachineName.trim()
             ) {
-              throw new Error("Remote gxserver install request is missing machine details.");
+              throw new Error('Remote gxserver install request is missing machine details.');
             }
             /*
              * CDXC:RemoteMachines 2026-06-23-08:30:
@@ -2857,20 +2687,20 @@ function useModalStateFromNative() {
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteProjectPicker(undefined);
+            setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "remoteProjectPicker") {
+          } else if (message.modal === 'remoteProjectPicker') {
             if (
-              typeof message.remoteMachineId !== "string" ||
+              typeof message.remoteMachineId !== 'string' ||
               !message.remoteMachineId.trim() ||
-              typeof message.remoteMachineName !== "string" ||
+              typeof message.remoteMachineName !== 'string' ||
               !message.remoteMachineName.trim()
             ) {
-              throw new Error("Remote project picker request is missing machine details.");
+              throw new Error('Remote project picker request is missing machine details.');
             }
             /*
              * CDXC:RemoteProjectPicker 2026-06-03-00:18:
@@ -2880,154 +2710,142 @@ function useModalStateFromNative() {
              * picker cannot accidentally browse local folders.
              */
             setRemoteProjectPicker({
-              initialQuery:
-                typeof message.initialQuery === "string" ? message.initialQuery : undefined,
+              initialQuery: typeof message.initialQuery === 'string' ? message.initialQuery : undefined,
               remoteMachineId: message.remoteMachineId,
               remoteMachineName: message.remoteMachineName,
             });
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "delayedSend") {
+          } else if (message.modal === 'delayedSend') {
             if (!message.sessionId) {
-              throw new Error("Delayed Actions modal request is missing sessionId.");
+              throw new Error('Delayed Actions modal request is missing sessionId.');
             }
             setDelayedSend({
               agentIcon: message.agentIcon,
               closeAfterDoneActive:
-                typeof message.closeAfterDoneActive === "boolean"
-                  ? message.closeAfterDoneActive
-                  : undefined,
+                typeof message.closeAfterDoneActive === 'boolean' ? message.closeAfterDoneActive : undefined,
               delayedSendDeadlineAt:
-                typeof message.delayedSendDeadlineAt === "string"
-                  ? message.delayedSendDeadlineAt
-                  : undefined,
+                typeof message.delayedSendDeadlineAt === 'string' ? message.delayedSendDeadlineAt : undefined,
               delayedSendRemainingLabel:
-                typeof message.delayedSendRemainingLabel === "string"
-                  ? message.delayedSendRemainingLabel
-                  : undefined,
-              sendWhenAllProjectSessionsStopActive:
-                message.sendWhenAllProjectSessionsStopActive === true,
+                typeof message.delayedSendRemainingLabel === 'string' ? message.delayedSendRemainingLabel : undefined,
+              sendWhenAllProjectSessionsStopActive: message.sendWhenAllProjectSessionsStopActive === true,
               sendWhenAgentStopsActive: message.sendWhenAgentStopsActive === true,
               sessionId: message.sessionId,
               supportsSendWhenAgentStops: message.supportsSendWhenAgentStops === true,
-              supportsSendWhenAllProjectSessionsStop:
-                message.supportsSendWhenAllProjectSessionsStop === true,
-              title: typeof message.title === "string" ? message.title : undefined,
+              supportsSendWhenAllProjectSessionsStop: message.supportsSendWhenAllProjectSessionsStop === true,
+              title: typeof message.title === 'string' ? message.title : undefined,
             });
             setConfig({});
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "worktree") {
+          } else if (message.modal === 'worktree') {
             setWorktree({
-              projectId: typeof message.projectId === "string" ? message.projectId : undefined,
-              projectName: typeof message.projectName === "string" ? message.projectName : undefined,
-              projectPath: typeof message.projectPath === "string" ? message.projectPath : undefined,
-              remoteMachineId: typeof message.remoteMachineId === "string" ? message.remoteMachineId : undefined,
-              remoteMachineName: typeof message.remoteMachineName === "string" ? message.remoteMachineName : undefined,
+              projectId: typeof message.projectId === 'string' ? message.projectId : undefined,
+              projectName: typeof message.projectName === 'string' ? message.projectName : undefined,
+              projectPath: typeof message.projectPath === 'string' ? message.projectPath : undefined,
+              remoteMachineId: typeof message.remoteMachineId === 'string' ? message.remoteMachineId : undefined,
+              remoteMachineName: typeof message.remoteMachineName === 'string' ? message.remoteMachineName : undefined,
             });
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setGitCommit(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "portlessSetup") {
-            if (
-              message.mode !== "firstSetup" &&
-              message.mode !== "standaloneReconfigure"
-            ) {
-              throw new Error("Portless setup modal request is missing setup mode.");
+          } else if (message.modal === 'portlessSetup') {
+            if (message.mode !== 'firstSetup' && message.mode !== 'standaloneReconfigure') {
+              throw new Error('Portless setup modal request is missing setup mode.');
             }
-            if (message.protocol !== "https" && message.protocol !== "http") {
-              throw new Error("Portless setup modal request is missing protocol.");
+            if (message.protocol !== 'https' && message.protocol !== 'http') {
+              throw new Error('Portless setup modal request is missing protocol.');
             }
             setPortlessSetup({ mode: message.mode, protocol: message.protocol });
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
             setGitCommit(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "deleteWorktree") {
+          } else if (message.modal === 'deleteWorktree') {
             if (!message.worktreeDeleteDraft) {
-              throw new Error("Delete worktree modal request is missing worktreeDeleteDraft.");
+              throw new Error('Delete worktree modal request is missing worktreeDeleteDraft.');
             }
             setWorktreeDelete(message.worktreeDeleteDraft);
             setWorktreeRename(undefined);
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setGitCommit(undefined);
-          } else if (message.modal === "renameWorktree") {
+          } else if (message.modal === 'renameWorktree') {
             if (!message.worktreeRenameDraft) {
-              throw new Error("Rename worktree modal request is missing worktreeRenameDraft.");
+              throw new Error('Rename worktree modal request is missing worktreeRenameDraft.');
             }
             setWorktreeRename(message.worktreeRenameDraft);
             setWorktreeDelete(undefined);
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setGitCommit(undefined);
-          } else if (message.modal === "gitCommit") {
+          } else if (message.modal === 'gitCommit') {
             if (!message.gitCommitDraft) {
-              throw new Error("Git commit modal request is missing gitCommitDraft.");
+              throw new Error('Git commit modal request is missing gitCommitDraft.');
             }
             setGitCommit(message.gitCommitDraft);
             setGitFileDiff(undefined);
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteProjectPicker(undefined);
+            setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
-          } else if (message.modal === "gitFileDiff") {
+          } else if (message.modal === 'gitFileDiff') {
             if (!message.gitFileDiff) {
-              throw new Error("Git file diff modal request is missing gitFileDiff.");
+              throw new Error('Git file diff modal request is missing gitFileDiff.');
             }
             setGitFileDiff(message.gitFileDiff);
             return;
-          } else if (message.modal === "agentConfig") {
+          } else if (message.modal === 'agentConfig') {
             if (!message.agentDraft) {
-              throw new Error("Agent config modal request is missing agentDraft.");
+              throw new Error('Agent config modal request is missing agentDraft.');
             }
             setConfig({ agentDraft: message.agentDraft });
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
@@ -3038,7 +2856,7 @@ function useModalStateFromNative() {
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
+            setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
             setWorktree(undefined);
@@ -3046,11 +2864,9 @@ function useModalStateFromNative() {
             setWorktreeDelete(undefined);
             setWorktreeRename(undefined);
           }
-          if (message.modal === "settings") {
+          if (message.modal === 'settings') {
             setGhostexFolderStats(undefined);
-            setSettingsInitialSection(
-              typeof message.initialSection === "string" ? message.initialSection : undefined,
-            );
+            setSettingsInitialSection(typeof message.initialSection === 'string' ? message.initialSection : undefined);
             /**
              * CDXC:SessionPersistence 2026-06-04-02:52:
              * Titlebar Tips notices can open Settings directly to a searchable
@@ -3059,9 +2875,7 @@ function useModalStateFromNative() {
              * code to know the Settings DOM.
              */
             setSettingsInitialSearchQuery(
-              typeof message.initialSearchQuery === "string"
-                ? message.initialSearchQuery
-                : undefined,
+              typeof message.initialSearchQuery === 'string' ? message.initialSearchQuery : undefined
             );
             /**
              * CDXC:RemoteMachines 2026-06-10-09:54:
@@ -3070,21 +2884,18 @@ function useModalStateFromNative() {
              * and focus that machine's editable fields.
              */
             setSettingsInitialRemoteMachineId(
-              typeof message.initialRemoteMachineId === "string" &&
-                message.initialRemoteMachineId.trim()
+              typeof message.initialRemoteMachineId === 'string' && message.initialRemoteMachineId.trim()
                 ? message.initialRemoteMachineId
-                : undefined,
+                : undefined
             );
-            setSettingsInitialTabOverride(
-              isSettingsModalTab(message.initialTab) ? message.initialTab : undefined,
-            );
+            setSettingsInitialTabOverride(isSettingsModalTab(message.initialTab) ? message.initialTab : undefined);
           } else {
             setSettingsInitialSection(undefined);
             setSettingsInitialRemoteMachineId(undefined);
             setSettingsInitialSearchQuery(undefined);
             setSettingsInitialTabOverride(undefined);
           }
-          if (message.modal === "commandPalette") {
+          if (message.modal === 'commandPalette') {
             /*
              * CDXC:CommandPalette 2026-06-13-22:18:
              * The Commands tab owns only command fuzzy finding. Preserve an
@@ -3095,43 +2906,39 @@ function useModalStateFromNative() {
              * Increment a request sequence for every Commands open so React can
              * refocus and apply the requested command query on repeat opens.
              */
-            setCommandPaletteInitialQuery(
-              typeof message.initialQuery === "string" ? message.initialQuery : "",
-            );
+            setCommandPaletteInitialQuery(typeof message.initialQuery === 'string' ? message.initialQuery : '');
             setCommandPaletteOpenRequestSequence((sequence) => sequence + 1);
             setIsCommandPalettePrewarm(message.prewarm === true);
           } else {
-            setCommandPaletteInitialQuery("");
+            setCommandPaletteInitialQuery('');
             setCommandPaletteOpenRequestSequence(0);
             setIsCommandPalettePrewarm(false);
           }
-          if (message.modal !== "agentsHub") {
+          if (message.modal !== 'agentsHub') {
             setAgentsHubCatalog(undefined);
             setAgentsHubFileContent(undefined);
           }
-          setActiveModalRequestId(
-            typeof message.requestId === "string" ? message.requestId : undefined,
-          );
+          setActiveModalRequestId(typeof message.requestId === 'string' ? message.requestId : undefined);
           setActiveModal(message.modal);
           return;
         }
 
-        if (message.type === "close") {
+        if (message.type === 'close') {
           if (isAppModalDebugLoggingEnabled()) {
             postAppModalHostMessage(
               {
                 details: JSON.stringify({ performanceNow: performance.now() }),
-                event: "modalHost.close.received",
-                type: "debugLog",
+                event: 'modalHost.close.received',
+                type: 'debugLog',
               },
-              "AppModals:debug",
+              'AppModals:debug'
             );
           }
           clearActiveModalState();
           return;
         }
 
-        if (message.type === "toast") {
+        if (message.type === 'toast') {
           /**
            * CDXC:Worktrees 2026-06-02-15:27:
            * Git and worktree command execution belongs to gxserver after the ownership split. The app-modal host owns only the visible toast surface, so gxserver-backed progress feedback appears over the full Ghostex window without stealing focus from terminal panes.
@@ -3152,16 +2959,16 @@ function useModalStateFromNative() {
           const isPersistent = message.persistent === true;
           const toastDescription = normalizeAppToastDescription(
             message.title,
-            typeof message.description === "string" ? message.description : undefined,
+            typeof message.description === 'string' ? message.description : undefined
           );
           const toastClassName = [
-            "ghostex-app-toast",
-            isPersistent ? "ghostex-app-toast-persistent" : "",
-            message.level === "error" ? "ghostex-app-toast-error" : "",
-            message.level === "success" ? "ghostex-app-toast-success" : "",
+            'ghostex-app-toast',
+            isPersistent ? 'ghostex-app-toast-persistent' : '',
+            message.level === 'error' ? 'ghostex-app-toast-error' : '',
+            message.level === 'success' ? 'ghostex-app-toast-success' : '',
           ]
             .filter(Boolean)
-            .join(" ");
+            .join(' ');
           const toastOptions = {
             action: message.action
               ? {
@@ -3178,27 +2985,27 @@ function useModalStateFromNative() {
             duration: isPersistent ? Number.POSITIVE_INFINITY : undefined,
             id: message.toastId,
             style:
-              message.level === "error"
+              message.level === 'error'
                 ? {
                     background:
-                      "linear-gradient(0deg, rgba(95, 24, 31, 0.28), rgba(95, 24, 31, 0.28)), var(--app-modal-background)",
-                    border: "1px solid rgba(248, 113, 113, 0.32)",
-                    color: "#fff1f2",
+                      'linear-gradient(0deg, rgba(95, 24, 31, 0.28), rgba(95, 24, 31, 0.28)), var(--app-modal-background)',
+                    border: '1px solid rgba(248, 113, 113, 0.32)',
+                    color: '#fff1f2',
                   }
-                : message.level === "success"
+                : message.level === 'success'
                   ? {
                       background:
-                        "linear-gradient(0deg, rgba(22, 101, 52, 0.24), rgba(22, 101, 52, 0.24)), var(--app-modal-background)",
-                      border: "1px solid rgba(74, 222, 128, 0.3)",
-                      color: "#f0fdf4",
+                        'linear-gradient(0deg, rgba(22, 101, 52, 0.24), rgba(22, 101, 52, 0.24)), var(--app-modal-background)',
+                      border: '1px solid rgba(74, 222, 128, 0.3)',
+                      color: '#f0fdf4',
                     }
-                : undefined,
+                  : undefined,
           };
-          if (message.level === "error") {
+          if (message.level === 'error') {
             toast.error(message.title, toastOptions);
-          } else if (message.level === "warning") {
+          } else if (message.level === 'warning') {
             toast.warning(message.title, toastOptions);
-          } else if (message.level === "success") {
+          } else if (message.level === 'success') {
             toast.success(message.title, toastOptions);
           } else {
             toast.message(message.title, toastOptions);
@@ -3211,15 +3018,14 @@ function useModalStateFromNative() {
               return;
             }
             postAppModalHostMessage(
-              { keepOpen: activeModalRef.current !== undefined, type: "toastDismissed" },
-              "AppModals:toastDismissed",
+              { keepOpen: activeModalRef.current !== undefined, type: 'toastDismissed' },
+              'AppModals:toastDismissed'
             );
           }, 4_200);
           return;
         }
 
-
-        if (message.type === "sidebarState") {
+        if (message.type === 'sidebarState') {
           if (isAgentsHubCatalogMessage(message.message)) {
             setAgentsHubCatalog(message.message);
             setAgentsHubFileContent(undefined);
@@ -3259,28 +3065,28 @@ function useModalStateFromNative() {
             isRecentProjectsResultMessage(message.message) ||
             isStashedPromptsTransientMessage(message.message)
           ) {
-            window.postMessage(message.message, "*");
+            window.postMessage(message.message, '*');
             return;
           }
           applySidebarStateMessage(message.message);
         }
       } catch (error) {
-        logAppModalError("AppModals:hostMessage", error);
+        logAppModalError('AppModals:hostMessage', error);
         throw error;
       }
     };
 
-    window.addEventListener("ghostex-app-modal-host-message", handleMessage);
+    window.addEventListener('ghostex-app-modal-host-message', handleMessage);
     postAppModalHostMessage(
-      { nativeWindowHostId: window.__ghostex_APP_MODAL_HOST_ID__, type: "ready" },
-      "AppModals:ready",
+      { nativeWindowHostId: window.__ghostex_APP_MODAL_HOST_ID__, type: 'ready' },
+      'AppModals:ready'
     );
     /*
      * CDXC:AppModals 2026-06-11-19:46:
      * Native child windows reuse modal-host.html for the app modal family.
      */
     return () => {
-      window.removeEventListener("ghostex-app-modal-host-message", handleMessage);
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
     };
   }, []);
 
@@ -3328,68 +3134,35 @@ function useModalStateFromNative() {
 }
 
 function isAgentHookStatusMessage(message: unknown): message is SidebarAgentHookStatusMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "agentHookStatus",
-  );
+  return Boolean(message && typeof message === 'object' && 'type' in message && message.type === 'agentHookStatus');
 }
 
 function isGhostexCliStatusMessage(message: unknown): message is SidebarGhostexCliStatusMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "ghostexCliStatus",
-  );
+  return Boolean(message && typeof message === 'object' && 'type' in message && message.type === 'ghostexCliStatus');
 }
 
 function isGhostexFolderStatsMessage(message: unknown): message is SidebarGhostexFolderStatsMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "ghostexFolderStats",
-  );
+  return Boolean(message && typeof message === 'object' && 'type' in message && message.type === 'ghostexFolderStats');
 }
 
 function isOSIntegrationStatusMessage(message: unknown): message is SidebarOSIntegrationStatusMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "osIntegrationStatus",
-  );
+  return Boolean(message && typeof message === 'object' && 'type' in message && message.type === 'osIntegrationStatus');
 }
 
-function isPluginSettingsStatusMessage(
-  message: unknown,
-): message is SidebarPluginSettingsStatusMessage {
+function isPluginSettingsStatusMessage(message: unknown): message is SidebarPluginSettingsStatusMessage {
   return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "pluginSettingsStatus",
+    message && typeof message === 'object' && 'type' in message && message.type === 'pluginSettingsStatus'
   );
 }
 
 // CDXC:AppIconPicker 2026-06-25-21:50: Narrow relayed sidebarState payloads to the App Icon contract.
 function isAppIconStateMessage(message: unknown): message is SidebarAppIconStateMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "appIconState",
-  );
+  return Boolean(message && typeof message === 'object' && 'type' in message && message.type === 'appIconState');
 }
 
 function isStashedPromptsTransientMessage(
-  message: unknown,
-): message is Extract<
-  ExtensionToSidebarMessage,
-  { type: "saveStashedPromptResult" | "stashedPromptsResult" }
-> {
+  message: unknown
+): message is Extract<ExtensionToSidebarMessage, { type: 'saveStashedPromptResult' | 'stashedPromptsResult' }> {
   /*
    * CDXC:StashedPrompts 2026-07-29:
    * Stashed-prompt query answers are transient sidebarState payloads. Forward
@@ -3398,60 +3171,46 @@ function isStashedPromptsTransientMessage(
    */
   return Boolean(
     message &&
-      typeof message === "object" &&
-      "type" in message &&
-      (message.type === "stashedPromptsResult" || message.type === "saveStashedPromptResult"),
+    typeof message === 'object' &&
+    'type' in message &&
+    (message.type === 'stashedPromptsResult' || message.type === 'saveStashedPromptResult')
   );
 }
 
 function isPreviousSessionsResultMessage(
-  message: unknown,
-): message is Extract<ExtensionToSidebarMessage, { type: "previousSessionsResult" }> {
+  message: unknown
+): message is Extract<ExtensionToSidebarMessage, { type: 'previousSessionsResult' }> {
   /*
   CDXC:PreviousSessionsModal 2026-06-01-22:01:
   The full-window Previous Sessions modal lives in the app modal host WebView, while gxserver previous-session queries are requested through the native sidebar bridge. Forward the result as a normal window message so the shared modal component receives the same response path it uses inside the sidebar WebView.
   */
   return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "previousSessionsResult",
+    message && typeof message === 'object' && 'type' in message && message.type === 'previousSessionsResult'
   );
 }
 
 function isRecentProjectsResultMessage(
-  message: unknown,
-): message is Extract<ExtensionToSidebarMessage, { type: "recentProjectsResult" }> {
+  message: unknown
+): message is Extract<ExtensionToSidebarMessage, { type: 'recentProjectsResult' }> {
   return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "recentProjectsResult",
+    message && typeof message === 'object' && 'type' in message && message.type === 'recentProjectsResult'
   );
 }
 
 function isAgentsHubCatalogMessage(message: unknown): message is AgentsHubCatalogMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "agentsHubCatalog",
-  );
+  return Boolean(message && typeof message === 'object' && 'type' in message && message.type === 'agentsHubCatalog');
 }
 
 function isAgentsHubFileContentMessage(message: unknown): message is AgentsHubFileContentMessage {
   return Boolean(
-    message &&
-      typeof message === "object" &&
-      "type" in message &&
-      message.type === "agentsHubFileContent",
+    message && typeof message === 'object' && 'type' in message && message.type === 'agentsHubFileContent'
   );
 }
 
 function createEmptyAgentDraft(): AgentConfigDraft {
   return {
-    command: "",
-    name: "",
+    command: '',
+    name: '',
   };
 }
 
@@ -3501,94 +3260,90 @@ function isModalRenderable({
   switch (activeModal) {
     case undefined:
       return false;
-    case "addProject":
+    case 'addProject':
       return addProject !== undefined;
-    case "agentConfig":
+    case 'agentConfig':
       return config.agentDraft !== undefined;
-    case "agentsHub":
-    case "commandPalette":
+    case 'agentsHub':
+    case 'commandPalette':
       return true;
-    case "delayedSend":
+    case 'delayedSend':
       return delayedSend !== undefined;
-    case "firstUserMessage":
+    case 'firstUserMessage':
       return firstUserMessage !== undefined;
-    case "gitCommit":
+    case 'gitCommit':
       return gitCommit !== undefined;
-    case "gitFileDiff":
+    case 'gitFileDiff':
       return gitFileDiff !== undefined;
-    case "missingProjectFolder":
+    case 'missingProjectFolder':
       return missingProjectFolder !== undefined;
-    case "deleteWorktree":
+    case 'deleteWorktree':
       return worktreeDelete !== undefined;
-    case "renameWorktree":
+    case 'renameWorktree':
       return worktreeRename !== undefined;
-    case "recentProjects":
+    case 'recentProjects':
       return recentProjects !== undefined;
-    case "remoteProjectPicker":
+    case 'remoteProjectPicker':
       return remoteProjectPicker !== undefined;
-    case "remoteGxserverInstall":
+    case 'remoteGxserverInstall':
       return remoteGxserverInstall !== undefined;
-    case "renameSession":
+    case 'renameSession':
       return renameSession !== undefined;
-    case "stashedPrompts":
+    case 'stashedPrompts':
       return stashedPrompts !== undefined;
-    case "exportTranscriptResult":
+    case 'exportTranscriptResult':
       return exportTranscriptResult !== undefined;
-    case "updateAvailable":
+    case 'updateAvailable':
       return updateAvailable !== undefined;
-    case "settings":
-    case "configureActions":
-    case "configureAgents":
-    case "hotkeys":
-    case "openTargets":
+    case 'settings':
+    case 'configureActions':
+    case 'configureAgents':
+    case 'hotkeys':
+    case 'openTargets':
       return settings !== undefined;
-    case "worktree":
+    case 'worktree':
       return worktree !== undefined;
-    case "portlessSetup":
+    case 'portlessSetup':
       return portlessSetup !== undefined;
-    case "daemonSessions":
-    case "pinnedPrompts":
-    case "previousSessions":
-    case "scratchPad":
-    case "discoverGhostex":
-    case "watchGhostexVideo":
-    case "tipsAndTricks":
-    case "firstLaunchSetup":
+    case 'daemonSessions':
+    case 'pinnedPrompts':
+    case 'previousSessions':
+    case 'scratchPad':
+    case 'discoverGhostex':
+    case 'watchGhostexVideo':
+    case 'tipsAndTricks':
+    case 'firstLaunchSetup':
       return true;
   }
 }
 
 function applySidebarStateMessage(message: unknown) {
-  if (!message || typeof message !== "object" || !("type" in message)) {
+  if (!message || typeof message !== 'object' || !('type' in message)) {
     return;
   }
 
-  if (message.type === "hydrate" || message.type === "sessionState") {
+  if (message.type === 'hydrate' || message.type === 'sessionState') {
     useSidebarStore
       .getState()
       .applySidebarMessage(
-        message as Parameters<
-          ReturnType<typeof useSidebarStore.getState>["applySidebarMessage"]
-        >[0],
+        message as Parameters<ReturnType<typeof useSidebarStore.getState>['applySidebarMessage']>[0]
       );
     return;
   }
 
-  if (message.type === "daemonSessionsState") {
+  if (message.type === 'daemonSessionsState') {
     useSidebarStore
       .getState()
       .setDaemonSessionsState(
-        message as Parameters<
-          ReturnType<typeof useSidebarStore.getState>["setDaemonSessionsState"]
-        >[0],
+        message as Parameters<ReturnType<typeof useSidebarStore.getState>['setDaemonSessionsState']>[0]
       );
   }
 }
 
-document.body.classList.add("app-modal-host-body");
-if (window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow") {
-  document.documentElement.classList.add("app-modal-host-native-window-document");
-  document.body.classList.add("app-modal-host-native-window-body");
+document.body.classList.add('app-modal-host-body');
+if (window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow') {
+  document.documentElement.classList.add('app-modal-host-native-window-document');
+  document.body.classList.add('app-modal-host-native-window-body');
   /*
    * CDXC:GPUIAppModalScroll 2026-07-26-07:55:
    * GPUI child windows fit to the one-shot measured dialog height and then
@@ -3599,8 +3354,8 @@ if (window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow") {
    * hidden in these native child windows.
    */
   if (window.__ghostex_APP_MODAL_HOST_ID__ === GPUI_APP_MODAL_HOST_ID) {
-    document.body.dataset.appModalFixedWindow = "true";
+    document.body.dataset.appModalFixedWindow = 'true';
   }
 }
-installAppModalGlobalErrorLogging("AppModals:modalHost");
-createRoot(document.getElementById("root")!).render(<AppModalHost />);
+installAppModalGlobalErrorLogging('AppModals:modalHost');
+createRoot(document.getElementById('root')!).render(<AppModalHost />);

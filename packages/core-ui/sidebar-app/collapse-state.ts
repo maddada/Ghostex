@@ -1,25 +1,20 @@
-import {
-  KEEP_AWAKE_DURATION_OPTIONS,
-  type KeepAwakeDurationMinutes,
-} from "../../shared/ghostex-settings";
-import {
-  readLegacyCollapsedSidebarProjectCollectionIds,
-} from "../project-collections";
+import { KEEP_AWAKE_DURATION_OPTIONS, type KeepAwakeDurationMinutes } from '../../shared/ghostex-settings';
+import { readLegacyCollapsedSidebarProjectCollectionIds } from '../project-collections';
 import {
   readProjectSessionListCollapsedState,
   type ProjectSessionListCollapsedState,
-} from "../project-session-list-toggle";
-import type { SidebarKeepAwakeRuntimeState } from "./types";
+} from '../project-session-list-toggle';
+import type { SidebarKeepAwakeRuntimeState } from './types';
 
-export const SIDEBAR_KEEP_AWAKE_RUNTIME_STORAGE_KEY = "ghostex.titlebar.keepAwakeRuntime";
+export const SIDEBAR_KEEP_AWAKE_RUNTIME_STORAGE_KEY = 'ghostex.titlebar.keepAwakeRuntime';
 export function isSidebarRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 export function isKeepAwakeDurationMinutes(value: unknown): value is KeepAwakeDurationMinutes {
   return KEEP_AWAKE_DURATION_OPTIONS.some((option) => option.value === value);
 }
 export function readSidebarKeepAwakeRuntime(): SidebarKeepAwakeRuntimeState | undefined {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return undefined;
   }
 
@@ -33,7 +28,7 @@ export function readSidebarKeepAwakeRuntime(): SidebarKeepAwakeRuntimeState | un
       return undefined;
     }
     const fireAtMs = parsedRuntime.fireAtMs;
-    if (typeof fireAtMs === "number" && Number.isFinite(fireAtMs) && fireAtMs <= Date.now()) {
+    if (typeof fireAtMs === 'number' && Number.isFinite(fireAtMs) && fireAtMs <= Date.now()) {
       return undefined;
     }
     return {
@@ -58,23 +53,23 @@ export type SidebarUiCollapseStorage = {
 };
 
 export type SidebarUiCollapseStateReadResult = {
-  reason?: "invalid-shape" | "missing" | "parse-error" | "storage-unavailable";
+  reason?: 'invalid-shape' | 'missing' | 'parse-error' | 'storage-unavailable';
   state: SidebarUiCollapseState;
   storedByteLength?: number;
 };
 
 export type SidebarUiCollapseStateWriteResult = {
   ok: boolean;
-  reason?: "storage-error" | "storage-unavailable";
+  reason?: 'storage-error' | 'storage-unavailable';
   storedByteLength?: number;
 };
-export const SIDEBAR_UI_COLLAPSE_STATE_STORAGE_KEY = "ghostex-sidebar-ui-collapse-state";
+export const SIDEBAR_UI_COLLAPSE_STATE_STORAGE_KEY = 'ghostex-sidebar-ui-collapse-state';
 /*
  * Collapse preferences belong to one app window. The current GPUI host uses
  * "main"; future windows must pass their own stable scope id so their sidebars
  * persist independently without sending presentation state through gxserver.
  */
-export const DEFAULT_SIDEBAR_WINDOW_SCOPE_ID = "main";
+export const DEFAULT_SIDEBAR_WINDOW_SCOPE_ID = 'main';
 export function createDefaultSidebarUiCollapseState(): SidebarUiCollapseState {
   return {
     collapsedGroupsById: {},
@@ -104,47 +99,35 @@ export function createRemoteProjectCollectionCollapseKey(machineId: string, coll
 }
 
 export function normalizeSidebarUiCollapseState(candidate: unknown): SidebarUiCollapseState {
-  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return createDefaultSidebarUiCollapseState();
   }
   const state = candidate as Partial<SidebarUiCollapseState>;
   return {
     collapsedGroupsById: normalizeStoredCollapsedGroupsById(state.collapsedGroupsById),
-    collapsedProjectCollectionsByKey: normalizeStoredCollapsedGroupsById(
-      state.collapsedProjectCollectionsByKey,
-    ),
-    collapsedProjectSessionListsById: normalizeStoredCollapsedGroupsById(
-      state.collapsedProjectSessionListsById,
-    ),
-    collapsedRemoteMachineSectionsById: normalizeStoredCollapsedGroupsById(
-      state.collapsedRemoteMachineSectionsById,
-    ),
+    collapsedProjectCollectionsByKey: normalizeStoredCollapsedGroupsById(state.collapsedProjectCollectionsByKey),
+    collapsedProjectSessionListsById: normalizeStoredCollapsedGroupsById(state.collapsedProjectSessionListsById),
+    collapsedRemoteMachineSectionsById: normalizeStoredCollapsedGroupsById(state.collapsedRemoteMachineSectionsById),
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed === true,
     isReferenceProjectsCollapsed: state.isReferenceProjectsCollapsed === true,
   };
 }
 
 export function readSidebarUiCollapseState(windowScopeId: string): SidebarUiCollapseStateReadResult {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return {
-      reason: "storage-unavailable",
+      reason: 'storage-unavailable',
       state: createDefaultSidebarUiCollapseState(),
     };
   }
 
   try {
-    const scopedStoredValue = window.localStorage.getItem(
-      getSidebarUiCollapseStateStorageKey(windowScopeId),
-    );
+    const scopedStoredValue = window.localStorage.getItem(getSidebarUiCollapseStateStorageKey(windowScopeId));
     if (scopedStoredValue !== null) {
       const scopedCandidate = JSON.parse(scopedStoredValue) as Partial<SidebarUiCollapseStorage>;
-      if (
-        !scopedCandidate ||
-        typeof scopedCandidate !== "object" ||
-        scopedCandidate.version !== 2
-      ) {
+      if (!scopedCandidate || typeof scopedCandidate !== 'object' || scopedCandidate.version !== 2) {
         return {
-          reason: "invalid-shape",
+          reason: 'invalid-shape',
           state: createDefaultSidebarUiCollapseState(),
           storedByteLength: scopedStoredValue.length,
         };
@@ -156,17 +139,17 @@ export function readSidebarUiCollapseState(windowScopeId: string): SidebarUiColl
     }
 
     const legacyStoredValue = window.localStorage.getItem(SIDEBAR_UI_COLLAPSE_STATE_STORAGE_KEY);
-    const candidate = JSON.parse(legacyStoredValue ?? "null");
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    const candidate = JSON.parse(legacyStoredValue ?? 'null');
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
       const state = createDefaultSidebarUiCollapseState();
       state.collapsedProjectCollectionsByKey = Object.fromEntries(
         Object.keys(readLegacyCollapsedSidebarProjectCollectionIds()).map((collectionId) => [
           createLocalProjectCollectionCollapseKey(collectionId),
           true,
-        ]),
+        ])
       );
       state.collapsedProjectSessionListsById = readProjectSessionListCollapsedState();
-      return { reason: "missing", state };
+      return { reason: 'missing', state };
     }
 
     const migrated = normalizeSidebarUiCollapseState(candidate);
@@ -174,27 +157,27 @@ export function readSidebarUiCollapseState(windowScopeId: string): SidebarUiColl
       Object.keys(readLegacyCollapsedSidebarProjectCollectionIds()).map((collectionId) => [
         createLocalProjectCollectionCollapseKey(collectionId),
         true,
-      ]),
+      ])
     );
     migrated.collapsedProjectSessionListsById = readProjectSessionListCollapsedState();
     return { state: migrated, storedByteLength: legacyStoredValue?.length ?? 0 };
   } catch {
     return {
-      reason: "parse-error",
+      reason: 'parse-error',
       state: createDefaultSidebarUiCollapseState(),
     };
   }
 }
 
 export function normalizeStoredCollapsedGroupsById(candidate: unknown): Record<string, true> {
-  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return {};
   }
 
   const collapsedGroupsById: Record<string, true> = {};
-  for (const [ groupId, collapsed ] of Object.entries(candidate)) {
+  for (const [groupId, collapsed] of Object.entries(candidate)) {
     if (collapsed === true) {
-      collapsedGroupsById[ groupId ] = true;
+      collapsedGroupsById[groupId] = true;
     }
   }
   return collapsedGroupsById;
@@ -205,29 +188,26 @@ export function summarizeSidebarUiCollapseState(state: SidebarUiCollapseState): 
     collapsedGroupCount: Object.keys(state.collapsedGroupsById).length,
     collapsedProjectCollectionCount: Object.keys(state.collapsedProjectCollectionsByKey).length,
     collapsedProjectSessionListCount: Object.keys(state.collapsedProjectSessionListsById).length,
-    collapsedRemoteMachineSectionCount: Object.keys(state.collapsedRemoteMachineSectionsById)
-      .length,
+    collapsedRemoteMachineSectionCount: Object.keys(state.collapsedRemoteMachineSectionsById).length,
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed,
     isReferenceProjectsCollapsed: state.isReferenceProjectsCollapsed,
   };
 }
 
-export function summarizeSidebarUiCollapseRead(
-  result: SidebarUiCollapseStateReadResult,
-): Record<string, unknown> {
+export function summarizeSidebarUiCollapseRead(result: SidebarUiCollapseStateReadResult): Record<string, unknown> {
   return {
     ...summarizeSidebarUiCollapseState(result.state),
-    readReason: result.reason ?? "stored",
+    readReason: result.reason ?? 'stored',
     storedByteLength: result.storedByteLength ?? 0,
   };
 }
 
 export function writeSidebarUiCollapseState(
   windowScopeId: string,
-  state: SidebarUiCollapseState,
+  state: SidebarUiCollapseState
 ): SidebarUiCollapseStateWriteResult {
-  if (typeof window === "undefined") {
-    return { ok: false, reason: "storage-unavailable" };
+  if (typeof window === 'undefined') {
+    return { ok: false, reason: 'storage-unavailable' };
   }
 
   try {
@@ -239,6 +219,6 @@ export function writeSidebarUiCollapseState(
     return { ok: true, storedByteLength: serialized.length };
   } catch {
     // Ignore storage failures; the in-memory collapse state should still update.
-    return { ok: false, reason: "storage-error" };
+    return { ok: false, reason: 'storage-error' };
   }
 }

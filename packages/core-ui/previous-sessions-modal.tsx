@@ -233,7 +233,12 @@ export function PreviousSessionsModal({
     const tagFilteredSessions = hasTagFilters
       ? openSessions.filter((item) => sessionMatchesSidebarTagFilters(item.session, selectedSessionTagFilters))
       : openSessions;
-    const matchedSessions = new Set(filterSidebarSessionItems(tagFilteredSessions.map((item) => item.session), searchQuery));
+    const matchedSessions = new Set(
+      filterSidebarSessionItems(
+        tagFilteredSessions.map((item) => item.session),
+        searchQuery
+      )
+    );
     return tagFilteredSessions.filter((item) => matchedSessions.has(item.session));
   }, [hasTagFilters, openSessions, searchQuery, selectedSessionTagFilters]);
   const filteredClosedSessions = useMemo(
@@ -271,10 +276,7 @@ export function PreviousSessionsModal({
       ].sort((left, right) => right.timestamp - left.timestamp || left.key.localeCompare(right.key)),
     [filteredOpenSessions, showClosedSessionsOnly, visibleClosedSessions]
   );
-  const groupedSessions = useMemo(
-    () => groupQuickAccessSessionsByDay(visibleSessionItems),
-    [visibleSessionItems]
-  );
+  const groupedSessions = useMemo(() => groupQuickAccessSessionsByDay(visibleSessionItems), [visibleSessionItems]);
 
   const hasClosedSessionsResolved = remotePreviousSessions !== undefined || previousSessions.length > 0;
   const currentPreviousSessionsQueryKey = useMemo(
@@ -408,30 +410,33 @@ export function PreviousSessionsModal({
     [onClose, vscode]
   );
 
-  const selectSessionByKeyboard = useCallback((direction: -1 | 1) => {
-    if (visibleSessionItems.length === 0) {
-      return false;
-    }
+  const selectSessionByKeyboard = useCallback(
+    (direction: -1 | 1) => {
+      if (visibleSessionItems.length === 0) {
+        return false;
+      }
 
-    const currentIndex = selectedSessionKeyRef.current
-      ? visibleSessionItems.findIndex((item) => item.key === selectedSessionKeyRef.current)
-      : -1;
-    const nextIndex =
-      currentIndex < 0
-        ? direction === 1
-          ? 0
-          : visibleSessionItems.length - 1
-        : (currentIndex + direction + visibleSessionItems.length) % visibleSessionItems.length;
-    const nextSessionKey = visibleSessionItems[nextIndex]?.key;
-    if (!nextSessionKey) {
-      return false;
-    }
+      const currentIndex = selectedSessionKeyRef.current
+        ? visibleSessionItems.findIndex((item) => item.key === selectedSessionKeyRef.current)
+        : -1;
+      const nextIndex =
+        currentIndex < 0
+          ? direction === 1
+            ? 0
+            : visibleSessionItems.length - 1
+          : (currentIndex + direction + visibleSessionItems.length) % visibleSessionItems.length;
+      const nextSessionKey = visibleSessionItems[nextIndex]?.key;
+      if (!nextSessionKey) {
+        return false;
+      }
 
-    selectedSessionKeyRef.current = nextSessionKey;
-    setSelectedSessionKey(nextSessionKey);
-    searchInputRef.current?.focus({ preventScroll: true });
-    return true;
-  }, [visibleSessionItems]);
+      selectedSessionKeyRef.current = nextSessionKey;
+      setSelectedSessionKey(nextSessionKey);
+      searchInputRef.current?.focus({ preventScroll: true });
+      return true;
+    },
+    [visibleSessionItems]
+  );
 
   const toggleClosedSessionsOnly = useCallback(() => {
     setShowClosedSessionsOnly((current) => !current);
@@ -564,7 +569,15 @@ export function PreviousSessionsModal({
     return () => {
       document.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [activateQuickAccessSession, isOpen, isTagFilterMenuOpen, onClose, selectSessionByKeyboard, toggleClosedSessionsOnly, visibleSessionItems]);
+  }, [
+    activateQuickAccessSession,
+    isOpen,
+    isTagFilterMenuOpen,
+    onClose,
+    selectSessionByKeyboard,
+    toggleClosedSessionsOnly,
+    visibleSessionItems,
+  ]);
 
   useEffect(() => {
     selectedSessionKeyRef.current = selectedSessionKey;
@@ -879,9 +892,9 @@ export function PreviousSessionsModal({
                       if (!item.visible) {
                         return null;
                       }
-                      if (item.type === "separator") {
+                      if (item.type === 'separator') {
                         return item.enabled ? (
-                          <div className="session-context-menu-divider" key={item.id} role="separator" />
+                          <div className='session-context-menu-divider' key={item.id} role='separator' />
                         ) : null;
                       }
                       const filter = getSidebarSessionTagListItemFilter(item);

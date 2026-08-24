@@ -35,28 +35,28 @@ GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES="${GHOSTEX_REQUIRE_REMOTE_GXSERVE
 GHOSTEX_ON_DEMAND_ASSETS="${GHOSTEX_ON_DEMAND_ASSETS:-0}"
 GHOSTEX_GPUI_USE_PREBUILT_RUST="${GHOSTEX_GPUI_USE_PREBUILT_RUST:-0}"
 case "$(printf '%s' "$GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES" | tr '[:upper:]' '[:lower:]')" in
-	1 | true | yes | on)
-		GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1
-		;;
-	*)
-		GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=0
-		;;
+1 | true | yes | on)
+	GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1
+	;;
+*)
+	GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=0
+	;;
 esac
 case "$(printf '%s' "$GHOSTEX_ON_DEMAND_ASSETS" | tr '[:upper:]' '[:lower:]')" in
-	1 | true | yes | on)
-		GHOSTEX_ON_DEMAND_ASSETS=1
-		;;
-	*)
-		GHOSTEX_ON_DEMAND_ASSETS=0
-		;;
+1 | true | yes | on)
+	GHOSTEX_ON_DEMAND_ASSETS=1
+	;;
+*)
+	GHOSTEX_ON_DEMAND_ASSETS=0
+	;;
 esac
 case "$(printf '%s' "$GHOSTEX_GPUI_USE_PREBUILT_RUST" | tr '[:upper:]' '[:lower:]')" in
-	1 | true | yes | on)
-		GHOSTEX_GPUI_USE_PREBUILT_RUST=1
-		;;
-	*)
-		GHOSTEX_GPUI_USE_PREBUILT_RUST=0
-		;;
+1 | true | yes | on)
+	GHOSTEX_GPUI_USE_PREBUILT_RUST=1
+	;;
+*)
+	GHOSTEX_GPUI_USE_PREBUILT_RUST=0
+	;;
 esac
 
 # Versioning: Sparkle compares CFBundleVersion, so packaged GPUI builds carry
@@ -74,12 +74,12 @@ GHOSTEX_GPUI_SPARKLE_FEED_URL="${GHOSTEX_GPUI_SPARKLE_FEED_URL:-https://raw.gith
 GHOSTEX_GPUI_SPARKLE_PUBLIC_ED_KEY="${GHOSTEX_GPUI_SPARKLE_PUBLIC_ED_KEY:-AGWDPeMqfhmbjt8Pbk+VTC9fDfXAYq+cZoLGCYuGn70=}"
 GHOSTEX_REQUIRE_SPARKLE="${GHOSTEX_REQUIRE_SPARKLE:-0}"
 case "$(printf '%s' "$GHOSTEX_REQUIRE_SPARKLE" | tr '[:upper:]' '[:lower:]')" in
-	1 | true | yes | on)
-		GHOSTEX_REQUIRE_SPARKLE=1
-		;;
-	*)
-		GHOSTEX_REQUIRE_SPARKLE=0
-		;;
+1 | true | yes | on)
+	GHOSTEX_REQUIRE_SPARKLE=1
+	;;
+*)
+	GHOSTEX_REQUIRE_SPARKLE=0
+	;;
 esac
 
 # Signing: unset identity keeps the historical ad-hoc dev signing. Release
@@ -88,12 +88,12 @@ esac
 GHOSTEX_GPUI_SIGN_IDENTITY="${GHOSTEX_GPUI_SIGN_IDENTITY:-}"
 GHOSTEX_GPUI_NOTARIZE="${GHOSTEX_GPUI_NOTARIZE:-0}"
 case "$(printf '%s' "$GHOSTEX_GPUI_NOTARIZE" | tr '[:upper:]' '[:lower:]')" in
-	1 | true | yes | on)
-		GHOSTEX_GPUI_NOTARIZE=1
-		;;
-	*)
-		GHOSTEX_GPUI_NOTARIZE=0
-		;;
+1 | true | yes | on)
+	GHOSTEX_GPUI_NOTARIZE=1
+	;;
+*)
+	GHOSTEX_GPUI_NOTARIZE=0
+	;;
 esac
 GHOSTEX_NOTARY_PROFILE="${GHOSTEX_NOTARY_PROFILE:-notarytool-profile}"
 
@@ -413,11 +413,11 @@ resolve_gpui_lid_sleep_helper_swift_developer_dir() {
 			continue
 		fi
 		case "$checked_developer_dirs" in
-			*"
+		*"
 $candidate
 "*)
-				continue
-				;;
+			continue
+			;;
 		esac
 		checked_developer_dirs="$checked_developer_dirs
 $candidate
@@ -506,7 +506,7 @@ stage_gpui_ghostex_editor_app() {
 
 	echo "Building bundled GhostexEditor helper for $GHOSTEX_MACOS_ARCH" >&2
 	GHOSTEX_EDITOR_ARCH="$GHOSTEX_MACOS_ARCH" \
-	GHOSTEX_EDITOR_SWIFT_DEVELOPER_DIR="${GHOSTEX_GPUI_SWIFT_DEVELOPER_DIR:-${DEVELOPER_DIR:-}}" \
+		GHOSTEX_EDITOR_SWIFT_DEVELOPER_DIR="${GHOSTEX_GPUI_SWIFT_DEVELOPER_DIR:-${DEVELOPER_DIR:-}}" \
 		bash "$GHOSTEX_EDITOR_BUILD_SCRIPT"
 
 	if [[ ! -x "$GHOSTEX_EDITOR_APP_SOURCE/Contents/MacOS/GhostexEditor" ]]; then
@@ -579,18 +579,18 @@ validate_remote_gxserver_linux_package() {
 			return 1
 		fi
 		case "$package_label" in
-			LINUX_X64)
-				if [[ "$file_output" != *"x86-64"* && "$file_output" != *"x86_64"* ]]; then
-					echo "Remote gxserver $package_label package has the wrong Linux ELF architecture at $required_path." >&2
-					return 1
-				fi
-				;;
-			LINUX_ARM64)
-				if [[ "$file_output" != *"aarch64"* && "$file_output" != *"AArch64"* ]]; then
-					echo "Remote gxserver $package_label package has the wrong Linux ELF architecture at $required_path." >&2
-					return 1
-				fi
-				;;
+		LINUX_X64)
+			if [[ "$file_output" != *"x86-64"* && "$file_output" != *"x86_64"* ]]; then
+				echo "Remote gxserver $package_label package has the wrong Linux ELF architecture at $required_path." >&2
+				return 1
+			fi
+			;;
+		LINUX_ARM64)
+			if [[ "$file_output" != *"aarch64"* && "$file_output" != *"AArch64"* ]]; then
+				echo "Remote gxserver $package_label package has the wrong Linux ELF architecture at $required_path." >&2
+				return 1
+			fi
+			;;
 		esac
 	done
 }
@@ -920,7 +920,7 @@ prepare_cef_component_asset() {
 	else
 		stage_framework_directory "$CEF_FRAMEWORK" "$staged_framework"
 		GHOSTEX_GPUI_SIGN_IDENTITY="${GHOSTEX_GPUI_SIGN_IDENTITY:--}" \
-		GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG="${GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG:---timestamp}" \
+			GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG="${GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG:---timestamp}" \
 			"$SCRIPT_DIR/codesign-gpui-app.sh" --cef-framework "$staged_framework"
 		"$REPO_ROOT/tooling/release-gpui/create-deterministic-tar.sh" "$stage_root" "$asset_path"
 	fi
@@ -945,14 +945,14 @@ prepare_cef_component_asset() {
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
-		--run)
-			RUN_APP=1
-			shift
-			;;
-		*)
-			echo "Unknown argument: $1" >&2
-			exit 1
-			;;
+	--run)
+		RUN_APP=1
+		shift
+		;;
+	*)
+		echo "Unknown argument: $1" >&2
+		exit 1
+		;;
 	esac
 done
 
@@ -966,18 +966,18 @@ default_macos_arch() {
 
 GHOSTEX_MACOS_ARCH="${GHOSTEX_MACOS_ARCH:-$(default_macos_arch)}"
 case "$GHOSTEX_MACOS_ARCH" in
-	arm64 | aarch64)
-		GHOSTEX_MACOS_ARCH="arm64"
-		RUST_TARGET_ARCH="aarch64"
-		;;
-	x86_64 | x64 | amd64)
-		GHOSTEX_MACOS_ARCH="x86_64"
-		RUST_TARGET_ARCH="x86_64"
-		;;
-	*)
-		echo "Unsupported GHOSTEX_MACOS_ARCH: $GHOSTEX_MACOS_ARCH" >&2
-		exit 1
-		;;
+arm64 | aarch64)
+	GHOSTEX_MACOS_ARCH="arm64"
+	RUST_TARGET_ARCH="aarch64"
+	;;
+x86_64 | x64 | amd64)
+	GHOSTEX_MACOS_ARCH="x86_64"
+	RUST_TARGET_ARCH="x86_64"
+	;;
+*)
+	echo "Unsupported GHOSTEX_MACOS_ARCH: $GHOSTEX_MACOS_ARCH" >&2
+	exit 1
+	;;
 esac
 
 CEF_CACHE_DIR="$GPUI_DIR/build/cef-cache"

@@ -65,7 +65,9 @@ pub(crate) fn render_agents_remote_connect_status_overlay(
 /// Overlay copy for a remote machine's latest connect wire state. Mirrors the
 /// sidebar's `remoteMachineBusyLabel` / `remoteMachineFailureLabel` vocabulary so
 /// the terminal area and the sidebar row never disagree about one machine.
-pub(crate) fn gpui_remote_connect_overlay_labels(state: Option<&str>) -> (&'static str, Option<&'static str>) {
+pub(crate) fn gpui_remote_connect_overlay_labels(
+    state: Option<&str>,
+) -> (&'static str, Option<&'static str>) {
     match state {
         Some("installing") => ("Installing gxserver…", None),
         Some("downloadingRemoteServerPackage") => ("Downloading server package…", None),
@@ -488,4 +490,3 @@ impl Drop for GpuiRemoteAskpassScript {
         let _ = fs::remove_dir_all(&self.directory);
     }
 }
-

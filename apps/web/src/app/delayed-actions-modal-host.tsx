@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from 'react';
 
-import { DelayedSendModal } from "@/packages/core-ui/delayed-send-modal";
-import type { GxserverRpcEndpointPath } from "@/packages/shared/gxserver-protocol";
-import { rpcForMachine } from "../connections/connection-registry";
-import { parseSidebarSessionId } from "../sidebar-runtime/sidebar-ids";
-import type { OpenDelayedActionsModalDetail } from "./action-events";
+import { DelayedSendModal } from '@/packages/core-ui/delayed-send-modal';
+import type { GxserverRpcEndpointPath } from '@/packages/shared/gxserver-protocol';
+import { rpcForMachine } from '../connections/connection-registry';
+import { parseSidebarSessionId } from '../sidebar-runtime/sidebar-ids';
+import type { OpenDelayedActionsModalDetail } from './action-events';
 
 /*
 CDXC:GxserverDelayedSends 2026-08-19:
@@ -13,21 +13,21 @@ activity watcher, and the eventual Enter, so it no longer accepts
 `scheduleDelayedSend`/`cancelDelayedSend` as renderer commands. Close After
 Done is still renderer-owned and keeps the renderer-command route.
 */
-type DelayedActionRendererCommand = "toggleCloseAfterDone";
+type DelayedActionRendererCommand = 'toggleCloseAfterDone';
 
 export function DelayedActionsModalHost() {
   const [detail, setDetail] = useState<OpenDelayedActionsModalDetail>();
 
   useEffect(() => {
-    const open = (event: WindowEventMap["ghostex-web:openDelayedActionsModal"]) => {
+    const open = (event: WindowEventMap['ghostex-web:openDelayedActionsModal']) => {
       setDetail(event.detail);
     };
     const close = () => setDetail(undefined);
-    window.addEventListener("ghostex-web:openDelayedActionsModal", open);
-    window.addEventListener("ghostex-web:closeAppModal", close);
+    window.addEventListener('ghostex-web:openDelayedActionsModal', open);
+    window.addEventListener('ghostex-web:closeAppModal', close);
     return () => {
-      window.removeEventListener("ghostex-web:openDelayedActionsModal", open);
-      window.removeEventListener("ghostex-web:closeAppModal", close);
+      window.removeEventListener('ghostex-web:openDelayedActionsModal', open);
+      window.removeEventListener('ghostex-web:closeAppModal', close);
     };
   }, []);
 
@@ -40,7 +40,7 @@ export function DelayedActionsModalHost() {
       }
       const target = parseSidebarSessionId(detail.sessionId);
       if (!target) {
-        console.warn("[ghostex-web] Ignoring Session Automations for an invalid session id.");
+        console.warn('[ghostex-web] Ignoring Session Automations for an invalid session id.');
         return;
       }
       void rpcForMachine(target.machineId, path, {
@@ -61,10 +61,10 @@ export function DelayedActionsModalHost() {
       }
       const target = parseSidebarSessionId(detail.sessionId);
       if (!target) {
-        console.warn("[ghostex-web] Ignoring Session Automations for an invalid session id.");
+        console.warn('[ghostex-web] Ignoring Session Automations for an invalid session id.');
         return;
       }
-      void rpcForMachine(target.machineId, "/api/dispatchRendererCommand", {
+      void rpcForMachine(target.machineId, '/api/dispatchRendererCommand', {
         action,
         payload: {
           ...payload,
@@ -87,7 +87,7 @@ export function DelayedActionsModalHost() {
       isOpen={detail !== undefined}
       onCancel={close}
       onCancelTimer={() => {
-        request("cancelDelayedSend", "/api/cancelDelayedSend");
+        request('cancelDelayedSend', '/api/cancelDelayedSend');
         close();
       }}
       onConfirm={(delayMs, sendWhenAgentStops, sendWhenAllProjectSessionsStop) => {
@@ -95,7 +95,7 @@ export function DelayedActionsModalHost() {
         Exactly one trigger reaches the daemon: the modal reports `delayMs` only
         for "After a delay", and the two status triggers are mutually exclusive.
         */
-        request("scheduleDelayedSend", "/api/scheduleDelayedSend", {
+        request('scheduleDelayedSend', '/api/scheduleDelayedSend', {
           ...(delayMs === undefined ? {} : { delayMs }),
           ...(sendWhenAllProjectSessionsStop ? { sendWhenAllProjectSessionsStop: true } : {}),
           ...(sendWhenAgentStops ? { sendWhenAgentStops: true } : {}),
@@ -103,7 +103,7 @@ export function DelayedActionsModalHost() {
         close();
       }}
       onToggleCloseAfterDone={() => {
-        dispatch("toggleCloseAfterDone");
+        dispatch('toggleCloseAfterDone');
         close();
       }}
       sendWhenAllProjectSessionsStopActive={detail?.sendWhenAllProjectSessionsStopActive}

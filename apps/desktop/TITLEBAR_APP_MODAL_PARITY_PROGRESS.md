@@ -131,10 +131,12 @@ Bring the GPUI app titlebar and related modal UI/UX to production parity with th
 - High-level technical approach: reused the gxserver/sidebar-projected command button contract for action definitions; browser actions switch/wake the GPUI Browser and load the saved URL through the existing Browser CEF path; terminal actions create a command-pane tab and attach the saved command through the explicit command-terminal launch-payload source for that exact command slot.
 - Privacy/layout behavior: no persistent logs, OS browser opens, shell-outs from the titlebar, React overlays, hidden hit regions, synthetic routing, fake run-state success, command-text notifications, or durable command/URL persistence were added.
 - Exact files touched: `gpui/src/main.rs` and `gpui/TITLEBAR_APP_MODAL_PARITY_PROGRESS.md`.
+
 <!--
 CDXC:GPUITitlebarActions 2026-06-27-09:10:
 Workspace parity slices 489, 507, and 510 superseded Worker 12's terminal Action limitation by adding Action run id/status-file lifecycle, mounted idle Action reuse/write into the exact command surface, and stale command-pane HUD filtering.
 -->
+
 - Superseded gap: the command-pane Action reuse/run-state/write-into-existing-terminal limitation recorded in Worker 12 is no longer a remaining titlebar gap because later workspace parity slices 489, 507, and 510 delivered the needed Action lifecycle, mounted idle-surface reuse/write, and stale HUD filtering behavior.
 - Runtime validation caveat: end-to-end GPUI titlebar Actions menu/run/HUD behavior still has not been validated in this ledger because this slice did not run build, test, app, or browser verification.
 - Verification: no verification commands were run; no build, test, format, typecheck, app launch/restart, browser automation, or `bun run start` command was run.

@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
-import { Button } from "@/packages/components/ui/button";
-import { cn } from "@/packages/components/utils";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Button } from '@/packages/components/ui/button';
+import { cn } from '@/packages/components/utils';
 import {
   Dialog,
   DialogContent,
@@ -8,15 +8,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/packages/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/packages/components/ui/field";
-import { Input } from "@/packages/components/ui/input";
+} from '@/packages/components/ui/dialog';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
+import { Input } from '@/packages/components/ui/input';
 import {
   normalizeWorktreeRenameName,
   worktreeRenameFolderSlug,
   worktreeRenameNameError,
-} from "../shared/worktree-rename-name";
-import type { SidebarTheme } from "../shared/session-grid-contract";
+} from '../shared/worktree-rename-name';
+import type { SidebarTheme } from '../shared/session-grid-contract';
 
 export type WorktreeRenameModalDraft = {
   /**
@@ -67,20 +67,14 @@ export type WorktreeRenameModalProps = {
  * minted itself: a branch the user named is theirs, a branch Ghostex named is
  * Ghostex's to keep in step with the folder.
  */
-export function WorktreeRenameModal({
-  draft,
-  isOpen,
-  onCancel,
-  onRename,
-  theme = "dark-1",
-}: WorktreeRenameModalProps) {
+export function WorktreeRenameModal({ draft, isOpen, onCancel, onRename, theme = 'dark-1' }: WorktreeRenameModalProps) {
   const initialName = resolveWorktreeRenameInitialName(draft);
   const [name, setName] = useState(initialName);
   const [renameBranch, setRenameBranch] = useState(draft.renameBranchDefault);
   const nameInputId = useId();
   const branchCheckboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const isDarkTheme = getSidebarThemeVariant(theme) === "dark";
+  const isDarkTheme = getSidebarThemeVariant(theme) === 'dark';
 
   useEffect(() => {
     if (!isOpen) {
@@ -108,10 +102,10 @@ export function WorktreeRenameModal({
 
   const trimmedName = normalizeWorktreeRenameName(name);
   const folderSlug = worktreeRenameFolderSlug(name);
-  const nextFolderName = folderSlug ? `${draft.parentFolderName}-${folderSlug}` : "";
+  const nextFolderName = folderSlug ? `${draft.parentFolderName}-${folderSlug}` : '';
   const nextFolderPath = useMemo(
-    () => (nextFolderName ? joinRenameParentDirectory(draft.parentProjectPath, nextFolderName) : ""),
-    [draft.parentProjectPath, nextFolderName],
+    () => (nextFolderName ? joinRenameParentDirectory(draft.parentProjectPath, nextFolderName) : ''),
+    [draft.parentProjectPath, nextFolderName]
   );
 
   const validationError = worktreeRenameNameError(name);
@@ -123,9 +117,7 @@ export function WorktreeRenameModal({
     unchanged,
   });
   const submitError =
-    validationError ??
-    (unchanged && !renameBranch ? "Nothing to rename." : undefined) ??
-    collisionError;
+    validationError ?? (unchanged && !renameBranch ? 'Nothing to rename.' : undefined) ?? collisionError;
   const canSubmit = !submitError && !draft.blockingReason;
   const warnings = draft.warnings ?? [];
 
@@ -148,88 +140,77 @@ export function WorktreeRenameModal({
     >
       <DialogContent
         className={cn(
-          "ghostex-settings-shadcn command-config-modal-shadcn worktree-rename-modal-shadcn flex flex-col gap-0 overflow-hidden p-0 font-sans",
-          isDarkTheme && "dark",
+          'ghostex-settings-shadcn command-config-modal-shadcn worktree-rename-modal-shadcn flex flex-col gap-0 overflow-hidden p-0 font-sans',
+          isDarkTheme && 'dark'
         )}
         data-sidebar-theme={theme}
       >
-        <form className="worktree-rename-modal-form" onSubmit={submitRename}>
-          <DialogHeader className="worktree-rename-modal-header">
-            <DialogTitle className="text-xl">Rename Worktree</DialogTitle>
-            <DialogDescription className="worktree-rename-modal-subject">
+        <form className='worktree-rename-modal-form' onSubmit={submitRename}>
+          <DialogHeader className='worktree-rename-modal-header'>
+            <DialogTitle className='text-xl'>Rename Worktree</DialogTitle>
+            <DialogDescription className='worktree-rename-modal-subject'>
               {draft.worktreeName}
-              {draft.branch ? ` · ${draft.branch}` : ""}
+              {draft.branch ? ` · ${draft.branch}` : ''}
             </DialogDescription>
           </DialogHeader>
-          <div className="worktree-rename-modal-body">
-            <p className="worktree-rename-modal-path">{draft.currentPath}</p>
-            <FieldGroup className="worktree-rename-field-group">
+          <div className='worktree-rename-modal-body'>
+            <p className='worktree-rename-modal-path'>{draft.currentPath}</p>
+            <FieldGroup className='worktree-rename-field-group'>
               <Field>
                 <FieldLabel htmlFor={nameInputId}>Name</FieldLabel>
                 <Input
-                  autoComplete="off"
-                  className="worktree-rename-name-input"
+                  autoComplete='off'
+                  className='worktree-rename-name-input'
                   id={nameInputId}
                   onChange={(event) => setName(event.currentTarget.value)}
                   ref={inputRef}
                   spellCheck={false}
                   value={name}
                 />
-                <FieldDescription className="worktree-rename-preview">
-                  <span className="worktree-rename-preview-line">
-                    Folder: <code>{nextFolderName || "—"}</code>
+                <FieldDescription className='worktree-rename-preview'>
+                  <span className='worktree-rename-preview-line'>
+                    Folder: <code>{nextFolderName || '—'}</code>
                   </span>
                   {renameBranch ? (
-                    <span className="worktree-rename-preview-line">
-                      Branch: <code>{trimmedName || "—"}</code>
+                    <span className='worktree-rename-preview-line'>
+                      Branch: <code>{trimmedName || '—'}</code>
                     </span>
                   ) : null}
                 </FieldDescription>
               </Field>
             </FieldGroup>
-            <label className="worktree-rename-branch-option" htmlFor={branchCheckboxId}>
+            <label className='worktree-rename-branch-option' htmlFor={branchCheckboxId}>
               <input
                 checked={renameBranch}
-                className="worktree-rename-branch-checkbox"
+                className='worktree-rename-branch-checkbox'
                 id={branchCheckboxId}
                 onChange={(event) => setRenameBranch(event.currentTarget.checked)}
-                type="checkbox"
+                type='checkbox'
               />
-              <span className="worktree-rename-branch-option-copy">
-                <span className="worktree-rename-branch-option-label">
-                  Also rename the git branch
-                </span>
-                <span className="worktree-rename-branch-option-help">
+              <span className='worktree-rename-branch-option-copy'>
+                <span className='worktree-rename-branch-option-label'>Also rename the git branch</span>
+                <span className='worktree-rename-branch-option-help'>
                   The branch takes the typed name exactly, without the folder&apos;s slug.
                 </span>
               </span>
             </label>
             {draft.blockingReason ? (
-              <p className="worktree-rename-message worktree-rename-message-blocking">
-                {draft.blockingReason}
-              </p>
+              <p className='worktree-rename-message worktree-rename-message-blocking'>{draft.blockingReason}</p>
             ) : null}
             {submitError && !draft.blockingReason ? (
-              <p className="worktree-rename-message worktree-rename-message-blocking">
-                {submitError}
-              </p>
+              <p className='worktree-rename-message worktree-rename-message-blocking'>{submitError}</p>
             ) : null}
             {warnings.map((warning) => (
-              <p className="worktree-rename-message" key={warning}>
+              <p className='worktree-rename-message' key={warning}>
                 {warning}
               </p>
             ))}
           </div>
-          <DialogFooter className="worktree-rename-modal-actions">
-            <Button
-              className="worktree-rename-modal-button"
-              onClick={onCancel}
-              type="button"
-              variant="outline"
-            >
+          <DialogFooter className='worktree-rename-modal-actions'>
+            <Button className='worktree-rename-modal-button' onClick={onCancel} type='button' variant='outline'>
               Cancel
             </Button>
-            <Button className="worktree-rename-modal-button" disabled={!canSubmit} type="submit">
+            <Button className='worktree-rename-modal-button' disabled={!canSubmit} type='submit'>
               Rename
             </Button>
           </DialogFooter>
@@ -254,9 +235,7 @@ export function WorktreeRenameModal({
  */
 function resolveWorktreeRenameInitialName(draft: WorktreeRenameModalDraft): string {
   const branch = draft.branch?.trim();
-  return branch && worktreeRenameFolderSlug(branch) === draft.currentName
-    ? branch
-    : draft.currentName;
+  return branch && worktreeRenameFolderSlug(branch) === draft.currentName ? branch : draft.currentName;
 }
 
 /*
@@ -282,10 +261,10 @@ function resolveWorktreeRenameCollisionError({
     return undefined;
   }
   if (nextFolderPath === draft.parentProjectPath) {
-    return "That name would collide with the main checkout.";
+    return 'That name would collide with the main checkout.';
   }
   if ((draft.registeredProjectPaths ?? []).includes(nextFolderPath)) {
-    return "Another project is already registered at that folder.";
+    return 'Another project is already registered at that folder.';
   }
   return undefined;
 }
@@ -299,18 +278,18 @@ function resolveWorktreeRenameCollisionError({
  * submit. Take whichever separator the path actually uses and keep it.
  */
 function joinRenameParentDirectory(parentProjectPath: string, folderName: string): string {
-  const trimmed = parentProjectPath.replace(/[/\\]+$/, "");
-  const separatorIndex = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  const separator = separatorIndex >= 0 ? trimmed[separatorIndex] : "/";
-  const familyRoot = separatorIndex > 0 ? trimmed.slice(0, separatorIndex) : "";
+  const trimmed = parentProjectPath.replace(/[/\\]+$/, '');
+  const separatorIndex = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  const separator = separatorIndex >= 0 ? trimmed[separatorIndex] : '/';
+  const familyRoot = separatorIndex > 0 ? trimmed.slice(0, separatorIndex) : '';
   return `${familyRoot}${separator}${folderName}`;
 }
 
-function getSidebarThemeVariant(theme: SidebarTheme): "dark" | "light" {
+function getSidebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
   /**
    * CDXC:SidebarTheme 2026-06-15-01:43:
    * Worktree rename is part of the app-modal family, so Light removes the dark
    * class while Dark 1 and Dark 2 keep dark shadcn mode.
    */
-  return theme.startsWith("light-") || theme === "plain-light" ? "light" : "dark";
+  return theme.startsWith('light-') || theme === 'plain-light' ? 'light' : 'dark';
 }

@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 /*
 CDXC:GPUITerminalTextInput 2026-06-23-20:34:
 Focused terminal text mount targets derive Debug for compile-time diagnostics and tests, so their Agents and command slot IDs must carry Debug too. The derived output contains only stable numeric IDs, not user-owned terminal text or paths.
@@ -16,13 +15,11 @@ pub(crate) struct AgentsTerminalBodyMountSlotId {
     pub(crate) session_id: TerminalSessionId,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CommandTerminalBodyMountSlotId {
     pub(crate) group_id: CommandPaneGroupId,
     pub(crate) session_id: CommandSessionId,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct ProjectEditorCompanionTerminalBodyMountSlotId {
@@ -30,14 +27,12 @@ pub(crate) struct ProjectEditorCompanionTerminalBodyMountSlotId {
     pub(crate) session_id: TerminalSessionId,
 }
 
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum ProjectEditorCompanionTerminalSlot {
     #[default]
     Top,
     Bottom,
 }
-
 
 /*
 CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
@@ -53,14 +48,12 @@ pub(crate) enum ZmxPersistenceFocusedTerminalSlot {
     Companion(ProjectEditorCompanionTerminalBodyMountSlotId),
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct CommandPaneVisibleBodyOwner {
     pub(crate) group_id: CommandPaneGroupId,
     pub(crate) session_id: CommandSessionId,
     pub(crate) is_sleeping: bool,
 }
-
 
 impl CommandPaneVisibleBodyOwner {
     pub(crate) fn mount_slot_id(self) -> Option<CommandTerminalBodyMountSlotId> {
@@ -71,11 +64,9 @@ impl CommandPaneVisibleBodyOwner {
     }
 }
 
-
 pub(crate) trait TerminalSurfaceMountSlotKey: Copy + Eq + std::hash::Hash {
     fn terminal_surface_sort_key(self) -> (u8, u64, u64);
 }
-
 
 impl TerminalSurfaceMountSlotKey for AgentsTerminalBodyMountSlotId {
     fn terminal_surface_sort_key(self) -> (u8, u64, u64) {
@@ -83,13 +74,11 @@ impl TerminalSurfaceMountSlotKey for AgentsTerminalBodyMountSlotId {
     }
 }
 
-
 impl TerminalSurfaceMountSlotKey for CommandTerminalBodyMountSlotId {
     fn terminal_surface_sort_key(self) -> (u8, u64, u64) {
         (1, self.group_id.0, self.session_id.0)
     }
 }
-
 
 impl TerminalSurfaceMountSlotKey for ProjectEditorCompanionTerminalBodyMountSlotId {
     fn terminal_surface_sort_key(self) -> (u8, u64, u64) {

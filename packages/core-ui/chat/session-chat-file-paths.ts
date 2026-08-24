@@ -44,7 +44,7 @@
  * root, which is precisely the wrong move.
  */
 
-import { IconFile, IconFileCode, IconMarkdown } from "@tabler/icons-react";
+import { IconFile, IconFileCode, IconMarkdown } from '@tabler/icons-react';
 
 export interface SessionChatFilePosition {
   line: number;
@@ -86,32 +86,32 @@ const DOTTED_NUMBER = /^\d+(?:\.\d+)+$/;
  * shaped like paths and none of them is one.
  */
 const EXTENSIONLESS_FILE_NAMES = new Set([
-  "AUTHORS",
-  "BUILD",
-  "Brewfile",
-  "CHANGELOG",
-  "CODEOWNERS",
-  "COPYING",
-  "Caddyfile",
-  "Containerfile",
-  "Dockerfile",
-  "Fastfile",
-  "GNUmakefile",
-  "Gemfile",
-  "Jenkinsfile",
-  "Justfile",
-  "LICENCE",
-  "LICENSE",
-  "Makefile",
-  "NOTICE",
-  "Podfile",
-  "Procfile",
-  "README",
-  "Rakefile",
-  "Vagrantfile",
-  "WORKSPACE",
-  "justfile",
-  "makefile",
+  'AUTHORS',
+  'BUILD',
+  'Brewfile',
+  'CHANGELOG',
+  'CODEOWNERS',
+  'COPYING',
+  'Caddyfile',
+  'Containerfile',
+  'Dockerfile',
+  'Fastfile',
+  'GNUmakefile',
+  'Gemfile',
+  'Jenkinsfile',
+  'Justfile',
+  'LICENCE',
+  'LICENSE',
+  'Makefile',
+  'NOTICE',
+  'Podfile',
+  'Procfile',
+  'README',
+  'Rakefile',
+  'Vagrantfile',
+  'WORKSPACE',
+  'justfile',
+  'makefile',
 ]);
 
 /**
@@ -121,27 +121,27 @@ const EXTENSIONLESS_FILE_NAMES = new Set([
  * paths than the fake hostnames it would save.
  */
 const HOSTNAME_TLDS = new Set([
-  "ai",
-  "app",
-  "biz",
-  "cloud",
-  "co",
-  "com",
-  "dev",
-  "edu",
-  "gov",
-  "info",
-  "io",
-  "net",
-  "org",
-  "xyz",
+  'ai',
+  'app',
+  'biz',
+  'cloud',
+  'co',
+  'com',
+  'dev',
+  'edu',
+  'gov',
+  'info',
+  'io',
+  'net',
+  'org',
+  'xyz',
 ]);
 
 /** `example.com`, `localhost`, `127.0.0.1`, `1.2.3` — a host or a version. */
 function looksLikeHostOrVersion(segment: string): boolean {
-  if (segment === "localhost") return true;
+  if (segment === 'localhost') return true;
   if (DOTTED_NUMBER.test(segment)) return true;
-  const labels = segment.toLowerCase().split(".");
+  const labels = segment.toLowerCase().split('.');
   const lastLabel = labels[labels.length - 1];
   return labels.length > 1 && lastLabel !== undefined && HOSTNAME_TLDS.has(lastLabel);
 }
@@ -150,9 +150,7 @@ function looksLikeHostOrVersion(segment: string): boolean {
  * Decides whether one inline-code span is a file reference. Returns null for
  * everything the module doc refuses.
  */
-export function resolveSessionChatInlineCodeFilePath(
-  text: string,
-): SessionChatFilePathRef | null {
+export function resolveSessionChatInlineCodeFilePath(text: string): SessionChatFilePathRef | null {
   return resolveFilePathReference(text, { requirePathEvidence: true });
 }
 
@@ -169,54 +167,42 @@ export function resolveSessionChatInlineCodeFilePath(
  * a file glyph beside it. Everything else still applies, so `v1.2.3`,
  * `example.com`, `showLineNumbers`, and `{1,3-5}` are refused here too.
  */
-export function resolveSessionChatFenceTitleFilePath(
-  title: string,
-): SessionChatFilePathRef | null {
+export function resolveSessionChatFenceTitleFilePath(title: string): SessionChatFilePathRef | null {
   return resolveFilePathReference(title, { requirePathEvidence: false });
 }
 
 function resolveFilePathReference(
   text: string,
-  { requirePathEvidence }: { requirePathEvidence: boolean },
+  { requirePathEvidence }: { requirePathEvidence: boolean }
 ): SessionChatFilePathRef | null {
   const trimmed = text.trim();
   if (trimmed.length === 0 || trimmed.length > MAX_CANDIDATE_LENGTH) return null;
   if (DISQUALIFYING_CHARACTER.test(trimmed)) return null;
 
   const positionMatch = POSITION_SUFFIX.exec(trimmed);
-  const path = positionMatch
-    ? trimmed.slice(0, trimmed.length - positionMatch[0].length)
-    : trimmed;
+  const path = positionMatch ? trimmed.slice(0, trimmed.length - positionMatch[0].length) : trimmed;
   if (path.length === 0) return null;
 
-  const isWindowsPath =
-    WINDOWS_DRIVE_PREFIX.test(path) || WINDOWS_UNC_PREFIX.test(path);
+  const isWindowsPath = WINDOWS_DRIVE_PREFIX.test(path) || WINDOWS_UNC_PREFIX.test(path);
   // Backslashes only separate directories on a path that announced itself as a
   // Windows path; anywhere else a backslash is an escape, and the segment check
   // below rejects it.
-  const normalized = isWindowsPath ? path.replaceAll("\\", "/") : path;
+  const normalized = isWindowsPath ? path.replaceAll('\\', '/') : path;
   // The drive letter and the UNC leader carry a colon and a doubled slash that
   // no segment may contain, so they are peeled off before the segment check.
-  const body = isWindowsPath
-    ? normalized.replace(/^(?:[A-Za-z]:|\/\/)/, "")
-    : normalized;
+  const body = isWindowsPath ? normalized.replace(/^(?:[A-Za-z]:|\/\/)/, '') : normalized;
 
-  const segments = body.split("/").filter((segment) => segment.length > 0);
+  const segments = body.split('/').filter((segment) => segment.length > 0);
   const basename = segments[segments.length - 1];
   if (basename === undefined) return null;
   if (segments.some((segment) => !PATH_SEGMENT.test(segment))) return null;
 
-  const announcesItselfAsAPath =
-    isWindowsPath || normalized.startsWith("/") || RELATIVE_PATH_PREFIX.test(normalized);
+  const announcesItselfAsAPath = isWindowsPath || normalized.startsWith('/') || RELATIVE_PATH_PREFIX.test(normalized);
   const hasSeparator = announcesItselfAsAPath || segments.length > 1;
   if (requirePathEvidence && !hasSeparator && positionMatch === null) return null;
 
   const firstSegment = segments[0];
-  if (
-    !announcesItselfAsAPath &&
-    firstSegment !== undefined &&
-    looksLikeHostOrVersion(firstSegment)
-  ) {
+  if (!announcesItselfAsAPath && firstSegment !== undefined && looksLikeHostOrVersion(firstSegment)) {
     return null;
   }
 
@@ -262,13 +248,12 @@ export function sessionChatFilePathChipLabel(ref: SessionChatFilePathRef): {
 } {
   // Split the path as written rather than by its normalized segments, so a
   // Windows path keeps its backslashes both on screen and in the split.
-  const separatorIndex = Math.max(ref.path.lastIndexOf("/"), ref.path.lastIndexOf("\\"));
+  const separatorIndex = Math.max(ref.path.lastIndexOf('/'), ref.path.lastIndexOf('\\'));
   const { column, line } = ref.position ?? {};
   return {
-    detail:
-      line === undefined ? "" : `L${line}${column === undefined ? "" : `:C${column}`}`,
+    detail: line === undefined ? '' : `L${line}${column === undefined ? '' : `:C${column}`}`,
     name: separatorIndex < 0 ? ref.path : ref.path.slice(separatorIndex),
-    parent: separatorIndex < 0 ? "" : ref.path.slice(0, separatorIndex),
+    parent: separatorIndex < 0 ? '' : ref.path.slice(0, separatorIndex),
   };
 }
 
@@ -276,7 +261,7 @@ export function sessionChatFilePathChipLabel(ref: SessionChatFilePathRef): {
 export function sessionChatFilePathTitle(ref: SessionChatFilePathRef): string {
   if (!ref.position) return ref.path;
   const { column, line } = ref.position;
-  return `${ref.path}:${line}${column === undefined ? "" : `:${column}`}`;
+  return `${ref.path}:${line}${column === undefined ? '' : `:${column}`}`;
 }
 
 /*
@@ -286,60 +271,60 @@ export function sessionChatFilePathTitle(ref: SessionChatFilePathRef): string {
  * already the house set. Three glyphs is the whole vocabulary: prose, source,
  * and everything else.
  */
-const MARKDOWN_EXTENSIONS = new Set(["markdown", "md", "mdown", "mdx", "mkdn", "rst"]);
+const MARKDOWN_EXTENSIONS = new Set(['markdown', 'md', 'mdown', 'mdx', 'mkdn', 'rst']);
 const CODE_EXTENSIONS = new Set([
-  "bash",
-  "c",
-  "cc",
-  "cjs",
-  "cpp",
-  "cs",
-  "css",
-  "dart",
-  "ex",
-  "exs",
-  "fish",
-  "go",
-  "gradle",
-  "h",
-  "hpp",
-  "hs",
-  "html",
-  "java",
-  "js",
-  "json",
-  "jsonc",
-  "jsx",
-  "kt",
-  "kts",
-  "lua",
-  "m",
-  "mjs",
-  "mm",
-  "php",
-  "pl",
-  "py",
-  "rb",
-  "rs",
-  "scala",
-  "scss",
-  "sh",
-  "sql",
-  "svelte",
-  "swift",
-  "toml",
-  "ts",
-  "tsx",
-  "vue",
-  "xml",
-  "yaml",
-  "yml",
-  "zig",
-  "zsh",
+  'bash',
+  'c',
+  'cc',
+  'cjs',
+  'cpp',
+  'cs',
+  'css',
+  'dart',
+  'ex',
+  'exs',
+  'fish',
+  'go',
+  'gradle',
+  'h',
+  'hpp',
+  'hs',
+  'html',
+  'java',
+  'js',
+  'json',
+  'jsonc',
+  'jsx',
+  'kt',
+  'kts',
+  'lua',
+  'm',
+  'mjs',
+  'mm',
+  'php',
+  'pl',
+  'py',
+  'rb',
+  'rs',
+  'scala',
+  'scss',
+  'sh',
+  'sql',
+  'svelte',
+  'swift',
+  'toml',
+  'ts',
+  'tsx',
+  'vue',
+  'xml',
+  'yaml',
+  'yml',
+  'zig',
+  'zsh',
 ]);
 
 export function sessionChatFilePathIcon(basename: string): typeof IconFile {
-  const extension = basename.slice(basename.lastIndexOf(".") + 1).toLowerCase();
+  const extension = basename.slice(basename.lastIndexOf('.') + 1).toLowerCase();
   if (MARKDOWN_EXTENSIONS.has(extension)) return IconMarkdown;
   if (CODE_EXTENSIONS.has(extension) || EXTENSIONLESS_FILE_NAMES.has(basename)) {
     return IconFileCode;
@@ -364,14 +349,13 @@ interface MarkdownAstNode {
 export function remarkSessionChatInlineCode() {
   return (tree: MarkdownAstNode) => {
     const visit = (node: MarkdownAstNode, insideLink: boolean) => {
-      if (node.type === "inlineCode" && !insideLink) {
+      if (node.type === 'inlineCode' && !insideLink) {
         node.data = {
           ...node.data,
-          hProperties: { ...node.data?.hProperties, dataInlineCode: "" },
+          hProperties: { ...node.data?.hProperties, dataInlineCode: '' },
         };
       }
-      const childInsideLink =
-        insideLink || node.type === "link" || node.type === "linkReference";
+      const childInsideLink = insideLink || node.type === 'link' || node.type === 'linkReference';
       node.children?.forEach((child) => visit(child, childInsideLink));
     };
     visit(tree, false);

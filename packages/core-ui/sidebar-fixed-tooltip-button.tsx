@@ -8,24 +8,21 @@ import {
   type ButtonHTMLAttributes,
   type CSSProperties,
   type Ref,
-} from "react";
-import { createPortal } from "react-dom";
-import {
-  TOOLTIP_DELAY_MS,
-  TOOLTIP_MOTION_CLASS_NAME,
-} from "../components/ui/tooltip-config";
-import { cn } from "@/packages/components/utils";
+} from 'react';
+import { createPortal } from 'react-dom';
+import { TOOLTIP_DELAY_MS, TOOLTIP_MOTION_CLASS_NAME } from '../components/ui/tooltip-config';
+import { cn } from '@/packages/components/utils';
 import {
   areSidebarTooltipsSuppressed,
   SIDEBAR_TOOLTIP_DISMISS_EVENT,
   SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
-} from "./app-tooltip";
+} from './app-tooltip';
 
 const SIDEBAR_FIXED_TOOLTIP_VIEWPORT_MARGIN_PX = 8;
 const SIDEBAR_FIXED_TOOLTIP_TRIGGER_OFFSET_PX = 8;
 
-type SidebarFixedTooltipSide = "bottom" | "left" | "right" | "top";
-type SidebarFixedTooltipAlign = "center" | "end" | "start";
+type SidebarFixedTooltipSide = 'bottom' | 'left' | 'right' | 'top';
+type SidebarFixedTooltipAlign = 'center' | 'end' | 'start';
 
 type SidebarFixedTooltipRect = {
   bottom: number;
@@ -65,13 +62,13 @@ let activeSidebarFixedTooltipClose: (() => void) | undefined;
 
 function assignSidebarFixedTooltipButtonRef(
   ref: Ref<HTMLButtonElement> | undefined,
-  value: HTMLButtonElement | null,
+  value: HTMLButtonElement | null
 ): void {
   if (!ref) {
     return;
   }
 
-  if (typeof ref === "function") {
+  if (typeof ref === 'function') {
     ref(value);
     return;
   }
@@ -110,24 +107,20 @@ function getAvailableSpace({
 
 function getCandidateSides(preferredSide: SidebarFixedTooltipSide): SidebarFixedTooltipSide[] {
   switch (preferredSide) {
-    case "left":
-      return ["left", "right", "bottom", "top"];
-    case "right":
-      return ["right", "left", "bottom", "top"];
-    case "top":
-      return ["top", "bottom", "right", "left"];
-    case "bottom":
+    case 'left':
+      return ['left', 'right', 'bottom', 'top'];
+    case 'right':
+      return ['right', 'left', 'bottom', 'top'];
+    case 'top':
+      return ['top', 'bottom', 'right', 'left'];
+    case 'bottom':
     default:
-      return ["bottom", "top", "right", "left"];
+      return ['bottom', 'top', 'right', 'left'];
   }
 }
 
-function getRequiredSpace(
-  side: SidebarFixedTooltipSide,
-  tooltipHeight: number,
-  tooltipWidth: number,
-): number {
-  return side === "left" || side === "right" ? tooltipWidth : tooltipHeight;
+function getRequiredSpace(side: SidebarFixedTooltipSide, tooltipHeight: number, tooltipWidth: number): number {
+  return side === 'left' || side === 'right' ? tooltipWidth : tooltipHeight;
 }
 
 function getResolvedTooltipSide({
@@ -143,22 +136,20 @@ function getResolvedTooltipSide({
 }): SidebarFixedTooltipSide {
   const candidates = getCandidateSides(preferredSide);
   const fittingSide = candidates.find(
-    (side) => getRequiredSpace(side, tooltipHeight, tooltipWidth) <= availableSpace[side],
+    (side) => getRequiredSpace(side, tooltipHeight, tooltipWidth) <= availableSpace[side]
   );
   if (fittingSide) {
     return fittingSide;
   }
 
-  return candidates.reduce((bestSide, side) =>
-    availableSpace[side] > availableSpace[bestSide] ? side : bestSide,
-  );
+  return candidates.reduce((bestSide, side) => (availableSpace[side] > availableSpace[bestSide] ? side : bestSide));
 }
 
 export function getSidebarFixedTooltipPosition({
-  align = "center",
+  align = 'center',
   margin = SIDEBAR_FIXED_TOOLTIP_VIEWPORT_MARGIN_PX,
   offset = SIDEBAR_FIXED_TOOLTIP_TRIGGER_OFFSET_PX,
-  preferredSide = "bottom",
+  preferredSide = 'bottom',
   tooltipRect,
   triggerRect,
   viewportHeight,
@@ -183,11 +174,8 @@ export function getSidebarFixedTooltipPosition({
     tooltipWidth,
   });
 
-  if (side === "left" || side === "right") {
-    const preferredLeft =
-      side === "left"
-        ? triggerRect.left - offset - tooltipWidth
-        : triggerRect.right + offset;
+  if (side === 'left' || side === 'right') {
+    const preferredLeft = side === 'left' ? triggerRect.left - offset - tooltipWidth : triggerRect.right + offset;
     return {
       left: clamp(preferredLeft, margin, viewportWidth - margin - tooltipWidth),
       maxWidth,
@@ -197,9 +185,9 @@ export function getSidebarFixedTooltipPosition({
   }
 
   const preferredLeft =
-    align === "start"
+    align === 'start'
       ? triggerRect.left
-      : align === "end"
+      : align === 'end'
         ? triggerRect.right - tooltipWidth
         : triggerCenterX - tooltipWidth / 2;
 
@@ -208,7 +196,7 @@ export function getSidebarFixedTooltipPosition({
     maxWidth,
     side,
     top:
-      side === "top"
+      side === 'top'
         ? clamp(triggerRect.top - offset - tooltipHeight, margin, viewportHeight - margin - tooltipHeight)
         : clamp(triggerRect.bottom + offset, margin, viewportHeight - margin - tooltipHeight),
   };
@@ -219,235 +207,220 @@ export function getSidebarFixedTooltipPosition({
  * Sidebar action tooltips must render through a fixed document-body popup instead of CSS pseudo-elements so scroll masks, the Recent Projects footer boundary, and section overflow cannot clip the label.
  * Resolve the popup side from measured viewport space so the last remote-machine or project header action can flip above its trigger while normal actions still prefer the requested side.
  */
-export const SidebarFixedTooltipButton = forwardRef<
-  HTMLButtonElement,
-  SidebarFixedTooltipButtonProps
->(function SidebarFixedTooltipButton(
-  {
-    children,
-    disabled,
-    onBlur,
-    onFocus,
-    onMouseEnter,
-    onMouseLeave,
-    tooltip,
-    tooltipAlign = "center",
-    tooltipSide = "bottom",
-    ...buttonProps
-  },
-  forwardedRef,
-) {
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const disabledRef = useRef(disabled);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const tooltipTextRef = useRef(tooltip);
-  const tooltipId = useId();
-  const instanceIdRef = useRef(Symbol("sidebarFixedTooltip"));
-  const openTimeoutIdRef = useRef<number | undefined>(undefined);
-  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState<SidebarFixedTooltipPosition>();
-  disabledRef.current = disabled;
-  tooltipTextRef.current = tooltip;
+export const SidebarFixedTooltipButton = forwardRef<HTMLButtonElement, SidebarFixedTooltipButtonProps>(
+  function SidebarFixedTooltipButton(
+    {
+      children,
+      disabled,
+      onBlur,
+      onFocus,
+      onMouseEnter,
+      onMouseLeave,
+      tooltip,
+      tooltipAlign = 'center',
+      tooltipSide = 'bottom',
+      ...buttonProps
+    },
+    forwardedRef
+  ) {
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const disabledRef = useRef(disabled);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+    const tooltipTextRef = useRef(tooltip);
+    const tooltipId = useId();
+    const instanceIdRef = useRef(Symbol('sidebarFixedTooltip'));
+    const openTimeoutIdRef = useRef<number | undefined>(undefined);
+    const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+    const [tooltipPosition, setTooltipPosition] = useState<SidebarFixedTooltipPosition>();
+    disabledRef.current = disabled;
+    tooltipTextRef.current = tooltip;
 
-  const setButtonRef = (button: HTMLButtonElement | null) => {
-    buttonRef.current = button;
-    assignSidebarFixedTooltipButtonRef(forwardedRef, button);
-  };
+    const setButtonRef = (button: HTMLButtonElement | null) => {
+      buttonRef.current = button;
+      assignSidebarFixedTooltipButtonRef(forwardedRef, button);
+    };
 
-  const clearOpenTimeout = () => {
-    if (openTimeoutIdRef.current === undefined) {
-      return;
-    }
-    window.clearTimeout(openTimeoutIdRef.current);
-    openTimeoutIdRef.current = undefined;
-  };
-
-  const closeTooltip = () => {
-    clearOpenTimeout();
-    if (activeSidebarFixedTooltipId === instanceIdRef.current) {
-      activeSidebarFixedTooltipId = undefined;
-      activeSidebarFixedTooltipClose = undefined;
-    }
-    setIsTooltipOpen(false);
-    setTooltipPosition(undefined);
-  };
-
-  const openTooltip = ({ delayed }: { delayed: boolean }) => {
-    clearOpenTimeout();
-    if (disabled || !tooltip || areSidebarTooltipsSuppressed()) {
-      closeTooltip();
-      return;
-    }
-
-    const commitOpen = () => {
-      if (
-        disabledRef.current ||
-        !tooltipTextRef.current ||
-        areSidebarTooltipsSuppressed()
-      ) {
-        closeTooltip();
+    const clearOpenTimeout = () => {
+      if (openTimeoutIdRef.current === undefined) {
         return;
       }
-      if (activeSidebarFixedTooltipId !== instanceIdRef.current) {
-        activeSidebarFixedTooltipClose?.();
-      }
-      activeSidebarFixedTooltipId = instanceIdRef.current;
-      activeSidebarFixedTooltipClose = closeTooltip;
-      setIsTooltipOpen(true);
+      window.clearTimeout(openTimeoutIdRef.current);
       openTimeoutIdRef.current = undefined;
     };
 
-    if (delayed) {
-      openTimeoutIdRef.current = window.setTimeout(commitOpen, TOOLTIP_DELAY_MS);
-      return;
-    }
-    commitOpen();
-  };
-
-  useEffect(() => {
-    const handleSidebarTooltipDismiss = () => closeTooltip();
-    const handleSidebarTooltipSuppressionChanged = () => {
-      if (areSidebarTooltipsSuppressed()) {
-        closeTooltip();
-      }
-    };
-
-    window.addEventListener(SIDEBAR_TOOLTIP_DISMISS_EVENT, handleSidebarTooltipDismiss);
-    window.addEventListener(
-      SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
-      handleSidebarTooltipSuppressionChanged,
-    );
-
-    return () => {
-      window.removeEventListener(SIDEBAR_TOOLTIP_DISMISS_EVENT, handleSidebarTooltipDismiss);
-      window.removeEventListener(
-        SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
-        handleSidebarTooltipSuppressionChanged,
-      );
+    const closeTooltip = () => {
+      clearOpenTimeout();
       if (activeSidebarFixedTooltipId === instanceIdRef.current) {
         activeSidebarFixedTooltipId = undefined;
         activeSidebarFixedTooltipClose = undefined;
       }
-      clearOpenTimeout();
+      setIsTooltipOpen(false);
+      setTooltipPosition(undefined);
     };
-  }, []);
 
-  useEffect(() => {
-    clearOpenTimeout();
-    if (disabled || !tooltip) {
-      closeTooltip();
-    }
-  }, [disabled, tooltip]);
-
-  useLayoutEffect(() => {
-    if (!isTooltipOpen) {
-      return undefined;
-    }
-
-    const updateTooltipPosition = () => {
-      const button = buttonRef.current;
-      const tooltipElement = tooltipRef.current;
-      if (!button || !tooltipElement) {
+    const openTooltip = ({ delayed }: { delayed: boolean }) => {
+      clearOpenTimeout();
+      if (disabled || !tooltip || areSidebarTooltipsSuppressed()) {
+        closeTooltip();
         return;
       }
 
-      const nextPosition = getSidebarFixedTooltipPosition({
-        align: tooltipAlign,
-        preferredSide: tooltipSide,
-        tooltipRect: tooltipElement.getBoundingClientRect(),
-        triggerRect: button.getBoundingClientRect(),
-        viewportHeight: window.innerHeight,
-        viewportWidth: window.innerWidth,
-      });
+      const commitOpen = () => {
+        if (disabledRef.current || !tooltipTextRef.current || areSidebarTooltipsSuppressed()) {
+          closeTooltip();
+          return;
+        }
+        if (activeSidebarFixedTooltipId !== instanceIdRef.current) {
+          activeSidebarFixedTooltipClose?.();
+        }
+        activeSidebarFixedTooltipId = instanceIdRef.current;
+        activeSidebarFixedTooltipClose = closeTooltip;
+        setIsTooltipOpen(true);
+        openTimeoutIdRef.current = undefined;
+      };
 
-      setTooltipPosition((previousPosition) => {
-        if (
-          previousPosition?.left === nextPosition.left &&
-          previousPosition.maxWidth === nextPosition.maxWidth &&
-          previousPosition.side === nextPosition.side &&
-          previousPosition.top === nextPosition.top
-        ) {
-          return previousPosition;
+      if (delayed) {
+        openTimeoutIdRef.current = window.setTimeout(commitOpen, TOOLTIP_DELAY_MS);
+        return;
+      }
+      commitOpen();
+    };
+
+    useEffect(() => {
+      const handleSidebarTooltipDismiss = () => closeTooltip();
+      const handleSidebarTooltipSuppressionChanged = () => {
+        if (areSidebarTooltipsSuppressed()) {
+          closeTooltip();
+        }
+      };
+
+      window.addEventListener(SIDEBAR_TOOLTIP_DISMISS_EVENT, handleSidebarTooltipDismiss);
+      window.addEventListener(SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT, handleSidebarTooltipSuppressionChanged);
+
+      return () => {
+        window.removeEventListener(SIDEBAR_TOOLTIP_DISMISS_EVENT, handleSidebarTooltipDismiss);
+        window.removeEventListener(SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT, handleSidebarTooltipSuppressionChanged);
+        if (activeSidebarFixedTooltipId === instanceIdRef.current) {
+          activeSidebarFixedTooltipId = undefined;
+          activeSidebarFixedTooltipClose = undefined;
+        }
+        clearOpenTimeout();
+      };
+    }, []);
+
+    useEffect(() => {
+      clearOpenTimeout();
+      if (disabled || !tooltip) {
+        closeTooltip();
+      }
+    }, [disabled, tooltip]);
+
+    useLayoutEffect(() => {
+      if (!isTooltipOpen) {
+        return undefined;
+      }
+
+      const updateTooltipPosition = () => {
+        const button = buttonRef.current;
+        const tooltipElement = tooltipRef.current;
+        if (!button || !tooltipElement) {
+          return;
         }
 
-        return nextPosition;
-      });
-    };
+        const nextPosition = getSidebarFixedTooltipPosition({
+          align: tooltipAlign,
+          preferredSide: tooltipSide,
+          tooltipRect: tooltipElement.getBoundingClientRect(),
+          triggerRect: button.getBoundingClientRect(),
+          viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth,
+        });
 
-    updateTooltipPosition();
-    window.addEventListener("resize", updateTooltipPosition);
-    window.addEventListener("scroll", updateTooltipPosition, true);
+        setTooltipPosition((previousPosition) => {
+          if (
+            previousPosition?.left === nextPosition.left &&
+            previousPosition.maxWidth === nextPosition.maxWidth &&
+            previousPosition.side === nextPosition.side &&
+            previousPosition.top === nextPosition.top
+          ) {
+            return previousPosition;
+          }
 
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(updateTooltipPosition);
-    if (buttonRef.current) {
-      resizeObserver?.observe(buttonRef.current);
-    }
-    if (tooltipRef.current) {
-      resizeObserver?.observe(tooltipRef.current);
-    }
+          return nextPosition;
+        });
+      };
 
-    return () => {
-      window.removeEventListener("resize", updateTooltipPosition);
-      window.removeEventListener("scroll", updateTooltipPosition, true);
-      resizeObserver?.disconnect();
-    };
-  }, [isTooltipOpen, tooltip, tooltipAlign, tooltipSide]);
+      updateTooltipPosition();
+      window.addEventListener('resize', updateTooltipPosition);
+      window.addEventListener('scroll', updateTooltipPosition, true);
 
-  return (
-    <>
-      <button
-        {...buttonProps}
-        aria-describedby={isTooltipOpen ? tooltipId : buttonProps["aria-describedby"]}
-        disabled={disabled}
-        onBlur={(event) => {
-          onBlur?.(event);
-          closeTooltip();
-        }}
-        onFocus={(event) => {
-          onFocus?.(event);
-          openTooltip({ delayed: false });
-        }}
-        onMouseEnter={(event) => {
-          onMouseEnter?.(event);
-          openTooltip({ delayed: true });
-        }}
-        onMouseLeave={(event) => {
-          onMouseLeave?.(event);
-          closeTooltip();
-        }}
-        ref={setButtonRef}
-      >
-        {children}
-      </button>
-      {isTooltipOpen && tooltip && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className={cn("sidebar-fixed-tooltip-popup", TOOLTIP_MOTION_CLASS_NAME)}
-              data-side={tooltipPosition?.side ?? tooltipSide}
-              data-state="delayed-open"
-              id={tooltipId}
-              ref={tooltipRef}
-              role="tooltip"
-              style={
-                {
-                  "--sidebar-fixed-tooltip-left": tooltipPosition
-                    ? `${tooltipPosition.left}px`
-                    : "0px",
-                  "--sidebar-fixed-tooltip-max-width": tooltipPosition
-                    ? `${tooltipPosition.maxWidth}px`
-                    : `calc(100vw - ${SIDEBAR_FIXED_TOOLTIP_VIEWPORT_MARGIN_PX * 2}px)`,
-                  "--sidebar-fixed-tooltip-top": tooltipPosition
-                    ? `${tooltipPosition.top}px`
-                    : "0px",
-                } as CSSProperties
-              }
-            >
-              {tooltip}
-            </div>,
-            document.body,
-          )
-        : null}
-    </>
-  );
-});
+      const resizeObserver =
+        typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(updateTooltipPosition);
+      if (buttonRef.current) {
+        resizeObserver?.observe(buttonRef.current);
+      }
+      if (tooltipRef.current) {
+        resizeObserver?.observe(tooltipRef.current);
+      }
+
+      return () => {
+        window.removeEventListener('resize', updateTooltipPosition);
+        window.removeEventListener('scroll', updateTooltipPosition, true);
+        resizeObserver?.disconnect();
+      };
+    }, [isTooltipOpen, tooltip, tooltipAlign, tooltipSide]);
+
+    return (
+      <>
+        <button
+          {...buttonProps}
+          aria-describedby={isTooltipOpen ? tooltipId : buttonProps['aria-describedby']}
+          disabled={disabled}
+          onBlur={(event) => {
+            onBlur?.(event);
+            closeTooltip();
+          }}
+          onFocus={(event) => {
+            onFocus?.(event);
+            openTooltip({ delayed: false });
+          }}
+          onMouseEnter={(event) => {
+            onMouseEnter?.(event);
+            openTooltip({ delayed: true });
+          }}
+          onMouseLeave={(event) => {
+            onMouseLeave?.(event);
+            closeTooltip();
+          }}
+          ref={setButtonRef}
+        >
+          {children}
+        </button>
+        {isTooltipOpen && tooltip && typeof document !== 'undefined'
+          ? createPortal(
+              <div
+                className={cn('sidebar-fixed-tooltip-popup', TOOLTIP_MOTION_CLASS_NAME)}
+                data-side={tooltipPosition?.side ?? tooltipSide}
+                data-state='delayed-open'
+                id={tooltipId}
+                ref={tooltipRef}
+                role='tooltip'
+                style={
+                  {
+                    '--sidebar-fixed-tooltip-left': tooltipPosition ? `${tooltipPosition.left}px` : '0px',
+                    '--sidebar-fixed-tooltip-max-width': tooltipPosition
+                      ? `${tooltipPosition.maxWidth}px`
+                      : `calc(100vw - ${SIDEBAR_FIXED_TOOLTIP_VIEWPORT_MARGIN_PX * 2}px)`,
+                    '--sidebar-fixed-tooltip-top': tooltipPosition ? `${tooltipPosition.top}px` : '0px',
+                  } as CSSProperties
+                }
+              >
+                {tooltip}
+              </div>,
+              document.body
+            )
+          : null}
+      </>
+    );
+  }
+);

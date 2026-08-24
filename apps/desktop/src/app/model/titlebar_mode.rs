@@ -7,7 +7,6 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum TitlebarMode {
     Agents,
@@ -17,7 +16,6 @@ pub(crate) enum TitlebarMode {
     Automate,
     Manage,
 }
-
 
 impl TitlebarMode {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -107,7 +105,6 @@ impl TitlebarMode {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TitlebarModeSwitcherItem {
     pub(crate) mode: TitlebarMode,
@@ -115,14 +112,12 @@ pub(crate) struct TitlebarModeSwitcherItem {
     pub(crate) disabled_reason: Option<&'static str>,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiTitlebarExitFocusControlSignature {
     pub(crate) label: &'static str,
     pub(crate) styled_as_active_mode_tab: bool,
     pub(crate) clears_agents_focus_mode: bool,
 }
-
 
 pub(crate) fn gpui_titlebar_exit_focus_control_signature(
     agents_focus_mode_active: bool,

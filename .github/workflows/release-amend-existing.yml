@@ -141,7 +141,7 @@ jobs:
       - name: Validate immutable release inputs
         env:
           GH_TOKEN: ${{ github.token }}
-          GHOSTEX_RELEASE_ALLOW_EXISTING_TAG: "1"
+          GHOSTEX_RELEASE_ALLOW_EXISTING_TAG: '1'
           GHOSTEX_RELEASE_MACOS: ${{ steps.scope.outputs.GHOSTEX_RELEASE_MACOS }}
           GHOSTEX_RELEASE_LINUX_DEB: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_DEB }}
           GHOSTEX_RELEASE_LINUX_RPM: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_RPM }}
@@ -155,7 +155,7 @@ jobs:
           GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64 }}
           GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64 }}
           GHOSTEX_RELEASE_UPDATE_SPARKLE: ${{ steps.scope.outputs.update_sparkle }}
-          GHOSTEX_RELEASE_PRERELEASE: "false"
+          GHOSTEX_RELEASE_PRERELEASE: 'false'
           APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
           APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
@@ -204,7 +204,7 @@ jobs:
           GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64 }}
           GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64 }}
           GHOSTEX_RELEASE_UPDATE_SPARKLE: ${{ steps.scope.outputs.update_sparkle }}
-          GHOSTEX_RELEASE_PRERELEASE: "false"
+          GHOSTEX_RELEASE_PRERELEASE: 'false'
           RELEASE_FORCE_PRODUCTS: ${{ steps.scope.outputs.force_products }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
@@ -233,7 +233,7 @@ jobs:
           GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64 }}
           GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64 }}
           GHOSTEX_RELEASE_UPDATE_SPARKLE: ${{ steps.scope.outputs.update_sparkle }}
-          GHOSTEX_RELEASE_PRERELEASE: "false"
+          GHOSTEX_RELEASE_PRERELEASE: 'false'
         run: node tooling/release-gpui/preflight.mjs "${{ inputs.version }}" --only-plan --plan build/release-gpui/release-plan.json
       - uses: actions/upload-artifact@v7
         with:

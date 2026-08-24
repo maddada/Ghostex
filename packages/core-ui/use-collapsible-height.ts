@@ -1,7 +1,7 @@
-import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 
 type CollapsibleStyle = CSSProperties & {
-  "--sidebar-collapse-content-height"?: string;
+  '--sidebar-collapse-content-height'?: string;
 };
 
 export function useCollapsibleHeight<T extends HTMLElement>() {
@@ -56,7 +56,7 @@ export function useCollapsibleHeight<T extends HTMLElement>() {
     contentHeight === undefined
       ? undefined
       : ({
-          "--sidebar-collapse-content-height": `${contentHeight}px`,
+          '--sidebar-collapse-content-height': `${contentHeight}px`,
         } as CollapsibleStyle);
 
   return {

@@ -48,8 +48,9 @@ context, so every phase must be self-contained. Required structure per phase:
 
 ```markdown
 ## Phase <n>: <title>
-- depends_on: [<phase numbers>]        # empty list = can start immediately
-- parallel_ok: true|false              # true only if files are disjoint from every phase it could overlap with in time
+
+- depends_on: [<phase numbers>] # empty list = can start immediately
+- parallel_ok: true|false # true only if files are disjoint from every phase it could overlap with in time
 - goal: <one paragraph, concrete>
 - files: <exact files/dirs to touch>
 - do_not_touch: <files/areas that other phases own>
@@ -165,7 +166,7 @@ ghostex wait-for-text <sessionId> "^\s*(. )?PHASE <n> (COMPLETE|BLOCKED)" --time
   ask the user. When you unblock, the old `PHASE <n> BLOCKED` line is still
   in scrollback and will false-match — change the token, not the window:
   tell the worker to end with `PHASE <n> COMPLETE ROUND 2` (or `PHASE <n>
-  BLOCKED ROUND 2: reason`) as the last line, and re-arm the monitor on
+BLOCKED ROUND 2: reason`) as the last line, and re-arm the monitor on
   `"^\s*(. )?PHASE <n> (COMPLETE|BLOCKED) ROUND 2"`.
 - On exit 1, diagnose before acting: `ghostex read-text <sessionId> --lines 100`
   for the scrollback and `ghostex sessions --json` for lifecycle state. If the

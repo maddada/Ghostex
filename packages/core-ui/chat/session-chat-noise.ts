@@ -16,8 +16,8 @@
 // records the terminal never shows either (system reminders, hook plumbing)
 // stay hidden.
 
-import type { SessionChatMessage } from "../../shared/session-chat";
-import { parseSessionChatCommandEnvelope } from "./session-chat-command-envelope";
+import type { SessionChatMessage } from '../../shared/session-chat';
+import { parseSessionChatCommandEnvelope } from './session-chat-command-envelope';
 
 const LEADING_TAG_NAME = /^<([a-z][a-z0-9-]*)(?:[\s>]|$)/;
 const MARKUP_TAG = /<\/?[a-z][a-z0-9-]*(?:\s[^>]*)?>/gi;
@@ -34,7 +34,7 @@ const COMPACTION_OUTPUT =
   /^compact(?:ed|ing|ion)\b(?:\s+(?:is\s+)?(?:complete[d]?|done|finished|successful(?:ly)?))?(?:\s*\([^)]*\))?\s*[.!…]*$/i;
 
 /** Claude: the row derived from `/compact`'s local-command output. */
-const COMPACTION_COMPLETED_LABEL = "Compaction completed";
+const COMPACTION_COMPLETED_LABEL = 'Compaction completed';
 /*
  * Codex: the row gxserver decodes from the rollout's `ContextCompaction` thread
  * item (`CONTEXT_COMPACTED_STATUS_TEXT` in server/src/session_chat.rs — keep the
@@ -43,17 +43,10 @@ const COMPACTION_COMPLETED_LABEL = "Compaction completed";
  * happened. Matched exactly, and only on a transcript-decoded system turn, so a
  * user typing the same words still reads as their own message.
  */
-const CONTEXT_COMPACTED_LABEL = "Context compacted";
+const CONTEXT_COMPACTED_LABEL = 'Context compacted';
 
-function isContextCompactionRecord(
-  message: SessionChatMessage,
-  text: string,
-): boolean {
-  return (
-    message.role === "system" &&
-    message.source === "transcript" &&
-    text.trim() === CONTEXT_COMPACTED_LABEL
-  );
+function isContextCompactionRecord(message: SessionChatMessage, text: string): boolean {
+  return message.role === 'system' && message.source === 'transcript' && text.trim() === CONTEXT_COMPACTED_LABEL;
 }
 
 /*
@@ -79,10 +72,9 @@ const EFFORT_DEFAULT_OUTPUT = /^set effort level to\s+\S+/i;
  * against a harness that starts batching them.
  */
 const TASK_NOTIFICATION_BLOCK = /<task-notification>([\s\S]*?)<\/task-notification>/gi;
-const TASK_NOTIFICATION_FIELD = (name: string): RegExp =>
-  new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, "i");
+const TASK_NOTIFICATION_FIELD = (name: string): RegExp => new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'i');
 
-export type SessionChatStatusTone = "ok" | "error" | "neutral";
+export type SessionChatStatusTone = 'ok' | 'error' | 'neutral';
 
 export interface SessionChatStatusRow {
   label: string;
@@ -90,30 +82,24 @@ export interface SessionChatStatusRow {
 }
 
 function taskNotificationTone(status: string): SessionChatStatusTone {
-  if (status === "completed") {
-    return "ok";
+  if (status === 'completed') {
+    return 'ok';
   }
-  if (status === "failed") {
-    return "error";
+  if (status === 'failed') {
+    return 'error';
   }
   // killed/stopped were not failures, they were halted; an empty status is a
   // Monitor event. Neither deserves a red row.
-  return "neutral";
+  return 'neutral';
 }
 
 /** One status row per `<task-notification>`, or [] when none parse. */
-export function parseSessionChatTaskNotifications(
-  text: string,
-): SessionChatStatusRow[] {
+export function parseSessionChatTaskNotifications(text: string): SessionChatStatusRow[] {
   const rows: SessionChatStatusRow[] = [];
   for (const match of text.matchAll(TASK_NOTIFICATION_BLOCK)) {
-    const block = match[1] ?? "";
-    const status = (TASK_NOTIFICATION_FIELD("status").exec(block)?.[1] ?? "")
-      .trim()
-      .toLowerCase();
-    const summary = (TASK_NOTIFICATION_FIELD("summary").exec(block)?.[1] ?? "")
-      .replace(/\s+/g, " ")
-      .trim();
+    const block = match[1] ?? '';
+    const status = (TASK_NOTIFICATION_FIELD('status').exec(block)?.[1] ?? '').trim().toLowerCase();
+    const summary = (TASK_NOTIFICATION_FIELD('summary').exec(block)?.[1] ?? '').replace(/\s+/g, ' ').trim();
     if (summary.length === 0 && status.length === 0) {
       continue;
     }
@@ -137,11 +123,7 @@ const INLINE_BODY_MAX_CHARS = 320;
 const INLINE_BODY_MAX_LINES = 4;
 
 function fitsInlineSuppressedTurn(body: string): boolean {
-  return (
-    body.length > 0 &&
-    body.length <= INLINE_BODY_MAX_CHARS &&
-    body.split(/\n/).length <= INLINE_BODY_MAX_LINES
-  );
+  return body.length > 0 && body.length <= INLINE_BODY_MAX_CHARS && body.split(/\n/).length <= INLINE_BODY_MAX_LINES;
 }
 
 /**
@@ -150,13 +132,11 @@ function fitsInlineSuppressedTurn(body: string): boolean {
  * must never reach the DOM.
  */
 export function stripSessionChatAnsi(text: string): string {
-  return text.replace(ANSI_STYLE_SEQUENCE, "");
+  return text.replace(ANSI_STYLE_SEQUENCE, '');
 }
 
 function normalizedSuppressedTurnBody(text: string): string {
-  return stripSessionChatAnsi(sessionChatSuppressedTurnBody(text))
-    .replace(/\s+/g, " ")
-    .trim();
+  return stripSessionChatAnsi(sessionChatSuppressedTurnBody(text)).replace(/\s+/g, ' ').trim();
 }
 
 function isCompactionCommandOutput(text: string): boolean {
@@ -175,51 +155,45 @@ function modelSetByCommandOutput(text: string): ModelDefaultOutput | null {
   if (!model) {
     return null;
   }
-  const note = (match?.[2] ?? "").trim();
+  const note = (match?.[2] ?? '').trim();
   return { model, note: note.length > 0 ? note : null };
 }
 
 /** Harness tags that render as a collapsed, expandable marker. */
 const COLLAPSED_TAG_LABELS: Readonly<Record<string, string>> = {
-  "agent-message": "Message from another session",
-  "bash-input": "Local command",
-  "bash-stderr": "Local command output",
-  "bash-stdout": "Local command output",
-  "command-args": "Slash command",
-  "command-message": "Slash command",
-  "command-name": "Slash command",
-  "cross-session-message": "Message from another session",
-  "local-command-caveat": "Local command output",
-  "local-command-stderr": "Local command output",
-  "local-command-stdout": "Local command output",
-  "task-notification": "Task notification",
-  "teammate-message": "Message from another session",
-  "user-memory-input": "Memory note",
+  'agent-message': 'Message from another session',
+  'bash-input': 'Local command',
+  'bash-stderr': 'Local command output',
+  'bash-stdout': 'Local command output',
+  'command-args': 'Slash command',
+  'command-message': 'Slash command',
+  'command-name': 'Slash command',
+  'cross-session-message': 'Message from another session',
+  'local-command-caveat': 'Local command output',
+  'local-command-stderr': 'Local command output',
+  'local-command-stdout': 'Local command output',
+  'task-notification': 'Task notification',
+  'teammate-message': 'Message from another session',
+  'user-memory-input': 'Memory note',
 };
 
 /** Harness tags the agent's own TUI never prints either — stay hidden. */
 const HIDDEN_TAG_NAMES: ReadonlySet<string> = new Set([
-  "fork-boilerplate",
-  "mcp-polling-update",
-  "mcp-resource-update",
-  "system-reminder",
-  "user-prompt-submit-hook",
+  'fork-boilerplate',
+  'mcp-polling-update',
+  'mcp-resource-update',
+  'system-reminder',
+  'user-prompt-submit-hook',
 ]);
 
 const COLLAPSED_PREFIX_LABELS: readonly (readonly [string, string])[] = [
-  ["<channel source=", "Message from another session"],
-  ["[request interrupted", "Interrupted"],
-  ["a message arrived from ", "Message from another session"],
-  ["another claude session sent a message", "Message from another session"],
-  ["no response requested.", "Message from another session"],
-  [
-    "caveat: the messages below were generated by the user while running local commands",
-    "Local command output",
-  ],
-  [
-    "this session is being continued from a previous conversation",
-    "Session continued from a previous conversation",
-  ],
+  ['<channel source=', 'Message from another session'],
+  ['[request interrupted', 'Interrupted'],
+  ['a message arrived from ', 'Message from another session'],
+  ['another claude session sent a message', 'Message from another session'],
+  ['no response requested.', 'Message from another session'],
+  ['caveat: the messages below were generated by the user while running local commands', 'Local command output'],
+  ['this session is being continued from a previous conversation', 'Session continued from a previous conversation'],
 ];
 
 export const SESSION_CHAT_KNOWN_HARNESS_TAG_NAMES: ReadonlySet<string> = new Set([
@@ -227,8 +201,9 @@ export const SESSION_CHAT_KNOWN_HARNESS_TAG_NAMES: ReadonlySet<string> = new Set
   ...HIDDEN_TAG_NAMES,
 ]);
 
-export const SESSION_CHAT_HARNESS_INJECTED_TURN_PREFIXES: readonly string[] =
-  COLLAPSED_PREFIX_LABELS.map(([prefix]) => prefix);
+export const SESSION_CHAT_HARNESS_INJECTED_TURN_PREFIXES: readonly string[] = COLLAPSED_PREFIX_LABELS.map(
+  ([prefix]) => prefix
+);
 
 export function isKnownHarnessInjectedUserTurnText(text: string): boolean {
   return harnessInjectedTurnLabel(text) !== null;
@@ -250,7 +225,7 @@ function harnessInjectedTurnLabel(text: string): string | null {
       return label;
     }
     if (HIDDEN_TAG_NAMES.has(tagName)) {
-      return "";
+      return '';
     }
   }
   for (const [prefix, label] of COLLAPSED_PREFIX_LABELS) {
@@ -263,87 +238,81 @@ function harnessInjectedTurnLabel(text: string): string | null {
 
 export function sessionChatMessageText(message: SessionChatMessage): string {
   return message.blocks
-    .filter((block) => block.type === "text")
+    .filter((block) => block.type === 'text')
     .map((block) => block.text)
-    .join("")
+    .join('')
     .trim();
 }
 
 /** Text left once the harness markup is removed — "" ⇒ nothing to expand. */
 export function sessionChatSuppressedTurnBody(text: string): string {
-  return text.replace(MARKUP_TAG, "").trim();
+  return text.replace(MARKUP_TAG, '').trim();
 }
 
 export type SessionChatSuppressedTurn =
   /** Never surfaced: the agent's own TUI does not print it either. */
-  | { kind: "hidden" }
+  | { kind: 'hidden' }
   /** One-line marker that expands to the full text on click. */
-  | { kind: "collapsed"; label: string }
+  | { kind: 'collapsed'; label: string }
   /** A polished, non-expandable status row for a completed UI action. */
-  | { kind: "status"; label: string; tone?: SessionChatStatusTone };
+  | { kind: 'status'; label: string; tone?: SessionChatStatusTone };
 
-export function classifySessionChatSuppressedTurn(
-  message: SessionChatMessage,
-): SessionChatSuppressedTurn | null {
-  if (message.role !== "user" && message.role !== "system") {
+export function classifySessionChatSuppressedTurn(message: SessionChatMessage): SessionChatSuppressedTurn | null {
+  if (message.role !== 'user' && message.role !== 'system') {
     return null;
   }
-  if (
-    message.blocks.some(
-      (block) => block.type === "tool-call" || block.type === "tool-result",
-    )
-  ) {
+  if (message.blocks.some((block) => block.type === 'tool-call' || block.type === 'tool-result')) {
     return null;
   }
   const text = sessionChatMessageText(message);
-  if (text.trim().toLowerCase() === "/compact") {
+  if (text.trim().toLowerCase() === '/compact') {
     // The authoritative completion row below is the one visible record.
-    return { kind: "hidden" };
+    return { kind: 'hidden' };
   }
   if (isContextCompactionRecord(message, text)) {
     // Same completed-action pill Claude's compaction gets, so the seam reads
     // identically whichever CLI drew it.
-    return { kind: "status", label: CONTEXT_COMPACTED_LABEL };
+    return { kind: 'status', label: CONTEXT_COMPACTED_LABEL };
   }
   const label = harnessInjectedTurnLabel(text);
   if (label === null) {
     return null;
   }
-  if (label === "" || sessionChatSuppressedTurnBody(text).length === 0) {
+  if (label === '' || sessionChatSuppressedTurnBody(text).length === 0) {
     // Hidden class, or pure markup with no readable content.
-    return { kind: "hidden" };
+    return { kind: 'hidden' };
   }
-  if (label === "Local command output" && isCompactionCommandOutput(text)) {
-    return { kind: "status", label: COMPACTION_COMPLETED_LABEL };
+  if (label === 'Local command output' && isCompactionCommandOutput(text)) {
+    return { kind: 'status', label: COMPACTION_COMPLETED_LABEL };
   }
   const command = parseSessionChatCommandEnvelope(text);
   if (
-    label === "Slash command" &&
-    (command?.name.toLowerCase() === "/model" ||
-      command?.name.toLowerCase() === "/effort" ||
-      command?.name.toLowerCase() === "/compact")
+    label === 'Slash command' &&
+    (command?.name.toLowerCase() === '/model' ||
+      command?.name.toLowerCase() === '/effort' ||
+      command?.name.toLowerCase() === '/compact')
   ) {
     // The local-command output owns the one user-facing result row.
-    return { kind: "hidden" };
+    return { kind: 'hidden' };
   }
-  if (label === "Local command output") {
+  if (label === 'Local command output') {
     const model = modelSetByCommandOutput(text);
     if (model) {
-      return { kind: "status", label: `Set model to ${model.model}` };
+      return { kind: 'status', label: `Set model to ${model.model}` };
     }
     if (EFFORT_DEFAULT_OUTPUT.test(normalizedSuppressedTurnBody(text))) {
       // Effort is part of the model configuration action. The model result
       // above is the single durable row for the two picker selections.
-      return { kind: "hidden" };
+      return { kind: 'hidden' };
     }
   }
-  if (label === "Task notification") {
+  if (label === 'Task notification') {
     const [first] = parseSessionChatTaskNotifications(text);
     if (first) {
-      return { kind: "status", label: first.label, tone: first.tone };
+      return { kind: 'status', label: first.label, tone: first.tone };
     }
   }
-  return { kind: "collapsed", label };
+  return { kind: 'collapsed', label };
 }
 
 export function isSessionChatNoiseMessage(message: SessionChatMessage): boolean {
@@ -357,42 +326,33 @@ export function isSessionChatNoiseMessage(message: SessionChatMessage): boolean 
  * the agent has said the compaction happened, a client-side "we sent it" row
  * would sit BELOW the result it announced.
  */
-export function isSessionChatCompactionRecord(
-  message: SessionChatMessage,
-): boolean {
+export function isSessionChatCompactionRecord(message: SessionChatMessage): boolean {
   const suppressed = classifySessionChatSuppressedTurn(message);
   return (
-    suppressed?.kind === "status" &&
-    (suppressed.label === CONTEXT_COMPACTED_LABEL ||
-      suppressed.label === COMPACTION_COMPLETED_LABEL)
+    suppressed?.kind === 'status' &&
+    (suppressed.label === CONTEXT_COMPACTED_LABEL || suppressed.label === COMPACTION_COMPLETED_LABEL)
   );
 }
 
 /** How many compactions the transcript has recorded so far. */
-export function countSessionChatCompactionRecords(
-  messages: readonly SessionChatMessage[],
-): number {
+export function countSessionChatCompactionRecords(messages: readonly SessionChatMessage[]): number {
   return messages.filter(isSessionChatCompactionRecord).length;
 }
 
 /** True only for turns that must not reach the list at all. */
 export function isSessionChatHiddenMessage(message: SessionChatMessage): boolean {
-  return classifySessionChatSuppressedTurn(message)?.kind === "hidden";
+  return classifySessionChatSuppressedTurn(message)?.kind === 'hidden';
 }
 
 /** The collapsed-marker label, or null when the turn renders normally. */
-export function sessionChatSuppressedTurnLabel(
-  message: SessionChatMessage,
-): string | null {
+export function sessionChatSuppressedTurnLabel(message: SessionChatMessage): string | null {
   const suppressed = classifySessionChatSuppressedTurn(message);
-  return suppressed?.kind === "collapsed" || suppressed?.kind === "status"
-    ? suppressed.label
-    : null;
+  return suppressed?.kind === 'collapsed' || suppressed?.kind === 'status' ? suppressed.label : null;
 }
 
 export interface SessionChatSuppressedTurnPresentation {
   /** "inline" is a short "collapsed" turn shown as prose instead of a chevron. */
-  kind: "collapsed" | "inline" | "status";
+  kind: 'collapsed' | 'inline' | 'status';
   label: string;
   text: string;
   tone?: SessionChatStatusTone;
@@ -402,20 +362,20 @@ export interface SessionChatSuppressedTurnPresentation {
 
 /** Human-readable label and expandable text for a suppressed harness turn. */
 export function sessionChatSuppressedTurnPresentation(
-  message: SessionChatMessage,
+  message: SessionChatMessage
 ): SessionChatSuppressedTurnPresentation | null {
   const suppressed = classifySessionChatSuppressedTurn(message);
-  if (suppressed?.kind !== "collapsed" && suppressed?.kind !== "status") {
+  if (suppressed?.kind !== 'collapsed' && suppressed?.kind !== 'status') {
     return null;
   }
 
   const rawText = sessionChatMessageText(message);
 
-  if (suppressed.kind === "status") {
+  if (suppressed.kind === 'status') {
     const statuses = parseSessionChatTaskNotifications(rawText);
     if (statuses.length > 0) {
       return {
-        kind: "status",
+        kind: 'status',
         label: suppressed.label,
         text: rawText,
         ...(suppressed.tone ? { tone: suppressed.tone } : {}),
@@ -427,7 +387,7 @@ export function sessionChatSuppressedTurnPresentation(
   const command = parseSessionChatCommandEnvelope(rawText);
   const model = modelSetByCommandOutput(rawText);
   let text = stripSessionChatAnsi(rawText);
-  if (command?.name.toLowerCase() === "/model") {
+  if (command?.name.toLowerCase() === '/model') {
     text = command.name;
   } else if (model) {
     text = normalizedSuppressedTurnBody(rawText);
@@ -435,15 +395,15 @@ export function sessionChatSuppressedTurnPresentation(
       // The pin warning is a second fact about the same action, not chrome to
       // drop: it gets its own neutral row under the model result.
       return {
-        kind: "status",
+        kind: 'status',
         label: suppressed.label,
         text,
         statuses: [
           {
             label: suppressed.label,
-            tone: suppressed.kind === "status" ? (suppressed.tone ?? "ok") : "ok",
+            tone: suppressed.kind === 'status' ? (suppressed.tone ?? 'ok') : 'ok',
           },
-          { label: model.note, tone: "neutral" },
+          { label: model.note, tone: 'neutral' },
         ],
       };
     }
@@ -451,10 +411,10 @@ export function sessionChatSuppressedTurnPresentation(
 
   // Short harness turns read as prose; the body without its markup IS the
   // sentence, so the inline row shows that rather than the raw envelope.
-  if (suppressed.kind === "collapsed") {
+  if (suppressed.kind === 'collapsed') {
     const body = stripSessionChatAnsi(sessionChatSuppressedTurnBody(rawText));
     if (fitsInlineSuppressedTurn(body)) {
-      return { kind: "inline", label: suppressed.label, text: body };
+      return { kind: 'inline', label: suppressed.label, text: body };
     }
   }
 
@@ -462,21 +422,15 @@ export function sessionChatSuppressedTurnPresentation(
     kind: suppressed.kind,
     label: suppressed.label,
     text,
-    ...(suppressed.kind === "status" && suppressed.tone
-      ? { tone: suppressed.tone }
-      : {}),
+    ...(suppressed.kind === 'status' && suppressed.tone ? { tone: suppressed.tone } : {}),
   };
 }
 
-export function stripSessionChatNoiseMessages(
-  messages: readonly SessionChatMessage[],
-): SessionChatMessage[] {
+export function stripSessionChatNoiseMessages(messages: readonly SessionChatMessage[]): SessionChatMessage[] {
   return messages.filter((message) => !isSessionChatNoiseMessage(message));
 }
 
 /** Drop only the never-surfaced turns; collapsed markers stay in the list. */
-export function dropSessionChatHiddenMessages(
-  messages: readonly SessionChatMessage[],
-): SessionChatMessage[] {
+export function dropSessionChatHiddenMessages(messages: readonly SessionChatMessage[]): SessionChatMessage[] {
   return messages.filter((message) => !isSessionChatHiddenMessage(message));
 }

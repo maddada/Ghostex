@@ -283,7 +283,9 @@ pub(crate) fn gpui_remote_sanitized_process_failure(
     default_message.to_string()
 }
 
-pub(crate) fn gpui_remote_process_stderr_category(result: &GpuiRemoteProcessResult) -> &'static str {
+pub(crate) fn gpui_remote_process_stderr_category(
+    result: &GpuiRemoteProcessResult,
+) -> &'static str {
     let stderr = result.stderr.trim().to_ascii_lowercase();
     if stderr.contains("saved ssh password") {
         return "savedPasswordUnavailable";
@@ -322,7 +324,9 @@ pub(crate) fn gpui_remote_process_stderr_category(result: &GpuiRemoteProcessResu
     "other"
 }
 
-pub(crate) fn gpui_remote_process_failure_is_ssh_transport(result: &GpuiRemoteProcessResult) -> bool {
+pub(crate) fn gpui_remote_process_failure_is_ssh_transport(
+    result: &GpuiRemoteProcessResult,
+) -> bool {
     if matches!(result.exit_code, 124 | 255) {
         return true;
     }
@@ -492,7 +496,10 @@ pub(crate) fn gpui_remote_command_for_execution_target(
     }
 }
 
-pub(crate) fn gpui_remote_command_for_windows_wsl(distribution: Option<&str>, command: &str) -> String {
+pub(crate) fn gpui_remote_command_for_windows_wsl(
+    distribution: Option<&str>,
+    command: &str,
+) -> String {
     /*
     Compress and encode the POSIX login-shell program so PowerShell and cmd
     only parse a short, fixed WSL argv shape. Native Windows OpenSSH rejects
@@ -783,4 +790,3 @@ pub(crate) fn gpui_sanitized_remote_gxserver_version(raw: &str) -> Option<String
         })
         .then_some(version)
 }
-

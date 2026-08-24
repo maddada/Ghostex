@@ -65,24 +65,25 @@ export function extractHeadings(state: EditorState): HeadingInfo[] {
       if (headingLevel !== null) {
         const line = state.doc.lineAt(node.from);
         let text = state.doc.sliceString(node.from, node.to);
-        text = text.replace(/^#{1,6}\s+/, '').replace(/\s+#+$/, '').trim();
+        text = text
+          .replace(/^#{1,6}\s+/, '')
+          .replace(/\s+#+$/, '')
+          .trim();
         headings.push({
           level: headingLevel,
           text,
           line: line.number,
-          from: node.from
+          from: node.from,
         });
       }
-    }
+    },
   });
 
   return headings;
 }
 
 function hasDetailsOpenAttribute(openTag: string): boolean {
-  const attributeText = openTag
-    .replace(/^<details\b/i, '')
-    .replace(/>$/, '');
+  const attributeText = openTag.replace(/^<details\b/i, '').replace(/>$/, '');
   return /(?:^|[\s/])open(?=[\s=/>]|$)/i.test(attributeText);
 }
 
@@ -119,15 +120,12 @@ export function extractDetailsBlocks(state: EditorState): DetailsBlockInfo[] {
       if (openTagMatch) {
         const openingLine = state.doc.lineAt(node.from);
         const summaryMatch = rawText.match(summaryTagPattern);
-        const openerTo = typeof summaryMatch?.index === 'number'
-          ? node.from + summaryMatch.index + summaryMatch[0].length
-          : openingLine.to;
-        const summaryFrom = typeof summaryMatch?.index === 'number'
-          ? node.from + summaryMatch.index
-          : node.from;
-        const summaryTo = typeof summaryMatch?.index === 'number'
-          ? openerTo
-          : openingLine.to;
+        const openerTo =
+          typeof summaryMatch?.index === 'number'
+            ? node.from + summaryMatch.index + summaryMatch[0].length
+            : openingLine.to;
+        const summaryFrom = typeof summaryMatch?.index === 'number' ? node.from + summaryMatch.index : node.from;
+        const summaryTo = typeof summaryMatch?.index === 'number' ? openerTo : openingLine.to;
         pendingBlocks.push({
           anchorFrom: node.from,
           anchorTo: openerTo,
@@ -136,7 +134,7 @@ export function extractDetailsBlocks(state: EditorState): DetailsBlockInfo[] {
           lineFrom: openingLine.from,
           lineTo: openingLine.to,
           summaryText: normalizeSummaryText(summaryMatch?.[1]),
-          defaultCollapsed: !hasDetailsOpenAttribute(openTagMatch[0])
+          defaultCollapsed: !hasDetailsOpenAttribute(openTagMatch[0]),
         });
       }
 
@@ -166,9 +164,9 @@ export function extractDetailsBlocks(state: EditorState): DetailsBlockInfo[] {
         closingFrom: node.from,
         closingTo: closingLine.to,
         summaryText: openBlock.summaryText,
-        defaultCollapsed: openBlock.defaultCollapsed
+        defaultCollapsed: openBlock.defaultCollapsed,
       });
-    }
+    },
   });
 
   detailsBlocks.sort((a, b) => a.anchorFrom - b.anchorFrom);
@@ -188,7 +186,10 @@ export function extractHeadingSections(state: EditorState): HeadingSection[] {
 
       const line = state.doc.lineAt(node.from);
       let text = state.doc.sliceString(node.from, node.to);
-      text = text.replace(/^#{1,6}\s+/, '').replace(/\s+#+$/, '').trim();
+      text = text
+        .replace(/^#{1,6}\s+/, '')
+        .replace(/\s+#+$/, '')
+        .trim();
       headings.push({
         level: headingLevel,
         text,
@@ -201,9 +202,9 @@ export function extractHeadingSections(state: EditorState): HeadingSection[] {
         lineFrom: line.from,
         lineTo: line.to,
         collapseFrom: line.to,
-        collapseTo: state.doc.length
+        collapseTo: state.doc.length,
       });
-    }
+    },
   });
 
   for (let index = 0; index < headings.length; index += 1) {

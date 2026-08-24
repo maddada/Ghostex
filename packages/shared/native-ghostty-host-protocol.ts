@@ -1,53 +1,47 @@
 export const NATIVE_GHOSTTY_HOST_PROTOCOL_VERSION = 1;
 
-import type { SidebarProjectDiffStats } from "./project-diff-stats";
-import type { SidebarCommandButton } from "./sidebar-commands";
-import type {
-  GxserverPortlessPresentation,
-  GxserverPortlessStatus,
-} from "./gxserver-protocol";
-import type {
-  CustomWorkspaceOpenTarget,
-  WorkspaceOpenTargetAvailability,
-} from "./workspace-open-targets";
+import type { SidebarProjectDiffStats } from './project-diff-stats';
+import type { SidebarCommandButton } from './sidebar-commands';
+import type { GxserverPortlessPresentation, GxserverPortlessStatus } from './gxserver-protocol';
+import type { CustomWorkspaceOpenTarget, WorkspaceOpenTargetAvailability } from './workspace-open-targets';
 
 export type NativeTerminalLayout =
   | {
-      kind: "leaf";
+      kind: 'leaf';
       sessionId: string;
     }
   | {
       activeSessionId?: string;
-      kind: "tabs";
+      kind: 'tabs';
       sessionIds: string[];
     }
   | {
       children: NativeTerminalLayout[];
-      direction: "horizontal" | "vertical";
-      kind: "split";
+      direction: 'horizontal' | 'vertical';
+      kind: 'split';
       ratio?: number;
     };
 
 export type NativeTerminalTitleBarAction =
-  | "close"
-  | "closeCommandsPanel"
-  | "closeAfterDone"
-  | "delayedSend"
-  | "expandCommandsPanel"
-  | "fork"
-  | "mergeAllTabs"
-  | "newTerminal"
-  | "openBrowser"
-  | "pinCommandsPanel"
-  | "popOut"
-  | "reload"
-  | "rename"
-  | "restorePopOut"
-  | "rotatePanesClockwise"
-  | "sleep"
-  | "splitHorizontal"
-  | "splitVertical"
-  | "unpinCommandsPanel";
+  | 'close'
+  | 'closeCommandsPanel'
+  | 'closeAfterDone'
+  | 'delayedSend'
+  | 'expandCommandsPanel'
+  | 'fork'
+  | 'mergeAllTabs'
+  | 'newTerminal'
+  | 'openBrowser'
+  | 'pinCommandsPanel'
+  | 'popOut'
+  | 'reload'
+  | 'rename'
+  | 'restorePopOut'
+  | 'rotatePanesClockwise'
+  | 'sleep'
+  | 'splitHorizontal'
+  | 'splitVertical'
+  | 'unpinCommandsPanel';
 
 export type TitlebarResourceGroup = {
   groupId: string;
@@ -60,7 +54,7 @@ export type TitlebarResourceGroup = {
 };
 
 export type TitlebarResourceSession = {
-  activity: "attention" | "idle" | "working";
+  activity: 'attention' | 'idle' | 'working';
   agentIcon?: string;
   /**
    * CDXC:DelayedSend 2026-05-17-03:14
@@ -86,24 +80,24 @@ export type TitlebarResourceSession = {
    * Use `persistence-disabled` instead of a generic `disabled` value so
    * titlebar/resource payloads state exactly which provider capability is off.
    */
-  nativePaneState?: "mounted" | "mounting" | "unmounted";
-  providerSessionState?: "exists" | "missing" | "persistence-disabled" | "unknown";
+  nativePaneState?: 'mounted' | 'mounting' | 'unmounted';
+  providerSessionState?: 'exists' | 'missing' | 'persistence-disabled' | 'unknown';
   isLive?: boolean;
   isRunning: boolean;
   isSleeping?: boolean;
   lastInteractionAt?: string;
   projectId?: string;
   sessionId: string;
-  sessionKind?: "browser" | "terminal";
+  sessionKind?: 'browser' | 'terminal';
   sessionPersistenceName?: string;
-  sessionPersistenceProvider?: "tmux" | "zmx" | "zellij";
+  sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
   terminalTitle?: string;
   title: string;
 };
 
-export type NativePortlessProtocol = "https" | "http";
-export type NativePortlessAdminInstallAction = "install" | "reconfigure" | "retry";
-export type NativePortlessAdminAction = NativePortlessAdminInstallAction | "remove";
+export type NativePortlessProtocol = 'https' | 'http';
+export type NativePortlessAdminInstallAction = 'install' | 'reconfigure' | 'retry';
+export type NativePortlessAdminAction = NativePortlessAdminInstallAction | 'remove';
 
 export type NativeTitlebarPortlessState = {
   /*
@@ -116,7 +110,7 @@ export type NativeTitlebarPortlessState = {
       NativePortlessAdminAction,
       {
         available: boolean;
-        unavailableReason?: "localMacOnly" | "notRecommended" | "setupNotGhostexOwned";
+        unavailableReason?: 'localMacOnly' | 'notRecommended' | 'setupNotGhostexOwned';
       }
     >;
     available: boolean;
@@ -132,15 +126,15 @@ export type NativeGhosttyHostCommand =
       initialInput?: string;
       sessionId: string;
       sessionPersistenceName?: string;
-      sessionPersistenceProvider?: "tmux" | "zmx" | "zellij";
+      sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
       shellCommand?: string;
       title?: string;
       tmuxMode?: boolean;
       tmuxSessionName?: string;
-      type: "createTerminal";
+      type: 'createTerminal';
     }
   | {
-      browserFeedbackTool?: "agentation";
+      browserFeedbackTool?: 'agentation';
       browserHistory?: Array<{
         faviconDataUrl?: string;
         title: string;
@@ -154,13 +148,13 @@ export type NativeGhosttyHostCommand =
       showBetaFeatures?: boolean;
       threadId?: string;
       title: string;
-      type: "createWebPane";
+      type: 'createWebPane';
       url: string;
     }
-    | {
+  | {
       command?: string;
       cwd?: string;
-      editorKind?: "terminal";
+      editorKind?: 'terminal';
       env?: Record<string, string>;
       filePath?: string;
       language?: string;
@@ -168,7 +162,7 @@ export type NativeGhosttyHostCommand =
       requestId?: string;
       statusFile?: string;
       title?: string;
-      type: "openFloatingEditor";
+      type: 'openFloatingEditor';
     }
   | {
       /**
@@ -180,11 +174,11 @@ export type NativeGhosttyHostCommand =
       preserveLayoutPlaceholder?: boolean;
       preservePersistenceSession?: boolean;
       sessionId: string;
-      type: "closeTerminal";
+      type: 'closeTerminal';
     }
   | {
       sessionId: string;
-      type: "closeWebPane";
+      type: 'closeWebPane';
     }
   | {
       /*
@@ -192,22 +186,22 @@ export type NativeGhosttyHostCommand =
        * The macOS host needs a pre-dispatch session-row hit hint because the focused border can be invalidated before the later focusTerminal/focusWebPane command arrives. The hint contains only a boolean and lets Swift keep the handoff scoped to actual sidebar session rows.
        */
       isSessionCard: boolean;
-      type: "setSidebarSessionFocusBorderHandoffHitTarget";
+      type: 'setSidebarSessionFocusBorderHandoffHitTarget';
     }
   | {
       /*
        * CDXC:SidebarSessionFocus 2026-06-29-02:04:
        * Child controls and modified clicks inside a session row must cancel the candidate border handoff so non-focus interactions still remove terminal focus immediately.
        */
-      type: "cancelSidebarSessionFocusBorderHandoff";
+      type: 'cancelSidebarSessionFocusBorderHandoff';
     }
   | {
       sessionId: string;
-      type: "focusTerminal";
+      type: 'focusTerminal';
     }
   | {
       sessionId: string;
-      type: "focusWebPane";
+      type: 'focusWebPane';
     }
   | {
       /**
@@ -229,11 +223,11 @@ export type NativeGhosttyHostCommand =
       cwd: string;
       linkVscodeUserConfig?: boolean;
       projectId?: string;
-      type: "startCodeServerRuntime";
+      type: 'startCodeServerRuntime';
       vscodeUserConfigDir?: string;
     }
   | {
-      type: "stopCodeServerRuntime";
+      type: 'stopCodeServerRuntime';
     }
   | {
       /**
@@ -258,7 +252,7 @@ export type NativeGhosttyHostCommand =
         title: string;
         url: string;
       }>;
-      browserFeedbackTool?: "agentation";
+      browserFeedbackTool?: 'agentation';
       /**
        * CDXC:BrowserHistory 2026-06-15-10:25:
        * Browser toolbar history is project-family state shared by the main project and its worktrees. The sidebar owns that family scope, then sends de-duplicated URL history snapshots to native so AppKit can render the address-bar menu without learning worktree relationships.
@@ -271,7 +265,7 @@ export type NativeGhosttyHostCommand =
       }>;
       browserHistoryScopeId?: string;
       showBetaFeatures?: boolean;
-      mode?: "code" | "git" | "automate" | "tasks" | "manage";
+      mode?: 'code' | 'git' | 'automate' | 'tasks' | 'manage';
       companionPaneHidden?: boolean;
       /**
        * CDXC:ProjectBrowserTabs 2026-06-16-12:02:
@@ -288,7 +282,7 @@ export type NativeGhosttyHostCommand =
       showsBrowserToolbar?: boolean;
       showsProjectTabs?: boolean;
       title: string;
-      type: "createProjectEditorPane";
+      type: 'createProjectEditorPane';
       url: string;
     }
   | {
@@ -303,11 +297,11 @@ export type NativeGhosttyHostCommand =
         visitedAt: string;
       }>;
       browserHistoryScopeId: string;
-      type: "setBrowserHistory";
+      type: 'setBrowserHistory';
     }
   | {
       projectId: string;
-      type: "focusProjectEditorPane";
+      type: 'focusProjectEditorPane';
     }
   | {
       /**
@@ -317,41 +311,41 @@ export type NativeGhosttyHostCommand =
        * sidebar requests the tab with the native project-editor id and URL.
        */
       projectId: string;
-      type: "projectEditorAddBrowserTab";
+      type: 'projectEditorAddBrowserTab';
       url: string;
     }
   | {
       projectId: string;
-      type: "closeProjectEditorPane";
+      type: 'closeProjectEditorPane';
     }
   | {
       sessionId: string;
       text: string;
-      type: "writeTerminalText";
+      type: 'writeTerminalText';
     }
   | {
       sessionId: string;
       text: string;
-      type: "writeTerminalScript";
+      type: 'writeTerminalScript';
     }
   | {
-      provider: "tmux" | "zmx" | "zellij";
+      provider: 'tmux' | 'zmx' | 'zellij';
       requestId: string;
       sessionName: string;
-      type: "checkPersistenceSession";
+      type: 'checkPersistenceSession';
     }
   | {
       layout: NativeTerminalLayout;
-      type: "setTerminalLayout";
+      type: 'setTerminalLayout';
     }
   | {
       activeProjectEditorId?: string;
       activeProjectDiffStats?: SidebarProjectDiffStats;
-      activeProjectMode?: "agents" | "code" | "git" | "automate" | "tasks" | "manage";
+      activeProjectMode?: 'agents' | 'code' | 'git' | 'automate' | 'tasks' | 'manage';
       activeProjectEditorCompanionPaneHidden?: boolean;
       activeProjectEditorIsOpen?: boolean;
       activeProjectEditorIsSleeping?: boolean;
-      activeProjectEditorStatus?: "idle" | "opening" | "running" | "error";
+      activeProjectEditorStatus?: 'idle' | 'opening' | 'running' | 'error';
       activeProjectId?: string;
       activeProjectIconDataUrl?: string;
       activeProjectIsQuick?: boolean;
@@ -364,7 +358,7 @@ export type NativeGhosttyHostCommand =
       commandsPanelDefaultHeightPx?: number;
       commandsPanelIsVisible?: boolean;
       commandsPanelLayout?: NativeTerminalLayout;
-      commandsPanelMode?: "floating" | "pinned";
+      commandsPanelMode?: 'floating' | 'pinned';
       /**
        * CDXC:NativeWindowChrome 2026-05-10-14:19
        * Native host commands carry the outer app title separately from pane
@@ -396,7 +390,7 @@ export type NativeGhosttyHostCommand =
        *
        * CDXC:SessionFocusMode 2026-05-28-15:35:
        * Availability follows rendered awake pane owners, so a persisted split whose other owner is sleeping does not show Focus in the native tab context menu.
-      */
+       */
       sessionFocusModeAvailableSessionIds?: string[];
       sleepingSessionIds?: string[];
       /**
@@ -437,7 +431,7 @@ export type NativeGhosttyHostCommand =
        * surface into a ghostex-owned window.
        */
       poppedOutSessionIds?: string[];
-      sessionActivities?: Record<string, "attention" | "sleeping" | "working">;
+      sessionActivities?: Record<string, 'attention' | 'sleeping' | 'working'>;
       sessionAgentIconColors?: Record<string, string>;
       sessionAgentIconDataUrls?: Record<string, string>;
       /**
@@ -451,7 +445,7 @@ export type NativeGhosttyHostCommand =
        * CDXC:DelayedSend 2026-05-17-03:14
        * Native tab strips and pane overlays are outside React, so layout sync
        * must carry the active Delayed Send countdown labels into AppKit.
-      */
+       */
       sessionDelayedSendRemainingLabels?: Record<string, string>;
       sessionFaviconDataUrls?: Record<string, string>;
       sessionFirstPromptTitleGenerationSessionIds?: string[];
@@ -499,7 +493,7 @@ export type NativeGhosttyHostCommand =
       };
       titlebarPortless?: NativeTitlebarPortlessState;
       titlebarResourceGroups?: TitlebarResourceGroup[];
-      type: "setActiveTerminalSet";
+      type: 'setActiveTerminalSet';
       workspaceOpenTargets?: {
         availability: WorkspaceOpenTargetAvailability;
         customTargets: CustomWorkspaceOpenTarget[];
@@ -508,7 +502,7 @@ export type NativeGhosttyHostCommand =
     }
   | {
       sessionId: string;
-      type: "setTerminalVisibility";
+      type: 'setTerminalVisibility';
       visible: boolean;
     }
   | {
@@ -517,7 +511,7 @@ export type NativeGhosttyHostCommand =
        * Settings must be able to show the native notification permission prompt
        * and open macOS Notification Settings without faking an attention event.
        */
-      type: "requestMacOSNotificationPermission" | "openMacOSNotificationSettings";
+      type: 'requestMacOSNotificationPermission' | 'openMacOSNotificationSettings';
     }
   | {
       /**
@@ -530,7 +524,7 @@ export type NativeGhosttyHostCommand =
       iconDataUrl?: string;
       sessionId: string;
       title: string;
-      type: "showSessionAttentionNotification";
+      type: 'showSessionAttentionNotification';
     }
   | {
       /**
@@ -544,13 +538,13 @@ export type NativeGhosttyHostCommand =
       action: NativePortlessAdminInstallAction;
       protocol: NativePortlessProtocol;
       requestId: string;
-      type: "portlessAdminAction";
+      type: 'portlessAdminAction';
     }
   | {
-      action: "remove";
+      action: 'remove';
       protocol?: NativePortlessProtocol;
       requestId: string;
-      type: "portlessAdminAction";
+      type: 'portlessAdminAction';
     };
 
 export type NativeGhosttyHostEvent =
@@ -560,13 +554,13 @@ export type NativeGhosttyHostEvent =
       imagePath: string;
       title?: string;
       trigger: string;
-      type: "appShotCaptured";
+      type: 'appShotCaptured';
       windowHeight?: number;
       windowWidth?: number;
     }
   | {
       message: string;
-      type: "appShotCaptureFailed";
+      type: 'appShotCaptureFailed';
     }
   | {
       foregroundPid?: number;
@@ -575,31 +569,31 @@ export type NativeGhosttyHostEvent =
       sessionPersistenceName?: string;
       tmuxSessionName?: string;
       ttyName?: string;
-      type: "terminalReady";
+      type: 'terminalReady';
     }
   | {
       error?: string;
       exists: boolean;
-      provider: "tmux" | "zmx" | "zellij";
+      provider: 'tmux' | 'zmx' | 'zellij';
       requestId: string;
       sessionName: string;
-      type: "persistenceSessionState";
+      type: 'persistenceSessionState';
     }
   | {
       sessionId: string;
       sessionPersistenceName?: string;
       title: string;
       tmuxSessionName?: string;
-      type: "terminalTitleChanged";
+      type: 'terminalTitleChanged';
     }
   | {
       faviconDataUrl?: string;
       sessionId: string;
-      type: "browserFaviconChanged";
+      type: 'browserFaviconChanged';
     }
   | {
       sessionId: string;
-      type: "browserUrlChanged";
+      type: 'browserUrlChanged';
       url: string;
     }
   | {
@@ -609,7 +603,7 @@ export type NativeGhosttyHostEvent =
        * sidebar-owned workspace mutations, not native window creation.
        */
       sourceSessionId: string;
-      type: "browserOpenInNewTabRequested";
+      type: 'browserOpenInNewTabRequested';
       url: string;
     }
   | {
@@ -620,22 +614,22 @@ export type NativeGhosttyHostEvent =
        * the system browser when the user disabled in-app terminal links.
        */
       sourceSessionId: string;
-      type: "terminalOpenUrlRequested";
+      type: 'terminalOpenUrlRequested';
       url: string;
     }
   | {
       cwd: string;
       sessionId: string;
-      type: "terminalCwdChanged";
+      type: 'terminalCwdChanged';
     }
   | {
       exitCode?: number;
       sessionId: string;
-      type: "terminalExited";
+      type: 'terminalExited';
     }
   | {
       sessionId: string;
-      type: "terminalFocused";
+      type: 'terminalFocused';
     }
   | {
       /**
@@ -646,11 +640,11 @@ export type NativeGhosttyHostEvent =
        * not as a generic modal/search Escape event.
        */
       sessionId: string;
-      type: "terminalEscapePressed";
+      type: 'terminalEscapePressed';
     }
   | {
       sessionId: string;
-      type: "terminalBell";
+      type: 'terminalBell';
     }
   | {
       /**
@@ -660,7 +654,7 @@ export type NativeGhosttyHostEvent =
        * host event stream instead of React DOM key handling.
        */
       sessionId: string;
-      type: "firstPromptAutoRenameCancelled";
+      type: 'firstPromptAutoRenameCancelled';
     }
   | {
       /**
@@ -671,7 +665,7 @@ export type NativeGhosttyHostEvent =
        * a fresh terminal in the same slot.
        */
       sessionId: string;
-      type: "nativeSessionSurfaceMissing";
+      type: 'nativeSessionSurfaceMissing';
     }
   | {
       /**
@@ -681,32 +675,32 @@ export type NativeGhosttyHostEvent =
        * The sidebar confirms removal instead of showing a pane that exits.
        */
       cwd: string;
-      reason: "missingCwd" | string;
+      reason: 'missingCwd' | string;
       sessionId: string;
-      type: "terminalRestoreBlocked";
+      type: 'terminalRestoreBlocked';
     }
   | {
       heightRatio: number;
-      type: "commandsPanelHeightRatioChanged";
+      type: 'commandsPanelHeightRatioChanged';
     }
   | {
       sessionId: string;
-      type: "sessionAttentionNotificationClicked";
+      type: 'sessionAttentionNotificationClicked';
     }
   | {
       message: string;
       sessionId: string;
-      type: "terminalError";
+      type: 'terminalError';
     }
   | {
-      placement?: "bottom" | "center" | "left" | "right" | "top";
+      placement?: 'bottom' | 'center' | 'left' | 'right' | 'top';
       sourceSessionId: string;
       targetSessionId: string;
-      type: "paneReorderRequested";
+      type: 'paneReorderRequested';
     }
   | {
       sessionId: string;
-      type: "paneTabSelected";
+      type: 'paneTabSelected';
     }
   | {
       /**
@@ -715,7 +709,7 @@ export type NativeGhosttyHostEvent =
        * when tab selection itself is configured to preserve the cold renderer.
        */
       sessionId: string;
-      type: "sleepingPaneWakeRequested";
+      type: 'sleepingPaneWakeRequested';
     }
   | {
       /**
@@ -725,7 +719,7 @@ export type NativeGhosttyHostEvent =
        * workarea back to Agents before restoring Code/Browser/Project/Manage on unfocus.
        */
       sessionId: string;
-      type: "paneTabFocusRequested";
+      type: 'paneTabFocusRequested';
     }
   | {
       /**
@@ -734,10 +728,10 @@ export type NativeGhosttyHostEvent =
        * sidebar can reorder the containing paneLayout tab group without
        * interpreting the gesture as a pane split/drop.
        */
-      position: "after" | "before";
+      position: 'after' | 'before';
       sourceSessionId: string;
       targetSessionId: string;
-      type: "paneTabReorderRequested";
+      type: 'paneTabReorderRequested';
     }
   | {
       /**
@@ -746,9 +740,9 @@ export type NativeGhosttyHostEvent =
        * command. The sidebar resolves the tab group from paneLayout so bulk
        * close actions never apply to every visible tab or another group.
        */
-      scope: "close" | "closeLeft" | "closeOthers" | "closeRight";
+      scope: 'close' | 'closeLeft' | 'closeOthers' | 'closeRight';
       sessionId: string;
-      type: "paneTabCloseRequested";
+      type: 'paneTabCloseRequested';
     }
   | {
       /**
@@ -756,9 +750,9 @@ export type NativeGhosttyHostEvent =
        * Native tab sleep context-menu actions use tab-group scoped targets and
        * keep sessions restorable through the normal wake path.
        */
-      scope: "sleep" | "sleepLeft" | "sleepOthers" | "sleepRight";
+      scope: 'sleep' | 'sleepLeft' | 'sleepOthers' | 'sleepRight';
       sessionId: string;
-      type: "paneTabSleepRequested";
+      type: 'paneTabSleepRequested';
     }
   | {
       /**
@@ -768,7 +762,7 @@ export type NativeGhosttyHostEvent =
        * layout syncs do not reopen the project editor.
        */
       projectId: string;
-      type: "projectEditorBackRequested";
+      type: 'projectEditorBackRequested';
     }
   | {
       /**
@@ -779,7 +773,7 @@ export type NativeGhosttyHostEvent =
        */
       hidden: boolean;
       projectId: string;
-      type: "projectEditorCompanionPaneHiddenChanged";
+      type: 'projectEditorCompanionPaneHiddenChanged';
     }
   | {
       /**
@@ -807,7 +801,7 @@ export type NativeGhosttyHostEvent =
         title: string;
         url: string;
       }>;
-      type: "projectEditorTabSelected";
+      type: 'projectEditorTabSelected';
       url?: string;
     }
   | {
@@ -819,8 +813,8 @@ export type NativeGhosttyHostEvent =
        */
       message?: string;
       projectId: string;
-      status: "opening" | "running" | "error";
-      type: "projectEditorLoadState";
+      status: 'opening' | 'running' | 'error';
+      type: 'projectEditorLoadState';
     }
   | {
       /**
@@ -830,7 +824,7 @@ export type NativeGhosttyHostEvent =
        */
       message: string;
       projectId?: string;
-      type: "codeServerRuntimeStartFailed";
+      type: 'codeServerRuntimeStartFailed';
     }
   | {
       /**
@@ -847,22 +841,16 @@ export type NativeGhosttyHostEvent =
       protocol?: NativePortlessProtocol;
       requestId: string;
       status: string;
-      type: "portlessAdminResult";
+      type: 'portlessAdminResult';
     }
   | {
       protocolVersion: typeof NATIVE_GHOSTTY_HOST_PROTOCOL_VERSION;
-      type: "hostReady";
+      type: 'hostReady';
     };
 
 /*
 CDXC:PortlessProtocol 2026-06-23-00:25:
 Native-sidebar should consume the shared sanitized Portless admin command/result contracts instead of carrying a second copy. These aliases keep Phase 11 privileged action fields aligned while Phase 12 passes the latest result through React metadata without stdout, stderr, paths, URLs, command text, or env values.
 */
-export type NativePortlessAdminCommand = Extract<
-  NativeGhosttyHostCommand,
-  { type: "portlessAdminAction" }
->;
-export type NativePortlessAdminResult = Extract<
-  NativeGhosttyHostEvent,
-  { type: "portlessAdminResult" }
->;
+export type NativePortlessAdminCommand = Extract<NativeGhosttyHostCommand, { type: 'portlessAdminAction' }>;
+export type NativePortlessAdminResult = Extract<NativeGhosttyHostEvent, { type: 'portlessAdminResult' }>;

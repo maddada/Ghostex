@@ -11,12 +11,12 @@ DIST="$ROOT/apps/editor/dist/desktop"
 mkdir -p "$DIST"
 
 case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*)
-    cp "$ROOT/apps/editor/desktop/target/release/ghostex-editor.exe" "$DIST/GhostexEditor.exe"
-    ;;
-  *)
-    cp "$ROOT/apps/editor/desktop/target/release/ghostex-editor" "$DIST/ghostex-editor"
-    ;;
+MINGW* | MSYS* | CYGWIN*)
+	cp "$ROOT/apps/editor/desktop/target/release/ghostex-editor.exe" "$DIST/GhostexEditor.exe"
+	;;
+*)
+	cp "$ROOT/apps/editor/desktop/target/release/ghostex-editor" "$DIST/ghostex-editor"
+	;;
 esac
 
 mkdir -p "$DIST/web"

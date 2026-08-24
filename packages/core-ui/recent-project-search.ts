@@ -1,4 +1,4 @@
-import type { SidebarRecentProject } from "../shared/session-grid-contract";
+import type { SidebarRecentProject } from '../shared/session-grid-contract';
 
 export type SidebarRecentProjectsByMachine = {
   local: SidebarRecentProject[];
@@ -6,7 +6,7 @@ export type SidebarRecentProjectsByMachine = {
 };
 
 export function groupRecentProjectsByMachine(
-  projects: readonly SidebarRecentProject[],
+  projects: readonly SidebarRecentProject[]
 ): SidebarRecentProjectsByMachine {
   const local: SidebarRecentProject[] = [];
   const remoteByMachineId = new Map<string, SidebarRecentProject[]>();

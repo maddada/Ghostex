@@ -9,12 +9,8 @@
 extern int32_t GhostexGpuiAppShotsSettingsEnabled(void);
 extern int32_t GhostexGpuiAppShotsSettingsHotkey(void);
 extern void GhostexGpuiAppShotsCaptureSucceeded(
-    const char *app_name,
-    const char *bundle_identifier,
-    const char *image_path,
-    const char *window_title,
-    int32_t window_width,
-    int32_t window_height,
+    const char *app_name, const char *bundle_identifier, const char *image_path,
+    const char *window_title, int32_t window_width, int32_t window_height,
     const char *trigger);
 extern void GhostexGpuiAppShotsCaptureFailed(const char *message);
 
@@ -38,7 +34,8 @@ static const unsigned short GhostexGpuiAppShotsLeftCommandKeyCode = 55;
 static id GhostexGpuiAppShotsLocalMonitor = nil;
 static id GhostexGpuiAppShotsGlobalMonitor = nil;
 static NSString *GhostexGpuiAppShotsDirectory = nil;
-static NSMutableSet<NSNumber *> *GhostexGpuiAppShotsPressedModifierKeyCodes = nil;
+static NSMutableSet<NSNumber *> *GhostexGpuiAppShotsPressedModifierKeyCodes =
+    nil;
 static NSTimeInterval GhostexGpuiAppShotsLastLeftShiftTap = 0.0;
 static NSTimeInterval GhostexGpuiAppShotsLastLeftOptionTap = 0.0;
 static NSTimeInterval GhostexGpuiAppShotsLastCapture = 0.0;
@@ -50,7 +47,8 @@ static NSString *GhostexGpuiAppShotsDisplayPath(NSString *path) {
   }
   NSString *homePrefix = [home stringByAppendingString:@"/"];
   if ([path hasPrefix:homePrefix]) {
-    return [@"~/" stringByAppendingString:[path substringFromIndex:homePrefix.length]];
+    return [@"~/"
+        stringByAppendingString:[path substringFromIndex:homePrefix.length]];
   }
   return path;
 }
@@ -62,41 +60,35 @@ static void GhostexGpuiAppShotsResetState(void) {
 }
 
 static BOOL GhostexGpuiAppShotsShouldTriggerBothKeys(
-    NSEvent *event,
-    unsigned short leftKeyCode,
-    unsigned short rightKeyCode,
+    NSEvent *event, unsigned short leftKeyCode, unsigned short rightKeyCode,
     NSEventModifierFlags leftModifierMask,
     NSEventModifierFlags rightModifierMask);
 
 static BOOL GhostexGpuiAppShotsShouldTriggerDoubleTap(
-    NSEvent *event,
-    unsigned short keyCode,
-    NSEventModifierFlags pressedModifierMask,
-    NSTimeInterval *lastTap) {
-  if (event.keyCode != keyCode || (event.modifierFlags & pressedModifierMask) == 0) {
+    NSEvent *event, unsigned short keyCode,
+    NSEventModifierFlags pressedModifierMask, NSTimeInterval *lastTap) {
+  if (event.keyCode != keyCode ||
+      (event.modifierFlags & pressedModifierMask) == 0) {
     return NO;
   }
 
   NSTimeInterval timestamp = event.timestamp;
-  BOOL triggered = *lastTap > 0.0 &&
-                   timestamp - *lastTap <= GhostexGpuiAppShotsDoubleTapThresholdSeconds;
+  BOOL triggered =
+      *lastTap > 0.0 &&
+      timestamp - *lastTap <= GhostexGpuiAppShotsDoubleTapThresholdSeconds;
   *lastTap = timestamp;
   return triggered;
 }
 
 static BOOL GhostexGpuiAppShotsShouldTriggerBothCommand(NSEvent *event) {
   return GhostexGpuiAppShotsShouldTriggerBothKeys(
-      event,
-      GhostexGpuiAppShotsLeftCommandKeyCode,
-      GhostexGpuiAppShotsRightCommandKeyCode,
-      NX_DEVICELCMDKEYMASK,
+      event, GhostexGpuiAppShotsLeftCommandKeyCode,
+      GhostexGpuiAppShotsRightCommandKeyCode, NX_DEVICELCMDKEYMASK,
       NX_DEVICERCMDKEYMASK);
 }
 
 static BOOL GhostexGpuiAppShotsShouldTriggerBothKeys(
-    NSEvent *event,
-    unsigned short leftKeyCode,
-    unsigned short rightKeyCode,
+    NSEvent *event, unsigned short leftKeyCode, unsigned short rightKeyCode,
     NSEventModifierFlags leftModifierMask,
     NSEventModifierFlags rightModifierMask) {
   if (event.keyCode != leftKeyCode && event.keyCode != rightKeyCode) {
@@ -114,71 +106,70 @@ static BOOL GhostexGpuiAppShotsShouldTriggerBothKeys(
     [GhostexGpuiAppShotsPressedModifierKeyCodes removeObject:@(rightKeyCode)];
   }
 
-  BOOL triggered =
-      [GhostexGpuiAppShotsPressedModifierKeyCodes containsObject:@(leftKeyCode)] &&
-      [GhostexGpuiAppShotsPressedModifierKeyCodes containsObject:@(rightKeyCode)];
+  BOOL triggered = [GhostexGpuiAppShotsPressedModifierKeyCodes
+                       containsObject:@(leftKeyCode)] &&
+                   [GhostexGpuiAppShotsPressedModifierKeyCodes
+                       containsObject:@(rightKeyCode)];
   if (triggered) {
     [GhostexGpuiAppShotsPressedModifierKeyCodes removeAllObjects];
   }
   return triggered;
 }
 
-static BOOL GhostexGpuiAppShotsShouldTrigger(NSEvent *event, GhostexGpuiAppShotsHotkey hotkey) {
+static BOOL GhostexGpuiAppShotsShouldTrigger(NSEvent *event,
+                                             GhostexGpuiAppShotsHotkey hotkey) {
   switch (hotkey) {
-    case GhostexGpuiAppShotsHotkeyDoubleLeftShift:
-      return GhostexGpuiAppShotsShouldTriggerDoubleTap(
-          event,
-          GhostexGpuiAppShotsLeftShiftKeyCode,
-          NX_DEVICELSHIFTKEYMASK,
-          &GhostexGpuiAppShotsLastLeftShiftTap);
-    case GhostexGpuiAppShotsHotkeyDoubleLeftOption:
-      return GhostexGpuiAppShotsShouldTriggerDoubleTap(
-          event,
-          GhostexGpuiAppShotsLeftOptionKeyCode,
-          NX_DEVICELALTKEYMASK,
-          &GhostexGpuiAppShotsLastLeftOptionTap);
-    case GhostexGpuiAppShotsHotkeyBothShift:
-      return GhostexGpuiAppShotsShouldTriggerBothKeys(
-          event,
-          GhostexGpuiAppShotsLeftShiftKeyCode,
-          GhostexGpuiAppShotsRightShiftKeyCode,
-          NX_DEVICELSHIFTKEYMASK,
-          NX_DEVICERSHIFTKEYMASK);
-    case GhostexGpuiAppShotsHotkeyBothOption:
-      return GhostexGpuiAppShotsShouldTriggerBothKeys(
-          event,
-          GhostexGpuiAppShotsLeftOptionKeyCode,
-          GhostexGpuiAppShotsRightOptionKeyCode,
-          NX_DEVICELALTKEYMASK,
-          NX_DEVICERALTKEYMASK);
-    case GhostexGpuiAppShotsHotkeyBothCommand:
-    default:
-      return GhostexGpuiAppShotsShouldTriggerBothCommand(event);
+  case GhostexGpuiAppShotsHotkeyDoubleLeftShift:
+    return GhostexGpuiAppShotsShouldTriggerDoubleTap(
+        event, GhostexGpuiAppShotsLeftShiftKeyCode, NX_DEVICELSHIFTKEYMASK,
+        &GhostexGpuiAppShotsLastLeftShiftTap);
+  case GhostexGpuiAppShotsHotkeyDoubleLeftOption:
+    return GhostexGpuiAppShotsShouldTriggerDoubleTap(
+        event, GhostexGpuiAppShotsLeftOptionKeyCode, NX_DEVICELALTKEYMASK,
+        &GhostexGpuiAppShotsLastLeftOptionTap);
+  case GhostexGpuiAppShotsHotkeyBothShift:
+    return GhostexGpuiAppShotsShouldTriggerBothKeys(
+        event, GhostexGpuiAppShotsLeftShiftKeyCode,
+        GhostexGpuiAppShotsRightShiftKeyCode, NX_DEVICELSHIFTKEYMASK,
+        NX_DEVICERSHIFTKEYMASK);
+  case GhostexGpuiAppShotsHotkeyBothOption:
+    return GhostexGpuiAppShotsShouldTriggerBothKeys(
+        event, GhostexGpuiAppShotsLeftOptionKeyCode,
+        GhostexGpuiAppShotsRightOptionKeyCode, NX_DEVICELALTKEYMASK,
+        NX_DEVICERALTKEYMASK);
+  case GhostexGpuiAppShotsHotkeyBothCommand:
+  default:
+    return GhostexGpuiAppShotsShouldTriggerBothCommand(event);
   }
 }
 
 static void GhostexGpuiAppShotsBringGhostexToFront(void) {
   /*
   CDXC:GPUIAppShots 2026-06-29-01:29:
-  App Shots capture the previously frontmost window first, then activate Ghostex with all app windows so the user lands back in the agent session that receives the staged screenshot prompt.
+  App Shots capture the previously frontmost window first, then activate Ghostex
+  with all app windows so the user lands back in the agent session that receives
+  the staged screenshot prompt.
   */
   [[NSRunningApplication currentApplication]
-      activateWithOptions:NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps];
+      activateWithOptions:NSApplicationActivateAllWindows |
+                          NSApplicationActivateIgnoringOtherApps];
 }
 
-static void GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(const char *message) {
+static void
+GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(const char *message) {
   GhostexGpuiAppShotsCaptureFailed(message);
   GhostexGpuiAppShotsBringGhostexToFront();
 }
 
 static NSDictionary *GhostexGpuiAppShotsFrontWindowInfo(pid_t pid) {
-  NSArray *windowInfoList = CFBridgingRelease(
-      CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+  NSArray *windowInfoList = CFBridgingRelease(CGWindowListCopyWindowInfo(
+      kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
   for (NSDictionary *windowInfo in windowInfoList) {
     NSNumber *ownerPid = windowInfo[(__bridge NSString *)kCGWindowOwnerPID];
     NSNumber *layer = windowInfo[(__bridge NSString *)kCGWindowLayer];
     NSNumber *alpha = windowInfo[(__bridge NSString *)kCGWindowAlpha];
-    NSDictionary *boundsDictionary = windowInfo[(__bridge NSString *)kCGWindowBounds];
+    NSDictionary *boundsDictionary =
+        windowInfo[(__bridge NSString *)kCGWindowBounds];
     if (!ownerPid || ownerPid.intValue != pid || layer.integerValue != 0) {
       continue;
     }
@@ -187,7 +178,8 @@ static NSDictionary *GhostexGpuiAppShotsFrontWindowInfo(pid_t pid) {
     }
     CGRect bounds = CGRectZero;
     if (!boundsDictionary ||
-        !CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)boundsDictionary, &bounds)) {
+        !CGRectMakeWithDictionaryRepresentation(
+            (__bridge CFDictionaryRef)boundsDictionary, &bounds)) {
       continue;
     }
     if (CGRectGetWidth(bounds) < 20.0 || CGRectGetHeight(bounds) < 20.0) {
@@ -201,67 +193,86 @@ static NSDictionary *GhostexGpuiAppShotsFrontWindowInfo(pid_t pid) {
 static void GhostexGpuiAppShotsCapture(NSString *trigger) {
   /*
   CDXC:GPUIAppShots 2026-06-25-23:07:
-  GPUI App Shots mirrors macOS by taking an instant WindowServer screenshot of the frontmost app window and collecting only cheap CGWindow metadata. Do not add Accessibility tree reads, OCR, DOM scraping, terminal text inspection, stdout/stderr capture, persistent logs, or renderer-supplied screenshot paths to this native boundary.
+  GPUI App Shots mirrors macOS by taking an instant WindowServer screenshot of
+  the frontmost app window and collecting only cheap CGWindow metadata. Do not
+  add Accessibility tree reads, OCR, DOM scraping, terminal text inspection,
+  stdout/stderr capture, persistent logs, or renderer-supplied screenshot paths
+  to this native boundary.
   */
-  NSRunningApplication *frontmostApplication = NSWorkspace.sharedWorkspace.frontmostApplication;
+  NSRunningApplication *frontmostApplication =
+      NSWorkspace.sharedWorkspace.frontmostApplication;
   if (!frontmostApplication) {
-    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront("Could not identify the frontmost app.");
+    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(
+        "Could not identify the frontmost app.");
     return;
   }
 
-  NSDictionary *windowInfo = GhostexGpuiAppShotsFrontWindowInfo(frontmostApplication.processIdentifier);
+  NSDictionary *windowInfo = GhostexGpuiAppShotsFrontWindowInfo(
+      frontmostApplication.processIdentifier);
   NSNumber *windowNumber = windowInfo[(__bridge NSString *)kCGWindowNumber];
-  NSDictionary *boundsDictionary = windowInfo[(__bridge NSString *)kCGWindowBounds];
+  NSDictionary *boundsDictionary =
+      windowInfo[(__bridge NSString *)kCGWindowBounds];
   if (!windowNumber || !boundsDictionary) {
-    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront("Could not find a visible frontmost app window.");
+    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(
+        "Could not find a visible frontmost app window.");
     return;
   }
 
   CGRect bounds = CGRectZero;
-  if (!CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)boundsDictionary, &bounds)) {
-    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront("Could not read the frontmost app window bounds.");
+  if (!CGRectMakeWithDictionaryRepresentation(
+          (__bridge CFDictionaryRef)boundsDictionary, &bounds)) {
+    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(
+        "Could not read the frontmost app window bounds.");
     return;
   }
 
   CGWindowID windowId = windowNumber.unsignedIntValue;
   CGImageRef image = CGWindowListCreateImage(
-      CGRectNull,
-      kCGWindowListOptionIncludingWindow,
-      windowId,
+      CGRectNull, kCGWindowListOptionIncludingWindow, windowId,
       kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution);
   if (!image) {
-    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront("Could not capture the frontmost app window.");
+    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(
+        "Could not capture the frontmost app window.");
     return;
   }
 
   NSString *shotsDirectory = GhostexGpuiAppShotsDirectory;
   if (shotsDirectory.length == 0) {
     CGImageRelease(image);
-    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront("The App Shots image folder is unavailable.");
+    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(
+        "The App Shots image folder is unavailable.");
     return;
   }
   NSError *directoryError = nil;
   [[NSFileManager defaultManager] createDirectoryAtPath:shotsDirectory
                             withIntermediateDirectories:YES
-                                             attributes:@{NSFilePosixPermissions: @(0700)}
+                                             attributes:@{
+                                               NSFilePosixPermissions : @(0700)
+                                             }
                                                   error:&directoryError];
   if (directoryError) {
     CGImageRelease(image);
-    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront("Could not prepare the App Shots image folder.");
+    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(
+        "Could not prepare the App Shots image folder.");
     return;
   }
 
   NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
   formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
   formatter.dateFormat = @"yyMMddHHmmss";
-  NSString *fileName = [NSString stringWithFormat:@"appshot-%@.png", [formatter stringFromDate:[NSDate date]]];
-  NSString *imagePath = [shotsDirectory stringByAppendingPathComponent:fileName];
+  NSString *fileName =
+      [NSString stringWithFormat:@"appshot-%@.png",
+                                 [formatter stringFromDate:[NSDate date]]];
+  NSString *imagePath =
+      [shotsDirectory stringByAppendingPathComponent:fileName];
 
   NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithCGImage:image];
-  NSData *pngData = [bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+  NSData *pngData = [bitmap representationUsingType:NSBitmapImageFileTypePNG
+                                         properties:@{}];
   CGImageRelease(image);
   if (!pngData || ![pngData writeToFile:imagePath atomically:YES]) {
-    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront("Could not save the App Shot image.");
+    GhostexGpuiAppShotsCaptureFailedAndBringGhostexToFront(
+        "Could not save the App Shot image.");
     return;
   }
 
@@ -273,11 +284,9 @@ static void GhostexGpuiAppShotsCapture(NSString *trigger) {
   GhostexGpuiAppShotsCaptureSucceeded(
       appName.UTF8String,
       bundleIdentifier.length > 0 ? bundleIdentifier.UTF8String : NULL,
-      displayPath.UTF8String,
-      title.length > 0 ? title.UTF8String : NULL,
+      displayPath.UTF8String, title.length > 0 ? title.UTF8String : NULL,
       (int32_t)llround(CGRectGetWidth(bounds)),
-      (int32_t)llround(CGRectGetHeight(bounds)),
-      trigger.UTF8String);
+      (int32_t)llround(CGRectGetHeight(bounds)), trigger.UTF8String);
   GhostexGpuiAppShotsBringGhostexToFront();
 }
 
@@ -301,14 +310,18 @@ static void GhostexGpuiAppShotsHandleModifierEvent(NSEvent *event) {
   }
 
   NSTimeInterval timestamp = event.timestamp;
-  if (timestamp - GhostexGpuiAppShotsLastCapture < GhostexGpuiAppShotsCaptureCooldownSeconds) {
+  if (timestamp - GhostexGpuiAppShotsLastCapture <
+      GhostexGpuiAppShotsCaptureCooldownSeconds) {
     return;
   }
   GhostexGpuiAppShotsLastCapture = timestamp;
 
   /*
   CDXC:GPUIAppShots 2026-06-25-23:07:
-  The App Shots hotkey reads shared Settings for every flagsChanged event so toggles and hotkey changes apply without restarting GPUI. The trigger labels are fixed enum-like values only; never include raw key text, app names, titles, paths, commands, or user content in side-channel metadata.
+  The App Shots hotkey reads shared Settings for every flagsChanged event so
+  toggles and hotkey changes apply without restarting GPUI. The trigger labels
+  are fixed enum-like values only; never include raw key text, app names,
+  titles, paths, commands, or user content in side-channel metadata.
   */
   NSString *trigger = @"both-command";
   if (hotkey == GhostexGpuiAppShotsHotkeyDoubleLeftShift) {
@@ -330,23 +343,27 @@ void GhostexGpuiInstallAppShotsEventMonitors(const char *shotsDirectory) {
   if (!shotsDirectory) {
     return;
   }
-  NSString *resolvedShotsDirectory = [NSString stringWithUTF8String:shotsDirectory];
-  if (resolvedShotsDirectory.length == 0 || !resolvedShotsDirectory.isAbsolutePath) {
+  NSString *resolvedShotsDirectory =
+      [NSString stringWithUTF8String:shotsDirectory];
+  if (resolvedShotsDirectory.length == 0 ||
+      !resolvedShotsDirectory.isAbsolutePath) {
     return;
   }
   GhostexGpuiAppShotsDirectory = [resolvedShotsDirectory copy];
   GhostexGpuiAppShotsPressedModifierKeyCodes = [NSMutableSet setWithCapacity:2];
-  GhostexGpuiAppShotsLocalMonitor =
-      [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskFlagsChanged
-                                            handler:^NSEvent *(NSEvent *event) {
-                                              GhostexGpuiAppShotsHandleModifierEvent(event);
-                                              return event;
-                                            }];
-  GhostexGpuiAppShotsGlobalMonitor =
-      [NSEvent addGlobalMonitorForEventsMatchingMask:NSEventMaskFlagsChanged
-                                             handler:^(NSEvent *event) {
-                                               GhostexGpuiAppShotsHandleModifierEvent(event);
-                                             }];
+  GhostexGpuiAppShotsLocalMonitor = [NSEvent
+      addLocalMonitorForEventsMatchingMask:NSEventMaskFlagsChanged
+                                   handler:^NSEvent *(NSEvent *event) {
+                                     GhostexGpuiAppShotsHandleModifierEvent(
+                                         event);
+                                     return event;
+                                   }];
+  GhostexGpuiAppShotsGlobalMonitor = [NSEvent
+      addGlobalMonitorForEventsMatchingMask:NSEventMaskFlagsChanged
+                                    handler:^(NSEvent *event) {
+                                      GhostexGpuiAppShotsHandleModifierEvent(
+                                          event);
+                                    }];
 }
 
 void GhostexGpuiRemoveAppShotsEventMonitors(void) {

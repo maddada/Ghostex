@@ -1,14 +1,14 @@
 export const SIDEBAR_EMPTY_SPACE_BLOCKER_SELECTOR = [
-  "button",
-  "input",
-  "select",
-  "textarea",
-  "a",
+  'button',
+  'input',
+  'select',
+  'textarea',
+  'a',
   "[role='button']",
   "[role='menu']",
   "[role='menuitem']",
   "[data-empty-space-blocking='true']",
-].join(", ");
+].join(', ');
 
 export type EmptySidebarDoubleClickEvent = {
   clientX: number;
@@ -20,7 +20,7 @@ export type EmptySidebarDoubleClickEvent = {
 export function isEmptySidebarDoubleClick(event: EmptySidebarDoubleClickEvent): boolean {
   const { clientX, clientY, currentTarget, target } = event;
 
-  if (typeof document.elementsFromPoint === "function") {
+  if (typeof document.elementsFromPoint === 'function') {
     const elementsAtPoint = document.elementsFromPoint(clientX, clientY);
     let sawSidebarRoot = false;
 
@@ -50,8 +50,7 @@ export function isEmptySidebarDoubleClick(event: EmptySidebarDoubleClickEvent): 
   }
 
   const targetNode = target instanceof Node ? target : undefined;
-  const targetElement =
-    targetNode instanceof Element ? targetNode : (targetNode?.parentElement ?? undefined);
+  const targetElement = targetNode instanceof Element ? targetNode : (targetNode?.parentElement ?? undefined);
   if (!targetElement || !currentTarget.contains(targetElement)) {
     return false;
   }

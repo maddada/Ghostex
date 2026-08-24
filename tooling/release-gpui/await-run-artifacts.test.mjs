@@ -6,7 +6,7 @@
  * scarce runner to its job timeout.
  */
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from 'vitest';
 
 import {
   MAX_CONSECUTIVE_LIST_FAILURES,
@@ -15,63 +15,63 @@ import {
   downloadRunArtifacts,
   missingArtifacts,
   parseAwaitArgs,
-} from "./await-run-artifacts.mjs";
+} from './await-run-artifacts.mjs';
 
-describe("await-run-artifacts arguments", () => {
-  test("parses names, destination, and bounds", () => {
+describe('await-run-artifacts arguments', () => {
+  test('parses names, destination, and bounds', () => {
     const options = parseAwaitArgs([
-      "--names",
-      "release-gxserver-linux-x64, release-code-server-x",
-      "--run-id",
-      "31648691822",
-      "--repo",
-      "maddada/Ghostex",
-      "--timeout-minutes",
-      "20",
-      "--poll-seconds",
-      "5",
-      "--dest",
-      "build/runtime-artifacts",
+      '--names',
+      'release-gxserver-linux-x64, release-code-server-x',
+      '--run-id',
+      '31648691822',
+      '--repo',
+      'maddada/Ghostex',
+      '--timeout-minutes',
+      '20',
+      '--poll-seconds',
+      '5',
+      '--dest',
+      'build/runtime-artifacts',
     ]);
-    expect(options.names).toEqual(["release-gxserver-linux-x64", "release-code-server-x"]);
-    expect(options.runId).toBe("31648691822");
+    expect(options.names).toEqual(['release-gxserver-linux-x64', 'release-code-server-x']);
+    expect(options.runId).toBe('31648691822');
     expect(options.timeoutMinutes).toBe(20);
     expect(options.pollSeconds).toBe(5);
-    expect(options.dest).toBe("build/runtime-artifacts");
+    expect(options.dest).toBe('build/runtime-artifacts');
   });
 
-  test("requires names, a run id, and a positive timeout", () => {
+  test('requires names, a run id, and a positive timeout', () => {
     expect(() => parseAwaitArgs([])).toThrow(/--names/u);
-    expect(() => parseAwaitArgs(["--names", "a", "--run-id", "nope"])).toThrow(/--run-id/u);
-    expect(() => parseAwaitArgs(["--names", "a", "--run-id", "1", "--timeout-minutes", "0"])).toThrow(/positive/u);
-    expect(() => parseAwaitArgs(["--names", "a", "--run-id", "1", "--wat", "x"])).toThrow(/Unknown option/u);
+    expect(() => parseAwaitArgs(['--names', 'a', '--run-id', 'nope'])).toThrow(/--run-id/u);
+    expect(() => parseAwaitArgs(['--names', 'a', '--run-id', '1', '--timeout-minutes', '0'])).toThrow(/positive/u);
+    expect(() => parseAwaitArgs(['--names', 'a', '--run-id', '1', '--wat', 'x'])).toThrow(/Unknown option/u);
   });
 });
 
 describe("waiting for the current run's artifacts", () => {
   const options = {
     dest: null,
-    names: ["release-gxserver-linux-x64", "release-gxserver-linux-arm64"],
+    names: ['release-gxserver-linux-x64', 'release-gxserver-linux-arm64'],
     pollSeconds: 0,
-    repo: "maddada/Ghostex",
-    runId: "31648691822",
+    repo: 'maddada/Ghostex',
+    runId: '31648691822',
     timeoutMinutes: 5,
   };
 
-  test("reports which of the named artifacts are still missing", () => {
-    expect(missingArtifacts(options.names, new Set(["release-gxserver-linux-x64"]))).toEqual([
-      "release-gxserver-linux-arm64",
+  test('reports which of the named artifacts are still missing', () => {
+    expect(missingArtifacts(options.names, new Set(['release-gxserver-linux-x64']))).toEqual([
+      'release-gxserver-linux-arm64',
     ]);
     expect(missingArtifacts(options.names, new Set(options.names))).toEqual([]);
   });
 
-  test("returns as soon as every artifact has been uploaded", async () => {
+  test('returns as soon as every artifact has been uploaded', async () => {
     let poll = 0;
     const slept = [];
     await awaitRunArtifacts(options, {
       list: () => {
         poll += 1;
-        return poll < 3 ? new Set(["release-gxserver-linux-x64"]) : new Set(options.names);
+        return poll < 3 ? new Set(['release-gxserver-linux-x64']) : new Set(options.names);
       },
       sleep: (seconds) => slept.push(seconds),
     });
@@ -79,12 +79,9 @@ describe("waiting for the current run's artifacts", () => {
     expect(slept).toEqual([0, 0]);
   });
 
-  test("fails with a bounded, named error instead of hanging the runner", async () => {
+  test('fails with a bounded, named error instead of hanging the runner', async () => {
     await expect(
-      awaitRunArtifacts(
-        { ...options, timeoutMinutes: 1 / 60_000 },
-        { list: () => new Set(), sleep: () => {} },
-      ),
+      awaitRunArtifacts({ ...options, timeoutMinutes: 1 / 60_000 }, { list: () => new Set(), sleep: () => {} })
     ).rejects.toThrow(/Timed out .* release-gxserver-linux-x64, release-gxserver-linux-arm64/u);
   });
 
@@ -93,7 +90,7 @@ describe("waiting for the current run's artifacts", () => {
    * platform job. The listing is an observation, not a decision, so a failed poll
    * is simply skipped.
    */
-  test("survives transient listing failures and still returns once the artifacts appear", async () => {
+  test('survives transient listing failures and still returns once the artifacts appear', async () => {
     let poll = 0;
     const warnings = [];
     const write = process.stdout.write.bind(process.stdout);
@@ -105,7 +102,7 @@ describe("waiting for the current run's artifacts", () => {
       const result = await awaitRunArtifacts(options, {
         list: () => {
           poll += 1;
-          if (poll <= 3) throw new Error("gh api artifacts failed: HTTP 503 Service Unavailable");
+          if (poll <= 3) throw new Error('gh api artifacts failed: HTTP 503 Service Unavailable');
           return new Set(options.names);
         },
         sleep: () => {},
@@ -115,19 +112,19 @@ describe("waiting for the current run's artifacts", () => {
       process.stdout.write = write;
     }
     expect(poll).toBe(4);
-    expect(warnings.join("")).toMatch(/Artifact listing attempt 1\/5 failed/u);
+    expect(warnings.join('')).toMatch(/Artifact listing attempt 1\/5 failed/u);
   });
 
-  test("gives up loudly after too many consecutive listing failures", async () => {
+  test('gives up loudly after too many consecutive listing failures', async () => {
     let poll = 0;
     await expect(
       awaitRunArtifacts(options, {
         list: () => {
           poll += 1;
-          throw new Error("gh api artifacts failed: connect ETIMEDOUT");
+          throw new Error('gh api artifacts failed: connect ETIMEDOUT');
         },
         sleep: () => {},
-      }),
+      })
     ).rejects.toThrow(/Could not list run 31648691822 artifacts 5 times in a row/u);
     expect(poll).toBe(MAX_CONSECUTIVE_LIST_FAILURES);
   });
@@ -138,23 +135,23 @@ describe("waiting for the current run's artifacts", () => {
    * With a producer pattern the wait fails as soon as every matching job has
    * completed, and names the artifacts the run actually uploaded.
    */
-  test("fails fast once every producer job completed without uploading the artifact", async () => {
+  test('fails fast once every producer job completed without uploading the artifact', async () => {
     await expect(
       awaitRunArtifacts(
         { ...options, producerPattern: /code_server_x64|reuse/u },
         {
-          list: () => new Set(["code-server-otheridentity-x64"]),
+          list: () => new Set(['code-server-otheridentity-x64']),
           listJobs: () => [
-            { conclusion: "success", name: "code_server_x64 / build", status: "completed" },
-            { conclusion: "success", name: "prepare", status: "completed" },
+            { conclusion: 'success', name: 'code_server_x64 / build', status: 'completed' },
+            { conclusion: 'success', name: 'prepare', status: 'completed' },
           ],
           sleep: () => {},
-        },
-      ),
+        }
+      )
     ).rejects.toThrow(/Every producer job has completed .* code-server-otheridentity-x64/su);
   });
 
-  test("keeps waiting while any producer job is still running", async () => {
+  test('keeps waiting while any producer job is still running', async () => {
     let poll = 0;
     await awaitRunArtifacts(
       { ...options, producerPattern: /gxserver_/u },
@@ -163,14 +160,14 @@ describe("waiting for the current run's artifacts", () => {
           poll += 1;
           return poll < 3 ? new Set() : new Set(options.names);
         },
-        listJobs: () => [{ conclusion: null, name: "gxserver_x64 / build", status: "in_progress" }],
+        listJobs: () => [{ conclusion: null, name: 'gxserver_x64 / build', status: 'in_progress' }],
         sleep: () => {},
-      },
+      }
     );
     expect(poll).toBe(3);
   });
 
-  test("falls back to the plain timeout when no job matches the producer pattern", async () => {
+  test('falls back to the plain timeout when no job matches the producer pattern', async () => {
     const write = process.stdout.write.bind(process.stdout);
     const output = [];
     process.stdout.write = (chunk) => {
@@ -182,39 +179,39 @@ describe("waiting for the current run's artifacts", () => {
         awaitRunArtifacts(
           { ...options, producerPattern: /never_matches/u, timeoutMinutes: 1 / 60_000 },
           {
-            list: () => new Set(["something-else"]),
-            listJobs: () => [{ conclusion: "success", name: "prepare", status: "completed" }],
+            list: () => new Set(['something-else']),
+            listJobs: () => [{ conclusion: 'success', name: 'prepare', status: 'completed' }],
             sleep: () => {},
-          },
-        ),
+          }
+        )
       ).rejects.toThrow(/Timed out .* Artifacts the run did upload: something-else/su);
     } finally {
       process.stdout.write = write;
     }
-    expect(output.join("")).toMatch(/No job of run .* matches producer pattern/u);
+    expect(output.join('')).toMatch(/No job of run .* matches producer pattern/u);
   });
 
-  test("reports how long it actually waited", async () => {
+  test('reports how long it actually waited', async () => {
     const result = await awaitRunArtifacts(options, {
       list: () => new Set(options.names),
       sleep: () => {},
     });
-    expect(typeof result.waitedMs).toBe("number");
+    expect(typeof result.waitedMs).toBe('number');
     expect(result.waitedMs).toBeLessThan(60_000);
   });
 });
 
-describe("downloading the awaited artifacts", () => {
+describe('downloading the awaited artifacts', () => {
   const base = {
     dest: null,
-    names: ["release-gxserver-linux-x64"],
-    repo: "maddada/Ghostex",
-    runId: "31648691822",
+    names: ['release-gxserver-linux-x64'],
+    repo: 'maddada/Ghostex',
+    runId: '31648691822',
   };
 
-  test("retries a transient download and succeeds", async () => {
+  test('retries a transient download and succeeds', async () => {
     const attempts = [];
-    const destination = `${process.env.TMPDIR ?? "/tmp"}/ghostex-await-download-${process.pid}-a`;
+    const destination = `${process.env.TMPDIR ?? '/tmp'}/ghostex-await-download-${process.pid}-a`;
     await downloadRunArtifacts({
       ...base,
       dest: destination,
@@ -222,16 +219,16 @@ describe("downloading the awaited artifacts", () => {
       run: (command, args) => {
         attempts.push(args.at(-1));
         return attempts.length < 3
-          ? { status: 1, stderr: "Unable to download artifact: 502 Bad Gateway" }
-          : { status: 0, stderr: "" };
+          ? { status: 1, stderr: 'Unable to download artifact: 502 Bad Gateway' }
+          : { status: 0, stderr: '' };
       },
     });
     expect(attempts).toHaveLength(3);
   });
 
-  test("never retries a fatal download failure", async () => {
+  test('never retries a fatal download failure', async () => {
     let calls = 0;
-    const destination = `${process.env.TMPDIR ?? "/tmp"}/ghostex-await-download-${process.pid}-b`;
+    const destination = `${process.env.TMPDIR ?? '/tmp'}/ghostex-await-download-${process.pid}-b`;
     await expect(
       downloadRunArtifacts({
         ...base,
@@ -239,15 +236,15 @@ describe("downloading the awaited artifacts", () => {
         retryOverrides: { sleep: async () => {} },
         run: () => {
           calls += 1;
-          return { status: 1, stderr: "digest mismatch for release-gxserver-linux-x64" };
+          return { status: 1, stderr: 'digest mismatch for release-gxserver-linux-x64' };
         },
-      }),
+      })
     ).rejects.toThrow(/gh run download release-gxserver-linux-x64 failed/u);
     expect(calls).toBe(1);
   });
 
-  test("classifies unnamed download failures as retryable and integrity failures as fatal", () => {
-    expect(classifyArtifactDownloadFailure(new Error("something odd happened")).retryable).toBe(true);
-    expect(classifyArtifactDownloadFailure(new Error("hash mismatch")).retryable).toBe(false);
+  test('classifies unnamed download failures as retryable and integrity failures as fatal', () => {
+    expect(classifyArtifactDownloadFailure(new Error('something odd happened')).retryable).toBe(true);
+    expect(classifyArtifactDownloadFailure(new Error('hash mismatch')).retryable).toBe(false);
   });
 });

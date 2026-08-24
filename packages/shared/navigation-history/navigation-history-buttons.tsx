@@ -14,15 +14,15 @@
  * everyone else.
  */
 
-import { useSyncExternalStore } from "react";
-import type { NavigationHistoryController } from "./navigation-history-controller";
+import { useSyncExternalStore } from 'react';
+import type { NavigationHistoryController } from './navigation-history-controller';
 
-const ARROW_LEFT_PATH = "M15 6l-6 6 6 6";
-const ARROW_RIGHT_PATH = "M9 6l6 6-6 6";
+const ARROW_LEFT_PATH = 'M15 6l-6 6 6 6';
+const ARROW_RIGHT_PATH = 'M9 6l6 6-6 6';
 
 function ChevronIcon({ path }: { path: string }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
+    <svg aria-hidden='true' viewBox='0 0 24 24'>
       <path d={path} />
     </svg>
   );
@@ -36,25 +36,17 @@ export type NavigationHistoryButtonsProps = {
   buttonClassName?: string;
 };
 
-export function NavigationHistoryButtons({
-  buttonClassName,
-  className,
-  controller,
-}: NavigationHistoryButtonsProps) {
-  const state = useSyncExternalStore(
-    controller.subscribe,
-    controller.getState,
-    controller.getState,
-  );
+export function NavigationHistoryButtons({ buttonClassName, className, controller }: NavigationHistoryButtonsProps) {
+  const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
 
   return (
-    <div className={className} data-navigation-history="buttons">
+    <div className={className} data-navigation-history='buttons'>
       <button
         aria-label={state.backTooltip}
         className={buttonClassName}
         disabled={!state.canGoBack}
-        onClick={() => void controller.navigate("back")}
-        type="button"
+        onClick={() => void controller.navigate('back')}
+        type='button'
       >
         <ChevronIcon path={ARROW_LEFT_PATH} />
       </button>
@@ -62,8 +54,8 @@ export function NavigationHistoryButtons({
         aria-label={state.forwardTooltip}
         className={buttonClassName}
         disabled={!state.canGoForward}
-        onClick={() => void controller.navigate("forward")}
-        type="button"
+        onClick={() => void controller.navigate('forward')}
+        type='button'
       >
         <ChevronIcon path={ARROW_RIGHT_PATH} />
       </button>

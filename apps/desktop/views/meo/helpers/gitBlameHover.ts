@@ -20,18 +20,12 @@ function parseCssPixelValue(value, fallback) {
 function getGutterHoverBounds(gutter, gutterRect) {
   const marker = gutter.querySelector('.meo-git-gutter-marker');
   const markerBeforeStyle = marker instanceof HTMLElement ? window.getComputedStyle(marker, '::before') : null;
-  const hitLeftOffset = parseCssPixelValue(
-    markerBeforeStyle?.left,
-    defaultGutterHoverHitLeftPx
-  );
-  const hitWidth = Math.max(
-    0,
-    parseCssPixelValue(markerBeforeStyle?.width, defaultGutterHoverHitWidthPx)
-  );
+  const hitLeftOffset = parseCssPixelValue(markerBeforeStyle?.left, defaultGutterHoverHitLeftPx);
+  const hitWidth = Math.max(0, parseCssPixelValue(markerBeforeStyle?.width, defaultGutterHoverHitWidthPx));
 
   return {
     left: gutterRect.left + Math.min(0, hitLeftOffset),
-    right: gutterRect.left + Math.max(gutterRect.width, hitLeftOffset + hitWidth)
+    right: gutterRect.left + Math.max(gutterRect.width, hitLeftOffset + hitWidth),
   };
 }
 
@@ -45,7 +39,7 @@ function formatAbsoluteDate(unixSeconds) {
       month: 'short',
       day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     }).format(new Date(unixSeconds * 1000));
   } catch {
     return new Date(unixSeconds * 1000).toLocaleString();
@@ -87,7 +81,7 @@ function renderBlameResult(ui, result) {
     const date = formatAbsoluteDate(result.authorTimeUnix);
     const parts = [
       result.author || 'Unknown',
-      result.shortCommit || (result.commit ? result.commit.slice(0, 8) : '')
+      result.shortCommit || (result.commit ? result.commit.slice(0, 8) : ''),
     ].filter(Boolean);
     if (date) {
       parts.push(date);
@@ -121,7 +115,9 @@ function getRenderedBlockTarget(target) {
   if (!(target instanceof Element)) {
     return null;
   }
-  return target.closest('[data-meo-rendered-block-kind][data-meo-rendered-block-start-line][data-meo-rendered-block-end-line]');
+  return target.closest(
+    '[data-meo-rendered-block-kind][data-meo-rendered-block-start-line][data-meo-rendered-block-end-line]'
+  );
 }
 
 function getRenderedBlockRangeFromElement(block) {
@@ -141,7 +137,9 @@ function getRenderedBlockLineRange(target) {
 }
 
 function getRenderedBlockLineRangeAtClientY(view, clientY) {
-  for (const node of view.dom.querySelectorAll('[data-meo-rendered-block-kind][data-meo-rendered-block-start-line][data-meo-rendered-block-end-line]')) {
+  for (const node of view.dom.querySelectorAll(
+    '[data-meo-rendered-block-kind][data-meo-rendered-block-start-line][data-meo-rendered-block-end-line]'
+  )) {
     const range = getRenderedBlockRangeFromElement(node);
     if (!range) continue;
     const rect = node.getBoundingClientRect();
@@ -153,7 +151,7 @@ function getRenderedBlockLineRangeAtClientY(view, clientY) {
     return range;
   }
 
-  const viewAny = /** @type {any} */ (view);
+  const viewAny = /** @type {any} */ view;
   if (typeof viewAny.lineBlockAtHeight === 'function') {
     const block = viewAny.lineBlockAtHeight(clientY - view.documentTop);
     if (block && Number.isFinite(block.from)) {
@@ -188,26 +186,19 @@ function getRenderedBlockElement(view, lineRange, target = null) {
   const targetRange = getRenderedBlockRangeFromElement(targetBlock);
   if (
     targetBlock instanceof HTMLElement &&
-    (
-      !lineRange ||
-      (targetRange && targetRange.startLine === lineRange.startLine && targetRange.endLine === lineRange.endLine)
-    )
+    (!lineRange ||
+      (targetRange && targetRange.startLine === lineRange.startLine && targetRange.endLine === lineRange.endLine))
   ) {
     return targetBlock;
   }
 
-  if (
-    !lineRange ||
-    !Number.isInteger(lineRange.startLine) ||
-    !Number.isInteger(lineRange.endLine)
-  ) {
+  if (!lineRange || !Number.isInteger(lineRange.startLine) || !Number.isInteger(lineRange.endLine)) {
     return null;
   }
 
-  const selector = (
+  const selector =
     `[data-meo-rendered-block-kind][data-meo-rendered-block-start-line="${lineRange.startLine}"]` +
-    `[data-meo-rendered-block-end-line="${lineRange.endLine}"]`
-  );
+    `[data-meo-rendered-block-end-line="${lineRange.endLine}"]`;
   const block = view.dom.querySelector(selector);
   return block instanceof HTMLElement ? block : null;
 }
@@ -314,41 +305,32 @@ function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, ma
   const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
   const hitMarker = markerElement instanceof HTMLElement ? markerElement : null;
   if (!isTrailingEofVisualLine(doc, lineNumber)) {
-    const changedMarker = (
-      isChangedMarker(rowMarker)
-        ? rowMarker
-        : isChangedMarker(hitMarker)
-          ? hitMarker
-          : null
-    );
+    const changedMarker = isChangedMarker(rowMarker) ? rowMarker : isChangedMarker(hitMarker) ? hitMarker : null;
     return {
       lineNumber,
       requestLineNumber: lineNumber,
       proxiedFromTrailingEof: false,
-      effectiveChangeKind: getMarkerChangeKind(changedMarker)
+      effectiveChangeKind: getMarkerChangeKind(changedMarker),
     };
   }
-  const previousRowMarker = (
+  const previousRowMarker =
     gutterRowElement instanceof HTMLElement
-      ? gutterRowElement.previousElementSibling?.querySelector?.('.meo-git-gutter-marker') ?? null
-      : null
-  );
-  const changedMarker = (
-    isChangedMarker(rowMarker)
-      ? rowMarker
-      : isChangedMarker(hitMarker)
-        ? hitMarker
+      ? (gutterRowElement.previousElementSibling?.querySelector?.('.meo-git-gutter-marker') ?? null)
+      : null;
+  const changedMarker = isChangedMarker(rowMarker)
+    ? rowMarker
+    : isChangedMarker(hitMarker)
+      ? hitMarker
       : isChangedMarker(previousRowMarker)
         ? previousRowMarker
-        : null
-  );
+        : null;
   // The synthetic trailing EOF row should always proxy to the previous real line so
   // unchanged last lines still support blame hover/click like the line above.
   return {
     lineNumber: Math.max(1, lineNumber - 1),
     requestLineNumber: lineNumber,
     proxiedFromTrailingEof: true,
-    effectiveChangeKind: getMarkerChangeKind(changedMarker)
+    effectiveChangeKind: getMarkerChangeKind(changedMarker),
   };
 }
 
@@ -357,7 +339,7 @@ export function createGitBlameHoverController({
   getMode,
   requestBlame,
   openRevisionForLine,
-  openWorktreeForLine
+  openWorktreeForLine,
 }) {
   const ui = buildTooltipDom();
   const hoverOverlay = buildGutterHoverOverlayDom();
@@ -382,12 +364,11 @@ export function createGitBlameHoverController({
   const pointerMoveDistanceSquaredFromDown = (event) => {
     const deltaX = event.clientX - pointerDownClientX;
     const deltaY = event.clientY - pointerDownClientY;
-    return (deltaX * deltaX) + (deltaY * deltaY);
+    return deltaX * deltaX + deltaY * deltaY;
   };
 
-  const hasPointerMovedPastDragThreshold = (event) => (
-    pointerMoveDistanceSquaredFromDown(event) > gutterClickDragThresholdSquared
-  );
+  const hasPointerMovedPastDragThreshold = (event) =>
+    pointerMoveDistanceSquaredFromDown(event) > gutterClickDragThresholdSquared;
 
   const getGutterBandLayout = () => {
     const gutter = view.dom.querySelector('.cm-gutter.meo-git-gutter');
@@ -410,18 +391,17 @@ export function createGitBlameHoverController({
       bandTop: Math.max(gutterRect.top, docTop),
       bandBottom: Math.min(gutterRect.bottom, docBottom),
       docTop,
-      docBottom
+      docBottom,
     };
   };
 
-  const isWithinBand = (layout, clientX, clientY) => (
+  const isWithinBand = (layout, clientX, clientY) =>
     clientX >= layout.bandLeft &&
     clientX < layout.bandRight &&
     clientY >= layout.bandTop &&
     clientY <= layout.bandBottom &&
     clientY >= layout.docTop &&
-    clientY <= layout.docBottom
-  );
+    clientY <= layout.docBottom;
 
   const gutterProbeXs = (layout, clientX) => {
     const probeXs = [];
@@ -450,9 +430,10 @@ export function createGitBlameHoverController({
 
   const getMarkerAtY = (layout, clientX, clientY) => {
     for (const sampleX of gutterProbeXs(layout, clientX)) {
-      const stack = typeof document.elementsFromPoint === 'function'
-        ? document.elementsFromPoint(sampleX, clientY)
-        : [document.elementFromPoint(sampleX, clientY)];
+      const stack =
+        typeof document.elementsFromPoint === 'function'
+          ? document.elementsFromPoint(sampleX, clientY)
+          : [document.elementFromPoint(sampleX, clientY)];
       for (const hit of stack) {
         if (!(hit instanceof Element)) {
           continue;
@@ -468,18 +449,16 @@ export function createGitBlameHoverController({
 
   const getGutterRowAtY = (layout, clientX, clientY) => {
     for (const sampleX of gutterProbeXs(layout, clientX)) {
-      const stack = typeof document.elementsFromPoint === 'function'
-        ? document.elementsFromPoint(sampleX, clientY)
-        : [document.elementFromPoint(sampleX, clientY)];
+      const stack =
+        typeof document.elementsFromPoint === 'function'
+          ? document.elementsFromPoint(sampleX, clientY)
+          : [document.elementFromPoint(sampleX, clientY)];
       for (const hit of stack) {
         if (!(hit instanceof Element)) {
           continue;
         }
         const row = hit.closest('.cm-gutterElement');
-        if (
-          row instanceof HTMLElement &&
-          row.closest('.cm-gutter.meo-git-gutter')
-        ) {
+        if (row instanceof HTMLElement && row.closest('.cm-gutter.meo-git-gutter')) {
           return row;
         }
       }
@@ -493,7 +472,7 @@ export function createGitBlameHoverController({
     }
     const rowRect = gutterRowElement.getBoundingClientRect();
     const probeY = (rowRect.top + rowRect.bottom) / 2;
-    const viewAny = /** @type {any} */ (view);
+    const viewAny = /** @type {any} */ view;
     if (typeof viewAny.lineBlockAtHeight === 'function') {
       const block = viewAny.lineBlockAtHeight(probeY - view.documentTop);
       if (block && Number.isFinite(block.from)) {
@@ -502,11 +481,7 @@ export function createGitBlameHoverController({
     }
 
     const contentRect = view.contentDOM.getBoundingClientRect();
-    const x = clamp(
-      contentRect.left + 4,
-      contentRect.left + 1,
-      Math.max(contentRect.left + 1, contentRect.right - 1)
-    );
+    const x = clamp(contentRect.left + 4, contentRect.left + 1, Math.max(contentRect.left + 1, contentRect.right - 1));
     const pos = view.posAtCoords({ x, y: probeY });
     return pos === null ? null : view.state.doc.lineAt(pos).number;
   };
@@ -529,29 +504,19 @@ export function createGitBlameHoverController({
     return true;
   };
 
-  const sameLineRange = (left, right) => (
-    left === right ||
-    (
-      left &&
-      right &&
-      left.startLine === right.startLine &&
-      left.endLine === right.endLine
-    )
-  );
+  const sameLineRange = (left, right) =>
+    left === right || (left && right && left.startLine === right.startLine && left.endLine === right.endLine);
 
   const getChangedMarkerForRow = (gutterRowElement, markerElement = null) => {
     const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
     const marker = markerElement instanceof Element ? markerElement.closest('.meo-git-gutter-marker') : null;
-    let changedMarker = isChangedMarker(rowMarker)
-      ? rowMarker
-      : isChangedMarker(marker)
-        ? marker
-        : null;
+    let changedMarker = isChangedMarker(rowMarker) ? rowMarker : isChangedMarker(marker) ? marker : null;
 
     if (!changedMarker && gutterRowElement instanceof HTMLElement) {
       const rawLineNumber = getRawLineNumberAtGutterRow(gutterRowElement);
       if (rawLineNumber !== null && isTrailingEofVisualLine(view.state.doc, rawLineNumber)) {
-        const previousRowMarker = gutterRowElement.previousElementSibling?.querySelector?.('.meo-git-gutter-marker') ?? null;
+        const previousRowMarker =
+          gutterRowElement.previousElementSibling?.querySelector?.('.meo-git-gutter-marker') ?? null;
         if (isChangedMarker(previousRowMarker)) {
           changedMarker = previousRowMarker;
         }
@@ -667,17 +632,10 @@ export function createGitBlameHoverController({
       nextMarkers = [changedMarker];
     }
 
-    const rawLineNumber = (
-      gutterRowElement instanceof HTMLElement
-        ? getRawLineNumberAtGutterRow(gutterRowElement)
-        : null
-    );
+    const rawLineNumber =
+      gutterRowElement instanceof HTMLElement ? getRawLineNumberAtGutterRow(gutterRowElement) : null;
 
-    const lineFlags = (
-      getMode?.() === 'live'
-        ? view.state.field(gitDiffLineFlagsField, false)
-        : null
-    );
+    const lineFlags = getMode?.() === 'live' ? view.state.field(gitDiffLineFlagsField, false) : null;
 
     if (gutterRowElement instanceof HTMLElement && getMode?.() === 'live') {
       if (rawLineNumber !== null && Array.isArray(lineFlags)) {
@@ -708,16 +666,12 @@ export function createGitBlameHoverController({
     }
 
     if (!nextMarkers.length && !nextGutterRowHoverKind && getMode?.() === 'live') {
-      const fallbackBlock = (
-        renderedBlockRange ??
-        (rawLineNumber === null ? null : getLiveRenderedBlockAtLine(view.state, rawLineNumber))
-      );
+      const fallbackBlock =
+        renderedBlockRange ?? (rawLineNumber === null ? null : getLiveRenderedBlockAtLine(view.state, rawLineNumber));
       if (fallbackBlock) {
         nextRenderedBlockRange = { startLine: fallbackBlock.startLine, endLine: fallbackBlock.endLine };
-        nextGutterRowHoverKind = (
-          getLineRangeChangeKind(lineFlags, fallbackBlock.startLine, fallbackBlock.endLine) ??
-          'empty'
-        );
+        nextGutterRowHoverKind =
+          getLineRangeChangeKind(lineFlags, fallbackBlock.startLine, fallbackBlock.endLine) ?? 'empty';
       }
     }
 
@@ -782,7 +736,7 @@ export function createGitBlameHoverController({
         requestLineNumber: block.canonicalLine,
         proxiedFromTrailingEof: false,
         effectiveChangeKind: block.aggregateChangeKind,
-        collapsedBlock: block
+        collapsedBlock: block,
       };
     }
 
@@ -791,30 +745,28 @@ export function createGitBlameHoverController({
       return hit;
     }
 
-    const aggregateChangeKind = getLineRangeChangeKind(
-      lineFlags,
-      renderedBlock.startLine,
-      renderedBlock.endLine
-    );
+    const aggregateChangeKind = getLineRangeChangeKind(lineFlags, renderedBlock.startLine, renderedBlock.endLine);
     if (!aggregateChangeKind) {
       return hit;
     }
 
     return {
       ...hit,
-      effectiveChangeKind: aggregateChangeKind
+      effectiveChangeKind: aggregateChangeKind,
     };
   };
 
   const lineNumberAtClientY = (layout, clientY, gutterRowElement = null, markerElement = null) => {
-    const viewAny = /** @type {any} */ (view);
+    const viewAny = /** @type {any} */ view;
     if (typeof viewAny.lineBlockAtHeight === 'function') {
       const rowRect = gutterRowElement instanceof HTMLElement ? gutterRowElement.getBoundingClientRect() : null;
       const probeY = rowRect ? (rowRect.top + rowRect.bottom) / 2 : clientY;
       const block = viewAny.lineBlockAtHeight(probeY - view.documentTop);
       if (block && Number.isFinite(block.from)) {
         const lineNumber = view.state.doc.lineAt(block.from).number;
-        return remapLiveHit(normalizeTrailingEofVisualLineHit(view.state.doc, lineNumber, gutterRowElement, markerElement));
+        return remapLiveHit(
+          normalizeTrailingEofVisualLineHit(view.state.doc, lineNumber, gutterRowElement, markerElement)
+        );
       }
     }
 
@@ -830,7 +782,7 @@ export function createGitBlameHoverController({
         requestLineNumber: null,
         proxiedFromTrailingEof: false,
         effectiveChangeKind: null,
-        collapsedBlock: null
+        collapsedBlock: null,
       };
     }
     const lineNumber = view.state.doc.lineAt(pos).number;
@@ -845,11 +797,7 @@ export function createGitBlameHoverController({
     lineRange = null,
     { target = null, collapseTall = true } = {}
   ) => {
-    if (
-      lineRange &&
-      Number.isInteger(lineRange.startLine) &&
-      Number.isInteger(lineRange.endLine)
-    ) {
+    if (lineRange && Number.isInteger(lineRange.startLine) && Number.isInteger(lineRange.endLine)) {
       const renderedBlockElement = getRenderedBlockElement(view, lineRange, target);
       const gutterRows = getGutterRowsInLineRange(lineRange.startLine, lineRange.endLine);
       const topCandidates = [];
@@ -869,11 +817,7 @@ export function createGitBlameHoverController({
       }
 
       if (topCandidates.length && bottomCandidates.length) {
-        const visibleTop = Math.max(
-          Math.min(...topCandidates),
-          layout.gutterRect.top,
-          8
-        );
+        const visibleTop = Math.max(Math.min(...topCandidates), layout.gutterRect.top, 8);
         const visibleBottom = Math.min(
           Math.max(...bottomCandidates),
           layout.gutterRect.bottom,
@@ -888,7 +832,7 @@ export function createGitBlameHoverController({
             left: layout.gutterRect.left,
             right: layout.gutterRect.right,
             top: hoverTop,
-            bottom: hoverBottom
+            bottom: hoverBottom,
           };
         }
 
@@ -896,7 +840,7 @@ export function createGitBlameHoverController({
           left: layout.gutterRect.left,
           right: layout.gutterRect.right,
           top: visibleTop,
-          bottom: visibleBottom
+          bottom: visibleBottom,
         };
       }
 
@@ -906,7 +850,7 @@ export function createGitBlameHoverController({
           left: layout.gutterRect.left,
           right: layout.gutterRect.right,
           top: clamp(Math.min(rowRect.top, clientY - 10), layout.gutterRect.top, layout.gutterRect.bottom),
-          bottom: clamp(Math.max(rowRect.bottom, clientY + 10), layout.gutterRect.top, layout.gutterRect.bottom)
+          bottom: clamp(Math.max(rowRect.bottom, clientY + 10), layout.gutterRect.top, layout.gutterRect.bottom),
         };
       }
 
@@ -914,7 +858,7 @@ export function createGitBlameHoverController({
         left: layout.gutterRect.left,
         right: layout.gutterRect.right,
         top: clamp(clientY - 10, layout.gutterRect.top, layout.gutterRect.bottom),
-        bottom: clamp(clientY + 10, layout.gutterRect.top, layout.gutterRect.bottom)
+        bottom: clamp(clientY + 10, layout.gutterRect.top, layout.gutterRect.bottom),
       };
     }
 
@@ -923,18 +867,8 @@ export function createGitBlameHoverController({
     const startCoords = view.coordsAtPos(line.from);
     const endCoords = view.coordsAtPos(line.to, -1) || view.coordsAtPos(line.to);
 
-    const topCandidates = [
-      startCoords?.top,
-      endCoords?.top,
-      rowRect?.top,
-      clientY
-    ].filter(Number.isFinite);
-    const bottomCandidates = [
-      startCoords?.bottom,
-      endCoords?.bottom,
-      rowRect?.bottom,
-      clientY
-    ].filter(Number.isFinite);
+    const topCandidates = [startCoords?.top, endCoords?.top, rowRect?.top, clientY].filter(Number.isFinite);
+    const bottomCandidates = [startCoords?.bottom, endCoords?.bottom, rowRect?.bottom, clientY].filter(Number.isFinite);
 
     const top = topCandidates.length ? Math.min(...topCandidates) : clientY;
     const bottom = bottomCandidates.length ? Math.max(...bottomCandidates) : clientY;
@@ -943,7 +877,7 @@ export function createGitBlameHoverController({
       left: layout.gutterRect.left,
       right: layout.gutterRect.right,
       top,
-      bottom
+      bottom,
     };
   };
 
@@ -985,7 +919,7 @@ export function createGitBlameHoverController({
       pendingBlameLineNumber = lineNumber;
       try {
         result = await requestBlame?.({
-          lineNumber: requestLineNumber
+          lineNumber: requestLineNumber,
         });
       } catch {
         result = { kind: 'unavailable', reason: 'error' };
@@ -1052,12 +986,10 @@ export function createGitBlameHoverController({
     }
 
     const withinBand = isWithinBand(layout, event.clientX, event.clientY);
-    const renderedBlockRange = (mode === 'live' && withinBand)
-      ? (
-          getRenderedBlockLineRange(target) ??
-          getRenderedBlockLineRangeAtClientY(view, event.clientY)
-        )
-      : null;
+    const renderedBlockRange =
+      mode === 'live' && withinBand
+        ? (getRenderedBlockLineRange(target) ?? getRenderedBlockLineRangeAtClientY(view, event.clientY))
+        : null;
     if (!withinBand) {
       clearMarkerHover();
       if (!ui.root.contains(target)) {
@@ -1082,26 +1014,18 @@ export function createGitBlameHoverController({
       return;
     }
     const lineNumber = hit.lineNumber;
-    const requestLineNumber = (
-      Number.isFinite(hit.requestLineNumber) ? hit.requestLineNumber : lineNumber
-    );
-    const effectiveChangeKind = (
+    const requestLineNumber = Number.isFinite(hit.requestLineNumber) ? hit.requestLineNumber : lineNumber;
+    const effectiveChangeKind =
       hit.effectiveChangeKind ??
       getMarkerChangeKind(hoveredMarkerElement) ??
       (activeGutterRowHoverKind === 'added' || activeGutterRowHoverKind === 'modified'
         ? activeGutterRowHoverKind
-        : null)
-    );
+        : null);
     const proxiedFromTrailingEof = hit.proxiedFromTrailingEof === true;
-    const renderedBlock = (
+    const renderedBlock =
       mode === 'live'
-        ? (
-            activeRenderedBlockRange ??
-            renderedBlockRange ??
-            getLiveRenderedBlockAtLine(view.state, lineNumber)
-          )
-        : null
-    );
+        ? (activeRenderedBlockRange ?? renderedBlockRange ?? getLiveRenderedBlockAtLine(view.state, lineNumber))
+        : null;
     const anchorRect = getLineAnchorRect(
       lineNumber,
       layout,
@@ -1204,13 +1128,8 @@ export function createGitBlameHoverController({
     if (lineNumber === null) {
       return;
     }
-    const requestLineNumber = (
-      Number.isFinite(hit.requestLineNumber) ? hit.requestLineNumber : lineNumber
-    );
-    const effectiveChangeKind = (
-      hit.effectiveChangeKind ??
-      getMarkerChangeKind(marker)
-    );
+    const requestLineNumber = Number.isFinite(hit.requestLineNumber) ? hit.requestLineNumber : lineNumber;
+    const effectiveChangeKind = hit.effectiveChangeKind ?? getMarkerChangeKind(marker);
     const proxiedFromTrailingEof = hit.proxiedFromTrailingEof === true;
 
     event.preventDefault();
@@ -1252,6 +1171,6 @@ export function createGitBlameHoverController({
       view.scrollDOM.removeEventListener('scroll', onScroll);
       ui.root.remove();
       hoverOverlay.remove();
-    }
+    },
   };
 }

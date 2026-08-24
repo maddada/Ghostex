@@ -3,7 +3,7 @@ function isWindowsDrivePath(value: string): boolean {
 }
 
 function isUncPath(value: string): boolean {
-  return value.startsWith("\\\\");
+  return value.startsWith('\\\\');
 }
 
 function isWindowsAbsolutePath(value: string): boolean {
@@ -12,25 +12,25 @@ function isWindowsAbsolutePath(value: string): boolean {
 
 export function isExplicitRelativeProjectPath(value: string): boolean {
   return (
-    value === "." ||
-    value === ".." ||
-    value.startsWith("./") ||
-    value.startsWith("../") ||
-    value.startsWith(".\\") ||
-    value.startsWith("..\\")
+    value === '.' ||
+    value === '..' ||
+    value.startsWith('./') ||
+    value.startsWith('../') ||
+    value.startsWith('.\\') ||
+    value.startsWith('..\\')
   );
 }
 
 function isRootPath(value: string): boolean {
-  return value === "/" || value === "\\" || /^[a-zA-Z]:[/\\]?$/u.test(value);
+  return value === '/' || value === '\\' || /^[a-zA-Z]:[/\\]?$/u.test(value);
 }
 
-function getAbsolutePathKind(value: string): "unix" | "windows" | null {
+function getAbsolutePathKind(value: string): 'unix' | 'windows' | null {
   if (isWindowsDrivePath(value) || isUncPath(value)) {
-    return "windows";
+    return 'windows';
   }
-  if (value.startsWith("/")) {
-    return "unix";
+  if (value.startsWith('/')) {
+    return 'unix';
   }
   return null;
 }
@@ -39,69 +39,66 @@ function trimTrailingPathSeparators(value: string): string {
   if (value.length === 0 || isRootPath(value)) {
     return value;
   }
-  const trimmed =
-    getAbsolutePathKind(value) === "unix"
-      ? value.replace(/\/+$/gu, "")
-      : value.replace(/[\\/]+$/gu, "");
+  const trimmed = getAbsolutePathKind(value) === 'unix' ? value.replace(/\/+$/gu, '') : value.replace(/[\\/]+$/gu, '');
   if (trimmed.length === 0) {
     return value;
   }
   return /^[a-zA-Z]:$/u.test(trimmed) ? `${trimmed}\\` : trimmed;
 }
 
-function preferredPathSeparator(value: string): "/" | "\\" {
+function preferredPathSeparator(value: string): '/' | '\\' {
   const absolutePathKind = getAbsolutePathKind(value);
-  if (absolutePathKind === "windows") {
-    return "\\";
+  if (absolutePathKind === 'windows') {
+    return '\\';
   }
-  if (absolutePathKind === "unix") {
-    return "/";
+  if (absolutePathKind === 'unix') {
+    return '/';
   }
-  return value.includes("\\") ? "\\" : "/";
+  return value.includes('\\') ? '\\' : '/';
 }
 
 export function hasTrailingPathSeparator(value: string): boolean {
-  return (getAbsolutePathKind(value) === "unix" ? /\/$/u : /[\\/]$/u).test(value);
+  return (getAbsolutePathKind(value) === 'unix' ? /\/$/u : /[\\/]$/u).test(value);
 }
 
-function splitPathSegments(value: string, separator: "/" | "\\"): string[] {
-  return value.split(separator === "/" ? /\/+/u : /[\\/]+/u).filter(Boolean);
+function splitPathSegments(value: string, separator: '/' | '\\'): string[] {
+  return value.split(separator === '/' ? /\/+/u : /[\\/]+/u).filter(Boolean);
 }
 
 function getLastPathSeparatorIndex(value: string): number {
-  if (getAbsolutePathKind(value) === "unix") {
-    return value.lastIndexOf("/");
+  if (getAbsolutePathKind(value) === 'unix') {
+    return value.lastIndexOf('/');
   }
-  return Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"));
+  return Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
 }
 
 function splitAbsolutePath(value: string): {
   root: string;
-  separator: "/" | "\\";
+  separator: '/' | '\\';
   segments: string[];
 } | null {
   if (isWindowsDrivePath(value)) {
     const root = `${value.slice(0, 2)}\\`;
-    const segments = splitPathSegments(value.slice(root.length), "\\");
-    return { root, separator: "\\", segments };
+    const segments = splitPathSegments(value.slice(root.length), '\\');
+    return { root, separator: '\\', segments };
   }
   if (isUncPath(value)) {
-    const segments = splitPathSegments(value, "\\");
+    const segments = splitPathSegments(value, '\\');
     const [server, share, ...rest] = segments;
     if (!server || !share) {
       return null;
     }
     return {
       root: `\\\\${server}\\${share}\\`,
-      separator: "\\",
+      separator: '\\',
       segments: rest,
     };
   }
-  if (value.startsWith("/")) {
+  if (value.startsWith('/')) {
     return {
-      root: "/",
-      separator: "/",
-      segments: splitPathSegments(value.slice(1), "/"),
+      root: '/',
+      separator: '/',
+      segments: splitPathSegments(value.slice(1), '/'),
     };
   }
   return null;
@@ -109,16 +106,16 @@ function splitAbsolutePath(value: string): {
 
 export function isFilesystemBrowseQuery(
   value: string,
-  platform = typeof navigator === "undefined" ? "" : navigator.platform,
+  platform = typeof navigator === 'undefined' ? '' : navigator.platform
 ): boolean {
   const allowWindowsPaths = /^Win/u.test(platform);
   return (
-    value.startsWith("./") ||
-    value.startsWith("../") ||
-    value.startsWith(".\\") ||
-    value.startsWith("..\\") ||
-    value.startsWith("/") ||
-    value.startsWith("~/") ||
+    value.startsWith('./') ||
+    value.startsWith('../') ||
+    value.startsWith('.\\') ||
+    value.startsWith('..\\') ||
+    value.startsWith('/') ||
+    value.startsWith('~/') ||
     (allowWindowsPaths && isWindowsAbsolutePath(value))
   );
 }
@@ -144,10 +141,10 @@ export function resolveProjectPathForDispatch(value: string, cwd?: string | null
 
   const nextSegments = [...absoluteBase.segments];
   for (const segment of trimmedValue.split(/[\\/]+/u)) {
-    if (segment.length === 0 || segment === ".") {
+    if (segment.length === 0 || segment === '.') {
       continue;
     }
-    if (segment === "..") {
+    if (segment === '..') {
       nextSegments.pop();
       continue;
     }

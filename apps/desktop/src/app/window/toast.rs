@@ -2,8 +2,8 @@
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use crate::*;
 use crate::app::helpers::*;
+use crate::*;
 
 pub(crate) const GPUI_APP_TOAST_WIDTH: f32 = 356.0;
 pub(crate) const GPUI_APP_TOAST_GAP: f32 = 10.0;
@@ -14,7 +14,8 @@ pub(crate) const GPUI_APP_TOAST_CLOSE_SIZE: f32 = 18.0;
 pub(crate) const GPUI_APP_TOAST_CLOSE_OUTSET: f32 = GPUI_APP_TOAST_CLOSE_SIZE / 2.0;
 pub(crate) const GPUI_APP_TOAST_CLOSE_WINDOW_INSET: f32 = 5.0;
 pub(crate) const GPUI_APP_TOAST_CLOSE_TOP_INSET: f32 = 5.0;
-pub(crate) const GPUI_APP_TOAST_WINDOW_WIDTH: f32 = GPUI_APP_TOAST_WIDTH + GPUI_APP_TOAST_CLOSE_OUTSET;
+pub(crate) const GPUI_APP_TOAST_WINDOW_WIDTH: f32 =
+    GPUI_APP_TOAST_WIDTH + GPUI_APP_TOAST_CLOSE_OUTSET;
 pub(crate) const GPUI_APP_TOAST_WRAPPER_GAP: f32 = GPUI_APP_TOAST_GAP - GPUI_APP_TOAST_CLOSE_OUTSET;
 pub(crate) const GPUI_APP_TOAST_HORIZONTAL_PADDING: f32 = 12.0;
 pub(crate) const GPUI_APP_TOAST_VERTICAL_PADDING: f32 = 10.0;
@@ -100,7 +101,10 @@ pub(crate) fn gpui_app_toast_comparable_text(value: &str) -> String {
         .to_lowercase()
 }
 
-pub(crate) fn gpui_normalized_app_toast_description(title: &str, description: Option<&str>) -> Option<String> {
+pub(crate) fn gpui_normalized_app_toast_description(
+    title: &str,
+    description: Option<&str>,
+) -> Option<String> {
     let description = description?.trim();
     if description.is_empty() {
         return None;

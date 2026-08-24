@@ -1,7 +1,7 @@
-import type { DefaultEditorCommand } from "./ghostex-settings";
+import type { DefaultEditorCommand } from './ghostex-settings';
 
-const vscodeCompatibleEditorCommands = new Set(["code", "code-insiders", "codium", "cursor", "windsurf"]);
-const zedCompatibleEditorCommands = new Set(["zed", "zeditor"]);
+const vscodeCompatibleEditorCommands = new Set(['code', 'code-insiders', 'codium', 'cursor', 'windsurf']);
+const zedCompatibleEditorCommands = new Set(['zed', 'zeditor']);
 
 export function createAgentsHubExternalEditorCommand({
   defaultEditorCommand,
@@ -24,11 +24,11 @@ export function createAgentsHubExternalEditorCommand({
      */
     return [
       editorCommand,
-      "--reuse-window",
+      '--reuse-window',
       quoteAgentsHubShellArg(folderPath),
-      "--goto",
+      '--goto',
       quoteAgentsHubShellArg(`${normalizedFilePath}:1:1`),
-    ].join(" ");
+    ].join(' ');
   }
 
   if (isEditorCommandMatch(defaultEditorCommand, editorCliName, zedCompatibleEditorCommands)) {
@@ -39,38 +39,38 @@ export function createAgentsHubExternalEditorCommand({
      */
     return [
       editorCommand,
-      "--existing",
+      '--existing',
       quoteAgentsHubShellArg(folderPath),
       quoteAgentsHubShellArg(`${normalizedFilePath}:1:1`),
-    ].join(" ");
+    ].join(' ');
   }
 
-  return [
-    editorCommand,
-    quoteAgentsHubShellArg(folderPath),
-    quoteAgentsHubShellArg(normalizedFilePath),
-  ].join(" ");
+  return [editorCommand, quoteAgentsHubShellArg(folderPath), quoteAgentsHubShellArg(normalizedFilePath)].join(' ');
 }
 
 function isEditorCommandMatch(
   defaultEditorCommand: DefaultEditorCommand | undefined,
   editorCliName: string | undefined,
-  compatibleCommands: Set<string>,
+  compatibleCommands: Set<string>
 ): boolean {
   return Boolean(
     (defaultEditorCommand && compatibleCommands.has(defaultEditorCommand)) ||
-      (editorCliName && compatibleCommands.has(editorCliName)),
+    (editorCliName && compatibleCommands.has(editorCliName))
   );
 }
 
 function dirnameAgentsHubPath(path: string): string {
-  const index = path.lastIndexOf("/");
-  return index > 0 ? path.slice(0, index) : ".";
+  const index = path.lastIndexOf('/');
+  return index > 0 ? path.slice(0, index) : '.';
 }
 
 function getEditorCliName(editorCommand: string): string | undefined {
-  const executable = editorCommand.trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/)?.slice(1).find(Boolean);
-  return executable?.split("/").filter(Boolean).at(-1);
+  const executable = editorCommand
+    .trim()
+    .match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/)
+    ?.slice(1)
+    .find(Boolean);
+  return executable?.split('/').filter(Boolean).at(-1);
 }
 
 function quoteAgentsHubShellArg(value: string): string {

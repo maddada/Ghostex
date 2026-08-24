@@ -11,7 +11,6 @@ use std::collections::HashSet;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use crate::app::helpers::*;
 use crate::*;
 
@@ -238,18 +237,24 @@ pub(crate) fn gpui_sidebar_command_session_indicators_from_command_pane_sources(
     )
 }
 
-pub(crate) fn gpui_sidebar_command_indicator_matchable_session_source(session: &serde_json::Value) -> bool {
+pub(crate) fn gpui_sidebar_command_indicator_matchable_session_source(
+    session: &serde_json::Value,
+) -> bool {
     gpui_sidebar_command_indicator_session_id(session).is_some()
         && gpui_sidebar_command_indicator_status(session).is_some()
 }
 
-pub(crate) fn gpui_sidebar_command_indicator_session_id(session: &serde_json::Value) -> Option<&str> {
+pub(crate) fn gpui_sidebar_command_indicator_session_id(
+    session: &serde_json::Value,
+) -> Option<&str> {
     let session_id = session.get("sessionId")?.as_str()?;
     gpui_command_session_id_from_external_id(session_id)?;
     Some(session_id)
 }
 
-pub(crate) fn gpui_sidebar_command_indicator_status(session: &serde_json::Value) -> Option<&'static str> {
+pub(crate) fn gpui_sidebar_command_indicator_status(
+    session: &serde_json::Value,
+) -> Option<&'static str> {
     match session.get("status").and_then(serde_json::Value::as_str) {
         Some("idle") => Some("idle"),
         Some("running") => Some("running"),
@@ -284,4 +289,3 @@ pub(crate) fn gpui_command_pane_sidebar_indicator_key(value: &str) -> String {
         .map(|text| text.to_lowercase())
         .unwrap_or_default()
 }
-

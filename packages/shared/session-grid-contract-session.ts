@@ -22,7 +22,7 @@ import {
   type BrowserSessionRecord,
   type TerminalViewMode,
   type VisibleSessionCount,
-} from "./session-grid-contract-core";
+} from './session-grid-contract-core';
 
 /**
  * CDXC:Claude-session-status 2026-04-25-08:29
@@ -58,7 +58,7 @@ const CURSOR_CLI_AGENT_READY_TITLE_PATTERN = /^Cursor Agent\s*-\s*✅ Ready$/iu;
 const CURSOR_CLI_AGENT_TITLE_PATTERN = /^Cursor Agent$/iu;
 const CURSOR_CLI_WORKING_TITLE_STRIP_PATTERN = /\s*-\s*⏳ Working [.·]+$/u;
 const CURSOR_CLI_READY_TITLE_STRIP_PATTERN = /\s*-\s*✅ Ready$/u;
-export const DEFAULT_TERMINAL_SESSION_TITLE = "Terminal Session";
+export const DEFAULT_TERMINAL_SESSION_TITLE = 'Terminal Session';
 /**
  * CDXC:CommandsPanel 2026-05-16-07:36:
  * Users need the bottom command pane to shrink to 5% of the window height.
@@ -80,127 +80,119 @@ export const DEFAULT_COMMANDS_PANEL_REFERENCE_WORKSPACE_HEIGHT_PX = 900;
 
 export function resolveDefaultCommandsPanelHeightRatio(
   workspaceHeightPx?: number,
-  defaultHeightPx: number = DEFAULT_COMMANDS_PANEL_HEIGHT_PX,
+  defaultHeightPx: number = DEFAULT_COMMANDS_PANEL_HEIGHT_PX
 ): number {
   const workspaceHeight =
-    typeof workspaceHeightPx === "number" &&
-    Number.isFinite(workspaceHeightPx) &&
-    workspaceHeightPx > 0
+    typeof workspaceHeightPx === 'number' && Number.isFinite(workspaceHeightPx) && workspaceHeightPx > 0
       ? workspaceHeightPx
       : DEFAULT_COMMANDS_PANEL_REFERENCE_WORKSPACE_HEIGHT_PX;
   const resolvedDefaultHeightPx =
-    Number.isFinite(defaultHeightPx) && defaultHeightPx > 0
-      ? defaultHeightPx
-      : DEFAULT_COMMANDS_PANEL_HEIGHT_PX;
+    Number.isFinite(defaultHeightPx) && defaultHeightPx > 0 ? defaultHeightPx : DEFAULT_COMMANDS_PANEL_HEIGHT_PX;
   return Math.max(
     MIN_COMMANDS_PANEL_HEIGHT_RATIO,
-    Math.min(
-      MAX_COMMANDS_PANEL_HEIGHT_RATIO,
-      resolvedDefaultHeightPx / workspaceHeight,
-    ),
+    Math.min(MAX_COMMANDS_PANEL_HEIGHT_RATIO, resolvedDefaultHeightPx / workspaceHeight)
   );
 }
 
-export const DEFAULT_COMMANDS_PANEL_HEIGHT_RATIO =
-  resolveDefaultCommandsPanelHeightRatio();
-const DEFAULT_TERMINAL_ENGINE: TerminalEngine = "ghostty-native";
+export const DEFAULT_COMMANDS_PANEL_HEIGHT_RATIO = resolveDefaultCommandsPanelHeightRatio();
+const DEFAULT_TERMINAL_ENGINE: TerminalEngine = 'ghostty-native';
 const IGNORED_GENERIC_TERMINAL_TITLES = new Set([
-  "amp",
-  "amp cli",
-  "agy",
-  "antigravity",
-  "antigravity cli",
-  "claude",
-  "claude code",
-  "codex",
-  "codex cli",
-  "cursor",
-  "cursor agent",
-  "cursor cli",
-  "cursor-agent",
-  "droid",
-  "factory droid",
-  "grok",
-  "grok build",
-  "openai codex",
-  "kiro",
-  "kiro cli",
-  "kiro-cli",
-  "omp",
-  "pi",
-  "π",
-  "ghostex",
+  'amp',
+  'amp cli',
+  'agy',
+  'antigravity',
+  'antigravity cli',
+  'claude',
+  'claude code',
+  'codex',
+  'codex cli',
+  'cursor',
+  'cursor agent',
+  'cursor cli',
+  'cursor-agent',
+  'droid',
+  'factory droid',
+  'grok',
+  'grok build',
+  'openai codex',
+  'kiro',
+  'kiro cli',
+  'kiro-cli',
+  'omp',
+  'pi',
+  'π',
+  'ghostex',
 ]);
 const IGNORED_PLACEHOLDER_SESSION_TITLES = new Set([
   DEFAULT_TERMINAL_SESSION_TITLE.toLowerCase(),
-  "amp cli session",
-  "amp session",
-  "antigravity cli session",
-  "antigravity session",
-  "claude session",
-  "claude code session",
-  "codebuddy session",
-  "code buddy session",
-  "codex session",
-  "codex cli session",
-  "copilot session",
-  "cursor agent session",
-  "cursor cli session",
-  "cursor session",
-  "droid session",
-  "factory droid session",
-  "gemini session",
-  "grok session",
-  "grok build session",
-  "hermes session",
-  "hermes agent session",
-  "kiro session",
-  "kiro cli session",
-  "omp session",
-  "opencode session",
-  "open code session",
-  "openai codex session",
-  "pi session",
-  "qoder session",
-  "qodercli session",
-  "rovo session",
-  "rovo dev session",
-  "rovodev session",
+  'amp cli session',
+  'amp session',
+  'antigravity cli session',
+  'antigravity session',
+  'claude session',
+  'claude code session',
+  'codebuddy session',
+  'code buddy session',
+  'codex session',
+  'codex cli session',
+  'copilot session',
+  'cursor agent session',
+  'cursor cli session',
+  'cursor session',
+  'droid session',
+  'factory droid session',
+  'gemini session',
+  'grok session',
+  'grok build session',
+  'hermes session',
+  'hermes agent session',
+  'kiro session',
+  'kiro cli session',
+  'omp session',
+  'opencode session',
+  'open code session',
+  'openai codex session',
+  'pi session',
+  'qoder session',
+  'qodercli session',
+  'rovo session',
+  'rovo dev session',
+  'rovodev session',
 ]);
 const DEFAULT_SESSION_AGENT_TITLE_NAMES = new Map<string, string>([
-  ["agy", "Antigravity CLI"],
-  ["amp", "Amp CLI"],
-  ["amp-cli", "Amp CLI"],
-  ["antigravity", "Antigravity CLI"],
-  ["antigravity-cli", "Antigravity CLI"],
-  ["claude", "Claude"],
-  ["claude-code", "Claude"],
-  ["codebuddy", "CodeBuddy"],
-  ["code-buddy", "CodeBuddy"],
-  ["codex", "Codex"],
-  ["codex-cli", "Codex"],
-  ["copilot", "Copilot"],
-  ["cursor", "Cursor CLI"],
-  ["cursor-cli", "Cursor CLI"],
-  ["droid", "Factory Droid"],
-  ["factory-droid", "Factory Droid"],
-  ["gemini", "Gemini"],
-  ["grok", "Grok Build"],
-  ["grok-build", "Grok Build"],
-  ["hermes", "Hermes Agent"],
-  ["hermes-agent", "Hermes Agent"],
-  ["kiro", "Kiro CLI"],
-  ["kiro-cli", "Kiro CLI"],
-  ["omp", "OMP"],
-  ["opencode", "OpenCode"],
-  ["open-code", "OpenCode"],
-  ["pi", "Pi"],
-  ["qoder", "Qoder"],
-  ["qodercli", "Qoder"],
-  ["rovo", "Rovo Dev"],
-  ["rovo-dev", "Rovo Dev"],
-  ["rovodev", "Rovo Dev"],
-  ["π", "Pi"],
+  ['agy', 'Antigravity CLI'],
+  ['amp', 'Amp CLI'],
+  ['amp-cli', 'Amp CLI'],
+  ['antigravity', 'Antigravity CLI'],
+  ['antigravity-cli', 'Antigravity CLI'],
+  ['claude', 'Claude'],
+  ['claude-code', 'Claude'],
+  ['codebuddy', 'CodeBuddy'],
+  ['code-buddy', 'CodeBuddy'],
+  ['codex', 'Codex'],
+  ['codex-cli', 'Codex'],
+  ['copilot', 'Copilot'],
+  ['cursor', 'Cursor CLI'],
+  ['cursor-cli', 'Cursor CLI'],
+  ['droid', 'Factory Droid'],
+  ['factory-droid', 'Factory Droid'],
+  ['gemini', 'Gemini'],
+  ['grok', 'Grok Build'],
+  ['grok-build', 'Grok Build'],
+  ['hermes', 'Hermes Agent'],
+  ['hermes-agent', 'Hermes Agent'],
+  ['kiro', 'Kiro CLI'],
+  ['kiro-cli', 'Kiro CLI'],
+  ['omp', 'OMP'],
+  ['opencode', 'OpenCode'],
+  ['open-code', 'OpenCode'],
+  ['pi', 'Pi'],
+  ['qoder', 'Qoder'],
+  ['qodercli', 'Qoder'],
+  ['rovo', 'Rovo Dev'],
+  ['rovo-dev', 'Rovo Dev'],
+  ['rovodev', 'Rovo Dev'],
+  ['π', 'Pi'],
 ]);
 const DEFAULT_SESSION_SEARCH_PLACEHOLDER_TITLES = createDefaultSessionSearchPlaceholderTitles();
 const ELLIPSIZED_PATH_TITLE_PATTERN = /^(?:…|\.\.\.)[\\/]/u;
@@ -209,8 +201,7 @@ const WINDOWS_DEFAULT_POWERSHELL_TITLE_PATTERN =
 const AGENT_STATUS_WORD_TITLE_PATTERN =
   /^(?:[\s.:[\](){}!|/\\_-]*)(?:done|error|idle|thinking|working)(?:[\s.:[\](){}!|/\\_-]*)$/iu;
 const GHOST_PLACEHOLDER_SESSION_TITLE_PATTERN = /^👻(?:\s+Terminal Session)?$/u;
-const CODEX_SESSION_ID_TITLE_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+const CODEX_SESSION_ID_TITLE_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 export function clampVisibleSessionCount(value: number): VisibleSessionCount {
   /**
@@ -228,36 +219,33 @@ export function clampVisibleSessionCount(value: number): VisibleSessionCount {
 
 export function clampTerminalViewMode(value: string | undefined): TerminalViewMode {
   switch (value) {
-    case "horizontal":
-    case "vertical":
-    case "grid":
+    case 'horizontal':
+    case 'vertical':
+    case 'grid':
       return value;
     default:
-      return "grid";
+      return 'grid';
   }
 }
 
 export function clampAgentManagerZoomPercent(value: number | undefined): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     return DEFAULT_AGENT_MANAGER_ZOOM_PERCENT;
   }
 
-  return Math.min(
-    MAX_AGENT_MANAGER_ZOOM_PERCENT,
-    Math.max(MIN_AGENT_MANAGER_ZOOM_PERCENT, Math.round(value)),
-  );
+  return Math.min(MAX_AGENT_MANAGER_ZOOM_PERCENT, Math.max(MIN_AGENT_MANAGER_ZOOM_PERCENT, Math.round(value)));
 }
 
 export function clampSidebarThemeSetting(value: string | undefined): SidebarThemeSetting {
   switch (value) {
-    case "auto":
+    case 'auto':
       /**
        * CDXC:SidebarTheme 2026-06-15-02:29:
        * Theme selection is disabled again while themes are coming soon, so
        * legacy Auto should resolve to the active Dark Gray/Dark 2 chrome.
        */
-      return "dark-2";
-    case "plain":
+      return 'dark-2';
+    case 'plain':
       /**
        * CDXC:SidebarTheme 2026-06-15-01:43:
        * The old persisted "plain" setting is the current shipped dark surface.
@@ -265,57 +253,54 @@ export function clampSidebarThemeSetting(value: string | undefined): SidebarThem
        * off the exact #0e0e0e chrome they selected before Dark 1 became the
        * default.
        */
-      return "dark-2";
-    case "dark-2":
-      return "dark-2";
-    case "dark-1":
-    case "plain-light":
-    case "dark-modern":
-    case "dark-green":
+      return 'dark-2';
+    case 'dark-2':
+      return 'dark-2';
+    case 'dark-1':
+    case 'plain-light':
+    case 'dark-modern':
+    case 'dark-green':
       /**
        * CDXC:SidebarTheme 2026-06-15-02:29:
        * Hidden theme values may exist from prior builds or settings files, but
        * the disabled Settings control must keep the app on Dark Gray/Dark 2.
        */
-      return "dark-2";
-    case "dark-plus":
-    case "dark-blue":
-    case "dark-red":
-    case "dark-pink":
-    case "dark-orange":
-    case "light-plus":
-    case "light-blue":
-    case "light-green":
-    case "light-pink":
-    case "light-orange":
-    case "monokai":
-    case "solarized-dark":
-      return "dark-2";
+      return 'dark-2';
+    case 'dark-plus':
+    case 'dark-blue':
+    case 'dark-red':
+    case 'dark-pink':
+    case 'dark-orange':
+    case 'light-plus':
+    case 'light-blue':
+    case 'light-green':
+    case 'light-pink':
+    case 'light-orange':
+    case 'monokai':
+    case 'solarized-dark':
+      return 'dark-2';
     default:
-      return "dark-2";
+      return 'dark-2';
   }
 }
 
-export function resolveSidebarTheme(
-  themeSetting: SidebarThemeSetting,
-  variant: SidebarThemeVariant,
-): SidebarTheme {
-  if (themeSetting === "auto") {
+export function resolveSidebarTheme(themeSetting: SidebarThemeSetting, variant: SidebarThemeVariant): SidebarTheme {
+  if (themeSetting === 'auto') {
     /**
      * CDXC:SidebarTheme 2026-06-15-02:29:
      * Theme selection is disabled again; direct Auto callers should use the
      * same active Dark Gray/Dark 2 chrome as normalized settings.
      */
-    return "dark-2";
+    return 'dark-2';
   }
 
-  if (themeSetting === "plain") {
+  if (themeSetting === 'plain') {
     /**
      * CDXC:SidebarTheme 2026-06-15-01:43:
      * Preserve old callers that pass the legacy "plain" value directly by
      * resolving it to Dark 2, the snapshot of the previous #0e0e0e app chrome.
      */
-    return "dark-2";
+    return 'dark-2';
   }
 
   return themeSetting;
@@ -328,35 +313,29 @@ export function createDefaultSessionGridSnapshot(): SessionGridSnapshot {
     sessions: [],
     visibleCount: 1,
     visibleSessionIds: [],
-    viewMode: "grid",
+    viewMode: 'grid',
   };
 }
 
-export function createDefaultCommandsPanelState(options?: {
-  defaultHeightPx?: number;
-  workspaceHeightPx?: number;
-}) {
+export function createDefaultCommandsPanelState(options?: { defaultHeightPx?: number; workspaceHeightPx?: number }) {
   return {
     activeSessionId: undefined,
-    heightRatio: resolveDefaultCommandsPanelHeightRatio(
-      options?.workspaceHeightPx,
-      options?.defaultHeightPx,
-    ),
+    heightRatio: resolveDefaultCommandsPanelHeightRatio(options?.workspaceHeightPx, options?.defaultHeightPx),
     isVisible: false,
-    mode: "pinned" as const,
+    mode: 'pinned' as const,
     paneLayout: undefined,
     sessions: [],
   };
 }
 
 export function isSessionGridFocusModeActive(
-  snapshot: Pick<SessionGridSnapshot, "fullscreenRestoreVisibleCount" | "visibleCount">,
+  snapshot: Pick<SessionGridSnapshot, 'fullscreenRestoreVisibleCount' | 'visibleCount'>
 ): boolean {
   return snapshot.visibleCount === 1 && snapshot.fullscreenRestoreVisibleCount !== undefined;
 }
 
 export function getSessionGridLayoutVisibleCount(
-  snapshot: Pick<SessionGridSnapshot, "fullscreenRestoreVisibleCount" | "visibleCount">,
+  snapshot: Pick<SessionGridSnapshot, 'fullscreenRestoreVisibleCount' | 'visibleCount'>
 ): VisibleSessionCount {
   return snapshot.fullscreenRestoreVisibleCount ?? snapshot.visibleCount;
 }
@@ -391,7 +370,7 @@ export function createDefaultGroupedSessionWorkspaceSnapshot(): GroupedSessionWo
 export function createTimestampedSessionId(
   usedSessionIds: Iterable<string>,
   now = new Date(),
-  _random = Math.random,
+  _random = Math.random
 ): string {
   const usedSessionIdSet = new Set(usedSessionIds);
 
@@ -402,11 +381,11 @@ export function createTimestampedSessionId(
     }
   }
 
-  throw new Error("Unable to allocate a unique ghostex session ID for this timestamp.");
+  throw new Error('Unable to allocate a unique ghostex session ID for this timestamp.');
 }
 
 export function formatSessionDisplayId(displayId: number | string): string {
-  if (typeof displayId === "string") {
+  if (typeof displayId === 'string') {
     const trimmedDisplayId = displayId.trim();
     if (/^(?:g|s)-[a-z0-9-]+$/i.test(trimmedDisplayId)) {
       return trimmedDisplayId;
@@ -423,17 +402,16 @@ export function formatSessionDisplayId(displayId: number | string): string {
   }
 
   if (!Number.isFinite(Number(displayId))) {
-    return "00";
+    return '00';
   }
 
   const normalizedDisplayId =
-    ((Math.floor(Number(displayId)) % MAX_SESSION_DISPLAY_ID_COUNT) +
-      MAX_SESSION_DISPLAY_ID_COUNT) %
+    ((Math.floor(Number(displayId)) % MAX_SESSION_DISPLAY_ID_COUNT) + MAX_SESSION_DISPLAY_ID_COUNT) %
     MAX_SESSION_DISPLAY_ID_COUNT;
-  return String(normalizedDisplayId).padStart(2, "0");
+  return String(normalizedDisplayId).padStart(2, '0');
 }
 
-export function getSlotPosition(slotIndex: number): Pick<SessionRecord, "column" | "row"> {
+export function getSlotPosition(slotIndex: number): Pick<SessionRecord, 'column' | 'row'> {
   const normalizedSlotIndex = Math.max(0, Math.floor(slotIndex));
   return {
     column: normalizedSlotIndex % GRID_COLUMN_COUNT,
@@ -445,16 +423,12 @@ export function getSlotLabel(row: number, column: number): string {
   return `R${row + 1}C${column + 1}`;
 }
 
-export function getSessionShortcutLabel(slotIndex: number, platform: "default" | "mac"): string {
+export function getSessionShortcutLabel(slotIndex: number, platform: 'default' | 'mac'): string {
   const shortcutNumber = Math.max(1, Math.floor(slotIndex) + 1);
-  return platform === "mac" ? `⌘⌥${shortcutNumber}` : `⌃⌥${shortcutNumber}`;
+  return platform === 'mac' ? `⌘⌥${shortcutNumber}` : `⌃⌥${shortcutNumber}`;
 }
 
-export function createSessionAlias(
-  sessionNumber: number,
-  slotIndex: number,
-  displayId?: string | number,
-): string {
+export function createSessionAlias(sessionNumber: number, slotIndex: number, displayId?: string | number): string {
   void slotIndex;
   return formatSessionDisplayId(displayId ?? sessionNumber - 1);
 }
@@ -466,62 +440,56 @@ export function createSessionAlias(
  * emits a meaningful title or the user explicitly renames the session.
  */
 export function createAgentSessionDefaultTitle(agentName: string | undefined): string {
-  const normalizedAgentName = agentName?.replace(/\s+/g, " ").trim();
+  const normalizedAgentName = agentName?.replace(/\s+/g, ' ').trim();
   const defaultAgentTitleName = normalizedAgentName
-    ? (DEFAULT_SESSION_AGENT_TITLE_NAMES.get(normalizedAgentName.toLowerCase()) ??
-      normalizedAgentName)
+    ? (DEFAULT_SESSION_AGENT_TITLE_NAMES.get(normalizedAgentName.toLowerCase()) ?? normalizedAgentName)
     : undefined;
-  return defaultAgentTitleName
-    ? `${defaultAgentTitleName} Session`
-    : DEFAULT_TERMINAL_SESSION_TITLE;
+  return defaultAgentTitleName ? `${defaultAgentTitleName} Session` : DEFAULT_TERMINAL_SESSION_TITLE;
 }
 
 function createDefaultSessionSearchPlaceholderTitles(): Set<string> {
   const titles = new Set(IGNORED_PLACEHOLDER_SESSION_TITLES);
   for (const title of IGNORED_PLACEHOLDER_SESSION_TITLES) {
-    if (title === DEFAULT_TERMINAL_SESSION_TITLE.toLowerCase() || !title.endsWith(" session")) {
+    if (title === DEFAULT_TERMINAL_SESSION_TITLE.toLowerCase() || !title.endsWith(' session')) {
       continue;
     }
-    titles.add(title.replace(/\s+session$/u, " agent session"));
+    titles.add(title.replace(/\s+session$/u, ' agent session'));
   }
   for (const agentTitleName of new Set(DEFAULT_SESSION_AGENT_TITLE_NAMES.values())) {
-    const normalizedAgentTitleName = agentTitleName.trim().replace(/\s+/g, " ").toLowerCase();
+    const normalizedAgentTitleName = agentTitleName.trim().replace(/\s+/g, ' ').toLowerCase();
     if (!normalizedAgentTitleName) {
       continue;
     }
     titles.add(`${normalizedAgentTitleName} session`);
     titles.add(`${normalizedAgentTitleName} agent session`);
-    if (normalizedAgentTitleName.endsWith(" cli")) {
-      titles.add(`${normalizedAgentTitleName.slice(0, -" cli".length)} agent session`);
+    if (normalizedAgentTitleName.endsWith(' cli')) {
+      titles.add(`${normalizedAgentTitleName.slice(0, -' cli'.length)} agent session`);
     }
   }
   return titles;
 }
 
 export function isNumericSessionAlias(alias: string | undefined): boolean {
-  return /^\d+$/.test(alias?.trim() ?? "");
+  return /^\d+$/.test(alias?.trim() ?? '');
 }
 
 export function isGeneratedSessionAlias(
-  session: Pick<BaseSessionRecord, "alias" | "displayId" | "sessionId" | "slotIndex">,
+  session: Pick<BaseSessionRecord, 'alias' | 'displayId' | 'sessionId' | 'slotIndex'>
 ): boolean {
-  return (
-    session.alias.trim() ===
-    createSessionAlias(getSessionNumber(session), session.slotIndex, session.displayId)
-  );
+  return session.alias.trim() === createSessionAlias(getSessionNumber(session), session.slotIndex, session.displayId);
 }
 
 export function createSessionRecord(
   sessionNumber: number,
   slotIndex: number,
-  options?: CreateSessionRecordOptions,
+  options?: CreateSessionRecordOptions
 ): SessionRecord {
   const position = getSlotPosition(slotIndex);
   const terminalAgentName =
-    options?.kind === "terminal" || options?.kind === undefined ? options?.agentName : undefined;
+    options?.kind === 'terminal' || options?.kind === undefined ? options?.agentName : undefined;
   const sessionId = options?.sessionId?.trim() || `session-${sessionNumber}`;
   const displayId = formatSessionDisplayId(
-    options?.displayId ?? (isTimestampedSessionId(sessionId) ? sessionId : sessionNumber - 1),
+    options?.displayId ?? (isTimestampedSessionId(sessionId) ? sessionId : sessionNumber - 1)
   );
   const alias = createSessionAlias(sessionNumber, slotIndex, displayId);
   const createdAt = new Date().toISOString();
@@ -530,14 +498,14 @@ export function createSessionRecord(
   const title = options?.title?.trim() || DEFAULT_TERMINAL_SESSION_TITLE;
   const titleSource = normalizeSessionTitleSource(options?.titleSource, title);
 
-  if (options?.kind === "browser") {
+  if (options?.kind === 'browser') {
     return {
       alias,
       browser: options.browser,
       column: position.column,
       createdAt,
       displayId,
-      kind: "browser",
+      kind: 'browser',
       lastAccessedAt,
       lastStartedAt,
       row: position.row,
@@ -560,51 +528,45 @@ export function createSessionRecord(
     delayedSendDeadlineAt: normalizeTerminalDelayedSendDeadlineAt(options?.delayedSendDeadlineAt),
     delayedSendRemainingMs: normalizeTerminalDelayedSendRemainingMs(options?.delayedSendRemainingMs),
     displayId,
-    isFavorite: options?.sessionTag === "favorite" ? true : undefined,
-    kind: "terminal",
+    isFavorite: options?.sessionTag === 'favorite' ? true : undefined,
+    kind: 'terminal',
     lastAccessedAt,
     lastStartedAt,
     row: position.row,
     sessionId,
-    sessionTag:
-      options?.kind === undefined || options?.kind === "terminal" ? options?.sessionTag : undefined,
+    sessionTag: options?.kind === undefined || options?.kind === 'terminal' ? options?.sessionTag : undefined,
     slotIndex,
     terminalEngine: normalizeTerminalEngine(options?.terminalEngine),
     sessionPersistenceName: normalizeTerminalSessionPersistenceName(
-      options?.sessionPersistenceName ?? options?.tmuxSessionName,
+      options?.sessionPersistenceName ?? options?.tmuxSessionName
     ),
-    sessionPersistenceProvider: normalizeTerminalSessionPersistenceProvider(
-      options?.sessionPersistenceProvider,
-    ),
+    sessionPersistenceProvider: normalizeTerminalSessionPersistenceProvider(options?.sessionPersistenceProvider),
     surface: normalizeTerminalSurface(options?.surface),
     title,
     titleSource,
   };
 }
 
-function normalizeSessionTitleSource(
-  source: SessionTitleSource | undefined,
-  title: string,
-): SessionTitleSource {
+function normalizeSessionTitleSource(source: SessionTitleSource | undefined, title: string): SessionTitleSource {
   if (
-    source === "browser-auto" ||
-    source === "generated" ||
-    source === "placeholder" ||
-    source === "terminal-auto" ||
-    source === "user"
+    source === 'browser-auto' ||
+    source === 'generated' ||
+    source === 'placeholder' ||
+    source === 'terminal-auto' ||
+    source === 'user'
   ) {
     return source;
   }
-  return getVisiblePrimaryTitle(title) ? "user" : "placeholder";
+  return getVisiblePrimaryTitle(title) ? 'user' : 'placeholder';
 }
 
 export function normalizeTerminalSessionAgentName(value: string | undefined): string | undefined {
-  const normalizedValue = value?.replace(/\s+/g, " ").trim();
+  const normalizedValue = value?.replace(/\s+/g, ' ').trim();
   return normalizedValue && normalizedValue.length > 0 ? normalizedValue : undefined;
 }
 
 function normalizeTerminalCommandTitle(value: string | undefined): string | undefined {
-  const normalizedValue = value?.replace(/\s+/g, " ").trim();
+  const normalizedValue = value?.replace(/\s+/g, ' ').trim();
   return normalizedValue && normalizedValue.length > 0 ? normalizedValue : undefined;
 }
 
@@ -631,7 +593,7 @@ function normalizeTerminalSessionPersistenceName(value: string | undefined): str
 }
 
 export function normalizeTerminalSessionPersistenceProvider(
-  provider: TerminalSessionPersistenceProvider | undefined,
+  provider: TerminalSessionPersistenceProvider | undefined
 ): TerminalSessionPersistenceProvider | undefined {
   /**
    * CDXC:SessionPersistence 2026-05-07-20:32
@@ -639,9 +601,7 @@ export function normalizeTerminalSessionPersistenceProvider(
    * session name. Restore, wake, reload, and sidebar badges must not reinterpret
    * a stored tmux/zmx/zellij name through the current global Settings provider.
    */
-  return provider === "tmux" || provider === "zmx" || provider === "zellij"
-    ? provider
-    : undefined;
+  return provider === 'tmux' || provider === 'zmx' || provider === 'zellij' ? provider : undefined;
 }
 
 export function normalizeTerminalEngine(value: string | undefined): TerminalEngine {
@@ -649,11 +609,11 @@ export function normalizeTerminalEngine(value: string | undefined): TerminalEngi
 }
 
 export function normalizeTerminalSurface(value: TerminalSurface | undefined): TerminalSurface {
-  return value === "commands" ? "commands" : "workspace";
+  return value === 'commands' ? 'commands' : 'workspace';
 }
 
 export function isPersistentTerminalEngine(value: TerminalEngine): boolean {
-  return value === "ghostty-native";
+  return value === 'ghostty-native';
 }
 
 export function isXtermTerminalEngine(value: TerminalEngine): boolean {
@@ -661,7 +621,7 @@ export function isXtermTerminalEngine(value: TerminalEngine): boolean {
 }
 
 export function getTerminalSessionSurfaceTitle(
-  session: Pick<BaseSessionRecord, "alias" | "displayId" | "sessionId" | "slotIndex" | "title">,
+  session: Pick<BaseSessionRecord, 'alias' | 'displayId' | 'sessionId' | 'slotIndex' | 'title'>
 ): string {
   return formatSessionSurfaceTitle(session);
 }
@@ -677,7 +637,7 @@ export function getSessionNumberFromSessionId(sessionId: string): number | undef
 }
 
 export function getVisibleSessionNumber(
-  session: Pick<BaseSessionRecord, "displayId" | "sessionId" | "slotIndex">,
+  session: Pick<BaseSessionRecord, 'displayId' | 'sessionId' | 'slotIndex'>
 ): string {
   return formatSessionDisplayId(session.displayId ?? getSessionNumber(session) - 1);
 }
@@ -692,9 +652,9 @@ export function getVisiblePrimaryTitle(title: string): string | undefined {
 }
 
 export function getSessionCardPrimaryTitle(
-  session: Pick<BaseSessionRecord, "title"> & { agentName?: string },
+  session: Pick<BaseSessionRecord, 'title'> & { agentName?: string }
 ): string | undefined {
-  const normalizedTitle = session.title.trim().replace(/\s+/g, " ");
+  const normalizedTitle = session.title.trim().replace(/\s+/g, ' ');
   /**
    * CDXC:Session-title-defaults 2026-04-27-08:31
    * Session cards still need a human placeholder while resume/persistence code
@@ -724,12 +684,12 @@ export function getSessionCardPrimaryTitle(
  * as real card titles, or be persisted by terminal-title sync.
  */
 export function isGhostPlaceholderSessionTitle(title: string): boolean {
-  const normalizedTitle = title.trim().replace(/\s+/g, " ");
+  const normalizedTitle = title.trim().replace(/\s+/g, ' ');
   return GHOST_PLACEHOLDER_SESSION_TITLE_PATTERN.test(normalizedTitle);
 }
 
 export function isDefaultSessionSearchTitle(title: string | undefined): boolean {
-  const normalizedTitle = title?.trim().replace(/\s+/g, " ");
+  const normalizedTitle = title?.trim().replace(/\s+/g, ' ');
   if (!normalizedTitle) {
     return false;
   }
@@ -743,8 +703,7 @@ export function isDefaultSessionSearchTitle(title: string | undefined): boolean 
   return isIgnoredPlaceholderSessionTitle(normalizedTitle);
 }
 
-const SESSION_RENAME_UNSUPPORTED_GLYPH_PATTERN =
-  /[^\p{L}\p{N} !"#$%&'()*+,\-.\/:;<=>?@[\\\]^_`{|}~]/gu;
+const SESSION_RENAME_UNSUPPORTED_GLYPH_PATTERN = /[^\p{L}\p{N} !"#$%&'()*+,\-.\/:;<=>?@[\\\]^_`{|}~]/gu;
 
 /**
  * CDXC:SidebarRename 2026-05-15-16:15
@@ -755,10 +714,10 @@ const SESSION_RENAME_UNSUPPORTED_GLYPH_PATTERN =
  */
 export function normalizeSessionRenameTitle(title: string | undefined): string | undefined {
   const normalizedTitle = title
-    ?.normalize("NFKC")
-    .replace(/\s+/gu, " ")
-    .replace(SESSION_RENAME_UNSUPPORTED_GLYPH_PATTERN, "")
-    .replace(/\s+/gu, " ")
+    ?.normalize('NFKC')
+    .replace(/\s+/gu, ' ')
+    .replace(SESSION_RENAME_UNSUPPORTED_GLYPH_PATTERN, '')
+    .replace(/\s+/gu, ' ')
     .trim();
   return normalizedTitle || undefined;
 }
@@ -770,8 +729,8 @@ export function normalizeTerminalTitle(title: string | undefined): string | unde
   }
 
   const sanitizedTitle = normalizedTitle
-    .replace(LEADING_TERMINAL_TITLE_STATUS_MARKER_PATTERN, "")
-    .replace(LEADING_TERMINAL_TITLE_PREFIX_PATTERN, "")
+    .replace(LEADING_TERMINAL_TITLE_STATUS_MARKER_PATTERN, '')
+    .replace(LEADING_TERMINAL_TITLE_PREFIX_PATTERN, '')
     .trim();
   const cursorTitle = normalizeCursorTerminalTitle(sanitizedTitle);
   if (cursorTitle !== null) {
@@ -785,25 +744,23 @@ export function normalizeTerminalTitle(title: string | undefined): string | unde
 }
 
 function normalizeAntigravityTerminalTitle(title: string): string | undefined | null {
-  const normalizedTitle = title.trim().replace(/\s+/g, " ");
+  const normalizedTitle = title.trim().replace(/\s+/g, ' ');
   if (
     ANTIGRAVITY_ATTENTION_TITLE_PATTERN.test(normalizedTitle) ||
     ANTIGRAVITY_IDLE_TITLE_PATTERN.test(normalizedTitle)
   ) {
-    return "agy";
+    return 'agy';
   }
 
   return null;
 }
 
 function isCursorCliPlaceholderTerminalTitle(title: string): boolean {
-  const normalizedTitle = title.trim().replace(/\s+/g, " ");
+  const normalizedTitle = title.trim().replace(/\s+/g, ' ');
   return (
     CURSOR_CLI_AGENT_READY_TITLE_PATTERN.test(normalizedTitle) ||
     CURSOR_CLI_AGENT_TITLE_PATTERN.test(normalizedTitle) ||
-    ["cursor", "cursor agent", "cursor cli", "cursor-agent"].includes(
-      normalizedTitle.toLowerCase(),
-    )
+    ['cursor', 'cursor agent', 'cursor cli', 'cursor-agent'].includes(normalizedTitle.toLowerCase())
   );
 }
 
@@ -814,20 +771,20 @@ function isIgnoredGenericAgentTerminalTitle(title: string): boolean {
    * placeholders. They may drive agent detection, but must never persist as the
    * canonical session title or render as a user-named card heading.
    */
-  return IGNORED_GENERIC_TERMINAL_TITLES.has(title.trim().replace(/\s+/g, " ").toLowerCase());
+  return IGNORED_GENERIC_TERMINAL_TITLES.has(title.trim().replace(/\s+/g, ' ').toLowerCase());
 }
 
 function normalizeCursorTerminalTitle(title: string): string | undefined | null {
-  const normalizedTitle = title.trim().replace(/\s+/g, " ");
+  const normalizedTitle = title.trim().replace(/\s+/g, ' ');
   if (isCursorCliPlaceholderTerminalTitle(normalizedTitle)) {
     return undefined;
   }
   if (CURSOR_CLI_READY_TITLE_SUFFIX_PATTERN.test(normalizedTitle)) {
-    const strippedTitle = normalizedTitle.replace(CURSOR_CLI_READY_TITLE_STRIP_PATTERN, "").trim();
+    const strippedTitle = normalizedTitle.replace(CURSOR_CLI_READY_TITLE_STRIP_PATTERN, '').trim();
     return isCursorCliPlaceholderTerminalTitle(strippedTitle) ? undefined : strippedTitle || undefined;
   }
   if (CURSOR_CLI_WORKING_TITLE_SUFFIX_PATTERN.test(normalizedTitle)) {
-    const strippedTitle = normalizedTitle.replace(CURSOR_CLI_WORKING_TITLE_STRIP_PATTERN, "").trim();
+    const strippedTitle = normalizedTitle.replace(CURSOR_CLI_WORKING_TITLE_STRIP_PATTERN, '').trim();
     return isCursorCliPlaceholderTerminalTitle(strippedTitle) ? undefined : strippedTitle || undefined;
   }
 
@@ -844,7 +801,7 @@ function normalizePiTerminalTitle(title: string): string | undefined {
      * while working. The braille character is an animated spinner, so strip
      * the whole status prefix and trim the remaining title for every client.
      */
-    return ompMatch[1]?.trim() || "π";
+    return ompMatch[1]?.trim() || 'π';
   }
 
   const match = /^π\s*-\s*(.+)$/u.exec(normalizedTitle);
@@ -864,10 +821,10 @@ function normalizePiTerminalTitle(title: string): string | undefined {
    * Codex's generated-title behavior without persisting the cwd as a name.
    */
   if (parts.length < 2) {
-    return "π";
+    return 'π';
   }
 
-  return parts.slice(0, -1).join(" - ") || "π";
+  return parts.slice(0, -1).join(' - ') || 'π';
 }
 
 /**
@@ -915,7 +872,7 @@ export function getVisibleTerminalTitle(title: string | undefined): string | und
 }
 
 function isIgnoredPlaceholderSessionTitle(title: string): boolean {
-  const normalizedTitle = title.trim().replace(/\s+/g, " ");
+  const normalizedTitle = title.trim().replace(/\s+/g, ' ');
   /**
    * CDXC:Session-title-defaults 2026-04-27-08:20
    * Neutral titles such as `Terminal Session` and agent-aware creation titles
@@ -939,7 +896,7 @@ function isPathLikeTerminalTitle(title: string): boolean {
 
 export function getPreferredSessionTitle(
   sessionTitle: string | undefined,
-  terminalTitle: string | undefined,
+  terminalTitle: string | undefined
 ): string | undefined {
   const visibleTerminalTitle = getVisibleTerminalTitle(terminalTitle);
   if (visibleTerminalTitle) {
@@ -954,19 +911,19 @@ export function getOrderedSessions(snapshot: SessionGridSnapshot): SessionRecord
 }
 
 export function isTerminalSession(session: SessionRecord): session is TerminalSessionRecord {
-  return session.kind === "terminal";
+  return session.kind === 'terminal';
 }
 
 export function isBrowserSession(session: SessionRecord): session is BrowserSessionRecord {
-  return session.kind === "browser";
+  return session.kind === 'browser';
 }
 
-function getSessionNumber(session: Pick<BaseSessionRecord, "sessionId" | "slotIndex">): number {
+function getSessionNumber(session: Pick<BaseSessionRecord, 'sessionId' | 'slotIndex'>): number {
   return getSessionNumberFromSessionId(session.sessionId) ?? session.slotIndex + 1;
 }
 
 function formatSessionSurfaceTitle(
-  session: Pick<BaseSessionRecord, "alias" | "displayId" | "sessionId" | "slotIndex" | "title">,
+  session: Pick<BaseSessionRecord, 'alias' | 'displayId' | 'sessionId' | 'slotIndex' | 'title'>
 ): string {
   const displayId = formatSessionDisplayId(session.displayId ?? getSessionNumber(session) - 1);
   const visiblePrimaryTitle = getVisiblePrimaryTitle(session.title);
@@ -978,11 +935,11 @@ function formatSessionSurfaceTitle(
 }
 
 function formatSessionIdTimestamp(value: Date): string {
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  const hour = String(value.getHours()).padStart(2, "0");
-  const minute = String(value.getMinutes()).padStart(2, "0");
-  const second = String(value.getSeconds()).padStart(2, "0");
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  const hour = String(value.getHours()).padStart(2, '0');
+  const minute = String(value.getMinutes()).padStart(2, '0');
+  const second = String(value.getSeconds()).padStart(2, '0');
   return `${month}${day}-${hour}${minute}${second}`;
 }
 

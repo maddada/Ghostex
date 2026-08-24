@@ -596,5 +596,4 @@ impl GhostexGpuiApp {
         #[cfg(not(target_os = "macos"))]
         let _ = (decisions, scale_factor, cx);
     }
-
 }

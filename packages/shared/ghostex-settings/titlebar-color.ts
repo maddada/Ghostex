@@ -1,7 +1,7 @@
-export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_FOREGROUND_COLOR = "#d8d8d8";
-export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_DARK_FOREGROUND_COLOR = "#262626";
-export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR = "#1c1c1c";
-export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR = "#808080";
+export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_FOREGROUND_COLOR = '#d8d8d8';
+export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_DARK_FOREGROUND_COLOR = '#262626';
+export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR = '#1c1c1c';
+export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR = '#808080';
 export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT = 90;
 /*
  * CDXC:SidebarTitlebarColors 2026-06-28-08:01:
@@ -16,23 +16,23 @@ const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_SCALE_REFERENCE_DARKNESS_PERCENT = 95;
 export const MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT = 85;
 export const MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT = 100;
 const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: ReadonlyMap<string, string> = new Map([
-  ["#000000", "#000000"],
-  ["#ffffff", "#0e0e0e"],
-  ["#808080", "#0e0e0e"],
-  ["#88d7ff", "#0a0f12"],
-  ["#4f6672", "#0c0e10"],
-  ["#884444", "#0d0005"],
-  ["#8a5330", "#100502"],
-  ["#8a6a2f", "#110a02"],
-  ["#657a3f", "#0c1005"],
-  ["#3f7a5f", "#031006"],
-  ["#2f7d66", "#03100c"],
-  ["#287c7f", "#031011"],
-  ["#336699", "#0c0e11"],
-  ["#4f5f96", "#080912"],
-  ["#6c4f8f", "#0a0611"],
-  ["#854f7a", "#100611"],
-  ["#8a4f5f", "#100409"],
+  ['#000000', '#000000'],
+  ['#ffffff', '#0e0e0e'],
+  ['#808080', '#0e0e0e'],
+  ['#88d7ff', '#0a0f12'],
+  ['#4f6672', '#0c0e10'],
+  ['#884444', '#0d0005'],
+  ['#8a5330', '#100502'],
+  ['#8a6a2f', '#110a02'],
+  ['#657a3f', '#0c1005'],
+  ['#3f7a5f', '#031006'],
+  ['#2f7d66', '#03100c'],
+  ['#287c7f', '#031011'],
+  ['#336699', '#0c0e11'],
+  ['#4f5f96', '#080912'],
+  ['#6c4f8f', '#0a0611'],
+  ['#854f7a', '#100611'],
+  ['#8a4f5f', '#100409'],
 ]);
 
 export function normalizeSidebarTitlebarHexColor(value: string, fallback: string): string {
@@ -51,10 +51,7 @@ type SidebarTitlebarRgbColor = {
 };
 
 function parseSidebarTitlebarHexColor(color: string): SidebarTitlebarRgbColor {
-  const normalized = normalizeSidebarTitlebarHexColor(
-    color,
-    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR,
-  );
+  const normalized = normalizeSidebarTitlebarHexColor(color, DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR);
   return {
     red: Number.parseInt(normalized.slice(1, 3), 16),
     green: Number.parseInt(normalized.slice(3, 5), 16),
@@ -64,8 +61,8 @@ function parseSidebarTitlebarHexColor(color: string): SidebarTitlebarRgbColor {
 
 function formatSidebarTitlebarHexColor(color: SidebarTitlebarRgbColor): string {
   return `#${[color.red, color.green, color.blue]
-    .map((channel) => clampColorChannel(channel).toString(16).padStart(2, "0"))
-    .join("")}`;
+    .map((channel) => clampColorChannel(channel).toString(16).padStart(2, '0'))
+    .join('')}`;
 }
 
 function scaleSidebarTitlebarVector(color: SidebarTitlebarRgbColor, amount: number): SidebarTitlebarRgbColor {
@@ -78,7 +75,7 @@ function scaleSidebarTitlebarVector(color: SidebarTitlebarRgbColor, amount: numb
 
 function addSidebarTitlebarColors(
   base: SidebarTitlebarRgbColor,
-  offset: SidebarTitlebarRgbColor,
+  offset: SidebarTitlebarRgbColor
 ): SidebarTitlebarRgbColor {
   return {
     red: base.red + offset.red,
@@ -94,11 +91,7 @@ function normalizedSidebarTitlebarTintDirection(background: SidebarTitlebarRgbCo
     green: background.green - average,
     blue: background.blue - average,
   };
-  const magnitude = Math.max(
-    Math.abs(direction.red),
-    Math.abs(direction.green),
-    Math.abs(direction.blue),
-  );
+  const magnitude = Math.max(Math.abs(direction.red), Math.abs(direction.green), Math.abs(direction.blue));
   if (magnitude < 0.5) {
     return {
       red: 0,
@@ -115,14 +108,14 @@ export function clampSidebarTitlebarBackgroundDarknessPercent(value: number): nu
   }
   return Math.min(
     MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
-    Math.max(MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT, Math.round(value)),
+    Math.max(MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT, Math.round(value))
   );
 }
 
 export function getSidebarTitlebarBackgroundDarknessForColor(backgroundColor: string): number {
   const background = normalizeSidebarTitlebarHexColor(
     backgroundColor,
-    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR,
+    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR
   );
   const red = Number.parseInt(background.slice(1, 3), 16);
   const green = Number.parseInt(background.slice(3, 5), 16);
@@ -153,7 +146,7 @@ function getSidebarTitlebarDefaultDarkTintBackground(tint: string): SidebarTitle
 
 function scaleSidebarTitlebarDefaultDarkTintBackground(
   background: SidebarTitlebarRgbColor,
-  darknessPercent: number,
+  darknessPercent: number
 ): SidebarTitlebarRgbColor {
   if (darknessPercent === MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT) {
     return { red: 0, green: 0, blue: 0 };
@@ -161,8 +154,7 @@ function scaleSidebarTitlebarDefaultDarkTintBackground(
   const defaultRange =
     MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT -
     CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_SCALE_REFERENCE_DARKNESS_PERCENT;
-  const scale =
-    (MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT - darknessPercent) / defaultRange;
+  const scale = (MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT - darknessPercent) / defaultRange;
   return {
     red: background.red * scale,
     green: background.green * scale,
@@ -172,7 +164,7 @@ function scaleSidebarTitlebarDefaultDarkTintBackground(
 
 export function getSidebarTitlebarBackgroundForDarkness(
   darknessPercent: number,
-  tintColor = DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
+  tintColor = DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR
 ): string {
   /**
    * CDXC:SidebarTitlebarColors 2026-06-15-13:45:
@@ -207,17 +199,11 @@ export function getSidebarTitlebarBackgroundForDarkness(
    * of adding a blue cast.
    */
   const darkness = clampSidebarTitlebarBackgroundDarknessPercent(darknessPercent);
-  const tint = normalizeSidebarTitlebarHexColor(
-    tintColor,
-    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
-  );
+  const tint = normalizeSidebarTitlebarHexColor(tintColor, DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR);
   const defaultDarkTintBackground = getSidebarTitlebarDefaultDarkTintBackground(tint);
-  const background = scaleSidebarTitlebarDefaultDarkTintBackground(
-    defaultDarkTintBackground,
-    darkness,
-  );
+  const background = scaleSidebarTitlebarDefaultDarkTintBackground(defaultDarkTintBackground, darkness);
   const channels = [background.red, background.green, background.blue].map(clampColorChannel);
-  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /**
@@ -230,7 +216,7 @@ export function getSidebarTitlebarBackgroundForDarkness(
 export function getSidebarTitlebarForegroundForBackground(backgroundColor: string): string {
   const background = normalizeSidebarTitlebarHexColor(
     backgroundColor,
-    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR,
+    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR
   );
   const red = Number.parseInt(background.slice(1, 3), 16);
   const green = Number.parseInt(background.slice(3, 5), 16);

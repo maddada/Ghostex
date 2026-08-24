@@ -10,16 +10,16 @@ import {
   GPUI_SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_MESSAGE_VERSION,
   GPUI_SIDEBAR_WORKSPACE_TERMINAL_TITLE_SETTLE_MS,
   GPUI_WORKSPACE_TERMINAL_LIFECYCLE_BRIDGE_RETRY_DELAY_MS,
-} from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
-import { createGpuiSidebarSettings } from "./helpers/bootstrap";
-import { normalizeGpuiWorkspaceTabSessionSelection } from "./helpers/command-palette";
-import { normalizeNonEmptyString } from "./helpers/records";
+} from './constants';
+import type { GpuiSidebarRuntime } from './core';
+import { createGpuiSidebarSettings } from './helpers/bootstrap';
+import { normalizeGpuiWorkspaceTabSessionSelection } from './helpers/command-palette';
+import { normalizeNonEmptyString } from './helpers/records';
 import {
   createGpuiRemotePresentationSessionId,
   parseGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationSessionId,
-} from "./helpers/remote-presentation";
+} from './helpers/remote-presentation';
 import {
   gpuiWorkspaceTerminalTitleCommandForAgent,
   normalizeGpuiWorkspaceFirstPromptTitleGenerationCancel,
@@ -29,20 +29,18 @@ import {
   normalizeGpuiWorkspaceTerminalTitleChanged,
   normalizeQueuedGpuiWorkspaceTerminalLifecycleRequest,
   shouldApplyGpuiLocalWorkspaceTransition,
-} from "./helpers/terminal-lifecycle";
+} from './helpers/terminal-lifecycle';
 import type {
   GpuiRemoteProjectReference,
   GpuiWorkspaceTerminalLifecycleRequest,
   GpuiWorkspaceTerminalTitleChangedPayload,
-} from "./types-and-protocol";
-import {
-  createGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from './types-and-protocol';
+import { createGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverSessionTransitionResult,
   GxserverTerminalTitleEventResult,
-} from "@/packages/shared/gxserver-protocol";
-import { getVisibleTerminalTitle } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/gxserver-protocol';
+import { getVisibleTerminalTitle } from '@/packages/shared/session-grid-contract';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -62,7 +60,10 @@ export interface GpuiSidebarRuntimeTerminalLifecycleMethods {
   ingestGpuiWorkspaceTerminalTitle(observation: GpuiWorkspaceTerminalTitleChangedPayload): Promise<void>;
   handleGpuiWorkspaceTerminalRuntimeAction(payload: unknown): Promise<void>;
   postLocalWorkspaceTerminalRenameCommand(projectId: string, sessionId: string, title: string): void;
-  transitionWorkspaceTerminalLifecycleClose(request: GpuiWorkspaceTerminalLifecycleRequest, fallbackReplacementSessionId: string | undefined): boolean;
+  transitionWorkspaceTerminalLifecycleClose(
+    request: GpuiWorkspaceTerminalLifecycleRequest,
+    fallbackReplacementSessionId: string | undefined
+  ): boolean;
   workspaceTerminalLifecycleResultBridgeReady(): boolean;
   handleOrQueueWorkspaceTerminalLifecycleRequest(payload: unknown): void;
   queuePendingWorkspaceTerminalLifecycleRequest(request: GpuiWorkspaceTerminalLifecycleRequest): void;
@@ -70,12 +71,14 @@ export interface GpuiSidebarRuntimeTerminalLifecycleMethods {
   drainPendingWorkspaceTerminalLifecycleRequests(queuedRequests?: readonly unknown[]): void;
   handleNormalizedWorkspaceTerminalLifecycleRequest(request: GpuiWorkspaceTerminalLifecycleRequest): Promise<void>;
   applyWorkspaceTerminalLifecycleRequest(request: GpuiWorkspaceTerminalLifecycleRequest): Promise<boolean>;
-  applyRemoteWorkspaceTerminalLifecycleRequest(request: GpuiWorkspaceTerminalLifecycleRequest, remoteProject: GpuiRemoteProjectReference): Promise<boolean>;
+  applyRemoteWorkspaceTerminalLifecycleRequest(
+    request: GpuiWorkspaceTerminalLifecycleRequest,
+    remoteProject: GpuiRemoteProjectReference
+  ): Promise<boolean>;
   postWorkspaceTerminalLifecycleResult(requestId: number, ok: boolean): void;
 }
 
 export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
-
   handleGpuiWorkspaceTabSessionSelected(this: GpuiSidebarRuntime, payload: unknown): void {
     const selection = normalizeGpuiWorkspaceTabSessionSelection(payload);
     if (!selection) {
@@ -112,23 +115,21 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
         (session) =>
           session.projectId === selection.projectId &&
           session.sessionId === selection.sessionId &&
-          session.lifecycleState === "running",
+          session.lifecycleState === 'running'
       ) === true;
     this.setLocalPresentationSessionFocus(
       selection.projectId,
       selection.sessionId,
       undefined,
-      selection.visibleSessionIds,
+      selection.visibleSessionIds
     );
     if (shouldReconcileRunningPresentation) {
       this.postLocalWorkspaceTerminalFocus(selection.projectId, selection.sessionId);
     }
-    this.publishPresentation("patch");
+    this.publishPresentation('patch');
   },
 
-  async handleGpuiWorkspaceFirstPromptTitleGenerationCancel(this: GpuiSidebarRuntime,
-    payload: unknown,
-  ): Promise<void> {
+  async handleGpuiWorkspaceFirstPromptTitleGenerationCancel(this: GpuiSidebarRuntime, payload: unknown): Promise<void> {
     /*
     CDXC:GPUISessionTitleOverlay 2026-07-26:
     Escape inside the blocking "Generating title" pane overlay cancels the
@@ -146,18 +147,13 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     if (session?.isGeneratingFirstPromptTitle !== true) {
       return;
     }
-    if (
-      this.clearLocalPresentationSessionFirstPromptTitleGeneration(
-        cancel.projectId,
-        cancel.sessionId,
-      )
-    ) {
-      this.publishPresentation("patch");
+    if (this.clearLocalPresentationSessionFirstPromptTitleGeneration(cancel.projectId, cancel.sessionId)) {
+      this.publishPresentation('patch');
     }
     try {
-      await this.client.rpc("/api/cancelFirstPromptAutoTitle", {
+      await this.client.rpc('/api/cancelFirstPromptAutoTitle', {
         projectId: cancel.projectId,
-        reason: "escape",
+        reason: 'escape',
         sessionId: cancel.sessionId,
       });
     } catch {
@@ -169,9 +165,10 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     }
   },
 
-  clearLocalPresentationSessionFirstPromptTitleGeneration(this: GpuiSidebarRuntime,
+  clearLocalPresentationSessionFirstPromptTitleGeneration(
+    this: GpuiSidebarRuntime,
     projectId: string,
-    sessionId: string,
+    sessionId: string
   ): boolean {
     const presentation = this.presentation;
     if (!presentation) {
@@ -219,13 +216,13 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     }
     const agentName = normalizeNonEmptyString(
       this.presentation?.sessions.find(
-        (session) => session.projectId === bell.projectId && session.sessionId === bell.sessionId,
-      )?.agentName,
+        (session) => session.projectId === bell.projectId && session.sessionId === bell.sessionId
+      )?.agentName
     );
     try {
-      await this.client.rpc("/api/updateAgentActivity", {
+      await this.client.rpc('/api/updateAgentActivity', {
         ...(agentName ? { agentName } : {}),
-        event: "bell",
+        event: 'bell',
         projectId: bell.projectId,
         sessionId: bell.sessionId,
       });
@@ -239,10 +236,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     if (!observation) {
       return;
     }
-    const key = createGxserverPresentationProjectSessionId(
-      observation.projectId,
-      observation.sessionId,
-    );
+    const key = createGxserverPresentationProjectSessionId(observation.projectId, observation.sessionId);
     this.workspaceTerminalTitleObservations.set(key, observation);
     const previousTimeout = this.workspaceTerminalTitleSettleTimeouts.get(key);
     if (previousTimeout !== undefined) {
@@ -259,8 +253,9 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     this.workspaceTerminalTitleSettleTimeouts.set(key, timeout);
   },
 
-  async ingestGpuiWorkspaceTerminalTitle(this: GpuiSidebarRuntime,
-    observation: GpuiWorkspaceTerminalTitleChangedPayload,
+  async ingestGpuiWorkspaceTerminalTitle(
+    this: GpuiSidebarRuntime,
+    observation: GpuiWorkspaceTerminalTitleChangedPayload
   ): Promise<void> {
     if (!this.client) {
       return;
@@ -270,25 +265,18 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       return;
     }
     const session = this.presentation?.sessions.find(
-      (candidate) =>
-        candidate.projectId === observation.projectId &&
-        candidate.sessionId === observation.sessionId,
+      (candidate) => candidate.projectId === observation.projectId && candidate.sessionId === observation.sessionId
     );
-    if (!session || (session.kind !== "terminal" && session.kind !== "agent")) {
+    if (!session || (session.kind !== 'terminal' && session.kind !== 'agent')) {
       return;
     }
     const storedVisibleTitle = getVisibleTerminalTitle(session.terminalTitle)?.trim();
-    if (
-      storedVisibleTitle &&
-      storedVisibleTitle.replace(/\s+/gu, " ") === visibleTitle.replace(/\s+/gu, " ")
-    ) {
+    if (storedVisibleTitle && storedVisibleTitle.replace(/\s+/gu, ' ') === visibleTitle.replace(/\s+/gu, ' ')) {
       return;
     }
     try {
-      await this.client.rpc<GxserverTerminalTitleEventResult>("/api/ingestTerminalTitleEvent", {
-        ...(session.agentName || session.agentId
-          ? { agentName: session.agentName ?? session.agentId }
-          : {}),
+      await this.client.rpc<GxserverTerminalTitleEventResult>('/api/ingestTerminalTitleEvent', {
+        ...(session.agentName || session.agentId ? { agentName: session.agentName ?? session.agentId } : {}),
         projectId: observation.projectId,
         rawTitle: observation.rawTitle,
         sessionId: observation.sessionId,
@@ -311,33 +299,31 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     if (!request) {
       return;
     }
-    if (request.action === "sleepInactiveSessions") {
+    if (request.action === 'sleepInactiveSessions') {
       await this.sleepInactiveSessionsFromTitlebar();
       return;
     }
-    if (request.action === "sleepAllDaemonSessions") {
+    if (request.action === 'sleepAllDaemonSessions') {
       await this.sleepAllLocalDaemonSessions();
       return;
     }
-    const sessionId = createGxserverPresentationProjectSessionId(
-      request.projectId,
-      request.sessionId,
-    );
-    if (request.action === "forkSession") {
+    const sessionId = createGxserverPresentationProjectSessionId(request.projectId, request.sessionId);
+    if (request.action === 'forkSession') {
       await this.forkSession(sessionId);
       return;
     }
-    if (request.action === "exportTranscript") {
+    if (request.action === 'exportTranscript') {
       await this.exportSessionTranscript(sessionId);
       return;
     }
     await this.fullReloadSession(sessionId);
   },
 
-  postLocalWorkspaceTerminalRenameCommand(this: GpuiSidebarRuntime,
+  postLocalWorkspaceTerminalRenameCommand(
+    this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
-    title: string,
+    title: string
   ): void {
     /*
     CDXC:GxserverRendererCommands 2026-06-27-02:27:
@@ -350,8 +336,8 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     Rust still owns turning that selector into the actual terminal input.
     */
     const postRename = window.ghostexGpui?.postWorkspaceTerminalRenameCommand;
-    if (typeof postRename !== "function") {
-      throw new Error("Renderer command bridge unavailable.");
+    if (typeof postRename !== 'function') {
+      throw new Error('Renderer command bridge unavailable.');
     }
     /*
     CDXC:GPUISidebarRename 2026-07-29:
@@ -362,9 +348,9 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     instead of being dropped at the surface-ownership check.
     */
     this.focusLocalWorkspaceSession(projectId, sessionId);
-    this.publishPresentation("patch");
+    this.publishPresentation('patch');
     const session = this.findLocalPresentationSession(projectId, sessionId);
-    const agent = (session?.agentId ?? session?.agentName ?? "").trim().toLowerCase();
+    const agent = (session?.agentId ?? session?.agentName ?? '').trim().toLowerCase();
     const bridgeSent = postRename(
       JSON.stringify({
         version: GPUI_SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_MESSAGE_VERSION,
@@ -373,16 +359,17 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
         sessionId,
         title,
         command: gpuiWorkspaceTerminalTitleCommandForAgent(agent),
-      }),
+      })
     );
     if (!bridgeSent) {
-      throw new Error("Renderer command bridge unavailable.");
+      throw new Error('Renderer command bridge unavailable.');
     }
   },
 
-  transitionWorkspaceTerminalLifecycleClose(this: GpuiSidebarRuntime,
+  transitionWorkspaceTerminalLifecycleClose(
+    this: GpuiSidebarRuntime,
     request: GpuiWorkspaceTerminalLifecycleRequest,
-    fallbackReplacementSessionId: string | undefined,
+    fallbackReplacementSessionId: string | undefined
   ): boolean {
     /*
     CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:59:
@@ -393,15 +380,15 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     const replacementSessionId = request.replacementSessionId ?? fallbackReplacementSessionId;
     if (replacementSessionId) {
       this.focusLocalWorkspaceSession(replacementProjectId, replacementSessionId);
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
     }
     const client = this.client;
     if (client) {
       void client
-        .rpc<GxserverSessionTransitionResult>("/api/transitionSession", {
+        .rpc<GxserverSessionTransitionResult>('/api/transitionSession', {
           action: request.action,
           projectId: request.projectId,
-          reason: "closeTerminal",
+          reason: 'closeTerminal',
           sessionId: request.sessionId,
         })
         .catch(() => undefined);
@@ -410,7 +397,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
   },
 
   workspaceTerminalLifecycleResultBridgeReady(this: GpuiSidebarRuntime): boolean {
-    return typeof window.ghostexGpui?.postWorkspaceTerminalLifecycleResult === "function";
+    return typeof window.ghostexGpui?.postWorkspaceTerminalLifecycleResult === 'function';
   },
 
   handleOrQueueWorkspaceTerminalLifecycleRequest(this: GpuiSidebarRuntime, payload: unknown): void {
@@ -425,8 +412,9 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     void this.handleNormalizedWorkspaceTerminalLifecycleRequest(request);
   },
 
-  queuePendingWorkspaceTerminalLifecycleRequest(this: GpuiSidebarRuntime,
-    request: GpuiWorkspaceTerminalLifecycleRequest,
+  queuePendingWorkspaceTerminalLifecycleRequest(
+    this: GpuiSidebarRuntime,
+    request: GpuiWorkspaceTerminalLifecycleRequest
   ): void {
     const gpuiBridge = (window.ghostexGpui = window.ghostexGpui ?? {});
     const pending = Array.isArray(gpuiBridge.pendingWorkspaceTerminalLifecycleRequests)
@@ -447,9 +435,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     }, GPUI_WORKSPACE_TERMINAL_LIFECYCLE_BRIDGE_RETRY_DELAY_MS);
   },
 
-  drainPendingWorkspaceTerminalLifecycleRequests(this: GpuiSidebarRuntime,
-    queuedRequests?: readonly unknown[],
-  ): void {
+  drainPendingWorkspaceTerminalLifecycleRequests(this: GpuiSidebarRuntime, queuedRequests?: readonly unknown[]): void {
     const gpuiBridge = (window.ghostexGpui = window.ghostexGpui ?? {});
     const pending = [
       ...(queuedRequests ?? []),
@@ -477,8 +463,9 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     }
   },
 
-  async handleNormalizedWorkspaceTerminalLifecycleRequest(this: GpuiSidebarRuntime,
-    request: GpuiWorkspaceTerminalLifecycleRequest,
+  async handleNormalizedWorkspaceTerminalLifecycleRequest(
+    this: GpuiSidebarRuntime,
+    request: GpuiWorkspaceTerminalLifecycleRequest
   ): Promise<void> {
     let ok = false;
     try {
@@ -489,8 +476,9 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     this.postWorkspaceTerminalLifecycleResult(request.requestId, ok);
   },
 
-  async applyWorkspaceTerminalLifecycleRequest(this: GpuiSidebarRuntime,
-    request: GpuiWorkspaceTerminalLifecycleRequest,
+  async applyWorkspaceTerminalLifecycleRequest(
+    this: GpuiSidebarRuntime,
+    request: GpuiWorkspaceTerminalLifecycleRequest
   ): Promise<boolean> {
     const remoteProject = parseGpuiRemotePresentationProjectId(request.projectId);
     if (remoteProject) {
@@ -500,7 +488,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       request.replacementSessionId === undefined && !request.skipReplacementFallback
         ? this.resolveLocalProjectListTransitionFocusTarget(request.projectId, request.sessionId)
         : undefined;
-    if (request.action === "close") {
+    if (request.action === 'close') {
       /*
       CDXC:GPUIWorkspaceLifecycle 2026-07-10:
       Close is local-first and must hide the sidebar row even when gxserver is
@@ -513,55 +501,53 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     if (!this.client) {
       return false;
     }
-    if (request.action === "wake") {
+    if (request.action === 'wake') {
       /*
       CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:24:
       Rust-origin mapped sleeping placeholder activation must mirror macOS wake ownership: SidebarApp/gxserver commits `/api/wakeSession`, the sidebar marks the row running, and only the result ack lets Rust move the native tab into Mounting. Do not post WorkspaceTerminalFocus from this branch or the wake request would re-enter Rust before its pending lifecycle mutation applies.
       */
-      await this.client.rpc("/api/wakeSession", {
+      await this.client.rpc('/api/wakeSession', {
         projectId: request.projectId,
-        reason: "gpui-sidebar",
+        reason: 'gpui-sidebar',
         sessionId: request.sessionId,
       });
       this.patchPresentationSession(request.projectId, request.sessionId, {
-        lifecycleState: "running",
+        lifecycleState: 'running',
       });
       this.setLocalPresentationSessionFocus(request.projectId, request.sessionId);
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
       return true;
     }
-    const result = await this.client.rpc<GxserverSessionTransitionResult>(
-      "/api/transitionSession",
-      {
-        action: request.action,
-        projectId: request.projectId,
-        reason: "sleepSession",
-        sessionId: request.sessionId,
-      },
-    );
+    const result = await this.client.rpc<GxserverSessionTransitionResult>('/api/transitionSession', {
+      action: request.action,
+      projectId: request.projectId,
+      reason: 'sleepSession',
+      sessionId: request.sessionId,
+    });
     if (!shouldApplyGpuiLocalWorkspaceTransition(result, request.action)) {
       return false;
     }
     this.patchPresentationSession(request.projectId, request.sessionId, {
-      lifecycleState: "sleeping",
+      lifecycleState: 'sleeping',
     });
     const replacementProjectId = request.replacementProjectId ?? request.projectId;
     const replacementSessionId = request.replacementSessionId ?? fallbackReplacementSessionId;
     if (replacementSessionId) {
       this.focusLocalWorkspaceSession(replacementProjectId, replacementSessionId);
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
     }
     return true;
   },
 
-  async applyRemoteWorkspaceTerminalLifecycleRequest(this: GpuiSidebarRuntime,
+  async applyRemoteWorkspaceTerminalLifecycleRequest(
+    this: GpuiSidebarRuntime,
     request: GpuiWorkspaceTerminalLifecycleRequest,
-    remoteProject: GpuiRemoteProjectReference,
+    remoteProject: GpuiRemoteProjectReference
   ): Promise<boolean> {
     const scopedSessionId = createGpuiRemotePresentationSessionId(
       remoteProject.machineId,
       remoteProject.projectId,
-      request.sessionId,
+      request.sessionId
     );
     const replacementProject = request.replacementProjectId
       ? parseGpuiRemotePresentationProjectId(request.replacementProjectId)
@@ -585,31 +571,25 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
         transfers AppKit/GPUI keyboard ownership, leaving both the Agents pane
         and project-editor companion unable to type until clicked.
         */
-        this.postRemoteSessionNativeAction(
-          "openRemoteSessionTerminal",
-          replacementReference,
-          {
-            sessionId: createGpuiRemotePresentationSessionId(
-              replacementReference.machineId,
-              replacementReference.projectId,
-              replacementReference.sessionId,
-            ),
-            type: "focusSession",
-          },
-        );
+        this.postRemoteSessionNativeAction('openRemoteSessionTerminal', replacementReference, {
+          sessionId: createGpuiRemotePresentationSessionId(
+            replacementReference.machineId,
+            replacementReference.projectId,
+            replacementReference.sessionId
+          ),
+          type: 'focusSession',
+        });
         this.setRemotePresentationSessionFocus(replacementReference);
       }
     };
 
-    if (request.action === "close") {
+    if (request.action === 'close') {
       const presentation = this.remotePresentations.get(remoteProject.machineId);
       if (presentation) {
         this.remotePresentations.set(remoteProject.machineId, {
           ...presentation,
           sessions: presentation.sessions.filter(
-            (session) =>
-              session.projectId !== remoteProject.projectId ||
-              session.sessionId !== request.sessionId,
+            (session) => session.projectId !== remoteProject.projectId || session.sessionId !== request.sessionId
           ),
         });
       }
@@ -619,9 +599,9 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       }
       focusReplacement();
       this.publishRemotePresentationPatch();
-      void this.requestRemoteGxserver(remoteProject.machineId, "/api/killSession", {
+      void this.requestRemoteGxserver(remoteProject.machineId, '/api/killSession', {
         projectId: remoteProject.projectId,
-        reason: "closeTerminal",
+        reason: 'closeTerminal',
         sessionId: request.sessionId,
       })
         .then(() => this.refreshRemotePresentationFromGxserver(remoteProject.machineId))
@@ -631,15 +611,15 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
 
     await this.requestRemoteGxserver(
       remoteProject.machineId,
-      request.action === "wake" ? "/api/wakeSession" : "/api/sleepSession",
+      request.action === 'wake' ? '/api/wakeSession' : '/api/sleepSession',
       {
         projectId: remoteProject.projectId,
-        reason: "gpui-sidebar",
+        reason: 'gpui-sidebar',
         sessionId: request.sessionId,
-      },
+      }
     );
     await this.refreshRemotePresentationFromGxserver(remoteProject.machineId);
-    if (request.action === "wake") {
+    if (request.action === 'wake') {
       this.setRemotePresentationSessionFocus({
         machineId: remoteProject.machineId,
         projectId: remoteProject.projectId,
@@ -653,7 +633,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
 
   postWorkspaceTerminalLifecycleResult(this: GpuiSidebarRuntime, requestId: number, ok: boolean): void {
     const postResult = window.ghostexGpui?.postWorkspaceTerminalLifecycleResult;
-    if (typeof postResult !== "function") {
+    if (typeof postResult !== 'function') {
       return;
     }
     const payload = JSON.stringify({
@@ -666,5 +646,6 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
   },
 };
 
-const gpuiSidebarRuntimeTerminalLifecycleMethodsShapeCheck: GpuiSidebarRuntimeTerminalLifecycleMethods = gpuiSidebarRuntimeTerminalLifecycleMethods;
+const gpuiSidebarRuntimeTerminalLifecycleMethodsShapeCheck: GpuiSidebarRuntimeTerminalLifecycleMethods =
+  gpuiSidebarRuntimeTerminalLifecycleMethods;
 void gpuiSidebarRuntimeTerminalLifecycleMethodsShapeCheck;

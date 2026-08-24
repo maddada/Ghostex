@@ -11,73 +11,64 @@ import {
   GPUI_COMMAND_PANE_TIMER_REMAINING_MS_MAX,
   GPUI_DEFAULT_VISIBLE_COUNT,
   GPUI_GXSERVER_LOCAL_COMMAND_PANE_SESSION_ID_PATTERN,
-} from "../constants";
+} from '../constants';
 import type {
   GpuiCommandPaneSessionSummary,
   GpuiSidebarCommandSessionIndicatorScope,
   GpuiSidebarRuntimeSettings,
   GpuiWorkspaceSessionDelayedSendSummary,
-} from "../types-and-protocol";
-import { createGpuiSidebarSettings } from "./bootstrap";
-import { createGpuiProjectSettingsProjects } from "./presentation-projection";
+} from '../types-and-protocol';
+import { createGpuiSidebarSettings } from './bootstrap';
+import { createGpuiProjectSettingsProjects } from './presentation-projection';
 import {
   compareGpuiRecentProjectsByClosedAt,
   createGpuiRecentProjects,
   createGpuiRemoteRecentProjects,
-} from "./recent-projects";
-import { getCompletionSoundLabel } from "@/packages/shared/completion-sound";
+} from './recent-projects';
+import { getCompletionSoundLabel } from '@/packages/shared/completion-sound';
 import {
   gxserverPresentationSidebarAutoSettleAfterDays,
   gxserverPresentationSidebarLifecycleCapabilities,
   parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverPresentationSnapshot,
   GxserverProjectDomainState,
   GxserverRecentProjectDomainState,
   GxserverSidebarHudResponse,
-} from "@/packages/shared/gxserver-protocol";
+} from '@/packages/shared/gxserver-protocol';
 import type {
   SidebarCommandSessionIndicator,
   SidebarHudState,
   SidebarSessionGroup,
-} from "@/packages/shared/session-grid-contract";
-import { resolveSidebarTheme } from "@/packages/shared/session-grid-contract";
-import type { SidebarAgentButton } from "@/packages/shared/sidebar-agents";
-import { createSidebarAgentButtons } from "@/packages/shared/sidebar-agents";
-import type { SidebarCommandButton } from "@/packages/shared/sidebar-commands";
-import { createSidebarCommandButtons } from "@/packages/shared/sidebar-commands";
-import type { SidebarGitState } from "@/packages/shared/sidebar-git";
-import { createDefaultSidebarGitState } from "@/packages/shared/sidebar-git";
+} from '@/packages/shared/session-grid-contract';
+import { resolveSidebarTheme } from '@/packages/shared/session-grid-contract';
+import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
+import { createSidebarAgentButtons } from '@/packages/shared/sidebar-agents';
+import type { SidebarCommandButton } from '@/packages/shared/sidebar-commands';
+import { createSidebarCommandButtons } from '@/packages/shared/sidebar-commands';
+import type { SidebarGitState } from '@/packages/shared/sidebar-git';
+import { createDefaultSidebarGitState } from '@/packages/shared/sidebar-git';
 
 export function normalizeGpuiWorkspaceSessionDelayedSends(
-  sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[] | unknown,
+  sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[] | unknown
 ): GpuiWorkspaceSessionDelayedSendSummary[] {
   if (!Array.isArray(sessions)) {
     return [];
   }
   return sessions.slice(0, GPUI_COMMAND_PANE_SESSION_SUMMARY_LIMIT).flatMap((session) => {
-    if (!session || typeof session !== "object") {
+    if (!session || typeof session !== 'object') {
       return [];
     }
-    const record = session as Partial<
-      Record<keyof GpuiWorkspaceSessionDelayedSendSummary, unknown>
-    >;
+    const record = session as Partial<Record<keyof GpuiWorkspaceSessionDelayedSendSummary, unknown>>;
     const sessionId = normalizeGpuiCommandPaneSessionString(record.sessionId);
     if (!sessionId || !parseGxserverPresentationProjectSessionId(sessionId)) {
       return [];
     }
-    const delayedSendDeadlineAt = normalizeGpuiCommandPaneTimerDeadlineAt(
-      record.delayedSendDeadlineAt,
-    );
-    const delayedSendRemainingLabel = normalizeGpuiWorkspaceDelayedSendRemainingLabel(
-      record.delayedSendRemainingLabel,
-    );
-    const delayedSendRemainingMs = normalizeGpuiCommandPaneTimerRemainingMs(
-      record.delayedSendRemainingMs,
-    );
-    const sendWhenAllProjectSessionsStopActive =
-      record.sendWhenAllProjectSessionsStopActive === true;
+    const delayedSendDeadlineAt = normalizeGpuiCommandPaneTimerDeadlineAt(record.delayedSendDeadlineAt);
+    const delayedSendRemainingLabel = normalizeGpuiWorkspaceDelayedSendRemainingLabel(record.delayedSendRemainingLabel);
+    const delayedSendRemainingMs = normalizeGpuiCommandPaneTimerRemainingMs(record.delayedSendRemainingMs);
+    const sendWhenAllProjectSessionsStopActive = record.sendWhenAllProjectSessionsStopActive === true;
     const sendWhenAgentStopsActive = record.sendWhenAgentStopsActive === true;
     if (
       !delayedSendDeadlineAt &&
@@ -93,9 +84,7 @@ export function normalizeGpuiWorkspaceSessionDelayedSends(
         ...(delayedSendDeadlineAt ? { delayedSendDeadlineAt } : {}),
         ...(delayedSendRemainingLabel ? { delayedSendRemainingLabel } : {}),
         ...(delayedSendRemainingMs !== undefined ? { delayedSendRemainingMs } : {}),
-        ...(sendWhenAllProjectSessionsStopActive
-          ? { sendWhenAllProjectSessionsStopActive: true }
-          : {}),
+        ...(sendWhenAllProjectSessionsStopActive ? { sendWhenAllProjectSessionsStopActive: true } : {}),
         ...(sendWhenAgentStopsActive ? { sendWhenAgentStopsActive: true } : {}),
         sessionId,
       },
@@ -104,20 +93,20 @@ export function normalizeGpuiWorkspaceSessionDelayedSends(
 }
 
 export function normalizeGpuiWorkspaceDelayedSendRemainingLabel(value: unknown): string | undefined {
-  if (value === "Waiting for agent" || value === "Waiting for agents") {
+  if (value === 'Waiting for agent' || value === 'Waiting for agents') {
     return value;
   }
   return normalizeGpuiCommandPaneTimerRemainingLabel(value);
 }
 
 export function normalizeGpuiCommandPaneSessions(
-  sessions: readonly GpuiCommandPaneSessionSummary[] | unknown,
+  sessions: readonly GpuiCommandPaneSessionSummary[] | unknown
 ): GpuiCommandPaneSessionSummary[] {
   if (!Array.isArray(sessions)) {
     return [];
   }
   return sessions.slice(0, GPUI_COMMAND_PANE_SESSION_SUMMARY_LIMIT).flatMap((session) => {
-    if (!session || typeof session !== "object") {
+    if (!session || typeof session !== 'object') {
       return [];
     }
     const record = session as Partial<Record<keyof GpuiCommandPaneSessionSummary, unknown>>;
@@ -128,24 +117,14 @@ export function normalizeGpuiCommandPaneSessions(
     }
     const commandId = normalizeGpuiCommandPaneSessionString(record.commandId);
     const title = normalizeGpuiCommandPaneSessionString(record.title);
-    const delayedSendDeadlineAt = normalizeGpuiCommandPaneTimerDeadlineAt(
-      record.delayedSendDeadlineAt,
-    );
-    const delayedSendRemainingLabel = normalizeGpuiCommandPaneTimerRemainingLabel(
-      record.delayedSendRemainingLabel,
-    );
-    const delayedSendRemainingMs = normalizeGpuiCommandPaneTimerRemainingMs(
-      record.delayedSendRemainingMs,
-    );
-    const closeAfterDoneDeadlineAt = normalizeGpuiCommandPaneTimerDeadlineAt(
-      record.closeAfterDoneDeadlineAt,
-    );
+    const delayedSendDeadlineAt = normalizeGpuiCommandPaneTimerDeadlineAt(record.delayedSendDeadlineAt);
+    const delayedSendRemainingLabel = normalizeGpuiCommandPaneTimerRemainingLabel(record.delayedSendRemainingLabel);
+    const delayedSendRemainingMs = normalizeGpuiCommandPaneTimerRemainingMs(record.delayedSendRemainingMs);
+    const closeAfterDoneDeadlineAt = normalizeGpuiCommandPaneTimerDeadlineAt(record.closeAfterDoneDeadlineAt);
     const closeAfterDoneRemainingLabel = normalizeGpuiCommandPaneTimerRemainingLabel(
-      record.closeAfterDoneRemainingLabel,
+      record.closeAfterDoneRemainingLabel
     );
-    const closeAfterDoneRemainingMs = normalizeGpuiCommandPaneTimerRemainingMs(
-      record.closeAfterDoneRemainingMs,
-    );
+    const closeAfterDoneRemainingMs = normalizeGpuiCommandPaneTimerRemainingMs(record.closeAfterDoneRemainingMs);
     return [
       {
         ...(commandId ? { commandId } : {}),
@@ -171,10 +150,10 @@ export function normalizeGpuiCommandPaneSessions(
 }
 
 export function normalizeGpuiCommandPaneSessionString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
-  const normalized = value.trim().replace(/\s+/g, " ");
+  const normalized = value.trim().replace(/\s+/g, ' ');
   if (
     !normalized ||
     normalized.length > GPUI_COMMAND_PANE_SESSION_STRING_MAX_LENGTH ||
@@ -186,7 +165,7 @@ export function normalizeGpuiCommandPaneSessionString(value: unknown): string | 
 }
 
 export function normalizeGpuiCommandPaneTimerDeadlineAt(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
   const normalized = value.trim();
@@ -203,10 +182,10 @@ export function normalizeGpuiCommandPaneTimerDeadlineAt(value: unknown): string 
 }
 
 export function normalizeGpuiCommandPaneTimerRemainingLabel(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
-  const normalized = value.trim().replace(/\s+/g, " ");
+  const normalized = value.trim().replace(/\s+/g, ' ');
   if (
     !normalized ||
     normalized.length > GPUI_COMMAND_PANE_TIMER_LABEL_MAX_LENGTH ||
@@ -220,7 +199,7 @@ export function normalizeGpuiCommandPaneTimerRemainingLabel(value: unknown): str
 
 export function normalizeGpuiCommandPaneTimerRemainingMs(value: unknown): number | undefined {
   if (
-    typeof value !== "number" ||
+    typeof value !== 'number' ||
     !Number.isFinite(value) ||
     value < 0 ||
     value > GPUI_COMMAND_PANE_TIMER_REMAINING_MS_MAX
@@ -231,20 +210,18 @@ export function normalizeGpuiCommandPaneTimerRemainingMs(value: unknown): number
 }
 
 export function normalizeGpuiCommandPaneSessionStatus(
-  value: unknown,
-): SidebarCommandSessionIndicator["status"] | undefined {
+  value: unknown
+): SidebarCommandSessionIndicator['status'] | undefined {
   return isValidGpuiCommandPaneSessionStatus(value) ? value : undefined;
 }
 
-export function isValidGpuiCommandPaneSessionStatus(
-  value: unknown,
-): value is SidebarCommandSessionIndicator["status"] {
-  return value === "idle" || value === "running" || value === "error";
+export function isValidGpuiCommandPaneSessionStatus(value: unknown): value is SidebarCommandSessionIndicator['status'] {
+  return value === 'idle' || value === 'running' || value === 'error';
 }
 
 export function hasSameGpuiCommandPaneSessions(
   current: readonly GpuiCommandPaneSessionSummary[],
-  next: readonly GpuiCommandPaneSessionSummary[],
+  next: readonly GpuiCommandPaneSessionSummary[]
 ): boolean {
   if (current.length !== next.length) {
     return false;
@@ -274,15 +251,12 @@ export function isGpuiGxserverLocalCommandPaneSessionId(sessionId: unknown): ses
   CDXC:GPUICommandPane 2026-06-27-01:37:
   GPUI command-pane summaries are live local tab state for gxserver-backed native-shaped `G...` command sessions only. Rust shell internals may still carry numeric ids, so drop raw numeric strings, lowercase `g...`, malformed strings, and non-string rows at the bridge boundary before stale native-local command tabs can drive HUD indicators, active-tab state, timer projection, or auto-sleep protection.
   */
-  return (
-    typeof sessionId === "string" &&
-    GPUI_GXSERVER_LOCAL_COMMAND_PANE_SESSION_ID_PATTERN.test(sessionId)
-  );
+  return typeof sessionId === 'string' && GPUI_GXSERVER_LOCAL_COMMAND_PANE_SESSION_ID_PATTERN.test(sessionId);
 }
 
 export function filterGpuiGxserverLocalCommandPaneSessions(
   commandPaneSessions: readonly GpuiCommandPaneSessionSummary[],
-  scope: GpuiSidebarCommandSessionIndicatorScope = {},
+  scope: GpuiSidebarCommandSessionIndicatorScope = {}
 ): GpuiCommandPaneSessionSummary[] {
   /*
   CDXC:GPUICommandPane 2026-06-27-08:32:
@@ -295,8 +269,8 @@ export function filterGpuiGxserverLocalCommandPaneSessions(
     scope.activeProjectId && scope.presentation
       ? new Set<string>(
           scope.presentation.sessions.flatMap((session) =>
-            session.projectId === scope.activeProjectId ? [session.sessionId] : [],
-          ),
+            session.projectId === scope.activeProjectId ? [session.sessionId] : []
+          )
         )
       : undefined;
   return commandPaneSessions.filter((session) => {
@@ -313,7 +287,7 @@ export function filterGpuiGxserverLocalCommandPaneSessions(
 export function createGpuiSidebarCommandSessionIndicators(
   commands: readonly SidebarCommandButton[],
   commandPaneSessions: readonly GpuiCommandPaneSessionSummary[],
-  scope: GpuiSidebarCommandSessionIndicatorScope = {},
+  scope: GpuiSidebarCommandSessionIndicatorScope = {}
 ): SidebarCommandSessionIndicator[] {
   /*
   CDXC:GPUICommandPane 2026-06-27-06:30:
@@ -322,30 +296,22 @@ export function createGpuiSidebarCommandSessionIndicators(
   CDXC:GPUICommandPane 2026-06-27-08:45:
   Keep the exported helper backward-compatible for direct two-argument tests and callers. Live HUD construction passes the optional active-project presentation scope so stale command-pane summaries are pruned against the full current presentation, not against whichever ids happen to appear in a non-removal delta.
   */
-  const localCommandPaneSessions = filterGpuiGxserverLocalCommandPaneSessions(
-    commandPaneSessions,
-    scope,
-  );
+  const localCommandPaneSessions = filterGpuiGxserverLocalCommandPaneSessions(commandPaneSessions, scope);
   return commands.flatMap((command) => {
-    if (command.actionType !== "terminal") {
+    if (command.actionType !== 'terminal') {
       return [];
     }
-    const commandTitleKey = getGpuiSidebarCommandTitleKey(
-      getGpuiSidebarCommandSessionTitle(command),
-    );
+    const commandTitleKey = getGpuiSidebarCommandTitleKey(getGpuiSidebarCommandSessionTitle(command));
     if (!commandTitleKey) {
       return [];
     }
     const mappedSession = localCommandPaneSessions.find(
       (session) =>
-        session.commandId === command.commandId &&
-        getGpuiSidebarCommandTitleKey(session.title) === commandTitleKey,
+        session.commandId === command.commandId && getGpuiSidebarCommandTitleKey(session.title) === commandTitleKey
     );
     const session =
       mappedSession ??
-      localCommandPaneSessions.find(
-        (candidate) => getGpuiSidebarCommandTitleKey(candidate.title) === commandTitleKey,
-      );
+      localCommandPaneSessions.find((candidate) => getGpuiSidebarCommandTitleKey(candidate.title) === commandTitleKey);
     if (!session) {
       return [];
     }
@@ -394,13 +360,11 @@ export function createGpuiSidebarCommandSessionIndicators(
 
 export function getGpuiSidebarCommandSessionTitle(command: SidebarCommandButton): string {
   const normalizedActionName = command.name.trim();
-  return normalizedActionName.length > 0
-    ? normalizedActionName
-    : (command.command ?? "").trim().slice(0, 20);
+  return normalizedActionName.length > 0 ? normalizedActionName : (command.command ?? '').trim().slice(0, 20);
 }
 
 export function getGpuiSidebarCommandTitleKey(value: string | undefined): string {
-  return normalizeGpuiCommandPaneSessionString(value)?.toLocaleLowerCase() ?? "";
+  return normalizeGpuiCommandPaneSessionString(value)?.toLocaleLowerCase() ?? '';
 }
 
 export function createGpuiSidebarHudState({
@@ -425,10 +389,7 @@ export function createGpuiSidebarHudState({
   groups?: readonly SidebarSessionGroup[];
   presentation?: GxserverPresentationSnapshot;
   recentProjects?: readonly GxserverRecentProjectDomainState[];
-  remoteRecentProjectsByMachineId?: ReadonlyMap<
-    string,
-    readonly GxserverRecentProjectDomainState[]
-  >;
+  remoteRecentProjectsByMachineId?: ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]>;
   remotePresentationsByMachineId?: ReadonlyMap<string, GxserverPresentationSnapshot>;
   runtimeSettings?: GpuiSidebarRuntimeSettings;
   sidebarHud?: GxserverSidebarHudResponse;
@@ -438,10 +399,7 @@ export function createGpuiSidebarHudState({
    * CDXC:SidebarHudContract 2026-06-24-20:34:
    * GPUI SidebarApp uses gxserver's `/api/readSidebarHud` projection for read-side agent/action buttons so live sidebar and app-modal Settings share one production contract. The local shared defaults are only for pre-bootstrap or unavailable gxserver state; project metadata is not re-normalized here.
    */
-  const agents =
-    sidebarHud
-      ? ([...sidebarHud.agents] as SidebarAgentButton[])
-      : createSidebarAgentButtons([], []);
+  const agents = sidebarHud ? ([...sidebarHud.agents] as SidebarAgentButton[]) : createSidebarAgentButtons([], []);
   /*
    * CDXC:ProjectActions 2026-08-01:
    * `showOnProjectRow` is optional on the gxserver contract because a daemon
@@ -451,15 +409,13 @@ export function createGpuiSidebarHudState({
    * and the Settings toggle both see a real boolean.
    */
   const normalizeHudCommands = (
-    hudCommands: readonly GxserverSidebarHudResponse["commands"][number][],
+    hudCommands: readonly GxserverSidebarHudResponse['commands'][number][]
   ): ReturnType<typeof createSidebarCommandButtons> =>
     hudCommands.map((command) => ({
       ...command,
       showOnProjectRow: command.showOnProjectRow === true,
     })) as ReturnType<typeof createSidebarCommandButtons>;
-  const commands = sidebarHud
-    ? normalizeHudCommands(sidebarHud.commands)
-    : createSidebarCommandButtons([], [], []);
+  const commands = sidebarHud ? normalizeHudCommands(sidebarHud.commands) : createSidebarCommandButtons([], [], []);
   /*
    * CDXC:GlobalActions 2026-08-01:
    * `globalCommands` is optional on the gxserver contract because a daemon
@@ -475,39 +431,32 @@ export function createGpuiSidebarHudState({
         Object.entries(sidebarHud.commandsByProject).map(([projectId, projectCommands]) => [
           projectId,
           normalizeHudCommands(projectCommands),
-        ]),
+        ])
       )
     : undefined;
   const focusedSession = groups
     .flatMap((group) => group.sessions)
     .find(
       (session) =>
-        parseGxserverPresentationProjectSessionId(session.sessionId)?.sessionId ===
-          focusedSessionId || session.sessionId === focusedSessionId,
+        parseGxserverPresentationProjectSessionId(session.sessionId)?.sessionId === focusedSessionId ||
+        session.sessionId === focusedSessionId
     );
-  const visibleSessions = groups.flatMap((group) =>
-    group.sessions.filter((session) => session.isVisible),
-  );
+  const visibleSessions = groups.flatMap((group) => group.sessions.filter((session) => session.isVisible));
   return {
-    activeSessionsSortMode: "lastActivity",
+    activeSessionsSortMode: 'lastActivity',
     agentManagerZoomPercent: settings.agentManagerZoomPercent,
     agents,
     commands,
     ...(commandsByProject ? { commandsByProject } : {}),
-    commandSessionIndicators: createGpuiSidebarCommandSessionIndicators(
-      commands,
-      commandPaneSessions,
-      {
-        activeProjectId,
-        presentation,
-      },
-    ),
+    commandSessionIndicators: createGpuiSidebarCommandSessionIndicators(commands, commandPaneSessions, {
+      activeProjectId,
+      presentation,
+    }),
     completionBellEnabled: settings.completionBellEnabled,
     completionSound: settings.completionSound,
     completionSoundLabel: getCompletionSoundLabel(settings.completionSound),
     debuggingMode: settings.debuggingMode,
-    focusedSessionTitle:
-      focusedSession?.displayTitle ?? focusedSession?.primaryTitle ?? focusedSession?.alias,
+    focusedSessionTitle: focusedSession?.displayTitle ?? focusedSession?.primaryTitle ?? focusedSession?.alias,
     git: git ?? createDefaultSidebarGitState(),
     globalCommands,
     highlightedVisibleCount: GPUI_DEFAULT_VISIBLE_COUNT,
@@ -531,13 +480,10 @@ export function createGpuiSidebarHudState({
     */
     lifecycleCapabilities: gxserverPresentationSidebarLifecycleCapabilities(presentation),
     lifecycleCapabilitiesByMachineId: Object.fromEntries(
-      [...(remotePresentationsByMachineId ?? new Map())].flatMap(
-        ([machineId, remotePresentation]) => {
-          const capabilities =
-            gxserverPresentationSidebarLifecycleCapabilities(remotePresentation);
-          return capabilities ? [[machineId, capabilities] as const] : [];
-        },
-      ),
+      [...(remotePresentationsByMachineId ?? new Map())].flatMap(([machineId, remotePresentation]) => {
+        const capabilities = gxserverPresentationSidebarLifecycleCapabilities(remotePresentation);
+        return capabilities ? [[machineId, capabilities] as const] : [];
+      })
     ),
     /*
     CDXC:SidebarV2LogicalProjects 2026-07-29:
@@ -551,15 +497,10 @@ export function createGpuiSidebarHudState({
     */
     autoSettleAfterDays: gxserverPresentationSidebarAutoSettleAfterDays(presentation),
     autoSettleAfterDaysByMachineId: Object.fromEntries(
-      [...(remotePresentationsByMachineId ?? new Map())].flatMap(
-        ([machineId, remotePresentation]) => {
-          const autoSettleAfterDays =
-            gxserverPresentationSidebarAutoSettleAfterDays(remotePresentation);
-          return autoSettleAfterDays === undefined
-            ? []
-            : [[machineId, autoSettleAfterDays] as const];
-        },
-      ),
+      [...(remotePresentationsByMachineId ?? new Map())].flatMap(([machineId, remotePresentation]) => {
+        const autoSettleAfterDays = gxserverPresentationSidebarAutoSettleAfterDays(remotePresentation);
+        return autoSettleAfterDays === undefined ? [] : [[machineId, autoSettleAfterDays] as const];
+      })
     ),
     pendingAgentIds: [],
     projectSettingsProjects: createGpuiProjectSettingsProjects(domainProjects, presentation),
@@ -572,18 +513,14 @@ export function createGpuiSidebarHudState({
     */
     recentProjects: [
       ...createGpuiRecentProjects(recentProjects, settings),
-      ...createGpuiRemoteRecentProjects(
-        remoteRecentProjectsByMachineId,
-        remotePresentationsByMachineId,
-        settings,
-      ),
+      ...createGpuiRemoteRecentProjects(remoteRecentProjectsByMachineId, remotePresentationsByMachineId, settings),
     ].sort(compareGpuiRecentProjectsByClosedAt),
     settings,
     createSessionOnSidebarDoubleClick: settings.createSessionOnSidebarDoubleClick,
     renameSessionOnDoubleClick: settings.renameSessionOnDoubleClick,
     showCloseButtonOnSessionCards: settings.showCloseButtonOnSessionCards,
-    theme: resolveSidebarTheme(settings.sidebarTheme, "dark"),
-    viewMode: "grid",
+    theme: resolveSidebarTheme(settings.sidebarTheme, 'dark'),
+    viewMode: 'grid',
     visibleCount: GPUI_DEFAULT_VISIBLE_COUNT,
     visibleSlotLabels: visibleSessions.map((session) => session.shortcutLabel),
   };

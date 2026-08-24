@@ -12,8 +12,8 @@
 // drains the queue: a prompt can leave it with no client action at all, so a
 // count derived from this client's own calls would go stale on its own.
 
-import { IconStackPush } from "@tabler/icons-react";
-import { AppTooltip } from "@/packages/core-ui/app-tooltip";
+import { IconStackPush } from '@tabler/icons-react';
+import { AppTooltip } from '@/packages/core-ui/app-tooltip';
 
 export function SessionChatQueuedPromptsButton({
   count,
@@ -27,7 +27,7 @@ export function SessionChatQueuedPromptsButton({
   if (count < 1) {
     return null;
   }
-  const label = `${count} queued prompt${count === 1 ? "" : "s"}`;
+  const label = `${count} queued prompt${count === 1 ? '' : 's'}`;
   /*
   A `failed` row stops the queue draining until the user retries or deletes it,
   so this button has to say "stopped", not just "waiting". #ff6b6b is the same
@@ -40,20 +40,16 @@ export function SessionChatQueuedPromptsButton({
     ? `${label} — delivery failed, open Chat View to retry`
     : `${label} — open Chat View to edit them`;
   return (
-    <div className="pointer-events-none absolute left-[13px] top-[13px] z-20 flex">
+    <div className='pointer-events-none absolute left-[13px] top-[13px] z-20 flex'>
       <AppTooltip content={tooltip}>
         {/*
           data-slot opts out of the unlayered legacy `button:where(:not([data-slot]))`
           chrome in theme.css, exactly as the host action cluster does.
         */}
         <button
-          aria-label={
-            hasFailed
-              ? `${label}. Delivery failed. Open Chat View.`
-              : `${label}. Open Chat View.`
-          }
-          className="pointer-events-auto flex h-[28.125px] shrink-0 items-center gap-1.5 border border-[#2a2a2a] bg-[#101010] px-2.5 text-[11px] leading-none text-[#a6a6a6] shadow-[0_10px_22px_rgba(0,0,0,0.32)] transition-colors hover:bg-[#343434]"
-          data-slot="session-chat-queued-prompts"
+          aria-label={hasFailed ? `${label}. Delivery failed. Open Chat View.` : `${label}. Open Chat View.`}
+          className='pointer-events-auto flex h-[28.125px] shrink-0 items-center gap-1.5 border border-[#2a2a2a] bg-[#101010] px-2.5 text-[11px] leading-none text-[#a6a6a6] shadow-[0_10px_22px_rgba(0,0,0,0.32)] transition-colors hover:bg-[#343434]'
+          data-slot='session-chat-queued-prompts'
           onClick={(event) => {
             // This button hides its own container: switching to chat marks the
             // terminal layer aria-hidden, and leaving focus inside an
@@ -62,15 +58,10 @@ export function SessionChatQueuedPromptsButton({
             event.currentTarget.blur();
             onOpenChat();
           }}
-          type="button"
+          type='button'
         >
-          <IconStackPush
-            aria-hidden="true"
-            color={hasFailed ? "#ff6b6b" : undefined}
-            size={14}
-            stroke={2}
-          />
-          <span className={hasFailed ? "text-[#ff6b6b]" : undefined}>Queued: {count}</span>
+          <IconStackPush aria-hidden='true' color={hasFailed ? '#ff6b6b' : undefined} size={14} stroke={2} />
+          <span className={hasFailed ? 'text-[#ff6b6b]' : undefined}>Queued: {count}</span>
         </button>
       </AppTooltip>
     </div>

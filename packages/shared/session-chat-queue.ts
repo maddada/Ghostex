@@ -32,7 +32,7 @@ above the composer and which the agent has never seen. Never reuse
  *             until the user retries or deletes it; the text is never
  *             discarded.
  */
-export type SessionChatQueuedPromptState = "queued" | "sending" | "failed";
+export type SessionChatQueuedPromptState = 'queued' | 'sending' | 'failed';
 
 export interface SessionChatQueuedPrompt {
   /** Server-generated and stable across edits, so a row keeps its identity. */
@@ -133,8 +133,7 @@ export interface GxserverQueueSessionChatPromptParams {
   text: string;
 }
 
-export interface GxserverQueueSessionChatPromptResult
-  extends GxserverSessionChatQueueResult {
+export interface GxserverQueueSessionChatPromptResult extends GxserverSessionChatQueueResult {
   /** The row that was just created, so the caller knows its server id. */
   prompt: SessionChatQueuedPrompt;
 }
@@ -159,8 +158,7 @@ export interface GxserverRemoveSessionChatQueuedPromptParams {
   promptId: string;
 }
 
-export interface GxserverSessionChatRemoveQueuedPromptResult
-  extends GxserverSessionChatQueueResult {
+export interface GxserverSessionChatRemoveQueuedPromptResult extends GxserverSessionChatQueueResult {
   /**
    * The row that was removed. Returned so Edit can pull its text back into the
    * composer without having cached it — the delete and the edit are one
@@ -187,8 +185,7 @@ export interface GxserverSendSessionChatQueuedPromptParams {
   promptId: string;
 }
 
-export interface GxserverSendSessionChatQueuedPromptResult
-  extends GxserverSessionChatQueueResult {
+export interface GxserverSendSessionChatQueuedPromptResult extends GxserverSessionChatQueueResult {
   /**
    * True when the prompt was handed to the agent (and therefore removed from
    * `queue`). "Send now" delivers immediately regardless of agent state,

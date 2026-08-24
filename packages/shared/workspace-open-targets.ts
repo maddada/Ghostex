@@ -1,28 +1,28 @@
-export type WorkspaceOpenTargetLaunchStyle = "direct-path" | "goto" | "line-column";
-export type WorkspaceIdeTargetApp = "zed" | "zed-preview" | "vscode" | "vscode-insiders";
+export type WorkspaceOpenTargetLaunchStyle = 'direct-path' | 'goto' | 'line-column';
+export type WorkspaceIdeTargetApp = 'zed' | 'zed-preview' | 'vscode' | 'vscode-insiders';
 
 export type BuiltInWorkspaceOpenTargetId =
-  | "cursor"
-  | "trae"
-  | "kiro"
-  | "vscode"
-  | "vscode-insiders"
-  | "vscodium"
-  | "zed"
-  | "antigravity"
-  | "idea"
-  | "aqua"
-  | "clion"
-  | "datagrip"
-  | "dataspell"
-  | "goland"
-  | "phpstorm"
-  | "pycharm"
-  | "rider"
-  | "rubymine"
-  | "rustrover"
-  | "webstorm"
-  | "finder";
+  | 'cursor'
+  | 'trae'
+  | 'kiro'
+  | 'vscode'
+  | 'vscode-insiders'
+  | 'vscodium'
+  | 'zed'
+  | 'antigravity'
+  | 'idea'
+  | 'aqua'
+  | 'clion'
+  | 'datagrip'
+  | 'dataspell'
+  | 'goland'
+  | 'phpstorm'
+  | 'pycharm'
+  | 'rider'
+  | 'rubymine'
+  | 'rustrover'
+  | 'webstorm'
+  | 'finder';
 
 export type WorkspaceOpenTargetDefinition = {
   baseArgs?: readonly string[];
@@ -41,10 +41,8 @@ export type CustomWorkspaceOpenTarget = {
   label: string;
 };
 
-export const CUSTOM_WORKSPACE_OPEN_TARGET_ID_PREFIX = "custom:";
-export const ALWAYS_AVAILABLE_WORKSPACE_OPEN_TARGET_IDS: readonly BuiltInWorkspaceOpenTargetId[] = [
-  "finder",
-];
+export const CUSTOM_WORKSPACE_OPEN_TARGET_ID_PREFIX = 'custom:';
+export const ALWAYS_AVAILABLE_WORKSPACE_OPEN_TARGET_IDS: readonly BuiltInWorkspaceOpenTargetId[] = ['finder'];
 
 export type WorkspaceOpenTargetAvailability = {
   availableTargetIds: BuiltInWorkspaceOpenTargetId[];
@@ -76,131 +74,129 @@ export const DEFAULT_WORKSPACE_OPEN_TARGET_AVAILABILITY: WorkspaceOpenTargetAvai
  */
 export const BUILT_IN_WORKSPACE_OPEN_TARGETS: readonly WorkspaceOpenTargetDefinition[] = [
   {
-    commands: ["cursor"],
-    id: "cursor",
-    label: "Cursor",
-    launchStyle: "goto",
-    macOSAppNames: ["Cursor"],
+    commands: ['cursor'],
+    id: 'cursor',
+    label: 'Cursor',
+    launchStyle: 'goto',
+    macOSAppNames: ['Cursor'],
   },
-  { commands: ["trae"], id: "trae", label: "Trae", launchStyle: "goto", macOSAppNames: ["Trae"] },
+  { commands: ['trae'], id: 'trae', label: 'Trae', launchStyle: 'goto', macOSAppNames: ['Trae'] },
   {
-    baseArgs: ["ide"],
-    commands: ["kiro"],
-    id: "kiro",
-    label: "Kiro",
-    launchStyle: "goto",
-    macOSAppNames: ["Kiro"],
-  },
-  {
-    commands: ["code"],
-    id: "vscode",
-    label: "VS Code",
-    launchStyle: "goto",
-    macOSAppNames: ["Visual Studio Code"],
-    targetApp: "vscode",
+    baseArgs: ['ide'],
+    commands: ['kiro'],
+    id: 'kiro',
+    label: 'Kiro',
+    launchStyle: 'goto',
+    macOSAppNames: ['Kiro'],
   },
   {
-    commands: ["code-insiders"],
-    id: "vscode-insiders",
-    label: "VS Code Insiders",
-    launchStyle: "goto",
-    macOSAppNames: ["Visual Studio Code - Insiders"],
-    targetApp: "vscode-insiders",
+    commands: ['code'],
+    id: 'vscode',
+    label: 'VS Code',
+    launchStyle: 'goto',
+    macOSAppNames: ['Visual Studio Code'],
+    targetApp: 'vscode',
   },
   {
-    commands: ["codium"],
-    id: "vscodium",
-    label: "VSCodium",
-    launchStyle: "goto",
-    macOSAppNames: ["VSCodium"],
+    commands: ['code-insiders'],
+    id: 'vscode-insiders',
+    label: 'VS Code Insiders',
+    launchStyle: 'goto',
+    macOSAppNames: ['Visual Studio Code - Insiders'],
+    targetApp: 'vscode-insiders',
   },
   {
-    commands: ["zed", "zeditor"],
-    id: "zed",
-    label: "Zed",
-    launchStyle: "direct-path",
-    macOSAppNames: ["Zed", "Zed Preview"],
-    targetApp: "zed",
+    commands: ['codium'],
+    id: 'vscodium',
+    label: 'VSCodium',
+    launchStyle: 'goto',
+    macOSAppNames: ['VSCodium'],
   },
   {
-    commands: ["agy-ide"],
-    id: "antigravity",
-    label: "Antigravity",
-    launchStyle: "goto",
-    macOSAppNames: ["Antigravity"],
+    commands: ['zed', 'zeditor'],
+    id: 'zed',
+    label: 'Zed',
+    launchStyle: 'direct-path',
+    macOSAppNames: ['Zed', 'Zed Preview'],
+    targetApp: 'zed',
   },
   {
-    commands: ["idea"],
-    id: "idea",
-    label: "IntelliJ IDEA",
-    launchStyle: "line-column",
-    macOSAppNames: ["IntelliJ IDEA"],
-  },
-  { commands: ["aqua"], id: "aqua", label: "Aqua", launchStyle: "line-column", macOSAppNames: ["Aqua"] },
-  { commands: ["clion"], id: "clion", label: "CLion", launchStyle: "line-column", macOSAppNames: ["CLion"] },
-  {
-    commands: ["datagrip"],
-    id: "datagrip",
-    label: "DataGrip",
-    launchStyle: "line-column",
-    macOSAppNames: ["DataGrip"],
+    commands: ['agy-ide'],
+    id: 'antigravity',
+    label: 'Antigravity',
+    launchStyle: 'goto',
+    macOSAppNames: ['Antigravity'],
   },
   {
-    commands: ["dataspell"],
-    id: "dataspell",
-    label: "DataSpell",
-    launchStyle: "line-column",
-    macOSAppNames: ["DataSpell"],
+    commands: ['idea'],
+    id: 'idea',
+    label: 'IntelliJ IDEA',
+    launchStyle: 'line-column',
+    macOSAppNames: ['IntelliJ IDEA'],
+  },
+  { commands: ['aqua'], id: 'aqua', label: 'Aqua', launchStyle: 'line-column', macOSAppNames: ['Aqua'] },
+  { commands: ['clion'], id: 'clion', label: 'CLion', launchStyle: 'line-column', macOSAppNames: ['CLion'] },
+  {
+    commands: ['datagrip'],
+    id: 'datagrip',
+    label: 'DataGrip',
+    launchStyle: 'line-column',
+    macOSAppNames: ['DataGrip'],
   },
   {
-    commands: ["goland"],
-    id: "goland",
-    label: "GoLand",
-    launchStyle: "line-column",
-    macOSAppNames: ["GoLand"],
+    commands: ['dataspell'],
+    id: 'dataspell',
+    label: 'DataSpell',
+    launchStyle: 'line-column',
+    macOSAppNames: ['DataSpell'],
   },
   {
-    commands: ["phpstorm"],
-    id: "phpstorm",
-    label: "PhpStorm",
-    launchStyle: "line-column",
-    macOSAppNames: ["PhpStorm"],
+    commands: ['goland'],
+    id: 'goland',
+    label: 'GoLand',
+    launchStyle: 'line-column',
+    macOSAppNames: ['GoLand'],
   },
   {
-    commands: ["pycharm"],
-    id: "pycharm",
-    label: "PyCharm",
-    launchStyle: "line-column",
-    macOSAppNames: ["PyCharm"],
-  },
-  { commands: ["rider"], id: "rider", label: "Rider", launchStyle: "line-column", macOSAppNames: ["Rider"] },
-  {
-    commands: ["rubymine"],
-    id: "rubymine",
-    label: "RubyMine",
-    launchStyle: "line-column",
-    macOSAppNames: ["RubyMine"],
+    commands: ['phpstorm'],
+    id: 'phpstorm',
+    label: 'PhpStorm',
+    launchStyle: 'line-column',
+    macOSAppNames: ['PhpStorm'],
   },
   {
-    commands: ["rustrover"],
-    id: "rustrover",
-    label: "RustRover",
-    launchStyle: "line-column",
-    macOSAppNames: ["RustRover"],
+    commands: ['pycharm'],
+    id: 'pycharm',
+    label: 'PyCharm',
+    launchStyle: 'line-column',
+    macOSAppNames: ['PyCharm'],
+  },
+  { commands: ['rider'], id: 'rider', label: 'Rider', launchStyle: 'line-column', macOSAppNames: ['Rider'] },
+  {
+    commands: ['rubymine'],
+    id: 'rubymine',
+    label: 'RubyMine',
+    launchStyle: 'line-column',
+    macOSAppNames: ['RubyMine'],
   },
   {
-    commands: ["webstorm"],
-    id: "webstorm",
-    label: "WebStorm",
-    launchStyle: "line-column",
-    macOSAppNames: ["WebStorm"],
+    commands: ['rustrover'],
+    id: 'rustrover',
+    label: 'RustRover',
+    launchStyle: 'line-column',
+    macOSAppNames: ['RustRover'],
   },
-  { commands: null, id: "finder", label: "Open Folder", launchStyle: "direct-path" },
+  {
+    commands: ['webstorm'],
+    id: 'webstorm',
+    label: 'WebStorm',
+    launchStyle: 'line-column',
+    macOSAppNames: ['WebStorm'],
+  },
+  { commands: null, id: 'finder', label: 'Open Folder', launchStyle: 'direct-path' },
 ];
 
-const BUILT_IN_WORKSPACE_OPEN_TARGET_IDS = new Set<string>(
-  BUILT_IN_WORKSPACE_OPEN_TARGETS.map((target) => target.id),
-);
+const BUILT_IN_WORKSPACE_OPEN_TARGET_IDS = new Set<string>(BUILT_IN_WORKSPACE_OPEN_TARGETS.map((target) => target.id));
 
 export function normalizeWorkspaceOpenTargetHiddenIds(candidate: unknown): string[] {
   if (!Array.isArray(candidate)) {
@@ -209,16 +205,13 @@ export function normalizeWorkspaceOpenTargetHiddenIds(candidate: unknown): strin
   return Array.from(
     new Set(
       candidate.filter(
-        (id): id is BuiltInWorkspaceOpenTargetId =>
-          typeof id === "string" && BUILT_IN_WORKSPACE_OPEN_TARGET_IDS.has(id),
-      ),
-    ),
+        (id): id is BuiltInWorkspaceOpenTargetId => typeof id === 'string' && BUILT_IN_WORKSPACE_OPEN_TARGET_IDS.has(id)
+      )
+    )
   );
 }
 
-export function normalizeWorkspaceOpenTargetAvailability(
-  candidate: unknown,
-): WorkspaceOpenTargetAvailability {
+export function normalizeWorkspaceOpenTargetAvailability(candidate: unknown): WorkspaceOpenTargetAvailability {
   if (!isRecord(candidate)) {
     return DEFAULT_WORKSPACE_OPEN_TARGET_AVAILABILITY;
   }
@@ -226,7 +219,7 @@ export function normalizeWorkspaceOpenTargetAvailability(
   return {
     availableTargetIds,
     checkedAtMs:
-      typeof candidate.checkedAtMs === "number" && Number.isFinite(candidate.checkedAtMs)
+      typeof candidate.checkedAtMs === 'number' && Number.isFinite(candidate.checkedAtMs)
         ? Math.max(0, candidate.checkedAtMs)
         : 0,
     resolvedAppNames: normalizeTargetResolutionMap(candidate.resolvedAppNames, availableTargetIds),
@@ -244,12 +237,12 @@ export function normalizeCustomWorkspaceOpenTargets(candidate: unknown): CustomW
     if (!isRecord(entry)) {
       continue;
     }
-    const label = typeof entry.label === "string" ? entry.label.trim() : "";
-    const command = typeof entry.command === "string" ? entry.command.trim() : "";
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    const command = typeof entry.command === 'string' ? entry.command.trim() : '';
     if (!label || !command) {
       continue;
     }
-    const requestedId = typeof entry.id === "string" ? entry.id.trim() : "";
+    const requestedId = typeof entry.id === 'string' ? entry.id.trim() : '';
     const baseId = requestedId.startsWith(CUSTOM_WORKSPACE_OPEN_TARGET_ID_PREFIX)
       ? requestedId
       : `${CUSTOM_WORKSPACE_OPEN_TARGET_ID_PREFIX}${createWorkspaceOpenTargetSlug(label)}`;
@@ -262,9 +255,7 @@ export function normalizeCustomWorkspaceOpenTargets(candidate: unknown): CustomW
     }
     seenIds.add(id);
     normalized.push({
-      args: Array.isArray(entry.args)
-        ? entry.args.filter((arg): arg is string => typeof arg === "string")
-        : [],
+      args: Array.isArray(entry.args) ? entry.args.filter((arg): arg is string => typeof arg === 'string') : [],
       command,
       id,
       label,
@@ -277,20 +268,16 @@ export function createWorkspaceOpenTargetSlug(label: string): string {
   const slug = label
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "target";
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'target';
 }
 
-export function isAlwaysAvailableWorkspaceOpenTarget(
-  targetId: string,
-): targetId is BuiltInWorkspaceOpenTargetId {
+export function isAlwaysAvailableWorkspaceOpenTarget(targetId: string): targetId is BuiltInWorkspaceOpenTargetId {
   return (ALWAYS_AVAILABLE_WORKSPACE_OPEN_TARGET_IDS as readonly string[]).includes(targetId);
 }
 
-export function getBuiltInWorkspaceOpenTargetById(
-  targetId: string,
-): WorkspaceOpenTargetDefinition | undefined {
+export function getBuiltInWorkspaceOpenTargetById(targetId: string): WorkspaceOpenTargetDefinition | undefined {
   return BUILT_IN_WORKSPACE_OPEN_TARGETS.find((target) => target.id === targetId);
 }
 
@@ -304,19 +291,17 @@ export function normalizeAvailableWorkspaceOpenTargetIds(candidate: unknown): Bu
   const ids = new Set<BuiltInWorkspaceOpenTargetId>(ALWAYS_AVAILABLE_WORKSPACE_OPEN_TARGET_IDS);
   if (Array.isArray(candidate)) {
     for (const id of candidate) {
-      if (typeof id === "string" && BUILT_IN_WORKSPACE_OPEN_TARGET_IDS.has(id)) {
+      if (typeof id === 'string' && BUILT_IN_WORKSPACE_OPEN_TARGET_IDS.has(id)) {
         ids.add(id as BuiltInWorkspaceOpenTargetId);
       }
     }
   }
-  return BUILT_IN_WORKSPACE_OPEN_TARGETS.filter((target) => ids.has(target.id)).map(
-    (target) => target.id,
-  );
+  return BUILT_IN_WORKSPACE_OPEN_TARGETS.filter((target) => ids.has(target.id)).map((target) => target.id);
 }
 
 function normalizeTargetResolutionMap(
   candidate: unknown,
-  availableTargetIds: readonly BuiltInWorkspaceOpenTargetId[],
+  availableTargetIds: readonly BuiltInWorkspaceOpenTargetId[]
 ): Record<string, string> {
   if (!isRecord(candidate)) {
     return {};
@@ -324,7 +309,7 @@ function normalizeTargetResolutionMap(
   const availableIds = new Set<string>(availableTargetIds);
   const normalized: Record<string, string> = {};
   for (const [targetId, value] of Object.entries(candidate)) {
-    if (availableIds.has(targetId) && typeof value === "string" && value.trim()) {
+    if (availableIds.has(targetId) && typeof value === 'string' && value.trim()) {
       normalized[targetId] = value.trim();
     }
   }
@@ -332,5 +317,5 @@ function normalizeTargetResolutionMap(
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

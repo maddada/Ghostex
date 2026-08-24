@@ -161,7 +161,7 @@
   white-space: nowrap;
 }
 
-.command-pane__tab[aria-selected="true"] {
+.command-pane__tab[aria-selected='true'] {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.9);
 }

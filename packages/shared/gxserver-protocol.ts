@@ -17,7 +17,7 @@ import type {
   GxserverSessionChatReplacedEvent,
   GxserverSessionChatSnapshotEvent,
   GxserverSessionChatStateEvent,
-} from "./session-chat";
+} from './session-chat';
 
 // Session Chat wire types live in ./session-chat (canonical) and are
 // re-exported here so protocol consumers keep a single import surface.
@@ -55,17 +55,17 @@ export type {
   SessionChatDraft,
   SessionChatQueuedPrompt,
   SessionChatQueuedPromptState,
-} from "./session-chat";
+} from './session-chat';
 
-export const GXSERVER_PRODUCT = "gxserver" as const;
+export const GXSERVER_PRODUCT = 'gxserver' as const;
 export const GXSERVER_PROTOCOL_VERSION = 1 as const;
-export const GXSERVER_LOCAL_API_HOST = "127.0.0.1" as const;
+export const GXSERVER_LOCAL_API_HOST = '127.0.0.1' as const;
 export const GXSERVER_LOCAL_API_PORT = 58744 as const;
-export const GXSERVER_REMOTE_API_HOST = "0.0.0.0" as const;
+export const GXSERVER_REMOTE_API_HOST = '0.0.0.0' as const;
 export const GXSERVER_REMOTE_API_PORT = 58745 as const;
 export const GXSERVER_MACOS_BRIDGE_PORT = 58743 as const;
-export const GXSERVER_TERMINAL_WS_ENDPOINT = "/api/terminal" as const;
-export const GXSERVER_WEB_BOOTSTRAP_ENDPOINT = "/api/webBootstrap" as const;
+export const GXSERVER_TERMINAL_WS_ENDPOINT = '/api/terminal' as const;
+export const GXSERVER_WEB_BOOTSTRAP_ENDPOINT = '/api/webBootstrap' as const;
 
 export type GxserverProduct = typeof GXSERVER_PRODUCT;
 export type GxserverProtocolVersion = typeof GXSERVER_PROTOCOL_VERSION;
@@ -77,215 +77,208 @@ export type GxserverSessionId = `G${number}${Lowercase<string>}`;
 export type GxserverGlobalSessionRef = `${GxserverServerId}:${GxserverProjectId}:${GxserverSessionId}`;
 export type GxserverZmxSessionName = `${GxserverServerId}-${GxserverProjectId}-${GxserverSessionId}`;
 export type GxserverAuthToken = string & { readonly __gxserverAuthToken: unique symbol };
-export type GxserverLogLevel = "debug" | "info" | "warn" | "error";
-export type GxserverLogOrder = "asc" | "desc";
-export type GxserverListenerKind = "local" | "remote";
-export type GxserverApiPermission = "fullLocal" | "remoteAllowed" | "remoteBlocked";
+export type GxserverLogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type GxserverLogOrder = 'asc' | 'desc';
+export type GxserverListenerKind = 'local' | 'remote';
+export type GxserverApiPermission = 'fullLocal' | 'remoteAllowed' | 'remoteBlocked';
 export type GxserverRpcErrorCode =
-  | "badRequest"
-  | "corruptState"
-  | "dependencyUnavailable"
-  | "forbidden"
-  | "internalError"
-  | "methodNotAllowed"
-  | "notFound"
-  | "notImplemented"
-  | "protocolMismatch"
-  | "projectPathUnavailable"
-  | "unauthorized";
+  | 'badRequest'
+  | 'corruptState'
+  | 'dependencyUnavailable'
+  | 'forbidden'
+  | 'internalError'
+  | 'methodNotAllowed'
+  | 'notFound'
+  | 'notImplemented'
+  | 'protocolMismatch'
+  | 'projectPathUnavailable'
+  | 'unauthorized';
 
 export const GXSERVER_RENDERER_COMMAND_ACTIONS = [
-  "assertSidebarCard",
-  "clickButton",
-  "focusGroup",
-  "focusSession",
-  "fullReloadSession",
-  "moveProject",
-  "moveSidebar",
-  "openBrowser",
-  "openBrowserPane",
-  "openPaths",
-  "restartSession",
-  "renameCommand",
-  "runCommand",
-  "saveAgent",
-  "sendMessage",
-  "setViewMode",
-  "setVisibleCount",
-  "switchProject",
-  "toggleSidebarCollapsed",
-  "waitFor",
+  'assertSidebarCard',
+  'clickButton',
+  'focusGroup',
+  'focusSession',
+  'fullReloadSession',
+  'moveProject',
+  'moveSidebar',
+  'openBrowser',
+  'openBrowserPane',
+  'openPaths',
+  'restartSession',
+  'renameCommand',
+  'runCommand',
+  'saveAgent',
+  'sendMessage',
+  'setViewMode',
+  'setVisibleCount',
+  'switchProject',
+  'toggleSidebarCollapsed',
+  'waitFor',
 ] as const;
 
-export type GxserverRendererCommandAction = typeof GXSERVER_RENDERER_COMMAND_ACTIONS[number];
+export type GxserverRendererCommandAction = (typeof GXSERVER_RENDERER_COMMAND_ACTIONS)[number];
 
 export type GxserverEndpointPath =
-  | "/api/health"
-  | "/api/health/server"
-  | "/api/events"
-  | "/api/control/stop"
-  | "/api/control/stopAll"
-  | "/api/readAgentSettings"
-  | "/api/updateAgentSettings"
-  | "/api/readAppUserData"
-  | "/api/saveScratchPad"
-  | "/api/savePinnedPrompt"
-  | "/api/saveStashedPrompt"
-  | "/api/listStashedPrompts"
-  | "/api/deleteStashedPrompt"
-  | "/api/listStashedPromptTags"
-  | "/api/saveStashedPromptTag"
-  | "/api/deleteStashedPromptTag"
-  | "/api/setStashedPromptTags"
-  | "/api/readAgentSkillStatus"
-  | "/api/installAgentSkills"
-  | "/api/readAgentHookStatus"
-  | "/api/installAgentHooks"
-  | "/api/uninstallAgentHooks"
-  | "/api/ingestAgentHookEvent"
-  | "/api/createSession"
-  | "/api/createAgentSession"
-  | "/api/forkSession"
-  | "/api/readAgentLaunchPlan"
-  | "/api/readAgentResumePlan"
-  | "/api/requestSessionRename"
-  | "/api/generateSessionTitle"
-  | "/api/cancelFirstPromptAutoTitle"
-  | "/api/ingestSessionStateEvent"
-  | "/api/ingestTerminalTitleEvent"
-  | "/api/updateAgentActivity"
-  | "/api/readPresentationSnapshot"
-  | "/api/readSidebarHud"
-  | "/api/mutateSidebarHudSettings"
-  | "/api/readWorkspaceSessionGroups"
-  | "/api/updateWorkspaceSessionGroups"
+  | '/api/health'
+  | '/api/health/server'
+  | '/api/events'
+  | '/api/control/stop'
+  | '/api/control/stopAll'
+  | '/api/readAgentSettings'
+  | '/api/updateAgentSettings'
+  | '/api/readAppUserData'
+  | '/api/saveScratchPad'
+  | '/api/savePinnedPrompt'
+  | '/api/saveStashedPrompt'
+  | '/api/listStashedPrompts'
+  | '/api/deleteStashedPrompt'
+  | '/api/listStashedPromptTags'
+  | '/api/saveStashedPromptTag'
+  | '/api/deleteStashedPromptTag'
+  | '/api/setStashedPromptTags'
+  | '/api/readAgentSkillStatus'
+  | '/api/installAgentSkills'
+  | '/api/readAgentHookStatus'
+  | '/api/installAgentHooks'
+  | '/api/uninstallAgentHooks'
+  | '/api/ingestAgentHookEvent'
+  | '/api/createSession'
+  | '/api/createAgentSession'
+  | '/api/forkSession'
+  | '/api/readAgentLaunchPlan'
+  | '/api/readAgentResumePlan'
+  | '/api/requestSessionRename'
+  | '/api/generateSessionTitle'
+  | '/api/cancelFirstPromptAutoTitle'
+  | '/api/ingestSessionStateEvent'
+  | '/api/ingestTerminalTitleEvent'
+  | '/api/updateAgentActivity'
+  | '/api/readPresentationSnapshot'
+  | '/api/readSidebarHud'
+  | '/api/mutateSidebarHudSettings'
+  | '/api/readWorkspaceSessionGroups'
+  | '/api/updateWorkspaceSessionGroups'
   /*
    * CDXC:NavigationHistory 2026-08-19:
    * Titlebar Back/Forward walks a daemon-owned trail of previously active
    * sessions and projects, shared by the gpui desktop titlebar and the web
    * titlebar. See packages/shared/navigation-history for the entry/state contract.
    */
-  | "/api/readNavigationHistory"
-  | "/api/recordNavigationVisit"
-  | "/api/navigateHistory"
-  | "/api/readSidebarProjectCollections"
-  | "/api/updateSidebarProjectCollections"
-  | "/api/assignProjectToSidebarCollection"
-  | "/api/scheduleDelayedSend"
-  | "/api/cancelDelayedSend"
-  | "/api/readDelayedSends"
-  | "/api/readAutomationState"
-  | "/api/saveAutomation"
-  | "/api/deleteAutomation"
-  | "/api/runAutomationNow"
-  | "/api/setAutomationEnabled"
-  | "/api/archiveAutomationRun"
-  | "/api/markAutomationRunRead"
-  | "/api/searchSessions"
-  | "/api/listPreviousSessions"
-  | "/api/transitionSession"
-  | "/api/holdSessionsAwake"
-  | "/api/sleepSession"
-  | "/api/wakeSession"
-  | "/api/startSessionProvider"
-  | "/api/killSession"
-  | "/api/probeSessionProvider"
-  | "/api/listSessions"
-  | "/api/removeSession"
-  | "/api/readSessionText"
-  | "/api/searchAgentPrompts"
-  | "/api/readAgentPromptText"
-  | "/api/toggleAgentPromptFavorite"
-  | "/api/resolveAgentPromptLaunch"
-  | "/api/readSessionChat"
-  | "/api/readSessionChatSkills"
-  | "/api/readSessionChatFiles"
-  | "/api/sendSessionChatMessage"
-  | "/api/saveSessionChatImage"
-  | "/api/saveSessionChatAttachment"
-  | "/api/readSessionChatImage"
-  | "/api/answerSessionChatPrompt"
-  | "/api/interruptSessionChat"
-  | "/api/handoffSessionChatDraft"
-  | "/api/readSessionChatQueue"
-  | "/api/queueSessionChatPrompt"
-  | "/api/updateSessionChatQueuedPrompt"
-  | "/api/removeSessionChatQueuedPrompt"
-  | "/api/reorderSessionChatQueue"
-  | "/api/sendSessionChatQueuedPrompt"
-  | "/api/setSessionChatDraft"
-  | "/api/exportSessionTranscript"
-  | "/api/sendSessionText"
-  | "/api/sendSessionMessage"
-  | "/api/sendSessionEnter"
-  | "/api/focusSession"
-  | "/api/dispatchRendererCommand"
-  | "/api/attachSessionMetadata"
-  | "/api/createProject"
-  | "/api/updateProject"
-  | "/api/relocateProject"
-  | "/api/listProjects"
-  | "/api/closeProjectToRecent"
-  | "/api/listRecentProjects"
-  | "/api/restoreRecentProject"
-  | "/api/removeRecentProject"
-  | "/api/readProjectStatus"
-  | "/api/addProjectPath"
-  | "/api/createQuickProject"
-  | "/api/listProjectWorktrees"
-  | "/api/createProjectWorktree"
-  | "/api/openProjectWorktree"
-  | "/api/mergeWorktreeIntoMain"
-  | "/api/checkoutProjectNewBranch"
-  | "/api/removeProject"
-  | "/api/deleteWorktreeProject"
-  | "/api/renameWorktreeProject"
-  | "/api/updateSession"
-  | "/api/updateSessionOrder"
-  | "/api/settleSession"
-  | "/api/unsettleSession"
-  | "/api/snoozeSession"
-  | "/api/unsnoozeSession"
-  | "/api/createWorktreeSession"
-  | "/api/removeSessionWorktree"
-  | "/api/runGitAction"
-  | "/api/generateCommitMessage"
-  | "/api/createPullRequest"
-  | "/api/runGitHubAction"
-  | "/api/runWorktreeAction"
-  | "/api/runProjectSetupCommand"
-  | "/api/runBeadsAction"
-  | "/api/previewRepositoryClone"
-  | "/api/startRepositoryClone"
-  | "/api/readRepositoryCloneJob"
-  | "/api/cancelRepositoryCloneJob"
-  | "/api/browseProjectDirectories"
-  | "/api/createProjectDirectory"
-  | "/api/discoverSourceControl"
-  | "/api/lookupRepository"
-  | "/api/resolveGitRootForPath"
-  | "/api/queryLogs"
-  | "/api/updateAuth"
-  | "/api/updateListenerConfig"
-  | "/api/updatePortlessState"
-  | "/api/installTool"
-  | "/api/browseFilesystem"
-  | "/api/destructiveAdminAction";
+  | '/api/readNavigationHistory'
+  | '/api/recordNavigationVisit'
+  | '/api/navigateHistory'
+  | '/api/readSidebarProjectCollections'
+  | '/api/updateSidebarProjectCollections'
+  | '/api/assignProjectToSidebarCollection'
+  | '/api/scheduleDelayedSend'
+  | '/api/cancelDelayedSend'
+  | '/api/readDelayedSends'
+  | '/api/readAutomationState'
+  | '/api/saveAutomation'
+  | '/api/deleteAutomation'
+  | '/api/runAutomationNow'
+  | '/api/setAutomationEnabled'
+  | '/api/archiveAutomationRun'
+  | '/api/markAutomationRunRead'
+  | '/api/searchSessions'
+  | '/api/listPreviousSessions'
+  | '/api/transitionSession'
+  | '/api/holdSessionsAwake'
+  | '/api/sleepSession'
+  | '/api/wakeSession'
+  | '/api/startSessionProvider'
+  | '/api/killSession'
+  | '/api/probeSessionProvider'
+  | '/api/listSessions'
+  | '/api/removeSession'
+  | '/api/readSessionText'
+  | '/api/searchAgentPrompts'
+  | '/api/readAgentPromptText'
+  | '/api/toggleAgentPromptFavorite'
+  | '/api/resolveAgentPromptLaunch'
+  | '/api/readSessionChat'
+  | '/api/readSessionChatSkills'
+  | '/api/readSessionChatFiles'
+  | '/api/sendSessionChatMessage'
+  | '/api/saveSessionChatImage'
+  | '/api/saveSessionChatAttachment'
+  | '/api/readSessionChatImage'
+  | '/api/answerSessionChatPrompt'
+  | '/api/interruptSessionChat'
+  | '/api/handoffSessionChatDraft'
+  | '/api/readSessionChatQueue'
+  | '/api/queueSessionChatPrompt'
+  | '/api/updateSessionChatQueuedPrompt'
+  | '/api/removeSessionChatQueuedPrompt'
+  | '/api/reorderSessionChatQueue'
+  | '/api/sendSessionChatQueuedPrompt'
+  | '/api/setSessionChatDraft'
+  | '/api/exportSessionTranscript'
+  | '/api/sendSessionText'
+  | '/api/sendSessionMessage'
+  | '/api/sendSessionEnter'
+  | '/api/focusSession'
+  | '/api/dispatchRendererCommand'
+  | '/api/attachSessionMetadata'
+  | '/api/createProject'
+  | '/api/updateProject'
+  | '/api/relocateProject'
+  | '/api/listProjects'
+  | '/api/closeProjectToRecent'
+  | '/api/listRecentProjects'
+  | '/api/restoreRecentProject'
+  | '/api/removeRecentProject'
+  | '/api/readProjectStatus'
+  | '/api/addProjectPath'
+  | '/api/createQuickProject'
+  | '/api/listProjectWorktrees'
+  | '/api/createProjectWorktree'
+  | '/api/openProjectWorktree'
+  | '/api/mergeWorktreeIntoMain'
+  | '/api/checkoutProjectNewBranch'
+  | '/api/removeProject'
+  | '/api/deleteWorktreeProject'
+  | '/api/renameWorktreeProject'
+  | '/api/updateSession'
+  | '/api/updateSessionOrder'
+  | '/api/settleSession'
+  | '/api/unsettleSession'
+  | '/api/snoozeSession'
+  | '/api/unsnoozeSession'
+  | '/api/createWorktreeSession'
+  | '/api/removeSessionWorktree'
+  | '/api/runGitAction'
+  | '/api/generateCommitMessage'
+  | '/api/createPullRequest'
+  | '/api/runGitHubAction'
+  | '/api/runWorktreeAction'
+  | '/api/runProjectSetupCommand'
+  | '/api/runBeadsAction'
+  | '/api/previewRepositoryClone'
+  | '/api/startRepositoryClone'
+  | '/api/readRepositoryCloneJob'
+  | '/api/cancelRepositoryCloneJob'
+  | '/api/browseProjectDirectories'
+  | '/api/createProjectDirectory'
+  | '/api/discoverSourceControl'
+  | '/api/lookupRepository'
+  | '/api/resolveGitRootForPath'
+  | '/api/queryLogs'
+  | '/api/updateAuth'
+  | '/api/updateListenerConfig'
+  | '/api/updatePortlessState'
+  | '/api/installTool'
+  | '/api/browseFilesystem'
+  | '/api/destructiveAdminAction';
 
 export type GxserverRpcEndpointPath = Exclude<
   GxserverEndpointPath,
-  "/api/health" | "/api/health/server" | "/api/events"
+  '/api/health' | '/api/health/server' | '/api/events'
 >;
 
 export type GxserverLifecycleState =
-  | "running"
-  | "stopped"
-  | "starting"
-  | "stopping"
-  | "stale"
-  | "unreachable"
-  | "portConflict"
-  | "protocolMismatch";
+  'running' | 'stopped' | 'starting' | 'stopping' | 'stale' | 'unreachable' | 'portConflict' | 'protocolMismatch';
 
 export interface GxserverMinimalHealthResponse {
   ok: true;
@@ -310,7 +303,7 @@ export interface GxserverListenerConfig {
 }
 
 export interface GxserverListenerAuthConfig {
-  mode: "bearerToken";
+  mode: 'bearerToken';
   required: true;
 }
 
@@ -329,9 +322,9 @@ export interface GxserverStateImportStatus {
   logsImported?: GxserverLegacyLogImportStatus;
   projectsImported?: number;
   sessionsImported?: number;
-  skippedReason?: "alreadyCompleted" | "noLegacyState";
+  skippedReason?: 'alreadyCompleted' | 'noLegacyState';
   sourceFilesRead?: readonly string[];
-  status: "notRun" | "completed" | "skipped";
+  status: 'notRun' | 'completed' | 'skipped';
 }
 
 export interface GxserverLegacyLogImportStatus {
@@ -356,28 +349,28 @@ changes, admin results, Disable, retry, and explicit service removal. Payloads
 must stay enum/boolean/protocol only so setup recovery never carries paths,
 commands, process output, URLs, tokens, environment values, or Portless files.
 */
-export type GxserverPortlessProtocol = "https" | "http";
-export type GxserverPortlessSetupOwnership = "unknown" | "missing" | "ghostex" | "standalone";
-export type GxserverPortlessSetupStatus = "unknown" | "needed" | "active" | "failed" | "disabled" | "postponed";
-export type GxserverPortlessRuntimeStatus = "unknown" | "inactive" | "active" | "failed";
-export type GxserverPortlessPayloadSourceStatus = "current" | "missing" | "unavailable";
-export type GxserverPortlessAdminAction = "install" | "reconfigure" | "retry" | "remove";
-export type GxserverPortlessActionUnavailableReason = "nativeAdminBridgeRequired" | "notRecommended";
-export type GxserverPortlessRoutePreviewStatus = "current" | "disabled" | "unavailable";
-export type GxserverPortlessRoutePreviewKind = "primary" | "additional";
-export type GxserverPortlessAssignedDomainKind = "project" | "worktree";
+export type GxserverPortlessProtocol = 'https' | 'http';
+export type GxserverPortlessSetupOwnership = 'unknown' | 'missing' | 'ghostex' | 'standalone';
+export type GxserverPortlessSetupStatus = 'unknown' | 'needed' | 'active' | 'failed' | 'disabled' | 'postponed';
+export type GxserverPortlessRuntimeStatus = 'unknown' | 'inactive' | 'active' | 'failed';
+export type GxserverPortlessPayloadSourceStatus = 'current' | 'missing' | 'unavailable';
+export type GxserverPortlessAdminAction = 'install' | 'reconfigure' | 'retry' | 'remove';
+export type GxserverPortlessActionUnavailableReason = 'nativeAdminBridgeRequired' | 'notRecommended';
+export type GxserverPortlessRoutePreviewStatus = 'current' | 'disabled' | 'unavailable';
+export type GxserverPortlessRoutePreviewKind = 'primary' | 'additional';
+export type GxserverPortlessAssignedDomainKind = 'project' | 'worktree';
 export type GxserverPortlessStateUpdateParams =
   | {
       enabled: boolean;
-      kind: "setEnabled";
+      kind: 'setEnabled';
     }
   | {
-      kind: "setProtocol";
+      kind: 'setProtocol';
       protocol: GxserverPortlessProtocol;
     }
   | {
       action: GxserverPortlessAdminAction;
-      kind: "recordAdminResult";
+      kind: 'recordAdminResult';
       ok: boolean;
       protocol?: GxserverPortlessProtocol;
     };
@@ -450,14 +443,14 @@ export interface GxserverServerHealthResponse extends GxserverMinimalHealthRespo
   tools: readonly GxserverToolCapabilityStatus[];
 }
 
-export type GxserverToolName = "zmx" | "bd";
-export type GxserverToolAvailability = "available" | "missing" | "notExecutable" | "unsupported";
-export type GxserverToolResolutionSource = "devSubmodule" | "appResource" | "gxserverBundle";
+export type GxserverToolName = 'zmx' | 'bd';
+export type GxserverToolAvailability = 'available' | 'missing' | 'notExecutable' | 'unsupported';
+export type GxserverToolResolutionSource = 'devSubmodule' | 'appResource' | 'gxserverBundle';
 
 export interface GxserverToolCapabilityStatus {
   availability: GxserverToolAvailability;
   candidatePaths?: readonly string[];
-  capability: "zmxLifecycle" | "beadsProjectBoard" | "deferred";
+  capability: 'zmxLifecycle' | 'beadsProjectBoard' | 'deferred';
   executablePath?: string;
   guidance?: string;
   message: string;
@@ -528,7 +521,7 @@ export interface GxserverUpdateAgentSettingsParams {
   defaultPromptAgentId?: string;
 }
 
-export type GxserverAgentSkillSourceKind = "global" | "pluginCache" | "repository";
+export type GxserverAgentSkillSourceKind = 'global' | 'pluginCache' | 'repository';
 
 export interface GxserverAgentSkillLocation {
   directoryPath: string;
@@ -554,7 +547,7 @@ export interface GxserverReadAgentSkillStatusResult {
   homeDir: string;
   roots: readonly GxserverAgentSkillDiscoveryRoot[];
   skills: readonly GxserverAgentSkillStatusRow[];
-  type: "agentSkillStatus";
+  type: 'agentSkillStatus';
 }
 
 export interface GxserverAgentSkillDiscoveryRoot {
@@ -575,7 +568,7 @@ export interface GxserverInstallAgentSkillsResult extends GxserverReadAgentSkill
   stdout: string;
 }
 
-export type GxserverAgentHookStatus = "cliMissing" | "installed" | "missing" | "updateRequired";
+export type GxserverAgentHookStatus = 'cliMissing' | 'installed' | 'missing' | 'updateRequired';
 
 export interface GxserverAgentHookStatusRow {
   agentId: string;
@@ -598,7 +591,7 @@ export interface GxserverReadAgentHookStatusResult {
   generatedAt: string;
   hookStateDirectory: string;
   notifyHookPath: string;
-  type: "agentHookStatus";
+  type: 'agentHookStatus';
 }
 
 export interface GxserverInstallAgentHooksParams {
@@ -620,7 +613,7 @@ export interface GxserverIngestAgentHookEventParams extends GxserverSessionLifec
   eventName?: string;
   firstUserMessage?: string;
   rawEventName?: string;
-  status?: GxserverAgentActivityState["activity"];
+  status?: GxserverAgentActivityState['activity'];
   statusUpdatedAt?: string;
   title?: string;
 }
@@ -629,7 +622,7 @@ export interface GxserverIngestAgentHookEventResult {
   activity?: GxserverAgentActivityState;
   changed: boolean;
   enteredAttention: boolean;
-  previousActivity?: GxserverAgentActivityState["activity"];
+  previousActivity?: GxserverAgentActivityState['activity'];
   projection: GxserverSessionTitleProjection;
   reason: string;
   session: GxserverSessionDomainState;
@@ -640,7 +633,7 @@ export interface GxserverEndpointDescriptor {
   permission: GxserverApiPermission;
   requiresAuth: boolean;
   requiresProtocolVersion: boolean;
-  transport: "http" | "webSocket";
+  transport: 'http' | 'webSocket';
 }
 
 /*
@@ -746,7 +739,7 @@ export interface GxserverStashedPromptTag {
 }
 
 /** The tagId of the seeded builtin Favorites tag. */
-export const GXSERVER_FAVORITE_PROMPT_TAG_ID = "favorite";
+export const GXSERVER_FAVORITE_PROMPT_TAG_ID = 'favorite';
 
 export interface GxserverListStashedPromptTagsResult {
   tags: readonly GxserverStashedPromptTag[];
@@ -841,27 +834,20 @@ export interface GxserverAddProjectPathParams {
   createIfMissing?: boolean;
   name?: string;
   path: string;
-  systemKind?: GxserverProjectDomainState["systemKind"];
-  visibility?: GxserverProjectDomainState["visibility"];
+  systemKind?: GxserverProjectDomainState['systemKind'];
+  visibility?: GxserverProjectDomainState['visibility'];
 }
 
-export type GxserverSourceControlProviderKind =
-  | "azure-devops"
-  | "bitbucket"
-  | "github"
-  | "gitlab";
+export type GxserverSourceControlProviderKind = 'azure-devops' | 'bitbucket' | 'github' | 'gitlab';
 
 /**
  * `unsupported` means gxserver itself has no implementation for the provider
  * (Bitbucket / Azure DevOps today), as opposed to `missing`, which means the
  * provider's CLI is simply not installed on that machine.
  */
-export type GxserverSourceControlDiscoveryStatus = "available" | "missing" | "unsupported";
+export type GxserverSourceControlDiscoveryStatus = 'available' | 'missing' | 'unsupported';
 
-export type GxserverSourceControlAuthStatus =
-  | "authenticated"
-  | "unauthenticated"
-  | "unknown";
+export type GxserverSourceControlAuthStatus = 'authenticated' | 'unauthenticated' | 'unknown';
 
 export interface GxserverSourceControlProviderAuth {
   account?: string;
@@ -965,76 +951,77 @@ export interface GxserverQueryLogsResult {
   totalMatched: number;
   totalMatchedIsExact?: boolean;
   truncated?: boolean;
-  truncatedReason?: "fileWindowExceeded";
+  truncatedReason?: 'fileWindowExceeded';
 }
 
 export type GxserverGitAction =
-  | "branch"
-  | "addAll"
-  | "checkout"
-  | "checkoutNewBranch"
-  | "commit"
-  | "countFileLines"
-  | "deleteLocalBranch"
-  | "deleteRemoteBranch"
-  | "diff"
-  | "diffCached"
-  | "diffCachedFiles"
-  | "diffCachedStatFiles"
-  | "diffCachedNoExt"
-  | "diffCachedStat"
-  | "diffNoExt"
-  | "diffNoIndexAgainstNull"
-  | "diffNumstat"
-  | "getOriginRemoteUrl"
-  | "isInsideWorkTree"
-  | "isUntrackedFile"
-  | "list"
-  | "listBranches"
-  | "listRemotes"
-  | "listUntracked"
-  | "merge"
-  | "pullFastForward"
-  | "push"
-  | "pushSetUpstreamCurrent"
-  | "pushSetUpstream"
-  | "remoteBranchExists"
-  | "status"
-  | "statusPorcelain"
-  | "statusPorcelainZ"
-  | "upstreamCounts"
-  | "verifyRef";
-export type GxserverWorktreeAction = "create" | "ensureBeadsHooks" | "list" | "pathExists" | "prune" | "remove" | "switch";
+  | 'branch'
+  | 'addAll'
+  | 'checkout'
+  | 'checkoutNewBranch'
+  | 'commit'
+  | 'countFileLines'
+  | 'deleteLocalBranch'
+  | 'deleteRemoteBranch'
+  | 'diff'
+  | 'diffCached'
+  | 'diffCachedFiles'
+  | 'diffCachedStatFiles'
+  | 'diffCachedNoExt'
+  | 'diffCachedStat'
+  | 'diffNoExt'
+  | 'diffNoIndexAgainstNull'
+  | 'diffNumstat'
+  | 'getOriginRemoteUrl'
+  | 'isInsideWorkTree'
+  | 'isUntrackedFile'
+  | 'list'
+  | 'listBranches'
+  | 'listRemotes'
+  | 'listUntracked'
+  | 'merge'
+  | 'pullFastForward'
+  | 'push'
+  | 'pushSetUpstreamCurrent'
+  | 'pushSetUpstream'
+  | 'remoteBranchExists'
+  | 'status'
+  | 'statusPorcelain'
+  | 'statusPorcelainZ'
+  | 'upstreamCounts'
+  | 'verifyRef';
+export type GxserverWorktreeAction =
+  'create' | 'ensureBeadsHooks' | 'list' | 'pathExists' | 'prune' | 'remove' | 'switch';
 export type GxserverBeadsAction =
-  | "addLabel"
-  | "board"
-  | "close"
-  | "comment"
-  | "configGet"
-  | "configGetIssuePrefix"
-  | "configSet"
-  | "create"
-  | "delete"
-  | "depAdd"
-  | "depRemove"
-  | "list"
-  | "listAllLabels"
-  | "renamePrefix"
-  | "removeLabel"
-  | "search"
-  | "setLabels"
-  | "show"
-  | "status"
-  | "storageExists"
-  | "update"
-  | "updateDescription"
-  | "updateEstimate"
-  | "updatePriority"
-  | "updateStatus"
-  | "updateTitle";
-export type GxserverBeadsStatus = "backlog" | "closed" | "in_progress" | "open" | "review" | "test";
-export type GxserverGitHubAction = "prCreateFill" | "prView" | "version";
-export type GxserverProjectSetupAction = "worktreeSetupCommand";
+  | 'addLabel'
+  | 'board'
+  | 'close'
+  | 'comment'
+  | 'configGet'
+  | 'configGetIssuePrefix'
+  | 'configSet'
+  | 'create'
+  | 'delete'
+  | 'depAdd'
+  | 'depRemove'
+  | 'list'
+  | 'listAllLabels'
+  | 'renamePrefix'
+  | 'removeLabel'
+  | 'search'
+  | 'setLabels'
+  | 'show'
+  | 'status'
+  | 'storageExists'
+  | 'update'
+  | 'updateDescription'
+  | 'updateEstimate'
+  | 'updatePriority'
+  | 'updateStatus'
+  | 'updateTitle';
+export type GxserverBeadsStatus = 'backlog' | 'closed' | 'in_progress' | 'open' | 'review' | 'test';
+export type GxserverGitHubAction = 'prCreateFill' | 'prView' | 'version';
+export type GxserverProjectSetupAction = 'worktreeSetupCommand';
 
 export interface GxserverProjectOperationScope {
   projectId?: GxserverProjectId;
@@ -1072,7 +1059,7 @@ export interface GxserverGenerateCommitMessageResult {
   subject: string;
 }
 
-export type GxserverPullRequestState = "open" | "closed" | "merged";
+export type GxserverPullRequestState = 'open' | 'closed' | 'merged';
 
 export interface GxserverPullRequestSummary {
   number?: number;
@@ -1093,7 +1080,7 @@ export interface GxserverCreatePullRequestResult {
   created: boolean;
   ok: boolean;
   pr?: GxserverPullRequestSummary;
-  reason?: "createFailed" | "githubCliUnavailable" | "invalidResult" | "viewFailed";
+  reason?: 'createFailed' | 'githubCliUnavailable' | 'invalidResult' | 'viewFailed';
 }
 
 export interface GxserverRunWorktreeActionParams extends GxserverProjectOperationScope {
@@ -1152,7 +1139,7 @@ export interface GxserverMergeWorktreeIntoMainParams {
 
 export interface GxserverMergeWorktreeIntoMainResult {
   parentProjectId: GxserverProjectId;
-  status: "conflicts" | "merged";
+  status: 'conflicts' | 'merged';
 }
 
 export interface GxserverCheckoutProjectNewBranchParams {
@@ -1182,11 +1169,11 @@ export interface GxserverDeleteWorktreeProjectParams {
 }
 
 export type GxserverDeleteWorktreeProjectWarningKind =
-  | "localBranchDeleteFailed"
-  | "localBranchNotResolved"
-  | "pruneFailed"
-  | "remoteBranchDeleteFailed"
-  | "remoteBranchNotResolved";
+  | 'localBranchDeleteFailed'
+  | 'localBranchNotResolved'
+  | 'pruneFailed'
+  | 'remoteBranchDeleteFailed'
+  | 'remoteBranchNotResolved';
 
 export interface GxserverDeleteWorktreeProjectWarning {
   kind: GxserverDeleteWorktreeProjectWarningKind;
@@ -1285,7 +1272,7 @@ export interface GxserverRepositoryClonePreviewResult {
    */
   destinationBlocked: boolean;
   destinationExists: boolean;
-  destinationExistsKind?: "directory" | "file" | "other";
+  destinationExistsKind?: 'directory' | 'file' | 'other';
   destinationFolderName: string;
   destinationIsEmpty?: boolean;
   destinationPath: string;
@@ -1295,7 +1282,7 @@ export interface GxserverRepositoryClonePreviewResult {
   warning?: string;
 }
 
-export type GxserverRepositoryCloneJobState = "running" | "completed" | "failed" | "canceled";
+export type GxserverRepositoryCloneJobState = 'running' | 'completed' | 'failed' | 'canceled';
 
 export interface GxserverRepositoryCloneJobStatus {
   completedAt?: string;
@@ -1327,18 +1314,14 @@ export interface GxserverTypedCommand {
 }
 
 export type GxserverTypedOperationFailureCode =
-  | "aborted"
-  | "stderrLimitExceeded"
-  | "stdinFailed"
-  | "stdoutLimitExceeded"
-  | "timeout";
+  'aborted' | 'stderrLimitExceeded' | 'stdinFailed' | 'stdoutLimitExceeded' | 'timeout';
 
 export interface GxserverTypedOperationFailure {
   capturedBytes?: number;
   code: GxserverTypedOperationFailureCode;
   limitBytes?: number;
   message: string;
-  stream?: "stderr" | "stdout";
+  stream?: 'stderr' | 'stdout';
   timeoutMs?: number;
 }
 
@@ -1377,59 +1360,52 @@ export interface GxserverBeadsBoardResult extends GxserverTypedOperationResult {
 }
 
 export type GxserverSharedStateArea =
-  | "projects"
-  | "sessions"
-  | "zmxLifecycle"
-  | "sleepWakePolicy"
-  | "agentStatus"
-  | "remoteControl"
-  | "pinnedFavorite"
-  | "customAgentsCommands"
-  | "launchRuntimeSettings"
-  | "previousSessionHistory"
-  | "worktreeGitActions"
-  | "beadsProjectBoard";
+  | 'projects'
+  | 'sessions'
+  | 'zmxLifecycle'
+  | 'sleepWakePolicy'
+  | 'agentStatus'
+  | 'remoteControl'
+  | 'pinnedFavorite'
+  | 'customAgentsCommands'
+  | 'launchRuntimeSettings'
+  | 'previousSessionHistory'
+  | 'worktreeGitActions'
+  | 'beadsProjectBoard';
 
 export type GxserverClientLocalStateArea =
-  | "sidebarGroups"
-  | "splitTabLayout"
-  | "visibleSessionCount"
-  | "browserEditorCodeServerPanes"
-  | "cefBrowserProfiles"
-  | "popOutWindows"
-  | "visualSettings";
+  | 'sidebarGroups'
+  | 'splitTabLayout'
+  | 'visibleSessionCount'
+  | 'browserEditorCodeServerPanes'
+  | 'cefBrowserProfiles'
+  | 'popOutWindows'
+  | 'visualSettings';
 
-export type GxserverMixedStateArea =
-  | "notificationRules"
-  | "commandDefinitions"
-  | "projectIcons"
-  | "theme";
+export type GxserverMixedStateArea = 'notificationRules' | 'commandDefinitions' | 'projectIcons' | 'theme';
 
-export type GxserverSessionKind = "terminal" | "agent";
-export type GxserverSessionSurface = "workspace" | "commands";
+export type GxserverSessionKind = 'terminal' | 'agent';
+export type GxserverSessionSurface = 'workspace' | 'commands';
 export type GxserverSessionTag =
-  | "favorite"
-  | "high-priority"
-  | "research"
-  | "todo"
-  | "in-progress"
-  | "testing"
-  | "blocked"
-  | "low-priority"
-  | "on-hold"
-  | "done"
-  | "bug"
-  | "feature"
-  | "design";
-export type GxserverSessionTagFilter = GxserverSessionTag | "untagged";
-export type GxserverDomainLifecycleState = "running" | "sleeping" | "stopped" | "missing" | "unknown";
-export type GxserverProviderLifecycleState = "exists" | "missing" | "unknown";
+  | 'favorite'
+  | 'high-priority'
+  | 'research'
+  | 'todo'
+  | 'in-progress'
+  | 'testing'
+  | 'blocked'
+  | 'low-priority'
+  | 'on-hold'
+  | 'done'
+  | 'bug'
+  | 'feature'
+  | 'design';
+export type GxserverSessionTagFilter = GxserverSessionTag | 'untagged';
+export type GxserverDomainLifecycleState = 'running' | 'sleeping' | 'stopped' | 'missing' | 'unknown';
+export type GxserverProviderLifecycleState = 'exists' | 'missing' | 'unknown';
 export type GxserverStartupTextDisposition =
-  | "discardExistingProvider"
-  | "discardUnknownProvider"
-  | "none"
-  | "queueAfterTerminalReady";
-export type GxserverRestoreBlockReason = "missingCwd";
+  'discardExistingProvider' | 'discardUnknownProvider' | 'none' | 'queueAfterTerminalReady';
+export type GxserverRestoreBlockReason = 'missingCwd';
 
 export interface GxserverProjectDomainState {
   attentionRules: Record<string, unknown>;
@@ -1466,9 +1442,9 @@ export interface GxserverProjectDomainState {
   CDXC:ProjectVisibility 2026-06-30-21:23:
   Active project visibility is gxserver-owned so mobile, CLI, GPUI, and macOS omit Remote Attach carrier projects and other hidden containers through the shared daemon contract instead of each client filtering macOS sidebar details.
   */
-  systemKind?: "remoteAttachCarrier";
+  systemKind?: 'remoteAttachCarrier';
   updatedAt: string;
-  visibility?: "visible" | "hidden";
+  visibility?: 'visible' | 'hidden';
   worktree?: Record<string, unknown>;
 }
 
@@ -1506,7 +1482,7 @@ export interface GxserverReadSidebarHudParams {
 }
 
 export interface GxserverSidebarHudAgentButton {
-  acceptAllMode?: "inherit" | "enabled" | "disabled";
+  acceptAllMode?: 'inherit' | 'enabled' | 'disabled';
   agentId: string;
   command?: string;
   icon?: string;
@@ -1515,7 +1491,7 @@ export interface GxserverSidebarHudAgentButton {
 }
 
 export interface GxserverSidebarHudCommandButton {
-  actionType: "browser" | "terminal";
+  actionType: 'browser' | 'terminal';
   closeTerminalOnExit: boolean;
   command?: string;
   commandId: string;
@@ -1529,7 +1505,7 @@ export interface GxserverSidebarHudCommandButton {
 }
 
 export interface GxserverSidebarHudCommandLink {
-  target: "integrated" | "external";
+  target: 'integrated' | 'external';
   url: string;
 }
 
@@ -1567,29 +1543,29 @@ export type GxserverSidebarHudSettingsMutationParams = {
 
 type GxserverSidebarHudSettingsMutationIntent =
   | {
-      acceptAllMode?: "inherit" | "enabled" | "disabled";
+      acceptAllMode?: 'inherit' | 'enabled' | 'disabled';
       activeProjectId?: string;
       agentId?: string;
       command: string;
       icon?: string;
       name: string;
-      operation: "save";
-      target: "agent";
+      operation: 'save';
+      target: 'agent';
     }
   | {
       activeProjectId?: string;
       agentId: string;
-      operation: "delete";
-      target: "agent";
+      operation: 'delete';
+      target: 'agent';
     }
   | {
       activeProjectId?: string;
       agentIds: readonly string[];
-      operation: "order";
-      target: "agent";
+      operation: 'order';
+      target: 'agent';
     }
   | {
-      actionType: "browser" | "terminal";
+      actionType: 'browser' | 'terminal';
       activeProjectId?: string;
       closeTerminalOnExit?: boolean;
       command?: string;
@@ -1597,7 +1573,7 @@ type GxserverSidebarHudSettingsMutationIntent =
       icon?: string;
       links?: readonly GxserverSidebarHudCommandLink[];
       name: string;
-      operation: "save";
+      operation: 'save';
       playCompletionSound?: boolean;
       showOnProjectRow?: boolean;
       /**
@@ -1607,20 +1583,20 @@ type GxserverSidebarHudSettingsMutationIntent =
        * the payload shape. gxserver validates both through one path, which is
        * what keeps the two lists from drifting into different action shapes.
        */
-      target: "command" | "globalCommand";
+      target: 'command' | 'globalCommand';
       url?: string;
     }
   | {
       activeProjectId?: string;
       commandId: string;
-      operation: "delete";
-      target: "command" | "globalCommand";
+      operation: 'delete';
+      target: 'command' | 'globalCommand';
     }
   | {
       activeProjectId?: string;
       commandIds: readonly string[];
-      operation: "order";
-      target: "command" | "globalCommand";
+      operation: 'order';
+      target: 'command' | 'globalCommand';
     };
 
 export interface GxserverSidebarHudSettingsMutationResult {
@@ -1629,12 +1605,12 @@ export interface GxserverSidebarHudSettingsMutationResult {
   projects: readonly GxserverProjectDomainState[];
 }
 
-export type GxserverConnectionTransport = "local" | "tailscale" | "direct" | "ssh";
+export type GxserverConnectionTransport = 'local' | 'tailscale' | 'direct' | 'ssh';
 export type GxserverConnectionProfileId = string & { readonly __gxserverConnectionProfileId: unique symbol };
 
 export interface GxserverCredentialSecretRef {
   account: string;
-  service: "ghostex.gxserver";
+  service: 'ghostex.gxserver';
 }
 
 export interface GxserverConnectionProfile {
@@ -1661,10 +1637,10 @@ export interface GxserverRouteRef {
 }
 
 export interface GxserverRemoteProjectListMetadata {
-  icon: "cloud";
+  icon: 'cloud';
   profileId: string;
   serverId: GxserverServerId;
-  transport: Exclude<GxserverConnectionTransport, "local">;
+  transport: Exclude<GxserverConnectionTransport, 'local'>;
 }
 
 export interface GxserverSshForwardPlan {
@@ -1680,9 +1656,9 @@ export interface GxserverSshForwardPlan {
 export interface GxserverRemoteAttachMetadata {
   attachCommand: string;
   profileId: string;
-  provider: "zmx";
+  provider: 'zmx';
   serverId?: GxserverServerId;
-  transport: "ssh";
+  transport: 'ssh';
   zmxName: GxserverZmxSessionName;
 }
 
@@ -1778,7 +1754,7 @@ export interface GxserverCreateSessionParams {
   projectId?: GxserverProjectId;
   projectName?: string;
   projectPath?: string;
-  providerState?: Partial<GxserverSessionDomainState["providerState"]>;
+  providerState?: Partial<GxserverSessionDomainState['providerState']>;
   /**
    * CDXC:GPUIRemoteSessions 2026-06-24-17:19:
    * Remote agent starts can ask gxserver to reject unknown custom/default agent ids instead of creating an inert row with no launch command. This lets clients avoid sending renderer-owned command text while still failing honestly when remote project metadata cannot resolve the selected agent.
@@ -1794,7 +1770,7 @@ export interface GxserverCreateSessionParams {
   worktree?: Record<string, unknown>;
 }
 
-export type GxserverUpdateSessionParams = Partial<Omit<GxserverCreateSessionParams, "projectId">> & {
+export type GxserverUpdateSessionParams = Partial<Omit<GxserverCreateSessionParams, 'projectId'>> & {
   projectId: GxserverProjectId;
   sessionId: GxserverSessionId;
 };
@@ -1973,7 +1949,7 @@ caller sent before this existed) is a user action.
 Only an automatic sleep can be declined, and only by a live keep-awake lease —
 see `GxserverHoldSessionsAwakeParams`. A user who taps Sleep always gets a sleep.
 */
-export type GxserverSleepTrigger = "automatic" | "user";
+export type GxserverSleepTrigger = 'automatic' | 'user';
 
 export interface GxserverSleepSessionParams extends GxserverSessionLifecycleParams {
   sleepTrigger?: GxserverSleepTrigger;
@@ -1987,7 +1963,7 @@ export interface GxserverSleepSessionResult {
   measure and no conversation to resume. Either way the session was not touched,
   so a client must not optimistically mark the row sleeping.
   */
-  declined?: "keptAwake" | "neverActive";
+  declined?: 'keptAwake' | 'neverActive';
   kill?: Record<string, unknown>;
   session: GxserverSessionDomainState;
 }
@@ -2036,7 +2012,7 @@ export interface GxserverHoldSessionsAwakeResult {
   }[];
 }
 
-export type GxserverSessionTransitionAction = "close" | "sleep";
+export type GxserverSessionTransitionAction = 'close' | 'sleep';
 export interface GxserverSessionTransitionParams extends GxserverSessionLifecycleParams {
   /*
   CDXC:ProjectSidebarOwnership 2026-06-02-13:01:
@@ -2062,12 +2038,7 @@ export interface GxserverCancelFirstPromptAutoTitleResult {
   session: GxserverSessionDomainState;
 }
 
-export type GxserverSessionTitleSource =
-  | "browser-auto"
-  | "generated"
-  | "placeholder"
-  | "terminal-auto"
-  | "user";
+export type GxserverSessionTitleSource = 'browser-auto' | 'generated' | 'placeholder' | 'terminal-auto' | 'user';
 
 export interface GxserverSessionTitleProjection {
   displayTitle?: string;
@@ -2082,12 +2053,12 @@ export interface GxserverSessionTitleProjection {
 }
 
 export type GxserverPresentationRevision = number & { readonly __gxserverPresentationRevision: unique symbol };
-export type GxserverPresentationSessionActivity = "attention" | "idle" | "working";
+export type GxserverPresentationSessionActivity = 'attention' | 'idle' | 'working';
 /*
 CDXC:SessionStatus 2026-06-07-00:30:
 zmx title observation health is presentation metadata for working-status detection. Publish only coarse watcher states and timestamps so clients can avoid treating unavailable detection as idle without exposing terminal titles, commands, paths, or user content.
 */
-export type GxserverTitleObservationStatus = "active" | "failed" | "retrying" | "starting";
+export type GxserverTitleObservationStatus = 'active' | 'failed' | 'retrying' | 'starting';
 
 export interface GxserverTitleObservationState {
   failureCount?: number;
@@ -2120,7 +2091,7 @@ export interface GxserverPresentationSessionActions {
 CDXC:GxserverPresentation 2026-06-15-17:32:
 Presentation clients need provider liveness as a first-class field because domain lifecycle and native pane lifecycle are separate resources. A row can remain visible while its zmx provider is missing or persistence is disabled, and clients must not infer provider existence from `running` alone.
 */
-export type GxserverPresentationProviderSessionState = "exists" | "missing" | "persistence-disabled" | "unknown";
+export type GxserverPresentationProviderSessionState = 'exists' | 'missing' | 'persistence-disabled' | 'unknown';
 
 export interface GxserverPresentationProject {
   createdAt: string;
@@ -2188,7 +2159,7 @@ export interface GxserverPresentationProject {
   isFavorite: boolean;
   isPinned: boolean;
   path?: string;
-  pathState?: "available" | "missing" | "notDirectory" | "unavailable";
+  pathState?: 'available' | 'missing' | 'notDirectory' | 'unavailable';
   projectId: GxserverProjectId;
   sortKey: string;
   title: string;
@@ -2204,7 +2175,7 @@ export interface GxserverPresentationGroup {
   title: string;
 }
 
-export type GxserverPresentationSettledOverride = "active" | "settled";
+export type GxserverPresentationSettledOverride = 'active' | 'settled';
 
 /**
  * CDXC:SidebarV2Git 2026-07-29:
@@ -2213,7 +2184,7 @@ export type GxserverPresentationSettledOverride = "active" | "settled";
  * a different (deliberately quiet) hue: a draft is work in progress, not a
  * review waiting on anyone.
  */
-export type GxserverPresentationSessionPrState = "closed" | "draft" | "merged" | "open";
+export type GxserverPresentationSessionPrState = 'closed' | 'draft' | 'merged' | 'open';
 
 /*
 CDXC:SidebarV2Git 2026-07-29:
@@ -2350,7 +2321,7 @@ export interface GxserverPresentationSession {
    */
   queuedPromptFailedCount?: number;
   sessionId: GxserverSessionId;
-  sessionPersistenceProvider?: "tmux" | "zmx" | "zellij";
+  sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
   sessionTag?: GxserverSessionTag;
   sendWhenAllProjectSessionsStopActive?: boolean;
   sendWhenAgentStopsActive?: boolean;
@@ -2460,37 +2431,37 @@ export type GxserverPresentationDelta =
   | {
       domainProject?: GxserverProjectDomainState;
       project: GxserverPresentationProject;
-      type: "projectAdded" | "projectUpdated";
+      type: 'projectAdded' | 'projectUpdated';
     }
   | {
       projectId: GxserverProjectId;
-      type: "projectRemoved";
+      type: 'projectRemoved';
     }
   | {
       group: GxserverPresentationGroup;
-      type: "groupAdded" | "groupUpdated" | "groupOrderChanged";
+      type: 'groupAdded' | 'groupUpdated' | 'groupOrderChanged';
     }
   | {
       groupId: string;
       projectId: GxserverProjectId;
-      type: "groupRemoved";
+      type: 'groupRemoved';
     }
   | {
       session: GxserverPresentationSession;
       type:
-        | "sessionAdded"
-        | "sessionUpdated"
-        | "sessionMoved"
-        | "sessionTitleChanged"
-        | "sessionActivityChanged"
-        | "sessionLifecycleChanged"
-        | "sessionSurfaceChanged"
-        | "sessionPresentationChanged";
+        | 'sessionAdded'
+        | 'sessionUpdated'
+        | 'sessionMoved'
+        | 'sessionTitleChanged'
+        | 'sessionActivityChanged'
+        | 'sessionLifecycleChanged'
+        | 'sessionSurfaceChanged'
+        | 'sessionPresentationChanged';
     }
   | {
       projectId: GxserverProjectId;
       sessionId: GxserverSessionId;
-      type: "sessionRemoved";
+      type: 'sessionRemoved';
     };
 
 export interface GxserverPresentationDeltaEvent {
@@ -2501,7 +2472,7 @@ export interface GxserverPresentationDeltaEvent {
 export interface GxserverPresentationSubscribeMessage {
   clientId?: string;
   lastRevision?: GxserverPresentationRevision;
-  type: "subscribePresentation";
+  type: 'subscribePresentation';
 }
 
 export interface GxserverPresentationSearchParams {
@@ -2536,7 +2507,7 @@ export interface GxserverPresentationSearchResult {
   lastActiveAt?: string;
   lifecycleState: GxserverDomainLifecycleState;
   match?: {
-    field: "agent" | "command" | "cwd" | "id" | "project" | "timestamp" | "title";
+    field: 'agent' | 'command' | 'cwd' | 'id' | 'project' | 'timestamp' | 'title';
     snippet?: string;
   };
   projectId: GxserverProjectId;
@@ -2548,7 +2519,7 @@ export interface GxserverPresentationSearchResult {
    * Previous Sessions search results must carry the same identity and provider metadata needed to render and restore stopped agent rows without rehydrating native sidebar history. Keep raw prompt/user text out of list/search responses; restore-specific command construction stays behind readAgentResumePlan for the selected session.
    */
   sessionPersistenceName?: string;
-  sessionPersistenceProvider?: "tmux" | "zmx" | "zellij";
+  sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
   sessionTag?: GxserverSessionTag;
   sidebarOrder?: number;
   subtitle?: string;
@@ -2571,7 +2542,7 @@ export interface GxserverTerminalTitleEventParams extends GxserverSessionLifecyc
   previousTerminalTitle?: string;
   protectStoredTitleFromAutomation?: boolean;
   rawTitle?: string;
-  sessionPersistenceProvider?: "off" | "tmux" | "zellij" | "zmx";
+  sessionPersistenceProvider?: 'off' | 'tmux' | 'zellij' | 'zmx';
 }
 
 export interface GxserverTerminalTitleEventResult {
@@ -2579,19 +2550,14 @@ export interface GxserverTerminalTitleEventResult {
   activity: GxserverAgentActivityState;
   changed: boolean;
   enteredAttention: boolean;
-  previousActivity: GxserverAgentActivityState["activity"];
+  previousActivity: GxserverAgentActivityState['activity'];
   projection: GxserverSessionTitleProjection;
   reason: string;
   session: GxserverSessionDomainState;
   visibleTitle?: string;
 }
 
-export type GxserverFirstPromptTitleGenerationAgent =
-  | "codex"
-  | "cursor"
-  | "claude"
-  | "grok"
-  | "custom";
+export type GxserverFirstPromptTitleGenerationAgent = 'codex' | 'cursor' | 'claude' | 'grok' | 'custom';
 
 export interface GxserverSessionStateEventParams extends GxserverSessionLifecycleParams {
   agentName?: string;
@@ -2617,7 +2583,7 @@ export interface GxserverSessionRenameRequestParams extends GxserverSessionLifec
   agentSessionId?: string;
   agentSessionPath?: string;
   title: string;
-  titleSource?: Extract<GxserverSessionTitleSource, "generated" | "user">;
+  titleSource?: Extract<GxserverSessionTitleSource, 'generated' | 'user'>;
 }
 
 export interface GxserverSessionRenameRequestResult {
@@ -2630,11 +2596,11 @@ export interface GxserverSessionRenameRequestResult {
 }
 
 export interface GxserverAttachSessionMetadataParams extends GxserverSessionLifecycleParams {
-  promptEditor?: "code-server" | "monaco";
+  promptEditor?: 'code-server' | 'monaco';
   startupText?: string;
 }
 
-export type GxserverAgentStartupTextDisposition = "none" | "queueAfterTerminalReady";
+export type GxserverAgentStartupTextDisposition = 'none' | 'queueAfterTerminalReady';
 
 export interface GxserverAgentLaunchPlanParams {
   agentId: string;
@@ -2647,7 +2613,7 @@ export interface GxserverAgentLaunchPlan {
   command: string;
   delayedSend?: {
     deadlineAt: string;
-    disposition: "scheduled";
+    disposition: 'scheduled';
   };
   firstUserMessage?: string;
   startupText: string;
@@ -2670,20 +2636,20 @@ export interface GxserverAgentResumePlan {
 }
 
 export type GxserverAgentActivityEvent =
-  | "acknowledge"
-  | "agentDetected"
-  | "bell"
-  | "escape"
-  | "launch"
-  | "resume"
-  | "terminalError"
-  | "terminalExited"
-  | "title"
-  | "wake";
+  | 'acknowledge'
+  | 'agentDetected'
+  | 'bell'
+  | 'escape'
+  | 'launch'
+  | 'resume'
+  | 'terminalError'
+  | 'terminalExited'
+  | 'title'
+  | 'wake';
 
 export interface GxserverAgentActivityState {
-  activity: "attention" | "idle" | "working";
-  agentName?: "antigravity" | "claude" | "codex" | "copilot" | "cursor" | "gemini" | "opencode" | "pi";
+  activity: 'attention' | 'idle' | 'working';
+  agentName?: 'antigravity' | 'claude' | 'codex' | 'copilot' | 'cursor' | 'gemini' | 'opencode' | 'pi';
   attentionEventId?: string;
   attentionSuppressedUntil?: string;
   hasSeenWorking?: boolean;
@@ -2693,12 +2659,12 @@ export interface GxserverAgentActivityState {
   lastTitle?: string;
   lastTitleChangeAt?: string;
   suppressedUntil?: string;
-  workingSource?: "explicit" | "title";
+  workingSource?: 'explicit' | 'title';
   workingStartedAt?: string;
 }
 
 export interface GxserverAgentActivityInput {
-  activity?: GxserverAgentActivityState["activity"];
+  activity?: GxserverAgentActivityState['activity'];
   agentId?: string;
   event?: GxserverAgentActivityEvent;
   nowIso?: string;
@@ -2709,7 +2675,7 @@ export interface GxserverAgentActivityInput {
 }
 
 export interface GxserverUpdateAgentActivityParams extends GxserverSessionLifecycleParams {
-  activity?: GxserverAgentActivityState["activity"];
+  activity?: GxserverAgentActivityState['activity'];
   agentName?: string;
   event?: GxserverAgentActivityEvent;
   nowMs?: number;
@@ -2720,7 +2686,7 @@ export interface GxserverUpdateAgentActivityParams extends GxserverSessionLifecy
 export interface GxserverUpdateAgentActivityResult {
   activity: GxserverAgentActivityState;
   enteredAttention: boolean;
-  previousActivity: GxserverAgentActivityState["activity"];
+  previousActivity: GxserverAgentActivityState['activity'];
   session: GxserverSessionDomainState;
 }
 
@@ -2740,7 +2706,7 @@ export interface GxserverAttachSessionMetadataResult {
   attachCommand?: string;
   cwd?: string;
   persistenceSessionCreated?: boolean;
-  provider: "zmx";
+  provider: 'zmx';
   providerState: GxserverProviderProbeResult;
   restoreBlocked?: GxserverSessionRestoreBlocked;
   session: GxserverSessionDomainState;
@@ -2749,53 +2715,46 @@ export interface GxserverAttachSessionMetadataResult {
   zmxName: GxserverZmxSessionName;
 }
 
-export type GxserverTerminalWsErrorCode =
-  | "unauthorized"
-  | "protocolMismatch"
-  | "notFound"
-  | "providerNotRunning";
+export type GxserverTerminalWsErrorCode = 'unauthorized' | 'protocolMismatch' | 'notFound' | 'providerNotRunning';
 
 export interface GxserverTerminalWsReadyMessage {
   cols: number;
   rows: number;
-  type: "ready";
+  type: 'ready';
   zmxName: GxserverZmxSessionName;
 }
 
 export interface GxserverTerminalWsExitMessage {
   code: number | null;
-  type: "exit";
+  type: 'exit';
 }
 
 export interface GxserverTerminalWsErrorMessage {
   code: GxserverTerminalWsErrorCode;
   message: string;
-  type: "error";
+  type: 'error';
 }
 
 export interface GxserverTerminalWsResizeMessage {
   cols: number;
   rows: number;
-  type: "resize";
+  type: 'resize';
 }
 
 export type GxserverTerminalWsClientControlMessage = GxserverTerminalWsResizeMessage;
 export type GxserverTerminalWsServerControlMessage =
-  | GxserverTerminalWsReadyMessage
-  | GxserverTerminalWsExitMessage
-  | GxserverTerminalWsErrorMessage;
+  GxserverTerminalWsReadyMessage | GxserverTerminalWsExitMessage | GxserverTerminalWsErrorMessage;
 export type GxserverTerminalWsControlMessage =
-  | GxserverTerminalWsClientControlMessage
-  | GxserverTerminalWsServerControlMessage;
+  GxserverTerminalWsClientControlMessage | GxserverTerminalWsServerControlMessage;
 
 export interface GxserverStartSessionProviderParams extends GxserverSessionLifecycleParams {
-  promptEditor?: "code-server" | "monaco";
+  promptEditor?: 'code-server' | 'monaco';
   startupText?: string;
 }
 
 export interface GxserverStartSessionProviderResult {
   exitCode?: number;
-  provider: "zmx";
+  provider: 'zmx';
   providerState: GxserverProviderProbeResult;
   session: GxserverSessionDomainState;
   started: boolean;
@@ -2804,7 +2763,7 @@ export interface GxserverStartSessionProviderResult {
 }
 
 export interface GxserverSessionProviderProbeResponse {
-  provider: "zmx";
+  provider: 'zmx';
   providerState: GxserverProviderProbeResult;
   session: GxserverSessionDomainState;
 }
@@ -2828,24 +2787,24 @@ export type GxserverEvent =
   | {
       protocolVersion: GxserverProtocolVersion;
       serverId: GxserverServerId;
-      type: "eventStreamReady";
+      type: 'eventStreamReady';
     }
   | {
       protocolVersion: GxserverProtocolVersion;
       serverId: GxserverServerId;
-      type: "serverStarted";
+      type: 'serverStarted';
     }
   | {
       protocolVersion: GxserverProtocolVersion;
       serverId: GxserverServerId;
-      type: "serverStopping";
+      type: 'serverStopping';
     }
   | {
       path: GxserverEndpointPath;
       protocolVersion: GxserverProtocolVersion;
       requestId: string;
       serverId: GxserverServerId;
-      type: "apiRequestHandled";
+      type: 'apiRequestHandled';
     }
   | {
       clientId?: string;
@@ -2853,27 +2812,27 @@ export type GxserverEvent =
       revision: GxserverPresentationRevision;
       serverId: GxserverServerId;
       snapshot: GxserverPresentationSnapshot;
-      type: "presentationSnapshot";
+      type: 'presentationSnapshot';
     }
   | {
       delta: GxserverPresentationDelta;
       protocolVersion: GxserverProtocolVersion;
       revision: GxserverPresentationRevision;
       serverId: GxserverServerId;
-      type: "presentationDelta";
+      type: 'presentationDelta';
     }
   | {
       command: GxserverRendererCommand;
       protocolVersion: GxserverProtocolVersion;
       serverId: GxserverServerId;
-      type: "rendererCommand";
+      type: 'rendererCommand';
     }
   | {
       protocolVersion: GxserverProtocolVersion;
       revision: GxserverPresentationRevision;
       serverId: GxserverServerId;
       sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
-      type: "sidebarProjectCollectionsChanged";
+      type: 'sidebarProjectCollectionsChanged';
     }
   /*
    * CDXC:GlobalActions 2026-08-07:
@@ -2887,7 +2846,7 @@ export type GxserverEvent =
       protocolVersion: GxserverProtocolVersion;
       revision: GxserverPresentationRevision;
       serverId: GxserverServerId;
-      type: "globalSidebarCommandsChanged";
+      type: 'globalSidebarCommandsChanged';
     }
   | GxserverSessionChatSnapshotEvent
   | GxserverSessionChatAppendedEvent

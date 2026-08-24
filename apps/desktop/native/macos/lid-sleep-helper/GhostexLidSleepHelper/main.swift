@@ -3,7 +3,8 @@ import Security
 
 private let helperLabel =
   Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
-private let helperConfigURL = URL(fileURLWithPath: "/Library/PrivilegedHelperTools/\(helperLabel).config.plist")
+private let helperConfigURL = URL(
+  fileURLWithPath: "/Library/PrivilegedHelperTools/\(helperLabel).config.plist")
 private let leaseInterval: TimeInterval = 45
 
 private final class LidSleepHelper: NSObject, NSXPCListenerDelegate, GhostexLidSleepHelperProtocol {
@@ -28,7 +29,9 @@ private final class LidSleepHelper: NSObject, NSXPCListenerDelegate, GhostexLidS
     }
   }
 
-  func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
+  func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection)
+    -> Bool
+  {
     guard isAuthorizedClient(connection) else {
       return false
     }
@@ -121,8 +124,11 @@ private final class LidSleepHelper: NSObject, NSXPCListenerDelegate, GhostexLidS
         return (true, nil)
       }
       let data = pipe.fileHandleForReading.readDataToEndOfFile()
-      let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      return (false, output?.isEmpty == false ? output : "pmset exited \(process.terminationStatus)")
+      let output = String(data: data, encoding: .utf8)?.trimmingCharacters(
+        in: .whitespacesAndNewlines)
+      return (
+        false, output?.isEmpty == false ? output : "pmset exited \(process.terminationStatus)"
+      )
     } catch {
       return (false, error.localizedDescription)
     }
@@ -180,8 +186,9 @@ private final class LidSleepHelper: NSObject, NSXPCListenerDelegate, GhostexLidS
      trust boundary.
      */
     var requirement: SecRequirement?
-    guard SecRequirementCreateWithString(requirementString as CFString, SecCSFlags(), &requirement)
-      == errSecSuccess,
+    guard
+      SecRequirementCreateWithString(requirementString as CFString, SecCSFlags(), &requirement)
+        == errSecSuccess,
       let requirement
     else {
       return false
@@ -197,11 +204,13 @@ private final class LidSleepHelper: NSObject, NSXPCListenerDelegate, GhostexLidS
       return [:]
     }
     var info: CFDictionary?
-    guard SecCodeCopySigningInformation(
-      staticCode,
-      SecCSFlags(rawValue: kSecCSSigningInformation),
-      &info
-    ) == errSecSuccess else {
+    guard
+      SecCodeCopySigningInformation(
+        staticCode,
+        SecCSFlags(rawValue: kSecCSSigningInformation),
+        &info
+      ) == errSecSuccess
+    else {
       return [:]
     }
     return (info as? [String: Any]) ?? [:]

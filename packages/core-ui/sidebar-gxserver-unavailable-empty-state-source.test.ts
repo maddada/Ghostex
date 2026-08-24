@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 
-const sidebarAppSource = readFileSync(new URL("./sidebar-app.tsx", import.meta.url), "utf8");
+const sidebarAppSource = readFileSync(new URL('./sidebar-app.tsx', import.meta.url), 'utf8');
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -11,8 +11,8 @@ function sourceBetween(source: string, start: string, end: string): string {
   return source.slice(startIndex, endIndex);
 }
 
-describe("gxserver unavailable sidebar empty state source", () => {
-  test("keeps the startup placeholder silent until the delayed restart guidance", () => {
+describe('gxserver unavailable sidebar empty state source', () => {
+  test('keeps the startup placeholder silent until the delayed restart guidance', () => {
     /*
      * CDXC:GxserverPresentation 2026-06-16-09:35:
      * The synthetic gxserver-unavailable group exists for startup state
@@ -22,41 +22,37 @@ describe("gxserver unavailable sidebar empty state source", () => {
      */
     const constantsSource = sourceBetween(
       sidebarAppSource,
-      "const SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID",
-      "const MIN_SESSION_SEARCH_QUERY_LENGTH",
+      'const SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID',
+      'const MIN_SESSION_SEARCH_QUERY_LENGTH'
     );
     const timerSource = sourceBetween(
       sidebarAppSource,
-      "const hasGxserverUnavailablePlaceholder = Boolean(",
-      "const effectiveSettings = settings ?? DEFAULT_ghostex_SETTINGS;",
+      'const hasGxserverUnavailablePlaceholder = Boolean(',
+      'const effectiveSettings = settings ?? DEFAULT_ghostex_SETTINGS;'
     );
     const projectGroupFilterSource = sourceBetween(
       sidebarAppSource,
-      "const displayedReferenceProjectGroupIds = useMemo(",
-      "const remoteProjectGroupIdsByMachineId = useMemo(",
+      'const displayedReferenceProjectGroupIds = useMemo(',
+      'const remoteProjectGroupIdsByMachineId = useMemo('
     );
     const emptyStateSource = sourceBetween(
       sidebarAppSource,
-      "const referenceProjectsEmptyState = showGxserverUnavailableEmptyState",
-      "const {",
+      'const referenceProjectsEmptyState = showGxserverUnavailableEmptyState',
+      'const {'
     );
 
-    expect(constantsSource).toContain(
-      "const SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS = 20_000;",
-    );
-    expect(timerSource).toContain("setShowGxserverUnavailableEmptyState(false);");
-    expect(timerSource).toContain("setShowGxserverUnavailableEmptyState(true);");
-    expect(timerSource).toContain("SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS");
-    expect(projectGroupFilterSource).toContain(
-      "groupId !== SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID",
-    );
+    expect(constantsSource).toContain('const SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS = 20_000;');
+    expect(timerSource).toContain('setShowGxserverUnavailableEmptyState(false);');
+    expect(timerSource).toContain('setShowGxserverUnavailableEmptyState(true);');
+    expect(timerSource).toContain('SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS');
+    expect(projectGroupFilterSource).toContain('groupId !== SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID');
     expect(emptyStateSource).toContain('className="reference-sidebar-empty-state"');
-    expect(emptyStateSource).toContain("Unable to load sessions.");
-    expect(emptyStateSource).toContain("<br />");
-    expect(emptyStateSource).toContain("Restart Ghostex to try again.");
-    expect(emptyStateSource).toContain("No Projects Added.");
+    expect(emptyStateSource).toContain('Unable to load sessions.');
+    expect(emptyStateSource).toContain('<br />');
+    expect(emptyStateSource).toContain('Restart Ghostex to try again.');
+    expect(emptyStateSource).toContain('No Projects Added.');
     expect(emptyStateSource).toContain(
-      "Hover over the Projects label and click on the plus button to add your first project and get started!",
+      'Hover over the Projects label and click on the plus button to add your first project and get started!'
     );
   });
 });

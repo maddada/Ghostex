@@ -53,7 +53,10 @@ export const requestLocalLinkStatuses = (text: string): void => {
   vscodeApi?.postMessage({ type: 'resolveLocalLinks', requestId, targets });
 };
 
-export const handleResolvedLocalLinks = (message: { requestId: string; results?: Array<{ target: string; exists: boolean }> }): boolean => {
+export const handleResolvedLocalLinks = (message: {
+  requestId: string;
+  results?: Array<{ target: string; exists: boolean }>;
+}): boolean => {
   if (message.requestId !== latestLocalLinkRequestId) {
     return false;
   }
@@ -118,12 +121,7 @@ export function isLikelyLocalLinkTarget(rawTarget: string): boolean {
   if (!pathLike) {
     return false;
   }
-  if (
-    pathLike.startsWith('./') ||
-    pathLike.startsWith('../') ||
-    pathLike.startsWith('/') ||
-    pathLike.startsWith('~')
-  ) {
+  if (pathLike.startsWith('./') || pathLike.startsWith('../') || pathLike.startsWith('/') || pathLike.startsWith('~')) {
     return true;
   }
   if (/^[a-zA-Z]:\//.test(pathLike)) {
@@ -191,7 +189,7 @@ function isEscapedAt(text: string, index: number): boolean {
   for (let i = index - 1; i >= 0 && text[i] === '\\'; i -= 1) {
     slashCount += 1;
   }
-  return (slashCount % 2) === 1;
+  return slashCount % 2 === 1;
 }
 
 function findClosingBracket(text: string, from: number): number {

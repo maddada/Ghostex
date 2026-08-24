@@ -140,7 +140,10 @@ impl GhostexGpuiApp {
     /// Exit Focus slot with the same text-button chrome, but stays in the
     /// resting (non-active-tab) skin because it does not represent a mode
     /// the workspace is currently in.
-    pub(crate) fn render_titlebar_prompt_editor_button(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_titlebar_prompt_editor_button(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         div()
             .id("ghostex-gpui-titlebar-prompt-editor")
             .relative()
@@ -356,5 +359,4 @@ impl GhostexGpuiApp {
             })
             .into_any_element()
     }
-
 }

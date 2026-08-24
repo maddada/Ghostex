@@ -132,7 +132,11 @@ pub struct Scanner {
 
 impl Scanner {
     pub fn new(home: impl Into<PathBuf>, cache_root: impl Into<PathBuf>) -> Self {
-        Self { home: home.into(), cache_root: cache_root.into(), ..Default::default() }
+        Self {
+            home: home.into(),
+            cache_root: cache_root.into(),
+            ..Default::default()
+        }
     }
 
     fn path(&self, suffix: &str) -> PathBuf {
@@ -190,7 +194,9 @@ impl Scanner {
     }
 
     fn load_claude_project_session_indexes(&mut self, base: &Path) {
-        let Ok(entries) = fs::read_dir(base) else { return };
+        let Ok(entries) = fs::read_dir(base) else {
+            return;
+        };
         for entry in entries.flatten() {
             if !entry.path().is_dir() {
                 continue;
@@ -203,10 +209,14 @@ impl Scanner {
 
     fn load_claude_profile_session_indexes(&mut self) {
         let base = self.path(".claude-profiles");
-        let Ok(profiles) = fs::read_dir(&base) else { return };
+        let Ok(profiles) = fs::read_dir(&base) else {
+            return;
+        };
         for profile in profiles.flatten() {
             let projects = profile.path().join("projects");
-            let Ok(entries) = fs::read_dir(&projects) else { continue };
+            let Ok(entries) = fs::read_dir(&projects) else {
+                continue;
+            };
             for entry in entries.flatten() {
                 if !entry.path().is_dir() {
                     continue;
@@ -219,8 +229,12 @@ impl Scanner {
     }
 
     fn parse_claude_sessions_index(&mut self, data: &[u8]) {
-        let Ok(v) = serde_json::from_slice::<Value>(data) else { return };
-        let Some(Value::Array(entries)) = field(&v, "entries") else { return };
+        let Ok(v) = serde_json::from_slice::<Value>(data) else {
+            return;
+        };
+        let Some(Value::Array(entries)) = field(&v, "entries") else {
+            return;
+        };
         for entry in entries {
             let Some(session_id) =
                 string_field(entry, "sessionId").or_else(|| string_field(entry, "id"))
@@ -241,8 +255,12 @@ impl Scanner {
         if clean_title(session_id).is_none() {
             return;
         }
-        let Some(safe) = clean_title(title) else { return };
-        self.claude_titles.entry(session_id.to_string()).or_insert(safe);
+        let Some(safe) = clean_title(title) else {
+            return;
+        };
+        self.claude_titles
+            .entry(session_id.to_string())
+            .or_insert(safe);
     }
 
     fn claude_title_for_session(&self, session_id: &str) -> Option<String> {
@@ -256,7 +274,9 @@ impl Scanner {
     pub fn parse_claude_history(&mut self, data: &[u8]) {
         for line in data.split(|&b| b == b'\n') {
             let Some(v) = parse_line(line) else { continue };
-            let Some(disp) = string_field(&v, "display") else { continue };
+            let Some(disp) = string_field(&v, "display") else {
+                continue;
+            };
             if disp.is_empty() {
                 continue;
             }
@@ -296,15 +316,21 @@ impl Scanner {
     }
 
     fn load_codex_session_index_titles(&mut self) {
-        let Some(data) = read_all(&self.path(".codex/session_index.jsonl")) else { return };
+        let Some(data) = read_all(&self.path(".codex/session_index.jsonl")) else {
+            return;
+        };
         for line in data.split(|&b| b == b'\n') {
             let Some(v) = parse_line(line) else { continue };
-            let Some(session_id) = string_field(&v, "id") else { continue };
+            let Some(session_id) = string_field(&v, "id") else {
+                continue;
+            };
             if session_id.is_empty() {
                 continue;
             }
             let session_id = session_id.to_string();
-            let Some(title) = title_from_object(&v) else { continue };
+            let Some(title) = title_from_object(&v) else {
+                continue;
+            };
             self.codex_titles.insert(session_id, title);
         }
     }
@@ -358,7 +384,9 @@ impl Scanner {
         for year in read_dir_sorted(&base) {
             for month in read_dir_sorted(&year) {
                 for day in read_dir_sorted(&month) {
-                    let Ok(entries) = fs::read_dir(&day) else { continue };
+                    let Ok(entries) = fs::read_dir(&day) else {
+                        continue;
+                    };
                     for entry in entries.flatten() {
                         let path = entry.path();
                         if path.is_file()
@@ -377,7 +405,9 @@ impl Scanner {
     }
 
     fn scan_codex_session_cached(&mut self, source_path: &Path) {
-        let Ok(stat) = fs::metadata(source_path) else { return };
+        let Ok(stat) = fs::metadata(source_path) else {
+            return;
+        };
         self.load_codex_session_metadata(source_path);
         let fallback_ts = mtime_seconds(&stat);
         let Some(stamp) = stamp_from_stat(&stat) else {
@@ -402,7 +432,9 @@ impl Scanner {
     /// Read only the head of a transcript to pick up `session_meta`, which is
     /// the first line Codex writes.
     fn load_codex_session_metadata(&mut self, source_path: &Path) {
-        let Some(data) = read_prefix(source_path, 64 * 1024) else { return };
+        let Some(data) = read_prefix(source_path, 64 * 1024) else {
+            return;
+        };
         for line in data.split(|&b| b == b'\n') {
             let Some(v) = parse_line(line) else { continue };
             if self.record_codex_session_metadata(&v) {
@@ -412,16 +444,24 @@ impl Scanner {
     }
 
     fn record_codex_session_metadata(&mut self, v: &Value) -> bool {
-        let Some(typ) = string_field(v, "type") else { return false };
+        let Some(typ) = string_field(v, "type") else {
+            return false;
+        };
         if typ != "session_meta" {
             return false;
         }
-        let Some(payload) = field(v, "payload") else { return true };
+        let Some(payload) = field(v, "payload") else {
+            return true;
+        };
         if !payload.is_object() {
             return true;
         }
-        let Some(session_id) = string_field(payload, "id").map(str::to_string) else { return true };
-        let Some(cwd) = string_field(payload, "cwd").map(str::to_string) else { return true };
+        let Some(session_id) = string_field(payload, "id").map(str::to_string) else {
+            return true;
+        };
+        let Some(cwd) = string_field(payload, "cwd").map(str::to_string) else {
+            return true;
+        };
         self.put_codex_project_if_absent(&session_id, &cwd);
         true
     }
@@ -449,7 +489,9 @@ impl Scanner {
     // the bounded whole-file read limit. Stream them so prompt extraction stays
     // proportional to the retained prompt text, not the full transcript size.
     fn scan_codex_session_streaming(&mut self, source_path: &Path, fallback_ts: i64) -> bool {
-        let Ok(file) = fs::File::open(source_path) else { return false };
+        let Ok(file) = fs::File::open(source_path) else {
+            return false;
+        };
         let mut reader = BufReader::with_capacity(64 * 1024, file);
         let mut state = CodexSessionParseState {
             record_start: self.records.len(),
@@ -478,7 +520,11 @@ impl Scanner {
         let mut h = Wyhash::new(0);
         h.update(source_path.to_str()?.as_bytes());
         let id = h.finish();
-        Some(self.cache_root.join("codex-sessions-v5").join(format!("{id:016x}.jsonl")))
+        Some(
+            self.cache_root
+                .join("codex-sessions-v5")
+                .join(format!("{id:016x}.jsonl")),
+        )
     }
 
     fn save_codex_cache(
@@ -532,8 +578,12 @@ impl Scanner {
     fn parse_codex_cache(&mut self, data: &[u8], source_path: &Path, stamp: &SourceStamp) -> bool {
         let record_start = self.records.len();
         let mut lines = data.split(|&b| b == b'\n');
-        let Some(header_line) = lines.next() else { return false };
-        let Some(header) = parse_line(header_line) else { return false };
+        let Some(header_line) = lines.next() else {
+            return false;
+        };
+        let Some(header) = parse_line(header_line) else {
+            return false;
+        };
         if !codex_cache_header_matches(&header, source_path, stamp) {
             return false;
         }
@@ -541,7 +591,9 @@ impl Scanner {
         let mut saw_footer = false;
         for line in lines {
             let Some(v) = parse_line(line) else { continue };
-            let Some(kind) = string_field(&v, "kind") else { continue };
+            let Some(kind) = string_field(&v, "kind") else {
+                continue;
+            };
             if kind == "footer" {
                 saw_footer = true;
                 break;
@@ -549,7 +601,9 @@ impl Scanner {
             if kind != "record" {
                 continue;
             }
-            let Some(text) = string_field(&v, "text") else { continue };
+            let Some(text) = string_field(&v, "text") else {
+                continue;
+            };
             if text.is_empty() {
                 continue;
             }
@@ -595,7 +649,9 @@ impl Scanner {
     pub fn parse_codex_history(&mut self, data: &[u8]) {
         for line in data.split(|&b| b == b'\n') {
             let Some(v) = parse_line(line) else { continue };
-            let Some(text) = string_field(&v, "text") else { continue };
+            let Some(text) = string_field(&v, "text") else {
+                continue;
+            };
             if text.is_empty() {
                 continue;
             }
@@ -636,11 +692,15 @@ impl Scanner {
     fn parse_codex_session_line(&mut self, line: &[u8], state: &mut CodexSessionParseState) {
         let Some(v) = parse_line(line) else { return };
         let line_ts = timestamp_from_object(&v);
-        let Some(typ) = string_field(&v, "type").map(str::to_string) else { return };
+        let Some(typ) = string_field(&v, "type").map(str::to_string) else {
+            return;
+        };
 
         if typ == "session_meta" {
             self.record_codex_session_metadata(&v);
-            let Some(payload) = field(&v, "payload") else { return };
+            let Some(payload) = field(&v, "payload") else {
+                return;
+            };
             if !payload.is_object() {
                 return;
             }
@@ -669,8 +729,12 @@ impl Scanner {
         }
 
         if typ == "event_msg" {
-            let Some(payload) = field(&v, "payload") else { return };
-            let Some(ptype) = string_field(payload, "type") else { return };
+            let Some(payload) = field(&v, "payload") else {
+                return;
+            };
+            let Some(ptype) = string_field(payload, "type") else {
+                return;
+            };
             if ptype != "token_count" {
                 return;
             }
@@ -719,15 +783,21 @@ impl Scanner {
         if typ != "response_item" {
             return;
         }
-        let Some(payload) = field(&v, "payload") else { return };
+        let Some(payload) = field(&v, "payload") else {
+            return;
+        };
         if string_field(payload, "type") != Some("message") {
             return;
         }
         if string_field(payload, "role") != Some("user") {
             return;
         }
-        let Some(content) = field(payload, "content") else { return };
-        let Some(text) = content_text(content) else { return };
+        let Some(content) = field(payload, "content") else {
+            return;
+        };
+        let Some(text) = content_text(content) else {
+            return;
+        };
         if text.is_empty() || text.starts_with('<') {
             return;
         }
@@ -737,7 +807,11 @@ impl Scanner {
             text,
             project: state.cwd.clone(),
             session: state.session_id.clone(),
-            ts: if state.fallback_ts > 0 { state.fallback_ts } else { line_ts },
+            ts: if state.fallback_ts > 0 {
+                state.fallback_ts
+            } else {
+                line_ts
+            },
             meta: state.meta.clone(),
         });
     }
@@ -762,7 +836,9 @@ impl Scanner {
         let base = self.path(".pi/agent/sessions");
         let mut files: Vec<PathBuf> = Vec::new();
         for sub in read_dir_sorted(&base) {
-            let Ok(entries) = fs::read_dir(&sub) else { continue };
+            let Ok(entries) = fs::read_dir(&sub) else {
+                continue;
+            };
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
@@ -807,7 +883,9 @@ impl Scanner {
             }
             let Some(v) = parse_line(line) else { continue };
             let line_ts = timestamp_from_object(&v);
-            let Some(typ) = string_field(&v, "type").map(str::to_string) else { continue };
+            let Some(typ) = string_field(&v, "type").map(str::to_string) else {
+                continue;
+            };
 
             if typ == "session" {
                 if session_ts == 0 && line_ts > 0 {
@@ -845,11 +923,15 @@ impl Scanner {
             if typ != "message" {
                 continue;
             }
-            let Some(msg) = field(&v, "message") else { continue };
+            let Some(msg) = field(&v, "message") else {
+                continue;
+            };
             if !msg.is_object() {
                 continue;
             }
-            let Some(role) = string_field(msg, "role") else { continue };
+            let Some(role) = string_field(msg, "role") else {
+                continue;
+            };
             if role == "assistant" {
                 if let Some(x) = string_field(msg, "provider") {
                     meta.provider = x.to_string();
@@ -877,8 +959,12 @@ impl Scanner {
             if role != "user" {
                 continue;
             }
-            let Some(content) = field(msg, "content") else { continue };
-            let Some(text) = content_text(content) else { continue };
+            let Some(content) = field(msg, "content") else {
+                continue;
+            };
+            let Some(text) = content_text(content) else {
+                continue;
+            };
             if text.is_empty() {
                 continue;
             }
@@ -909,14 +995,20 @@ impl Scanner {
             let fallback_project = self.cursor_project_for_project_directory(&encoded);
             let transcripts = project_dir.join("agent-transcripts");
             for session_dir in read_dir_sorted(&transcripts) {
-                let Some(session_id) =
-                    session_dir.file_name().and_then(|n| n.to_str()).map(str::to_string)
+                let Some(session_id) = session_dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(str::to_string)
                 else {
                     continue;
                 };
                 let file = session_dir.join(format!("{session_id}.jsonl"));
-                let Ok(stat) = fs::metadata(&file) else { continue };
-                let Some(data) = read_all(&file) else { continue };
+                let Ok(stat) = fs::metadata(&file) else {
+                    continue;
+                };
+                let Some(data) = read_all(&file) else {
+                    continue;
+                };
                 let mut info = self.cursor_info_for_session(&session_id);
                 if info.project.is_empty() {
                     info.project = fallback_project.clone();
@@ -933,15 +1025,26 @@ impl Scanner {
     }
 
     fn cursor_info_for_session(&self, session_id: &str) -> CursorInfo {
-        let meta_path =
-            self.home.join(format!(".cursor/acp-sessions/{session_id}/meta.json"));
-        let Some(data) = read_all(&meta_path) else { return CursorInfo::default() };
-        let Ok(v) = serde_json::from_slice::<Value>(&data) else { return CursorInfo::default() };
+        let meta_path = self
+            .home
+            .join(format!(".cursor/acp-sessions/{session_id}/meta.json"));
+        let Some(data) = read_all(&meta_path) else {
+            return CursorInfo::default();
+        };
+        let Ok(v) = serde_json::from_slice::<Value>(&data) else {
+            return CursorInfo::default();
+        };
         CursorInfo {
             project: string_field(&v, "cwd").unwrap_or("").to_string(),
             title: title_from_fields(
                 &v,
-                &["thread_name", "threadName", "title", "session_title", "sessionTitle"],
+                &[
+                    "thread_name",
+                    "threadName",
+                    "title",
+                    "session_title",
+                    "sessionTitle",
+                ],
             )
             .unwrap_or_default(),
         }
@@ -971,12 +1074,18 @@ impl Scanner {
             if string_field(&v, "role") != Some("user") {
                 continue;
             }
-            let Some(msg) = field(&v, "message") else { continue };
+            let Some(msg) = field(&v, "message") else {
+                continue;
+            };
             if !msg.is_object() {
                 continue;
             }
-            let Some(content) = field(msg, "content") else { continue };
-            let Some(text) = content_text(content) else { continue };
+            let Some(content) = field(msg, "content") else {
+                continue;
+            };
+            let Some(text) = content_text(content) else {
+                continue;
+            };
             if text.is_empty() {
                 continue;
             }
@@ -1000,16 +1109,24 @@ impl Scanner {
         let base = self.path(".grok/sessions");
         for project_dir in read_dir_sorted(&base) {
             for session_dir in read_dir_sorted(&project_dir) {
-                let Some(dir_name) =
-                    session_dir.file_name().and_then(|n| n.to_str()).map(str::to_string)
+                let Some(dir_name) = session_dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(str::to_string)
                 else {
                     continue;
                 };
-                let Some(summary) = read_all(&session_dir.join("summary.json")) else { continue };
+                let Some(summary) = read_all(&session_dir.join("summary.json")) else {
+                    continue;
+                };
                 let mut info = parse_grok_summary(&summary, &dir_name);
                 let chat = session_dir.join("chat_history.jsonl");
-                let Ok(stat) = fs::metadata(&chat) else { continue };
-                let Some(data) = read_all(&chat) else { continue };
+                let Ok(stat) = fs::metadata(&chat) else {
+                    continue;
+                };
+                let Some(data) = read_all(&chat) else {
+                    continue;
+                };
                 if info.ts == 0 {
                     info.ts = mtime_seconds(&stat);
                 }
@@ -1025,8 +1142,12 @@ impl Scanner {
             if string_field(&v, "type") != Some("user") {
                 continue;
             }
-            let Some(content) = field(&v, "content") else { continue };
-            let Some(text) = content_text(content) else { continue };
+            let Some(content) = field(&v, "content") else {
+                continue;
+            };
+            let Some(text) = content_text(content) else {
+                continue;
+            };
             if text.is_empty() {
                 continue;
             }
@@ -1059,7 +1180,9 @@ impl Scanner {
         if !db_path.exists() {
             return;
         }
-        let fallback_ts = fs::metadata(db_path).map(|m| mtime_seconds(&m)).unwrap_or(0);
+        let fallback_ts = fs::metadata(db_path)
+            .map(|m| mtime_seconds(&m))
+            .unwrap_or(0);
         match read_opencode_rows(db_path) {
             Ok(rows) => {
                 for row in rows {
@@ -1080,14 +1203,18 @@ impl Scanner {
     }
 
     fn parse_opencode_row(&mut self, row: &str, fallback_ts: i64) {
-        let Some(v) = parse_line(row.as_bytes()) else { return };
+        let Some(v) = parse_line(row.as_bytes()) else {
+            return;
+        };
         if string_field(&v, "role") != Some("user") {
             return;
         }
         if string_field(&v, "type") != Some("text") {
             return;
         }
-        let Some(text) = string_field(&v, "text") else { return };
+        let Some(text) = string_field(&v, "text") else {
+            return;
+        };
         if text.is_empty() {
             return;
         }
@@ -1135,7 +1262,10 @@ pub struct GrokInfo {
 
 pub fn parse_grok_summary(data: &[u8], fallback_session: &str) -> GrokInfo {
     let Ok(v) = serde_json::from_slice::<Value>(data) else {
-        return GrokInfo { session: fallback_session.to_string(), ..Default::default() };
+        return GrokInfo {
+            session: fallback_session.to_string(),
+            ..Default::default()
+        };
     };
     let info_obj = field(&v, "info");
     let mut info = GrokInfo {
@@ -1152,7 +1282,9 @@ pub fn parse_grok_summary(data: &[u8], fallback_session: &str) -> GrokInfo {
         title: title_from_object(&v)
             .or_else(|| info_obj.and_then(title_from_object))
             .unwrap_or_default(),
-        model: string_field(&v, "current_model_id").unwrap_or("").to_string(),
+        model: string_field(&v, "current_model_id")
+            .unwrap_or("")
+            .to_string(),
         ts: 0,
     };
     if let Some(updated) = string_field(&v, "updated_at") {
@@ -1182,7 +1314,9 @@ fn read_opencode_rows(db_path: &Path) -> Result<Vec<String>, String> {
     use rusqlite::{Connection, OpenFlags};
     let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| format!("open opencode.db: {e}"))?;
-    let mut stmt = conn.prepare(OPENCODE_QUERY).map_err(|e| format!("prepare: {e}"))?;
+    let mut stmt = conn
+        .prepare(OPENCODE_QUERY)
+        .map_err(|e| format!("prepare: {e}"))?;
     let rows = stmt
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|e| format!("query: {e}"))?;
@@ -1208,7 +1342,9 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 fn read_dir_sorted(base: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(base) else { return Vec::new() };
+    let Ok(entries) = fs::read_dir(base) else {
+        return Vec::new();
+    };
     let mut out: Vec<PathBuf> = entries
         .flatten()
         .map(|e| e.path())
@@ -1300,11 +1436,15 @@ fn content_text(v: &Value) -> Option<String> {
         Value::Array(items) => {
             let mut buf = String::new();
             for item in items {
-                let Some(t) = string_field(item, "type") else { continue };
+                let Some(t) = string_field(item, "type") else {
+                    continue;
+                };
                 if t != "text" && t != "input_text" {
                     continue;
                 }
-                let Some(txt) = string_field(item, "text") else { continue };
+                let Some(txt) = string_field(item, "text") else {
+                    continue;
+                };
                 if !buf.is_empty() {
                     buf.push(' ');
                 }
@@ -1351,7 +1491,14 @@ fn float_val(v: Option<&Value>) -> f64 {
 }
 
 fn timestamp_from_object(v: &Value) -> i64 {
-    for name in ["updated_at", "updatedAt", "timestamp", "created_at", "createdAt", "ts"] {
+    for name in [
+        "updated_at",
+        "updatedAt",
+        "timestamp",
+        "created_at",
+        "createdAt",
+        "ts",
+    ] {
         let ts = timestamp_value(field(v, name));
         if ts > 0 {
             return ts;
@@ -1378,9 +1525,16 @@ fn timestamp_value(v: Option<&Value>) -> i64 {
         }
         Value::String(s) => parse_timestamp_string(s),
         Value::Object(_) => {
-            for name in
-                ["updated", "updated_at", "updatedAt", "created", "created_at", "createdAt", "timestamp", "ts"]
-            {
+            for name in [
+                "updated",
+                "updated_at",
+                "updatedAt",
+                "created",
+                "created_at",
+                "createdAt",
+                "timestamp",
+                "ts",
+            ] {
                 let ts = timestamp_value(field(v, name));
                 if ts > 0 {
                     return ts;
@@ -1418,7 +1572,9 @@ fn title_from_fields(v: &Value, fields: &[&str]) -> Option<String> {
         return None;
     }
     for name in fields {
-        let Some(title) = string_field(v, name) else { continue };
+        let Some(title) = string_field(v, name) else {
+            continue;
+        };
         if let Some(safe) = clean_title(title) {
             return Some(safe);
         }
@@ -1429,7 +1585,14 @@ fn title_from_fields(v: &Value, fields: &[&str]) -> Option<String> {
 fn title_from_object(v: &Value) -> Option<String> {
     title_from_fields(
         v,
-        &["thread_name", "threadName", "title", "session_title", "sessionTitle", "name"],
+        &[
+            "thread_name",
+            "threadName",
+            "title",
+            "session_title",
+            "sessionTitle",
+            "name",
+        ],
     )
 }
 
@@ -1441,7 +1604,10 @@ fn clean_title(title: &str) -> Option<String> {
     if trimmed.is_empty() {
         return None;
     }
-    if trimmed.chars().any(|c| (c as u32) < 0x20 || c == '\u{7f}' || c == '\u{fffd}') {
+    if trimmed
+        .chars()
+        .any(|c| (c as u32) < 0x20 || c == '\u{7f}' || c == '\u{fffd}')
+    {
         return None;
     }
     Some(trimmed.to_string())
@@ -1455,9 +1621,14 @@ pub fn parse_iso8601_seconds(s: &str) -> i64 {
     let num = |range: std::ops::Range<usize>| -> Option<i64> {
         std::str::from_utf8(&b[range]).ok()?.parse::<i64>().ok()
     };
-    let (Some(year), Some(month), Some(day), Some(hour), Some(minute), Some(second)) =
-        (num(0..4), num(5..7), num(8..10), num(11..13), num(14..16), num(17..19))
-    else {
+    let (Some(year), Some(month), Some(day), Some(hour), Some(minute), Some(second)) = (
+        num(0..4),
+        num(5..7),
+        num(8..10),
+        num(11..13),
+        num(14..16),
+        num(17..19),
+    ) else {
         return 0;
     };
     let days = days_from_civil(year, month, day);
@@ -1498,7 +1669,11 @@ pub fn civil_from_day_key(day: i64) -> CivilDate {
     if m <= 2 {
         y += 1;
     }
-    CivilDate { year: y, month: m as u32, day: d as u32 }
+    CivilDate {
+        year: y,
+        month: m as u32,
+        day: d as u32,
+    }
 }
 
 fn resolve_cursor_encoded_project_path(
@@ -1737,7 +1912,10 @@ not json
     #[test]
     fn cursor_encoded_segments_collapse_non_alphanumerics() {
         assert_eq!(cursor_encoded_path_segment("_active"), "active");
-        assert_eq!(cursor_encoded_path_segment("my project.v2"), "my-project-v2");
+        assert_eq!(
+            cursor_encoded_path_segment("my project.v2"),
+            "my-project-v2"
+        );
         assert_eq!(cursor_encoded_path_segment("--"), "");
     }
 

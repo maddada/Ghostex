@@ -16,11 +16,11 @@ release_gpui_prepare_output "$REPO_ROOT" "$OUTPUT"
 # paying for a second full cargo build.
 PACKAGE_ROOT="${GHOSTEX_LINUX_PACKAGE_ROOT:-$REPO_ROOT/build/release-gpui/linux-deb-package-root}"
 if [[ "${GHOSTEX_LINUX_PACKAGE_ROOT_READY:-0}" != "1" ]]; then
-  "$SCRIPT_DIR/linux-stage.sh" "$VERSION" "$PACKAGE_ROOT"
+	"$SCRIPT_DIR/linux-stage.sh" "$VERSION" "$PACKAGE_ROOT"
 fi
 [[ -d "$PACKAGE_ROOT/opt/ghostex" ]] || {
-  echo "Linux package root is not staged: $PACKAGE_ROOT" >&2
-  exit 1
+	echo "Linux package root is not staged: $PACKAGE_ROOT" >&2
+	exit 1
 }
 mkdir -p "$PACKAGE_ROOT/DEBIAN"
 cat >"$PACKAGE_ROOT/DEBIAN/control" <<EOF

@@ -120,7 +120,8 @@ final class EditorSession {
       do {
         try writeDraft(latestDraft)
       } catch {
-        writeStderr("GhostexEditor: save failed for \(fileURL.path): \(error.localizedDescription)\n")
+        writeStderr(
+          "GhostexEditor: save failed for \(fileURL.path): \(error.localizedDescription)\n")
       }
       writeStatus("saved")
       openerConnection?.send([
@@ -222,7 +223,8 @@ final class EditorSession {
       let relativePath = String(trimmedPath.dropFirst("~/.ghostex/".count))
       return ghostexDataDirectory().appendingPathComponent(relativePath)
     }
-    let legacyAbsolutePrefix = FileManager.default.homeDirectoryForCurrentUser
+    let legacyAbsolutePrefix =
+      FileManager.default.homeDirectoryForCurrentUser
       .appendingPathComponent(".ghostex", isDirectory: true).path + "/"
     if trimmedPath.hasPrefix(legacyAbsolutePrefix) {
       let relativePath = String(trimmedPath.dropFirst(legacyAbsolutePrefix.count))
@@ -244,10 +246,12 @@ final class EditorSession {
      * 1600px: large screenshots stay crisp in the popup while the base64
      * payload crossing into the webview stays bounded.
      */
-    let sourceSize = image.size.width > 0 && image.size.height > 0 ? image.size : NSSize(width: 1, height: 1)
+    let sourceSize =
+      image.size.width > 0 && image.size.height > 0 ? image.size : NSSize(width: 1, height: 1)
     let maximumDimension = CGFloat(1600)
     let scale = min(1, maximumDimension / max(sourceSize.width, sourceSize.height))
-    let drawSize = NSSize(width: max(1, sourceSize.width * scale), height: max(1, sourceSize.height * scale))
+    let drawSize = NSSize(
+      width: max(1, sourceSize.width * scale), height: max(1, sourceSize.height * scale))
     let output = NSImage(size: drawSize)
     output.lockFocus()
     NSColor.clear.setFill()
@@ -345,7 +349,8 @@ final class EditorSession {
     guard let filenames = pasteboard.propertyList(forType: filenamesType) as? [String] else {
       return nil
     }
-    return filenames
+    return
+      filenames
       .map { URL(fileURLWithPath: $0) }
       .first { fileURL in
         FileManager.default.fileExists(atPath: fileURL.path) && isImageFileURL(fileURL)
@@ -438,9 +443,10 @@ final class EditorSession {
     if let ghostexHome = absoluteEnvironmentDirectory("GHOSTEX_HOME", environment: environment) {
       return ghostexHome
     }
-    let dataRoot = absoluteEnvironmentDirectory("XDG_DATA_HOME", environment: environment)
+    let dataRoot =
+      absoluteEnvironmentDirectory("XDG_DATA_HOME", environment: environment)
       ?? FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".local/share", isDirectory: true)
+      .appendingPathComponent(".local/share", isDirectory: true)
     return dataRoot.appendingPathComponent("ghostex", isDirectory: true)
   }
 
@@ -458,7 +464,8 @@ final class EditorSession {
   }
 
   private static func normalizedImageFileExtension(_ pathExtension: String) -> String {
-    let normalizedExtension = pathExtension.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let normalizedExtension = pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
     if normalizedExtension == "jpeg" {
       return "jpg"
     }

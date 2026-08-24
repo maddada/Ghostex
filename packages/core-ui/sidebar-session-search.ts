@@ -1,26 +1,26 @@
-import type { SidebarPreviousSessionItem } from "../shared/session-grid-contract";
+import type { SidebarPreviousSessionItem } from '../shared/session-grid-contract';
 
 type SessionIdsByGroup = Record<string, string[]>;
 
 export type SidebarSessionSearchResult =
   | {
       groupId: string;
-      kind: "session";
+      kind: 'session';
       sessionId: string;
     }
   | {
       historyId: string;
-      kind: "previous";
+      kind: 'previous';
     };
 
 export type SidebarSessionSearchSelection =
   | {
-      kind: "session";
+      kind: 'session';
       sessionId: string;
     }
   | {
       historyId: string;
-      kind: "previous";
+      kind: 'previous';
     };
 
 export function createSidebarSessionSearchResults({
@@ -45,7 +45,7 @@ export function createSidebarSessionSearchResults({
   for (const session of filteredPreviousSessions) {
     results.push({
       historyId: session.historyId,
-      kind: "previous",
+      kind: 'previous',
     });
   }
 
@@ -69,9 +69,7 @@ export function getNextSidebarSessionSearchSelection({
     ? results.findIndex((result) => isSidebarSessionSearchSelectionMatch(result, currentSelection))
     : -1;
   if (currentIndex < 0) {
-    return createSidebarSessionSearchSelection(
-      direction === 1 ? results[0] : results[results.length - 1],
-    );
+    return createSidebarSessionSearchSelection(direction === 1 ? results[0] : results[results.length - 1]);
   }
 
   const nextIndex = (currentIndex + direction + results.length) % results.length;
@@ -80,41 +78,41 @@ export function getNextSidebarSessionSearchSelection({
 
 export function isSidebarSessionSearchSelectionMatch(
   result: SidebarSessionSearchResult,
-  selection: SidebarSessionSearchSelection,
+  selection: SidebarSessionSearchSelection
 ): boolean {
-  return result.kind === "session"
-    ? selection.kind === "session" && result.sessionId === selection.sessionId
-    : selection.kind === "previous" && result.historyId === selection.historyId;
+  return result.kind === 'session'
+    ? selection.kind === 'session' && result.sessionId === selection.sessionId
+    : selection.kind === 'previous' && result.historyId === selection.historyId;
 }
 
 export function createSidebarSessionSearchSelection(
-  result: SidebarSessionSearchResult | undefined,
+  result: SidebarSessionSearchResult | undefined
 ): SidebarSessionSearchSelection | undefined {
   if (!result) {
     return undefined;
   }
 
-  return result.kind === "session"
+  return result.kind === 'session'
     ? {
-        kind: "session",
+        kind: 'session',
         sessionId: result.sessionId,
       }
     : {
         historyId: result.historyId,
-        kind: "previous",
+        kind: 'previous',
       };
 }
 
 function appendSessionResults(
   results: SidebarSessionSearchResult[],
   groupIds: readonly string[],
-  sessionIdsByGroup: SessionIdsByGroup,
+  sessionIdsByGroup: SessionIdsByGroup
 ): void {
   for (const groupId of groupIds) {
     for (const sessionId of sessionIdsByGroup[groupId] ?? []) {
       results.push({
         groupId,
-        kind: "session",
+        kind: 'session',
         sessionId,
       });
     }

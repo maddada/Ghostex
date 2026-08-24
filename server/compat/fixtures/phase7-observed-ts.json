@@ -201,13 +201,7 @@
             "protocolVersion": 1,
             "version": "0.1.0",
             "buildIdentity": "<buildIdentity>",
-            "capabilities": [
-              "health",
-              "events",
-              "localFullApi",
-              "remoteLimitedApi",
-              "strictProtocolVersion"
-            ],
+            "capabilities": ["health", "events", "localFullApi", "remoteLimitedApi", "strictProtocolVersion"],
             "listeners": {
               "local": {
                 "enabled": true,
@@ -305,13 +299,7 @@
             "protocolVersion": 1,
             "version": "0.1.0",
             "buildIdentity": "<buildIdentity>",
-            "capabilities": [
-              "health",
-              "events",
-              "localFullApi",
-              "remoteLimitedApi",
-              "strictProtocolVersion"
-            ],
+            "capabilities": ["health", "events", "localFullApi", "remoteLimitedApi", "strictProtocolVersion"],
             "listeners": {
               "local": {
                 "enabled": true,
@@ -400,11 +388,7 @@
       "name": "phase7RunGitStatus",
       "value": {
         "action": "status",
-        "args": [
-          "status",
-          "--short",
-          "--branch"
-        ],
+        "args": ["status", "--short", "--branch"],
         "exitCode": 0,
         "stdoutHasFile": true
       }
@@ -423,12 +407,7 @@
       "value": {
         "action": "commit",
         "command": {
-          "args": [
-            "commit",
-            "--no-verify",
-            "-F",
-            "<stdin>"
-          ],
+          "args": ["commit", "--no-verify", "-F", "<stdin>"],
           "cwd": "<home>/workspace/phase7-project",
           "executable": "git"
         },
@@ -441,9 +420,7 @@
       "name": "phase7RunGitHubVersion",
       "value": {
         "action": "version",
-        "args": [
-          "--version"
-        ],
+        "args": ["--version"],
         "exitCode": 0,
         "stdout": "gh version 2.0.0 (compat)"
       }

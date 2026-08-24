@@ -9,20 +9,13 @@
  *   `{type:"contentHeightMeasured"}` outbound message, exactly like the native
  *   window resize.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { useSandboxStore } from "../state/store";
-import type { SimModalWindow } from "../state/types";
-import {
-  registerModalIframe,
-  subscribeModalWindowOutbound,
-  unregisterModalIframe,
-} from "./modal-connections";
-import {
-  forgetTutorialVideoSimulation,
-  simulateTutorialVideoFullscreenKey,
-} from "./tutorial-video-window";
-import "./modal-window-frame.css";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import { useSandboxStore } from '../state/store';
+import type { SimModalWindow } from '../state/types';
+import { registerModalIframe, subscribeModalWindowOutbound, unregisterModalIframe } from './modal-connections';
+import { forgetTutorialVideoSimulation, simulateTutorialVideoFullscreenKey } from './tutorial-video-window';
+import './modal-window-frame.css';
 
 /** Title bar height; must match --sandbox-modal-chrome-height in the CSS. */
 const CHROME_HEIGHT = 34;
@@ -72,15 +65,15 @@ export function ModalWindowFrame({ window: modalWindow }: { window: SimModalWind
   }, [nonReactHostUrl, windowId]);
 
   useEffect(() => {
-    if (height !== "fit") {
+    if (height !== 'fit') {
       return;
     }
     return subscribeModalWindowOutbound(windowId, (message) => {
-      if (message.type !== "contentHeightMeasured") {
+      if (message.type !== 'contentHeightMeasured') {
         return;
       }
       const nextHeight = message.height;
-      if (typeof nextHeight === "number" && Number.isFinite(nextHeight) && nextHeight > 0) {
+      if (typeof nextHeight === 'number' && Number.isFinite(nextHeight) && nextHeight > 0) {
         setMeasuredHeight(Math.round(nextHeight));
       }
     });
@@ -134,48 +127,46 @@ export function ModalWindowFrame({ window: modalWindow }: { window: SimModalWind
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }, []);
 
-  const bodyHeight = height === "fit" ? (measuredHeight ?? FIT_FALLBACK_HEIGHT) : height;
+  const bodyHeight = height === 'fit' ? (measuredHeight ?? FIT_FALLBACK_HEIGHT) : height;
   const panelStyle: CSSProperties = {
     height: bodyHeight + CHROME_HEIGHT,
     width,
     ...(position
       ? { left: position.left, top: position.top }
-      : { left: "50%", top: "50%", transform: "translate(-50%, -50%)" }),
+      : { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }),
   };
 
   return (
     <div
-      className={`sandbox-modal-window${dragging ? " sandbox-modal-window-dragging" : ""}`}
+      className={`sandbox-modal-window${dragging ? ' sandbox-modal-window-dragging' : ''}`}
       data-modal-kind={modalWindow.modal}
       ref={panelRef}
       style={panelStyle}
     >
       <div
-        className="sandbox-modal-window-titlebar"
+        className='sandbox-modal-window-titlebar'
         onPointerCancel={endDrag}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
       >
         <button
-          aria-label="Close window"
-          className="sandbox-modal-window-close"
+          aria-label='Close window'
+          className='sandbox-modal-window-close'
           onClick={() => closeModalWindow(windowId)}
           onPointerDown={(event) => event.stopPropagation()}
-          type="button"
+          type='button'
         >
           <span>×</span>
         </button>
-        <div className="sandbox-modal-window-title">{title}</div>
-        <div className="sandbox-modal-window-badge">
-          {modalWindow.forced ? "forced" : "auto"}
-        </div>
+        <div className='sandbox-modal-window-title'>{title}</div>
+        <div className='sandbox-modal-window-badge'>{modalWindow.forced ? 'forced' : 'auto'}</div>
       </div>
-      <div className="sandbox-modal-window-body">
+      <div className='sandbox-modal-window-body'>
         <iframe
-          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+          allow='autoplay; encrypted-media; fullscreen; picture-in-picture'
           className={`sandbox-modal-window-iframe${
-            presented ? (dragging ? " sandbox-modal-window-iframe-inert" : "") : " sandbox-modal-window-iframe-hidden"
+            presented ? (dragging ? ' sandbox-modal-window-iframe-inert' : '') : ' sandbox-modal-window-iframe-hidden'
           }`}
           onLoad={
             nonReactHostUrl
@@ -186,10 +177,10 @@ export function ModalWindowFrame({ window: modalWindow }: { window: SimModalWind
                   }
                   simulateTutorialVideoFullscreenKey(windowId, element, (event) => {
                     emitEvent({
-                      kind: "modal",
+                      kind: 'modal',
                       label: event.label,
                       detail: event.detail,
-                      codeRef: "apps/desktop/src/app/consts.rs GHOSTEX_TUTORIAL_VIDEO_URL host key injection",
+                      codeRef: 'apps/desktop/src/app/consts.rs GHOSTEX_TUTORIAL_VIDEO_URL host key injection',
                     });
                   });
                 }
@@ -200,8 +191,8 @@ export function ModalWindowFrame({ window: modalWindow }: { window: SimModalWind
           title={title}
         />
         {presented ? null : (
-          <div className="sandbox-modal-window-loading">
-            <div className="sandbox-modal-window-spinner" />
+          <div className='sandbox-modal-window-loading'>
+            <div className='sandbox-modal-window-spinner' />
             <div>waiting for {modalWindow.modal} to present…</div>
           </div>
         )}

@@ -1,23 +1,22 @@
 export type SettingsAgentDragData = {
   agentId: string;
-  kind: "settings-agent";
+  kind: 'settings-agent';
 };
 
 export type SettingsCommandDragData = {
   commandId: string;
-  kind: "settings-command";
+  kind: 'settings-command';
 };
 
 export type SettingsSidebarTagListItemDragData = {
   itemId: string;
-  kind: "settings-sidebar-tag-list-item";
+  kind: 'settings-sidebar-tag-list-item';
 };
-
 
 export function createSettingsAgentDragData(agentId: string): SettingsAgentDragData {
   return {
     agentId,
-    kind: "settings-agent",
+    kind: 'settings-agent',
   };
 }
 
@@ -27,20 +26,20 @@ export function getSettingsAgentDragData(candidate: unknown): SettingsAgentDragD
   }
 
   const data = candidate.data;
-  if (!isObjectRecord(data) || data.kind !== "settings-agent" || typeof data.agentId !== "string") {
+  if (!isObjectRecord(data) || data.kind !== 'settings-agent' || typeof data.agentId !== 'string') {
     return undefined;
   }
 
   return {
     agentId: data.agentId,
-    kind: "settings-agent",
+    kind: 'settings-agent',
   };
 }
 
 export function createSettingsCommandDragData(commandId: string): SettingsCommandDragData {
   return {
     commandId,
-    kind: "settings-command",
+    kind: 'settings-command',
   };
 }
 
@@ -50,48 +49,38 @@ export function getSettingsCommandDragData(candidate: unknown): SettingsCommandD
   }
 
   const data = candidate.data;
-  if (
-    !isObjectRecord(data) ||
-    data.kind !== "settings-command" ||
-    typeof data.commandId !== "string"
-  ) {
+  if (!isObjectRecord(data) || data.kind !== 'settings-command' || typeof data.commandId !== 'string') {
     return undefined;
   }
 
   return {
     commandId: data.commandId,
-    kind: "settings-command",
+    kind: 'settings-command',
   };
 }
 
-export function createSettingsSidebarTagListItemDragData(
-  itemId: string,
-): SettingsSidebarTagListItemDragData {
+export function createSettingsSidebarTagListItemDragData(itemId: string): SettingsSidebarTagListItemDragData {
   return {
     itemId,
-    kind: "settings-sidebar-tag-list-item",
+    kind: 'settings-sidebar-tag-list-item',
   };
 }
 
 export function getSettingsSidebarTagListItemDragData(
-  candidate: unknown,
+  candidate: unknown
 ): SettingsSidebarTagListItemDragData | undefined {
   if (!hasData(candidate)) {
     return undefined;
   }
 
   const data = candidate.data;
-  if (
-    !isObjectRecord(data) ||
-    data.kind !== "settings-sidebar-tag-list-item" ||
-    typeof data.itemId !== "string"
-  ) {
+  if (!isObjectRecord(data) || data.kind !== 'settings-sidebar-tag-list-item' || typeof data.itemId !== 'string') {
     return undefined;
   }
 
   return {
     itemId: data.itemId,
-    kind: "settings-sidebar-tag-list-item",
+    kind: 'settings-sidebar-tag-list-item',
   };
 }
 
@@ -122,7 +111,7 @@ export function mergeIds(draftIds: readonly string[], syncedIds: readonly string
 export function reconcileDraftIds<Item extends Record<Key, string>, Key extends keyof Item>(
   draftIds: readonly string[] | undefined,
   items: readonly Item[],
-  key: Key,
+  key: Key
 ): string[] | undefined {
   if (!draftIds) {
     return undefined;
@@ -137,14 +126,14 @@ export function haveSameOrder(left: readonly string[], right: readonly string[])
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
-export function createSettingsReorderRequestId(kind: "actions" | "agents" | "globalActions"): string {
+export function createSettingsReorderRequestId(kind: 'actions' | 'agents' | 'globalActions'): string {
   return `settings-${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function hasData(candidate: unknown): candidate is { data?: unknown } {
-  return isObjectRecord(candidate) && "data" in candidate;
+  return isObjectRecord(candidate) && 'data' in candidate;
 }
 
 export function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }

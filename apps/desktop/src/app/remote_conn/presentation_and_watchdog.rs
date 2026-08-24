@@ -80,7 +80,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn next_gpui_remote_gxserver_connect_generation(&mut self, remote_machine_id: &str) -> u64 {
+    pub(crate) fn next_gpui_remote_gxserver_connect_generation(
+        &mut self,
+        remote_machine_id: &str,
+    ) -> u64 {
         let generation = self
             .remote_gxserver_connect_generations
             .entry(remote_machine_id.to_string())
@@ -373,4 +376,3 @@ impl GhostexGpuiApp {
         }
     }
 }
-

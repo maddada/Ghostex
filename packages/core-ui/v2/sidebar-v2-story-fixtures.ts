@@ -1,7 +1,7 @@
-import { createDefaultSidebarProjectDiffStats } from "../../shared/project-diff-stats";
-import type { SidebarSessionItem } from "../../shared/session-grid-contract";
-import type { SidebarV2SessionOverrides } from "../../shared/sidebar-v2-session";
-import { createStorySession, type SidebarStoryGroup } from "../sidebar-story-fixture-helpers";
+import { createDefaultSidebarProjectDiffStats } from '../../shared/project-diff-stats';
+import type { SidebarSessionItem } from '../../shared/session-grid-contract';
+import type { SidebarV2SessionOverrides } from '../../shared/sidebar-v2-session';
+import { createStorySession, type SidebarStoryGroup } from '../sidebar-story-fixture-helpers';
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -52,7 +52,7 @@ type SidebarV2StorySessionExtras = SidebarV2SessionOverrides &
        * and a `ghostex/…` branch — a fixture that carries only the branch could
        * not exercise the cleanup prompt or "New session on <branch>".
        */
-      | "cwd"
+      | 'cwd'
       /*
        * CDXC:SidebarV2ContextMenuParity 2026-07-30:
        * The captured 1st user message is what unlocks BOTH "View 1st message"
@@ -61,32 +61,29 @@ type SidebarV2StorySessionExtras = SidebarV2SessionOverrides &
        * persistence pair does the same for "Copy attach command", which needs a
        * stored provider/name rather than the global Settings provider.
        */
-      | "firstUserMessage"
-      | "gitStatus"
-      | "isPinned"
-      | "kind"
-      | "lifecycleState"
-      | "sessionKind"
-      | "sessionPersistenceName"
-      | "sessionPersistenceProvider"
+      | 'firstUserMessage'
+      | 'gitStatus'
+      | 'isPinned'
+      | 'kind'
+      | 'lifecycleState'
+      | 'sessionKind'
+      | 'sessionPersistenceName'
+      | 'sessionPersistenceProvider'
       /* An already-marked row: the only shape that can exercise the "re-pick the
          current marker to clear it" half of the Tag as submenu. */
-      | "sessionTag"
-      | "workingStartedAt"
+      | 'sessionTag'
+      | 'workingStartedAt'
     >
   >;
 
-function withSidebarV2Fields(
-  session: SidebarSessionItem,
-  extras: SidebarV2StorySessionExtras,
-): SidebarSessionItem {
+function withSidebarV2Fields(session: SidebarSessionItem, extras: SidebarV2StorySessionExtras): SidebarSessionItem {
   return { ...session, ...extras };
 }
 
 function createStoryProjectContext(
   projectId: string,
-  overrides: Partial<NonNullable<SidebarStoryGroup["projectContext"]>> = {},
-): NonNullable<SidebarStoryGroup["projectContext"]> {
+  overrides: Partial<NonNullable<SidebarStoryGroup['projectContext']>> = {}
+): NonNullable<SidebarStoryGroup['projectContext']> {
   return {
     canRemoveProject: true,
     editor: {
@@ -94,10 +91,10 @@ function createStoryProjectContext(
       isOpen: false,
       isSleeping: false,
       projectId,
-      status: "idle",
+      status: 'idle',
     },
     path: `/Users/story/dev/${projectId}`,
-    theme: "plain-dark",
+    theme: 'plain-dark',
     ...overrides,
   };
 }
@@ -110,7 +107,7 @@ function createStoryProjectContext(
  */
 const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
   {
-    groupId: "v2-quick",
+    groupId: 'v2-quick',
     /*
      * CDXC:SidebarV2ContextMenuParity 2026-07-30:
      * The one group whose panes are actually split, so Focus (which zooms a pane
@@ -130,18 +127,18 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
      */
     isActive: false,
     isChatCollection: true,
-    kind: "workspace",
+    kind: 'workspace',
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          activity: "attention",
-          activityLabel: "Approval",
-          agentIcon: "claude",
-          alias: "Approve the migration plan",
-          detail: "Claude Code",
+          activity: 'attention',
+          activityLabel: 'Approval',
+          agentIcon: 'claude',
+          alias: 'Approve the migration plan',
+          detail: 'Claude Code',
           lastInteractionAt: minutesAgo(2),
-          sessionId: "v2-quick-approval",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-quick-approval',
+          shortcutLabel: '⌘⌥1',
         }),
         {
           createdAt: minutesAgo(12),
@@ -157,16 +154,16 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
             deletions: 0,
             updatedAt: minutesAgo(1),
           },
-        },
+        }
       ),
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "codex",
-          alias: "Draft the release notes",
-          detail: "OpenAI Codex",
+          agentIcon: 'codex',
+          alias: 'Draft the release notes',
+          detail: 'OpenAI Codex',
           lastInteractionAt: hoursAgo(5),
-          sessionId: "v2-quick-idle",
-          shortcutLabel: "⌘⌥2",
+          sessionId: 'v2-quick-idle',
+          shortcutLabel: '⌘⌥2',
         }),
         {
           createdAt: hoursAgo(6),
@@ -178,51 +175,51 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
            * fixture for both the "all present" and the "posts the right command"
            * halves of the menu coverage.
            */
-          firstUserMessage: "Write the 6.9.0 release notes from the merged PRs",
-          sessionPersistenceName: "ghostex-quick-idle",
-          sessionPersistenceProvider: "zmx",
-          sessionTag: "favorite",
-        },
+          firstUserMessage: 'Write the 6.9.0 release notes from the merged PRs',
+          sessionPersistenceName: 'ghostex-quick-idle',
+          sessionPersistenceProvider: 'zmx',
+          sessionTag: 'favorite',
+        }
       ),
     ],
-    title: "Quick",
+    title: 'Quick',
   },
   {
-    groupId: "v2-project-ghostex",
+    groupId: 'v2-project-ghostex',
     isActive: true,
-    kind: "workspace",
+    kind: 'workspace',
     /*
      * CDXC:SidebarV2ProjectIcons 2026-07-29:
      * A Tabler glyph, because that is the icon shape almost every real Ghostex
      * project has; the image variant lives on `zmx` below and the folder
      * fallback on the Quick collection, so one screen covers all three.
      */
-    projectContext: createStoryProjectContext("ghostex", {
-      icon: { color: "#d6e0f3", icon: "archive", kind: "tabler" },
+    projectContext: createStoryProjectContext('ghostex', {
+      icon: { color: '#d6e0f3', icon: 'archive', kind: 'tabler' },
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          alias: "Ghostex docs preview",
-          detail: "https://ghostex.dev/docs",
+          alias: 'Ghostex docs preview',
+          detail: 'https://ghostex.dev/docs',
           isVisible: true,
           lastInteractionAt: minutesAgo(9),
-          sessionId: "v2-ghostex-browser",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-ghostex-browser',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: hoursAgo(2), kind: "browser", sessionKind: "browser" },
+        { createdAt: hoursAgo(2), kind: 'browser', sessionKind: 'browser' }
       ),
       withSidebarV2Fields(
         createStorySession({
-          activity: "working",
-          agentIcon: "codex",
-          alias: "Port the inbox sidebar",
-          detail: "OpenAI Codex",
+          activity: 'working',
+          agentIcon: 'codex',
+          alias: 'Port the inbox sidebar',
+          detail: 'OpenAI Codex',
           isFocused: true,
           isVisible: true,
           lastInteractionAt: minutesAgo(7),
-          sessionId: "v2-ghostex-working",
-          shortcutLabel: "⌘⌥2",
+          sessionId: 'v2-ghostex-working',
+          shortcutLabel: '⌘⌥2',
         }),
         {
           createdAt: minutesAgo(40),
@@ -232,28 +229,28 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
            * the fixture for the last-session cleanup prompt and for "New
            * session on <branch>".
            */
-          cwd: "/Users/story/dev/worktrees/sidebar-v2-inbox",
+          cwd: '/Users/story/dev/worktrees/sidebar-v2-inbox',
           /* The full card line: worktree branch, open review, live diff. */
           gitStatus: {
             additions: 412,
-            branch: "ghostex/sidebar-v2-inbox",
+            branch: 'ghostex/sidebar-v2-inbox',
             deletions: 87,
             prNumber: 128,
-            prState: "open",
-            prUrl: "https://github.com/ghostex/ghostex/pull/128",
+            prState: 'open',
+            prUrl: 'https://github.com/ghostex/ghostex/pull/128',
             updatedAt: minutesAgo(1),
           },
           workingStartedAt: minutesAgo(7),
-        },
+        }
       ),
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "claude",
-          alias: "Pinned: release checklist",
-          detail: "Claude Code",
+          agentIcon: 'claude',
+          alias: 'Pinned: release checklist',
+          detail: 'Claude Code',
           lastInteractionAt: minutesAgo(3),
-          sessionId: "v2-ghostex-pinned",
-          shortcutLabel: "⌘⌥3",
+          sessionId: 'v2-ghostex-pinned',
+          shortcutLabel: '⌘⌥3',
         }),
         {
           createdAt: daysAgo(2),
@@ -264,32 +261,32 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
            * <branch>" must not offer: the main working tree cannot be adopted as
            * a worktree, so the item would only ever produce a server refusal.
            */
-          cwd: "/Users/story/dev/ghostex",
+          cwd: '/Users/story/dev/ghostex',
           /* Branch only: no review opened yet and nothing changed on it, so the
              line is one truncating branch label and nothing else. */
           gitStatus: {
             additions: 0,
-            branch: "release/6.9",
+            branch: 'release/6.9',
             deletions: 0,
             updatedAt: minutesAgo(2),
           },
           isPinned: true,
-        },
+        }
       ),
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "gemini",
-          alias: "Snoozed: dependency bump",
-          detail: "Gemini CLI",
+          agentIcon: 'gemini',
+          alias: 'Snoozed: dependency bump',
+          detail: 'Gemini CLI',
           lastInteractionAt: hoursAgo(4),
-          sessionId: "v2-ghostex-snoozed",
-          shortcutLabel: "⌘⌥4",
+          sessionId: 'v2-ghostex-snoozed',
+          shortcutLabel: '⌘⌥4',
         }),
         {
           createdAt: hoursAgo(9),
           snoozedAt: minutesAgo(30),
           snoozedUntil: hoursFromNow(3),
-        },
+        }
       ),
       /*
        * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -301,14 +298,14 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
        */
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "codex",
-          alias: "Settled: old spike branch",
-          detail: "OpenAI Codex",
+          agentIcon: 'codex',
+          alias: 'Settled: old spike branch',
+          detail: 'OpenAI Codex',
           lastInteractionAt: daysAgo(6),
-          sessionId: "v2-ghostex-settled",
-          shortcutLabel: "⌘⌥5",
+          sessionId: 'v2-ghostex-settled',
+          shortcutLabel: '⌘⌥5',
         }),
-        { createdAt: daysAgo(9), settledOverride: "settled" },
+        { createdAt: daysAgo(9), settledOverride: 'settled' }
       ),
       /*
        * Settled by an explicit user click: `settledAt` is stamped, and the row
@@ -317,12 +314,12 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
        */
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "claude",
-          alias: "Settled by hand: shipped the fix",
-          detail: "Claude Code",
+          agentIcon: 'claude',
+          alias: 'Settled by hand: shipped the fix',
+          detail: 'Claude Code',
           lastInteractionAt: minutesAgo(25),
-          sessionId: "v2-ghostex-settled-manual",
-          shortcutLabel: "⌘⌥6",
+          sessionId: 'v2-ghostex-settled-manual',
+          shortcutLabel: '⌘⌥6',
         }),
         {
           createdAt: hoursAgo(3),
@@ -333,38 +330,38 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
            */
           gitStatus: {
             additions: 18,
-            branch: "ghostex/fix-rename-race",
+            branch: 'ghostex/fix-rename-race',
             deletions: 4,
             prNumber: 124,
-            prState: "merged",
-            prUrl: "https://github.com/ghostex/ghostex/pull/124",
+            prState: 'merged',
+            prUrl: 'https://github.com/ghostex/ghostex/pull/124',
             updatedAt: minutesAgo(18),
           },
           settledAt: minutesAgo(20),
-          settledOverride: "settled",
-        },
+          settledOverride: 'settled',
+        }
       ),
     ],
-    title: "ghostex",
+    title: 'ghostex',
   },
   {
-    groupId: "v2-project-zmx",
+    groupId: 'v2-project-zmx',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("zmx", {
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('zmx', {
       iconDataUrl:
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mP4vqIEK2IYWhIA/4WEwcpaLgUAAAAASUVORK5CYII=",
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mP4vqIEK2IYWhIA/4WEwcpaLgUAAAAASUVORK5CYII=',
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          alias: "Failed migration run",
-          agentIcon: "codex",
-          detail: "OpenAI Codex",
+          alias: 'Failed migration run',
+          agentIcon: 'codex',
+          detail: 'OpenAI Codex',
           isRunning: false,
           lastInteractionAt: minutesAgo(20),
-          sessionId: "v2-zmx-failed",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-zmx-failed',
+          shortcutLabel: '⌘⌥1',
         }),
         {
           createdAt: minutesAgo(55),
@@ -372,48 +369,48 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
              anyone and must not compete with the failed status above it. */
           gitStatus: {
             additions: 9,
-            branch: "zmx/reflow-probe",
+            branch: 'zmx/reflow-probe',
             deletions: 2,
             prNumber: 31,
-            prState: "draft",
-            prUrl: "https://github.com/ghostex/zmx/pull/31",
+            prState: 'draft',
+            prUrl: 'https://github.com/ghostex/zmx/pull/31',
             updatedAt: minutesAgo(12),
           },
-          lifecycleState: "error",
-        },
+          lifecycleState: 'error',
+        }
       ),
       withSidebarV2Fields(
         createStorySession({
-          alias: "Done: flaky test fix",
-          agentIcon: "claude",
-          detail: "Claude Code",
+          alias: 'Done: flaky test fix',
+          agentIcon: 'claude',
+          detail: 'Claude Code',
           lastInteractionAt: minutesAgo(4),
-          sessionId: "v2-zmx-done",
-          shortcutLabel: "⌘⌥2",
+          sessionId: 'v2-zmx-done',
+          shortcutLabel: '⌘⌥2',
         }),
         {
           createdAt: hoursAgo(1),
           /* A CLOSED review: the work is over and did not land. */
           gitStatus: {
             additions: 3,
-            branch: "zmx/flaky-test-fix",
+            branch: 'zmx/flaky-test-fix',
             deletions: 3,
             prNumber: 28,
-            prState: "closed",
-            prUrl: "https://github.com/ghostex/zmx/pull/28",
+            prState: 'closed',
+            prUrl: 'https://github.com/ghostex/zmx/pull/28',
             updatedAt: minutesAgo(6),
           },
-        },
+        }
       ),
       withSidebarV2Fields(
         createStorySession({
-          alias: "zmx changelog",
-          detail: "https://github.com/ghostex/zmx",
+          alias: 'zmx changelog',
+          detail: 'https://github.com/ghostex/zmx',
           lastInteractionAt: hoursAgo(3),
-          sessionId: "v2-zmx-browser",
-          shortcutLabel: "⌘⌥3",
+          sessionId: 'v2-zmx-browser',
+          shortcutLabel: '⌘⌥3',
         }),
-        { createdAt: hoursAgo(8), kind: "browser", sessionKind: "browser" },
+        { createdAt: hoursAgo(8), kind: 'browser', sessionKind: 'browser' }
       ),
       /*
        * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -424,18 +421,18 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
        */
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "gemini",
-          alias: "Woke: nightly benchmark",
-          detail: "Gemini CLI",
+          agentIcon: 'gemini',
+          alias: 'Woke: nightly benchmark',
+          detail: 'Gemini CLI',
           lastInteractionAt: hoursAgo(9),
-          sessionId: "v2-zmx-woke",
-          shortcutLabel: "⌘⌥4",
+          sessionId: 'v2-zmx-woke',
+          shortcutLabel: '⌘⌥4',
         }),
         {
           createdAt: hoursAgo(30),
           snoozedAt: hoursAgo(12),
           snoozedUntil: minutesAgo(45),
-        },
+        }
       ),
       /*
        * The snooze is still in the future, but the agent RAISED ITS HAND: it is
@@ -445,23 +442,23 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
        */
       withSidebarV2Fields(
         createStorySession({
-          activity: "attention",
-          activityLabel: "Approval",
-          agentIcon: "claude",
-          alias: "Snoozed but blocked on you",
-          detail: "Claude Code",
+          activity: 'attention',
+          activityLabel: 'Approval',
+          agentIcon: 'claude',
+          alias: 'Snoozed but blocked on you',
+          detail: 'Claude Code',
           lastInteractionAt: minutesAgo(6),
-          sessionId: "v2-zmx-raised-hand",
-          shortcutLabel: "⌘⌥5",
+          sessionId: 'v2-zmx-raised-hand',
+          shortcutLabel: '⌘⌥5',
         }),
         {
           createdAt: hoursAgo(20),
           snoozedAt: hoursAgo(2),
           snoozedUntil: hoursFromNow(5),
-        },
+        }
       ),
     ],
-    title: "zmx",
+    title: 'zmx',
   },
 ];
 
@@ -487,72 +484,72 @@ const SIDEBAR_V2_INBOX_GROUPS: SidebarStoryGroup[] = [
  * pin mark, i.e. against the widest name box the row ever offers.
  */
 const SIDEBAR_V2_ROW_WIDTH_PROJECT_ICON_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mOoWvQdK2IYWhIAv4WEwR6YLdgAAAAASUVORK5CYII=";
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mOoWvQdK2IYWhIAv4WEwR6YLdgAAAAASUVORK5CYII=';
 
 const SIDEBAR_V2_ROW_WIDTH_GROUPS: SidebarStoryGroup[] = [
   {
-    groupId: "v2-width-fits",
+    groupId: 'v2-width-fits',
     isActive: true,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("width-fits", {
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('width-fits', {
       iconDataUrl: SIDEBAR_V2_ROW_WIDTH_PROJECT_ICON_DATA_URL,
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "claude",
-          alias: "Trim the inbox card",
-          detail: "Claude Code",
+          agentIcon: 'claude',
+          alias: 'Trim the inbox card',
+          detail: 'Claude Code',
           lastInteractionAt: hoursAgo(12),
-          sessionId: "v2-width-fits-session",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-width-fits-session',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: hoursAgo(13) },
+        { createdAt: hoursAgo(13) }
       ),
     ],
-    title: "maddada/ghostex",
+    title: 'maddada/ghostex',
   },
   {
-    groupId: "v2-width-overflows",
+    groupId: 'v2-width-overflows',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("width-overflows", {
-      icon: { color: "#d6e0f3", icon: "archive", kind: "tabler" },
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('width-overflows', {
+      icon: { color: '#d6e0f3', icon: 'archive', kind: 'tabler' },
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "codex",
-          alias: "Trace the pipeline regression",
-          detail: "OpenAI Codex",
+          agentIcon: 'codex',
+          alias: 'Trace the pipeline regression',
+          detail: 'OpenAI Codex',
           lastInteractionAt: hoursAgo(9),
-          sessionId: "v2-width-overflows-session",
-          shortcutLabel: "⌘⌥2",
+          sessionId: 'v2-width-overflows-session',
+          shortcutLabel: '⌘⌥2',
         }),
-        { createdAt: hoursAgo(10) },
+        { createdAt: hoursAgo(10) }
       ),
     ],
-    title: "infrastructure-platform/observability-pipeline-experiments",
+    title: 'infrastructure-platform/observability-pipeline-experiments',
   },
   {
-    groupId: "v2-width-plain",
+    groupId: 'v2-width-plain',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("width-plain"),
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('width-plain'),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "gemini",
-          alias: "Write the changelog",
-          detail: "Gemini CLI",
+          agentIcon: 'gemini',
+          alias: 'Write the changelog',
+          detail: 'Gemini CLI',
           lastInteractionAt: hoursAgo(4),
-          sessionId: "v2-width-plain-session",
-          shortcutLabel: "⌘⌥3",
+          sessionId: 'v2-width-plain-session',
+          shortcutLabel: '⌘⌥3',
         }),
-        { createdAt: hoursAgo(5) },
+        { createdAt: hoursAgo(5) }
       ),
     ],
-    title: "notes",
+    title: 'notes',
   },
 ];
 
@@ -579,34 +576,34 @@ const SIDEBAR_V2_ROW_WIDTH_GROUPS: SidebarStoryGroup[] = [
  * that was supposed to answer it.
  */
 export const SIDEBAR_V2_DISCOVERED_ICON_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mP4z8BQxYAJRhcvAOKCwcH5X8XKAAAAAElFTkSuQmCC";
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mP4z8BQxYAJRhcvAOKCwcH5X8XKAAAAAElFTkSuQmCC';
 
 export const SIDEBAR_V2_USER_ICON_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mNoWvSdAStiGFoSAJIkhMFR2wJ8AAAAAElFTkSuQmCC";
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mNoWvSdAStiGFoSAJIkhMFR2wJ8AAAAAElFTkSuQmCC';
 
 const SIDEBAR_V2_PROJECT_ICON_GROUPS: SidebarStoryGroup[] = [
   {
-    groupId: "v2-icons-user-image",
+    groupId: 'v2-icons-user-image',
     isActive: true,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("icons-user-image", {
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('icons-user-image', {
       discoveredIconDataUrl: SIDEBAR_V2_DISCOVERED_ICON_DATA_URL,
       iconDataUrl: SIDEBAR_V2_USER_ICON_DATA_URL,
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "claude",
-          alias: "Keep the icon I picked",
-          detail: "Claude Code",
+          agentIcon: 'claude',
+          alias: 'Keep the icon I picked',
+          detail: 'Claude Code',
           lastInteractionAt: hoursAgo(2),
-          sessionId: "v2-icons-user-image-session",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-icons-user-image-session',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: hoursAgo(3) },
+        { createdAt: hoursAgo(3) }
       ),
     ],
-    title: "picked-image",
+    title: 'picked-image',
   },
   {
     /*
@@ -614,119 +611,119 @@ const SIDEBAR_V2_PROJECT_ICON_GROUPS: SidebarStoryGroup[] = [
      * own Ghostex project still carries from 2026-05-30, on a repository that
      * ships a favicon. The favicon must win.
      */
-    groupId: "v2-icons-legacy-glyph",
+    groupId: 'v2-icons-legacy-glyph',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("icons-legacy-glyph", {
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('icons-legacy-glyph', {
       discoveredIconDataUrl: SIDEBAR_V2_DISCOVERED_ICON_DATA_URL,
-      icon: { color: "#d6e0f3", icon: "archive", kind: "tabler" },
+      icon: { color: '#d6e0f3', icon: 'archive', kind: 'tabler' },
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "codex",
+          agentIcon: 'codex',
           alias: "Show the repo's favicon, not the stale glyph",
-          detail: "OpenAI Codex",
+          detail: 'OpenAI Codex',
           lastInteractionAt: hoursAgo(4),
-          sessionId: "v2-icons-legacy-glyph-session",
-          shortcutLabel: "⌘⌥2",
+          sessionId: 'v2-icons-legacy-glyph-session',
+          shortcutLabel: '⌘⌥2',
         }),
-        { createdAt: hoursAgo(5) },
+        { createdAt: hoursAgo(5) }
       ),
     ],
-    title: "legacy-glyph-and-favicon",
+    title: 'legacy-glyph-and-favicon',
   },
   {
     /* The glyph is still the fallback: with no discovered icon it renders, so
        nothing that used to show up disappears. */
-    groupId: "v2-icons-glyph-only",
+    groupId: 'v2-icons-glyph-only',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("icons-glyph-only", {
-      icon: { color: "#f3d6e0", icon: "terminal", kind: "tabler" },
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('icons-glyph-only', {
+      icon: { color: '#f3d6e0', icon: 'terminal', kind: 'tabler' },
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "codex",
-          alias: "Keep the glyph when the repo ships nothing",
-          detail: "OpenAI Codex",
+          agentIcon: 'codex',
+          alias: 'Keep the glyph when the repo ships nothing',
+          detail: 'OpenAI Codex',
           lastInteractionAt: hoursAgo(5),
-          sessionId: "v2-icons-glyph-only-session",
-          shortcutLabel: "⌘⌥6",
+          sessionId: 'v2-icons-glyph-only-session',
+          shortcutLabel: '⌘⌥6',
         }),
-        { createdAt: hoursAgo(6) },
+        { createdAt: hoursAgo(6) }
       ),
     ],
-    title: "glyph-only",
+    title: 'glyph-only',
   },
   {
     /* The user's real case: a repository that ships its own favicon and was
        never given an icon by hand. This is the row that used to be a folder. */
-    groupId: "v2-icons-discovered",
+    groupId: 'v2-icons-discovered',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("icons-discovered", {
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('icons-discovered', {
       discoveredIconDataUrl: SIDEBAR_V2_DISCOVERED_ICON_DATA_URL,
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "gemini",
+          agentIcon: 'gemini',
           alias: "Show the repository's own favicon",
-          detail: "Gemini CLI",
+          detail: 'Gemini CLI',
           lastInteractionAt: hoursAgo(6),
-          sessionId: "v2-icons-discovered-session",
-          shortcutLabel: "⌘⌥3",
+          sessionId: 'v2-icons-discovered-session',
+          shortcutLabel: '⌘⌥3',
         }),
-        { createdAt: hoursAgo(7) },
+        { createdAt: hoursAgo(7) }
       ),
       withSidebarV2Fields(
         createStorySession({
-          alias: "Ghostex docs preview",
-          detail: "https://ghostex.dev/docs",
+          alias: 'Ghostex docs preview',
+          detail: 'https://ghostex.dev/docs',
           isVisible: true,
           lastInteractionAt: hoursAgo(1),
-          sessionId: "v2-icons-discovered-browser",
-          shortcutLabel: "⌘⌥4",
+          sessionId: 'v2-icons-discovered-browser',
+          shortcutLabel: '⌘⌥4',
         }),
-        { createdAt: hoursAgo(8), kind: "browser", sessionKind: "browser" },
+        { createdAt: hoursAgo(8), kind: 'browser', sessionKind: 'browser' }
       ),
     ],
-    title: "ships-a-favicon",
+    title: 'ships-a-favicon',
   },
   {
     /* Nothing to show: the ONLY case that may still render a folder. */
-    groupId: "v2-icons-none",
+    groupId: 'v2-icons-none',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("icons-none"),
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('icons-none'),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "claude",
-          alias: "Plain folder, no icon anywhere",
-          detail: "Claude Code",
+          agentIcon: 'claude',
+          alias: 'Plain folder, no icon anywhere',
+          detail: 'Claude Code',
           lastInteractionAt: hoursAgo(8),
-          sessionId: "v2-icons-none-session",
-          shortcutLabel: "⌘⌥5",
+          sessionId: 'v2-icons-none-session',
+          shortcutLabel: '⌘⌥5',
         }),
-        { createdAt: hoursAgo(9) },
+        { createdAt: hoursAgo(9) }
       ),
     ],
-    title: "no-icon-at-all",
+    title: 'no-icon-at-all',
   },
 ];
 
 /** Projects registered but empty: exercises the "No sessions yet" state. */
 const SIDEBAR_V2_EMPTY_GROUPS: SidebarStoryGroup[] = [
   {
-    groupId: "v2-empty-project",
+    groupId: 'v2-empty-project',
     isActive: true,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("empty"),
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('empty'),
     sessions: [],
-    title: "empty-project",
+    title: 'empty-project',
   },
 ];
 
@@ -738,11 +735,11 @@ const SIDEBAR_V2_EMPTY_GROUPS: SidebarStoryGroup[] = [
  */
 const SIDEBAR_V2_GXSERVER_UNAVAILABLE_GROUPS: SidebarStoryGroup[] = [
   {
-    groupId: "gxserver-unavailable",
+    groupId: 'gxserver-unavailable',
     isActive: true,
-    kind: "workspace",
+    kind: 'workspace',
     sessions: [],
-    title: "",
+    title: '',
   },
 ];
 
@@ -768,120 +765,120 @@ const SIDEBAR_V2_GXSERVER_UNAVAILABLE_GROUPS: SidebarStoryGroup[] = [
  */
 const SIDEBAR_V2_MULTI_MACHINE_GROUPS: SidebarStoryGroup[] = [
   {
-    groupId: "v2-mm-local",
+    groupId: 'v2-mm-local',
     isActive: true,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("ghostex", {
-      gitRemoteOriginUrl: "git@github.com:ghostex/ghostex.git",
-      path: "/Users/story/dev/ghostex",
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('ghostex', {
+      gitRemoteOriginUrl: 'git@github.com:ghostex/ghostex.git',
+      path: '/Users/story/dev/ghostex',
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          activity: "working",
-          agentIcon: "codex",
-          alias: "Local: port the inbox",
-          detail: "OpenAI Codex",
+          activity: 'working',
+          agentIcon: 'codex',
+          alias: 'Local: port the inbox',
+          detail: 'OpenAI Codex',
           isFocused: true,
           isVisible: true,
           lastInteractionAt: minutesAgo(4),
-          sessionId: "v2-mm-local-working",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-mm-local-working',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: minutesAgo(30), workingStartedAt: minutesAgo(4) },
+        { createdAt: minutesAgo(30), workingStartedAt: minutesAgo(4) }
       ),
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "claude",
-          alias: "Local: five days idle",
-          detail: "Claude Code",
+          agentIcon: 'claude',
+          alias: 'Local: five days idle',
+          detail: 'Claude Code',
           lastInteractionAt: daysAgo(5),
-          sessionId: "v2-mm-local-idle",
-          shortcutLabel: "⌘⌥2",
+          sessionId: 'v2-mm-local-idle',
+          shortcutLabel: '⌘⌥2',
         }),
-        { createdAt: daysAgo(6) },
+        { createdAt: daysAgo(6) }
       ),
     ],
-    title: "ghostex",
+    title: 'ghostex',
   },
   {
-    groupId: "v2-mm-remote",
+    groupId: 'v2-mm-remote',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("ghostex-remote", {
-      gitRemoteOriginUrl: "https://github.com/ghostex/Ghostex.git",
-      path: "/home/build/src/ghostex-main",
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('ghostex-remote', {
+      gitRemoteOriginUrl: 'https://github.com/ghostex/Ghostex.git',
+      path: '/home/build/src/ghostex-main',
     }),
-    remoteMachineContext: { machineId: "build-box", machineName: "Build Box" },
+    remoteMachineContext: { machineId: 'build-box', machineName: 'Build Box' },
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "codex",
-          alias: "Build Box: nightly build",
-          detail: "OpenAI Codex",
+          agentIcon: 'codex',
+          alias: 'Build Box: nightly build',
+          detail: 'OpenAI Codex',
           lastInteractionAt: minutesAgo(11),
-          sessionId: "v2-mm-remote-active",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-mm-remote-active',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: minutesAgo(45) },
+        { createdAt: minutesAgo(45) }
       ),
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "gemini",
-          alias: "Build Box: five days idle",
-          detail: "Gemini CLI",
+          agentIcon: 'gemini',
+          alias: 'Build Box: five days idle',
+          detail: 'Gemini CLI',
           lastInteractionAt: daysAgo(5),
-          sessionId: "v2-mm-remote-idle",
-          shortcutLabel: "⌘⌥2",
+          sessionId: 'v2-mm-remote-idle',
+          shortcutLabel: '⌘⌥2',
         }),
-        { createdAt: daysAgo(6) },
+        { createdAt: daysAgo(6) }
       ),
     ],
-    title: "ghostex-main",
+    title: 'ghostex-main',
   },
   {
-    groupId: "v2-mm-local-copy",
+    groupId: 'v2-mm-local-copy',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("ghostex-copy", {
-      gitRemoteOriginUrl: "git@github.com:ghostex/ghostex.git",
-      path: "/Users/story/dev/ghostex-review",
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('ghostex-copy', {
+      gitRemoteOriginUrl: 'git@github.com:ghostex/ghostex.git',
+      path: '/Users/story/dev/ghostex-review',
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "claude",
-          alias: "Second clone: review pass",
-          detail: "Claude Code",
+          agentIcon: 'claude',
+          alias: 'Second clone: review pass',
+          detail: 'Claude Code',
           lastInteractionAt: minutesAgo(19),
-          sessionId: "v2-mm-local-copy-review",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-mm-local-copy-review',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: hoursAgo(3) },
+        { createdAt: hoursAgo(3) }
       ),
     ],
-    title: "ghostex-review",
+    title: 'ghostex-review',
   },
   {
-    groupId: "v2-mm-notes",
+    groupId: 'v2-mm-notes',
     isActive: false,
-    kind: "workspace",
+    kind: 'workspace',
     /* Probed and found to have no origin: never merges, never offers the menu. */
-    projectContext: createStoryProjectContext("notes", { gitRemoteOriginUrl: null }),
+    projectContext: createStoryProjectContext('notes', { gitRemoteOriginUrl: null }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "codex",
-          alias: "Notes: weekly plan",
-          detail: "OpenAI Codex",
+          agentIcon: 'codex',
+          alias: 'Notes: weekly plan',
+          detail: 'OpenAI Codex',
           lastInteractionAt: minutesAgo(33),
-          sessionId: "v2-mm-notes-plan",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-mm-notes-plan',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: hoursAgo(4) },
+        { createdAt: hoursAgo(4) }
       ),
     ],
-    title: "notes",
+    title: 'notes',
   },
 ];
 
@@ -903,15 +900,15 @@ const SIDEBAR_V2_MULTI_MACHINE_GROUPS: SidebarStoryGroup[] = [
  * A third project outside the monorepo (its own repository) is included so the
  * splits can be shown NOT to disturb unrelated rows.
  */
-const SIDEBAR_V2_MONOREPO_ROOT = "/Users/story/dev/mono";
-const SIDEBAR_V2_MONOREPO_ORIGIN = "git@github.com:ghostex/mono.git";
+const SIDEBAR_V2_MONOREPO_ROOT = '/Users/story/dev/mono';
+const SIDEBAR_V2_MONOREPO_ORIGIN = 'git@github.com:ghostex/mono.git';
 
 const SIDEBAR_V2_MONOREPO_GROUPS: SidebarStoryGroup[] = [
   {
-    groupId: "v2-mono-web",
+    groupId: 'v2-mono-web',
     isActive: true,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("mono-web", {
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('mono-web', {
       gitRemoteOriginUrl: SIDEBAR_V2_MONOREPO_ORIGIN,
       gitRepositoryRootPath: SIDEBAR_V2_MONOREPO_ROOT,
       path: `${SIDEBAR_V2_MONOREPO_ROOT}/apps/web`,
@@ -919,26 +916,26 @@ const SIDEBAR_V2_MONOREPO_GROUPS: SidebarStoryGroup[] = [
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          activity: "working",
-          agentIcon: "codex",
-          alias: "web: ship the new nav",
-          detail: "OpenAI Codex",
+          activity: 'working',
+          agentIcon: 'codex',
+          alias: 'web: ship the new nav',
+          detail: 'OpenAI Codex',
           isFocused: true,
           isVisible: true,
           lastInteractionAt: minutesAgo(3),
-          sessionId: "v2-mono-web-working",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-mono-web-working',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: minutesAgo(40), workingStartedAt: minutesAgo(3) },
+        { createdAt: minutesAgo(40), workingStartedAt: minutesAgo(3) }
       ),
     ],
-    title: "web",
+    title: 'web',
   },
   {
-    groupId: "v2-mono-api",
+    groupId: 'v2-mono-api',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("mono-api", {
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('mono-api', {
       gitRemoteOriginUrl: SIDEBAR_V2_MONOREPO_ORIGIN,
       gitRepositoryRootPath: SIDEBAR_V2_MONOREPO_ROOT,
       path: `${SIDEBAR_V2_MONOREPO_ROOT}/services/api`,
@@ -946,17 +943,17 @@ const SIDEBAR_V2_MONOREPO_GROUPS: SidebarStoryGroup[] = [
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "claude",
-          alias: "api: rate limit the webhook",
-          detail: "Claude Code",
+          agentIcon: 'claude',
+          alias: 'api: rate limit the webhook',
+          detail: 'Claude Code',
           lastInteractionAt: minutesAgo(14),
-          sessionId: "v2-mono-api-review",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-mono-api-review',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: hoursAgo(2) },
+        { createdAt: hoursAgo(2) }
       ),
     ],
-    title: "api",
+    title: 'api',
   },
   {
     /*
@@ -965,62 +962,62 @@ const SIDEBAR_V2_MONOREPO_GROUPS: SidebarStoryGroup[] = [
      * `apps/web` checkouts stay merged under the former and split under the
      * latter, so the three modes produce three different lists.
      */
-    groupId: "v2-mono-remote-web",
+    groupId: 'v2-mono-remote-web',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("mono-remote-web", {
-      gitRemoteOriginUrl: "https://github.com/ghostex/Mono.git",
-      gitRepositoryRootPath: "/home/build/mono",
-      path: "/home/build/mono/apps/web",
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('mono-remote-web', {
+      gitRemoteOriginUrl: 'https://github.com/ghostex/Mono.git',
+      gitRepositoryRootPath: '/home/build/mono',
+      path: '/home/build/mono/apps/web',
     }),
-    remoteMachineContext: { machineId: "build-box", machineName: "Build Box" },
+    remoteMachineContext: { machineId: 'build-box', machineName: 'Build Box' },
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "codex",
-          alias: "Build Box: web smoke run",
-          detail: "OpenAI Codex",
+          agentIcon: 'codex',
+          alias: 'Build Box: web smoke run',
+          detail: 'OpenAI Codex',
           lastInteractionAt: minutesAgo(9),
-          sessionId: "v2-mono-remote-web-smoke",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-mono-remote-web-smoke',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: hoursAgo(1) },
+        { createdAt: hoursAgo(1) }
       ),
     ],
-    title: "web (build box)",
+    title: 'web (build box)',
   },
   {
-    groupId: "v2-mono-outsider",
+    groupId: 'v2-mono-outsider',
     isActive: false,
-    kind: "workspace",
-    projectContext: createStoryProjectContext("tooling", {
-      gitRemoteOriginUrl: "git@github.com:ghostex/tooling.git",
-      gitRepositoryRootPath: "/Users/story/dev/tooling",
-      path: "/Users/story/dev/tooling",
+    kind: 'workspace',
+    projectContext: createStoryProjectContext('tooling', {
+      gitRemoteOriginUrl: 'git@github.com:ghostex/tooling.git',
+      gitRepositoryRootPath: '/Users/story/dev/tooling',
+      path: '/Users/story/dev/tooling',
     }),
     sessions: [
       withSidebarV2Fields(
         createStorySession({
-          agentIcon: "gemini",
-          alias: "tooling: bump the linter",
-          detail: "Gemini CLI",
+          agentIcon: 'gemini',
+          alias: 'tooling: bump the linter',
+          detail: 'Gemini CLI',
           lastInteractionAt: minutesAgo(26),
-          sessionId: "v2-mono-outsider-task",
-          shortcutLabel: "⌘⌥1",
+          sessionId: 'v2-mono-outsider-task',
+          shortcutLabel: '⌘⌥1',
         }),
-        { createdAt: hoursAgo(5) },
+        { createdAt: hoursAgo(5) }
       ),
     ],
-    title: "tooling",
+    title: 'tooling',
   },
 ];
 
 export const SIDEBAR_V2_STORY_GROUPS = {
-  "sidebar-v2-empty": SIDEBAR_V2_EMPTY_GROUPS,
-  "sidebar-v2-gxserver-unavailable": SIDEBAR_V2_GXSERVER_UNAVAILABLE_GROUPS,
-  "sidebar-v2-inbox": SIDEBAR_V2_INBOX_GROUPS,
-  "sidebar-v2-monorepo": SIDEBAR_V2_MONOREPO_GROUPS,
-  "sidebar-v2-multi-machine": SIDEBAR_V2_MULTI_MACHINE_GROUPS,
-  "sidebar-v2-project-icons": SIDEBAR_V2_PROJECT_ICON_GROUPS,
-  "sidebar-v2-row-width": SIDEBAR_V2_ROW_WIDTH_GROUPS,
+  'sidebar-v2-empty': SIDEBAR_V2_EMPTY_GROUPS,
+  'sidebar-v2-gxserver-unavailable': SIDEBAR_V2_GXSERVER_UNAVAILABLE_GROUPS,
+  'sidebar-v2-inbox': SIDEBAR_V2_INBOX_GROUPS,
+  'sidebar-v2-monorepo': SIDEBAR_V2_MONOREPO_GROUPS,
+  'sidebar-v2-multi-machine': SIDEBAR_V2_MULTI_MACHINE_GROUPS,
+  'sidebar-v2-project-icons': SIDEBAR_V2_PROJECT_ICON_GROUPS,
+  'sidebar-v2-row-width': SIDEBAR_V2_ROW_WIDTH_GROUPS,
 } as const;

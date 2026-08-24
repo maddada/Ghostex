@@ -1,4 +1,4 @@
-import { type ghostexSettings } from "./types";
+import { type ghostexSettings } from './types';
 
 export function clampNumber(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) {
@@ -9,36 +9,24 @@ export function clampNumber(value: number, min: number, max: number, fallback: n
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function readBoolean(
-  source: Record<string, unknown>,
-  key: keyof ghostexSettings,
-  fallback: boolean,
-): boolean {
+export function readBoolean(source: Record<string, unknown>, key: keyof ghostexSettings, fallback: boolean): boolean {
   const value = source[key];
-  return typeof value === "boolean" ? value : fallback;
+  return typeof value === 'boolean' ? value : fallback;
 }
 
-export function readNumber(
-  source: Record<string, unknown>,
-  key: keyof ghostexSettings,
-  fallback: number,
-): number {
+export function readNumber(source: Record<string, unknown>, key: keyof ghostexSettings, fallback: number): number {
   const value = source[key];
-  return typeof value === "number" ? value : fallback;
+  return typeof value === 'number' ? value : fallback;
 }
 
-export function readString(
-  source: Record<string, unknown>,
-  key: keyof ghostexSettings,
-  fallback: string,
-): string {
+export function readString(source: Record<string, unknown>, key: keyof ghostexSettings, fallback: string): string {
   const value = source[key];
-  return typeof value === "string" ? value : fallback;
+  return typeof value === 'string' ? value : fallback;
 }
 
 export function readLooseString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === 'string' ? value.trim() : '';
 }

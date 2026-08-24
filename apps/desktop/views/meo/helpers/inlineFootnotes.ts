@@ -23,10 +23,9 @@ export function collectInlineFootnoteMarkerRanges(rawText: string): InlineFootno
     ranges.push({
       label: match[1],
       fromOffset: match.index,
-      toOffset: match.index + match[0].length
+      toOffset: match.index + match[0].length,
     });
   }
 
   return ranges;
 }
-

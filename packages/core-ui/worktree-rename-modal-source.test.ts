@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 
 /**
  * CDXC:WorktreeRename 2026-08-09-18:40:
@@ -12,10 +12,7 @@ import { describe, expect, test } from "vitest";
  * genuinely disabled when the rename cannot run.
  */
 
-const worktreeRenameModalSource = readFileSync(
-  new URL("./worktree-rename-modal.tsx", import.meta.url),
-  "utf8",
-);
+const worktreeRenameModalSource = readFileSync(new URL('./worktree-rename-modal.tsx', import.meta.url), 'utf8');
 
 function sourceBetween(start: string, end: string): string {
   const startIndex = worktreeRenameModalSource.indexOf(start);
@@ -25,39 +22,39 @@ function sourceBetween(start: string, end: string): string {
   return worktreeRenameModalSource.slice(startIndex, endIndex);
 }
 
-describe("worktree rename modal draft", () => {
-  test("carries the flags the runtime resolved before the modal opened", () => {
-    const draftType = sourceBetween("export type WorktreeRenameModalDraft = {", "};");
+describe('worktree rename modal draft', () => {
+  test('carries the flags the runtime resolved before the modal opened', () => {
+    const draftType = sourceBetween('export type WorktreeRenameModalDraft = {', '};');
 
-    expect(draftType).toContain("renameBranchDefault: boolean");
-    expect(draftType).toContain("blockingReason?: string");
-    expect(draftType).toContain("warnings?: readonly string[]");
-    expect(draftType).toContain("currentName: string");
-    expect(draftType).toContain("parentFolderName: string");
+    expect(draftType).toContain('renameBranchDefault: boolean');
+    expect(draftType).toContain('blockingReason?: string');
+    expect(draftType).toContain('warnings?: readonly string[]');
+    expect(draftType).toContain('currentName: string');
+    expect(draftType).toContain('parentFolderName: string');
   });
 });
 
-describe("worktree rename modal submit", () => {
-  test("sends the shared confirmRenameWorktree fields and nothing else", () => {
+describe('worktree rename modal submit', () => {
+  test('sends the shared confirmRenameWorktree fields and nothing else', () => {
     // Anchored on the function's own closing brace, not the first `};` after
     // it: a nested object literal inside submitRename would otherwise truncate
     // the slice before the onRename call and fail for the wrong reason.
-    const submit = sourceBetween("const submitRename = (", "\n  };");
+    const submit = sourceBetween('const submitRename = (', '\n  };');
 
-    expect(submit).toContain("onRename(draft.projectId, { name: trimmedName, renameBranch })");
-    expect(submit).toContain("if (!canSubmit)");
-    expect(worktreeRenameModalSource).not.toContain("destinationPath");
+    expect(submit).toContain('onRename(draft.projectId, { name: trimmedName, renameBranch })');
+    expect(submit).toContain('if (!canSubmit)');
+    expect(worktreeRenameModalSource).not.toContain('destinationPath');
   });
 
-  test("disables Rename for a blocking reason and for an invalid name", () => {
-    const footer = sourceBetween("<DialogFooter", "</DialogFooter>");
+  test('disables Rename for a blocking reason and for an invalid name', () => {
+    const footer = sourceBetween('<DialogFooter', '</DialogFooter>');
 
-    expect(footer).toContain("disabled={!canSubmit}");
-    expect(worktreeRenameModalSource).toContain("const canSubmit = !submitError && !draft.blockingReason");
-    expect(worktreeRenameModalSource).toContain("worktreeRenameNameError(name)");
+    expect(footer).toContain('disabled={!canSubmit}');
+    expect(worktreeRenameModalSource).toContain('const canSubmit = !submitError && !draft.blockingReason');
+    expect(worktreeRenameModalSource).toContain('worktreeRenameNameError(name)');
   });
 
-  test("prefills the branch when the folder is only its slugged form", () => {
+  test('prefills the branch when the folder is only its slugged form', () => {
     /*
      * CDXC:WorktreeRename 2026-08-10:
      * The bug this exists to stop, caught in manual testing: a worktree on
@@ -66,26 +63,26 @@ describe("worktree rename modal submit", () => {
      * and pressing Rename then flattened the branch's slash without the user
      * changing a character. Reopening has to be a no-op.
      */
-    const resolver = sourceBetween("function resolveWorktreeRenameInitialName(", "\n}");
+    const resolver = sourceBetween('function resolveWorktreeRenameInitialName(', '\n}');
 
-    expect(resolver).toContain("worktreeRenameFolderSlug(branch) === draft.currentName");
-    expect(resolver).toContain("? branch");
-    expect(worktreeRenameModalSource).toContain("const [name, setName] = useState(initialName)");
-    expect(worktreeRenameModalSource).toContain("const unchanged = trimmedName === initialName");
+    expect(resolver).toContain('worktreeRenameFolderSlug(branch) === draft.currentName');
+    expect(resolver).toContain('? branch');
+    expect(worktreeRenameModalSource).toContain('const [name, setName] = useState(initialName)');
+    expect(worktreeRenameModalSource).toContain('const unchanged = trimmedName === initialName');
   });
 
-  test("previews the folder slug and the verbatim branch separately", () => {
+  test('previews the folder slug and the verbatim branch separately', () => {
     /*
      * CDXC:WorktreeRename 2026-08-09-18:40:
      * The folder and the branch are deliberately different strings for the same
      * typed name, so the preview must not collapse them into one line.
      */
-    const preview = sourceBetween("worktree-rename-preview", "</FieldDescription>");
+    const preview = sourceBetween('worktree-rename-preview', '</FieldDescription>');
 
-    expect(preview).toContain("Folder:");
-    expect(preview).toContain("{nextFolderName");
-    expect(preview).toContain("Branch:");
-    expect(preview).toContain("{trimmedName");
-    expect(worktreeRenameModalSource).toContain("worktreeRenameFolderSlug(name)");
+    expect(preview).toContain('Folder:');
+    expect(preview).toContain('{nextFolderName');
+    expect(preview).toContain('Branch:');
+    expect(preview).toContain('{trimmedName');
+    expect(worktreeRenameModalSource).toContain('worktreeRenameFolderSlug(name)');
   });
 });

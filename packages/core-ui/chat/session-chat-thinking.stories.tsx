@@ -1,84 +1,84 @@
-import * as React from "react";
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor, within } from "storybook/test";
-import type { SessionChatMessage } from "../../shared/session-chat";
-import { SessionChatMessageList } from "./session-chat-message-list";
+import * as React from 'react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import type { SessionChatMessage } from '../../shared/session-chat';
+import { SessionChatMessageList } from './session-chat-message-list';
 
 const STORY_MESSAGES: SessionChatMessage[] = [
   {
-    id: "thought-plain-before",
-    role: "reasoning",
-    blocks: [{ type: "text", text: "Inspecting the current chat renderer" }],
-    source: "transcript",
+    id: 'thought-plain-before',
+    role: 'reasoning',
+    blocks: [{ type: 'text', text: 'Inspecting the current chat renderer' }],
+    source: 'transcript',
     timestamp: 1_000,
   },
   {
-    id: "thought-with-tools",
-    role: "reasoning",
-    blocks: [{ type: "text", text: "Checking alignment and command previews" }],
-    source: "transcript",
+    id: 'thought-with-tools',
+    role: 'reasoning',
+    blocks: [{ type: 'text', text: 'Checking alignment and command previews' }],
+    source: 'transcript',
     timestamp: 2_000,
   },
   {
-    id: "codex-exec-call",
-    role: "tool",
+    id: 'codex-exec-call',
+    role: 'tool',
     blocks: [
       {
-        type: "tool-call",
-        name: "exec",
+        type: 'tool-call',
+        name: 'exec',
         input: {
-          cmd: "rg -n \"ghostex-chat-thinking\" packages/core-ui/chat\nsed -n '230,330p' packages/core-ui/styles/chat.css\nbun run typecheck\necho this-fourth-line-must-not-appear",
+          cmd: 'rg -n "ghostex-chat-thinking" packages/core-ui/chat\nsed -n \'230,330p\' packages/core-ui/styles/chat.css\nbun run typecheck\necho this-fourth-line-must-not-appear',
         },
       },
       {
-        type: "tool-call",
-        name: "bash",
+        type: 'tool-call',
+        name: 'bash',
         input:
-          "git diff -- packages/core-ui/chat/session-chat-message-list.tsx\ngit diff -- packages/core-ui/styles/chat.css\nbun run build:sidebar-css\necho hidden-fourth-line",
+          'git diff -- packages/core-ui/chat/session-chat-message-list.tsx\ngit diff -- packages/core-ui/styles/chat.css\nbun run build:sidebar-css\necho hidden-fourth-line',
       },
     ],
-    source: "transcript",
+    source: 'transcript',
     timestamp: 3_000,
   },
   {
-    id: "tool-results",
-    role: "tool",
+    id: 'tool-results',
+    role: 'tool',
     blocks: [
-      { type: "tool-result", output: "Found the relevant selectors." },
-      { type: "tool-result", output: "The focused build completed." },
+      { type: 'tool-result', output: 'Found the relevant selectors.' },
+      { type: 'tool-result', output: 'The focused build completed.' },
     ],
-    source: "transcript",
+    source: 'transcript',
     timestamp: 4_000,
   },
   {
-    id: "thought-plain-after",
-    role: "reasoning",
-    blocks: [{ type: "text", text: "Verifying the final visual rhythm" }],
-    source: "transcript",
+    id: 'thought-plain-after',
+    role: 'reasoning',
+    blocks: [{ type: 'text', text: 'Verifying the final visual rhythm' }],
+    source: 'transcript',
     timestamp: 5_000,
   },
   {
-    id: "assistant-commentary",
-    role: "assistant",
+    id: 'assistant-commentary',
+    role: 'assistant',
     blocks: [
       {
-        type: "text",
-        text: "The intermediate text reply is visible, but it must not own a copy control.",
+        type: 'text',
+        text: 'The intermediate text reply is visible, but it must not own a copy control.',
       },
     ],
-    source: "transcript",
+    source: 'transcript',
     timestamp: 6_000,
   },
   {
-    id: "assistant-final",
-    role: "assistant",
+    id: 'assistant-final',
+    role: 'assistant',
     blocks: [
       {
-        type: "text",
-        text: "The final reply is the only agent text reply with a copy control.",
+        type: 'text',
+        text: 'The final reply is the only agent text reply with a copy control.',
       },
     ],
-    source: "transcript",
+    source: 'transcript',
     timestamp: 7_000,
   },
 ];
@@ -105,15 +105,11 @@ function SessionChatThinkingStory({
 }) {
   return (
     <>
-      {previewDisclosureHover ? (
-        <style>{DISCLOSURE_HOVER_PREVIEW_STYLES}</style>
-      ) : null}
+      {previewDisclosureHover ? <style>{DISCLOSURE_HOVER_PREVIEW_STYLES}</style> : null}
       <div
-        className="ghostex-session-chat-scope flex h-screen min-h-[34rem] flex-col bg-background text-foreground"
-        data-chat-disclosure-hover-preview={
-          previewDisclosureHover ? "true" : undefined
-        }
-        data-chat-theme="dark"
+        className='ghostex-session-chat-scope flex h-screen min-h-[34rem] flex-col bg-background text-foreground'
+        data-chat-disclosure-hover-preview={previewDisclosureHover ? 'true' : undefined}
+        data-chat-theme='dark'
       >
         <SessionChatMessageList
           hasMore={false}
@@ -129,9 +125,7 @@ function SessionChatThinkingStory({
 }
 
 function thinkingTextElements(canvasElement: HTMLElement): HTMLElement[] {
-  return Array.from(
-    canvasElement.querySelectorAll<HTMLElement>("[data-ghostex-thinking-text]"),
-  );
+  return Array.from(canvasElement.querySelectorAll<HTMLElement>('[data-ghostex-thinking-text]'));
 }
 
 function expectAlignedThinkingAndSpacing(canvasElement: HTMLElement): void {
@@ -140,16 +134,10 @@ function expectAlignedThinkingAndSpacing(canvasElement: HTMLElement): void {
 
   const rectangles = thoughts.map((thought) => thought.getBoundingClientRect());
   const leftOrigins = rectangles.map((rectangle) => rectangle.left);
-  expect(Math.max(...leftOrigins) - Math.min(...leftOrigins)).toBeLessThanOrEqual(
-    0.5,
-  );
+  expect(Math.max(...leftOrigins) - Math.min(...leftOrigins)).toBeLessThanOrEqual(0.5);
 
-  expect((rectangles[1]?.top ?? 0) - (rectangles[0]?.bottom ?? 0)).toBeGreaterThanOrEqual(
-    12.5,
-  );
-  expect((rectangles[2]?.top ?? 0) - (rectangles[1]?.bottom ?? 0)).toBeGreaterThanOrEqual(
-    12.5,
-  );
+  expect((rectangles[1]?.top ?? 0) - (rectangles[0]?.bottom ?? 0)).toBeGreaterThanOrEqual(12.5);
+  expect((rectangles[2]?.top ?? 0) - (rectangles[1]?.bottom ?? 0)).toBeGreaterThanOrEqual(12.5);
 }
 
 function horizontalCenter(element: Element): number {
@@ -158,22 +146,14 @@ function horizontalCenter(element: Element): number {
 }
 
 function expectMarkerGeometry(canvasElement: HTMLElement): void {
-  const agentMessage = canvasElement.querySelector<HTMLElement>(
-    ".ghostex-chat-agent-message",
-  );
-  const thinkingLine = canvasElement.querySelector<HTMLElement>(
-    ".ghostex-chat-thinking-line",
-  );
-  const thinkingTrigger = canvasElement.querySelector<HTMLElement>(
-    ".ghostex-chat-thinking-trigger",
-  );
-  const thinkingIcon = canvasElement.querySelector<HTMLElement>(
-    ".ghostex-chat-thinking-icon",
-  );
+  const agentMessage = canvasElement.querySelector<HTMLElement>('.ghostex-chat-agent-message');
+  const thinkingLine = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-line');
+  const thinkingTrigger = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-trigger');
+  const thinkingIcon = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-icon');
   // CDXC:SessionChatMarkerColumn 2026-08-23: the reasoning disclosure's glyph
   // is the transcript's ONE disclosure chevron now, not a clip-path triangle.
   const caret = canvasElement.querySelector<HTMLElement>(
-    ".ghostex-chat-thinking-icon .ghostex-chat-disclosure-chevron",
+    '.ghostex-chat-thinking-icon .ghostex-chat-disclosure-chevron'
   );
 
   expect(agentMessage).not.toBeNull();
@@ -182,13 +162,10 @@ function expectMarkerGeometry(canvasElement: HTMLElement): void {
   expect(thinkingIcon).not.toBeNull();
   expect(caret).not.toBeNull();
 
-  const agentBullet = getComputedStyle(agentMessage as HTMLElement, "::before");
-  const thinkingBullet = getComputedStyle(
-    thinkingLine as HTMLElement,
-    "::before",
-  );
-  expect(agentBullet.width).toBe("4px");
-  expect(agentBullet.height).toBe("4px");
+  const agentBullet = getComputedStyle(agentMessage as HTMLElement, '::before');
+  const thinkingBullet = getComputedStyle(thinkingLine as HTMLElement, '::before');
+  expect(agentBullet.width).toBe('4px');
+  expect(agentBullet.height).toBe('4px');
   expect(thinkingBullet.width).toBe(agentBullet.width);
   expect(thinkingBullet.height).toBe(agentBullet.height);
 
@@ -208,18 +185,13 @@ function expectMarkerGeometry(canvasElement: HTMLElement): void {
     (thinkingLine as HTMLElement).getBoundingClientRect().top +
     Number.parseFloat(thinkingBullet.marginTop) +
     Number.parseFloat(thinkingBullet.height) / 2;
-  expect(Math.abs(thinkingBulletCenter - thinkingLineCenter)).toBeLessThanOrEqual(
-    0.5,
-  );
+  expect(Math.abs(thinkingBulletCenter - thinkingLineCenter)).toBeLessThanOrEqual(0.5);
 
   const thinkingTriggerCenter =
     (thinkingTrigger as HTMLElement).getBoundingClientRect().top +
-    Number.parseFloat(getComputedStyle(thinkingTrigger as HTMLElement).lineHeight) /
-      2;
+    Number.parseFloat(getComputedStyle(thinkingTrigger as HTMLElement).lineHeight) / 2;
   const iconRectangle = (thinkingIcon as HTMLElement).getBoundingClientRect();
-  expect(
-    Math.abs(iconRectangle.top + iconRectangle.height / 2 - thinkingTriggerCenter),
-  ).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(iconRectangle.top + iconRectangle.height / 2 - thinkingTriggerCenter)).toBeLessThanOrEqual(0.5);
 
   // One glyph size across the whole surface: --chat-glyph-control-size, 14px.
   const caretRectangle = (caret as HTMLElement).getBoundingClientRect();
@@ -228,9 +200,9 @@ function expectMarkerGeometry(canvasElement: HTMLElement): void {
 }
 
 const meta = {
-  title: "Chat/Thinking and tool disclosures",
+  title: 'Chat/Thinking and tool disclosures',
   component: SessionChatThinkingStory,
-  parameters: { layout: "fullscreen" },
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof SessionChatThinkingStory>;
 
 export default meta;
@@ -243,13 +215,11 @@ export const CollapsedAlignmentAndFinalCopy: Story = {
     expectAlignedThinkingAndSpacing(canvasElement);
     expectMarkerGeometry(canvasElement);
     expect(
-      within(canvasElement).getByRole("button", {
-        name: "Checking alignment and command previews",
-      }),
-    ).toHaveAttribute("aria-expanded", "false");
-    expect(
-      within(canvasElement).getAllByRole("button", { name: "Copy message" }),
-    ).toHaveLength(1);
+      within(canvasElement).getByRole('button', {
+        name: 'Checking alignment and command previews',
+      })
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(within(canvasElement).getAllByRole('button', { name: 'Copy message' })).toHaveLength(1);
   },
 };
 
@@ -257,42 +227,32 @@ export const ExpandedRailsAndCommandPreviews: Story = {
   args: { verboseMode: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const execRow = canvas.getByRole("button", { name: /^exec / });
+    const execRow = canvas.getByRole('button', { name: /^exec / });
     expect(execRow).toHaveTextContent(
-      "rg -n \"ghostex-chat-thinking\" packages/core-ui/chat sed -n '230,330p' packages/core-ui/styles/chat.css bun run typecheck",
+      'rg -n "ghostex-chat-thinking" packages/core-ui/chat sed -n \'230,330p\' packages/core-ui/styles/chat.css bun run typecheck'
     );
-    expect(execRow).not.toHaveTextContent("this-fourth-line-must-not-appear");
-    expect(canvas.getByRole("button", { name: /^bash / })).toHaveTextContent(
-      "git diff -- packages/core-ui/chat/session-chat-message-list.tsx git diff -- packages/core-ui/styles/chat.css bun run build:sidebar-css",
+    expect(execRow).not.toHaveTextContent('this-fourth-line-must-not-appear');
+    expect(canvas.getByRole('button', { name: /^bash / })).toHaveTextContent(
+      'git diff -- packages/core-ui/chat/session-chat-message-list.tsx git diff -- packages/core-ui/styles/chat.css bun run build:sidebar-css'
     );
 
     await userEvent.click(execRow);
 
-    const thinkingIcon = canvasElement.querySelector(
-      ".ghostex-chat-thinking-icon",
-    );
-    const thinkingRail = canvasElement.querySelector(
-      ".ghostex-chat-thinking-detail > .ghostex-chat-expansion-rail",
-    );
-    const terminalIcon = execRow.querySelector(".ghostex-chat-work-icon");
+    const thinkingIcon = canvasElement.querySelector('.ghostex-chat-thinking-icon');
+    const thinkingRail = canvasElement.querySelector('.ghostex-chat-thinking-detail > .ghostex-chat-expansion-rail');
+    const terminalIcon = execRow.querySelector('.ghostex-chat-work-icon');
     const terminalRail = execRow.parentElement?.querySelector(
-      ".ghostex-chat-work-detail > .ghostex-chat-expansion-rail",
+      '.ghostex-chat-work-detail > .ghostex-chat-expansion-rail'
     );
     expect(thinkingIcon).not.toBeNull();
     expect(thinkingRail).not.toBeNull();
     expect(terminalIcon).not.toBeNull();
     expect(terminalRail).not.toBeNull();
     expect(
-      Math.abs(
-        horizontalCenter(thinkingIcon as Element) -
-          horizontalCenter(thinkingRail as Element),
-      ),
+      Math.abs(horizontalCenter(thinkingIcon as Element) - horizontalCenter(thinkingRail as Element))
     ).toBeLessThanOrEqual(0.5);
     expect(
-      Math.abs(
-        horizontalCenter(terminalIcon as Element) -
-          horizontalCenter(terminalRail as Element),
-      ),
+      Math.abs(horizontalCenter(terminalIcon as Element) - horizontalCenter(terminalRail as Element))
     ).toBeLessThanOrEqual(0.5);
   },
 };
@@ -301,18 +261,12 @@ export const HoverHeadingTreatmentPreview: Story = {
   args: { previewDisclosureHover: true, verboseMode: true },
   play: async ({ canvasElement }) => {
     expectAlignedThinkingAndSpacing(canvasElement);
-    const thinkingTrigger = canvasElement.querySelector<HTMLElement>(
-      ".ghostex-chat-thinking-trigger",
-    );
-    const thinkingIcon = canvasElement.querySelector<HTMLElement>(
-      ".ghostex-chat-thinking-icon",
-    );
+    const thinkingTrigger = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-trigger');
+    const thinkingIcon = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-icon');
     const thinkingRail = canvasElement.querySelector<HTMLElement>(
-      ".ghostex-chat-thinking-detail > .ghostex-chat-expansion-rail",
+      '.ghostex-chat-thinking-detail > .ghostex-chat-expansion-rail'
     );
-    const workTrigger = canvasElement.querySelector<HTMLElement>(
-      ".ghostex-chat-work-trigger",
-    );
+    const workTrigger = canvasElement.querySelector<HTMLElement>('.ghostex-chat-work-trigger');
 
     expect(thinkingTrigger).not.toBeNull();
     expect(thinkingIcon).not.toBeNull();
@@ -320,43 +274,29 @@ export const HoverHeadingTreatmentPreview: Story = {
     expect(workTrigger).not.toBeNull();
 
     await waitFor(() => {
-      expect(
-        getComputedStyle(thinkingTrigger as HTMLElement).borderRadius,
-      ).toBe("4px");
-      expect(getComputedStyle(workTrigger as HTMLElement).borderRadius).toBe(
-        "4px",
-      );
+      expect(getComputedStyle(thinkingTrigger as HTMLElement).borderRadius).toBe('4px');
+      expect(getComputedStyle(workTrigger as HTMLElement).borderRadius).toBe('4px');
     });
-    const triggerRectangle = (
-      thinkingTrigger as HTMLElement
-    ).getBoundingClientRect();
+    const triggerRectangle = (thinkingTrigger as HTMLElement).getBoundingClientRect();
     const caretRectangle = canvasElement
-      .querySelector<HTMLElement>(
-        ".ghostex-chat-thinking-icon .ghostex-chat-disclosure-chevron",
-      )
+      .querySelector<HTMLElement>('.ghostex-chat-thinking-icon .ghostex-chat-disclosure-chevron')
       ?.getBoundingClientRect();
     const toolIconRectangle = workTrigger
-      ?.querySelector<SVGElement>(".ghostex-chat-work-icon svg")
+      ?.querySelector<SVGElement>('.ghostex-chat-work-icon svg')
       ?.getBoundingClientRect();
     const workTriggerRectangle = workTrigger?.getBoundingClientRect();
     expect(caretRectangle).toBeDefined();
     expect(toolIconRectangle).toBeDefined();
     expect(workTriggerRectangle).toBeDefined();
-    const caretInset =
-      (caretRectangle?.left ?? 0) - triggerRectangle.left;
-    const toolInset =
-      (toolIconRectangle?.left ?? 0) - (workTriggerRectangle?.left ?? 0);
+    const caretInset = (caretRectangle?.left ?? 0) - triggerRectangle.left;
+    const toolInset = (toolIconRectangle?.left ?? 0) - (workTriggerRectangle?.left ?? 0);
     // CDXC:SessionChatMarkerColumn 2026-08-23: one gutter for both lanes —
     // --chat-marker-inset (2px) plus the 1px each side that centres a 14px
     // glyph in the 16px slot.
     expect(caretInset).toBeCloseTo(3, 1);
     expect(toolInset).toBeCloseTo(3, 1);
-    expect(
-      Math.abs(caretInset - toolInset),
-    ).toBeLessThanOrEqual(0.5);
-    const plainThinkingLine = canvasElement.querySelector<HTMLElement>(
-      ".ghostex-chat-thinking-line",
-    );
+    expect(Math.abs(caretInset - toolInset)).toBeLessThanOrEqual(0.5);
+    const plainThinkingLine = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-line');
     expect(plainThinkingLine).not.toBeNull();
     expect(
       Math.abs(
@@ -364,17 +304,12 @@ export const HoverHeadingTreatmentPreview: Story = {
           // Half of --chat-marker-slot: the disclosure's glyph sits on the
           // same axis as the bullet of the prose line below it.
           ((plainThinkingLine?.getBoundingClientRect().left ?? 0) +
-            Number.parseFloat(
-              getComputedStyle(plainThinkingLine as HTMLElement).paddingLeft,
-            ) +
-            8),
-      ),
+            Number.parseFloat(getComputedStyle(plainThinkingLine as HTMLElement).paddingLeft) +
+            8)
+      )
     ).toBeLessThanOrEqual(0.5);
     expect(
-      Math.abs(
-        horizontalCenter(thinkingIcon as Element) -
-          horizontalCenter(thinkingRail as Element),
-      ),
+      Math.abs(horizontalCenter(thinkingIcon as Element) - horizontalCenter(thinkingRail as Element))
     ).toBeLessThanOrEqual(0.5);
   },
 };
@@ -383,8 +318,8 @@ export const WorkingTurnHasNoAgentCopyControl: Story = {
   args: { verboseMode: false },
   render: () => (
     <div
-      className="ghostex-session-chat-scope flex h-screen min-h-[34rem] flex-col bg-background text-foreground"
-      data-chat-theme="dark"
+      className='ghostex-session-chat-scope flex h-screen min-h-[34rem] flex-col bg-background text-foreground'
+      data-chat-theme='dark'
     >
       <SessionChatMessageList
         hasMore={false}
@@ -396,9 +331,7 @@ export const WorkingTurnHasNoAgentCopyControl: Story = {
     </div>
   ),
   play: async ({ canvasElement }) => {
-    expect(
-      within(canvasElement).queryByRole("button", { name: "Copy message" }),
-    ).not.toBeInTheDocument();
+    expect(within(canvasElement).queryByRole('button', { name: 'Copy message' })).not.toBeInTheDocument();
   },
 };
 
@@ -407,30 +340,30 @@ function longTranscript(): SessionChatMessage[] {
   for (let turn = 0; turn < 12; turn += 1) {
     messages.push({
       id: `long-user-${turn}`,
-      role: "user",
+      role: 'user',
       blocks: [
         {
-          type: "text",
+          type: 'text',
           text: `Turn ${turn}: please review the layout and report anything that looks off.`,
         },
       ],
-      source: "transcript",
+      source: 'transcript',
       timestamp: turn * 1_000 + 1,
     });
     messages.push({
       id: `long-assistant-${turn}`,
-      role: "assistant",
+      role: 'assistant',
       blocks: [
         {
-          type: "text",
+          type: 'text',
           text: Array.from(
             { length: 6 },
             (_unused, line) =>
-              `Reply ${turn}.${line}: the surrounding rows keep their rhythm and the spacing stays even across the whole column.`,
-          ).join("\n\n"),
+              `Reply ${turn}.${line}: the surrounding rows keep their rhythm and the spacing stays even across the whole column.`
+          ).join('\n\n'),
         },
       ],
-      source: "transcript",
+      source: 'transcript',
       timestamp: turn * 1_000 + 2,
     });
   }
@@ -439,11 +372,7 @@ function longTranscript(): SessionChatMessage[] {
 
 const LONG_TRANSCRIPT = longTranscript();
 
-function LongChatSendHarness({
-  scrollToTopBeforeSend = false,
-}: {
-  scrollToTopBeforeSend?: boolean;
-}) {
+function LongChatSendHarness({ scrollToTopBeforeSend = false }: { scrollToTopBeforeSend?: boolean }) {
   const [messages, setMessages] = React.useState(LONG_TRANSCRIPT);
   const [isWorking, setWorking] = React.useState(false);
 
@@ -452,10 +381,10 @@ function LongChatSendHarness({
       setMessages((current) => [
         ...current,
         {
-          id: "pending:new-turn",
-          role: "user",
-          blocks: [{ type: "text", text: "One more question about the footer." }],
-          source: "transcript",
+          id: 'pending:new-turn',
+          role: 'user',
+          blocks: [{ type: 'text', text: 'One more question about the footer.' }],
+          source: 'transcript',
           timestamp: 999_000,
         },
       ]);
@@ -470,9 +399,7 @@ function LongChatSendHarness({
     // Scroll away from the bottom first so the scroller leaves follow mode,
     // then send: the newest row still has to come back into view.
     const scrollTimer = window.setTimeout(() => {
-      const viewport = document.querySelector<HTMLElement>(
-        '[data-slot="message-scroller-viewport"]',
-      );
+      const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
       if (viewport) {
         viewport.scrollTop = 0;
       }
@@ -486,8 +413,8 @@ function LongChatSendHarness({
 
   return (
     <div
-      className="ghostex-session-chat-scope flex h-screen flex-col bg-background text-foreground"
-      data-chat-theme="dark"
+      className='ghostex-session-chat-scope flex h-screen flex-col bg-background text-foreground'
+      data-chat-theme='dark'
     >
       <SessionChatMessageList
         hasMore={false}
@@ -509,33 +436,23 @@ export const LongChatSendLeavesNoDeadSpace: Story = {
   args: { verboseMode: false },
   render: () => <LongChatSendHarness />,
   play: async ({ canvasElement }) => {
-    const viewport = canvasElement.querySelector<HTMLElement>(
-      '[data-slot="message-scroller-viewport"]',
-    );
+    const viewport = canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
     expect(viewport).not.toBeNull();
-    const workingIndicator = await within(canvasElement).findByRole("status", {
-      name: "Agent is responding",
+    const workingIndicator = await within(canvasElement).findByRole('status', {
+      name: 'Agent is responding',
     });
 
     await waitFor(() => {
-      expect(viewport?.scrollHeight ?? 0).toBeGreaterThan(
-        viewport?.clientHeight ?? 0,
-      );
+      expect(viewport?.scrollHeight ?? 0).toBeGreaterThan(viewport?.clientHeight ?? 0);
     });
 
     const scroller = viewport as HTMLElement;
     scroller.scrollTop = scroller.scrollHeight;
     await waitFor(() => {
-      expect(
-        Math.abs(
-          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop,
-        ),
-      ).toBeLessThanOrEqual(1);
+      expect(Math.abs(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop)).toBeLessThanOrEqual(1);
     });
 
-    const deadSpace =
-      scroller.getBoundingClientRect().bottom -
-      workingIndicator.getBoundingClientRect().bottom;
+    const deadSpace = scroller.getBoundingClientRect().bottom - workingIndicator.getBoundingClientRect().bottom;
     expect(deadSpace).toBeLessThanOrEqual(24);
   },
 };
@@ -548,24 +465,18 @@ export const LongChatSendWhileScrolledUpFollowsBottom: Story = {
   args: { verboseMode: false },
   render: () => <LongChatSendHarness scrollToTopBeforeSend />,
   play: async ({ canvasElement }) => {
-    const viewport = canvasElement.querySelector<HTMLElement>(
-      '[data-slot="message-scroller-viewport"]',
-    );
+    const viewport = canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
     expect(viewport).not.toBeNull();
     const scroller = viewport as HTMLElement;
-    const workingIndicator = await within(canvasElement).findByRole("status", {
-      name: "Agent is responding",
+    const workingIndicator = await within(canvasElement).findByRole('status', {
+      name: 'Agent is responding',
     });
 
     await waitFor(() => {
-      expect(
-        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop,
-      ).toBeLessThanOrEqual(1);
+      expect(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop).toBeLessThanOrEqual(1);
     });
 
-    const deadSpace =
-      scroller.getBoundingClientRect().bottom -
-      workingIndicator.getBoundingClientRect().bottom;
+    const deadSpace = scroller.getBoundingClientRect().bottom - workingIndicator.getBoundingClientRect().bottom;
     expect(deadSpace).toBeLessThanOrEqual(24);
   },
 };

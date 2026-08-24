@@ -157,7 +157,9 @@ pub(crate) fn gpui_app_modal_product_state_from_value(
     })
 }
 
-pub(crate) fn gpui_pinned_prompts_from_value(value: Option<&serde_json::Value>) -> Vec<GpuiPinnedPrompt> {
+pub(crate) fn gpui_pinned_prompts_from_value(
+    value: Option<&serde_json::Value>,
+) -> Vec<GpuiPinnedPrompt> {
     let Some(items) = value.and_then(serde_json::Value::as_array) else {
         return Vec::new();
     };
@@ -192,7 +194,9 @@ pub(crate) fn gpui_pinned_prompt_from_value(value: &serde_json::Value) -> Option
     })
 }
 
-pub(crate) fn gpui_normalize_pinned_prompts(mut prompts: Vec<GpuiPinnedPrompt>) -> Vec<GpuiPinnedPrompt> {
+pub(crate) fn gpui_normalize_pinned_prompts(
+    mut prompts: Vec<GpuiPinnedPrompt>,
+) -> Vec<GpuiPinnedPrompt> {
     prompts.retain(|prompt| {
         !prompt.prompt_id.is_empty()
             && !prompt.content.is_empty()
@@ -226,4 +230,3 @@ pub(crate) fn gpui_normalize_pinned_prompt_title(title: &str, content: &str) -> 
         .filter(|line| !line.is_empty())
         .unwrap_or_else(|| "Untitled Prompt".to_string())
 }
-

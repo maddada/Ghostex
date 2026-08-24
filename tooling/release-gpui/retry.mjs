@@ -9,7 +9,7 @@
  * transient is re-thrown immediately.
  */
 
-import { classifyError } from "./failure-classification.mjs";
+import { classifyError } from './failure-classification.mjs';
 
 /* §6.2: the bounded profiles each call site uses. */
 export const RETRY_PROFILES = Object.freeze({
@@ -44,12 +44,12 @@ export async function withRetry(operation, options = {}) {
     classify = classifyError,
     factor = 3,
     jitterMs = 0,
-    label = "operation",
+    label = 'operation',
     onRetry,
     random = Math.random,
     sleep = defaultSleep,
   } = options;
-  if (!Number.isInteger(attempts) || attempts < 1) throw new Error("withRetry requires at least one attempt");
+  if (!Number.isInteger(attempts) || attempts < 1) throw new Error('withRetry requires at least one attempt');
 
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -78,7 +78,7 @@ export async function withRetry(operation, options = {}) {
         onRetry({ attempt, attempts, classification, delayMs: delay, error, label });
       } else {
         process.stdout.write(
-          `::notice::retry ${classification.matchedRule} attempt ${attempt}/${attempts} after ${delay}ms (${label})\n`,
+          `::notice::retry ${classification.matchedRule} attempt ${attempt}/${attempts} after ${delay}ms (${label})\n`
         );
       }
       await sleep(delay);

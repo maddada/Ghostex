@@ -35,14 +35,14 @@ const DISPLAY_MATH_VIEWBOX_PADDING = {
   left: 22,
   top: 20,
   right: 12,
-  bottom: 12
+  bottom: 12,
 } as const;
 const DISPLAY_MATH_TRIM_RETRY_DELAYS_MS = [80, 220];
 const DISPLAY_MATH_LABEL_SELECTORS = [
   '.nodeLabel .katex-mathml math',
   '.nodeLabel .katex-html',
   '.nodeLabel .katex-display',
-  '.nodeLabel'
+  '.nodeLabel',
 ];
 const DISPLAY_MATH_LABEL_SELECTOR = DISPLAY_MATH_LABEL_SELECTORS.join(', ');
 const MERMAID_DISPLAY_MATH_THEME_CSS =
@@ -51,7 +51,11 @@ const MERMAID_DISPLAY_MATH_THEME_CSS =
   '.katex-display{margin:0 !important;}' +
   '.katex{line-height:1 !important;}';
 
-function resolveCssColor(value: string, fallback: string, property: 'color' | 'backgroundColor' = 'backgroundColor'): string {
+function resolveCssColor(
+  value: string,
+  fallback: string,
+  property: 'color' | 'backgroundColor' = 'backgroundColor'
+): string {
   const trimmed = value.trim();
   if (!trimmed) {
     return fallback;
@@ -188,7 +192,7 @@ function isProbablyDarkColor(color: string): boolean {
   if (![red, green, blue].every(Number.isFinite)) {
     return false;
   }
-  return (red * 0.299 + green * 0.587 + blue * 0.114) < 128;
+  return red * 0.299 + green * 0.587 + blue * 0.114 < 128;
 }
 
 function isMermaidDarkTheme(background: string): boolean {
@@ -199,24 +203,11 @@ function getMermaidThemeConfig() {
   const bodyStyles = getComputedStyle(document.body);
   const background = getThemeCssColor('--meo-code-background', bodyStyles.backgroundColor || '#ffffff');
   const darkMode = isMermaidDarkTheme(background);
-  const nodeBackground = darkMode
-    ? getThemeCssColor('--meo-surface-background', '#2f343d')
-    : '#ffffff';
-  const foreground = darkMode
-    ? getThemeCssColor('--meo-foreground', '#c9d1d9', 'color')
-    : '#1f2328';
-  const border = darkMode
-    ? getThemeCssColor('--meo-color-base03', '#3e444d', 'color')
-    : '#d0d7de';
+  const nodeBackground = darkMode ? getThemeCssColor('--meo-surface-background', '#2f343d') : '#ffffff';
+  const foreground = darkMode ? getThemeCssColor('--meo-foreground', '#c9d1d9', 'color') : '#1f2328';
+  const border = darkMode ? getThemeCssColor('--meo-color-base03', '#3e444d', 'color') : '#d0d7de';
   const accent = getThemeCssColor('--meo-color-base05', border, 'color');
-  const signature = [
-    background,
-    nodeBackground,
-    foreground,
-    border,
-    accent,
-    darkMode ? 'dark' : 'light'
-  ].join('|');
+  const signature = [background, nodeBackground, foreground, border, accent, darkMode ? 'dark' : 'light'].join('|');
 
   return {
     signature,
@@ -240,17 +231,17 @@ function getMermaidThemeConfig() {
         clusterBkg: background,
         clusterBorder: border,
         titleColor: foreground,
-        darkMode
+        darkMode,
       },
       htmlLabels: true,
       markdownAutoWrap: true,
       flowchart: {
-        htmlLabels: true
+        htmlLabels: true,
       },
       // VS Code webviews can vary in MathML support, so force KaTeX-backed output.
       legacyMathML: true,
-      forceLegacyMathML: true
-    }
+      forceLegacyMathML: true,
+    },
   };
 }
 
@@ -428,7 +419,7 @@ function normalizeMermaidDiagramText(diagramText) {
   const escapedMath = escapeForMermaidLabel(compactDisplayMath(trimmed));
   const initConfig = JSON.stringify({
     flowchart: { diagramPadding: 0 },
-    themeCSS: MERMAID_DISPLAY_MATH_THEME_CSS
+    themeCSS: MERMAID_DISPLAY_MATH_THEME_CSS,
   });
 
   return [
@@ -437,7 +428,7 @@ function normalizeMermaidDiagramText(diagramText) {
     `  MATH["${escapedMath}"]`,
     '  style MATH fill:transparent,stroke:transparent,stroke-width:0px',
     `  classDef ${MERMAID_MATH_CLASS} padding:0px;`,
-    `  class MATH ${MERMAID_MATH_CLASS}`
+    `  class MATH ${MERMAID_MATH_CLASS}`,
   ].join('\n');
 }
 
@@ -719,7 +710,7 @@ export class MermaidDiagramWidget extends WidgetType {
       x: minX,
       y: minY,
       width: maxX - minX,
-      height: maxY - minY
+      height: maxY - minY,
     };
   }
 
@@ -758,7 +749,7 @@ export class MermaidDiagramWidget extends WidgetType {
           x: parts[0],
           y: parts[1],
           width: parts[2],
-          height: parts[3]
+          height: parts[3],
         };
       }
     }
@@ -770,7 +761,7 @@ export class MermaidDiagramWidget extends WidgetType {
         x: 0,
         y: 0,
         width,
-        height
+        height,
       };
     }
 

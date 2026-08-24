@@ -179,7 +179,10 @@ impl GhostexGpuiApp {
         self.stop_gpui_keep_awake_runtime_with_options(false)
     }
 
-    pub(crate) fn stop_gpui_keep_awake_runtime_with_options(&mut self, suppress_auto_start: bool) -> bool {
+    pub(crate) fn stop_gpui_keep_awake_runtime_with_options(
+        &mut self,
+        suppress_auto_start: bool,
+    ) -> bool {
         if suppress_auto_start && self.keep_awake_runtime.is_some() {
             self.keep_awake_auto_start_suppressed = true;
         }
@@ -311,5 +314,4 @@ impl GhostexGpuiApp {
             Ok(())
         }
     }
-
 }

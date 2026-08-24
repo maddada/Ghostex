@@ -1,18 +1,18 @@
-import { createRoot } from "react-dom/client";
-import "@/packages/core-ui/styles.css";
-import { SidebarApp } from "@/packages/core-ui/sidebar-app";
-import { dismissSidebarTooltips } from "@/packages/core-ui/app-tooltip";
-import { dismissAllSidebarContextMenus } from "@/packages/core-ui/sidebar-context-menu-portal";
-import { createGpuiSidebarRuntime } from "./gxserver-runtime";
-import "./sidebar.css";
+import { createRoot } from 'react-dom/client';
+import '@/packages/core-ui/styles.css';
+import { SidebarApp } from '@/packages/core-ui/sidebar-app';
+import { dismissSidebarTooltips } from '@/packages/core-ui/app-tooltip';
+import { dismissAllSidebarContextMenus } from '@/packages/core-ui/sidebar-context-menu-portal';
+import { createGpuiSidebarRuntime } from './gxserver-runtime';
+import './sidebar.css';
 
 /*
 CDXC:GPUISidebarGxserverRuntime 2026-06-24-11:00:
 GPUI sidebar production runtime mounts the shared SidebarApp directly and feeds it through the local gxserver message source. Storybook fixtures are not a runtime fallback; missing or invalid Rust/CEF gxserver bootstrap publishes the explicit gxserver-unavailable sidebar state until real presentation data arrives.
 */
-document.body.dataset.sidebarTheme = "plain-dark";
+document.body.dataset.sidebarTheme = 'plain-dark';
 // Reuse the native sidebar edge contract so reference-sidebar bleed stays inside the GPUI viewport.
-document.body.classList.add("vscode-dark", "native-sidebar-body");
+document.body.classList.add('vscode-dark', 'native-sidebar-body');
 
 /*
 CDXC:GPUISidebarCollapseRestore 2026-07-09:
@@ -21,9 +21,9 @@ exactly like the macOS sidebar WKWebView: the GPUI sidebar CEF profile has a
 persistent cache_path (see cef_app_ui_profile_cache_path in apps/desktop/src/cef/shell.rs),
 so no Rust-owned state file or startup seeding bridge is needed.
 */
-const rootElement = document.getElementById("root");
+const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Ghostex sidebar root element was not found.");
+  throw new Error('Ghostex sidebar root element was not found.');
 }
 
 /*
@@ -73,8 +73,8 @@ const root = createRoot(rootElement);
 
 root.render(
   <div
-    className="native-sidebar-shell gpui-sidebar"
-    data-sidebar-mode="combined"
+    className='native-sidebar-shell gpui-sidebar'
+    data-sidebar-mode='combined'
     onPointerDownCapture={() => {
       /*
        * The sidebar CEF surface is a normal native sibling of GPUI titlebar
@@ -83,7 +83,7 @@ root.render(
        * its normal target and behavior.
        */
       window.webkit?.messageHandlers?.ghostexNativeHost?.postMessage({
-        type: "closeTitlebarDropdownPanel",
+        type: 'closeTitlebarDropdownPanel',
       });
     }}
     onContextMenu={(event) => {
@@ -92,17 +92,17 @@ root.render(
       }
     }}
   >
-    <main className="native-sidebar-main">
+    <main className='native-sidebar-main'>
       <SidebarApp
         enableProjectCollections={true}
         messageSource={gpuiSidebarRuntime.messageSource}
         nativeHostEventSource={null}
         onStartGxserver={() => gpuiSidebarRuntime.startLocalGxserver()}
         vscode={gpuiSidebarRuntime.vscode}
-        windowScopeId="main"
+        windowScopeId='main'
       />
     </main>
-  </div>,
+  </div>
 );
 
 gpuiSidebarRuntime.start();

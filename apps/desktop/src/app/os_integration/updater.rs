@@ -152,7 +152,11 @@ impl GhostexGpuiApp {
     // The window stays in the signature for parity with the Windows updater,
     // which opens its own update modal; Sparkle owns its own panels here.
     #[cfg(target_os = "macos")]
-    pub(crate) fn check_for_gpui_updates(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn check_for_gpui_updates(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.update_downloading {
             return;
         }
@@ -178,7 +182,11 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "windows")]
-    pub(crate) fn check_for_gpui_updates(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn check_for_gpui_updates(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.update_downloading {
             return;
         }
@@ -208,9 +216,18 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    pub(crate) fn check_for_gpui_updates(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) {}
+    pub(crate) fn check_for_gpui_updates(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut gpui::Context<Self>,
+    ) {
+    }
 
-    pub(crate) fn set_gpui_update_available(&mut self, available: bool, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn set_gpui_update_available(
+        &mut self,
+        available: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.update_available == available {
             return;
         }
@@ -218,7 +235,11 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn set_gpui_update_downloading(&mut self, downloading: bool, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn set_gpui_update_downloading(
+        &mut self,
+        downloading: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let progress_cleared = !downloading && self.update_download_progress.is_some();
         if progress_cleared {
             self.update_download_progress = None;
@@ -247,7 +268,11 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "windows")]
-    pub(crate) fn begin_windows_update_check(&mut self, interactive: bool, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn begin_windows_update_check(
+        &mut self,
+        interactive: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.update_checking || self.update_downloading {
             return;
         }
@@ -460,5 +485,4 @@ impl GhostexGpuiApp {
         GPUI_APP_QUIT_IN_PROGRESS.store(true, Ordering::Release);
         cx.quit();
     }
-
 }

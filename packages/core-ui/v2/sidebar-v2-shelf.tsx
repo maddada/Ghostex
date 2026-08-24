@@ -1,6 +1,6 @@
-import { IconChevronDown } from "@tabler/icons-react";
-import type { ReactNode } from "react";
-import { useSidebarCollapsiblePresence } from "../sidebar-collapse-animation";
+import { IconChevronDown } from '@tabler/icons-react';
+import type { ReactNode } from 'react';
+import { useSidebarCollapsiblePresence } from '../sidebar-collapse-animation';
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -14,7 +14,7 @@ import { useSidebarCollapsiblePresence } from "../sidebar-collapse-animation";
  *   paying their layout cost once the transition is complete.
  */
 
-export type SidebarV2ShelfTone = "browser" | "settled" | "snoozed";
+export type SidebarV2ShelfTone = 'browser' | 'settled' | 'snoozed';
 
 export type SidebarV2ShelfProps = {
   children: ReactNode;
@@ -25,36 +25,26 @@ export type SidebarV2ShelfProps = {
   tone: SidebarV2ShelfTone;
 };
 
-export function SidebarV2Shelf({
-  children,
-  count,
-  isExpanded,
-  label,
-  onToggle,
-  tone,
-}: SidebarV2ShelfProps) {
-  const { isPresent, isVisuallyCollapsed, setCollapsibleElement } =
-    useSidebarCollapsiblePresence(!isExpanded);
+export function SidebarV2Shelf({ children, count, isExpanded, label, onToggle, tone }: SidebarV2ShelfProps) {
+  const { isPresent, isVisuallyCollapsed, setCollapsibleElement } = useSidebarCollapsiblePresence(!isExpanded);
   if (count === 0) {
     return null;
   }
   return (
     <>
-      <li className="sidebar-v2-shelf-header-item">
+      <li className='sidebar-v2-shelf-header-item'>
         <button
           aria-expanded={isExpanded}
-          className="sidebar-v2-shelf-header"
+          className='sidebar-v2-shelf-header'
           data-tone={tone}
           onClick={onToggle}
-          type="button"
+          type='button'
         >
-          <span className="sidebar-v2-shelf-label">
-            {isExpanded ? label : `${label} (${count})`}
-          </span>
-          <span aria-hidden="true" className="sidebar-v2-shelf-rule" />
+          <span className='sidebar-v2-shelf-label'>{isExpanded ? label : `${label} (${count})`}</span>
+          <span aria-hidden='true' className='sidebar-v2-shelf-rule' />
           <IconChevronDown
-            aria-hidden="true"
-            className="sidebar-v2-shelf-chevron"
+            aria-hidden='true'
+            className='sidebar-v2-shelf-chevron'
             data-expanded={String(isExpanded)}
             size={12}
             stroke={2}
@@ -64,12 +54,12 @@ export function SidebarV2Shelf({
       {isPresent ? (
         <li
           aria-hidden={isVisuallyCollapsed}
-          className="sidebar-v2-shelf-body sidebar-animated-collapse-body"
+          className='sidebar-v2-shelf-body sidebar-animated-collapse-body'
           data-collapsed={String(isVisuallyCollapsed)}
           inert={isVisuallyCollapsed ? true : undefined}
           ref={setCollapsibleElement}
         >
-          <ul className="sidebar-v2-shelf-body-list">{children}</ul>
+          <ul className='sidebar-v2-shelf-body-list'>{children}</ul>
         </li>
       ) : null}
     </>

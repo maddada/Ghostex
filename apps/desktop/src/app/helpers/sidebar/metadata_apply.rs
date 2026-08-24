@@ -11,7 +11,6 @@ use std::time::Duration;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use anyhow::Result;
 
 use crate::app::helpers::*;
@@ -224,7 +223,9 @@ pub(crate) fn gpui_apply_sidebar_command_metadata_write(
 }
 
 #[allow(dead_code)] // no caller: sidebar agent/command metadata is projected by gxserver now; kept as the local-state derivation
-pub(crate) fn gpui_sidebar_command_write_active_project_id(write: &GpuiSidebarCommandMetadataWrite) -> &str {
+pub(crate) fn gpui_sidebar_command_write_active_project_id(
+    write: &GpuiSidebarCommandMetadataWrite,
+) -> &str {
     match write {
         GpuiSidebarCommandMetadataWrite::Save {
             active_project_id, ..
@@ -396,4 +397,3 @@ pub(crate) fn gpui_next_sidebar_command_metadata_state(
         }
     }
 }
-

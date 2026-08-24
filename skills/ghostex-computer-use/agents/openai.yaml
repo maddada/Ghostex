@@ -1,7 +1,7 @@
 interface:
-  display_name: "Ghostex Computer Use"
-  short_description: "Automate native Mac apps through the Cua Driver CLI"
-  default_prompt: "Use $ghostex-computer-use to drive a native macOS app through the Cua Driver CLI, not MCP, without stealing focus."
+  display_name: 'Ghostex Computer Use'
+  short_description: 'Automate native Mac apps through the Cua Driver CLI'
+  default_prompt: 'Use $ghostex-computer-use to drive a native macOS app through the Cua Driver CLI, not MCP, without stealing focus.'
 
 policy:
   allow_implicit_invocation: true

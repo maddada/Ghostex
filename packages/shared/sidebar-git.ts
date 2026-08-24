@@ -1,11 +1,4 @@
-export type SidebarGitAction =
-  | "commit"
-  | "push"
-  | "pr"
-  | "syncRemote"
-  | "syncMain"
-  | "multiRelease"
-  | "release";
+export type SidebarGitAction = 'commit' | 'push' | 'pr' | 'syncRemote' | 'syncMain' | 'multiRelease' | 'release';
 
 export type SidebarGitChangedFile = {
   additions: number;
@@ -22,7 +15,7 @@ export type SidebarGitFileDiffDraft = {
 
 export type SidebarGitPullRequest = {
   number?: number;
-  state: "open" | "closed" | "merged";
+  state: 'open' | 'closed' | 'merged';
   title: string;
   url: string;
 };
@@ -57,7 +50,7 @@ export type SidebarGitMenuItem = {
   label: string;
 };
 
-export type SidebarGitActionCategory = "direct" | "agent";
+export type SidebarGitActionCategory = 'direct' | 'agent';
 
 export type SidebarGitPrimaryActionState = {
   action: SidebarGitAction;
@@ -66,12 +59,12 @@ export type SidebarGitPrimaryActionState = {
   label: string;
 };
 
-export const DEFAULT_SIDEBAR_GIT_ACTION: SidebarGitAction = "commit";
+export const DEFAULT_SIDEBAR_GIT_ACTION: SidebarGitAction = 'commit';
 
 export function createDefaultSidebarGitState(
   primaryAction: SidebarGitAction = DEFAULT_SIDEBAR_GIT_ACTION,
   confirmSuggestedCommit = false,
-  generateCommitBody = true,
+  generateCommitBody = true
 ): SidebarGitState {
   return {
     additions: 0,
@@ -96,29 +89,22 @@ export function createDefaultSidebarGitState(
   };
 }
 
-export function hasSidebarGitDiffStat(
-  state: Pick<SidebarGitState, "additions" | "deletions">,
-): boolean {
+export function hasSidebarGitDiffStat(state: Pick<SidebarGitState, 'additions' | 'deletions'>): boolean {
   return state.additions > 0 || state.deletions > 0;
 }
 
-export function hasSidebarGitRemoteCommitDelta(
-  state: Pick<SidebarGitState, "aheadCount" | "behindCount">,
-): boolean {
+export function hasSidebarGitRemoteCommitDelta(state: Pick<SidebarGitState, 'aheadCount' | 'behindCount'>): boolean {
   /**
    * CDXC:TitlebarGit 2026-06-16-18:41:
    * Remote sync availability and titlebar copy share one normalized ahead/behind
    * check so a synced branch cannot run the sync action while the Commits row
    * shows ↑0 ↓0.
    */
-  return (
-    Math.max(0, Math.trunc(state.behindCount)) > 0 ||
-    Math.max(0, Math.trunc(state.aheadCount)) > 0
-  );
+  return Math.max(0, Math.trunc(state.behindCount)) > 0 || Math.max(0, Math.trunc(state.aheadCount)) > 0;
 }
 
 export function normalizeSidebarGitAction(candidate: string | undefined): SidebarGitAction {
-  return candidate === "push" || candidate === "pr" ? candidate : "commit";
+  return candidate === 'push' || candidate === 'pr' ? candidate : 'commit';
 }
 
 export function buildSidebarGitMenuItems(state: SidebarGitState): SidebarGitMenuItem[] {
@@ -129,18 +115,18 @@ export function buildSidebarGitMenuItems(state: SidebarGitState): SidebarGitMenu
    * projects do not need to pull main into themselves before worktree merge.
    */
   return [
-    buildSidebarGitMenuItem("commit", "Commit", state),
-    buildSidebarGitMenuItem("push", "Push", state),
-    buildSidebarGitMenuItem("pr", state.pr?.state === "open" ? "View PR" : "Create PR", state),
-    ...(state.isWorktree ? [buildSidebarGitMenuItem("syncMain", "Sync with Main", state)] : []),
-    buildSidebarGitMenuItem("multiRelease", "Multicommit & Release", state),
-    buildSidebarGitMenuItem("release", "Release", state),
+    buildSidebarGitMenuItem('commit', 'Commit', state),
+    buildSidebarGitMenuItem('push', 'Push', state),
+    buildSidebarGitMenuItem('pr', state.pr?.state === 'open' ? 'View PR' : 'Create PR', state),
+    ...(state.isWorktree ? [buildSidebarGitMenuItem('syncMain', 'Sync with Main', state)] : []),
+    buildSidebarGitMenuItem('multiRelease', 'Multicommit & Release', state),
+    buildSidebarGitMenuItem('release', 'Release', state),
   ];
 }
 
 export function getSidebarGitActionCategory(
-  state: Pick<SidebarGitState, "pr">,
-  action: SidebarGitAction,
+  state: Pick<SidebarGitState, 'pr'>,
+  action: SidebarGitAction
 ): SidebarGitActionCategory {
   /**
    * CDXC:GitActionModel 2026-06-02-13:41:
@@ -148,31 +134,29 @@ export function getSidebarGitActionCategory(
    * agent-run workflows. Create PR belongs with agent workflows, while View PR
    * stays direct because it only opens the existing pull request.
    */
-  if (action === "syncMain" || action === "multiRelease" || action === "release") {
-    return "agent";
+  if (action === 'syncMain' || action === 'multiRelease' || action === 'release') {
+    return 'agent';
   }
-  if (action === "pr" && state.pr?.state !== "open") {
-    return "agent";
+  if (action === 'pr' && state.pr?.state !== 'open') {
+    return 'agent';
   }
-  return "direct";
+  return 'direct';
 }
 
-export function resolveSidebarGitPrimaryActionState(
-  state: SidebarGitState,
-): SidebarGitPrimaryActionState {
+export function resolveSidebarGitPrimaryActionState(state: SidebarGitState): SidebarGitPrimaryActionState {
   const action = normalizeSidebarGitAction(state.primaryAction);
   const disabledReason = getSidebarGitDisabledReason(state, action);
 
-  if (action === "push") {
+  if (action === 'push') {
     return {
       action,
       disabled: disabledReason !== undefined,
       disabledReason,
-      label: state.hasWorkingTreeChanges ? "Commit & Push" : "Push",
+      label: state.hasWorkingTreeChanges ? 'Commit & Push' : 'Push',
     };
   }
 
-  if (action === "pr") {
+  if (action === 'pr') {
     return {
       action,
       disabled: disabledReason !== undefined,
@@ -185,41 +169,38 @@ export function resolveSidebarGitPrimaryActionState(
     action,
     disabled: disabledReason !== undefined,
     disabledReason,
-    label: "Commit",
+    label: 'Commit',
   };
 }
 
-export function getSidebarGitDisabledReason(
-  state: SidebarGitState,
-  action: SidebarGitAction,
-): string | undefined {
+export function getSidebarGitDisabledReason(state: SidebarGitState, action: SidebarGitAction): string | undefined {
   if (state.isBusy) {
-    return "Git action already running.";
+    return 'Git action already running.';
   }
 
   if (!state.isRepo) {
-    return "Open a Git repository to use Git actions.";
+    return 'Open a Git repository to use Git actions.';
   }
 
-  if (action === "commit") {
-    return state.hasWorkingTreeChanges ? undefined : "No working tree changes to commit.";
+  if (action === 'commit') {
+    return state.hasWorkingTreeChanges ? undefined : 'No working tree changes to commit.';
   }
 
-  if (action === "multiRelease" || action === "release") {
+  if (action === 'multiRelease' || action === 'release') {
     return undefined;
   }
 
   if (!state.branch) {
-    return action === "syncRemote"
-      ? "Create and checkout a branch before syncing."
-      : "Create and checkout a branch before pushing or creating a PR.";
+    return action === 'syncRemote'
+      ? 'Create and checkout a branch before syncing.'
+      : 'Create and checkout a branch before pushing or creating a PR.';
   }
 
-  if (action === "syncMain") {
-    return state.isWorktree ? undefined : "Open a worktree project to sync with main.";
+  if (action === 'syncMain') {
+    return state.isWorktree ? undefined : 'Open a worktree project to sync with main.';
   }
 
-  if (action === "syncRemote") {
+  if (action === 'syncRemote') {
     /**
      * CDXC:TitlebarGit 2026-06-16-07:31:
      * The macOS titlebar sync row is a direct remote branch sync, not the
@@ -234,10 +215,10 @@ export function getSidebarGitDisabledReason(
   }
 
   if (state.behindCount > 0) {
-    return "Branch is behind upstream. Pull or rebase first.";
+    return 'Branch is behind upstream. Pull or rebase first.';
   }
 
-  if (action === "push") {
+  if (action === 'push') {
     if (state.hasWorkingTreeChanges) {
       return undefined;
     }
@@ -254,18 +235,18 @@ export function getSidebarGitDisabledReason(
       return 'Add an "origin" remote before pushing.';
     }
 
-    return "No local commits to push.";
+    return 'No local commits to push.';
   }
 
   if (!state.hasGitHubCli) {
-    return "Install GitHub CLI to create or view pull requests.";
+    return 'Install GitHub CLI to create or view pull requests.';
   }
 
   if (state.hasWorkingTreeChanges) {
     return undefined;
   }
 
-  if (state.pr?.state === "open") {
+  if (state.pr?.state === 'open') {
     return undefined;
   }
 
@@ -285,14 +266,10 @@ export function getSidebarGitDisabledReason(
     return undefined;
   }
 
-  return "No branch state available for PR creation.";
+  return 'No branch state available for PR creation.';
 }
 
-function buildSidebarGitMenuItem(
-  action: SidebarGitAction,
-  label: string,
-  state: SidebarGitState,
-): SidebarGitMenuItem {
+function buildSidebarGitMenuItem(action: SidebarGitAction, label: string, state: SidebarGitState): SidebarGitMenuItem {
   const disabledReason = getSidebarGitDisabledReason(state, action);
   return {
     action,
@@ -305,13 +282,13 @@ function buildSidebarGitMenuItem(
 function resolveSidebarGitPrPrimaryLabel(state: SidebarGitState): string {
   const needsPush = state.hasWorkingTreeChanges || state.aheadCount > 0 || !state.hasUpstream;
   if (state.hasWorkingTreeChanges) {
-    return "Commit, Push & PR";
+    return 'Commit, Push & PR';
   }
-  if (state.pr?.state === "open" && !needsPush) {
-    return "View PR";
+  if (state.pr?.state === 'open' && !needsPush) {
+    return 'View PR';
   }
   if (needsPush) {
-    return state.pr?.state === "open" ? "Push & View PR" : "Push & Create PR";
+    return state.pr?.state === 'open' ? 'Push & View PR' : 'Push & Create PR';
   }
-  return state.pr?.state === "open" ? "View PR" : "Create PR";
+  return state.pr?.state === 'open' ? 'View PR' : 'Create PR';
 }

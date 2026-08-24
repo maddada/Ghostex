@@ -1,18 +1,14 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fireEvent, waitFor } from "storybook/test";
-import type { SidebarStoryArgs } from "../sidebar-story-fixtures";
-import { resetSidebarStoryMessages } from "../sidebar-story-harness";
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, fireEvent, waitFor } from 'storybook/test';
+import type { SidebarStoryArgs } from '../sidebar-story-fixtures';
+import { resetSidebarStoryMessages } from '../sidebar-story-harness';
 import {
   DEFAULT_SIDEBAR_STORY_ARGS,
   SIDEBAR_STORY_ARG_TYPES,
   SIDEBAR_STORY_DECORATORS,
   renderSidebarStory,
-} from "../sidebar-story-meta";
-import {
-  expectProjectGroupingOverridePatch,
-  findSidebarV2Row,
-  waitForSidebarV2,
-} from "./sidebar-v2.story-helpers";
+} from '../sidebar-story-meta';
+import { expectProjectGroupingOverridePatch, findSidebarV2Row, waitForSidebarV2 } from './sidebar-v2.story-helpers';
 
 /*
  * CDXC:SidebarV2LogicalProjects 2026-07-29:
@@ -26,27 +22,27 @@ import {
  * prove that the grouping override actually round-trips through settings.
  */
 
-const LOCAL_OVERRIDE_KEY = "local:/Users/story/dev/ghostex";
-const LOCAL_COPY_OVERRIDE_KEY = "local:/Users/story/dev/ghostex-review";
-const REMOTE_OVERRIDE_KEY = "build-box:/home/build/src/ghostex-main";
+const LOCAL_OVERRIDE_KEY = 'local:/Users/story/dev/ghostex';
+const LOCAL_COPY_OVERRIDE_KEY = 'local:/Users/story/dev/ghostex-review';
+const REMOTE_OVERRIDE_KEY = 'build-box:/home/build/src/ghostex-main';
 
 /*
  * CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
  * The monorepo fixture's three checkouts: two sub-directories of one repository
  * on this Mac, and the same `apps/web` sub-directory on a remote machine.
  */
-const MONO_WEB_OVERRIDE_KEY = "local:/Users/story/dev/mono/apps/web";
-const MONO_API_OVERRIDE_KEY = "local:/Users/story/dev/mono/services/api";
-const MONO_REMOTE_WEB_OVERRIDE_KEY = "build-box:/home/build/mono/apps/web";
+const MONO_WEB_OVERRIDE_KEY = 'local:/Users/story/dev/mono/apps/web';
+const MONO_API_OVERRIDE_KEY = 'local:/Users/story/dev/mono/services/api';
+const MONO_REMOTE_WEB_OVERRIDE_KEY = 'build-box:/home/build/mono/apps/web';
 
 const meta = {
-  title: "Sidebar/V2 Logical Projects",
+  title: 'Sidebar/V2 Logical Projects',
   args: {
     ...DEFAULT_SIDEBAR_STORY_ARGS,
-    fixture: "sidebar-v2-multi-machine",
-    sidebarLifecycleCapabilities: "settleSnoozeGitAndWorktree",
-    sidebarV2Layout: "byProject",
-    sidebarVersion: "v2",
+    fixture: 'sidebar-v2-multi-machine',
+    sidebarLifecycleCapabilities: 'settleSnoozeGitAndWorktree',
+    sidebarV2Layout: 'byProject',
+    sidebarVersion: 'v2',
   },
   argTypes: SIDEBAR_STORY_ARG_TYPES,
   decorators: SIDEBAR_STORY_DECORATORS,
@@ -58,15 +54,13 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 async function groupIds(root: HTMLElement): Promise<string[]> {
-  return [...root.querySelectorAll("[data-sidebar-v2-group-id]")].map(
-    (element) => element.getAttribute("data-sidebar-v2-group-id") ?? "",
+  return [...root.querySelectorAll('[data-sidebar-v2-group-id]')].map(
+    (element) => element.getAttribute('data-sidebar-v2-group-id') ?? ''
   );
 }
 
 function groupTitles(root: HTMLElement): string[] {
-  return [...root.querySelectorAll(".group-title")].map(
-    (element) => element.textContent ?? "",
-  );
+  return [...root.querySelectorAll('.group-title')].map((element) => element.textContent ?? '');
 }
 
 /**
@@ -77,27 +71,23 @@ function groupTitles(root: HTMLElement): string[] {
 async function chooseGroupingMode(
   storyRoot: ParentNode,
   groupId: string,
-  option: "Repository" | "Repository + path" | "Keep separate",
+  option: 'Repository' | 'Repository + path' | 'Keep separate'
 ): Promise<void> {
   const header = (storyRoot as ParentNode).querySelector<HTMLElement>(
-    `[data-sidebar-v2-group-id="${groupId}"] .group-head`,
+    `[data-sidebar-v2-group-id="${groupId}"] .group-head`
   );
   expect(header).toBeTruthy();
   fireEvent.contextMenu(header!, { clientX: 40, clientY: 80 });
   await waitFor(() => {
-    expect(storyRoot.querySelector(".sidebar-v2-session-context-menu")).toBeTruthy();
+    expect(storyRoot.querySelector('.sidebar-v2-session-context-menu')).toBeTruthy();
   });
-  fireEvent.click(
-    storyRoot.querySelector<HTMLElement>(
-      ".sidebar-v2-session-context-menu .session-context-menu-item",
-    )!,
-  );
+  fireEvent.click(storyRoot.querySelector<HTMLElement>('.sidebar-v2-session-context-menu .session-context-menu-item')!);
   await waitFor(() => {
-    expect(storyRoot.querySelectorAll(".sidebar-v2-context-submenu-item").length).toBe(3);
+    expect(storyRoot.querySelectorAll('.sidebar-v2-context-submenu-item').length).toBe(3);
   });
-  const chosen = [
-    ...storyRoot.querySelectorAll<HTMLElement>(".sidebar-v2-context-submenu-item"),
-  ].find((item) => item.textContent === option);
+  const chosen = [...storyRoot.querySelectorAll<HTMLElement>('.sidebar-v2-context-submenu-item')].find(
+    (item) => item.textContent === option
+  );
   expect(chosen).toBeTruthy();
   fireEvent.click(chosen!);
 }
@@ -112,55 +102,43 @@ export const MergesOneRepositoryAcrossMachines: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("collapse three checkouts into one group, keeping notes apart", async () => {
+    await step('collapse three checkouts into one group, keeping notes apart', async () => {
       await waitFor(async () => {
-        expect(await groupIds(root)).toEqual(["v2-mm-local", "v2-mm-notes"]);
+        expect(await groupIds(root)).toEqual(['v2-mm-local', 'v2-mm-notes']);
       });
-      const merged = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mm-local"]',
-      );
-      expect(
-        merged!.getAttribute("data-sidebar-v2-group-merged"),
-      ).toBe("true");
+      const merged = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mm-local"]');
+      expect(merged!.getAttribute('data-sidebar-v2-group-merged')).toBe('true');
     });
 
-    await step("title the merged group by the shared repository, not one member", async () => {
-      const title = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mm-local"] .group-title',
-      );
-      expect(title?.textContent).toBe("ghostex/ghostex");
+    await step('title the merged group by the shared repository, not one member', async () => {
+      const title = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mm-local"] .group-title');
+      expect(title?.textContent).toBe('ghostex/ghostex');
     });
 
     await step("count every member's sessions on the merged header", async () => {
-      const count = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mm-local"] .sidebar-v2-group-count',
-      );
+      const count = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mm-local"] .sidebar-v2-group-count');
       // 2 local + 2 remote + 1 second-clone.
-      expect(count?.textContent).toBe("5");
+      expect(count?.textContent).toBe('5');
     });
 
-    await step("leave the non-git project unmerged and unmergeable", async () => {
-      const notes = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mm-notes"] .group-title',
-      );
-      expect(notes?.textContent).toBe("notes");
+    await step('leave the non-git project unmerged and unmergeable', async () => {
+      const notes = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mm-notes"] .group-title');
+      expect(notes?.textContent).toBe('notes');
       expect(
-        root.querySelector<HTMLElement>(
-          '[data-sidebar-v2-group-id="v2-mm-notes"]',
-        )?.getAttribute("data-sidebar-v2-group-merged"),
-      ).toBe("false");
+        root
+          .querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mm-notes"]')
+          ?.getAttribute('data-sidebar-v2-group-merged')
+      ).toBe('false');
     });
 
-    await step("render rows from both machines inside the one group", async () => {
-      const merged = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mm-local"]',
+    await step('render rows from both machines inside the one group', async () => {
+      const merged = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mm-local"]');
+      const rowIds = [...merged!.querySelectorAll('.sidebar-v2-row[data-session-id]')].map((element) =>
+        element.getAttribute('data-session-id')
       );
-      const rowIds = [...merged!.querySelectorAll(".sidebar-v2-row[data-session-id]")].map(
-        (element) => element.getAttribute("data-session-id"),
-      );
-      expect(rowIds).toContain("v2-mm-local-working");
-      expect(rowIds).toContain("v2-mm-remote-active");
-      expect(rowIds).toContain("v2-mm-local-copy-review");
+      expect(rowIds).toContain('v2-mm-local-working');
+      expect(rowIds).toContain('v2-mm-remote-active');
+      expect(rowIds).toContain('v2-mm-local-copy-review');
     });
   },
 };
@@ -176,10 +154,10 @@ export const BadgesRemoteRowsOnly: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     await waitForSidebarV2(storyRoot);
 
-    await step("badge a remote row with its machine name", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-mm-remote-active");
-      const badge = row.querySelector<HTMLElement>("[data-sidebar-v2-machine]");
-      expect(badge?.textContent).toContain("Build Box");
+    await step('badge a remote row with its machine name', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-mm-remote-active');
+      const badge = row.querySelector<HTMLElement>('[data-sidebar-v2-machine]');
+      expect(badge?.textContent).toContain('Build Box');
     });
 
     /*
@@ -188,28 +166,28 @@ export const BadgesRemoteRowsOnly: Story = {
      * cannot probe is exactly the remote case), and "which machine is this
      * running on" is the one fact the row cannot state anywhere else.
      */
-    await step("keep the meta line for a badge with no git data behind it", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-mm-remote-active");
+    await step('keep the meta line for a badge with no git data behind it', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-mm-remote-active');
       const meta = row.querySelector<HTMLElement>('[data-line="meta"]');
-      expect(meta?.getAttribute("data-meta")).toBe("machine");
-      expect(meta?.querySelector("[data-sidebar-v2-git]")).toBeNull();
+      expect(meta?.getAttribute('data-meta')).toBe('machine');
+      expect(meta?.querySelector('[data-sidebar-v2-git]')).toBeNull();
       /*
        * TWO lines, not three: these stories run in Group-by-Project, where the
        * group header states the project and the card drops its project line. The
        * badge therefore buys line 2 of 2 here, and line 3 of 3 in flat mode.
        */
       expect(row.querySelector('[data-line="project"]')).toBeNull();
-      expect(row.closest(".sidebar-v2-row-item")?.getAttribute("data-card-lines")).toBe("2");
+      expect(row.closest('.sidebar-v2-row-item')?.getAttribute('data-card-lines')).toBe('2');
     });
 
-    await step("leave local rows unbadged, on both local checkouts", async () => {
-      for (const sessionId of ["v2-mm-local-working", "v2-mm-local-copy-review"]) {
+    await step('leave local rows unbadged, on both local checkouts', async () => {
+      for (const sessionId of ['v2-mm-local-working', 'v2-mm-local-copy-review']) {
         const row = await findSidebarV2Row(storyRoot, sessionId);
-        expect(row.querySelector("[data-sidebar-v2-machine]")).toBeNull();
+        expect(row.querySelector('[data-sidebar-v2-machine]')).toBeNull();
         /* No badge and no git: the line is dropped, not left blank. A grouped
            card with neither is a single-line card. */
         expect(row.querySelector('[data-line="meta"]')).toBeNull();
-        expect(row.closest(".sidebar-v2-row-item")?.getAttribute("data-card-lines")).toBe("1");
+        expect(row.closest('.sidebar-v2-row-item')?.getAttribute('data-card-lines')).toBe('1');
       }
     });
   },
@@ -226,29 +204,27 @@ export const PartitionsEachMachineWithItsOwnWindow: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("park the local five-day-idle session on the Settled shelf", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-mm-local-idle");
-      expect(row.getAttribute("data-variant")).toBe("slim");
-      expect(
-        row.closest("[data-sidebar-v2-group-id]")?.getAttribute("data-sidebar-v2-group-id"),
-      ).toBe("v2-mm-local");
+    await step('park the local five-day-idle session on the Settled shelf', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-mm-local-idle');
+      expect(row.getAttribute('data-variant')).toBe('slim');
+      expect(row.closest('[data-sidebar-v2-group-id]')?.getAttribute('data-sidebar-v2-group-id')).toBe('v2-mm-local');
     });
 
-    await step("keep the remote five-day-idle session in the inbox", async () => {
-      const row = await findSidebarV2Row(storyRoot, "v2-mm-remote-idle");
-      expect(row.getAttribute("data-variant")).toBe("card");
-      expect(row.querySelector("[data-sidebar-v2-machine]")?.textContent).toContain("Build Box");
+    await step('keep the remote five-day-idle session in the inbox', async () => {
+      const row = await findSidebarV2Row(storyRoot, 'v2-mm-remote-idle');
+      expect(row.getAttribute('data-variant')).toBe('card');
+      expect(row.querySelector('[data-sidebar-v2-machine]')?.textContent).toContain('Build Box');
     });
 
-    await step("state the shelf holds exactly the one local row", async () => {
+    await step('state the shelf holds exactly the one local row', async () => {
       const shelf = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mm-local"] .sidebar-v2-shelf-header[data-tone="settled"]',
+        '[data-sidebar-v2-group-id="v2-mm-local"] .sidebar-v2-shelf-header[data-tone="settled"]'
       );
       expect(shelf).toBeTruthy();
-      const settledRows = [
-        ...root.querySelectorAll('.sidebar-v2-row[data-variant="slim"][data-session-id]'),
-      ].map((element) => element.getAttribute("data-session-id"));
-      expect(settledRows).toEqual(["v2-mm-local-idle"]);
+      const settledRows = [...root.querySelectorAll('.sidebar-v2-row[data-variant="slim"][data-session-id]')].map(
+        (element) => element.getAttribute('data-session-id')
+      );
+      expect(settledRows).toEqual(['v2-mm-local-idle']);
     });
   },
 };
@@ -259,40 +235,36 @@ export const PartitionsEachMachineWithItsOwnWindow: Story = {
  * disagree about how many projects exist.
  */
 export const ScopeFilterListsLogicalProjects: Story = {
-  args: { sidebarV2Layout: "flat" },
+  args: { sidebarV2Layout: 'flat' },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("offer one entry per logical project", async () => {
-      fireEvent.click(root.querySelector<HTMLElement>(".sidebar-v2-scope-trigger")!);
+    await step('offer one entry per logical project', async () => {
+      fireEvent.click(root.querySelector<HTMLElement>('.sidebar-v2-scope-trigger')!);
       await waitFor(() => {
-        expect(
-          storyRoot.querySelectorAll(".sidebar-v2-scope-menu .sidebar-v2-scope-menu-item").length,
-        ).toBeGreaterThan(0);
+        expect(storyRoot.querySelectorAll('.sidebar-v2-scope-menu .sidebar-v2-scope-menu-item').length).toBeGreaterThan(
+          0
+        );
       });
-      const labels = [
-        ...storyRoot.querySelectorAll(".sidebar-v2-scope-menu .sidebar-v2-scope-menu-label"),
-      ].map((element) => element.textContent);
-      expect(labels).toEqual(["All projects", "ghostex/ghostex", "notes"]);
+      const labels = [...storyRoot.querySelectorAll('.sidebar-v2-scope-menu .sidebar-v2-scope-menu-label')].map(
+        (element) => element.textContent
+      );
+      expect(labels).toEqual(['All projects', 'ghostex/ghostex', 'notes']);
     });
 
     await step("count every machine's sessions under the merged entry", async () => {
-      const counts = [
-        ...storyRoot.querySelectorAll(".sidebar-v2-scope-menu .sidebar-v2-scope-menu-count"),
-      ].map((element) => element.textContent);
-      expect(counts).toEqual(["6", "5", "1"]);
+      const counts = [...storyRoot.querySelectorAll('.sidebar-v2-scope-menu .sidebar-v2-scope-menu-count')].map(
+        (element) => element.textContent
+      );
+      expect(counts).toEqual(['6', '5', '1']);
     });
 
     await step("scope to the merged project and keep BOTH machines' rows", async () => {
-      const items = [
-        ...storyRoot.querySelectorAll<HTMLElement>(
-          ".sidebar-v2-scope-menu .sidebar-v2-scope-menu-item",
-        ),
-      ];
+      const items = [...storyRoot.querySelectorAll<HTMLElement>('.sidebar-v2-scope-menu .sidebar-v2-scope-menu-item')];
       fireEvent.click(items[1]!);
-      await findSidebarV2Row(storyRoot, "v2-mm-local-working");
-      await findSidebarV2Row(storyRoot, "v2-mm-remote-active");
+      await findSidebarV2Row(storyRoot, 'v2-mm-local-working');
+      await findSidebarV2Row(storyRoot, 'v2-mm-remote-active');
       await waitFor(() => {
         expect(root.querySelector('[data-session-id="v2-mm-notes-plan"]')).toBeNull();
       });
@@ -308,38 +280,31 @@ export const ScopeFilterListsLogicalProjects: Story = {
 export const SeparateOverrideSplitsTheGroup: Story = {
   args: {
     sidebarProjectGroupingOverrides: {
-      [LOCAL_COPY_OVERRIDE_KEY]: "separate",
-      [LOCAL_OVERRIDE_KEY]: "separate",
-      [REMOTE_OVERRIDE_KEY]: "separate",
+      [LOCAL_COPY_OVERRIDE_KEY]: 'separate',
+      [LOCAL_OVERRIDE_KEY]: 'separate',
+      [REMOTE_OVERRIDE_KEY]: 'separate',
     },
   },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("render one group per physical checkout again", async () => {
+    await step('render one group per physical checkout again', async () => {
       await waitFor(async () => {
-        expect(await groupIds(root)).toEqual([
-          "v2-mm-local",
-          "v2-mm-remote",
-          "v2-mm-local-copy",
-          "v2-mm-notes",
-        ]);
+        expect(await groupIds(root)).toEqual(['v2-mm-local', 'v2-mm-remote', 'v2-mm-local-copy', 'v2-mm-notes']);
       });
     });
 
     await step("restore each checkout's own title", async () => {
-      const titles = [...root.querySelectorAll(".group-title")].map(
-        (element) => element.textContent,
-      );
-      expect(titles).toEqual(["ghostex", "ghostex-main", "ghostex-review", "notes"]);
+      const titles = [...root.querySelectorAll('.group-title')].map((element) => element.textContent);
+      expect(titles).toEqual(['ghostex', 'ghostex-main', 'ghostex-review', 'notes']);
     });
 
-    await step("mark no group as merged", async () => {
-      const merged = [...root.querySelectorAll("[data-sidebar-v2-group-id]")].map((element) =>
-        element.getAttribute("data-sidebar-v2-group-merged"),
+    await step('mark no group as merged', async () => {
+      const merged = [...root.querySelectorAll('[data-sidebar-v2-group-id]')].map((element) =>
+        element.getAttribute('data-sidebar-v2-group-merged')
       );
-      expect(merged).toEqual(["false", "false", "false", "false"]);
+      expect(merged).toEqual(['false', 'false', 'false', 'false']);
     });
   },
 };
@@ -357,14 +322,10 @@ export const GroupingOverrideMenuRegroupsTheList: Story = {
     resetSidebarStoryMessages();
 
     await step("open the merged group's context menu", async () => {
-      const header = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mm-local"] .group-head',
-      );
+      const header = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mm-local"] .group-head');
       fireEvent.contextMenu(header!, { clientX: 40, clientY: 80 });
       await waitFor(() => {
-        expect(
-          storyRoot.querySelector(".sidebar-v2-session-context-menu"),
-        ).toBeTruthy();
+        expect(storyRoot.querySelector('.sidebar-v2-session-context-menu')).toBeTruthy();
       });
     });
 
@@ -373,69 +334,44 @@ export const GroupingOverrideMenuRegroupsTheList: Story = {
      * Close Project joined this menu when grouped mode adopted V1's project UX,
      * so the group menu is now grouping-plus-close rather than grouping alone.
      */
-    await step("offer the grouping submenu above Close Project", async () => {
-      const items = [
-        ...storyRoot.querySelectorAll(
-          ".sidebar-v2-session-context-menu .session-context-menu-item",
-        ),
-      ].map((element) => element.textContent);
-      expect(items).toEqual(["Group across machines", "Close Project"]);
+    await step('offer the grouping submenu above Close Project', async () => {
+      const items = [...storyRoot.querySelectorAll('.sidebar-v2-session-context-menu .session-context-menu-item')].map(
+        (element) => element.textContent
+      );
+      expect(items).toEqual(['Group across machines', 'Close Project']);
     });
 
-    await step("check the mode the group is currently using", async () => {
+    await step('check the mode the group is currently using', async () => {
       fireEvent.click(
-        storyRoot.querySelector<HTMLElement>(
-          ".sidebar-v2-session-context-menu .session-context-menu-item",
-        )!,
+        storyRoot.querySelector<HTMLElement>('.sidebar-v2-session-context-menu .session-context-menu-item')!
       );
       await waitFor(() => {
-        expect(
-          storyRoot.querySelectorAll(".sidebar-v2-context-submenu-item").length,
-        ).toBe(3);
+        expect(storyRoot.querySelectorAll('.sidebar-v2-context-submenu-item').length).toBe(3);
       });
-      const options = [
-        ...storyRoot.querySelectorAll<HTMLElement>(".sidebar-v2-context-submenu-item"),
-      ];
-      expect(options.map((option) => option.textContent)).toEqual([
-        "Repository",
-        "Repository + path",
-        "Keep separate",
-      ]);
-      expect(options.map((option) => option.getAttribute("data-checked"))).toEqual([
-        "true",
-        "false",
-        "false",
-      ]);
+      const options = [...storyRoot.querySelectorAll<HTMLElement>('.sidebar-v2-context-submenu-item')];
+      expect(options.map((option) => option.textContent)).toEqual(['Repository', 'Repository + path', 'Keep separate']);
+      expect(options.map((option) => option.getAttribute('data-checked'))).toEqual(['true', 'false', 'false']);
     });
 
     await step("write 'separate' for EVERY member of the merged group", async () => {
-      const options = [
-        ...storyRoot.querySelectorAll<HTMLElement>(".sidebar-v2-context-submenu-item"),
-      ];
+      const options = [...storyRoot.querySelectorAll<HTMLElement>('.sidebar-v2-context-submenu-item')];
       fireEvent.click(options[2]!);
       await expectProjectGroupingOverridePatch({
-        [LOCAL_COPY_OVERRIDE_KEY]: "separate",
-        [LOCAL_OVERRIDE_KEY]: "separate",
-        [REMOTE_OVERRIDE_KEY]: "separate",
+        [LOCAL_COPY_OVERRIDE_KEY]: 'separate',
+        [LOCAL_OVERRIDE_KEY]: 'separate',
+        [REMOTE_OVERRIDE_KEY]: 'separate',
       });
     });
 
-    await step("re-group the list off the settings write", async () => {
+    await step('re-group the list off the settings write', async () => {
       await waitFor(
         async () => {
-          expect(await groupIds(root)).toEqual([
-            "v2-mm-local",
-            "v2-mm-remote",
-            "v2-mm-local-copy",
-            "v2-mm-notes",
-          ]);
+          expect(await groupIds(root)).toEqual(['v2-mm-local', 'v2-mm-remote', 'v2-mm-local-copy', 'v2-mm-notes']);
         },
-        { timeout: 20_000 },
+        { timeout: 20_000 }
       );
-      const titles = [...root.querySelectorAll(".group-title")].map(
-        (element) => element.textContent,
-      );
-      expect(titles).toEqual(["ghostex", "ghostex-main", "ghostex-review", "notes"]);
+      const titles = [...root.querySelectorAll('.group-title')].map((element) => element.textContent);
+      expect(titles).toEqual(['ghostex', 'ghostex-main', 'ghostex-review', 'notes']);
     });
 
     /*
@@ -445,21 +381,21 @@ export const GroupingOverrideMenuRegroupsTheList: Story = {
      * a row the user never split explicitly — has to pull the whole repository
      * back together, not just re-merge that row with itself.
      */
-    await step("re-merge the whole set from ONE split row", async () => {
+    await step('re-merge the whole set from ONE split row', async () => {
       resetSidebarStoryMessages();
-      await chooseGroupingMode(storyRoot, "v2-mm-local-copy", "Repository");
+      await chooseGroupingMode(storyRoot, 'v2-mm-local-copy', 'Repository');
       await expectProjectGroupingOverridePatch({
-        [LOCAL_COPY_OVERRIDE_KEY]: "repository",
-        [LOCAL_OVERRIDE_KEY]: "repository",
-        [REMOTE_OVERRIDE_KEY]: "repository",
+        [LOCAL_COPY_OVERRIDE_KEY]: 'repository',
+        [LOCAL_OVERRIDE_KEY]: 'repository',
+        [REMOTE_OVERRIDE_KEY]: 'repository',
       });
       await waitFor(
         async () => {
-          expect(await groupIds(root)).toEqual(["v2-mm-local", "v2-mm-notes"]);
+          expect(await groupIds(root)).toEqual(['v2-mm-local', 'v2-mm-notes']);
         },
-        { timeout: 20_000 },
+        { timeout: 20_000 }
       );
-      expect(groupTitles(root)).toEqual(["ghostex/ghostex", "notes"]);
+      expect(groupTitles(root)).toEqual(['ghostex/ghostex', 'notes']);
     });
   },
 };
@@ -473,7 +409,7 @@ export const GroupingOverrideMenuRegroupsTheList: Story = {
  * path" produced the same key as "Repository" for every project, so the option
  * was in the menu and could not change anything.
  */
-const MONOREPO_ARGS = { fixture: "sidebar-v2-monorepo" } as const;
+const MONOREPO_ARGS = { fixture: 'sidebar-v2-monorepo' } as const;
 
 export const MonorepoSubProjectsMergeByDefault: Story = {
   args: MONOREPO_ARGS,
@@ -481,32 +417,27 @@ export const MonorepoSubProjectsMergeByDefault: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("collapse both sub-projects and the remote copy into one row", async () => {
+    await step('collapse both sub-projects and the remote copy into one row', async () => {
       await waitFor(async () => {
-        expect(await groupIds(root)).toEqual(["v2-mono-web", "v2-mono-outsider"]);
+        expect(await groupIds(root)).toEqual(['v2-mono-web', 'v2-mono-outsider']);
       });
-      expect(groupTitles(root)).toEqual(["ghostex/mono", "tooling"]);
+      expect(groupTitles(root)).toEqual(['ghostex/mono', 'tooling']);
       expect(
-        root
-          .querySelector('[data-sidebar-v2-group-id="v2-mono-web"]')
-          ?.getAttribute("data-sidebar-v2-group-merged"),
-      ).toBe("true");
-      expect(
-        root.querySelector('[data-sidebar-v2-group-id="v2-mono-web"] .sidebar-v2-group-count')
-          ?.textContent,
-      ).toBe("3");
+        root.querySelector('[data-sidebar-v2-group-id="v2-mono-web"]')?.getAttribute('data-sidebar-v2-group-merged')
+      ).toBe('true');
+      expect(root.querySelector('[data-sidebar-v2-group-id="v2-mono-web"] .sidebar-v2-group-count')?.textContent).toBe(
+        '3'
+      );
     });
 
     await step("hold every sub-project's rows in the merged group", async () => {
-      const merged = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mono-web"]',
+      const merged = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mono-web"]');
+      const rowIds = [...merged!.querySelectorAll('.sidebar-v2-row[data-session-id]')].map((element) =>
+        element.getAttribute('data-session-id')
       );
-      const rowIds = [...merged!.querySelectorAll(".sidebar-v2-row[data-session-id]")].map(
-        (element) => element.getAttribute("data-session-id"),
-      );
-      expect(rowIds).toContain("v2-mono-web-working");
-      expect(rowIds).toContain("v2-mono-api-review");
-      expect(rowIds).toContain("v2-mono-remote-web-smoke");
+      expect(rowIds).toContain('v2-mono-web-working');
+      expect(rowIds).toContain('v2-mono-api-review');
+      expect(rowIds).toContain('v2-mono-remote-web-smoke');
     });
   },
 };
@@ -525,60 +456,52 @@ export const RepositoryPathOverrideSplitsSubProjects: Story = {
     resetSidebarStoryMessages();
 
     await step("choose 'Repository + path' on the merged monorepo row", async () => {
-      await chooseGroupingMode(storyRoot, "v2-mono-web", "Repository + path");
+      await chooseGroupingMode(storyRoot, 'v2-mono-web', 'Repository + path');
       await expectProjectGroupingOverridePatch({
-        [MONO_API_OVERRIDE_KEY]: "repositoryPath",
-        [MONO_REMOTE_WEB_OVERRIDE_KEY]: "repositoryPath",
-        [MONO_WEB_OVERRIDE_KEY]: "repositoryPath",
+        [MONO_API_OVERRIDE_KEY]: 'repositoryPath',
+        [MONO_REMOTE_WEB_OVERRIDE_KEY]: 'repositoryPath',
+        [MONO_WEB_OVERRIDE_KEY]: 'repositoryPath',
       });
     });
 
-    await step("split the two sub-projects into their own rows", async () => {
+    await step('split the two sub-projects into their own rows', async () => {
       await waitFor(
         async () => {
-          expect(await groupIds(root)).toEqual([
-            "v2-mono-web",
-            "v2-mono-api",
-            "v2-mono-outsider",
-          ]);
+          expect(await groupIds(root)).toEqual(['v2-mono-web', 'v2-mono-api', 'v2-mono-outsider']);
         },
-        { timeout: 20_000 },
+        { timeout: 20_000 }
       );
-      expect(groupTitles(root)).toEqual(["ghostex/mono", "api", "tooling"]);
+      expect(groupTitles(root)).toEqual(['ghostex/mono', 'api', 'tooling']);
     });
 
-    await step("keep the two apps/web checkouts merged with each other", async () => {
+    await step('keep the two apps/web checkouts merged with each other', async () => {
       const web = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mono-web"]');
-      expect(
-        web!.getAttribute("data-sidebar-v2-group-merged"),
-      ).toBe("true");
-      expect(web!.querySelector(".sidebar-v2-group-count")?.textContent).toBe("2");
-      const webRowIds = [...web!.querySelectorAll(".sidebar-v2-row[data-session-id]")].map(
-        (element) => element.getAttribute("data-session-id"),
+      expect(web!.getAttribute('data-sidebar-v2-group-merged')).toBe('true');
+      expect(web!.querySelector('.sidebar-v2-group-count')?.textContent).toBe('2');
+      const webRowIds = [...web!.querySelectorAll('.sidebar-v2-row[data-session-id]')].map((element) =>
+        element.getAttribute('data-session-id')
       );
-      expect(webRowIds).toContain("v2-mono-web-working");
-      expect(webRowIds).toContain("v2-mono-remote-web-smoke");
-      expect(webRowIds).not.toContain("v2-mono-api-review");
+      expect(webRowIds).toContain('v2-mono-web-working');
+      expect(webRowIds).toContain('v2-mono-remote-web-smoke');
+      expect(webRowIds).not.toContain('v2-mono-api-review');
     });
 
-    await step("move the api sub-project out on its own", async () => {
+    await step('move the api sub-project out on its own', async () => {
       const api = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mono-api"]');
+      expect(api!.getAttribute('data-sidebar-v2-group-merged')).toBe('false');
       expect(
-        api!.getAttribute("data-sidebar-v2-group-merged"),
-      ).toBe("false");
-      expect(
-        [...api!.querySelectorAll(".sidebar-v2-row[data-session-id]")].map((element) =>
-          element.getAttribute("data-session-id"),
-        ),
-      ).toEqual(["v2-mono-api-review"]);
+        [...api!.querySelectorAll('.sidebar-v2-row[data-session-id]')].map((element) =>
+          element.getAttribute('data-session-id')
+        )
+      ).toEqual(['v2-mono-api-review']);
     });
 
-    await step("leave the unrelated repository untouched", async () => {
+    await step('leave the unrelated repository untouched', async () => {
       expect(
         root
           .querySelector('[data-sidebar-v2-group-id="v2-mono-outsider"]')
-          ?.getAttribute("data-sidebar-v2-group-merged"),
-      ).toBe("false");
+          ?.getAttribute('data-sidebar-v2-group-merged')
+      ).toBe('false');
     });
   },
 };
@@ -593,33 +516,28 @@ export const SeparateOverrideSplitsEveryMonorepoCheckout: Story = {
   args: {
     ...MONOREPO_ARGS,
     sidebarProjectGroupingOverrides: {
-      [MONO_API_OVERRIDE_KEY]: "separate",
-      [MONO_REMOTE_WEB_OVERRIDE_KEY]: "separate",
-      [MONO_WEB_OVERRIDE_KEY]: "separate",
+      [MONO_API_OVERRIDE_KEY]: 'separate',
+      [MONO_REMOTE_WEB_OVERRIDE_KEY]: 'separate',
+      [MONO_WEB_OVERRIDE_KEY]: 'separate',
     },
   },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("render one row per physical checkout", async () => {
+    await step('render one row per physical checkout', async () => {
       await waitFor(async () => {
-        expect(await groupIds(root)).toEqual([
-          "v2-mono-web",
-          "v2-mono-api",
-          "v2-mono-remote-web",
-          "v2-mono-outsider",
-        ]);
+        expect(await groupIds(root)).toEqual(['v2-mono-web', 'v2-mono-api', 'v2-mono-remote-web', 'v2-mono-outsider']);
       });
-      expect(groupTitles(root)).toEqual(["web", "api", "web (build box)", "tooling"]);
+      expect(groupTitles(root)).toEqual(['web', 'api', 'web (build box)', 'tooling']);
     });
 
-    await step("mark no row as merged", async () => {
+    await step('mark no row as merged', async () => {
       expect(
-        [...root.querySelectorAll("[data-sidebar-v2-group-id]")].map((element) =>
-          element.getAttribute("data-sidebar-v2-group-merged"),
-        ),
-      ).toEqual(["false", "false", "false", "false"]);
+        [...root.querySelectorAll('[data-sidebar-v2-group-id]')].map((element) =>
+          element.getAttribute('data-sidebar-v2-group-merged')
+        )
+      ).toEqual(['false', 'false', 'false', 'false']);
     });
   },
 };
@@ -640,20 +558,16 @@ export const NonGitProjectHasNoGroupingMenu: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const root = await waitForSidebarV2(storyRoot);
 
-    await step("offer no grouping item on the non-git group header", async () => {
-      const header = root.querySelector<HTMLElement>(
-        '[data-sidebar-v2-group-id="v2-mm-notes"] .group-head',
-      );
+    await step('offer no grouping item on the non-git group header', async () => {
+      const header = root.querySelector<HTMLElement>('[data-sidebar-v2-group-id="v2-mm-notes"] .group-head');
       fireEvent.contextMenu(header!, { clientX: 40, clientY: 120 });
       await waitFor(() => {
-        expect(storyRoot.querySelector(".sidebar-v2-session-context-menu")).toBeTruthy();
+        expect(storyRoot.querySelector('.sidebar-v2-session-context-menu')).toBeTruthy();
       });
-      const items = [
-        ...storyRoot.querySelectorAll(
-          ".sidebar-v2-session-context-menu .session-context-menu-item",
-        ),
-      ].map((element) => element.textContent);
-      expect(items).toEqual(["Close Project"]);
+      const items = [...storyRoot.querySelectorAll('.sidebar-v2-session-context-menu .session-context-menu-item')].map(
+        (element) => element.textContent
+      );
+      expect(items).toEqual(['Close Project']);
     });
   },
 };

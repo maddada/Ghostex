@@ -3,11 +3,13 @@
 #import <dispatch/dispatch.h>
 #import <stdint.h>
 
-extern void GhostexGpuiAccessibilityDisplayOptionsChanged(int32_t shouldReduceMotion);
+extern void
+GhostexGpuiAccessibilityDisplayOptionsChanged(int32_t shouldReduceMotion);
 
 static BOOL GhostexGpuiAccessibilityDisplayOptionsMonitorInstalled = NO;
 
-static void GhostexGpuiRunAccessibilityDisplayOptionsOnMain(dispatch_block_t block) {
+static void
+GhostexGpuiRunAccessibilityDisplayOptionsOnMain(dispatch_block_t block) {
   if ([NSThread isMainThread]) {
     block();
   } else {
@@ -18,10 +20,15 @@ static void GhostexGpuiRunAccessibilityDisplayOptionsOnMain(dispatch_block_t blo
 static int32_t GhostexGpuiAccessibilityDisplayShouldReduceMotionOnMain(void) {
   /*
    CDXC:GPUIStatusPetOverlay 2026-06-26-07:31:
-   GPUI Pet Overlay Reduce Motion follows macOS accessibility display options from NSWorkspace at runtime. Return only a boolean-like primitive across FFI and do not persist or log settings payloads, paths, titles, commands, URLs, terminal content, tokens, or raw system preference data.
+   GPUI Pet Overlay Reduce Motion follows macOS accessibility display options
+   from NSWorkspace at runtime. Return only a boolean-like primitive across FFI
+   and do not persist or log settings payloads, paths, titles, commands, URLs,
+   terminal content, tokens, or raw system preference data.
    */
   if (@available(macOS 10.12, *)) {
-    return NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion ? 1 : 0;
+    return NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion
+               ? 1
+               : 0;
   }
   return -1;
 }
@@ -32,7 +39,7 @@ static int32_t GhostexGpuiAccessibilityDisplayShouldReduceMotionOnMain(void) {
 @implementation GhostexGpuiAccessibilityDisplayOptionsObserver
 
 + (instancetype)sharedObserver {
-  static GhostexGpuiAccessibilityDisplayOptionsObserver* observer = nil;
+  static GhostexGpuiAccessibilityDisplayOptionsObserver *observer = nil;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     observer = [[GhostexGpuiAccessibilityDisplayOptionsObserver alloc] init];
@@ -40,11 +47,10 @@ static int32_t GhostexGpuiAccessibilityDisplayShouldReduceMotionOnMain(void) {
   return observer;
 }
 
-- (void)displayOptionsChanged:(NSNotification*)notification {
+- (void)displayOptionsChanged:(NSNotification *)notification {
   (void)notification;
   GhostexGpuiAccessibilityDisplayOptionsChanged(
-    GhostexGpuiAccessibilityDisplayShouldReduceMotionOnMain()
-  );
+      GhostexGpuiAccessibilityDisplayShouldReduceMotionOnMain());
 }
 
 @end
@@ -70,13 +76,18 @@ void GhostexGpuiInstallAccessibilityDisplayOptionsMonitor(void) {
       }
       /*
        CDXC:GPUIStatusPetOverlay 2026-06-26-07:31:
-       Runtime Reduce Motion changes must notify Rust from the NSWorkspace accessibility display-options notification instead of using an animation polling loop. The callback carries only the current boolean state so the pet ticker can stop or restart without broad settings IPC or hidden UI.
+       Runtime Reduce Motion changes must notify Rust from the NSWorkspace
+       accessibility display-options notification instead of using an animation
+       polling loop. The callback carries only the current boolean state so the
+       pet ticker can stop or restart without broad settings IPC or hidden UI.
        */
       [[[NSWorkspace sharedWorkspace] notificationCenter]
-        addObserver:[GhostexGpuiAccessibilityDisplayOptionsObserver sharedObserver]
-           selector:@selector(displayOptionsChanged:)
-               name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
-             object:nil];
+          addObserver:[GhostexGpuiAccessibilityDisplayOptionsObserver
+                          sharedObserver]
+             selector:@selector(displayOptionsChanged:)
+                 name:
+                     NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+               object:nil];
       GhostexGpuiAccessibilityDisplayOptionsMonitorInstalled = YES;
     });
   }
@@ -89,9 +100,11 @@ void GhostexGpuiRemoveAccessibilityDisplayOptionsMonitor(void) {
         return;
       }
       [[[NSWorkspace sharedWorkspace] notificationCenter]
-        removeObserver:[GhostexGpuiAccessibilityDisplayOptionsObserver sharedObserver]
-                  name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
-                object:nil];
+          removeObserver:[GhostexGpuiAccessibilityDisplayOptionsObserver
+                             sharedObserver]
+                    name:
+                        NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+                  object:nil];
       GhostexGpuiAccessibilityDisplayOptionsMonitorInstalled = NO;
     });
   }

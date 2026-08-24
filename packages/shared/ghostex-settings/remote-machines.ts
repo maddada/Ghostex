@@ -1,7 +1,4 @@
-import {
-  isRecord,
-  readLooseString,
-} from "./primitives";
+import { isRecord, readLooseString } from './primitives';
 
 export type RemoteMachineSettings = {
   id: string;
@@ -63,12 +60,8 @@ export function normalizeRemoteMachineSettings(candidate: unknown): RemoteMachin
 
 function normalizeRemoteMachineWslDistribution(value: unknown): string {
   const distribution = readLooseString(value).slice(0, 120);
-  if (
-    !distribution ||
-    distribution.startsWith("-") ||
-    !/^[A-Za-z0-9][A-Za-z0-9._+() -]*$/u.test(distribution)
-  ) {
-    return "";
+  if (!distribution || distribution.startsWith('-') || !/^[A-Za-z0-9][A-Za-z0-9._+() -]*$/u.test(distribution)) {
+    return '';
   }
   return distribution;
 }
@@ -79,10 +72,10 @@ function normalizeRemoteMachineId(input: unknown): string | undefined {
 }
 
 function normalizeRemoteMachineSshPort(input: unknown): number | undefined {
-  if (input === undefined || input === null || input === "") {
+  if (input === undefined || input === null || input === '') {
     return undefined;
   }
-  const value = typeof input === "number" ? input : Number(input);
+  const value = typeof input === 'number' ? input : Number(input);
   if (!Number.isInteger(value) || value < 1 || value > 65535) {
     return undefined;
   }

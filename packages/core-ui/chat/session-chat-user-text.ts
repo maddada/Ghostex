@@ -58,25 +58,25 @@ const QUOTE_LINE = /^ {0,3}>/;
  * (no quotes at all) hands the very same string to the parser.
  */
 export function sessionChatUserMarkdownSource(markdown: string): string {
-  if (!markdown.includes(">")) return markdown;
+  if (!markdown.includes('>')) return markdown;
 
-  const lines = markdown.split("\n");
+  const lines = markdown.split('\n');
   const output: string[] = [];
   let fence: string | null = null;
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
+    const line = lines[index] ?? '';
     output.push(line);
 
     const fenceMatch = FENCE_LINE.exec(line);
     if (fenceMatch) {
-      const marker = fenceMatch[1] ?? "";
+      const marker = fenceMatch[1] ?? '';
       if (fence === null) {
         fence = marker[0] ?? null;
       } else if (
         marker[0] === fence &&
         // A closing fence is at least as long as the opening one and carries
         // no info string.
-        (fenceMatch[2] ?? "").trim() === ""
+        (fenceMatch[2] ?? '').trim() === ''
       ) {
         fence = null;
       }
@@ -88,10 +88,10 @@ export function sessionChatUserMarkdownSource(markdown: string): string {
     if (next === undefined) continue;
     if (!QUOTE_LINE.test(line)) continue;
     // A blank line already ends the quote, and a quoted line continues it.
-    if (next.trim() === "" || QUOTE_LINE.test(next)) continue;
-    output.push("");
+    if (next.trim() === '' || QUOTE_LINE.test(next)) continue;
+    output.push('');
   }
-  return output.join("\n");
+  return output.join('\n');
 }
 
 /**
@@ -110,13 +110,13 @@ export function remarkSessionChatHardBreaks() {
       const rebuilt: MarkdownAstNode[] = [];
       let changed = false;
       for (const child of children) {
-        if (child.type !== "text" || typeof child.value !== "string") {
+        if (child.type !== 'text' || typeof child.value !== 'string') {
           visit(child);
           rebuilt.push(child);
           continue;
         }
         const value = child.value;
-        const pattern = new RegExp(TEXT_NEWLINE.source, "g");
+        const pattern = new RegExp(TEXT_NEWLINE.source, 'g');
         let cursor = 0;
         let match = pattern.exec(value);
         if (match === null) {
@@ -126,14 +126,14 @@ export function remarkSessionChatHardBreaks() {
         changed = true;
         while (match !== null) {
           if (match.index > cursor) {
-            rebuilt.push({ type: "text", value: value.slice(cursor, match.index) });
+            rebuilt.push({ type: 'text', value: value.slice(cursor, match.index) });
           }
-          rebuilt.push({ type: "break" });
+          rebuilt.push({ type: 'break' });
           cursor = match.index + match[0].length;
           match = pattern.exec(value);
         }
         if (cursor < value.length) {
-          rebuilt.push({ type: "text", value: value.slice(cursor) });
+          rebuilt.push({ type: 'text', value: value.slice(cursor) });
         }
       }
       if (changed) node.children = rebuilt;

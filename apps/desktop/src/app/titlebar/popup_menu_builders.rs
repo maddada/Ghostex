@@ -391,5 +391,4 @@ impl GhostexGpuiApp {
         }
         menu
     }
-
 }

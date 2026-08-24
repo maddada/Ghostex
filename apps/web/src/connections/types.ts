@@ -1,4 +1,4 @@
-import type { GxserverPresentationSnapshot } from "@/packages/shared/gxserver-protocol";
+import type { GxserverPresentationSnapshot } from '@/packages/shared/gxserver-protocol';
 
 export type GhostexWebMachine = {
   authToken: string;
@@ -7,7 +7,7 @@ export type GhostexWebMachine = {
   machineId: string;
 };
 
-export type MachineConnectionStatus = "connected" | "connecting" | "disconnected";
+export type MachineConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
 export type MachineConnectionState = {
   error?: string;
@@ -16,4 +16,3 @@ export type MachineConnectionState = {
   reconnectAt?: number;
   status: MachineConnectionStatus;
 };
-

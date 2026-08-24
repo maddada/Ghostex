@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType } from 'react';
 import {
   IconApi,
   IconArchiveFilled,
@@ -74,12 +74,12 @@ import {
   IconUpload,
   IconWand,
   IconWorld,
-} from "@tabler/icons-react";
+} from '@tabler/icons-react';
 import {
   getSidebarCommandIconLabel,
   SIDEBAR_COMMAND_ICON_IDS,
   type SidebarCommandIcon,
-} from "../shared/sidebar-command-icons";
+} from '../shared/sidebar-command-icons';
 
 type TablerIconProps = {
   className?: string;
@@ -171,7 +171,5 @@ export function SidebarCommandIconGlyph({
   stroke = 1.8,
 }: SidebarCommandIconGlyphProps) {
   const Icon = ICON_COMPONENT_BY_ID[icon];
-  return (
-    <Icon aria-hidden="true" className={className} color={color} size={size} stroke={stroke} />
-  );
+  return <Icon aria-hidden='true' className={className} color={color} size={size} stroke={stroke} />;
 }

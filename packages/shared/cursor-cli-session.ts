@@ -1,4 +1,4 @@
-import { quoteShellDoubleArg } from "./shell-quote";
+import { quoteShellDoubleArg } from './shell-quote';
 
 /**
  * CDXC:CursorCLI 2026-05-20-08:20:
@@ -8,8 +8,7 @@ import { quoteShellDoubleArg } from "./shell-quote";
  * project-scoped Cursor SQLite store under `~/.cursor/chats/<md5(projectPath)>`.
  */
 
-export const CURSOR_CHAT_SESSION_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+export const CURSOR_CHAT_SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 export function isCursorChatSessionId(value: string | undefined): value is string {
   const normalizedValue = value?.trim();
@@ -25,7 +24,7 @@ export function getCursorChatSessionIdFromIdentity(value: string | undefined): s
     return normalizedValue.toLowerCase();
   }
   const transcriptMatch = normalizedValue.match(
-    /(?:^|[/\\])agent-transcripts(?:[/\\])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/\\])/iu,
+    /(?:^|[/\\])agent-transcripts(?:[/\\])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/\\])/iu
   );
   return transcriptMatch?.[1]?.toLowerCase();
 }
@@ -40,9 +39,7 @@ export function isCursorAgentTranscriptPath(value: string | undefined): boolean 
   const normalizedValue = value?.trim();
   return Boolean(
     normalizedValue &&
-      /(?:^|[/\\])\.cursor(?:[/\\])projects(?:[/\\]).+(?:[/\\])agent-transcripts(?:[/\\])/iu.test(
-        normalizedValue,
-      ),
+    /(?:^|[/\\])\.cursor(?:[/\\])projects(?:[/\\]).+(?:[/\\])agent-transcripts(?:[/\\])/iu.test(normalizedValue)
   );
 }
 

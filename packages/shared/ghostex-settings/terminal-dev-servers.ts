@@ -1,4 +1,4 @@
-import { readLooseString } from "./primitives";
+import { readLooseString } from './primitives';
 
 export const DEFAULT_TERMINAL_DEV_SERVER_IGNORED_PORT_RULES: readonly string[] = [];
 
@@ -7,9 +7,7 @@ type TerminalDevServerPortRule = {
   upperBound: number;
 };
 
-export function normalizeTerminalDevServerIgnoredPortRuleInput(
-  value: string,
-): string | undefined {
+export function normalizeTerminalDevServerIgnoredPortRuleInput(value: string): string | undefined {
   return parseTerminalDevServerPortRule(value)?.canonicalString;
 }
 
@@ -21,15 +19,17 @@ export function normalizeTerminalDevServerIgnoredPortRules(candidate: unknown): 
     candidate.map(readLooseString).flatMap((value) => {
       const rule = parseTerminalDevServerPortRule(value);
       return rule ? [rule] : [];
-    }),
+    })
   ).map((rule) => rule.canonicalString);
 
   return mergedRules.length === 0 ? DEFAULT_TERMINAL_DEV_SERVER_IGNORED_PORT_RULES : mergedRules;
 }
 
-function parseTerminalDevServerPortRule(value: string): (TerminalDevServerPortRule & {
-  canonicalString: string;
-}) | undefined {
+function parseTerminalDevServerPortRule(value: string):
+  | (TerminalDevServerPortRule & {
+      canonicalString: string;
+    })
+  | undefined {
   const trimmedValue = value.trim();
   if (!trimmedValue) {
     return undefined;
@@ -52,19 +52,16 @@ function parseTerminalDevServerPortRule(value: string): (TerminalDevServerPortRu
   return {
     lowerBound,
     upperBound,
-    canonicalString:
-      lowerBound === upperBound ? String(lowerBound) : `${lowerBound}-${upperBound}`,
+    canonicalString: lowerBound === upperBound ? String(lowerBound) : `${lowerBound}-${upperBound}`,
   };
 }
 
 function mergeTerminalDevServerPortRules(
-  rules: ReadonlyArray<TerminalDevServerPortRule>,
+  rules: ReadonlyArray<TerminalDevServerPortRule>
 ): Array<TerminalDevServerPortRule & { canonicalString: string }> {
   const mergedRules: TerminalDevServerPortRule[] = [];
   for (const rule of [...rules].sort((left, right) =>
-    left.lowerBound === right.lowerBound
-      ? left.upperBound - right.upperBound
-      : left.lowerBound - right.lowerBound,
+    left.lowerBound === right.lowerBound ? left.upperBound - right.upperBound : left.lowerBound - right.lowerBound
   )) {
     const previousRule = mergedRules.at(-1);
     if (!previousRule || rule.lowerBound > previousRule.upperBound + 1) {
@@ -77,8 +74,6 @@ function mergeTerminalDevServerPortRules(
   return mergedRules.map((rule) => ({
     ...rule,
     canonicalString:
-      rule.lowerBound === rule.upperBound
-        ? String(rule.lowerBound)
-        : `${rule.lowerBound}-${rule.upperBound}`,
+      rule.lowerBound === rule.upperBound ? String(rule.lowerBound) : `${rule.lowerBound}-${rule.upperBound}`,
   }));
 }

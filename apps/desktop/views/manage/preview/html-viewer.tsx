@@ -1,14 +1,12 @@
-import { useMemo } from "react";
-import { ManageWebKitWindow } from "../types";
-import { isHtmlPath } from "../file-tree-utils";
+import { useMemo } from 'react';
+import { ManageWebKitWindow } from '../types';
+import { isHtmlPath } from '../file-tree-utils';
 
-export const MANAGE_AGENTATION_VERSION = "3.0.2";
-export const MANAGE_AGENTATION_REACT_VERSION = "18.2.0";
-export const MANAGE_AGENTATION_PACKAGE_URL =
-  `https://esm.sh/agentation@${MANAGE_AGENTATION_VERSION}?bundle&deps=react@${MANAGE_AGENTATION_REACT_VERSION},react-dom@${MANAGE_AGENTATION_REACT_VERSION}`;
+export const MANAGE_AGENTATION_VERSION = '3.0.2';
+export const MANAGE_AGENTATION_REACT_VERSION = '18.2.0';
+export const MANAGE_AGENTATION_PACKAGE_URL = `https://esm.sh/agentation@${MANAGE_AGENTATION_VERSION}?bundle&deps=react@${MANAGE_AGENTATION_REACT_VERSION},react-dom@${MANAGE_AGENTATION_REACT_VERSION}`;
 export const MANAGE_AGENTATION_REACT_URL = `https://esm.sh/react@${MANAGE_AGENTATION_REACT_VERSION}`;
-export const MANAGE_AGENTATION_REACT_DOM_CLIENT_URL =
-  `https://esm.sh/react-dom@${MANAGE_AGENTATION_REACT_VERSION}/client?deps=react@${MANAGE_AGENTATION_REACT_VERSION}`;
+export const MANAGE_AGENTATION_REACT_DOM_CLIENT_URL = `https://esm.sh/react-dom@${MANAGE_AGENTATION_REACT_VERSION}/client?deps=react@${MANAGE_AGENTATION_REACT_VERSION}`;
 
 export function ManageHtmlRenderViewer({
   annotationsEnabled,
@@ -28,7 +26,7 @@ export function ManageHtmlRenderViewer({
         injectAgentation: annotationsEnabled,
         resourceBaseUrl,
       }),
-    [annotationsEnabled, content, resourceBaseUrl],
+    [annotationsEnabled, content, resourceBaseUrl]
   );
 
   /*
@@ -51,8 +49,8 @@ export function ManageHtmlRenderViewer({
   return (
     <iframe
       allow="clipboard-read 'none'; clipboard-write 'self'; fullscreen 'self'"
-      aria-label="Rendered HTML document"
-      className="manage-html-render-view"
+      aria-label='Rendered HTML document'
+      className='manage-html-render-view'
       data-document-key={documentKey}
       onLoad={(event) => {
         /*
@@ -66,51 +64,48 @@ export function ManageHtmlRenderViewer({
         if (!renderedDocument) {
           return;
         }
-        renderedDocument.addEventListener("click", (clickEvent) => {
-          const mouseEvent = clickEvent as MouseEvent;
-          if (
-            clickEvent.defaultPrevented ||
-            mouseEvent.button !== 0 ||
-            mouseEvent.altKey ||
-            mouseEvent.ctrlKey ||
-            mouseEvent.metaKey ||
-            mouseEvent.shiftKey
-          ) {
-            return;
-          }
-          const eventTarget = clickEvent.target as {
-            closest?: (selector: string) => Element | null;
-          } | null;
-          const anchor = eventTarget?.closest?.("a[href]") as HTMLAnchorElement | null;
-          const href = anchor?.getAttribute("href")?.trim();
-          if (
-            !anchor ||
-            !href ||
-            anchor.hasAttribute("download") ||
-            (anchor.target && anchor.target !== "_self")
-          ) {
-            return;
-          }
-          if (href.startsWith("#")) {
-            const targetId = decodeManageHtmlFragment(href);
-            const target = targetId
-              ? renderedDocument.getElementById(targetId)
-              : renderedDocument.documentElement;
-            if (target) {
-              clickEvent.preventDefault();
-              target.scrollIntoView({ behavior: "smooth", block: "start" });
+        renderedDocument.addEventListener(
+          'click',
+          (clickEvent) => {
+            const mouseEvent = clickEvent as MouseEvent;
+            if (
+              clickEvent.defaultPrevented ||
+              mouseEvent.button !== 0 ||
+              mouseEvent.altKey ||
+              mouseEvent.ctrlKey ||
+              mouseEvent.metaKey ||
+              mouseEvent.shiftKey
+            ) {
+              return;
             }
-            return;
-          }
-          const linkedDocumentPath = manageHtmlLinkedDocumentPath(href, resourceBaseUrl);
-          if (!linkedDocumentPath || linkedDocumentPath === documentKey) {
-            return;
-          }
-          clickEvent.preventDefault();
-          onOpenDocument(linkedDocumentPath);
-        }, true);
+            const eventTarget = clickEvent.target as {
+              closest?: (selector: string) => Element | null;
+            } | null;
+            const anchor = eventTarget?.closest?.('a[href]') as HTMLAnchorElement | null;
+            const href = anchor?.getAttribute('href')?.trim();
+            if (!anchor || !href || anchor.hasAttribute('download') || (anchor.target && anchor.target !== '_self')) {
+              return;
+            }
+            if (href.startsWith('#')) {
+              const targetId = decodeManageHtmlFragment(href);
+              const target = targetId ? renderedDocument.getElementById(targetId) : renderedDocument.documentElement;
+              if (target) {
+                clickEvent.preventDefault();
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+              return;
+            }
+            const linkedDocumentPath = manageHtmlLinkedDocumentPath(href, resourceBaseUrl);
+            if (!linkedDocumentPath || linkedDocumentPath === documentKey) {
+              return;
+            }
+            clickEvent.preventDefault();
+            onOpenDocument(linkedDocumentPath);
+          },
+          true
+        );
       }}
-      sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts"
+      sandbox='allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts'
       srcDoc={renderedHtml}
       title={documentKey}
     />
@@ -119,13 +114,13 @@ export function ManageHtmlRenderViewer({
 
 export function buildManageHtmlDocument(
   html: string,
-  options: { injectAgentation?: boolean; resourceBaseUrl?: string } = {},
+  options: { injectAgentation?: boolean; resourceBaseUrl?: string } = {}
 ): string {
   /*
    * CDXC:ManageHtmlRendering 2026-07-01-18:12:
    * Docs HTML files should behave like real interactive browser documents. Parse only to append Ghostex-owned viewer chrome and the optional Agentation bootstrap; do not remove authored scripts, inline handlers, JavaScript URLs, frames, form targets, srcdoc content, or base tags.
    */
-  const documentValue = new DOMParser().parseFromString(html, "text/html");
+  const documentValue = new DOMParser().parseFromString(html, 'text/html');
   injectManageHtmlResourceBase(documentValue, options.resourceBaseUrl);
   injectManageHtmlViewerChromeStyles(documentValue);
   if (options.injectAgentation) {
@@ -145,21 +140,14 @@ export function manageHtmlResourceBaseUrl(documentPath: string): string | undefi
   } catch {
     return undefined;
   }
-  if (
-    baseUrl.protocol !== "https:" ||
-    baseUrl.hostname !== "ghostex-docs.invalid" ||
-    baseUrl.pathname !== "/"
-  ) {
+  if (baseUrl.protocol !== 'https:' || baseUrl.hostname !== 'ghostex-docs.invalid' || baseUrl.pathname !== '/') {
     return undefined;
   }
-  const components = documentPath.split("/");
-  if (
-    components.length < 2 ||
-    components.some((component) => !component || component === "." || component === "..")
-  ) {
+  const components = documentPath.split('/');
+  if (components.length < 2 || components.some((component) => !component || component === '.' || component === '..')) {
     return undefined;
   }
-  const parentPath = components.slice(0, -1).map(encodeURIComponent).join("/");
+  const parentPath = components.slice(0, -1).map(encodeURIComponent).join('/');
   return new URL(`${parentPath}/`, baseUrl).toString();
 }
 
@@ -171,10 +159,7 @@ export function decodeManageHtmlFragment(href: string): string | undefined {
   }
 }
 
-export function manageHtmlLinkedDocumentPath(
-  href: string,
-  resourceBaseUrl: string | undefined,
-): string | undefined {
+export function manageHtmlLinkedDocumentPath(href: string, resourceBaseUrl: string | undefined): string | undefined {
   if (!resourceBaseUrl) {
     return undefined;
   }
@@ -189,7 +174,7 @@ export function manageHtmlLinkedDocumentPath(
   if (linkedUrl.origin !== baseUrl.origin) {
     return undefined;
   }
-  const encodedComponents = linkedUrl.pathname.split("/").filter(Boolean);
+  const encodedComponents = linkedUrl.pathname.split('/').filter(Boolean);
   if (encodedComponents.length === 0) {
     return undefined;
   }
@@ -200,38 +185,32 @@ export function manageHtmlLinkedDocumentPath(
     return undefined;
   }
   if (
-    components.some(
-      (component) =>
-        !component || component === "." || component === ".." || component.includes("\\"),
-    )
+    components.some((component) => !component || component === '.' || component === '..' || component.includes('\\'))
   ) {
     return undefined;
   }
-  const path = components.join("/");
+  const path = components.join('/');
   return isHtmlPath(path) ? path : undefined;
 }
 
-export function injectManageHtmlResourceBase(
-  documentValue: Document,
-  resourceBaseUrl: string | undefined,
-): void {
+export function injectManageHtmlResourceBase(documentValue: Document, resourceBaseUrl: string | undefined): void {
   if (!resourceBaseUrl) {
     return;
   }
-  const authoredBase = documentValue.querySelector("base[href]");
+  const authoredBase = documentValue.querySelector('base[href]');
   if (authoredBase) {
-    const href = authoredBase.getAttribute("href");
+    const href = authoredBase.getAttribute('href');
     if (href) {
       try {
-        authoredBase.setAttribute("href", new URL(href, resourceBaseUrl).toString());
+        authoredBase.setAttribute('href', new URL(href, resourceBaseUrl).toString());
       } catch {
         // Leave malformed authored base URLs unchanged so the browser reports them normally.
       }
     }
     return;
   }
-  const base = documentValue.createElement("base");
-  base.setAttribute("data-ghostex-manage-resource-base", "true");
+  const base = documentValue.createElement('base');
+  base.setAttribute('data-ghostex-manage-resource-base', 'true');
   base.href = resourceBaseUrl;
   documentValue.head.prepend(base);
 }
@@ -244,9 +223,9 @@ export function injectManageHtmlViewerChromeStyles(documentValue: Document): voi
    * CDXC:ManageHtmlRendering 2026-06-30-11:58:
    * Use document tagging plus WebKit scrollbar pseudo-elements for exact 4px embedded scrollbars. Standards `scrollbar-width: thin` is intentionally avoided because it produced a wider rendered scrollbar than the Docs requirement.
    */
-  documentValue.documentElement.setAttribute("data-ghostex-manage-html-viewer", "true");
-  const style = documentValue.createElement("style");
-  style.setAttribute("data-ghostex-manage-html-chrome", "true");
+  documentValue.documentElement.setAttribute('data-ghostex-manage-html-viewer', 'true');
+  const style = documentValue.createElement('style');
+  style.setAttribute('data-ghostex-manage-html-chrome', 'true');
   style.textContent = `
 html[data-ghostex-manage-html-viewer],
 html[data-ghostex-manage-html-viewer] body,
@@ -296,8 +275,8 @@ html[data-ghostex-manage-html-viewer] *::-webkit-scrollbar-corner {
 }
 
 export function injectManageAgentationScript(documentValue: Document): void {
-  const script = documentValue.createElement("script");
-  script.type = "module";
+  const script = documentValue.createElement('script');
+  script.type = 'module';
   script.textContent = buildManageAgentationBootstrapScript();
   (documentValue.body || documentValue.documentElement).appendChild(script);
 }
@@ -347,9 +326,9 @@ Promise.all([
 export function serializeManageDocumentType(documentValue: Document): string {
   const doctype = documentValue.doctype;
   if (!doctype) {
-    return "<!doctype html>";
+    return '<!doctype html>';
   }
-  const publicId = doctype.publicId ? ` PUBLIC "${doctype.publicId}"` : "";
-  const systemId = doctype.systemId ? `${publicId ? "" : " SYSTEM"} "${doctype.systemId}"` : "";
+  const publicId = doctype.publicId ? ` PUBLIC "${doctype.publicId}"` : '';
+  const systemId = doctype.systemId ? `${publicId ? '' : ' SYSTEM'} "${doctype.systemId}"` : '';
   return `<!doctype ${doctype.name}${publicId}${systemId}>`;
 }

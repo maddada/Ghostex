@@ -15,7 +15,8 @@ CEF's blocking-file thread, canonicalizes both ends, and serves only paths
 inside the configured Docs roots; ordinary Browser/sidebar/workarea clients
 never receive this request handler or the project path.
 */
-pub(crate) const MANAGE_DOCS_RESOURCE_BASE_URL: &str = PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL;
+pub(crate) const MANAGE_DOCS_RESOURCE_BASE_URL: &str =
+    PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL;
 
 pub(crate) type ManageDocsRemoteResourceLoader = Arc<dyn Fn(&str) -> Option<Vec<u8>> + Send + Sync>;
 
@@ -554,4 +555,3 @@ wrap_request_handler! {
         }
     }
 }
-

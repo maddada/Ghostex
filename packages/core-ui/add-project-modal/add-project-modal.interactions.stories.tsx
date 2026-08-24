@@ -1,15 +1,12 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fireEvent, waitFor } from "storybook/test";
-import { findRequiredElement } from "../sidebar-app.interactions.helpers";
-import {
-  ADD_PROJECT_STORY_LOCAL_MACHINE,
-  ADD_PROJECT_STORY_REMOTE_MACHINE,
-} from "./add-project-modal-mocks";
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, fireEvent, waitFor } from 'storybook/test';
+import { findRequiredElement } from '../sidebar-app.interactions.helpers';
+import { ADD_PROJECT_STORY_LOCAL_MACHINE, ADD_PROJECT_STORY_REMOTE_MACHINE } from './add-project-modal-mocks';
 import {
   AddProjectStoryHarness,
   findAddProjectStoryCall,
   getAddProjectStoryMocks,
-} from "./add-project-modal.story-harness";
+} from './add-project-modal.story-harness';
 
 /*
  * CDXC:AddProject 2026-07-30:
@@ -22,7 +19,7 @@ import {
  */
 
 const meta = {
-  title: "Modals/Add Project Interactions",
+  title: 'Modals/Add Project Interactions',
   component: AddProjectStoryHarness,
 } satisfies Meta<typeof AddProjectStoryHarness>;
 
@@ -31,15 +28,11 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 async function findDialog(storyRoot: ParentNode): Promise<HTMLElement> {
-  return findRequiredElement(storyRoot, "[data-add-project-modal]", "add project dialog");
+  return findRequiredElement(storyRoot, '[data-add-project-modal]', 'add project dialog');
 }
 
 async function findPathInput(dialog: ParentNode): Promise<HTMLInputElement> {
-  const input = await findRequiredElement(
-    dialog,
-    '[data-add-project-field="pathInput"]',
-    "path input",
-  );
+  const input = await findRequiredElement(dialog, '[data-add-project-field="pathInput"]', 'path input');
   return input as HTMLInputElement;
 }
 
@@ -51,20 +44,20 @@ async function chooseSource(dialog: ParentNode, source: string): Promise<void> {
   const row = await findRequiredElement(
     dialog,
     `[data-add-project-field="sourceOption"][data-add-project-source="${source}"]`,
-    `${source} source row`,
+    `${source} source row`
   );
   fireEvent.click(row);
 }
 
 function listedSources(dialog: ParentNode): string[] {
   return Array.from(dialog.querySelectorAll('[data-add-project-field="sourceOption"]')).map(
-    (row) => row.getAttribute("data-add-project-source") ?? "",
+    (row) => row.getAttribute('data-add-project-source') ?? ''
   );
 }
 
 function listedDirectories(dialog: ParentNode): string[] {
   return Array.from(dialog.querySelectorAll('[data-add-project-field="directoryEntry"]')).map(
-    (row) => row.getAttribute("data-add-project-path") ?? "",
+    (row) => row.getAttribute('data-add-project-path') ?? ''
   );
 }
 
@@ -76,32 +69,24 @@ export const BrowsesDescendsAndGoesUp: Story = {
     const dialog = await findDialog(storyRoot);
 
     await step("Local folder opens the browser at the machine's base directory", async () => {
-      await chooseSource(dialog, "local");
+      await chooseSource(dialog, 'local');
       const input = await findPathInput(dialog);
-      await expect(input.value).toBe("~/");
-      await waitFor(async () =>
-        expect(listedDirectories(dialog)).toContain("/Users/story/dev"),
-      );
-      await expect(listedDirectories(dialog)).not.toContain("/Users/story/.config");
+      await expect(input.value).toBe('~/');
+      await waitFor(async () => expect(listedDirectories(dialog)).toContain('/Users/story/dev'));
+      await expect(listedDirectories(dialog)).not.toContain('/Users/story/.config');
     });
 
-    await step("clicking a directory descends into it", async () => {
-      fireEvent.click(
-        await findRequiredElement(dialog, '[data-add-project-path="/Users/story/dev"]', "dev row"),
-      );
+    await step('clicking a directory descends into it', async () => {
+      fireEvent.click(await findRequiredElement(dialog, '[data-add-project-path="/Users/story/dev"]', 'dev row'));
       const input = await findPathInput(dialog);
-      await expect(input.value).toBe("~/dev/");
-      await waitFor(async () =>
-        expect(listedDirectories(dialog)).toContain("/Users/story/dev/ghostex"),
-      );
+      await expect(input.value).toBe('~/dev/');
+      await waitFor(async () => expect(listedDirectories(dialog)).toContain('/Users/story/dev/ghostex'));
     });
 
-    await step("the .. row walks back to the parent directory", async () => {
-      fireEvent.click(
-        await findRequiredElement(dialog, '[data-add-project-field="directoryUp"]', "up row"),
-      );
+    await step('the .. row walks back to the parent directory', async () => {
+      fireEvent.click(await findRequiredElement(dialog, '[data-add-project-field="directoryUp"]', 'up row'));
       const input = await findPathInput(dialog);
-      await expect(input.value).toBe("~/");
+      await expect(input.value).toBe('~/');
     });
   },
 };
@@ -112,29 +97,25 @@ export const EnterSubmitsTypedPath: Story = {
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
-    await chooseSource(dialog, "local");
+    await chooseSource(dialog, 'local');
     const input = await findPathInput(dialog);
 
-    await step("typing a directory path never preselects a suggestion", async () => {
-      typeQuery(input, "~/dev/ghostex/");
-      await waitFor(async () =>
-        expect(listedDirectories(dialog)).toContain("/Users/story/dev/ghostex/sidebar"),
-      );
+    await step('typing a directory path never preselects a suggestion', async () => {
+      typeQuery(input, '~/dev/ghostex/');
+      await waitFor(async () => expect(listedDirectories(dialog)).toContain('/Users/story/dev/ghostex/sidebar'));
       await expect(dialog.querySelector('[aria-selected="true"]')).toBeNull();
     });
 
-    await step("Enter adds the server-resolved directory", async () => {
-      fireEvent.keyDown(input, { key: "Enter" });
+    await step('Enter adds the server-resolved directory', async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
       await waitFor(async () =>
-        expect(findAddProjectStoryCall("addProject")).toEqual({
+        expect(findAddProjectStoryCall('addProject')).toEqual({
           createIfMissing: false,
-          machineId: "local",
-          path: "/Users/story/dev/ghostex",
-        }),
+          machineId: 'local',
+          path: '/Users/story/dev/ghostex',
+        })
       );
-      await waitFor(async () =>
-        expect(storyRoot.querySelector("[data-add-project-modal]")).toBeNull(),
-      );
+      await waitFor(async () => expect(storyRoot.querySelector('[data-add-project-modal]')).toBeNull());
     });
   },
 };
@@ -145,43 +126,33 @@ export const ModifierEnterOverridesHighlight: Story = {
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
-    await chooseSource(dialog, "local");
+    await chooseSource(dialog, 'local');
     let input = await findPathInput(dialog);
 
-    await step("Enter on a highlighted directory descends into it", async () => {
-      typeQuery(input, "~/dev/");
-      await waitFor(async () =>
-        expect(listedDirectories(dialog)).toContain("/Users/story/dev/ghostex"),
-      );
-      fireEvent.keyDown(input, { key: "ArrowDown" });
-      fireEvent.keyDown(input, { key: "ArrowDown" });
-      const submit = await findRequiredElement(
-        dialog,
-        '[data-add-project-field="submit"]',
-        "submit button",
-      );
-      await waitFor(async () =>
-        expect(submit.getAttribute("aria-label")).toBe("Add (⌘ Enter)"),
-      );
-      fireEvent.keyDown(input, { key: "Enter" });
+    await step('Enter on a highlighted directory descends into it', async () => {
+      typeQuery(input, '~/dev/');
+      await waitFor(async () => expect(listedDirectories(dialog)).toContain('/Users/story/dev/ghostex'));
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      const submit = await findRequiredElement(dialog, '[data-add-project-field="submit"]', 'submit button');
+      await waitFor(async () => expect(submit.getAttribute('aria-label')).toBe('Add (⌘ Enter)'));
+      fireEvent.keyDown(input, { key: 'Enter' });
       input = await findPathInput(dialog);
-      await expect(input.value).toBe("~/dev/ghostex/");
+      await expect(input.value).toBe('~/dev/ghostex/');
     });
 
-    await step("mod+Enter submits the typed path even with a highlighted row", async () => {
-      typeQuery(input, "~/dev/");
+    await step('mod+Enter submits the typed path even with a highlighted row', async () => {
+      typeQuery(input, '~/dev/');
+      await waitFor(async () => expect(listedDirectories(dialog)).toContain('/Users/story/dev/playground'));
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'Enter', metaKey: true });
       await waitFor(async () =>
-        expect(listedDirectories(dialog)).toContain("/Users/story/dev/playground"),
-      );
-      fireEvent.keyDown(input, { key: "ArrowDown" });
-      fireEvent.keyDown(input, { key: "ArrowDown" });
-      fireEvent.keyDown(input, { key: "Enter", metaKey: true });
-      await waitFor(async () =>
-        expect(findAddProjectStoryCall("addProject")).toEqual({
+        expect(findAddProjectStoryCall('addProject')).toEqual({
           createIfMissing: false,
-          machineId: "local",
-          path: "/Users/story/dev",
-        }),
+          machineId: 'local',
+          path: '/Users/story/dev',
+        })
       );
     });
   },
@@ -193,48 +164,38 @@ export const SubmitLabelFlipsToCreateAndAdd: Story = {
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
-    await chooseSource(dialog, "local");
+    await chooseSource(dialog, 'local');
     const input = await findPathInput(dialog);
-    const submit = await findRequiredElement(
-      dialog,
-      '[data-add-project-field="submit"]',
-      "submit button",
-    );
+    const submit = await findRequiredElement(dialog, '[data-add-project-field="submit"]', 'submit button');
 
-    await step("an exact directory name keeps the plain Add label", async () => {
-      typeQuery(input, "~/dev/ghostex");
-      await waitFor(async () => expect(submit.textContent).toBe("Add"));
+    await step('an exact directory name keeps the plain Add label', async () => {
+      typeQuery(input, '~/dev/ghostex');
+      await waitFor(async () => expect(submit.textContent).toBe('Add'));
     });
 
-    await step("an unknown leaf segment flips the label to Create & Add", async () => {
-      typeQuery(input, "~/dev/brand-new");
-      await waitFor(async () => expect(submit.textContent).toBe("Create & Add"));
+    await step('an unknown leaf segment flips the label to Create & Add', async () => {
+      typeQuery(input, '~/dev/brand-new');
+      await waitFor(async () => expect(submit.textContent).toBe('Create & Add'));
       /* The `..` row still lists: a group exists, so no empty state. */
       await expect(dialog.querySelector('[data-add-project-field="directoryUp"]')).not.toBeNull();
     });
 
-    await step("with no rows at all the hint explains the create-on-Enter behavior", async () => {
-      typeQuery(input, "~/brand-new");
-      const emptyState = await findRequiredElement(
-        dialog,
-        '[data-add-project-field="emptyState"]',
-        "empty state",
-      );
+    await step('with no rows at all the hint explains the create-on-Enter behavior', async () => {
+      typeQuery(input, '~/brand-new');
+      const emptyState = await findRequiredElement(dialog, '[data-add-project-field="emptyState"]', 'empty state');
       await waitFor(async () =>
-        expect(emptyState.textContent).toBe(
-          "Press Enter to create this folder and add it as a project.",
-        ),
+        expect(emptyState.textContent).toBe('Press Enter to create this folder and add it as a project.')
       );
     });
 
-    await step("submitting sends createIfMissing", async () => {
-      fireEvent.keyDown(input, { key: "Enter" });
+    await step('submitting sends createIfMissing', async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
       await waitFor(async () =>
-        expect(findAddProjectStoryCall("addProject")).toEqual({
+        expect(findAddProjectStoryCall('addProject')).toEqual({
           createIfMissing: true,
-          machineId: "local",
-          path: "~/brand-new",
-        }),
+          machineId: 'local',
+          path: '~/brand-new',
+        })
       );
     });
   },
@@ -251,42 +212,38 @@ export const MachineStepPicksRemoteMachine: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
 
-    await step("both machines are offered", async () => {
+    await step('both machines are offered', async () => {
       await waitFor(async () =>
         expect(
-          Array.from(dialog.querySelectorAll('[data-add-project-field="machineOption"]')).map(
-            (row) => row.getAttribute("data-add-project-machine-id"),
-          ),
-        ).toEqual(["local", "machine-bigbox"]),
+          Array.from(dialog.querySelectorAll('[data-add-project-field="machineOption"]')).map((row) =>
+            row.getAttribute('data-add-project-machine-id')
+          )
+        ).toEqual(['local', 'machine-bigbox'])
       );
     });
 
-    await step("choosing the remote machine scopes the sources step to it", async () => {
+    await step('choosing the remote machine scopes the sources step to it', async () => {
       fireEvent.click(
-        await findRequiredElement(
-          dialog,
-          '[data-add-project-machine-id="machine-bigbox"]',
-          "remote machine row",
-        ),
+        await findRequiredElement(dialog, '[data-add-project-machine-id="machine-bigbox"]', 'remote machine row')
       );
       const machineLabel = await findRequiredElement(
         dialog,
         '[data-add-project-field="machineLabel"]',
-        "machine label",
+        'machine label'
       );
-      await expect(machineLabel.textContent).toContain("Bigbox");
+      await expect(machineLabel.textContent).toContain('Bigbox');
       await waitFor(async () =>
-        expect(findAddProjectStoryCall("discoverSourceControl")).toEqual({
-          machineId: "machine-bigbox",
-        }),
+        expect(findAddProjectStoryCall('discoverSourceControl')).toEqual({
+          machineId: 'machine-bigbox',
+        })
       );
     });
 
-    await step("the remote machine browses from its own base directory", async () => {
-      await chooseSource(dialog, "local");
+    await step('the remote machine browses from its own base directory', async () => {
+      await chooseSource(dialog, 'local');
       const input = await findPathInput(dialog);
-      await expect(input.value).toBe("~/projects/");
-      await waitFor(async () => expect(listedDirectories(dialog)).toContain("/srv/projects/api"));
+      await expect(input.value).toBe('~/projects/');
+      await waitFor(async () => expect(listedDirectories(dialog)).toContain('/srv/projects/api'));
     });
   },
 };
@@ -298,59 +255,44 @@ export const SourceReadinessOrdersAndDisablesProviders: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
 
-    await step("ready providers sort ahead of unready ones", async () => {
+    await step('ready providers sort ahead of unready ones', async () => {
       await waitFor(async () =>
-        expect(listedSources(dialog)).toEqual([
-          "local",
-          "url",
-          "github",
-          "azure-devops",
-          "bitbucket",
-          "gitlab",
-        ]),
+        expect(listedSources(dialog)).toEqual(['local', 'url', 'github', 'azure-devops', 'bitbucket', 'gitlab'])
       );
     });
 
-    await step("the ready GitHub row has no Setup Required affordance", async () => {
-      const github = await findRequiredElement(
-        dialog,
-        '[data-add-project-source="github"]',
-        "github row",
-      );
-      await expect(github.getAttribute("aria-disabled")).toBeNull();
-      await expect(
-        github.querySelector('[data-add-project-field="setupRequired"]'),
-      ).toBeNull();
+    await step('the ready GitHub row has no Setup Required affordance', async () => {
+      const github = await findRequiredElement(dialog, '[data-add-project-source="github"]', 'github row');
+      await expect(github.getAttribute('aria-disabled')).toBeNull();
+      await expect(github.querySelector('[data-add-project-field="setupRequired"]')).toBeNull();
     });
 
-    await step("the unready Bitbucket row is disabled and explains itself", async () => {
+    await step('the unready Bitbucket row is disabled and explains itself', async () => {
       const bitbucket = await findRequiredElement(
         dialog,
         '[data-add-project-field="sourceOption"][data-add-project-source="bitbucket"]',
-        "bitbucket row",
+        'bitbucket row'
       );
-      await expect(bitbucket.getAttribute("aria-disabled")).toBe("true");
-      await expect(bitbucket.textContent).toContain(
-        "Bitbucket support needs a CLI Ghostex does not ship yet.",
-      );
+      await expect(bitbucket.getAttribute('aria-disabled')).toBe('true');
+      await expect(bitbucket.textContent).toContain('Bitbucket support needs a CLI Ghostex does not ship yet.');
       fireEvent.click(bitbucket);
       await expect(dialog.querySelector('[data-add-project-field="repositoryCard"]')).toBeNull();
       await expect(listedSources(dialog).length).toBe(6);
     });
 
-    await step("Setup Required routes to source-control settings", async () => {
+    await step('Setup Required routes to source-control settings', async () => {
       const setupRequired = await findRequiredElement(
         dialog,
         '[data-add-project-field="setupRequired"][data-add-project-source="bitbucket"]',
-        "setup required button",
+        'setup required button'
       );
       fireEvent.click(setupRequired);
       await waitFor(async () =>
         expect(
           storyRoot
-            .querySelector("[data-add-project-story-settings-provider]")
-            ?.getAttribute("data-add-project-story-settings-provider"),
-        ).toBe("bitbucket"),
+            .querySelector('[data-add-project-story-settings-provider]')
+            ?.getAttribute('data-add-project-story-settings-provider')
+        ).toBe('bitbucket')
       );
     });
   },
@@ -363,71 +305,55 @@ export const ClonesFromGitUrlAndAddsProject: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
 
-    await step("the Git URL source asks for a clone URL", async () => {
-      await chooseSource(dialog, "url");
+    await step('the Git URL source asks for a clone URL', async () => {
+      await chooseSource(dialog, 'url');
       const input = await findPathInput(dialog);
-      await expect(input.getAttribute("placeholder")).toBe(
-        "Enter repository, URL, or clone command",
-      );
-      const emptyState = await findRequiredElement(
-        dialog,
-        '[data-add-project-field="emptyState"]',
-        "empty state",
-      );
+      await expect(input.getAttribute('placeholder')).toBe('Enter repository, URL, or clone command');
+      const emptyState = await findRequiredElement(dialog, '[data-add-project-field="emptyState"]', 'empty state');
       await expect(emptyState.textContent).toBe(
-        "Enter a repository, URL, or clone command and press Enter to continue.",
+        'Enter a repository, URL, or clone command and press Enter to continue.'
       );
     });
 
-    await step("Enter moves straight to the destination step", async () => {
+    await step('Enter moves straight to the destination step', async () => {
       const input = await findPathInput(dialog);
-      typeQuery(input, "https://github.com/acme/widgets.git");
-      fireEvent.keyDown(input, { key: "Enter" });
-      const card = await findRequiredElement(
-        dialog,
-        '[data-add-project-field="repositoryCard"]',
-        "repository card",
-      );
-      await expect(card.textContent).toContain("https://github.com/acme/widgets.git");
-      await waitFor(async () => expect((await findPathInput(dialog)).value).toBe("~/"));
+      typeQuery(input, 'https://github.com/acme/widgets.git');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      const card = await findRequiredElement(dialog, '[data-add-project-field="repositoryCard"]', 'repository card');
+      await expect(card.textContent).toContain('https://github.com/acme/widgets.git');
+      await waitFor(async () => expect((await findPathInput(dialog)).value).toBe('~/'));
     });
 
-    await step("a new destination folder flips the label to Create & Clone", async () => {
+    await step('a new destination folder flips the label to Create & Clone', async () => {
       const input = await findPathInput(dialog);
-      typeQuery(input, "~/dev/widgets");
-      const submit = await findRequiredElement(
-        dialog,
-        '[data-add-project-field="submit"]',
-        "submit button",
-      );
-      await waitFor(async () => expect(submit.textContent).toBe("Create & Clone"));
+      typeQuery(input, '~/dev/widgets');
+      const submit = await findRequiredElement(dialog, '[data-add-project-field="submit"]', 'submit button');
+      await waitFor(async () => expect(submit.textContent).toBe('Create & Clone'));
     });
 
-    await step("Enter starts the clone job, polls it, then registers the project", async () => {
+    await step('Enter starts the clone job, polls it, then registers the project', async () => {
       const input = await findPathInput(dialog);
-      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.keyDown(input, { key: 'Enter' });
       await waitFor(async () =>
-        expect(findAddProjectStoryCall("startClone")).toEqual({
-          destinationPath: "~/dev/widgets",
-          machineId: "local",
-          remoteUrl: "https://github.com/acme/widgets.git",
-        }),
+        expect(findAddProjectStoryCall('startClone')).toEqual({
+          destinationPath: '~/dev/widgets',
+          machineId: 'local',
+          remoteUrl: 'https://github.com/acme/widgets.git',
+        })
       );
       await waitFor(async () =>
         expect(
-          getAddProjectStoryMocks().calls.filter((call) => call.name === "readCloneJob").length,
-        ).toBeGreaterThanOrEqual(3),
+          getAddProjectStoryMocks().calls.filter((call) => call.name === 'readCloneJob').length
+        ).toBeGreaterThanOrEqual(3)
       );
       await waitFor(async () =>
-        expect(findAddProjectStoryCall("addProject")).toEqual({
+        expect(findAddProjectStoryCall('addProject')).toEqual({
           createIfMissing: false,
-          machineId: "local",
-          path: "~/dev/widgets",
-        }),
+          machineId: 'local',
+          path: '~/dev/widgets',
+        })
       );
-      await waitFor(async () =>
-        expect(storyRoot.querySelector("[data-add-project-modal]")).toBeNull(),
-      );
+      await waitFor(async () => expect(storyRoot.querySelector('[data-add-project-modal]')).toBeNull());
     });
   },
 };
@@ -435,39 +361,31 @@ export const ClonesFromGitUrlAndAddsProject: Story = {
 /** 8. A failed provider lookup keeps the repository step and its typed value. */
 export const LookupFailureStaysOnRepositoryStep: Story = {
   args: {
-    mockOptions: { lookupError: "GitHub repository not found: acme/missing" },
+    mockOptions: { lookupError: 'GitHub repository not found: acme/missing' },
   },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
 
-    await step("the GitHub source asks for owner/repo", async () => {
+    await step('the GitHub source asks for owner/repo', async () => {
       /* Wait for discovery: before it answers every provider still reads as unready. */
       await waitFor(async () =>
         expect(
-          dialog.querySelector(
-            '[data-add-project-field="setupRequired"][data-add-project-source="github"]',
-          ),
-        ).toBeNull(),
+          dialog.querySelector('[data-add-project-field="setupRequired"][data-add-project-source="github"]')
+        ).toBeNull()
       );
-      await chooseSource(dialog, "github");
+      await chooseSource(dialog, 'github');
       const input = await findPathInput(dialog);
-      await expect(input.getAttribute("placeholder")).toBe(
-        "Enter GitHub repository, URL, or clone command",
-      );
+      await expect(input.getAttribute('placeholder')).toBe('Enter GitHub repository, URL, or clone command');
     });
 
-    await step("the failure renders inline and the step keeps the typed repository", async () => {
+    await step('the failure renders inline and the step keeps the typed repository', async () => {
       const input = await findPathInput(dialog);
-      typeQuery(input, "acme/missing");
-      fireEvent.keyDown(input, { key: "Enter" });
-      const error = await findRequiredElement(
-        dialog,
-        '[data-add-project-field="error"]',
-        "error region",
-      );
-      await expect(error.textContent).toContain("GitHub repository not found: acme/missing");
-      await expect((await findPathInput(dialog)).value).toBe("acme/missing");
+      typeQuery(input, 'acme/missing');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      const error = await findRequiredElement(dialog, '[data-add-project-field="error"]', 'error region');
+      await expect(error.textContent).toContain('GitHub repository not found: acme/missing');
+      await expect((await findPathInput(dialog)).value).toBe('acme/missing');
       await expect(dialog.querySelector('[data-add-project-field="repositoryCard"]')).toBeNull();
     });
   },
@@ -477,38 +395,30 @@ export const LookupFailureStaysOnRepositoryStep: Story = {
 export const AddFailureShowsPersistentError: Story = {
   args: {
     mockOptions: {
-      addProjectError: "Workspace root is not a directory: /Users/story/dev/ghostex",
+      addProjectError: 'Workspace root is not a directory: /Users/story/dev/ghostex',
     },
   },
   play: async ({ canvasElement, step }) => {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
-    await chooseSource(dialog, "local");
+    await chooseSource(dialog, 'local');
     const input = await findPathInput(dialog);
 
-    await step("the add failure is rendered as an inline region, not a list line", async () => {
-      typeQuery(input, "~/dev/ghostex/");
-      await waitFor(async () =>
-        expect(listedDirectories(dialog)).toContain("/Users/story/dev/ghostex/gpui"),
-      );
-      fireEvent.keyDown(input, { key: "Enter" });
-      const error = await findRequiredElement(
-        dialog,
-        '[data-add-project-field="error"]',
-        "error region",
-      );
-      await expect(error.textContent).toContain(
-        "Workspace root is not a directory: /Users/story/dev/ghostex",
-      );
+    await step('the add failure is rendered as an inline region, not a list line', async () => {
+      typeQuery(input, '~/dev/ghostex/');
+      await waitFor(async () => expect(listedDirectories(dialog)).toContain('/Users/story/dev/ghostex/gpui'));
+      fireEvent.keyDown(input, { key: 'Enter' });
+      const error = await findRequiredElement(dialog, '[data-add-project-field="error"]', 'error region');
+      await expect(error.textContent).toContain('Workspace root is not a directory: /Users/story/dev/ghostex');
     });
 
-    await step("the error survives further navigation instead of flashing away", async () => {
-      fireEvent.keyDown(input, { key: "ArrowDown" });
-      fireEvent.keyDown(input, { key: "ArrowUp" });
-      await expect(
-        dialog.querySelector('[data-add-project-field="error"]')?.textContent,
-      ).toContain("Workspace root is not a directory: /Users/story/dev/ghostex");
-      await expect(storyRoot.querySelector("[data-add-project-modal]")).not.toBeNull();
+    await step('the error survives further navigation instead of flashing away', async () => {
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'ArrowUp' });
+      await expect(dialog.querySelector('[data-add-project-field="error"]')?.textContent).toContain(
+        'Workspace root is not a directory: /Users/story/dev/ghostex'
+      );
+      await expect(storyRoot.querySelector('[data-add-project-modal]')).not.toBeNull();
     });
   },
 };
@@ -520,20 +430,20 @@ export const BackNavigationPopsSteps: Story = {
     const storyRoot = canvasElement.ownerDocument.body;
     const dialog = await findDialog(storyRoot);
 
-    await step("clearing the local-browse query pops back to the sources step", async () => {
-      await chooseSource(dialog, "local");
+    await step('clearing the local-browse query pops back to the sources step', async () => {
+      await chooseSource(dialog, 'local');
       const input = await findPathInput(dialog);
-      await expect(input.value).toBe("~/");
-      typeQuery(input, "");
-      await waitFor(async () => expect(listedSources(dialog)).toContain("url"));
+      await expect(input.value).toBe('~/');
+      typeQuery(input, '');
+      await waitFor(async () => expect(listedSources(dialog)).toContain('url'));
     });
 
-    await step("Backspace on the empty repository step pops back too", async () => {
-      await chooseSource(dialog, "url");
+    await step('Backspace on the empty repository step pops back too', async () => {
+      await chooseSource(dialog, 'url');
       const input = await findPathInput(dialog);
-      await expect(input.value).toBe("");
-      fireEvent.keyDown(input, { key: "Backspace" });
-      await waitFor(async () => expect(listedSources(dialog)).toContain("local"));
+      await expect(input.value).toBe('');
+      fireEvent.keyDown(input, { key: 'Backspace' });
+      await waitFor(async () => expect(listedSources(dialog)).toContain('local'));
       await expect(dialog.querySelector('[data-add-project-field="back"]')).toBeNull();
     });
   },

@@ -17,9 +17,9 @@ between "working" and "stuck". Nothing here estimates the PERCENTAGE — that
 comes off the screen or is not drawn at all.
 */
 
-import { useEffect, useState } from "react";
-import type { SessionChatTerminalActivity } from "../../shared/session-chat";
-import { cn } from "@/packages/components/utils";
+import { useEffect, useState } from 'react';
+import type { SessionChatTerminalActivity } from '../../shared/session-chat';
+import { cn } from '@/packages/components/utils';
 
 /** How often the local clock re-renders between server samples. */
 const ACTIVITY_CLOCK_TICK_MS = 1_000;
@@ -49,7 +49,7 @@ export function formatSessionChatActivityElapsed(totalSeconds: number): string {
  */
 export function sessionChatActivityElapsedSeconds(
   activity: { elapsedSeconds?: number; detectedAt: string },
-  now: number,
+  now: number
 ): number | null {
   if (activity.elapsedSeconds === undefined) {
     return null;
@@ -80,35 +80,25 @@ export function SessionChatActivityRow({ activity }: SessionChatActivityRowProps
   }, [activity.detectedAt, hasClock]);
 
   const elapsed = sessionChatActivityElapsedSeconds(activity, now);
-  const percent =
-    activity.percent === undefined
-      ? null
-      : Math.min(100, Math.max(0, Math.round(activity.percent)));
+  const percent = activity.percent === undefined ? null : Math.min(100, Math.max(0, Math.round(activity.percent)));
 
   return (
     <div
-      aria-live="polite"
-      className="ghostex-chat-activity-row my-2 grid gap-2 rounded-2xl border border-border/65 bg-muted/20 px-4 py-3"
+      aria-live='polite'
+      className='ghostex-chat-activity-row my-2 grid gap-2 rounded-2xl border border-border/65 bg-muted/20 px-4 py-3'
       data-kind={activity.kind}
-      role="status"
+      role='status'
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary"
-        />
-        <span className="min-w-0 flex-1 truncate text-sm text-foreground/90">
-          {activity.label}
-        </span>
+      <div className='flex min-w-0 items-center gap-2'>
+        <span aria-hidden='true' className='size-1.5 shrink-0 animate-pulse rounded-full bg-primary' />
+        <span className='min-w-0 flex-1 truncate text-sm text-foreground/90'>{activity.label}</span>
         {elapsed !== null ? (
-          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+          <span className='shrink-0 text-xs text-muted-foreground tabular-nums'>
             {formatSessionChatActivityElapsed(elapsed)}
           </span>
         ) : null}
         {percent !== null ? (
-          <span className="shrink-0 text-xs font-medium text-foreground/80 tabular-nums">
-            {percent}%
-          </span>
+          <span className='shrink-0 text-xs font-medium text-foreground/80 tabular-nums'>{percent}%</span>
         ) : null}
       </div>
       {percent !== null ? (
@@ -116,11 +106,11 @@ export function SessionChatActivityRow({ activity }: SessionChatActivityRowProps
           aria-valuemax={100}
           aria-valuemin={0}
           aria-valuenow={percent}
-          className="h-1 min-w-0 overflow-hidden rounded-full bg-foreground/10"
-          role="progressbar"
+          className='h-1 min-w-0 overflow-hidden rounded-full bg-foreground/10'
+          role='progressbar'
         >
           <div
-            className={cn("h-full rounded-full bg-primary transition-[width] duration-500")}
+            className={cn('h-full rounded-full bg-primary transition-[width] duration-500')}
             style={{ width: `${percent}%` }}
           />
         </div>

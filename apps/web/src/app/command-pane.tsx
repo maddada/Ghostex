@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import type { GxserverProjectId, GxserverSessionId } from "@/packages/shared/gxserver-protocol";
-import type { GhostexWebMachine } from "../connections/types";
-import { SessionTerminal } from "../terminal";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import type { GxserverProjectId, GxserverSessionId } from '@/packages/shared/gxserver-protocol';
+import type { GhostexWebMachine } from '../connections/types';
+import { SessionTerminal } from '../terminal';
 import {
   workspaceSessionId,
   type WorkspacePlaceholderAction,
   type WorkspaceSession,
-} from "../workspace/workspace-model";
-import type { ActiveProject } from "./types";
+} from '../workspace/workspace-model';
+import type { ActiveProject } from './types';
 
 interface CommandPaneProps {
   activeProject?: ActiveProject;
@@ -21,7 +21,7 @@ interface CommandPaneProps {
   openRequest?: { requestId: number; sessionId?: string };
 }
 
-const HEIGHT_STORAGE_KEY = "ghostexWeb.commandPaneHeight.v1";
+const HEIGHT_STORAGE_KEY = 'ghostexWeb.commandPaneHeight.v1';
 const DEFAULT_HEIGHT = 320;
 const MIN_HEIGHT = 120;
 
@@ -45,9 +45,7 @@ export function CommandPane({
   onReady,
   openRequest,
 }: CommandPaneProps) {
-  const projectKey = activeProject
-    ? `${activeProject.machineId}/${activeProject.projectId}`
-    : "none";
+  const projectKey = activeProject ? `${activeProject.machineId}/${activeProject.projectId}` : 'none';
   const [activeByProject, setActiveByProject] = useState<Record<string, string>>({});
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set());
   const [creating, setCreating] = useState(false);
@@ -56,7 +54,7 @@ export function CommandPane({
   const activeId = activeByProject[projectKey];
   const activeSession = useMemo(
     () => sessions.find((session) => workspaceSessionId(session) === activeId) ?? sessions[0],
-    [activeId, sessions],
+    [activeId, sessions]
   );
   const expanded = expandedProjects.has(projectKey) && Boolean(activeSession);
 
@@ -69,11 +67,7 @@ export function CommandPane({
   }, [activeId, activeSession, projectKey]);
 
   useEffect(() => {
-    if (
-      !openRequest
-      || openRequest.requestId === handledOpenRequest.current
-      || sessions.length === 0
-    ) return;
+    if (!openRequest || openRequest.requestId === handledOpenRequest.current || sessions.length === 0) return;
     handledOpenRequest.current = openRequest.requestId;
     const requestedSession = openRequest.sessionId
       ? sessions.find((session) => workspaceSessionId(session) === openRequest.sessionId)
@@ -93,8 +87,8 @@ export function CommandPane({
 
   useEffect(() => {
     const clampToViewport = () => setHeight((current) => clampHeight(current));
-    window.addEventListener("resize", clampToViewport);
-    return () => window.removeEventListener("resize", clampToViewport);
+    window.addEventListener('resize', clampToViewport);
+    return () => window.removeEventListener('resize', clampToViewport);
   }, []);
 
   const selectSession = (session: WorkspaceSession) => {
@@ -132,42 +126,42 @@ export function CommandPane({
   if (!expanded || !activeSession) return null;
 
   return (
-    <section className="command-pane" style={{ height }}>
+    <section className='command-pane' style={{ height }}>
       <div
-        aria-label="Resize command pane"
-        className="command-pane__resize"
+        aria-label='Resize command pane'
+        className='command-pane__resize'
         onDoubleClick={() => setHeight(clampHeight(DEFAULT_HEIGHT))}
         onPointerCancel={endResize}
         onPointerDown={beginResize}
         onPointerMove={resize}
         onPointerUp={endResize}
-        role="separator"
+        role='separator'
       />
-      <div className="command-pane__header">
-        <strong className="command-pane__label">Command Terminal</strong>
-        <div className="command-pane__tabs" role="tablist">
+      <div className='command-pane__header'>
+        <strong className='command-pane__label'>Command Terminal</strong>
+        <div className='command-pane__tabs' role='tablist'>
           {sessions.map((session) => {
             const id = workspaceSessionId(session);
             return (
               <button
                 aria-selected={workspaceSessionId(activeSession) === id}
-                className="command-pane__tab"
+                className='command-pane__tab'
                 key={id}
                 onClick={() => selectSession(session)}
-                role="tab"
-                type="button"
+                role='tab'
+                type='button'
               >
                 <span>{session.title}</span>
                 <span
                   aria-label={`Close ${session.title}`}
-                  className="command-pane__close"
+                  className='command-pane__close'
                   onClick={(event) => {
                     event.stopPropagation();
                     void onClose(session).catch((error: unknown) =>
                       onError(error instanceof Error ? error.message : String(error))
                     );
                   }}
-                  role="button"
+                  role='button'
                 >
                   ×
                 </span>
@@ -176,29 +170,31 @@ export function CommandPane({
           })}
         </div>
         <button
-          aria-label="New command terminal"
-          className="command-pane__new"
+          aria-label='New command terminal'
+          className='command-pane__new'
           disabled={!activeProject || creating}
           onClick={() => void create()}
-          type="button"
+          type='button'
         >
-          {creating ? "…" : "+"}
+          {creating ? '…' : '+'}
         </button>
         <button
-          aria-label="Hide command pane"
-          className="command-pane__hide"
-          onClick={() => setExpandedProjects((current) => {
-            const next = new Set(current);
-            next.delete(projectKey);
-            return next;
-          })}
-          type="button"
+          aria-label='Hide command pane'
+          className='command-pane__hide'
+          onClick={() =>
+            setExpandedProjects((current) => {
+              const next = new Set(current);
+              next.delete(projectKey);
+              return next;
+            })
+          }
+          type='button'
         >
           ⌄
         </button>
       </div>
-      <div className="command-pane__body">
-        {activeSession.presentationState === "running" && machine && (
+      <div className='command-pane__body'>
+        {activeSession.presentationState === 'running' && machine && (
           <SessionTerminal
             aria-label={`Command terminal ${activeSession.title}`}
             authToken={machine.authToken}
@@ -209,18 +205,17 @@ export function CommandPane({
             sessionId={activeSession.sessionId as GxserverSessionId}
           />
         )}
-        {activeSession.presentationState !== "running" && (
-          <div className="command-pane__placeholder">
+        {activeSession.presentationState !== 'running' && (
+          <div className='command-pane__placeholder'>
             <span>{activeSession.statusMessage ?? commandStateLabel(activeSession)}</span>
-            {activeSession.presentationState !== "mounting" && (
+            {activeSession.presentationState !== 'mounting' && (
               <button
-                onClick={() => onAttach(
-                  activeSession,
-                  activeSession.presentationState === "sleeping" ? "wake" : "materialize",
-                )}
-                type="button"
+                onClick={() =>
+                  onAttach(activeSession, activeSession.presentationState === 'sleeping' ? 'wake' : 'materialize')
+                }
+                type='button'
               >
-                {activeSession.presentationState === "sleeping" ? "Wake" : "Retry"}
+                {activeSession.presentationState === 'sleeping' ? 'Wake' : 'Retry'}
               </button>
             )}
           </div>
@@ -232,10 +227,15 @@ export function CommandPane({
 
 function commandStateLabel(session: WorkspaceSession): string {
   switch (session.presentationState) {
-    case "sleeping": return "This command terminal is sleeping.";
-    case "mounting": return "Starting command terminal…";
-    case "restored-unmounted": return "This command terminal needs to be materialized.";
-    case "startup-failed": return "Command terminal startup failed.";
-    case "running": return "";
+    case 'sleeping':
+      return 'This command terminal is sleeping.';
+    case 'mounting':
+      return 'Starting command terminal…';
+    case 'restored-unmounted':
+      return 'This command terminal needs to be materialized.';
+    case 'startup-failed':
+      return 'Command terminal startup failed.';
+    case 'running':
+      return '';
   }
 }

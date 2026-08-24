@@ -486,22 +486,16 @@ export function CommandPalette({
    * nothing when chosen.
    */
   const browserViewTabHidden = useSidebarStore(
-    (state) =>
-      (state.hud.settings?.browserViewTabHidden ??
-        DEFAULT_ghostex_SETTINGS.browserViewTabHidden) === true
+    (state) => (state.hud.settings?.browserViewTabHidden ?? DEFAULT_ghostex_SETTINGS.browserViewTabHidden) === true
   );
   const codeViewTabHidden = useSidebarStore(
-    (state) =>
-      (state.hud.settings?.codeViewTabHidden ?? DEFAULT_ghostex_SETTINGS.codeViewTabHidden) === true
+    (state) => (state.hud.settings?.codeViewTabHidden ?? DEFAULT_ghostex_SETTINGS.codeViewTabHidden) === true
   );
   const docsViewTabHidden = useSidebarStore(
-    (state) =>
-      (state.hud.settings?.docsViewTabHidden ?? DEFAULT_ghostex_SETTINGS.docsViewTabHidden) === true
+    (state) => (state.hud.settings?.docsViewTabHidden ?? DEFAULT_ghostex_SETTINGS.docsViewTabHidden) === true
   );
   const kanbanViewTabHidden = useSidebarStore(
-    (state) =>
-      (state.hud.settings?.kanbanViewTabHidden ?? DEFAULT_ghostex_SETTINGS.kanbanViewTabHidden) ===
-      true
+    (state) => (state.hud.settings?.kanbanViewTabHidden ?? DEFAULT_ghostex_SETTINGS.kanbanViewTabHidden) === true
   );
   const hiddenWorkareaCommandIds = useMemo(() => {
     const hidden = new Set<string>();
@@ -567,9 +561,7 @@ export function CommandPalette({
     return [
       ...hotkeyCommands,
       ...APP_MODAL_PALETTE_COMMANDS,
-      ...SIDEBAR_MESSAGE_PALETTE_COMMANDS.filter(
-        (command) => !hiddenWorkareaCommandIds.has(command.commandId)
-      ),
+      ...SIDEBAR_MESSAGE_PALETTE_COMMANDS.filter((command) => !hiddenWorkareaCommandIds.has(command.commandId)),
       ...openTargetCommands,
       petCommand,
     ];
@@ -627,12 +619,8 @@ export function CommandPalette({
     [commandQuery, commandSearchItems]
   );
   const isSearchingCommands = commandQuery.length > 0;
-  const hasCommandResults = isSearchingCommands
-    ? filteredCommandResults.length > 0
-    : commandSearchItems.length > 0;
-  const topCommandValue = (
-    isSearchingCommands ? filteredCommandResults[0] : commandSearchItems[0]
-  )?.searchText ?? '';
+  const hasCommandResults = isSearchingCommands ? filteredCommandResults.length > 0 : commandSearchItems.length > 0;
+  const topCommandValue = (isSearchingCommands ? filteredCommandResults[0] : commandSearchItems[0])?.searchText ?? '';
 
   useLayoutEffect(() => {
     if (!isOpen || isPrewarm) {
@@ -953,11 +941,7 @@ export function CommandPalette({
           {!isSearchingCommands && builtInCommands.length > 0 ? (
             <CommandGroup heading='Ghostex'>
               {builtInCommands.map((command) => (
-                <BuiltInCommandRow
-                  command={command}
-                  key={getBuiltInCommandKey(command)}
-                  onRun={runBuiltInCommand}
-                />
+                <BuiltInCommandRow command={command} key={getBuiltInCommandKey(command)} onRun={runBuiltInCommand} />
               ))}
             </CommandGroup>
           ) : null}
@@ -966,27 +950,17 @@ export function CommandPalette({
               {builtInCommands.length > 0 ? <CommandSeparator /> : null}
               <CommandGroup heading='Pane Actions'>
                 {paneActionCommands.map((command) => (
-                  <BuiltInCommandRow
-                    command={command}
-                    key={command.definition.id}
-                    onRun={runBuiltInCommand}
-                  />
+                  <BuiltInCommandRow command={command} key={command.definition.id} onRun={runBuiltInCommand} />
                 ))}
               </CommandGroup>
             </>
           ) : null}
           {!isSearchingCommands && projectCommands.length > 0 ? (
             <>
-              {builtInCommands.length > 0 || paneActionCommands.length > 0 ? (
-                <CommandSeparator />
-              ) : null}
+              {builtInCommands.length > 0 || paneActionCommands.length > 0 ? <CommandSeparator /> : null}
               <CommandGroup heading='Project Actions'>
                 {projectCommands.map((item) => (
-                  <ProjectCommandRow
-                    item={item}
-                    key={item.command.commandId}
-                    onRun={runProjectCommand}
-                  />
+                  <ProjectCommandRow item={item} key={item.command.commandId} onRun={runProjectCommand} />
                 ))}
               </CommandGroup>
             </>
@@ -1245,11 +1219,7 @@ function getCommandDescription(command: SidebarCommandButton): string {
   return `${typeLabel} - ${target}`;
 }
 
-function getProjectCommandSearchText({
-  command,
-  hotkey,
-  slotNumber,
-}: ProjectPaletteCommand): string {
+function getProjectCommandSearchText({ command, hotkey, slotNumber }: ProjectPaletteCommand): string {
   return `${getCommandTitle(command)} ${getCommandDescription(command)} ${hotkey} action ${slotNumber}`;
 }
 

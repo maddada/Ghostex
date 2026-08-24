@@ -274,7 +274,9 @@ pub(crate) fn gpui_status_title_allowed(value: &str) -> bool {
         && !value.chars().any(char::is_control)
 }
 
-pub(crate) fn gpui_pet_overlay_activity_activation_session_id(activity: &GpuiPetOverlayActivityState) -> &str {
+pub(crate) fn gpui_pet_overlay_activity_activation_session_id(
+    activity: &GpuiPetOverlayActivityState,
+) -> &str {
     /*
     CDXC:GPUIStatusPetOverlay 2026-06-26-05:30:
     Pet activity cards activate the exact sanitized activity `id` supplied by the sidebar bridge. The GPUI click payload must not include project ids, titles, paths, URLs, commands, logs, or terminal content, and it must not derive a different target from the visible card text.
@@ -331,7 +333,10 @@ pub(crate) fn gpui_status_indicator_activation_candidate_order(
         .then_with(|| left.order.cmp(&right.order))
 }
 
-pub(crate) fn gpui_status_indicator_session_matches_focus(session_id: &str, focused_session_id: &str) -> bool {
+pub(crate) fn gpui_status_indicator_session_matches_focus(
+    session_id: &str,
+    focused_session_id: &str,
+) -> bool {
     if session_id == focused_session_id {
         return true;
     }
@@ -364,4 +369,3 @@ pub(crate) fn gpui_status_pet_activation_script(message: &serde_json::Value) -> 
         "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onStatusPetActivation==='function'){{bridge.onStatusPetActivation(payload);}}else{{const pending=Array.isArray(bridge.pendingStatusPetActivations)?bridge.pendingStatusPetActivations:[];pending.push(payload);bridge.pendingStatusPetActivations=pending;}}}})(); undefined;"
     )
 }
-

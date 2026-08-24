@@ -1,6 +1,6 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vitest/config';
 
 /*
  * CDXC:RepoRestructure 2026-08-22: source trees moved under packages/ and apps/,
@@ -16,15 +16,15 @@ import { defineConfig } from "vitest/config";
  * the move), so leaving `root` unset would make Vitest resolve those globs
  * against tooling/release-gpui/ instead and discover the wrong (empty) set.
  */
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export default defineConfig({
   root: repoRoot,
   resolve: {
     alias: {
-      "@": repoRoot,
-      "bun:test": "vitest",
-      "vite-plus/test": "vitest",
+      '@': repoRoot,
+      'bun:test': 'vitest',
+      'vite-plus/test': 'vitest',
     },
   },
   test: {
@@ -37,26 +37,26 @@ export default defineConfig({
      * then fail for reasons unrelated to the release candidate.
      */
     exclude: [
-      "**/node_modules/**",
-      "**/.git/**",
-      "**/dist/**",
-      "**/build/**",
-      "**/out/**",
-      "**/coverage/**",
-      "**/.cache/**",
-      "**/.turbo/**",
-      "**/.vite/**",
-      "**/.zig-cache/**",
-      "**/zig-out/**",
-      "**/DerivedData/**",
-      "**/target/**",
-      ".dependencies/**",
-      "apps/mobile/app/android/.gradle/**",
-      "apps/mobile/app/android/**/build/**",
-      ".dependencies/code-server/lib/**",
-      ".dependencies/code-server/test/**",
-      "storybook-static/**",
-      "tmp/**",
+      '**/node_modules/**',
+      '**/.git/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/out/**',
+      '**/coverage/**',
+      '**/.cache/**',
+      '**/.turbo/**',
+      '**/.vite/**',
+      '**/.zig-cache/**',
+      '**/zig-out/**',
+      '**/DerivedData/**',
+      '**/target/**',
+      '.dependencies/**',
+      'apps/mobile/app/android/.gradle/**',
+      'apps/mobile/app/android/**/build/**',
+      '.dependencies/code-server/lib/**',
+      '.dependencies/code-server/test/**',
+      'storybook-static/**',
+      'tmp/**',
     ],
   },
 });

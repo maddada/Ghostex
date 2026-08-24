@@ -5,21 +5,21 @@
 use std::collections::HashSet;
 
 use gpui::AnyElement;
+use gpui::InteractiveElement as _;
 use gpui::KeyDownEvent;
 use gpui::MouseButton;
 use gpui::MouseDownEvent;
 use gpui::MouseUpEvent;
+use gpui::ParentElement as _;
+use gpui::Styled as _;
 use gpui::Window;
 use gpui::div;
+use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui_component::Sizable as _;
 use gpui_component::Size as ComponentSize;
 use gpui_component::h_flex;
 use gpui_component::input::Input;
-use gpui::InteractiveElement as _;
-use gpui::ParentElement as _;
-use gpui::Styled as _;
-use gpui::prelude::FluentBuilder as _;
 
 use crate::app::consts::*;
 use crate::app::helpers::*;
@@ -297,7 +297,10 @@ impl GhostexGpuiApp {
     /// placeholder, generated, user, and terminal-title trust rules; using a
     /// second live OSC source here lets WSL's `user@host: /path` shell title
     /// hide title generation that the sidebar has already projected.
-    pub(crate) fn agents_workspace_tab_display_title(&self, session_id: TerminalSessionId) -> String {
+    pub(crate) fn agents_workspace_tab_display_title(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> String {
         self.agents_workspace
             .session(session_id)
             .map(|session| session.title.clone())
@@ -559,5 +562,4 @@ impl GhostexGpuiApp {
             };
         }
     }
-
 }

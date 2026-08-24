@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 impl Render for WorkspaceTabDragPreview {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let visual_tone = WorkspaceTabLifecycleVisualTone::new(self.presentation_state, true);
@@ -60,7 +59,6 @@ impl Render for WorkspaceTabDragPreview {
     }
 }
 
-
 impl Render for CommandTabDragPreview {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let show_status_indicator =
@@ -103,7 +101,6 @@ impl Render for CommandTabDragPreview {
             })
     }
 }
-
 
 impl Render for BrowserTabDragPreview {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {

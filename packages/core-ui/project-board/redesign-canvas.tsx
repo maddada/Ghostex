@@ -6,34 +6,34 @@
  * unlayered square-theme rules beat Tailwind's utilities layer, while the real
  * kanban/manage pages only load shadcn.generated.css.
  */
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode } from 'react';
 
 export const PAGE_THEME: CSSProperties & Record<string, string> = {
-  "--background": "#0e0e0e",
-  "--foreground": "oklch(0.985 0 0)",
-  "--card": "#161616",
-  "--card-foreground": "oklch(0.985 0 0)",
-  "--popover": "#161616",
-  "--popover-foreground": "oklch(0.985 0 0)",
-  "--primary": "oklch(0.922 0 0)",
-  "--primary-foreground": "oklch(0.205 0 0)",
-  "--secondary": "#1f1f1f",
-  "--secondary-foreground": "oklch(0.985 0 0)",
-  "--muted": "#1f1f1f",
-  "--muted-foreground": "oklch(0.708 0 0)",
-  "--accent": "#1f1f1f",
-  "--accent-foreground": "oklch(0.985 0 0)",
-  "--destructive": "oklch(0.704 0.191 22.216)",
-  "--border": "rgba(255, 255, 255, 0.08)",
-  "--input": "rgba(255, 255, 255, 0.15)",
-  "--ring": "oklch(0.556 0 0)",
-  "--radius": "8px",
+  '--background': '#0e0e0e',
+  '--foreground': 'oklch(0.985 0 0)',
+  '--card': '#161616',
+  '--card-foreground': 'oklch(0.985 0 0)',
+  '--popover': '#161616',
+  '--popover-foreground': 'oklch(0.985 0 0)',
+  '--primary': 'oklch(0.922 0 0)',
+  '--primary-foreground': 'oklch(0.205 0 0)',
+  '--secondary': '#1f1f1f',
+  '--secondary-foreground': 'oklch(0.985 0 0)',
+  '--muted': '#1f1f1f',
+  '--muted-foreground': 'oklch(0.708 0 0)',
+  '--accent': '#1f1f1f',
+  '--accent-foreground': 'oklch(0.985 0 0)',
+  '--destructive': 'oklch(0.704 0.191 22.216)',
+  '--border': 'rgba(255, 255, 255, 0.08)',
+  '--input': 'rgba(255, 255, 255, 0.15)',
+  '--ring': 'oklch(0.556 0 0)',
+  '--radius': '8px',
   /*
    * CDXC:AccentColor 2026-08-24:
    * Mirror the shipped default accent so redesign stories keep rendering the
    * accent text that now reads from --ghostex-accent.
    */
-  "--ghostex-accent": "#38bdf8",
+  '--ghostex-accent': '#38bdf8',
 };
 
 export const PAGE_SCOPED_CSS = `
@@ -104,7 +104,7 @@ export const PAGE_SCOPED_CSS = `
 
 export function RedesignCanvas({ children }: { children: ReactNode }) {
   return (
-    <div className="pb-redesign flex h-screen flex-col bg-[#0e0e0e] text-foreground" style={PAGE_THEME}>
+    <div className='pb-redesign flex h-screen flex-col bg-[#0e0e0e] text-foreground' style={PAGE_THEME}>
       <style>{PAGE_SCOPED_CSS}</style>
       {children}
     </div>

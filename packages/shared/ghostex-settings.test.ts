@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from 'vitest';
 import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
   APP_SHOTS_HOTKEY_OPTIONS,
@@ -38,16 +38,16 @@ import {
   SIDEBAR_SIDE_OPTIONS,
   SIDEBAR_THEME_SETTING_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
-} from "./ghostex-settings";
-import { DEFAULT_PET_ID } from "./pets";
+} from './ghostex-settings';
+import { DEFAULT_PET_ID } from './pets';
 import {
   DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
   getEnabledVisibleSidebarSessionTags,
   getEnabledVisibleSidebarSessionTagFilters,
   getEnabledVisibleSidebarSessionTagSections,
-} from "./session-tags";
+} from './session-tags';
 
-describe("normalizeghostexSettings", () => {
+describe('normalizeghostexSettings', () => {
   /*
    * CDXC:SidebarV2Lifecycle 2026-07-29:
    * `sidebarAutoSettleAfterDays` is read by BOTH the client predicate and
@@ -76,7 +76,7 @@ describe("normalizeghostexSettings", () => {
       sidebarAutoSettleAfterDays: null,
     });
     // A non-number is a corrupt file, not an intent to disable.
-    expect(normalizeghostexSettings({ sidebarAutoSettleAfterDays: "7" })).toMatchObject({
+    expect(normalizeghostexSettings({ sidebarAutoSettleAfterDays: '7' })).toMatchObject({
       sidebarAutoSettleAfterDays: 3,
     });
   });
@@ -88,7 +88,7 @@ describe("normalizeghostexSettings", () => {
    * substitute the default: silently rewriting an unknown value to "repository"
    * would re-merge checkouts the user deliberately separated.
    */
-  test("keeps only recognized project grouping overrides", () => {
+  test('keeps only recognized project grouping overrides', () => {
     expect(DEFAULT_ghostex_SETTINGS.sidebarProjectGroupingOverrides).toEqual({});
     expect(normalizeghostexSettings({})).toMatchObject({
       sidebarProjectGroupingOverrides: {},
@@ -96,81 +96,83 @@ describe("normalizeghostexSettings", () => {
     expect(
       normalizeghostexSettings({
         sidebarProjectGroupingOverrides: {
-          "": "separate",
-          "build-box:/home/build/ghostex": "repositoryPath",
-          "local:/Users/madda/dev/Ghostex": "separate",
-          "local:/Users/madda/dev/other": "repository",
-          "local:/Users/madda/dev/typo": "repository_path",
-          "local:/Users/madda/dev/wrong": 3,
+          '': 'separate',
+          'build-box:/home/build/ghostex': 'repositoryPath',
+          'local:/Users/madda/dev/Ghostex': 'separate',
+          'local:/Users/madda/dev/other': 'repository',
+          'local:/Users/madda/dev/typo': 'repository_path',
+          'local:/Users/madda/dev/wrong': 3,
         },
-      }),
+      })
     ).toMatchObject({
       sidebarProjectGroupingOverrides: {
-        "build-box:/home/build/ghostex": "repositoryPath",
-        "local:/Users/madda/dev/Ghostex": "separate",
-        "local:/Users/madda/dev/other": "repository",
+        'build-box:/home/build/ghostex': 'repositoryPath',
+        'local:/Users/madda/dev/Ghostex': 'separate',
+        'local:/Users/madda/dev/other': 'repository',
       },
     });
   });
 
-  test("falls back to no overrides for a malformed record", () => {
-    for (const value of [null, [], "separate", 3]) {
-      expect(
-        normalizeghostexSettings({ sidebarProjectGroupingOverrides: value }),
-      ).toMatchObject({ sidebarProjectGroupingOverrides: {} });
+  test('falls back to no overrides for a malformed record', () => {
+    for (const value of [null, [], 'separate', 3]) {
+      expect(normalizeghostexSettings({ sidebarProjectGroupingOverrides: value })).toMatchObject({
+        sidebarProjectGroupingOverrides: {},
+      });
     }
   });
 
-  test("maps the auto-settle window onto its Settings select value", () => {
-    expect(sidebarAutoSettleAfterDaysSelectValue(3)).toBe("3");
+  test('maps the auto-settle window onto its Settings select value', () => {
+    expect(sidebarAutoSettleAfterDaysSelectValue(3)).toBe('3');
     expect(sidebarAutoSettleAfterDaysSelectValue(null)).toBe(SIDEBAR_AUTO_SETTLE_OFF_VALUE);
     // A hand-edited window with no preset reads as Off rather than pretending
     // to be a preset it is not using.
     expect(sidebarAutoSettleAfterDaysSelectValue(2.5)).toBe(SIDEBAR_AUTO_SETTLE_OFF_VALUE);
-    expect(parseSidebarAutoSettleAfterDaysSelectValue("14")).toBe(14);
+    expect(parseSidebarAutoSettleAfterDaysSelectValue('14')).toBe(14);
     expect(parseSidebarAutoSettleAfterDaysSelectValue(SIDEBAR_AUTO_SETTLE_OFF_VALUE)).toBeNull();
   });
 
-  test("normalizes browser actions to browser panes", () => {
+  test('normalizes browser actions to browser panes', () => {
     /**
      * CDXC:BrowserPanes 2026-05-27-07:24
      * Browser actions no longer support Chrome Canary attachment. Legacy stored
      * values must normalize to browser panes so removed settings cannot restore
      * the old external browser route.
      */
-    expect(DEFAULT_ghostex_SETTINGS.browserOpenMode).toBe("browser-pane");
+    expect(DEFAULT_ghostex_SETTINGS.browserOpenMode).toBe('browser-pane');
     expect(normalizeghostexSettings({})).toMatchObject({
-      browserOpenMode: "browser-pane",
+      browserOpenMode: 'browser-pane',
     });
-    expect(normalizeghostexSettings({ browserOpenMode: "browser-pane" })).toMatchObject({
-      browserOpenMode: "browser-pane",
+    expect(normalizeghostexSettings({ browserOpenMode: 'browser-pane' })).toMatchObject({
+      browserOpenMode: 'browser-pane',
     });
-    expect(normalizeghostexSettings({ browserOpenMode: "chrome-canary" })).toMatchObject({
-      browserOpenMode: "browser-pane",
+    expect(normalizeghostexSettings({ browserOpenMode: 'chrome-canary' })).toMatchObject({
+      browserOpenMode: 'browser-pane',
     });
-    expect(normalizeghostexSettings({ browserOpenMode: "Safari" })).toMatchObject({
-      browserOpenMode: "browser-pane",
+    expect(normalizeghostexSettings({ browserOpenMode: 'Safari' })).toMatchObject({
+      browserOpenMode: 'browser-pane',
     });
-    expect(BROWSER_OPEN_MODE_OPTIONS).toEqual([{
-      label: "Browser Panes",
-      value: "browser-pane",
-    }]);
+    expect(BROWSER_OPEN_MODE_OPTIONS).toEqual([
+      {
+        label: 'Browser Panes',
+        value: 'browser-pane',
+      },
+    ]);
   });
 
-  test("normalizes legacy browser feedback choices to Agentation", () => {
-    expect(DEFAULT_ghostex_SETTINGS.browserFeedbackTool).toBe("agentation");
+  test('normalizes legacy browser feedback choices to Agentation', () => {
+    expect(DEFAULT_ghostex_SETTINGS.browserFeedbackTool).toBe('agentation');
     expect(normalizeghostexSettings({})).toMatchObject({
-      browserFeedbackTool: "agentation",
+      browserFeedbackTool: 'agentation',
     });
-    expect(normalizeghostexSettings({ browserFeedbackTool: "react-grab" })).toMatchObject({
-      browserFeedbackTool: "agentation",
+    expect(normalizeghostexSettings({ browserFeedbackTool: 'react-grab' })).toMatchObject({
+      browserFeedbackTool: 'agentation',
     });
-    expect(normalizeghostexSettings({ browserFeedbackTool: "unknown" })).toMatchObject({
-      browserFeedbackTool: "agentation",
+    expect(normalizeghostexSettings({ browserFeedbackTool: 'unknown' })).toMatchObject({
+      browserFeedbackTool: 'agentation',
     });
   });
 
-  test("normalizes terminal dev-server discovery settings", () => {
+  test('normalizes terminal dev-server discovery settings', () => {
     /*
      * CDXC:TerminalDevServers 2026-06-23-19:22:
      * Terminal dev-server preferences should persist as app settings with detection enabled by default and ignored ports stored as canonical port or range strings.
@@ -186,66 +188,56 @@ describe("normalizeghostexSettings", () => {
     expect(
       normalizeghostexSettings({
         terminalDevServerDetectionEnabled: false,
-        terminalDevServerIgnoredPortRules: [
-          "3000-3005",
-          "3004-3008",
-          "abc",
-          "9229",
-          "9230",
-        ],
-      }),
+        terminalDevServerIgnoredPortRules: ['3000-3005', '3004-3008', 'abc', '9229', '9230'],
+      })
     ).toMatchObject({
       terminalDevServerDetectionEnabled: false,
-      terminalDevServerIgnoredPortRules: ["3000-3008", "9229-9230"],
+      terminalDevServerIgnoredPortRules: ['3000-3008', '9229-9230'],
     });
-    expect(normalizeTerminalDevServerIgnoredPortRuleInput(" 24678 - 24680 ")).toBe(
-      "24678-24680",
-    );
-    expect(normalizeTerminalDevServerIgnoredPortRuleInput("0")).toBeUndefined();
-    expect(normalizeTerminalDevServerIgnoredPortRuleInput("70000")).toBeUndefined();
-    expect(normalizeTerminalDevServerIgnoredPortRuleInput("5000-4000")).toBeUndefined();
-    expect(normalizeTerminalDevServerIgnoredPortRules(["3000", "3001", "3002-3003"])).toEqual([
-      "3000-3003",
-    ]);
+    expect(normalizeTerminalDevServerIgnoredPortRuleInput(' 24678 - 24680 ')).toBe('24678-24680');
+    expect(normalizeTerminalDevServerIgnoredPortRuleInput('0')).toBeUndefined();
+    expect(normalizeTerminalDevServerIgnoredPortRuleInput('70000')).toBeUndefined();
+    expect(normalizeTerminalDevServerIgnoredPortRuleInput('5000-4000')).toBeUndefined();
+    expect(normalizeTerminalDevServerIgnoredPortRules(['3000', '3001', '3002-3003'])).toEqual(['3000-3003']);
   });
 
-  test("merges the legacy link-destination settings into one web-link target", () => {
+  test('merges the legacy link-destination settings into one web-link target', () => {
     /*
      * CDXC:WebLinkOpenTarget 2026-08-19:
      * The Browser toggle and the Dev Servers dropdown answered the same question with opposite defaults. They merge into one target, so the toggle has to win migration: it is the switch users actually flipped, while nearly every install carries a dev-server default it never chose.
      */
-    expect(DEFAULT_ghostex_SETTINGS.webLinkOpenTarget).toBe("internal-browser");
+    expect(DEFAULT_ghostex_SETTINGS.webLinkOpenTarget).toBe('internal-browser');
     expect(WEB_LINK_OPEN_TARGET_OPTIONS).toEqual([
-      { label: "Internal Browser", value: "internal-browser" },
-      { label: "System Default Browser", value: "system-default-browser" },
+      { label: 'Internal Browser', value: 'internal-browser' },
+      { label: 'System Default Browser', value: 'system-default-browser' },
     ]);
     expect(normalizeghostexSettings({})).toMatchObject({
-      webLinkOpenTarget: "internal-browser",
+      webLinkOpenTarget: 'internal-browser',
     });
-    expect(
-      normalizeghostexSettings({ webLinkOpenTarget: "system-default-browser" }),
-    ).toMatchObject({ webLinkOpenTarget: "system-default-browser" });
+    expect(normalizeghostexSettings({ webLinkOpenTarget: 'system-default-browser' })).toMatchObject({
+      webLinkOpenTarget: 'system-default-browser',
+    });
     expect(
       normalizeghostexSettings({
         openTerminalLinksInApp: false,
-        terminalDevServerOpenTarget: "internal-browser",
-      }),
-    ).toMatchObject({ webLinkOpenTarget: "system-default-browser" });
+        terminalDevServerOpenTarget: 'internal-browser',
+      })
+    ).toMatchObject({ webLinkOpenTarget: 'system-default-browser' });
     expect(
       normalizeghostexSettings({
         openTerminalLinksInApp: true,
-        terminalDevServerOpenTarget: "system-default-browser",
-      }),
-    ).toMatchObject({ webLinkOpenTarget: "internal-browser" });
-    expect(
-      normalizeghostexSettings({ terminalDevServerOpenTarget: "system-default-browser" }),
-    ).toMatchObject({ webLinkOpenTarget: "system-default-browser" });
-    expect(
-      normalizeghostexSettings({ terminalDevServerDefaultBrowserId: "edge" }),
-    ).toMatchObject({ webLinkOpenTarget: "system-default-browser" });
+        terminalDevServerOpenTarget: 'system-default-browser',
+      })
+    ).toMatchObject({ webLinkOpenTarget: 'internal-browser' });
+    expect(normalizeghostexSettings({ terminalDevServerOpenTarget: 'system-default-browser' })).toMatchObject({
+      webLinkOpenTarget: 'system-default-browser',
+    });
+    expect(normalizeghostexSettings({ terminalDevServerDefaultBrowserId: 'edge' })).toMatchObject({
+      webLinkOpenTarget: 'system-default-browser',
+    });
   });
 
-  test("normalizes global Portless settings", () => {
+  test('normalizes global Portless settings', () => {
     /*
      * CDXC:PortlessSettingsDisabled 2026-07-25:
      * Portless settings remain global, but missing or invalid values default
@@ -253,10 +245,10 @@ describe("normalizeghostexSettings", () => {
      * readable so the implementation can return later without a schema reset.
      */
     expect(DEFAULT_ghostex_SETTINGS.portlessEnabled).toBe(false);
-    expect(DEFAULT_ghostex_SETTINGS.portlessProtocol).toBe("https");
+    expect(DEFAULT_ghostex_SETTINGS.portlessProtocol).toBe('https');
     expect(normalizeghostexSettings({})).toMatchObject({
       portlessEnabled: false,
-      portlessProtocol: "https",
+      portlessProtocol: 'https',
     });
 
     const legacySettings = { ...DEFAULT_ghostex_SETTINGS } as Record<string, unknown>;
@@ -264,35 +256,35 @@ describe("normalizeghostexSettings", () => {
     delete legacySettings.portlessProtocol;
     expect(normalizeghostexSettings(legacySettings)).toMatchObject({
       portlessEnabled: false,
-      portlessProtocol: "https",
+      portlessProtocol: 'https',
     });
 
     expect(
       normalizeghostexSettings({
-        portlessEnabled: "false",
-        portlessProtocol: "HTTPS",
-      }),
+        portlessEnabled: 'false',
+        portlessProtocol: 'HTTPS',
+      })
     ).toMatchObject({
       portlessEnabled: false,
-      portlessProtocol: "https",
+      portlessProtocol: 'https',
     });
     expect(
       normalizeghostexSettings({
         portlessEnabled: true,
-        portlessProtocol: "https",
-      }),
+        portlessProtocol: 'https',
+      })
     ).toMatchObject({
       portlessEnabled: true,
-      portlessProtocol: "https",
+      portlessProtocol: 'https',
     });
     expect(
       normalizeghostexSettings({
         portlessEnabled: false,
-        portlessProtocol: "http",
-      }),
+        portlessProtocol: 'http',
+      })
     ).toMatchObject({
       portlessEnabled: false,
-      portlessProtocol: "http",
+      portlessProtocol: 'http',
     });
 
     const normalizedProjectLikeSettings = normalizeghostexSettings({
@@ -301,48 +293,48 @@ describe("normalizeghostexSettings", () => {
     });
     expect(normalizedProjectLikeSettings).toMatchObject({
       portlessEnabled: false,
-      portlessProtocol: "https",
+      portlessProtocol: 'https',
     });
     expect(
       Object.keys(normalizedProjectLikeSettings).filter(
-        (key) => key.toLowerCase().includes("portless") && key.toLowerCase().includes("project"),
-      ),
+        (key) => key.toLowerCase().includes('portless') && key.toLowerCase().includes('project')
+      )
     ).toEqual([]);
   });
 
-  test("normalizes App Shots settings", () => {
+  test('normalizes App Shots settings', () => {
     expect(DEFAULT_ghostex_SETTINGS.appShotsEnabled).toBe(false);
-    expect(DEFAULT_ghostex_SETTINGS.appShotsHotkey).toBe("both-command");
+    expect(DEFAULT_ghostex_SETTINGS.appShotsHotkey).toBe('both-command');
     expect(DEFAULT_ghostex_SETTINGS.appShotsMetadataEnabled).toBe(false);
     expect(normalizeghostexSettings({})).toMatchObject({
       appShotsEnabled: false,
-      appShotsHotkey: "both-command",
+      appShotsHotkey: 'both-command',
       appShotsMetadataEnabled: false,
     });
     expect(
       normalizeghostexSettings({
         appShotsEnabled: true,
-        appShotsHotkey: "both-option",
+        appShotsHotkey: 'both-option',
         appShotsMetadataEnabled: true,
-      }),
+      })
     ).toMatchObject({
       appShotsEnabled: true,
-      appShotsHotkey: "both-option",
+      appShotsHotkey: 'both-option',
       appShotsMetadataEnabled: true,
     });
-    expect(normalizeghostexSettings({ appShotsHotkey: "cmd+r" })).toMatchObject({
-      appShotsHotkey: "both-command",
+    expect(normalizeghostexSettings({ appShotsHotkey: 'cmd+r' })).toMatchObject({
+      appShotsHotkey: 'both-command',
     });
     expect(APP_SHOTS_HOTKEY_OPTIONS.map((option) => option.value)).toEqual([
-      "both-command",
-      "both-shift",
-      "both-option",
-      "double-left-shift",
-      "double-left-option",
+      'both-command',
+      'both-shift',
+      'both-option',
+      'double-left-shift',
+      'double-left-option',
     ]);
   });
 
-  test("defaults experimental features off and normalizes the persisted gate", () => {
+  test('defaults experimental features off and normalizes the persisted gate', () => {
     /*
      * CDXC:ExperimentalFeatures 2026-06-28-07:41:
      * Enable Experimental Features should be disabled for new installs and
@@ -356,12 +348,12 @@ describe("normalizeghostexSettings", () => {
     expect(normalizeghostexSettings({ showBetaFeatures: true })).toMatchObject({
       showBetaFeatures: true,
     });
-    expect(normalizeghostexSettings({ showBetaFeatures: "true" })).toMatchObject({
+    expect(normalizeghostexSettings({ showBetaFeatures: 'true' })).toMatchObject({
       showBetaFeatures: false,
     });
   });
 
-  test("persists Show Advanced settings density", () => {
+  test('persists Show Advanced settings density', () => {
     /*
      * CDXC:SettingsAdvanced 2026-06-28-08:01:
      * Show Advanced is a durable Settings preference so advanced rows remain
@@ -374,12 +366,12 @@ describe("normalizeghostexSettings", () => {
     expect(normalizeghostexSettings({ showAdvancedSettings: true })).toMatchObject({
       showAdvancedSettings: true,
     });
-    expect(normalizeghostexSettings({ showAdvancedSettings: "true" })).toMatchObject({
+    expect(normalizeghostexSettings({ showAdvancedSettings: 'true' })).toMatchObject({
       showAdvancedSettings: false,
     });
   });
 
-  test("normalizes the persisted Settings modal location", () => {
+  test('normalizes the persisted Settings modal location', () => {
     /*
      * CDXC:SettingsNavigation 2026-06-29-17:54:
      * macOS Settings restart restore should persist only safe tab ids and
@@ -387,23 +379,23 @@ describe("normalizeghostexSettings", () => {
      * Settings spot without accepting malformed storage.
      */
     expect(DEFAULT_ghostex_SETTINGS.settingsModalNavigation).toEqual({
-      activeTab: "settings",
+      activeTab: 'settings',
       scrollTopByTab: {},
       version: 1,
     });
     expect(
       normalizeghostexSettings({
         settingsModalNavigation: {
-          activeTab: "hotkeys",
+          activeTab: 'hotkeys',
           scrollTopByTab: {
             hotkeys: 340.5,
             settings: 120,
           },
           version: 1,
         },
-      }).settingsModalNavigation,
+      }).settingsModalNavigation
     ).toEqual({
-      activeTab: "hotkeys",
+      activeTab: 'hotkeys',
       scrollTopByTab: {
         settings: 120,
         hotkeys: 340.5,
@@ -413,16 +405,16 @@ describe("normalizeghostexSettings", () => {
     expect(
       normalizeghostexSettings({
         settingsModalNavigation: {
-          activeTab: "missing",
+          activeTab: 'missing',
           scrollTopByTab: {
             hotkeys: -20,
             integrations: 2_000_000,
-            settings: "500",
+            settings: '500',
           },
         },
-      }).settingsModalNavigation,
+      }).settingsModalNavigation
     ).toEqual({
-      activeTab: "settings",
+      activeTab: 'settings',
       scrollTopByTab: {
         integrations: 1_000_000,
       },
@@ -430,102 +422,102 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("normalizes the default prompt agent setting", () => {
+  test('normalizes the default prompt agent setting', () => {
     /**
      * CDXC:PromptAgents 2026-05-28-07:15:
      * Automated prompt launchers share one Settings-selected agent id. Missing
      * values default to Codex, while custom agent ids stay valid because the
      * runtime agent registry resolves whether the selected id is configured.
      */
-    expect(DEFAULT_ghostex_SETTINGS.defaultPromptAgentId).toBe("codex");
+    expect(DEFAULT_ghostex_SETTINGS.defaultPromptAgentId).toBe('codex');
     expect(normalizeghostexSettings({})).toMatchObject({
-      defaultPromptAgentId: "codex",
+      defaultPromptAgentId: 'codex',
     });
-    expect(normalizeghostexSettings({ defaultPromptAgentId: " claude " })).toMatchObject({
-      defaultPromptAgentId: "claude",
+    expect(normalizeghostexSettings({ defaultPromptAgentId: ' claude ' })).toMatchObject({
+      defaultPromptAgentId: 'claude',
     });
-    expect(normalizeghostexSettings({ defaultPromptAgentId: "" })).toMatchObject({
-      defaultPromptAgentId: "codex",
+    expect(normalizeghostexSettings({ defaultPromptAgentId: '' })).toMatchObject({
+      defaultPromptAgentId: 'codex',
     });
   });
 
-  test("normalizes the session title generation agent settings", () => {
+  test('normalizes the session title generation agent settings', () => {
     /*
     CDXC:GxserverSessionTitle 2026-06-04-08:24:
     Settings exposes a separate first-prompt title generator choice so users can switch Codex, Cursor, Claude, Grok Build, or a custom command without changing the broader default prompt agent used by Git, board, or worktree prompts.
     */
-    expect(DEFAULT_ghostex_SETTINGS.sessionTitleGenerationAgent).toBe("codex");
+    expect(DEFAULT_ghostex_SETTINGS.sessionTitleGenerationAgent).toBe('codex');
     expect(normalizeghostexSettings({})).toMatchObject({
-      customSessionTitleGenerationCommand: "",
-      sessionTitleGenerationAgent: "codex",
+      customSessionTitleGenerationCommand: '',
+      sessionTitleGenerationAgent: 'codex',
     });
-    expect(normalizeghostexSettings({
-      customSessionTitleGenerationCommand: "  title-wrapper --json  ",
-      sessionTitleGenerationAgent: "custom",
-    })).toMatchObject({
-      customSessionTitleGenerationCommand: "title-wrapper --json",
-      sessionTitleGenerationAgent: "custom",
+    expect(
+      normalizeghostexSettings({
+        customSessionTitleGenerationCommand: '  title-wrapper --json  ',
+        sessionTitleGenerationAgent: 'custom',
+      })
+    ).toMatchObject({
+      customSessionTitleGenerationCommand: 'title-wrapper --json',
+      sessionTitleGenerationAgent: 'custom',
     });
-    expect(normalizeghostexSettings({ sessionTitleGenerationAgent: "grok" })).toMatchObject({
-      sessionTitleGenerationAgent: "grok",
+    expect(normalizeghostexSettings({ sessionTitleGenerationAgent: 'grok' })).toMatchObject({
+      sessionTitleGenerationAgent: 'grok',
     });
-    expect(normalizeghostexSettings({ sessionTitleGenerationAgent: "unknown" })).toMatchObject({
-      sessionTitleGenerationAgent: "codex",
+    expect(normalizeghostexSettings({ sessionTitleGenerationAgent: 'unknown' })).toMatchObject({
+      sessionTitleGenerationAgent: 'codex',
     });
   });
 
-  test("normalizes the app icon source id", () => {
+  test('normalizes the app icon source id', () => {
     /*
      * CDXC:AppIconPicker 2026-06-25-21:50:
      * The app icon source id is a trimmed filename, or "" for the default
      * bundled icon. Missing or non-string values fall back to the default.
      */
-    expect(DEFAULT_ghostex_SETTINGS.appIconSourceId).toBe("");
+    expect(DEFAULT_ghostex_SETTINGS.appIconSourceId).toBe('');
     expect(normalizeghostexSettings({})).toMatchObject({
-      appIconSourceId: "",
+      appIconSourceId: '',
     });
-    expect(normalizeghostexSettings({ appIconSourceId: "  panda.icns  " })).toMatchObject({
-      appIconSourceId: "panda.icns",
+    expect(normalizeghostexSettings({ appIconSourceId: '  panda.icns  ' })).toMatchObject({
+      appIconSourceId: 'panda.icns',
     });
-    expect(normalizeghostexSettings({ appIconSourceId: "../panda.png" })).toMatchObject({
-      appIconSourceId: "",
+    expect(normalizeghostexSettings({ appIconSourceId: '../panda.png' })).toMatchObject({
+      appIconSourceId: '',
     });
-    expect(normalizeghostexSettings({ appIconSourceId: "icons\\panda.png" })).toMatchObject({
-      appIconSourceId: "",
+    expect(normalizeghostexSettings({ appIconSourceId: 'icons\\panda.png' })).toMatchObject({
+      appIconSourceId: '',
     });
-    expect(normalizeghostexSettings({ appIconSourceId: "a".repeat(256) })).toMatchObject({
-      appIconSourceId: "",
+    expect(normalizeghostexSettings({ appIconSourceId: 'a'.repeat(256) })).toMatchObject({
+      appIconSourceId: '',
     });
-    expect(
-      normalizeghostexSettings({ appIconSourceId: 42 as unknown as string }),
-    ).toMatchObject({
-      appIconSourceId: "",
+    expect(normalizeghostexSettings({ appIconSourceId: 42 as unknown as string })).toMatchObject({
+      appIconSourceId: '',
     });
   });
 
-  test("previews session title generation commands", () => {
+  test('previews session title generation commands', () => {
     /*
     CDXC:GxserverSessionTitle 2026-06-04-22:44:
     The Settings and first-time modal title-agent dropdowns must show the exact command template Ghostex sends, including model ids from each installed CLI's local model catalog.
     */
-    expect(getSessionTitleGenerationCommandPreview("codex")).toBe(
-      "codex exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c 'model_reasoning_effort=\"low\"' <<'PROMPT'\n<title generation prompt>\nPROMPT",
+    expect(getSessionTitleGenerationCommandPreview('codex')).toBe(
+      "codex exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c 'model_reasoning_effort=\"low\"' <<'PROMPT'\n<title generation prompt>\nPROMPT"
     );
-    expect(getSessionTitleGenerationCommandPreview("cursor")).toBe(
-      "cursor-agent --print --yolo --trust --model cursor-grok-4.5-low --output-format text '<title generation prompt>'",
+    expect(getSessionTitleGenerationCommandPreview('cursor')).toBe(
+      "cursor-agent --print --yolo --trust --model cursor-grok-4.5-low --output-format text '<title generation prompt>'"
     );
-    expect(getSessionTitleGenerationCommandPreview("claude")).toBe(
-      "claude -p --model haiku --effort low <<'PROMPT'\n<title generation prompt>\nPROMPT",
+    expect(getSessionTitleGenerationCommandPreview('claude')).toBe(
+      "claude -p --model haiku --effort low <<'PROMPT'\n<title generation prompt>\nPROMPT"
     );
-    expect(getSessionTitleGenerationCommandPreview("grok")).toBe(
-      "grok --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single '<title generation prompt>'",
+    expect(getSessionTitleGenerationCommandPreview('grok')).toBe(
+      "grok --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single '<title generation prompt>'"
     );
-    expect(getSessionTitleGenerationCommandPreview("custom", { command: "title-wrapper" })).toBe(
-      "title-wrapper <<'PROMPT'\n<title generation prompt>\nPROMPT",
+    expect(getSessionTitleGenerationCommandPreview('custom', { command: 'title-wrapper' })).toBe(
+      "title-wrapper <<'PROMPT'\n<title generation prompt>\nPROMPT"
     );
   });
 
-  test("normalizes the sidebar handle reset default width", () => {
+  test('normalizes the sidebar handle reset default width', () => {
     /*
     CDXC:SidebarChrome 2026-06-05-04:40:
     Settings owns the sidebar handle double-click reset width, while app restart continues restoring the separately persisted last sidebar width.
@@ -545,13 +537,13 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("normalizes the project session Show less count", () => {
+  test('normalizes the project session Show less count', () => {
     /*
     CDXC:ProjectSessionLists 2026-06-13-01:06:
     Settings owns how many project sessions remain visible after Show less. Use ten as the current default while continuing to clamp explicit user counts.
     */
     expect(DEFAULT_ghostex_SETTINGS.projectSessionListCollapsedCount).toBe(
-      DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
+      DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT
     );
     expect(DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT).toBe(10);
     expect(normalizeghostexSettings({})).toMatchObject({
@@ -568,7 +560,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("normalizes project jump expansion settings", () => {
+  test('normalizes project jump expansion settings', () => {
     /*
     CDXC:ProjectHotkeys 2026-06-15-11:12:
     Project jumps should reveal collapsed Projects rows by default, while the
@@ -583,14 +575,14 @@ describe("normalizeghostexSettings", () => {
       normalizeghostexSettings({
         expandCollapsedProjectsOnJump: false,
         showLessForExpandedProjectJumps: true,
-      }),
+      })
     ).toMatchObject({
       expandCollapsedProjectsOnJump: false,
       showLessForExpandedProjectJumps: true,
     });
   });
 
-  test("normalizes sidebar tag filter list presentation", () => {
+  test('normalizes sidebar tag filter list presentation', () => {
     /*
     CDXC:SessionTagFilters 2026-06-13-17:50:
     The sidebar tag filter list is configurable presentation chrome. Defaults
@@ -606,91 +598,83 @@ describe("normalizeghostexSettings", () => {
     Default-hidden tags are fully off: both disabled and hidden. The Settings
     management list still carries those rows so users can turn them back on.
     */
-    expect(DEFAULT_ghostex_SETTINGS.sidebarSessionTagListItems).toEqual(
-      DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
-    );
-    expect(normalizeghostexSettings({}).sidebarSessionTagListItems).toEqual(
-      DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
-    );
+    expect(DEFAULT_ghostex_SETTINGS.sidebarSessionTagListItems).toEqual(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS);
+    expect(normalizeghostexSettings({}).sidebarSessionTagListItems).toEqual(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS);
     expect(
       DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS.filter(
-        (item) => item.type === "tag" && !item.enabled && !item.visible,
-      ).map((item) => item.id),
-    ).toEqual(["high-priority", "low-priority", "todo", "bug", "feature"]);
+        (item) => item.type === 'tag' && !item.enabled && !item.visible
+      ).map((item) => item.id)
+    ).toEqual(['high-priority', 'low-priority', 'todo', 'bug', 'feature']);
     expect(getEnabledVisibleSidebarSessionTags(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS)).toEqual([
-      "favorite",
-      "in-progress",
-      "testing",
-      "blocked",
-      "on-hold",
-      "done",
-      "research",
-      "design",
+      'favorite',
+      'in-progress',
+      'testing',
+      'blocked',
+      'on-hold',
+      'done',
+      'research',
+      'design',
     ]);
     expect(getEnabledVisibleSidebarSessionTagFilters(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS)).toEqual([
-      "favorite",
-      "in-progress",
-      "testing",
-      "blocked",
-      "on-hold",
-      "done",
-      "research",
-      "design",
-      "untagged",
+      'favorite',
+      'in-progress',
+      'testing',
+      'blocked',
+      'on-hold',
+      'done',
+      'research',
+      'design',
+      'untagged',
     ]);
     expect(
-      getEnabledVisibleSidebarSessionTagSections(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS).map(
-        (section) => ({
-          label: section.label,
-          tags: section.options.map((option) => option.value),
-        }),
-      ),
+      getEnabledVisibleSidebarSessionTagSections(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS).map((section) => ({
+        label: section.label,
+        tags: section.options.map((option) => option.value),
+      }))
     ).toEqual([
-      { label: "Priority", tags: ["favorite"] },
-      { label: "Progress", tags: ["in-progress", "testing", "blocked", "on-hold", "done"] },
-      { label: "Type", tags: ["research", "design"] },
+      { label: 'Priority', tags: ['favorite'] },
+      { label: 'Progress', tags: ['in-progress', 'testing', 'blocked', 'on-hold', 'done'] },
+      { label: 'Type', tags: ['research', 'design'] },
     ]);
     const normalizedCustomTags = normalizeghostexSettings({
       sidebarSessionTagListItems: [
-        { enabled: false, id: "separator-progress-type", type: "separator", visible: true },
-        { enabled: false, id: "testing", tag: "testing", type: "tag", visible: false },
-        { enabled: true, id: "unknown", type: "tag", visible: true },
-        { enabled: true, id: "testing", tag: "testing", type: "tag", visible: true },
+        { enabled: false, id: 'separator-progress-type', type: 'separator', visible: true },
+        { enabled: false, id: 'testing', tag: 'testing', type: 'tag', visible: false },
+        { enabled: true, id: 'unknown', type: 'tag', visible: true },
+        { enabled: true, id: 'testing', tag: 'testing', type: 'tag', visible: true },
       ],
     }).sidebarSessionTagListItems;
     expect(normalizedCustomTags.slice(0, 3)).toEqual([
-      { enabled: false, id: "separator-progress-type", type: "separator", visible: true },
-      { enabled: false, id: "testing", tag: "testing", type: "tag", visible: false },
+      { enabled: false, id: 'separator-progress-type', type: 'separator', visible: true },
+      { enabled: false, id: 'testing', tag: 'testing', type: 'tag', visible: false },
       DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS[0],
     ]);
-    expect(getEnabledVisibleSidebarSessionTagFilters(normalizedCustomTags)).not.toContain("testing");
+    expect(getEnabledVisibleSidebarSessionTagFilters(normalizedCustomTags)).not.toContain('testing');
     expect(normalizedCustomTags.at(-2)).toEqual({
       enabled: true,
-      id: "separator-type-untagged",
-      type: "separator",
+      id: 'separator-type-untagged',
+      type: 'separator',
       visible: true,
     });
     expect(normalizedCustomTags.at(-1)).toEqual({
       enabled: true,
-      id: "untagged",
-      type: "untagged",
+      id: 'untagged',
+      type: 'untagged',
       visible: true,
     });
   });
 
-  test("keeps untracked project diff lines off unless explicitly enabled", () => {
+  test('keeps untracked project diff lines off unless explicitly enabled', () => {
     expect(DEFAULT_ghostex_SETTINGS.showUntrackedProjectDiffWhenNoTrackedChanges).toBe(false);
     expect(normalizeghostexSettings({})).toMatchObject({
       showUntrackedProjectDiffWhenNoTrackedChanges: false,
     });
-    expect(
-      normalizeghostexSettings({ showUntrackedProjectDiffWhenNoTrackedChanges: true }),
-    ).toMatchObject({
+    expect(normalizeghostexSettings({ showUntrackedProjectDiffWhenNoTrackedChanges: true })).toMatchObject({
       showUntrackedProjectDiffWhenNoTrackedChanges: true,
     });
   });
 
-  test("hides project-header git file counts by default", () => {
+  test('hides project-header git file counts by default', () => {
     /**
      * CDXC:ProjectDiffStats 2026-05-15-14:33:
      * When project-header git stats are visible, they should omit the
@@ -706,7 +690,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("defaults sidebar UI settings to the Recommended preset", () => {
+  test('defaults sidebar UI settings to the Recommended preset', () => {
     /**
      * CDXC:SidebarSettingsPresets 2026-06-13-01:06:
      * Superseded by CDXC:SidebarSettingsPresets 2026-06-30-22:29.
@@ -735,32 +719,23 @@ describe("normalizeghostexSettings", () => {
      * icons.
      */
     expect(DEFAULT_ghostex_SETTINGS).toMatchObject(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended);
-    expect(normalizeghostexSettings({})).toMatchObject(
-      SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended,
-    );
-    expect(getSidebarSettingsPresetId(DEFAULT_ghostex_SETTINGS)).toBe("recommended");
+    expect(normalizeghostexSettings({})).toMatchObject(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended);
+    expect(getSidebarSettingsPresetId(DEFAULT_ghostex_SETTINGS)).toBe('recommended');
     expect(SIDEBAR_SETTINGS_PRESETS.map((preset) => preset.id)).toEqual([
-      "recommended",
-      "codex",
-      "minimal",
-      "detailed",
+      'recommended',
+      'codex',
+      'minimal',
+      'detailed',
     ]);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.hideBrowserFaviconUntilHover).toBe(false);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.minimal.hideBrowserFaviconUntilHover).toBe(true);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.detailed.hideBrowserFaviconUntilHover).toBe(false);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.minimal.showProjectIcons).toBe(false);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showProjectIcons).toBe(true);
-    expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards).toBe(
-      true,
-    );
-    expect(
-      SIDEBAR_SETTINGS_PRESETS.every((preset) => preset.settings.showCloseButtonOnSessionCards),
-    ).toBe(true);
-    expect("hideFloatingSessionStatusIndicators" in SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended)
-      .toBe(false);
-    expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideMenuBarSessionStatusIndicators).toBe(
-      false,
-    );
+    expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards).toBe(true);
+    expect(SIDEBAR_SETTINGS_PRESETS.every((preset) => preset.settings.showCloseButtonOnSessionCards)).toBe(true);
+    expect('hideFloatingSessionStatusIndicators' in SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended).toBe(false);
+    expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideMenuBarSessionStatusIndicators).toBe(false);
     expect(
       normalizeghostexSettings({
         hideProjectHeaderDiffStats: false,
@@ -768,7 +743,7 @@ describe("normalizeghostexSettings", () => {
         hideSessionAgentIconUntilHover: false,
         showProjectIcons: false,
         useColoredSessionAgentIcons: true,
-      }),
+      })
     ).toMatchObject({
       hideProjectHeaderDiffStats: false,
       hideBrowserFaviconUntilHover: true,
@@ -778,7 +753,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("detects sidebar presets and custom deviations", () => {
+  test('detects sidebar presets and custom deviations', () => {
     /**
      * CDXC:SidebarSettingsPresets 2026-05-16-10:11:
      * Preset selection is derived from the controlled setting values. Any
@@ -795,28 +770,20 @@ describe("normalizeghostexSettings", () => {
      * Keep this as compatibility coverage for old settings files after removing
      * the macOS/GPUI floating badge UI and renderer.
      */
-    expect(
-      getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, "codex")),
-    ).toBe("codex");
-    expect(
-      getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, "minimal")),
-    ).toBe("minimal");
-    expect(
-      getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, "detailed")),
-    ).toBe("detailed");
-    expect(
-      getSidebarSettingsPresetId(
-        applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, "recommended"),
-      ),
-    ).toBe("recommended");
-    expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideSessionAgentIconUntilHover).toBe(
-      false,
+    expect(getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, 'codex'))).toBe('codex');
+    expect(getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, 'minimal'))).toBe('minimal');
+    expect(getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, 'detailed'))).toBe(
+      'detailed'
     );
+    expect(getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, 'recommended'))).toBe(
+      'recommended'
+    );
+    expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideSessionAgentIconUntilHover).toBe(false);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideProjectHeaderDiffStats).toBe(false);
     const floatingIndicatorsEnabled = normalizeghostexSettings({
       hideFloatingSessionStatusIndicators: false,
     });
-    expect(getSidebarSettingsPresetId(floatingIndicatorsEnabled)).toBe("recommended");
+    expect(getSidebarSettingsPresetId(floatingIndicatorsEnabled)).toBe('recommended');
     for (const preset of SIDEBAR_SETTINGS_PRESETS) {
       const appliedPreset = applySidebarSettingsPreset(floatingIndicatorsEnabled, preset.id);
       expect(appliedPreset.hideFloatingSessionStatusIndicators).toBe(false);
@@ -825,15 +792,14 @@ describe("normalizeghostexSettings", () => {
     const floatingIndicatorsHidden = normalizeghostexSettings({
       hideFloatingSessionStatusIndicators: true,
     });
-    expect(
-      applySidebarSettingsPreset(floatingIndicatorsHidden, "detailed")
-        .hideFloatingSessionStatusIndicators,
-    ).toBe(true);
+    expect(applySidebarSettingsPreset(floatingIndicatorsHidden, 'detailed').hideFloatingSessionStatusIndicators).toBe(
+      true
+    );
     expect(
       getSidebarSettingsPresetId({
         ...DEFAULT_ghostex_SETTINGS,
         showProjectEditorDiffFileCount: true,
-      }),
+      })
     ).toBeUndefined();
     /*
      * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
@@ -849,11 +815,11 @@ describe("normalizeghostexSettings", () => {
       getSidebarSettingsPresetId({
         ...DEFAULT_ghostex_SETTINGS,
         useColoredSessionAgentIcons: true,
-      }),
-    ).toBe("recommended");
+      })
+    ).toBe('recommended');
   });
 
-  test("hides session-card last active timestamps by default unless explicitly shown", () => {
+  test('hides session-card last active timestamps by default unless explicitly shown', () => {
     /**
      * CDXC:SidebarSessions 2026-06-13-15:42
      * Recommended hides Last Active timestamps on session cards by default.
@@ -869,7 +835,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("hides session command-copy context actions unless explicitly enabled", () => {
+  test('hides session command-copy context actions unless explicitly enabled', () => {
     /**
      * CDXC:SidebarContextMenu 2026-06-09-23:17:
      * Copy resume and Copy attach command are advanced context-menu utilities.
@@ -885,7 +851,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("hides the session close context-menu option unless explicitly enabled", () => {
+  test('hides the session close context-menu option unless explicitly enabled', () => {
     /**
      * CDXC:SidebarContextMenu 2026-06-10-13:58:
      * The single-session Close context-menu item should be absent by default.
@@ -900,7 +866,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("hides the session details copy context-menu option unless explicitly enabled", () => {
+  test('hides the session details copy context-menu option unless explicitly enabled', () => {
     /**
      * CDXC:SidebarContextMenu 2026-06-11-23:08:
      * Copy details writes session metadata to the clipboard. Missing settings
@@ -915,15 +881,15 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("keeps title-bar keep-awake settings English and bounded", () => {
+  test('keeps title-bar keep-awake settings English and bounded', () => {
     expect(DEFAULT_ghostex_SETTINGS.keepAwakeDefaultDurationMinutes).toBe(0);
     expect(DEFAULT_ghostex_SETTINGS.hideKeepAwakeTitlebarControl).toBe(false);
     expect(DEFAULT_ghostex_SETTINGS.keepAwakePreventLidSleep).toBe(false);
     expect(DEFAULT_ghostex_SETTINGS.keepAwakeWhileWorkingSessions).toBe(false);
     expect(KEEP_AWAKE_DURATION_OPTIONS).toEqual([
-      { label: "Until turned off", value: 0 },
-      { label: "2 hours", value: 120 },
-      { label: "5 hours", value: 300 },
+      { label: 'Until turned off', value: 0 },
+      { label: '2 hours', value: 120 },
+      { label: '5 hours', value: 300 },
     ]);
     expect(KEEP_AWAKE_DURATION_OPTIONS.every((option) => option.label.trim().length > 0)).toBe(true);
     expect(
@@ -933,7 +899,7 @@ describe("normalizeghostexSettings", () => {
         keepAwakeDefaultDurationMinutes: 120,
         keepAwakePreventLidSleep: true,
         keepAwakeWhileWorkingSessions: true,
-      }),
+      })
     ).toMatchObject({
       hideKeepAwakeTitlebarControl: false,
       keepAwakeAllowDisplaySleep: true,
@@ -950,7 +916,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("pins removed macOS pane gap setting to zero", () => {
+  test('pins removed macOS pane gap setting to zero', () => {
     /**
      * CDXC:WorkspaceLayout 2026-05-30-07:24:
      * Pane Gap is no longer a macOS app setting. Persisted legacy values should
@@ -975,7 +941,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("normalizes auto sleep settings separately for editors, Git, and agents", () => {
+  test('normalizes auto sleep settings separately for editors, Git, and agents', () => {
     /**
      * CDXC:AutoSleep 2026-05-28-08:06:
      * Settings must normalize editor/Git sleep defaults while making agent
@@ -995,13 +961,13 @@ describe("normalizeghostexSettings", () => {
      * focused-agent override is no longer normalized as a setting.
      */
     expect(AUTO_SLEEP_IDLE_MINUTE_OPTIONS).toEqual([
-      { label: "5 minutes", value: 5 },
-      { label: "10 minutes", value: 10 },
-      { label: "15 minutes", value: 15 },
-      { label: "30 minutes", value: 30 },
-      { label: "1 hour", value: 60 },
-      { label: "2 hours", value: 120 },
-      { label: "5 hours", value: 300 },
+      { label: '5 minutes', value: 5 },
+      { label: '10 minutes', value: 10 },
+      { label: '15 minutes', value: 15 },
+      { label: '30 minutes', value: 30 },
+      { label: '1 hour', value: 60 },
+      { label: '2 hours', value: 120 },
+      { label: '5 hours', value: 300 },
     ]);
     expect(normalizeghostexSettings({})).toMatchObject({
       autoSleepAgentIdleMinutes: 15,
@@ -1027,7 +993,7 @@ describe("normalizeghostexSettings", () => {
         autoSleepGitEditorEnabled: false,
         autoSleepGitEditorIdleMinutes: 30,
         autoSleepProjectEditorIdleMinutes: 999,
-      }),
+      })
     ).toMatchObject({
       autoSleepAgentIdleMinutes: 15,
       autoSleepAgentSessionsEnabled: true,
@@ -1040,51 +1006,51 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("supports built-in and custom default editor commands", () => {
+  test('supports built-in and custom default editor commands', () => {
     /**
      * CDXC:AgentsHub 2026-05-12-09:22
      * Agents Hub edit actions should have one normalized editor command
      * setting, with common editor CLIs available without custom text.
      */
-    expect(DEFAULT_ghostex_SETTINGS.defaultEditorCommand).toBe("code");
+    expect(DEFAULT_ghostex_SETTINGS.defaultEditorCommand).toBe('code');
     expect(normalizeghostexSettings({})).toMatchObject({
-      customDefaultEditorCommand: "",
-      defaultEditorCommand: "code",
+      customDefaultEditorCommand: '',
+      defaultEditorCommand: 'code',
     });
-    expect(normalizeghostexSettings({ defaultEditorCommand: "code-insiders" })).toMatchObject({
-      defaultEditorCommand: "code-insiders",
+    expect(normalizeghostexSettings({ defaultEditorCommand: 'code-insiders' })).toMatchObject({
+      defaultEditorCommand: 'code-insiders',
     });
-    expect(normalizeghostexSettings({ defaultEditorCommand: "zed" })).toMatchObject({
-      defaultEditorCommand: "zed",
+    expect(normalizeghostexSettings({ defaultEditorCommand: 'zed' })).toMatchObject({
+      defaultEditorCommand: 'zed',
     });
-    expect(normalizeghostexSettings({ defaultEditorCommand: "invalid" })).toMatchObject({
-      defaultEditorCommand: "code",
+    expect(normalizeghostexSettings({ defaultEditorCommand: 'invalid' })).toMatchObject({
+      defaultEditorCommand: 'code',
     });
     const customSettings = normalizeghostexSettings({
-      customDefaultEditorCommand: "  my-editor --reuse-window  ",
-      defaultEditorCommand: "other",
+      customDefaultEditorCommand: '  my-editor --reuse-window  ',
+      defaultEditorCommand: 'other',
     });
     expect(customSettings).toMatchObject({
-      customDefaultEditorCommand: "my-editor --reuse-window",
-      defaultEditorCommand: "other",
+      customDefaultEditorCommand: 'my-editor --reuse-window',
+      defaultEditorCommand: 'other',
     });
-    expect(getDefaultEditorCommandForSettings(customSettings)).toBe("my-editor --reuse-window");
+    expect(getDefaultEditorCommandForSettings(customSettings)).toBe('my-editor --reuse-window');
     expect(
       getDefaultEditorCommandForSettings(
-        normalizeghostexSettings({ customDefaultEditorCommand: "", defaultEditorCommand: "other" }),
-      ),
-    ).toBe("code");
+        normalizeghostexSettings({ customDefaultEditorCommand: '', defaultEditorCommand: 'other' })
+      )
+    ).toBe('code');
     expect(DEFAULT_EDITOR_COMMAND_OPTIONS).toContainEqual({
-      label: "VS Code Insiders (code-insiders)",
-      value: "code-insiders",
+      label: 'VS Code Insiders (code-insiders)',
+      value: 'code-insiders',
     });
     expect(DEFAULT_EDITOR_COMMAND_OPTIONS).toContainEqual({
-      label: "Other",
-      value: "other",
+      label: 'Other',
+      value: 'other',
     });
   });
 
-  test("defaults bundled code-server panes to Ghostex-owned settings", () => {
+  test('defaults bundled code-server panes to Ghostex-owned settings', () => {
     /**
      * CDXC:EditorPanes 2026-06-08-20:12:
      * The bundled macOS code-server runtime should start with Ghostex-owned
@@ -1101,14 +1067,14 @@ describe("normalizeghostexSettings", () => {
       normalizeghostexSettings({
         codeServerLinkVscodeUserConfig: true,
         codeServerUseVscodeInsidersUserConfig: true,
-      }),
+      })
     ).toMatchObject({
       codeServerLinkVscodeUserConfig: true,
       codeServerUseVscodeInsidersUserConfig: true,
     });
   });
 
-  test("keeps sidebar side as a selectable left or right setting", () => {
+  test('keeps sidebar side as a selectable left or right setting', () => {
     /**
      * CDXC:SidebarPlacement 2026-05-06-17:32
      * Sidebar placement is persisted with the rest of Settings so users can
@@ -1116,92 +1082,90 @@ describe("normalizeghostexSettings", () => {
      * move-sidebar command, while invalid
      * values still normalize to the left-side default AppKit layout.
      */
-    expect(DEFAULT_ghostex_SETTINGS.sidebarSide).toBe("left");
+    expect(DEFAULT_ghostex_SETTINGS.sidebarSide).toBe('left');
     expect(normalizeghostexSettings({})).toMatchObject({
-      sidebarSide: "left",
+      sidebarSide: 'left',
     });
-    expect(normalizeghostexSettings({ sidebarSide: "right" })).toMatchObject({
-      sidebarSide: "right",
+    expect(normalizeghostexSettings({ sidebarSide: 'right' })).toMatchObject({
+      sidebarSide: 'right',
     });
-    expect(normalizeghostexSettings({ sidebarSide: "bottom" })).toMatchObject({
-      sidebarSide: "left",
+    expect(normalizeghostexSettings({ sidebarSide: 'bottom' })).toMatchObject({
+      sidebarSide: 'left',
     });
     expect(SIDEBAR_SIDE_OPTIONS).toEqual([
-      { label: "Left", value: "left" },
-      { label: "Right", value: "right" },
+      { label: 'Left', value: 'left' },
+      { label: 'Right', value: 'right' },
     ]);
   });
 
-  test("keeps command pane side as a selectable bottom or right setting", () => {
-    expect(DEFAULT_ghostex_SETTINGS.commandsPanelSide).toBe("bottom");
+  test('keeps command pane side as a selectable bottom or right setting', () => {
+    expect(DEFAULT_ghostex_SETTINGS.commandsPanelSide).toBe('bottom');
     expect(normalizeghostexSettings({})).toMatchObject({
-      commandsPanelSide: "bottom",
+      commandsPanelSide: 'bottom',
     });
-    expect(normalizeghostexSettings({ commandsPanelSide: "right" })).toMatchObject({
-      commandsPanelSide: "right",
+    expect(normalizeghostexSettings({ commandsPanelSide: 'right' })).toMatchObject({
+      commandsPanelSide: 'right',
     });
-    expect(normalizeghostexSettings({ commandsPanelSide: "left" })).toMatchObject({
-      commandsPanelSide: "bottom",
+    expect(normalizeghostexSettings({ commandsPanelSide: 'left' })).toMatchObject({
+      commandsPanelSide: 'bottom',
     });
     expect(COMMANDS_PANEL_SIDE_OPTIONS).toEqual([
-      { label: "Bottom", value: "bottom" },
-      { label: "Right", value: "right" },
+      { label: 'Bottom', value: 'bottom' },
+      { label: 'Right', value: 'right' },
     ]);
   });
 
-  test("normalizes the selectable project group rail style", () => {
-    expect(DEFAULT_ghostex_SETTINGS.sidebarProjectGroupStyle).toBe("branched");
+  test('normalizes the selectable project group rail style', () => {
+    expect(DEFAULT_ghostex_SETTINGS.sidebarProjectGroupStyle).toBe('branched');
     expect(normalizeghostexSettings({})).toMatchObject({
-      sidebarProjectGroupStyle: "branched",
+      sidebarProjectGroupStyle: 'branched',
     });
-    expect(normalizeghostexSettings({ sidebarProjectGroupStyle: "quiet" })).toMatchObject({
-      sidebarProjectGroupStyle: "quiet",
+    expect(normalizeghostexSettings({ sidebarProjectGroupStyle: 'quiet' })).toMatchObject({
+      sidebarProjectGroupStyle: 'quiet',
     });
-    expect(normalizeghostexSettings({ sidebarProjectGroupStyle: "header" })).toMatchObject({
-      sidebarProjectGroupStyle: "header",
+    expect(normalizeghostexSettings({ sidebarProjectGroupStyle: 'header' })).toMatchObject({
+      sidebarProjectGroupStyle: 'header',
     });
-    expect(normalizeghostexSettings({ sidebarProjectGroupStyle: "branched" })).toMatchObject({
-      sidebarProjectGroupStyle: "branched",
+    expect(normalizeghostexSettings({ sidebarProjectGroupStyle: 'branched' })).toMatchObject({
+      sidebarProjectGroupStyle: 'branched',
     });
-    expect(normalizeghostexSettings({ sidebarProjectGroupStyle: "boxed" })).toMatchObject({
-      sidebarProjectGroupStyle: "branched",
+    expect(normalizeghostexSettings({ sidebarProjectGroupStyle: 'boxed' })).toMatchObject({
+      sidebarProjectGroupStyle: 'branched',
     });
     expect(SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS).toEqual([
-      { label: "Quiet rail", value: "quiet" },
-      { label: "Header rail", value: "header" },
-      { label: "Branched rail", value: "branched" },
+      { label: 'Quiet rail', value: 'quiet' },
+      { label: 'Header rail', value: 'header' },
+      { label: 'Branched rail', value: 'branched' },
     ]);
   });
 
-  test("defaults sidebar theme to Dark Gray and keeps the theme option disabled", () => {
+  test('defaults sidebar theme to Dark Gray and keeps the theme option disabled', () => {
     /**
      * CDXC:SidebarTheme 2026-06-15-02:29:
      * Theme selection is disabled while themes are coming soon. New installs,
      * legacy Auto, old plain, and temporarily exposed theme values all resolve
      * to Dark 2, whose disabled Settings label is Dark Gray.
      */
-    expect(DEFAULT_ghostex_SETTINGS.sidebarTheme).toBe("dark-2");
+    expect(DEFAULT_ghostex_SETTINGS.sidebarTheme).toBe('dark-2');
     expect(normalizeghostexSettings({})).toMatchObject({
-      sidebarTheme: "dark-2",
+      sidebarTheme: 'dark-2',
     });
-    expect(normalizeghostexSettings({ sidebarTheme: "auto" })).toMatchObject({
-      sidebarTheme: "dark-2",
+    expect(normalizeghostexSettings({ sidebarTheme: 'auto' })).toMatchObject({
+      sidebarTheme: 'dark-2',
     });
-    expect(normalizeghostexSettings({ sidebarTheme: "plain" })).toMatchObject({
-      sidebarTheme: "dark-2",
+    expect(normalizeghostexSettings({ sidebarTheme: 'plain' })).toMatchObject({
+      sidebarTheme: 'dark-2',
     });
-    expect(normalizeghostexSettings({ sidebarTheme: "dark-1" })).toMatchObject({
-      sidebarTheme: "dark-2",
+    expect(normalizeghostexSettings({ sidebarTheme: 'dark-1' })).toMatchObject({
+      sidebarTheme: 'dark-2',
     });
-    expect(normalizeghostexSettings({ sidebarTheme: "plain-light" })).toMatchObject({
-      sidebarTheme: "dark-2",
+    expect(normalizeghostexSettings({ sidebarTheme: 'plain-light' })).toMatchObject({
+      sidebarTheme: 'dark-2',
     });
-    expect(SIDEBAR_THEME_SETTING_OPTIONS).toEqual([
-      { label: "Dark Gray", value: "dark-2" },
-    ]);
+    expect(SIDEBAR_THEME_SETTING_OPTIONS).toEqual([{ label: 'Dark Gray', value: 'dark-2' }]);
   });
 
-  test("derives custom sidebar and titlebar background from the theming contrast slider", () => {
+  test('derives custom sidebar and titlebar background from the theming contrast slider', () => {
     /**
      * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
      * Custom chrome colors default to Dark Gray-compatible values and persist
@@ -1250,71 +1214,71 @@ describe("normalizeghostexSettings", () => {
      * receiving a blue cast.
      */
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarColorsEnabled).toBe(true);
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarForegroundColor).toBe("#d8d8d8");
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundTintColor).toBe("#808080");
+    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarForegroundColor).toBe('#d8d8d8');
+    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundTintColor).toBe('#808080');
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundDarknessPercent).toBe(90);
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundColor).toBe("#1c1c1c");
-    expect(getSidebarTitlebarBackgroundForDarkness(95, "#884444")).toBe("#0d0005");
-    expect(getSidebarTitlebarBackgroundForDarkness(95, "#336699")).toBe("#0c0e11");
-    expect(getSidebarTitlebarBackgroundForDarkness(95, "#000000")).toBe("#000000");
+    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundColor).toBe('#1c1c1c');
+    expect(getSidebarTitlebarBackgroundForDarkness(95, '#884444')).toBe('#0d0005');
+    expect(getSidebarTitlebarBackgroundForDarkness(95, '#336699')).toBe('#0c0e11');
+    expect(getSidebarTitlebarBackgroundForDarkness(95, '#000000')).toBe('#000000');
     expect(normalizeghostexSettings({})).toMatchObject({
       customSidebarTitlebarColorsEnabled: true,
-      customSidebarTitlebarForegroundColor: "#d8d8d8",
-      customSidebarTitlebarBackgroundTintColor: "#808080",
+      customSidebarTitlebarForegroundColor: '#d8d8d8',
+      customSidebarTitlebarBackgroundTintColor: '#808080',
       customSidebarTitlebarBackgroundDarknessPercent: 90,
-      customSidebarTitlebarBackgroundColor: "#1c1c1c",
+      customSidebarTitlebarBackgroundColor: '#1c1c1c',
     });
     expect(
       normalizeghostexSettings({
-        customSidebarTitlebarBackgroundColor: "#080c0e",
-      }),
+        customSidebarTitlebarBackgroundColor: '#080c0e',
+      })
     ).toMatchObject({
-      customSidebarTitlebarBackgroundTintColor: "#808080",
+      customSidebarTitlebarBackgroundTintColor: '#808080',
       customSidebarTitlebarBackgroundDarknessPercent: 96,
-      customSidebarTitlebarBackgroundColor: "#0b0b0b",
+      customSidebarTitlebarBackgroundColor: '#0b0b0b',
     });
     expect(
       normalizeghostexSettings({
         customSidebarTitlebarColorsEnabled: true,
-        customSidebarTitlebarForegroundColor: "#ABCDEF",
-        customSidebarTitlebarBackgroundTintColor: "#336699",
+        customSidebarTitlebarForegroundColor: '#ABCDEF',
+        customSidebarTitlebarBackgroundTintColor: '#336699',
         customSidebarTitlebarBackgroundDarknessPercent: 85,
-        customSidebarTitlebarBackgroundColor: "#123456",
-      }),
+        customSidebarTitlebarBackgroundColor: '#123456',
+      })
     ).toMatchObject({
       customSidebarTitlebarColorsEnabled: true,
-      customSidebarTitlebarForegroundColor: "#d8d8d8",
-      customSidebarTitlebarBackgroundTintColor: "#336699",
+      customSidebarTitlebarForegroundColor: '#d8d8d8',
+      customSidebarTitlebarBackgroundTintColor: '#336699',
       customSidebarTitlebarBackgroundDarknessPercent: 85,
-      customSidebarTitlebarBackgroundColor: "#242a33",
+      customSidebarTitlebarBackgroundColor: '#242a33',
     });
     expect(
       normalizeghostexSettings({
         customSidebarTitlebarColorsEnabled: false,
-        customSidebarTitlebarForegroundColor: "#ABCDEF",
-        customSidebarTitlebarBackgroundTintColor: "not-a-color",
+        customSidebarTitlebarForegroundColor: '#ABCDEF',
+        customSidebarTitlebarBackgroundTintColor: 'not-a-color',
         customSidebarTitlebarBackgroundDarknessPercent: 20,
-      }),
+      })
     ).toMatchObject({
       customSidebarTitlebarColorsEnabled: true,
-      customSidebarTitlebarForegroundColor: "#d8d8d8",
-      customSidebarTitlebarBackgroundTintColor: "#808080",
+      customSidebarTitlebarForegroundColor: '#d8d8d8',
+      customSidebarTitlebarBackgroundTintColor: '#808080',
       customSidebarTitlebarBackgroundDarknessPercent: 85,
-      customSidebarTitlebarBackgroundColor: "#2a2a2a",
+      customSidebarTitlebarBackgroundColor: '#2a2a2a',
     });
     expect(
       normalizeghostexSettings({
-        customSidebarTitlebarForegroundColor: "red",
-        customSidebarTitlebarBackgroundColor: "#fff",
-      }),
+        customSidebarTitlebarForegroundColor: 'red',
+        customSidebarTitlebarBackgroundColor: '#fff',
+      })
     ).toMatchObject({
-      customSidebarTitlebarForegroundColor: "#d8d8d8",
+      customSidebarTitlebarForegroundColor: '#d8d8d8',
       customSidebarTitlebarBackgroundDarknessPercent: 90,
-      customSidebarTitlebarBackgroundColor: "#1c1c1c",
+      customSidebarTitlebarBackgroundColor: '#1c1c1c',
     });
   });
 
-  test("derives fixed-strength sidebar and titlebar gradient stops from custom chrome color", () => {
+  test('derives fixed-strength sidebar and titlebar gradient stops from custom chrome color', () => {
     /*
      * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
      * Custom sidebar chrome should use a deterministic gradient with the same
@@ -1328,33 +1292,33 @@ describe("normalizeghostexSettings", () => {
      * CDXC:SidebarTitlebarColors 2026-07-22:
      * Invalid gradient input falls back to the neutral #808080/90 default.
      */
-    expect(getSidebarTitlebarGradientColors("#0e0e0e")).toEqual({
-      sidebarTop: "#0e0e0e",
-      sidebarBottom: "#0e0e0e",
-      titlebarLeft: "#0e0e0e",
-      titlebarRight: "#0e0e0e",
+    expect(getSidebarTitlebarGradientColors('#0e0e0e')).toEqual({
+      sidebarTop: '#0e0e0e',
+      sidebarBottom: '#0e0e0e',
+      titlebarLeft: '#0e0e0e',
+      titlebarRight: '#0e0e0e',
     });
-    expect(getSidebarTitlebarGradientColors("#000000")).toEqual({
-      sidebarTop: "#000000",
-      sidebarBottom: "#000000",
-      titlebarLeft: "#000000",
-      titlebarRight: "#000000",
+    expect(getSidebarTitlebarGradientColors('#000000')).toEqual({
+      sidebarTop: '#000000',
+      sidebarBottom: '#000000',
+      titlebarLeft: '#000000',
+      titlebarRight: '#000000',
     });
-    expect(getSidebarTitlebarGradientColors("#0c0e11")).toEqual({
-      sidebarTop: "#0a0e13",
-      sidebarBottom: "#030d1b",
-      titlebarLeft: "#0a0e13",
-      titlebarRight: "#030d1b",
+    expect(getSidebarTitlebarGradientColors('#0c0e11')).toEqual({
+      sidebarTop: '#0a0e13',
+      sidebarBottom: '#030d1b',
+      titlebarLeft: '#0a0e13',
+      titlebarRight: '#030d1b',
     });
-    expect(getSidebarTitlebarGradientColors("invalid")).toEqual({
-      sidebarTop: "#1c1c1c",
-      sidebarBottom: "#1c1c1c",
-      titlebarLeft: "#1c1c1c",
-      titlebarRight: "#1c1c1c",
+    expect(getSidebarTitlebarGradientColors('invalid')).toEqual({
+      sidebarTop: '#1c1c1c',
+      sidebarBottom: '#1c1c1c',
+      titlebarLeft: '#1c1c1c',
+      titlebarRight: '#1c1c1c',
     });
   });
 
-  test("keeps legacy floating session status settings normalized", () => {
+  test('keeps legacy floating session status settings normalized', () => {
     /**
      * CDXC:SessionStatusIndicators 2026-05-07-18:20
      * Medium is the legacy default because it was 50% of the approved X-Large
@@ -1385,54 +1349,52 @@ describe("normalizeghostexSettings", () => {
      */
     expect(DEFAULT_ghostex_SETTINGS.hideFloatingSessionStatusIndicators).toBe(false);
     expect(DEFAULT_ghostex_SETTINGS.hideMenuBarSessionStatusIndicators).toBe(false);
-    expect(DEFAULT_ghostex_SETTINGS.sessionStatusIndicatorSize).toBe("medium");
+    expect(DEFAULT_ghostex_SETTINGS.sessionStatusIndicatorSize).toBe('medium');
     expect(normalizeghostexSettings({})).toMatchObject({
       hideFloatingSessionStatusIndicators: false,
       hideMenuBarSessionStatusIndicators: false,
-      sessionStatusIndicatorSize: "medium",
+      sessionStatusIndicatorSize: 'medium',
     });
     expect(
       normalizeghostexSettings({
         hideFloatingSessionStatusIndicators: false,
         hideMenuBarSessionStatusIndicators: true,
-      }),
+      })
     ).toMatchObject({
       hideFloatingSessionStatusIndicators: false,
       hideMenuBarSessionStatusIndicators: true,
     });
-    expect(normalizeghostexSettings({ sessionStatusIndicatorSize: "x-large" })).toMatchObject({
-      sessionStatusIndicatorSize: "x-large",
+    expect(normalizeghostexSettings({ sessionStatusIndicatorSize: 'x-large' })).toMatchObject({
+      sessionStatusIndicatorSize: 'x-large',
     });
-    expect(normalizeghostexSettings({ sessionStatusIndicatorSize: "giant" })).toMatchObject({
-      sessionStatusIndicatorSize: "medium",
+    expect(normalizeghostexSettings({ sessionStatusIndicatorSize: 'giant' })).toMatchObject({
+      sessionStatusIndicatorSize: 'medium',
     });
     expect(SESSION_STATUS_INDICATOR_SIZE_OPTIONS).toEqual([
-      { label: "X-Large", value: "x-large" },
-      { label: "Large", value: "large" },
-      { label: "Medium", value: "medium" },
-      { label: "Small", value: "small" },
+      { label: 'X-Large', value: 'x-large' },
+      { label: 'Large', value: 'large' },
+      { label: 'Medium', value: 'medium' },
+      { label: 'Small', value: 'small' },
     ]);
   });
 
-  test("keeps the pet overlay opt-in and normalizes selected pets", () => {
+  test('keeps the pet overlay opt-in and normalizes selected pets', () => {
     expect(DEFAULT_ghostex_SETTINGS.petOverlayEnabled).toBe(false);
     expect(DEFAULT_ghostex_SETTINGS.selectedPetId).toBe(DEFAULT_PET_ID);
     expect(normalizeghostexSettings({})).toMatchObject({
       petOverlayEnabled: false,
-      selectedPetId: "boo",
+      selectedPetId: 'boo',
     });
-    expect(
-      normalizeghostexSettings({ petOverlayEnabled: true, selectedPetId: "dewey" }),
-    ).toMatchObject({
+    expect(normalizeghostexSettings({ petOverlayEnabled: true, selectedPetId: 'dewey' })).toMatchObject({
       petOverlayEnabled: true,
-      selectedPetId: "dewey",
+      selectedPetId: 'dewey',
     });
-    expect(normalizeghostexSettings({ selectedPetId: "not-a-pet" })).toMatchObject({
-      selectedPetId: "boo",
+    expect(normalizeghostexSettings({ selectedPetId: 'not-a-pet' })).toMatchObject({
+      selectedPetId: 'boo',
     });
   });
 
-  test("enables macOS attention notifications by default", () => {
+  test('enables macOS attention notifications by default', () => {
     /**
      * CDXC:SessionAttentionNotifications 2026-05-10-16:46
      * Attention banners are a first-install behavior so finished background
@@ -1448,7 +1410,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("keeps terminal bell attention notifications opt-in", () => {
+  test('keeps terminal bell attention notifications opt-in', () => {
     /*
      * CDXC:TerminalBellAttention 2026-07-01-01:13:
      * A terminal BEL can be normal shell feedback, so missing settings must not
@@ -1464,17 +1426,17 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("keeps the workspace background color setting", () => {
-    expect(DEFAULT_ghostex_SETTINGS.workspaceBackgroundColor).toBe("#000000");
-    expect(normalizeghostexSettings({ workspaceBackgroundColor: "#202020" })).toMatchObject({
-      workspaceBackgroundColor: "#202020",
+  test('keeps the workspace background color setting', () => {
+    expect(DEFAULT_ghostex_SETTINGS.workspaceBackgroundColor).toBe('#000000');
+    expect(normalizeghostexSettings({ workspaceBackgroundColor: '#202020' })).toMatchObject({
+      workspaceBackgroundColor: '#202020',
     });
-    expect(normalizeghostexSettings({ workspaceBackgroundColor: "   " })).toMatchObject({
+    expect(normalizeghostexSettings({ workspaceBackgroundColor: '   ' })).toMatchObject({
       workspaceBackgroundColor: DEFAULT_ghostex_SETTINGS.workspaceBackgroundColor,
     });
   });
 
-  test("keeps Ghostty mouse scroll multipliers in the settings slider range", () => {
+  test('keeps Ghostty mouse scroll multipliers in the settings slider range', () => {
     /**
      * CDXC:TerminalScrollSettings 2026-04-29-08:56
      * The settings modal exposes Ghostty's precision and discrete scroll
@@ -1488,7 +1450,7 @@ describe("normalizeghostexSettings", () => {
       normalizeghostexSettings({
         terminalMouseScrollMultiplierDiscrete: 4,
         terminalMouseScrollMultiplierPrecision: 0.75,
-      }),
+      })
     ).toMatchObject({
       terminalMouseScrollMultiplierDiscrete: 4,
       terminalMouseScrollMultiplierPrecision: 0.75,
@@ -1497,14 +1459,14 @@ describe("normalizeghostexSettings", () => {
       normalizeghostexSettings({
         terminalMouseScrollMultiplierDiscrete: 10001,
         terminalMouseScrollMultiplierPrecision: 0,
-      }),
+      })
     ).toMatchObject({
       terminalMouseScrollMultiplierDiscrete: 8,
       terminalMouseScrollMultiplierPrecision: 0.25,
     });
   });
 
-  test("defaults session persistence to recommended zmx provider", () => {
+  test('defaults session persistence to recommended zmx provider', () => {
     /**
      * CDXC:SessionPersistence 2026-05-05-07:28
      * Legacy tmuxMode=true settings should migrate to the tmux provider, and
@@ -1525,69 +1487,69 @@ describe("normalizeghostexSettings", () => {
      * Provider session ids in terminal panes are disabled by default and remain
      * available only when the user explicitly enables the pane overlay setting.
      */
-    expect(DEFAULT_ghostex_SETTINGS.sessionPersistenceProvider).toBe("zmx");
+    expect(DEFAULT_ghostex_SETTINGS.sessionPersistenceProvider).toBe('zmx');
     expect(DEFAULT_ghostex_SETTINGS.showSessionIdInTerminalPanes).toBe(false);
     expect(DEFAULT_ghostex_SETTINGS.tmuxMode).toBe(false);
     expect(normalizeghostexSettings({})).toMatchObject({
-      sessionPersistenceProvider: "zmx",
+      sessionPersistenceProvider: 'zmx',
       showSessionIdInTerminalPanes: false,
       tmuxMode: false,
     });
     expect(normalizeghostexSettings({ tmuxMode: true })).toMatchObject({
-      sessionPersistenceProvider: "tmux",
+      sessionPersistenceProvider: 'tmux',
       tmuxMode: true,
     });
-    expect(normalizeghostexSettings({ sessionPersistenceProvider: "zmx" })).toMatchObject({
-      sessionPersistenceProvider: "zmx",
+    expect(normalizeghostexSettings({ sessionPersistenceProvider: 'zmx' })).toMatchObject({
+      sessionPersistenceProvider: 'zmx',
       tmuxMode: false,
     });
-    expect(normalizeghostexSettings({ sessionPersistenceProvider: "zellij" })).toMatchObject({
-      sessionPersistenceProvider: "zellij",
+    expect(normalizeghostexSettings({ sessionPersistenceProvider: 'zellij' })).toMatchObject({
+      sessionPersistenceProvider: 'zellij',
       tmuxMode: false,
     });
     expect(
       normalizeghostexSettings({
-        sessionPersistenceProvider: "zmx",
+        sessionPersistenceProvider: 'zmx',
         showSessionIdInTerminalPanes: true,
-      }),
+      })
     ).toMatchObject({
-      sessionPersistenceProvider: "zmx",
+      sessionPersistenceProvider: 'zmx',
       showSessionIdInTerminalPanes: true,
     });
     expect(
       normalizeghostexSettings({
-        sessionPersistenceProvider: "zmx",
+        sessionPersistenceProvider: 'zmx',
         showSessionIdInTerminalPanes: false,
-      }),
+      })
     ).toMatchObject({
-      sessionPersistenceProvider: "zmx",
+      sessionPersistenceProvider: 'zmx',
       showSessionIdInTerminalPanes: false,
     });
     expect(SESSION_PERSISTENCE_PROVIDER_OPTIONS).toEqual([
       {
-        label: "Off",
-        value: "off",
+        label: 'Off',
+        value: 'off',
       },
       {
-        label: "zmx (recommended)",
-        value: "zmx",
+        label: 'zmx (recommended)',
+        value: 'zmx',
       },
     ]);
     expect(SESSION_PERSISTENCE_PROVIDER_OPTIONS).not.toContainEqual({
-      label: "tmux",
-      value: "tmux",
+      label: 'tmux',
+      value: 'tmux',
     });
     expect(SESSION_PERSISTENCE_PROVIDER_OPTIONS).not.toContainEqual({
-      label: "zellij",
-      value: "zellij",
+      label: 'zellij',
+      value: 'zellij',
     });
-    expect(normalizeghostexSettings({ sessionPersistenceProvider: "wat" })).toMatchObject({
-      sessionPersistenceProvider: "off",
+    expect(normalizeghostexSettings({ sessionPersistenceProvider: 'wat' })).toMatchObject({
+      sessionPersistenceProvider: 'off',
       tmuxMode: false,
     });
   });
 
-  test("keeps common Ghostty terminal behavior settings", () => {
+  test('keeps common Ghostty terminal behavior settings', () => {
     /**
      * CDXC:TerminalBehaviorSettings 2026-04-29-09:32
      * The settings modal owns common Ghostty behavior controls and writes the
@@ -1597,50 +1559,50 @@ describe("normalizeghostexSettings", () => {
       terminalClipboardPasteProtection: true,
       terminalClipboardTrimTrailingSpaces: true,
       terminalPastePreviewableImages: true,
-      terminalCopyOnSelect: "false",
+      terminalCopyOnSelect: 'false',
       terminalCursorStyleBlink: true,
       terminalMouseHideWhileTyping: false,
       terminalScrollbackLimitMb: 15,
-      terminalScrollbar: "system",
+      terminalScrollbar: 'system',
     });
     expect(
       normalizeghostexSettings({
         terminalClipboardPasteProtection: false,
         terminalClipboardTrimTrailingSpaces: false,
         terminalPastePreviewableImages: false,
-        terminalConfirmCloseSurface: "always",
-        terminalCopyOnSelect: "clipboard",
+        terminalConfirmCloseSurface: 'always',
+        terminalCopyOnSelect: 'clipboard',
         terminalCursorStyleBlink: false,
         terminalMouseHideWhileTyping: true,
         terminalScrollbackLimitMb: 25,
-        terminalScrollbar: "never",
-      }),
+        terminalScrollbar: 'never',
+      })
     ).toMatchObject({
       terminalClipboardPasteProtection: false,
       terminalClipboardTrimTrailingSpaces: false,
       terminalPastePreviewableImages: false,
-      terminalConfirmCloseSurface: "always",
-      terminalCopyOnSelect: "clipboard",
+      terminalConfirmCloseSurface: 'always',
+      terminalCopyOnSelect: 'clipboard',
       terminalCursorStyleBlink: false,
       terminalMouseHideWhileTyping: true,
       terminalScrollbackLimitMb: 25,
-      terminalScrollbar: "never",
+      terminalScrollbar: 'never',
     });
     expect(
       normalizeghostexSettings({
-        terminalConfirmCloseSurface: "ask-me",
-        terminalCopyOnSelect: "system",
+        terminalConfirmCloseSurface: 'ask-me',
+        terminalCopyOnSelect: 'system',
         terminalScrollbackLimitMb: 1000,
-        terminalScrollbar: "always",
-      }),
+        terminalScrollbar: 'always',
+      })
     ).toMatchObject({
-      terminalCopyOnSelect: "false",
+      terminalCopyOnSelect: 'false',
       terminalScrollbackLimitMb: 200,
-      terminalScrollbar: "system",
+      terminalScrollbar: 'system',
     });
   });
 
-  test("defaults Ctrl+G prompt editing to Monaco and only exposes machine default as the alternative", () => {
+  test('defaults Ctrl+G prompt editing to Monaco and only exposes machine default as the alternative', () => {
     /**
      * CDXC:PromptEditorBackend 2026-05-11-14:38
      * Monaco is the default floating editor backend.
@@ -1651,69 +1613,69 @@ describe("normalizeghostexSettings", () => {
      * CDXC:PromptEditorBackend 2026-06-30-00:08:
      * Settings must offer only Monaco and the user's machine default editor. Removed gte/custom persisted choices and legacy gte booleans normalize to inherit so the app stops advertising or installing gte from Ctrl+G Settings.
      */
-    expect(DEFAULT_ghostex_SETTINGS.promptEditorBackend).toBe("monaco");
+    expect(DEFAULT_ghostex_SETTINGS.promptEditorBackend).toBe('monaco');
     expect(normalizeghostexSettings({})).toMatchObject({
-      customPromptEditorCommand: "code --wait",
-      promptEditorBackend: "monaco",
+      customPromptEditorCommand: 'code --wait',
+      promptEditorBackend: 'monaco',
       richPromptEditingWithGte: false,
       useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ richPromptEditingWithGte: false })).toMatchObject({
-      promptEditorBackend: "monaco",
+      promptEditorBackend: 'monaco',
       richPromptEditingWithGte: false,
       useGteForCtrlGPromptEditing: false,
     });
-    expect(normalizeghostexSettings({ promptEditorBackend: "monaco" })).toMatchObject({
-      promptEditorBackend: "monaco",
+    expect(normalizeghostexSettings({ promptEditorBackend: 'monaco' })).toMatchObject({
+      promptEditorBackend: 'monaco',
       richPromptEditingWithGte: false,
       useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ richPromptEditingWithGte: true })).toMatchObject({
-      promptEditorBackend: "inherit",
+      promptEditorBackend: 'inherit',
       richPromptEditingWithGte: false,
       useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ useGteForCtrlGPromptEditing: true })).toMatchObject({
-      promptEditorBackend: "inherit",
+      promptEditorBackend: 'inherit',
       richPromptEditingWithGte: false,
       useGteForCtrlGPromptEditing: false,
     });
-    expect(normalizeghostexSettings({ promptEditorBackend: "gte" })).toMatchObject({
-      promptEditorBackend: "inherit",
+    expect(normalizeghostexSettings({ promptEditorBackend: 'gte' })).toMatchObject({
+      promptEditorBackend: 'inherit',
       richPromptEditingWithGte: false,
       useGteForCtrlGPromptEditing: false,
     });
-    expect(normalizeghostexSettings({ promptEditorBackend: "inherit" })).toMatchObject({
-      promptEditorBackend: "inherit",
+    expect(normalizeghostexSettings({ promptEditorBackend: 'inherit' })).toMatchObject({
+      promptEditorBackend: 'inherit',
     });
     expect(
       normalizeghostexSettings({
-        customPromptEditorCommand: "  vim -f  ",
-        promptEditorBackend: "custom",
-      }),
+        customPromptEditorCommand: '  vim -f  ',
+        promptEditorBackend: 'custom',
+      })
     ).toMatchObject({
-      customPromptEditorCommand: "vim -f",
-      promptEditorBackend: "inherit",
+      customPromptEditorCommand: 'vim -f',
+      promptEditorBackend: 'inherit',
     });
     expect(
       normalizeghostexSettings({
-        customPromptEditorCommand: "",
-        promptEditorBackend: "custom",
-      }),
+        customPromptEditorCommand: '',
+        promptEditorBackend: 'custom',
+      })
     ).toMatchObject({
-      customPromptEditorCommand: "code --wait",
-      promptEditorBackend: "inherit",
+      customPromptEditorCommand: 'code --wait',
+      promptEditorBackend: 'inherit',
     });
-    expect(normalizeghostexSettings({ promptEditorBackend: "invalid" })).toMatchObject({
-      promptEditorBackend: "monaco",
+    expect(normalizeghostexSettings({ promptEditorBackend: 'invalid' })).toMatchObject({
+      promptEditorBackend: 'monaco',
     });
     expect(PROMPT_EDITOR_BACKEND_OPTIONS).toEqual([
-      { label: "Monaco editor", value: "monaco" },
-      { label: "Use default from this machine", value: "inherit" },
+      { label: 'Monaco editor', value: 'monaco' },
+      { label: 'Use default from this machine', value: 'inherit' },
     ]);
   });
 
-  test("keeps Ghostty typography settings in documented practical ranges", () => {
+  test('keeps Ghostty typography settings in documented practical ranges', () => {
     /**
      * CDXC:TerminalTypographySettings 2026-04-29-09:32
      * CDXC:GhosttyDefaults 2026-05-22-12:29:
@@ -1727,7 +1689,7 @@ describe("normalizeghostexSettings", () => {
      * range so native layout receives bounded content insets.
      */
     expect(normalizeghostexSettings({})).toMatchObject({
-      terminalFontFamily: "JetBrains Mono",
+      terminalFontFamily: 'JetBrains Mono',
       terminalFontSize: 13,
       terminalFontWeight: 300,
       terminalLetterSpacing: 0,
@@ -1737,16 +1699,16 @@ describe("normalizeghostexSettings", () => {
     });
     expect(
       normalizeghostexSettings({
-        terminalFontFamily: "Hack",
+        terminalFontFamily: 'Hack',
         terminalFontSize: 13.5,
         terminalFontWeight: 650,
         terminalLetterSpacing: 0.6,
         terminalLineHeight: 1.3,
         terminalPaneHorizontalPaddingPx: 18,
         terminalPaneVerticalPaddingPx: 9,
-      }),
+      })
     ).toMatchObject({
-      terminalFontFamily: "Hack",
+      terminalFontFamily: 'Hack',
       terminalFontSize: 13.5,
       terminalFontWeight: 650,
       terminalLetterSpacing: 0.6,
@@ -1756,16 +1718,16 @@ describe("normalizeghostexSettings", () => {
     });
     expect(
       normalizeghostexSettings({
-        terminalFontFamily: "Cross Platform Mono",
+        terminalFontFamily: 'Cross Platform Mono',
         terminalFontSize: 512,
         terminalFontWeight: 10,
         terminalLetterSpacing: 99,
         terminalLineHeight: -1,
         terminalPaneHorizontalPaddingPx: 999,
         terminalPaneVerticalPaddingPx: -12,
-      }),
+      })
     ).toMatchObject({
-      terminalFontFamily: "Consolas",
+      terminalFontFamily: 'Consolas',
       terminalFontSize: 32,
       terminalFontWeight: 100,
       terminalLetterSpacing: 8,
@@ -1775,7 +1737,7 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("keeps bundled Ghostty theme settings", () => {
+  test('keeps bundled Ghostty theme settings', () => {
     /**
      * CDXC:TerminalThemeSettings 2026-04-29-09:32
      * Ghostty theme names are exact strings from the bundled theme list. The
@@ -1786,29 +1748,29 @@ describe("normalizeghostexSettings", () => {
      * unmanaged.
      */
     expect(GHOSTTY_THEME_SETTING_OPTIONS).toContainEqual({
-      label: "Use existing Ghostty config",
-      value: "__ghostex_ghostty_theme_unmanaged__",
+      label: 'Use existing Ghostty config',
+      value: '__ghostex_ghostty_theme_unmanaged__',
     });
     expect(GHOSTTY_THEME_SETTING_OPTIONS).toContainEqual({
-      label: "GitHub Dark",
-      value: "GitHub Dark",
+      label: 'GitHub Dark',
+      value: 'GitHub Dark',
     });
     expect(normalizeghostexSettings({})).toMatchObject({
-      terminalGhosttyTheme: "GitHub Dark",
+      terminalGhosttyTheme: 'GitHub Dark',
     });
     expect(
       normalizeghostexSettings({
-        terminalGhosttyTheme: "GitHub Dark Default",
-      }),
+        terminalGhosttyTheme: 'GitHub Dark Default',
+      })
     ).toMatchObject({
-      terminalGhosttyTheme: "GitHub Dark Default",
+      terminalGhosttyTheme: 'GitHub Dark Default',
     });
-    expect(normalizeghostexSettings({ terminalGhosttyTheme: "Not A Bundled Theme" })).toMatchObject({
-      terminalGhosttyTheme: "",
+    expect(normalizeghostexSettings({ terminalGhosttyTheme: 'Not A Bundled Theme' })).toMatchObject({
+      terminalGhosttyTheme: '',
     });
   });
 
-  test("normalizes SSH-only remote machine settings for sidebar sections", () => {
+  test('normalizes SSH-only remote machine settings for sidebar sections', () => {
     /**
      * CDXC:RemoteMachines 2026-06-02-23:47:
      * Remote machine settings require a display name and SSH host because the
@@ -1823,36 +1785,35 @@ describe("normalizeghostexSettings", () => {
       normalizeghostexSettings({
         remoteMachines: [
           {
-            id: "remote-main",
-            name: " Main machine ",
-            sshHost: " 100.77.81.4 ",
-            sshIdentityFile: " ~/.ssh/id_ed25519 ",
-            sshPassword: "never-store-this",
+            id: 'remote-main',
+            name: ' Main machine ',
+            sshHost: ' 100.77.81.4 ',
+            sshIdentityFile: ' ~/.ssh/id_ed25519 ',
+            sshPassword: 'never-store-this',
             sshPasswordSaved: true,
             sshPort: 2222,
-            sshUser: " madda ",
+            sshUser: ' madda ',
           },
-          { id: "remote-main", name: "Second", sshHost: "example.local", sshPort: 100000 },
-          { id: "remote-blank-name", name: "", sshHost: "example.local" },
-          { id: "remote-blank-host", name: "Blank host", sshHost: "" },
+          { id: 'remote-main', name: 'Second', sshHost: 'example.local', sshPort: 100000 },
+          { id: 'remote-blank-name', name: '', sshHost: 'example.local' },
+          { id: 'remote-blank-host', name: 'Blank host', sshHost: '' },
         ],
-      }).remoteMachines,
+      }).remoteMachines
     ).toEqual([
       {
-        id: "remote-main",
-        name: "Main machine",
-        sshHost: "100.77.81.4",
-        sshIdentityFile: "~/.ssh/id_ed25519",
+        id: 'remote-main',
+        name: 'Main machine',
+        sshHost: '100.77.81.4',
+        sshIdentityFile: '~/.ssh/id_ed25519',
         sshPasswordSaved: true,
         sshPort: 2222,
-        sshUser: "madda",
+        sshUser: 'madda',
       },
       {
-        id: "remote-2",
-        name: "Second",
-        sshHost: "example.local",
+        id: 'remote-2',
+        name: 'Second',
+        sshHost: 'example.local',
       },
     ]);
   });
-
 });

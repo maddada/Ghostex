@@ -20,7 +20,7 @@ import {
   GPUI_STATUS_INDICATOR_MAX_PROJECTS,
   GPUI_STATUS_INDICATOR_MAX_SESSIONS_PER_PROJECT,
   GPUI_STATUS_INDICATOR_TITLE_MAX_CHARS,
-} from "../constants";
+} from '../constants';
 import type {
   GpuiMenuBarProjectActivationPayload,
   GpuiMenuBarSessionActivationPayload,
@@ -30,30 +30,25 @@ import type {
   GpuiSessionStatusIndicatorStatus,
   GpuiSessionStatusIndicatorsPayload,
   GpuiStatusPetActivationPayload,
-} from "../types-and-protocol";
-import { normalizeNonEmptyString } from "./records";
+} from '../types-and-protocol';
+import { normalizeNonEmptyString } from './records';
 import {
   createGpuiRemotePresentationSessionId,
   parseGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationSessionId,
-} from "./remote-presentation";
-import { createDisplaySessionLayout } from "@/packages/shared/active-sessions-sort";
-import type { ghostexSettings } from "@/packages/shared/ghostex-settings";
+} from './remote-presentation';
+import { createDisplaySessionLayout } from '@/packages/shared/active-sessions-sort';
+import type { ghostexSettings } from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type {
-  SidebarSessionGroup,
-  SidebarSessionItem,
-} from "@/packages/shared/session-grid-contract";
-import { DEFAULT_TERMINAL_SESSION_TITLE } from "@/packages/shared/session-grid-contract";
-import {
-  normalizeWorkspaceProjectIconDataUrl,
-} from "@/packages/shared/workspace-project-appearance";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { SidebarSessionGroup, SidebarSessionItem } from '@/packages/shared/session-grid-contract';
+import { DEFAULT_TERMINAL_SESSION_TITLE } from '@/packages/shared/session-grid-contract';
+import { normalizeWorkspaceProjectIconDataUrl } from '@/packages/shared/workspace-project-appearance';
 
 export function createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
-  groups: readonly SidebarSessionGroup[],
+  groups: readonly SidebarSessionGroup[]
 ): GpuiSessionStatusIndicatorCandidate[] {
   /*
   CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
@@ -66,17 +61,13 @@ export function createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
       break;
     }
     const groupProjectId = group.projectContext?.editor.projectId;
-    const groupIconDataUrl = normalizeWorkspaceProjectIconDataUrl(
-      group.projectContext?.iconDataUrl,
-    );
-    const sessionsById = Object.fromEntries(
-      group.sessions.map((session) => [session.sessionId, session]),
-    );
+    const groupIconDataUrl = normalizeWorkspaceProjectIconDataUrl(group.projectContext?.iconDataUrl);
+    const sessionsById = Object.fromEntries(group.sessions.map((session) => [session.sessionId, session]));
     const manualSessionIds = group.sessions.map((session) => session.sessionId);
     const displayLayout = createDisplaySessionLayout({
       sessionIdsByGroup: { [group.groupId]: manualSessionIds },
       sessionsById,
-      sortMode: "lastActivity",
+      sortMode: 'lastActivity',
       workspaceGroupIds: [group.groupId],
     });
     const visualSessionIds = displayLayout.sessionIdsByGroup[group.groupId] ?? manualSessionIds;
@@ -99,10 +90,7 @@ export function createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
         lastInteractionAt: session.lastInteractionAt,
         order,
         projectId: candidateProjectId,
-        projectTitle: boundedGpuiStatusIndicatorTitle(
-          group.title || candidateProjectId,
-          candidateProjectId,
-        ),
+        projectTitle: boundedGpuiStatusIndicatorTitle(group.title || candidateProjectId, candidateProjectId),
         sessionId: session.sessionId,
         status: getGpuiSessionStatusIndicatorStatus(session),
         title: getGpuiPetOverlaySessionTitle(session),
@@ -115,7 +103,7 @@ export function createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
 
 export function createGpuiSessionStatusIndicatorsPayload(
   candidates: readonly GpuiSessionStatusIndicatorCandidate[],
-  settings: ghostexSettings,
+  settings: ghostexSettings
 ): GpuiSessionStatusIndicatorsPayload {
   const counts = countGpuiSessionStatusIndicatorCandidates(candidates);
   return {
@@ -131,10 +119,10 @@ export function createGpuiSessionStatusIndicatorsPayload(
 
 export function createGpuiPetOverlayStatePayload(
   candidates: readonly GpuiSessionStatusIndicatorCandidate[],
-  settings: ghostexSettings,
+  settings: ghostexSettings
 ): GpuiPetOverlayStatePayload {
   const actionableActivityCandidates = candidates.filter(
-    (candidate) => candidate.status === "attention" || candidate.status === "working",
+    (candidate) => candidate.status === 'attention' || candidate.status === 'working'
   );
   const shownActivityCandidates =
     actionableActivityCandidates.length > 0
@@ -148,7 +136,7 @@ export function createGpuiPetOverlayStatePayload(
       title: candidate.title,
     })),
     enabled: settings.petOverlayEnabled,
-    selectedPetId: boundedGpuiStatusIndicatorTitle(settings.selectedPetId, "cat"),
+    selectedPetId: boundedGpuiStatusIndicatorTitle(settings.selectedPetId, 'cat'),
     statusItems: createGpuiPetOverlayStatusItems(candidates),
     type: GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_TYPE,
     version: GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_VERSION,
@@ -156,7 +144,7 @@ export function createGpuiPetOverlayStatePayload(
 }
 
 export function createGpuiSessionStatusIndicatorProjects(
-  candidates: readonly GpuiSessionStatusIndicatorCandidate[],
+  candidates: readonly GpuiSessionStatusIndicatorCandidate[]
 ): GpuiSessionStatusIndicatorProject[] {
   const projects: GpuiSessionStatusIndicatorProject[] = [];
   const projectsById = new Map<string, GpuiSessionStatusIndicatorProject>();
@@ -193,7 +181,7 @@ export function createGpuiSessionStatusIndicatorProjects(
 }
 
 export function countGpuiSessionStatusIndicatorCandidates(
-  candidates: readonly GpuiSessionStatusIndicatorCandidate[],
+  candidates: readonly GpuiSessionStatusIndicatorCandidate[]
 ): Record<GpuiSessionStatusIndicatorStatus, number> {
   const counts = {
     attention: 0,
@@ -209,65 +197,59 @@ export function countGpuiSessionStatusIndicatorCandidates(
 }
 
 export function createGpuiPetOverlayStatusItems(
-  candidates: readonly GpuiSessionStatusIndicatorCandidate[],
+  candidates: readonly GpuiSessionStatusIndicatorCandidate[]
 ): Array<{ count: number; status: GpuiSessionStatusIndicatorStatus }> {
   const counts = countGpuiSessionStatusIndicatorCandidates(candidates);
   if (counts.attention > 0 || counts.working > 0) {
     const items: Array<{ count: number; status: GpuiSessionStatusIndicatorStatus }> = [];
     if (counts.attention > 0) {
-      items.push({ count: counts.attention, status: "attention" });
+      items.push({ count: counts.attention, status: 'attention' });
     }
     if (counts.working > 0) {
-      items.push({ count: counts.working, status: "working" });
+      items.push({ count: counts.working, status: 'working' });
     }
     return items;
   }
-  return counts.available > 0 ? [{ count: counts.available, status: "available" }] : [];
+  return counts.available > 0 ? [{ count: counts.available, status: 'available' }] : [];
 }
 
-export function getGpuiSessionStatusIndicatorStatus(
-  session: SidebarSessionItem,
-): GpuiSessionStatusIndicatorStatus {
-  if (session.activity === "attention") {
-    return "attention";
+export function getGpuiSessionStatusIndicatorStatus(session: SidebarSessionItem): GpuiSessionStatusIndicatorStatus {
+  if (session.activity === 'attention') {
+    return 'attention';
   }
-  if (session.activity === "working") {
-    return "working";
+  if (session.activity === 'working') {
+    return 'working';
   }
-  return "available";
+  return 'available';
 }
 
 export function hasRunningZmxBackingForGpuiIdleIndicator(session: SidebarSessionItem): boolean {
-  if (session.sessionKind !== "terminal") {
+  if (session.sessionKind !== 'terminal') {
     return false;
   }
-  if (
-    session.sessionPersistenceProvider !== "zmx" ||
-    !normalizeNonEmptyString(session.sessionPersistenceName)
-  ) {
+  if (session.sessionPersistenceProvider !== 'zmx' || !normalizeNonEmptyString(session.sessionPersistenceName)) {
     return false;
   }
   return (
-    session.providerSessionState === "exists" ||
-    session.nativePaneState === "mounted" ||
-    session.nativePaneState === "mounting" ||
+    session.providerSessionState === 'exists' ||
+    session.nativePaneState === 'mounted' ||
+    session.nativePaneState === 'mounting' ||
     session.isLive === true
   );
 }
 
 export function shouldCountGpuiSessionStatusIndicatorCandidate(
-  candidate: GpuiSessionStatusIndicatorCandidate,
+  candidate: GpuiSessionStatusIndicatorCandidate
 ): boolean {
-  return candidate.status !== "available" || candidate.hasRunningZmxBacking;
+  return candidate.status !== 'available' || candidate.hasRunningZmxBacking;
 }
 
 export function compareGpuiSessionStatusIndicatorCandidates(
   left: GpuiSessionStatusIndicatorCandidate,
-  right: GpuiSessionStatusIndicatorCandidate,
+  right: GpuiSessionStatusIndicatorCandidate
 ): number {
   const timeDelta =
-    getGpuiIndicatorTimestamp(right.lastInteractionAt) -
-    getGpuiIndicatorTimestamp(left.lastInteractionAt);
+    getGpuiIndicatorTimestamp(right.lastInteractionAt) - getGpuiIndicatorTimestamp(left.lastInteractionAt);
   if (timeDelta !== 0) {
     return timeDelta;
   }
@@ -276,11 +258,10 @@ export function compareGpuiSessionStatusIndicatorCandidates(
 
 export function compareGpuiPetOverlayActivityCandidates(
   left: GpuiSessionStatusIndicatorCandidate,
-  right: GpuiSessionStatusIndicatorCandidate,
+  right: GpuiSessionStatusIndicatorCandidate
 ): number {
   const statusDelta =
-    getGpuiPetOverlayActivityStatusPriority(right.status) -
-    getGpuiPetOverlayActivityStatusPriority(left.status);
+    getGpuiPetOverlayActivityStatusPriority(right.status) - getGpuiPetOverlayActivityStatusPriority(left.status);
   if (statusDelta !== 0) {
     return statusDelta;
   }
@@ -289,11 +270,11 @@ export function compareGpuiPetOverlayActivityCandidates(
 
 export function getGpuiPetOverlayActivityStatusPriority(status: GpuiSessionStatusIndicatorStatus): number {
   switch (status) {
-    case "attention":
+    case 'attention':
       return 2;
-    case "working":
+    case 'working':
       return 1;
-    case "available":
+    case 'available':
       return 0;
   }
 }
@@ -313,7 +294,7 @@ export function getGpuiPetOverlaySessionTitle(session: SidebarSessionItem): stri
     session.terminalTitle?.trim() ||
     session.alias.trim() ||
     session.sessionNumber?.trim();
-  return boundedGpuiStatusIndicatorTitle(title, "Untitled session");
+  return boundedGpuiStatusIndicatorTitle(title, 'Untitled session');
 }
 
 export function boundedGpuiStatusIndicatorTitle(value: string | undefined, fallback: string): string {
@@ -330,14 +311,12 @@ export function boundedGpuiActiveWorkspaceTabSessionTitle(value: string): string
     : normalized;
 }
 
-export function normalizeGpuiStatusPetActivation(
-  value: unknown,
-): GpuiStatusPetActivationPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+export function normalizeGpuiStatusPetActivation(value: unknown): GpuiStatusPetActivationPayload | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).some((key) => !["sessionId", "type", "version"].includes(key))) {
+  if (Object.keys(record).some((key) => !['sessionId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -353,14 +332,12 @@ export function normalizeGpuiStatusPetActivation(
   return { sessionId };
 }
 
-export function normalizeGpuiMenuBarProjectActivation(
-  value: unknown,
-): GpuiMenuBarProjectActivationPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+export function normalizeGpuiMenuBarProjectActivation(value: unknown): GpuiMenuBarProjectActivationPayload | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).some((key) => !["projectId", "type", "version"].includes(key))) {
+  if (Object.keys(record).some((key) => !['projectId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -376,16 +353,12 @@ export function normalizeGpuiMenuBarProjectActivation(
   return { projectId };
 }
 
-export function normalizeGpuiMenuBarSessionActivation(
-  value: unknown,
-): GpuiMenuBarSessionActivationPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+export function normalizeGpuiMenuBarSessionActivation(value: unknown): GpuiMenuBarSessionActivationPayload | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (
-    Object.keys(record).some((key) => !["projectId", "sessionId", "type", "version"].includes(key))
-  ) {
+  if (Object.keys(record).some((key) => !['projectId', 'sessionId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -408,19 +381,12 @@ export function normalizeGpuiMenuBarSessionActivation(
 }
 
 export function gpuiMenuBarStatusSessionFocusRoutingId(projectId: string, sessionId: string): string {
-  if (
-    parseGpuiRemotePresentationSessionId(sessionId) ||
-    parseGxserverPresentationProjectSessionId(sessionId)
-  ) {
+  if (parseGpuiRemotePresentationSessionId(sessionId) || parseGxserverPresentationProjectSessionId(sessionId)) {
     return sessionId;
   }
   const remoteProject = parseGpuiRemotePresentationProjectId(projectId);
   if (remoteProject) {
-    return createGpuiRemotePresentationSessionId(
-      remoteProject.machineId,
-      remoteProject.projectId,
-      sessionId,
-    );
+    return createGpuiRemotePresentationSessionId(remoteProject.machineId, remoteProject.projectId, sessionId);
   }
   return createGxserverPresentationProjectSessionId(projectId, sessionId);
 }
@@ -428,8 +394,8 @@ export function gpuiMenuBarStatusSessionFocusRoutingId(projectId: string, sessio
 export function gpuiStatusPetActivationSessionIdAllowed(value: string): boolean {
   return (
     value.length <= GPUI_STATUS_INDICATOR_ID_MAX_CHARS &&
-    !value.includes("/") &&
-    !value.includes("\\") &&
+    !value.includes('/') &&
+    !value.includes('\\') &&
     !/[\u0000-\u001f\u007f]/u.test(value)
   );
 }

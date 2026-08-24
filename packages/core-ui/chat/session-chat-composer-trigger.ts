@@ -10,9 +10,9 @@
 // start of the draft) is a mention, anything else — "cost$5", "user@host" — is
 // ordinary text.
 
-import type { SessionChatSkill } from "../../shared/session-chat";
+import type { SessionChatSkill } from '../../shared/session-chat';
 
-export type SessionChatComposerTriggerKind = "path" | "skill";
+export type SessionChatComposerTriggerKind = 'path' | 'skill';
 
 export interface SessionChatComposerTrigger {
   kind: SessionChatComposerTriggerKind;
@@ -31,37 +31,29 @@ function clampCaret(text: string, caret: number): number {
   return Math.max(0, Math.min(text.length, Math.floor(caret)));
 }
 
-export function detectSessionChatComposerTrigger(
-  text: string,
-  caret: number,
-): SessionChatComposerTrigger | null {
+export function detectSessionChatComposerTrigger(text: string, caret: number): SessionChatComposerTrigger | null {
   const cursor = clampCaret(text, caret);
   let index = cursor - 1;
-  while (index >= 0 && !/\s/.test(text[index] ?? "")) {
+  while (index >= 0 && !/\s/.test(text[index] ?? '')) {
     index -= 1;
   }
   const start = index + 1;
   const token = text.slice(start, cursor);
-  if (token.startsWith("$")) {
-    return { end: cursor, kind: "skill", query: token.slice(1), start };
+  if (token.startsWith('$')) {
+    return { end: cursor, kind: 'skill', query: token.slice(1), start };
   }
-  if (token.startsWith("@")) {
-    return { end: cursor, kind: "path", query: token.slice(1), start };
+  if (token.startsWith('@')) {
+    return { end: cursor, kind: 'path', query: token.slice(1), start };
   }
   return null;
 }
 
-export function filterSessionChatSkills(
-  skills: readonly SessionChatSkill[],
-  query: string,
-): SessionChatSkill[] {
+export function filterSessionChatSkills(skills: readonly SessionChatSkill[], query: string): SessionChatSkill[] {
   const normalized = query.trim().toLocaleLowerCase();
-  if (normalized === "") {
+  if (normalized === '') {
     return [...skills];
   }
-  return skills.filter((skill) =>
-    skill.name.toLocaleLowerCase().includes(normalized),
-  );
+  return skills.filter((skill) => skill.name.toLocaleLowerCase().includes(normalized));
 }
 
 /**
@@ -71,7 +63,7 @@ export function filterSessionChatSkills(
  * host's file-link route only opens files.
  */
 export function linkedSessionChatSkillMention(skill: SessionChatSkill): string {
-  const label = skill.name.replace(/[\\\[\]]/g, "\\$&");
+  const label = skill.name.replace(/[\\\[\]]/g, '\\$&');
   return `[$${label}](${markdownLinkDestination(skill.skillFilePath)})`;
 }
 
@@ -81,9 +73,9 @@ export function linkedSessionChatSkillMention(skill: SessionChatSkill): string {
  */
 function markdownLinkDestination(path: string): string {
   if (/\s/.test(path)) {
-    return `<${path.replace(/[\\<>]/g, "\\$&")}>`;
+    return `<${path.replace(/[\\<>]/g, '\\$&')}>`;
   }
-  return path.replace(/[\\()]/g, "\\$&");
+  return path.replace(/[\\()]/g, '\\$&');
 }
 
 const SIMPLE_MENTION_PATH_PATTERN = /^[^\s@"\\]+$/;
@@ -96,17 +88,17 @@ export function sessionChatFileMention(path: string): string {
   if (SIMPLE_MENTION_PATH_PATTERN.test(path)) {
     return `@${path}`;
   }
-  return `@"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+  return `@"${path.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
 export function sessionChatFileBasename(path: string): string {
-  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
   return separator >= 0 ? path.slice(separator + 1) : path;
 }
 
 export function sessionChatFileDirectory(path: string): string {
-  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return separator >= 0 ? path.slice(0, separator) : "";
+  const separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  return separator >= 0 ? path.slice(0, separator) : '';
 }
 
 const FILE_MATCH_LIMIT = 60;
@@ -116,12 +108,9 @@ const FILE_MATCH_LIMIT = 60;
  * basename substring, then anywhere in the path. Ties break on the shortest
  * path so top-level files outrank deeply nested namesakes.
  */
-export function filterSessionChatFiles(
-  files: readonly string[],
-  query: string,
-): string[] {
+export function filterSessionChatFiles(files: readonly string[], query: string): string[] {
   const normalized = query.trim().toLocaleLowerCase();
-  if (normalized === "") {
+  if (normalized === '') {
     return files.slice(0, FILE_MATCH_LIMIT);
   }
   const scored: { path: string; score: number }[] = [];
@@ -141,9 +130,7 @@ export function filterSessionChatFiles(
   }
   scored.sort(
     (left, right) =>
-      left.score - right.score ||
-      left.path.length - right.path.length ||
-      left.path.localeCompare(right.path),
+      left.score - right.score || left.path.length - right.path.length || left.path.localeCompare(right.path)
   );
   return scored.slice(0, FILE_MATCH_LIMIT).map((entry) => entry.path);
 }

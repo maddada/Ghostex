@@ -98,7 +98,8 @@ pub(crate) fn gpui_workspace_open_target_detection_script() -> String {
     lines.join("\n")
 }
 
-pub(crate) fn gpui_detect_workspace_open_target_availability() -> Option<GpuiDetectedOpenTargetAvailability> {
+pub(crate) fn gpui_detect_workspace_open_target_availability()
+-> Option<GpuiDetectedOpenTargetAvailability> {
     // None mirrors the macOS catch path (spawn failure or timeout: keep the
     // stored availability). A scan that ran but failed still returns the
     // finder-only result, exactly like the exitCode gate on macOS.
@@ -337,4 +338,3 @@ impl GpuiAddProjectDialogOperation {
         }
     }
 }
-

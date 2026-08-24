@@ -25,9 +25,7 @@ use windows_sys::Win32::Security::Cryptography::{
 
 use anyhow::Result;
 use futures::{StreamExt as _, channel::mpsc};
-use gpui::{
-    AppContext as _, Asset, ParentElement as _, prelude::FluentBuilder as _,
-};
+use gpui::{AppContext as _, Asset, ParentElement as _, prelude::FluentBuilder as _};
 
 use crate::app::helpers::*;
 use crate::*;
@@ -639,7 +637,9 @@ pub(crate) fn gpui_portless_launchd_plist(
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_run_privileged_portless_admin_script(script_path: &Path) -> GpuiPrivilegedScriptResult {
+pub(crate) fn gpui_run_privileged_portless_admin_script(
+    script_path: &Path,
+) -> GpuiPrivilegedScriptResult {
     let command = format!(
         "/bin/sh {}",
         gpui_shell_quote(&gpui_path_string(script_path))
@@ -833,7 +833,9 @@ pub(crate) fn gpui_recommended_portless_native_admin_action(
     None
 }
 
-pub(crate) fn gpui_settings_portless_enabled(settings: &serde_json::Map<String, serde_json::Value>) -> bool {
+pub(crate) fn gpui_settings_portless_enabled(
+    settings: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
     GPUI_PORTLESS_APP_INTEGRATION_ENABLED
         && settings
             .get("portlessEnabled")
@@ -966,7 +968,8 @@ pub(crate) fn on_demand_component_manifest_path() -> Option<PathBuf> {
     None
 }
 
-pub(crate) fn on_demand_component_store() -> Result<Option<component_store::ComponentStore>, String> {
+pub(crate) fn on_demand_component_store() -> Result<Option<component_store::ComponentStore>, String>
+{
     let Some(manifest_path) = on_demand_component_manifest_path() else {
         return Ok(None);
     };
@@ -1139,7 +1142,9 @@ pub(crate) fn source_code_server_repo_root_candidates() -> Vec<PathBuf> {
     candidates
 }
 
-pub(crate) fn source_code_server_validate_development_payload(repo_root: &Path) -> Result<(), String> {
+pub(crate) fn source_code_server_validate_development_payload(
+    repo_root: &Path,
+) -> Result<(), String> {
     if !repo_root.join("lib/vscode/package.json").exists() {
         return Err("code-server VS Code payload is unavailable".to_string());
     }
@@ -1545,7 +1550,9 @@ pub(crate) fn source_code_server_wait_until_responsive_at(
     source_code_server_readiness_at(port)
 }
 
-pub(crate) fn source_code_server_wait_until_responsive(timeout: Duration) -> SourceCodeServerReadiness {
+pub(crate) fn source_code_server_wait_until_responsive(
+    timeout: Duration,
+) -> SourceCodeServerReadiness {
     source_code_server_wait_until_responsive_at(SOURCE_CODE_SERVER_EDITOR_PORT, timeout)
 }
 
@@ -1561,7 +1568,9 @@ pub(crate) fn source_code_server_wait_until_not_responsive(timeout: Duration) ->
 }
 
 #[cfg(not(target_os = "windows"))]
-pub(crate) fn source_code_server_open_file_in_existing_instance(file_path: &Path) -> Result<(), String> {
+pub(crate) fn source_code_server_open_file_in_existing_instance(
+    file_path: &Path,
+) -> Result<(), String> {
     /*
     Use the bundled code-server CLI's reviewed session-socket protocol to open
     the validated file in the already-owned Source workbench. The Source CEF
@@ -1603,7 +1612,9 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(file_path: &Path
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn source_code_server_open_file_in_existing_instance(file_path: &Path) -> Result<(), String> {
+pub(crate) fn source_code_server_open_file_in_existing_instance(
+    file_path: &Path,
+) -> Result<(), String> {
     let deadline = Instant::now() + SOURCE_CODE_SERVER_STARTUP_GRACE_INTERVAL;
     while Instant::now() < deadline {
         let mut command = windows_terminal_backend::source_code_server_open_file_command(
@@ -1621,4 +1632,3 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(file_path: &Path
     }
     Err("Ghostex Source did not become ready to open that file.".to_string())
 }
-

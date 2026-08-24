@@ -210,7 +210,10 @@ impl GhostexGpuiApp {
     the machine editor (vi, for anyone with no $EDITOR) without a word. Say so
     where the user is looking instead of degrading silently.
     */
-    pub(crate) fn warn_if_monaco_prompt_editor_helper_is_missing(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn warn_if_monaco_prompt_editor_helper_is_missing(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if !gpui_prompt_editor_backend_setting_is_monaco()
             || gpui_resolved_ghostex_editor_executable().is_some()
         {
@@ -532,11 +535,7 @@ impl GhostexGpuiApp {
             the same interaction.
             */
             if !self.titlebar_mode_available(TitlebarMode::Browser) {
-                self.copy_path_for_disabled_project_workarea(
-                    open_value,
-                    "Browser",
-                    cx,
-                );
+                self.copy_path_for_disabled_project_workarea(open_value, "Browser", cx);
                 return;
             }
             let Some(sidebar) = self.sidebar.clone() else {
@@ -578,5 +577,4 @@ impl GhostexGpuiApp {
         })
         .detach();
     }
-
 }

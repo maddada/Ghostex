@@ -7,7 +7,8 @@
 use std::sync::{Arc, atomic::Ordering};
 
 use gpui::{
-    AnyElement, Hsla, Image, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div, px, rgb, rgba,
+    AnyElement, Hsla, Image, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _,
+    div, px, rgb, rgba,
 };
 
 use crate::app::helpers::*;
@@ -65,7 +66,9 @@ pub(crate) fn gpui_settings_hex_rgb(value: Option<&serde_json::Value>) -> Option
         .flatten()
 }
 
-pub(crate) fn refresh_gpui_visual_settings(settings: &shared_settings::SharedSidebarSettingsSnapshot) {
+pub(crate) fn refresh_gpui_visual_settings(
+    settings: &shared_settings::SharedSidebarSettingsSnapshot,
+) {
     let object = settings.object();
     let configured_workspace = object
         .get("workspaceBackgroundColor")
@@ -264,7 +267,9 @@ pub(crate) fn workspace_tab_terminal_icon_inactive_color(
     }
 }
 
-pub(crate) fn workspace_tab_terminal_icon_glyph_color(visual_tone: WorkspaceTabLifecycleVisualTone) -> Hsla {
+pub(crate) fn workspace_tab_terminal_icon_glyph_color(
+    visual_tone: WorkspaceTabLifecycleVisualTone,
+) -> Hsla {
     if visual_tone.uses_selected_treatment() {
         match visual_tone.presentation_state {
             TerminalSessionPresentationState::Running => rgb(0xffffff).opacity(0.76).into(),
@@ -331,7 +336,9 @@ pub(crate) fn workspace_tab_running_status_dot_color(
     }
 }
 
-pub(crate) fn workspace_tab_state_badge_background(visual_tone: WorkspaceTabLifecycleVisualTone) -> Hsla {
+pub(crate) fn workspace_tab_state_badge_background(
+    visual_tone: WorkspaceTabLifecycleVisualTone,
+) -> Hsla {
     let is_active = visual_tone.uses_selected_treatment();
     match visual_tone.presentation_state {
         TerminalSessionPresentationState::Running => rgb(0xffffff).opacity(0.0).into(),
@@ -353,7 +360,9 @@ pub(crate) fn workspace_tab_state_badge_background(visual_tone: WorkspaceTabLife
     }
 }
 
-pub(crate) fn workspace_tab_state_badge_text_color(visual_tone: WorkspaceTabLifecycleVisualTone) -> Hsla {
+pub(crate) fn workspace_tab_state_badge_text_color(
+    visual_tone: WorkspaceTabLifecycleVisualTone,
+) -> Hsla {
     let is_active = visual_tone.uses_selected_treatment();
     match visual_tone.presentation_state {
         TerminalSessionPresentationState::Running => workspace_tab_text_color(visual_tone),
@@ -617,7 +626,9 @@ pub(crate) fn workspace_pane_border_color_for_state(state: WorkspacePaneBorderSt
     }
 }
 
-pub(crate) fn project_editor_companion_border_color_for_state(state: WorkspacePaneBorderState) -> Hsla {
+pub(crate) fn project_editor_companion_border_color_for_state(
+    state: WorkspacePaneBorderState,
+) -> Hsla {
     match state {
         WorkspacePaneBorderState::Neutral => rgb(0x252525).into(),
         WorkspacePaneBorderState::Focused => workspace_pane_focused_border_color(),
@@ -644,14 +655,6 @@ pub(crate) fn project_editor_companion_divider_background_color() -> Hsla {
 pub(crate) fn project_editor_companion_divider_line_color() -> Hsla {
     rgb(0x000000).opacity(0.0).into()
 }
-
-
-
-
-
-
-
-
 
 pub(crate) fn command_pane_chrome_color() -> Hsla {
     /*
@@ -798,14 +801,18 @@ pub(crate) fn command_pane_tab_status_indicator_element(
     }
 }
 
-pub(crate) fn command_pane_tab_status_indicator_color(tab_status: CommandTerminalTabStatus) -> Hsla {
+pub(crate) fn command_pane_tab_status_indicator_color(
+    tab_status: CommandTerminalTabStatus,
+) -> Hsla {
     let color = rgb(command_terminal_tab_status_color(tab_status));
     color
         .opacity(command_terminal_tab_status_indicator_opacity(tab_status))
         .into()
 }
 
-pub(crate) fn command_terminal_tab_status_has_indicator(tab_status: CommandTerminalTabStatus) -> bool {
+pub(crate) fn command_terminal_tab_status_has_indicator(
+    tab_status: CommandTerminalTabStatus,
+) -> bool {
     !matches!(tab_status, CommandTerminalTabStatus::Idle)
 }
 
@@ -839,7 +846,9 @@ pub(crate) fn command_terminal_tab_status_color(tab_status: CommandTerminalTabSt
     }
 }
 
-pub(crate) fn command_terminal_tab_status_indicator_opacity(tab_status: CommandTerminalTabStatus) -> f32 {
+pub(crate) fn command_terminal_tab_status_indicator_opacity(
+    tab_status: CommandTerminalTabStatus,
+) -> f32 {
     match tab_status {
         CommandTerminalTabStatus::DelayedSend => 0.96,
         CommandTerminalTabStatus::Idle
@@ -932,7 +941,9 @@ pub(crate) fn gpui_combined_presentation_session_id(project_id: &str, session_id
     )
 }
 
-pub(crate) fn gpui_combined_presentation_session_key(value: &str) -> Option<GpuiLocalWorkspaceSessionKey> {
+pub(crate) fn gpui_combined_presentation_session_key(
+    value: &str,
+) -> Option<GpuiLocalWorkspaceSessionKey> {
     let payload = value.strip_prefix("combined-session:")?;
     let (project_id, session_id) = payload.split_once(':')?;
     let project_id = gpui_percent_decoded_id_part(project_id)?;
@@ -942,4 +953,3 @@ pub(crate) fn gpui_combined_presentation_session_key(value: &str) -> Option<Gpui
         session_id,
     })
 }
-

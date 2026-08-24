@@ -7,38 +7,30 @@ import {
   GPUI_DEFAULT_VISIBLE_COUNT,
   GPUI_GXSERVER_CHATS_GROUP_ID,
   GPUI_GXSERVER_UNAVAILABLE_GROUP_ID,
-} from "../constants";
-import type {
-  GpuiPresentationProjectProjectionMetadata,
-  GpuiSidebarGroupsPatch,
-} from "../types-and-protocol";
-import { booleanFromRecord, optionalNumberField, stringFromRecord } from "./records";
+} from '../constants';
+import type { GpuiPresentationProjectProjectionMetadata, GpuiSidebarGroupsPatch } from '../types-and-protocol';
+import { booleanFromRecord, optionalNumberField, stringFromRecord } from './records';
 import {
   createGpuiProjectWorktreeParentCandidates,
   normalizeGpuiProjectPath,
   normalizeGpuiSidebarWorktreeMetadata,
   normalizeGpuiWorktreeParentProjectId,
   resolveGpuiProjectWorktreeParentMetadata,
-} from "./worktrees";
-import type {
-  GxserverPresentationSidebarProjectOverlay,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from './worktrees';
+import type { GxserverPresentationSidebarProjectOverlay } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverPresentationSnapshot,
   GxserverProjectDomainState,
   GxserverRecentProjectDomainState,
-} from "@/packages/shared/gxserver-protocol";
-import type {
-  SidebarProjectSettingsItem,
-  SidebarSessionGroup,
-} from "@/packages/shared/session-grid-contract";
-import type { SidebarAgentButton } from "@/packages/shared/sidebar-agents";
-import { DEFAULT_SIDEBAR_AGENTS, getSidebarAgentIconById } from "@/packages/shared/sidebar-agents";
-import type { WorkspaceProjectIcon } from "@/packages/shared/workspace-project-appearance";
+} from '@/packages/shared/gxserver-protocol';
+import type { SidebarProjectSettingsItem, SidebarSessionGroup } from '@/packages/shared/session-grid-contract';
+import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
+import { DEFAULT_SIDEBAR_AGENTS, getSidebarAgentIconById } from '@/packages/shared/sidebar-agents';
+import type { WorkspaceProjectIcon } from '@/packages/shared/workspace-project-appearance';
 import {
   normalizeWorkspaceProjectIcon,
   normalizeWorkspaceProjectIconDataUrl,
-} from "@/packages/shared/workspace-project-appearance";
+} from '@/packages/shared/workspace-project-appearance';
 
 export function createGpuiPresentationProjectProjectionMetadata({
   domainProjects,
@@ -58,14 +50,12 @@ export function createGpuiPresentationProjectProjectionMetadata({
   */
   const hiddenProjectIds = new Set(
     (recentProjects ?? [])
-      .map((project) => (typeof project.projectId === "string" ? project.projectId.trim() : ""))
-      .filter((projectId) => projectId.length > 0),
+      .map((project) => (typeof project.projectId === 'string' ? project.projectId.trim() : ''))
+      .filter((projectId) => projectId.length > 0)
   );
   const projectOverlaysById = new Map<string, GxserverPresentationSidebarProjectOverlay>();
   const domainProjectIds = new Set(domainProjects.map((project) => project.projectId));
-  const orderIndexByProjectId = new Map(
-    (projectOrder ?? []).map((projectId, index) => [projectId, index]),
-  );
+  const orderIndexByProjectId = new Map((projectOrder ?? []).map((projectId, index) => [projectId, index]));
   const worktreeParentCandidates = createGpuiProjectWorktreeParentCandidates({
     domainProjects,
     presentation,
@@ -78,7 +68,7 @@ export function createGpuiPresentationProjectProjectionMetadata({
     const icon = gpuiPresentationProjectIcon(project);
     const worktree = resolveGpuiProjectWorktreeParentMetadata(
       normalizeGpuiSidebarWorktreeMetadata(project.worktree),
-      worktreeParentCandidates,
+      worktreeParentCandidates
     );
     if (project.isRecentProject === true) {
       hiddenProjectIds.add(project.projectId);
@@ -91,7 +81,7 @@ export function createGpuiPresentationProjectProjectionMetadata({
       ...(iconDataUrl ? { iconDataUrl } : {}),
       ...(isChatProject ? { isChatProject } : {}),
       ...(isQuickProject ? { isQuickProject } : {}),
-      ...optionalNumberField("orderIndex", orderIndexByProjectId.get(project.projectId)),
+      ...optionalNumberField('orderIndex', orderIndexByProjectId.get(project.projectId)),
       ...(worktree ? { worktree } : {}),
     });
   }
@@ -100,18 +90,15 @@ export function createGpuiPresentationProjectProjectionMetadata({
     const orderIndex = orderIndexByProjectId.get(project.projectId);
     const worktree = resolveGpuiProjectWorktreeParentMetadata(
       normalizeGpuiSidebarWorktreeMetadata(project.worktree),
-      worktreeParentCandidates,
+      worktreeParentCandidates
     );
     if (orderIndex !== undefined || worktree) {
       mergeGpuiPresentationProjectOverlay(projectOverlaysById, project.projectId, {
-        ...optionalNumberField("orderIndex", orderIndex),
+        ...optionalNumberField('orderIndex', orderIndex),
         ...(worktree ? { worktree } : {}),
       });
     }
-    if (
-      domainProjectIds.has(project.projectId) ||
-      !isGpuiPresentationChatProjectPath(project.path)
-    ) {
+    if (domainProjectIds.has(project.projectId) || !isGpuiPresentationChatProjectPath(project.path)) {
       continue;
     }
     chatProjectIds.add(project.projectId);
@@ -131,7 +118,7 @@ export function createGpuiPresentationProjectProjectionMetadata({
 export function mergeGpuiPresentationProjectOverlay(
   overlaysById: Map<string, GxserverPresentationSidebarProjectOverlay>,
   projectId: string,
-  patch: Partial<Omit<GxserverPresentationSidebarProjectOverlay, "projectId">>,
+  patch: Partial<Omit<GxserverPresentationSidebarProjectOverlay, 'projectId'>>
 ): void {
   if (!overlaysById.has(projectId) && Object.values(patch).every((value) => value === undefined)) {
     return;
@@ -151,15 +138,11 @@ rather than an uploaded image, so a sidebar that only receives `iconDataUrl`
 shows almost every project a generic folder. Same sourcing rules apply: identity
 metadata only, never inferred from paths, titles, sessions, or renderer state.
 */
-export function gpuiPresentationProjectIcon(
-  project: GxserverProjectDomainState,
-): WorkspaceProjectIcon | undefined {
+export function gpuiPresentationProjectIcon(project: GxserverProjectDomainState): WorkspaceProjectIcon | undefined {
   return normalizeWorkspaceProjectIcon(project.identityIcon?.icon);
 }
 
-export function gpuiPresentationProjectIconDataUrl(
-  project: GxserverProjectDomainState,
-): string | undefined {
+export function gpuiPresentationProjectIconDataUrl(project: GxserverProjectDomainState): string | undefined {
   /*
   CDXC:GPUISettingsNotifications 2026-06-26-07:22:
   Session-attention icon parity must source images only from gxserver project identity metadata already normalized for workspace project appearance. Do not infer icons from project paths, URLs, titles, sessions, browser favicons, logs, command output, or renderer-local state.
@@ -169,34 +152,30 @@ export function gpuiPresentationProjectIconDataUrl(
     return undefined;
   }
   const icon = normalizeWorkspaceProjectIcon(identityIcon.icon);
-  if (icon?.kind === "image") {
+  if (icon?.kind === 'image') {
     return icon.dataUrl;
   }
   return normalizeWorkspaceProjectIconDataUrl(identityIcon.iconDataUrl);
 }
 
-export function isGpuiPresentationChatDomainProject(
-  project: GxserverProjectDomainState | undefined,
-): boolean {
+export function isGpuiPresentationChatDomainProject(project: GxserverProjectDomainState | undefined): boolean {
   return (
-    booleanFromRecord(project as Record<string, unknown> | undefined, "isChat") === true ||
-    booleanFromRecord(project?.launchSettings, "isChat") === true ||
+    booleanFromRecord(project as Record<string, unknown> | undefined, 'isChat') === true ||
+    booleanFromRecord(project?.launchSettings, 'isChat') === true ||
     isGpuiPresentationChatProjectPath(project?.path)
   );
 }
 
-export function isGpuiPresentationQuickDomainProject(
-  project: GxserverProjectDomainState | undefined,
-): boolean {
+export function isGpuiPresentationQuickDomainProject(project: GxserverProjectDomainState | undefined): boolean {
   return (
-    booleanFromRecord(project as Record<string, unknown> | undefined, "isQuick") === true ||
-    booleanFromRecord(project?.launchSettings, "isQuick") === true ||
+    booleanFromRecord(project as Record<string, unknown> | undefined, 'isQuick') === true ||
+    booleanFromRecord(project?.launchSettings, 'isQuick') === true ||
     isGpuiPresentationChatDomainProject(project)
   );
 }
 
 export function isGpuiPresentationChatProjectPath(value: unknown): boolean {
-  const path = normalizeGpuiProjectPath(value)?.replace(/\\/gu, "/").replace(/\/+$/u, "");
+  const path = normalizeGpuiProjectPath(value)?.replace(/\\/gu, '/').replace(/\/+$/u, '');
   if (!path) {
     return false;
   }
@@ -212,43 +191,39 @@ export function isGpuiPresentationChatProjectPath(value: unknown): boolean {
 
 export function createGpuiProjectSettingsProjects(
   domainProjects: readonly GxserverProjectDomainState[],
-  presentation: GxserverPresentationSnapshot | undefined,
+  presentation: GxserverPresentationSnapshot | undefined
 ): SidebarProjectSettingsItem[] {
   if (domainProjects.length > 0) {
     return domainProjects.flatMap((project) => {
       const path = normalizeGpuiProjectPath(project.path);
-      if (
-        !path ||
-        project.isRecentProject === true ||
-        isGpuiPresentationQuickDomainProject(project)
-      ) {
+      if (!path || project.isRecentProject === true || isGpuiPresentationQuickDomainProject(project)) {
         return [];
       }
       return [
         {
           ...optionalGpuiProjectSettingsString(
-            "beadsDirectory",
-            stringFromRecord(project.projectBoardConfig, "beadsDirectory"),
+            'beadsDirectory',
+            stringFromRecord(project.projectBoardConfig, 'beadsDirectory')
           ),
           ...optionalGpuiProjectSettingsString(
-            "beadsDisplayKey",
-            stringFromRecord(project.projectBoardConfig, "beadsDisplayKey") ??
-              stringFromRecord(project.gitConfig, "beadsDisplayKey"),
+            'beadsDisplayKey',
+            stringFromRecord(project.projectBoardConfig, 'beadsDisplayKey') ??
+              stringFromRecord(project.gitConfig, 'beadsDisplayKey')
           ),
           ...optionalGpuiProjectSettingsString(
-            "docsDirectory",
-            stringFromRecord(project.projectBoardConfig, "docsDirectory"),
+            'docsDirectory',
+            stringFromRecord(project.projectBoardConfig, 'docsDirectory')
           ),
           name: project.name,
           path,
           projectId: project.projectId,
           ...optionalGpuiProjectSettingsString(
-            "worktreeCommand",
-            stringFromRecord(project.gitConfig, "worktreeCommand"),
+            'worktreeCommand',
+            stringFromRecord(project.gitConfig, 'worktreeCommand')
           ),
           ...optionalGpuiProjectSettingsString(
-            "worktreeParentProjectId",
-            normalizeGpuiWorktreeParentProjectId(project.worktree),
+            'worktreeParentProjectId',
+            normalizeGpuiWorktreeParentProjectId(project.worktree)
           ),
         },
       ];
@@ -265,8 +240,8 @@ export function createGpuiProjectSettingsProjects(
         path,
         projectId: project.projectId,
         ...optionalGpuiProjectSettingsString(
-          "worktreeParentProjectId",
-          normalizeGpuiWorktreeParentProjectId(project.worktree),
+          'worktreeParentProjectId',
+          normalizeGpuiWorktreeParentProjectId(project.worktree)
         ),
       },
     ];
@@ -275,13 +250,13 @@ export function createGpuiProjectSettingsProjects(
 
 export function optionalGpuiProjectSettingsString<TKey extends keyof SidebarProjectSettingsItem>(
   key: TKey,
-  value: string | undefined,
+  value: string | undefined
 ): Partial<Pick<SidebarProjectSettingsItem, TKey>> {
   return value ? ({ [key]: value } as Partial<Pick<SidebarProjectSettingsItem, TKey>>) : {};
 }
 
 export function normalizeGpuiPathForProjectComparison(path: string): string {
-  return path.trim().replace(/\/+$/u, "") || path.trim();
+  return path.trim().replace(/\/+$/u, '') || path.trim();
 }
 
 export function createGpuiGxserverUnavailableSidebarGroups(): SidebarSessionGroup[] {
@@ -291,22 +266,22 @@ export function createGpuiGxserverUnavailableSidebarGroups(): SidebarSessionGrou
       isActive: false,
       isChatCollection: true,
       isFocusModeActive: false,
-      kind: "workspace",
+      kind: 'workspace',
       layoutVisibleCount: GPUI_DEFAULT_VISIBLE_COUNT,
       sessions: [],
-      title: "Chats",
-      viewMode: "grid",
+      title: 'Chats',
+      viewMode: 'grid',
       visibleCount: GPUI_DEFAULT_VISIBLE_COUNT,
     },
     {
       groupId: GPUI_GXSERVER_UNAVAILABLE_GROUP_ID,
       isActive: true,
       isFocusModeActive: false,
-      kind: "workspace",
+      kind: 'workspace',
       layoutVisibleCount: GPUI_DEFAULT_VISIBLE_COUNT,
       sessions: [],
-      title: "",
-      viewMode: "grid",
+      title: '',
+      viewMode: 'grid',
       visibleCount: GPUI_DEFAULT_VISIBLE_COUNT,
     },
   ];
@@ -314,16 +289,14 @@ export function createGpuiGxserverUnavailableSidebarGroups(): SidebarSessionGrou
 
 export function createGpuiSidebarGroupsPatch(
   previousGroups: readonly SidebarSessionGroup[],
-  nextGroups: SidebarSessionGroup[],
+  nextGroups: SidebarSessionGroup[]
 ): GpuiSidebarGroupsPatch {
   const previousGroupsById = new Map(previousGroups.map((group) => [group.groupId, group]));
   const nextGroupIds = new Set(nextGroups.map((group) => group.groupId));
   const previousSessionIds = new Set(
-    previousGroups.flatMap((group) => group.sessions.map((session) => session.sessionId)),
+    previousGroups.flatMap((group) => group.sessions.map((session) => session.sessionId))
   );
-  const nextSessionIds = new Set(
-    nextGroups.flatMap((group) => group.sessions.map((session) => session.sessionId)),
-  );
+  const nextSessionIds = new Set(nextGroups.flatMap((group) => group.sessions.map((session) => session.sessionId)));
   return {
     groupOrder: nextGroups.map((group) => group.groupId),
     /*
@@ -338,12 +311,8 @@ export function createGpuiSidebarGroupsPatch(
       const previousGroup = previousGroupsById.get(group.groupId);
       return !previousGroup || !haveSameSidebarProjectionValue(previousGroup, group);
     }),
-    removedGroupIds: [...previousGroupsById.keys()].filter(
-      (groupId) => !nextGroupIds.has(groupId),
-    ),
-    removedSessionIds: [...previousSessionIds].filter(
-      (sessionId) => !nextSessionIds.has(sessionId),
-    ),
+    removedGroupIds: [...previousGroupsById.keys()].filter((groupId) => !nextGroupIds.has(groupId)),
+    removedSessionIds: [...previousSessionIds].filter((sessionId) => !nextSessionIds.has(sessionId)),
   };
 }
 
@@ -359,7 +328,7 @@ export function haveSameSidebarProjectionValue(left: unknown, right: unknown): b
   if (typeof left !== typeof right) {
     return false;
   }
-  if (typeof left !== "object" || left === null || right === null) {
+  if (typeof left !== 'object' || left === null || right === null) {
     return false;
   }
   if (Array.isArray(left) || Array.isArray(right)) {
@@ -379,7 +348,7 @@ export function haveSameSidebarProjectionValue(left: unknown, right: unknown): b
   );
 }
 
-export function resolveGpuiSidebarAgentIcon(agentName: string | undefined): SidebarAgentButton["icon"] {
+export function resolveGpuiSidebarAgentIcon(agentName: string | undefined): SidebarAgentButton['icon'] {
   const directIcon = getSidebarAgentIconById(agentName);
   if (directIcon) {
     return directIcon;
@@ -393,7 +362,7 @@ export function resolveGpuiSidebarAgentIcon(agentName: string | undefined): Side
     (agent) =>
       agent.agentId === normalizedAgentName ||
       agent.name.trim().toLowerCase() === normalizedAgentName ||
-      agent.icon === normalizedAgentName,
+      agent.icon === normalizedAgentName
   )?.icon;
 }
 

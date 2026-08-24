@@ -4,10 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
-use gpui_component::{
-    WindowExt,
-    notification::Notification,
-};
+use gpui_component::{WindowExt, notification::Notification};
 
 use crate::app::helpers::*;
 use crate::*;
@@ -214,7 +211,10 @@ unsafe extern "C" {
     pub(crate) fn GhostexGpuiSparkleCheckForUpdates();
     pub(crate) fn GhostexGpuiSparkleProbeForUpdateInformation();
     pub(crate) fn GhostexGpuiShowStandardAboutPanel();
-    pub(crate) fn GhostexGpuiSetLidSleepPreventionEnabled(enabled: i32, install_if_needed: i32) -> i32;
+    pub(crate) fn GhostexGpuiSetLidSleepPreventionEnabled(
+        enabled: i32,
+        install_if_needed: i32,
+    ) -> i32;
     pub(crate) fn GhostexGpuiHeartbeatLidSleepPrevention() -> i32;
     pub(crate) fn GhostexGpuiApplyMenuBarStatusItemWithProjects(
         attention_count: u64,
@@ -249,7 +249,10 @@ unsafe extern "C" {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_set_lid_sleep_prevention_enabled(enabled: bool, install_if_needed: bool) -> bool {
+pub(crate) fn gpui_set_lid_sleep_prevention_enabled(
+    enabled: bool,
+    install_if_needed: bool,
+) -> bool {
     unsafe {
         GhostexGpuiSetLidSleepPreventionEnabled(enabled as i32, install_if_needed as i32) == 1
     }
@@ -370,4 +373,3 @@ pub(crate) fn gpui_completion_sound_file_name(sound: &str) -> &'static str {
         _ => "arcade.mp3",
     }
 }
-

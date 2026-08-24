@@ -2,13 +2,13 @@ import {
   getDefaultSidebarAgentById,
   getDefaultSidebarAgentByIcon,
   type SidebarAgentIcon,
-} from "@/packages/shared/sidebar-agents";
+} from '@/packages/shared/sidebar-agents';
 import type {
   SidebarAgentHookStatusMessage,
   SidebarGhostexCliStatusMessage,
-} from "@/packages/shared/session-grid-contract-sidebar";
-import { FASTER_CHROME_DEVTOOLS_SKILL_URL } from "./constants";
-import type { TitlebarNotice, TitlebarResourceGroup, TitlebarResourceSession, TitlebarTip } from "./types";
+} from '@/packages/shared/session-grid-contract-sidebar';
+import { FASTER_CHROME_DEVTOOLS_SKILL_URL } from './constants';
+import type { TitlebarNotice, TitlebarResourceGroup, TitlebarResourceSession, TitlebarTip } from './types';
 
 /**
  * CDXC:TipsAndTricks 2026-05-30-08:31:
@@ -31,86 +31,86 @@ import type { TitlebarNotice, TitlebarResourceGroup, TitlebarResourceSession, Ti
  */
 export const TITLEBAR_TIPS: TitlebarTip[] = [
   {
-    body: "Search for project actions, pane splits and moves, session controls, settings shortcuts, and other Ghostex actions.",
-    icon: "command",
-    id: "command-palette-all-actions",
-    title: "Press Cmd Shift P anywhere to open Ghostex Quick Access",
+    body: 'Search for project actions, pane splits and moves, session controls, settings shortcuts, and other Ghostex actions.',
+    icon: 'command',
+    id: 'command-palette-all-actions',
+    title: 'Press Cmd Shift P anywhere to open Ghostex Quick Access',
   },
   {
-    body: "Open Settings to customize sidebar presets, visible details, agents, actions, project tools, and workspace open targets.",
-    icon: "sidebar",
-    id: "customize-sidebar-layout-and-tools",
-    title: "Customize the sidebar",
+    body: 'Open Settings to customize sidebar presets, visible details, agents, actions, project tools, and workspace open targets.',
+    icon: 'sidebar',
+    id: 'customize-sidebar-layout-and-tools',
+    title: 'Customize the sidebar',
   },
   {
-    body: "The Resources menu can sleep inactive terminal sessions while keeping them restorable in the sidebar.",
-    icon: "moon",
-    id: "sleep-idle-sessions-from-resources",
-    title: "Sleep idle sessions from Resources",
+    body: 'The Resources menu can sleep inactive terminal sessions while keeping them restorable in the sidebar.',
+    icon: 'moon',
+    id: 'sleep-idle-sessions-from-resources',
+    title: 'Sleep idle sessions from Resources',
   },
   {
-    body: "Use browser panes beside agents when the task needs screenshots, DOM inspection, or logged-in product state.",
-    icon: "browser",
-    id: "attach-browser-pane-to-task",
-    title: "Attach a browser pane to a task",
+    body: 'Use browser panes beside agents when the task needs screenshots, DOM inspection, or logged-in product state.',
+    icon: 'browser',
+    id: 'attach-browser-pane-to-task',
+    title: 'Attach a browser pane to a task',
   },
   {
     action: {
-      settingsSearchQuery: "Ghostex Computer Use",
-      type: "openSettings",
+      settingsSearchQuery: 'Ghostex Computer Use',
+      type: 'openSettings',
     },
-    body: "Configure Ghostex Computer Use in Settings, then ask agents to use /ghostex-computer-use for native macOS app control.",
-    icon: "resources",
-    id: "use-ghostex-computer-use-skill",
-    title: "Use /ghostex-computer-use for desktop control",
+    body: 'Configure Ghostex Computer Use in Settings, then ask agents to use /ghostex-computer-use for native macOS app control.',
+    icon: 'resources',
+    id: 'use-ghostex-computer-use-skill',
+    title: 'Use /ghostex-computer-use for desktop control',
   },
   {
     action: {
-      settingsSearchQuery: "Ghostex Browser Use",
-      type: "openSettings",
+      settingsSearchQuery: 'Ghostex Browser Use',
+      type: 'openSettings',
     },
-    body: "Configure Ghostex Browser Use in Settings, then ask agents to use /ghostex-browser-use for page inspection, console logs, screenshots, and clicks.",
-    icon: "browser",
-    id: "use-ghostex-browser-use-skill",
-    title: "Use /ghostex-browser-use for browser panes",
+    body: 'Configure Ghostex Browser Use in Settings, then ask agents to use /ghostex-browser-use for page inspection, console logs, screenshots, and clicks.',
+    icon: 'browser',
+    id: 'use-ghostex-browser-use-skill',
+    title: 'Use /ghostex-browser-use for browser panes',
   },
   {
     action: {
-      settingsSearchQuery: "Ghostex Auto Rename Session",
-      type: "openSettings",
+      settingsSearchQuery: 'Ghostex Auto Rename Session',
+      type: 'openSettings',
     },
-    body: "Configure Ghostex Auto Rename Session in Settings, then ask agents to use $ghostex-auto-rename-session to auto rename the current session from the work they just did.",
-    icon: "command",
-    id: "use-ghostex-auto-rename-session-skill",
-    title: "Use $ghostex-auto-rename-session to auto rename sessions",
+    body: 'Configure Ghostex Auto Rename Session in Settings, then ask agents to use $ghostex-auto-rename-session to auto rename the current session from the work they just did.',
+    icon: 'command',
+    id: 'use-ghostex-auto-rename-session-skill',
+    title: 'Use $ghostex-auto-rename-session to auto rename sessions',
   },
   {
     action: {
-      type: "openBrowserPane",
+      type: 'openBrowserPane',
       url: FASTER_CHROME_DEVTOOLS_SKILL_URL,
     },
-    body: "Install Faster Chrome DevTools Skill when agents need fast CLI-backed access to your own Chrome profile, tabs, cookies, and extensions.",
-    icon: "command",
-    id: "recommend-faster-chrome-devtools-skill",
-    title: "Give agents fast access to your personal Chrome",
+    body: 'Install Faster Chrome DevTools Skill when agents need fast CLI-backed access to your own Chrome profile, tabs, cookies, and extensions.',
+    icon: 'command',
+    id: 'recommend-faster-chrome-devtools-skill',
+    title: 'Give agents fast access to your personal Chrome',
   },
   {
     body: 'Open the sidebar Search row, click "Search by Text", then type any words you remember from the prompt.',
-    icon: "search",
-    id: "find-session-by-prompt-text",
-    title: "Find any session from prompt text",
+    icon: 'search',
+    id: 'find-session-by-prompt-text',
+    title: 'Find any session from prompt text',
   },
   {
-    body: "Pin a session in the sidebar when you need it to stay at the top.",
-    icon: "resources",
-    id: "pin-important-workspaces",
-    title: "Pin important sessions",
+    body: 'Pin a session in the sidebar when you need it to stay at the top.',
+    icon: 'resources',
+    id: 'pin-important-workspaces',
+    title: 'Pin important sessions',
   },
   {
-    body: "Then you can easily ask agents to \"work on beads with   high priority from the kanban board\"",
-    icon: "command",
-    id: "add-todos-to-kanban-page",
-    title: "Add all your Todos in the Kanban page",
+    body: 'Then you can easily ask agents to "work on beads with   high priority from the kanban board"',
+    icon: 'command',
+    id: 'add-todos-to-kanban-page',
+    title: 'Add all your Todos in the Kanban page',
   },
 ];
 
@@ -122,11 +122,11 @@ export const TITLEBAR_TIPS: TitlebarTip[] = [
  * stays visible until persistence is enabled again.
  */
 export const TITLEBAR_PERSISTENCE_OFF_NOTICE: TitlebarNotice = {
-  body: "Android and iOS attach can have issues while Session Persistence is Off. Enable zmx persistence so mobile clients reconnect to durable terminal sessions.",
-  icon: "warning",
-  id: "session-persistence-off-mobile-attach",
-  settingsTarget: "sessionPersistence",
-  title: "Mobile attach needs persistence",
+  body: 'Android and iOS attach can have issues while Session Persistence is Off. Enable zmx persistence so mobile clients reconnect to durable terminal sessions.',
+  icon: 'warning',
+  id: 'session-persistence-off-mobile-attach',
+  settingsTarget: 'sessionPersistence',
+  title: 'Mobile attach needs persistence',
 };
 
 /**
@@ -140,15 +140,15 @@ export const TITLEBAR_PERSISTENCE_OFF_NOTICE: TitlebarNotice = {
  * every routine support log is active.
  */
 export const TITLEBAR_DEBUGGING_MODE_NOTICE: TitlebarNotice = {
-  body: "Ghostex is showing debug UI controls. Routine disk logging is controlled by Diagnostic disk logging scenarios in Settings.",
-  icon: "warning",
-  id: "debugging-mode-enabled",
-  settingsTarget: "debuggingMode",
-  title: "Debug mode is on",
+  body: 'Ghostex is showing debug UI controls. Routine disk logging is controlled by Diagnostic disk logging scenarios in Settings.',
+  icon: 'warning',
+  id: 'debugging-mode-enabled',
+  settingsTarget: 'debuggingMode',
+  title: 'Debug mode is on',
 };
 
 export function createTitlebarGhostexCliNotice(
-  ghostexCliStatus: SidebarGhostexCliStatusMessage | undefined,
+  ghostexCliStatus: SidebarGhostexCliStatusMessage | undefined
 ): TitlebarNotice | undefined {
   /**
    * CDXC:CliInstall 2026-06-07-15:26:
@@ -156,31 +156,26 @@ export function createTitlebarGhostexCliNotice(
    * on PATH. Keep the description to three lines or less while naming concrete
    * benefits: terminal commands, mobile attach, and agent integration skills.
    */
-  if (
-    !ghostexCliStatus ||
-    (ghostexCliStatus.installed === true && ghostexCliStatus.gxUsable === true)
-  ) {
+  if (!ghostexCliStatus || (ghostexCliStatus.installed === true && ghostexCliStatus.gxUsable === true)) {
     return undefined;
   }
   return {
-    body: "Install or repair the CLI to use ghostex/gx in any terminal, attach mobile clients, and install Browser/Computer/Orchestration agent skills.",
-    icon: "warning",
-    id: "ghostex-cli-not-accessible",
-    settingsTarget: "ghostexCli",
-    title: "Ghostex CLI is not accessible",
+    body: 'Install or repair the CLI to use ghostex/gx in any terminal, attach mobile clients, and install Browser/Computer/Orchestration agent skills.',
+    icon: 'warning',
+    id: 'ghostex-cli-not-accessible',
+    settingsTarget: 'ghostexCli',
+    title: 'Ghostex CLI is not accessible',
   };
 }
 
 export function createTitlebarMissingAgentHooksNotice(
   resourceGroups: TitlebarResourceGroup[],
-  agentHookStatus: SidebarAgentHookStatusMessage | undefined,
+  agentHookStatus: SidebarAgentHookStatusMessage | undefined
 ): TitlebarNotice | undefined {
   if (!agentHookStatus || agentHookStatus.errorMessage) {
     return undefined;
   }
-  const hookStatusByAgentId = new Map(
-    agentHookStatus.agents.map((status) => [status.agentId, status]),
-  );
+  const hookStatusByAgentId = new Map(agentHookStatus.agents.map((status) => [status.agentId, status]));
   const liveSupportedAgentIds = new Set<string>();
   for (const group of resourceGroups) {
     for (const session of group.sessions) {
@@ -197,14 +192,19 @@ export function createTitlebarMissingAgentHooksNotice(
   const missingAgents = new Map<string, string>();
   const outdatedAgents = new Map<string, string>();
   for (const status of agentHookStatus.agents) {
-    if (!status.cliInstalled || status.status === "installed" || status.status === "notRequired" || status.status === "cliMissing") {
+    if (
+      !status.cliInstalled ||
+      status.status === 'installed' ||
+      status.status === 'notRequired' ||
+      status.status === 'cliMissing'
+    ) {
       continue;
     }
     const agent = getDefaultSidebarAgentById(status.agentId);
     if (!agent) {
       continue;
     }
-    if (status.status === "updateRequired") {
+    if (status.status === 'updateRequired') {
       outdatedAgents.set(agent.agentId, agent.name);
     } else {
       missingAgents.set(agent.agentId, agent.name);
@@ -242,22 +242,22 @@ export function createTitlebarMissingAgentHooksNotice(
   const formattedAgents = formatTitlebarNoticeNameList(agentNames);
   const hasOutdatedHooks = outdatedAgents.size > 0;
   const hasMissingHooks = missingAgents.size > 0;
-  const action = hasOutdatedHooks && hasMissingHooks ? "setup" : hasOutdatedHooks ? "update" : "install";
-  const actionLabel = action === "setup" ? "install or update" : action;
-  const actionVerb = action === "setup" ? "set up" : action === "update" ? "updated" : "installed";
+  const action = hasOutdatedHooks && hasMissingHooks ? 'setup' : hasOutdatedHooks ? 'update' : 'install';
+  const actionLabel = action === 'setup' ? 'install or update' : action;
+  const actionVerb = action === 'setup' ? 'set up' : action === 'update' ? 'updated' : 'installed';
   return {
-    action: "openSettings",
-    body: `Open Settings > Integrations to ${actionLabel} agent hooks for ${formattedAgents}. Automatic session renaming, In Progress/Needs Attention status, and sleeping or resuming agent sessions will not work correctly until hooks are ${action === "setup" ? "installed or updated" : actionVerb}.`,
-    icon: "warning",
-    id: `agent-hooks-${action}-${[...outdatedAgents.keys(), ...missingAgents.keys()].sort().join("-")}`,
-    settingsTarget: "agentHooks",
+    action: 'openSettings',
+    body: `Open Settings > Integrations to ${actionLabel} agent hooks for ${formattedAgents}. Automatic session renaming, In Progress/Needs Attention status, and sleeping or resuming agent sessions will not work correctly until hooks are ${action === 'setup' ? 'installed or updated' : actionVerb}.`,
+    icon: 'warning',
+    id: `agent-hooks-${action}-${[...outdatedAgents.keys(), ...missingAgents.keys()].sort().join('-')}`,
+    settingsTarget: 'agentHooks',
     title: "Warning: Agent hooks aren't installed for agent CLIs",
   };
 }
 
 export function isTitlebarLiveTerminalAgentSession(session: TitlebarResourceSession): boolean {
   return (
-    session.sessionKind === "terminal" &&
+    session.sessionKind === 'terminal' &&
     session.isRunning === true &&
     session.isSleeping !== true &&
     Boolean(session.agentIcon)
@@ -266,10 +266,10 @@ export function isTitlebarLiveTerminalAgentSession(session: TitlebarResourceSess
 
 export function formatTitlebarNoticeNameList(names: string[]): string {
   if (names.length <= 1) {
-    return names[0] ?? "";
+    return names[0] ?? '';
   }
   if (names.length === 2) {
     return `${names[0]} and ${names[1]}`;
   }
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }

@@ -1,4 +1,4 @@
-import type { SidebarSessionTag } from "./session-tags";
+import type { SidebarSessionTag } from './session-tags';
 
 export const GRID_COLUMN_COUNT = 3;
 export const MAX_GROUP_COUNT = 20;
@@ -6,16 +6,16 @@ export const MAX_SESSION_DISPLAY_ID_COUNT = 100;
 export const DEFAULT_AGENT_MANAGER_ZOOM_PERCENT = 100;
 export const MIN_AGENT_MANAGER_ZOOM_PERCENT = 50;
 export const MAX_AGENT_MANAGER_ZOOM_PERCENT = 200;
-export const DEFAULT_MAIN_GROUP_ID = "group-1";
-export const DEFAULT_MAIN_GROUP_TITLE = "Main";
+export const DEFAULT_MAIN_GROUP_ID = 'group-1';
+export const DEFAULT_MAIN_GROUP_TITLE = 'Main';
 
 export type VisibleSessionCount = number;
 
-export type TerminalViewMode = "horizontal" | "vertical" | "grid";
+export type TerminalViewMode = 'horizontal' | 'vertical' | 'grid';
 
-export type SessionGridDirection = "up" | "right" | "down" | "left";
+export type SessionGridDirection = 'up' | 'right' | 'down' | 'left';
 
-export type SessionPaneSplitDirection = "horizontal" | "vertical";
+export type SessionPaneSplitDirection = 'horizontal' | 'vertical';
 
 /**
  * CDXC:NativeSplits 2026-05-10-18:30
@@ -27,23 +27,23 @@ export type SessionPaneSplitDirection = "horizontal" | "vertical";
  */
 export type SessionPaneLayoutNode =
   | {
-      kind: "leaf";
+      kind: 'leaf';
       sessionId: string;
     }
   | {
       activeSessionId?: string;
-      kind: "tabs";
+      kind: 'tabs';
       sessionIds: string[];
     }
   | {
       children: SessionPaneLayoutNode[];
       direction: SessionPaneSplitDirection;
-      kind: "split";
+      kind: 'split';
       ratio?: number;
     };
 
-export type SidebarSessionActivityState = "idle" | "working" | "attention";
-export type SessionLifecycleState = "running" | "done" | "sleeping" | "error";
+export type SidebarSessionActivityState = 'idle' | 'working' | 'attention';
+export type SessionLifecycleState = 'running' | 'done' | 'sleeping' | 'error';
 /**
  * CDXC:SessionTitleSync 2026-04-27-17:45
  * Session titles keep provenance so restart restore can trust real terminal
@@ -56,51 +56,46 @@ export type SessionLifecycleState = "running" | "done" | "sleeping" | "error";
  * titles so browser reloads can refresh page identity without looking like a
  * user rename.
  */
-export type SessionTitleSource =
-  | "browser-auto"
-  | "generated"
-  | "placeholder"
-  | "terminal-auto"
-  | "user";
+export type SessionTitleSource = 'browser-auto' | 'generated' | 'placeholder' | 'terminal-auto' | 'user';
 
 export type SidebarTheme =
-  | "dark-1"
-  | "dark-2"
-  | "plain-dark"
-  | "plain-light"
-  | "dark-green"
-  | "dark-blue"
-  | "dark-red"
-  | "dark-pink"
-  | "dark-orange"
-  | "light-blue"
-  | "light-green"
-  | "light-pink"
-  | "light-orange";
+  | 'dark-1'
+  | 'dark-2'
+  | 'plain-dark'
+  | 'plain-light'
+  | 'dark-green'
+  | 'dark-blue'
+  | 'dark-red'
+  | 'dark-pink'
+  | 'dark-orange'
+  | 'light-blue'
+  | 'light-green'
+  | 'light-pink'
+  | 'light-orange';
 
 export type SidebarThemeSetting =
-  | "auto"
-  | "plain"
-  | "dark-1"
-  | "dark-2"
-  | "plain-light"
-  | "dark-green"
-  | "dark-blue"
-  | "dark-red"
-  | "dark-pink"
-  | "dark-orange"
-  | "light-blue"
-  | "light-green"
-  | "light-pink"
-  | "light-orange";
+  | 'auto'
+  | 'plain'
+  | 'dark-1'
+  | 'dark-2'
+  | 'plain-light'
+  | 'dark-green'
+  | 'dark-blue'
+  | 'dark-red'
+  | 'dark-pink'
+  | 'dark-orange'
+  | 'light-blue'
+  | 'light-green'
+  | 'light-pink'
+  | 'light-orange';
 
-export type SidebarThemeVariant = "light" | "dark";
+export type SidebarThemeVariant = 'light' | 'dark';
 
-export type SessionKind = "browser" | "terminal";
-export type TerminalSurface = "workspace" | "commands";
-export type CommandsPanelMode = "floating" | "pinned";
-export type TerminalEngine = "ghostty-native";
-export type TerminalSessionPersistenceProvider = "tmux" | "zmx" | "zellij";
+export type SessionKind = 'browser' | 'terminal';
+export type TerminalSurface = 'workspace' | 'commands';
+export type CommandsPanelMode = 'floating' | 'pinned';
+export type TerminalEngine = 'ghostty-native';
+export type TerminalSessionPersistenceProvider = 'tmux' | 'zmx' | 'zellij';
 
 export type BrowserSessionMetadata = {
   faviconDataUrl?: string;
@@ -196,7 +191,7 @@ export type TerminalSessionRecord = BaseSessionRecord & {
    * Attention is restored visually; working only wakes the session and is then
    * cleared because the resumed terminal may no longer be active.
    */
-  restoreActivity?: Extract<SidebarSessionActivityState, "attention" | "working">;
+  restoreActivity?: Extract<SidebarSessionActivityState, 'attention' | 'working'>;
   /**
    * CDXC:CommandPanes 2026-05-16-15:08:
    * Command-pane reuse is keyed by the configured action title rather than the
@@ -217,7 +212,7 @@ export type TerminalSessionRecord = BaseSessionRecord & {
    */
   agentSessionId?: string;
   agentSessionPath?: string;
-  kind: "terminal";
+  kind: 'terminal';
   sessionPersistenceName?: string;
   sessionPersistenceProvider?: TerminalSessionPersistenceProvider;
   surface?: TerminalSurface;
@@ -228,7 +223,7 @@ export type TerminalSessionRecord = BaseSessionRecord & {
 
 export type BrowserSessionRecord = BaseSessionRecord & {
   browser: BrowserSessionMetadata;
-  kind: "browser";
+  kind: 'browser';
 };
 
 export type SessionRecord = BrowserSessionRecord | TerminalSessionRecord;
@@ -237,8 +232,8 @@ export type CreateSessionRecordOptions =
   | {
       browser: BrowserSessionMetadata;
       displayId?: string;
-      initialPresentation?: "background" | "focused";
-      kind: "browser";
+      initialPresentation?: 'background' | 'focused';
+      kind: 'browser';
       sessionId?: string;
       title?: string;
       titleSource?: SessionTitleSource;
@@ -252,8 +247,8 @@ export type CreateSessionRecordOptions =
       delayedSendDeadlineAt?: string;
       delayedSendRemainingMs?: number;
       displayId?: string;
-      initialPresentation?: "background" | "focused";
-      kind?: "terminal";
+      initialPresentation?: 'background' | 'focused';
+      kind?: 'terminal';
       sessionId?: string;
       sessionTag?: SidebarSessionTag;
       sessionPersistenceName?: string;
@@ -264,8 +259,7 @@ export type CreateSessionRecordOptions =
       tmuxSessionName?: string;
       title?: string;
       titleSource?: SessionTitleSource;
-    }
-  ;
+    };
 
 export type SessionGridSnapshot = {
   focusedSessionId?: string;

@@ -15,24 +15,39 @@ release_gpui_require_command zstd
 release_gpui_prepare_output "$REPO_ROOT" "$OUTPUT"
 
 if [[ "$(uname -m)" != "x86_64" ]]; then
-  echo "Linux release packaging is x64-only and requires an x86_64 runner." >&2
-  exit 1
+	echo "Linux release packaging is x64-only and requires an x86_64 runner." >&2
+	exit 1
 fi
 
 "$SCRIPT_DIR/prepare-references.sh"
 if [[ ! -x "$REPO_ROOT/build/remote-gxserver-linux/x64/package/bin/gxserver" ]]; then
-  "$REPO_ROOT/tooling/build-remote-gxserver-linux-release.sh" --arch x64
+	"$REPO_ROOT/tooling/build-remote-gxserver-linux-release.sh" --arch x64
 fi
 GHOSTEX_ON_DEMAND_ASSETS=1 \
-GHOSTEX_GPUI_MARKETING_VERSION="$VERSION" \
-  "$REPO_ROOT/gpui/scripts/build-linux-app.sh"
+	GHOSTEX_GPUI_MARKETING_VERSION="$VERSION" \
+	"$REPO_ROOT/gpui/scripts/build-linux-app.sh"
 
 APP_DIR="$REPO_ROOT/gpui/build/linux/Ghostex"
-[[ -x "$APP_DIR/Ghostex" ]] || { echo "Linux build is missing Ghostex" >&2; exit 1; }
-[[ -x "$APP_DIR/ghostex-gpui-runtime" ]] || { echo "Linux build is missing its internal GPUI runtime" >&2; exit 1; }
-[[ ! -e "$APP_DIR/libcef.so" ]] || { echo "Linux release build still bundles libcef.so" >&2; exit 1; }
-[[ -x "$APP_DIR/gxserver/bin/gxserver" ]] || { echo "Linux build is missing bundled gxserver" >&2; exit 1; }
-[[ -x "$APP_DIR/gxserver/bin/ghostex" ]] || { echo "Linux build is missing bundled ghostex CLI" >&2; exit 1; }
+[[ -x "$APP_DIR/Ghostex" ]] || {
+	echo "Linux build is missing Ghostex" >&2
+	exit 1
+}
+[[ -x "$APP_DIR/ghostex-gpui-runtime" ]] || {
+	echo "Linux build is missing its internal GPUI runtime" >&2
+	exit 1
+}
+[[ ! -e "$APP_DIR/libcef.so" ]] || {
+	echo "Linux release build still bundles libcef.so" >&2
+	exit 1
+}
+[[ -x "$APP_DIR/gxserver/bin/gxserver" ]] || {
+	echo "Linux build is missing bundled gxserver" >&2
+	exit 1
+}
+[[ -x "$APP_DIR/gxserver/bin/ghostex" ]] || {
+	echo "Linux build is missing bundled ghostex CLI" >&2
+	exit 1
+}
 ON_DEMAND_MANIFEST="$APP_DIR/resources/on-demand-resources.json"
 CEF_COMPONENT_VERSION="$(node -e '
 const fs = require("node:fs");
@@ -41,23 +56,26 @@ const component = manifest.components?.cef;
 const asset = component?.platforms?.["linux-x64"];
 if (!component?.componentVersion || component.downloadTag !== `cef-${component.componentVersion}` || !/^[0-9a-f]{64}$/.test(asset?.sha256 ?? "")) process.exit(1);
 process.stdout.write(component.componentVersion);
-' "$ON_DEMAND_MANIFEST")" || { echo "Linux release build has an invalid sealed CEF component manifest" >&2; exit 1; }
+' "$ON_DEMAND_MANIFEST")" || {
+	echo "Linux release build has an invalid sealed CEF component manifest" >&2
+	exit 1
+}
 node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
-  --component cef \
-  --version "$CEF_COMPONENT_VERSION" \
-  --asset-dir "$REPO_ROOT/build/on-demand-components/assets" \
-  --output "$REPO_ROOT/build/on-demand-components/components.json"
+	--component cef \
+	--version "$CEF_COMPONENT_VERSION" \
+	--asset-dir "$REPO_ROOT/build/on-demand-components/assets" \
+	--output "$REPO_ROOT/build/on-demand-components/components.json"
 
 PACKAGE_ROOT="$REPO_ROOT/build/release-gpui/linux-package-root"
 rm -rf "$PACKAGE_ROOT"
 mkdir -p \
-  "$PACKAGE_ROOT/opt/ghostex" \
-  "$PACKAGE_ROOT/usr/bin" \
-  "$PACKAGE_ROOT/usr/share/applications" \
-  "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps"
+	"$PACKAGE_ROOT/opt/ghostex" \
+	"$PACKAGE_ROOT/usr/bin" \
+	"$PACKAGE_ROOT/usr/share/applications" \
+	"$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps"
 cp -a "$APP_DIR/." "$PACKAGE_ROOT/opt/ghostex/"
 cp "$REPO_ROOT/gpui/resources/AppIcon.appiconset/icon_256x256.png" \
-  "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/ghostex.png"
+	"$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/ghostex.png"
 cat >"$PACKAGE_ROOT/usr/bin/ghostex" <<'EOF'
 #!/usr/bin/env bash
 exec /opt/ghostex/gxserver/bin/ghostex "$@"
@@ -129,7 +147,10 @@ cp -a %{_builddir}/ghostex-root/. %{buildroot}/
 EOF
 rpmbuild --define "_topdir $RPM_ROOT" -bb "$RPM_ROOT/SPECS/ghostex.spec"
 RPM_BUILT="$(find "$RPM_ROOT/RPMS" -type f -name '*.rpm' -print -quit)"
-[[ -n "$RPM_BUILT" ]] || { echo "rpmbuild produced no RPM" >&2; exit 1; }
+[[ -n "$RPM_BUILT" ]] || {
+	echo "rpmbuild produced no RPM" >&2
+	exit 1
+}
 RPM="$OUTPUT/ghostex-$VERSION-1.x86_64.rpm"
 cp "$RPM_BUILT" "$RPM"
 rpm -qpi "$RPM" >/dev/null
@@ -142,18 +163,18 @@ TARBALL="$OUTPUT/ghostex-${VERSION}-linux-x64.tar.zst"
 TAR_FILE_LIST="$(mktemp)"
 trap 'rm -f "$TAR_FILE_LIST"' EXIT
 (
-  cd "$PACKAGE_ROOT"
-  find . -mindepth 1 -print0 | LC_ALL=C sort -z >"$TAR_FILE_LIST"
-  tar --format=gnu \
-    --owner=0 --group=0 --numeric-owner \
-    --mtime=@946684800 \
-    --no-recursion --null --files-from "$TAR_FILE_LIST" -cf - \
-    | zstd -19 -T0 -q -f -o "$TARBALL" -
+	cd "$PACKAGE_ROOT"
+	find . -mindepth 1 -print0 | LC_ALL=C sort -z >"$TAR_FILE_LIST"
+	tar --format=gnu \
+		--owner=0 --group=0 --numeric-owner \
+		--mtime=@946684800 \
+		--no-recursion --null --files-from "$TAR_FILE_LIST" -cf - |
+		zstd -19 -T0 -q -f -o "$TARBALL" -
 )
 TAR_MEMBERS="$(zstd -dc "$TARBALL" | tar -tf -)"
 if grep -q '^\./DEBIAN' <<<"$TAR_MEMBERS"; then
-  echo "Linux tarball leaked DEBIAN/ control metadata" >&2
-  exit 1
+	echo "Linux tarball leaked DEBIAN/ control metadata" >&2
+	exit 1
 fi
 
 release_gpui_write_manifest "$OUTPUT" linux-x64 "$VERSION" "$DEB" "$RPM" "$TARBALL"

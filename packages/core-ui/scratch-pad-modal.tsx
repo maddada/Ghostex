@@ -1,7 +1,7 @@
-import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from "react";
-import { trimPromptEditorTrailingSpaces } from "../shared/prompt-editor-text";
-import { useSidebarStore } from "./sidebar-store";
+import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from 'react';
+import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
+import { useSidebarStore } from './sidebar-store';
 
 export type ScratchPadModalProps = {
   isOpen: boolean;
@@ -47,15 +47,15 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
       setDraftContent(normalizedContent);
     }
     if (normalizedContent === lastSavedContentRef.current) {
-      postDebug("flushDraft.skipped", {
-        reason: "unchanged",
+      postDebug('flushDraft.skipped', {
+        reason: 'unchanged',
         valueLength: normalizedContent.length,
       });
       return;
     }
 
     lastSavedContentRef.current = normalizedContent;
-    postDebug("flushDraft.saved", {
+    postDebug('flushDraft.saved', {
       valueLength: normalizedContent.length,
     });
     onSave(normalizedContent);
@@ -69,7 +69,7 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
   useEffect(() => {
     if (!isOpen) {
       if (wasOpenRef.current) {
-        postDebug("modal.closed", {
+        postDebug('modal.closed', {
           contentLength: content.length,
           draftLength: draftContent.length,
         });
@@ -84,7 +84,7 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
       setDraftContent(content);
       lastSavedContentRef.current = content;
       wasOpenRef.current = true;
-      postDebug("modal.opened", {
+      postDebug('modal.opened', {
         contentLength: content.length,
       });
     }
@@ -124,7 +124,7 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
   };
 
   const handlePaste = (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-    const pastedText = event.clipboardData.getData("text/plain");
+    const pastedText = event.clipboardData.getData('text/plain');
     const trimmedText = trimPromptEditorTrailingSpaces(pastedText);
     if (!pastedText || trimmedText === pastedText) {
       return;
@@ -139,20 +139,20 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      postDebug("document.keydown", {
+      postDebug('document.keydown', {
         code: event.code,
         key: summarizeScratchPadKey(event),
         target: describeScratchPadElement(event.target),
       });
 
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         closeModal();
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [draftContent, isOpen, onClose, onSave]);
 
@@ -164,20 +164,20 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
     const timeoutId = window.setTimeout(() => {
       const textarea = textareaRef.current;
       if (!textarea) {
-        postDebug("textarea.initialFocusSkipped", {
-          reason: "missingTextarea",
+        postDebug('textarea.initialFocusSkipped', {
+          reason: 'missingTextarea',
         });
         return;
       }
 
-      postDebug("textarea.initialFocus.requested", {
+      postDebug('textarea.initialFocus.requested', {
         textareaMatchesActiveElement: document.activeElement === textarea,
         valueLength: textarea.value.length,
       });
       textarea.focus();
       const selectionIndex = textarea.value.length;
       textarea.setSelectionRange(selectionIndex, selectionIndex);
-      postDebug("textarea.initialFocus.completed", {
+      postDebug('textarea.initialFocus.completed', {
         selectionEnd: textarea.selectionEnd,
         selectionStart: textarea.selectionStart,
         textareaMatchesActiveElement: document.activeElement === textarea,
@@ -196,37 +196,37 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
     }
 
     const handleWindowFocus = () => {
-      postDebug("window.focus");
+      postDebug('window.focus');
     };
     const handleWindowBlur = () => {
-      postDebug("window.blur");
+      postDebug('window.blur');
     };
     const handleVisibilityChange = () => {
-      postDebug("document.visibilityChange");
+      postDebug('document.visibilityChange');
     };
     const handleFocusIn = (event: FocusEvent) => {
-      postDebug("document.focusin", {
+      postDebug('document.focusin', {
         target: describeScratchPadElement(event.target),
       });
     };
     const handleFocusOut = (event: FocusEvent) => {
-      postDebug("document.focusout", {
+      postDebug('document.focusout', {
         relatedTarget: describeScratchPadElement(event.relatedTarget),
         target: describeScratchPadElement(event.target),
       });
     };
 
-    window.addEventListener("focus", handleWindowFocus);
-    window.addEventListener("blur", handleWindowBlur);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    document.addEventListener("focusin", handleFocusIn);
-    document.addEventListener("focusout", handleFocusOut);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
     return () => {
-      window.removeEventListener("focus", handleWindowFocus);
-      window.removeEventListener("blur", handleWindowBlur);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      document.removeEventListener("focusin", handleFocusIn);
-      document.removeEventListener("focusout", handleFocusOut);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
     };
   }, [isOpen, onDebug]);
 
@@ -235,25 +235,25 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
   }
 
   return createPortal(
-    <div className="confirm-modal-root scroll-mask-y" role="presentation">
-      <button className="confirm-modal-backdrop" onClick={closeModal} type="button" />
+    <div className='confirm-modal-root scroll-mask-y' role='presentation'>
+      <button className='confirm-modal-backdrop' onClick={closeModal} type='button' />
       <div
-        aria-labelledby="scratch-pad-modal-title"
-        aria-modal="true"
-        className="confirm-modal scratch-pad-modal scroll-mask-y"
-        role="dialog"
+        aria-labelledby='scratch-pad-modal-title'
+        aria-modal='true'
+        className='confirm-modal scratch-pad-modal scroll-mask-y'
+        role='dialog'
       >
-        <div className="confirm-modal-header">
-          <div className="confirm-modal-title" id="scratch-pad-modal-title">
+        <div className='confirm-modal-header'>
+          <div className='confirm-modal-title' id='scratch-pad-modal-title'>
             Scratch Pad
           </div>
         </div>
-        <div className="scratch-pad-modal-body">
+        <div className='scratch-pad-modal-body'>
           <textarea
-            aria-label="Scratch pad"
-            className="scratch-pad-textarea"
+            aria-label='Scratch pad'
+            className='scratch-pad-textarea'
             onBlur={(event) => {
-              postDebug("textarea.blur", {
+              postDebug('textarea.blur', {
                 relatedTarget: describeScratchPadElement(event.relatedTarget),
                 selectionEnd: event.currentTarget.selectionEnd,
                 selectionStart: event.currentTarget.selectionStart,
@@ -262,7 +262,7 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
               flushDraft();
             }}
             onChange={(event) => {
-              postDebug("textarea.change", {
+              postDebug('textarea.change', {
                 selectionEnd: event.currentTarget.selectionEnd,
                 selectionStart: event.currentTarget.selectionStart,
                 valueLength: event.currentTarget.value.length,
@@ -270,21 +270,21 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
               setDraftContent(event.target.value);
             }}
             onFocus={(event) => {
-              postDebug("textarea.focus", {
+              postDebug('textarea.focus', {
                 selectionEnd: event.currentTarget.selectionEnd,
                 selectionStart: event.currentTarget.selectionStart,
                 valueLength: event.currentTarget.value.length,
               });
             }}
             onInput={(event) => {
-              postDebug("textarea.input", {
+              postDebug('textarea.input', {
                 selectionEnd: event.currentTarget.selectionEnd,
                 selectionStart: event.currentTarget.selectionStart,
                 valueLength: event.currentTarget.value.length,
               });
             }}
             onPaste={handlePaste}
-            placeholder="Workspace notes that autosave as you type."
+            placeholder='Workspace notes that autosave as you type.'
             ref={textareaRef}
             spellCheck={false}
             value={draftContent}
@@ -292,34 +292,28 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }
 
 function describeScratchPadElement(value: EventTarget | Element | null): string {
   if (!(value instanceof Element)) {
-    return value === null ? "null" : "non-element";
+    return value === null ? 'null' : 'non-element';
   }
 
   const tagName = value.tagName.toLowerCase();
-  const role = value.getAttribute("role");
-  const ariaLabel = value.getAttribute("aria-label");
+  const role = value.getAttribute('role');
+  const ariaLabel = value.getAttribute('aria-label');
   const className =
-    typeof value.className === "string"
-      ? value.className
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 3)
-          .join(".")
-      : "";
-  return [tagName, role ? `role=${role}` : "", ariaLabel ? `aria=${ariaLabel}` : "", className]
+    typeof value.className === 'string' ? value.className.split(/\s+/).filter(Boolean).slice(0, 3).join('.') : '';
+  return [tagName, role ? `role=${role}` : '', ariaLabel ? `aria=${ariaLabel}` : '', className]
     .filter(Boolean)
-    .join(" ");
+    .join(' ');
 }
 
 function summarizeScratchPadKey(event: KeyboardEvent): string {
   if (event.key.length === 1) {
-    return "printable";
+    return 'printable';
   }
   return event.key;
 }

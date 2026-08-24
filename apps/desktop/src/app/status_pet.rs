@@ -36,7 +36,10 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 impl GhostexGpuiApp {
-    pub(crate) fn render_gpui_status_pet_presentation(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_gpui_status_pet_presentation(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         /*
         CDXC:GPUIStatusPetOverlay 2026-06-26-05:07:
         Worker 49 added aggregate status activation with exact visible controls and no broad UI, transparent root overlays, hidden hit regions, hit-test reroutes, or Rust-side session materialization fallbacks.
@@ -97,7 +100,10 @@ impl GhostexGpuiApp {
         overlay.into_any_element()
     }
 
-    pub(crate) fn render_gpui_pet_activity_stack(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_gpui_pet_activity_stack(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         let mut stack = v_flex()
             .id("ghostex-gpui-pet-activity-stack")
             .w(px(GPUI_PET_OVERLAY_ACTIVITY_CARD_WIDTH))
@@ -355,7 +361,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    pub(crate) fn toggle_gpui_pet_overlay_activities_visible(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn toggle_gpui_pet_overlay_activities_visible(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUIStatusPetOverlay 2026-06-26-11:17:
         GPUI Pet Overlay avatar clicks toggle only the in-stack card/badge presentation. Activity cards and collapsed status badges own their own activation handlers and stop propagation, so selecting a session/status must not also expand or collapse the avatar stack.
@@ -368,7 +377,11 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn set_gpui_pet_overlay_avatar_hovered(&mut self, hovered: bool, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn set_gpui_pet_overlay_avatar_hovered(
+        &mut self,
+        hovered: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.gpui_pet_overlay_avatar_hovered == hovered {
             return;
         }
@@ -390,7 +403,10 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn refresh_gpui_pet_overlay_animation_state(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn refresh_gpui_pet_overlay_animation_state(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let next_state = gpui_pet_overlay_animation_state_for_surface(
             &self.sidebar_pet_overlay.activities,
             self.gpui_pet_overlay_avatar_hovered,
@@ -404,7 +420,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn ensure_gpui_pet_overlay_animation_ticker(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn ensure_gpui_pet_overlay_animation_ticker(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.gpui_pet_overlay_animation_ticker_active
             || !gpui_pet_overlay_animation_ticker_should_run(
                 self.sidebar_pet_overlay.enabled,
@@ -460,7 +479,10 @@ impl GhostexGpuiApp {
             .show(position, window, cx);
     }
 
-    pub(crate) fn sleep_gpui_pet_overlay_from_context_menu(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn sleep_gpui_pet_overlay_from_context_menu(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
         if settings_snapshot
             .object()

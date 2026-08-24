@@ -3,7 +3,7 @@ type AppModalErrorLogPayload = {
   message: string;
   name?: string;
   stack?: string;
-  type: "logError";
+  type: 'logError';
 };
 
 declare global {
@@ -40,21 +40,21 @@ export function logAppModalError(area: string, error: unknown): void {
      */
     name: error instanceof Error ? error.name : undefined,
     stack: error instanceof Error ? error.stack : undefined,
-    type: "logError",
+    type: 'logError',
   };
 
   try {
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage(payload);
   } catch (loggingError) {
-    console.error("[AppModals] failed to persist modal error", loggingError, payload);
+    console.error('[AppModals] failed to persist modal error', loggingError, payload);
   }
 }
 
 export function installAppModalGlobalErrorLogging(area: string): void {
-  window.addEventListener("error", (event) => {
+  window.addEventListener('error', (event) => {
     logAppModalError(area, event.error ?? event.message);
   });
-  window.addEventListener("unhandledrejection", (event) => {
+  window.addEventListener('unhandledrejection', (event) => {
     logAppModalError(area, event.reason);
   });
 }

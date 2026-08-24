@@ -27,20 +27,20 @@ it. `embeddedLangs` was verified to match each module's static imports exactly
 for every language we stage.
 */
 
-import fs from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-import * as esbuild from "esbuild";
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import * as esbuild from 'esbuild';
 
-import { SESSION_CHAT_CODE_LANGUAGES } from "../packages/core-ui/chat/session-chat-code-languages.ts";
+import { SESSION_CHAT_CODE_LANGUAGES } from '../packages/core-ui/chat/session-chat-code-languages.ts';
 
 /** Directory name the staged scripts live in, relative to the page. */
-export const SHIKI_ASSET_DIR_NAME = "shiki";
-export const SHIKI_CORE_FILE_NAME = "core.js";
-const SHIKI_LANGS_GLOBAL = "__ghostexShikiLangs";
-const SHIKI_CORE_GLOBAL = "__ghostexShikiCore";
+export const SHIKI_ASSET_DIR_NAME = 'shiki';
+export const SHIKI_CORE_FILE_NAME = 'core.js';
+const SHIKI_LANGS_GLOBAL = '__ghostexShikiLangs';
+const SHIKI_CORE_GLOBAL = '__ghostexShikiCore';
 
-const repoRoot = path.resolve(import.meta.dirname, "..");
+const repoRoot = path.resolve(import.meta.dirname, '..');
 
 /** U+2028/2029 are valid in JS string literals but break some inline hosts. */
 function jsStringLiteral(value) {
@@ -48,7 +48,7 @@ function jsStringLiteral(value) {
   // string literals but still break some inline <script> hosts, so escape
   // them explicitly the way the rest of this repo does.
   return JSON.stringify(value).replace(/[\u2028\u2029]/g, (character) =>
-    character === "\u2028" ? "\\u2028" : "\\u2029",
+    character === '\u2028' ? '\\u2028' : '\\u2029'
   );
 }
 
@@ -56,17 +56,17 @@ async function buildClassicScript(contents) {
   const result = await esbuild.build({
     absWorkingDir: repoRoot,
     bundle: true,
-    format: "iife",
-    logLevel: "silent",
+    format: 'iife',
+    logLevel: 'silent',
     minify: true,
-    platform: "browser",
-    stdin: { contents, loader: "ts", resolveDir: repoRoot },
-    target: ["chrome120", "safari16"],
+    platform: 'browser',
+    stdin: { contents, loader: 'ts', resolveDir: repoRoot },
+    target: ['chrome120', 'safari16'],
     write: false,
   });
-  const script = result.outputFiles.find((file) => file.path === "<stdout>");
+  const script = result.outputFiles.find((file) => file.path === '<stdout>');
   if (!script) {
-    throw new Error("esbuild emitted no Shiki classic script.");
+    throw new Error('esbuild emitted no Shiki classic script.');
   }
   return script.text;
 }
@@ -85,17 +85,13 @@ async function collectGrammarClosure() {
     if (grammars.has(language)) {
       continue;
     }
-    const modulePath = path.join(
-      repoRoot,
-      "node_modules/@shikijs/langs/dist",
-      `${language}.mjs`,
-    );
+    const modulePath = path.join(repoRoot, 'node_modules/@shikijs/langs/dist', `${language}.mjs`);
     const module = await import(pathToFileURL(modulePath).href);
     const registrations = module.default;
     // Every @shikijs/langs module ends with its own registration:
     //   export default [...<embedded>, lang]
     const own = registrations[registrations.length - 1];
-    if (!own || typeof own !== "object") {
+    if (!own || typeof own !== 'object') {
       throw new Error(`@shikijs/langs/${language} exported no registration.`);
     }
     const deps = [...(own.embeddedLangs ?? [])];
@@ -122,7 +118,7 @@ export async function writeShikiClassicAssets(outDir) {
       `import dark from "@shikijs/themes/github-dark-default";`,
       `globalThis.${SHIKI_CORE_GLOBAL} = () =>`,
       `  createHighlighterCore({ engine: createOnigurumaEngine(wasm), langs: [], themes: [light, dark] });`,
-    ].join("\n"),
+    ].join('\n')
   );
   fs.writeFileSync(path.join(outDir, SHIKI_CORE_FILE_NAME), coreScript);
 
@@ -226,24 +222,20 @@ export function createSessionChatHighlighterCore() {
  */
 export function shikiClassicScriptEsbuildPlugin() {
   return {
-    name: "ghostex-shiki-classic-scripts",
+    name: 'ghostex-shiki-classic-scripts',
     setup(build) {
-      build.onResolve(
-        { filter: /(^|\/)session-chat-code-grammars(\.ts)?$/ },
-        () => ({ namespace: "ghostex-shiki-classic", path: "grammars" }),
-      );
-      build.onResolve(
-        { filter: /(^|\/)session-chat-shiki-engine(\.ts)?$/ },
-        () => ({ namespace: "ghostex-shiki-classic", path: "engine" }),
-      );
-      build.onLoad(
-        { filter: /.*/, namespace: "ghostex-shiki-classic" },
-        (args) => ({
-          contents:
-            args.path === "grammars" ? GRAMMARS_SHIM_SOURCE : ENGINE_SHIM_SOURCE,
-          loader: "js",
-        }),
-      );
+      build.onResolve({ filter: /(^|\/)session-chat-code-grammars(\.ts)?$/ }, () => ({
+        namespace: 'ghostex-shiki-classic',
+        path: 'grammars',
+      }));
+      build.onResolve({ filter: /(^|\/)session-chat-shiki-engine(\.ts)?$/ }, () => ({
+        namespace: 'ghostex-shiki-classic',
+        path: 'engine',
+      }));
+      build.onLoad({ filter: /.*/, namespace: 'ghostex-shiki-classic' }, (args) => ({
+        contents: args.path === 'grammars' ? GRAMMARS_SHIM_SOURCE : ENGINE_SHIM_SOURCE,
+        loader: 'js',
+      }));
     },
   };
 }

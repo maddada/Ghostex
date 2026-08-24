@@ -2,9 +2,9 @@ import {
   effectiveSidebarV2Settled,
   effectiveSidebarV2Snoozed,
   type SidebarV2LifecycleCapabilities,
-} from "./sidebar-v2-lifecycle";
-import type { SidebarV2ChangeRequestState, SidebarV2Session } from "./sidebar-v2-session";
-import { firstValidTimestampMs, parseTimestampMs } from "./sidebar-v2-status";
+} from './sidebar-v2-lifecycle';
+import type { SidebarV2ChangeRequestState, SidebarV2Session } from './sidebar-v2-session';
+import { firstValidTimestampMs, parseTimestampMs } from './sidebar-v2-status';
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
@@ -26,10 +26,7 @@ callers pass a first-seen ranking built with `reconcileSidebarV2CreationOrder`,
 which is position-stable by construction.
 */
 
-export type SidebarV2SortSession = Pick<
-  SidebarV2Session,
-  "createdAt" | "isPinned" | "sessionId"
->;
+export type SidebarV2SortSession = Pick<SidebarV2Session, 'createdAt' | 'isPinned' | 'sessionId'>;
 
 export type SidebarV2SortOptions = {
   /**
@@ -40,10 +37,7 @@ export type SidebarV2SortOptions = {
   creationRankById?: ReadonlyMap<string, number>;
 };
 
-function resolveCreationRank(
-  session: SidebarV2SortSession,
-  options: SidebarV2SortOptions,
-): number {
+function resolveCreationRank(session: SidebarV2SortSession, options: SidebarV2SortOptions): number {
   if (options.creationRankById) {
     return options.creationRankById.get(session.sessionId) ?? Number.NEGATIVE_INFINITY;
   }
@@ -53,7 +47,7 @@ function resolveCreationRank(
 function compareSidebarV2Inbox(
   left: SidebarV2SortSession,
   right: SidebarV2SortSession,
-  options: SidebarV2SortOptions,
+  options: SidebarV2SortOptions
 ): number {
   // Compared instead of subtracted so an unranked row (-Infinity) cannot
   // produce NaN and silently scramble the whole comparator.
@@ -73,7 +67,7 @@ function compareSidebarV2Inbox(
  */
 export function sortSessionsForSidebarV2<T extends SidebarV2SortSession>(
   sessions: readonly T[],
-  options: SidebarV2SortOptions = {},
+  options: SidebarV2SortOptions = {}
 ): T[] {
   const pinned: T[] = [];
   const rest: T[] = [];
@@ -104,9 +98,7 @@ export function reconcileSidebarV2CreationOrder(input: {
 
 /** Turns a newest-first id list into the rank map `sortSessionsForSidebarV2`
     consumes (higher rank = newer). */
-export function createSidebarV2CreationRankMap(
-  newestFirstSessionIds: readonly string[],
-): Map<string, number> {
+export function createSidebarV2CreationRankMap(newestFirstSessionIds: readonly string[]): Map<string, number> {
   const ranks = new Map<string, number>();
   const total = newestFirstSessionIds.length;
   for (const [index, sessionId] of newestFirstSessionIds.entries()) {
@@ -117,7 +109,7 @@ export function createSidebarV2CreationRankMap(
 
 export type SidebarV2SettledSortSession = Pick<
   SidebarV2Session,
-  "lastInteractionAt" | "sessionId" | "settledAt" | "workingStartedAt"
+  'lastInteractionAt' | 'sessionId' | 'settledAt' | 'workingStartedAt'
 >;
 
 /**
@@ -126,38 +118,25 @@ export type SidebarV2SettledSortSession = Pick<
  * candidate the auto-settle window reads, so a session settled by inactivity
  * does not sort by an unrelated stamp.
  */
-export function resolveSidebarV2SettledTimestampMs(
-  session: SidebarV2SettledSortSession,
-): number | null {
-  return firstValidTimestampMs(
-    session.settledAt,
-    session.lastInteractionAt,
-    session.workingStartedAt,
-  );
+export function resolveSidebarV2SettledTimestampMs(session: SidebarV2SettledSortSession): number | null {
+  return firstValidTimestampMs(session.settledAt, session.lastInteractionAt, session.workingStartedAt);
 }
 
 /** Settled rows are history: they order by when the work ENDED, not by when the
     session was created or last touched. */
-export function sortSettledSessionsForSidebarV2<T extends SidebarV2SettledSortSession>(
-  sessions: readonly T[],
-): T[] {
+export function sortSettledSessionsForSidebarV2<T extends SidebarV2SettledSortSession>(sessions: readonly T[]): T[] {
   return [...sessions].sort((left, right) => {
-    const delta =
-      (resolveSidebarV2SettledTimestampMs(right) ?? 0) -
-      (resolveSidebarV2SettledTimestampMs(left) ?? 0);
+    const delta = (resolveSidebarV2SettledTimestampMs(right) ?? 0) - (resolveSidebarV2SettledTimestampMs(left) ?? 0);
     return delta || left.sessionId.localeCompare(right.sessionId);
   });
 }
 
-export type SidebarV2SnoozedSortSession = Pick<SidebarV2Session, "sessionId" | "snoozedUntil">;
+export type SidebarV2SnoozedSortSession = Pick<SidebarV2Session, 'sessionId' | 'snoozedUntil'>;
 
 /** The snoozed shelf reads as a schedule: soonest wake first. Rows with no
     usable wake time sink to the bottom instead of jumping to the top. */
-export function sortSnoozedSessionsForSidebarV2<T extends SidebarV2SnoozedSortSession>(
-  sessions: readonly T[],
-): T[] {
-  const wakeAtMs = (session: T) =>
-    firstValidTimestampMs(session.snoozedUntil) ?? Number.POSITIVE_INFINITY;
+export function sortSnoozedSessionsForSidebarV2<T extends SidebarV2SnoozedSortSession>(sessions: readonly T[]): T[] {
+  const wakeAtMs = (session: T) => firstValidTimestampMs(session.snoozedUntil) ?? Number.POSITIVE_INFINITY;
   return [...sessions].sort((left, right) => {
     const leftWake = wakeAtMs(left);
     const rightWake = wakeAtMs(right);
@@ -190,7 +169,7 @@ export type SidebarV2PartitionOptions = {
  */
 export function partitionSidebarV2Sessions<T extends SidebarV2Session>(
   sessions: readonly T[],
-  options: SidebarV2PartitionOptions,
+  options: SidebarV2PartitionOptions
 ): SidebarV2Partition<T> {
   const active: T[] = [];
   const settled: T[] = [];
@@ -222,7 +201,7 @@ export function partitionSidebarV2Sessions<T extends SidebarV2Session>(
   };
 }
 
-export type SidebarV2TraversalDirection = "next" | "previous";
+export type SidebarV2TraversalDirection = 'next' | 'previous';
 
 /**
  * Keyboard traversal over the rendered row order. A current id that is not in
@@ -238,14 +217,14 @@ export function resolveAdjacentSidebarV2SessionId<T>(input: {
     return null;
   }
   if (currentSessionId === null) {
-    return direction === "previous" ? (sessionIds.at(-1) ?? null) : (sessionIds[0] ?? null);
+    return direction === 'previous' ? (sessionIds.at(-1) ?? null) : (sessionIds[0] ?? null);
   }
 
   const currentIndex = sessionIds.indexOf(currentSessionId);
   if (currentIndex === -1) {
     return null;
   }
-  if (direction === "previous") {
+  if (direction === 'previous') {
     return currentIndex > 0 ? (sessionIds[currentIndex - 1] ?? null) : null;
   }
   return currentIndex < sessionIds.length - 1 ? (sessionIds[currentIndex + 1] ?? null) : null;

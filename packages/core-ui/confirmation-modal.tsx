@@ -1,5 +1,5 @@
-import { createPortal } from "react-dom";
-import { useEffect } from "react";
+import { createPortal } from 'react-dom';
+import { useEffect } from 'react';
 
 export type ConfirmationModalProps = {
   confirmLabel: string;
@@ -24,14 +24,14 @@ export function ConfirmationModal({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         onCancel();
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, onCancel]);
 
@@ -40,33 +40,33 @@ export function ConfirmationModal({
   }
 
   return createPortal(
-    <div className="confirm-modal-root scroll-mask-y" role="presentation">
-      <button className="confirm-modal-backdrop" onClick={onCancel} type="button" />
+    <div className='confirm-modal-root scroll-mask-y' role='presentation'>
+      <button className='confirm-modal-backdrop' onClick={onCancel} type='button' />
       <div
-        aria-describedby="confirm-modal-description"
-        aria-labelledby="confirm-modal-title"
-        aria-modal="true"
-        className="confirm-modal scroll-mask-y"
-        role="dialog"
+        aria-describedby='confirm-modal-description'
+        aria-labelledby='confirm-modal-title'
+        aria-modal='true'
+        className='confirm-modal scroll-mask-y'
+        role='dialog'
       >
-        <div className="confirm-modal-header">
-          <div className="confirm-modal-title" id="confirm-modal-title">
+        <div className='confirm-modal-header'>
+          <div className='confirm-modal-title' id='confirm-modal-title'>
             {title}
           </div>
-          <div className="confirm-modal-description" id="confirm-modal-description">
+          <div className='confirm-modal-description' id='confirm-modal-description'>
             {description}
           </div>
         </div>
-        <div className="confirm-modal-actions">
-          <button className="secondary confirm-modal-button" onClick={onCancel} type="button">
+        <div className='confirm-modal-actions'>
+          <button className='secondary confirm-modal-button' onClick={onCancel} type='button'>
             Cancel
           </button>
-          <button className="primary confirm-modal-button" onClick={onConfirm} type="button">
+          <button className='primary confirm-modal-button' onClick={onConfirm} type='button'>
             {confirmLabel}
           </button>
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }

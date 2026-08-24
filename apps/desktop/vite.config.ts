@@ -1,43 +1,43 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import * as esbuild from "esbuild";
-import { defineConfig, type Plugin } from "vite";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as esbuild from 'esbuild';
+import { defineConfig, type Plugin } from 'vite';
 import {
   SHIKI_ASSET_DIR_NAME,
   shikiClassicScriptEsbuildPlugin,
   writeShikiClassicAssets,
-} from "../../tooling/shiki-classic-assets.mjs";
+} from '../../tooling/shiki-classic-assets.mjs';
 
-const gpuiRoot = fileURLToPath(new URL(".", import.meta.url));
-const repoRoot = path.resolve(gpuiRoot, "..", "..");
-const sidebarOutDir = path.resolve(gpuiRoot, "dist/sidebar");
+const gpuiRoot = fileURLToPath(new URL('.', import.meta.url));
+const repoRoot = path.resolve(gpuiRoot, '..', '..');
+const sidebarOutDir = path.resolve(gpuiRoot, 'dist/sidebar');
 const cefHtmlEntries = [
-  "index.html",
-  "chat.html",
-  "find.html",
-  "kanban.html",
-  "manage.html",
-  "modal-host.html",
-  "titlebar-host.html",
+  'index.html',
+  'chat.html',
+  'find.html',
+  'kanban.html',
+  'manage.html',
+  'modal-host.html',
+  'titlebar-host.html',
 ] as const;
 /*
  * CDXC:GPUISidebarEntrypoints 2026-06-28-16:18:
  * GPUI CEF entry modules should describe the stable surface they mount, not the historical porting phase. Keep this explicit entry map as the source of truth for the sidebar, Kanban, and Manage bundle inputs so HTML wrappers, Vite output, and packaged resources stay aligned.
  */
 const cefHtmlEntryScripts = {
-  "index.html": path.resolve(gpuiRoot, "sidebar/main.tsx"),
-  "chat.html": path.resolve(gpuiRoot, "sidebar/chat-main.tsx"),
-  "find.html": path.resolve(gpuiRoot, "sidebar/find-main.tsx"),
-  "kanban.html": path.resolve(gpuiRoot, "sidebar/kanban-main.tsx"),
-  "manage.html": path.resolve(gpuiRoot, "sidebar/manage-main.tsx"),
-  "modal-host.html": path.resolve(gpuiRoot, "views/modal-host.tsx"),
-  "titlebar-host.html": path.resolve(gpuiRoot, "views/titlebar-host.tsx"),
+  'index.html': path.resolve(gpuiRoot, 'sidebar/main.tsx'),
+  'chat.html': path.resolve(gpuiRoot, 'sidebar/chat-main.tsx'),
+  'find.html': path.resolve(gpuiRoot, 'sidebar/find-main.tsx'),
+  'kanban.html': path.resolve(gpuiRoot, 'sidebar/kanban-main.tsx'),
+  'manage.html': path.resolve(gpuiRoot, 'sidebar/manage-main.tsx'),
+  'modal-host.html': path.resolve(gpuiRoot, 'views/modal-host.tsx'),
+  'titlebar-host.html': path.resolve(gpuiRoot, 'views/titlebar-host.tsx'),
 } satisfies Record<(typeof cefHtmlEntries)[number], string>;
 
 function inlineCefHtmlAssets(): Plugin {
   return {
-    name: "ghostex-gpui-inline-cef-html-assets",
+    name: 'ghostex-gpui-inline-cef-html-assets',
     async writeBundle(options, bundle) {
       const outDir = options.dir ?? sidebarOutDir;
       /*
@@ -68,30 +68,28 @@ function inlineCefHtmlAssets(): Plugin {
           throw new Error(`Ghostex CEF build did not emit ${htmlPath}.`);
         }
 
-        let html = fs.readFileSync(htmlPath, "utf8");
+        let html = fs.readFileSync(htmlPath, 'utf8');
         for (const cssFileName of collectCefEntryCssFileNames(bundle, [
           cefHtmlEntryScripts[htmlEntry],
           path.resolve(gpuiRoot, htmlEntry),
         ])) {
           const asset = bundle[cssFileName];
-          if (!asset || asset.type !== "asset") {
+          if (!asset || asset.type !== 'asset') {
             throw new Error(`Ghostex CEF build did not emit CSS asset ${cssFileName}.`);
           }
           const styleTag = `<style>\n${inlineStyleContent(String(asset.source))}\n</style>`;
-          const linkPattern = new RegExp(
-            `<link([^>]*?)href="${escapeRegExp(`./${cssFileName}`)}"([^>]*?)>`,
-          );
+          const linkPattern = new RegExp(`<link([^>]*?)href="${escapeRegExp(`./${cssFileName}`)}"([^>]*?)>`);
           html = linkPattern.test(html)
             ? html.replace(linkPattern, () => styleTag)
-            : html.replace("</head>", `${styleTag}\n</head>`);
+            : html.replace('</head>', `${styleTag}\n</head>`);
         }
         const styleTags = collectInlineStyleTags(stripModulePreloadLinks(html));
         const finalHtml = injectInlineStyleTags(
           replaceCefEntryModuleScript(
-            fs.readFileSync(path.join(gpuiRoot, htmlEntry), "utf8"),
-            await buildInlineCefEntryScript(cefHtmlEntryScripts[htmlEntry]),
+            fs.readFileSync(path.join(gpuiRoot, htmlEntry), 'utf8'),
+            await buildInlineCefEntryScript(cefHtmlEntryScripts[htmlEntry])
           ),
-          styleTags,
+          styleTags
         );
 
         fs.writeFileSync(htmlPath, finalHtml);
@@ -111,13 +109,13 @@ function inlineCefHtmlAssets(): Plugin {
  */
 function stageMonacoVs(): Plugin {
   return {
-    name: "ghostex-gpui-stage-monaco-vs",
+    name: 'ghostex-gpui-stage-monaco-vs',
     closeBundle() {
-      const monacoSource = path.join(repoRoot, "node_modules", "monaco-editor", "min", "vs");
-      if (!fs.existsSync(path.join(monacoSource, "loader.js"))) {
+      const monacoSource = path.join(repoRoot, 'node_modules', 'monaco-editor', 'min', 'vs');
+      if (!fs.existsSync(path.join(monacoSource, 'loader.js'))) {
         throw new Error(`monaco-editor min/vs runtime is missing at ${monacoSource}.`);
       }
-      const monacoDest = path.join(sidebarOutDir, "monaco", "vs");
+      const monacoDest = path.join(sidebarOutDir, 'monaco', 'vs');
       fs.rmSync(monacoDest, { force: true, recursive: true });
       fs.cpSync(monacoSource, monacoDest, { recursive: true });
     },
@@ -141,7 +139,7 @@ function stageMonacoVs(): Plugin {
  */
 function stageShikiChatRuntime(): Plugin {
   return {
-    name: "ghostex-gpui-stage-shiki-chat-runtime",
+    name: 'ghostex-gpui-stage-shiki-chat-runtime',
     async closeBundle() {
       await writeShikiClassicAssets(path.join(sidebarOutDir, SHIKI_ASSET_DIR_NAME));
     },
@@ -149,33 +147,31 @@ function stageShikiChatRuntime(): Plugin {
 }
 
 type CefOutputBundleEntry =
-  | { type: "asset"; fileName: string; source: string | Uint8Array }
+  | { type: 'asset'; fileName: string; source: string | Uint8Array }
   | {
       dynamicImports: string[];
       facadeModuleId: string | null;
       fileName: string;
       imports: string[];
       isEntry: boolean;
-      type: "chunk";
+      type: 'chunk';
       viteMetadata?: { importedCss: Set<string> };
     };
 
 function collectCefEntryCssFileNames(
   bundle: Record<string, CefOutputBundleEntry>,
-  entryFacadeModuleIds: readonly string[],
+  entryFacadeModuleIds: readonly string[]
 ): string[] {
   const normalizedEntryFacadeModuleIds = entryFacadeModuleIds.map(normalizeFacadeModuleId);
   const entryChunk = Object.values(bundle).find(
     (entry) =>
-      entry.type === "chunk" &&
+      entry.type === 'chunk' &&
       entry.isEntry &&
       entry.facadeModuleId !== null &&
-      normalizedEntryFacadeModuleIds.includes(normalizeFacadeModuleId(entry.facadeModuleId)),
+      normalizedEntryFacadeModuleIds.includes(normalizeFacadeModuleId(entry.facadeModuleId))
   );
   if (!entryChunk) {
-    throw new Error(
-      `Ghostex CEF build did not emit an entry chunk for ${entryFacadeModuleIds[0]}.`,
-    );
+    throw new Error(`Ghostex CEF build did not emit an entry chunk for ${entryFacadeModuleIds[0]}.`);
   }
   const cssFileNames: string[] = [];
   const visitedChunkFileNames = new Set<string>();
@@ -187,7 +183,7 @@ function collectCefEntryCssFileNames(
     }
     visitedChunkFileNames.add(chunkFileName);
     const chunk = bundle[chunkFileName];
-    if (!chunk || chunk.type !== "chunk") {
+    if (!chunk || chunk.type !== 'chunk') {
       continue;
     }
     for (const cssFileName of chunk.viteMetadata?.importedCss ?? []) {
@@ -202,23 +198,23 @@ function collectCefEntryCssFileNames(
 
 function normalizeFacadeModuleId(moduleId: string): string {
   const normalized = path.normalize(moduleId);
-  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function inlineScriptContent(value: string): string {
-  return value.replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
+  return value.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
 }
 
 function inlineStyleContent(value: string): string {
-  return value.replace(/<\/style/gi, "<\\/style");
+  return value.replace(/<\/style/gi, '<\\/style');
 }
 
 function stripModulePreloadLinks(html: string): string {
-  return html.replace(/^\s*<link\b(?=[^>]*\brel=["']modulepreload["'])[^>]*>\s*$/gim, "");
+  return html.replace(/^\s*<link\b(?=[^>]*\brel=["']modulepreload["'])[^>]*>\s*$/gim, '');
 }
 
 function collectInlineStyleTags(html: string): string[] {
@@ -229,7 +225,7 @@ function injectInlineStyleTags(html: string, styleTags: readonly string[]): stri
   if (styleTags.length === 0) {
     return html;
   }
-  return html.replace("</head>", `${styleTags.join("\n")}\n  </head>`);
+  return html.replace('</head>', `${styleTags.join('\n')}\n  </head>`);
 }
 
 function replaceCefEntryModuleScript(html: string, bundledScript: string): string {
@@ -246,42 +242,42 @@ function replaceCefEntryModuleScript(html: string, bundledScript: string): strin
     return html.replace(existingInlineModuleScript, () => inlineModuleScript);
   }
 
-  throw new Error("Ghostex CEF build did not emit a module script to inline.");
+  throw new Error('Ghostex CEF build did not emit a module script to inline.');
 }
 
 async function buildInlineCefEntryScript(entryPoint: string): Promise<string> {
   const result = await esbuild.build({
     absWorkingDir: repoRoot,
     alias: {
-      "@": repoRoot,
+      '@': repoRoot,
     },
     bundle: true,
     define: {
-      "process.env.NODE_ENV": "\"production\"",
+      'process.env.NODE_ENV': '"production"',
     },
     entryPoints: [entryPoint],
-    format: "esm",
-    jsx: "automatic",
+    format: 'esm',
+    jsx: 'automatic',
     loader: {
-      ".gif": "dataurl",
-      ".jpeg": "dataurl",
-      ".jpg": "dataurl",
-      ".mp3": "dataurl",
-      ".png": "dataurl",
-      ".svg": "text",
-      ".wav": "dataurl",
-      ".webp": "dataurl",
-      ".woff": "dataurl",
-      ".woff2": "dataurl",
+      '.gif': 'dataurl',
+      '.jpeg': 'dataurl',
+      '.jpg': 'dataurl',
+      '.mp3': 'dataurl',
+      '.png': 'dataurl',
+      '.svg': 'text',
+      '.wav': 'dataurl',
+      '.webp': 'dataurl',
+      '.woff': 'dataurl',
+      '.woff2': 'dataurl',
     },
-    logLevel: "silent",
+    logLevel: 'silent',
     minify: true,
-    platform: "browser",
+    platform: 'browser',
     plugins: [createCefSingleFileEsbuildPlugin()],
-    target: ["chrome120"],
+    target: ['chrome120'],
     write: false,
   });
-  const script = result.outputFiles.find((file) => file.path === "<stdout>");
+  const script = result.outputFiles.find((file) => file.path === '<stdout>');
   if (!script) {
     throw new Error(`Ghostex CEF esbuild bundle did not emit ${entryPoint}.`);
   }
@@ -290,15 +286,15 @@ async function buildInlineCefEntryScript(entryPoint: string): Promise<string> {
 
 function createCefSingleFileEsbuildPlugin(): esbuild.Plugin {
   return {
-    name: "ghostex-gpui-cef-single-file",
+    name: 'ghostex-gpui-cef-single-file',
     setup(build) {
       build.onResolve({ filter: /\.css$/ }, (args) => ({
-        namespace: "ghostex-gpui-empty-css",
+        namespace: 'ghostex-gpui-empty-css',
         path: args.path,
       }));
-      build.onLoad({ filter: /.*/, namespace: "ghostex-gpui-empty-css" }, () => ({
-        contents: "",
-        loader: "js",
+      build.onLoad({ filter: /.*/, namespace: 'ghostex-gpui-empty-css' }, () => ({
+        contents: '',
+        loader: 'js',
       }));
       // See stageShikiChatRuntime: CEF pages load the Shiki engine and its
       // grammars as classic scripts from ./shiki, never as ES module chunks.
@@ -306,13 +302,10 @@ function createCefSingleFileEsbuildPlugin(): esbuild.Plugin {
       // before esbuild can inline the highlighter into every chat pane.
       shikiClassicScriptEsbuildPlugin().setup(build);
       build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
-        const contents = await fs.promises.readFile(args.path, "utf8");
+        const contents = await fs.promises.readFile(args.path, 'utf8');
         return {
-          contents: contents.replace(
-            /\s+with\s*\{\s*type\s*:\s*["']text["']\s*\}/g,
-            "",
-          ),
-          loader: args.path.endsWith(".tsx") || args.path.endsWith(".jsx") ? "tsx" : "ts",
+          contents: contents.replace(/\s+with\s*\{\s*type\s*:\s*["']text["']\s*\}/g, ''),
+          loader: args.path.endsWith('.tsx') || args.path.endsWith('.jsx') ? 'tsx' : 'ts',
           resolveDir: path.dirname(args.path),
         };
       });
@@ -321,7 +314,7 @@ function createCefSingleFileEsbuildPlugin(): esbuild.Plugin {
 }
 
 export default defineConfig({
-  base: "./",
+  base: './',
   root: gpuiRoot,
   plugins: [inlineCefHtmlAssets(), stageMonacoVs(), stageShikiChatRuntime()],
   build: {
@@ -333,24 +326,24 @@ export default defineConfig({
        * The GPUI shell resolves the bundled sidebar through Contents/Resources/sidebar/index.html. Keep the Vite HTML entry at the package root so production-style packaging and local development share that single entry URL.
        */
       input: {
-        index: path.resolve(gpuiRoot, "index.html"),
-        chat: path.resolve(gpuiRoot, "chat.html"),
-        find: path.resolve(gpuiRoot, "find.html"),
-        kanban: path.resolve(gpuiRoot, "kanban.html"),
-        manage: path.resolve(gpuiRoot, "manage.html"),
-        modalHost: path.resolve(gpuiRoot, "modal-host.html"),
-        titlebarHost: path.resolve(gpuiRoot, "titlebar-host.html"),
+        index: path.resolve(gpuiRoot, 'index.html'),
+        chat: path.resolve(gpuiRoot, 'chat.html'),
+        find: path.resolve(gpuiRoot, 'find.html'),
+        kanban: path.resolve(gpuiRoot, 'kanban.html'),
+        manage: path.resolve(gpuiRoot, 'manage.html'),
+        modalHost: path.resolve(gpuiRoot, 'modal-host.html'),
+        titlebarHost: path.resolve(gpuiRoot, 'titlebar-host.html'),
       },
     },
   },
   resolve: {
-    dedupe: ["react", "react-dom"],
+    dedupe: ['react', 'react-dom'],
     alias: {
       /*
        * CDXC:GPUISidebarReactImports 2026-06-14-12:06:
        * The GPUI CEF sidebar bundle imports app-owned sidebar and shadcn modules from the repository root. Keep the same @ alias as Storybook and Electron so this app exercises the production React component graph.
        */
-      "@": repoRoot,
+      '@': repoRoot,
     },
   },
   server: {

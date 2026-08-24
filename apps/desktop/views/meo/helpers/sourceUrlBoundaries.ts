@@ -39,7 +39,7 @@ function computeSourceUrlBoundaryDecorations(state: EditorState): DecorationSet 
       if (range.to < node.to) {
         addRange(builder, range.to, node.to);
       }
-    }
+    },
   });
 
   return builder.finish();
@@ -65,5 +65,5 @@ export const sourceUrlBoundaryField = StateField.define<DecorationSet>({
       return decorations;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });

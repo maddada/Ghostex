@@ -5,21 +5,17 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct WorkspacePaneId(pub(crate) u64);
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct WorkspaceSplitId(pub(crate) u64);
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkspaceSplitAxis {
     Horizontal,
     Vertical,
 }
-
 
 impl WorkspaceSplitAxis {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -38,7 +34,6 @@ impl WorkspaceSplitAxis {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkspaceDropZone {
     Center,
@@ -48,20 +43,17 @@ pub(crate) enum WorkspaceDropZone {
     Bottom,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkspaceDropTarget {
     TabStrip(usize),
     PaneBody(WorkspaceDropZone),
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct WorkspaceDropFeedback {
     pub(crate) pane_id: WorkspacePaneId,
     pub(crate) target: WorkspaceDropTarget,
 }
-
 
 #[derive(Clone, Copy)]
 pub(crate) struct WorkspaceCloseFocusBounds {
@@ -71,7 +63,6 @@ pub(crate) struct WorkspaceCloseFocusBounds {
     pub(crate) bottom: f32,
 }
 
-
 pub(crate) struct WorkspaceCloseFocusRect {
     pub(crate) pane_id: WorkspacePaneId,
     pub(crate) bounds: WorkspaceCloseFocusBounds,
@@ -80,7 +71,6 @@ pub(crate) struct WorkspaceCloseFocusRect {
     pub(crate) path: Vec<usize>,
     pub(crate) has_tabs: bool,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct DraggedWorkspaceTab {
@@ -92,7 +82,6 @@ pub(crate) struct DraggedWorkspaceTab {
     pub(crate) agent_icon: Option<&'static str>,
 }
 
-
 pub(crate) struct WorkspaceTabDragPreview {
     pub(crate) title: String,
     pub(crate) presentation_state: TerminalSessionPresentationState,
@@ -100,19 +89,16 @@ pub(crate) struct WorkspaceTabDragPreview {
     pub(crate) agent_icon: Option<&'static str>,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct WorkspaceTab {
     pub(crate) session_id: TerminalSessionId,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct WorkspaceLeaf {
     pub(crate) pane_id: WorkspacePaneId,
     pub(crate) tab_group: WorkspaceTabGroup,
 }
-
 
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -125,14 +111,12 @@ pub(crate) struct WorkspaceSplit {
     pub(crate) second: Box<WorkspaceNode>,
 }
 
-
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) enum WorkspaceNode {
     Split(WorkspaceSplit),
     Leaf(WorkspaceLeaf),
 }
-
 
 pub(crate) fn workspace_terminal_session_mapping_get(
     key: &GpuiWorkspaceTerminalSessionKey,
@@ -146,7 +130,6 @@ pub(crate) fn workspace_terminal_session_mapping_get(
         GpuiWorkspaceTerminalSessionKey::Remote(key) => remote_attach_sessions.get(key).copied(),
     }
 }
-
 
 pub(crate) fn workspace_terminal_session_mapping_insert(
     key: GpuiWorkspaceTerminalSessionKey,
@@ -164,7 +147,6 @@ pub(crate) fn workspace_terminal_session_mapping_insert(
     }
 }
 
-
 pub(crate) fn workspace_terminal_session_mapping_remove(
     key: &GpuiWorkspaceTerminalSessionKey,
     local_workspace_session_mappings: &mut HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
@@ -180,8 +162,10 @@ pub(crate) fn workspace_terminal_session_mapping_remove(
     }
 }
 
-
-pub(crate) fn collect_workspace_leaf_ids(node: &WorkspaceNode, pane_ids: &mut Vec<WorkspacePaneId>) {
+pub(crate) fn collect_workspace_leaf_ids(
+    node: &WorkspaceNode,
+    pane_ids: &mut Vec<WorkspacePaneId>,
+) {
     match node {
         WorkspaceNode::Leaf(leaf) => {
             if !leaf.tab_group.tabs.is_empty() {
@@ -195,8 +179,10 @@ pub(crate) fn collect_workspace_leaf_ids(node: &WorkspaceNode, pane_ids: &mut Ve
     }
 }
 
-
-pub(crate) fn collect_workspace_all_leaf_ids(node: &WorkspaceNode, pane_ids: &mut Vec<WorkspacePaneId>) {
+pub(crate) fn collect_workspace_all_leaf_ids(
+    node: &WorkspaceNode,
+    pane_ids: &mut Vec<WorkspacePaneId>,
+) {
     match node {
         WorkspaceNode::Leaf(leaf) => pane_ids.push(leaf.pane_id),
         WorkspaceNode::Split(split) => {
@@ -206,7 +192,6 @@ pub(crate) fn collect_workspace_all_leaf_ids(node: &WorkspaceNode, pane_ids: &mu
     }
 }
 
-
 pub(crate) fn workspace_empty_root_leaf_id(node: &WorkspaceNode) -> Option<WorkspacePaneId> {
     match node {
         WorkspaceNode::Leaf(leaf) if leaf.tab_group.tabs.is_empty() => Some(leaf.pane_id),
@@ -214,8 +199,10 @@ pub(crate) fn workspace_empty_root_leaf_id(node: &WorkspaceNode) -> Option<Works
     }
 }
 
-
-pub(crate) fn collect_workspace_tabs_in_tree_order(node: &WorkspaceNode, tabs: &mut Vec<WorkspaceTab>) {
+pub(crate) fn collect_workspace_tabs_in_tree_order(
+    node: &WorkspaceNode,
+    tabs: &mut Vec<WorkspaceTab>,
+) {
     match node {
         WorkspaceNode::Leaf(leaf) => tabs.extend(leaf.tab_group.tabs.iter().copied()),
         WorkspaceNode::Split(split) => {
@@ -225,7 +212,6 @@ pub(crate) fn collect_workspace_tabs_in_tree_order(node: &WorkspaceNode, tabs: &
     }
 }
 
-
 pub(crate) fn collect_workspace_tab_count(node: &WorkspaceNode) -> usize {
     match node {
         WorkspaceNode::Leaf(leaf) => leaf.tab_group.tabs.len(),
@@ -234,7 +220,6 @@ pub(crate) fn collect_workspace_tab_count(node: &WorkspaceNode) -> usize {
         }
     }
 }
-
 
 pub(crate) fn rotate_workspace_node_clockwise(node: &mut WorkspaceNode) {
     match node {
@@ -258,15 +243,16 @@ pub(crate) fn rotate_workspace_node_clockwise(node: &mut WorkspaceNode) {
     }
 }
 
-
-pub(crate) fn find_workspace_leaf(node: &WorkspaceNode, pane_id: WorkspacePaneId) -> Option<&WorkspaceLeaf> {
+pub(crate) fn find_workspace_leaf(
+    node: &WorkspaceNode,
+    pane_id: WorkspacePaneId,
+) -> Option<&WorkspaceLeaf> {
     match node {
         WorkspaceNode::Leaf(leaf) => (leaf.pane_id == pane_id).then_some(leaf),
         WorkspaceNode::Split(split) => find_workspace_leaf(&split.first, pane_id)
             .or_else(|| find_workspace_leaf(&split.second, pane_id)),
     }
 }
-
 
 pub(crate) fn find_workspace_leaf_mut(
     node: &mut WorkspaceNode,
@@ -278,7 +264,6 @@ pub(crate) fn find_workspace_leaf_mut(
             .or_else(|| find_workspace_leaf_mut(&mut split.second, pane_id)),
     }
 }
-
 
 pub(crate) fn find_workspace_split(
     node: &WorkspaceNode,
@@ -297,7 +282,6 @@ pub(crate) fn find_workspace_split(
     }
 }
 
-
 pub(crate) fn find_workspace_split_mut(
     node: &mut WorkspaceNode,
     split_id: WorkspaceSplitId,
@@ -315,11 +299,9 @@ pub(crate) fn find_workspace_split_mut(
     }
 }
 
-
 pub(crate) fn workspace_node_contains_pane(node: &WorkspaceNode, pane_id: WorkspacePaneId) -> bool {
     find_workspace_leaf(node, pane_id).is_some()
 }
-
 
 pub(crate) fn first_workspace_leaf_id(node: &WorkspaceNode) -> Option<WorkspacePaneId> {
     match node {
@@ -330,7 +312,6 @@ pub(crate) fn first_workspace_leaf_id(node: &WorkspaceNode) -> Option<WorkspaceP
         }
     }
 }
-
 
 pub(crate) fn workspace_close_focus_replacement_leaf_id(
     node: &WorkspaceNode,
@@ -366,7 +347,6 @@ pub(crate) fn workspace_close_focus_replacement_leaf_id(
     };
     workspace_closest_post_close_focus_rect(focus_candidates, closing_pane).map(|pane| pane.pane_id)
 }
-
 
 pub(crate) fn collect_workspace_close_focus_rects(
     node: &WorkspaceNode,
@@ -425,7 +405,6 @@ pub(crate) fn collect_workspace_close_focus_rects(
     }
 }
 
-
 pub(crate) fn workspace_closing_pane_sibling_branch_candidates<'a>(
     candidates: &[&'a WorkspaceCloseFocusRect],
     closing_pane_path: &[usize],
@@ -444,7 +423,6 @@ pub(crate) fn workspace_closing_pane_sibling_branch_candidates<'a>(
         .collect()
 }
 
-
 pub(crate) fn workspace_closest_post_close_focus_rect<'a>(
     candidates: &[&'a WorkspaceCloseFocusRect],
     closing_pane: &WorkspaceCloseFocusRect,
@@ -461,7 +439,6 @@ pub(crate) fn workspace_closest_post_close_focus_rect<'a>(
         })
         .map(|(_, pane)| *pane)
 }
-
 
 pub(crate) fn workspace_post_close_pane_focus_score(
     closing_pane: &WorkspaceCloseFocusRect,
@@ -497,7 +474,6 @@ pub(crate) fn workspace_post_close_pane_focus_score(
         + center_distance
 }
 
-
 pub(crate) fn workspace_range_gap(start_a: f32, end_a: f32, start_b: f32, end_b: f32) -> f32 {
     if end_a < start_b {
         start_b - end_a
@@ -508,11 +484,14 @@ pub(crate) fn workspace_range_gap(start_a: f32, end_a: f32, start_b: f32, end_b:
     }
 }
 
-
-pub(crate) fn workspace_ranges_intersect(start_a: f32, end_a: f32, start_b: f32, end_b: f32) -> bool {
+pub(crate) fn workspace_ranges_intersect(
+    start_a: f32,
+    end_a: f32,
+    start_b: f32,
+    end_b: f32,
+) -> bool {
     start_a.max(start_b) < end_a.min(end_b)
 }
-
 
 pub(crate) fn insert_workspace_leaf_split(
     node: &mut WorkspaceNode,
@@ -567,8 +546,10 @@ pub(crate) fn insert_workspace_leaf_split(
     }
 }
 
-
-pub(crate) fn collapse_empty_workspace_leaf(node: &mut WorkspaceNode, pane_id: WorkspacePaneId) -> bool {
+pub(crate) fn collapse_empty_workspace_leaf(
+    node: &mut WorkspaceNode,
+    pane_id: WorkspacePaneId,
+) -> bool {
     let mut replacement = None;
     let is_empty = match node {
         WorkspaceNode::Leaf(leaf) => leaf.pane_id == pane_id && leaf.tab_group.tabs.is_empty(),
@@ -590,20 +571,20 @@ pub(crate) fn collapse_empty_workspace_leaf(node: &mut WorkspaceNode, pane_id: W
     }
 }
 
-
 pub(crate) fn take_workspace_node(node: &mut Box<WorkspaceNode>) -> WorkspaceNode {
     let mut replacement = Box::new(workspace_dummy_node());
     std::mem::swap(node, &mut replacement);
     *replacement
 }
 
-
 pub(crate) fn workspace_dummy_node() -> WorkspaceNode {
     workspace_empty_leaf_node(WorkspacePaneId(0))
 }
 
-
-pub(crate) fn workspace_node_is_empty_leaf_for_pane(node: &WorkspaceNode, pane_id: WorkspacePaneId) -> bool {
+pub(crate) fn workspace_node_is_empty_leaf_for_pane(
+    node: &WorkspaceNode,
+    pane_id: WorkspacePaneId,
+) -> bool {
     matches!(
         node,
         WorkspaceNode::Leaf(leaf)
@@ -612,7 +593,6 @@ pub(crate) fn workspace_node_is_empty_leaf_for_pane(node: &WorkspaceNode, pane_i
                 && leaf.tab_group.active_tab == TerminalSessionId(0)
     )
 }
-
 
 pub(crate) fn workspace_leaf_node_from_session_ids(
     pane_id: WorkspacePaneId,
@@ -631,7 +611,6 @@ pub(crate) fn workspace_leaf_node_from_session_ids(
     })
 }
 
-
 pub(crate) fn workspace_empty_leaf_node(pane_id: WorkspacePaneId) -> WorkspaceNode {
     WorkspaceNode::Leaf(WorkspaceLeaf {
         pane_id,
@@ -641,7 +620,6 @@ pub(crate) fn workspace_empty_leaf_node(pane_id: WorkspacePaneId) -> WorkspaceNo
         },
     })
 }
-
 
 pub(crate) fn normalize_workspace_node(
     node: WorkspaceNode,
@@ -694,8 +672,10 @@ pub(crate) fn normalize_workspace_node(
     }
 }
 
-
-pub(crate) fn workspace_node_axis_pane_count(node: &WorkspaceNode, axis: WorkspaceSplitAxis) -> usize {
+pub(crate) fn workspace_node_axis_pane_count(
+    node: &WorkspaceNode,
+    axis: WorkspaceSplitAxis,
+) -> usize {
     match node {
         WorkspaceNode::Leaf(_) => 1,
         WorkspaceNode::Split(split) => {
@@ -709,7 +689,6 @@ pub(crate) fn workspace_node_axis_pane_count(node: &WorkspaceNode, axis: Workspa
         }
     }
 }
-
 
 pub(crate) fn focus_existing_local_workspace_terminal_tab_model(
     workspace: &mut WorkspaceModel,

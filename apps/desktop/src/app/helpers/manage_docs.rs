@@ -2,7 +2,8 @@
 // main.rs (pure move, no logic changes). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
 use std::{
-    collections::HashSet, fs,
+    collections::HashSet,
+    fs,
     io::Read,
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
@@ -11,7 +12,6 @@ use std::{
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Security::Cryptography::{
     BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
@@ -19,9 +19,7 @@ use windows_sys::Win32::Security::Cryptography::{
 
 use anyhow::Result;
 use futures::StreamExt as _;
-use gpui::{
-    Action, AppContext as _, Entity, ParentElement as _, prelude::FluentBuilder as _,
-};
+use gpui::{Action, AppContext as _, Entity, ParentElement as _, prelude::FluentBuilder as _};
 
 use crate::app::helpers::*;
 use crate::*;
@@ -154,7 +152,9 @@ pub(crate) fn register_gpui_terminal_key_event_callback_target(
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn unregister_gpui_terminal_key_event_callback_target(gpui_root_view: *mut std::ffi::c_void) {
+pub(crate) fn unregister_gpui_terminal_key_event_callback_target(
+    gpui_root_view: *mut std::ffi::c_void,
+) {
     GPUI_TERMINAL_KEY_EVENT_CALLBACK_TARGETS.with(|targets| {
         targets.borrow_mut().remove(&(gpui_root_view as usize));
     });
@@ -176,7 +176,9 @@ pub(crate) fn gpui_terminal_key_event_callback_target_for_native_view(
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_first_responder_programmatic_depth(gpui_root_view: *mut std::ffi::c_void) -> u32 {
+pub(crate) fn gpui_first_responder_programmatic_depth(
+    gpui_root_view: *mut std::ffi::c_void,
+) -> u32 {
     GPUI_FIRST_RESPONDER_PROGRAMMATIC_DEPTHS.with(|depths| {
         depths
             .borrow()
@@ -322,7 +324,9 @@ pub(crate) fn gpui_manage_additional_docs_folders_text(
         .unwrap_or_default()
 }
 
-pub(crate) fn gpui_global_docs_directory_text(settings: &cef::SidebarRuntimeSettingsSnapshot) -> String {
+pub(crate) fn gpui_global_docs_directory_text(
+    settings: &cef::SidebarRuntimeSettingsSnapshot,
+) -> String {
     serde_json::from_str::<serde_json::Value>(&settings.saved_settings_json)
         .ok()
         .and_then(|value| {
@@ -778,7 +782,9 @@ project-root-relative again, the meaning it had before a custom root existed:
 instead; with additive mounting that is no longer coherent, because the mounted
 Docs directory always shows its whole tree.
 */
-pub(crate) fn manage_docs_scan_root_relative_paths(additional_docs_folders_text: &str) -> Vec<String> {
+pub(crate) fn manage_docs_scan_root_relative_paths(
+    additional_docs_folders_text: &str,
+) -> Vec<String> {
     let mut roots = MANAGE_BUILT_IN_DOCS_RELATIVE_PATHS
         .iter()
         .map(|path| (*path).to_string())
@@ -799,7 +805,10 @@ pub(crate) fn manage_path_is_in_docs_scan_root(
         .any(|root| relative_path == root || relative_path.starts_with(&format!("{root}/")))
 }
 
-pub(crate) fn manage_path_is_docs_scan_root(relative_path: &str, additional_docs_folders_text: &str) -> bool {
+pub(crate) fn manage_path_is_docs_scan_root(
+    relative_path: &str,
+    additional_docs_folders_text: &str,
+) -> bool {
     manage_docs_scan_root_relative_paths(additional_docs_folders_text)
         .iter()
         .any(|root| relative_path == root)
@@ -1035,7 +1044,9 @@ pub(crate) struct ManageDocsExtraMount {
 /// The project's own Docs directory, or `None` when it stores none. An
 /// unreadable project row is an error, never "no override": answering "no
 /// override" would silently point Docs at the wrong folder.
-pub(crate) fn manage_project_docs_directory(project_id: Option<&str>) -> Result<Option<String>, String> {
+pub(crate) fn manage_project_docs_directory(
+    project_id: Option<&str>,
+) -> Result<Option<String>, String> {
     let Some(project_id) = gpui_trimmed_nonempty_str(project_id) else {
         return Ok(None);
     };
@@ -1241,7 +1252,10 @@ mounted entry carries the name the tree shows it under beside the routing
 address it answers to, so the reserved segment never reaches Copy Path or text
 pasted into a terminal.
 */
-pub(crate) fn manage_name_docs_extra_root_tree_entries(tree: &mut [serde_json::Value], mount_name: &str) {
+pub(crate) fn manage_name_docs_extra_root_tree_entries(
+    tree: &mut [serde_json::Value],
+    mount_name: &str,
+) {
     for entry in tree {
         let Some(relative_path) = entry
             .get("path")
@@ -1263,7 +1277,10 @@ pub(crate) fn manage_name_docs_extra_root_tree_entries(tree: &mut [serde_json::V
 /// The mount still shows when its folder does not, carrying the reason in the
 /// only field the Docs tree renders. A missing vault must look missing, not
 /// look empty.
-pub(crate) fn manage_unavailable_docs_extra_root_entry(name: &str, error: &str) -> serde_json::Value {
+pub(crate) fn manage_unavailable_docs_extra_root_entry(
+    name: &str,
+    error: &str,
+) -> serde_json::Value {
     serde_json::json!({
         "depth": 0,
         "kind": "directory",
@@ -1973,7 +1990,11 @@ pub(crate) fn manage_renderable_git_baseline(
     })
 }
 
-pub(crate) fn manage_git_baseline_payload(root: &Path, file: &Path, relative_path: &str) -> serde_json::Value {
+pub(crate) fn manage_git_baseline_payload(
+    root: &Path,
+    file: &Path,
+    relative_path: &str,
+) -> serde_json::Value {
     /*
     macOS `manageGitBaselinePayload` parity for meo's CodeMirror Git gutter:
     resolve the repo from the file's parent, reject repos outside the active
@@ -2164,4 +2185,3 @@ pub(crate) fn system_time_epoch_millis_string(time: std::time::SystemTime) -> St
         .map(|duration| duration.as_millis().to_string())
         .unwrap_or_else(|_| "0".to_string())
 }
-

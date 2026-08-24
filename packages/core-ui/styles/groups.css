@@ -29,11 +29,11 @@
   width: calc(100% - var(--sidebar-session-column-offset));
 }
 
-.group[data-collapsed="false"] {
+.group[data-collapsed='false'] {
   margin-bottom: var(--sidebar-section-expanded-spacing);
 }
 
-.group[data-project-group="true"][data-collapsed="false"] {
+.group[data-project-group='true'][data-collapsed='false'] {
   /*
    * CDXC:ProjectGroups 2026-05-15-14:33:
    * Project groups no longer render sidebar Code editor rows or project-header
@@ -43,11 +43,11 @@
   gap: calc(5px * var(--sidebar-density-scale));
 }
 
-.group[data-dragging="true"] {
+.group[data-dragging='true'] {
   opacity: 0.72;
 }
 
-.group[data-project-group="true"][data-dragging="true"] {
+.group[data-project-group='true'][data-dragging='true'] {
   /*
    * CDXC:ProjectDragPreview 2026-05-21-11:45:
    * During project reorder, the original project row should remain visible at
@@ -87,11 +87,7 @@
    * fixed positioning and a backing surface; padding stays at zero so the
    * nested .group-head lands exactly on the measured header rect.
    */
-  background: color-mix(
-    in srgb,
-    var(--workspace-project-theme-color, var(--app-foreground)) 8%,
-    var(--app-background)
-  );
+  background: color-mix(in srgb, var(--workspace-project-theme-color, var(--app-foreground)) 8%, var(--app-background));
   border: none;
   border-radius: 0;
   box-shadow: 0 6px 16px color-mix(in srgb, #000000 18%, transparent);
@@ -126,14 +122,13 @@
  * the measured header rect, so neutralize both at higher specificity to keep
  * its placement and width identical to the original header.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"].project-drag-ghost {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'].project-drag-ghost {
   border: none;
   margin: 0;
 }
 
-.group[data-project-group="true"]::before,
-.group[data-project-group="true"]::after {
+.group[data-project-group='true']::before,
+.group[data-project-group='true']::after {
   /*
    * CDXC:ProjectReorder 2026-05-18-20:39:
    * Project drag reorder needs a dim drop line that marks the exact insertion
@@ -150,7 +145,7 @@
    */
   background: #c8cdd5;
   border-radius: 0;
-  content: "";
+  content: '';
   height: 2px;
   left: calc(6px * var(--sidebar-density-scale));
   opacity: 0;
@@ -160,27 +155,27 @@
   z-index: 8;
 }
 
-.group[data-project-group="true"][data-group-drop-position="before"]::before {
+.group[data-project-group='true'][data-group-drop-position='before']::before {
   opacity: 0.72;
   top: calc(-9px * var(--sidebar-density-scale));
 }
 
-.group[data-project-group="true"][data-group-drop-position="after"]::after {
+.group[data-project-group='true'][data-group-drop-position='after']::after {
   bottom: calc(-9px * var(--sidebar-density-scale));
   opacity: 0.72;
 }
 
-.group[data-active="true"] {
+.group[data-active='true'] {
   background: transparent;
   box-shadow: none;
 }
 
-.group[data-drop-target="true"] {
+.group[data-drop-target='true'] {
   border-color: transparent;
   box-shadow: none;
 }
 
-.group:has(.session[data-drop-target="true"]) {
+.group:has(.session[data-drop-target='true']) {
   border-color: transparent;
   box-shadow: none;
 }
@@ -196,8 +191,7 @@
   margin-left: 0;
   margin-right: 0;
   min-width: 0;
-  padding: calc(2px * var(--sidebar-density-scale)) 0
-    calc(2px * var(--sidebar-density-scale)) 6px;
+  padding: calc(2px * var(--sidebar-density-scale)) 0 calc(2px * var(--sidebar-density-scale)) 6px;
   position: relative;
   transition: background-color 120ms ease;
   z-index: 4;
@@ -205,14 +199,14 @@
 
 .group-head::before {
   border-radius: 0;
-  content: "";
+  content: '';
   inset: 0;
   pointer-events: none;
   position: absolute;
   transition: background-color 120ms ease;
 }
 
-.native-sidebar-shell[data-sidebar-mode="combined"] .group-head {
+.native-sidebar-shell[data-sidebar-mode='combined'] .group-head {
   /*
    * CDXC:SidebarHover 2026-05-04-09:12
    * Combined group headers should keep compact left padding before the project
@@ -220,9 +214,7 @@
    * last inset made the hover surface too narrow; show one more pixel on the
    * right so the plus button has visible surface behind its border.
    */
-  margin-right: calc(
-    -1 * ((var(--sidebar-session-column-offset) / 2) + var(--sidebar-group-inline-padding)) + 5px
-  );
+  margin-right: calc(-1 * ((var(--sidebar-session-column-offset) / 2) + var(--sidebar-group-inline-padding)) + 5px);
 }
 
 .group-head:hover,
@@ -243,7 +235,7 @@
    collection must be obvious because top-level actions target that active
    project context. Draw the highlight around the header itself, including
    collapsed empty project selectors. */
-.group[data-active="true"] .group-head::before {
+.group[data-active='true'] .group-head::before {
   background: color-mix(in srgb, var(--app-button-background) 10%, transparent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--app-button-background) 62%, var(--app-border)),
@@ -256,8 +248,8 @@
  * fills while idle. Preserve hover/focus affordances, but let the gradient
  * remain visible behind active headers when the pointer is not on them.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-active="true"]:not(:has(.group-session-connector-button:hover)):not(
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-active='true']:not(:has(.group-session-connector-button:hover)):not(
     :has(.group-session-connector-button:focus-visible)
   )
   .group-head:not(:hover):not(:has(:focus-visible))::before {
@@ -268,29 +260,23 @@
 /* CDXC:WorkspaceTheme 2026-05-05-02:58: Custom workspace theme colors tint
    Combined-mode project headers only. The synthetic Chats group keeps its
    normal chat styling because it has no project theme color. */
-.group[data-workspace-custom-theme="true"] .group-head:hover::before,
-.group[data-workspace-custom-theme="true"] .group-head:has(:focus-visible)::before,
-.group[data-workspace-custom-theme="true"]:has(.group-session-connector-button:hover)
-  .group-head::before,
-.group[data-workspace-custom-theme="true"]:has(.group-session-connector-button:focus-visible)
-  .group-head::before {
+.group[data-workspace-custom-theme='true'] .group-head:hover::before,
+.group[data-workspace-custom-theme='true'] .group-head:has(:focus-visible)::before,
+.group[data-workspace-custom-theme='true']:has(.group-session-connector-button:hover) .group-head::before,
+.group[data-workspace-custom-theme='true']:has(.group-session-connector-button:focus-visible) .group-head::before {
   background: color-mix(in srgb, var(--workspace-project-theme-color) 12%, transparent);
 }
 
-.group[data-workspace-custom-theme="true"] .group-collapse-button,
-.group[data-workspace-custom-theme="true"] .group-title {
-  color: color-mix(
-    in srgb,
-    var(--workspace-project-theme-color) 74%,
-    var(--app-foreground) 26%
-  );
+.group[data-workspace-custom-theme='true'] .group-collapse-button,
+.group[data-workspace-custom-theme='true'] .group-title {
+  color: color-mix(in srgb, var(--workspace-project-theme-color) 74%, var(--app-foreground) 26%);
 }
 
-.group[data-session-connector="true"][data-collapsed="false"] .group-head::after {
+.group[data-session-connector='true'][data-collapsed='false'] .group-head::after {
   background: #444c56;
   border-radius: 0;
   bottom: calc(-12px * var(--sidebar-density-scale));
-  content: "";
+  content: '';
   left: calc(8px * var(--sidebar-density-scale));
   pointer-events: none;
   position: absolute;
@@ -304,7 +290,7 @@
   width: 2px;
 }
 
-.group-head[data-collapsible="true"] {
+.group-head[data-collapsible='true'] {
   cursor: pointer;
 }
 
@@ -315,13 +301,13 @@
  * should keep the default cursor. Visual row hover states carry affordance
  * without showing the hand pointer over project names or header chrome.
  */
-.group[data-project-group="true"],
-.group[data-project-group="true"] .group-head,
-.group[data-project-group="true"] .group-title-wrap,
-.group[data-project-group="true"] .group-title-row,
-.group[data-project-group="true"] .group-title-handle,
-.group[data-project-group="true"] .group-title-button,
-.group[data-project-group="true"] .group-collapse-button {
+.group[data-project-group='true'],
+.group[data-project-group='true'] .group-head,
+.group[data-project-group='true'] .group-title-wrap,
+.group[data-project-group='true'] .group-title-row,
+.group[data-project-group='true'] .group-title-handle,
+.group[data-project-group='true'] .group-title-button,
+.group[data-project-group='true'] .group-collapse-button {
   cursor: default !important;
 }
 
@@ -361,11 +347,11 @@
   outline: none;
 }
 
-.group-collapse-button[data-collapsed="false"] {
+.group-collapse-button[data-collapsed='false'] {
   --section-titlebar-toggle-rotation: 90deg;
 }
 
-.group-collapse-button[data-static-icon="true"][aria-disabled="true"] {
+.group-collapse-button[data-static-icon='true'][aria-disabled='true'] {
   cursor: default;
 }
 
@@ -380,33 +366,29 @@
   justify-content: center;
 }
 
-.group-head:hover
-  .group-collapse-button[data-has-idle-icon="true"]
-  .section-titlebar-toggle-chevron-icon,
+.group-head:hover .group-collapse-button[data-has-idle-icon='true'] .section-titlebar-toggle-chevron-icon,
 .group-head:has(.group-collapse-button:focus-visible)
-  .group-collapse-button[data-has-idle-icon="true"]
+  .group-collapse-button[data-has-idle-icon='true']
   .section-titlebar-toggle-chevron-icon,
 .group:has(.group-session-connector-button:hover)
-  .group-collapse-button[data-has-idle-icon="true"]
+  .group-collapse-button[data-has-idle-icon='true']
   .section-titlebar-toggle-chevron-icon,
 .group:has(.group-session-connector-button:focus-visible)
-  .group-collapse-button[data-has-idle-icon="true"]
+  .group-collapse-button[data-has-idle-icon='true']
   .section-titlebar-toggle-chevron-icon {
   opacity: 1;
   transform: rotate(var(--section-titlebar-toggle-rotation)) scale(1);
 }
 
-.group-head:hover
-  .group-collapse-button[data-has-idle-icon="true"]
-  .section-titlebar-toggle-idle-icon,
+.group-head:hover .group-collapse-button[data-has-idle-icon='true'] .section-titlebar-toggle-idle-icon,
 .group-head:has(.group-collapse-button:focus-visible)
-  .group-collapse-button[data-has-idle-icon="true"]
+  .group-collapse-button[data-has-idle-icon='true']
   .section-titlebar-toggle-idle-icon,
 .group:has(.group-session-connector-button:hover)
-  .group-collapse-button[data-has-idle-icon="true"]
+  .group-collapse-button[data-has-idle-icon='true']
   .section-titlebar-toggle-idle-icon,
 .group:has(.group-session-connector-button:focus-visible)
-  .group-collapse-button[data-has-idle-icon="true"]
+  .group-collapse-button[data-has-idle-icon='true']
   .section-titlebar-toggle-idle-icon {
   opacity: 0;
   transform: scale(0.72);
@@ -424,16 +406,16 @@
   max-width: min(100%, 250px);
 }
 
-.group-title-handle[data-draggable="true"] {
+.group-title-handle[data-draggable='true'] {
   cursor: grab;
 }
 
-.group-title-handle[data-draggable="true"]:active {
+.group-title-handle[data-draggable='true']:active {
   cursor: grabbing;
 }
 
-.group[data-project-group="true"] .group-title-handle[data-draggable="true"],
-.group[data-project-group="true"] .group-title-handle[data-draggable="true"]:active {
+.group[data-project-group='true'] .group-title-handle[data-draggable='true'],
+.group[data-project-group='true'] .group-title-handle[data-draggable='true']:active {
   /*
    * CDXC:ProjectDragPreview 2026-05-21-11:57:
    * Project headers are still draggable, but dragging should not replace the
@@ -467,7 +449,7 @@
  * favicon chain; classic project rows reuse it here so both sidebar modes show
  * the same image, typed glyph, worktree, or folder state.
  */
-.group[data-project-group="true"] .sidebar-v2-project-icon {
+.group[data-project-group='true'] .sidebar-v2-project-icon {
   border-radius: 5px;
   color: color-mix(in srgb, var(--app-muted) 65%, transparent);
   flex: none;
@@ -476,23 +458,22 @@
   width: 16px;
 }
 
-.group[data-project-group="true"]
-  .sidebar-v2-project-icon[data-icon-variant="tabler"] {
+.group[data-project-group='true'] .sidebar-v2-project-icon[data-icon-variant='tabler'] {
   align-items: center;
   display: inline-flex;
   justify-content: center;
 }
 
-.group[data-project-path-state="missing"] .group-project-terminal-button,
-.group[data-project-path-state="notDirectory"] .group-project-terminal-button,
-.group[data-project-path-state="unavailable"] .group-project-terminal-button,
-.group[data-project-path-state="missing"] .group-agent-split-button,
-.group[data-project-path-state="notDirectory"] .group-agent-split-button,
-.group[data-project-path-state="unavailable"] .group-agent-split-button {
+.group[data-project-path-state='missing'] .group-project-terminal-button,
+.group[data-project-path-state='notDirectory'] .group-project-terminal-button,
+.group[data-project-path-state='unavailable'] .group-project-terminal-button,
+.group[data-project-path-state='missing'] .group-agent-split-button,
+.group[data-project-path-state='notDirectory'] .group-agent-split-button,
+.group[data-project-path-state='unavailable'] .group-agent-split-button {
   opacity: 0.5;
 }
 
-.group[data-project-group="true"] .group-title-handle {
+.group[data-project-group='true'] .group-title-handle {
   /*
    * CDXC:ProjectHeaders 2026-05-21-01:08:
    * Project header actions should align to the right edge of the header surface.
@@ -504,9 +485,7 @@
   max-width: 100%;
 }
 
-.group[data-project-group="true"]
-  .group-title-row[data-project-leading-icon="false"]
-  .group-title-handle {
+.group[data-project-group='true'] .group-title-row[data-project-leading-icon='false'] .group-title-handle {
   /*
    * CDXC:ProjectHeaders 2026-06-29-21:04:
    * Project and worktree rows no longer show a leading folder or branch glyph,
@@ -516,25 +495,25 @@
   margin-left: 0;
 }
 
-.group[data-project-group="true"] .group-title-row {
+.group[data-project-group='true'] .group-title-row {
   gap: 0;
 }
 
-.group[data-project-group="true"] .group-title-button {
+.group[data-project-group='true'] .group-title-button {
   flex: 0 1 auto;
   width: auto;
 }
 
-.group[data-project-group="true"] .group-title-spacer {
+.group[data-project-group='true'] .group-title-spacer {
   display: none;
 }
 
-.group[data-project-group="true"] .group-header-actions {
+.group[data-project-group='true'] .group-header-actions {
   transition: none;
 }
 
-.group[data-project-group="true"] .group-add-button,
-.group[data-project-group="true"] .group-agent-split-button {
+.group[data-project-group='true'] .group-add-button,
+.group[data-project-group='true'] .group-agent-split-button {
   transition: none;
 }
 
@@ -581,7 +560,7 @@
   white-space: nowrap;
 }
 
-.group[data-project-group="true"][data-active="true"] .group-project-diff-stats {
+.group[data-project-group='true'][data-active='true'] .group-project-diff-stats {
   /*
    * CDXC:ProjectDiffStats 2026-06-09-17:10:
    * The active project's header git stats must read brighter than non-active
@@ -591,15 +570,12 @@
   opacity: 0.72;
 }
 
-.group-title-row:has(.group-project-diff-stats)
-  .group-header-actions:not([data-open="true"]) {
+.group-title-row:has(.group-project-diff-stats) .group-header-actions:not([data-open='true']) {
   display: none;
 }
 
 .group-head:hover .group-title-row:has(.group-project-diff-stats) .group-header-actions,
-.group-head:has(:focus-visible)
-  .group-title-row:has(.group-project-diff-stats)
-  .group-header-actions {
+.group-head:has(:focus-visible) .group-title-row:has(.group-project-diff-stats) .group-header-actions {
   display: inline-flex;
 }
 
@@ -622,21 +598,18 @@
 
 .group-head:hover .group-project-diff-stats,
 .group-head:has(:focus-visible) .group-project-diff-stats,
-.group-title-row:has(.group-header-actions[data-open="true"]) .group-project-diff-stats {
+.group-title-row:has(.group-header-actions[data-open='true']) .group-project-diff-stats {
   display: none;
   opacity: 0;
   visibility: hidden;
 }
 
-.group-title-row:has(.group-collapsed-status-counts)
-  .group-header-actions:not([data-open="true"]) {
+.group-title-row:has(.group-collapsed-status-counts) .group-header-actions:not([data-open='true']) {
   display: none;
 }
 
 .group-head:hover .group-title-row:has(.group-collapsed-status-counts) .group-header-actions,
-.group-head:has(:focus-visible)
-  .group-title-row:has(.group-collapsed-status-counts)
-  .group-header-actions {
+.group-head:has(:focus-visible) .group-title-row:has(.group-collapsed-status-counts) .group-header-actions {
   display: inline-flex;
 }
 
@@ -663,12 +636,12 @@
   color: var(--app-foreground);
 }
 
-.group-title-button[data-disabled="true"] {
+.group-title-button[data-disabled='true'] {
   cursor: default;
 }
 
-.group-title-button[data-disabled="true"]:hover .group-title,
-.group-title-button[data-disabled="true"]:focus-visible .group-title {
+.group-title-button[data-disabled='true']:hover .group-title,
+.group-title-button[data-disabled='true']:focus-visible .group-title {
   color: inherit;
 }
 
@@ -769,8 +742,8 @@
 .group-agent-split-button:hover .group-agent-toggle-button,
 .group-agent-split-button:focus-within .group-agent-main-button,
 .group-agent-split-button:focus-within .group-agent-toggle-button,
-.group-agent-split-button[data-open="true"] .group-agent-main-button,
-.group-agent-split-button[data-open="true"] .group-agent-toggle-button {
+.group-agent-split-button[data-open='true'] .group-agent-main-button,
+.group-agent-split-button[data-open='true'] .group-agent-toggle-button {
   /*
    * CDXC:ProjectAgents 2026-05-10-14:18
    * The agent launcher and chevron are one split button. Hover, focus, and
@@ -806,7 +779,7 @@
   width: 100%;
 }
 
-.group-control-menu-item[data-selected="true"] {
+.group-control-menu-item[data-selected='true'] {
   background: color-mix(in srgb, var(--app-button-background) 20%, transparent);
   color: color-mix(in srgb, var(--app-button-background) 78%, var(--app-foreground) 22%);
 }
@@ -819,7 +792,7 @@
   justify-content: flex-start;
 }
 
-.group-agent-menu-item[data-selected="true"],
+.group-agent-menu-item[data-selected='true'],
 .group-agent-menu-item:hover,
 .group-agent-menu-item:focus-visible {
   /*
@@ -831,7 +804,7 @@
   background: var(--app-context-menu-hover-background, #202020);
 }
 
-.group-agent-menu-item[data-selected="true"] {
+.group-agent-menu-item[data-selected='true'] {
   /*
    * CDXC:ProjectAgents 2026-05-10-14:18
    * Keep the selected row neutral; its brighter semibold label communicates
@@ -849,7 +822,7 @@
   white-space: nowrap;
 }
 
-.group-agent-menu-item[data-selected="true"] .group-agent-menu-label {
+.group-agent-menu-item[data-selected='true'] .group-agent-menu-label {
   color: var(--app-foreground);
   font-weight: 600;
 }
@@ -914,12 +887,12 @@
   translate: 0 0;
 }
 
-.group-collapsed-summary[data-activity="working"] .session-status-dot {
+.group-collapsed-summary[data-activity='working'] .session-status-dot {
   --session-status-dot-color: #ffb454;
   animation: session-status-dot-pulse 1.35s ease-in-out infinite;
 }
 
-.group-collapsed-summary[data-activity="attention"] .session-status-dot {
+.group-collapsed-summary[data-activity='attention'] .session-status-dot {
   --session-status-dot-color: var(--attention-dot);
 }
 
@@ -977,25 +950,25 @@
   background: currentColor;
   border-radius: 999px;
   box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
-  content: "";
+  content: '';
   display: block;
   flex: none;
   height: calc(6px * var(--sidebar-density-scale));
   width: calc(6px * var(--sidebar-density-scale));
 }
 
-.group-collapsed-status-count[data-activity="working"] {
+.group-collapsed-status-count[data-activity='working'] {
   color: var(--project-status-working-color);
 }
 
-.group-collapsed-status-count[data-activity="awake"] {
+.group-collapsed-status-count[data-activity='awake'] {
   color: var(--project-status-awake-color);
   opacity: 0.7;
 }
 
 .group-head:hover .group-collapsed-status-counts,
 .group-head:has(:focus-visible) .group-collapsed-status-counts,
-.group-title-row:has(.group-header-actions[data-open="true"]) .group-collapsed-status-counts {
+.group-title-row:has(.group-header-actions[data-open='true']) .group-collapsed-status-counts {
   display: none;
   gap: 0;
   margin-left: 0;
@@ -1075,18 +1048,18 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-button-background) 24%, transparent);
 }
 
-.group[data-active="true"] .group-title {
+.group[data-active='true'] .group-title {
   color: var(--app-foreground);
 }
 
-.group[data-collapsed="true"] {
+.group[data-collapsed='true'] {
   cursor: default;
   gap: calc((10px * var(--sidebar-density-scale)) + 3px);
   padding-bottom: 0;
   padding-top: 0;
 }
 
-.group[data-empty-project="true"] {
+.group[data-empty-project='true'] {
   /*
    * CDXC:SidebarMode 2026-05-04-06:52
    * Empty Combined-mode project groups act like collapsed project selectors:
@@ -1097,38 +1070,38 @@
   margin-bottom: var(--sidebar-section-collapsed-spacing);
 }
 
-.group-collapse-button[data-empty-project="true"] .section-titlebar-toggle-chevron-icon,
+.group-collapse-button[data-empty-project='true'] .section-titlebar-toggle-chevron-icon,
 .group-head:hover
-  .group-collapse-button[data-empty-project="true"][data-has-idle-icon="true"]
+  .group-collapse-button[data-empty-project='true'][data-has-idle-icon='true']
   .section-titlebar-toggle-chevron-icon,
-.group-head:has(.group-collapse-button[data-empty-project="true"]:focus-visible)
-  .group-collapse-button[data-empty-project="true"][data-has-idle-icon="true"]
+.group-head:has(.group-collapse-button[data-empty-project='true']:focus-visible)
+  .group-collapse-button[data-empty-project='true'][data-has-idle-icon='true']
   .section-titlebar-toggle-chevron-icon {
   opacity: 0;
   transform: rotate(var(--section-titlebar-toggle-rotation)) scale(0.82);
 }
 
-.group-collapse-button[data-empty-project="true"] .section-titlebar-toggle-idle-icon,
+.group-collapse-button[data-empty-project='true'] .section-titlebar-toggle-idle-icon,
 .group-head:hover
-  .group-collapse-button[data-empty-project="true"][data-has-idle-icon="true"]
+  .group-collapse-button[data-empty-project='true'][data-has-idle-icon='true']
   .section-titlebar-toggle-idle-icon,
-.group-head:has(.group-collapse-button[data-empty-project="true"]:focus-visible)
-  .group-collapse-button[data-empty-project="true"][data-has-idle-icon="true"]
+.group-head:has(.group-collapse-button[data-empty-project='true']:focus-visible)
+  .group-collapse-button[data-empty-project='true'][data-has-idle-icon='true']
   .section-titlebar-toggle-idle-icon {
   opacity: 1;
   transform: scale(1);
   visibility: visible;
 }
 
-.group-title-button[data-empty-project="true"]:hover .group-title,
-.group-title-button[data-empty-project="true"]:focus-visible .group-title {
+.group-title-button[data-empty-project='true']:hover .group-title,
+.group-title-button[data-empty-project='true']:focus-visible .group-title {
   color: var(--app-foreground);
 }
 
 .group-head:hover .group-header-actions,
 .group-head:has(:focus-visible) .group-header-actions,
-.group-header-actions[data-open="true"],
-.group[data-active="true"] .group-meta,
+.group-header-actions[data-open='true'],
+.group[data-active='true'] .group-meta,
 .group:hover .group-meta {
   gap: calc(6px * var(--sidebar-density-scale));
   margin-left: calc(6px * var(--sidebar-density-scale));
@@ -1153,9 +1126,9 @@
   visibility: visible;
 }
 
-.group[data-project-group="true"] .group-head:hover .group-header-actions,
-.group[data-project-group="true"] .group-head:has(:focus-visible) .group-header-actions,
-.group[data-project-group="true"] .group-header-actions[data-open="true"] {
+.group[data-project-group='true'] .group-head:hover .group-header-actions,
+.group[data-project-group='true'] .group-head:has(:focus-visible) .group-header-actions,
+.group[data-project-group='true'] .group-header-actions[data-open='true'] {
   margin-left: auto;
 }
 
@@ -1163,8 +1136,8 @@
 .group-head:hover .group-agent-split-button,
 .group-head:has(:focus-visible) .group-add-button,
 .group-head:has(:focus-visible) .group-agent-split-button,
-.group-header-actions[data-open="true"] .group-add-button,
-.group-header-actions[data-open="true"] .group-agent-split-button {
+.group-header-actions[data-open='true'] .group-add-button,
+.group-header-actions[data-open='true'] .group-agent-split-button {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
@@ -1184,7 +1157,7 @@
   position: relative;
 }
 
-.group-sessions[data-pinned-drop-gaps="true"] {
+.group-sessions[data-pinned-drop-gaps='true'] {
   gap: 0;
   overflow: visible;
 }
@@ -1205,7 +1178,7 @@
 
 .pinned-sessions-divider::before {
   background: color-mix(in srgb, var(--app-border) 72%, transparent);
-  content: "";
+  content: '';
   height: 1px;
   left: 50%;
   position: absolute;
@@ -1214,12 +1187,11 @@
   width: 93.30543933%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .pinned-sessions-divider {
+.sidebar-reference-layout[data-reference-sidebar='true'] .pinned-sessions-divider {
   margin-left: calc(-1 * var(--reference-sidebar-scroll-row-bleed-left, 7px));
   margin-right: calc(-1 * var(--reference-sidebar-scroll-row-bleed-right, 0px));
   width: calc(
-    100% + var(--reference-sidebar-scroll-row-bleed-left, 7px) +
-      var(--reference-sidebar-scroll-row-bleed-right, 0px)
+    100% + var(--reference-sidebar-scroll-row-bleed-left, 7px) + var(--reference-sidebar-scroll-row-bleed-right, 0px)
   );
 }
 
@@ -1256,7 +1228,8 @@
   letter-spacing: 0.04em;
   line-height: calc(14px * var(--sidebar-density-scale));
   margin: 0;
-  padding: calc(3px * var(--sidebar-density-scale)) calc(10px * var(--sidebar-density-scale)) 0 calc(5px * var(--sidebar-density-scale));
+  padding: calc(3px * var(--sidebar-density-scale)) calc(10px * var(--sidebar-density-scale)) 0
+    calc(5px * var(--sidebar-density-scale));
   text-transform: uppercase;
   user-select: none;
   width: max-content;
@@ -1276,7 +1249,7 @@
     transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.session-kind-toggle-chevron[data-expanded="true"] {
+.session-kind-toggle-chevron[data-expanded='true'] {
   transform: rotate(90deg);
 }
 
@@ -1297,7 +1270,7 @@
   z-index: 4;
 }
 
-.pinned-session-drop-gap[data-edge="start"] {
+.pinned-session-drop-gap[data-edge='start'] {
   height: 0;
 }
 
@@ -1306,7 +1279,7 @@
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--app-button-background) 22%, transparent),
     0 0 14px color-mix(in srgb, var(--app-button-background) 28%, transparent);
-  content: "";
+  content: '';
   height: 3px;
   left: calc(12px * var(--sidebar-density-scale));
   opacity: 0;
@@ -1318,7 +1291,7 @@
   transition: opacity 120ms ease;
 }
 
-.pinned-session-drop-gap[data-active="true"]::before {
+.pinned-session-drop-gap[data-active='true']::before {
   opacity: 1;
 }
 
@@ -1371,7 +1344,7 @@
 .group-sessions::after,
 .group-empty-drop-target::before,
 .group-empty-drop-target::after {
-  content: "";
+  content: '';
   position: absolute;
   left: calc(12px * var(--sidebar-density-scale));
   right: calc(12px * var(--sidebar-density-scale));
@@ -1387,14 +1360,14 @@
   z-index: 3;
 }
 
-.group-sessions[data-drop-position="start"]::before,
-.group-empty-drop-target[data-drop-position="start"]::before {
+.group-sessions[data-drop-position='start']::before,
+.group-empty-drop-target[data-drop-position='start']::before {
   opacity: 1;
   top: calc(-5px * var(--sidebar-density-scale));
 }
 
-.group-sessions[data-drop-position="end"]::after,
-.group-empty-drop-target[data-drop-position="end"]::after {
+.group-sessions[data-drop-position='end']::after,
+.group-empty-drop-target[data-drop-position='end']::after {
   bottom: calc(-5px * var(--sidebar-density-scale));
   opacity: 1;
 }
@@ -1404,7 +1377,7 @@
   position: relative;
 }
 
-.group-empty-drop-target[data-drop-target="true"] .group-empty-state {
+.group-empty-drop-target[data-drop-target='true'] .group-empty-state {
   /*
    * CDXC:SidebarDragDrop 2026-06-19-11:12:
    * Session drag/drop should communicate the destination with insertion lines
@@ -1416,7 +1389,7 @@
   box-shadow: none;
 }
 
-.group:has(.session[data-drop-target="true"]) .group-empty-state {
+.group:has(.session[data-drop-target='true']) .group-empty-state {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
@@ -1520,15 +1493,15 @@
    layout during hover.
    CDXC:ProjectHeaders 2026-06-29-21:04: Reference project rows should match
    combined project rows by omitting the leading folder/worktree glyph. */
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-list {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-list {
   --sidebar-session-column-offset: 0px;
   justify-items: stretch;
   padding-left: 20px;
   padding-right: 20px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-chat-group-list,
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-project-group-list {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-chat-group-list,
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-project-group-list {
   /*
    * CDXC:SidebarReferenceBounds 2026-05-26-22:59:
    * Project and session buttons should align with the sidebar content edge
@@ -1553,7 +1526,7 @@
   position: relative;
 }
 
-.project-collection[data-dragging="true"] {
+.project-collection[data-dragging='true'] {
   opacity: 0.28;
 }
 
@@ -1583,11 +1556,7 @@ section.project-collection.project-collection-drag-ghost {
     var(--vscode-sideBar-background, #141414)
   );
   border: 1px solid
-    color-mix(
-      in srgb,
-      var(--project-collection-color) var(--project-group-header-border-mix, 38%),
-      transparent
-    );
+    color-mix(in srgb, var(--project-collection-color) var(--project-group-header-border-mix, 38%), transparent);
   border-radius: 6px;
   display: flex;
   gap: 5px;
@@ -1612,8 +1581,7 @@ section.project-collection.project-collection-drag-ghost {
   );
 }
 
-.project-collection[data-drop-target="true"]:not([data-dragging="true"])
-  > .project-collection-header {
+.project-collection[data-drop-target='true']:not([data-dragging='true']) > .project-collection-header {
   box-shadow: 0 0 0 1px #c8cdd5;
 }
 
@@ -1642,7 +1610,7 @@ section.project-collection.project-collection-drag-ghost {
   width: 20px;
 }
 
-.project-collection[data-collapsed="false"] .project-collection-collapse svg {
+.project-collection[data-collapsed='false'] .project-collection-collapse svg {
   transform: rotate(90deg);
 }
 
@@ -1692,7 +1660,7 @@ section.project-collection.project-collection-drag-ghost {
     var(--vscode-sideBar-background, #141414)
   );
   bottom: 0;
-  content: "";
+  content: '';
   left: 2px;
   pointer-events: none;
   position: absolute;
@@ -1758,7 +1726,7 @@ section.project-collection.project-collection-drag-ghost {
   transform: rotate(180deg);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-project-group-list {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-project-group-list {
   /*
    * CDXC:ReferenceSidebar 2026-05-08-09:13
    * Project rows in the reference sidebar need an 11px visual gap between
@@ -1772,7 +1740,7 @@ section.project-collection.project-collection-drag-ghost {
   row-gap: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group {
   border: none;
   border-radius: 0;
   cursor: default;
@@ -1783,20 +1751,20 @@ section.project-collection.project-collection-drag-ghost {
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-collapsed="false"],
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-project-group="true"][data-collapsed="false"],
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-empty-project="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-collapsed='false'],
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'][data-collapsed='false'],
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-empty-project='true'] {
   gap: 0;
   margin-bottom: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-head {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-head {
   border-radius: 0;
   margin: 0;
   padding: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-project-group="true"] .group-head {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head {
   /*
    * CDXC:SidebarStickyHeaders 2026-05-20-08:08:
    * Project headers originally acted as the only sticky context row in the
@@ -1852,49 +1820,40 @@ section.project-collection.project-collection-drag-ghost {
   position: relative;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"][data-dragging="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'][data-dragging='true'] {
   opacity: 0.18;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-head::before,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-head::after,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-session-connector-rail,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-session-connector-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-head::before,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-head::after,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-session-connector-rail,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-session-connector-button {
   display: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-head::before {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head::before {
   border-radius: 0;
   display: block;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group:not([data-project-group="true"])
-  .group-header-actions {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group:not([data-project-group='true']) .group-header-actions {
   display: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-title-row {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-title-row {
   gap: 12px;
   min-height: 32px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-title-row {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-title-row {
   gap: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-title-handle {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-title-handle {
   margin-left: 10px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-project-diff-stats {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-project-diff-stats {
   font-size: 13.55px;
   font-weight: 300 !important;
   gap: 8px;
@@ -1902,7 +1861,7 @@ section.project-collection.project-collection-drag-ghost {
   line-height: 20px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-collapse-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-collapse-button {
   color: #a6adb6;
   height: 16px;
   padding: 0;
@@ -1911,14 +1870,14 @@ section.project-collection.project-collection-drag-ghost {
   width: 16px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .section-titlebar-toggle-icon,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-collapse-icon {
+.sidebar-reference-layout[data-reference-sidebar='true'] .section-titlebar-toggle-icon,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-collapse-icon {
   height: 16px;
   width: 16px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-title,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-title-input {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-title,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-title-input {
   font-size: 16px;
   font-weight: 550;
   letter-spacing: 0;
@@ -1926,11 +1885,11 @@ section.project-collection.project-collection-drag-ghost {
   text-transform: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-title {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-title {
   color: #a5a5a5;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-active="true"] .group-title {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-active='true'] .group-title {
   color: #a5a5a5;
 }
 
@@ -1986,31 +1945,27 @@ section.project-collection.project-collection-drag-ghost {
  * title the active state by rendering it full white and one font-weight step
  * above the normal 500-weight project title.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"][data-active="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true'][data-active='true']
   .group-title {
   color: #ffffff;
   font-weight: 700;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"][data-active="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true'][data-active='true']
   .group-head::before {
   background: transparent;
   box-shadow: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-head::before {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head::before {
   box-shadow: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-head:hover::before,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head:hover::before,
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true']
   .group-head:has(.group-title-button:focus-visible)::before {
   background: color-mix(in srgb, var(--app-foreground) 6%, transparent);
   box-shadow: none;
@@ -2023,26 +1978,24 @@ section.project-collection.project-collection-drag-ghost {
  * pseudo-surfaces, so opt parked project rows back into that project-header
  * hover treatment and keep it visible while their context menu is open.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row.group-head::before {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-row.group-head::before {
   border-radius: 0;
   display: block;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-row.group-head:hover::before,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-row.group-head:focus-visible::before,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-row.group-head[data-context-menu-open="true"]::before {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-row.group-head:hover::before,
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-row.group-head:focus-visible::before,
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .recent-projects-row.group-head[data-context-menu-open='true']::before {
   background: color-mix(in srgb, var(--app-foreground) 6%, transparent);
   box-shadow: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-title-handle {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-title-handle {
   max-width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-header-actions {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-header-actions {
   /*
    * CDXC:ProjectGroups 2026-05-08-12:31
    * Combined project-header action buttons must reveal instantly instead of
@@ -2054,97 +2007,91 @@ section.project-collection.project-collection-drag-ghost {
   transition: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-head:hover .group-header-actions,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group-head:has(:focus-visible)
-  .group-header-actions,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-header-actions[data-open="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-head:hover .group-header-actions,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-head:has(:focus-visible) .group-header-actions,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-header-actions[data-open='true'] {
   gap: 2px;
   margin-left: 6px;
   max-width: max-content;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true']
   .group-head:hover
   .group-header-actions,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true']
   .group-head:has(:focus-visible)
   .group-header-actions,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-header-actions[data-open="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true']
+  .group-header-actions[data-open='true'] {
   margin-left: auto;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-add-button,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-agent-main-button,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-agent-toggle-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-add-button,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-agent-main-button,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-agent-toggle-button {
   background: transparent;
   border: none;
   color: #858c95;
   height: 22px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-add-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-add-button {
   border-radius: 6px;
   transition: none;
   width: 22px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-agent-split-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-agent-split-button {
   grid-template-columns: 22px 18px;
   transition: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-agent-main-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-agent-main-button {
   border-radius: 6px 0 0 6px;
   width: 22px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-agent-toggle-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-agent-toggle-button {
   border-radius: 0 6px 6px 0;
   width: 18px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-add-button:hover,
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-add-button:focus-visible,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group-agent-split-button:hover
-  .group-agent-main-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group-agent-split-button:hover
-  .group-agent-toggle-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-add-button:hover,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-add-button:focus-visible,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-agent-split-button:hover .group-agent-main-button,
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-agent-split-button:hover .group-agent-toggle-button,
+.sidebar-reference-layout[data-reference-sidebar='true']
   .group-agent-split-button:focus-within
   .group-agent-main-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .group-agent-split-button:focus-within
   .group-agent-toggle-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group-agent-split-button[data-open="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group-agent-split-button[data-open='true']
   .group-agent-main-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group-agent-split-button[data-open="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group-agent-split-button[data-open='true']
   .group-agent-toggle-button {
   background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
   color: #aeb4bd;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-chat-collection="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-chat-collection='true'] {
   margin-bottom: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-chat-collection="true"] .group-head {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-chat-collection='true'] .group-head {
   display: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-chat-group-list .group-empty-drop-target {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-chat-group-list .group-empty-drop-target {
   margin-top: 8px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-empty-drop-target {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-empty-drop-target {
   margin-top: 12px;
 }
 
@@ -2154,8 +2101,8 @@ section.project-collection.project-collection-drag-ghost {
  * reference sidebar's empty Chats placeholder, because both represent an empty
  * section body rather than a standalone alert or card.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-chat-group-list .group-empty-state,
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-empty-state.group-empty-state {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-chat-group-list .group-empty-state,
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-empty-state.group-empty-state {
   border: 0;
   box-sizing: border-box;
   color: #444444;
@@ -2173,7 +2120,7 @@ section.project-collection.project-collection-drag-ghost {
   padding-left: 18px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-empty-state {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-empty-state {
   box-sizing: border-box;
   color: #444444;
   font-size: 15.55px;
@@ -2188,20 +2135,25 @@ section.project-collection.project-collection-drag-ghost {
   padding-left: 18px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-project-group="true"] .group-head:hover .section-titlebar-toggle-idle-icon,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true']
+  .group-head:hover
+  .section-titlebar-toggle-idle-icon,
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true']
   .group-head:has(.group-collapse-button:focus-visible)
   .section-titlebar-toggle-idle-icon {
   opacity: 1;
   transform: scale(1);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-project-group="true"] .section-titlebar-toggle-chevron-icon {
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-project-group='true']
+  .section-titlebar-toggle-chevron-icon {
   display: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group-sessions {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group-sessions {
   /*
    * CDXC:SidebarSessions 2026-06-19-10:52:
    * Reference-sidebar session rows should touch directly. Drag insertion lines
@@ -2212,7 +2164,7 @@ section.project-collection.project-collection-drag-ghost {
   overflow: visible;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-session-connector="true"] .session-frame {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-session-connector='true'] .session-frame {
   /*
    * CDXC:SidebarSessions 2026-05-31-15:43:
    * Connector groups use the same visible session buttons as project groups,
@@ -2222,8 +2174,7 @@ section.project-collection.project-collection-drag-ghost {
   margin-left: calc(-1 * var(--reference-sidebar-scroll-row-bleed-left, 7px));
   margin-right: calc(-1 * var(--reference-sidebar-scroll-row-bleed-right, 0px));
   width: calc(
-    100% + var(--reference-sidebar-scroll-row-bleed-left, 7px) +
-      var(--reference-sidebar-scroll-row-bleed-right, 0px)
+    100% + var(--reference-sidebar-scroll-row-bleed-left, 7px) + var(--reference-sidebar-scroll-row-bleed-right, 0px)
   );
 }
 .sidebar-hidden-item-icon {

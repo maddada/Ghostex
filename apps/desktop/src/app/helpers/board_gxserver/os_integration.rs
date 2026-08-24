@@ -17,7 +17,9 @@ pub(crate) const GPUI_OS_INTEGRATION_STATUS_EDITOR_EXTENSIONS: &[&str] =
     &["txt", "md", "json", "js", "ts", "sh"];
 pub(crate) const GPUI_OS_INTEGRATION_SCRIPT_EXTENSIONS: &[&str] = &["command", "tool", "sh"];
 
-pub(crate) fn gpui_set_os_integration_defaults_status_message(target: Option<&str>) -> serde_json::Value {
+pub(crate) fn gpui_set_os_integration_defaults_status_message(
+    target: Option<&str>,
+) -> serde_json::Value {
     let status_items = gpui_set_os_integration_defaults(target);
     let mut payload = gpui_os_integration_status_message();
     gpui_merge_os_integration_status_items(&mut payload, status_items);
@@ -372,4 +374,3 @@ pub(crate) struct GpuiOSIntegrationBundleInfo {
     pub(crate) bundle_root: PathBuf,
     pub(crate) info_plist: String,
 }
-

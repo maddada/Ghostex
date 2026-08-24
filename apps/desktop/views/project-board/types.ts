@@ -3,14 +3,14 @@ import {
   type BoardStatusKey,
   type BoardTicket,
   type TshirtSize,
-} from "../project-board-shared";
-import { type ProjectBoardBridgeRequest } from "@/packages/shared/bead-conversation-links";
+} from '../project-board-shared';
+import { type ProjectBoardBridgeRequest } from '@/packages/shared/bead-conversation-links';
 
 export type ConversationActionState =
-  | { kind: "associate"; beadId: string }
-  | { kind: "jump"; linkId: string }
-  | { kind: "start"; beadId: string }
-  | { kind: "unlink"; linkId: string }
+  | { kind: 'associate'; beadId: string }
+  | { kind: 'jump'; linkId: string }
+  | { kind: 'start'; beadId: string }
+  | { kind: 'unlink'; linkId: string }
   | undefined;
 
 export type DetailDraft = {
@@ -45,10 +45,10 @@ export type PendingBoardStatusMove = {
   token: number;
 };
 
-export type ProjectBoardFocusOwnerEvent = "focusin" | "keydown" | "pointerdown";
+export type ProjectBoardFocusOwnerEvent = 'focusin' | 'keydown' | 'pointerdown';
 
 export type ProjectBoardImageBridgeRequest = {
-  action: "loadPreview" | "pasteImage";
+  action: 'loadPreview' | 'pasteImage';
   path?: string;
   requestId: string;
 };
@@ -77,7 +77,7 @@ export type ProjectBeadsWebKitWindow = Window & {
   };
 };
 
-export type BoardRefreshMode = "background" | "initial" | "manual" | "mutation";
+export type BoardRefreshMode = 'background' | 'initial' | 'manual' | 'mutation';
 
 export type BoardRefreshOptions = {
   mode?: BoardRefreshMode;
@@ -88,25 +88,18 @@ export type ProjectBoardCommandCompletedEventDetail = {
   exitCode?: number;
 };
 
-export type ProjectBoardRunnableCommandAction =
-  | "initializeBeads"
-  | "installOrUpdateBeads"
-  | "runBeadsMigration";
+export type ProjectBoardRunnableCommandAction = 'initializeBeads' | 'installOrUpdateBeads' | 'runBeadsMigration';
 
-export type RunnableBeadsMigrationOption =
-  | "migrate"
-  | "adopt"
-  | "adopt-fast-forward"
-  | "reconcile-fork";
+export type RunnableBeadsMigrationOption = 'migrate' | 'adopt' | 'adopt-fast-forward' | 'reconcile-fork';
 
 export function projectBoardCommandRunKey(
   action: ProjectBoardRunnableCommandAction,
-  migrationOption?: RunnableBeadsMigrationOption,
+  migrationOption?: RunnableBeadsMigrationOption
 ): string {
   return migrationOption ? `${action}:${migrationOption}` : action;
 }
 
-export type ProjectSurfaceTab = "triage" | "automations" | "runs" | "board";
+export type ProjectSurfaceTab = 'triage' | 'automations' | 'runs' | 'board';
 
 export type TicketContextMenuState = {
   confirmingDelete: boolean;

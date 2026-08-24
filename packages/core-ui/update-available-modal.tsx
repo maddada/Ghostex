@@ -1,16 +1,11 @@
-import { Button } from "@/packages/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/packages/components/ui/dialog";
-import ReactMarkdown from "react-markdown";
+import { Button } from '@/packages/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
+import ReactMarkdown from 'react-markdown';
 
 export type UpdateAvailableModalState = {
   notesMarkdown: string;
   portable: boolean;
-  state: "available" | "ready";
+  state: 'available' | 'ready';
   version: string;
 };
 
@@ -27,7 +22,7 @@ export function UpdateAvailableModal({
   onRestart: () => void;
   update?: UpdateAvailableModalState;
 }) {
-  const ready = update?.state === "ready";
+  const ready = update?.state === 'ready';
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
@@ -35,18 +30,14 @@ export function UpdateAvailableModal({
       }}
       open={isOpen}
     >
-      <DialogContent className="update-available-modal" showCloseButton={false}>
+      <DialogContent className='update-available-modal' showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle className="text-xl">
-            {ready
-              ? "Ghostex is ready to update"
-              : "A Ghostex update is available"}
+          <DialogTitle className='text-xl'>
+            {ready ? 'Ghostex is ready to update' : 'A Ghostex update is available'}
           </DialogTitle>
         </DialogHeader>
-        <p className="update-available-modal-version">
-          Version {update?.version}
-        </p>
-        <div className="update-available-modal-notes">
+        <p className='update-available-modal-version'>Version {update?.version}</p>
+        <div className='update-available-modal-notes'>
           {update?.notesMarkdown.trim() ? (
             <ReactMarkdown
               components={{
@@ -62,16 +53,16 @@ export function UpdateAvailableModal({
           )}
         </div>
         {update?.portable ? (
-          <p className="update-available-modal-portable">
+          <p className='update-available-modal-portable'>
             This portable copy will be updated in place and remain portable.
           </p>
         ) : null}
-        <div className="update-available-modal-actions">
-          <Button onClick={onCancel} type="button" variant="outline">
-            {ready ? "Later" : "Cancel"}
+        <div className='update-available-modal-actions'>
+          <Button onClick={onCancel} type='button' variant='outline'>
+            {ready ? 'Later' : 'Cancel'}
           </Button>
-          <Button onClick={ready ? onRestart : onDownload} type="button">
-            {ready ? "Restart and update" : "Download update"}
+          <Button onClick={ready ? onRestart : onDownload} type='button'>
+            {ready ? 'Restart and update' : 'Download update'}
           </Button>
         </div>
       </DialogContent>

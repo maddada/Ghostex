@@ -112,7 +112,10 @@ pub fn path_for(home: &str, xdg: Option<&str>) -> PathBuf {
             return PathBuf::from(x).join("zehn").join("favorites");
         }
     }
-    PathBuf::from(home).join(".config").join("zehn").join("favorites")
+    PathBuf::from(home)
+        .join(".config")
+        .join("zehn")
+        .join("favorites")
 }
 
 /// Combined ranking value: higher sorts first. Favorites form a strict tier
@@ -173,8 +176,17 @@ mod tests {
 
     #[test]
     fn path_for_honors_xdg_then_falls_back_to_config() {
-        assert_eq!(path_for("/home/x", Some("/cfg")), PathBuf::from("/cfg/zehn/favorites"));
-        assert_eq!(path_for("/home/x", None), PathBuf::from("/home/x/.config/zehn/favorites"));
-        assert_eq!(path_for("/home/x", Some("")), PathBuf::from("/home/x/.config/zehn/favorites"));
+        assert_eq!(
+            path_for("/home/x", Some("/cfg")),
+            PathBuf::from("/cfg/zehn/favorites")
+        );
+        assert_eq!(
+            path_for("/home/x", None),
+            PathBuf::from("/home/x/.config/zehn/favorites")
+        );
+        assert_eq!(
+            path_for("/home/x", Some("")),
+            PathBuf::from("/home/x/.config/zehn/favorites")
+        );
     }
 }

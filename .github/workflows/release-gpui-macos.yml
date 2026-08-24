@@ -16,7 +16,7 @@ on:
       plan:
         description: Resolved release plan JSON from the prepare job
         required: false
-        default: ""
+        default: ''
         type: string
     secrets:
       APPLE_DEVELOPER_ID_P12_BASE64:

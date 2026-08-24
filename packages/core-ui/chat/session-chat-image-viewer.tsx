@@ -11,7 +11,7 @@
 // paths inside "[Image #N](path)" references live on the session's machine, so
 // the page cannot open them directly. http(s)/data URLs render as-is.
 
-import { IconLoader2, IconPhotoX, IconX } from "@tabler/icons-react";
+import { IconLoader2, IconPhotoX, IconX } from '@tabler/icons-react';
 import {
   createContext,
   useCallback,
@@ -23,8 +23,8 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
-} from "react";
-import { cn } from "@/packages/components/utils";
+} from 'react';
+import { cn } from '@/packages/components/utils';
 
 export interface SessionChatImageTarget {
   /** Absolute path on the session's machine (loaded over the transport). */
@@ -46,9 +46,7 @@ export interface SessionChatImageViewerApi {
   resolve: (target: SessionChatImageTarget) => Promise<string> | undefined;
 }
 
-const SessionChatImageViewerContext = createContext<SessionChatImageViewerApi | null>(
-  null,
-);
+const SessionChatImageViewerContext = createContext<SessionChatImageViewerApi | null>(null);
 
 export function useSessionChatImageViewer(): SessionChatImageViewerApi | null {
   return useContext(SessionChatImageViewerContext);
@@ -98,17 +96,17 @@ export function SessionChatInlineImage({
   const viewer = useSessionChatImageViewer();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [nearViewport, setNearViewport] = useState(false);
-  const [source, setSource] = useState<
-    { status: "loading" } | { status: "ready"; src: string } | { status: "error" }
-  >({ status: "loading" });
-  const targetKey = target.url ?? target.path ?? "";
+  const [source, setSource] = useState<{ status: 'loading' } | { status: 'ready'; src: string } | { status: 'error' }>({
+    status: 'loading',
+  });
+  const targetKey = target.url ?? target.path ?? '';
 
   useEffect(() => {
     const node = containerRef.current;
     if (node === null || nearViewport) {
       return;
     }
-    if (typeof IntersectionObserver === "undefined") {
+    if (typeof IntersectionObserver === 'undefined') {
       setNearViewport(true);
       return;
     }
@@ -119,7 +117,7 @@ export function SessionChatInlineImage({
         }
       },
       // A screen of lead time, so scrolling meets loaded pictures.
-      { rootMargin: "600px" },
+      { rootMargin: '600px' }
     );
     observer.observe(node);
     return () => observer.disconnect();
@@ -131,20 +129,20 @@ export function SessionChatInlineImage({
     }
     const pending = viewer.resolve(target);
     if (pending === undefined) {
-      setSource({ status: "error" });
+      setSource({ status: 'error' });
       return;
     }
     let cancelled = false;
-    setSource({ status: "loading" });
+    setSource({ status: 'loading' });
     pending
       .then((src) => {
         if (!cancelled) {
-          setSource({ src, status: "ready" });
+          setSource({ src, status: 'ready' });
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setSource({ status: "error" });
+          setSource({ status: 'error' });
         }
       });
     return () => {
@@ -154,23 +152,23 @@ export function SessionChatInlineImage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearViewport, targetKey, viewer]);
 
-  if (source.status === "error" || viewer === null) {
+  if (source.status === 'error' || viewer === null) {
     return <>{fallback ?? null}</>;
   }
   return (
-    <div className={cn("ghostex-chat-inline-image-frame", className)} ref={containerRef}>
-      {source.status === "ready" ? (
+    <div className={cn('ghostex-chat-inline-image-frame', className)} ref={containerRef}>
+      {source.status === 'ready' ? (
         <button
-          aria-label={target.alt ? `View ${target.alt}` : "View image"}
-          className="ghostex-chat-inline-image-button"
+          aria-label={target.alt ? `View ${target.alt}` : 'View image'}
+          className='ghostex-chat-inline-image-button'
           onClick={() => viewer.open(target)}
-          type="button"
+          type='button'
         >
-          <img alt={target.alt ?? ""} className="ghostex-chat-inline-image" src={source.src} />
+          <img alt={target.alt ?? ''} className='ghostex-chat-inline-image' src={source.src} />
         </button>
       ) : (
-        <span aria-label="Loading image" className="ghostex-chat-inline-image-pending" role="img">
-          <IconLoader2 aria-hidden="true" className="size-4 animate-spin" stroke={2} />
+        <span aria-label='Loading image' className='ghostex-chat-inline-image-pending' role='img'>
+          <IconLoader2 aria-hidden='true' className='size-4 animate-spin' stroke={2} />
         </span>
       )}
     </div>
@@ -200,46 +198,46 @@ function zoomWidthsForImage(fitWidth: number, naturalWidth: number): number[] {
 
 /** File name to suggest when the picture is saved out of the overlay. */
 export function sessionChatImageFileName(target: SessionChatImageTarget): string {
-  const source = target.path ?? target.url ?? "";
+  const source = target.path ?? target.url ?? '';
   if (/^data:/i.test(source)) {
     const subtype = /^data:image\/([a-z0-9.+-]+)/i.exec(source)?.[1];
-    return `image.${subtype === undefined || subtype === "jpeg" ? "png" : subtype}`;
+    return `image.${subtype === undefined || subtype === 'jpeg' ? 'png' : subtype}`;
   }
   const bare = source.split(/[?#]/, 1)[0] ?? source;
-  let base = bare.split("/").pop() ?? "";
+  let base = bare.split('/').pop() ?? '';
   try {
     base = decodeURIComponent(base);
   } catch {
     // Malformed escapes: keep the raw segment.
   }
-  return base === "" ? "image.png" : base;
+  return base === '' ? 'image.png' : base;
 }
 
 /** Re-encodes the decoded picture as PNG — the only format clipboards take. */
 async function imageAsPngBlob(image: HTMLImageElement): Promise<Blob> {
-  const canvas = document.createElement("canvas");
+  const canvas = document.createElement('canvas');
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext('2d');
   if (context === null) {
-    throw new Error("The image could not be rendered for copying.");
+    throw new Error('The image could not be rendered for copying.');
   }
   context.drawImage(image, 0, 0);
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob === null) {
-        reject(new Error("The image could not be encoded for copying."));
+        reject(new Error('The image could not be encoded for copying.'));
         return;
       }
       resolve(blob);
-    }, "image/png");
+    }, 'image/png');
   });
 }
 
 /** Original bytes behind a rendered source, base64, for handing to the host. */
 async function base64FromSource(src: string): Promise<string> {
-  if (src.startsWith("data:")) {
-    const comma = src.indexOf(",");
+  if (src.startsWith('data:')) {
+    const comma = src.indexOf(',');
     const payload = src.slice(comma + 1);
     if (/;base64/i.test(src.slice(0, comma))) {
       return payload;
@@ -252,21 +250,21 @@ async function base64FromSource(src: string): Promise<string> {
 function base64FromBlob(blob: Blob): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error("The image bytes could not be read."));
+    reader.onerror = () => reject(new Error('The image bytes could not be read.'));
     reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
+      const result = typeof reader.result === 'string' ? reader.result : '';
       // data:<mime>;base64,<payload>
-      resolve(result.slice(result.indexOf(",") + 1));
+      resolve(result.slice(result.indexOf(',') + 1));
     };
     reader.readAsDataURL(blob);
   });
 }
 
 type ViewerState =
-  | { status: "closed" }
-  | { status: "loading"; alt?: string }
-  | { status: "ready"; src: string; alt?: string; name: string }
-  | { status: "error"; alt?: string };
+  | { status: 'closed' }
+  | { status: 'loading'; alt?: string }
+  | { status: 'ready'; src: string; alt?: string; name: string }
+  | { status: 'error'; alt?: string };
 
 export function SessionChatImageViewerProvider({
   children,
@@ -283,7 +281,7 @@ export function SessionChatImageViewerProvider({
    */
   saveImageAs?: (params: { base64Data: string; suggestedName: string }) => Promise<void>;
 }) {
-  const [state, setState] = useState<ViewerState>({ status: "closed" });
+  const [state, setState] = useState<ViewerState>({ status: 'closed' });
   // Distinguishes stale loads from the current one after rapid re-opens.
   const openSequenceRef = useRef(0);
   const loadImageRef = useRef(loadImage);
@@ -313,7 +311,7 @@ export function SessionChatImageViewerProvider({
 
   const close = useCallback((): void => {
     openSequenceRef.current += 1;
-    setState({ status: "closed" });
+    setState({ status: 'closed' });
   }, []);
 
   const api = useMemo<SessionChatImageViewerApi>(() => {
@@ -341,8 +339,7 @@ export function SessionChatImageViewerProvider({
     };
     return {
       canOpen: (target) =>
-        target.url !== undefined ||
-        (target.path !== undefined && loadImageRef.current !== undefined),
+        target.url !== undefined || (target.path !== undefined && loadImageRef.current !== undefined),
       open: (target) => {
         const alt = target.alt;
         const source = resolve(target);
@@ -352,16 +349,16 @@ export function SessionChatImageViewerProvider({
         const name = sessionChatImageFileName(target);
         openSequenceRef.current += 1;
         const sequence = openSequenceRef.current;
-        setState({ status: "loading", ...(alt !== undefined ? { alt } : {}) });
+        setState({ status: 'loading', ...(alt !== undefined ? { alt } : {}) });
         source
           .then((src) => {
             if (openSequenceRef.current === sequence) {
-              setState({ name, src, status: "ready", ...(alt !== undefined ? { alt } : {}) });
+              setState({ name, src, status: 'ready', ...(alt !== undefined ? { alt } : {}) });
             }
           })
           .catch(() => {
             if (openSequenceRef.current === sequence) {
-              setState({ status: "error", ...(alt !== undefined ? { alt } : {}) });
+              setState({ status: 'error', ...(alt !== undefined ? { alt } : {}) });
             }
           });
       },
@@ -369,11 +366,8 @@ export function SessionChatImageViewerProvider({
     };
   }, []);
 
-  const source = state.status === "ready" ? state.src : null;
-  const zoomWidths = useMemo(
-    () => zoomWidthsForImage(fitWidth, naturalWidth),
-    [fitWidth, naturalWidth],
-  );
+  const source = state.status === 'ready' ? state.src : null;
+  const zoomWidths = useMemo(() => zoomWidthsForImage(fitWidth, naturalWidth), [fitWidth, naturalWidth]);
   const zoomWidth = zoomLevel > 0 ? zoomWidths[zoomLevel - 1] : undefined;
 
   // Every open (and every close) starts fitted, unzoomed and without a menu.
@@ -405,9 +399,9 @@ export function SessionChatImageViewerProvider({
     if (source === null || zoomLevel > 0) {
       return;
     }
-    window.addEventListener("resize", measureFit);
+    window.addEventListener('resize', measureFit);
     return () => {
-      window.removeEventListener("resize", measureFit);
+      window.removeEventListener('resize', measureFit);
     };
   }, [measureFit, source, zoomLevel]);
 
@@ -457,10 +451,8 @@ export function SessionChatImageViewerProvider({
     }
     const imageRect = image.getBoundingClientRect();
     const scrollRect = scroll.getBoundingClientRect();
-    scroll.scrollLeft +=
-      imageRect.left - scrollRect.left + focus.x * imageRect.width - scroll.clientWidth / 2;
-    scroll.scrollTop +=
-      imageRect.top - scrollRect.top + focus.y * imageRect.height - scroll.clientHeight / 2;
+    scroll.scrollLeft += imageRect.left - scrollRect.left + focus.x * imageRect.width - scroll.clientWidth / 2;
+    scroll.scrollTop += imageRect.top - scrollRect.top + focus.y * imageRect.height - scroll.clientHeight / 2;
   }, [zoomLevel]);
 
   // Nudge a menu opened near the right or bottom edge back inside the window.
@@ -498,15 +490,15 @@ export function SessionChatImageViewerProvider({
     // The blob is handed over as a promise so the write stays inside the click
     // gesture that opened the menu; re-encoding first would lose it.
     void navigator.clipboard
-      .write([new ClipboardItem({ "image/png": imageAsPngBlob(image) })])
+      .write([new ClipboardItem({ 'image/png': imageAsPngBlob(image) })])
       .catch((error: unknown) => {
-        console.error("[session-chat] Copying the image failed.", error);
-        setMenuError("The image could not be copied.");
+        console.error('[session-chat] Copying the image failed.', error);
+        setMenuError('The image could not be copied.');
       });
   };
 
   const saveImage = (): void => {
-    if (state.status !== "ready") {
+    if (state.status !== 'ready') {
       return;
     }
     const { name, src } = state;
@@ -514,10 +506,10 @@ export function SessionChatImageViewerProvider({
     const hostSave = saveImageAsRef.current;
     if (hostSave === undefined) {
       // Browser hosts write the original bytes straight to the download folder.
-      const anchor = document.createElement("a");
+      const anchor = document.createElement('a');
       anchor.download = name;
       anchor.href = src;
-      anchor.rel = "noopener";
+      anchor.rel = 'noopener';
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -528,20 +520,20 @@ export function SessionChatImageViewerProvider({
     void base64FromSource(src)
       .then((base64Data) => hostSave({ base64Data, suggestedName: name }))
       .catch((error: unknown) => {
-        console.error("[session-chat] Saving the image failed.", error);
-        setMenuError("The image could not be saved.");
+        console.error('[session-chat] Saving the image failed.', error);
+        setMenuError('The image could not be saved.');
       });
   };
 
   // Escape closes the overlay before the composer's interrupt shortcut can
   // see the key (window capture, only while open).
-  const open = state.status !== "closed";
+  const open = state.status !== 'closed';
   useEffect(() => {
     if (!open) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
         if (menuAt !== null) {
@@ -551,9 +543,9 @@ export function SessionChatImageViewerProvider({
         close();
       }
     };
-    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [close, menuAt, open]);
 
@@ -562,9 +554,9 @@ export function SessionChatImageViewerProvider({
       {children}
       {open ? (
         <div
-          aria-label={state.alt ?? "Image preview"}
-          aria-modal="true"
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-[2px]"
+          aria-label={state.alt ?? 'Image preview'}
+          aria-modal='true'
+          className='fixed inset-0 z-50 bg-black/70 backdrop-blur-[2px]'
           onClick={() => {
             // An open menu is what a stray click is aiming to dismiss; only a
             // click with no menu up means "close the picture".
@@ -574,20 +566,20 @@ export function SessionChatImageViewerProvider({
             }
             close();
           }}
-          role="dialog"
+          role='dialog'
         >
           {/* Outside the scrolling layer so it stays put while a zoomed
               picture is panned around under it. */}
           <button
-            aria-label="Close image preview"
-            className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:text-white"
+            aria-label='Close image preview'
+            className='absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:text-white'
             onClick={close}
-            type="button"
+            type='button'
           >
-            <IconX aria-hidden="true" size={18} stroke={2} />
+            <IconX aria-hidden='true' size={18} stroke={2} />
           </button>
           <div
-            className="absolute inset-0 overflow-auto"
+            className='absolute inset-0 overflow-auto'
             onScroll={() => {
               // A menu anchored to page coordinates would drift away from the
               // pixel it was opened on once the picture is panned.
@@ -597,32 +589,22 @@ export function SessionChatImageViewerProvider({
             }}
             ref={scrollRef}
           >
-            <div className="ghostex-chat-image-preview-stage">
-              {state.status === "loading" ? (
-                <IconLoader2
-                  aria-label="Loading image"
-                  className="size-7 animate-spin text-white/80"
-                  stroke={2}
-                />
+            <div className='ghostex-chat-image-preview-stage'>
+              {state.status === 'loading' ? (
+                <IconLoader2 aria-label='Loading image' className='size-7 animate-spin text-white/80' stroke={2} />
               ) : null}
-              {state.status === "error" ? (
-                <div className="flex flex-col items-center gap-2 text-white/80">
-                  <IconPhotoX aria-hidden="true" className="size-7" stroke={1.8} />
-                  <span className="text-sm">The image could not be loaded.</span>
+              {state.status === 'error' ? (
+                <div className='flex flex-col items-center gap-2 text-white/80'>
+                  <IconPhotoX aria-hidden='true' className='size-7' stroke={1.8} />
+                  <span className='text-sm'>The image could not be loaded.</span>
                 </div>
               ) : null}
-              {state.status === "ready" ? (
+              {state.status === 'ready' ? (
                 <img
-                  alt={state.alt ?? "Image preview"}
-                  className="ghostex-chat-image-preview rounded-lg shadow-2xl"
-                  data-zoom={
-                    zoomWidths.length === 0
-                      ? "none"
-                      : zoomLevel >= zoomWidths.length
-                        ? "out"
-                        : "in"
-                  }
-                  data-zoomed={zoomLevel > 0 ? "true" : undefined}
+                  alt={state.alt ?? 'Image preview'}
+                  className='ghostex-chat-image-preview rounded-lg shadow-2xl'
+                  data-zoom={zoomWidths.length === 0 ? 'none' : zoomLevel >= zoomWidths.length ? 'out' : 'in'}
+                  data-zoomed={zoomLevel > 0 ? 'true' : undefined}
                   // Native image dragging would fight scroll-to-pan.
                   draggable={false}
                   onClick={stepZoom}
@@ -642,7 +624,7 @@ export function SessionChatImageViewerProvider({
           </div>
           {menuAt !== null ? (
             <div
-              className="ghostex-chat-image-menu"
+              className='ghostex-chat-image-menu'
               onClick={(event) => {
                 event.stopPropagation();
               }}
@@ -650,29 +632,19 @@ export function SessionChatImageViewerProvider({
                 event.preventDefault();
               }}
               ref={menuRef}
-              role="menu"
+              role='menu'
               style={{ left: menuAt.x, top: menuAt.y }}
             >
-              <button
-                className="ghostex-chat-image-menu-item"
-                onClick={copyImage}
-                role="menuitem"
-                type="button"
-              >
+              <button className='ghostex-chat-image-menu-item' onClick={copyImage} role='menuitem' type='button'>
                 Copy image
               </button>
-              <button
-                className="ghostex-chat-image-menu-item"
-                onClick={saveImage}
-                role="menuitem"
-                type="button"
-              >
+              <button className='ghostex-chat-image-menu-item' onClick={saveImage} role='menuitem' type='button'>
                 Save image
               </button>
             </div>
           ) : null}
           {menuError !== null ? (
-            <div className="ghostex-chat-image-menu-error" role="status">
+            <div className='ghostex-chat-image-menu-error' role='status'>
               {menuError}
             </div>
           ) : null}

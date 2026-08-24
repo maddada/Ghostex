@@ -131,7 +131,10 @@ pub(crate) fn project_beads_bridge_response_from_result(
     })
 }
 
-pub(crate) fn project_beads_bridge_error_response(request_id: &str, error: &str) -> serde_json::Value {
+pub(crate) fn project_beads_bridge_error_response(
+    request_id: &str,
+    error: &str,
+) -> serde_json::Value {
     serde_json::json!({
         "error": error,
         "exitCode": 127,
@@ -395,4 +398,3 @@ pub(crate) fn gpui_project_beads_sanitize_generated_title(line: &str) -> String 
 pub(crate) fn gpui_normalized_project_path_for_comparison(path: &str) -> String {
     path.trim().trim_end_matches('/').to_string()
 }
-

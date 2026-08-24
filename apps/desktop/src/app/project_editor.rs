@@ -217,14 +217,19 @@ impl GhostexGpuiApp {
         ))
     }
 
-    pub(crate) fn project_editor_companion_active_terminal_session_id(&mut self) -> Option<TerminalSessionId> {
+    pub(crate) fn project_editor_companion_active_terminal_session_id(
+        &mut self,
+    ) -> Option<TerminalSessionId> {
         let key = self.project_editor_companion_active_terminal_key()?;
         let session_id = self.shell_session_for_workspace_terminal_key(&key)?;
         self.project_editor_companion_terminal_session_is_active_project_eligible(session_id)
             .then_some(session_id)
     }
 
-    pub(crate) fn shell_session_belongs_to_active_project(&mut self, session_id: TerminalSessionId) -> bool {
+    pub(crate) fn shell_session_belongs_to_active_project(
+        &mut self,
+        session_id: TerminalSessionId,
+    ) -> bool {
         let Some(active_project_id) = self.project_editor_companion_active_project_id() else {
             return false;
         };
@@ -242,7 +247,9 @@ impl GhostexGpuiApp {
             && self.shell_session_belongs_to_active_project(session_id)
     }
 
-    pub(crate) fn project_editor_companion_focused_terminal_session_id(&self) -> Option<TerminalSessionId> {
+    pub(crate) fn project_editor_companion_focused_terminal_session_id(
+        &self,
+    ) -> Option<TerminalSessionId> {
         match self.project_editor_companion_focused_terminal_slot {
             ProjectEditorCompanionTerminalSlot::Top => {
                 self.project_editor_companion_terminal_session_id
@@ -259,7 +266,9 @@ impl GhostexGpuiApp {
             .unwrap_or_else(|| "Companion".to_string())
     }
 
-    pub(crate) fn project_editor_companion_recent_terminal_sessions(&mut self) -> Vec<TerminalSessionId> {
+    pub(crate) fn project_editor_companion_recent_terminal_sessions(
+        &mut self,
+    ) -> Vec<TerminalSessionId> {
         let active_project_id = self.project_editor_companion_active_project_id();
         let mut keys = self
             .sidebar_gxserver_presentation_focus_state
@@ -498,7 +507,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn start_project_editor_auto_sleep_policy_polling(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn start_project_editor_auto_sleep_policy_polling(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()

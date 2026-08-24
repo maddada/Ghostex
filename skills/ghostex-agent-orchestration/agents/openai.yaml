@@ -1,7 +1,7 @@
 interface:
-  display_name: "ghostex-agent-orchestration"
-  short_description: "Coordinate Ghostex panes and agent sessions"
-  default_prompt: "Use $ghostex-agent-orchestration to create panes, inspect sessions, send messages, and read output through the Ghostex CLI."
+  display_name: 'ghostex-agent-orchestration'
+  short_description: 'Coordinate Ghostex panes and agent sessions'
+  default_prompt: 'Use $ghostex-agent-orchestration to create panes, inspect sessions, send messages, and read output through the Ghostex CLI.'
 
 policy:
   allow_implicit_invocation: true

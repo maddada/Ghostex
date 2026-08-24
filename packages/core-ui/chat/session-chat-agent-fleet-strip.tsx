@@ -30,12 +30,9 @@ counter moves, never for a clock, so without interpolating here the times would
 sit frozen between the samples that actually changed something.
 */
 
-import { useEffect, useState } from "react";
-import type { SessionChatAgentFleet } from "../../shared/session-chat";
-import {
-  formatSessionChatActivityElapsed,
-  sessionChatActivityElapsedSeconds,
-} from "./session-chat-activity-row";
+import { useEffect, useState } from 'react';
+import type { SessionChatAgentFleet } from '../../shared/session-chat';
+import { formatSessionChatActivityElapsed, sessionChatActivityElapsedSeconds } from './session-chat-activity-row';
 
 /** How often the local clocks re-render between server samples. */
 const FLEET_CLOCK_TICK_MS = 1_000;
@@ -64,50 +61,51 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
   }
 
   return (
-    <div aria-label="Sub-agents" className="ghostex-chat-agent-fleet" role="group">
-      <div className="ghostex-chat-agent-fleet-header">
-        <span className="ghostex-chat-agent-fleet-title">
-          {agents.length === 1 ? "Sub-agent" : "Sub-agents"}
-        </span>
+    <div aria-label='Sub-agents' className='ghostex-chat-agent-fleet' role='group'>
+      <div className='ghostex-chat-agent-fleet-header'>
+        <span className='ghostex-chat-agent-fleet-title'>{agents.length === 1 ? 'Sub-agent' : 'Sub-agents'}</span>
         {agents.length > 1 ? (
           // The singular title already says "one"; a `1` beside it is noise.
-          <span className="ghostex-chat-agent-fleet-count">{agents.length}</span>
+          <span className='ghostex-chat-agent-fleet-count'>{agents.length}</span>
         ) : null}
       </div>
-      <div className="ghostex-chat-agent-fleet-rows" role="list">
+      <div className='ghostex-chat-agent-fleet-rows' role='list'>
         {agents.map((agent, index) => {
           const elapsed = sessionChatActivityElapsedSeconds(
-            { detectedAt: fleet.detectedAt, ...(agent.elapsedSeconds === undefined ? {} : { elapsedSeconds: agent.elapsedSeconds }) },
-            now,
+            {
+              detectedAt: fleet.detectedAt,
+              ...(agent.elapsedSeconds === undefined ? {} : { elapsedSeconds: agent.elapsedSeconds }),
+            },
+            now
           );
           return (
             <div
-              className="ghostex-chat-agent-fleet-row"
+              className='ghostex-chat-agent-fleet-row'
               // Claude runs several agents of one type at once, so the name is
               // not a key. Position is: the block keeps screen order.
               key={`${index}:${agent.name}`}
-              role="listitem"
+              role='listitem'
             >
-              <span aria-hidden="true" className="ghostex-chat-agent-fleet-pulse" />
-              <span className="ghostex-chat-agent-fleet-name" title={agent.name}>
+              <span aria-hidden='true' className='ghostex-chat-agent-fleet-pulse' />
+              <span className='ghostex-chat-agent-fleet-name' title={agent.name}>
                 {agent.name}
               </span>
               {/* Task and marker share one cell: `+2` reads as belonging to the
                   work on its left, and staying out of the clock's column keeps
                   a marked row aligned with every unmarked one. */}
-              <span className="ghostex-chat-agent-fleet-work">
+              <span className='ghostex-chat-agent-fleet-work'>
                 <span
-                  className="ghostex-chat-agent-fleet-task"
+                  className='ghostex-chat-agent-fleet-task'
                   // Names the agent as well as the task: under a narrow pane the
                   // name column is hidden and this is the only way back to it.
                   title={agent.task ? `${agent.name} — ${agent.task}` : agent.name}
                 >
-                  {agent.task ?? ""}
+                  {agent.task ?? ''}
                 </span>
                 {agent.nested ? (
                   <span
-                    className="ghostex-chat-agent-fleet-nested"
-                    title={`${agent.nested} more agent${agent.nested === 1 ? "" : "s"} under this one`}
+                    className='ghostex-chat-agent-fleet-nested'
+                    title={`${agent.nested} more agent${agent.nested === 1 ? '' : 's'} under this one`}
                   >
                     +{agent.nested}
                   </span>
@@ -117,12 +115,12 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
                   that is what right-aligns every counter on the same edge no
                   matter how long the one above it was. The separator only
                   appears when it has something on both sides of it. */}
-              <span className="ghostex-chat-agent-fleet-tokens">{agent.tokens ?? ""}</span>
-              <span aria-hidden="true" className="ghostex-chat-agent-fleet-separator">
-                {agent.tokens && elapsed !== null ? "•" : ""}
+              <span className='ghostex-chat-agent-fleet-tokens'>{agent.tokens ?? ''}</span>
+              <span aria-hidden='true' className='ghostex-chat-agent-fleet-separator'>
+                {agent.tokens && elapsed !== null ? '•' : ''}
               </span>
-              <span className="ghostex-chat-agent-fleet-clock">
-                {elapsed === null ? "" : formatSessionChatActivityElapsed(elapsed)}
+              <span className='ghostex-chat-agent-fleet-clock'>
+                {elapsed === null ? '' : formatSessionChatActivityElapsed(elapsed)}
               </span>
             </div>
           );

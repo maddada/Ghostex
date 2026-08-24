@@ -3,11 +3,19 @@ name: Release build - gxserver Linux ARM64
 on:
   workflow_dispatch:
     inputs:
-      version: { description: "Semver release version", required: true, type: string }
-      source_sha: { description: "Immutable application source commit", required: true, type: string }
-      channel: { description: "Release channel", required: true, default: stable, type: choice, options: [stable, prerelease, test] }
-      update_sparkle: { description: "Whether assembly may eventually update Sparkle", required: true, default: true, type: boolean }
-      prerequisite_run_id: { description: "Optional prerequisite workflow run", required: false, type: string }
+      version: { description: 'Semver release version', required: true, type: string }
+      source_sha: { description: 'Immutable application source commit', required: true, type: string }
+      channel:
+        {
+          description: 'Release channel',
+          required: true,
+          default: stable,
+          type: choice,
+          options: [stable, prerelease, test],
+        }
+      update_sparkle:
+        { description: 'Whether assembly may eventually update Sparkle', required: true, default: true, type: boolean }
+      prerequisite_run_id: { description: 'Optional prerequisite workflow run', required: false, type: string }
 
 permissions: { actions: write, contents: write }
 
@@ -17,7 +25,7 @@ jobs:
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with: { ref: "${{ inputs.source_sha }}", fetch-depth: 0, submodules: false }
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0, submodules: false }
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
@@ -51,7 +59,7 @@ jobs:
           rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
       - run: bun install --frozen-lockfile
       - name: Prepare source dependencies
-        env: { GHOSTEX_RELEASE_REPO_ROOT: "${{ github.workspace }}" }
+        env: { GHOSTEX_RELEASE_REPO_ROOT: '${{ github.workspace }}' }
         run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 .release-automation/tooling/release-gpui/prepare-references.sh
       - name: Resolve immutable code-server component identity
         id: code_server_identity
@@ -61,7 +69,7 @@ jobs:
           GHOSTEX_RELEASE_AUTOMATION_ROOT: ${{ github.workspace }}/.release-automation
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
-          GHOSTEX_REQUIRE_BEADS_SMOKE: "1"
+          GHOSTEX_REQUIRE_BEADS_SMOKE: '1'
         run: |
           .release-automation/tooling/build-remote-gxserver-linux-release.sh --arch arm64
           OUTPUT="build/release-gpui/${{ inputs.version }}/gxserver-linux-arm64"
@@ -125,13 +133,14 @@ jobs:
   stage:
     needs: build
     runs-on: ubuntu-24.04
-    concurrency: { group: "release-state-${{ inputs.version }}", cancel-in-progress: false }
+    concurrency: { group: 'release-state-${{ inputs.version }}', cancel-in-progress: false }
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: main, fetch-depth: 1 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24.13.1 }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with: { name: "${{ inputs.version }}-${{ inputs.source_sha }}-gxserver-linux-arm64", path: build/stage/gxserver }
-      - env: { GH_TOKEN: "${{ github.token }}" }
+        with:
+          { name: '${{ inputs.version }}-${{ inputs.source_sha }}-gxserver-linux-arm64', path: build/stage/gxserver }
+      - env: { GH_TOKEN: '${{ github.token }}' }
         run: node tooling/release-resumable.mjs stage-package-and-advance "${{ inputs.version }}" "${{ inputs.source_sha }}" gxserver-linux-arm64 build/stage/gxserver "$(git rev-parse HEAD)" "${{ inputs.channel }}" "${{ inputs.update_sparkle }}"

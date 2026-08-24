@@ -621,7 +621,10 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn refresh_gpui_titlebar_resources_presentation_groups(&self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn refresh_gpui_titlebar_resources_presentation_groups(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUIResourcesDevServers 2026-07-26:
         Read the daemon's presentation snapshot off the main thread once per
@@ -936,7 +939,10 @@ impl GhostexGpuiApp {
         tabs
     }
 
-    pub(crate) fn request_gpui_titlebar_tips_runtime_status(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn request_gpui_titlebar_tips_runtime_status(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         self.run_gpui_app_modal_and_titlebar_status_task(
             || gpui_ghostex_cli_status_message(None),
             cx,
@@ -1966,7 +1972,11 @@ impl GhostexGpuiApp {
         self.upsert_gpui_app_toast(toast, cx);
     }
 
-    pub(crate) fn upsert_gpui_app_toast(&mut self, mut toast: GpuiAppToast, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn upsert_gpui_app_toast(
+        &mut self,
+        mut toast: GpuiAppToast,
+        cx: &mut gpui::Context<Self>,
+    ) {
         toast.description =
             gpui_normalized_app_toast_description(&toast.title, toast.description.as_deref());
         let main_window_bounds = self.main_window_bounds;

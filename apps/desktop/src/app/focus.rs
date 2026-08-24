@@ -10,8 +10,8 @@ use std::time::Instant;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-use gpui::Focusable as _;
 use gpui::App;
+use gpui::Focusable as _;
 use gpui::Modifiers;
 use gpui::MouseButton;
 use gpui::Pixels;
@@ -640,7 +640,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn set_sidebar_focus_border_handoff_target(&mut self, session_id: TerminalSessionId) {
+    pub(crate) fn set_sidebar_focus_border_handoff_target(
+        &mut self,
+        session_id: TerminalSessionId,
+    ) {
         if let Some(handoff) = self.sidebar_focus_border_handoff.as_mut() {
             handoff.target_session_id = Some(session_id);
         }
@@ -920,7 +923,11 @@ impl GhostexGpuiApp {
         ));
     }
 
-    pub(crate) fn focus_agents_pane(&mut self, pane_id: WorkspacePaneId, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn focus_agents_pane(
+        &mut self,
+        pane_id: WorkspacePaneId,
+        cx: &mut gpui::Context<Self>,
+    ) {
         self.agents_workspace.focus_pane(pane_id);
         self.sync_project_editor_companion_terminal_selection();
         self.set_shell_focus(ShellFocusTarget::AgentsPane(
@@ -1444,7 +1451,10 @@ impl GhostexGpuiApp {
     of the unconditional repaint sequence, so a pane whose grid already matches
     never repaints or scrolls.
     */
-    pub(crate) fn schedule_zmx_persistence_refresh_after_resize(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn schedule_zmx_persistence_refresh_after_resize(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         self.zmx_persistence_resize_refresh_generation = self
             .zmx_persistence_resize_refresh_generation
             .wrapping_add(1);
@@ -1472,7 +1482,10 @@ impl GhostexGpuiApp {
     daemon grid to the passed size, and a hidden pane's stale size would fight
     the surfaced owner.
     */
-    pub(crate) fn refresh_zmx_persistence_surfaced_terminals_if_stale(&self, cx: &gpui::Context<Self>) {
+    pub(crate) fn refresh_zmx_persistence_surfaced_terminals_if_stale(
+        &self,
+        cx: &gpui::Context<Self>,
+    ) {
         if self.active_mode == TitlebarMode::Agents {
             for slot_id in self.agents_workspace.rendered_terminal_body_mount_slots() {
                 self.refresh_zmx_persistence_agents_terminal_if_stale(slot_id, cx);
@@ -1529,7 +1542,10 @@ impl GhostexGpuiApp {
     site without threading the refresh through each one; the conditional
     refresh makes redundant firing after click focus a size-matched no-op.
     */
-    pub(crate) fn refresh_zmx_persistence_focused_terminal_if_changed(&mut self, cx: &gpui::Context<Self>) {
+    pub(crate) fn refresh_zmx_persistence_focused_terminal_if_changed(
+        &mut self,
+        cx: &gpui::Context<Self>,
+    ) {
         let focused = self.current_zmx_persistence_focused_terminal_slot();
         if self.zmx_persistence_last_focused_terminal_slot == focused {
             return;

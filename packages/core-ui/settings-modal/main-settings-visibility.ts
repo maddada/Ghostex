@@ -9,15 +9,15 @@ import {
   FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS,
   isFirstLaunchSetupMainSettingVisible,
   type FirstLaunchSetupMainSettingKey,
-} from "../../shared/first-launch-setup-settings";
-import { type ghostexSettings } from "../../shared/ghostex-settings";
-import { shouldShowSetting, shouldShowSettingsSection } from "./search";
-import { getMainSettingsSectionRef } from "./scroll-targets";
+} from '../../shared/first-launch-setup-settings';
+import { type ghostexSettings } from '../../shared/ghostex-settings';
+import { shouldShowSetting, shouldShowSettingsSection } from './search';
+import { getMainSettingsSectionRef } from './scroll-targets';
 import {
   type MainSettingsGroupSearch,
   type MainSettingsSectionNavigation,
   type SettingsSearchSections,
-} from "./search-catalog";
+} from './search-catalog';
 import {
   DEBUGGING_MODE_DEPENDENT_SETTING_KEY_SET,
   MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS,
@@ -31,19 +31,19 @@ import {
   SettingsSectionNavigationItem,
   SettingsSectionSearchResult,
   getMainSettingsSectionGroupId,
-} from "./types";
+} from './types';
 
 export type MainSettingVisibilityPredicate = (
   sectionResult: SettingsSectionSearchResult,
-  settingKey: string,
+  settingKey: string
 ) => boolean;
 export type MainSectionVisibilityPredicate = (
   sectionId: MainSettingsSectionId,
-  sectionResult: SettingsSectionSearchResult,
+  sectionResult: SettingsSectionSearchResult
 ) => boolean;
 export type MainSubsectionVisibilityPredicate = (
   sectionId: MainSettingsScrollTargetId,
-  sectionResult: SettingsSectionSearchResult,
+  sectionResult: SettingsSectionSearchResult
 ) => boolean;
 
 export function createMainSettingsVisibility({
@@ -66,33 +66,26 @@ export function createMainSettingsVisibility({
   showAdvancedSettings: boolean;
 }) {
   const settingMatchesGroupedSectionTitle = (settingKey: string) =>
-    (Object.entries(MAIN_SETTINGS_SECTION_SETTING_KEYS) as Array<
-      [MainSettingsSectionId, readonly string[]]
-    >).some(([sectionId, settingKeys]) => {
-      if (sectionId === "agents") {
-        return false;
+    (Object.entries(MAIN_SETTINGS_SECTION_SETTING_KEYS) as Array<[MainSettingsSectionId, readonly string[]]>).some(
+      ([sectionId, settingKeys]) => {
+        if (sectionId === 'agents') {
+          return false;
+        }
+        return mainSettingsGroupSearch[sectionId].groupTitleMatches === true && settingKeys.includes(settingKey);
       }
-      return (
-        mainSettingsGroupSearch[sectionId].groupTitleMatches === true &&
-        settingKeys.includes(settingKey)
-      );
-    });
+    );
   const subsectionMatchesGroupedSectionTitle = (sectionId: MainSettingsScrollTargetId) =>
     MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS[sectionId].some((settingKey) =>
-      settingMatchesGroupedSectionTitle(settingKey),
+      settingMatchesGroupedSectionTitle(settingKey)
     );
-  const visibleFirstLaunchMainSettings =
-    firstLaunchSetupVisibleSettings ?? FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS;
+  const visibleFirstLaunchMainSettings = firstLaunchSetupVisibleSettings ?? FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS;
   const keepAwakeSettingsVisible = isFirstLaunchSetup || draft.showBetaFeatures;
   const debuggingModeDependentSettingsVisible = draft.debuggingMode;
-  const mainSettingVisible = (
-    sectionResult: SettingsSectionSearchResult,
-    settingKey: string,
-  ) => {
+  const mainSettingVisible = (sectionResult: SettingsSectionSearchResult, settingKey: string) => {
     if (isFirstLaunchSetup) {
       return isFirstLaunchSetupMainSettingVisible(
         settingKey as FirstLaunchSetupMainSettingKey,
-        visibleFirstLaunchMainSettings,
+        visibleFirstLaunchMainSettings
       );
     }
     if (settingsSearchQuery.trim() && settingMatchesGroupedSectionTitle(settingKey)) {
@@ -101,70 +94,53 @@ export function createMainSettingsVisibility({
     return shouldShowSetting(sectionResult, settingKey, showAdvancedSettings);
   };
   const debuggingSettingVisible = (settingKey: string) => {
-    if (
-      !debuggingModeDependentSettingsVisible &&
-      DEBUGGING_MODE_DEPENDENT_SETTING_KEY_SET.has(settingKey)
-    ) {
+    if (!debuggingModeDependentSettingsVisible && DEBUGGING_MODE_DEPENDENT_SETTING_KEY_SET.has(settingKey)) {
       return false;
     }
     return mainSettingVisible(settingsSearch.debugging, settingKey);
   };
-  const mainSectionVisible = (
-    sectionId: MainSettingsSectionId,
-    sectionResult: SettingsSectionSearchResult,
-  ) => {
+  const mainSectionVisible = (sectionId: MainSettingsSectionId, sectionResult: SettingsSectionSearchResult) => {
     /*
      * CDXC:TitlebarKeepAwake 2026-06-19-13:13:
      * Keep Awake is experimental-only in the regular macOS Settings UI. Hide
      * the Power section until Enable Experimental Features is enabled, while
      * preserving the first-launch lid-close preference required by onboarding.
      */
-    if (
-      sectionId === "advanced" &&
-      !isFirstLaunchSetup &&
-      !debuggingModeDependentSettingsVisible
-    ) {
+    if (sectionId === 'advanced' && !isFirstLaunchSetup && !debuggingModeDependentSettingsVisible) {
       return (
         shouldShowSettingsSection(settingsSearch.beta, showAdvancedSettings) ||
-        shouldShowSetting(settingsSearch.debugging, "debuggingMode", showAdvancedSettings)
+        shouldShowSetting(settingsSearch.debugging, 'debuggingMode', showAdvancedSettings)
       );
     }
     if (isFirstLaunchSetup) {
       return MAIN_SETTINGS_SECTION_SETTING_KEYS[sectionId].some((settingKey) =>
         isFirstLaunchSetupMainSettingVisible(
           settingKey as FirstLaunchSetupMainSettingKey,
-          visibleFirstLaunchMainSettings,
-        ),
+          visibleFirstLaunchMainSettings
+        )
       );
     }
     return shouldShowSettingsSection(sectionResult, showAdvancedSettings);
   };
-  const mainSubsectionVisible = (
-    sectionId: MainSettingsScrollTargetId,
-    sectionResult: SettingsSectionSearchResult,
-  ) => {
-    if (sectionId === "power" && !keepAwakeSettingsVisible) {
+  const mainSubsectionVisible = (sectionId: MainSettingsScrollTargetId, sectionResult: SettingsSectionSearchResult) => {
+    if (sectionId === 'power' && !keepAwakeSettingsVisible) {
       return false;
     }
-    if (sectionId === "appIcon" && appIconPickerUnavailable) {
+    if (sectionId === 'appIcon' && appIconPickerUnavailable) {
       return false;
     }
-    if (
-      sectionId === "debugging" &&
-      !isFirstLaunchSetup &&
-      !debuggingModeDependentSettingsVisible
-    ) {
+    if (sectionId === 'debugging' && !isFirstLaunchSetup && !debuggingModeDependentSettingsVisible) {
       return (
         subsectionMatchesGroupedSectionTitle(sectionId) ||
-        shouldShowSetting(sectionResult, "debuggingMode", showAdvancedSettings)
+        shouldShowSetting(sectionResult, 'debuggingMode', showAdvancedSettings)
       );
     }
     if (isFirstLaunchSetup) {
       return MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS[sectionId].some((settingKey) =>
         isFirstLaunchSetupMainSettingVisible(
           settingKey as FirstLaunchSetupMainSettingKey,
-          visibleFirstLaunchMainSettings,
-        ),
+          visibleFirstLaunchMainSettings
+        )
       );
     }
     if (settingsSearchQuery.trim() && subsectionMatchesGroupedSectionTitle(sectionId)) {
@@ -200,8 +176,8 @@ export function createVisibleMainSettingsNavigation({
 }) {
   const scrollMainSettingsSectionIntoView = (sectionId: MainSettingsScrollTargetId) => {
     getMainSettingsSectionRef(sectionId, mainSettingsSectionRefs).current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
+      behavior: 'smooth',
+      block: 'start',
     });
   };
   const visibleMainSettingsSectionNavigation: Array<
@@ -209,36 +185,36 @@ export function createVisibleMainSettingsNavigation({
       searchResult: SettingsSectionSearchResult;
       subsections: readonly MainSettingsSubsectionNavigationItem[];
     }
-  > =
-    (isFirstLaunchSetup
+  > = (
+    isFirstLaunchSetup
       ? [
           {
-            id: "agents" as const,
+            id: 'agents' as const,
             searchResult: settingsSearch.sidebar,
-            title: "Agents",
+            title: 'Agents',
           },
           ...mainSettingsSectionNavigation,
         ]
       : mainSettingsSectionNavigation
+  )
+    .filter((section) =>
+      section.id === 'agents'
+        ? mainSectionVisible('agents', settingsSearch.sidebar)
+        : mainSectionVisible(section.id, section.searchResult)
     )
-      .filter((section) =>
-        section.id === "agents"
-          ? mainSectionVisible("agents", settingsSearch.sidebar)
-          : mainSectionVisible(section.id, section.searchResult),
-      )
-      .map((section) => ({
-        ...section,
-        /*
-         * CDXC:SettingsNavigation 2026-08-19:
-         * A nested row must not outlive the section it points at, so hide the
-         * ones a search query, Show Advanced, or an unavailable capability
-         * (Power without experimental features, App Icon off macOS) already
-         * removed from the page.
-         */
-        subsections: (MAIN_SETTINGS_SUBSECTION_NAVIGATION[section.id] ?? []).filter((subsection) =>
-          mainSubsectionVisible(subsection.id, settingsSearch[subsection.id]),
-        ),
-      }));
+    .map((section) => ({
+      ...section,
+      /*
+       * CDXC:SettingsNavigation 2026-08-19:
+       * A nested row must not outlive the section it points at, so hide the
+       * ones a search query, Show Advanced, or an unavailable capability
+       * (Power without experimental features, App Icon off macOS) already
+       * removed from the page.
+       */
+      subsections: (MAIN_SETTINGS_SUBSECTION_NAVIGATION[section.id] ?? []).filter((subsection) =>
+        mainSubsectionVisible(subsection.id, settingsSearch[subsection.id])
+      ),
+    }));
   const getMainSettingsSectionMeasurementItems = (): SettingsSectionMeasurementItem<MainSettingsScrollTargetId>[] =>
     visibleMainSettingsSectionNavigation.flatMap((section) =>
       (section.subsections.length > 0
@@ -247,15 +223,13 @@ export function createVisibleMainSettingsNavigation({
       ).map((scrollTargetId) => ({
         id: scrollTargetId,
         ref: getMainSettingsSectionRef(scrollTargetId, mainSettingsSectionRefs),
-      })),
+      }))
     );
   const activeMainSettingsGroupId = getMainSettingsSectionGroupId(activeMainSettingsSectionId);
   const hasVisibleMainSettings = visibleMainSettingsSectionNavigation.length > 0;
   const visibleMainSettingsSectionIds = visibleMainSettingsSectionNavigation
-    .map((section) =>
-      [section.id, ...section.subsections.map((subsection) => subsection.id)].join(">"),
-    )
-    .join("|");
+    .map((section) => [section.id, ...section.subsections.map((subsection) => subsection.id)].join('>'))
+    .join('|');
 
   return {
     activeMainSettingsGroupId,
@@ -269,4 +243,4 @@ export function createVisibleMainSettingsNavigation({
 
 export type VisibleMainSettingsSectionNavigation = ReturnType<
   typeof createVisibleMainSettingsNavigation
->["visibleMainSettingsSectionNavigation"];
+>['visibleMainSettingsSectionNavigation'];

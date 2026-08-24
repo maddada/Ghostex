@@ -172,7 +172,10 @@ impl GhostexGpuiApp {
             })
     }
 
-    pub(crate) fn render_sidebar_collapse_button(&self, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    pub(crate) fn render_sidebar_collapse_button(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
         /*
         CDXC:GPUITitlebarParity 2026-06-22-19:39:
         The visible sidebar toggle should match the macOS React titlebar's current flat layout-sidebar icon. Keep its 29px GPUI hit target 7px away from the native traffic lights (widened from 3px on 2026-08-23; macOS only, Windows/Linux keep their own frame). This margin is the left edge of the whole project slot, so it also sets where Back/Forward and the project name start. Do not render the old blue circular chevron visual.
@@ -264,7 +267,10 @@ impl GhostexGpuiApp {
         switcher
     }
 
-    pub(crate) fn render_compact_mode_dropdown(&self, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    pub(crate) fn render_compact_mode_dropdown(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
         let label = self.active_mode.display_label();
         h_flex()
             .id("ghostex-gpui-titlebar-compact-mode-dropdown")
@@ -387,5 +393,4 @@ impl GhostexGpuiApp {
             })
             .child(label)
     }
-
 }

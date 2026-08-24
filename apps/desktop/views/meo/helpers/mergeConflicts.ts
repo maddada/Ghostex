@@ -9,7 +9,7 @@ const lineDecos = {
   base: Decoration.line({ class: 'meo-merge-line meo-merge-base' }),
   separator: Decoration.line({ class: 'meo-merge-line meo-merge-separator' }),
   incomingHeader: Decoration.line({ class: 'meo-merge-line meo-merge-incoming-header' }),
-  incoming: Decoration.line({ class: 'meo-merge-line meo-merge-incoming' })
+  incoming: Decoration.line({ class: 'meo-merge-line meo-merge-incoming' }),
 };
 
 interface MergeConflict {
@@ -123,7 +123,7 @@ export function parseMergeConflicts(state: EditorState): MergeConflict[] {
       currentLabel,
       incomingLabel: markerLabel(lineText(state, endLineNo), '>>>>>>>'),
       currentText: doc.sliceString(currentStart, currentEnd),
-      incomingText: doc.sliceString(incomingStart, incomingEnd)
+      incomingText: doc.sliceString(incomingStart, incomingEnd),
     });
 
     lineNo = endLineNo + 1;
@@ -145,10 +145,12 @@ class MergeConflictActionsWidget extends WidgetType {
   }
 
   eq(other: MergeConflictActionsWidget): boolean {
-    return other instanceof MergeConflictActionsWidget &&
+    return (
+      other instanceof MergeConflictActionsWidget &&
       other.conflictId === this.conflictId &&
       other.currentLabel === this.currentLabel &&
-      other.incomingLabel === this.incomingLabel;
+      other.incomingLabel === this.incomingLabel
+    );
   }
 
   toDOM(): HTMLElement {
@@ -159,7 +161,7 @@ class MergeConflictActionsWidget extends WidgetType {
     const buttons = [
       { action: 'current', label: 'Accept Current' },
       { action: 'incoming', label: 'Accept Incoming' },
-      { action: 'both', label: 'Accept Both' }
+      { action: 'both', label: 'Accept Both' },
     ];
 
     for (const item of buttons) {
@@ -210,7 +212,7 @@ function buildConflictDecorations(state: EditorState, conflicts: MergeConflict[]
       Decoration.widget({
         widget: new MergeConflictActionsWidget(conflict.id, conflict.currentLabel, conflict.incomingLabel),
         side: -1,
-        block: true
+        block: true,
       })
     );
 
@@ -242,7 +244,7 @@ function buildMergeConflictState(state: EditorState): MergeConflictState {
   const conflicts = parseMergeConflicts(state);
   return {
     conflicts,
-    decorations: buildConflictDecorations(state, conflicts)
+    decorations: buildConflictDecorations(state, conflicts),
   };
 }
 
@@ -258,7 +260,7 @@ const mergeConflictField = StateField.define<MergeConflictState>({
   },
   provide(field: any) {
     return EditorView.decorations.from(field, (value: MergeConflictState) => value.decorations);
-  }
+  },
 });
 
 function detectDocEol(state: EditorState): string {
@@ -292,11 +294,11 @@ function applyConflictResolution(view: EditorView, conflict: MergeConflict, acti
     changes: {
       from: conflict.blockFrom,
       to: conflict.blockTo,
-      insert
+      insert,
     },
     selection: {
-      anchor: conflict.blockFrom
-    }
+      anchor: conflict.blockFrom,
+    },
   });
   return true;
 }
@@ -324,7 +326,7 @@ const mergeConflictDomHandlers = EditorView.domEventHandlers({
       view.focus();
     }
     return true;
-  }
+  },
 });
 
 export function mergeConflictSourceExtensions(): any[] {

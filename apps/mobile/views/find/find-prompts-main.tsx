@@ -1,5 +1,5 @@
-import { createRoot } from "react-dom/client";
-import "./find-prompts.css";
+import { createRoot } from 'react-dom/client';
+import './find-prompts.css';
 import type {
   ReadAgentPromptTextParams,
   ReadAgentPromptTextResult,
@@ -9,9 +9,9 @@ import type {
   SearchAgentPromptsResult,
   ToggleAgentPromptFavoriteParams,
   ToggleAgentPromptFavoriteResult,
-} from "@/packages/shared/agent-prompt-search";
-import { FindPromptsView } from "@/packages/core-ui/find/find-prompts-view";
-import type { FindPromptsTransport } from "@/packages/core-ui/find/find-prompts-transport";
+} from '@/packages/shared/agent-prompt-search';
+import { FindPromptsView } from '@/packages/core-ui/find/find-prompts-view';
+import type { FindPromptsTransport } from '@/packages/core-ui/find/find-prompts-transport';
 
 /*
 CDXC:AgentHistorySearch 2026-08-20:
@@ -35,14 +35,7 @@ Bridge contract (mirrored by mobile/src/find/find-prompts-bridge.ts):
 */
 
 type BridgeOp =
-  | "close"
-  | "copyText"
-  | "focusSession"
-  | "launchSession"
-  | "readText"
-  | "resolveLaunch"
-  | "search"
-  | "toggleFavorite";
+  'close' | 'copyText' | 'focusSession' | 'launchSession' | 'readText' | 'resolveLaunch' | 'search' | 'toggleFavorite';
 
 interface BridgeResponse {
   error?: string;
@@ -52,7 +45,7 @@ interface BridgeResponse {
 }
 
 interface MobileFindConfig {
-  theme?: "dark" | "light";
+  theme?: 'dark' | 'light';
 }
 
 declare global {
@@ -86,7 +79,7 @@ window.ghostexMobileFindDeliver = (response) => {
   if (response.ok) {
     entry.resolve(response.result);
   } else {
-    entry.reject(new Error(response.error || "The Ghostex bridge call failed."));
+    entry.reject(new Error(response.error || 'The Ghostex bridge call failed.'));
   }
 };
 
@@ -94,14 +87,14 @@ function bridgeCall<TResult>(op: BridgeOp, params?: Record<string, unknown>): Pr
   return new Promise<TResult>((resolve, reject) => {
     const host = window.ReactNativeWebView;
     if (!host) {
-      reject(new Error("This Find page is not hosted by the Ghostex app."));
+      reject(new Error('This Find page is not hosted by the Ghostex app.'));
       return;
     }
     const id = nextCallId;
     nextCallId += 1;
     const timer = window.setTimeout(() => {
       pendingCalls.delete(id);
-      reject(new Error("The Ghostex bridge call timed out."));
+      reject(new Error('The Ghostex bridge call timed out.'));
     }, BRIDGE_CALL_TIMEOUT_MS);
     pendingCalls.set(id, {
       reject,
@@ -114,16 +107,16 @@ function bridgeCall<TResult>(op: BridgeOp, params?: Record<string, unknown>): Pr
 
 const transport: FindPromptsTransport = {
   close() {
-    void bridgeCall("close");
+    void bridgeCall('close');
   },
   copyText(text) {
-    return bridgeCall("copyText", { text });
+    return bridgeCall('copyText', { text });
   },
   focusSession(params) {
-    return bridgeCall("focusSession", { ...params });
+    return bridgeCall('focusSession', { ...params });
   },
   launchSession(plan) {
-    return bridgeCall("launchSession", {
+    return bridgeCall('launchSession', {
       agent: plan.agent,
       command: plan.commandLine,
       cwd: plan.cwd,
@@ -132,34 +125,34 @@ const transport: FindPromptsTransport = {
     });
   },
   readText(params: ReadAgentPromptTextParams) {
-    return bridgeCall<ReadAgentPromptTextResult>("readText", { ...params });
+    return bridgeCall<ReadAgentPromptTextResult>('readText', { ...params });
   },
   resolveLaunch(params: ResolveAgentPromptLaunchParams) {
-    return bridgeCall<ResolveAgentPromptLaunchResult>("resolveLaunch", { ...params });
+    return bridgeCall<ResolveAgentPromptLaunchResult>('resolveLaunch', { ...params });
   },
   search(params: SearchAgentPromptsParams) {
-    return bridgeCall<SearchAgentPromptsResult>("search", { ...params });
+    return bridgeCall<SearchAgentPromptsResult>('search', { ...params });
   },
   toggleFavorite(params: ToggleAgentPromptFavoriteParams) {
-    return bridgeCall<ToggleAgentPromptFavoriteResult>("toggleFavorite", { ...params });
+    return bridgeCall<ToggleAgentPromptFavoriteResult>('toggleFavorite', { ...params });
   },
 };
 
 const config = window.__ghostexMobileFindConfig ?? {};
-const theme = config.theme === "light" ? "light" : "dark";
-document.body.dataset.sidebarTheme = theme === "light" ? "plain-light" : "plain-dark";
-document.body.classList.add(theme === "light" ? "vscode-light" : "vscode-dark", "native-sidebar-body");
-if (theme === "dark") {
-  document.documentElement.classList.add("dark");
+const theme = config.theme === 'light' ? 'light' : 'dark';
+document.body.dataset.sidebarTheme = theme === 'light' ? 'plain-light' : 'plain-dark';
+document.body.classList.add(theme === 'light' ? 'vscode-light' : 'vscode-dark', 'native-sidebar-body');
+if (theme === 'dark') {
+  document.documentElement.classList.add('dark');
 }
 document.documentElement.style.colorScheme = theme;
 
-const rootElement = document.getElementById("root");
+const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Ghostex find root element was not found.");
+  throw new Error('Ghostex find root element was not found.');
 }
 createRoot(rootElement).render(
-  <div className="native-sidebar-shell gpui-find-prompts">
+  <div className='native-sidebar-shell gpui-find-prompts'>
     <FindPromptsView transport={transport} />
-  </div>,
+  </div>
 );

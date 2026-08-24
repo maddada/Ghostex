@@ -15,7 +15,10 @@ use crate::*;
 
 impl GhostexGpuiApp {
     #[cfg(target_os = "macos")]
-    pub(crate) fn drain_command_terminal_runtime_clipboard_requests(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn drain_command_terminal_runtime_clipboard_requests(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUITerminalClipboard 2026-06-23-19:07:
         Command runtime clipboard handoff mirrors Agents ownership rules: only exact command mount keys from the current surface map can authorize app-thread standard clipboard access for queued owner-local Ghostty requests. Focus is never requester identity, reads stay explicit-string-only, writes forward only runtime-provided text, and stale/missing surfaces naturally keep their queued operations unreachable.

@@ -2,15 +2,11 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <meta
-      content="width=device-width, initial-scale=1.0"
-      name="viewport"
-    />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <style>
       :root {
         color-scheme: dark;
-        font-family:
-          -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
       }
 
       html,
@@ -189,7 +185,9 @@
         color: rgb(255 255 255 / 76%);
         cursor: default;
         display: inline-flex;
-        font: 700 10px/1 system-ui, sans-serif;
+        font:
+          700 10px/1 system-ui,
+          sans-serif;
         height: 16px;
         justify-content: center;
         min-width: 0;
@@ -246,7 +244,9 @@
         color: rgb(255 255 255 / 82%);
         cursor: default;
         display: inline-flex;
-        font: 700 12px/1 system-ui, sans-serif;
+        font:
+          700 12px/1 system-ui,
+          sans-serif;
         height: 32px;
         justify-content: center;
         min-width: 0;
@@ -268,54 +268,23 @@
   <body>
     <div id="root">
       <header class="editor-header">
-        <div
-          class="editor-hint"
-          id="editor-hint"
-        ></div>
+        <div class="editor-hint" id="editor-hint"></div>
         <div class="editor-actions">
-          <button
-            id="cancel-button"
-            type="button"
-          >
-            Cancel
-          </button>
-          <button
-            class="save-button"
-            id="save-button"
-            type="button"
-          >
-            Save
-          </button>
+          <button id="cancel-button" type="button">Cancel</button>
+          <button class="save-button" id="save-button" type="button">Save</button>
         </div>
       </header>
       <main id="editor"></main>
-      <footer
-        class="editor-image-strip"
-        hidden
-        id="image-strip"
-      ></footer>
+      <footer class="editor-image-strip" hidden id="image-strip"></footer>
     </div>
-    <div
-      class="editor-image-popup"
-      hidden
-      id="image-popup"
-      role="presentation"
-    >
-      <button
-        aria-label="Close image preview"
-        class="editor-image-popup-close"
-        id="image-popup-close"
-        type="button"
-      >
+    <div class="editor-image-popup" hidden id="image-popup" role="presentation">
+      <button aria-label="Close image preview" class="editor-image-popup-close" id="image-popup-close" type="button">
         ✕
       </button>
-      <img
-        alt=""
-        id="image-popup-image"
-      />
+      <img alt="" id="image-popup-image" />
     </div>
     <script>
-      __GHOSTEX_EDITOR_BUNDLE__
+      __GHOSTEX_EDITOR_BUNDLE__;
     </script>
   </body>
 </html>

@@ -16,28 +16,22 @@
  * building is always safe, degrading toward reuse never is.
  */
 
-import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import {
-  COMPONENT_IDS,
-  PRODUCT_IDS,
-  TRUSTED_REPO,
-  defaultScope,
-  productDefinition,
-} from "./product-inputs.mjs";
+import { COMPONENT_IDS, PRODUCT_IDS, TRUSTED_REPO, defaultScope, productDefinition } from './product-inputs.mjs';
 import {
   FINGERPRINT_ALGORITHM_REVISION,
   computeFingerprints,
   createGitTreeReader,
   shortFingerprint,
-} from "./fingerprint.mjs";
-import { releaseProvenanceAssetName, validateReleaseProvenance } from "./provenance.mjs";
-import { DEFAULT_BASELINE_COUNT, computePlan, planSummaryLine, renderPlanText, scopeFromEnv } from "./plan.mjs";
-import { withRetryProfile } from "./retry.mjs";
+} from './fingerprint.mjs';
+import { releaseProvenanceAssetName, validateReleaseProvenance } from './provenance.mjs';
+import { DEFAULT_BASELINE_COUNT, computePlan, planSummaryLine, renderPlanText, scopeFromEnv } from './plan.mjs';
+import { withRetryProfile } from './retry.mjs';
 
 const versionPattern = /^\d+\.\d+\.\d+$/u;
 const releaseTagPattern = /^v(\d+\.\d+\.\d+)$/u;
@@ -75,7 +69,7 @@ export function parsePlanCliArgs(argv) {
     emitStepSummary: false,
     forceAll: false,
     forcedProducts: [],
-    format: "text",
+    format: 'text',
     offline: false,
     output: null,
     repo: TRUSTED_REPO,
@@ -87,78 +81,78 @@ export function parsePlanCliArgs(argv) {
   };
   const takeValue = (argv_, index, name) => {
     const value = argv_[index + 1];
-    if (value === undefined || value.startsWith("--")) throw new Error(`${name} requires a value`);
+    if (value === undefined || value.startsWith('--')) throw new Error(`${name} requires a value`);
     return value;
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--help" || argument === "-h") return { ...options, help: true };
-    if (!argument.startsWith("--")) {
+    if (argument === '--help' || argument === '-h') return { ...options, help: true };
+    if (!argument.startsWith('--')) {
       if (options.version !== null) throw new Error(`Unexpected argument: ${argument}`);
       options.version = argument;
       continue;
     }
     switch (argument) {
-      case "--force-all":
+      case '--force-all':
         options.forceAll = true;
         break;
-      case "--offline":
+      case '--offline':
         options.offline = true;
         break;
-      case "--emit-github-output":
+      case '--emit-github-output':
         options.emitGithubOutput = true;
         break;
-      case "--emit-step-summary":
+      case '--emit-step-summary':
         options.emitStepSummary = true;
         break;
-      case "--version":
+      case '--version':
         options.version = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--force":
+      case '--force':
         options.forcedProducts = takeValue(argv, index, argument)
-          .split(",")
+          .split(',')
           .map((entry) => entry.trim())
           .filter(Boolean);
         index += 1;
         break;
-      case "--scope-json":
+      case '--scope-json':
         options.scopeJson = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--reuse-from-run":
+      case '--reuse-from-run':
         options.reuseFromRunId = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--baseline-count":
+      case '--baseline-count':
         options.baselineCount = Number(takeValue(argv, index, argument));
         index += 1;
         break;
-      case "--format":
+      case '--format':
         options.format = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--output":
+      case '--output':
         options.output = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--repo":
+      case '--repo':
         options.repo = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--repo-root":
+      case '--repo-root':
         options.repoRoot = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--source-sha":
+      case '--source-sha':
         options.sourceSha = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--cef-version":
+      case '--cef-version':
         options.cefComponentVersion = takeValue(argv, index, argument);
         index += 1;
         break;
-      case "--code-server-version":
+      case '--code-server-version':
         options.codeServerComponentVersion = takeValue(argv, index, argument);
         index += 1;
         break;
@@ -166,16 +160,16 @@ export function parsePlanCliArgs(argv) {
         throw new Error(`Unknown option: ${argument}`);
     }
   }
-  if (!["text", "json"].includes(options.format)) throw new Error("--format must be text or json");
+  if (!['text', 'json'].includes(options.format)) throw new Error('--format must be text or json');
   if (!Number.isInteger(options.baselineCount) || options.baselineCount < 1) {
-    throw new Error("--baseline-count must be a positive integer");
+    throw new Error('--baseline-count must be a positive integer');
   }
   if (options.reuseFromRunId !== null && !/^\d+$/u.test(options.reuseFromRunId)) {
-    throw new Error("--reuse-from-run must be a GitHub Actions run id");
+    throw new Error('--reuse-from-run must be a GitHub Actions run id');
   }
   for (const productId of options.forcedProducts) productDefinition(productId);
   if (options.forceAll && options.forcedProducts.length > 0) {
-    throw new Error("--force-all already rebuilds everything; drop --force");
+    throw new Error('--force-all already rebuilds everything; drop --force');
   }
   return options;
 }
@@ -188,26 +182,26 @@ export function parsePlanCliArgs(argv) {
  */
 export function resolvePlanScope({ env = process.env, scopeJson = null } = {}) {
   if (scopeJson) {
-    const text = scopeJson.startsWith("@") ? readFileSync(scopeJson.slice(1), "utf8") : scopeJson;
+    const text = scopeJson.startsWith('@') ? readFileSync(scopeJson.slice(1), 'utf8') : scopeJson;
     return defaultScope(JSON.parse(text));
   }
-  const hasEnvScope = Object.keys(env).some((key) => key.startsWith("GHOSTEX_RELEASE_") && env[key] !== "");
+  const hasEnvScope = Object.keys(env).some((key) => key.startsWith('GHOSTEX_RELEASE_') && env[key] !== '');
   return hasEnvScope ? scopeFromEnv(env) : defaultScope();
 }
 
 function ghCapture(args, { allowFailure = false, maxBuffer = 96 * 1024 * 1024 } = {}) {
-  const result = spawnSync("gh", args, { encoding: "utf8", maxBuffer });
+  const result = spawnSync('gh', args, { encoding: 'utf8', maxBuffer });
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    if (allowFailure) return { ok: false, stderr: result.stderr ?? "", stdout: result.stdout ?? "" };
-    throw new Error(`gh ${args.join(" ")} failed: ${(result.stderr || result.stdout || "").trim()}`);
+    if (allowFailure) return { ok: false, stderr: result.stderr ?? '', stdout: result.stdout ?? '' };
+    throw new Error(`gh ${args.join(' ')} failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
-  return { ok: true, stderr: result.stderr ?? "", stdout: result.stdout ?? "" };
+  return { ok: true, stderr: result.stderr ?? '', stdout: result.stdout ?? '' };
 }
 
 function ghJson(args, options) {
-  return withRetryProfile(async () => JSON.parse(ghCapture(args, options).stdout), "github", {
-    label: `gh ${args.slice(0, 2).join(" ")}`,
+  return withRetryProfile(async () => JSON.parse(ghCapture(args, options).stdout), 'github', {
+    label: `gh ${args.slice(0, 2).join(' ')}`,
   });
 }
 
@@ -222,19 +216,19 @@ function notice(message) {
  */
 export async function collectReleaseBaselines({ count, repo, resolveTagCommit }) {
   const perPage = Math.min(100, Math.max(count * 2, count));
-  const releases = await ghJson(["api", `repos/${repo}/releases?per_page=${perPage}`]);
+  const releases = await ghJson(['api', `repos/${repo}/releases?per_page=${perPage}`]);
   const baselines = [];
   for (const release of releases) {
     if (baselines.length >= count) break;
     if (release.draft) continue;
-    const match = releaseTagPattern.exec(release.tag_name ?? "");
+    const match = releaseTagPattern.exec(release.tag_name ?? '');
     if (!match) continue;
     const assetName = releaseProvenanceAssetName(match[1]);
     const asset = (release.assets ?? []).find((candidate) => candidate.name === assetName);
     if (!asset) continue;
     const download = ghCapture(
-      ["api", `repos/${repo}/releases/assets/${asset.id}`, "-H", "Accept: application/octet-stream"],
-      { allowFailure: true },
+      ['api', `repos/${repo}/releases/assets/${asset.id}`, '-H', 'Accept: application/octet-stream'],
+      { allowFailure: true }
     );
     if (!download.ok) {
       notice(`::warning::Skipping ${release.tag_name}: ${assetName} could not be downloaded`);
@@ -272,47 +266,47 @@ export async function collectReleaseBaselines({ count, repo, resolveTagCommit })
  */
 export async function collectSourceRun({ repo, runId }) {
   const run = await ghJson([
-    "run",
-    "view",
+    'run',
+    'view',
     String(runId),
-    "--repo",
+    '--repo',
     repo,
-    "--json",
-    "conclusion,event,headSha,status,url,workflowName",
+    '--json',
+    'conclusion,event,headSha,status,url,workflowName',
   ]);
-  const listing = await ghJson(["api", `repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`]);
+  const listing = await ghJson(['api', `repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`]);
   const artifacts = listing.artifacts ?? [];
   const expiredArtifacts = artifacts.filter((artifact) => artifact.expired).map((artifact) => artifact.name);
   const available = new Set(artifacts.filter((artifact) => !artifact.expired).map((artifact) => artifact.name));
 
   const products = {};
-  const scratch = mkdtempSync(path.join(tmpdir(), "ghostex-plan-run-"));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'ghostex-plan-run-'));
   try {
     for (const productId of PRODUCT_IDS) {
       const artifactName = `release-provenance-${productId}`;
       if (!available.has(artifactName)) continue;
       const destination = path.join(scratch, productId);
       const download = ghCapture(
-        ["run", "download", String(runId), "--repo", repo, "--name", artifactName, "--dir", destination],
-        { allowFailure: true },
+        ['run', 'download', String(runId), '--repo', repo, '--name', artifactName, '--dir', destination],
+        { allowFailure: true }
       );
       if (!download.ok) {
         notice(`::warning::${artifactName} could not be downloaded from run ${runId}`);
         continue;
       }
-      const recordPath = path.join(destination, "provenance.json");
+      const recordPath = path.join(destination, 'provenance.json');
       if (!existsSync(recordPath)) continue;
-      products[productId] = JSON.parse(readFileSync(recordPath, "utf8"));
+      products[productId] = JSON.parse(readFileSync(recordPath, 'utf8'));
     }
   } finally {
     rmSync(scratch, { force: true, recursive: true });
   }
 
-  if (run.conclusion && run.conclusion !== "success") {
+  if (run.conclusion && run.conclusion !== 'success') {
     const survivors = Object.keys(products);
     notice(
       `::notice::Run ${runId} concluded ${run.conclusion}; its ${survivors.length} product(s) with ` +
-        `surviving artifacts (${survivors.join(", ") || "none"}) remain reuse candidates`,
+        `surviving artifacts (${survivors.join(', ') || 'none'}) remain reuse candidates`
     );
   }
 
@@ -338,7 +332,12 @@ export async function collectSourceRun({ repo, runId }) {
  * composition must still carry that baseline's component version.
  */
 export function resolveComponentIdentities({ baselines, entries, overrides = {}, readObject, scope, version }) {
-  const fingerprints = computeFingerprints({ context: { scope, version }, entries, ids: [...COMPONENT_IDS], readObject });
+  const fingerprints = computeFingerprints({
+    context: { scope, version },
+    entries,
+    ids: [...COMPONENT_IDS],
+    readObject,
+  });
   const identities = {};
   for (const component of COMPONENT_IDS) {
     if (overrides[component]) {
@@ -352,7 +351,7 @@ export function resolveComponentIdentities({ baselines, entries, overrides = {},
       const recordedVersion = provenance.components?.[component]?.componentVersion;
       if (!recordedVersion) continue;
       const matches = Object.values(provenance.products ?? {}).some(
-        (record) => record?.inputs?.composed?.[component] === current,
+        (record) => record?.inputs?.composed?.[component] === current
       );
       if (matches) {
         identities[component] = recordedVersion;
@@ -373,17 +372,17 @@ export async function collectComponentTagState({ baselines, identities, repo }) 
       continue;
     }
     const tag = `${component}-${componentVersion}`;
-    const view = ghCapture(["release", "view", tag, "--repo", repo, "--json", "assets"], { allowFailure: true });
-    const assets = view.ok ? JSON.parse(view.stdout).assets ?? [] : [];
+    const view = ghCapture(['release', 'view', tag, '--repo', repo, '--json', 'assets'], { allowFailure: true });
+    const assets = view.ok ? (JSON.parse(view.stdout).assets ?? []) : [];
     const platforms = {};
     const prefix = `${tag}-`;
     for (const asset of assets) {
-      if (!asset.name.startsWith(prefix) || !asset.name.endsWith(".tar.gz")) continue;
-      const platform = asset.name.slice(prefix.length, -".tar.gz".length);
-      if (!platform || platform.includes(".")) continue;
+      if (!asset.name.startsWith(prefix) || !asset.name.endsWith('.tar.gz')) continue;
+      const platform = asset.name.slice(prefix.length, -'.tar.gz'.length);
+      if (!platform || platform.includes('.')) continue;
       platforms[platform] = {
         assetName: asset.name,
-        sha256: typeof asset.digest === "string" ? asset.digest.replace(/^sha256:/u, "") : null,
+        sha256: typeof asset.digest === 'string' ? asset.digest.replace(/^sha256:/u, '') : null,
         sizeBytes: asset.size ?? null,
       };
     }
@@ -404,12 +403,12 @@ export async function collectComponentTagState({ baselines, identities, repo }) 
  * out, which is exactly the state the `prepare` job arranges.
  */
 export function resolveCodeServerIdentity({ repoRoot }) {
-  const root = path.join(repoRoot, ".dependencies/code-server");
-  if (!existsSync(path.join(root, "package.json"))) return null;
+  const root = path.join(repoRoot, '.dependencies/code-server');
+  if (!existsSync(path.join(root, 'package.json'))) return null;
   const result = spawnSync(
-    "node",
-    [path.join(repoRoot, "tooling/release-gpui/code-server-component-identity.mjs"), "--root", root],
-    { cwd: repoRoot, encoding: "utf8" },
+    'node',
+    [path.join(repoRoot, 'tooling/release-gpui/code-server-component-identity.mjs'), '--root', root],
+    { cwd: repoRoot, encoding: 'utf8' }
   );
   if (result.status !== 0) return null;
   const identity = result.stdout.trim();
@@ -419,48 +418,50 @@ export function resolveCodeServerIdentity({ repoRoot }) {
 export function renderPlanMarkdown(plan) {
   const lines = [];
   lines.push(`## Release plan — ${plan.version} (${plan.algorithmRevision})`);
-  lines.push("");
+  lines.push('');
   lines.push(`- Source \`${plan.sourceSha}\``);
-  lines.push(`- Mode ${plan.forceAll ? "**force-all**" : "change-aware"}${plan.forcedProducts.length > 0 ? ` (forced: ${plan.forcedProducts.join(", ")})` : ""}`);
   lines.push(
-    `- Baselines ${plan.baselineTags.length > 0 ? plan.baselineTags.join(", ") : "(none)"} — ` +
-      `${plan.baselinesInspected} inspected, ${plan.baselinesWithProvenance} with provenance`,
+    `- Mode ${plan.forceAll ? '**force-all**' : 'change-aware'}${plan.forcedProducts.length > 0 ? ` (forced: ${plan.forcedProducts.join(', ')})` : ''}`
+  );
+  lines.push(
+    `- Baselines ${plan.baselineTags.length > 0 ? plan.baselineTags.join(', ') : '(none)'} — ` +
+      `${plan.baselinesInspected} inspected, ${plan.baselinesWithProvenance} with provenance`
   );
   lines.push(`- ${planSummaryLine(plan)}; ~${plan.estimates.savedRunnerMinutes} runner-minutes saved`);
-  lines.push("");
-  lines.push("| Product | Action | Fingerprint | Reason |");
-  lines.push("|---|---|---|---|");
+  lines.push('');
+  lines.push('| Product | Action | Fingerprint | Reason |');
+  lines.push('|---|---|---|---|');
   for (const productId of PRODUCT_IDS) {
     const entry = plan.products[productId];
     lines.push(
-      `| \`${productId}\` | ${entry.action.toUpperCase()} | \`${shortFingerprint(entry.fingerprint)}\` | ${entry.reason} |`,
+      `| \`${productId}\` | ${entry.action.toUpperCase()} | \`${shortFingerprint(entry.fingerprint)}\` | ${entry.reason} |`
     );
   }
-  lines.push("");
-  lines.push("| Component | Version | Action | Reason |");
-  lines.push("|---|---|---|---|");
+  lines.push('');
+  lines.push('| Component | Version | Action | Reason |');
+  lines.push('|---|---|---|---|');
   for (const component of COMPONENT_IDS) {
     const entry = plan.components[component];
     lines.push(
-      `| \`${component}\` | \`${entry.componentVersion ?? "unknown"}\` | ${entry.action.toUpperCase()} | ${entry.reason} |`,
+      `| \`${component}\` | \`${entry.componentVersion ?? 'unknown'}\` | ${entry.action.toUpperCase()} | ${entry.reason} |`
     );
   }
-  lines.push("");
+  lines.push('');
   const rejected = PRODUCT_IDS.flatMap((productId) =>
     (plan.products[productId].rejectedReuse ?? []).map(
-      (entry) => `- \`${productId}\` rejected ${entry.origin}: ${entry.reasons.join("; ")}`,
-    ),
+      (entry) => `- \`${productId}\` rejected ${entry.origin}: ${entry.reasons.join('; ')}`
+    )
   );
   if (rejected.length > 0) {
-    lines.push("<details><summary>Rejected reuse candidates</summary>", "");
+    lines.push('<details><summary>Rejected reuse candidates</summary>', '');
     lines.push(...rejected);
-    lines.push("", "</details>", "");
+    lines.push('', '</details>', '');
   }
   lines.push(
-    `Feeds: sparkle=${plan.feeds.sparkle ? "update" : "hold"}, homebrew=${plan.feeds.homebrew ? "update" : "hold"}, ` +
-      `windows-feeds=${plan.feeds.windowsFeeds.join(",") || "none"}`,
+    `Feeds: sparkle=${plan.feeds.sparkle ? 'update' : 'hold'}, homebrew=${plan.feeds.homebrew ? 'update' : 'hold'}, ` +
+      `windows-feeds=${plan.feeds.windowsFeeds.join(',') || 'none'}`
   );
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /*
@@ -500,13 +501,13 @@ export function planGithubOutputs(plan) {
   if (threaded.length > THREADED_PLAN_WARN_BYTES) {
     notice(
       `::warning::The resolved plan threaded to the release jobs is ${threaded.length} bytes, ` +
-        `above the ${THREADED_PLAN_WARN_BYTES}-byte review threshold`,
+        `above the ${THREADED_PLAN_WARN_BYTES}-byte review threshold`
     );
   }
   return {
-    expected_platforms: plan.expectedPlatforms.join(","),
+    expected_platforms: plan.expectedPlatforms.join(','),
     feeds_sparkle: String(Boolean(plan.feeds.sparkle)),
-    feeds_windows: plan.feeds.windowsFeeds.join(","),
+    feeds_windows: plan.feeds.windowsFeeds.join(','),
     job_android: plan.jobs.android,
     job_code_server_arm64: plan.jobs.code_server_arm64,
     job_code_server_x64: plan.jobs.code_server_x64,
@@ -519,7 +520,7 @@ export function planGithubOutputs(plan) {
     job_windows_x64: plan.jobs.windows_x64,
     job_wsl_arm64: plan.jobs.wsl_arm64,
     job_wsl_x64: plan.jobs.wsl_x64,
-    linux_packages: plan.jobs.linux_packages.join(","),
+    linux_packages: plan.jobs.linux_packages.join(','),
     plan: threaded,
     reuse_count: String(plan.jobs.reuse_matrix.length),
     reuse_matrix: JSON.stringify(plan.jobs.reuse_matrix),
@@ -530,18 +531,18 @@ export function planGithubOutputs(plan) {
 function appendOutputs(file, outputs) {
   if (!file) return;
   const lines = Object.entries(outputs).map(([key, value]) => {
-    if (String(value).includes("\n")) throw new Error(`Plan output ${key} must be single-line`);
+    if (String(value).includes('\n')) throw new Error(`Plan output ${key} must be single-line`);
     return `${key}=${value}`;
   });
-  appendFileSync(file, `${lines.join("\n")}\n`);
+  appendFileSync(file, `${lines.join('\n')}\n`);
 }
 
 export async function buildPlanFromRepository(options) {
   const reader = createGitTreeReader({ repoRoot: options.repoRoot });
-  const sourceSha = options.sourceSha ?? reader.resolve("HEAD");
+  const sourceSha = options.sourceSha ?? reader.resolve('HEAD');
   const version =
-    options.version ?? JSON.parse(readFileSync(path.join(options.repoRoot, "package.json"), "utf8")).version;
-  if (!versionPattern.test(version ?? "")) throw new Error("Pass a MAJOR.MINOR.PATCH release version");
+    options.version ?? JSON.parse(readFileSync(path.join(options.repoRoot, 'package.json'), 'utf8')).version;
+  if (!versionPattern.test(version ?? '')) throw new Error('Pass a MAJOR.MINOR.PATCH release version');
   const scope = resolvePlanScope({ scopeJson: options.scopeJson });
   const entries = reader.listTree(sourceSha);
 
@@ -550,17 +551,17 @@ export async function buildPlanFromRepository(options) {
   let componentTagState = {};
   const identityOverrides = {
     cef: options.cefComponentVersion,
-    "code-server": options.codeServerComponentVersion ?? resolveCodeServerIdentity({ repoRoot: options.repoRoot }),
+    'code-server': options.codeServerComponentVersion ?? resolveCodeServerIdentity({ repoRoot: options.repoRoot }),
   };
 
   if (options.offline) {
-    notice("::notice::Planning offline: no reuse candidates will be considered");
+    notice('::notice::Planning offline: no reuse candidates will be considered');
   } else {
     baselines = await collectReleaseBaselines({
       count: options.baselineCount,
       repo: options.repo,
       resolveTagCommit: (tag) => {
-        const result = spawnSync("git", ["-C", options.repoRoot, "rev-list", "-n", "1", tag], { encoding: "utf8" });
+        const result = spawnSync('git', ['-C', options.repoRoot, 'rev-list', '-n', '1', tag], { encoding: 'utf8' });
         return result.status === 0 ? result.stdout.trim() || null : null;
       },
     });
@@ -587,9 +588,7 @@ export async function buildPlanFromRepository(options) {
 
   return computePlan({
     assetMetadata: ({ candidate, name }) =>
-      candidate.tier === "release"
-        ? (candidate.assets ?? []).find((asset) => asset.name === name) ?? null
-        : null,
+      candidate.tier === 'release' ? ((candidate.assets ?? []).find((asset) => asset.name === name) ?? null) : null,
     baselineCount: options.baselineCount,
     baselines,
     componentIdentities,
@@ -614,7 +613,7 @@ async function main() {
     return;
   }
   const plan = await buildPlanFromRepository(options);
-  if (options.format === "json") process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+  if (options.format === 'json') process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
   else process.stdout.write(`${renderPlanText(plan)}\n`);
   if (options.output) writeFileSync(options.output, `${JSON.stringify(plan, null, 2)}\n`);
   if (options.emitGithubOutput) appendOutputs(process.env.GITHUB_OUTPUT, planGithubOutputs(plan));

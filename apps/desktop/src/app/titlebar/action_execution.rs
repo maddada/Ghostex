@@ -303,5 +303,4 @@ impl GhostexGpuiApp {
         self.persist_shell_layout_state();
         cx.notify();
     }
-
 }

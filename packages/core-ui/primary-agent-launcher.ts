@@ -1,6 +1,6 @@
-const PRIMARY_AGENT_LAUNCHER_STORAGE_KEY = "ghostex-sidebar-project-terminal-launcher";
+const PRIMARY_AGENT_LAUNCHER_STORAGE_KEY = 'ghostex-sidebar-project-terminal-launcher';
 
-export const PRIMARY_AGENT_LAUNCHER_CHANGED_EVENT = "ghostex-sidebar-primary-agent-launcher-changed";
+export const PRIMARY_AGENT_LAUNCHER_CHANGED_EVENT = 'ghostex-sidebar-primary-agent-launcher-changed';
 
 export type PrimaryAgentLauncherChangedEvent = CustomEvent<{
   agentId: string;
@@ -19,6 +19,6 @@ export function writePrimaryAgentLauncherId(agentId: string): void {
   window.dispatchEvent(
     new CustomEvent(PRIMARY_AGENT_LAUNCHER_CHANGED_EVENT, {
       detail: { agentId },
-    }),
+    })
   );
 }

@@ -1,6 +1,6 @@
-const COMBINED_PROJECT_GROUP_ID_PREFIX = "combined-project:";
-const COMBINED_PROJECT_SESSION_ID_PREFIX = "combined-session:";
-const COMBINED_ID_SEPARATOR = ":";
+const COMBINED_PROJECT_GROUP_ID_PREFIX = 'combined-project:';
+const COMBINED_PROJECT_SESSION_ID_PREFIX = 'combined-session:';
+const COMBINED_ID_SEPARATOR = ':';
 
 export type CombinedSidebarSessionReference = {
   projectId: string;
@@ -32,12 +32,10 @@ export function createCombinedProjectSessionId(projectId: string, sessionId: str
     encodeCombinedIdPart(projectId),
     COMBINED_ID_SEPARATOR,
     encodeCombinedIdPart(sessionId),
-  ].join("");
+  ].join('');
 }
 
-export function parseCombinedProjectSessionId(
-  sessionId: string,
-): CombinedSidebarSessionReference | undefined {
+export function parseCombinedProjectSessionId(sessionId: string): CombinedSidebarSessionReference | undefined {
   if (!sessionId.startsWith(COMBINED_PROJECT_SESSION_ID_PREFIX)) {
     return undefined;
   }

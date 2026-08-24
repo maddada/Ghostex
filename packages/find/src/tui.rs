@@ -11,7 +11,7 @@
 use std::io::{Read, Write};
 
 use crate::agent::{Agent, ALL_AGENTS};
-use crate::index::{day_key, QueryOptions, SearchIndex, Hit, SECONDS_PER_DAY, UNKNOWN_DAY_KEY};
+use crate::index::{day_key, Hit, QueryOptions, SearchIndex, SECONDS_PER_DAY, UNKNOWN_DAY_KEY};
 use crate::scan::{civil_from_day_key, project_display_name, Record, Usage};
 use crate::unicode as uni;
 
@@ -232,7 +232,9 @@ impl<'a> Tui<'a> {
     }
 
     fn selected_record(&self) -> Option<&Record> {
-        self.hits.get(self.sel).map(|h| &self.index.records[h.index])
+        self.hits
+            .get(self.sel)
+            .map(|h| &self.index.records[h.index])
     }
 
     fn refresh_winsize(&mut self, stdin: &std::io::Stdin) {
@@ -266,7 +268,8 @@ impl<'a> Tui<'a> {
     fn rebuild_view_rows(&mut self) {
         self.view_rows.clear();
         if !self.group_by_day {
-            self.view_rows.extend((0..self.hits.len()).map(ViewRow::Hit));
+            self.view_rows
+                .extend((0..self.hits.len()).map(ViewRow::Hit));
             return;
         }
         let mut last_day: Option<i64> = None;
@@ -334,7 +337,6 @@ impl<'a> Tui<'a> {
             .sum()
     }
 
-
     fn clamp_scroll(&mut self) {
         let h = self.list_height();
         if self.view_rows.is_empty() {
@@ -383,7 +385,14 @@ impl<'a> Tui<'a> {
     /// Render `text` on a single line: UTF-8 aware, truncated to `max` display
     /// columns, with matched bytes highlighted. Highlight positions are byte
     /// offsets; a codepoint is highlighted when its first byte is a match.
-    fn write_highlighted(&self, b: &mut String, text: &str, positions: &[u16], max: usize, selected: bool) {
+    fn write_highlighted(
+        &self,
+        b: &mut String,
+        text: &str,
+        positions: &[u16],
+        max: usize,
+        selected: bool,
+    ) {
         let bytes = text.as_bytes();
         let scroll = if selected { self.result_scroll } else { 0 };
         let mut pi = 0usize;
@@ -494,7 +503,13 @@ impl<'a> Tui<'a> {
         }
     }
 
-    fn write_result_row(&self, b: &mut String, hit_idx: usize, now: i64, max_lines: usize) -> usize {
+    fn write_result_row(
+        &self,
+        b: &mut String,
+        hit_idx: usize,
+        now: i64,
+        max_lines: usize,
+    ) -> usize {
         if max_lines == 0 {
             return 0;
         }
@@ -511,7 +526,13 @@ impl<'a> Tui<'a> {
             b.push_str(RESET_STYLE);
         }
         b.push(' ');
-        self.write_highlighted(b, &rec.text, &hit.positions, self.result_prompt_cols(), selected);
+        self.write_highlighted(
+            b,
+            &rec.text,
+            &hit.positions,
+            self.result_prompt_cols(),
+            selected,
+        );
         self.finish_result_line(b, selected);
         if max_lines == 1 {
             return 1;
@@ -538,7 +559,10 @@ impl<'a> Tui<'a> {
     }
 
     fn write_day_header_row(&self, b: &mut String, day: i64, now: i64) {
-        b.push_str(&format!("  \x1b[1;90m{}\x1b[0m\r\n", format_day_header(day, now)));
+        b.push_str(&format!(
+            "  \x1b[1;90m{}\x1b[0m\r\n",
+            format_day_header(day, now)
+        ));
     }
 
     fn count_digits(n: usize) -> usize {
@@ -553,7 +577,8 @@ impl<'a> Tui<'a> {
 
     fn write_prompt_line(&self, b: &mut String) {
         let prefix_cols = 2usize;
-        let counts = 2 + Self::count_digits(self.hits.len()) + 1 + Self::count_digits(self.records().len());
+        let counts =
+            2 + Self::count_digits(self.hits.len()) + 1 + Self::count_digits(self.records().len());
         let status_cols = if self.cols >= 96 {
             counts + 72
         } else if self.cols >= 64 {
@@ -582,7 +607,11 @@ impl<'a> Tui<'a> {
                 self.records().len()
             ));
         } else {
-            b.push_str(&format!("  \x1b[90m{}/{}\x1b[0m", self.hits.len(), self.records().len()));
+            b.push_str(&format!(
+                "  \x1b[90m{}/{}\x1b[0m",
+                self.hits.len(),
+                self.records().len()
+            ));
         }
         b.push_str("\r\n");
     }
@@ -615,7 +644,9 @@ impl<'a> Tui<'a> {
         b.push_str("\x1b[7m");
         if self.query_cursor < q.len() {
             let (_, len) = uni::decode(&q[self.query_cursor..]);
-            b.push_str(&String::from_utf8_lossy(&q[self.query_cursor..self.query_cursor + len]));
+            b.push_str(&String::from_utf8_lossy(
+                &q[self.query_cursor..self.query_cursor + len],
+            ));
             b.push_str("\x1b[0m");
             b.push_str(&String::from_utf8_lossy(&q[self.query_cursor + len..end]));
         } else {
@@ -639,11 +670,19 @@ impl<'a> Tui<'a> {
     fn write_project_line(&self, b: &mut String, rec: &Record) {
         let max_cols = 1.max((self.cols as usize).saturating_sub(1));
         let mut line = String::new();
-        line.push_str(if rec.project.is_empty() { "-" } else { &rec.project });
+        line.push_str(if rec.project.is_empty() {
+            "-"
+        } else {
+            &rec.project
+        });
         if let Some(branch) = self.git_branch(&rec.project) {
             line.push_str(&format!(" ({branch})"));
         }
-        let pos = if self.hits.is_empty() { 0 } else { self.sel + 1 };
+        let pos = if self.hits.is_empty() {
+            0
+        } else {
+            self.sel + 1
+        };
         line.push_str(&format!("  {pos}/{}", self.hits.len()));
         self.append_agent_filter_status(&mut line);
 
@@ -749,7 +788,9 @@ impl<'a> Tui<'a> {
         let start = if count <= visible {
             0
         } else {
-            self.project_sel.saturating_sub(visible / 2).min(count - visible)
+            self.project_sel
+                .saturating_sub(visible / 2)
+                .min(count - visible)
         };
         for shown in 0..visible {
             let idx = start + shown;
@@ -771,7 +812,10 @@ impl<'a> Tui<'a> {
             b.push_str("\r\n");
         }
         if count > visible {
-            b.push_str(&format!("  \x1b[90m({}/{count})\x1b[0m\r\n", self.project_sel + 1));
+            b.push_str(&format!(
+                "  \x1b[90m({}/{count})\x1b[0m\r\n",
+                self.project_sel + 1
+            ));
         }
         if count == 0 {
             b.push_str("  \x1b[90mNo matching projects\x1b[0m\r\n");
@@ -838,7 +882,11 @@ impl<'a> Tui<'a> {
             let has_preview_title = self.preview_focus && bottom_rows > 4;
             // project line + blank + optional title + metadata line
             let fixed_rows = 3 + usize::from(has_preview_title);
-            let preview_lines = if bottom_rows > fixed_rows { bottom_rows - fixed_rows } else { 1 };
+            let preview_lines = if bottom_rows > fixed_rows {
+                bottom_rows - fixed_rows
+            } else {
+                1
+            };
             let preview_cols = 1.max((self.cols as usize).saturating_sub(1));
             if has_preview_title {
                 b.push_str("\x1b[1;36mpreview\x1b[0m\r\n");
@@ -850,7 +898,13 @@ impl<'a> Tui<'a> {
         flush_frame(out, b)
     }
 
-    fn write_preview(&self, b: &mut String, rec: &Record, preview_lines: usize, preview_cols: usize) {
+    fn write_preview(
+        &self,
+        b: &mut String,
+        rec: &Record,
+        preview_lines: usize,
+        preview_cols: usize,
+    ) {
         let text = rec.text.as_bytes();
         let mut i = 0usize;
         let mut skipped = 0usize;
@@ -1041,7 +1095,7 @@ impl<'a> Tui<'a> {
                     return Ok(None); // bare ESC quits
                 }
                 match c {
-                    3 => return Ok(None), // ctrl-c
+                    3 => return Ok(None),            // ctrl-c
                     4 => self.toggle_day_grouping(), // ctrl-d
                     13 => {
                         // Enter. CR only: ^j (byte 10) is the project picker, and
@@ -1090,10 +1144,10 @@ impl<'a> Tui<'a> {
                             self.forking = true;
                         }
                     }
-                    11 => self.kill_to_end(),   // ctrl-k
+                    11 => self.kill_to_end(),                // ctrl-k
                     10 => self.open_project_filter_picker(), // ctrl-j
                     7 => self.open_agent_filter_picker(),    // ctrl-g
-                    21 => self.kill_to_beginning(), // ctrl-u
+                    21 => self.kill_to_beginning(),          // ctrl-u
                     b'w' | b'W' => {
                         if self.preview_focus {
                             self.wrap_preview = !self.wrap_preview;
@@ -1151,7 +1205,12 @@ impl<'a> Tui<'a> {
             }
             return Some(4);
         }
-        if bytes[2] == b'3' && bytes.len() >= 6 && bytes[3] == b';' && bytes[4] == b'5' && bytes[5] == b'~' {
+        if bytes[2] == b'3'
+            && bytes.len() >= 6
+            && bytes[3] == b';'
+            && bytes[4] == b'5'
+            && bytes[5] == b'~'
+        {
             self.delete_word_forward(); // ctrl-delete
             return Some(6);
         }
@@ -1265,7 +1324,9 @@ impl<'a> Tui<'a> {
     /// Selection follows the same record across the re-sort so the cursor does
     /// not jump after starring/unstarring.
     fn toggle_favorite(&mut self) {
-        let Some(hit) = self.hits.get(self.sel) else { return };
+        let Some(hit) = self.hits.get(self.sel) else {
+            return;
+        };
         let rec_idx = hit.index;
         let rec = &self.index.records[rec_idx];
         let (agent, text) = (rec.agent, rec.text.clone());
@@ -1326,8 +1387,11 @@ impl<'a> Tui<'a> {
 
     fn move_filter_selection(&mut self, delta: isize) {
         if delta < 0 {
-            self.filter_sel =
-                if self.filter_sel == 0 { ALL_AGENTS.len() - 1 } else { self.filter_sel - 1 };
+            self.filter_sel = if self.filter_sel == 0 {
+                ALL_AGENTS.len() - 1
+            } else {
+                self.filter_sel - 1
+            };
         } else {
             self.filter_sel = (self.filter_sel + 1) % ALL_AGENTS.len();
         }
@@ -1367,20 +1431,29 @@ impl<'a> Tui<'a> {
             return;
         }
         if delta < 0 {
-            self.project_sel = if self.project_sel == 0 { count - 1 } else { self.project_sel - 1 };
+            self.project_sel = if self.project_sel == 0 {
+                count - 1
+            } else {
+                self.project_sel - 1
+            };
         } else {
             self.project_sel = (self.project_sel + 1) % count;
         }
     }
 
     fn apply_project_filter_selection(&mut self) {
-        self.project_filter =
-            self.filtered_projects().get(self.project_sel).map(|p| p.to_string());
+        self.project_filter = self
+            .filtered_projects()
+            .get(self.project_sel)
+            .map(|p| p.to_string());
         self.recompute();
     }
 
     fn toggle_project_filter_selection(&mut self) {
-        let picked = self.filtered_projects().get(self.project_sel).map(|p| p.to_string());
+        let picked = self
+            .filtered_projects()
+            .get(self.project_sel)
+            .map(|p| p.to_string());
         self.project_filter = match (picked, self.project_filter.clone()) {
             (None, _) => None,
             (Some(p), Some(cur)) if cur == p => None,
@@ -1404,7 +1477,9 @@ impl<'a> Tui<'a> {
         {
             self.project_query.pop();
         }
-        self.project_sel = self.project_sel.min(self.filtered_projects().len().saturating_sub(1));
+        self.project_sel = self
+            .project_sel
+            .min(self.filtered_projects().len().saturating_sub(1));
     }
 
     fn insert_query_byte(&mut self, c: u8) {
@@ -1426,7 +1501,10 @@ impl<'a> Tui<'a> {
         if self.query_cursor == 0 {
             return;
         }
-        self.delete_range(uni::prev_char(&self.query, self.query_cursor), self.query_cursor);
+        self.delete_range(
+            uni::prev_char(&self.query, self.query_cursor),
+            self.query_cursor,
+        );
     }
 
     fn kill_to_end(&mut self) {
@@ -1554,7 +1632,14 @@ fn parse_sgr_mouse(bytes: &[u8]) -> Option<(MouseEvent, usize)> {
     if i >= bytes.len() || (bytes[i] != b'M' && bytes[i] != b'm') {
         return None;
     }
-    Some((MouseEvent { button, _x: x, _y: y }, i + 1))
+    Some((
+        MouseEvent {
+            button,
+            _x: x,
+            _y: y,
+        },
+        i + 1,
+    ))
 }
 
 fn parse_mouse_number(bytes: &[u8], index: &mut usize) -> Option<usize> {
@@ -1688,7 +1773,11 @@ mod tests {
     }
 
     fn empty_index() -> SearchIndex {
-        SearchIndex::build("/nonexistent-home", std::path::Path::new("/nonexistent-cache"), "/nonexistent/favorites".into())
+        SearchIndex::build(
+            "/nonexistent-home",
+            std::path::Path::new("/nonexistent-cache"),
+            "/nonexistent/favorites".into(),
+        )
     }
 
     #[test]
@@ -1710,8 +1799,8 @@ mod tests {
             let mut index = empty_index();
             let mut tui = Tui::new(&mut index);
             tui.cols = cols;
-            tui.query =
-                b"a deliberately long search that used to push the help text past the edge".to_vec();
+            tui.query = b"a deliberately long search that used to push the help text past the edge"
+                .to_vec();
             tui.query_cursor = tui.query.len();
             let mut out = String::new();
             tui.write_prompt_line(&mut out);
@@ -1792,7 +1881,10 @@ mod tests {
         assert_eq!(format_last_active_compact(now - 5, now), "now");
         assert_eq!(format_last_active_compact(now - 120, now), "2m ago");
         assert_eq!(format_last_active_compact(now - 7_200, now), "2h ago");
-        assert_eq!(format_last_active_compact(now - 2 * SECONDS_PER_DAY, now), "2d ago");
+        assert_eq!(
+            format_last_active_compact(now - 2 * SECONDS_PER_DAY, now),
+            "2d ago"
+        );
         assert!(format_last_active_full(now).starts_with("last active "));
     }
 

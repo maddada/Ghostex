@@ -39,7 +39,10 @@ pub fn cache_root(home: &str, ghostex_home: Option<&str>, xdg_cache: Option<&str
             return PathBuf::from(root).join("ghostex").join("zehn");
         }
     }
-    PathBuf::from(home).join(".cache").join("ghostex").join("zehn")
+    PathBuf::from(home)
+        .join(".cache")
+        .join("ghostex")
+        .join("zehn")
 }
 
 /// Resolve the cache root from the process environment.
@@ -147,7 +150,8 @@ impl SearchIndex {
     }
 
     pub fn is_favorite(&self, rec: &Record) -> bool {
-        self.favorites.contains(favorites::key(rec.agent.label(), &rec.text))
+        self.favorites
+            .contains(favorites::key(rec.agent.label(), &rec.text))
     }
 
     /// Toggle the favorite flag for a record and persist the file.
@@ -159,7 +163,8 @@ impl SearchIndex {
 
     /// Set the favorite flag explicitly and persist the file.
     pub fn set_favorite(&mut self, agent: Agent, text: &str, favorite: bool) -> bool {
-        self.favorites.set(favorites::key(agent.label(), text), favorite);
+        self.favorites
+            .set(favorites::key(agent.label(), text), favorite);
         self.favorites.save(&self.favorites_path);
         favorite
     }
@@ -182,7 +187,10 @@ impl SearchIndex {
     /// Agents that actually appear in the index, in canonical order.
     pub fn present_agents(&self) -> Vec<Agent> {
         let present: HashSet<Agent> = self.records.iter().map(|rec| rec.agent).collect();
-        crate::agent::ALL_AGENTS.into_iter().filter(|a| present.contains(a)).collect()
+        crate::agent::ALL_AGENTS
+            .into_iter()
+            .filter(|a| present.contains(a))
+            .collect()
     }
 
     /// Rank the index against `options` and return the requested window.
@@ -196,7 +204,10 @@ impl SearchIndex {
     /// single-threaded picker.
     pub fn query(&mut self, options: &QueryOptions) -> QueryResult {
         let needle = options.query.as_bytes();
-        let agent_mask = options.agents.iter().fold(0u8, |mask, agent| mask | agent.bit());
+        let agent_mask = options
+            .agents
+            .iter()
+            .fold(0u8, |mask, agent| mask | agent.bit());
         let project = options.project.as_deref();
 
         let mut hits = self.collect_hits(needle, agent_mask, project);
@@ -215,7 +226,11 @@ impl SearchIndex {
 
         let matched = hits.len();
         let start = options.offset.min(matched);
-        let end = if options.limit == 0 { matched } else { (start + options.limit).min(matched) };
+        let end = if options.limit == 0 {
+            matched
+        } else {
+            (start + options.limit).min(matched)
+        };
         let window = hits[start..end]
             .iter()
             .map(|h| Hit {
@@ -226,7 +241,11 @@ impl SearchIndex {
             })
             .collect();
 
-        QueryResult { total: self.records.len(), matched, hits: window }
+        QueryResult {
+            total: self.records.len(),
+            matched,
+            hits: window,
+        }
     }
 
     fn collect_hits(
@@ -238,7 +257,16 @@ impl SearchIndex {
         let workers = query_worker_count(self.records.len());
         if workers <= 1 {
             let mut matcher = std::mem::take(&mut self.matcher);
-            let hits = match_range(&self.records, &self.favorites, 0, self.records.len(), needle, agent_mask, project, &mut matcher);
+            let hits = match_range(
+                &self.records,
+                &self.favorites,
+                0,
+                self.records.len(),
+                needle,
+                agent_mask,
+                project,
+                &mut matcher,
+            );
             self.matcher = matcher;
             return hits;
         }
@@ -256,10 +284,22 @@ impl SearchIndex {
                 let end = (start + chunk).min(records.len());
                 handles.push(scope.spawn(move || {
                     let mut matcher = Matcher::new();
-                    match_range(records, favorites, start, end, needle, agent_mask, project, &mut matcher)
+                    match_range(
+                        records,
+                        favorites,
+                        start,
+                        end,
+                        needle,
+                        agent_mask,
+                        project,
+                        &mut matcher,
+                    )
                 }));
             }
-            handles.into_iter().filter_map(|handle| handle.join().ok()).collect()
+            handles
+                .into_iter()
+                .filter_map(|handle| handle.join().ok())
+                .collect()
         });
         let total: usize = collected.iter().map(Vec::len).sum();
         let mut hits = Vec::with_capacity(total);
@@ -306,9 +346,17 @@ fn match_range(
                 continue;
             }
         }
-        let Some(m) = matcher.matches(needle, rec.text.as_bytes()) else { continue };
+        let Some(m) = matcher.matches(needle, rec.text.as_bytes()) else {
+            continue;
+        };
         let favorite = favorites.contains(favorites::key(rec.agent.label(), &rec.text));
-        hits.push(RankedHit { index: start + offset, score: m.score, favorite, ts: rec.ts, m });
+        hits.push(RankedHit {
+            index: start + offset,
+            score: m.score,
+            favorite,
+            ts: rec.ts,
+            m,
+        });
     }
     hits
 }
@@ -415,7 +463,11 @@ mod tests {
         let out = idx.query(&QueryOptions::default());
         assert_eq!(out.total, 3);
         assert_eq!(out.matched, 3);
-        let texts: Vec<&str> = out.hits.iter().map(|h| idx.records[h.index].text.as_str()).collect();
+        let texts: Vec<&str> = out
+            .hits
+            .iter()
+            .map(|h| idx.records[h.index].text.as_str())
+            .collect();
         assert_eq!(texts, vec!["newer", "middle", "older"]);
     }
 
@@ -426,7 +478,10 @@ mod tests {
             record(Agent::Codex, "two", "/a", 2),
             record(Agent::Codex, "three", "/b", 3),
         ]);
-        let out = idx.query(&QueryOptions { agents: vec![Agent::Codex], ..Default::default() });
+        let out = idx.query(&QueryOptions {
+            agents: vec![Agent::Codex],
+            ..Default::default()
+        });
         assert_eq!(out.matched, 2);
         let out = idx.query(&QueryOptions {
             agents: vec![Agent::Codex],
@@ -443,11 +498,21 @@ mod tests {
             record(Agent::Claude, "refactor the parser", "/a", 500),
             record(Agent::Claude, "r e f a c t o r", "/a", 100),
         ]);
-        let before = idx.query(&QueryOptions { query: "refactor".into(), ..Default::default() });
-        assert_eq!(idx.records[before.hits[0].index].text, "refactor the parser");
+        let before = idx.query(&QueryOptions {
+            query: "refactor".into(),
+            ..Default::default()
+        });
+        assert_eq!(
+            idx.records[before.hits[0].index].text,
+            "refactor the parser"
+        );
 
-        idx.favorites.set(favorites::key("claude", "r e f a c t o r"), true);
-        let after = idx.query(&QueryOptions { query: "refactor".into(), ..Default::default() });
+        idx.favorites
+            .set(favorites::key("claude", "r e f a c t o r"), true);
+        let after = idx.query(&QueryOptions {
+            query: "refactor".into(),
+            ..Default::default()
+        });
         assert!(after.hits[0].favorite);
         assert_eq!(idx.records[after.hits[0].index].text, "r e f a c t o r");
     }
@@ -459,7 +524,10 @@ mod tests {
             record(Agent::Claude, "old day high score", "/a", day),
             record(Agent::Claude, "new day", "/a", day * 5),
         ]);
-        let out = idx.query(&QueryOptions { group_by_day: true, ..Default::default() });
+        let out = idx.query(&QueryOptions {
+            group_by_day: true,
+            ..Default::default()
+        });
         assert_eq!(idx.records[out.hits[0].index].text, "new day");
     }
 
@@ -470,7 +538,11 @@ mod tests {
             record(Agent::Claude, "b", "/a", 200),
             record(Agent::Claude, "c", "/a", 100),
         ]);
-        let out = idx.query(&QueryOptions { offset: 1, limit: 1, ..Default::default() });
+        let out = idx.query(&QueryOptions {
+            offset: 1,
+            limit: 1,
+            ..Default::default()
+        });
         assert_eq!(out.matched, 3);
         assert_eq!(out.hits.len(), 1);
         assert_eq!(idx.records[out.hits[0].index].text, "b");
@@ -518,7 +590,10 @@ mod tests {
             cache_root("/home/x", None, Some("/xdg")),
             PathBuf::from("/xdg/ghostex/zehn")
         );
-        assert_eq!(cache_root("/home/x", None, None), PathBuf::from("/home/x/.cache/ghostex/zehn"));
+        assert_eq!(
+            cache_root("/home/x", None, None),
+            PathBuf::from("/home/x/.cache/ghostex/zehn")
+        );
         // Relative overrides are ignored, matching the Zig resolver.
         assert_eq!(
             cache_root("/home/x", Some("relative"), None),

@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 import {
   BEADS_PINS,
   CODE_SERVER_IDENTITY_REVISION,
@@ -15,17 +15,17 @@ import {
   nodeValues,
   productDefinition,
   validateProductGraph,
-} from "./product-inputs.mjs";
-import { createGitTreeReader, normalizePathspec } from "./fingerprint.mjs";
-import { defaultScope } from "./product-inputs.mjs";
-import { BEADS_PACKAGE_ID, BEADS_SCHEMA_VERSION, BEADS_SOURCE_REVISION, BEADS_VERSION } from "../beads-release.mjs";
-import { CODE_SERVER_COMPONENT_IDENTITY_REVISION } from "./code-server-component-identity.mjs";
+} from './product-inputs.mjs';
+import { createGitTreeReader, normalizePathspec } from './fingerprint.mjs';
+import { defaultScope } from './product-inputs.mjs';
+import { BEADS_PACKAGE_ID, BEADS_SCHEMA_VERSION, BEADS_SOURCE_REVISION, BEADS_VERSION } from '../beads-release.mjs';
+import { CODE_SERVER_COMPONENT_IDENTITY_REVISION } from './code-server-component-identity.mjs';
 
 const reader = createGitTreeReader({ repoRoot: process.cwd() });
-const entries = reader.listTree("HEAD");
+const entries = reader.listTree('HEAD');
 const trackedPaths = new Set(entries.map((entry) => entry.path));
-const topLevelPaths = execFileSync("git", ["ls-tree", "HEAD", "--name-only"], { encoding: "utf8" })
-  .split("\n")
+const topLevelPaths = execFileSync('git', ['ls-tree', 'HEAD', '--name-only'], { encoding: 'utf8' })
+  .split('\n')
   .map((line) => line.trim())
   .filter(Boolean);
 
@@ -54,8 +54,8 @@ function resolves(prefix) {
   return false;
 }
 
-describe("release product input map", () => {
-  test("declares an acyclic composition graph with one scope flag per product", () => {
+describe('release product input map', () => {
+  test('declares an acyclic composition graph with one scope flag per product', () => {
     expect(validateProductGraph()).toBe(true);
     const order = nodeIdsInDependencyOrder();
     for (const nodeId of order) {
@@ -65,53 +65,51 @@ describe("release product input map", () => {
     }
   });
 
-  test("covers exactly the published release platforms", () => {
+  test('covers exactly the published release platforms', () => {
     expect(PRODUCT_IDS).toEqual([
-      "gxserver-linux-x64",
-      "gxserver-linux-arm64",
-      "android",
-      "linux-deb-x64",
-      "linux-rpm-x64",
-      "linux-tar-x64",
-      "windows-x64",
-      "windows-arm64",
-      "gxserver-wsl-windows-x64",
-      "gxserver-wsl-windows-arm64",
-      "macos-arm64",
+      'gxserver-linux-x64',
+      'gxserver-linux-arm64',
+      'android',
+      'linux-deb-x64',
+      'linux-rpm-x64',
+      'linux-tar-x64',
+      'windows-x64',
+      'windows-arm64',
+      'gxserver-wsl-windows-x64',
+      'gxserver-wsl-windows-arm64',
+      'macos-arm64',
     ]);
-    expect([...COMPONENT_IDS].sort()).toEqual(["cef", "code-server"]);
+    expect([...COMPONENT_IDS].sort()).toEqual(['cef', 'code-server']);
   });
 
-  test("matches the publisher artifact-name contract", () => {
-    const version = "7.8.0";
-    expect(productDefinition("macos-arm64").artifacts(version)).toEqual([
-      "ghostex-7.8.0-arm64.dmg",
-      "bd-darwin-arm64.tar.gz",
+  test('matches the publisher artifact-name contract', () => {
+    const version = '7.8.0';
+    expect(productDefinition('macos-arm64').artifacts(version)).toEqual([
+      'ghostex-7.8.0-arm64.dmg',
+      'bd-darwin-arm64.tar.gz',
     ]);
-    expect(productDefinition("linux-deb-x64").artifacts(version)).toEqual(["ghostex_7.8.0_amd64.deb"]);
-    expect(productDefinition("linux-rpm-x64").artifacts(version)).toEqual(["ghostex-7.8.0-1.x86_64.rpm"]);
-    expect(productDefinition("linux-tar-x64").artifacts(version)).toEqual(["ghostex-7.8.0-linux-x64.tar.zst"]);
-    expect(productDefinition("android").artifacts(version)).toEqual(["ghostex-android.apk"]);
-    expect(productDefinition("gxserver-linux-arm64").artifacts(version)).toEqual(["gxserver-linux-arm64.tar.gz"]);
-    expect(productDefinition("gxserver-wsl-windows-x64").artifacts(version)).toEqual([
-      "gxserver-wsl-windows-x64.zip",
-    ]);
-    expect(productDefinition("windows-x64").artifacts(version)).toEqual([
-      "ghostex-7.8.0-windows-x64.exe",
-      "ghostex-7.8.0-windows-x64-portable.zip",
-      "releases.win-x64-stable.json",
-      "Ghostex-7.8.0-win-x64-stable-full.nupkg",
+    expect(productDefinition('linux-deb-x64').artifacts(version)).toEqual(['ghostex_7.8.0_amd64.deb']);
+    expect(productDefinition('linux-rpm-x64').artifacts(version)).toEqual(['ghostex-7.8.0-1.x86_64.rpm']);
+    expect(productDefinition('linux-tar-x64').artifacts(version)).toEqual(['ghostex-7.8.0-linux-x64.tar.zst']);
+    expect(productDefinition('android').artifacts(version)).toEqual(['ghostex-android.apk']);
+    expect(productDefinition('gxserver-linux-arm64').artifacts(version)).toEqual(['gxserver-linux-arm64.tar.gz']);
+    expect(productDefinition('gxserver-wsl-windows-x64').artifacts(version)).toEqual(['gxserver-wsl-windows-x64.zip']);
+    expect(productDefinition('windows-x64').artifacts(version)).toEqual([
+      'ghostex-7.8.0-windows-x64.exe',
+      'ghostex-7.8.0-windows-x64-portable.zip',
+      'releases.win-x64-stable.json',
+      'Ghostex-7.8.0-win-x64-stable-full.nupkg',
     ]);
   });
 
-  test("every declared pathspec resolves in the current checkout", () => {
+  test('every declared pathspec resolves in the current checkout', () => {
     const unresolved = positivePathspecs()
       .filter(({ declaration, prefix }) => !declaration.allowMissing && !resolves(prefix))
       .map(({ nodeId, declaration }) => `${nodeId}: ${declaration.pathspec}`);
     expect(unresolved).toEqual([]);
   });
 
-  test("documents every pathspec that is allowed to be missing", () => {
+  test('documents every pathspec that is allowed to be missing', () => {
     const allowed = positivePathspecs()
       .filter(({ declaration }) => declaration.allowMissing)
       .map(({ declaration }) => declaration.pathspec)
@@ -121,10 +119,10 @@ describe("release product input map", () => {
      * gitlink, so it can never appear in this repository's tree. The workflow
      * files the rewiring workstream created now exist and are required.
      */
-    expect([...new Set(allowed)]).toEqual([".dependencies/code-server/.node-version"]);
+    expect([...new Set(allowed)]).toEqual(['.dependencies/code-server/.node-version']);
   });
 
-  test("uses only supported pathspec syntax", () => {
+  test('uses only supported pathspec syntax', () => {
     for (const nodeId of Object.keys(NODES)) {
       for (const declaration of nodePathspecs(nodeId)) {
         expect(() => normalizePathspec(declaration.pathspec)).not.toThrow();
@@ -132,7 +130,7 @@ describe("release product input map", () => {
     }
   });
 
-  test("claims or explicitly ignores every tracked top-level path", () => {
+  test('claims or explicitly ignores every tracked top-level path', () => {
     const prefixes = positivePathspecs().map(({ prefix }) => prefix);
     const ignored = new Set(IGNORED_FOR_RELEASE.map((entry) => entry.path));
     const unclassified = topLevelPaths.filter((topLevel) => {
@@ -145,7 +143,7 @@ describe("release product input map", () => {
     }
   });
 
-  test("keeps every ignored path genuinely tracked and unclaimed", () => {
+  test('keeps every ignored path genuinely tracked and unclaimed', () => {
     const prefixes = positivePathspecs().map(({ prefix }) => prefix);
     for (const entry of IGNORED_FOR_RELEASE) {
       const claimed = prefixes.some((prefix) => prefix === entry.path || prefix.startsWith(`${entry.path}/`));
@@ -153,115 +151,115 @@ describe("release product input map", () => {
     }
   });
 
-  test("encodes the cross-cutting invalidation rules", () => {
+  test('encodes the cross-cutting invalidation rules', () => {
     const specs = (nodeId) => nodePathspecs(nodeId).map((declaration) => declaration.pathspec);
     for (const desktop of [
-      "macos-arm64",
-      "linux-deb-x64",
-      "linux-rpm-x64",
-      "linux-tar-x64",
-      "windows-x64",
-      "windows-arm64",
+      'macos-arm64',
+      'linux-deb-x64',
+      'linux-rpm-x64',
+      'linux-tar-x64',
+      'windows-x64',
+      'windows-arm64',
     ]) {
       /* Rule 1: protocol coupling and the embedded gxserver payload. */
-      expect(specs(desktop)).toContain("server/**");
-      expect(specs(desktop)).toContain("packages/paths/**");
+      expect(specs(desktop)).toContain('server/**');
+      expect(specs(desktop)).toContain('packages/paths/**');
       /* Rule 2: CEF surfaces are built from the shared React trees. */
-      expect(specs(desktop)).toContain("packages/shared/**");
-      expect(specs(desktop)).toContain("packages/core-ui/**");
-      expect(specs(desktop)).toContain("packages/components/**");
+      expect(specs(desktop)).toContain('packages/shared/**');
+      expect(specs(desktop)).toContain('packages/core-ui/**');
+      expect(specs(desktop)).toContain('packages/components/**');
       /* apps/desktop/** already covers apps/desktop/views/**, so it is not declared separately. */
-      expect(specs(desktop)).toContain("apps/desktop/**");
+      expect(specs(desktop)).toContain('apps/desktop/**');
       /* Rule 4: patched dependency gitlinks. */
-      expect(specs(desktop)).toContain(".dependencies/cef-rs");
+      expect(specs(desktop)).toContain('.dependencies/cef-rs');
       /* Rule 10: the graph and manifest definitions invalidate everything. */
-      expect(specs(desktop)).toContain(".github/workflows/release-gpui.yml");
-      expect(specs(desktop)).toContain("tooling/release-gpui/common.sh");
+      expect(specs(desktop)).toContain('.github/workflows/release-gpui.yml');
+      expect(specs(desktop)).toContain('tooling/release-gpui/common.sh');
     }
     /* Rule 3: packages/shared/** is deliberately absent from the remote Linux package. */
-    expect(specs("gxserver-linux-x64")).not.toContain("packages/shared/**");
-    expect(specs("gxserver-linux-arm64")).not.toContain("packages/shared/**");
+    expect(specs('gxserver-linux-x64')).not.toContain('packages/shared/**');
+    expect(specs('gxserver-linux-arm64')).not.toContain('packages/shared/**');
     /* Rule 5: a gxserver rebuild forces every desktop rebuild through composition. */
-    expect(productDefinition("macos-arm64").composedFrom).toEqual([
-      "gxserver-linux-x64",
-      "gxserver-linux-arm64",
-      "code-server",
-      "cef",
-      "beads",
+    expect(productDefinition('macos-arm64').composedFrom).toEqual([
+      'gxserver-linux-x64',
+      'gxserver-linux-arm64',
+      'code-server',
+      'cef',
+      'beads',
     ]);
-    expect(productDefinition("linux-deb-x64").composedFrom).toEqual(["gxserver-linux-x64", "cef"]);
+    expect(productDefinition('linux-deb-x64').composedFrom).toEqual(['gxserver-linux-x64', 'cef']);
     /* Rule 6: code-server touches macOS and Windows, never the Linux packages. */
-    expect(productDefinition("windows-arm64").composedFrom).toContain("code-server");
-    expect(productDefinition("linux-rpm-x64").composedFrom).not.toContain("code-server");
+    expect(productDefinition('windows-arm64').composedFrom).toContain('code-server');
+    expect(productDefinition('linux-rpm-x64').composedFrom).not.toContain('code-server');
     /* Rule 9: a workflow file invalidates only the product it builds. */
-    expect(specs("android")).toContain(".github/workflows/release-gpui-android.yml");
-    expect(specs("android")).not.toContain(".github/workflows/release-gpui-macos.yml");
+    expect(specs('android')).toContain('.github/workflows/release-gpui-android.yml');
+    expect(specs('android')).not.toContain('.github/workflows/release-gpui-macos.yml');
   });
 
-  test("marks exactly the version-stamped products", () => {
+  test('marks exactly the version-stamped products', () => {
     const stamped = PRODUCT_IDS.filter((id) => productDefinition(id).versionStamped).sort();
     expect(stamped).toEqual([
-      "gxserver-wsl-windows-arm64",
-      "gxserver-wsl-windows-x64",
-      "linux-deb-x64",
-      "linux-rpm-x64",
-      "linux-tar-x64",
-      "macos-arm64",
-      "windows-arm64",
-      "windows-x64",
+      'gxserver-wsl-windows-arm64',
+      'gxserver-wsl-windows-x64',
+      'linux-deb-x64',
+      'linux-rpm-x64',
+      'linux-tar-x64',
+      'macos-arm64',
+      'windows-arm64',
+      'windows-x64',
     ]);
   });
 
-  test("only version-stamped products may carry side files", () => {
+  test('only version-stamped products may carry side files', () => {
     for (const id of PRODUCT_IDS) {
       const definition = productDefinition(id);
       if (definition.sideFiles?.length) expect(definition.versionStamped).toBe(true);
     }
-    expect(productDefinition("macos-arm64").sideFiles).toEqual(["appcast.xml"]);
+    expect(productDefinition('macos-arm64').sideFiles).toEqual(['appcast.xml']);
   });
 
-  test("maps component platform requirements to their real consumers", () => {
+  test('maps component platform requirements to their real consumers', () => {
     /* macos.sh publishes both components; the CEF framework is bundled in the
      * app, but the darwin-arm64 asset is still pushed to the component tag. */
-    expect(componentPlatformRequirements("macos-arm64")).toEqual({
-      cef: ["darwin-arm64"],
-      "code-server": ["darwin-arm64", "linux-arm64", "linux-x64"],
+    expect(componentPlatformRequirements('macos-arm64')).toEqual({
+      cef: ['darwin-arm64'],
+      'code-server': ['darwin-arm64', 'linux-arm64', 'linux-x64'],
     });
-    expect(componentPlatformRequirements("windows-arm64")).toEqual({
-      cef: ["windows-arm64"],
-      "code-server": ["linux-arm64", "windows-arm64"],
+    expect(componentPlatformRequirements('windows-arm64')).toEqual({
+      cef: ['windows-arm64'],
+      'code-server': ['linux-arm64', 'windows-arm64'],
     });
-    expect(componentPlatformRequirements("linux-deb-x64")).toEqual({ cef: ["linux-x64"] });
-    expect(componentPlatformRequirements("linux-tar-x64")).toEqual({ cef: ["linux-x64"] });
-    expect(componentPlatformRequirements("android")).toEqual({});
+    expect(componentPlatformRequirements('linux-deb-x64')).toEqual({ cef: ['linux-x64'] });
+    expect(componentPlatformRequirements('linux-tar-x64')).toEqual({ cef: ['linux-x64'] });
+    expect(componentPlatformRequirements('android')).toEqual({});
   });
 
-  test("resolves scope-dependent values", () => {
-    const signed = nodeValues("windows-x64", { scope: defaultScope({ signWindows: true }), version: "7.8.0" });
-    const unsigned = nodeValues("windows-x64", { scope: defaultScope({ signWindows: false }), version: "7.8.0" });
-    expect(signed.signingMode).toBe("authenticode");
-    expect(unsigned.signingMode).toBe("unsigned");
-    expect(nodeValues("macos-arm64", { scope: defaultScope({ updateSparkle: false }), version: "7.8.0" }).updateSparkle).toBe(
-      "false",
-    );
-    expect(nodeValues("android", { scope: defaultScope(), version: "7.8.0" }).bun).toBe(TOOLCHAIN.bun);
+  test('resolves scope-dependent values', () => {
+    const signed = nodeValues('windows-x64', { scope: defaultScope({ signWindows: true }), version: '7.8.0' });
+    const unsigned = nodeValues('windows-x64', { scope: defaultScope({ signWindows: false }), version: '7.8.0' });
+    expect(signed.signingMode).toBe('authenticode');
+    expect(unsigned.signingMode).toBe('unsigned');
+    expect(
+      nodeValues('macos-arm64', { scope: defaultScope({ updateSparkle: false }), version: '7.8.0' }).updateSparkle
+    ).toBe('false');
+    expect(nodeValues('android', { scope: defaultScope(), version: '7.8.0' }).bun).toBe(TOOLCHAIN.bun);
   });
 });
 
-describe("pinned toolchain values track the workflows", () => {
-  const workflow = (name) => readFileSync(`.github/workflows/${name}`, "utf8");
+describe('pinned toolchain values track the workflows', () => {
+  const workflow = (name) => readFileSync(`.github/workflows/${name}`, 'utf8');
 
-  test("bun, node, zig, dotnet, vpk and Android SDK pins match the workflow files", () => {
-    const macos = workflow("release-gpui-macos.yml");
-    const windows = workflow("release-gpui-windows.yml");
-    const android = workflow("release-gpui-android.yml");
+  test('bun, node, zig, dotnet, vpk and Android SDK pins match the workflow files', () => {
+    const macos = workflow('release-gpui-macos.yml');
+    const windows = workflow('release-gpui-windows.yml');
+    const android = workflow('release-gpui-android.yml');
     expect(macos).toContain(`bun-version: ${TOOLCHAIN.bun}`);
     expect(macos).toContain(`mise" install zig@${TOOLCHAIN.zig}\n`);
     expect(macos).toContain('"$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"');
-    expect(workflow("release-gpui-linux.yml")).toContain(`mise" install zig@${TOOLCHAIN.zig}\n`);
-    expect(workflow("release-gpui-linux.yml")).toContain('"$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"');
-    expect(readFileSync("tooling/release-gpui/macos.sh", "utf8")).toContain(`== "${TOOLCHAIN.zig}"`);
-    expect(readFileSync("tooling/release-gpui/macos-prerequisite.sh", "utf8")).toContain(`== "${TOOLCHAIN.zig}"`);
+    expect(workflow('release-gpui-linux.yml')).toContain(`mise" install zig@${TOOLCHAIN.zig}\n`);
+    expect(workflow('release-gpui-linux.yml')).toContain('"$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"');
+    expect(readFileSync('tooling/release-gpui/macos.sh', 'utf8')).toContain(`== "${TOOLCHAIN.zig}"`);
+    expect(readFileSync('tooling/release-gpui/macos-prerequisite.sh', 'utf8')).toContain(`== "${TOOLCHAIN.zig}"`);
     expect(macos).toContain(`RIPGREP_VERSION: ${TOOLCHAIN.ripgrepVersion}`);
     expect(macos).toContain(`RIPGREP_PACKAGE_VERSION: ${TOOLCHAIN.ripgrepPackageVersion}`);
     expect(macos).toContain(`RIPGREP_SHA256: ${TOOLCHAIN.ripgrepSha256}`);
@@ -273,7 +271,7 @@ describe("pinned toolchain values track the workflows", () => {
     expect(android).toContain(`"platforms;${TOOLCHAIN.androidPlatform}"`);
     expect(android).toContain(`"build-tools;${TOOLCHAIN.androidBuildTools}"`);
     expect(android).toContain(`"ndk;${TOOLCHAIN.androidNdk}"`);
-    expect(readFileSync("tooling/release-gpui/prepare-zig.ps1", "utf8")).toContain(`$Version = "${TOOLCHAIN.zig}"`);
+    expect(readFileSync('tooling/release-gpui/prepare-zig.ps1', 'utf8')).toContain(`$Version = "${TOOLCHAIN.zig}"`);
   });
 
   /*
@@ -284,17 +282,14 @@ describe("pinned toolchain values track the workflows", () => {
    * which made TOOLCHAIN.zig the repo's only Zig pin.
    */
   test("the vendored Zig sources' declared minimums are satisfied by the single pin", async () => {
-    const { checkGhosttyZigPin, readGhosttyMinimumZig, readZmxMinimumZig } = await import(
-      "./check-ghostty-zig-pin.mjs"
-    );
+    const { checkGhosttyZigPin, readGhosttyMinimumZig, readZmxMinimumZig } =
+      await import('./check-ghostty-zig-pin.mjs');
     expect(() => checkGhosttyZigPin({ minimum: readGhosttyMinimumZig(), pin: TOOLCHAIN.zig })).not.toThrow();
-    expect(() => checkGhosttyZigPin({ minimum: "0.17.0", pin: TOOLCHAIN.zig })).toThrow(/requires Zig 0\.17\.0/u);
-    expect(() =>
-      checkGhosttyZigPin({ minimum: readZmxMinimumZig(), pin: TOOLCHAIN.zig, source: "zmx" }),
-    ).not.toThrow();
+    expect(() => checkGhosttyZigPin({ minimum: '0.17.0', pin: TOOLCHAIN.zig })).toThrow(/requires Zig 0\.17\.0/u);
+    expect(() => checkGhosttyZigPin({ minimum: readZmxMinimumZig(), pin: TOOLCHAIN.zig, source: 'zmx' })).not.toThrow();
   });
 
-  test("Beads and code-server identity pins match their source of truth", () => {
+  test('Beads and code-server identity pins match their source of truth', () => {
     expect(BEADS_PINS.version).toBe(BEADS_VERSION);
     expect(BEADS_PINS.sourceRevision).toBe(BEADS_SOURCE_REVISION);
     expect(BEADS_PINS.schemaVersion).toBe(String(BEADS_SCHEMA_VERSION));

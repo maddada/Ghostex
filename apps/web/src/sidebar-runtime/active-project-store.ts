@@ -1,4 +1,4 @@
-import type { SidebarProjectReference } from "./sidebar-ids";
+import type { SidebarProjectReference } from './sidebar-ids';
 
 const listeners = new Set<() => void>();
 let activeProject: SidebarProjectReference | undefined;
@@ -13,10 +13,7 @@ export function subscribeActiveSidebarProject(listener: () => void): () => void 
 }
 
 export function setActiveSidebarProject(project: SidebarProjectReference | undefined): void {
-  if (
-    activeProject?.machineId === project?.machineId
-    && activeProject?.projectId === project?.projectId
-  ) {
+  if (activeProject?.machineId === project?.machineId && activeProject?.projectId === project?.projectId) {
     return;
   }
   activeProject = project;

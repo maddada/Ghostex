@@ -1,20 +1,18 @@
-import type { Dispatch, SetStateAction } from "react";
-import type {
-  SidebarActiveSessionsSortMode,
-} from "../../shared/session-grid-contract";
+import type { Dispatch, SetStateAction } from 'react';
+import type { SidebarActiveSessionsSortMode } from '../../shared/session-grid-contract';
 import type {
   ghostexSettings,
   SidebarNewSessionEnvMode,
   SidebarProjectGroupingMode,
   SidebarV2Layout,
   SidebarVersion,
-} from "../../shared/ghostex-settings";
-import type { SidebarAgentButton } from "../../shared/sidebar-agents";
-import { openAppModal, openQuickAccess } from "../app-modal-host-bridge";
-import { writePrimaryAgentLauncherId } from "../primary-agent-launcher";
-import type { SidebarSessionTagFilter } from "../session-tag-ui";
-import type { WebviewApi } from "../webview-api";
-import type { SessionIdsByGroup } from "./types";
+} from '../../shared/ghostex-settings';
+import type { SidebarAgentButton } from '../../shared/sidebar-agents';
+import { openAppModal, openQuickAccess } from '../app-modal-host-bridge';
+import { writePrimaryAgentLauncherId } from '../primary-agent-launcher';
+import type { SidebarSessionTagFilter } from '../session-tag-ui';
+import type { WebviewApi } from '../webview-api';
+import type { SessionIdsByGroup } from './types';
 
 export type SidebarActionsOptions = {
   activeSessionsSortMode: SidebarActiveSessionsSortMode;
@@ -71,16 +69,13 @@ export function useSidebarActions({
   const setActiveSessionsSortMode = (sortMode: SidebarActiveSessionsSortMode) => {
     vscode.postMessage({
       manualSessionIdsByGroup:
-        sortMode === "manual" && activeSessionsSortMode !== "manual"
+        sortMode === 'manual' && activeSessionsSortMode !== 'manual'
           ? Object.fromEntries(
-            workspaceGroupIds.map((groupId) => [
-              groupId,
-              [ ...(effectiveSessionIdsByGroup[ groupId ] ?? []) ],
-            ]),
-          )
+              workspaceGroupIds.map((groupId) => [groupId, [...(effectiveSessionIdsByGroup[groupId] ?? [])]])
+            )
           : undefined,
       sortMode,
-      type: "setActiveSessionsSortMode",
+      type: 'setActiveSessionsSortMode',
     });
   };
 
@@ -98,8 +93,8 @@ export function useSidebarActions({
     vscode.postMessage({
       baseRevision: revision,
       patch,
-      source: "sidebar:sidebarVersion",
-      type: "updateSettingsPatch",
+      source: 'sidebar:sidebarVersion',
+      type: 'updateSettingsPatch',
     });
   };
 
@@ -118,9 +113,7 @@ export function useSidebarActions({
   };
 
   const toggleActiveSessionsSortMode = () => {
-    setActiveSessionsSortMode(
-      activeSessionsSortMode === "manual" ? "lastActivity" : "manual",
-    );
+    setActiveSessionsSortMode(activeSessionsSortMode === 'manual' ? 'lastActivity' : 'manual');
   };
 
   const toggleSessionTagFilter = (sessionTag: SidebarSessionTagFilter) => {
@@ -128,25 +121,23 @@ export function useSidebarActions({
       return;
     }
     setSelectedSessionTagFilters((current) =>
-      current.includes(sessionTag)
-        ? current.filter((tag) => tag !== sessionTag)
-        : [ ...current, sessionTag ],
+      current.includes(sessionTag) ? current.filter((tag) => tag !== sessionTag) : [...current, sessionTag]
     );
   };
 
   const moveSidebar = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:moveSidebar");
-    vscode.postMessage({ type: "moveSidebarToOtherSide" });
+    dismissAppModalForSidebarNavigation('SettingsDismissal:moveSidebar');
+    vscode.postMessage({ type: 'moveSidebarToOtherSide' });
   };
 
   const toggleSidebarCollapsed = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:toggleSidebar");
+    dismissAppModalForSidebarNavigation('SettingsDismissal:toggleSidebar');
     /**
      * CDXC:SidebarCollapse 2026-06-12-02:23:
      * Sidebar collapse is native chrome state. React requests the toggle, while
      * AppKit owns hiding the sidebar WebView, divider, and workspace border.
      */
-    vscode.postMessage({ type: "toggleSidebarCollapsed" });
+    vscode.postMessage({ type: 'toggleSidebarCollapsed' });
   };
 
   /*
@@ -158,17 +149,17 @@ export function useSidebarActions({
    * never silently browse this computer's filesystem instead of that machine's.
    */
   const openAddProjectModal = (machineId?: string) => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:addProject");
-    openAppModal({ ...(machineId ? { machineId } : {}), modal: "addProject", type: "open" });
+    dismissAppModalForSidebarNavigation('SettingsDismissal:addProject');
+    openAppModal({ ...(machineId ? { machineId } : {}), modal: 'addProject', type: 'open' });
   };
 
   const createReferenceAgentChat = (agent: SidebarAgentButton) => {
-    const quickGroupId = displayedReferenceChatGroupIds[ 0 ];
+    const quickGroupId = displayedReferenceChatGroupIds[0];
     if (!quickGroupId) {
       return;
     }
 
-    dismissAppModalForSidebarNavigation("SettingsDismissal:createQuickAgent");
+    dismissAppModalForSidebarNavigation('SettingsDismissal:createQuickAgent');
     /**
      * CDXC:QuickAgents 2026-06-08-18:25:
      * The Quick section header should expose the same selected-agent split picker as project headers. Launch through runSidebarAgent with the synthetic Quick group id so native creates a new projectless agent chat instead of targeting the active code project.
@@ -178,7 +169,7 @@ export function useSidebarActions({
     vscode.postMessage({
       agentId: agent.agentId,
       groupId: quickGroupId,
-      type: "runSidebarAgent",
+      type: 'runSidebarAgent',
     });
   };
 
@@ -207,13 +198,13 @@ export function useSidebarActions({
       createReferenceAgentChat(agent);
       return;
     }
-    dismissAppModalForSidebarNavigation("SettingsDismissal:createSidebarV2Agent");
+    dismissAppModalForSidebarNavigation('SettingsDismissal:createSidebarV2Agent');
     setPrimaryAgentLauncherId(agent.agentId);
     writePrimaryAgentLauncherId(agent.agentId);
     vscode.postMessage({
       agentId: agent.agentId,
       groupId,
-      type: "runSidebarAgent",
+      type: 'runSidebarAgent',
     });
   };
 
@@ -230,8 +221,8 @@ export function useSidebarActions({
     vscode.postMessage({
       baseRevision: revision,
       patch: { newSessionsDefaultEnvMode: mode },
-      source: "sidebar:newSessionsDefaultEnvMode",
-      type: "updateSettingsPatch",
+      source: 'sidebar:newSessionsDefaultEnvMode',
+      type: 'updateSettingsPatch',
     });
   };
 
@@ -243,68 +234,66 @@ export function useSidebarActions({
    * whole record, so the patch is a straight replacement rather than a merge
    * the settings pipeline would have to interpret.
    */
-  const setSidebarProjectGroupingOverrides = (
-    overrides: Readonly<Record<string, SidebarProjectGroupingMode>>,
-  ) => {
+  const setSidebarProjectGroupingOverrides = (overrides: Readonly<Record<string, SidebarProjectGroupingMode>>) => {
     vscode.postMessage({
       baseRevision: revision,
       patch: { sidebarProjectGroupingOverrides: overrides },
-      source: "sidebar:projectGrouping",
-      type: "updateSettingsPatch",
+      source: 'sidebar:projectGrouping',
+      type: 'updateSettingsPatch',
     });
   };
 
   const openConfigureAgentsModal = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:configureAgents");
-    openAppModal({ modal: "configureAgents", type: "open" });
+    dismissAppModalForSidebarNavigation('SettingsDismissal:configureAgents');
+    openAppModal({ modal: 'configureAgents', type: 'open' });
   };
 
   const openReferenceAutomations = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:automations");
-    vscode.postMessage({ type: "openAutomationsPage" });
+    dismissAppModalForSidebarNavigation('SettingsDismissal:automations');
+    vscode.postMessage({ type: 'openAutomationsPage' });
   };
 
   const openReferenceMobile = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:mobile");
-    vscode.postMessage({ type: "openMobileBrowserChat" });
+    dismissAppModalForSidebarNavigation('SettingsDismissal:mobile');
+    vscode.postMessage({ type: 'openMobileBrowserChat' });
   };
 
   const openReferenceAgentsHub = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:agentsHub");
-    openAppModal({ modal: "agentsHub", type: "open" });
+    dismissAppModalForSidebarNavigation('SettingsDismissal:agentsHub');
+    openAppModal({ modal: 'agentsHub', type: 'open' });
   };
 
   const togglePinnedPrompts = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:pinnedPrompts");
+    dismissAppModalForSidebarNavigation('SettingsDismissal:pinnedPrompts');
     setIsDaemonSessionsOpen(false);
     setIsPreviousSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openAppModal({ modal: "pinnedPrompts", type: "open" });
+    setSessionSearchQuery('');
+    openAppModal({ modal: 'pinnedPrompts', type: 'open' });
   };
 
   const openPreviousSessions = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:previousSessions");
+    dismissAppModalForSidebarNavigation('SettingsDismissal:previousSessions');
     setIsPinnedPromptsOpen(false);
     setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openQuickAccess("recentSessions");
+    setSessionSearchQuery('');
+    openQuickAccess('recentSessions');
   };
 
   const searchPreviousSessionsByPrompt = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:previousSessionsPromptSearch");
+    dismissAppModalForSidebarNavigation('SettingsDismissal:previousSessionsPromptSearch');
     setIsPinnedPromptsOpen(false);
     setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    vscode.postMessage({ type: "searchPreviousSessionsByText" });
+    setSessionSearchQuery('');
+    vscode.postMessage({ type: 'searchPreviousSessionsByText' });
   };
 
   return {

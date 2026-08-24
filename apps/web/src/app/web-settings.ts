@@ -2,10 +2,10 @@ import {
   DEFAULT_ghostex_SETTINGS,
   normalizeghostexSettings,
   type ghostexSettings,
-} from "@/packages/shared/ghostex-settings";
+} from '@/packages/shared/ghostex-settings';
 
-const WEB_SETTINGS_STORAGE_KEY = "ghostexWeb.settings.v1";
-export const WEB_SETTINGS_CHANGED_EVENT = "ghostex-web:settings-changed";
+const WEB_SETTINGS_STORAGE_KEY = 'ghostexWeb.settings.v1';
+export const WEB_SETTINGS_CHANGED_EVENT = 'ghostex-web:settings-changed';
 
 export function readWebSettings(): ghostexSettings {
   try {
@@ -22,7 +22,7 @@ export function writeWebSettings(settings: ghostexSettings): ghostexSettings {
   window.dispatchEvent(
     new CustomEvent<ghostexSettings>(WEB_SETTINGS_CHANGED_EVENT, {
       detail: normalized,
-    }),
+    })
   );
   return normalized;
 }

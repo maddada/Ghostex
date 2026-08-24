@@ -12,8 +12,14 @@ pub enum Agent {
     Grok,
 }
 
-pub const ALL_AGENTS: [Agent; 6] =
-    [Agent::Claude, Agent::Codex, Agent::Pi, Agent::Opencode, Agent::Cursor, Agent::Grok];
+pub const ALL_AGENTS: [Agent; 6] = [
+    Agent::Claude,
+    Agent::Codex,
+    Agent::Pi,
+    Agent::Opencode,
+    Agent::Cursor,
+    Agent::Grok,
+];
 
 impl Agent {
     pub fn label(self) -> &'static str {
@@ -45,12 +51,12 @@ impl Agent {
     /// Official brand colors as 24-bit truecolor escapes, used by the TUI.
     pub fn ansi_color(self) -> &'static str {
         match self {
-            Agent::Claude => "\x1b[38;2;218;119;86m",   // #DA7756 Anthropic terra cotta
-            Agent::Codex => "\x1b[38;2;16;163;127m",    // #10A37F OpenAI green
+            Agent::Claude => "\x1b[38;2;218;119;86m", // #DA7756 Anthropic terra cotta
+            Agent::Codex => "\x1b[38;2;16;163;127m",  // #10A37F OpenAI green
             Agent::Opencode => "\x1b[38;2;207;206;205m", // #CFCECD opencode logo gray
-            Agent::Pi => "\x1b[38;2;136;192;208m",      // #88C0D0 pi Nord frost
-            Agent::Cursor => "\x1b[38;2;74;144;226m",   // Cursor blue
-            Agent::Grok => "\x1b[38;2;180;160;255m",    // xAI/Grok purple accent
+            Agent::Pi => "\x1b[38;2;136;192;208m",    // #88C0D0 pi Nord frost
+            Agent::Cursor => "\x1b[38;2;74;144;226m", // Cursor blue
+            Agent::Grok => "\x1b[38;2;180;160;255m",  // xAI/Grok purple accent
         }
     }
 
@@ -71,14 +77,30 @@ impl Agent {
     pub fn resume_argv(self, session: &str, accept_all: bool) -> Vec<String> {
         let parts: Vec<&str> = if accept_all {
             match self {
-                Agent::Claude => vec!["claude", "--dangerously-skip-permissions", "--resume", session],
+                Agent::Claude => vec![
+                    "claude",
+                    "--dangerously-skip-permissions",
+                    "--resume",
+                    session,
+                ],
                 Agent::Codex => vec!["codex", "--yolo", "resume", session],
                 Agent::Pi => vec!["pi", "--session", session],
                 Agent::Opencode => {
-                    vec!["opencode", "--dangerously-skip-permissions", "--session", session]
+                    vec![
+                        "opencode",
+                        "--dangerously-skip-permissions",
+                        "--session",
+                        session,
+                    ]
                 }
                 Agent::Cursor => vec!["cursor-agent", "--yolo", "--resume", session],
-                Agent::Grok => vec!["grok", "--permission-mode", "bypassPermissions", "--resume", session],
+                Agent::Grok => vec![
+                    "grok",
+                    "--permission-mode",
+                    "bypassPermissions",
+                    "--resume",
+                    session,
+                ],
             }
         } else {
             match self {
@@ -122,12 +144,27 @@ mod tests {
 
     #[test]
     fn resume_argv_optionally_applies_accept_all_flags() {
-        assert_eq!(Agent::Codex.resume_argv("s", false), vec!["codex", "resume", "s"]);
-        assert_eq!(Agent::Codex.resume_argv("s", true), vec!["codex", "--yolo", "resume", "s"]);
-        assert_eq!(Agent::Pi.resume_argv("s", true), vec!["pi", "--session", "s"]);
+        assert_eq!(
+            Agent::Codex.resume_argv("s", false),
+            vec!["codex", "resume", "s"]
+        );
+        assert_eq!(
+            Agent::Codex.resume_argv("s", true),
+            vec!["codex", "--yolo", "resume", "s"]
+        );
+        assert_eq!(
+            Agent::Pi.resume_argv("s", true),
+            vec!["pi", "--session", "s"]
+        );
         assert_eq!(
             Agent::Grok.resume_argv("s", true),
-            vec!["grok", "--permission-mode", "bypassPermissions", "--resume", "s"]
+            vec![
+                "grok",
+                "--permission-mode",
+                "bypassPermissions",
+                "--resume",
+                "s"
+            ]
         );
     }
 

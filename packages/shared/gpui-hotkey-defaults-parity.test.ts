@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
-import { DEFAULT_ghostex_HOTKEYS } from "./ghostex-hotkeys";
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
+import { DEFAULT_ghostex_HOTKEYS } from './ghostex-hotkeys';
 
 /**
  * GPUI mirrors the shared default hotkey table (DEFAULT_ghostex_HOTKEYS in
@@ -15,12 +15,12 @@ import { DEFAULT_ghostex_HOTKEYS } from "./ghostex-hotkeys";
  * one side without the other fails here.
  */
 
-const gpuiMainSource = readFileSync(new URL("../../apps/desktop/src/app/hotkeys.rs", import.meta.url), "utf8");
+const gpuiMainSource = readFileSync(new URL('../../apps/desktop/src/app/hotkeys.rs', import.meta.url), 'utf8');
 
 function gpuiDefaultHotkeys(): Record<string, string> {
-  const start = gpuiMainSource.indexOf("const GPUI_DEFAULT_GHOSTEX_HOTKEYS");
+  const start = gpuiMainSource.indexOf('const GPUI_DEFAULT_GHOSTEX_HOTKEYS');
   expect(start).toBeGreaterThanOrEqual(0);
-  const end = gpuiMainSource.indexOf("];", start);
+  const end = gpuiMainSource.indexOf('];', start);
   expect(end).toBeGreaterThan(start);
   const table = gpuiMainSource.slice(start, end);
   const entries: Record<string, string> = {};
@@ -32,8 +32,8 @@ function gpuiDefaultHotkeys(): Record<string, string> {
   return entries;
 }
 
-describe("GPUI default hotkey table parity with packages/shared/ghostex-hotkeys.ts", () => {
-  test("Rust GPUI_DEFAULT_GHOSTEX_HOTKEYS matches DEFAULT_ghostex_HOTKEYS", () => {
+describe('GPUI default hotkey table parity with packages/shared/ghostex-hotkeys.ts', () => {
+  test('Rust GPUI_DEFAULT_GHOSTEX_HOTKEYS matches DEFAULT_ghostex_HOTKEYS', () => {
     const gpuiDefaults = gpuiDefaultHotkeys();
 
     // Guard the extraction itself: a marker or regex regression that extracts

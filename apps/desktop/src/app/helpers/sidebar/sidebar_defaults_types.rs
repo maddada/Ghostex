@@ -9,7 +9,6 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use crate::app::helpers::*;
 
 #[derive(Clone, Copy)]
@@ -384,4 +383,3 @@ pub(crate) const GPUI_SIDEBAR_COMMAND_ICON_IDS: &[&str] = &[
     "wand",
     "world",
 ];
-

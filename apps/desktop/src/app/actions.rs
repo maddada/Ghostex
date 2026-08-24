@@ -4,7 +4,6 @@
 
 use crate::*;
 
-
 gpui::actions!(
     ghostex_gpui,
     [
@@ -79,13 +78,11 @@ gpui::actions!(
     ]
 );
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct NewTerminalTabInPane {
     pub(crate) pane_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -93,13 +90,11 @@ pub(crate) struct SplitPaneRightWithNewTerminal {
     pub(crate) pane_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SplitPaneBelowWithNewTerminal {
     pub(crate) pane_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -107,13 +102,11 @@ pub(crate) struct RotateAgentsPanesForPane {
     pub(crate) pane_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct AppendFullWidthTerminalRowForPane {
     pub(crate) pane_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -121,13 +114,11 @@ pub(crate) struct ToggleFocusModeForPane {
     pub(crate) pane_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct MergeAllTabsForPane {
     pub(crate) pane_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -136,14 +127,12 @@ pub(crate) struct SelectAgentsWorkspaceTab {
     pub(crate) session_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct CloseAgentsWorkspaceTab {
     pub(crate) pane_id: u64,
     pub(crate) session_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -153,7 +142,6 @@ pub(crate) struct CloseAgentsWorkspaceTabsByScope {
     pub(crate) scope: u8,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SleepAgentsWorkspaceTabsByScope {
@@ -162,14 +150,12 @@ pub(crate) struct SleepAgentsWorkspaceTabsByScope {
     pub(crate) scope: u8,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct FocusAgentsWorkspaceTab {
     pub(crate) pane_id: u64,
     pub(crate) session_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -178,14 +164,12 @@ pub(crate) struct ForkAgentsWorkspaceTab {
     pub(crate) session_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct ReloadAgentsWorkspaceTab {
     pub(crate) pane_id: u64,
     pub(crate) session_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AgentsWorkspaceTabCloseScope {
@@ -194,7 +178,6 @@ pub(crate) enum AgentsWorkspaceTabCloseScope {
     CloseOthers,
     CloseRight,
 }
-
 
 impl AgentsWorkspaceTabCloseScope {
     pub(crate) fn action_value(self) -> u8 {
@@ -217,7 +200,6 @@ impl AgentsWorkspaceTabCloseScope {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AgentsWorkspaceTabSleepScope {
     Sleep,
@@ -225,7 +207,6 @@ pub(crate) enum AgentsWorkspaceTabSleepScope {
     SleepOthers,
     SleepRight,
 }
-
 
 impl AgentsWorkspaceTabSleepScope {
     pub(crate) fn action_value(self) -> u8 {
@@ -248,13 +229,11 @@ impl AgentsWorkspaceTabSleepScope {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct OpenBrowserPaneInExternalBrowser {
     pub(crate) pane_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -262,20 +241,17 @@ pub(crate) struct NewBrowserTabInPane {
     pub(crate) pane_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SplitBrowserPaneRightWithBrowserTab {
     pub(crate) pane_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SplitBrowserPaneBelowWithBrowserTab {
     pub(crate) pane_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -284,14 +260,12 @@ pub(crate) struct SelectBrowserTabInPane {
     pub(crate) tab_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct CloseBrowserTabInPane {
     pub(crate) pane_id: u64,
     pub(crate) tab_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -300,26 +274,21 @@ pub(crate) struct OpenBrowserHistoryEntryInNewTab {
     pub(crate) index: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct BrowserHistoryMenuLabel;
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunBrowserFeedbackTool;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct ToggleBrowserDevTools;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct ResetBrowserZoom;
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -327,13 +296,11 @@ pub(crate) struct OpenGpuiWorkspaceInTarget {
     pub(crate) target_index: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SelectGpuiTitlebarMode {
     pub(crate) mode_index: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -341,28 +308,23 @@ pub(crate) struct RunGpuiTitlebarAction {
     pub(crate) action_index: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarGitMenuAction {
     pub(crate) row_index: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct CopyGpuiTitlebarGitBranch;
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct OpenGpuiTitlebarGitCommitScreen;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarGitRemoteSync;
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -370,13 +332,11 @@ pub(crate) struct RunGpuiTitlebarTipsHeaderAction {
     pub(crate) action_index: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarTip {
     pub(crate) tip_index: u64,
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -384,20 +344,17 @@ pub(crate) struct FocusGpuiTitlebarResourceSession {
     pub(crate) session_id: String,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct OpenGpuiTitlebarResourceUrl {
     pub(crate) url: String,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct StartGpuiKeepAwakePeriod {
     pub(crate) duration_minutes: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -406,13 +363,11 @@ pub(crate) struct SelectBrowserProfile {
     pub(crate) profile_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct CreateBrowserProfile {
     pub(crate) pane_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -422,7 +377,6 @@ pub(crate) struct CloseCommandPaneTabsByScope {
     pub(crate) scope: u8,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SleepCommandPaneTabsByScope {
@@ -431,14 +385,12 @@ pub(crate) struct SleepCommandPaneTabsByScope {
     pub(crate) scope: u8,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RenameCommandPaneTab {
     pub(crate) group_id: u64,
     pub(crate) session_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -447,14 +399,12 @@ pub(crate) struct DelayedSendCommandPaneTab {
     pub(crate) session_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct ToggleCloseAfterDoneCommandPaneTab {
     pub(crate) group_id: u64,
     pub(crate) session_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
@@ -463,7 +413,6 @@ pub(crate) struct FocusCommandPaneTab {
     pub(crate) session_id: u64,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneTabCloseScope {
     Close,
@@ -471,7 +420,6 @@ pub(crate) enum CommandPaneTabCloseScope {
     CloseOthers,
     CloseRight,
 }
-
 
 impl CommandPaneTabCloseScope {
     pub(crate) fn action_value(self) -> u8 {
@@ -494,7 +442,6 @@ impl CommandPaneTabCloseScope {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneTabSleepScope {
     Sleep,
@@ -502,7 +449,6 @@ pub(crate) enum CommandPaneTabSleepScope {
     SleepOthers,
     SleepRight,
 }
-
 
 impl CommandPaneTabSleepScope {
     pub(crate) fn action_value(self) -> u8 {
@@ -524,4 +470,3 @@ impl CommandPaneTabSleepScope {
         }
     }
 }
-

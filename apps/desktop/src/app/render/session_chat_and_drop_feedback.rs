@@ -41,7 +41,10 @@ impl GhostexGpuiApp {
     /// The chat surface (or its loading/unavailable placeholder) for one
     /// session — shared by the Agents workspace body and the project-editor
     /// companion slot body.
-    pub(crate) fn render_session_chat_surface_content(&self, session_id: TerminalSessionId) -> AnyElement {
+    pub(crate) fn render_session_chat_surface_content(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> AnyElement {
         let surface = self.agents_chat_surfaces.get(&session_id).cloned();
         if let Some(surface) = surface {
             div()
@@ -163,7 +166,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    pub(crate) fn workspace_pane_drop_zone(&self, pane_id: WorkspacePaneId) -> Option<WorkspaceDropZone> {
+    pub(crate) fn workspace_pane_drop_zone(
+        &self,
+        pane_id: WorkspacePaneId,
+    ) -> Option<WorkspaceDropZone> {
         match self.workspace_drop_feedback {
             Some(WorkspaceDropFeedback {
                 pane_id: feedback_pane_id,
@@ -236,7 +242,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn render_agents_workspace_drop_edge_band(&self, zone: WorkspaceDropZone) -> gpui::Div {
+    pub(crate) fn render_agents_workspace_drop_edge_band(
+        &self,
+        zone: WorkspaceDropZone,
+    ) -> gpui::Div {
         let band = div()
             .absolute()
             .border_2()
@@ -301,5 +310,4 @@ impl GhostexGpuiApp {
             .child(label)
             .into_any_element()
     }
-
 }

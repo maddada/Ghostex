@@ -201,13 +201,7 @@
             "protocolVersion": 1,
             "version": "0.1.0",
             "buildIdentity": "<buildIdentity>",
-            "capabilities": [
-              "health",
-              "events",
-              "localFullApi",
-              "remoteLimitedApi",
-              "strictProtocolVersion"
-            ],
+            "capabilities": ["health", "events", "localFullApi", "remoteLimitedApi", "strictProtocolVersion"],
             "listeners": {
               "local": {
                 "enabled": true,
@@ -305,13 +299,7 @@
             "protocolVersion": 1,
             "version": "0.1.0",
             "buildIdentity": "<buildIdentity>",
-            "capabilities": [
-              "health",
-              "events",
-              "localFullApi",
-              "remoteLimitedApi",
-              "strictProtocolVersion"
-            ],
+            "capabilities": ["health", "events", "localFullApi", "remoteLimitedApi", "strictProtocolVersion"],
             "listeners": {
               "local": {
                 "enabled": true,
@@ -471,9 +459,7 @@
         "request": {
           "body": {
             "params": {
-              "customAgentOrder": [
-                "codex"
-              ],
+              "customAgentOrder": ["codex"],
               "customAgents": [
                 {
                   "id": "codex",
@@ -505,9 +491,7 @@
                 "attentionRules": {},
                 "completionRules": {},
                 "createdAt": "<timestamp>",
-                "customAgentOrder": [
-                  "codex"
-                ],
+                "customAgentOrder": ["codex"],
                 "customAgents": [
                   {
                     "id": "codex",
@@ -858,10 +842,7 @@
           "body": {
             "params": {
               "projectId": "<projectId>",
-              "sessionIds": [
-                "<sessionId>",
-                "<sessionId>"
-              ]
+              "sessionIds": ["<sessionId>", "<sessionId>"]
             },
             "protocolVersion": 1
           },
@@ -996,9 +977,7 @@
                   "attentionRules": {},
                   "completionRules": {},
                   "createdAt": "<timestamp>",
-                  "customAgentOrder": [
-                    "codex"
-                  ],
+                  "customAgentOrder": ["codex"],
                   "customAgents": [
                     {
                       "id": "codex",
@@ -1206,9 +1185,7 @@
                 "attentionRules": {},
                 "completionRules": {},
                 "createdAt": "<timestamp>",
-                "customAgentOrder": [
-                  "codex"
-                ],
+                "customAgentOrder": ["codex"],
                 "customAgents": [
                   {
                     "id": "codex",
@@ -1363,10 +1340,7 @@
                   {
                     "groupId": "<projectId>:active",
                     "projectId": "<projectId>",
-                    "sessionIds": [
-                      "<sessionId>",
-                      "<sessionId>"
-                    ],
+                    "sessionIds": ["<sessionId>", "<sessionId>"],
                     "sortKey": "0:phase 3 compat updated:<projectId>:active",
                     "title": "Active"
                   },
@@ -1381,9 +1355,7 @@
                 "projects": [
                   {
                     "createdAt": "<timestamp>",
-                    "groupIds": [
-                      "<projectId>:active"
-                    ],
+                    "groupIds": ["<projectId>:active"],
                     "isFavorite": false,
                     "isPinned": false,
                     "path": "<home>/workspace/added-project",
@@ -1394,9 +1366,7 @@
                   },
                   {
                     "createdAt": "<timestamp>",
-                    "groupIds": [
-                      "<projectId>:active"
-                    ],
+                    "groupIds": ["<projectId>:active"],
                     "isFavorite": true,
                     "isPinned": true,
                     "path": "<home>/workspace/phase3-project",

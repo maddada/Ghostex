@@ -192,7 +192,10 @@ pub(crate) fn gpui_remote_sidebar_delayed_send_params(
         gpui_command_delayed_send_duration_from_millis(delay_ms)?;
         shaped.insert("delayMs".to_string(), serde_json::json!(delay_ms));
     } else if send_when_agent_stops {
-        shaped.insert("sendWhenAgentStops".to_string(), serde_json::Value::Bool(true));
+        shaped.insert(
+            "sendWhenAgentStops".to_string(),
+            serde_json::Value::Bool(true),
+        );
     } else {
         shaped.insert(
             "sendWhenAllProjectSessionsStop".to_string(),
@@ -202,7 +205,9 @@ pub(crate) fn gpui_remote_sidebar_delayed_send_params(
     Some(serde_json::Value::Object(shaped))
 }
 
-pub(crate) fn gpui_remote_sidebar_project_id_params(params: serde_json::Value) -> Option<serde_json::Value> {
+pub(crate) fn gpui_remote_sidebar_project_id_params(
+    params: serde_json::Value,
+) -> Option<serde_json::Value> {
     let object = params.as_object()?;
     let project_id = object
         .get("projectId")
@@ -1024,7 +1029,9 @@ pub(crate) fn gpui_remote_sidebar_previous_sessions_response_payload(
     serde_json::Value::Object(response)
 }
 
-pub(crate) fn gpui_remote_sidebar_project_response_payload(result: serde_json::Value) -> serde_json::Value {
+pub(crate) fn gpui_remote_sidebar_project_response_payload(
+    result: serde_json::Value,
+) -> serde_json::Value {
     let mut response = serde_json::Map::new();
     if let Some(project) = result
         .get("project")
@@ -1394,4 +1401,3 @@ pub(crate) fn gpui_remote_sidebar_delete_worktree_response_payload(
     response.insert("warnings".to_string(), serde_json::Value::Array(warnings));
     serde_json::Value::Object(response)
 }
-

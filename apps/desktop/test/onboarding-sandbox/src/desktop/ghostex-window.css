@@ -13,7 +13,7 @@
   width: 100%;
 }
 
-.sbx-window[data-focused="false"] {
+.sbx-window[data-focused='false'] {
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
 }
 
@@ -64,7 +64,7 @@
   background: #28c840;
 }
 
-.sbx-window[data-focused="false"] .sbx-traffic-light {
+.sbx-window[data-focused='false'] .sbx-traffic-light {
   background: rgba(255, 255, 255, 0.22);
 }
 
@@ -79,7 +79,7 @@
   transform: translateX(-50%);
 }
 
-.sbx-window[data-focused="false"] .sbx-window-title {
+.sbx-window[data-focused='false'] .sbx-window-title {
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -113,7 +113,7 @@
 }
 
 .sbx-titlebar-button:hover,
-.sbx-titlebar-button[data-active="true"] {
+.sbx-titlebar-button[data-active='true'] {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
@@ -290,7 +290,7 @@
   padding: 4px 10px;
 }
 
-.sbx-main-tab[data-active="true"] {
+.sbx-main-tab[data-active='true'] {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.9);
 }

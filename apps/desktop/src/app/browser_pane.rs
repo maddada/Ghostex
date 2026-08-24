@@ -11,10 +11,10 @@ use std::rc::Rc;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-use gpui::Focusable as _;
 use gpui::App;
 use gpui::AppContext as _;
 use gpui::Entity;
+use gpui::Focusable as _;
 use gpui::Window;
 use gpui::rgb;
 use gpui_component::input::InputEvent;
@@ -52,7 +52,11 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn sync_browser_address_inputs(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn sync_browser_address_inputs(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let pane_ids = self.browser_tabs.rendered_leaf_order();
         let pane_id_set = pane_ids.iter().copied().collect::<HashSet<_>>();
         self.browser_address_inputs
@@ -203,7 +207,11 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn sync_browser_find_inputs(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn sync_browser_find_inputs(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let live_tab_ids = self
             .browser_tabs
             .tabs
@@ -554,7 +562,10 @@ impl GhostexGpuiApp {
             .map(|tab| (tab.id, tab.cef_url(), tab.profile_id))
     }
 
-    pub(crate) fn browser_surface_for_pane(&self, pane_id: BrowserPaneId) -> Option<Entity<CefSurface>> {
+    pub(crate) fn browser_surface_for_pane(
+        &self,
+        pane_id: BrowserPaneId,
+    ) -> Option<Entity<CefSurface>> {
         if !self.browser_surfaces_may_be_visible() {
             return None;
         }
@@ -570,7 +581,10 @@ impl GhostexGpuiApp {
             .allows_cef_child_views()
     }
 
-    pub(crate) fn browser_surface_for_rendered_leaf(&self, leaf: &BrowserLeaf) -> Option<Entity<CefSurface>> {
+    pub(crate) fn browser_surface_for_rendered_leaf(
+        &self,
+        leaf: &BrowserLeaf,
+    ) -> Option<Entity<CefSurface>> {
         /*
         CDXC:GPUIBrowserSplits 2026-06-22-09:55:
         Browser body rendering may attach an existing tab-owned CEF entity for every rendered split leaf whose active tab is loaded, but rendering must never materialize a restored or inactive tab. Missing loaded CEF entities return no surface so the body renderer can show the restored/sleeping placeholder card, address-only tabs stay blank, and Browser sleep, non-Browser modes, Browser tab drags, and command-tab drags hide every surface.

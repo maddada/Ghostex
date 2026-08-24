@@ -1,21 +1,21 @@
-import type { ReactNode } from "react";
-import type { RemoteFilesystemBrowseEntry } from "./remote-filesystem";
+import type { ReactNode } from 'react';
+import type { RemoteFilesystemBrowseEntry } from './remote-filesystem';
 
-export const REMOTE_PICKER_ITEM_ICON_CLASS = "size-4 text-muted-foreground/80";
-export const REMOTE_PICKER_ADDON_ICON_CLASS = "size-4";
+export const REMOTE_PICKER_ITEM_ICON_CLASS = 'size-4 text-muted-foreground/80';
+export const REMOTE_PICKER_ADDON_ICON_CLASS = 'size-4';
 
 export interface RemoteCommandPaletteItem {
   readonly description?: string;
   readonly disabled?: boolean;
   readonly icon: ReactNode;
-  readonly kind: "action" | "submenu";
+  readonly kind: 'action' | 'submenu';
   readonly searchTerms: ReadonlyArray<string>;
   readonly title: ReactNode;
   readonly value: string;
 }
 
 export interface RemoteCommandPaletteActionItem extends RemoteCommandPaletteItem {
-  readonly kind: "action";
+  readonly kind: 'action';
   readonly keepOpen?: boolean;
   readonly run: () => Promise<void>;
 }
@@ -36,17 +36,15 @@ export function filterBrowseEntries(input: {
   highlightedEntry: RemoteFilesystemBrowseEntry | null;
 } {
   const lowerFilter = input.browseFilterQuery.toLowerCase();
-  const showHidden = input.browseFilterQuery.startsWith(".");
+  const showHidden = input.browseFilterQuery.startsWith('.');
 
   const filteredEntries = input.browseEntries.filter(
-    (entry) =>
-      entry.name.toLowerCase().startsWith(lowerFilter) &&
-      (showHidden || !entry.name.startsWith(".")),
+    (entry) => entry.name.toLowerCase().startsWith(lowerFilter) && (showHidden || !entry.name.startsWith('.'))
   );
 
   let highlightedEntry: RemoteFilesystemBrowseEntry | null = null;
-  if (input.highlightedItemValue?.startsWith("browse:")) {
-    const highlightedPath = input.highlightedItemValue.slice("browse:".length);
+  if (input.highlightedItemValue?.startsWith('browse:')) {
+    const highlightedPath = input.highlightedItemValue.slice('browse:'.length);
     highlightedEntry = filteredEntries.find((entry) => entry.fullPath === highlightedPath) ?? null;
   }
 
@@ -73,10 +71,10 @@ export function buildBrowseGroups(input: {
     items.push({
       icon: input.upIcon,
       keepOpen: true,
-      kind: "action",
-      searchTerms: [input.browseQuery, ".."],
-      title: "..",
-      value: "browse:up",
+      kind: 'action',
+      searchTerms: [input.browseQuery, '..'],
+      title: '..',
+      value: 'browse:up',
       run: async () => {
         input.browseUp();
       },
@@ -87,7 +85,7 @@ export function buildBrowseGroups(input: {
     items.push({
       icon: input.directoryIcon,
       keepOpen: true,
-      kind: "action",
+      kind: 'action',
       searchTerms: [input.browseQuery, entry.fullPath, entry.name],
       title: entry.name,
       value: `browse:${entry.fullPath}`,
@@ -97,5 +95,5 @@ export function buildBrowseGroups(input: {
     });
   }
 
-  return [{ items, label: "Directories", value: "directories" }];
+  return [{ items, label: 'Directories', value: 'directories' }];
 }

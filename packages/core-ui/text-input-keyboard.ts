@@ -11,13 +11,13 @@ export type TextInputEditResult = {
 };
 
 export function isTextEditingKey(
-  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "isComposing" | "key" | "metaKey">,
+  event: Pick<KeyboardEvent, 'altKey' | 'ctrlKey' | 'isComposing' | 'key' | 'metaKey'>
 ): boolean {
   if (event.altKey || event.isComposing) {
     return false;
   }
 
-  if ((event.ctrlKey || event.metaKey) && event.key === "Backspace") {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Backspace') {
     return true;
   }
 
@@ -25,11 +25,11 @@ export function isTextEditingKey(
     return false;
   }
 
-  return event.key === "Backspace" || event.key === "Delete" || event.key.length === 1;
+  return event.key === 'Backspace' || event.key === 'Delete' || event.key.length === 1;
 }
 
 export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
-  if (typeof HTMLElement === "undefined" || !(target instanceof HTMLElement)) {
+  if (typeof HTMLElement === 'undefined' || !(target instanceof HTMLElement)) {
     return false;
   }
 
@@ -38,20 +38,20 @@ export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   }
 
   return (
-    (typeof HTMLInputElement !== "undefined" && target instanceof HTMLInputElement) ||
-    (typeof HTMLTextAreaElement !== "undefined" && target instanceof HTMLTextAreaElement) ||
-    (typeof HTMLSelectElement !== "undefined" && target instanceof HTMLSelectElement)
+    (typeof HTMLInputElement !== 'undefined' && target instanceof HTMLInputElement) ||
+    (typeof HTMLTextAreaElement !== 'undefined' && target instanceof HTMLTextAreaElement) ||
+    (typeof HTMLSelectElement !== 'undefined' && target instanceof HTMLSelectElement)
   );
 }
 
 export function applyTextEditingKey(
   state: TextInputEditState,
   key: string,
-  modifiers?: Pick<KeyboardEvent, "ctrlKey" | "metaKey">,
+  modifiers?: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey'>
 ): TextInputEditResult | undefined {
   const { selectionEnd, selectionStart, value } = normalizeSelection(state);
 
-  if (key === "Backspace") {
+  if (key === 'Backspace') {
     if (selectionStart === selectionEnd && (modifiers?.ctrlKey || modifiers?.metaKey)) {
       if (selectionStart === 0) {
         return {
@@ -93,7 +93,7 @@ export function applyTextEditingKey(
     };
   }
 
-  if (key === "Delete") {
+  if (key === 'Delete') {
     if (selectionStart === selectionEnd) {
       if (selectionStart >= value.length) {
         return {
@@ -129,11 +129,7 @@ export function applyTextEditingKey(
   };
 }
 
-function normalizeSelection({
-  selectionEnd,
-  selectionStart,
-  value,
-}: TextInputEditState): TextInputEditResult {
+function normalizeSelection({ selectionEnd, selectionStart, value }: TextInputEditState): TextInputEditResult {
   const valueLength = value.length;
   const normalizedSelectionStart = clampSelectionIndex(selectionStart ?? valueLength, valueLength);
   const normalizedSelectionEnd = clampSelectionIndex(selectionEnd ?? valueLength, valueLength);
@@ -160,11 +156,11 @@ function clampSelectionIndex(index: number, valueLength: number): number {
 function findPreviousWordBoundary(value: string, selectionStart: number): number {
   let index = selectionStart;
 
-  while (index > 0 && /\s/u.test(value[index - 1] ?? "")) {
+  while (index > 0 && /\s/u.test(value[index - 1] ?? '')) {
     index -= 1;
   }
 
-  while (index > 0 && !/\s/u.test(value[index - 1] ?? "")) {
+  while (index > 0 && !/\s/u.test(value[index - 1] ?? '')) {
     index -= 1;
   }
 

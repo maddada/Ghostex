@@ -3,38 +3,30 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import { GpuiGxserverClient } from "./client";
-import {
-  GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS,
-  GPUI_SIDEBAR_BOOTSTRAP_RETRY_DELAY_MS,
-} from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
+import { GpuiGxserverClient } from './client';
+import { GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS, GPUI_SIDEBAR_BOOTSTRAP_RETRY_DELAY_MS } from './constants';
+import type { GpuiSidebarRuntime } from './core';
 import {
   activeGroupIdForGpuiGxserverBootstrapPresentationState,
   hasSameGpuiGxserverBootstrapTransport,
   validateGpuiGxserverBootstrap,
-} from "./helpers/bootstrap";
-import { sameStringSet } from "./helpers/records";
-import {
-  isSidebarProjectCollectionsState,
-  parseGpuiRemotePresentationProjectId,
-} from "./helpers/remote-presentation";
+} from './helpers/bootstrap';
+import { sameStringSet } from './helpers/records';
+import { isSidebarProjectCollectionsState, parseGpuiRemotePresentationProjectId } from './helpers/remote-presentation';
 import type {
   GpuiGxserverBootstrap,
   GpuiSidebarRuntimeSnapshotKind,
   GpuiValidatedGxserverBootstrap,
-} from "./types-and-protocol";
-import { reduceGxserverPresentationDelta } from "@/packages/shared/gxserver-presentation-cache";
-import {
-  createGxserverPresentationSidebarSessionKey,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from './types-and-protocol';
+import { reduceGxserverPresentationDelta } from '@/packages/shared/gxserver-presentation-cache';
+import { createGxserverPresentationSidebarSessionKey } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverPresentationDelta,
   GxserverPresentationSession,
   GxserverPresentationSnapshot,
   GxserverProjectId,
   GxserverSessionId,
-} from "@/packages/shared/gxserver-protocol";
+} from '@/packages/shared/gxserver-protocol';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -56,14 +48,17 @@ export interface GpuiSidebarRuntimePresentationStreamMethods {
   autoMaterializeStartupFocusedSession(): void;
   applyPresentationDelta(delta: GxserverPresentationDelta, gxserverRevision: number): void;
   findLocalPresentationSession(projectId: string, sessionId: string): GxserverPresentationSession | undefined;
-  patchPresentationSession(projectId: string, sessionId: string, patch: Partial<GxserverPresentationSnapshot["sessions"][number]>): void;
+  patchPresentationSession(
+    projectId: string,
+    sessionId: string,
+    patch: Partial<GxserverPresentationSnapshot['sessions'][number]>
+  ): void;
   removePresentationSession(projectId: string, sessionId: string): void;
   hideLocalPresentationSession(projectId: string, sessionId: string): void;
   removeLocalPresentationProject(projectId: string): void;
 }
 
 export const gpuiSidebarRuntimePresentationStreamMethods = {
-
   applyGxserverBootstrapChanged(this: GpuiSidebarRuntime, bootstrap: GpuiGxserverBootstrap): void {
     const validated = validateGpuiGxserverBootstrap(bootstrap);
     if (!validated) {
@@ -107,7 +102,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
 
     const validated = validateGpuiGxserverBootstrap(bootstrap);
     if (!validated) {
-      this.publishUnavailable("bootstrap-invalid");
+      this.publishUnavailable('bootstrap-invalid');
       return;
     }
 
@@ -128,27 +123,26 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       client.fetchSidebarHud(validated.initialActiveProjectId),
       client.fetchWorkspaceSessionGroups().catch(() => undefined),
     ])
-      .then(
-        ([snapshot, appUserData, domainProjects, recentProjects, sidebarHud, workspaceGroups]) => {
-          if (this.client !== client) {
-            return;
-          }
-          this.appUserData = appUserData;
-          this.domainProjects = domainProjects ? [...domainProjects] : [];
-          this.recentProjects = recentProjects ? [...recentProjects] : [];
-          this.sidebarHud = sidebarHud;
-          this.adoptWorkspaceGroupsFromGxserver(workspaceGroups);
-          this.applyPresentationSnapshot(snapshot, "hydrate");
-          this.openPresentationSubscription(validated.clientId, snapshot.revision);
-        },
-      )
+      .then(([snapshot, appUserData, domainProjects, recentProjects, sidebarHud, workspaceGroups]) => {
+        if (this.client !== client) {
+          return;
+        }
+        this.appUserData = appUserData;
+        this.domainProjects = domainProjects ? [...domainProjects] : [];
+        this.recentProjects = recentProjects ? [...recentProjects] : [];
+        this.sidebarHud = sidebarHud;
+        this.adoptWorkspaceGroupsFromGxserver(workspaceGroups);
+        this.applyPresentationSnapshot(snapshot, 'hydrate');
+        this.openPresentationSubscription(validated.clientId, snapshot.revision);
+      })
       .catch(() => {
-        this.publishUnavailable("snapshot-failed");
+        this.publishUnavailable('snapshot-failed');
       });
   },
 
-  applyGxserverBootstrapPresentationState(this: GpuiSidebarRuntime,
-    bootstrap: GpuiValidatedGxserverBootstrap,
+  applyGxserverBootstrapPresentationState(
+    this: GpuiSidebarRuntime,
+    bootstrap: GpuiValidatedGxserverBootstrap
   ): boolean {
     const nextFocusedSessionId = bootstrap.focusedSessionId;
     const nextVisibleSessionIds = new Set(bootstrap.visibleSessionIds ?? []);
@@ -161,8 +155,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     project id.
     */
     const nextActiveProjectId =
-      bootstrap.initialActiveProjectId &&
-      parseGpuiRemotePresentationProjectId(bootstrap.initialActiveProjectId)
+      bootstrap.initialActiveProjectId && parseGpuiRemotePresentationProjectId(bootstrap.initialActiveProjectId)
         ? this.activeProjectId
         : bootstrap.initialActiveProjectId;
     const nextActiveGroupId = activeGroupIdForGpuiGxserverBootstrapPresentationState({
@@ -214,7 +207,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         this.forwardSidebarProjectCollectionsFromGxserver(state);
       },
       onSnapshot: (snapshot) => {
-        this.applyPresentationSnapshot(snapshot, this.hasHydrated ? "patch" : "hydrate");
+        this.applyPresentationSnapshot(snapshot, this.hasHydrated ? 'patch' : 'hydrate');
       },
     });
   },
@@ -243,17 +236,18 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
           this.recentProjects = [...recentProjects];
         }
         this.sidebarHud = sidebarHud;
-        this.applyPresentationSnapshot(snapshot, this.hasHydrated ? "patch" : "hydrate");
+        this.applyPresentationSnapshot(snapshot, this.hasHydrated ? 'patch' : 'hydrate');
         this.openPresentationSubscription(clientId, snapshot.revision);
       })
       .catch(() => {
-        this.publishUnavailable("stream-recovery-failed");
+        this.publishUnavailable('stream-recovery-failed');
       });
   },
 
-  applyPresentationSnapshot(this: GpuiSidebarRuntime,
+  applyPresentationSnapshot(
+    this: GpuiSidebarRuntime,
     snapshot: GxserverPresentationSnapshot,
-    kind: GpuiSidebarRuntimeSnapshotKind,
+    kind: GpuiSidebarRuntimeSnapshotKind
   ): void {
     const previousSessions = this.presentation?.sessions ?? [];
     const projectedSnapshot = this.projectLocalPresentationAttentionAcknowledgementGuards(snapshot);
@@ -264,8 +258,8 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     }
     this.publishPresentation(kind);
     this.notifyNativeGxserverPresentationReady();
-    if (kind === "hydrate") {
-      void this.runGpuiAutoSleepMonitor("startup");
+    if (kind === 'hydrate') {
+      void this.runGpuiAutoSleepMonitor('startup');
       this.autoMaterializeStartupFocusedSession();
     }
   },
@@ -292,9 +286,9 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       return;
     }
     const session = this.presentation?.sessions.find(
-      (presentationSession) => presentationSession.sessionId === focusedSessionId,
+      (presentationSession) => presentationSession.sessionId === focusedSessionId
     );
-    if (!session || session.lifecycleState !== "running") {
+    if (!session || session.lifecycleState !== 'running') {
       return;
     }
     this.postLocalWorkspaceTerminalFocus(session.projectId, focusedSessionId);
@@ -307,31 +301,33 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     this.applyDomainProjectDelta(delta);
     const previousSessions = this.presentation.sessions;
     const projectedSnapshot = this.projectLocalPresentationAttentionAcknowledgementGuards(
-      reduceGxserverPresentationDelta(this.presentation, delta, gxserverRevision),
+      reduceGxserverPresentationDelta(this.presentation, delta, gxserverRevision)
     );
     this.presentation = projectedSnapshot;
     this.syncLocalPresentationAttentionTracking(previousSessions, projectedSnapshot.sessions);
     this.detectSessionAttentionCompletionSounds(previousSessions, projectedSnapshot.sessions);
-    this.publishPresentation("patch");
+    this.publishPresentation('patch');
   },
 
-  findLocalPresentationSession(this: GpuiSidebarRuntime,
+  findLocalPresentationSession(
+    this: GpuiSidebarRuntime,
     projectId: string,
-    sessionId: string,
+    sessionId: string
   ): GxserverPresentationSession | undefined {
     return this.presentation?.sessions.find(
-      (session) => session.projectId === projectId && session.sessionId === sessionId,
+      (session) => session.projectId === projectId && session.sessionId === sessionId
     );
   },
 
-  patchPresentationSession(this: GpuiSidebarRuntime,
+  patchPresentationSession(
+    this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
-    patch: Partial<GxserverPresentationSnapshot["sessions"][number]>,
+    patch: Partial<GxserverPresentationSnapshot['sessions'][number]>
   ): void {
     const presentation = this.presentation;
     const session = presentation?.sessions.find(
-      (candidate) => candidate.projectId === projectId && candidate.sessionId === sessionId,
+      (candidate) => candidate.projectId === projectId && candidate.sessionId === sessionId
     );
     if (!presentation || !session) {
       return;
@@ -343,11 +339,11 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
           ...session,
           ...patch,
         },
-        type: "sessionUpdated",
+        type: 'sessionUpdated',
       },
-      presentation.revision + 1,
+      presentation.revision + 1
     );
-    this.publishPresentation("patch");
+    this.publishPresentation('patch');
   },
 
   removePresentationSession(this: GpuiSidebarRuntime, projectId: string, sessionId: string): void {
@@ -361,11 +357,11 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       {
         projectId: projectId as GxserverProjectId,
         sessionId: sessionId as GxserverSessionId,
-        type: "sessionRemoved",
+        type: 'sessionRemoved',
       },
-      presentation.revision + 1,
+      presentation.revision + 1
     );
-    this.publishPresentation("patch");
+    this.publishPresentation('patch');
   },
 
   hideLocalPresentationSession(this: GpuiSidebarRuntime, projectId: string, sessionId: string): void {
@@ -373,9 +369,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:59:
     GPUI native tab close must match macOS local-first sidebar removal. Keep a runtime-only hidden-session overlay so future gxserver hydrates cannot reinsert a locally closed mapped Agents row while the backend transition catches up or fails best-effort. Store only project/session ids.
     */
-    this.localFirstHiddenPresentationSessionKeys.add(
-      createGxserverPresentationSidebarSessionKey(projectId, sessionId),
-    );
+    this.localFirstHiddenPresentationSessionKeys.add(createGxserverPresentationSidebarSessionKey(projectId, sessionId));
   },
 
   removeLocalPresentationProject(this: GpuiSidebarRuntime, projectId: string): void {
@@ -391,12 +385,13 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       presentation,
       {
         projectId: projectId as GxserverProjectId,
-        type: "projectRemoved",
+        type: 'projectRemoved',
       },
-      presentation.revision + 1,
+      presentation.revision + 1
     );
   },
 };
 
-const gpuiSidebarRuntimePresentationStreamMethodsShapeCheck: GpuiSidebarRuntimePresentationStreamMethods = gpuiSidebarRuntimePresentationStreamMethods;
+const gpuiSidebarRuntimePresentationStreamMethodsShapeCheck: GpuiSidebarRuntimePresentationStreamMethods =
+  gpuiSidebarRuntimePresentationStreamMethods;
 void gpuiSidebarRuntimePresentationStreamMethodsShapeCheck;

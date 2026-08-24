@@ -9,7 +9,6 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use anyhow::Result;
 
 use crate::app::helpers::*;
@@ -386,4 +385,3 @@ pub(crate) fn gpui_sidebar_session_completion_sound_from_json(
     }
     Ok(trimmed.to_string())
 }
-

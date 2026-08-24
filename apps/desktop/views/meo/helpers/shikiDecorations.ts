@@ -11,7 +11,7 @@ import {
   isShikiEnabled,
   subscribeShikiRefresh,
   getShikiThemeMeta,
-  type ShikiToken
+  type ShikiToken,
 } from './shikiHighlighter';
 
 const shikiRefreshEffect = StateEffect.define<null>();
@@ -150,7 +150,7 @@ function buildDecorations(view: EditorView): DecorationSet {
           return false;
         }
         return undefined;
-      }
+      },
     });
   } catch {
     return Decoration.none;
@@ -184,7 +184,7 @@ const shikiPlugin = ViewPlugin.fromClass(
     }
   },
   {
-    decorations: (plugin) => plugin.decorations
+    decorations: (plugin) => plugin.decorations,
   }
 );
 

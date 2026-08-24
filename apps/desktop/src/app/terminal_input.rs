@@ -11,10 +11,10 @@ use std::sync::atomic::Ordering;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-use gpui::Focusable as _;
 use gpui::Bounds;
 use gpui::ClipboardItem;
 use gpui::Entity;
+use gpui::Focusable as _;
 use gpui::Pixels;
 use gpui::Window;
 use gpui_component::WindowExt;
@@ -26,7 +26,10 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 impl GhostexGpuiApp {
-    pub(crate) fn paste_into_focused_terminal_from_clipboard(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+    pub(crate) fn paste_into_focused_terminal_from_clipboard(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         /*
         CDXC:GPUITerminalPaste 2026-06-23-09:59:
         Cmd+V terminal paste is scoped to the shell focus model instead of the body mouse handlers: only the currently focused mounted Agents or command Ghostty surface can receive clipboard bytes. Clipboard contents stay ephemeral, explicit-string-only, and are never logged, persisted, or converted from file paths.
@@ -346,7 +349,9 @@ impl GhostexGpuiApp {
 
     /// The GPUI-engine view backing the focused terminal text target, if
     /// the focused slot is engine-claimed.
-    pub(crate) fn focused_gpui_engine_terminal_view(&self) -> Option<Entity<terminal_element::TerminalView>> {
+    pub(crate) fn focused_gpui_engine_terminal_view(
+        &self,
+    ) -> Option<Entity<terminal_element::TerminalView>> {
         match focused_terminal_text_target(self.active_mode, self.shell_focus)? {
             FocusedTerminalTextTarget::Agents => {
                 let slot_id = focused_agents_terminal_surface_mount_slot(
@@ -668,7 +673,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn sync_gpui_engine_agent_actions_visibility(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn sync_gpui_engine_agent_actions_visibility(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let focused_target = self.focused_terminal_text_mount_target();
         let chat_view_session_ids = self
             .agents_gpui_engine_terminals
@@ -1040,7 +1048,10 @@ impl GhostexGpuiApp {
         });
     }
 
-    pub(crate) fn request_command_group_terminal_text_focus_handoff(&mut self, group_id: CommandPaneGroupId) {
+    pub(crate) fn request_command_group_terminal_text_focus_handoff(
+        &mut self,
+        group_id: CommandPaneGroupId,
+    ) {
         let Some(session_id) = self
             .command_pane
             .find_leaf(group_id)
@@ -1076,7 +1087,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn clear_pending_project_editor_companion_terminal_text_focus_if_focus_moved(&mut self) {
+    pub(crate) fn clear_pending_project_editor_companion_terminal_text_focus_if_focus_moved(
+        &mut self,
+    ) {
         let Some(slot_id) = self.pending_project_editor_companion_terminal_text_focus_slot else {
             return;
         };
@@ -1252,7 +1265,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn focused_terminal_text_mount_target(&self) -> Option<FocusedTerminalTextMountTarget> {
+    pub(crate) fn focused_terminal_text_mount_target(
+        &self,
+    ) -> Option<FocusedTerminalTextMountTarget> {
         match focused_terminal_text_target(self.active_mode, self.shell_focus)? {
             FocusedTerminalTextTarget::Agents => focused_agents_terminal_surface_mount_slot(
                 self.active_mode,
@@ -1324,7 +1339,9 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn exact_focused_terminal_text_surface_target(&self) -> Option<FocusedTerminalTextMountTarget> {
+    pub(crate) fn exact_focused_terminal_text_surface_target(
+        &self,
+    ) -> Option<FocusedTerminalTextMountTarget> {
         let target = self.focused_terminal_text_mount_target()?;
         match target {
             FocusedTerminalTextMountTarget::Agents(slot_id) => self
@@ -1340,7 +1357,9 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(not(target_os = "macos"))]
-    pub(crate) fn exact_focused_terminal_text_surface_target(&self) -> Option<FocusedTerminalTextMountTarget> {
+    pub(crate) fn exact_focused_terminal_text_surface_target(
+        &self,
+    ) -> Option<FocusedTerminalTextMountTarget> {
         None
     }
 
@@ -1672,7 +1691,10 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn send_text_bytes_to_focused_agents_terminal_surface(&mut self, bytes: &[u8]) -> bool {
+    pub(crate) fn send_text_bytes_to_focused_agents_terminal_surface(
+        &mut self,
+        bytes: &[u8],
+    ) -> bool {
         let Some(slot_id) = focused_agents_terminal_surface_mount_slot(
             self.active_mode,
             self.shell_focus,
@@ -1715,7 +1737,10 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn send_text_bytes_to_focused_command_terminal_surface(&mut self, bytes: &[u8]) -> bool {
+    pub(crate) fn send_text_bytes_to_focused_command_terminal_surface(
+        &mut self,
+        bytes: &[u8],
+    ) -> bool {
         let Some(slot_id) =
             focused_command_terminal_surface_mount_slot(self.shell_focus, &self.command_pane)
         else {
@@ -2159,7 +2184,9 @@ impl GhostexGpuiApp {
 
     #[cfg(target_os = "macos")]
     #[allow(dead_code)]
-    pub(crate) fn next_terminal_close_confirm_dialog_key(&self) -> Option<TerminalCloseConfirmDialogKey> {
+    pub(crate) fn next_terminal_close_confirm_dialog_key(
+        &self,
+    ) -> Option<TerminalCloseConfirmDialogKey> {
         if let Some(slot_id) =
             focused_command_terminal_surface_mount_slot(self.shell_focus, &self.command_pane)
                 .filter(|slot_id| self.command_terminal_close_confirm_slot_is_current(*slot_id))

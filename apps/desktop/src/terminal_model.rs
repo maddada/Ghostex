@@ -225,7 +225,8 @@ pub struct SnapshotCell {
     pub bold: bool,
     pub italic: bool,
     pub faint: bool,
-    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
+    #[allow(dead_code)]
+    // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
     pub blink: bool,
     pub inverse: bool,
     pub invisible: bool,
@@ -245,10 +246,12 @@ pub struct SnapshotRow {
     /// is a hint that lets the renderer keep cached layout for clean rows.
     pub dirty: bool,
     /// This row continues onto the next row without a hard newline.
-    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
+    #[allow(dead_code)]
+    // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
     pub wraps: bool,
     /// This row is the continuation of a soft-wrapped row above it.
-    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
+    #[allow(dead_code)]
+    // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
     pub wrap_continuation: bool,
     /// One entry per column, spacers included.
     pub cells: Vec<SnapshotCell>,
@@ -261,7 +264,8 @@ pub struct SnapshotRow {
 pub struct TerminalTextRow {
     pub absolute_row: u64,
     pub wraps: bool,
-    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
+    #[allow(dead_code)]
+    // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
     pub wrap_continuation: bool,
     pub cells: Vec<TerminalTextCell>,
 }
@@ -330,7 +334,8 @@ pub struct TerminalSnapshot {
     /// Active viewport scrollbar state in rows.
     pub scrollbar: VtScrollbar,
     /// Active 256-color palette (for palette-indexed consumers).
-    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt palette even where the gpui renderer resolves colours itself
+    #[allow(dead_code)]
+    // snapshot shape: mirrors the libghostty-vt palette even where the gpui renderer resolves colours itself
     pub palette: [Rgb; 256],
 }
 

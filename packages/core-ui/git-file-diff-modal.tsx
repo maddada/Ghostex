@@ -1,17 +1,11 @@
-import { IconColumns2, IconLayoutRows, IconPilcrow, IconTextWrap } from "@tabler/icons-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
-import { Button } from "@/packages/components/ui/button";
-import { cn } from "@/packages/components/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/packages/components/ui/dialog";
-import type { SidebarGitFileDiffDraft } from "../shared/sidebar-git";
-import type { SidebarTheme } from "../shared/session-grid-contract";
-import { AppTooltip } from "./app-tooltip";
+import { IconColumns2, IconLayoutRows, IconPilcrow, IconTextWrap } from '@tabler/icons-react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
+import { Button } from '@/packages/components/ui/button';
+import { cn } from '@/packages/components/utils';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
+import type { SidebarGitFileDiffDraft } from '../shared/sidebar-git';
+import type { SidebarTheme } from '../shared/session-grid-contract';
+import { AppTooltip } from './app-tooltip';
 
 export type GitFileDiffModalDraft = SidebarGitFileDiffDraft;
 
@@ -22,7 +16,7 @@ export type GitFileDiffModalProps = {
   theme?: SidebarTheme;
 };
 
-type DiffLineKind = "addition" | "context" | "deletion" | "hunk" | "metadata" | "raw";
+type DiffLineKind = 'addition' | 'context' | 'deletion' | 'hunk' | 'metadata' | 'raw';
 
 type DiffLine = {
   content: string;
@@ -30,13 +24,13 @@ type DiffLine = {
   number: number;
 };
 
-export type GitDiffViewMode = "split" | "unified";
+export type GitDiffViewMode = 'split' | 'unified';
 
-export function GitFileDiffModal({ draft, isOpen, onClose, theme = "dark-1" }: GitFileDiffModalProps) {
+export function GitFileDiffModal({ draft, isOpen, onClose, theme = 'dark-1' }: GitFileDiffModalProps) {
   const descriptionId = useId();
   const titleId = useId();
   const hasStats = draft.additions !== undefined || draft.deletions !== undefined;
-  const isDarkTheme = getSidebarThemeVariant(theme) === "dark";
+  const isDarkTheme = getSidebarThemeVariant(theme) === 'dark';
 
   /*
    * CDXC:TitlebarGit 2026-05-25-10:16:
@@ -55,27 +49,27 @@ export function GitFileDiffModal({ draft, isOpen, onClose, theme = "dark-1" }: G
         aria-describedby={descriptionId}
         aria-labelledby={titleId}
         className={cn(
-          "ghostex-settings-shadcn settings-modal-dialog git-file-diff-modal-shadcn flex flex-col gap-0 overflow-hidden p-0 font-sans",
-          isDarkTheme && "dark",
+          'ghostex-settings-shadcn settings-modal-dialog git-file-diff-modal-shadcn flex flex-col gap-0 overflow-hidden p-0 font-sans',
+          isDarkTheme && 'dark'
         )}
         data-sidebar-theme={theme}
       >
-        <DialogHeader className="git-file-diff-modal-header">
-          <DialogTitle className="git-file-diff-modal-title" id={titleId}>
+        <DialogHeader className='git-file-diff-modal-header'>
+          <DialogTitle className='git-file-diff-modal-title' id={titleId}>
             File diff
           </DialogTitle>
-          <DialogDescription className="git-file-diff-modal-description" id={descriptionId}>
-            <span className="git-file-diff-modal-path">{draft.filePath}</span>
+          <DialogDescription className='git-file-diff-modal-description' id={descriptionId}>
+            <span className='git-file-diff-modal-path'>{draft.filePath}</span>
             {hasStats ? (
-              <span className="git-file-diff-modal-stats">
-                <span className="changed-files-tree-additions">+{draft.additions ?? 0}</span>
-                <span className="changed-files-tree-stat-divider">/</span>
-                <span className="changed-files-tree-deletions">-{draft.deletions ?? 0}</span>
+              <span className='git-file-diff-modal-stats'>
+                <span className='changed-files-tree-additions'>+{draft.additions ?? 0}</span>
+                <span className='changed-files-tree-stat-divider'>/</span>
+                <span className='changed-files-tree-deletions'>-{draft.deletions ?? 0}</span>
               </span>
             ) : null}
           </DialogDescription>
         </DialogHeader>
-        <div className="git-file-diff-modal-body">
+        <div className='git-file-diff-modal-body'>
           <GitFileDiffPanel draft={draft} />
         </div>
       </DialogContent>
@@ -83,13 +77,13 @@ export function GitFileDiffModal({ draft, isOpen, onClose, theme = "dark-1" }: G
   );
 }
 
-function getSidebarThemeVariant(theme: SidebarTheme): "dark" | "light" {
+function getSidebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
   /**
    * CDXC:SidebarTheme 2026-06-15-01:43:
    * Git diff modals share the app modal theme contract: Dark 1/Dark 2 use
    * dark shadcn mode, while Light removes the dark class and uses light tokens.
    */
-  return theme.startsWith("light-") || theme === "plain-light" ? "light" : "dark";
+  return theme.startsWith('light-') || theme === 'plain-light' ? 'light' : 'dark';
 }
 
 type GitFileDiffPanelProps = {
@@ -120,53 +114,50 @@ export function GitFileDiffControls({
   onViewModeChange: (viewMode: GitDiffViewMode) => void;
   viewMode: GitDiffViewMode;
 }) {
-  const nextViewMode = viewMode === "split" ? "unified" : "split";
-  const isLineWrapForced = viewMode === "split";
+  const nextViewMode = viewMode === 'split' ? 'unified' : 'split';
+  const isLineWrapForced = viewMode === 'split';
   const effectiveLineWrap = isLineWrapForced || lineWrap;
-  const viewModeLabel = nextViewMode === "split" ? "Switch to split diff" : "Switch to unified diff";
+  const viewModeLabel = nextViewMode === 'split' ? 'Switch to split diff' : 'Switch to unified diff';
   const lineWrapLabel = isLineWrapForced
-    ? "Line wrapping is forced on when side by side is used."
+    ? 'Line wrapping is forced on when side by side is used.'
     : effectiveLineWrap
-      ? "Disable line wrapping"
-      : "Enable line wrapping";
-  const whitespaceLabel = hideWhitespace ? "Show whitespace changes" : "Hide whitespace changes";
+      ? 'Disable line wrapping'
+      : 'Enable line wrapping';
+  const whitespaceLabel = hideWhitespace ? 'Show whitespace changes' : 'Hide whitespace changes';
   return (
-    <div className="git-file-diff-controls" aria-label="Diff display options">
+    <div className='git-file-diff-controls' aria-label='Diff display options'>
       <AppTooltip content={viewModeLabel}>
         <Button
           aria-label={viewModeLabel}
-          aria-pressed={viewMode === "split"}
-          className="git-file-diff-control-button"
-          data-active={viewMode === "split" ? "true" : "false"}
+          aria-pressed={viewMode === 'split'}
+          className='git-file-diff-control-button'
+          data-active={viewMode === 'split' ? 'true' : 'false'}
           onClick={() => onViewModeChange(nextViewMode)}
-          size="icon-xs"
-          type="button"
-          variant="outline"
+          size='icon-xs'
+          type='button'
+          variant='outline'
         >
-          {viewMode === "split" ? (
-            <IconLayoutRows aria-hidden="true" data-icon="inline-start" />
+          {viewMode === 'split' ? (
+            <IconLayoutRows aria-hidden='true' data-icon='inline-start' />
           ) : (
-            <IconColumns2 aria-hidden="true" data-icon="inline-start" />
+            <IconColumns2 aria-hidden='true' data-icon='inline-start' />
           )}
         </Button>
       </AppTooltip>
       <AppTooltip content={lineWrapLabel}>
-        <span
-          className="git-file-diff-control-tooltip-trigger"
-          tabIndex={isLineWrapForced ? 0 : -1}
-        >
+        <span className='git-file-diff-control-tooltip-trigger' tabIndex={isLineWrapForced ? 0 : -1}>
           <Button
             aria-label={lineWrapLabel}
             aria-pressed={effectiveLineWrap}
-            className="git-file-diff-control-button"
-            data-active={effectiveLineWrap ? "true" : "false"}
+            className='git-file-diff-control-button'
+            data-active={effectiveLineWrap ? 'true' : 'false'}
             disabled={isLineWrapForced}
             onClick={() => onLineWrapChange(!lineWrap)}
-            size="icon-xs"
-            type="button"
-            variant="outline"
+            size='icon-xs'
+            type='button'
+            variant='outline'
           >
-            <IconTextWrap aria-hidden="true" data-icon="inline-start" />
+            <IconTextWrap aria-hidden='true' data-icon='inline-start' />
           </Button>
         </span>
       </AppTooltip>
@@ -174,14 +165,14 @@ export function GitFileDiffControls({
         <Button
           aria-label={whitespaceLabel}
           aria-pressed={hideWhitespace}
-          className="git-file-diff-control-button"
-          data-active={hideWhitespace ? "true" : "false"}
+          className='git-file-diff-control-button'
+          data-active={hideWhitespace ? 'true' : 'false'}
           onClick={() => onHideWhitespaceChange(!hideWhitespace)}
-          size="icon-xs"
-          type="button"
-          variant="outline"
+          size='icon-xs'
+          type='button'
+          variant='outline'
         >
-          <IconPilcrow aria-hidden="true" data-icon="inline-start" />
+          <IconPilcrow aria-hidden='true' data-icon='inline-start' />
         </Button>
       </AppTooltip>
     </div>
@@ -196,27 +187,24 @@ export function GitFileDiffPanel({
   onHideWhitespaceChange,
   onLineWrapChange,
   onViewModeChange,
-  placeholder = "Select a file to preview its diff.",
+  placeholder = 'Select a file to preview its diff.',
   showToolbar = true,
   viewMode,
 }: GitFileDiffPanelProps) {
-  const [internalViewMode, setInternalViewMode] = useState<GitDiffViewMode>("unified");
+  const [internalViewMode, setInternalViewMode] = useState<GitDiffViewMode>('unified');
   const [internalHideWhitespace, setInternalHideWhitespace] = useState(false);
   const [internalLineWrap, setInternalLineWrap] = useState(false);
   const resolvedViewMode = viewMode ?? internalViewMode;
   const resolvedHideWhitespace = hideWhitespace ?? internalHideWhitespace;
   const resolvedLineWrap = lineWrap ?? internalLineWrap;
-  const effectiveLineWrap = resolvedViewMode === "split" || resolvedLineWrap;
+  const effectiveLineWrap = resolvedViewMode === 'split' || resolvedLineWrap;
   const setViewMode = onViewModeChange ?? setInternalViewMode;
   const setHideWhitespace = onHideWhitespaceChange ?? setInternalHideWhitespace;
   const setLineWrap = onLineWrapChange ?? setInternalLineWrap;
-  const lines = useMemo(() => parseDiffLines(draft?.patch ?? ""), [draft?.patch]);
+  const lines = useMemo(() => parseDiffLines(draft?.patch ?? ''), [draft?.patch]);
   const visibleLines = useMemo(
-    () =>
-      resolvedHideWhitespace
-        ? lines.filter((line) => !isWhitespaceOnlyChangeLine(line))
-        : lines,
-    [resolvedHideWhitespace, lines],
+    () => (resolvedHideWhitespace ? lines.filter((line) => !isWhitespaceOnlyChangeLine(line)) : lines),
+    [resolvedHideWhitespace, lines]
   );
 
   /*
@@ -236,14 +224,14 @@ export function GitFileDiffPanel({
    * split view and explain the forced state in its tooltip.
    */
   if (isLoading) {
-    return <div className="git-file-diff-placeholder">Loading diff...</div>;
+    return <div className='git-file-diff-placeholder'>Loading diff...</div>;
   }
   if (!draft) {
-    return <div className="git-file-diff-placeholder">{placeholder}</div>;
+    return <div className='git-file-diff-placeholder'>{placeholder}</div>;
   }
 
   return (
-    <div className="git-file-diff-panel" data-has-toolbar={showToolbar ? "true" : "false"}>
+    <div className='git-file-diff-panel' data-has-toolbar={showToolbar ? 'true' : 'false'}>
       {showToolbar ? (
         <GitFileDiffControls
           hideWhitespace={resolvedHideWhitespace}
@@ -255,12 +243,12 @@ export function GitFileDiffPanel({
         />
       ) : null}
       <div
-        className="git-file-diff-surface"
+        className='git-file-diff-surface'
         data-view-mode={resolvedViewMode}
-        data-wrap-lines={effectiveLineWrap ? "true" : "false"}
-        role="document"
+        data-wrap-lines={effectiveLineWrap ? 'true' : 'false'}
+        role='document'
       >
-        {resolvedViewMode === "split"
+        {resolvedViewMode === 'split'
           ? visibleLines.map((line) => <SplitDiffLine key={line.number} line={line} />)
           : visibleLines.map((line) => <UnifiedDiffLine key={line.number} line={line} />)}
       </div>
@@ -270,38 +258,33 @@ export function GitFileDiffPanel({
 
 function UnifiedDiffLine({ line }: { line: DiffLine }) {
   return (
-    <div className="git-file-diff-line" data-kind={line.kind}>
-      <span aria-hidden="true" className="git-file-diff-line-number">
+    <div className='git-file-diff-line' data-kind={line.kind}>
+      <span aria-hidden='true' className='git-file-diff-line-number'>
         {line.number}
       </span>
-      <pre className="git-file-diff-line-content">{renderDiffLineContent(line, line.content)}</pre>
+      <pre className='git-file-diff-line-content'>{renderDiffLineContent(line, line.content)}</pre>
     </div>
   );
 }
 
 function SplitDiffLine({ line }: { line: DiffLine }) {
-  if (line.kind === "metadata" || line.kind === "hunk" || line.kind === "raw") {
+  if (line.kind === 'metadata' || line.kind === 'hunk' || line.kind === 'raw') {
     return <UnifiedDiffLine line={line} />;
   }
-  const leftContent = line.kind === "deletion" || line.kind === "context" ? line.content : "";
-  const rightContent =
-    line.kind === "addition"
-      ? line.content
-      : line.kind === "context"
-        ? line.content
-        : "";
+  const leftContent = line.kind === 'deletion' || line.kind === 'context' ? line.content : '';
+  const rightContent = line.kind === 'addition' ? line.content : line.kind === 'context' ? line.content : '';
   return (
-    <div className="git-file-diff-split-line" data-kind={line.kind}>
-      <span aria-hidden="true" className="git-file-diff-line-number">
+    <div className='git-file-diff-split-line' data-kind={line.kind}>
+      <span aria-hidden='true' className='git-file-diff-line-number'>
         {line.number}
       </span>
-      <pre className="git-file-diff-line-content git-file-diff-split-cell">
+      <pre className='git-file-diff-line-content git-file-diff-split-cell'>
         {renderDiffLineContent(line, leftContent)}
       </pre>
-      <span aria-hidden="true" className="git-file-diff-line-number">
+      <span aria-hidden='true' className='git-file-diff-line-number'>
         {line.number}
       </span>
-      <pre className="git-file-diff-line-content git-file-diff-split-cell">
+      <pre className='git-file-diff-line-content git-file-diff-split-cell'>
         {renderDiffLineContent(line, rightContent)}
       </pre>
     </div>
@@ -309,17 +292,17 @@ function SplitDiffLine({ line }: { line: DiffLine }) {
 }
 
 type DiffSyntaxTokenKind =
-  | "attribute"
-  | "comment"
-  | "function"
-  | "keyword"
-  | "literal"
-  | "marker"
-  | "number"
-  | "operator"
-  | "plain"
-  | "string"
-  | "type";
+  | 'attribute'
+  | 'comment'
+  | 'function'
+  | 'keyword'
+  | 'literal'
+  | 'marker'
+  | 'number'
+  | 'operator'
+  | 'plain'
+  | 'string'
+  | 'type';
 
 type DiffSyntaxToken = {
   kind: DiffSyntaxTokenKind;
@@ -327,83 +310,73 @@ type DiffSyntaxToken = {
 };
 
 const DIFF_SYNTAX_KEYWORDS = new Set([
-  "as",
-  "async",
-  "await",
-  "break",
-  "case",
-  "catch",
-  "class",
-  "const",
-  "continue",
-  "default",
-  "defer",
-  "do",
-  "else",
-  "enum",
-  "export",
-  "extension",
-  "final",
-  "for",
-  "from",
-  "func",
-  "function",
-  "guard",
-  "if",
-  "implements",
-  "import",
-  "in",
-  "interface",
-  "let",
-  "mut",
-  "new",
-  "override",
-  "package",
-  "private",
-  "protected",
-  "protocol",
-  "public",
-  "return",
-  "static",
-  "struct",
-  "super",
-  "switch",
-  "throws",
-  "throw",
-  "try",
-  "type",
-  "var",
-  "where",
-  "while",
+  'as',
+  'async',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'default',
+  'defer',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extension',
+  'final',
+  'for',
+  'from',
+  'func',
+  'function',
+  'guard',
+  'if',
+  'implements',
+  'import',
+  'in',
+  'interface',
+  'let',
+  'mut',
+  'new',
+  'override',
+  'package',
+  'private',
+  'protected',
+  'protocol',
+  'public',
+  'return',
+  'static',
+  'struct',
+  'super',
+  'switch',
+  'throws',
+  'throw',
+  'try',
+  'type',
+  'var',
+  'where',
+  'while',
 ]);
 
-const DIFF_SYNTAX_LITERALS = new Set([
-  "false",
-  "nil",
-  "null",
-  "None",
-  "self",
-  "Self",
-  "this",
-  "true",
-  "undefined",
-]);
+const DIFF_SYNTAX_LITERALS = new Set(['false', 'nil', 'null', 'None', 'self', 'Self', 'this', 'true', 'undefined']);
 
 const DIFF_SYNTAX_PRIMITIVE_TYPES = new Set([
-  "Array",
-  "Bool",
-  "Boolean",
-  "Date",
-  "Dictionary",
-  "Double",
-  "Float",
-  "Int",
-  "Map",
-  "Number",
-  "Object",
-  "Set",
-  "String",
-  "Void",
+  'Array',
+  'Bool',
+  'Boolean',
+  'Date',
+  'Dictionary',
+  'Double',
+  'Float',
+  'Int',
+  'Map',
+  'Number',
+  'Object',
+  'Set',
+  'String',
+  'Void',
 ]);
 
 /*
@@ -415,9 +388,9 @@ const DIFF_SYNTAX_PRIMITIVE_TYPES = new Set([
  */
 function renderDiffLineContent(line: DiffLine, content: string): ReactNode {
   if (!content) {
-    return " ";
+    return ' ';
   }
-  if (line.kind !== "addition" && line.kind !== "context" && line.kind !== "deletion") {
+  if (line.kind !== 'addition' && line.kind !== 'context' && line.kind !== 'deletion') {
     return content;
   }
   return tokenizeDiffLineContent(line.kind, content).map((token, index) => (
@@ -431,14 +404,14 @@ function tokenizeDiffLineContent(kind: DiffLineKind, content: string): DiffSynta
   const tokens: DiffSyntaxToken[] = [];
   let code = content;
   if (
-    (kind === "addition" || kind === "context" || kind === "deletion") &&
-    (content.startsWith("+") || content.startsWith("-") || content.startsWith(" "))
+    (kind === 'addition' || kind === 'context' || kind === 'deletion') &&
+    (content.startsWith('+') || content.startsWith('-') || content.startsWith(' '))
   ) {
-    tokens.push({ kind: "marker", text: content.slice(0, 1) });
+    tokens.push({ kind: 'marker', text: content.slice(0, 1) });
     code = content.slice(1);
   }
   tokens.push(...tokenizeCodeContent(code));
-  return tokens.length > 0 ? tokens : [{ kind: "plain", text: " " }];
+  return tokens.length > 0 ? tokens : [{ kind: 'plain', text: ' ' }];
 }
 
 function tokenizeCodeContent(code: string): DiffSyntaxToken[] {
@@ -451,33 +424,33 @@ function tokenizeCodeContent(code: string): DiffSyntaxToken[] {
       while (index < code.length && isWhitespace(code[index])) {
         index += 1;
       }
-      tokens.push({ kind: "plain", text: code.slice(start, index) });
+      tokens.push({ kind: 'plain', text: code.slice(start, index) });
       continue;
     }
-    if (char === "/" && code[index + 1] === "/") {
-      tokens.push({ kind: "comment", text: code.slice(index) });
+    if (char === '/' && code[index + 1] === '/') {
+      tokens.push({ kind: 'comment', text: code.slice(index) });
       break;
     }
-    if (char === "/" && code[index + 1] === "*") {
-      const endIndex = code.indexOf("*/", index + 2);
+    if (char === '/' && code[index + 1] === '*') {
+      const endIndex = code.indexOf('*/', index + 2);
       const cursor = endIndex >= 0 ? endIndex + 2 : code.length;
-      tokens.push({ kind: "comment", text: code.slice(index, cursor) });
+      tokens.push({ kind: 'comment', text: code.slice(index, cursor) });
       index = cursor;
       continue;
     }
-    if (char === "#" && (index === 0 || isWhitespace(code[index - 1]))) {
-      tokens.push({ kind: "comment", text: code.slice(index) });
+    if (char === '#' && (index === 0 || isWhitespace(code[index - 1]))) {
+      tokens.push({ kind: 'comment', text: code.slice(index) });
       break;
     }
-    if (char === '"' || char === "'" || char === "`") {
+    if (char === '"' || char === "'" || char === '`') {
       const cursor = readQuotedString(code, index, char);
-      tokens.push({ kind: "string", text: code.slice(index, cursor) });
+      tokens.push({ kind: 'string', text: code.slice(index, cursor) });
       index = cursor;
       continue;
     }
-    if (char === "@" && isIdentifierStart(code[index + 1] ?? "")) {
+    if (char === '@' && isIdentifierStart(code[index + 1] ?? '')) {
       const cursor = readIdentifier(code, index + 1);
-      tokens.push({ kind: "attribute", text: code.slice(index, cursor) });
+      tokens.push({ kind: 'attribute', text: code.slice(index, cursor) });
       index = cursor;
       continue;
     }
@@ -486,7 +459,7 @@ function tokenizeCodeContent(code: string): DiffSyntaxToken[] {
       while (index < code.length && /[0-9a-fA-F._xXoObB]/.test(code[index])) {
         index += 1;
       }
-      tokens.push({ kind: "number", text: code.slice(start, index) });
+      tokens.push({ kind: 'number', text: code.slice(start, index) });
       continue;
     }
     if (isIdentifierStart(char)) {
@@ -498,34 +471,30 @@ function tokenizeCodeContent(code: string): DiffSyntaxToken[] {
     }
     const operatorMatch = /^[{}\[\]().,:;?<>+=*\/%!&|^~-]+/.exec(code.slice(index));
     if (operatorMatch) {
-      tokens.push({ kind: "operator", text: operatorMatch[0] });
+      tokens.push({ kind: 'operator', text: operatorMatch[0] });
       index += operatorMatch[0].length;
       continue;
     }
-    tokens.push({ kind: "plain", text: char });
+    tokens.push({ kind: 'plain', text: char });
     index += 1;
   }
   return tokens;
 }
 
-function classifyIdentifierToken(
-  code: string,
-  word: string,
-  cursor: number,
-): DiffSyntaxTokenKind {
+function classifyIdentifierToken(code: string, word: string, cursor: number): DiffSyntaxTokenKind {
   if (DIFF_SYNTAX_KEYWORDS.has(word)) {
-    return "keyword";
+    return 'keyword';
   }
   if (DIFF_SYNTAX_LITERALS.has(word)) {
-    return "literal";
+    return 'literal';
   }
   if (DIFF_SYNTAX_PRIMITIVE_TYPES.has(word) || /^[A-Z]/.test(word)) {
-    return "type";
+    return 'type';
   }
-  if (nextNonWhitespaceCharacter(code, cursor) === "(") {
-    return "function";
+  if (nextNonWhitespaceCharacter(code, cursor) === '(') {
+    return 'function';
   }
-  return "plain";
+  return 'plain';
 }
 
 function readIdentifier(code: string, start: number): number {
@@ -543,7 +512,7 @@ function readQuotedString(code: string, start: number, quote: string): number {
     const char = code[index];
     if (isEscaped) {
       isEscaped = false;
-    } else if (char === "\\") {
+    } else if (char === '\\') {
       isEscaped = true;
     } else if (char === quote) {
       index += 1;
@@ -566,11 +535,11 @@ function nextNonWhitespaceCharacter(code: string, start: number): string | undef
 }
 
 function isWhitespace(char: string | undefined): boolean {
-  return char === " " || char === "\t";
+  return char === ' ' || char === '\t';
 }
 
 function isDigit(char: string | undefined): boolean {
-  return char !== undefined && char >= "0" && char <= "9";
+  return char !== undefined && char >= '0' && char <= '9';
 }
 
 function isIdentifierStart(char: string | undefined): boolean {
@@ -582,10 +551,8 @@ function isIdentifierPart(char: string | undefined): boolean {
 }
 
 function parseDiffLines(patch: string): DiffLine[] {
-  const rawLines = patch.trimEnd().split("\n");
-  const lines = rawLines.some((line) => line.length > 0)
-    ? rawLines
-    : ["No diff is available for this file."];
+  const rawLines = patch.trimEnd().split('\n');
+  const lines = rawLines.some((line) => line.length > 0) ? rawLines : ['No diff is available for this file.'];
   return lines.map((content, index) => ({
     content,
     kind: classifyDiffLine(content),
@@ -594,36 +561,36 @@ function parseDiffLines(patch: string): DiffLine[] {
 }
 
 function classifyDiffLine(line: string): DiffLineKind {
-  if (line.startsWith("@@")) {
-    return "hunk";
+  if (line.startsWith('@@')) {
+    return 'hunk';
   }
   if (
-    line.startsWith("diff --git") ||
-    line.startsWith("index ") ||
-    line.startsWith("new file mode") ||
-    line.startsWith("deleted file mode") ||
-    line.startsWith("similarity index") ||
-    line.startsWith("rename from ") ||
-    line.startsWith("rename to ") ||
-    line.startsWith("--- ") ||
-    line.startsWith("+++ ")
+    line.startsWith('diff --git') ||
+    line.startsWith('index ') ||
+    line.startsWith('new file mode') ||
+    line.startsWith('deleted file mode') ||
+    line.startsWith('similarity index') ||
+    line.startsWith('rename from ') ||
+    line.startsWith('rename to ') ||
+    line.startsWith('--- ') ||
+    line.startsWith('+++ ')
   ) {
-    return "metadata";
+    return 'metadata';
   }
-  if (line.startsWith("+")) {
-    return "addition";
+  if (line.startsWith('+')) {
+    return 'addition';
   }
-  if (line.startsWith("-")) {
-    return "deletion";
+  if (line.startsWith('-')) {
+    return 'deletion';
   }
-  if (line.startsWith("No diff is available")) {
-    return "raw";
+  if (line.startsWith('No diff is available')) {
+    return 'raw';
   }
-  return "context";
+  return 'context';
 }
 
 function isWhitespaceOnlyChangeLine(line: DiffLine): boolean {
-  if (line.kind !== "addition" && line.kind !== "deletion") {
+  if (line.kind !== 'addition' && line.kind !== 'deletion') {
     return false;
   }
   return line.content.slice(1).trim().length === 0;

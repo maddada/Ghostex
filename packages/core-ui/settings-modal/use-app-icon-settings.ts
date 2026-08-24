@@ -4,10 +4,10 @@
  * commands, plus the adjacent native Background Image picker round trip. The
  * two effects keep their original relative order inside this hook.
  */
-import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
-import { type SidebarAppIconStateMessage } from "../../shared/session-grid-contract";
-import { type ghostexSettings } from "../../shared/ghostex-settings";
-import { type WebviewApi } from "../webview-api";
+import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { type SidebarAppIconStateMessage } from '../../shared/session-grid-contract';
+import { type ghostexSettings } from '../../shared/ghostex-settings';
+import { type WebviewApi } from '../webview-api';
 
 export function useAppIconSettings({
   appIconPickerUnavailable,
@@ -57,20 +57,19 @@ export function useAppIconSettings({
     if (appIconState.ok) {
       setAppIconError(undefined);
       const pendingSourceId = pendingAppIconSourceIdRef.current;
-      const confirmedSourceId =
-        pendingSourceId !== undefined ? pendingSourceId : appIconState.selectedId;
+      const confirmedSourceId = pendingSourceId !== undefined ? pendingSourceId : appIconState.selectedId;
       pendingAppIconSourceIdRef.current = undefined;
       const currentSettings = pendingSettingsRef.current ?? draft;
       if (currentSettings.appIconSourceId !== confirmedSourceId) {
-        updateDraft("appIconSourceId", confirmedSourceId);
+        updateDraft('appIconSourceId', confirmedSourceId);
       }
       return;
     }
     pendingAppIconSourceIdRef.current = undefined;
     setAppIconError(
-      typeof appIconState.error === "string" && appIconState.error.trim()
+      typeof appIconState.error === 'string' && appIconState.error.trim()
         ? appIconState.error.trim()
-        : "Could not update the app icon.",
+        : 'Could not update the app icon.'
     );
   }, [appIconState, draft]);
   /**
@@ -86,14 +85,14 @@ export function useAppIconSettings({
     }
     pendingAppIconSourceIdRef.current = sourceId;
     setAppIconError(undefined);
-    vscode.postMessage({ type: "setAppIcon", sourceId });
+    vscode.postMessage({ type: 'setAppIcon', sourceId });
   };
   const chooseAppIconFile = () => {
     if (!vscode) {
       return;
     }
     setAppIconError(undefined);
-    vscode.postMessage({ type: "pickAppIconFile" });
+    vscode.postMessage({ type: 'pickAppIconFile' });
   };
   /**
    * CDXC:TerminalBackgroundImage 2026-08-01:
@@ -108,7 +107,7 @@ export function useAppIconSettings({
     if (!vscode) {
       return;
     }
-    vscode.postMessage({ type: "pickTerminalBackgroundImageFile" });
+    vscode.postMessage({ type: 'pickTerminalBackgroundImageFile' });
   };
   useEffect(() => {
     if (!isOpen || !nativeFilePickerAvailable) {
@@ -118,21 +117,21 @@ export function useAppIconSettings({
       const message = (event as CustomEvent<unknown>).detail;
       if (
         !message ||
-        typeof message !== "object" ||
-        !("type" in message) ||
-        message.type !== "terminalBackgroundImageFilePicked"
+        typeof message !== 'object' ||
+        !('type' in message) ||
+        message.type !== 'terminalBackgroundImageFilePicked'
       ) {
         return;
       }
-      const path = "path" in message && typeof message.path === "string" ? message.path.trim() : "";
+      const path = 'path' in message && typeof message.path === 'string' ? message.path.trim() : '';
       if (!path) {
         return;
       }
-      updateDraft("terminalBackgroundImage", path);
+      updateDraft('terminalBackgroundImage', path);
     };
-    window.addEventListener("ghostex-app-modal-host-message", handlePickedBackgroundImage);
+    window.addEventListener('ghostex-app-modal-host-message', handlePickedBackgroundImage);
     return () => {
-      window.removeEventListener("ghostex-app-modal-host-message", handlePickedBackgroundImage);
+      window.removeEventListener('ghostex-app-modal-host-message', handlePickedBackgroundImage);
     };
   }, [isOpen, nativeFilePickerAvailable]);
 

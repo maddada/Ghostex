@@ -22,7 +22,9 @@ pub(crate) fn gpui_keep_awake_agents_working_session_count(workspace: &Workspace
         .count()
 }
 
-pub(crate) fn gpui_keep_awake_command_working_session_count(command_pane: &CommandPaneModel) -> usize {
+pub(crate) fn gpui_keep_awake_command_working_session_count(
+    command_pane: &CommandPaneModel,
+) -> usize {
     command_pane
         .flat_tab_ids()
         .into_iter()
@@ -34,7 +36,9 @@ pub(crate) fn gpui_keep_awake_command_working_session_count(command_pane: &Comma
         .count()
 }
 
-pub(crate) fn gpui_keep_awake_command_delayed_send_session_count(command_pane: &CommandPaneModel) -> usize {
+pub(crate) fn gpui_keep_awake_command_delayed_send_session_count(
+    command_pane: &CommandPaneModel,
+) -> usize {
     /*
     CDXC:GPUITitlebarKeepAwake 2026-06-27-01:05:
     Native `createTitlebarKeepAwakeSessionState` treats projected Delayed Send remaining-time fields as a Keep Awake hold input only for non-sleeping terminal sessions. Agents `delayed_send_active` is semantic tab chrome in GPUI, unlike native projected remaining-time fields, so only command tabs with timer-owned runtime Delayed Send state can start the titlebar power hold.
@@ -151,7 +155,10 @@ pub(crate) fn gpui_read_keep_awake_power_snapshot(
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_keep_awake_fixed_command_stdout(path: &str, args: &[&str]) -> Result<String, String> {
+pub(crate) fn gpui_keep_awake_fixed_command_stdout(
+    path: &str,
+    args: &[&str],
+) -> Result<String, String> {
     let output = Command::new(path)
         .args(args)
         .stdin(Stdio::null())
@@ -218,4 +225,3 @@ pub(crate) fn gpui_system_profiler_external_display_connected(output: &str) -> b
         .count()
         > 1
 }
-

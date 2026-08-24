@@ -1002,7 +1002,10 @@ impl GhostexGpuiApp {
         true
     }
 
-    pub(crate) fn sleep_focused_command_pane_session(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+    pub(crate) fn sleep_focused_command_pane_session(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         let Some((group_id, session_id)) =
             focused_command_pane_sleep_target(self.shell_focus, &self.command_pane)
         else {
@@ -1017,7 +1020,10 @@ impl GhostexGpuiApp {
         )
     }
 
-    pub(crate) fn wake_focused_command_pane_session(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+    pub(crate) fn wake_focused_command_pane_session(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         let Some((group_id, session_id)) =
             focused_command_pane_wake_target(self.shell_focus, &self.command_pane)
         else {
@@ -1214,7 +1220,10 @@ impl GhostexGpuiApp {
         );
     }
 
-    pub(crate) fn agents_pane_focus_mode_menu_label(&self, pane_id: WorkspacePaneId) -> Option<&'static str> {
+    pub(crate) fn agents_pane_focus_mode_menu_label(
+        &self,
+        pane_id: WorkspacePaneId,
+    ) -> Option<&'static str> {
         if self.active_mode != TitlebarMode::Agents {
             return None;
         }
@@ -1884,7 +1893,11 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn close_focused_surface(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn close_focused_surface(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUIKeyboardFocus 2026-06-22-06:02:
         Cmd-W is surface-aware in the GPUI placeholder shell. Command focus closes the active command placeholder, Browser surface focus closes the active browser tab, Agents mode closes the active workspace tab, and Source/Kanban/Automate/Docs never close the project-editor surface itself.
@@ -2104,7 +2117,10 @@ impl GhostexGpuiApp {
             || self.command_pane_layout_bounds.is_some()
     }
 
-    pub(crate) fn append_command_spatial_focus_candidates(&self, candidates: &mut Vec<FocusCandidate>) {
+    pub(crate) fn append_command_spatial_focus_candidates(
+        &self,
+        candidates: &mut Vec<FocusCandidate>,
+    ) {
         if self.command_pane.is_expanded() && self.command_pane.has_sessions() {
             let command_group_ids = self.command_pane.group_order();
             let command_group_candidates: Option<Vec<_>> = command_group_ids
@@ -2135,7 +2151,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn current_spatial_focus_bounds(&self) -> Option<(SpatialFocusTarget, Bounds<Pixels>)> {
+    pub(crate) fn current_spatial_focus_bounds(
+        &self,
+    ) -> Option<(SpatialFocusTarget, Bounds<Pixels>)> {
         match self.shell_focus {
             ShellFocusTarget::AgentsPane(pane_id) => self
                 .workspace_leaf_layout_bounds
@@ -2151,7 +2169,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn current_command_spatial_focus_bounds(&self) -> Option<(SpatialFocusTarget, Bounds<Pixels>)> {
+    pub(crate) fn current_command_spatial_focus_bounds(
+        &self,
+    ) -> Option<(SpatialFocusTarget, Bounds<Pixels>)> {
         if !self.command_pane.is_expanded() || !self.command_pane.has_sessions() {
             return None;
         }
@@ -2325,7 +2345,10 @@ impl GhostexGpuiApp {
         main_bounds_ready && self.command_spatial_focus_bounds_ready()
     }
 
-    pub(crate) fn project_editor_spatial_focus_candidates(&self, mode: TitlebarMode) -> Vec<FocusCandidate> {
+    pub(crate) fn project_editor_spatial_focus_candidates(
+        &self,
+        mode: TitlebarMode,
+    ) -> Vec<FocusCandidate> {
         let mut candidates = Vec::new();
 
         if self.project_editor_shell.left_companion_visible {
@@ -2404,7 +2427,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn project_editor_surface_bounds_for_mode(&self, mode: TitlebarMode) -> Option<Bounds<Pixels>> {
+    pub(crate) fn project_editor_surface_bounds_for_mode(
+        &self,
+        mode: TitlebarMode,
+    ) -> Option<Bounds<Pixels>> {
         self.project_editor_surface_layout_bounds
             .filter(|focus_bounds| focus_bounds.mode == mode)
             .map(|focus_bounds| focus_bounds.bounds)
@@ -2508,7 +2534,11 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn prepare_focus_bounds_for_render(&mut self, scale_factor: f32, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn prepare_focus_bounds_for_render(
+        &mut self,
+        scale_factor: f32,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUILibghosttyMountBounds 2026-06-22-20:29:
         Agents terminal mount-slot bounds are App-owned runtime geometry only. Clear them with the other per-render focus/layout bounds so future libghostty native views attach to the current body rectangle below the tab bar without persisting, logging, or retaining stale pane/session geometry.

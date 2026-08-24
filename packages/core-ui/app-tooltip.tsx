@@ -1,24 +1,18 @@
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "../components/ui/tooltip";
-import { useEffect, useState, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
+import { useEffect, useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 
-export const SIDEBAR_TOOLTIP_DISMISS_EVENT = "ghostex-sidebar-tooltip-dismiss";
-export const SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT =
-  "ghostex-sidebar-tooltip-suppression-changed";
+export const SIDEBAR_TOOLTIP_DISMISS_EVENT = 'ghostex-sidebar-tooltip-dismiss';
+export const SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT = 'ghostex-sidebar-tooltip-suppression-changed';
 
 let sidebarTooltipSuppressedForDrag = false;
 
 function setSidebarTooltipSuppressionBodyFlag(suppressed: boolean) {
-  const body = typeof document === "undefined" ? undefined : document.body;
+  const body = typeof document === 'undefined' ? undefined : document.body;
   if (!body) {
     return;
   }
   if (suppressed) {
-    body.dataset.sidebarTooltipsSuppressed = "true";
+    body.dataset.sidebarTooltipsSuppressed = 'true';
     return;
   }
   delete body.dataset.sidebarTooltipsSuppressed;
@@ -52,9 +46,9 @@ export function useDismissSidebarTooltipsOnScroll() {
       lastDismissAt = now;
       dismissSidebarTooltips();
     };
-    window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
     return () => {
-      window.removeEventListener("scroll", handleScroll, { capture: true });
+      window.removeEventListener('scroll', handleScroll, { capture: true });
     };
   }, []);
 }
@@ -85,16 +79,16 @@ export function setSidebarTooltipsSuppressedForDrag(suppressed: boolean) {
 }
 
 type AppTooltipProps = ComponentProps<typeof Tooltip> & {
-  align?: ComponentProps<typeof TooltipContent>["align"];
-  alignOffset?: ComponentProps<typeof TooltipContent>["alignOffset"];
-  anchor?: ComponentProps<typeof TooltipContent>["anchor"];
+  align?: ComponentProps<typeof TooltipContent>['align'];
+  alignOffset?: ComponentProps<typeof TooltipContent>['alignOffset'];
+  anchor?: ComponentProps<typeof TooltipContent>['anchor'];
   children: ReactElement;
-  collisionPadding?: ComponentProps<typeof TooltipContent>["collisionPadding"];
+  collisionPadding?: ComponentProps<typeof TooltipContent>['collisionPadding'];
   content: ReactNode;
   contentClassName?: string;
-  delay?: ComponentProps<typeof TooltipTrigger>["delay"];
-  side?: ComponentProps<typeof TooltipContent>["side"];
-  contentStyle?: ComponentProps<typeof TooltipContent>["style"];
+  delay?: ComponentProps<typeof TooltipTrigger>['delay'];
+  side?: ComponentProps<typeof TooltipContent>['side'];
+  contentStyle?: ComponentProps<typeof TooltipContent>['style'];
   sideOffset?: number;
 };
 
@@ -119,12 +113,7 @@ export function AppTooltip({
   sideOffset = 8,
   ...tooltipProps
 }: AppTooltipProps) {
-  const {
-    defaultOpen,
-    onOpenChange,
-    open: controlledOpen,
-    ...tooltipRootProps
-  } = tooltipProps;
+  const { defaultOpen, onOpenChange, open: controlledOpen, ...tooltipRootProps } = tooltipProps;
   const isControlled = controlledOpen !== undefined;
   const [uncontrolledOpen, setUncontrolledOpen] = useState(Boolean(defaultOpen));
   const open = isControlled ? controlledOpen : uncontrolledOpen;
@@ -147,20 +136,14 @@ export function AppTooltip({
       }
     };
     window.addEventListener(SIDEBAR_TOOLTIP_DISMISS_EVENT, handleDismiss);
-    window.addEventListener(
-      SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
-      handleSuppressionChanged,
-    );
+    window.addEventListener(SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT, handleSuppressionChanged);
     return () => {
       window.removeEventListener(SIDEBAR_TOOLTIP_DISMISS_EVENT, handleDismiss);
-      window.removeEventListener(
-        SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
-        handleSuppressionChanged,
-      );
+      window.removeEventListener(SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT, handleSuppressionChanged);
     };
   });
 
-  if (content === undefined || content === null || content === "") {
+  if (content === undefined || content === null || content === '') {
     return children;
   }
 

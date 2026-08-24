@@ -83,7 +83,14 @@ export function parseFootnotes(state: EditorState): ParsedFootnotes {
     primaryDefinitions.set(definition.normalizedLabel, definition);
   }
 
-  const references = collectReferences(state, tree, frontmatter, protectedRanges, primaryDefinitions, definitionMarkerToByFrom);
+  const references = collectReferences(
+    state,
+    tree,
+    frontmatter,
+    protectedRanges,
+    primaryDefinitions,
+    definitionMarkerToByFrom
+  );
   const numberByLabel = new Map<string, number>();
   let nextNumber = 1;
 
@@ -139,7 +146,7 @@ export function parseFootnotes(state: EditorState): ParsedFootnotes {
     references,
     definitions,
     numberByLabel,
-    referencesByContainerKey
+    referencesByContainerKey,
   };
 
   footnoteCache.set(state.doc, parsed);
@@ -158,7 +165,7 @@ function collectProtectedRanges(state: EditorState, tree: any): ProtectedRange[]
       if (node.name === 'FencedCode' || node.name === 'CodeBlock') {
         ranges.push({ from: node.from, to: node.to });
       }
-    }
+    },
   });
 
   ranges.sort((a, b) => a.from - b.from);
@@ -209,7 +216,7 @@ function collectDefinitions(
           to: nextLine.to,
           hideIndentFrom: null,
           hideIndentTo: null,
-          extraIndentColumns: 0
+          extraIndentColumns: 0,
         });
         endLineNo += 1;
         continue;
@@ -225,7 +232,7 @@ function collectDefinitions(
         to: nextLine.to,
         hideIndentFrom: nextLine.from,
         hideIndentTo: nextLine.from + continuationIndent.chars,
-        extraIndentColumns: continuationIndent.extraIndentColumns
+        extraIndentColumns: continuationIndent.extraIndentColumns,
       });
       endLineNo += 1;
     }
@@ -246,7 +253,7 @@ function collectDefinitions(
       number: null,
       firstReferenceFrom: null,
       continuationLines,
-      isPrimary: !seenLabels.has(normalizedLabel)
+      isPrimary: !seenLabels.has(normalizedLabel),
     };
 
     definitions.push(definition);
@@ -307,10 +314,10 @@ function collectReferences(
           label: markerRange.label,
           normalizedLabel,
           number: null,
-          definition
+          definition,
         });
       }
-    }
+    },
   });
 
   return references;
@@ -344,7 +351,7 @@ function measureContinuationIndent(lineText: string): { chars: number; extraInde
 
   return {
     chars,
-    extraIndentColumns: Math.max(0, visibleIndent - 2)
+    extraIndentColumns: Math.max(0, visibleIndent - 2),
   };
 }
 

@@ -273,7 +273,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    pub(crate) fn render_command_pane_side_divider(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_command_pane_side_divider(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         /*
         CDXC:GPUICommandPaneSide 2026-08-16:
         The right-docked pane's grab target is a real 5px divider sibling, the
@@ -695,5 +698,4 @@ impl GhostexGpuiApp {
                 .into_any_element(),
         }
     }
-
 }

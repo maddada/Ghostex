@@ -313,5 +313,4 @@ impl GhostexGpuiApp {
             .get(&command_session_id)?;
         Some(format!("{}:{}", key.project_id, key.session_id))
     }
-
 }

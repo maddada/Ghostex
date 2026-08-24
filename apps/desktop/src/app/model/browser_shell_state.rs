@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 pub(crate) fn browser_tab_model_to_shell_state_json(model: &BrowserTabModel) -> serde_json::Value {
     serde_json::json!({
         "activeTabId": model.active_tab.0,
@@ -58,7 +57,6 @@ pub(crate) fn browser_tab_model_to_shell_state_json(model: &BrowserTabModel) -> 
     })
 }
 
-
 pub(crate) fn browser_navigation_history_to_shell_state_json(
     history: &BrowserNavigationHistory,
     sanitized_tab_url: Option<&str>,
@@ -99,7 +97,6 @@ pub(crate) fn browser_navigation_history_to_shell_state_json(
     }))
 }
 
-
 pub(crate) fn browser_node_to_shell_state_json(node: &BrowserNode) -> serde_json::Value {
     match node {
         BrowserNode::Leaf(leaf) => serde_json::json!({
@@ -123,7 +120,6 @@ pub(crate) fn browser_node_to_shell_state_json(node: &BrowserNode) -> serde_json
         }),
     }
 }
-
 
 pub(crate) fn browser_tab_model_from_shell_state(
     value: &serde_json::Value,
@@ -241,9 +237,6 @@ pub(crate) fn browser_tab_model_from_shell_state(
     })
 }
 
-
-
-
 pub(crate) fn browser_node_from_shell_state(
     value: &serde_json::Value,
     tab_ids: &[BrowserTabId],
@@ -308,7 +301,6 @@ pub(crate) fn browser_node_from_shell_state(
     }
 }
 
-
 pub(crate) fn browser_navigation_history_from_shell_state(
     value: Option<&serde_json::Value>,
     current_url: &str,
@@ -323,7 +315,6 @@ pub(crate) fn browser_navigation_history_from_shell_state(
     };
     history
 }
-
 
 pub(crate) fn browser_navigation_history_value_from_shell_state(
     value: &serde_json::Value,
@@ -349,13 +340,11 @@ pub(crate) fn browser_navigation_history_value_from_shell_state(
     })
 }
 
-
 pub(crate) fn valid_sanitized_browser_history_url(value: &serde_json::Value) -> Option<String> {
     let url = value.as_str()?.trim();
     let sanitized_url = sanitize_browser_tab_url_for_state(url)?;
     (sanitized_url == url).then_some(sanitized_url)
 }
-
 
 pub(crate) fn browser_tab_from_shell_state(
     value: &serde_json::Value,

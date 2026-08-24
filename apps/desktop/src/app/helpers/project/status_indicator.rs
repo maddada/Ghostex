@@ -234,7 +234,9 @@ pub(crate) fn gpui_workspace_terminal_rename_command_input(
     }
 }
 
-pub(crate) fn gpui_project_git_changed_file_paths(project_id: &str) -> Result<HashSet<String>, String> {
+pub(crate) fn gpui_project_git_changed_file_paths(
+    project_id: &str,
+) -> Result<HashSet<String>, String> {
     let status = gpui_gxserver_git_action_result(project_id, "statusPorcelain")?;
     if gpui_typed_operation_exit_code(&status) != Some(0) {
         return Err("GPUI could not refresh changed files.".to_string());
@@ -253,4 +255,3 @@ pub(crate) fn gpui_project_git_changed_file_paths(project_id: &str) -> Result<Ha
     }
     Ok(files)
 }
-

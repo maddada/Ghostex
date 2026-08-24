@@ -783,5 +783,4 @@ impl GhostexGpuiApp {
             panel.dispatch_native_host_event(event.clone(), cx);
         });
     }
-
 }

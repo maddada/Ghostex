@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from 'react';
 import {
   GHOSTEX_HOTKEY_DEFINITIONS,
   normalizeHotkeyText,
   normalizeghostexHotkeySettings,
   type ghostexHotkeySettings,
-} from "../../shared/ghostex-hotkeys";
-import { formatSidebarHotkeyLabel } from "../hotkey-label";
+} from '../../shared/ghostex-hotkeys';
+import { formatSidebarHotkeyLabel } from '../hotkey-label';
 
 export type NativeModifierStateHostEvent = {
   isCommandPressed: boolean;
-  type: "nativeModifierState";
+  type: 'nativeModifierState';
 };
 
 export const SIDEBAR_HOTKEY_OVERLAY_ENABLED = false;
@@ -22,7 +22,7 @@ export const SIDEBAR_HOTKEY_OVERLAY_ENABLED = false;
  */
 
 export function useCommandHotkeyOverlay(): boolean {
-  const [ isVisible, setIsVisible ] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const isCommandPressedRef = useRef(false);
   const showTimerRef = useRef<number | undefined>(undefined);
 
@@ -73,13 +73,13 @@ export function useCommandHotkeyOverlay(): boolean {
       }, 1_000);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Meta") {
+      if (event.key !== 'Meta') {
         return;
       }
       showOverlayAfterDelay();
     };
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === "Meta" || !event.metaKey) {
+      if (event.key === 'Meta' || !event.metaKey) {
         hideOverlay();
       }
     };
@@ -93,16 +93,16 @@ export function useCommandHotkeyOverlay(): boolean {
         hideOverlay();
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("ghostex-native-host-event", handleNativeHostEvent);
-    window.addEventListener("blur", hideOverlay);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('ghostex-native-host-event', handleNativeHostEvent);
+    window.addEventListener('blur', hideOverlay);
     return () => {
       clearOverlayTimer();
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("ghostex-native-host-event", handleNativeHostEvent);
-      window.removeEventListener("blur", hideOverlay);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('ghostex-native-host-event', handleNativeHostEvent);
+      window.removeEventListener('blur', hideOverlay);
     };
   }, []);
 
@@ -112,26 +112,26 @@ export function useCommandHotkeyOverlay(): boolean {
 export function isNativeModifierStateHostEvent(value: unknown): value is NativeModifierStateHostEvent {
   return (
     Boolean(value) &&
-    typeof value === "object" &&
-    (value as NativeModifierStateHostEvent).type === "nativeModifierState" &&
-    typeof (value as NativeModifierStateHostEvent).isCommandPressed === "boolean"
+    typeof value === 'object' &&
+    (value as NativeModifierStateHostEvent).type === 'nativeModifierState' &&
+    typeof (value as NativeModifierStateHostEvent).isCommandPressed === 'boolean'
   );
 }
 
-export function SidebarHotkeyOverlay({ hotkeys }: { hotkeys?: ghostexHotkeySettings; }) {
+export function SidebarHotkeyOverlay({ hotkeys }: { hotkeys?: ghostexHotkeySettings }) {
   const normalizedHotkeys = normalizeghostexHotkeySettings(hotkeys);
   const rows = getSidebarHotkeyOverlayRows(normalizedHotkeys);
 
   return (
     <>
-      <div aria-hidden="true" className="sidebar-hotkey-overlay-backdrop" />
-      <aside aria-label="Keyboard shortcuts" className="sidebar-hotkey-overlay">
-        <div className="sidebar-hotkey-overlay-title">Hotkeys</div>
-        <div className="sidebar-hotkey-overlay-grid">
+      <div aria-hidden='true' className='sidebar-hotkey-overlay-backdrop' />
+      <aside aria-label='Keyboard shortcuts' className='sidebar-hotkey-overlay'>
+        <div className='sidebar-hotkey-overlay-title'>Hotkeys</div>
+        <div className='sidebar-hotkey-overlay-grid'>
           {rows.map((row) => (
-            <div className="sidebar-hotkey-overlay-row" key={`${row.title}-${row.hotkey}`}>
-              <span className="sidebar-hotkey-overlay-action">{row.title}</span>
-              <kbd className="sidebar-hotkey-overlay-key">{formatSidebarHotkeyLabel(row.hotkey)}</kbd>
+            <div className='sidebar-hotkey-overlay-row' key={`${row.title}-${row.hotkey}`}>
+              <span className='sidebar-hotkey-overlay-action'>{row.title}</span>
+              <kbd className='sidebar-hotkey-overlay-key'>{formatSidebarHotkeyLabel(row.hotkey)}</kbd>
             </div>
           ))}
         </div>
@@ -140,35 +140,32 @@ export function SidebarHotkeyOverlay({ hotkeys }: { hotkeys?: ghostexHotkeySetti
   );
 }
 export function getSidebarHotkeyOverlayRows(hotkeys: ghostexHotkeySettings) {
-  const rows: Array<{ hotkey: string; title: string; }> = [];
+  const rows: Array<{ hotkey: string; title: string }> = [];
   for (const definition of GHOSTEX_HOTKEY_DEFINITIONS) {
-    if (definition.id === "jumpToProject1") {
-      const hotkey = normalizeHotkeyText(hotkeys.jumpToProject1 ?? "");
+    if (definition.id === 'jumpToProject1') {
+      const hotkey = normalizeHotkeyText(hotkeys.jumpToProject1 ?? '');
       if (hotkey) {
         rows.push({
           hotkey: formatNumberedHotkeyExample(hotkey),
-          title: "Jump to Project N",
+          title: 'Jump to Project N',
         });
       }
       continue;
     }
-    if (definition.id === "focusSessionSlot1") {
-      const hotkey = normalizeHotkeyText(hotkeys.focusSessionSlot1 ?? "");
+    if (definition.id === 'focusSessionSlot1') {
+      const hotkey = normalizeHotkeyText(hotkeys.focusSessionSlot1 ?? '');
       if (hotkey) {
         rows.push({
           hotkey: formatNumberedHotkeyExample(hotkey),
-          title: "Focus Session N",
+          title: 'Focus Session N',
         });
       }
       continue;
     }
-    if (
-      /^jumpToProject[2-9]$/u.test(definition.id) ||
-      /^focusSessionSlot[2-9]$/u.test(definition.id)
-    ) {
+    if (/^jumpToProject[2-9]$/u.test(definition.id) || /^focusSessionSlot[2-9]$/u.test(definition.id)) {
       continue;
     }
-    const hotkey = normalizeHotkeyText(hotkeys[ definition.id ] ?? "");
+    const hotkey = normalizeHotkeyText(hotkeys[definition.id] ?? '');
     if (hotkey) {
       rows.push({ hotkey, title: definition.title });
     }
@@ -183,5 +180,5 @@ export function formatNumberedHotkeyExample(hotkey: string): string {
    * Show one N-based example derived from slot 1 so user rebinds still explain
    * the whole numbered family without crowding the cheat sheet.
    */
-  return hotkey.replace(/(^|[+ ])1(?=$| )/u, "$1n");
+  return hotkey.replace(/(^|[+ ])1(?=$| )/u, '$1n');
 }

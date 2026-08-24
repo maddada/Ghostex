@@ -759,7 +759,10 @@ impl GhostexGpuiApp {
         changed
     }
 
-    pub(crate) fn open_pending_source_file_if_ready(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+    pub(crate) fn open_pending_source_file_if_ready(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         let Some(pending) = self.pending_source_file_open.as_ref() else {
             return false;
         };
@@ -1066,7 +1069,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn scroll_command_group_active_tab_without_ensure(&self, group_id: CommandPaneGroupId) {
+    pub(crate) fn scroll_command_group_active_tab_without_ensure(
+        &self,
+        group_id: CommandPaneGroupId,
+    ) {
         let Some(active_index) = self
             .command_pane
             .find_leaf(group_id)

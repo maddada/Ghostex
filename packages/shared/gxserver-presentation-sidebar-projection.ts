@@ -4,21 +4,21 @@ import {
   type SidebarSessionGroup,
   type SidebarSessionItem,
   type SidebarSessionLifecycleCapabilities,
-} from "./session-grid-contract";
+} from './session-grid-contract';
 import type {
   GxserverDomainLifecycleState,
   GxserverPresentationProject,
   GxserverPresentationSession,
   GxserverPresentationSnapshot,
-} from "./gxserver-protocol";
-import { createDefaultSidebarProjectDiffStats } from "./project-diff-stats";
-import { orderProjectsWithWorktrees } from "./project-worktree-order";
+} from './gxserver-protocol';
+import { createDefaultSidebarProjectDiffStats } from './project-diff-stats';
+import { orderProjectsWithWorktrees } from './project-worktree-order';
 
-export const GXSERVER_PRESENTATION_CHATS_GROUP_ID = "combined-chats";
+export const GXSERVER_PRESENTATION_CHATS_GROUP_ID = 'combined-chats';
 
-const GXSERVER_PRESENTATION_PROJECT_GROUP_ID_PREFIX = "combined-project:";
-const GXSERVER_PRESENTATION_PROJECT_SESSION_ID_PREFIX = "combined-session:";
-const GXSERVER_PRESENTATION_ID_SEPARATOR = ":";
+const GXSERVER_PRESENTATION_PROJECT_GROUP_ID_PREFIX = 'combined-project:';
+const GXSERVER_PRESENTATION_PROJECT_SESSION_ID_PREFIX = 'combined-session:';
+const GXSERVER_PRESENTATION_ID_SEPARATOR = ':';
 
 export type GxserverPresentationSidebarSessionKey = string;
 
@@ -43,7 +43,7 @@ export type GxserverPresentationCloseAfterDoneProjection = {
 };
 
 export type GxserverPresentationSidebarProjectOverlay = {
-  editor?: NonNullable<SidebarSessionGroup["projectContext"]>["editor"];
+  editor?: NonNullable<SidebarSessionGroup['projectContext']>['editor'];
   /*
   CDXC:SidebarV2ProjectIcons 2026-07-29:
   The typed project icon rides beside the image-only `iconDataUrl` because a
@@ -51,17 +51,17 @@ export type GxserverPresentationSidebarProjectOverlay = {
   Hosts that only know about image icons keep publishing `iconDataUrl` and
   nothing changes for them.
   */
-  icon?: NonNullable<SidebarSessionGroup["projectContext"]>["icon"];
+  icon?: NonNullable<SidebarSessionGroup['projectContext']>['icon'];
   iconDataUrl?: string;
   isChatProject?: boolean;
   isQuickProject?: boolean;
   orderIndex?: number;
   path?: string;
   projectId: string;
-  theme?: NonNullable<SidebarSessionGroup["projectContext"]>["theme"];
+  theme?: NonNullable<SidebarSessionGroup['projectContext']>['theme'];
   themeColor?: string;
   title?: string;
-  worktree?: NonNullable<SidebarSessionGroup["projectContext"]>["worktree"];
+  worktree?: NonNullable<SidebarSessionGroup['projectContext']>['worktree'];
 };
 
 export type GxserverPresentationSidebarInput = {
@@ -75,15 +75,12 @@ export type GxserverPresentationSidebarInput = {
   hiddenSessionKeys?: ReadonlySet<GxserverPresentationSidebarSessionKey>;
   presentation: GxserverPresentationSnapshot;
   projectOverlays?: readonly GxserverPresentationSidebarProjectOverlay[];
-  resolveAgentIcon: (agentName: string | undefined) => SidebarSessionItem["agentIcon"];
+  resolveAgentIcon: (agentName: string | undefined) => SidebarSessionItem['agentIcon'];
   resolveCloseAfterDone?: (
     projectId: string,
-    sessionId: string,
+    sessionId: string
   ) => GxserverPresentationCloseAfterDoneProjection | undefined;
-  resolveDelayedSend?: (
-    projectId: string,
-    sessionId: string,
-  ) => GxserverPresentationDelayedSendProjection | undefined;
+  resolveDelayedSend?: (projectId: string, sessionId: string) => GxserverPresentationDelayedSendProjection | undefined;
   resolveSessionRoutingId?: (projectId: string, sessionId: string) => string | undefined;
   visibleSessionIds?: ReadonlySet<string>;
 };
@@ -96,19 +93,16 @@ export type GxserverPresentationSidebarSessionInput = {
   localSession?: SidebarSessionItem;
   presentation: GxserverPresentationSession;
   projectId: string;
-  resolveAgentIcon: (agentName: string | undefined) => SidebarSessionItem["agentIcon"];
+  resolveAgentIcon: (agentName: string | undefined) => SidebarSessionItem['agentIcon'];
   resolveCloseAfterDone?: (
     projectId: string,
-    sessionId: string,
+    sessionId: string
   ) => GxserverPresentationCloseAfterDoneProjection | undefined;
-  resolveDelayedSend?: (
-    projectId: string,
-    sessionId: string,
-  ) => GxserverPresentationDelayedSendProjection | undefined;
+  resolveDelayedSend?: (projectId: string, sessionId: string) => GxserverPresentationDelayedSendProjection | undefined;
   resolveProviderSessionState?: (
-    presentation: Pick<GxserverPresentationSession, "lifecycleState" | "providerSessionState">,
-    localSession: SidebarSessionItem | undefined,
-  ) => NonNullable<SidebarSessionItem["providerSessionState"]>;
+    presentation: Pick<GxserverPresentationSession, 'lifecycleState' | 'providerSessionState'>,
+    localSession: SidebarSessionItem | undefined
+  ) => NonNullable<SidebarSessionItem['providerSessionState']>;
   resolveSessionRoutingId?: (projectId: string, sessionId: string) => string | undefined;
   visibleSessionIds?: ReadonlySet<string>;
 };
@@ -122,20 +116,17 @@ export type GxserverPresentationSidebarGroupInput = {
   focusedSessionId?: string;
   project: GxserverPresentationProject;
   projectOverlay?: GxserverPresentationSidebarProjectOverlay;
-  resolveAgentIcon: (agentName: string | undefined) => SidebarSessionItem["agentIcon"];
+  resolveAgentIcon: (agentName: string | undefined) => SidebarSessionItem['agentIcon'];
   resolveCloseAfterDone?: (
     projectId: string,
-    sessionId: string,
+    sessionId: string
   ) => GxserverPresentationCloseAfterDoneProjection | undefined;
-  resolveDelayedSend?: (
-    projectId: string,
-    sessionId: string,
-  ) => GxserverPresentationDelayedSendProjection | undefined;
+  resolveDelayedSend?: (projectId: string, sessionId: string) => GxserverPresentationDelayedSendProjection | undefined;
   resolveLocalSession?: (projectId: string, sessionId: string) => SidebarSessionItem | undefined;
   resolveProviderSessionState?: (
-    presentation: Pick<GxserverPresentationSession, "lifecycleState" | "providerSessionState">,
-    localSession: SidebarSessionItem | undefined,
-  ) => NonNullable<SidebarSessionItem["providerSessionState"]>;
+    presentation: Pick<GxserverPresentationSession, 'lifecycleState' | 'providerSessionState'>,
+    localSession: SidebarSessionItem | undefined
+  ) => NonNullable<SidebarSessionItem['providerSessionState']>;
   resolveSessionRoutingId?: (projectId: string, sessionId: string) => string | undefined;
   sessions: readonly GxserverPresentationSession[];
   visibleSessionIds?: ReadonlySet<string>;
@@ -146,24 +137,22 @@ CDXC:GxserverPresentationParity 2026-06-24-10:45:
 GPUI must render gxserver sessions through the same React sidebar contract as macOS. This shared projection maps gxserver presentation snapshots into sidebar groups without AppKit, filesystem, browser, or native pane ownership; platform wrappers may join local resource state through explicit overlay inputs.
 */
 export function createGxserverPresentationSidebarGroups(
-  input: GxserverPresentationSidebarInput,
+  input: GxserverPresentationSidebarInput
 ): SidebarSessionGroup[] {
-  const projectOverlaysById = new Map(
-    (input.projectOverlays ?? []).map((project) => [project.projectId, project]),
-  );
+  const projectOverlaysById = new Map((input.projectOverlays ?? []).map((project) => [project.projectId, project]));
   const sessionsByProject = createGxserverPresentationSessionsByProjectFromGroups({
     hiddenProjectIds: input.hiddenProjectIds,
     hiddenSessionKeys: input.hiddenSessionKeys,
     presentation: input.presentation,
   });
   const visibleProjects = input.presentation.projects.filter(
-    (project) => !input.hiddenProjectIds?.has(project.projectId),
+    (project) => !input.hiddenProjectIds?.has(project.projectId)
   );
   const chatProjects = orderGxserverPresentationSidebarProjects(
     visibleProjects.filter((project) =>
-      isGxserverPresentationChatProject(input, project, projectOverlaysById.get(project.projectId)),
+      isGxserverPresentationChatProject(input, project, projectOverlaysById.get(project.projectId))
     ),
-    projectOverlaysById,
+    projectOverlaysById
   );
   const chatSessions = chatProjects.flatMap((project) => {
     const isActiveProject = project.projectId === input.activeProjectId;
@@ -180,14 +169,14 @@ export function createGxserverPresentationSidebarGroups(
         resolveDelayedSend: input.resolveDelayedSend,
         resolveSessionRoutingId: input.resolveSessionRoutingId,
         visibleSessionIds: input.visibleSessionIds,
-      }),
+      })
     );
   });
   const projectGroups = orderGxserverPresentationSidebarProjects(
-    visibleProjects.filter((project) =>
-      !isGxserverPresentationChatProject(input, project, projectOverlaysById.get(project.projectId)),
+    visibleProjects.filter(
+      (project) => !isGxserverPresentationChatProject(input, project, projectOverlaysById.get(project.projectId))
     ),
-    projectOverlaysById,
+    projectOverlaysById
   ).map((project) =>
     createGxserverPresentationSidebarGroup({
       activeProjectId: input.activeProjectId,
@@ -202,7 +191,7 @@ export function createGxserverPresentationSidebarGroups(
       resolveSessionRoutingId: input.resolveSessionRoutingId,
       sessions: sessionsByProject.get(project.projectId) ?? [],
       visibleSessionIds: input.visibleSessionIds,
-    }),
+    })
   );
 
   return [
@@ -213,15 +202,15 @@ export function createGxserverPresentationSidebarGroups(
         (input.projectOverlays ?? []).some(
           (project) =>
             project.projectId === input.activeProjectId &&
-            (project.isQuickProject === true || project.isChatProject === true),
+            (project.isQuickProject === true || project.isChatProject === true)
         ),
       isChatCollection: true,
       isFocusModeActive: false,
-      kind: "workspace",
+      kind: 'workspace',
       layoutVisibleCount: visibleCountForGxserverPresentationSidebarSessions(chatSessions),
       sessions: chatSessions,
-      title: "Chats",
-      viewMode: "grid",
+      title: 'Chats',
+      viewMode: 'grid',
       visibleCount: visibleCountForGxserverPresentationSidebarSessions(chatSessions),
     },
     ...projectGroups,
@@ -241,7 +230,7 @@ export function createGxserverPresentationSessionsByProjectFromGroups({
     presentation.sessions.map((session) => [
       createGxserverPresentationSidebarSessionKey(session.projectId, session.sessionId),
       session,
-    ]),
+    ])
   );
   const sessionsByProject = new Map<string, GxserverPresentationSession[]>();
   for (const group of presentation.groups) {
@@ -251,15 +240,13 @@ export function createGxserverPresentationSessionsByProjectFromGroups({
     const sessions = sessionsByProject.get(group.projectId) ?? [];
     for (const sessionId of group.sessionIds) {
       const session = sessionByProjectSessionKey.get(
-        createGxserverPresentationSidebarSessionKey(group.projectId, sessionId),
+        createGxserverPresentationSidebarSessionKey(group.projectId, sessionId)
       );
       if (
         !session ||
         session.visibleInSidebarByDefault !== true ||
-        session.surface === "commands" ||
-        hiddenSessionKeys?.has(
-          createGxserverPresentationSidebarSessionKey(session.projectId, session.sessionId),
-        )
+        session.surface === 'commands' ||
+        hiddenSessionKeys?.has(createGxserverPresentationSidebarSessionKey(session.projectId, session.sessionId))
       ) {
         continue;
       }
@@ -304,7 +291,7 @@ export function createGxserverPresentationSidebarGroup({
       resolveProviderSessionState,
       resolveSessionRoutingId,
       visibleSessionIds,
-    }),
+    })
   );
   const sidebarSessions = [...presentationSidebarSessions, ...extraSessions];
   const projectContext = {
@@ -317,18 +304,14 @@ export function createGxserverPresentationSidebarGroup({
     when the key is present keeps "not probed" from being flattened into
     "no origin" by the projection.
     */
-    ...(project.gitRemoteOriginUrl === undefined
-      ? {}
-      : { gitRemoteOriginUrl: project.gitRemoteOriginUrl }),
+    ...(project.gitRemoteOriginUrl === undefined ? {} : { gitRemoteOriginUrl: project.gitRemoteOriginUrl }),
     /*
     CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
     The repository root rides through the same way, and for the same reason:
     the daemon owns the probe, the client owns the interpretation. It has no
     null state, so an absent key is simply not spread.
     */
-    ...(project.gitRepositoryRootPath === undefined
-      ? {}
-      : { gitRepositoryRootPath: project.gitRepositoryRootPath }),
+    ...(project.gitRepositoryRootPath === undefined ? {} : { gitRepositoryRootPath: project.gitRepositoryRootPath }),
     /*
     CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
     The icon the project's own repository ships, straight off the presentation
@@ -337,12 +320,10 @@ export function createGxserverPresentationSidebarGroup({
     then discovered icon, then typed glyph, then folder) which a single merged
     field could not express.
     */
-    ...(project.discoveredIconDataUrl === undefined
-      ? {}
-      : { discoveredIconDataUrl: project.discoveredIconDataUrl }),
+    ...(project.discoveredIconDataUrl === undefined ? {} : { discoveredIconDataUrl: project.discoveredIconDataUrl }),
     ...(projectOverlay?.icon === undefined ? {} : { icon: projectOverlay.icon }),
     iconDataUrl: projectOverlay?.iconDataUrl,
-    path: projectOverlay?.path || project.path || "",
+    path: projectOverlay?.path || project.path || '',
     pathState: project.pathState,
     theme: projectOverlay?.theme,
     themeColor: projectOverlay?.themeColor,
@@ -353,12 +334,12 @@ export function createGxserverPresentationSidebarGroup({
     canFocusMode: false,
     isActive: isActiveProject,
     isFocusModeActive: false,
-    kind: "workspace",
+    kind: 'workspace',
     layoutVisibleCount: visibleCountForGxserverPresentationSidebarSessions(sidebarSessions),
     projectContext,
     sessions: sidebarSessions,
     title: project.title,
-    viewMode: "grid",
+    viewMode: 'grid',
     visibleCount: visibleCountForGxserverPresentationSidebarSessions(sidebarSessions),
   };
 }
@@ -383,10 +364,7 @@ export function createGxserverPresentationSidebarSession({
   const providerSessionState =
     resolveProviderSessionState?.(presentation, localSession) ??
     providerSessionStateForGxserverPresentation(presentation);
-  const isLive =
-    providerSessionState === "exists" ||
-    nativePaneState === "mounted" ||
-    nativePaneState === "mounting";
+  const isLive = providerSessionState === 'exists' || nativePaneState === 'mounted' || nativePaneState === 'mounting';
   const closeAfterDone = resolveCloseAfterDone?.(projectId, presentation.sessionId);
   const serverDelayedSend =
     presentation.delayedSendDeadlineAt ||
@@ -398,15 +376,12 @@ export function createGxserverPresentationSidebarSession({
           deadlineAt: presentation.delayedSendDeadlineAt,
           remainingLabel: presentation.delayedSendRemainingLabel,
           remainingMs: presentation.delayedSendRemainingMs,
-          sendWhenAllProjectSessionsStopActive:
-            presentation.sendWhenAllProjectSessionsStopActive,
+          sendWhenAllProjectSessionsStopActive: presentation.sendWhenAllProjectSessionsStopActive,
           sendWhenAgentStopsActive: presentation.sendWhenAgentStopsActive,
         }
       : undefined;
   const delayedSend = serverDelayedSend ?? resolveDelayedSend?.(projectId, presentation.sessionId);
-  const agentIcon = resolveAgentIcon(
-    presentation.agentIcon ?? presentation.agentName ?? presentation.agentId,
-  );
+  const agentIcon = resolveAgentIcon(presentation.agentIcon ?? presentation.agentName ?? presentation.agentId);
   return {
     activity: presentation.activity,
     agentIcon,
@@ -435,10 +410,8 @@ export function createGxserverPresentationSidebarSession({
     delayedSendDeadlineAt: delayedSend?.deadlineAt,
     delayedSendRemainingLabel: delayedSend?.remainingLabel,
     delayedSendRemainingMs: delayedSend?.remainingMs,
-    sendWhenAllProjectSessionsStopActive:
-      delayedSend?.sendWhenAllProjectSessionsStopActive === true ? true : undefined,
-    sendWhenAgentStopsActive:
-      delayedSend?.sendWhenAgentStopsActive === true ? true : undefined,
+    sendWhenAllProjectSessionsStopActive: delayedSend?.sendWhenAllProjectSessionsStopActive === true ? true : undefined,
+    sendWhenAgentStopsActive: delayedSend?.sendWhenAgentStopsActive === true ? true : undefined,
     /*
     CDXC:SessionChatPromptQueue 2026-08-21:
     The queued-prompt count is daemon-owned, exactly like the Delayed Send
@@ -453,12 +426,11 @@ export function createGxserverPresentationSidebarSession({
     count rather than dropping the badge entirely.
     */
     queuedPromptCount:
-      typeof presentation.queuedPromptCount === "number" && presentation.queuedPromptCount > 0
+      typeof presentation.queuedPromptCount === 'number' && presentation.queuedPromptCount > 0
         ? Math.floor(presentation.queuedPromptCount)
         : undefined,
     queuedPromptFailedCount:
-      typeof presentation.queuedPromptFailedCount === "number" &&
-      presentation.queuedPromptFailedCount > 0
+      typeof presentation.queuedPromptFailedCount === 'number' && presentation.queuedPromptFailedCount > 0
         ? Math.floor(presentation.queuedPromptFailedCount)
         : undefined,
     displayTitle: presentation.displayTitle,
@@ -478,20 +450,16 @@ export function createGxserverPresentationSidebarSession({
     isPinned: presentation.isPinned,
     isPrimaryTitleTerminalTitle: presentation.isPrimaryTitleTerminalTitle,
     isRunning: isLive,
-    isSleeping: lifecycleState === "sleeping",
-    isVisible: isActiveProject && (
-      visibleSessionIds?.has(presentation.sessionId) === true ||
-      index === 0
-    ),
-    lastInteractionAt:
-      presentation.meaningfulActivityAt ?? presentation.lastActiveAt ?? presentation.updatedAt,
+    isSleeping: lifecycleState === 'sleeping',
+    isVisible: isActiveProject && (visibleSessionIds?.has(presentation.sessionId) === true || index === 0),
+    lastInteractionAt: presentation.meaningfulActivityAt ?? presentation.lastActiveAt ?? presentation.updatedAt,
     lifecycleState,
     nativePaneState,
     primaryTitle: presentation.primaryTitle ?? presentation.title,
     providerSessionState,
     row: Math.floor(index / GRID_COLUMN_COUNT),
     sessionId: createProjectSessionId(projectId, presentation.sessionId),
-    sessionKind: presentation.kind === "agent" ? "terminal" : presentation.kind,
+    sessionKind: presentation.kind === 'agent' ? 'terminal' : presentation.kind,
     sessionTag: presentation.sessionTag,
     sessionNumber: String(index + 1),
     sessionPersistenceName: presentation.zmxName,
@@ -530,7 +498,7 @@ export function createGxserverPresentationSidebarSession({
  * must read that as "no git data from this machine".
  */
 export function gxserverPresentationSidebarLifecycleCapabilities(
-  presentation: Pick<GxserverPresentationSnapshot, "capabilities"> | undefined,
+  presentation: Pick<GxserverPresentationSnapshot, 'capabilities'> | undefined
 ): SidebarSessionLifecycleCapabilities | undefined {
   const capabilities = presentation?.capabilities;
   if (!capabilities) {
@@ -562,7 +530,7 @@ explicit null. A non-number value is treated as unstated rather than as off, so
 a malformed field cannot silently disable a machine's shelf.
 */
 export function gxserverPresentationSidebarAutoSettleAfterDays(
-  presentation: Pick<GxserverPresentationSnapshot, "autoSettleAfterDays"> | undefined,
+  presentation: Pick<GxserverPresentationSnapshot, 'autoSettleAfterDays'> | undefined
 ): number | null | undefined {
   const value = presentation?.autoSettleAfterDays;
   if (value === undefined) {
@@ -571,32 +539,32 @@ export function gxserverPresentationSidebarAutoSettleAfterDays(
   if (value === null) {
     return null;
   }
-  if (typeof value !== "number") {
+  if (typeof value !== 'number') {
     return undefined;
   }
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export function presentationLifecycleStateForSidebar(
-  lifecycleState: GxserverDomainLifecycleState,
-): NonNullable<SidebarSessionItem["lifecycleState"]> {
+  lifecycleState: GxserverDomainLifecycleState
+): NonNullable<SidebarSessionItem['lifecycleState']> {
   switch (lifecycleState) {
-    case "running":
-      return "running";
-    case "sleeping":
-      return "sleeping";
-    case "missing":
-    case "unknown":
-      return "error";
-    case "stopped":
+    case 'running':
+      return 'running';
+    case 'sleeping':
+      return 'sleeping';
+    case 'missing':
+    case 'unknown':
+      return 'error';
+    case 'stopped':
     default:
-      return "done";
+      return 'done';
   }
 }
 
 export function providerSessionStateForGxserverPresentation(
-  presentation: Pick<GxserverPresentationSession, "lifecycleState" | "providerSessionState">,
-): NonNullable<SidebarSessionItem["providerSessionState"]> {
+  presentation: Pick<GxserverPresentationSession, 'lifecycleState' | 'providerSessionState'>
+): NonNullable<SidebarSessionItem['providerSessionState']> {
   /*
   CDXC:GxserverPresentation 2026-06-24-10:45:
   Provider liveness is a shared gxserver presentation concept, while platform panes are optional overlays. Resolve the daemon-published provider state here so macOS and GPUI cards agree on zmx/tmux/zellij liveness before any local resource override is applied.
@@ -605,25 +573,23 @@ export function providerSessionStateForGxserverPresentation(
     return presentation.providerSessionState;
   }
   switch (presentation.lifecycleState) {
-    case "running":
-      return "exists";
-    case "sleeping":
-    case "missing":
-    case "stopped":
-      return "missing";
-    case "unknown":
+    case 'running':
+      return 'exists';
+    case 'sleeping':
+    case 'missing':
+    case 'stopped':
+      return 'missing';
+    case 'unknown':
     default:
-      return "unknown";
+      return 'unknown';
   }
 }
 
 export function orderGxserverPresentationSidebarProjects(
   presentationProjects: readonly GxserverPresentationProject[],
-  projectOverlaysById: ReadonlyMap<string, GxserverPresentationSidebarProjectOverlay> = new Map(),
+  projectOverlaysById: ReadonlyMap<string, GxserverPresentationSidebarProjectOverlay> = new Map()
 ): GxserverPresentationProject[] {
-  const presentationProjectById = new Map(
-    presentationProjects.map((project) => [project.projectId, project]),
-  );
+  const presentationProjectById = new Map(presentationProjects.map((project) => [project.projectId, project]));
   return orderProjectsWithWorktrees(
     [...presentationProjects]
       .sort((left, right) => {
@@ -650,7 +616,7 @@ export function orderGxserverPresentationSidebarProjects(
           updatedAt: project.updatedAt,
           worktree: overlay?.worktree,
         };
-      }),
+      })
   )
     .map((item) => presentationProjectById.get(item.projectId))
     .filter((project): project is GxserverPresentationProject => project !== undefined);
@@ -658,7 +624,7 @@ export function orderGxserverPresentationSidebarProjects(
 
 export function createGxserverPresentationSidebarSessionKey(
   projectId: string,
-  sessionId: string,
+  sessionId: string
 ): GxserverPresentationSidebarSessionKey {
   return `${projectId}\u0000${sessionId}`;
 }
@@ -680,11 +646,11 @@ export function createGxserverPresentationProjectSessionId(projectId: string, se
     encodeGxserverPresentationIdPart(projectId),
     GXSERVER_PRESENTATION_ID_SEPARATOR,
     encodeGxserverPresentationIdPart(sessionId),
-  ].join("");
+  ].join('');
 }
 
 export function parseGxserverPresentationProjectSessionId(
-  sessionId: string,
+  sessionId: string
 ): GxserverPresentationSidebarSessionReference | undefined {
   if (!sessionId.startsWith(GXSERVER_PRESENTATION_PROJECT_SESSION_ID_PREFIX)) {
     return undefined;
@@ -712,7 +678,7 @@ export function originalGxserverPresentationSidebarSessionId(sessionId: string):
 export function combineGxserverPresentationSidebarSession(
   projectId: string,
   session: SidebarSessionItem,
-  createProjectSessionId = createGxserverPresentationProjectSessionId,
+  createProjectSessionId = createGxserverPresentationProjectSessionId
 ): SidebarSessionItem {
   return {
     ...session,
@@ -721,31 +687,31 @@ export function combineGxserverPresentationSidebarSession(
 }
 
 export function createIdleGxserverPresentationProjectEditorState(
-  projectId: string,
-): NonNullable<SidebarSessionGroup["projectContext"]>["editor"] {
+  projectId: string
+): NonNullable<SidebarSessionGroup['projectContext']>['editor'] {
   return {
     diffStats: createDefaultSidebarProjectDiffStats(),
     isOpen: false,
     isSleeping: false,
     projectId,
-    status: "idle",
+    status: 'idle',
   };
 }
 
-export function visibleCountForGxserverPresentationSidebarSessions(
-  sessions: readonly SidebarSessionItem[],
-) {
+export function visibleCountForGxserverPresentationSidebarSessions(sessions: readonly SidebarSessionItem[]) {
   return clampVisibleSessionCount(Math.max(1, sessions.filter((session) => session.isVisible).length));
 }
 
 function isGxserverPresentationChatProject(
-  input: Pick<GxserverPresentationSidebarInput, "chatProjectIds">,
+  input: Pick<GxserverPresentationSidebarInput, 'chatProjectIds'>,
   project: GxserverPresentationProject,
-  projectOverlay: GxserverPresentationSidebarProjectOverlay | undefined,
+  projectOverlay: GxserverPresentationSidebarProjectOverlay | undefined
 ): boolean {
-  return projectOverlay?.isQuickProject === true ||
+  return (
+    projectOverlay?.isQuickProject === true ||
     projectOverlay?.isChatProject === true ||
-    input.chatProjectIds?.has(project.projectId) === true;
+    input.chatProjectIds?.has(project.projectId) === true
+  );
 }
 
 function encodeGxserverPresentationIdPart(value: string): string {

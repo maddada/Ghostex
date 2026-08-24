@@ -7,7 +7,7 @@ import {
   getGpuiWorkspaceSessionSubgroups,
   moveGpuiWorkspaceSessionToSubgroup,
   parseGpuiWorkspaceSessionSubgroupId,
-} from "../workspace-session-groups";
+} from '../workspace-session-groups';
 import {
   GPUI_GXSERVER_CHATS_GROUP_ID,
   GPUI_QUICK_AUTOMATIONS_PROJECT_ID,
@@ -15,33 +15,33 @@ import {
   GPUI_SIDEBAR_WORKSPACE_TERMINAL_FOCUS_MESSAGE_TYPE,
   GPUI_SIDEBAR_WORKSPACE_TERMINAL_FOCUS_MESSAGE_VERSION,
   SESSION_LIFECYCLE_FAILURE_TITLES,
-} from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
-import { gpuiBrowserSidebarSessionId } from "./helpers/browser-tabs";
-import { isGpuiInactiveProjectPresentationSession } from "./helpers/close-after-done";
+} from './constants';
+import type { GpuiSidebarRuntime } from './core';
+import { gpuiBrowserSidebarSessionId } from './helpers/browser-tabs';
+import { isGpuiInactiveProjectPresentationSession } from './helpers/close-after-done';
 import {
   isGpuiPresentationChatDomainProject,
   isGpuiPresentationChatProjectPath,
-} from "./helpers/presentation-projection";
-import { normalizeNonEmptyString } from "./helpers/records";
+} from './helpers/presentation-projection';
+import { normalizeNonEmptyString } from './helpers/records';
 import {
   createGpuiRemotePresentationGroupId,
   createGpuiRemotePresentationSessionId,
   parseGpuiRemotePresentationGroupId,
   parseGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationSessionId,
-} from "./helpers/remote-presentation";
-import { shouldApplyGpuiLocalWorkspaceTransition } from "./helpers/terminal-lifecycle";
-import { postAppModalHostMessage } from "@/packages/core-ui/app-modal-host-bridge";
-import type { PreferredAgentInterface } from "@/packages/shared/ghostex-settings";
-import { reorderPresentationProjectSessions } from "@/packages/shared/gxserver-presentation-cache";
+} from './helpers/remote-presentation';
+import { shouldApplyGpuiLocalWorkspaceTransition } from './helpers/terminal-lifecycle';
+import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import type { PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
+import { reorderPresentationProjectSessions } from '@/packages/shared/gxserver-presentation-cache';
 import {
   createGxserverPresentationProjectGroupId,
   createGxserverPresentationProjectSessionId,
   createGxserverPresentationSessionsByProjectFromGroups,
   parseGxserverPresentationProjectGroupId,
   parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverEndpointPath,
   GxserverForkSessionResult,
@@ -49,9 +49,9 @@ import type {
   GxserverSessionId,
   GxserverSessionRenameRequestResult,
   GxserverSessionTransitionResult,
-} from "@/packages/shared/gxserver-protocol";
-import type { SidebarToExtensionMessage } from "@/packages/shared/session-grid-contract";
-import type { SidebarSessionTag } from "@/packages/shared/session-tags";
+} from '@/packages/shared/gxserver-protocol';
+import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
+import type { SidebarSessionTag } from '@/packages/shared/session-tags';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -70,10 +70,19 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   closeQuickAutomationsProject(): void;
   focusSession(sessionId: string, originalMessage?: SidebarToExtensionMessage): Promise<void>;
   postSidebarSessionFocusConfirmation(sessionId: string): void;
-  focusLocalWorkspaceSession(projectId: string, sessionId: string, options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }): void;
-  postLocalWorkspaceTerminalFocus(projectId: string, sessionId: string, placementTargetSessionId?: string, options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }): void;
-  transitionSession(sessionId: string, action: "close" | "sleep"): Promise<void>;
-  copySessionDetails(message: Extract<SidebarToExtensionMessage, { type: "copySessionDetails" }>): void;
+  focusLocalWorkspaceSession(
+    projectId: string,
+    sessionId: string,
+    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
+  ): void;
+  postLocalWorkspaceTerminalFocus(
+    projectId: string,
+    sessionId: string,
+    placementTargetSessionId?: string,
+    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
+  ): void;
+  transitionSession(sessionId: string, action: 'close' | 'sleep'): Promise<void>;
+  copySessionDetails(message: Extract<SidebarToExtensionMessage, { type: 'copySessionDetails' }>): void;
   fullReloadSession(sessionId: string): Promise<void>;
   fullReloadProjectZmxSessions(groupId: string): Promise<void>;
   fullReloadWorkspaceGroup(groupId: string): Promise<void>;
@@ -82,45 +91,47 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   isRunningLocalPresentationSession(projectId: string, sessionId: string): boolean;
   isSleepingLocalPresentationSession(projectId: string, sessionId: string): boolean;
   forkSession(sessionId: string): Promise<void>;
-  renameSession(message: Extract<SidebarToExtensionMessage, { type: "renameSession" }>): Promise<void>;
-  updateSessionFlags(sessionId: string, flags: { isFavorite?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }): Promise<void>;
-  runSessionLifecycleCommand(sessionId: string, path: Extract<
+  renameSession(message: Extract<SidebarToExtensionMessage, { type: 'renameSession' }>): Promise<void>;
+  updateSessionFlags(
+    sessionId: string,
+    flags: { isFavorite?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
+  ): Promise<void>;
+  runSessionLifecycleCommand(
+    sessionId: string,
+    path: Extract<
       GxserverEndpointPath,
-      | "/api/settleSession"
-      | "/api/snoozeSession"
-      | "/api/unsettleSession"
-      | "/api/unsnoozeSession"
-    >, params: Record<string, unknown>): Promise<void>;
+      '/api/settleSession' | '/api/snoozeSession' | '/api/unsettleSession' | '/api/unsnoozeSession'
+    >,
+    params: Record<string, unknown>
+  ): Promise<void>;
   syncSessionOrder(groupId: string, sessionIds: readonly string[]): Promise<void>;
   focusProjectId(projectId: string): void;
-  setLocalPresentationSessionFocus(projectId: string, sessionId: string, targetGroupId?: string, exactVisibleSessionIds?: readonly string[]): void;
+  setLocalPresentationSessionFocus(
+    projectId: string,
+    sessionId: string,
+    targetGroupId?: string,
+    exactVisibleSessionIds?: readonly string[]
+  ): void;
   nextVisibleSessionIdsForLocalFocus(projectId: string, sessionId: string): Set<string>;
   currentVisibleSessionIdsForLocalProject(projectId: string): string[];
   isGpuiPresentationChatProjectId(projectId: string): boolean;
-  setRemotePresentationSessionFocus(reference: {
-    machineId: string;
-    projectId: string;
-    sessionId: string;
-  }): void;
+  setRemotePresentationSessionFocus(reference: { machineId: string; projectId: string; sessionId: string }): void;
   dropLocalPresentationSessionFocus(): void;
   dropRemotePresentationSessionFocus(machineId: string): void;
 }
 
 export const gpuiSidebarRuntimeSessionFocusMethods = {
-
   focusGroup(this: GpuiSidebarRuntime, groupId: string, originalMessage: SidebarToExtensionMessage): void {
     const remoteGroup = parseGpuiRemotePresentationGroupId(groupId);
     if (remoteGroup) {
       const target = this.selectRemoteGroupAttachTarget(remoteGroup);
       if (!target) {
-        this.postRemoteToast("info", "Remote attach unavailable", {
-          description: "This remote project has no attachable sessions.",
+        this.postRemoteToast('info', 'Remote attach unavailable', {
+          description: 'This remote project has no attachable sessions.',
         });
         return;
       }
-      if (
-        this.postRemoteSessionNativeAction("openRemoteSessionTerminal", target, originalMessage)
-      ) {
+      if (this.postRemoteSessionNativeAction('openRemoteSessionTerminal', target, originalMessage)) {
         this.setRemotePresentationSessionFocus(target);
         this.publishRemotePresentationPatch();
       }
@@ -134,7 +145,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       this.activeGroupId = groupId;
       this.refreshSidebarHudFromClient();
       if (this.presentation) {
-        this.publishPresentation("patch");
+        this.publishPresentation('patch');
       } else {
         this.publishRemotePresentationPatch();
       }
@@ -147,7 +158,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       this.activeGroupId = groupId;
       this.refreshSidebarHudFromClient();
     }
-    this.publishPresentation("patch");
+    this.publishPresentation('patch');
   },
 
   openQuickAutomationsPage(this: GpuiSidebarRuntime): void {
@@ -175,12 +186,9 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this.activeProjectId = GPUI_QUICK_AUTOMATIONS_PROJECT_ID;
     this.activeGroupId = GPUI_GXSERVER_CHATS_GROUP_ID;
     this.focusedSessionId = GPUI_QUICK_AUTOMATIONS_SIDEBAR_SESSION_ID;
-    this.visibleSessionIds = new Set([
-      ...this.visibleSessionIds,
-      GPUI_QUICK_AUTOMATIONS_SIDEBAR_SESSION_ID,
-    ]);
+    this.visibleSessionIds = new Set([...this.visibleSessionIds, GPUI_QUICK_AUTOMATIONS_SIDEBAR_SESSION_ID]);
     if (this.presentation) {
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
       return;
     }
     this.postActiveProjectContext();
@@ -197,19 +205,18 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       this.activeGroupId = undefined;
     }
     if (this.presentation) {
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
       return;
     }
     this.postActiveProjectContext();
   },
 
-  async focusSession(this: GpuiSidebarRuntime,
+  async focusSession(
+    this: GpuiSidebarRuntime,
     sessionId: string,
-    originalMessage?: SidebarToExtensionMessage,
+    originalMessage?: SidebarToExtensionMessage
   ): Promise<void> {
-    const browserTab = this.browserTabs.find(
-      (candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId,
-    );
+    const browserTab = this.browserTabs.find((candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId);
     if (browserTab) {
       /*
       A Browser row becomes the presentation focus owner when clicked. Clear
@@ -222,12 +229,12 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       if (remoteBrowserProject) {
         const remoteGroupId = createGpuiRemotePresentationGroupId(
           remoteBrowserProject.machineId,
-          remoteBrowserProject.projectId,
+          remoteBrowserProject.projectId
         );
         if (this.activeGroupId !== remoteGroupId) {
           this.activeGroupId = remoteGroupId;
           if (this.presentation) {
-            this.publishPresentation("patch");
+            this.publishPresentation('patch');
           } else {
             this.publishRemotePresentationPatch();
           }
@@ -235,30 +242,30 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       } else if (this.activeProjectId !== browserTab.projectId) {
         this.focusProjectId(browserTab.projectId);
         if (this.presentation) {
-          this.publishPresentation("patch");
+          this.publishPresentation('patch');
         }
       }
       const post = window.ghostexGpui?.postBrowserTabFocus;
-      if (typeof post === "function") {
+      if (typeof post === 'function') {
         post(
           JSON.stringify({
             projectId: browserTab.projectId,
             tabId: browserTab.tabId,
-            type: "ghostex.gpui.sidebar.browserTabFocus",
+            type: 'ghostex.gpui.sidebar.browserTabFocus',
             version: 1,
-          }),
+          })
         );
       }
       return;
     }
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
-      this.acknowledgeSessionAttention(sessionId, "sidebar-focus");
+      this.acknowledgeSessionAttention(sessionId, 'sidebar-focus');
       if (
         this.postRemoteSessionNativeAction(
-          "openRemoteSessionTerminal",
+          'openRemoteSessionTerminal',
           remoteSession,
-          originalMessage ?? { sessionId, type: "focusSession" },
+          originalMessage ?? { sessionId, type: 'focusSession' }
         )
       ) {
         this.setRemotePresentationSessionFocus(remoteSession);
@@ -277,7 +284,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     if (!reference || !this.client) {
       return;
     }
-    this.acknowledgeSessionAttention(sessionId, "sidebar-focus");
+    this.acknowledgeSessionAttention(sessionId, 'sidebar-focus');
     if (this.isSleepingLocalPresentationSession(reference.projectId, reference.sessionId)) {
       /*
       CDXC:GPUIWorkspaceSessionFocus 2026-06-26-23:24:
@@ -291,7 +298,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     Local GPUI sidebar clicks must match the macOS sidebar ownership model: the SidebarApp adapter applies local focus immediately and publishes the CEF bootstrap focus hint, but it must not call gxserver `/api/focusSession`. That endpoint is an external renderer-command route and can bounce focus when another renderer is the first open gxserver subscriber.
     */
     this.focusLocalWorkspaceSession(reference.projectId, reference.sessionId);
-    this.publishPresentation("patch");
+    this.publishPresentation('patch');
   },
 
   /*
@@ -311,7 +318,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       return;
     }
     const groups = this.latestGroups.filter((group) =>
-      group.sessions.some((session) => session.sessionId === sessionId),
+      group.sessions.some((session) => session.sessionId === sessionId)
     );
     if (groups.length === 0) {
       return;
@@ -322,14 +329,15 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       removedGroupIds: [],
       removedSessionIds: [],
       revision: ++this.revision,
-      type: "sidebarGroupsChanged",
+      type: 'sidebarGroupsChanged',
     });
   },
 
-  focusLocalWorkspaceSession(this: GpuiSidebarRuntime,
+  focusLocalWorkspaceSession(
+    this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
-    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface },
+    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
   ): void {
     /*
     CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:18:
@@ -341,34 +349,28 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       return;
     }
     this.setLocalPresentationSessionFocus(normalizedProjectId, normalizedSessionId);
-    this.postLocalWorkspaceTerminalFocus(
-      normalizedProjectId,
-      normalizedSessionId,
-      undefined,
-      options,
-    );
+    this.postLocalWorkspaceTerminalFocus(normalizedProjectId, normalizedSessionId, undefined, options);
   },
 
-  postLocalWorkspaceTerminalFocus(this: GpuiSidebarRuntime,
+  postLocalWorkspaceTerminalFocus(
+    this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
     placementTargetSessionId?: string,
-    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface },
+    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
   ): void {
     /*
     CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:08:
     Local GPUI session-card clicks must drive the real Agents workspace the way macOS does: after React updates gxserver presentation focus, send only bounded project/session ids to Rust so Rust can select or materialize the corresponding terminal tab from gxserver attach metadata. Do not pass labels, titles, commands, paths, terminal content, or daemon responses through the renderer bridge.
     */
     const postFocus = window.ghostexGpui?.postWorkspaceTerminalFocus;
-    if (typeof postFocus !== "function") {
+    if (typeof postFocus !== 'function') {
       return;
     }
     const payload = JSON.stringify({
       ...(placementTargetSessionId ? { placementTargetSessionId } : {}),
       ...(options?.forceRemount ? { forceRemount: true } : {}),
-      ...(options?.preferredInterface
-        ? { preferredInterface: options.preferredInterface }
-        : {}),
+      ...(options?.preferredInterface ? { preferredInterface: options.preferredInterface } : {}),
       projectId,
       sessionId,
       type: GPUI_SIDEBAR_WORKSPACE_TERMINAL_FOCUS_MESSAGE_TYPE,
@@ -377,20 +379,18 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     postFocus(payload);
   },
 
-  async transitionSession(this: GpuiSidebarRuntime, sessionId: string, action: "close" | "sleep"): Promise<void> {
-    const browserTab = this.browserTabs.find(
-      (candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId,
-    );
+  async transitionSession(this: GpuiSidebarRuntime, sessionId: string, action: 'close' | 'sleep'): Promise<void> {
+    const browserTab = this.browserTabs.find((candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId);
     if (browserTab) {
-      if (action === "close") {
+      if (action === 'close') {
         window.ghostexGpui?.postBrowserTabFocus?.(
           JSON.stringify({
             close: true,
             projectId: browserTab.projectId,
             tabId: browserTab.tabId,
-            type: "ghostex.gpui.sidebar.browserTabFocus",
+            type: 'ghostex.gpui.sidebar.browserTabFocus',
             version: 1,
-          }),
+          })
         );
       }
       return;
@@ -399,18 +399,18 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     if (remoteSession) {
       this.postRemoteGxserverSidebarRequest(
         remoteSession.machineId,
-        action === "close" ? "/api/killSession" : "/api/sleepSession",
+        action === 'close' ? '/api/killSession' : '/api/sleepSession',
         {
           projectId: remoteSession.projectId,
-          reason: "gpui-sidebar",
+          reason: 'gpui-sidebar',
           sessionId: remoteSession.sessionId,
-        },
+        }
       );
       return;
     }
     const reference = parseGxserverPresentationProjectSessionId(sessionId);
     if (reference?.projectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID) {
-      if (action === "close" && this.isQuickAutomationsSidebarSessionId(sessionId)) {
+      if (action === 'close' && this.isQuickAutomationsSidebarSessionId(sessionId)) {
         this.closeQuickAutomationsProject();
       }
       return;
@@ -420,47 +420,45 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     }
     const replacementFocusSessionId = this.resolveLocalProjectListTransitionFocusTarget(
       reference.projectId,
-      reference.sessionId,
+      reference.sessionId
     );
-    if (action === "close") {
+    if (action === 'close') {
       this.removePresentationSession(reference.projectId, reference.sessionId);
       if (replacementFocusSessionId) {
         this.focusLocalWorkspaceSession(reference.projectId, replacementFocusSessionId);
-        this.publishPresentation("patch");
+        this.publishPresentation('patch');
       }
       await this.client
-        .rpc<GxserverSessionTransitionResult>("/api/transitionSession", {
+        .rpc<GxserverSessionTransitionResult>('/api/transitionSession', {
           action,
           projectId: reference.projectId,
-          reason: "gpui-sidebar",
+          reason: 'gpui-sidebar',
           sessionId: reference.sessionId,
         })
         .catch(() => undefined);
       return;
     }
-    const result = await this.client.rpc<GxserverSessionTransitionResult>(
-      "/api/transitionSession",
-      {
-        action,
-        projectId: reference.projectId,
-        reason: "gpui-sidebar",
-        sessionId: reference.sessionId,
-      },
-    );
+    const result = await this.client.rpc<GxserverSessionTransitionResult>('/api/transitionSession', {
+      action,
+      projectId: reference.projectId,
+      reason: 'gpui-sidebar',
+      sessionId: reference.sessionId,
+    });
     if (!shouldApplyGpuiLocalWorkspaceTransition(result, action)) {
       return;
     }
     this.patchPresentationSession(reference.projectId, reference.sessionId, {
-      lifecycleState: "sleeping",
+      lifecycleState: 'sleeping',
     });
     if (replacementFocusSessionId) {
       this.focusLocalWorkspaceSession(reference.projectId, replacementFocusSessionId);
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
     }
   },
 
-  copySessionDetails(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "copySessionDetails" }>,
+  copySessionDetails(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'copySessionDetails' }>
   ): void {
     const detailsText = normalizeNonEmptyString(message.detailsText);
     if (!detailsText) {
@@ -468,10 +466,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       return;
     }
     try {
-      postAppModalHostMessage(
-        { detailsText, type: "copySessionDetails" },
-        "GPUISidebarActions:copySessionDetails",
-      );
+      postAppModalHostMessage({ detailsText, type: 'copySessionDetails' }, 'GPUISidebarActions:copySessionDetails');
     } catch {
       this.handleUnsupportedSidebarMessage(message);
     }
@@ -506,15 +501,11 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
         .filter(
           (session) =>
             session.projectId === remoteGroup.projectId &&
-            session.sessionPersistenceProvider === "zmx" &&
-            isGpuiInactiveProjectPresentationSession(session),
+            session.sessionPersistenceProvider === 'zmx' &&
+            isGpuiInactiveProjectPresentationSession(session)
         )
         .map((session) =>
-          createGpuiRemotePresentationSessionId(
-            remoteGroup.machineId,
-            remoteGroup.projectId,
-            session.sessionId,
-          ),
+          createGpuiRemotePresentationSessionId(remoteGroup.machineId, remoteGroup.projectId, session.sessionId)
         );
       for (const reloadSessionId of remoteSessionIds) {
         await this.fullReloadSession(reloadSessionId);
@@ -529,8 +520,8 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       .filter(
         (session) =>
           session.projectId === projectId &&
-          session.sessionPersistenceProvider === "zmx" &&
-          isGpuiInactiveProjectPresentationSession(session),
+          session.sessionPersistenceProvider === 'zmx' &&
+          isGpuiInactiveProjectPresentationSession(session)
       )
       .map((session) => createGxserverPresentationProjectSessionId(projectId, session.sessionId));
     for (const reloadSessionId of sessionIds) {
@@ -547,24 +538,21 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     const remoteProject = parseGpuiRemotePresentationProjectId(subgroup.projectId);
     const memberIds =
       getGpuiWorkspaceSessionSubgroups(this.workspaceGroups, subgroup.projectId).find(
-        (group) => group.groupId === subgroup.groupId,
+        (group) => group.groupId === subgroup.groupId
       )?.sessionIds ?? [];
     for (const sessionId of memberIds) {
       await this.fullReloadSession(
         remoteProject
-          ? createGpuiRemotePresentationSessionId(
-              remoteProject.machineId,
-              remoteProject.projectId,
-              sessionId,
-            )
-          : createGxserverPresentationProjectSessionId(subgroup.projectId, sessionId),
+          ? createGpuiRemotePresentationSessionId(remoteProject.machineId, remoteProject.projectId, sessionId)
+          : createGxserverPresentationProjectSessionId(subgroup.projectId, sessionId)
       );
     }
   },
 
-  resolveLocalProjectListTransitionFocusTarget(this: GpuiSidebarRuntime,
+  resolveLocalProjectListTransitionFocusTarget(
+    this: GpuiSidebarRuntime,
     projectId: string,
-    removedSessionId: string,
+    removedSessionId: string
   ): string | undefined {
     /*
     CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:34:
@@ -572,29 +560,19 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     */
     const normalizedProjectId = normalizeNonEmptyString(projectId);
     const normalizedRemovedSessionId = normalizeNonEmptyString(removedSessionId);
-    if (
-      !normalizedProjectId ||
-      !normalizedRemovedSessionId ||
-      this.focusedSessionId !== normalizedRemovedSessionId
-    ) {
+    if (!normalizedProjectId || !normalizedRemovedSessionId || this.focusedSessionId !== normalizedRemovedSessionId) {
       return undefined;
     }
-    const orderedSessionIds = this.localProjectTransitionSessionIds(
-      normalizedProjectId,
-      normalizedRemovedSessionId,
-    );
+    const orderedSessionIds = this.localProjectTransitionSessionIds(normalizedProjectId, normalizedRemovedSessionId);
     const removedIndex = orderedSessionIds.indexOf(normalizedRemovedSessionId);
     const candidates =
       removedIndex >= 0
-        ? [
-            ...orderedSessionIds.slice(removedIndex + 1),
-            ...orderedSessionIds.slice(0, removedIndex),
-          ]
+        ? [...orderedSessionIds.slice(removedIndex + 1), ...orderedSessionIds.slice(0, removedIndex)]
         : orderedSessionIds;
     const replacementSessionId = candidates.find(
       (candidateSessionId) =>
         candidateSessionId !== normalizedRemovedSessionId &&
-        this.isRunningLocalPresentationSession(normalizedProjectId, candidateSessionId),
+        this.isRunningLocalPresentationSession(normalizedProjectId, candidateSessionId)
     );
     return replacementSessionId;
   },
@@ -632,9 +610,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     return (
       this.presentation?.sessions.some(
         (session) =>
-          session.projectId === projectId &&
-          session.sessionId === sessionId &&
-          session.lifecycleState === "running",
+          session.projectId === projectId && session.sessionId === sessionId && session.lifecycleState === 'running'
       ) ?? false
     );
   },
@@ -643,9 +619,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     const presentationSleeping =
       this.presentation?.sessions.some(
         (session) =>
-          session.projectId === projectId &&
-          session.sessionId === sessionId &&
-          session.lifecycleState === "sleeping",
+          session.projectId === projectId && session.sessionId === sessionId && session.lifecycleState === 'sleeping'
       ) ?? false;
     if (presentationSleeping) {
       return true;
@@ -658,8 +632,8 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       group.sessions.some(
         (session) =>
           session.sessionId === sidebarSessionId &&
-          (session.lifecycleState === "sleeping" || session.isSleeping === true),
-      ),
+          (session.lifecycleState === 'sleeping' || session.isSleeping === true)
+      )
     );
   },
 
@@ -676,16 +650,14 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       from the session the user was viewing.
       */
       try {
-        await this.requestRemoteGxserver(remoteSession.machineId, "/api/forkSession", {
+        await this.requestRemoteGxserver(remoteSession.machineId, '/api/forkSession', {
           projectId: remoteSession.projectId,
-          reason: "gpui-sidebar",
+          reason: 'gpui-sidebar',
           sessionId: remoteSession.sessionId,
         });
-        await this.refreshRemotePresentationFromGxserver(remoteSession.machineId).catch(
-          () => undefined,
-        );
+        await this.refreshRemotePresentationFromGxserver(remoteSession.machineId).catch(() => undefined);
       } catch (error) {
-        this.postRemoteToast("error", "Remote fork failed", {
+        this.postRemoteToast('error', 'Remote fork failed', {
           description: error instanceof Error ? error.message : String(error),
         });
       }
@@ -697,8 +669,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     }
     if (
       !this.presentation?.sessions.some(
-        (session) =>
-          session.projectId === reference.projectId && session.sessionId === reference.sessionId,
+        (session) => session.projectId === reference.projectId && session.sessionId === reference.sessionId
       )
     ) {
       return;
@@ -717,7 +688,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       this.activeProjectId = reference.projectId;
       this.activeGroupId = sourceGroupId;
       this.refreshSidebarHudFromClient();
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
     }
 
     try {
@@ -728,17 +699,14 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       the fork payload, so `response.session` was undefined and the action
       could not materialize or focus the returned G-session.
       */
-      const { fork } = await this.client.rpc<{ fork: GxserverForkSessionResult }>(
-        "/api/forkSession",
-        {
-          projectId: reference.projectId,
-          reason: "gpui-sidebar",
-          sessionId: reference.sessionId,
-        },
-      );
+      const { fork } = await this.client.rpc<{ fork: GxserverForkSessionResult }>('/api/forkSession', {
+        projectId: reference.projectId,
+        reason: 'gpui-sidebar',
+        sessionId: reference.sessionId,
+      });
       const forkedSessionId = normalizeNonEmptyString(fork?.session.sessionId);
       if (!forkedSessionId) {
-        throw new Error("gxserver did not return the forked session.");
+        throw new Error('gxserver did not return the forked session.');
       }
 
       const sourceSubgroup = parseGpuiWorkspaceSessionSubgroupId(sourceGroupId);
@@ -747,34 +715,31 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
           this.workspaceGroups,
           reference.projectId,
           forkedSessionId,
-          sourceSubgroup.groupId,
+          sourceSubgroup.groupId
         );
         this.persistWorkspaceGroups();
       }
 
       this.setLocalPresentationSessionFocus(reference.projectId, forkedSessionId, sourceGroupId);
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
       /*
       The placement target is the clicked source session, not whichever pane
       happens to be focused when the RPC completes. Rust resolves this bounded
       id to the existing pane and appends the fork there before mounting the
       gxserver attach plan, matching macOS appendToTabGroup behavior.
       */
-      this.postLocalWorkspaceTerminalFocus(
-        reference.projectId,
-        forkedSessionId,
-        reference.sessionId,
-      );
-      await this.refreshDomainPresentationSnapshotFromClient("patch").catch(() => undefined);
+      this.postLocalWorkspaceTerminalFocus(reference.projectId, forkedSessionId, reference.sessionId);
+      await this.refreshDomainPresentationSnapshotFromClient('patch').catch(() => undefined);
     } catch (error) {
-      this.postSidebarActionToast("error", "Could not fork session", {
+      this.postSidebarActionToast('error', 'Could not fork session', {
         description: error instanceof Error ? error.message : String(error),
       });
     }
   },
 
-  async renameSession(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "renameSession" }>,
+  async renameSession(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'renameSession' }>
   ): Promise<void> {
     const remoteSession = parseGpuiRemotePresentationSessionId(message.sessionId);
     if (remoteSession) {
@@ -795,14 +760,14 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       only updating sidebar metadata or trying to use GPUI's local Ghostty
       surface bridge.
       */
-      this.postRemoteGxserverSidebarRequest(remoteSession.machineId, "/api/requestSessionRename", {
+      this.postRemoteGxserverSidebarRequest(remoteSession.machineId, '/api/requestSessionRename', {
         ...(message.agentId ? { agentName: message.agentId } : {}),
         projectId: remoteSession.projectId,
-        reason: "gpui-sidebar",
+        reason: 'gpui-sidebar',
         sessionId: remoteSession.sessionId,
         submitAgentRenameCommand: true,
         title: message.title,
-        titleSource: "user",
+        titleSource: 'user',
       });
       return;
     }
@@ -821,9 +786,9 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       pasted text must never reach `/api/requestSessionRename` as a literal
       title.
       */
-      const generationAgent = this.resolveSidebarAgent(message.agentId ?? "");
+      const generationAgent = this.resolveSidebarAgent(message.agentId ?? '');
       const generationCommand = generationAgent?.command?.trim();
-      await this.client.rpc("/api/generateSessionTitle", {
+      await this.client.rpc('/api/generateSessionTitle', {
         ...(message.agentId ? { agentId: message.agentId } : {}),
         ...(generationCommand ? { command: generationCommand } : {}),
         projectId: reference.projectId,
@@ -832,17 +797,14 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       });
       return;
     }
-    const result = await this.client.rpc<GxserverSessionRenameRequestResult>(
-      "/api/requestSessionRename",
-      {
-        agentName: message.agentId,
-        projectId: reference.projectId,
-        reason: "gpui-sidebar",
-        sessionId: reference.sessionId,
-        title: message.title,
-        titleSource: "user",
-      },
-    );
+    const result = await this.client.rpc<GxserverSessionRenameRequestResult>('/api/requestSessionRename', {
+      agentName: message.agentId,
+      projectId: reference.projectId,
+      reason: 'gpui-sidebar',
+      sessionId: reference.sessionId,
+      title: message.title,
+      titleSource: 'user',
+    });
     /*
     CDXC:GPUISidebarRename 2026-08-18:
     Session cards render `displayTitle`, so patching only `title` moved the
@@ -852,11 +814,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     keep the previous title here until the Agent CLI confirms the rename; the
     confirmed title lands through the normal presentation delta.
     */
-    this.patchPresentationSession(
-      reference.projectId,
-      reference.sessionId,
-      result.projection,
-    );
+    this.patchPresentationSession(reference.projectId, reference.sessionId, result.projection);
     /*
     CDXC:GPUISidebarRename 2026-07-28:
     gxserver keeps agent-session renames pending until the Agent CLI itself is
@@ -865,21 +823,18 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     mapped terminal — the same contract macOS follows.
     */
     if (result.shouldSendAgentRenameCommand) {
-      this.postLocalWorkspaceTerminalRenameCommand(
-        reference.projectId,
-        reference.sessionId,
-        message.title,
-      );
+      this.postLocalWorkspaceTerminalRenameCommand(reference.projectId, reference.sessionId, message.title);
     }
   },
 
-  async updateSessionFlags(this: GpuiSidebarRuntime,
+  async updateSessionFlags(
+    this: GpuiSidebarRuntime,
     sessionId: string,
-    flags: { isFavorite?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null },
+    flags: { isFavorite?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
   ): Promise<void> {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
-      this.postRemoteGxserverSidebarRequest(remoteSession.machineId, "/api/updateSession", {
+      this.postRemoteGxserverSidebarRequest(remoteSession.machineId, '/api/updateSession', {
         ...flags,
         projectId: remoteSession.projectId,
         sessionId: remoteSession.sessionId,
@@ -890,7 +845,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     if (!reference || !this.client) {
       return;
     }
-    await this.client.rpc("/api/updateSession", {
+    await this.client.rpc('/api/updateSession', {
       ...flags,
       projectId: reference.projectId,
       sessionId: reference.sessionId,
@@ -923,16 +878,14 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
   - No local presentation patch: gxserver emits the delta, and inventing one
     here would fight the server's guards and desync the settled/snoozed shelves.
   */
-  async runSessionLifecycleCommand(this: GpuiSidebarRuntime,
+  async runSessionLifecycleCommand(
+    this: GpuiSidebarRuntime,
     sessionId: string,
     path: Extract<
       GxserverEndpointPath,
-      | "/api/settleSession"
-      | "/api/snoozeSession"
-      | "/api/unsettleSession"
-      | "/api/unsnoozeSession"
+      '/api/settleSession' | '/api/snoozeSession' | '/api/unsettleSession' | '/api/unsnoozeSession'
     >,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<void> {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     try {
@@ -954,8 +907,8 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
         sessionId: reference.sessionId,
       });
     } catch {
-      this.postSidebarActionToast("warning", SESSION_LIFECYCLE_FAILURE_TITLES[path], {
-        description: "gxserver refused the change. The session may be working or waiting on you.",
+      this.postSidebarActionToast('warning', SESSION_LIFECYCLE_FAILURE_TITLES[path], {
+        description: 'gxserver refused the change. The session may be working or waiting on you.',
       });
     }
   },
@@ -975,10 +928,10 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this.presentation = reorderPresentationProjectSessions(
       this.presentation,
       projectId as GxserverProjectId,
-      gxserverSessionIds as GxserverSessionId[],
+      gxserverSessionIds as GxserverSessionId[]
     );
-    this.publishPresentation("patch");
-    await this.client.rpc("/api/updateSessionOrder", {
+    this.publishPresentation('patch');
+    await this.client.rpc('/api/updateSessionOrder', {
       projectId,
       sessionIds: gxserverSessionIds,
     });
@@ -996,11 +949,12 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this.refreshSidebarHudFromClient();
   },
 
-  setLocalPresentationSessionFocus(this: GpuiSidebarRuntime,
+  setLocalPresentationSessionFocus(
+    this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
     targetGroupId?: string,
-    exactVisibleSessionIds?: readonly string[],
+    exactVisibleSessionIds?: readonly string[]
   ): void {
     const normalizedProjectId = normalizeNonEmptyString(projectId);
     const normalizedSessionId = normalizeNonEmptyString(sessionId);
@@ -1027,14 +981,13 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     GPUI local session focus should follow the macOS sidebar rule that a click selects the target within the current visible workspace projection instead of replacing all visible ownership with a singleton. Preserve live local visible ids and remote ids, materialize the current project's projected visible row, then add the clicked session so last-activity resorting cannot make a second session steal focus back.
     */
     const liveLocalSessionIds = new Set<string>(
-      (this.presentation?.sessions ?? []).map((session) => session.sessionId),
+      (this.presentation?.sessions ?? []).map((session) => session.sessionId)
     );
     const nextVisibleSessionIds = new Set(
       [...this.visibleSessionIds].filter(
         (visibleSessionId) =>
-          parseGpuiRemotePresentationSessionId(visibleSessionId) ||
-          liveLocalSessionIds.has(visibleSessionId),
-      ),
+          parseGpuiRemotePresentationSessionId(visibleSessionId) || liveLocalSessionIds.has(visibleSessionId)
+      )
     );
     const projectVisibleSessionIds = this.currentVisibleSessionIdsForLocalProject(projectId);
     for (const visibleSessionId of projectVisibleSessionIds) {
@@ -1049,10 +1002,9 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     if (!presentation) {
       return [];
     }
-    const sessions =
-      createGxserverPresentationSessionsByProjectFromGroups({ presentation }).get(projectId) ?? [];
+    const sessions = createGxserverPresentationSessionsByProjectFromGroups({ presentation }).get(projectId) ?? [];
     return sessions.flatMap((session, index) =>
-      this.visibleSessionIds.has(session.sessionId) || index === 0 ? [session.sessionId] : [],
+      this.visibleSessionIds.has(session.sessionId) || index === 0 ? [session.sessionId] : []
     );
   },
 
@@ -1060,16 +1012,19 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     return (
       isGpuiPresentationChatDomainProject(this.domainProjectById(projectId)) ||
       isGpuiPresentationChatProjectPath(
-        this.presentation?.projects.find((project) => project.projectId === projectId)?.path,
+        this.presentation?.projects.find((project) => project.projectId === projectId)?.path
       )
     );
   },
 
-  setRemotePresentationSessionFocus(this: GpuiSidebarRuntime, reference: {
-    machineId: string;
-    projectId: string;
-    sessionId: string;
-  }): void {
+  setRemotePresentationSessionFocus(
+    this: GpuiSidebarRuntime,
+    reference: {
+      machineId: string;
+      projectId: string;
+      sessionId: string;
+    }
+  ): void {
     const machineId = normalizeNonEmptyString(reference.machineId);
     const projectId = normalizeNonEmptyString(reference.projectId);
     const sessionId = normalizeNonEmptyString(reference.sessionId);
@@ -1082,9 +1037,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       ?.projects.find((candidate) => candidate.projectId === projectId);
     const scopedGroupId = createGpuiRemotePresentationGroupId(
       machineId,
-      isGpuiPresentationChatProjectPath(project?.path)
-        ? GPUI_GXSERVER_CHATS_GROUP_ID
-        : projectId,
+      isGpuiPresentationChatProjectPath(project?.path) ? GPUI_GXSERVER_CHATS_GROUP_ID : projectId
     );
     this.activeGroupId = scopedGroupId;
     this.focusedSessionId = scopedSessionId;
@@ -1097,26 +1050,22 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       this.focusedSessionId = undefined;
     }
     this.visibleSessionIds = new Set(
-      [...this.visibleSessionIds].filter((sessionId) =>
-        Boolean(parseGpuiRemotePresentationSessionId(sessionId)),
-      ),
+      [...this.visibleSessionIds].filter((sessionId) => Boolean(parseGpuiRemotePresentationSessionId(sessionId)))
     );
   },
 
   dropRemotePresentationSessionFocus(this: GpuiSidebarRuntime, machineId: string): void {
-    if (
-      this.focusedSessionId &&
-      parseGpuiRemotePresentationSessionId(this.focusedSessionId)?.machineId === machineId
-    ) {
+    if (this.focusedSessionId && parseGpuiRemotePresentationSessionId(this.focusedSessionId)?.machineId === machineId) {
       this.focusedSessionId = undefined;
     }
     this.visibleSessionIds = new Set(
       [...this.visibleSessionIds].filter(
-        (sessionId) => parseGpuiRemotePresentationSessionId(sessionId)?.machineId !== machineId,
-      ),
+        (sessionId) => parseGpuiRemotePresentationSessionId(sessionId)?.machineId !== machineId
+      )
     );
   },
 };
 
-const gpuiSidebarRuntimeSessionFocusMethodsShapeCheck: GpuiSidebarRuntimeSessionFocusMethods = gpuiSidebarRuntimeSessionFocusMethods;
+const gpuiSidebarRuntimeSessionFocusMethodsShapeCheck: GpuiSidebarRuntimeSessionFocusMethods =
+  gpuiSidebarRuntimeSessionFocusMethods;
 void gpuiSidebarRuntimeSessionFocusMethodsShapeCheck;

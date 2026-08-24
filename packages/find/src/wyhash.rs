@@ -50,7 +50,14 @@ pub struct Wyhash {
 impl Wyhash {
     pub fn new(seed: u64) -> Self {
         let s0 = seed ^ mix(seed ^ SECRET[0], SECRET[1]);
-        Self { a: 0, b: 0, state: [s0, s0, s0], total_len: 0, buf: [0u8; 48], buf_len: 0 }
+        Self {
+            a: 0,
+            b: 0,
+            state: [s0, s0, s0],
+            total_len: 0,
+            buf: [0u8; 48],
+            buf_len: 0,
+        }
     }
 
     pub fn update(&mut self, input: &[u8]) {
@@ -151,7 +158,10 @@ impl Wyhash {
         let input = &input_lb[start_pos..];
         let mut i: usize = 0;
         while i + 16 < input.len() {
-            self.state[0] = mix(read(8, &input[i..]) ^ SECRET[1], read(8, &input[i + 8..]) ^ self.state[0]);
+            self.state[0] = mix(
+                read(8, &input[i..]) ^ SECRET[1],
+                read(8, &input[i + 8..]) ^ self.state[0],
+            );
             i += 16;
         }
         self.a = read(8, &input_lb[input_lb.len() - 16..]);
@@ -165,7 +175,10 @@ impl Wyhash {
         mum(&mut a, &mut b);
         self.a = a;
         self.b = b;
-        mix(self.a ^ SECRET[0] ^ (self.total_len as u64), self.b ^ SECRET[1])
+        mix(
+            self.a ^ SECRET[0] ^ (self.total_len as u64),
+            self.b ^ SECRET[1],
+        )
     }
 
     pub fn hash(seed: u64, input: &[u8]) -> u64 {
@@ -216,7 +229,12 @@ mod tests {
             let mut h = Wyhash::new(0);
             h.update(input);
             assert_eq!(h.finish(), want, "streamed hash of {} bytes", input.len());
-            assert_eq!(Wyhash::hash(0, input), want, "one-shot hash of {} bytes", input.len());
+            assert_eq!(
+                Wyhash::hash(0, input),
+                want,
+                "one-shot hash of {} bytes",
+                input.len()
+            );
         }
     }
 
@@ -229,7 +247,9 @@ mod tests {
         assert_eq!(h.finish(), 0x08775375308e09c0);
 
         let mut p = Wyhash::new(0);
-        p.update(b"/Users/madda/.codex/sessions/2026/08/20/rollout-2026-08-20T10-00-00-abcdef.jsonl");
+        p.update(
+            b"/Users/madda/.codex/sessions/2026/08/20/rollout-2026-08-20T10-00-00-abcdef.jsonl",
+        );
         assert_eq!(p.finish(), 0xb39b8f78d9344edf);
     }
 }

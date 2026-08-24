@@ -14,16 +14,16 @@
  * fields a new version legitimately changes.
  */
 
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { spawnSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { TRUSTED_REPO, productDefinition } from "./product-inputs.mjs";
-import { releaseProvenanceAssetName, validateReleaseProvenance, verifyReuseCandidate } from "./provenance.mjs";
-import { readReleasePlan, writeProductProvenance } from "./write-provenance.mjs";
+import { TRUSTED_REPO, productDefinition } from './product-inputs.mjs';
+import { releaseProvenanceAssetName, validateReleaseProvenance, verifyReuseCandidate } from './provenance.mjs';
+import { readReleasePlan, writeProductProvenance } from './write-provenance.mjs';
 
 /*
  * Manifest identity fields the publisher enforces for specific products
@@ -31,19 +31,19 @@ import { readReleasePlan, writeProductProvenance } from "./write-provenance.mjs"
  * particular build, so a reconstructed manifest must carry them verbatim.
  */
 export const MANIFEST_IDENTITY_FIELDS = Object.freeze({
-  android: { application_id: "io.ghostex", source_kind: "react-native-mobile" },
+  android: { application_id: 'io.ghostex', source_kind: 'react-native-mobile' },
 });
 
 /* Mirrors the architecture map in `release_gpui_write_manifest` (common.sh). */
 export const MANIFEST_ARCHITECTURES = Object.freeze({
-  android: "universal",
-  "gxserver-linux-arm64": "aarch64",
-  "gxserver-linux-x64": "x86_64",
-  "macos-arm64": "arm64",
+  android: 'universal',
+  'gxserver-linux-arm64': 'aarch64',
+  'gxserver-linux-x64': 'x86_64',
+  'macos-arm64': 'arm64',
 });
 
 function sha256File(filePath) {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
 }
 
 /*
@@ -53,12 +53,12 @@ function sha256File(filePath) {
  * GitHub instead of only exercising the pure helpers.
  */
 export function defaultGh(args, { allowFailure = false } = {}) {
-  const result = spawnSync("gh", args, { encoding: "utf8", maxBuffer: 96 * 1024 * 1024, stdio: "pipe" });
+  const result = spawnSync('gh', args, { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024, stdio: 'pipe' });
   if (result.error) throw result.error;
   if (result.status !== 0 && !allowFailure) {
-    throw new Error(`gh ${args.join(" ")} failed: ${(result.stderr || result.stdout || "").trim()}`);
+    throw new Error(`gh ${args.join(' ')} failed: ${(result.stderr || result.stdout || '').trim()}`);
   }
-  return { ok: result.status === 0, stderr: result.stderr ?? "", stdout: result.stdout ?? "" };
+  return { ok: result.status === 0, stderr: result.stderr ?? '', stdout: result.stdout ?? '' };
 }
 
 export function buildReusedManifest({ artifacts, product, record, runId, version, workflowSha }) {
@@ -78,7 +78,7 @@ export function buildReusedManifest({ artifacts, product, record, runId, version
 export function buildReusedMetadata({ artifacts, product, record, runId, version, workflowSha }) {
   const primary = artifacts.length === 1 ? artifacts[0] : {};
   return {
-    architecture: MANIFEST_ARCHITECTURES[product] ?? "unknown",
+    architecture: MANIFEST_ARCHITECTURES[product] ?? 'unknown',
     artifacts,
     application_id: MANIFEST_IDENTITY_FIELDS[product]?.application_id,
     created_at: new Date().toISOString(),
@@ -97,7 +97,7 @@ export function buildReusedMetadata({ artifacts, product, record, runId, version
 function downloadFromRelease({ artifacts, directory, gh, repo, tag }) {
   mkdirSync(directory, { recursive: true });
   for (const artifact of artifacts) {
-    gh(["release", "download", tag, "--repo", repo, "--pattern", artifact.name, "--dir", directory, "--clobber"]);
+    gh(['release', 'download', tag, '--repo', repo, '--pattern', artifact.name, '--dir', directory, '--clobber']);
     const file = path.join(directory, artifact.name);
     if (!existsSync(file)) throw new Error(`${tag} did not yield ${artifact.name}`);
   }
@@ -106,20 +106,20 @@ function downloadFromRelease({ artifacts, directory, gh, repo, tag }) {
 /* Tier 2: same-version recovery. The artifact directory is copied verbatim, side files included. */
 function downloadFromRun({ directory, gh, product, repo, runId }) {
   mkdirSync(directory, { recursive: true });
-  gh(["run", "download", String(runId), "--repo", repo, "--name", `release-${product}`, "--dir", directory]);
+  gh(['run', 'download', String(runId), '--repo', repo, '--name', `release-${product}`, '--dir', directory]);
 }
 
 export function originProvenanceFromRelease({ gh = defaultGh, product, repo, tag }) {
-  const release = JSON.parse(gh(["api", `repos/${repo}/releases/tags/${tag}`]).stdout);
-  const version = tag.replace(/^v/u, "");
+  const release = JSON.parse(gh(['api', `repos/${repo}/releases/tags/${tag}`]).stdout);
+  const version = tag.replace(/^v/u, '');
   const assetName = releaseProvenanceAssetName(version);
   const asset = (release.assets ?? []).find((entry) => entry.name === assetName);
   if (!asset) throw new Error(`${tag} carries no ${assetName}; it cannot be a reuse source`);
   const payload = gh([
-    "api",
+    'api',
     `repos/${repo}/releases/assets/${asset.id}`,
-    "-H",
-    "Accept: application/octet-stream",
+    '-H',
+    'Accept: application/octet-stream',
   ]).stdout;
   const provenance = validateReleaseProvenance(JSON.parse(payload));
   const record = provenance.products?.[product];
@@ -137,15 +137,15 @@ export function originProvenanceFromRelease({ gh = defaultGh, product, repo, tag
 }
 
 export function originProvenanceFromRun({ gh = defaultGh, product, repo, runId }) {
-  const scratch = mkdtempSync(path.join(tmpdir(), "ghostex-reuse-origin-"));
-  gh(["run", "download", String(runId), "--repo", repo, "--name", `release-provenance-${product}`, "--dir", scratch]);
-  const recordPath = path.join(scratch, "provenance.json");
+  const scratch = mkdtempSync(path.join(tmpdir(), 'ghostex-reuse-origin-'));
+  gh(['run', 'download', String(runId), '--repo', repo, '--name', `release-provenance-${product}`, '--dir', scratch]);
+  const recordPath = path.join(scratch, 'provenance.json');
   if (!existsSync(recordPath)) throw new Error(`run ${runId} carries no provenance record for ${product}`);
-  return JSON.parse(readFileSync(recordPath, "utf8"));
+  return JSON.parse(readFileSync(recordPath, 'utf8'));
 }
 
 function defaultAttestationVerifier({ file, gh = defaultGh, repo }) {
-  return gh(["attestation", "verify", file, "--repo", repo], { allowFailure: true }).ok;
+  return gh(['attestation', 'verify', file, '--repo', repo], { allowFailure: true }).ok;
 }
 
 export function materializeReuse({
@@ -161,11 +161,11 @@ export function materializeReuse({
   const definition = productDefinition(product);
   const entry = plan.products?.[product];
   if (!entry) throw new Error(`The release plan has no entry for ${product}`);
-  if (entry.action !== "reuse") throw new Error(`${product} is planned as ${entry.action}, not reuse`);
+  if (entry.action !== 'reuse') throw new Error(`${product} is planned as ${entry.action}, not reuse`);
   const descriptor = entry.reuse;
 
   let candidate;
-  if (descriptor.tier === "release") {
+  if (descriptor.tier === 'release') {
     const origin = originProvenanceFromRelease({ gh, product, repo, tag: descriptor.tag });
     downloadFromRelease({ artifacts: origin.record.artifacts, directory, gh, repo, tag: descriptor.tag });
     /*
@@ -185,14 +185,14 @@ export function materializeReuse({
       repo,
       runId: origin.record.originRunId,
       tag: descriptor.tag,
-      tier: "release",
+      tier: 'release',
     };
   } else {
     const record = originProvenanceFromRun({ gh, product, repo, runId: descriptor.runId });
     /* Re-read the run metadata here: the planner asserted it, this job proves it. */
     const run = JSON.parse(
-      gh(["run", "view", String(descriptor.runId), "--repo", repo, "--json", "conclusion,event,headSha,workflowName"])
-        .stdout,
+      gh(['run', 'view', String(descriptor.runId), '--repo', repo, '--json', 'conclusion,event,headSha,workflowName'])
+        .stdout
     );
     downloadFromRun({ directory, gh, product, repo, runId: descriptor.runId });
     candidate = {
@@ -205,7 +205,7 @@ export function materializeReuse({
       repo,
       runId: Number(descriptor.runId),
       tag: null,
-      tier: "run",
+      tier: 'run',
       workflowName: run.workflowName ?? null,
     };
   }
@@ -215,10 +215,10 @@ export function materializeReuse({
    * wrote next to the bytes; Tier 1's is GitHub's own asset metadata. Neither is
    * the provenance record being checked, which is the point.
    */
-  const manifestPath = path.join(directory, "manifest.json");
+  const manifestPath = path.join(directory, 'manifest.json');
   const runManifest =
-    descriptor.tier === "run" && existsSync(manifestPath)
-      ? JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/u, ""))
+    descriptor.tier === 'run' && existsSync(manifestPath)
+      ? JSON.parse(readFileSync(manifestPath, 'utf8').replace(/^\uFEFF/u, ''))
       : null;
 
   const verification = verifyReuseCandidate({
@@ -226,7 +226,7 @@ export function materializeReuse({
     candidate,
     evidence: {
       assetMetadata: (name) => {
-        if (descriptor.tier === "release") {
+        if (descriptor.tier === 'release') {
           return candidate.assets.find((asset) => asset.name === name) ?? null;
         }
         const artifact = (runManifest?.artifacts ?? []).find((item) => item.name === name);
@@ -246,7 +246,7 @@ export function materializeReuse({
     requireAll: true,
   });
   if (!verification.ok) {
-    throw new Error(`Refusing to reuse ${product}: ${verification.failures.join("; ")}`);
+    throw new Error(`Refusing to reuse ${product}: ${verification.failures.join('; ')}`);
   }
 
   const artifacts = candidate.record.artifacts.map((artifact) => ({
@@ -255,30 +255,44 @@ export function materializeReuse({
     size: artifact.size,
   }));
   const runId = Number(env.GITHUB_RUN_ID ?? 0);
-  const workflowSha = env.GHOSTEX_RELEASE_WORKFLOW_SHA || env.GITHUB_SHA || "";
+  const workflowSha = env.GHOSTEX_RELEASE_WORKFLOW_SHA || env.GITHUB_SHA || '';
 
-  if (descriptor.tier === "release") {
+  if (descriptor.tier === 'release') {
     writeFileSync(
       manifestPath,
       `${JSON.stringify(
-        buildReusedManifest({ artifacts, product, record: candidate.record, runId, version: plan.version, workflowSha }),
+        buildReusedManifest({
+          artifacts,
+          product,
+          record: candidate.record,
+          runId,
+          version: plan.version,
+          workflowSha,
+        }),
         null,
-        2,
-      )}\n`,
+        2
+      )}\n`
     );
     writeFileSync(
-      path.join(directory, "metadata.json"),
+      path.join(directory, 'metadata.json'),
       `${JSON.stringify(
-        buildReusedMetadata({ artifacts, product, record: candidate.record, runId, version: plan.version, workflowSha }),
+        buildReusedMetadata({
+          artifacts,
+          product,
+          record: candidate.record,
+          runId,
+          version: plan.version,
+          workflowSha,
+        }),
         null,
-        2,
-      )}\n`,
+        2
+      )}\n`
     );
   } else {
     if (!runManifest) throw new Error(`run ${descriptor.runId} artifact for ${product} has no manifest.json`);
     if (runManifest.platform !== product || runManifest.version !== plan.version) {
       throw new Error(
-        `run ${descriptor.runId} manifest is ${runManifest.platform}@${runManifest.version}; expected ${product}@${plan.version}`,
+        `run ${descriptor.runId} manifest is ${runManifest.platform}@${runManifest.version}; expected ${product}@${plan.version}`
       );
     }
     for (const sideFile of definition.sideFiles ?? []) {
@@ -295,7 +309,7 @@ export function materializeReuse({
     plan,
     reusedFrom: {
       attestationSubjectDigests,
-      ...(descriptor.tier === "release" ? { tag: descriptor.tag } : { runId: Number(descriptor.runId) }),
+      ...(descriptor.tier === 'release' ? { tag: descriptor.tag } : { runId: Number(descriptor.runId) }),
       tier: descriptor.tier,
       verifiedChecks: verification.verifiedChecks,
     },
@@ -308,15 +322,15 @@ function parseArguments(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     const value = argv[index + 1];
-    if (argument === "--product") options.product = value;
-    else if (argument === "--dir") options.directory = value;
-    else if (argument === "--repo") options.repo = value;
-    else if (argument === "--source-sha") options.sourceSha = value;
+    if (argument === '--product') options.product = value;
+    else if (argument === '--dir') options.directory = value;
+    else if (argument === '--repo') options.repo = value;
+    else if (argument === '--source-sha') options.sourceSha = value;
     else throw new Error(`Unknown option: ${argument}`);
     index += 1;
   }
-  if (!options.product) throw new Error("--product <id> is required");
-  if (!options.directory) throw new Error("--dir <artifact-directory> is required");
+  if (!options.product) throw new Error('--product <id> is required');
+  if (!options.directory) throw new Error('--dir <artifact-directory> is required');
   return options;
 }
 
@@ -326,14 +340,14 @@ function main() {
   const sourceSha = options.sourceSha ?? plan.sourceSha;
   const record = materializeReuse({
     directory: options.directory,
-    isAncestor: (commit) => spawnSync("git", ["merge-base", "--is-ancestor", commit, sourceSha]).status === 0,
+    isAncestor: (commit) => spawnSync('git', ['merge-base', '--is-ancestor', commit, sourceSha]).status === 0,
     plan,
     product: options.product,
     repo: options.repo,
   });
   process.stdout.write(
     `REUSED ${record.product} from ${record.reusedFrom.tag ?? `run ${record.reusedFrom.runId}`} ` +
-      `(${record.reusedFrom.verifiedChecks.join(", ")})\n`,
+      `(${record.reusedFrom.verifiedChecks.join(', ')})\n`
   );
 }
 

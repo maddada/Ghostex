@@ -21,10 +21,7 @@ import {
   CommandList,
 } from '../components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import type {
-  GxserverStashedPrompt,
-  GxserverStashedPromptTag,
-} from '../shared/gxserver-protocol';
+import type { GxserverStashedPrompt, GxserverStashedPromptTag } from '../shared/gxserver-protocol';
 import { GXSERVER_FAVORITE_PROMPT_TAG_ID } from '../shared/gxserver-protocol';
 import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
 import type { ExtensionToSidebarMessage } from '../shared/session-grid-contract';
@@ -78,10 +75,7 @@ const MAX_TAG_NAME_LENGTH = 40;
  * sentinel string mixed into the tagId space could one day collide with a tag
  * the daemon mints.
  */
-type StashedPromptTagFilter =
-  | { kind: 'all' }
-  | { kind: 'tag'; tagId: string }
-  | { kind: 'untagged' };
+type StashedPromptTagFilter = { kind: 'all' } | { kind: 'tag'; tagId: string } | { kind: 'untagged' };
 
 const ALL_PROMPTS_FILTER: StashedPromptTagFilter = { kind: 'all' };
 
@@ -296,11 +290,7 @@ export function StashedPromptsModal({
       return;
     }
     const timeoutId = window.setTimeout(() => {
-      document
-        .querySelector<HTMLInputElement>(
-          '.ghostex-stashed-prompts-dialog [data-slot="command-input"]'
-        )
-        ?.focus();
+      document.querySelector<HTMLInputElement>('.ghostex-stashed-prompts-dialog [data-slot="command-input"]')?.focus();
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [isAddingPrompt, isOpen]);
@@ -385,10 +375,7 @@ export function StashedPromptsModal({
    * search: its count narrows with the query like every other pill, but the
    * pill itself must not blink in and out of the rail as the user types.
    */
-  const hasTaggedPrompt = useMemo(
-    () => (prompts ?? []).some((prompt) => promptTagIds(prompt).length > 0),
-    [prompts]
-  );
+  const hasTaggedPrompt = useMemo(() => (prompts ?? []).some((prompt) => promptTagIds(prompt).length > 0), [prompts]);
 
   const promptCountByTagId = useMemo(() => {
     const counts = new Map<string, number>();
@@ -407,7 +394,7 @@ export function StashedPromptsModal({
   const showAddPrompt =
     tagFilter.kind === 'all' &&
     (normalizedSearchQuery.length === 0 || 'add saved prompt new prompt'.includes(normalizedSearchQuery));
-  const topPromptValue = showAddPrompt ? 'add saved prompt new prompt' : visiblePrompts[0]?.promptId ?? '';
+  const topPromptValue = showAddPrompt ? 'add saved prompt new prompt' : (visiblePrompts[0]?.promptId ?? '');
 
   useLayoutEffect(() => {
     if (!isOpen || isAddingPrompt) {
@@ -681,10 +668,7 @@ export function StashedPromptsModal({
                   {tagError}
                 </div>
               ) : null}
-              <CommandList
-                className='ghostex-command-palette-list ghostex-stashed-prompts-list'
-                ref={promptListRef}
-              >
+              <CommandList className='ghostex-command-palette-list ghostex-stashed-prompts-list' ref={promptListRef}>
                 {prompts !== undefined && !showAddPrompt && visiblePrompts.length === 0 ? (
                   <CommandEmpty>
                     {tagFilter.kind === 'tag'
@@ -896,9 +880,7 @@ function StashedPromptTagRail({
             aria-pressed={tagFilter.kind === 'untagged'}
             className='ghostex-stashed-prompt-tag-pill ghostex-stashed-prompt-tag-pill-untagged'
             data-active={String(tagFilter.kind === 'untagged')}
-            onClick={() =>
-              onSelectFilter(tagFilter.kind === 'untagged' ? ALL_PROMPTS_FILTER : { kind: 'untagged' })
-            }
+            onClick={() => onSelectFilter(tagFilter.kind === 'untagged' ? ALL_PROMPTS_FILTER : { kind: 'untagged' })}
             title='Saved prompts with no tag'
             type='button'
           >

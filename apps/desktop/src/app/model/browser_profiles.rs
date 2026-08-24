@@ -5,10 +5,8 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct BrowserProfileId(pub(crate) u64);
-
 
 impl BrowserProfileId {
     pub(crate) fn default_profile() -> Self {
@@ -32,13 +30,11 @@ impl BrowserProfileId {
     }
 }
 
-
 pub(crate) struct BrowserProfileModel {
     pub(crate) profiles: Vec<BrowserProfileId>,
     pub(crate) active_profile: BrowserProfileId,
     pub(crate) next_profile_id: u64,
 }
-
 
 impl BrowserProfileModel {
     pub(crate) fn shell_default() -> Self {
@@ -99,8 +95,9 @@ impl BrowserProfileModel {
     }
 }
 
-
-pub(crate) fn browser_profile_model_to_shell_state_json(model: &BrowserProfileModel) -> serde_json::Value {
+pub(crate) fn browser_profile_model_to_shell_state_json(
+    model: &BrowserProfileModel,
+) -> serde_json::Value {
     /*
     CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
     Browser profile shell-state serialization is sanitized at the writer boundary: persist only generated numeric profile ids, the active generated id, and the next generated id. Never persist profile display names from user input, filesystem paths, CEF cache directories, imported data choices, cookies, credentials, history, URLs, page titles, command text, or terminal content.
@@ -114,7 +111,6 @@ pub(crate) fn browser_profile_model_to_shell_state_json(model: &BrowserProfileMo
         "nextProfileId": model.next_profile_id.max(BROWSER_PROFILE_FIRST_GENERATED_ID),
     })
 }
-
 
 pub(crate) fn browser_profile_model_from_shell_state(
     value: &serde_json::Value,

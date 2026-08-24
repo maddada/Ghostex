@@ -1,10 +1,10 @@
-import { IconCopy, IconPencil } from "@tabler/icons-react";
-import { createPortal } from "react-dom";
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from "react";
-import { trimPromptEditorTrailingSpaces } from "../shared/prompt-editor-text";
-import type { SidebarPinnedPrompt } from "../shared/session-grid-contract";
-import { useSidebarStore } from "./sidebar-store";
-import type { WebviewApi } from "./webview-api";
+import { IconCopy, IconPencil } from '@tabler/icons-react';
+import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from 'react';
+import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
+import type { SidebarPinnedPrompt } from '../shared/session-grid-contract';
+import { useSidebarStore } from './sidebar-store';
+import type { WebviewApi } from './webview-api';
 
 export type PinnedPromptsModalProps = {
   isOpen: boolean;
@@ -34,7 +34,7 @@ export function PinnedPromptsModal({ isOpen, onClose, vscode }: PinnedPromptsMod
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
+      if (event.key !== 'Escape') {
         return;
       }
 
@@ -46,9 +46,9 @@ export function PinnedPromptsModal({ isOpen, onClose, vscode }: PinnedPromptsMod
       onClose();
     };
 
-    document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [editorState, isOpen, onClose]);
 
@@ -71,7 +71,7 @@ export function PinnedPromptsModal({ isOpen, onClose, vscode }: PinnedPromptsMod
           prompt={prompt}
         />
       )),
-    [pinnedPrompts],
+    [pinnedPrompts]
   );
 
   if (!isOpen) {
@@ -80,35 +80,33 @@ export function PinnedPromptsModal({ isOpen, onClose, vscode }: PinnedPromptsMod
 
   return createPortal(
     <>
-      <div className="confirm-modal-root scroll-mask-y" role="presentation">
-        <button className="confirm-modal-backdrop" onClick={onClose} type="button" />
+      <div className='confirm-modal-root scroll-mask-y' role='presentation'>
+        <button className='confirm-modal-backdrop' onClick={onClose} type='button' />
         <div
-          aria-labelledby="pinned-prompts-modal-title"
-          aria-modal="true"
-          className="confirm-modal pinned-prompts-modal scroll-mask-y"
-          role="dialog"
+          aria-labelledby='pinned-prompts-modal-title'
+          aria-modal='true'
+          className='confirm-modal pinned-prompts-modal scroll-mask-y'
+          role='dialog'
         >
-          <div className="confirm-modal-header">
-            <div className="confirm-modal-title" id="pinned-prompts-modal-title">
+          <div className='confirm-modal-header'>
+            <div className='confirm-modal-title' id='pinned-prompts-modal-title'>
               Pinned Prompts
             </div>
           </div>
-          <div className="pinned-prompts-modal-body">
+          <div className='pinned-prompts-modal-body'>
             {promptCards.length > 0 ? (
-              <div className="pinned-prompts-list scroll-mask-y">{promptCards}</div>
+              <div className='pinned-prompts-list scroll-mask-y'>{promptCards}</div>
             ) : (
-              <div className="group-empty-state previous-sessions-empty-state">
-                No pinned prompts yet.
-              </div>
+              <div className='group-empty-state previous-sessions-empty-state'>No pinned prompts yet.</div>
             )}
           </div>
-          <div className="previous-sessions-footer">
+          <div className='previous-sessions-footer'>
             <button
-              className="previous-sessions-find-button"
+              className='previous-sessions-find-button'
               onClick={() => {
-                setEditorState({ content: "", title: "" });
+                setEditorState({ content: '', title: '' });
               }}
-              type="button"
+              type='button'
             >
               Add Prompt
             </button>
@@ -126,13 +124,13 @@ export function PinnedPromptsModal({ isOpen, onClose, vscode }: PinnedPromptsMod
             content: draft.content,
             promptId: draft.promptId,
             title: draft.title,
-            type: "savePinnedPrompt",
+            type: 'savePinnedPrompt',
           });
           setEditorState(undefined);
         }}
       />
     </>,
-    document.body,
+    document.body
   );
 }
 
@@ -145,28 +143,28 @@ type PinnedPromptCardProps = {
 
 function PinnedPromptCard({ index, onCopy, onEdit, prompt }: PinnedPromptCardProps) {
   return (
-    <article className="pinned-prompt-card">
-      <div className="pinned-prompt-card-actions">
+    <article className='pinned-prompt-card'>
+      <div className='pinned-prompt-card-actions'>
         <button
           aria-label={`Copy pinned prompt ${index + 1}`}
-          className="pinned-prompt-card-action copy-cursor"
+          className='pinned-prompt-card-action copy-cursor'
           onClick={() => {
             void onCopy();
           }}
-          type="button"
+          type='button'
         >
-          <IconCopy aria-hidden="true" size={11} stroke={1.9} />
+          <IconCopy aria-hidden='true' size={11} stroke={1.9} />
         </button>
         <button
           aria-label={`Edit pinned prompt ${index + 1}`}
-          className="pinned-prompt-card-action"
+          className='pinned-prompt-card-action'
           onClick={onEdit}
-          type="button"
+          type='button'
         >
-          <IconPencil aria-hidden="true" size={11} stroke={1.9} />
+          <IconPencil aria-hidden='true' size={11} stroke={1.9} />
         </button>
       </div>
-      <div className="pinned-prompt-card-title">{prompt.title}</div>
+      <div className='pinned-prompt-card-title'>{prompt.title}</div>
     </article>
   );
 }
@@ -179,20 +177,20 @@ type PinnedPromptEditorModalProps = {
 };
 
 function PinnedPromptEditorModal({ draft, isOpen, onClose, onSave }: PinnedPromptEditorModalProps) {
-  const [draftTitle, setDraftTitle] = useState(draft?.title ?? "");
-  const [draftContent, setDraftContent] = useState(draft?.content ?? "");
+  const [draftTitle, setDraftTitle] = useState(draft?.title ?? '');
+  const [draftContent, setDraftContent] = useState(draft?.content ?? '');
   const titleInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!isOpen) {
-      setDraftTitle(draft?.title ?? "");
-      setDraftContent(draft?.content ?? "");
+      setDraftTitle(draft?.title ?? '');
+      setDraftContent(draft?.content ?? '');
       return;
     }
 
-    setDraftTitle(draft?.title ?? "");
-    setDraftContent(draft?.content ?? "");
+    setDraftTitle(draft?.title ?? '');
+    setDraftContent(draft?.content ?? '');
   }, [draft, isOpen]);
 
   useEffect(() => {
@@ -238,7 +236,7 @@ function PinnedPromptEditorModal({ draft, isOpen, onClose, onSave }: PinnedPromp
   };
 
   const handleContentPaste = (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-    const pastedText = event.clipboardData.getData("text/plain");
+    const pastedText = event.clipboardData.getData('text/plain');
     const trimmedText = trimPromptEditorTrailingSpaces(pastedText);
     if (!pastedText || trimmedText === pastedText) {
       return;
@@ -248,56 +246,56 @@ function PinnedPromptEditorModal({ draft, isOpen, onClose, onSave }: PinnedPromp
   };
 
   return createPortal(
-    <div className="confirm-modal-root confirm-modal-root-nested scroll-mask-y" role="presentation">
-      <button className="confirm-modal-backdrop" onClick={onClose} type="button" />
+    <div className='confirm-modal-root confirm-modal-root-nested scroll-mask-y' role='presentation'>
+      <button className='confirm-modal-backdrop' onClick={onClose} type='button' />
       <div
-        aria-labelledby="pinned-prompt-editor-modal-title"
-        aria-modal="true"
-        className="confirm-modal pinned-prompt-editor-modal scroll-mask-y"
-        role="dialog"
+        aria-labelledby='pinned-prompt-editor-modal-title'
+        aria-modal='true'
+        className='confirm-modal pinned-prompt-editor-modal scroll-mask-y'
+        role='dialog'
       >
-        <div className="confirm-modal-header">
-          <div className="confirm-modal-title" id="pinned-prompt-editor-modal-title">
-            {draft.promptId ? "Edit Prompt" : "Add Prompt"}
+        <div className='confirm-modal-header'>
+          <div className='confirm-modal-title' id='pinned-prompt-editor-modal-title'>
+            {draft.promptId ? 'Edit Prompt' : 'Add Prompt'}
           </div>
         </div>
-        <div className="pinned-prompt-editor-body">
-          <div className="command-config-fields">
-            <label className="command-config-field">
-              <span className="command-config-label">Title</span>
+        <div className='pinned-prompt-editor-body'>
+          <div className='command-config-fields'>
+            <label className='command-config-field'>
+              <span className='command-config-label'>Title</span>
               <input
-                aria-label="Pinned prompt title"
-                className="command-config-input pinned-prompt-editor-title-input"
+                aria-label='Pinned prompt title'
+                className='command-config-input pinned-prompt-editor-title-input'
                 onChange={(event) => {
                   setDraftTitle(event.target.value);
                 }}
-                placeholder="Short title for this prompt"
+                placeholder='Short title for this prompt'
                 ref={titleInputRef}
                 spellCheck={false}
-                type="text"
+                type='text'
                 value={draftTitle}
               />
             </label>
           </div>
           <textarea
-            aria-label="Pinned prompt"
-            className="scratch-pad-textarea pinned-prompt-editor-textarea"
+            aria-label='Pinned prompt'
+            className='scratch-pad-textarea pinned-prompt-editor-textarea'
             onChange={(event) => {
               setDraftContent(event.target.value);
             }}
             onPaste={handleContentPaste}
-            placeholder="Write a prompt you want available in every project."
+            placeholder='Write a prompt you want available in every project.'
             ref={textareaRef}
             spellCheck={false}
             value={draftContent}
           />
         </div>
-        <div className="confirm-modal-actions">
-          <button className="secondary confirm-modal-button" onClick={onClose} type="button">
+        <div className='confirm-modal-actions'>
+          <button className='secondary confirm-modal-button' onClick={onClose} type='button'>
             Cancel
           </button>
           <button
-            className="primary confirm-modal-button"
+            className='primary confirm-modal-button'
             disabled={!draftTitle.trim() || !draftContent.trim()}
             onClick={() => {
               /**
@@ -312,13 +310,13 @@ function PinnedPromptEditorModal({ draft, isOpen, onClose, onSave }: PinnedPromp
                 title: draftTitle,
               });
             }}
-            type="button"
+            type='button'
           >
-            <span>{draft.promptId ? "Save Prompt" : "Add Prompt"}</span>
+            <span>{draft.promptId ? 'Save Prompt' : 'Add Prompt'}</span>
           </button>
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }

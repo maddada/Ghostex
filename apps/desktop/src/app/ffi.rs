@@ -4,7 +4,6 @@
 
 use crate::*;
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_terminal_native_key_event_is_plain_escape_key_down(
     event: &ghostty_kit::ffi::ghostty_input_key_s,
@@ -16,7 +15,6 @@ pub(crate) fn gpui_terminal_native_key_event_is_plain_escape_key_down(
         && event.mods & GHOSTTY_TERMINAL_OBSERVED_SHORTCUT_MODS == 0
         && event.consumed_mods & GHOSTTY_TERMINAL_OBSERVED_SHORTCUT_MODS == 0
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_terminal_native_key_event_is_modified_return_key_down(
@@ -30,7 +28,6 @@ pub(crate) fn gpui_terminal_native_key_event_is_modified_return_key_down(
         && event.mods & GHOSTTY_TERMINAL_OBSERVED_SHORTCUT_MODS != 0
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiTerminalNativeViewKeyTranslationMods(
@@ -43,7 +40,6 @@ pub extern "C" fn GhostexGpuiTerminalNativeViewKeyTranslationMods(
     */
     terminal_ghostty_surface::native_key_translation_mods_for_view(native_view, mods)
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -111,7 +107,6 @@ pub extern "C" fn GhostexGpuiKeyboardRouteNativeEvent(
     handled as _
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys(
@@ -135,7 +130,6 @@ pub extern "C" fn GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys(
     })
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiKeyboardOwnerIsSessionChat(
@@ -156,7 +150,6 @@ pub extern "C" fn GhostexGpuiKeyboardOwnerIsSessionChat(
     })
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiKeyboardOwnerUsesDocsEditorHotkeys(
@@ -170,7 +163,6 @@ pub extern "C" fn GhostexGpuiKeyboardOwnerUsesDocsEditorHotkeys(
             as std::ffi::c_int
     })
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -251,7 +243,6 @@ pub extern "C" fn GhostexGpuiTerminalHandleNativeKeyEvent(
     }
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiTerminalNativeKeyEventIsBinding(
@@ -283,7 +274,6 @@ pub extern "C" fn GhostexGpuiTerminalNativeKeyEventIsBinding(
     terminal_ghostty_surface::native_key_event_is_binding_for_view(native_view, event) as _
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiTerminalHandlePromptEditorShortcut(
@@ -291,7 +281,6 @@ pub extern "C" fn GhostexGpuiTerminalHandlePromptEditorShortcut(
 ) -> std::ffi::c_int {
     queue_gpui_terminal_prompt_editor_shortcut(native_view) as _
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -317,7 +306,6 @@ pub extern "C" fn GhostexGpuiTerminalInsertDroppedText(
         0
     }
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -373,7 +361,6 @@ pub extern "C" fn GhostexGpuiTerminalInsertCommittedText(
     if accepted { 1 } else { 0 }
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiTerminalSetPreeditText(
@@ -417,7 +404,6 @@ pub extern "C" fn GhostexGpuiTerminalSetPreeditText(
     if accepted { 1 } else { 0 }
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiTerminalGetImePoint(
@@ -446,7 +432,6 @@ pub extern "C" fn GhostexGpuiTerminalGetImePoint(
     1
 }
 
-
 #[cfg(target_os = "macos")]
 thread_local! {
     pub(crate) static GPUI_APP_SHOTS_CALLBACK_TARGET: RefCell<Option<GpuiAppShotsCallbackTarget>> = const { RefCell::new(None) };
@@ -468,14 +453,12 @@ thread_local! {
     pub(crate) static GPUI_PENDING_OS_INTEGRATION_URLS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
 pub(crate) struct GpuiAppShotsCallbackTarget {
     pub(crate) app: gpui::WeakEntity<GhostexGpuiApp>,
     pub(crate) async_app: gpui::AsyncApp,
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
@@ -484,14 +467,12 @@ pub(crate) struct GpuiMenuBarStatusCallbackTarget {
     pub(crate) async_app: gpui::AsyncApp,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
 pub(crate) struct GpuiSidebarPointerCallbackTarget {
     pub(crate) app: gpui::WeakEntity<GhostexGpuiApp>,
     pub(crate) async_app: gpui::AsyncApp,
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
@@ -500,14 +481,12 @@ pub(crate) struct GpuiSessionAttentionNotificationCallbackTarget {
     pub(crate) async_app: gpui::AsyncApp,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
 pub(crate) struct GpuiAccessibilityDisplayOptionsCallbackTarget {
     pub(crate) app: gpui::WeakEntity<GhostexGpuiApp>,
     pub(crate) async_app: gpui::AsyncApp,
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
@@ -516,14 +495,12 @@ pub(crate) struct GpuiWorkspacePowerEventsCallbackTarget {
     pub(crate) async_app: gpui::AsyncApp,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
 pub(crate) struct GpuiSparkleUpdaterCallbackTarget {
     pub(crate) app: gpui::WeakEntity<GhostexGpuiApp>,
     pub(crate) async_app: gpui::AsyncApp,
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
@@ -532,7 +509,6 @@ pub(crate) struct GpuiOsIntegrationCallbackTarget {
     pub(crate) async_app: gpui::AsyncApp,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
 pub(crate) struct GpuiFirstResponderCallbackTarget {
@@ -540,14 +516,12 @@ pub(crate) struct GpuiFirstResponderCallbackTarget {
     pub(crate) async_app: gpui::AsyncApp,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
 pub(crate) struct GpuiTerminalKeyEventCallbackTarget {
     pub(crate) app: gpui::WeakEntity<GhostexGpuiApp>,
     pub(crate) async_app: gpui::AsyncApp,
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
@@ -560,7 +534,6 @@ pub(crate) struct GpuiKeyboardRouterCallbackTarget {
     pub(crate) pressed_keys: HashMap<u32, GpuiCapturedKeyRoute>,
 }
 
-
 #[cfg(target_os = "macos")]
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiAppShotCapture {
@@ -572,7 +545,6 @@ pub(crate) struct GpuiAppShotCapture {
     pub(crate) window_height: Option<i32>,
     pub(crate) trigger: Option<String>,
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -587,7 +559,6 @@ pub extern "C" fn GhostexGpuiAppShotsSettingsEnabled() -> std::ffi::c_int {
     }
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiAppShotsSettingsHotkey() -> std::ffi::c_int {
@@ -596,7 +567,6 @@ pub extern "C" fn GhostexGpuiAppShotsSettingsHotkey() -> std::ffi::c_int {
         .hotkey
         .native_code()
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -629,13 +599,11 @@ pub extern "C" fn GhostexGpuiAppShotsCaptureSucceeded(
     queue_gpui_app_shot_capture(capture);
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiAppShotsCaptureFailed(_message: *const std::ffi::c_char) {
     queue_gpui_app_shot_status("Could not capture an App Shot.");
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -645,7 +613,6 @@ pub extern "C" fn GhostexGpuiMenuBarStatusProjectClicked(project_id: *const std:
     };
     queue_gpui_menu_bar_status_project_click(project_id);
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -662,7 +629,6 @@ pub extern "C" fn GhostexGpuiMenuBarStatusSessionClicked(
     queue_gpui_menu_bar_status_session_click(project_id, session_id);
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiSessionAttentionNotificationClicked(
@@ -674,7 +640,6 @@ pub extern "C" fn GhostexGpuiSessionAttentionNotificationClicked(
     queue_gpui_session_attention_notification_click(session_id);
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiAccessibilityDisplayOptionsChanged(
@@ -683,13 +648,11 @@ pub extern "C" fn GhostexGpuiAccessibilityDisplayOptionsChanged(
     queue_gpui_accessibility_display_options_changed(should_reduce_motion == 1);
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiWorkspaceDidWake() {
     queue_gpui_workspace_did_wake();
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -697,13 +660,11 @@ pub extern "C" fn GhostexGpuiSparkleUpdateAvailableChanged(available: std::ffi::
     queue_gpui_sparkle_update_available_changed(available == 1);
 }
 
-
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiSparkleUpdateDownloadingChanged(downloading: std::ffi::c_int) {
     queue_gpui_sparkle_update_downloading_changed(downloading == 1);
 }
-
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
@@ -713,4 +674,3 @@ pub extern "C" fn GhostexGpuiSparkleUpdateDownloadProgressChanged(
 ) {
     queue_gpui_sparkle_update_download_progress_changed((has_progress == 1).then_some(progress));
 }
-

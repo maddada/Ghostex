@@ -16,7 +16,11 @@ pub struct Match {
 
 impl Match {
     fn empty(score: i32) -> Self {
-        Self { score, positions: [0; MAX_POSITIONS], pos_len: 0 }
+        Self {
+            score,
+            positions: [0; MAX_POSITIONS],
+            pos_len: 0,
+        }
     }
 
     pub fn highlights(&self) -> &[u16] {
@@ -198,7 +202,11 @@ impl Matcher {
         let n = win.len();
 
         for j in 0..n {
-            let prev_char = if base + j == 0 { b' ' } else { hay[base + j - 1] };
+            let prev_char = if base + j == 0 {
+                b' '
+            } else {
+                hay[base + j - 1]
+            };
             self.b[j] = bonus_at(class_of(prev_char), class_of(win[j]));
         }
 
@@ -482,7 +490,10 @@ mod tests {
     fn word_boundary_beats_mid_word() {
         let boundary = match_once(b"fix", b"please fix this").unwrap().score;
         let mid = match_once(b"fix", b"prefixing things").unwrap().score;
-        assert!(boundary > mid, "boundary {boundary} should beat mid-word {mid}");
+        assert!(
+            boundary > mid,
+            "boundary {boundary} should beat mid-word {mid}"
+        );
     }
 
     #[test]

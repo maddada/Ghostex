@@ -19,7 +19,7 @@ One-line vocabulary:
 - **`apps/`** = deliverables (things that ship and have an entry point).
 - **`views/`** = embedded pages an app ships (never call these "webviews" or "surfaces").
 - **`packages/`** = libraries imported by apps and by the server.
-- **`.dependencies/`** = ALL external-origin code, *including code we edit*.
+- **`.dependencies/`** = ALL external-origin code, _including code we edit_.
 
 Current root:
 
@@ -63,7 +63,7 @@ The full move map, per-file referencer inventory, and split log live in
 
 Only three Ghostex apps are active development targets:
 
-1. **Desktop app** — `apps/desktop/` (Rust/GPUI shell + CEF React views). This is *the* desktop app. `bun run start`, `bun run build`, and every `release:*` script in `package.json` target it.
+1. **Desktop app** — `apps/desktop/` (Rust/GPUI shell + CEF React views). This is _the_ desktop app. `bun run start`, `bun run build`, and every `release:*` script in `package.json` target it.
 2. **Web app** — `apps/web/` (static browser build of the shared workspace/Agents UI, talks to gxserver).
 3. **Mobile app** — `apps/mobile/` (React Native/Expo submodule in `apps/mobile/app`, ships Android).
 
@@ -163,7 +163,7 @@ does not any more. Prompt-history search is the `packages/find/` Rust crate
 
 - `gx f` runs the picker **in-process**. There is no `bin/zehn` to stage, no
   `GHOSTEX_ZEHN_BIN`, and no `ZEHN_ZIG`. (Releases do still require Zig 0.16 —
-  for ghostty and zmx, not for zehn — and 0.16 is now the repo's *only* Zig
+  for ghostty and zmx, not for zehn — and 0.16 is now the repo's _only_ Zig
   toolchain.)
 - `.dependencies/zehn/` is kept only as reference for the original
   implementation. Never build it, bundle it, add it back to a packaging list, or
@@ -231,7 +231,6 @@ Before running any destructive command, including but not limited to `git restor
 
 If the user asks to revert only the agent's changes, use surgical reversal: inspect diffs, identify the exact hunks/files you changed, and revert only those. When uncertain, stop and ask. Never use broad restore/clean commands as a shortcut.
 
-
 ### Never lose other agents' uncommitted work
 
 Multiple agents and the user work in this same checkout at the same time. Files you touched earlier in your session, or that you read a while ago, may have been changed by someone else since. Treat every uncommitted change you did not make yourself as protected user work.
@@ -259,6 +258,7 @@ Corollary: after you verify a surgical bug fix, tell the user it should be commi
 - As soon as the needed evidence is collected—or the logging attempt is abandoned—restore the previous settings and turn off every scenario and debug switch that you enabled. Never leave extra diagnostics running because they can consume disk, CPU, and make the user's computer lag while they continue working.
 - Do not turn off scenarios or debug settings that were already enabled by the user; restore exactly the state observed before the diagnostic session.
 
-###  Don't switch the repo to another branch ever
-  - We run multiple agents at a time on 1 worktree so agents should never switch the branch this folder is on away from main
-  - If you need to do work that requires switching to a new branch then please create a temp worktree and do the needed work there.
+### Don't switch the repo to another branch ever
+
+- We run multiple agents at a time on 1 worktree so agents should never switch the branch this folder is on away from main
+- If you need to do work that requires switching to a new branch then please create a temp worktree and do the needed work there.

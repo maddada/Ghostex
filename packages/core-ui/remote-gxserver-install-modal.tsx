@@ -1,10 +1,5 @@
-import { Button } from "@/packages/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/packages/components/ui/dialog";
+import { Button } from '@/packages/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
 
 export type RemoteGxserverInstallModalProps = {
   isOpen: boolean;
@@ -41,28 +36,29 @@ export function RemoteGxserverInstallModal({
        * attach, so copy must not imply that only the local macOS daemon is
        * uploaded.
        */}
-      <DialogContent className="remote-gxserver-install-modal" showCloseButton={false}>
+      <DialogContent className='remote-gxserver-install-modal' showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle className="text-xl">Install remote gxserver</DialogTitle>
+          <DialogTitle className='text-xl'>Install remote gxserver</DialogTitle>
         </DialogHeader>
-        <div className="remote-gxserver-install-modal-body">
+        <div className='remote-gxserver-install-modal-body'>
           <p>
-            Ghostex can connect to {machineName}, but gxserver is not installed there. Ghostex needs gxserver on that machine to browse folders, add projects, clone repositories, and manage sessions remotely.
+            Ghostex can connect to {machineName}, but gxserver is not installed there. Ghostex needs gxserver on that
+            machine to browse folders, add projects, clone repositories, and manage sessions remotely.
           </p>
           <p>
-            If you continue, Ghostex will copy its compatible bundled remote package over SSH into{" "}
-            <code>{"${XDG_DATA_HOME:-~/.local/share}/ghostex/gxserver"}</code>, expose <code>gxserver</code>, <code>zmx</code>,{" "}
-            <code>bd</code>, <code>ghostex</code>, and <code>gx</code> from{" "}
-            <code>~/.local/bin</code> when possible, start gxserver, then connect through an SSH
-            tunnel. Windows machines use the selected or default WSL2 distribution, and Ghostex
-            installs the Linux package in that distribution&apos;s home directory.
+            If you continue, Ghostex will copy its compatible bundled remote package over SSH into{' '}
+            <code>{'${XDG_DATA_HOME:-~/.local/share}/ghostex/gxserver'}</code>, expose <code>gxserver</code>,{' '}
+            <code>zmx</code>, <code>bd</code>, <code>ghostex</code>, and <code>gx</code> from <code>~/.local/bin</code>{' '}
+            when possible, start gxserver, then connect through an SSH tunnel. Windows machines use the selected or
+            default WSL2 distribution, and Ghostex installs the Linux package in that distribution&apos;s home
+            directory.
           </p>
         </div>
-        <div className="remote-gxserver-install-modal-actions">
-          <Button onClick={onCancel} type="button" variant="outline">
+        <div className='remote-gxserver-install-modal-actions'>
+          <Button onClick={onCancel} type='button' variant='outline'>
             Cancel
           </Button>
-          <Button onClick={onApprove} type="button">
+          <Button onClick={onApprove} type='button'>
             Install gxserver
           </Button>
         </div>

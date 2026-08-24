@@ -31,7 +31,7 @@ pod install --project-directory=ios
 ARCHIVE_PATH="$RUNNER_TEMP/Ghostex-$VERSION.xcarchive"
 EXPORT_PATH="$RUNNER_TEMP/Ghostex-$VERSION-upload"
 EXPORT_OPTIONS="$RUNNER_TEMP/Ghostex-$VERSION-ExportOptions.plist"
-cat > "$EXPORT_OPTIONS" <<PLIST
+cat >"$EXPORT_OPTIONS" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -45,36 +45,39 @@ cat > "$EXPORT_OPTIONS" <<PLIST
 PLIST
 
 AUTH_ARGS=(
-  -allowProvisioningUpdates
-  -authenticationKeyPath "$GHOSTEX_ASC_KEY_PATH"
-  -authenticationKeyID "$GHOSTEX_ASC_KEY_ID"
-  -authenticationKeyIssuerID "$GHOSTEX_ASC_ISSUER_ID"
+	-allowProvisioningUpdates
+	-authenticationKeyPath "$GHOSTEX_ASC_KEY_PATH"
+	-authenticationKeyID "$GHOSTEX_ASC_KEY_ID"
+	-authenticationKeyIssuerID "$GHOSTEX_ASC_ISSUER_ID"
 )
 
 xcodebuild \
-  -workspace ios/Ghostex.xcworkspace \
-  -scheme Ghostex \
-  -configuration Release \
-  -destination 'generic/platform=iOS' \
-  -archivePath "$ARCHIVE_PATH" \
-  DEVELOPMENT_TEAM="$TEAM_ID" \
-  CODE_SIGN_STYLE=Automatic \
-  "${AUTH_ARGS[@]}" \
-  archive
+	-workspace ios/Ghostex.xcworkspace \
+	-scheme Ghostex \
+	-configuration Release \
+	-destination 'generic/platform=iOS' \
+	-archivePath "$ARCHIVE_PATH" \
+	DEVELOPMENT_TEAM="$TEAM_ID" \
+	CODE_SIGN_STYLE=Automatic \
+	"${AUTH_ARGS[@]}" \
+	archive
 
 INFO_PLIST="$ARCHIVE_PATH/Products/Applications/Ghostex.app/Info.plist"
-[[ -f "$INFO_PLIST" ]] || { echo "Archived Ghostex.app Info.plist is missing" >&2; exit 1; }
+[[ -f "$INFO_PLIST" ]] || {
+	echo "Archived Ghostex.app Info.plist is missing" >&2
+	exit 1
+}
 [[ "$(plutil -extract CFBundleIdentifier raw "$INFO_PLIST")" == "$BUNDLE_ID" ]]
 [[ "$(plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")" == "$VERSION" ]]
 [[ "$(plutil -extract CFBundleVersion raw "$INFO_PLIST")" == "$BUILD_NUMBER" ]]
 
 xcodebuild -exportArchive \
-  -archivePath "$ARCHIVE_PATH" \
-  -exportPath "$EXPORT_PATH" \
-  -exportOptionsPlist "$EXPORT_OPTIONS" \
-  "${AUTH_ARGS[@]}"
+	-archivePath "$ARCHIVE_PATH" \
+	-exportPath "$EXPORT_PATH" \
+	-exportOptionsPlist "$EXPORT_OPTIONS" \
+	"${AUTH_ARGS[@]}"
 
 release_gpui_prepare_output "$REPO_ROOT" "$OUTPUT"
 printf '{"build_number":"%s","bundle_id":"%s","distribution":"testflight","marketing_version":"%s","status":"uploaded"}\n' \
-  "$BUILD_NUMBER" "$BUNDLE_ID" "$VERSION" > "$OUTPUT/testflight-attestation.json"
+	"$BUILD_NUMBER" "$BUNDLE_ID" "$VERSION" >"$OUTPUT/testflight-attestation.json"
 echo "Apple accepted Ghostex $VERSION ($BUILD_NUMBER) for TestFlight processing."

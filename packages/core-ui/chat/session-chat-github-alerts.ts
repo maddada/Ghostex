@@ -19,27 +19,17 @@ interface MarkdownAstNode {
   value?: unknown;
 }
 
-export const SESSION_CHAT_ALERT_KINDS = [
-  "note",
-  "tip",
-  "important",
-  "warning",
-  "caution",
-] as const;
+export const SESSION_CHAT_ALERT_KINDS = ['note', 'tip', 'important', 'warning', 'caution'] as const;
 
 export type SessionChatAlertKind = (typeof SESSION_CHAT_ALERT_KINDS)[number];
 
 const ALERT_MARKER = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\r?\n|$)/i;
 
 function readAlertMarker(node: MarkdownAstNode): void {
-  if (node.type !== "blockquote") return;
+  if (node.type !== 'blockquote') return;
   const paragraph = node.children?.[0];
   const text = paragraph?.children?.[0];
-  if (
-    paragraph?.type !== "paragraph" ||
-    text?.type !== "text" ||
-    typeof text.value !== "string"
-  ) {
+  if (paragraph?.type !== 'paragraph' || text?.type !== 'text' || typeof text.value !== 'string') {
     return;
   }
   const match = ALERT_MARKER.exec(text.value);
@@ -50,7 +40,7 @@ function readAlertMarker(node: MarkdownAstNode): void {
   // empty remainder is ambiguous: `[!NOTE]\n**bold**` parses as
   // [text "[!NOTE]\n", strong] — next-line content as a sibling — while
   // `[!NOTE]*aside*` parses the same way minus the newline.
-  const markerEndsItsLine = match[0].endsWith("\n");
+  const markerEndsItsLine = match[0].endsWith('\n');
   if (remainder.length > 0) {
     // The quote continues on the next line inside this same text node: keep the
     // paragraph, shed the marker line.

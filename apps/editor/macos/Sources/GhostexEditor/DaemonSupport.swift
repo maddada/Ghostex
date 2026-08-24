@@ -4,8 +4,8 @@ import Foundation
 let ghostexEditorProtocolVersion = 1
 
 private let daemonUsageText = """
-Usage: GhostexEditor --daemon [--socket <path>]
-"""
+  Usage: GhostexEditor --daemon [--socket <path>]
+  """
 
 struct LaunchConfiguration {
   let socketPath: String
@@ -37,7 +37,9 @@ func parseLaunchConfiguration(_ arguments: [String]) -> LaunchConfiguration {
       }
       socketOverride = arguments[index]
     default:
-      usageExit(argument.hasPrefix("--") ? "Unknown option: \(argument)" : "Unexpected argument: \(argument)")
+      usageExit(
+        argument.hasPrefix("--")
+          ? "Unknown option: \(argument)" : "Unexpected argument: \(argument)")
     }
     index += 1
   }
@@ -75,19 +77,23 @@ func resolveSocketPath(argumentOverride: String?) throws -> String {
     return try absoluteSocketPath(argumentOverride)
   }
   if let ghostexHome = absoluteEnvironmentPath("GHOSTEX_HOME", environment: environment) {
-    return ghostexHome
+    return
+      ghostexHome
       .appendingPathComponent("runtime", isDirectory: true)
       .appendingPathComponent("ghostex-editor.sock").path
   }
   if let runtimeDirectory = absoluteEnvironmentPath("XDG_RUNTIME_DIR", environment: environment) {
-    return runtimeDirectory
+    return
+      runtimeDirectory
       .appendingPathComponent("ghostex", isDirectory: true)
       .appendingPathComponent("ghostex-editor.sock").path
   }
-  let stateRoot = absoluteEnvironmentPath("XDG_STATE_HOME", environment: environment)
+  let stateRoot =
+    absoluteEnvironmentPath("XDG_STATE_HOME", environment: environment)
     ?? FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(".local/state", isDirectory: true)
-  return stateRoot
+    .appendingPathComponent(".local/state", isDirectory: true)
+  return
+    stateRoot
     .appendingPathComponent("ghostex", isDirectory: true)
     .appendingPathComponent("runtime", isDirectory: true)
     .appendingPathComponent("ghostex-editor.sock").path

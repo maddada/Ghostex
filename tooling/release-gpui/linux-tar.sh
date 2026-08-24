@@ -11,22 +11,22 @@ release_gpui_require_command tar
 release_gpui_require_command zstd
 TAR_VERSION="$(tar --version 2>&1)"
 case "$TAR_VERSION" in
-  *"GNU tar"*) ;;
-  *)
-    echo "The portable Linux tarball needs GNU tar (--mtime/--no-recursion); this host has: ${TAR_VERSION%%$'\n'*}" >&2
-    exit 1
-    ;;
+*"GNU tar"*) ;;
+*)
+	echo "The portable Linux tarball needs GNU tar (--mtime/--no-recursion); this host has: ${TAR_VERSION%%$'\n'*}" >&2
+	exit 1
+	;;
 esac
 release_gpui_prepare_output "$REPO_ROOT" "$OUTPUT"
 
 # CDXC:ReleaseChangeAwarePlanning 2026-08-13: shared staged root, see linux-deb.sh.
 PACKAGE_ROOT="${GHOSTEX_LINUX_PACKAGE_ROOT:-$REPO_ROOT/build/release-gpui/linux-tar-package-root}"
 if [[ "${GHOSTEX_LINUX_PACKAGE_ROOT_READY:-0}" != "1" ]]; then
-  "$SCRIPT_DIR/linux-stage.sh" "$VERSION" "$PACKAGE_ROOT"
+	"$SCRIPT_DIR/linux-stage.sh" "$VERSION" "$PACKAGE_ROOT"
 fi
 [[ -d "$PACKAGE_ROOT/opt/ghostex" ]] || {
-  echo "Linux package root is not staged: $PACKAGE_ROOT" >&2
-  exit 1
+	echo "Linux package root is not staged: $PACKAGE_ROOT" >&2
+	exit 1
 }
 
 # This archive is the staged package root and nothing else: a user installs it
@@ -56,33 +56,33 @@ trap 'rm -f "$FILE_LIST"' EXIT
 # one in the archive. `--no-recursion` is required because the explicit member
 # list already contains every directory.
 (
-  cd "$PACKAGE_ROOT"
-  find . -mindepth 1 -print0 | LC_ALL=C sort -z >"$FILE_LIST"
-  tar --format=gnu \
-    --owner=0 --group=0 --numeric-owner \
-    --mtime=@946684800 \
-    --no-recursion --null --files-from "$FILE_LIST" -cf - \
-    | zstd -19 -T0 -q -f -o "$TARBALL" -
+	cd "$PACKAGE_ROOT"
+	find . -mindepth 1 -print0 | LC_ALL=C sort -z >"$FILE_LIST"
+	tar --format=gnu \
+		--owner=0 --group=0 --numeric-owner \
+		--mtime=@946684800 \
+		--no-recursion --null --files-from "$FILE_LIST" -cf - |
+		zstd -19 -T0 -q -f -o "$TARBALL" -
 )
 
 MEMBERS="$(zstd -dc "$TARBALL" | tar -tf -)"
 for required in ./opt/ghostex/Ghostex ./usr/bin/ghostex ./usr/bin/gx \
-  ./usr/share/applications/ghostex.desktop ./usr/share/icons/hicolor/256x256/apps/ghostex.png; do
-  grep -qxF "$required" <<<"$MEMBERS" || {
-    echo "Linux tarball is missing $required" >&2
-    exit 1
-  }
+	./usr/share/applications/ghostex.desktop ./usr/share/icons/hicolor/256x256/apps/ghostex.png; do
+	grep -qxF "$required" <<<"$MEMBERS" || {
+		echo "Linux tarball is missing $required" >&2
+		exit 1
+	}
 done
 if grep -q '^\./DEBIAN' <<<"$MEMBERS"; then
-  echo "Linux tarball leaked DEBIAN/ control metadata" >&2
-  exit 1
+	echo "Linux tarball leaked DEBIAN/ control metadata" >&2
+	exit 1
 fi
 # The wrapper in usr/bin/ghostex hardcodes /opt/ghostex, so the prefix has to
 # survive extraction, and gx must arrive as a symlink rather than a second copy.
 DETAILED="$(zstd -dc "$TARBALL" | tar -tvf -)"
 grep -qE '^l.* \./usr/bin/gx -> ghostex$' <<<"$DETAILED" || {
-  echo "Linux tarball did not preserve usr/bin/gx as a symlink" >&2
-  exit 1
+	echo "Linux tarball did not preserve usr/bin/gx as a symlink" >&2
+	exit 1
 }
 
 release_gpui_write_manifest "$OUTPUT" linux-tar-x64 "$VERSION" "$TARBALL"

@@ -1,7 +1,4 @@
-import type {
-  SidebarActiveSessionsSortMode,
-  SidebarSessionItem,
-} from "./session-grid-contract-sidebar";
+import type { SidebarActiveSessionsSortMode, SidebarSessionItem } from './session-grid-contract-sidebar';
 
 export type SessionIdsByGroup = Record<string, string[]>;
 
@@ -25,9 +22,9 @@ export function createDisplaySessionLayout({
     workspaceGroupIds.map((groupId) => [
       groupId,
       orderBrowserSessionsFirst(sessionIdsByGroup[groupId] ?? [], sessionsById),
-    ]),
+    ])
   );
-  if (sortMode === "manual") {
+  if (sortMode === 'manual') {
     /*
     CDXC:ManualSessionSorting 2026-06-05-12:30:
     Manual Sorting preserves the saved order inside each session kind. Browser
@@ -43,12 +40,10 @@ export function createDisplaySessionLayout({
   const sortedSessionIdsByGroup = Object.fromEntries(
     workspaceGroupIds.map((groupId) => [
       groupId,
-      orderProjectSessionsForDisplay(
-        sessionIdsByGroup[groupId] ?? [],
-        sessionsById,
-        { sortUnpinnedByLastActivity: true },
-      ),
-    ]),
+      orderProjectSessionsForDisplay(sessionIdsByGroup[groupId] ?? [], sessionsById, {
+        sortUnpinnedByLastActivity: true,
+      }),
+    ])
   );
 
   return {
@@ -59,15 +54,13 @@ export function createDisplaySessionLayout({
 
 export function getDisplaySessionIdsInOrder(options: CreateDisplaySessionLayoutOptions): string[] {
   const displayLayout = createDisplaySessionLayout(options);
-  return displayLayout.groupIds.flatMap(
-    (groupId) => displayLayout.sessionIdsByGroup[groupId] ?? [],
-  );
+  return displayLayout.groupIds.flatMap((groupId) => displayLayout.sessionIdsByGroup[groupId] ?? []);
 }
 
 function orderProjectSessionsForDisplay(
   sessionIds: readonly string[],
   sessionsById: Record<string, SidebarSessionItem>,
-  options: { sortUnpinnedByLastActivity?: boolean } = {},
+  options: { sortUnpinnedByLastActivity?: boolean } = {}
 ): string[] {
   /**
    * CDXC:PinnedSessions 2026-05-28-12:04:
@@ -96,7 +89,7 @@ function orderProjectSessionsForDisplay(
 function orderSessionKindForDisplay(
   sessionIds: readonly string[],
   sessionsById: Record<string, SidebarSessionItem>,
-  options: { sortUnpinnedByLastActivity?: boolean },
+  options: { sortUnpinnedByLastActivity?: boolean }
 ): string[] {
   const pinnedSessionIds: string[] = [];
   const otherSessionIds: string[] = [];
@@ -114,7 +107,7 @@ function orderSessionKindForDisplay(
 
 function sortSessionIdsByLastActivity(
   sessionIds: readonly string[],
-  sessionsById: Record<string, SidebarSessionItem>,
+  sessionsById: Record<string, SidebarSessionItem>
 ): string[] {
   return [...sessionIds].sort((leftSessionId, rightSessionId) => {
     const leftPriority = getSessionActivitySortPriority(sessionsById[leftSessionId]);
@@ -136,7 +129,7 @@ function sortSessionIdsByLastActivity(
 
 function orderBrowserSessionsFirst(
   sessionIds: readonly string[],
-  sessionsById: Record<string, SidebarSessionItem>,
+  sessionsById: Record<string, SidebarSessionItem>
 ): string[] {
   /**
    * CDXC:ProjectBrowserTabs 2026-05-16-12:49:
@@ -161,14 +154,14 @@ function orderBrowserSessionsFirst(
 }
 
 function isBrowserSession(session: SidebarSessionItem | undefined): boolean {
-  return session?.kind === "browser" || session?.sessionKind === "browser";
+  return session?.kind === 'browser' || session?.sessionKind === 'browser';
 }
 
 function getSessionActivitySortPriority(session: SidebarSessionItem | undefined): number {
   switch (session?.activity) {
-    case "attention":
+    case 'attention':
       return 2;
-    case "working":
+    case 'working':
       return isMeaningfulWorkingStint(session) ? 1 : 0;
     default:
       return 0;
@@ -207,10 +200,7 @@ function isMeaningfulWorkingStint(session: SidebarSessionItem): boolean {
  * once when its stint earns priority and holds that slot until the stint
  * ends. Legacy working rows without a stint stamp keep the recency ordering.
  */
-function getSessionActivitySortTime(
-  session: SidebarSessionItem | undefined,
-  activityPriority: number,
-): number {
+function getSessionActivitySortTime(session: SidebarSessionItem | undefined, activityPriority: number): number {
   if (activityPriority === 1 && session?.workingStartedAt) {
     const workingStartedTime = Date.parse(session.workingStartedAt);
     if (Number.isFinite(workingStartedTime)) {

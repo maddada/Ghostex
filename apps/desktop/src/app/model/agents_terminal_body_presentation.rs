@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 /*
 CDXC:GPUILibghosttyMountBoundary 2026-06-22-20:14:
 Phase 2 libghostty parity records the pane id and selected session id for each rendered Agents terminal body before any real surface exists. Keep the boundary explicit so sleeping, mounting, failed-startup, restored/unmounted, popped-out, missing-session, inactive running, and non-focused running tabs stay classified instead of receiving fake or fallback surfaces.
@@ -43,7 +42,6 @@ pub(crate) enum AgentsTerminalBodyPresentation {
     EmptyWorkspacePlaceholder,
 }
 
-
 impl AgentsTerminalBodyPresentation {
     pub(crate) fn element_slug(
         self,
@@ -61,7 +59,6 @@ impl AgentsTerminalBodyPresentation {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AgentsTerminalBodyClickAction {
     FocusRunningMountSlot(AgentsTerminalBodyMountSlotId),
@@ -71,7 +68,6 @@ pub(crate) enum AgentsTerminalBodyClickAction {
     },
     None,
 }
-
 
 pub(crate) fn agents_terminal_body_click_action(
     mount_candidate: AgentsTerminalBodyMountCandidate,
@@ -93,14 +89,12 @@ pub(crate) fn agents_terminal_body_click_action(
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AgentsTerminalBodyMountCandidate {
     pub(crate) pane_id: WorkspacePaneId,
     pub(crate) active_session_id: Option<TerminalSessionId>,
     pub(crate) presentation: AgentsTerminalBodyPresentation,
 }
-
 
 impl AgentsTerminalBodyMountCandidate {
     pub(crate) fn eligible_for_terminal_surface(self) -> bool {
@@ -126,7 +120,6 @@ impl AgentsTerminalBodyMountCandidate {
         )
     }
 }
-
 
 pub(crate) fn selected_agents_terminal_body_mount_candidate(
     leaf: &WorkspaceLeaf,

@@ -8,8 +8,8 @@
 // web app and the phone just follow web URLs and leave machine paths inert
 // (navigating a browser to /Users/... would only break the page).
 
-import { createContext, useContext, type ReactNode } from "react";
-import type { SessionChatFilePosition } from "./session-chat-file-paths";
+import { createContext, useContext, type ReactNode } from 'react';
+import type { SessionChatFilePosition } from './session-chat-file-paths';
 
 export interface SessionChatHostLinks {
   /**
@@ -33,10 +33,7 @@ export interface SessionChatHostLinks {
   openFile?: (path: string, position?: SessionChatFilePosition) => void;
 }
 
-export type SessionChatLinkTarget =
-  | { kind: "url"; url: string }
-  | { kind: "file"; path: string }
-  | { kind: "inert" };
+export type SessionChatLinkTarget = { kind: 'url'; url: string } | { kind: 'file'; path: string } | { kind: 'inert' };
 
 /** Schemes a chat link may open as a web page. */
 const WEB_SCHEME_PATTERN = /^https?:\/\//i;
@@ -54,20 +51,20 @@ const LINE_COORDINATE_SUFFIX = /:\d+(?::\d+)?$/;
  */
 export function classifySessionChatLinkHref(href: string): SessionChatLinkTarget {
   const trimmed = href.trim();
-  if (trimmed === "" || trimmed.startsWith("#")) {
-    return { kind: "inert" };
+  if (trimmed === '' || trimmed.startsWith('#')) {
+    return { kind: 'inert' };
   }
   if (WEB_SCHEME_PATTERN.test(trimmed)) {
-    return { kind: "url", url: trimmed };
+    return { kind: 'url', url: trimmed };
   }
   if (/^file:\/\//i.test(trimmed)) {
-    return { kind: "file", path: filePathFromHref(trimmed.slice("file://".length)) };
+    return { kind: 'file', path: filePathFromHref(trimmed.slice('file://'.length)) };
   }
   if (!WINDOWS_DRIVE_PATH_PATTERN.test(trimmed) && URI_SCHEME_PATTERN.test(trimmed)) {
     // mailto:, vscode:, data:, … — nothing the chat's own surfaces can show.
-    return { kind: "inert" };
+    return { kind: 'inert' };
   }
-  return { kind: "file", path: filePathFromHref(trimmed) };
+  return { kind: 'file', path: filePathFromHref(trimmed) };
 }
 
 /**
@@ -81,7 +78,7 @@ function filePathFromHref(href: string): string {
   } catch {
     // Malformed escapes: use the raw href.
   }
-  return path.replace(LINE_COORDINATE_SUFFIX, "");
+  return path.replace(LINE_COORDINATE_SUFFIX, '');
 }
 
 const SessionChatHostLinksContext = createContext<SessionChatHostLinks | null>(null);
@@ -97,9 +94,5 @@ export function SessionChatHostLinksProvider({
   children: ReactNode;
   links?: SessionChatHostLinks;
 }) {
-  return (
-    <SessionChatHostLinksContext.Provider value={links ?? null}>
-      {children}
-    </SessionChatHostLinksContext.Provider>
-  );
+  return <SessionChatHostLinksContext.Provider value={links ?? null}>{children}</SessionChatHostLinksContext.Provider>;
 }

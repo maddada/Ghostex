@@ -9,7 +9,6 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use anyhow::Result;
 
 use crate::app::helpers::*;
@@ -317,7 +316,9 @@ pub(crate) fn gpui_sidebar_global_action_from_value(
     })
 }
 
-pub(crate) fn gpui_sidebar_pet_overlay_state_from_json(text: &str) -> Result<GpuiSidebarPetOverlayState, ()> {
+pub(crate) fn gpui_sidebar_pet_overlay_state_from_json(
+    text: &str,
+) -> Result<GpuiSidebarPetOverlayState, ()> {
     /*
     CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
     Pet overlay parser accepts only the saved enabled flag, bounded selected pet id, status items, and explicit project/session activity ids from the fixed sidebar bridge. It must not accept renderer paths, URLs, generic activation payloads, command text, stdout/stderr, tokens, terminal content, or menu-bar status-item data.
@@ -369,9 +370,10 @@ pub(crate) fn gpui_sidebar_pet_overlay_state_from_json(text: &str) -> Result<Gpu
     })
 }
 
-pub(crate) fn gpui_command_palette_run_sidebar_command_script(message: &serde_json::Value) -> String {
+pub(crate) fn gpui_command_palette_run_sidebar_command_script(
+    message: &serde_json::Value,
+) -> String {
     format!(
         "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onCommandPaletteRunSidebarCommand==='function'){{bridge.onCommandPaletteRunSidebarCommand(payload);}}else{{const pending=Array.isArray(bridge.pendingCommandPaletteRunSidebarCommands)?bridge.pendingCommandPaletteRunSidebarCommands:[];pending.push(payload);bridge.pendingCommandPaletteRunSidebarCommands=pending;}}}})(); undefined;"
     )
 }
-

@@ -10,7 +10,7 @@ export function ManageTextEditor({
   return (
     <textarea
       aria-label={`${language} editor`}
-      className="manage-text-editor"
+      className='manage-text-editor'
       onChange={(event) => onChange(event.currentTarget.value)}
       spellCheck={false}
       value={content}

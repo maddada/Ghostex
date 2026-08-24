@@ -5,14 +5,12 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneActionSessionSelectionKind {
     Created,
     Reused,
     ReusedActive,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct CommandPaneActionSessionSelection {
@@ -21,13 +19,11 @@ pub(crate) struct CommandPaneActionSessionSelection {
     pub(crate) session_id: CommandSessionId,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct CommandPaneActionRunCompletedTab {
     pub(crate) group_id: CommandPaneGroupId,
     pub(crate) session_id: CommandSessionId,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiSidebarCommandRunState {
@@ -35,7 +31,6 @@ pub(crate) enum GpuiSidebarCommandRunState {
     Running,
     Success,
 }
-
 
 impl GpuiSidebarCommandRunState {
     pub(crate) fn as_str(self) -> &'static str {
@@ -47,13 +42,11 @@ impl GpuiSidebarCommandRunState {
     }
 }
 
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarCommandRunFeedbackState {
     pub(crate) active_run_ids: Vec<String>,
     pub(crate) status: Option<GpuiSidebarCommandRunState>,
 }
-
 
 impl GpuiSidebarCommandRunFeedbackState {
     pub(crate) fn apply_run_state(&mut self, run_id: &str, state: GpuiSidebarCommandRunState) {
@@ -103,7 +96,6 @@ impl GpuiSidebarCommandRunFeedbackState {
     }
 }
 
-
 pub(crate) fn gpui_titlebar_action_run_mode_for_click(
     action: &GpuiTitlebarAction,
     feedback: Option<&GpuiSidebarCommandRunFeedbackState>,
@@ -116,7 +108,6 @@ pub(crate) fn gpui_titlebar_action_run_mode_for_click(
         .unwrap_or(GpuiTitlebarActionRunMode::Default)
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CommandPaneActionRunCompletion {
     pub(crate) close_terminal_on_exit: bool,
@@ -126,7 +117,6 @@ pub(crate) struct CommandPaneActionRunCompletion {
     pub(crate) play_completion_sound: bool,
     pub(crate) run_id: String,
 }
-
 
 impl CommandPaneActionRunCompletion {
     pub(crate) fn run_state(&self) -> GpuiSidebarCommandRunState {
@@ -142,7 +132,6 @@ impl CommandPaneActionRunCompletion {
     }
 }
 
-
 pub(crate) fn gpui_command_pane_action_runtime_close_terminal_on_exit(
     _requested_close_terminal_on_exit: bool,
 ) -> bool {
@@ -152,7 +141,6 @@ pub(crate) fn gpui_command_pane_action_runtime_close_terminal_on_exit(
     */
     false
 }
-
 
 pub(crate) fn gpui_command_pane_default_action_should_focus_command_pane() -> bool {
     /*
@@ -165,13 +153,11 @@ pub(crate) fn gpui_command_pane_default_action_should_focus_command_pane() -> bo
     false
 }
 
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CommandPaneActionRunRefresh {
     pub(crate) changed: bool,
     pub(crate) completions: Vec<CommandPaneActionRunCompletion>,
 }
-
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CommandTerminalProcessExitCleanup {
@@ -179,14 +165,12 @@ pub(crate) struct CommandTerminalProcessExitCleanup {
     pub(crate) completions: Vec<CommandPaneActionRunCompletion>,
 }
 
-
 #[derive(Clone, Copy)]
 pub(crate) enum CommandPaneControlAction {
     NewCommandPlaceholder,
     TogglePinned,
     ToggleExpanded,
 }
-
 
 pub(crate) fn command_pane_control_action_selects_clicked_group_before_dispatch(
     action: CommandPaneControlAction,
@@ -200,7 +184,6 @@ pub(crate) fn command_pane_control_action_selects_clicked_group_before_dispatch(
         CommandPaneControlAction::TogglePinned | CommandPaneControlAction::ToggleExpanded
     )
 }
-
 
 pub(crate) fn command_pane_focus_clicked_control_group(
     command_pane: &mut CommandPaneModel,
@@ -217,7 +200,6 @@ pub(crate) fn command_pane_focus_clicked_control_group(
 
     command_pane.focus_group(group_id)
 }
-
 
 pub(crate) fn command_pane_control_action_focuses_command_pane(
     action: CommandPaneControlAction,

@@ -24,7 +24,8 @@
 
 extern void GhostexGpuiSparkleUpdateAvailableChanged(int32_t available);
 extern void GhostexGpuiSparkleUpdateDownloadingChanged(int32_t downloading);
-extern void GhostexGpuiSparkleUpdateDownloadProgressChanged(int32_t hasProgress, double progress);
+extern void GhostexGpuiSparkleUpdateDownloadProgressChanged(int32_t hasProgress,
+                                                            double progress);
 
 @interface NSObject (GhostexGpuiSparkleDynamicMessaging)
 - (id)initWithHostBundle:(NSBundle *)hostBundle delegate:(id)delegate;
@@ -68,7 +69,8 @@ static void GhostexGpuiSparkleEmitDownloadProgress(void) {
   if (received > gGhostexGpuiSparkleDownloadExpectedLength) {
     received = gGhostexGpuiSparkleDownloadExpectedLength;
   }
-  double progress = (double)received / (double)gGhostexGpuiSparkleDownloadExpectedLength;
+  double progress =
+      (double)received / (double)gGhostexGpuiSparkleDownloadExpectedLength;
   if (progress < 0.0) {
     progress = 0.0;
   }
@@ -84,7 +86,8 @@ static void GhostexGpuiSparkleEmitDownloadProgress(void) {
  never appear (they would expose the archive size), matching
  GhostexSparkleUserDriver.swift.
 */
-static void GhostexGpuiSparkleShowDownloadInitiated(id self, SEL _cmd, id cancellation) {
+static void GhostexGpuiSparkleShowDownloadInitiated(id self, SEL _cmd,
+                                                    id cancellation) {
   (void)self;
   (void)_cmd;
   (void)cancellation;
@@ -94,14 +97,15 @@ static void GhostexGpuiSparkleShowDownloadInitiated(id self, SEL _cmd, id cancel
 }
 
 static void GhostexGpuiSparkleShowDownloadDidReceiveExpectedContentLength(
-  id self, SEL _cmd, uint64_t expectedContentLength) {
+    id self, SEL _cmd, uint64_t expectedContentLength) {
   (void)self;
   (void)_cmd;
   gGhostexGpuiSparkleDownloadExpectedLength = expectedContentLength;
   GhostexGpuiSparkleEmitDownloadProgress();
 }
 
-static void GhostexGpuiSparkleShowDownloadDidReceiveData(id self, SEL _cmd, uint64_t length) {
+static void GhostexGpuiSparkleShowDownloadDidReceiveData(id self, SEL _cmd,
+                                                         uint64_t length) {
   (void)self;
   (void)_cmd;
   uint64_t sum = gGhostexGpuiSparkleDownloadReceivedLength + length;
@@ -112,7 +116,8 @@ static void GhostexGpuiSparkleShowDownloadDidReceiveData(id self, SEL _cmd, uint
   GhostexGpuiSparkleEmitDownloadProgress();
 }
 
-static void GhostexGpuiSparkleShowDownloadDidStartExtractingUpdate(id self, SEL _cmd) {
+static void GhostexGpuiSparkleShowDownloadDidStartExtractingUpdate(id self,
+                                                                   SEL _cmd) {
   (void)self;
   (void)_cmd;
   GhostexGpuiSparkleUpdateDownloadingChanged(0);
@@ -120,7 +125,8 @@ static void GhostexGpuiSparkleShowDownloadDidStartExtractingUpdate(id self, SEL 
   GhostexGpuiSparkleUpdateDownloadProgressChanged(0, 0.0);
 }
 
-static void GhostexGpuiSparkleShowExtractionReceivedProgress(id self, SEL _cmd, double progress) {
+static void GhostexGpuiSparkleShowExtractionReceivedProgress(id self, SEL _cmd,
+                                                             double progress) {
   (void)self;
   (void)_cmd;
   (void)progress;
@@ -129,48 +135,52 @@ static void GhostexGpuiSparkleShowExtractionReceivedProgress(id self, SEL _cmd, 
   GhostexGpuiSparkleUpdateDownloadProgressChanged(0, 0.0);
 }
 
-static BOOL GhostexGpuiSparkleAddOverride(Class subclass, Class superclass, SEL selector, IMP imp) {
+static BOOL GhostexGpuiSparkleAddOverride(Class subclass, Class superclass,
+                                          SEL selector, IMP imp) {
   Method superMethod = class_getInstanceMethod(superclass, selector);
   if (superMethod == NULL) {
     return NO;
   }
-  return class_addMethod(subclass, selector, imp, method_getTypeEncoding(superMethod));
+  return class_addMethod(subclass, selector, imp,
+                         method_getTypeEncoding(superMethod));
 }
 
 static Class GhostexGpuiSparkleUserDriverClass(Class standardUserDriverClass) {
   static Class driverClass = Nil;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
-    Class allocated = objc_allocateClassPair(
-      standardUserDriverClass, "GhostexGpuiSparkleUserDriver", 0);
+    Class allocated = objc_allocateClassPair(standardUserDriverClass,
+                                             "GhostexGpuiSparkleUserDriver", 0);
     if (allocated == Nil) {
       return;
     }
     BOOL added = YES;
     added = GhostexGpuiSparkleAddOverride(
-              allocated, standardUserDriverClass,
-              @selector(showDownloadInitiatedWithCancellation:),
-              (IMP)GhostexGpuiSparkleShowDownloadInitiated) &&
+                allocated, standardUserDriverClass,
+                @selector(showDownloadInitiatedWithCancellation:),
+                (IMP)GhostexGpuiSparkleShowDownloadInitiated) &&
+            added;
+    added =
+        GhostexGpuiSparkleAddOverride(
+            allocated, standardUserDriverClass,
+            @selector(showDownloadDidReceiveExpectedContentLength:),
+            (IMP)
+                GhostexGpuiSparkleShowDownloadDidReceiveExpectedContentLength) &&
+        added;
+    added = GhostexGpuiSparkleAddOverride(
+                allocated, standardUserDriverClass,
+                @selector(showDownloadDidReceiveDataOfLength:),
+                (IMP)GhostexGpuiSparkleShowDownloadDidReceiveData) &&
             added;
     added = GhostexGpuiSparkleAddOverride(
-              allocated, standardUserDriverClass,
-              @selector(showDownloadDidReceiveExpectedContentLength:),
-              (IMP)GhostexGpuiSparkleShowDownloadDidReceiveExpectedContentLength) &&
+                allocated, standardUserDriverClass,
+                @selector(showDownloadDidStartExtractingUpdate),
+                (IMP)GhostexGpuiSparkleShowDownloadDidStartExtractingUpdate) &&
             added;
     added = GhostexGpuiSparkleAddOverride(
-              allocated, standardUserDriverClass,
-              @selector(showDownloadDidReceiveDataOfLength:),
-              (IMP)GhostexGpuiSparkleShowDownloadDidReceiveData) &&
-            added;
-    added = GhostexGpuiSparkleAddOverride(
-              allocated, standardUserDriverClass,
-              @selector(showDownloadDidStartExtractingUpdate),
-              (IMP)GhostexGpuiSparkleShowDownloadDidStartExtractingUpdate) &&
-            added;
-    added = GhostexGpuiSparkleAddOverride(
-              allocated, standardUserDriverClass,
-              @selector(showExtractionReceivedProgress:),
-              (IMP)GhostexGpuiSparkleShowExtractionReceivedProgress) &&
+                allocated, standardUserDriverClass,
+                @selector(showExtractionReceivedProgress:),
+                (IMP)GhostexGpuiSparkleShowExtractionReceivedProgress) &&
             added;
     if (!added) {
       // The bundled Sparkle no longer exposes the standard download
@@ -200,7 +210,8 @@ static Class GhostexGpuiSparkleUserDriverClass(Class standardUserDriverClass) {
 }
 
 - (BOOL)standardUserDriverShouldHandleShowingScheduledUpdate:(id)update
-                                          andInImmediateFocus:(BOOL)immediateFocus {
+                                         andInImmediateFocus:
+                                             (BOOL)immediateFocus {
   // Scheduled availability surfaces as the quiet titlebar affordance, never
   // as Sparkle's own scheduled alert (AppDelegate.swift parity).
   (void)update;
@@ -269,7 +280,8 @@ static int32_t GhostexGpuiSparkleUpdaterStartOnMain(void) {
   if (frameworksURL == nil) {
     return gGhostexGpuiSparkleStartResult;
   }
-  NSURL *sparkleURL = [frameworksURL URLByAppendingPathComponent:@"Sparkle.framework"];
+  NSURL *sparkleURL =
+      [frameworksURL URLByAppendingPathComponent:@"Sparkle.framework"];
   NSBundle *sparkleBundle = [NSBundle bundleWithURL:sparkleURL];
   if (sparkleBundle == nil || ![sparkleBundle load]) {
     return gGhostexGpuiSparkleStartResult;
@@ -281,15 +293,17 @@ static int32_t GhostexGpuiSparkleUpdaterStartOnMain(void) {
     gGhostexGpuiSparkleStartResult = -1;
     return gGhostexGpuiSparkleStartResult;
   }
-  Class driverClass = GhostexGpuiSparkleUserDriverClass(standardUserDriverClass);
+  Class driverClass =
+      GhostexGpuiSparkleUserDriverClass(standardUserDriverClass);
   if (driverClass == Nil) {
     gGhostexGpuiSparkleStartResult = -1;
     return gGhostexGpuiSparkleStartResult;
   }
 
-  GhostexGpuiSparkleDelegate *delegate = [[GhostexGpuiSparkleDelegate alloc] init];
-  id userDriver =
-    [[driverClass alloc] initWithHostBundle:[NSBundle mainBundle] delegate:delegate];
+  GhostexGpuiSparkleDelegate *delegate =
+      [[GhostexGpuiSparkleDelegate alloc] init];
+  id userDriver = [[driverClass alloc] initWithHostBundle:[NSBundle mainBundle]
+                                                 delegate:delegate];
   if (userDriver == nil) {
     gGhostexGpuiSparkleStartResult = -1;
     return gGhostexGpuiSparkleStartResult;

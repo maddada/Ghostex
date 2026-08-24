@@ -1,4 +1,4 @@
-import { AppTooltip } from "@/packages/core-ui/app-tooltip";
+import { AppTooltip } from '@/packages/core-ui/app-tooltip';
 import {
   type CSSProperties,
   type DragEvent as ReactDragEvent,
@@ -11,28 +11,95 @@ import {
   useMemo,
   useRef,
   useState,
-} from "react";
+} from 'react';
 import {
   IconLayoutSidebarLeftExpand,
   IconLayoutSidebarRightExpand,
   IconRefresh,
   IconSearch,
   IconX,
-} from "@tabler/icons-react";
+} from '@tabler/icons-react';
 import {
   requestProjectDocsFromHost,
   type ProjectDocsFileEntry as ManageFileEntry,
   type ProjectDocsFilePreview as ManageFilePreview,
   type ProjectDocsRequest as ManageFilesBridgeRequest,
   type ProjectDocsResponse as ManageFilesBridgeResponse,
-} from "@/packages/shared/project-docs";
-import { MANAGE_ANNOTATIONS_SIDECAR_PATH, MANAGE_BRIDGE_TIMEOUT_MS, MANAGE_CONTENT_AUTOSAVE_DELAY_MS, MANAGE_DOCS_ROOT_PATH, MANAGE_DRAG_DATA_TYPE, MANAGE_FILES_CHANGED_EVENT, MANAGE_FILES_RESPONSE_EVENT, MANAGE_FLOATING_SIDEBAR_MAX_WIDTH, MANAGE_GPUI_FILE_CHANGE_DEBOUNCE_MS, MANAGE_GPUI_FILE_CHANGE_POLL_INTERVAL_MS, MANAGE_SIDEBAR_DEFAULT_WIDTH, MANAGE_SIDEBAR_MAX_WIDTH, MANAGE_SIDEBAR_MIN_WIDTH, MANAGE_SIDEBAR_SIDE_STORAGE_KEY, MANAGE_SIDEBAR_WIDTH_STORAGE_KEY } from "./constants";
-import { ManageAnnotation, ManageArtifactKind, ManageDocsOpenFileWindow, ManageDragState, ManageDropTarget, ManageFileContextMenuState, ManageFileOperationState, ManageRenameDialogState, ManageSidebarSide, ManageWebKitWindow } from "./types";
-import { ManageEmptyState, ManageFileContextMenu, ManageFileRow, ManageRenameDialog, ManageSidebarActions } from "./file-tree-ui";
-import { ManagePreview } from "./preview/manage-preview";
-import { ManageTooltipButton } from "./manage-tooltip-button";
-import { canCreateManageEntryChildren, canMoveManageEntryToDirectory, canOpenManageEntryContextMenu, canRenameOrDeleteManageEntry, createDuplicateManageFilePath, createInitialArtifactContent, createInitialCollapsedManageDirectoryPaths, createUniqueArtifactPath, createUniqueFolderPath, dropDirectoryPathForManageEntry, filterManageEntriesForSearch, hasCollapsedManageAncestor, isExcalidrawPath, isHtmlPath, isManageDescendantPath, isMarkdownPath, manageFileMetadataSignature, moveManagePathToDirectory, orderManageEntriesForTree, parentManagePath, remapManageAnnotationPathsForMove, remapManagePathByMove, remapManagePathSetForMove, removeManageAnnotationPathsForDeletedEntry, removeManagePathSetForDeletedEntry, renameManageFilePath, shouldAutosaveManageFile, validateManageRenameFileName } from "./file-tree-utils";
-import { parseManageAnnotationStore, serializeManageAnnotationStore, stableManageAnnotationStoreKey, writeTextToClipboard } from "./annotation-store";
+} from '@/packages/shared/project-docs';
+import {
+  MANAGE_ANNOTATIONS_SIDECAR_PATH,
+  MANAGE_BRIDGE_TIMEOUT_MS,
+  MANAGE_CONTENT_AUTOSAVE_DELAY_MS,
+  MANAGE_DOCS_ROOT_PATH,
+  MANAGE_DRAG_DATA_TYPE,
+  MANAGE_FILES_CHANGED_EVENT,
+  MANAGE_FILES_RESPONSE_EVENT,
+  MANAGE_FLOATING_SIDEBAR_MAX_WIDTH,
+  MANAGE_GPUI_FILE_CHANGE_DEBOUNCE_MS,
+  MANAGE_GPUI_FILE_CHANGE_POLL_INTERVAL_MS,
+  MANAGE_SIDEBAR_DEFAULT_WIDTH,
+  MANAGE_SIDEBAR_MAX_WIDTH,
+  MANAGE_SIDEBAR_MIN_WIDTH,
+  MANAGE_SIDEBAR_SIDE_STORAGE_KEY,
+  MANAGE_SIDEBAR_WIDTH_STORAGE_KEY,
+} from './constants';
+import {
+  ManageAnnotation,
+  ManageArtifactKind,
+  ManageDocsOpenFileWindow,
+  ManageDragState,
+  ManageDropTarget,
+  ManageFileContextMenuState,
+  ManageFileOperationState,
+  ManageRenameDialogState,
+  ManageSidebarSide,
+  ManageWebKitWindow,
+} from './types';
+import {
+  ManageEmptyState,
+  ManageFileContextMenu,
+  ManageFileRow,
+  ManageRenameDialog,
+  ManageSidebarActions,
+} from './file-tree-ui';
+import { ManagePreview } from './preview/manage-preview';
+import { ManageTooltipButton } from './manage-tooltip-button';
+import {
+  canCreateManageEntryChildren,
+  canMoveManageEntryToDirectory,
+  canOpenManageEntryContextMenu,
+  canRenameOrDeleteManageEntry,
+  createDuplicateManageFilePath,
+  createInitialArtifactContent,
+  createInitialCollapsedManageDirectoryPaths,
+  createUniqueArtifactPath,
+  createUniqueFolderPath,
+  dropDirectoryPathForManageEntry,
+  filterManageEntriesForSearch,
+  hasCollapsedManageAncestor,
+  isExcalidrawPath,
+  isHtmlPath,
+  isManageDescendantPath,
+  isMarkdownPath,
+  manageFileMetadataSignature,
+  moveManagePathToDirectory,
+  orderManageEntriesForTree,
+  parentManagePath,
+  remapManageAnnotationPathsForMove,
+  remapManagePathByMove,
+  remapManagePathSetForMove,
+  removeManageAnnotationPathsForDeletedEntry,
+  removeManagePathSetForDeletedEntry,
+  renameManageFilePath,
+  shouldAutosaveManageFile,
+  validateManageRenameFileName,
+} from './file-tree-utils';
+import {
+  parseManageAnnotationStore,
+  serializeManageAnnotationStore,
+  stableManageAnnotationStoreKey,
+  writeTextToClipboard,
+} from './annotation-store';
 
 /*
  * CDXC:ManageEditing 2026-06-20-06:14:
@@ -301,7 +368,7 @@ export function registerManageDocsOpenFileHandler(handler?: (path: string) => vo
 }
 
 (window as ManageDocsOpenFileWindow).ghostexOpenDocsFile = (path: unknown) => {
-  if (typeof path !== "string" || path.length === 0) {
+  if (typeof path !== 'string' || path.length === 0) {
     return;
   }
   if (manageDocsOpenFileHandler !== undefined) {
@@ -313,33 +380,34 @@ export function registerManageDocsOpenFileHandler(handler?: (path: string) => vo
 
 /** Every ancestor folder of a docs-relative path ("a/b/c.md" → ["a", "a/b"]). */
 export function manageAncestorDirectoryPaths(path: string): string[] {
-  const segments = path.split("/").filter((segment) => segment.length > 0);
+  const segments = path.split('/').filter((segment) => segment.length > 0);
   segments.pop();
-  return segments.map((_, index) => segments.slice(0, index + 1).join("/"));
+  return segments.map((_, index) => segments.slice(0, index + 1).join('/'));
 }
 
 export function ManageApp() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const projectId = params.get("projectId") ?? "";
-  const projectEditorId = params.get("projectEditorId") ?? projectId;
+  const projectId = params.get('projectId') ?? '';
+  const projectEditorId = params.get('projectEditorId') ?? projectId;
   const [entries, setEntries] = useState<ManageFileEntry[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedPath, setSelectedPath] = useState<string>();
   const selectedPathRef = useRef<string | undefined>(undefined);
   const [preview, setPreview] = useState<ManageFilePreview>();
-  const [draftContent, setDraftContent] = useState("");
-  const [lastSavedContent, setLastSavedContent] = useState("");
-  const [listState, setListState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [previewState, setPreviewState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [draftContent, setDraftContent] = useState('');
+  const [lastSavedContent, setLastSavedContent] = useState('');
+  const [listState, setListState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [previewState, setPreviewState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [hasExternalChanges, setHasExternalChanges] = useState(false);
   const saveResetTimerRef = useRef<number | undefined>(undefined);
   const contentAutosaveTimerRef = useRef<number | undefined>(undefined);
   const [error, setError] = useState<string>();
   const [annotationsByPath, setAnnotationsByPath] = useState<Record<string, ManageAnnotation[]>>({});
-  const [annotationPersistenceState, setAnnotationPersistenceState] =
-    useState<"idle" | "loading" | "ready" | "saving" | "saved" | "error">("idle");
+  const [annotationPersistenceState, setAnnotationPersistenceState] = useState<
+    'idle' | 'loading' | 'ready' | 'saving' | 'saved' | 'error'
+  >('idle');
   const [sidebarSide, setSidebarSide] = useState<ManageSidebarSide>(() => readStoredManageSidebarSide());
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredManageSidebarWidth());
   const [sidebarHidden, setSidebarHidden] = useState(false);
@@ -357,8 +425,8 @@ export function ManageApp() {
   const annotationsLoadedRef = useRef(false);
   const annotationsSaveTimerRef = useRef<number | undefined>(undefined);
   const hasInitializedDirectoryCollapseRef = useRef(false);
-  const lastPersistedAnnotationsRef = useRef("");
-  const isEditablePreview = preview?.kind === "text";
+  const lastPersistedAnnotationsRef = useRef('');
+  const isEditablePreview = preview?.kind === 'text';
   const isDirty = isEditablePreview && draftContent !== lastSavedContent;
 
   const readFile = useCallback(
@@ -367,14 +435,14 @@ export function ManageApp() {
       setSelectedPath(path);
       selectedPathRef.current = path;
       setPreview(undefined);
-      setDraftContent("");
-      setLastSavedContent("");
-      setPreviewState("loading");
-      setSaveState("idle");
+      setDraftContent('');
+      setLastSavedContent('');
+      setPreviewState('loading');
+      setSaveState('idle');
       setError(undefined);
       try {
         const response = await requestManageFiles({
-          action: "read",
+          action: 'read',
           path,
           projectEditorId,
           projectId,
@@ -384,7 +452,7 @@ export function ManageApp() {
         }
         const openedFile = response.file;
         setPreview(openedFile);
-        const nextContent = openedFile?.content ?? "";
+        const nextContent = openedFile?.content ?? '';
         setDraftContent(nextContent);
         setLastSavedContent(nextContent);
         if (openedFile) {
@@ -396,17 +464,17 @@ export function ManageApp() {
                     modifiedAt: openedFile.modifiedAt,
                     size: openedFile.size,
                   }
-                : entry,
-            ),
+                : entry
+            )
           );
         }
-        setPreviewState("ready");
+        setPreviewState('ready');
       } catch (readError) {
-        setPreviewState("error");
-        setError(readError instanceof Error ? readError.message : "Could not open file.");
+        setPreviewState('error');
+        setError(readError instanceof Error ? readError.message : 'Could not open file.');
       }
     },
-    [projectEditorId, projectId],
+    [projectEditorId, projectId]
   );
 
   /*
@@ -433,11 +501,11 @@ export function ManageApp() {
   }, [readFile]);
 
   const refreshFiles = useCallback(async () => {
-    setListState("loading");
+    setListState('loading');
     setError(undefined);
     try {
       const response = await requestManageFiles({
-        action: "list",
+        action: 'list',
         projectEditorId,
         projectId,
       });
@@ -454,27 +522,26 @@ export function ManageApp() {
         hasInitializedDirectoryCollapseRef.current = true;
         setCollapsedDirectoryPaths(createInitialCollapsedManageDirectoryPaths(nextEntries));
       }
-      setListState("ready");
+      setListState('ready');
       const currentSelectedPath = selectedPathRef.current;
       const selectedStillExists =
-        currentSelectedPath &&
-        nextEntries.some((entry) => entry.kind === "file" && entry.path === currentSelectedPath);
+        currentSelectedPath && nextEntries.some((entry) => entry.kind === 'file' && entry.path === currentSelectedPath);
       if (!selectedStillExists) {
-        const firstFile = nextEntries.find((entry) => entry.kind === "file");
+        const firstFile = nextEntries.find((entry) => entry.kind === 'file');
         if (firstFile) {
           void readFile(firstFile.path);
         } else {
           selectedPathRef.current = undefined;
           setSelectedPath(undefined);
           setPreview(undefined);
-          setDraftContent("");
-          setLastSavedContent("");
-          setPreviewState("idle");
+          setDraftContent('');
+          setLastSavedContent('');
+          setPreviewState('idle');
         }
       }
     } catch (listError) {
-      setListState("error");
-      setError(listError instanceof Error ? listError.message : "Could not load project files.");
+      setListState('error');
+      setError(listError instanceof Error ? listError.message : 'Could not load project files.');
     }
   }, [projectEditorId, projectId, readFile]);
 
@@ -482,7 +549,7 @@ export function ManageApp() {
     setError(undefined);
     try {
       const response = await requestManageFiles({
-        action: "openDocsFoldersSettings",
+        action: 'openDocsFoldersSettings',
         projectEditorId,
         projectId,
       });
@@ -490,7 +557,7 @@ export function ManageApp() {
         throw new Error(response.error);
       }
     } catch (settingsError) {
-      setError(settingsError instanceof Error ? settingsError.message : "Could not open Docs settings.");
+      setError(settingsError instanceof Error ? settingsError.message : 'Could not open Docs settings.');
     }
   }, [projectEditorId, projectId]);
 
@@ -531,7 +598,7 @@ export function ManageApp() {
       pollInFlight = true;
       try {
         const response = await requestManageFiles({
-          action: "stat",
+          action: 'stat',
           path,
           projectEditorId,
           projectId,
@@ -544,7 +611,7 @@ export function ManageApp() {
         if (nextSignature === observedSignature) {
           return;
         }
-        if (isDirty || saveState === "saving") {
+        if (isDirty || saveState === 'saving') {
           return;
         }
         observedSignature = nextSignature;
@@ -556,8 +623,8 @@ export function ManageApp() {
                   modifiedAt: changedFile.modifiedAt,
                   size: changedFile.size,
                 }
-              : entry,
-          ),
+              : entry
+          )
         );
         if (debounceTimer !== undefined) {
           window.clearTimeout(debounceTimer);
@@ -580,10 +647,7 @@ export function ManageApp() {
       }
     };
 
-    const interval = window.setInterval(
-      () => void pollSelectedFile(),
-      MANAGE_GPUI_FILE_CHANGE_POLL_INTERVAL_MS,
-    );
+    const interval = window.setInterval(() => void pollSelectedFile(), MANAGE_GPUI_FILE_CHANGE_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -632,16 +696,16 @@ export function ManageApp() {
     };
     updateManageSidebarLayout();
     const resizeObserver =
-      typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(updateManageSidebarLayout);
+      typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(updateManageSidebarLayout);
     if (resizeObserver) {
       resizeObserver.observe(shell);
     } else {
-      window.addEventListener("resize", updateManageSidebarLayout);
+      window.addEventListener('resize', updateManageSidebarLayout);
     }
     return () => {
       resizeObserver?.disconnect();
       if (!resizeObserver) {
-        window.removeEventListener("resize", updateManageSidebarLayout);
+        window.removeEventListener('resize', updateManageSidebarLayout);
       }
     };
   }, []);
@@ -658,25 +722,25 @@ export function ManageApp() {
       if (sidebarRef.current?.contains(target)) {
         return;
       }
-      if (target instanceof Element && target.closest(".manage-file-context-menu")) {
+      if (target instanceof Element && target.closest('.manage-file-context-menu')) {
         return;
       }
       setSidebarHidden(true);
     };
-    window.addEventListener("pointerdown", hideFloatingSidebarOnOutsidePointerDown, true);
+    window.addEventListener('pointerdown', hideFloatingSidebarOnOutsidePointerDown, true);
     return () => {
-      window.removeEventListener("pointerdown", hideFloatingSidebarOnOutsidePointerDown, true);
+      window.removeEventListener('pointerdown', hideFloatingSidebarOnOutsidePointerDown, true);
     };
   }, [sidebarFloating, sidebarHidden]);
 
   useEffect(() => {
     let isCancelled = false;
     annotationsLoadedRef.current = false;
-    setAnnotationPersistenceState("loading");
+    setAnnotationPersistenceState('loading');
     async function loadAnnotations() {
       try {
         const response = await requestManageFiles({
-          action: "read",
+          action: 'read',
           path: MANAGE_ANNOTATIONS_SIDECAR_PATH,
           projectEditorId,
           projectId,
@@ -684,12 +748,12 @@ export function ManageApp() {
         if (isCancelled) {
           return;
         }
-        const content = response.error ? "" : (response.file?.content ?? "");
+        const content = response.error ? '' : (response.file?.content ?? '');
         const nextAnnotations = parseManageAnnotationStore(content);
         lastPersistedAnnotationsRef.current = stableManageAnnotationStoreKey(nextAnnotations);
         setAnnotationsByPath(nextAnnotations);
         annotationsLoadedRef.current = true;
-        setAnnotationPersistenceState("ready");
+        setAnnotationPersistenceState('ready');
       } catch {
         if (isCancelled) {
           return;
@@ -697,7 +761,7 @@ export function ManageApp() {
         lastPersistedAnnotationsRef.current = stableManageAnnotationStoreKey({});
         setAnnotationsByPath({});
         annotationsLoadedRef.current = true;
-        setAnnotationPersistenceState("ready");
+        setAnnotationPersistenceState('ready');
       }
     }
     void loadAnnotations();
@@ -718,13 +782,13 @@ export function ManageApp() {
     if (annotationsSaveTimerRef.current !== undefined) {
       window.clearTimeout(annotationsSaveTimerRef.current);
     }
-    setAnnotationPersistenceState("saving");
+    setAnnotationPersistenceState('saving');
     annotationsSaveTimerRef.current = window.setTimeout(() => {
       annotationsSaveTimerRef.current = undefined;
       void (async () => {
         try {
           const response = await requestManageFiles({
-            action: "save",
+            action: 'save',
             content: serialized,
             path: MANAGE_ANNOTATIONS_SIDECAR_PATH,
             projectEditorId,
@@ -734,9 +798,9 @@ export function ManageApp() {
             throw new Error(response.error);
           }
           lastPersistedAnnotationsRef.current = annotationStoreKey;
-          setAnnotationPersistenceState("saved");
+          setAnnotationPersistenceState('saved');
         } catch {
-          setAnnotationPersistenceState("error");
+          setAnnotationPersistenceState('error');
         }
       })();
     }, 550);
@@ -744,7 +808,7 @@ export function ManageApp() {
 
   const switchSidebarSide = useCallback(() => {
     setSidebarHidden(false);
-    setSidebarSide((current) => (current === "left" ? "right" : "left"));
+    setSidebarSide((current) => (current === 'left' ? 'right' : 'left'));
   }, []);
 
   const dismissFileContextMenu = useCallback(() => {
@@ -763,7 +827,7 @@ export function ManageApp() {
        */
       await writeTextToClipboard(entry.displayPath ?? entry.path);
     } catch (copyError) {
-      setError(copyError instanceof Error ? copyError.message : "Could not copy path.");
+      setError(copyError instanceof Error ? copyError.message : 'Could not copy path.');
     }
   }, []);
 
@@ -772,11 +836,11 @@ export function ManageApp() {
       if (fileOperation) {
         return;
       }
-      setFileOperation({ action: "copyFullPath", path: entry.path });
+      setFileOperation({ action: 'copyFullPath', path: entry.path });
       setError(undefined);
       try {
         const response = await requestManageFiles({
-          action: "copyFullPath",
+          action: 'copyFullPath',
           path: entry.path,
           projectEditorId,
           projectId,
@@ -786,14 +850,14 @@ export function ManageApp() {
         }
         setFileContextMenu(undefined);
       } catch (copyError) {
-        setError(copyError instanceof Error ? copyError.message : "Could not copy full path.");
+        setError(copyError instanceof Error ? copyError.message : 'Could not copy full path.');
       } finally {
         setFileOperation((current) =>
-          current?.action === "copyFullPath" && current.path === entry.path ? undefined : current,
+          current?.action === 'copyFullPath' && current.path === entry.path ? undefined : current
         );
       }
     },
-    [fileOperation, projectEditorId, projectId],
+    [fileOperation, projectEditorId, projectId]
   );
 
   const revealEntryInFinder = useCallback(
@@ -801,11 +865,11 @@ export function ManageApp() {
       if (fileOperation) {
         return;
       }
-      setFileOperation({ action: "revealInFinder", path: entry.path });
+      setFileOperation({ action: 'revealInFinder', path: entry.path });
       setError(undefined);
       try {
         const response = await requestManageFiles({
-          action: "revealInFinder",
+          action: 'revealInFinder',
           path: entry.path,
           projectEditorId,
           projectId,
@@ -815,14 +879,14 @@ export function ManageApp() {
         }
         setFileContextMenu(undefined);
       } catch (revealError) {
-        setError(revealError instanceof Error ? revealError.message : "Could not reveal item in Finder.");
+        setError(revealError instanceof Error ? revealError.message : 'Could not reveal item in Finder.');
       } finally {
         setFileOperation((current) =>
-          current?.action === "revealInFinder" && current.path === entry.path ? undefined : current,
+          current?.action === 'revealInFinder' && current.path === entry.path ? undefined : current
         );
       }
     },
-    [fileOperation, projectEditorId, projectId],
+    [fileOperation, projectEditorId, projectId]
   );
 
   const openFileContextMenu = useCallback((entry: ManageFileEntry, point: { x: number; y: number }) => {
@@ -838,7 +902,7 @@ export function ManageApp() {
 
   const suppressSidebarDefaultContextMenu = useCallback((event: ReactMouseEvent<HTMLElement>) => {
     const target = event.target;
-    if (target instanceof Element && target.closest(".manage-file-row, input, textarea")) {
+    if (target instanceof Element && target.closest('.manage-file-row, input, textarea')) {
       return;
     }
     event.preventDefault();
@@ -851,10 +915,10 @@ export function ManageApp() {
       if (!shellRect) {
         return;
       }
-      const nextWidth = sidebarSide === "right" ? shellRect.right - clientX : clientX - shellRect.left;
+      const nextWidth = sidebarSide === 'right' ? shellRect.right - clientX : clientX - shellRect.left;
       setSidebarWidth(clampManageSidebarWidth(nextWidth, shellRect.width));
     },
-    [sidebarSide],
+    [sidebarSide]
   );
 
   const resizeSidebarBy = useCallback((delta: number) => {
@@ -873,43 +937,43 @@ export function ManageApp() {
         updateSidebarWidthFromClientX(moveEvent.clientX);
       };
       const handlePointerUp = () => {
-        window.removeEventListener("pointermove", handlePointerMove);
-        window.removeEventListener("pointerup", handlePointerUp);
-        window.removeEventListener("pointercancel", handlePointerUp);
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+        window.removeEventListener('pointercancel', handlePointerUp);
       };
-      window.addEventListener("pointermove", handlePointerMove);
-      window.addEventListener("pointerup", handlePointerUp);
-      window.addEventListener("pointercancel", handlePointerUp);
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerUp);
     },
-    [sidebarHidden, updateSidebarWidthFromClientX],
+    [sidebarHidden, updateSidebarWidthFromClientX]
   );
 
   const handleSidebarResizeKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      const direction = sidebarSide === "right" ? -1 : 1;
-      if (event.key === "ArrowLeft") {
+      const direction = sidebarSide === 'right' ? -1 : 1;
+      if (event.key === 'ArrowLeft') {
         event.preventDefault();
         resizeSidebarBy(-12 * direction);
         return;
       }
-      if (event.key === "ArrowRight") {
+      if (event.key === 'ArrowRight') {
         event.preventDefault();
         resizeSidebarBy(12 * direction);
         return;
       }
-      if (event.key === "Home") {
+      if (event.key === 'Home') {
         event.preventDefault();
         const containerWidth = shellRef.current?.getBoundingClientRect().width ?? window.innerWidth;
         setSidebarWidth(clampManageSidebarWidth(MANAGE_SIDEBAR_MIN_WIDTH, containerWidth));
         return;
       }
-      if (event.key === "End") {
+      if (event.key === 'End') {
         event.preventDefault();
         const containerWidth = shellRef.current?.getBoundingClientRect().width ?? window.innerWidth;
         setSidebarWidth(clampManageSidebarWidth(MANAGE_SIDEBAR_MAX_WIDTH, containerWidth));
       }
     },
-    [resizeSidebarBy, sidebarSide],
+    [resizeSidebarBy, sidebarSide]
   );
 
   useEffect(
@@ -924,7 +988,7 @@ export function ManageApp() {
         window.clearTimeout(annotationsSaveTimerRef.current);
       }
     },
-    [],
+    []
   );
 
   const annotationsForSelectedPath = selectedPath ? (annotationsByPath[selectedPath] ?? []) : [];
@@ -938,84 +1002,79 @@ export function ManageApp() {
     return nextCounts;
   }, [annotationsByPath]);
 
-  const saveContentSnapshot = useCallback(async ({
-    content,
-    path,
-    throwOnError = false,
-  }: {
-    content: string;
-    path: string;
-    throwOnError?: boolean;
-  }) => {
-    if (saveState === "saving") {
-      if (throwOnError) {
-        throw new Error("Wait for the current save to finish.");
+  const saveContentSnapshot = useCallback(
+    async ({ content, path, throwOnError = false }: { content: string; path: string; throwOnError?: boolean }) => {
+      if (saveState === 'saving') {
+        if (throwOnError) {
+          throw new Error('Wait for the current save to finish.');
+        }
+        return;
       }
-      return;
-    }
-    if (saveResetTimerRef.current !== undefined) {
-      window.clearTimeout(saveResetTimerRef.current);
-      saveResetTimerRef.current = undefined;
-    }
-    setSaveState("saving");
-    setError(undefined);
-    try {
-      const response = await requestManageFiles({
-        action: "save",
-        content,
-        path,
-        projectEditorId,
-        projectId,
-      });
-      if (response.error) {
-        throw new Error(response.error);
+      if (saveResetTimerRef.current !== undefined) {
+        window.clearTimeout(saveResetTimerRef.current);
+        saveResetTimerRef.current = undefined;
       }
-      const savedFile = response.file;
-      if (!savedFile) {
-        throw new Error("Docs did not return saved file metadata.");
+      setSaveState('saving');
+      setError(undefined);
+      try {
+        const response = await requestManageFiles({
+          action: 'save',
+          content,
+          path,
+          projectEditorId,
+          projectId,
+        });
+        if (response.error) {
+          throw new Error(response.error);
+        }
+        const savedFile = response.file;
+        if (!savedFile) {
+          throw new Error('Docs did not return saved file metadata.');
+        }
+        const savedContent = savedFile.content ?? content;
+        /*
+         * CDXC:ManageAutosave 2026-06-28-02:36:
+         * Autosave may finish after another Markdown keystroke or Excalidraw gesture. Update file metadata and the saved baseline, but only replace editor content when the user has not changed the snapshot that was sent to native.
+         */
+        if (selectedPathRef.current === savedFile.path) {
+          setPreview(savedFile);
+          setDraftContent((currentContent) => (currentContent === content ? savedContent : currentContent));
+          setLastSavedContent(savedContent);
+        }
+        setEntries((currentEntries) =>
+          currentEntries.map((entry) =>
+            entry.path === savedFile.path
+              ? {
+                  ...entry,
+                  modifiedAt: savedFile.modifiedAt,
+                  size: savedFile.size,
+                }
+              : entry
+          )
+        );
+        if (selectedPathRef.current === savedFile.path) {
+          setSaveState('saved');
+          saveResetTimerRef.current = window.setTimeout(() => {
+            setSaveState('idle');
+            saveResetTimerRef.current = undefined;
+          }, 1_600);
+        }
+      } catch (saveError) {
+        const message = saveError instanceof Error ? saveError.message : 'Could not save file.';
+        if (selectedPathRef.current === path) {
+          setSaveState('error');
+          setError(message);
+        }
+        if (throwOnError) {
+          throw new Error(message);
+        }
       }
-      const savedContent = savedFile.content ?? content;
-      /*
-       * CDXC:ManageAutosave 2026-06-28-02:36:
-       * Autosave may finish after another Markdown keystroke or Excalidraw gesture. Update file metadata and the saved baseline, but only replace editor content when the user has not changed the snapshot that was sent to native.
-       */
-      if (selectedPathRef.current === savedFile.path) {
-        setPreview(savedFile);
-        setDraftContent((currentContent) => (currentContent === content ? savedContent : currentContent));
-        setLastSavedContent(savedContent);
-      }
-      setEntries((currentEntries) =>
-        currentEntries.map((entry) =>
-          entry.path === savedFile.path
-            ? {
-                ...entry,
-                modifiedAt: savedFile.modifiedAt,
-                size: savedFile.size,
-              }
-            : entry,
-        ),
-      );
-      if (selectedPathRef.current === savedFile.path) {
-        setSaveState("saved");
-        saveResetTimerRef.current = window.setTimeout(() => {
-          setSaveState("idle");
-          saveResetTimerRef.current = undefined;
-        }, 1_600);
-      }
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : "Could not save file.";
-      if (selectedPathRef.current === path) {
-        setSaveState("error");
-        setError(message);
-      }
-      if (throwOnError) {
-        throw new Error(message);
-      }
-    }
-  }, [projectEditorId, projectId, saveState]);
+    },
+    [projectEditorId, projectId, saveState]
+  );
 
   const saveFile = useCallback(async () => {
-    if (!selectedPath || !preview || preview.kind !== "text") {
+    if (!selectedPath || !preview || preview.kind !== 'text') {
       return;
     }
     await saveContentSnapshot({ content: draftContent, path: selectedPath });
@@ -1029,9 +1088,9 @@ export function ManageApp() {
     if (
       !selectedPath ||
       !preview ||
-      preview.kind !== "text" ||
+      preview.kind !== 'text' ||
       !isDirty ||
-      saveState === "saving" ||
+      saveState === 'saving' ||
       !shouldAutosaveManageFile(selectedPath)
     ) {
       return;
@@ -1058,12 +1117,12 @@ export function ManageApp() {
       const path = createUniqueArtifactPath(entries, kind, directoryPath);
       const content = createInitialArtifactContent(kind);
       setCreatingArtifactKind(kind);
-      setFileOperation({ action: "createFile", path: directoryPath });
-      setSaveState("saving");
+      setFileOperation({ action: 'createFile', path: directoryPath });
+      setSaveState('saving');
       setError(undefined);
       try {
         const response = await requestManageFiles({
-          action: "save",
+          action: 'save',
           content,
           path,
           projectEditorId,
@@ -1074,7 +1133,7 @@ export function ManageApp() {
         }
         const createdFile = response.file;
         if (!createdFile) {
-          throw new Error("Docs did not return created file metadata.");
+          throw new Error('Docs did not return created file metadata.');
         }
         selectedPathRef.current = createdFile.path;
         setSelectedPath(createdFile.path);
@@ -1082,13 +1141,13 @@ export function ManageApp() {
         const nextContent = createdFile.content ?? content;
         setDraftContent(nextContent);
         setLastSavedContent(nextContent);
-        setPreviewState("ready");
-        setSaveState("saved");
+        setPreviewState('ready');
+        setSaveState('saved');
         if (saveResetTimerRef.current !== undefined) {
           window.clearTimeout(saveResetTimerRef.current);
         }
         saveResetTimerRef.current = window.setTimeout(() => {
-          setSaveState("idle");
+          setSaveState('idle');
           saveResetTimerRef.current = undefined;
         }, 1_600);
         setFileContextMenu(undefined);
@@ -1099,53 +1158,56 @@ export function ManageApp() {
         });
         await refreshFiles();
       } catch (createError) {
-        setSaveState("error");
-        setError(createError instanceof Error ? createError.message : "Could not create document.");
+        setSaveState('error');
+        setError(createError instanceof Error ? createError.message : 'Could not create document.');
       } finally {
         setCreatingArtifactKind(undefined);
         setFileOperation((current) =>
-          current?.action === "createFile" && current.path === directoryPath ? undefined : current,
+          current?.action === 'createFile' && current.path === directoryPath ? undefined : current
         );
       }
     },
-    [creatingArtifactKind, entries, isCreatingFolder, projectEditorId, projectId, refreshFiles],
+    [creatingArtifactKind, entries, isCreatingFolder, projectEditorId, projectId, refreshFiles]
   );
 
-  const createFolder = useCallback(async (directoryPath = MANAGE_DOCS_ROOT_PATH) => {
-    if (creatingArtifactKind || isCreatingFolder) {
-      return;
-    }
-    const path = createUniqueFolderPath(entries, directoryPath);
-    setIsCreatingFolder(true);
-    setFileOperation({ action: "createFolder", path: directoryPath });
-    setError(undefined);
-    try {
-      const response = await requestManageFiles({
-        action: "createFolder",
-        path,
-        projectEditorId,
-        projectId,
-      });
-      if (response.error) {
-        throw new Error(response.error);
+  const createFolder = useCallback(
+    async (directoryPath = MANAGE_DOCS_ROOT_PATH) => {
+      if (creatingArtifactKind || isCreatingFolder) {
+        return;
       }
-      setCollapsedDirectoryPaths((current) => {
-        const next = new Set(current);
-        next.delete(path);
-        next.delete(directoryPath);
-        return next;
-      });
-      setFileContextMenu(undefined);
-      await refreshFiles();
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Could not create folder.");
-    } finally {
-      setIsCreatingFolder(false);
-      setFileOperation((current) =>
-        current?.action === "createFolder" && current.path === directoryPath ? undefined : current,
-      );
-    }
-  }, [creatingArtifactKind, entries, isCreatingFolder, projectEditorId, projectId, refreshFiles]);
+      const path = createUniqueFolderPath(entries, directoryPath);
+      setIsCreatingFolder(true);
+      setFileOperation({ action: 'createFolder', path: directoryPath });
+      setError(undefined);
+      try {
+        const response = await requestManageFiles({
+          action: 'createFolder',
+          path,
+          projectEditorId,
+          projectId,
+        });
+        if (response.error) {
+          throw new Error(response.error);
+        }
+        setCollapsedDirectoryPaths((current) => {
+          const next = new Set(current);
+          next.delete(path);
+          next.delete(directoryPath);
+          return next;
+        });
+        setFileContextMenu(undefined);
+        await refreshFiles();
+      } catch (createError) {
+        setError(createError instanceof Error ? createError.message : 'Could not create folder.');
+      } finally {
+        setIsCreatingFolder(false);
+        setFileOperation((current) =>
+          current?.action === 'createFolder' && current.path === directoryPath ? undefined : current
+        );
+      }
+    },
+    [creatingArtifactKind, entries, isCreatingFolder, projectEditorId, projectId, refreshFiles]
+  );
 
   const clearPendingContentAutosave = useCallback(() => {
     if (contentAutosaveTimerRef.current !== undefined) {
@@ -1167,16 +1229,14 @@ export function ManageApp() {
       const currentEntry = entries.find((entry) => entry.path === path);
       if (!currentEntry) {
         setRenameDialog((current) =>
-          current?.path === path ? { ...current, error: "This item is no longer available." } : current,
+          current?.path === path ? { ...current, error: 'This item is no longer available.' } : current
         );
         return;
       }
       const nextName = nextNameInput.trim();
       const validationError = validateManageRenameFileName(nextName);
       if (validationError) {
-        setRenameDialog((current) =>
-          current?.path === path ? { ...current, error: validationError } : current,
-        );
+        setRenameDialog((current) => (current?.path === path ? { ...current, error: validationError } : current));
         return;
       }
       const nextPath = renameManageFilePath(path, nextName);
@@ -1185,44 +1245,38 @@ export function ManageApp() {
         return;
       }
       if (
-        entries.some(
-          (entry) =>
-            entry.path !== path &&
-            entry.path.toLocaleLowerCase() === nextPath.toLocaleLowerCase(),
-        )
+        entries.some((entry) => entry.path !== path && entry.path.toLocaleLowerCase() === nextPath.toLocaleLowerCase())
       ) {
         setRenameDialog((current) =>
-          current?.path === path ? { ...current, error: "A file or folder with that name already exists." } : current,
+          current?.path === path ? { ...current, error: 'A file or folder with that name already exists.' } : current
         );
         return;
       }
       const selectedPathBeforeRename = selectedPathRef.current;
       const renamedSelectedPath =
         selectedPathBeforeRename && remapManagePathByMove(selectedPathBeforeRename, path, nextPath);
-      if (renamedSelectedPath && saveState === "saving") {
+      if (renamedSelectedPath && saveState === 'saving') {
         setRenameDialog((current) =>
           current?.path === path
-            ? { ...current, error: "Wait for the current save to finish before renaming." }
-            : current,
+            ? { ...current, error: 'Wait for the current save to finish before renaming.' }
+            : current
         );
         return;
       }
-      if (currentEntry.kind === "directory" && renamedSelectedPath && isDirty) {
+      if (currentEntry.kind === 'directory' && renamedSelectedPath && isDirty) {
         setRenameDialog((current) =>
-          current?.path === path
-            ? { ...current, error: "Save the current file before renaming its folder." }
-            : current,
+          current?.path === path ? { ...current, error: 'Save the current file before renaming its folder.' } : current
         );
         return;
       }
-      setFileOperation({ action: "rename", path });
+      setFileOperation({ action: 'rename', path });
       setError(undefined);
       try {
         if (selectedPathRef.current === path && isDirty) {
           clearPendingContentAutosave();
         }
         const response = await requestManageFiles({
-          action: "rename",
+          action: 'rename',
           newPath: nextPath,
           path,
           projectEditorId,
@@ -1232,37 +1286,35 @@ export function ManageApp() {
           throw new Error(response.error);
         }
         const renamedFile = response.file;
-        if (currentEntry.kind === "file" && !renamedFile) {
-          throw new Error("Docs did not return renamed file metadata.");
+        if (currentEntry.kind === 'file' && !renamedFile) {
+          throw new Error('Docs did not return renamed file metadata.');
         }
         setAnnotationsByPath((current) => remapManageAnnotationPathsForMove(current, path, nextPath));
         setCollapsedDirectoryPaths((current) => remapManagePathSetForMove(current, path, nextPath));
-        if (currentEntry.kind === "file" && renamedFile && selectedPathRef.current === path) {
+        if (currentEntry.kind === 'file' && renamedFile && selectedPathRef.current === path) {
           selectedPathRef.current = renamedFile.path;
           setSelectedPath(renamedFile.path);
           setPreview(renamedFile);
-          const savedContent = renamedFile.content ?? "";
+          const savedContent = renamedFile.content ?? '';
           const nextContent = isDirty ? draftContent : savedContent;
           setDraftContent(nextContent);
           setLastSavedContent(savedContent);
-          setPreviewState("ready");
-          setSaveState("idle");
+          setPreviewState('ready');
+          setSaveState('idle');
         }
         setRenameDialog(undefined);
         await refreshFiles();
-        if (currentEntry.kind === "directory" && renamedSelectedPath) {
+        if (currentEntry.kind === 'directory' && renamedSelectedPath) {
           selectedPathRef.current = renamedSelectedPath;
           setSelectedPath(renamedSelectedPath);
           await readFile(renamedSelectedPath);
         }
       } catch (renameError) {
-        const message = renameError instanceof Error ? renameError.message : "Could not rename item.";
+        const message = renameError instanceof Error ? renameError.message : 'Could not rename item.';
         setRenameDialog((current) => (current?.path === path ? { ...current, error: message } : current));
         setError(message);
       } finally {
-        setFileOperation((current) =>
-          current?.action === "rename" && current.path === path ? undefined : current,
-        );
+        setFileOperation((current) => (current?.action === 'rename' && current.path === path ? undefined : current));
       }
     },
     [
@@ -1275,7 +1327,7 @@ export function ManageApp() {
       readFile,
       refreshFiles,
       saveState,
-    ],
+    ]
   );
 
   const deleteFile = useCallback(
@@ -1287,21 +1339,21 @@ export function ManageApp() {
       const selectedPathBeforeDelete = selectedPathRef.current;
       const deletesSelectedPath =
         selectedPathBeforeDelete === path ||
-        (currentEntry.kind === "directory" &&
+        (currentEntry.kind === 'directory' &&
           selectedPathBeforeDelete !== undefined &&
           isManageDescendantPath(selectedPathBeforeDelete, path));
-      if (currentEntry.kind === "directory" && deletesSelectedPath && (isDirty || saveState === "saving")) {
-        setError("Save the current file before deleting its folder.");
+      if (currentEntry.kind === 'directory' && deletesSelectedPath && (isDirty || saveState === 'saving')) {
+        setError('Save the current file before deleting its folder.');
         return;
       }
-      setFileOperation({ action: "delete", path });
+      setFileOperation({ action: 'delete', path });
       setError(undefined);
       if (deletesSelectedPath) {
         clearPendingContentAutosave();
       }
       try {
         const response = await requestManageFiles({
-          action: "delete",
+          action: 'delete',
           path,
           projectEditorId,
           projectId,
@@ -1316,39 +1368,28 @@ export function ManageApp() {
           selectedPathRef.current = undefined;
           setSelectedPath(undefined);
           setPreview(undefined);
-          setDraftContent("");
-          setLastSavedContent("");
-          setPreviewState("idle");
-          setSaveState("idle");
+          setDraftContent('');
+          setLastSavedContent('');
+          setPreviewState('idle');
+          setSaveState('idle');
         }
         await refreshFiles();
       } catch (deleteError) {
-        setError(deleteError instanceof Error ? deleteError.message : "Could not delete item.");
+        setError(deleteError instanceof Error ? deleteError.message : 'Could not delete item.');
       } finally {
-        setFileOperation((current) =>
-          current?.action === "delete" && current.path === path ? undefined : current,
-        );
+        setFileOperation((current) => (current?.action === 'delete' && current.path === path ? undefined : current));
       }
     },
-    [
-      clearPendingContentAutosave,
-      entries,
-      fileOperation,
-      isDirty,
-      projectEditorId,
-      projectId,
-      refreshFiles,
-      saveState,
-    ],
+    [clearPendingContentAutosave, entries, fileOperation, isDirty, projectEditorId, projectId, refreshFiles, saveState]
   );
 
   const duplicateFile = useCallback(
     async (entry: ManageFileEntry) => {
-      if (entry.kind !== "file" || fileOperation) {
+      if (entry.kind !== 'file' || fileOperation) {
         return;
       }
       const nextPath = createDuplicateManageFilePath(entries, entry.path);
-      setFileOperation({ action: "duplicate", path: entry.path });
+      setFileOperation({ action: 'duplicate', path: entry.path });
       setError(undefined);
       try {
         if (selectedPathRef.current === entry.path && isDirty) {
@@ -1360,7 +1401,7 @@ export function ManageApp() {
           });
         }
         const response = await requestManageFiles({
-          action: "duplicate",
+          action: 'duplicate',
           newPath: nextPath,
           path: entry.path,
           projectEditorId,
@@ -1371,7 +1412,7 @@ export function ManageApp() {
         }
         const duplicatedFile = response.file;
         if (!duplicatedFile) {
-          throw new Error("Docs did not return duplicated file metadata.");
+          throw new Error('Docs did not return duplicated file metadata.');
         }
         setFileContextMenu(undefined);
         setCollapsedDirectoryPaths((current) => {
@@ -1383,16 +1424,16 @@ export function ManageApp() {
         selectedPathRef.current = duplicatedFile.path;
         setSelectedPath(duplicatedFile.path);
         setPreview(duplicatedFile);
-        const nextContent = duplicatedFile.content ?? "";
+        const nextContent = duplicatedFile.content ?? '';
         setDraftContent(nextContent);
         setLastSavedContent(nextContent);
-        setPreviewState("ready");
-        setSaveState("idle");
+        setPreviewState('ready');
+        setSaveState('idle');
       } catch (duplicateError) {
-        setError(duplicateError instanceof Error ? duplicateError.message : "Could not duplicate file.");
+        setError(duplicateError instanceof Error ? duplicateError.message : 'Could not duplicate file.');
       } finally {
         setFileOperation((current) =>
-          current?.action === "duplicate" && current.path === entry.path ? undefined : current,
+          current?.action === 'duplicate' && current.path === entry.path ? undefined : current
         );
       }
     },
@@ -1406,15 +1447,15 @@ export function ManageApp() {
       projectId,
       refreshFiles,
       saveContentSnapshot,
-    ],
+    ]
   );
 
   const addFileToSessionContext = useCallback(
     async (entry: ManageFileEntry) => {
-      if (entry.kind !== "file" || fileOperation) {
+      if (entry.kind !== 'file' || fileOperation) {
         return;
       }
-      setFileOperation({ action: "addToSessionContext", path: entry.path });
+      setFileOperation({ action: 'addToSessionContext', path: entry.path });
       setError(undefined);
       try {
         if (selectedPathRef.current === entry.path && isDirty) {
@@ -1426,7 +1467,7 @@ export function ManageApp() {
           });
         }
         const response = await requestManageFiles({
-          action: "addToSessionContext",
+          action: 'addToSessionContext',
           path: entry.path,
           projectEditorId,
           projectId,
@@ -1436,22 +1477,14 @@ export function ManageApp() {
         }
         setFileContextMenu(undefined);
       } catch (contextError) {
-        setError(contextError instanceof Error ? contextError.message : "Could not add file to session context.");
+        setError(contextError instanceof Error ? contextError.message : 'Could not add file to session context.');
       } finally {
         setFileOperation((current) =>
-          current?.action === "addToSessionContext" && current.path === entry.path ? undefined : current,
+          current?.action === 'addToSessionContext' && current.path === entry.path ? undefined : current
         );
       }
     },
-    [
-      clearPendingContentAutosave,
-      draftContent,
-      fileOperation,
-      isDirty,
-      projectEditorId,
-      projectId,
-      saveContentSnapshot,
-    ],
+    [clearPendingContentAutosave, draftContent, fileOperation, isDirty, projectEditorId, projectId, saveContentSnapshot]
   );
 
   const moveEntryToDirectory = useCallback(
@@ -1466,26 +1499,25 @@ export function ManageApp() {
       if (
         entries.some(
           (candidate) =>
-            candidate.path !== entry.path &&
-            candidate.path.toLocaleLowerCase() === nextPath.toLocaleLowerCase(),
+            candidate.path !== entry.path && candidate.path.toLocaleLowerCase() === nextPath.toLocaleLowerCase()
         )
       ) {
-        setError("A file or folder with that name already exists.");
+        setError('A file or folder with that name already exists.');
         return;
       }
       const selectedPathBeforeMove = selectedPathRef.current;
       const movedSelectedPath =
         selectedPathBeforeMove && remapManagePathByMove(selectedPathBeforeMove, entry.path, nextPath);
-      if (movedSelectedPath && (isDirty || saveState === "saving")) {
-        setError("Save the current file before moving it.");
+      if (movedSelectedPath && (isDirty || saveState === 'saving')) {
+        setError('Save the current file before moving it.');
         return;
       }
-      setFileOperation({ action: "move", path: entry.path });
+      setFileOperation({ action: 'move', path: entry.path });
       setDropTarget(undefined);
       setError(undefined);
       try {
         const response = await requestManageFiles({
-          action: "move",
+          action: 'move',
           newPath: nextPath,
           path: entry.path,
           projectEditorId,
@@ -1505,14 +1537,14 @@ export function ManageApp() {
           await readFile(movedSelectedPath);
         }
       } catch (moveError) {
-        setError(moveError instanceof Error ? moveError.message : "Could not move item.");
+        setError(moveError instanceof Error ? moveError.message : 'Could not move item.');
       } finally {
         setFileOperation((current) =>
-          current?.action === "move" && current.path === entry.path ? undefined : current,
+          current?.action === 'move' && current.path === entry.path ? undefined : current
         );
       }
     },
-    [entries, fileOperation, isDirty, projectEditorId, projectId, readFile, refreshFiles, saveState],
+    [entries, fileOperation, isDirty, projectEditorId, projectId, readFile, refreshFiles, saveState]
   );
 
   const submitRenameDialog = useCallback(() => {
@@ -1540,16 +1572,16 @@ export function ManageApp() {
   }, []);
 
   const startEntryDrag = useCallback((entry: ManageFileEntry, event: ReactDragEvent<HTMLButtonElement>) => {
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(MANAGE_DRAG_DATA_TYPE, entry.path);
-    event.dataTransfer.setData("text/plain", entry.path);
+    event.dataTransfer.setData('text/plain', entry.path);
     setDragState({ kind: entry.kind, path: entry.path });
     setDropTarget(undefined);
   }, []);
 
   const dragEntry = useMemo(
     () => (dragState ? entries.find((entry) => entry.path === dragState.path) : undefined),
-    [dragState, entries],
+    [dragState, entries]
   );
 
   const updateEntryDropTarget = useCallback(
@@ -1567,10 +1599,10 @@ export function ManageApp() {
       }
       event.preventDefault();
       event.stopPropagation();
-      event.dataTransfer.dropEffect = "move";
-      setDropTarget({ kind: "entry", path: entry.path, targetDirectoryPath });
+      event.dataTransfer.dropEffect = 'move';
+      setDropTarget({ kind: 'entry', path: entry.path, targetDirectoryPath });
     },
-    [dragEntry, entries],
+    [dragEntry, entries]
   );
 
   const dropOnEntry = useCallback(
@@ -1588,7 +1620,7 @@ export function ManageApp() {
       clearDragState();
       void moveEntryToDirectory(dragEntry, targetDirectoryPath);
     },
-    [clearDragState, dragEntry, entries, moveEntryToDirectory],
+    [clearDragState, dragEntry, entries, moveEntryToDirectory]
   );
 
   const updateRootDropTarget = useCallback(
@@ -1597,26 +1629,26 @@ export function ManageApp() {
         return;
       }
       const target = event.target;
-      if (target instanceof Element && target.closest(".manage-file-row")) {
+      if (target instanceof Element && target.closest('.manage-file-row')) {
         return;
       }
       if (!canMoveManageEntryToDirectory(dragEntry, MANAGE_DOCS_ROOT_PATH, entries)) {
         return;
       }
       event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-      setDropTarget({ kind: "root", path: MANAGE_DOCS_ROOT_PATH });
+      event.dataTransfer.dropEffect = 'move';
+      setDropTarget({ kind: 'root', path: MANAGE_DOCS_ROOT_PATH });
     },
-    [dragEntry, entries],
+    [dragEntry, entries]
   );
 
   const dropOnRoot = useCallback(
     (event: ReactDragEvent<HTMLElement>) => {
-      if (!dragEntry || dropTarget?.kind !== "root") {
+      if (!dragEntry || dropTarget?.kind !== 'root') {
         return;
       }
       const target = event.target;
-      if (target instanceof Element && target.closest(".manage-file-row")) {
+      if (target instanceof Element && target.closest('.manage-file-row')) {
         return;
       }
       if (!canMoveManageEntryToDirectory(dragEntry, MANAGE_DOCS_ROOT_PATH, entries)) {
@@ -1626,7 +1658,7 @@ export function ManageApp() {
       clearDragState();
       void moveEntryToDirectory(dragEntry, MANAGE_DOCS_ROOT_PATH);
     },
-    [clearDragState, dragEntry, dropTarget, entries, moveEntryToDirectory],
+    [clearDragState, dragEntry, dropTarget, entries, moveEntryToDirectory]
   );
 
   const handleSidebarDragLeave = useCallback((event: ReactDragEvent<HTMLElement>) => {
@@ -1639,7 +1671,7 @@ export function ManageApp() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "s") {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 's') {
         if (!selectedPath || !isDirty) {
           return;
         }
@@ -1647,8 +1679,8 @@ export function ManageApp() {
         void saveFile();
       }
     }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDirty, saveFile, selectedPath]);
 
   const directoryPathsWithChildren = useMemo(() => {
@@ -1666,7 +1698,7 @@ export function ManageApp() {
   const expandableDirectoryPaths = useMemo(() => {
     const paths = new Set<string>();
     for (const entry of entries) {
-      if (entry.kind === "directory" && directoryPathsWithChildren.has(entry.path)) {
+      if (entry.kind === 'directory' && directoryPathsWithChildren.has(entry.path)) {
         paths.add(entry.path);
       }
     }
@@ -1701,15 +1733,11 @@ export function ManageApp() {
   }, [collapsedDirectoryPaths, query, treeOrderedEntries]);
   const isFileSearchActive = query.trim().length > 0;
 
-  const contextMenuEntry = fileContextMenu
-    ? entries.find((entry) => entry.path === fileContextMenu.path)
-    : undefined;
+  const contextMenuEntry = fileContextMenu ? entries.find((entry) => entry.path === fileContextMenu.path) : undefined;
   const contextMenuOperation =
     contextMenuEntry && fileOperation?.path === contextMenuEntry.path ? fileOperation.action : undefined;
-  const contextMenuCanRenameOrDelete =
-    contextMenuEntry !== undefined && canRenameOrDeleteManageEntry(contextMenuEntry);
-  const contextMenuCanCreateHere =
-    contextMenuEntry !== undefined && canCreateManageEntryChildren(contextMenuEntry);
+  const contextMenuCanRenameOrDelete = contextMenuEntry !== undefined && canRenameOrDeleteManageEntry(contextMenuEntry);
+  const contextMenuCanCreateHere = contextMenuEntry !== undefined && canCreateManageEntryChildren(contextMenuEntry);
 
   useEffect(() => {
     if (fileContextMenu && !entries.some((entry) => entry.path === fileContextMenu.path)) {
@@ -1734,21 +1762,21 @@ export function ManageApp() {
         };
       });
     },
-    [selectedPath],
+    [selectedPath]
   );
 
   return (
     <main
-      className="manage-shell"
+      className='manage-shell'
       data-sidebar-floating={String(sidebarFloating)}
       data-sidebar-hidden={String(sidebarHidden)}
       data-sidebar-side={sidebarSide}
       ref={shellRef}
-      style={{ "--manage-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      style={{ '--manage-sidebar-width': `${sidebarWidth}px` } as CSSProperties}
     >
       {!sidebarHidden ? (
         <aside
-          className="manage-sidebar"
+          className='manage-sidebar'
           data-drag-active={String(Boolean(dragEntry))}
           onContextMenu={suppressSidebarDefaultContextMenu}
           onDragLeave={handleSidebarDragLeave}
@@ -1756,13 +1784,10 @@ export function ManageApp() {
           onDrop={dropOnRoot}
           ref={sidebarRef}
         >
-          <div
-            className="manage-sidebar-header"
-            data-root-drop-target={String(dropTarget?.kind === "root")}
-          >
+          <div className='manage-sidebar-header' data-root-drop-target={String(dropTarget?.kind === 'root')}>
             <ManageSidebarActions
               creatingKind={creatingArtifactKind}
-              isRefreshing={listState === "loading"}
+              isRefreshing={listState === 'loading'}
               isCreatingFolder={isCreatingFolder}
               hasExpandableDirectories={hasExpandableDirectories}
               hasExpandedDirectories={hasExpandedDirectories}
@@ -1777,56 +1802,52 @@ export function ManageApp() {
             />
           </div>
           <div
-            className="manage-search"
+            className='manage-search'
             onMouseDown={(event) => {
-              if (event.target instanceof Element && event.target.closest(".manage-search-clear-button")) {
+              if (event.target instanceof Element && event.target.closest('.manage-search-clear-button')) {
                 return;
               }
               searchInputRef.current?.focus({ preventScroll: true });
             }}
           >
-            <IconSearch aria-hidden="true" size={15} stroke={1.8} />
+            <IconSearch aria-hidden='true' size={15} stroke={1.8} />
             <input
-              aria-label="Search files"
+              aria-label='Search files'
               onChange={(event) => setQuery(event.currentTarget.value)}
               onKeyDown={(event) => {
-                if (event.key !== "Escape") {
+                if (event.key !== 'Escape') {
                   return;
                 }
                 event.preventDefault();
                 event.stopPropagation();
-                setQuery("");
+                setQuery('');
                 searchInputRef.current?.focus({ preventScroll: true });
               }}
-              placeholder="Search"
+              placeholder='Search'
               ref={searchInputRef}
               value={query}
             />
             {query.length > 0 ? (
               <ManageTooltipButton
-                aria-label="Clear file search"
-                className="manage-search-clear-button"
+                aria-label='Clear file search'
+                className='manage-search-clear-button'
                 onClick={() => {
-                  setQuery("");
+                  setQuery('');
                   searchInputRef.current?.focus({ preventScroll: true });
                 }}
-                tooltip="Clear file search"
-                type="button"
+                tooltip='Clear file search'
+                type='button'
               >
-                <IconX aria-hidden="true" size={14} stroke={1.8} />
+                <IconX aria-hidden='true' size={14} stroke={1.8} />
               </ManageTooltipButton>
             ) : null}
           </div>
-          <div
-            className="manage-file-list"
-            data-root-drop-target={String(dropTarget?.kind === "root")}
-            role="tree"
-          >
-            {listState === "loading" && entries.length === 0 ? (
-              <ManageEmptyState icon={<IconRefresh aria-hidden="true" size={18} />} text="Loading files" />
+          <div className='manage-file-list' data-root-drop-target={String(dropTarget?.kind === 'root')} role='tree'>
+            {listState === 'loading' && entries.length === 0 ? (
+              <ManageEmptyState icon={<IconRefresh aria-hidden='true' size={18} />} text='Loading files' />
             ) : null}
-            {listState !== "loading" && visibleEntries.length === 0 ? (
-              <ManageEmptyState icon={<IconSearch aria-hidden="true" size={18} />} text="No files found" />
+            {listState !== 'loading' && visibleEntries.length === 0 ? (
+              <ManageEmptyState icon={<IconSearch aria-hidden='true' size={18} />} text='No files found' />
             ) : null}
             {visibleEntries.map((entry) => (
               <ManageFileRow
@@ -1835,10 +1856,12 @@ export function ManageApp() {
                 hasChildren={directoryPathsWithChildren.has(entry.path)}
                 entry={entry}
                 hasActiveFileDescendant={
-                  entry.kind === "directory" && selectedPath !== undefined && isManageDescendantPath(selectedPath, entry.path)
+                  entry.kind === 'directory' &&
+                  selectedPath !== undefined &&
+                  isManageDescendantPath(selectedPath, entry.path)
                 }
                 isDragging={dragState?.path === entry.path}
-                isDropTarget={dropTarget?.kind === "entry" && dropTarget.path === entry.path}
+                isDropTarget={dropTarget?.kind === 'entry' && dropTarget.path === entry.path}
                 isExpanded={isFileSearchActive || !collapsedDirectoryPaths.has(entry.path)}
                 isSelected={entry.path === selectedPath}
                 key={entry.path}
@@ -1849,11 +1872,11 @@ export function ManageApp() {
                 onDragStart={startEntryDrag}
                 onOpenContextMenu={openFileContextMenu}
                 onSelect={() => {
-                  if (entry.kind === "file") {
+                  if (entry.kind === 'file') {
                     void readFile(entry.path);
                     return;
                   }
-                  if (entry.kind === "directory" && directoryPathsWithChildren.has(entry.path)) {
+                  if (entry.kind === 'directory' && directoryPathsWithChildren.has(entry.path)) {
                     toggleDirectory(entry.path);
                   }
                 }}
@@ -1863,35 +1886,35 @@ export function ManageApp() {
         </aside>
       ) : (
         <button
-          aria-label="Show file sidebar"
-          className="manage-sidebar-restore-button manage-icon-button"
+          aria-label='Show file sidebar'
+          className='manage-sidebar-restore-button manage-icon-button'
           onClick={() => setSidebarHidden(false)}
-          type="button"
+          type='button'
         >
-          {sidebarSide === "right" ? (
-            <IconLayoutSidebarRightExpand aria-hidden="true" size={16} stroke={1.8} />
+          {sidebarSide === 'right' ? (
+            <IconLayoutSidebarRightExpand aria-hidden='true' size={16} stroke={1.8} />
           ) : (
-            <IconLayoutSidebarLeftExpand aria-hidden="true" size={16} stroke={1.8} />
+            <IconLayoutSidebarLeftExpand aria-hidden='true' size={16} stroke={1.8} />
           )}
         </button>
       )}
       {!sidebarHidden && !sidebarFloating ? (
-        <AppTooltip content="Resize file sidebar">
+        <AppTooltip content='Resize file sidebar'>
           <div
-            aria-label="Resize file sidebar"
-            aria-orientation="vertical"
+            aria-label='Resize file sidebar'
+            aria-orientation='vertical'
             aria-valuemax={MANAGE_SIDEBAR_MAX_WIDTH}
             aria-valuemin={MANAGE_SIDEBAR_MIN_WIDTH}
             aria-valuenow={Math.round(sidebarWidth)}
-            className="manage-sidebar-resizer"
+            className='manage-sidebar-resizer'
             onKeyDown={handleSidebarResizeKeyDown}
             onPointerDown={handleSidebarResizePointerDown}
-            role="separator"
+            role='separator'
             tabIndex={0}
           />
         </AppTooltip>
       ) : null}
-      <section className="manage-preview">
+      <section className='manage-preview'>
         <ManagePreview
           annotations={annotationsForSelectedPath}
           annotationPersistenceState={annotationPersistenceState}
@@ -1915,15 +1938,15 @@ export function ManageApp() {
       </section>
       {fileContextMenu && contextMenuEntry ? (
         <ManageFileContextMenu
-          canAddToSessionContext={contextMenuEntry.kind === "file"}
+          canAddToSessionContext={contextMenuEntry.kind === 'file'}
           canCreateHere={contextMenuCanCreateHere}
-          canDuplicate={contextMenuEntry.kind === "file"}
+          canDuplicate={contextMenuEntry.kind === 'file'}
           canRenameOrDelete={contextMenuCanRenameOrDelete}
           confirmingDelete={fileContextMenu.confirmingDelete === true}
           creatingKind={contextMenuCanCreateHere ? creatingArtifactKind : undefined}
           isCreatingFolder={
             contextMenuCanCreateHere &&
-            fileOperation?.action === "createFolder" &&
+            fileOperation?.action === 'createFolder' &&
             fileOperation.path === contextMenuEntry.path
           }
           onAddToSessionContext={() => void addFileToSessionContext(contextMenuEntry)}
@@ -1951,7 +1974,7 @@ export function ManageApp() {
                       ...current,
                       confirmingDelete: true,
                     }
-                  : current,
+                  : current
               );
               return;
             }
@@ -1971,12 +1994,10 @@ export function ManageApp() {
       {renameDialog ? (
         <ManageRenameDialog
           error={renameDialog.error}
-          isRenaming={fileOperation?.action === "rename" && fileOperation.path === renameDialog.path}
+          isRenaming={fileOperation?.action === 'rename' && fileOperation.path === renameDialog.path}
           onCancel={() => setRenameDialog(undefined)}
           onChange={(value) =>
-            setRenameDialog((current) =>
-              current ? { ...current, error: undefined, value } : current,
-            )
+            setRenameDialog((current) => (current ? { ...current, error: undefined, value } : current))
           }
           onSubmit={submitRenameDialog}
           value={renameDialog.value}
@@ -1987,11 +2008,11 @@ export function ManageApp() {
 }
 
 export function requestManageFiles(
-  request: Omit<ManageFilesBridgeRequest, "requestId">,
+  request: Omit<ManageFilesBridgeRequest, 'requestId'>
 ): Promise<ManageFilesBridgeResponse> {
   const bridge = (window as ManageWebKitWindow).webkit?.messageHandlers?.ghostexManageFiles;
   if (!bridge) {
-    return Promise.reject(new Error("Docs is unavailable in this host."));
+    return Promise.reject(new Error('Docs is unavailable in this host.'));
   }
   return requestProjectDocsFromHost(request, {
     eventName: MANAGE_FILES_RESPONSE_EVENT,
@@ -2002,21 +2023,21 @@ export function requestManageFiles(
 }
 
 export function readStoredManageSidebarSide(): ManageSidebarSide {
-  return window.localStorage.getItem(MANAGE_SIDEBAR_SIDE_STORAGE_KEY) === "left" ? "left" : "right";
+  return window.localStorage.getItem(MANAGE_SIDEBAR_SIDE_STORAGE_KEY) === 'left' ? 'left' : 'right';
 }
 
 export function readStoredManageSidebarWidth(): number {
   const parsedWidth = Number(window.localStorage.getItem(MANAGE_SIDEBAR_WIDTH_STORAGE_KEY));
   return clampManageSidebarWidth(
     Number.isFinite(parsedWidth) && parsedWidth > 0 ? parsedWidth : MANAGE_SIDEBAR_DEFAULT_WIDTH,
-    window.innerWidth,
+    window.innerWidth
   );
 }
 
 export function clampManageSidebarWidth(width: number, containerWidth: number): number {
   const maxForContainer = Math.max(
     MANAGE_SIDEBAR_MIN_WIDTH,
-    Math.min(MANAGE_SIDEBAR_MAX_WIDTH, Math.floor(containerWidth * 0.46)),
+    Math.min(MANAGE_SIDEBAR_MAX_WIDTH, Math.floor(containerWidth * 0.46))
   );
   return Math.min(Math.max(Math.round(width), MANAGE_SIDEBAR_MIN_WIDTH), maxForContainer);
 }

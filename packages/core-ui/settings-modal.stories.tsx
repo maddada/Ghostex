@@ -1,14 +1,14 @@
-import { useState } from "react";
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor, within } from "storybook/test";
-import { SettingsModal } from "./settings-modal";
-import { DEFAULT_ghostex_SETTINGS, type ghostexSettings } from "../shared/ghostex-settings";
-import { DEFAULT_SIDEBAR_AGENTS } from "../shared/sidebar-agents";
+import { useState } from 'react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { SettingsModal } from './settings-modal';
+import { DEFAULT_ghostex_SETTINGS, type ghostexSettings } from '../shared/ghostex-settings';
+import { DEFAULT_SIDEBAR_AGENTS } from '../shared/sidebar-agents';
 import type {
   SidebarAgentHookStatusMessage,
   SidebarGhostexCliStatusMessage,
   SidebarProjectSettingsItem,
-} from "../shared/session-grid-contract";
+} from '../shared/session-grid-contract';
 
 const modalSettings: ghostexSettings = {
   ...DEFAULT_ghostex_SETTINGS,
@@ -22,65 +22,65 @@ const modalSettings: ghostexSettings = {
 
 const storyProjects: SidebarProjectSettingsItem[] = [
   {
-    beadsDirectory: "",
-    beadsDisplayKey: "ZMX",
-    name: "Ghostex",
-    path: "/Users/you/dev/ghostex",
-    projectId: "project-ghostex",
-    worktreeCommand: "bun install",
+    beadsDirectory: '',
+    beadsDisplayKey: 'ZMX',
+    name: 'Ghostex',
+    path: '/Users/you/dev/ghostex',
+    projectId: 'project-ghostex',
+    worktreeCommand: 'bun install',
   },
   {
-    beadsDirectory: "/Users/you/dev/infra/.beads",
-    beadsDisplayKey: "INF",
-    name: "Infra Control Plane",
-    path: "/Users/you/dev/platform/infra-control-plane",
-    projectId: "project-infra",
-    worktreeCommand: "pnpm install",
+    beadsDirectory: '/Users/you/dev/infra/.beads',
+    beadsDisplayKey: 'INF',
+    name: 'Infra Control Plane',
+    path: '/Users/you/dev/platform/infra-control-plane',
+    projectId: 'project-infra',
+    worktreeCommand: 'pnpm install',
   },
   {
-    beadsDirectory: "",
-    beadsDisplayKey: "WEB",
-    name: "Customer Web",
-    path: "/Users/you/dev/products/customer-web-application",
-    projectId: "project-web",
-    worktreeCommand: "",
+    beadsDirectory: '',
+    beadsDisplayKey: 'WEB',
+    name: 'Customer Web',
+    path: '/Users/you/dev/products/customer-web-application',
+    projectId: 'project-web',
+    worktreeCommand: '',
   },
   {
-    beadsDirectory: "",
-    beadsDisplayKey: "OPS",
-    name: "Operations Dashboard",
-    path: "/Users/you/dev/internal/tools/operations-dashboard",
-    projectId: "project-ops",
-    worktreeCommand: "bun run setup",
+    beadsDirectory: '',
+    beadsDisplayKey: 'OPS',
+    name: 'Operations Dashboard',
+    path: '/Users/you/dev/internal/tools/operations-dashboard',
+    projectId: 'project-ops',
+    worktreeCommand: 'bun run setup',
   },
 ];
 
 function SettingsModalStory({
   cuaPermissionsGranted,
   initialSettings = modalSettings,
-  initialTab = "settings",
+  initialTab = 'settings',
   projects,
 }: {
   cuaPermissionsGranted?: boolean;
   initialSettings?: ghostexSettings;
-  initialTab?: "settings" | "integrations" | "projects" | "agents" | "actions" | "openTargets" | "hotkeys";
+  initialTab?: 'settings' | 'integrations' | 'projects' | 'agents' | 'actions' | 'openTargets' | 'hotkeys';
   projects?: SidebarProjectSettingsItem[];
 }) {
   const [settings, setSettings] = useState<ghostexSettings>(initialSettings);
   const [agentHookStatus, setAgentHookStatus] = useState<SidebarAgentHookStatusMessage>({
     agents: DEFAULT_SIDEBAR_AGENTS.map((agent, index) => ({
       agentId: agent.agentId,
-      cliCommand: agent.command.split(" ")[0] ?? agent.command,
+      cliCommand: agent.command.split(' ')[0] ?? agent.command,
       cliInstalled: index < 10,
-      detail: index < 4 ? "Hook config is installed." : "Hook config is not installed.",
+      detail: index < 4 ? 'Hook config is installed.' : 'Hook config is not installed.',
       hookInstalled: index < 4,
       paths: [`~/.ghostex/mock-hooks/${agent.agentId}.json`],
-      status: index < 4 ? "installed" : index < 10 ? "missing" : "cliMissing",
+      status: index < 4 ? 'installed' : index < 10 ? 'missing' : 'cliMissing',
     })),
-    generatedAt: "2026-05-27T04:17:00.000Z",
-    hookStateDirectory: "~/.ghostexterm",
-    notifyHookPath: "~/.ghostexterm/notify-agent-status.js",
-    type: "agentHookStatus",
+    generatedAt: '2026-05-27T04:17:00.000Z',
+    hookStateDirectory: '~/.ghostexterm',
+    notifyHookPath: '~/.ghostexterm/notify-agent-status.js',
+    type: 'agentHookStatus',
   });
   const [ghostexCliStatus, setGhostexCliStatus] = useState<SidebarGhostexCliStatusMessage>({
     agentOrchestrationSkillInstalled: false,
@@ -91,23 +91,24 @@ function SettingsModalStory({
     cuaDriverAccessibilityPermissionGranted: cuaPermissionsGranted,
     cuaDriverInstalled: cuaPermissionsGranted !== undefined,
     cuaDriverScreenRecordingPermissionGranted: cuaPermissionsGranted,
-    detail: "Ghostex CLI is installed automatically with the app. Use ghostex for the full command. Ghostex Browser Use and Ghostex Computer Use are not installed yet.",
+    detail:
+      'Ghostex CLI is installed automatically with the app. Use ghostex for the full command. Ghostex Browser Use and Ghostex Computer Use are not installed yet.',
     generateTitleSkillInstalled: false,
-    generatedAt: "2026-05-27T04:17:00.000Z",
-    ghostexPath: "/opt/homebrew/bin/ghostex",
+    generatedAt: '2026-05-27T04:17:00.000Z',
+    ghostexPath: '/opt/homebrew/bin/ghostex',
     gxBlockedByExistingCommand: false,
     gxUsable: false,
     installed: true,
     moveCodexSessionSkillInstalled: false,
-    type: "ghostexCliStatus",
+    type: 'ghostexCliStatus',
   });
 
   return (
     <div
       style={{
-        background: "#0e0e0e",
-        height: "100vh",
-        width: "100vw",
+        background: '#0e0e0e',
+        height: '100vh',
+        width: '100vw',
       }}
     >
       <SettingsModal
@@ -122,8 +123,8 @@ function SettingsModalStory({
             ...agentHookStatus,
             agents: agentHookStatus.agents.map((agent) =>
               agent.cliInstalled
-                ? { ...agent, detail: "Hook config is installed.", hookInstalled: true, status: "installed" }
-                : agent,
+                ? { ...agent, detail: 'Hook config is installed.', hookInstalled: true, status: 'installed' }
+                : agent
             ),
           })
         }
@@ -131,48 +132,46 @@ function SettingsModalStory({
           setGhostexCliStatus({
             ...ghostexCliStatus,
             embeddedBrowserSkillInstalled: true,
-            embeddedBrowserSkillPath:
-              "/Users/madda/agents/skills/ghostex-embedded-browser-use/SKILL.md",
+            embeddedBrowserSkillPath: '/Users/madda/agents/skills/ghostex-embedded-browser-use/SKILL.md',
           })
         }
         onInstallBrowserUseSkill={() =>
           setGhostexCliStatus({
             ...ghostexCliStatus,
             browserSkillInstalled: true,
-            browserSkillPath: "/Users/madda/agents/skills/ghostex-browser-use/SKILL.md",
+            browserSkillPath: '/Users/madda/agents/skills/ghostex-browser-use/SKILL.md',
           })
         }
         onInstallComputerUseSkill={() =>
           setGhostexCliStatus({
             ...ghostexCliStatus,
             computerUseSkillInstalled: true,
-            computerUseSkillPath: "/Users/madda/agents/skills/ghostex-computer-use/SKILL.md",
+            computerUseSkillPath: '/Users/madda/agents/skills/ghostex-computer-use/SKILL.md',
           })
         }
         onInstallAgentOrchestrationSkill={() =>
           setGhostexCliStatus({
             ...ghostexCliStatus,
             agentOrchestrationSkillInstalled: true,
-            agentOrchestrationSkillPath:
-              "/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md",
+            agentOrchestrationSkillPath: '/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md',
           })
         }
         onInstallGenerateTitleSkill={() =>
           setGhostexCliStatus({
             ...ghostexCliStatus,
             generateTitleSkillInstalled: true,
-            generateTitleSkillPath: "/Users/madda/agents/skills/ghostex-auto-rename-session/SKILL.md",
+            generateTitleSkillPath: '/Users/madda/agents/skills/ghostex-auto-rename-session/SKILL.md',
           })
         }
         onInstallCuaDriver={() =>
           setGhostexCliStatus({
             ...ghostexCliStatus,
             computerUseSkillInstalled: true,
-            computerUseSkillPath: "/Users/madda/agents/skills/ghostex-computer-use/SKILL.md",
+            computerUseSkillPath: '/Users/madda/agents/skills/ghostex-computer-use/SKILL.md',
             cuaAppInstalled: true,
             cuaDriverAccessibilityPermissionGranted: true,
             cuaDriverInstalled: true,
-            cuaDriverPath: "/Users/madda/.local/bin/cua-driver",
+            cuaDriverPath: '/Users/madda/.local/bin/cua-driver',
             cuaDriverScreenRecordingPermissionGranted: true,
           })
         }
@@ -183,16 +182,16 @@ function SettingsModalStory({
         onRequestGhostexCliStatus={() => undefined}
         projects={projects}
         settings={settings}
-        theme={settings.sidebarTheme === "light-orange" ? "light-orange" : "dark-blue"}
+        theme={settings.sidebarTheme === 'light-orange' ? 'light-orange' : 'dark-blue'}
       />
     </div>
   );
 }
 
 const meta = {
-  title: "Sidebar/Settings Modal",
+  title: 'Sidebar/Settings Modal',
   parameters: {
-    layout: "fullscreen",
+    layout: 'fullscreen',
   },
   render: () => <SettingsModalStory />,
 } satisfies Meta;
@@ -208,7 +207,7 @@ export const DarkGray: Story = {
     <SettingsModalStory
       initialSettings={{
         ...modalSettings,
-        sidebarTheme: "plain",
+        sidebarTheme: 'plain',
       }}
     />
   ),
@@ -224,8 +223,8 @@ export const SidebarVersionInbox: Story = {
     <SettingsModalStory
       initialSettings={{
         ...modalSettings,
-        sidebarV2Layout: "byProject",
-        sidebarVersion: "v2",
+        sidebarV2Layout: 'byProject',
+        sidebarVersion: 'v2',
       }}
     />
   ),
@@ -239,14 +238,14 @@ export const SidebarVersionInbox: Story = {
      * V2 selected and disappear when the user goes back to Classic, so the
      * classic sidebar never advertises a shelf that does not exist.
      */
-    await step("show the auto-settle window while the Inbox sidebar is selected", async () => {
-      await body.findByText("Auto-settle inactive sessions");
+    await step('show the auto-settle window while the Inbox sidebar is selected', async () => {
+      await body.findByText('Auto-settle inactive sessions');
     });
 
-    await step("hide it again when the classic sidebar is selected", async () => {
-      await userEvent.click(await body.findByRole("button", { name: "Classic" }));
+    await step('hide it again when the classic sidebar is selected', async () => {
+      await userEvent.click(await body.findByRole('button', { name: 'Classic' }));
       await waitFor(() => {
-        expect(body.queryByText("Auto-settle inactive sessions")).toBeNull();
+        expect(body.queryByText('Auto-settle inactive sessions')).toBeNull();
       });
     });
   },
@@ -257,11 +256,11 @@ export const AccessibilityOff: Story = {
 };
 
 export const Integrations: Story = {
-  render: () => <SettingsModalStory cuaPermissionsGranted={false} initialTab="integrations" />,
+  render: () => <SettingsModalStory cuaPermissionsGranted={false} initialTab='integrations' />,
 };
 
 export const Projects: Story = {
-  render: () => <SettingsModalStory initialTab="projects" projects={storyProjects} />,
+  render: () => <SettingsModalStory initialTab='projects' projects={storyProjects} />,
 };
 
 /*
@@ -274,21 +273,21 @@ export const Projects: Story = {
  * touches.
  */
 export const Hotkeys: Story = {
-  render: () => <SettingsModalStory initialTab="hotkeys" />,
+  render: () => <SettingsModalStory initialTab='hotkeys' />,
 };
 
 export const Agents: Story = {
-  render: () => <SettingsModalStory initialTab="agents" />,
+  render: () => <SettingsModalStory initialTab='agents' />,
 };
 
 export const Theming: Story = {
   play: async ({ canvasElement, step }) => {
     const body = within(canvasElement.ownerDocument.body);
 
-    await step("jump the General page to the Theming section", async () => {
-      await userEvent.click(await body.findByRole("button", { name: "Appearance" }));
+    await step('jump the General page to the Theming section', async () => {
+      await userEvent.click(await body.findByRole('button', { name: 'Appearance' }));
       await waitFor(() => {
-        expect(body.getByText("Accent Color")).toBeTruthy();
+        expect(body.getByText('Accent Color')).toBeTruthy();
       });
     });
   },
@@ -300,7 +299,7 @@ export const LightOrange: Story = {
     <SettingsModalStory
       initialSettings={{
         ...modalSettings,
-        sidebarTheme: "light-orange",
+        sidebarTheme: 'light-orange',
       }}
     />
   ),
@@ -309,13 +308,13 @@ export const LightOrange: Story = {
 export const NarrowModal: Story = {
   parameters: {
     viewport: {
-      defaultViewport: "narrowSettings",
+      defaultViewport: 'narrowSettings',
       viewports: {
         narrowSettings: {
-          name: "Narrow settings modal",
+          name: 'Narrow settings modal',
           styles: {
-            height: "900px",
-            width: "520px",
+            height: '900px',
+            width: '520px',
           },
         },
       },

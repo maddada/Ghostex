@@ -1,24 +1,14 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppTooltip } from "@/packages/core-ui/app-tooltip";
-import type {
-  GxserverSidebarHudCommandButton,
-  GxserverSidebarHudResponse,
-} from "@/packages/shared/gxserver-protocol";
-import {
-  getConnectionStates,
-  rpcForMachine,
-  subscribeConnectionStates,
-} from "../connections/connection-registry";
-import {
-  getActiveSidebarProject,
-  subscribeActiveSidebarProject,
-} from "../sidebar-runtime/active-project-store";
-import "./action-events";
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { AppTooltip } from '@/packages/core-ui/app-tooltip';
+import type { GxserverSidebarHudCommandButton, GxserverSidebarHudResponse } from '@/packages/shared/gxserver-protocol';
+import { getConnectionStates, rpcForMachine, subscribeConnectionStates } from '../connections/connection-registry';
+import { getActiveSidebarProject, subscribeActiveSidebarProject } from '../sidebar-runtime/active-project-store';
+import './action-events';
 
 function BoltIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M13 3v7h6L11 21v-7H5L13 3Z" />
+    <svg aria-hidden='true' viewBox='0 0 24 24'>
+      <path d='M13 3v7h6L11 21v-7H5L13 3Z' />
     </svg>
   );
 }
@@ -27,28 +17,21 @@ export function TitlebarActions() {
   const activeProject = useSyncExternalStore(
     subscribeActiveSidebarProject,
     getActiveSidebarProject,
-    getActiveSidebarProject,
+    getActiveSidebarProject
   );
-  const connections = useSyncExternalStore(
-    subscribeConnectionStates,
-    getConnectionStates,
-    getConnectionStates,
-  );
+  const connections = useSyncExternalStore(subscribeConnectionStates, getConnectionStates, getConnectionStates);
   const [open, setOpen] = useState(false);
   const [commands, setCommands] = useState<readonly GxserverSidebarHudCommandButton[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const menuRef = useRef<HTMLDivElement>(null);
   const requestId = useRef(0);
-  const activeConnection = connections.find(
-    (state) => state.machine.machineId === activeProject?.machineId,
-  );
+  const activeConnection = connections.find((state) => state.machine.machineId === activeProject?.machineId);
   const commandSessionsExist = Boolean(
-    activeProject
-    && activeConnection?.presentation?.sessions.some((session) =>
-      session.projectId === activeProject.projectId
-      && session.surface === "commands"
-    ),
+    activeProject &&
+    activeConnection?.presentation?.sessions.some(
+      (session) => session.projectId === activeProject.projectId && session.surface === 'commands'
+    )
   );
 
   useEffect(() => {
@@ -57,13 +40,13 @@ export function TitlebarActions() {
       if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === 'Escape') setOpen(false);
     };
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', closeOnEscape);
     return () => {
-      window.removeEventListener("pointerdown", close);
-      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', closeOnEscape);
     };
   }, [open]);
 
@@ -76,30 +59,31 @@ export function TitlebarActions() {
     const nextRequestId = ++requestId.current;
     setLoading(true);
     setError(undefined);
-    void rpcForMachine<GxserverSidebarHudResponse>(
-      activeProject.machineId,
-      "/api/readSidebarHud",
-      { activeProjectId: activeProject.projectId },
-    ).then((response) => {
-      if (requestId.current === nextRequestId) setCommands(response.commands);
-    }).catch((nextError: unknown) => {
-      if (requestId.current === nextRequestId) {
-        setCommands([]);
-        setError(nextError instanceof Error ? nextError.message : String(nextError));
-      }
-    }).finally(() => {
-      if (requestId.current === nextRequestId) setLoading(false);
-    });
+    void rpcForMachine<GxserverSidebarHudResponse>(activeProject.machineId, '/api/readSidebarHud', {
+      activeProjectId: activeProject.projectId,
+    })
+      .then((response) => {
+        if (requestId.current === nextRequestId) setCommands(response.commands);
+      })
+      .catch((nextError: unknown) => {
+        if (requestId.current === nextRequestId) {
+          setCommands([]);
+          setError(nextError instanceof Error ? nextError.message : String(nextError));
+        }
+      })
+      .finally(() => {
+        if (requestId.current === nextRequestId) setLoading(false);
+      });
   }, [activeProject, open]);
 
   const runAction = (action: GxserverSidebarHudCommandButton) => {
     if (!activeProject) return;
-    if (action.actionType === "browser") {
+    if (action.actionType === 'browser') {
       if (!action.url?.trim()) {
         setError(`${action.name} does not have a URL.`);
         return;
       }
-      window.open(action.url, "_blank", "noopener,noreferrer");
+      window.open(action.url, '_blank', 'noopener,noreferrer');
       setOpen(false);
       return;
     }
@@ -115,70 +99,68 @@ export function TitlebarActions() {
      */
     for (const link of action.links ?? []) {
       if (link.url.trim()) {
-        window.open(link.url, "_blank", "noopener,noreferrer");
+        window.open(link.url, '_blank', 'noopener,noreferrer');
       }
     }
-    window.dispatchEvent(new CustomEvent("ghostex-web:runTitlebarAction", {
-      detail: {
-        action,
-        machineId: activeProject.machineId,
-        projectId: activeProject.projectId,
-      },
-    }));
+    window.dispatchEvent(
+      new CustomEvent('ghostex-web:runTitlebarAction', {
+        detail: {
+          action,
+          machineId: activeProject.machineId,
+          projectId: activeProject.projectId,
+        },
+      })
+    );
     setOpen(false);
   };
 
   return (
-    <div className="web-titlebar-actions" ref={menuRef}>
-      <AppTooltip content="Actions">
+    <div className='web-titlebar-actions' ref={menuRef}>
+      <AppTooltip content='Actions'>
         <button
           aria-expanded={open}
-          aria-haspopup="menu"
-          aria-label="Actions"
-          className="web-titlebar__icon-button web-titlebar__action"
+          aria-haspopup='menu'
+          aria-label='Actions'
+          className='web-titlebar__icon-button web-titlebar__action'
           onClick={() => setOpen((current) => !current)}
-          type="button"
+          type='button'
         >
           <BoltIcon />
         </button>
       </AppTooltip>
       {open && (
-        <div className="web-actions-menu" role="menu">
-          <div className="web-actions-menu__heading">Actions</div>
-          {!activeProject && (
-            <div className="web-actions-menu__status">Select a project to view its actions.</div>
-          )}
-          {activeProject && loading && (
-            <div className="web-actions-menu__status">Loading actions…</div>
-          )}
+        <div className='web-actions-menu' role='menu'>
+          <div className='web-actions-menu__heading'>Actions</div>
+          {!activeProject && <div className='web-actions-menu__status'>Select a project to view its actions.</div>}
+          {activeProject && loading && <div className='web-actions-menu__status'>Loading actions…</div>}
           {activeProject && !loading && !error && commands.length === 0 && (
-            <div className="web-actions-menu__status">No actions configured.</div>
+            <div className='web-actions-menu__status'>No actions configured.</div>
           )}
           {commands.map((command) => (
             <button
-              className="web-actions-menu__item"
+              className='web-actions-menu__item'
               key={command.commandId}
               onClick={() => runAction(command)}
-              role="menuitem"
-              type="button"
+              role='menuitem'
+              type='button'
             >
               <span>{command.name}</span>
-              <small>{command.actionType === "browser" ? "Browser" : "Terminal"}</small>
+              <small>{command.actionType === 'browser' ? 'Browser' : 'Terminal'}</small>
             </button>
           ))}
-          {error && <div className="web-actions-menu__error">{error}</div>}
+          {error && <div className='web-actions-menu__error'>{error}</div>}
           {commandSessionsExist && (
             <button
-              className="web-actions-menu__reopen"
+              className='web-actions-menu__reopen'
               onClick={() => {
-                window.dispatchEvent(new CustomEvent("ghostex-web:openCommandPane"));
+                window.dispatchEvent(new CustomEvent('ghostex-web:openCommandPane'));
                 setOpen(false);
               }}
-              role="menuitem"
-              type="button"
+              role='menuitem'
+              type='button'
             >
               <span>Show Command Pane</span>
-              <span aria-hidden="true">⌃</span>
+              <span aria-hidden='true'>⌃</span>
             </button>
           )}
         </div>

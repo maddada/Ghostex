@@ -275,4 +275,3 @@ pub(crate) fn gpui_macos_named_app_exists(app_name: &str) -> bool {
 pub(crate) fn gpui_macos_named_app_exists(_app_name: &str) -> bool {
     false
 }
-

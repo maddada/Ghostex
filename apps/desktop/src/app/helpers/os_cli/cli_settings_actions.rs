@@ -1,7 +1,4 @@
-use std::{
-    path::Path,
-    time::Duration,
-};
+use std::{path::Path, time::Duration};
 
 use anyhow::Result;
 
@@ -287,7 +284,8 @@ installer from Ghostex yet and open the Cua GitHub releases page instead.
 pub(crate) const GPUI_CUA_DRIVER_POSIX_INSTALL_COMMAND: &str =
     "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/install.sh)\"";
 #[cfg(target_os = "macos")]
-pub(crate) const GPUI_CUA_DRIVER_START_COMMAND: &str = "/usr/bin/open -n -g -a CuaDriver --args serve";
+pub(crate) const GPUI_CUA_DRIVER_START_COMMAND: &str =
+    "/usr/bin/open -n -g -a CuaDriver --args serve";
 
 #[cfg(target_os = "macos")]
 pub(crate) struct GpuiCuaDriverCommandAction {
@@ -323,4 +321,3 @@ pub(crate) fn gpui_cua_driver_command_action() -> GpuiCuaDriverCommandAction {
         }
     }
 }
-

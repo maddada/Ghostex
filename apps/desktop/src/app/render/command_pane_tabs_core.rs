@@ -274,7 +274,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn render_command_pane_floating_reserved_bottom_bar(&self, height: f32) -> AnyElement {
+    pub(crate) fn render_command_pane_floating_reserved_bottom_bar(
+        &self,
+        height: f32,
+    ) -> AnyElement {
         /*
         CDXC:GPUICommandPaneFloating 2026-06-25-18:19:
         Expanded floating command panels need the native reserved bottom footprint as plain command-panel chrome. Do not render tabs, plus, Expand, Pin/Unpin, or Minimize controls in this bottom reservation; those controls live in the floating panel itself.
@@ -687,5 +690,4 @@ impl GhostexGpuiApp {
             .bg(command_pane_tab_separator_color())
             .into_any_element()
     }
-
 }

@@ -9,8 +9,7 @@ use std::{
 
 const GHOSTTYKIT_HEADER: &str =
     "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/Headers/ghostty.h";
-const GHOSTTYKIT_ARCHIVE: &str =
-    "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
+const GHOSTTYKIT_ARCHIVE: &str = "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
 const GPUI_MACOS_DEPLOYMENT_TARGET_FLAG: &str = "-mmacosx-version-min=13.0";
 const LIBGHOSTTY_VT_BUILD_SCRIPT: &str = "scripts/build-libghostty-vt.sh";
 const WINDOWS_APP_ICON_SOURCE: &str = "resources/AppIcon.appiconset/icon_512x512.png";

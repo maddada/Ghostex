@@ -8,8 +8,8 @@ import {
   useEffect,
   useRef,
   useState,
-} from "react";
-import { Excalidraw } from "@excalidraw/excalidraw";
+} from 'react';
+import { Excalidraw } from '@excalidraw/excalidraw';
 import {
   IconArrowsDiagonal2,
   IconArrowsDiagonalMinimize,
@@ -32,14 +32,14 @@ import {
   IconSettings,
   IconTrash,
   IconX,
-} from "@tabler/icons-react";
-import { type ProjectDocsFileEntry as ManageFileEntry } from "@/packages/shared/project-docs";
-import { SidebarContextMenuPortal } from "@/packages/core-ui/sidebar-context-menu-portal";
-import { createPortal } from "react-dom";
-import { ManageArtifactKind, ManageFileContextMenuState, ManageFileOperationState, ManageSidebarSide } from "./types";
-import { ManageTooltipButton } from "./manage-tooltip-button";
-import { fileIconForPath } from "./file-tree-utils";
-import "@/packages/core-ui/styles/session-overlays.css";
+} from '@tabler/icons-react';
+import { type ProjectDocsFileEntry as ManageFileEntry } from '@/packages/shared/project-docs';
+import { SidebarContextMenuPortal } from '@/packages/core-ui/sidebar-context-menu-portal';
+import { createPortal } from 'react-dom';
+import { ManageArtifactKind, ManageFileContextMenuState, ManageFileOperationState, ManageSidebarSide } from './types';
+import { ManageTooltipButton } from './manage-tooltip-button';
+import { fileIconForPath } from './file-tree-utils';
+import '@/packages/core-ui/styles/session-overlays.css';
 
 export function ManageSidebarActions({
   creatingKind,
@@ -73,9 +73,9 @@ export function ManageSidebarActions({
   const [menuOpen, setMenuOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const HideSidebarIcon = sidebarSide === "right" ? IconLayoutSidebarRightCollapse : IconLayoutSidebarLeftCollapse;
+  const HideSidebarIcon = sidebarSide === 'right' ? IconLayoutSidebarRightCollapse : IconLayoutSidebarLeftCollapse;
   const BulkDirectoryIcon = hasExpandedDirectories ? IconArrowsDiagonalMinimize : IconArrowsDiagonal2;
-  const bulkDirectoryActionLabel = hasExpandedDirectories ? "Collapse All" : "Expand All";
+  const bulkDirectoryActionLabel = hasExpandedDirectories ? 'Collapse All' : 'Expand All';
   const isCreating = Boolean(creatingKind) || isCreatingFolder;
 
   useEffect(() => {
@@ -91,16 +91,16 @@ export function ManageSidebarActions({
       setCreateMenuOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         setMenuOpen(false);
         setCreateMenuOpen(false);
       }
     };
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [createMenuOpen, menuOpen]);
 
@@ -115,10 +115,10 @@ export function ManageSidebarActions({
   };
 
   return (
-    <div className="manage-sidebar-actions" ref={wrapperRef}>
+    <div className='manage-sidebar-actions' ref={wrapperRef}>
       <ManageTooltipButton
         aria-label={bulkDirectoryActionLabel}
-        className="manage-icon-button manage-sidebar-tree-toggle"
+        className='manage-icon-button manage-sidebar-tree-toggle'
         disabled={!hasExpandableDirectories}
         onClick={() => {
           setCreateMenuOpen(false);
@@ -126,24 +126,24 @@ export function ManageSidebarActions({
           onToggleAllDirectories();
         }}
         tooltip={bulkDirectoryActionLabel}
-        type="button"
+        type='button'
       >
-        <BulkDirectoryIcon aria-hidden="true" size={14} stroke={1.9} />
+        <BulkDirectoryIcon aria-hidden='true' size={14} stroke={1.9} />
       </ManageTooltipButton>
       <ManageTooltipButton
         aria-expanded={createMenuOpen}
-        aria-haspopup="menu"
-        aria-label="Create docs item"
-        className="manage-icon-button"
+        aria-haspopup='menu'
+        aria-label='Create docs item'
+        className='manage-icon-button'
         disabled={isCreating}
         onClick={() => {
           setCreateMenuOpen((current) => !current);
           setMenuOpen(false);
         }}
-        tooltip="Create docs item"
-        type="button"
+        tooltip='Create docs item'
+        type='button'
       >
-        <IconPlus aria-hidden="true" size={15} stroke={1.9} />
+        <IconPlus aria-hidden='true' size={15} stroke={1.9} />
       </ManageTooltipButton>
       {/*
         CDXC:DocsSidebar 2026-06-30-21:26:
@@ -151,91 +151,86 @@ export function ManageSidebarActions({
       */}
       <button
         aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        aria-label="Docs sidebar menu"
-        className="manage-icon-button"
+        aria-haspopup='menu'
+        aria-label='Docs sidebar menu'
+        className='manage-icon-button'
         onClick={() => {
           setMenuOpen((current) => !current);
           setCreateMenuOpen(false);
         }}
-        type="button"
+        type='button'
       >
-        <IconMenu2 aria-hidden="true" size={15} stroke={1.8} />
+        <IconMenu2 aria-hidden='true' size={15} stroke={1.8} />
       </button>
-      <button
-        aria-label="Hide file sidebar"
-        className="manage-icon-button"
-        onClick={onHideSidebar}
-        type="button"
-      >
-        <HideSidebarIcon aria-hidden="true" size={15} stroke={1.8} />
+      <button aria-label='Hide file sidebar' className='manage-icon-button' onClick={onHideSidebar} type='button'>
+        <HideSidebarIcon aria-hidden='true' size={15} stroke={1.8} />
       </button>
       {createMenuOpen ? (
-        <div className="manage-sidebar-menu manage-create-menu" role="menu">
+        <div className='manage-sidebar-menu manage-create-menu' role='menu'>
           <button
-            className="manage-sidebar-menu-item"
+            className='manage-sidebar-menu-item'
             disabled={isCreating}
             onClick={() => runCreateAction(onCreateFolder)}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <IconFolderPlus aria-hidden="true" size={14} stroke={1.8} />
-            {isCreatingFolder ? "Creating folder" : "New folder"}
+            <IconFolderPlus aria-hidden='true' size={14} stroke={1.8} />
+            {isCreatingFolder ? 'Creating folder' : 'New folder'}
           </button>
           <button
-            className="manage-sidebar-menu-item"
+            className='manage-sidebar-menu-item'
             disabled={isCreating}
-            onClick={() => runCreateAction(() => onCreate("markdown"))}
-            role="menuitem"
-            type="button"
+            onClick={() => runCreateAction(() => onCreate('markdown'))}
+            role='menuitem'
+            type='button'
           >
-            <IconMarkdown aria-hidden="true" size={14} stroke={1.8} />
-            {creatingKind === "markdown" ? "Creating Markdown" : "New Markdown"}
+            <IconMarkdown aria-hidden='true' size={14} stroke={1.8} />
+            {creatingKind === 'markdown' ? 'Creating Markdown' : 'New Markdown'}
           </button>
           <button
-            className="manage-sidebar-menu-item"
+            className='manage-sidebar-menu-item'
             disabled={isCreating}
-            onClick={() => runCreateAction(() => onCreate("html"))}
-            role="menuitem"
-            type="button"
+            onClick={() => runCreateAction(() => onCreate('html'))}
+            role='menuitem'
+            type='button'
           >
-            <IconFileTypeHtml aria-hidden="true" size={14} stroke={1.8} />
-            {creatingKind === "html" ? "Creating HTML" : "New HTML"}
+            <IconFileTypeHtml aria-hidden='true' size={14} stroke={1.8} />
+            {creatingKind === 'html' ? 'Creating HTML' : 'New HTML'}
           </button>
           <button
-            className="manage-sidebar-menu-item"
+            className='manage-sidebar-menu-item'
             disabled={isCreating}
-            onClick={() => runCreateAction(() => onCreate("excalidraw"))}
-            role="menuitem"
-            type="button"
+            onClick={() => runCreateAction(() => onCreate('excalidraw'))}
+            role='menuitem'
+            type='button'
           >
-            <IconEdit aria-hidden="true" size={14} stroke={1.8} />
-            {creatingKind === "excalidraw" ? "Creating drawing" : "New drawing"}
+            <IconEdit aria-hidden='true' size={14} stroke={1.8} />
+            {creatingKind === 'excalidraw' ? 'Creating drawing' : 'New drawing'}
           </button>
         </div>
       ) : null}
       {menuOpen ? (
-        <div className="manage-sidebar-menu" role="menu">
+        <div className='manage-sidebar-menu' role='menu'>
           <button
-            className="manage-sidebar-menu-item"
+            className='manage-sidebar-menu-item'
             disabled={isRefreshing}
             onClick={() => runMenuAction(onRefresh)}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <IconRefresh aria-hidden="true" size={14} stroke={1.8} />
+            <IconRefresh aria-hidden='true' size={14} stroke={1.8} />
             Refresh
           </button>
           <button
-            className="manage-sidebar-menu-item"
+            className='manage-sidebar-menu-item'
             onClick={() => runMenuAction(onSwitchSide)}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            {sidebarSide === "right" ? (
-              <IconLayoutSidebarLeftCollapse aria-hidden="true" size={14} stroke={1.8} />
+            {sidebarSide === 'right' ? (
+              <IconLayoutSidebarLeftCollapse aria-hidden='true' size={14} stroke={1.8} />
             ) : (
-              <IconLayoutSidebarRightCollapse aria-hidden="true" size={14} stroke={1.8} />
+              <IconLayoutSidebarRightCollapse aria-hidden='true' size={14} stroke={1.8} />
             )}
             Switch sidebar side
           </button>
@@ -244,12 +239,12 @@ export function ManageSidebarActions({
             The Docs overflow menu should deep-link to Settings -> Projects -> Global Settings so users can configure the project-relative folders that Docs scans for files without leaving the Docs context.
           */}
           <button
-            className="manage-sidebar-menu-item"
+            className='manage-sidebar-menu-item'
             onClick={() => runMenuAction(onOpenDocsFoldersSettings)}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <IconSettings aria-hidden="true" size={14} stroke={1.8} />
+            <IconSettings aria-hidden='true' size={14} stroke={1.8} />
             Configure docs folders
           </button>
         </div>
@@ -293,20 +288,20 @@ export function ManageFileRow({
   onOpenContextMenu: (entry: ManageFileEntry, point: { x: number; y: number }) => void;
   onSelect: () => void;
 }) {
-  const Icon = entry.kind === "directory" ? (isExpanded ? IconFolderOpen : IconFolder) : fileIconForPath(entry.path);
+  const Icon = entry.kind === 'directory' ? (isExpanded ? IconFolderOpen : IconFolder) : fileIconForPath(entry.path);
   return (
     <button
-      aria-expanded={entry.kind === "directory" && hasChildren ? isExpanded : undefined}
-      aria-haspopup={canOpenContextMenu ? "menu" : undefined}
-      aria-selected={entry.kind === "file" ? isSelected : undefined}
-      className="manage-file-row"
+      aria-expanded={entry.kind === 'directory' && hasChildren ? isExpanded : undefined}
+      aria-haspopup={canOpenContextMenu ? 'menu' : undefined}
+      aria-selected={entry.kind === 'file' ? isSelected : undefined}
+      className='manage-file-row'
       data-active-descendant={String(hasActiveFileDescendant)}
       data-context-menu-open={String(isContextMenuOpen)}
       data-dragging={String(isDragging)}
       data-drop-target={String(isDropTarget)}
       data-kind={entry.kind}
       data-selected={String(isSelected)}
-      draggable={entry.kind === "file" || entry.kind === "directory"}
+      draggable={entry.kind === 'file' || entry.kind === 'directory'}
       onClick={onSelect}
       onContextMenu={(event: ReactMouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
@@ -320,7 +315,7 @@ export function ManageFileRow({
         if (!canOpenContextMenu) {
           return;
         }
-        if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) {
+        if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) {
           return;
         }
         event.preventDefault();
@@ -334,21 +329,21 @@ export function ManageFileRow({
       onDragOver={(event) => onEntryDragOver(entry, event)}
       onDragStart={(event) => onDragStart(entry, event)}
       onDrop={(event) => onEntryDrop(entry, event)}
-      role="treeitem"
-      style={{ "--depth": entry.depth } as CSSProperties}
-      type="button"
+      role='treeitem'
+      style={{ '--depth': entry.depth } as CSSProperties}
+      type='button'
     >
       <span
-        aria-hidden="true"
-        className="manage-file-disclosure"
-        data-visible={String(entry.kind === "directory" && hasChildren)}
+        aria-hidden='true'
+        className='manage-file-disclosure'
+        data-visible={String(entry.kind === 'directory' && hasChildren)}
       >
         <IconChevronRight size={14} stroke={1.9} />
       </span>
-      <Icon aria-hidden="true" className="manage-file-icon" size={15} stroke={1.75} />
-      <span className="manage-file-name">{entry.name}</span>
-      <span className="manage-file-badges">
-        {annotationCount > 0 ? <span className="manage-count-badge">{annotationCount}</span> : null}
+      <Icon aria-hidden='true' className='manage-file-icon' size={15} stroke={1.75} />
+      <span className='manage-file-name'>{entry.name}</span>
+      <span className='manage-file-badges'>
+        {annotationCount > 0 ? <span className='manage-count-badge'>{annotationCount}</span> : null}
       </span>
     </button>
   );
@@ -392,168 +387,170 @@ export function ManageFileContextMenu({
   onDismiss: () => void;
   onRename: () => void;
   onRevealInFinder: () => void;
-  pendingAction?: ManageFileOperationState["action"];
-  position: Pick<ManageFileContextMenuState, "x" | "y">;
+  pendingAction?: ManageFileOperationState['action'];
+  position: Pick<ManageFileContextMenuState, 'x' | 'y'>;
 }) {
   const [createFileMenuOpen, setCreateFileMenuOpen] = useState(false);
   const isBusy = Boolean(pendingAction);
   return (
     <SidebarContextMenuPortal
-      menuClassName="session-context-menu manage-file-context-menu"
+      menuClassName='session-context-menu manage-file-context-menu'
       menuStyle={{
         left: `${position.x}px`,
-        position: "fixed",
+        position: 'fixed',
         top: `${position.y}px`,
       }}
       onDismiss={onDismiss}
     >
       <button
-        className="session-context-menu-item manage-file-context-menu-item"
+        className='session-context-menu-item manage-file-context-menu-item'
         disabled={isBusy}
         onClick={onRevealInFinder}
-        role="menuitem"
-        type="button"
+        role='menuitem'
+        type='button'
       >
-        <IconFolderOpen aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
-        {pendingAction === "revealInFinder" ? "Revealing" : "Reveal in Finder"}
+        <IconFolderOpen aria-hidden='true' className='session-context-menu-icon' size={14} stroke={1.8} />
+        {pendingAction === 'revealInFinder' ? 'Revealing' : 'Reveal in Finder'}
       </button>
       <button
-        className="session-context-menu-item manage-file-context-menu-item"
+        className='session-context-menu-item manage-file-context-menu-item'
         onClick={onCopyPath}
-        role="menuitem"
-        type="button"
+        role='menuitem'
+        type='button'
       >
-        <IconCopy aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
+        <IconCopy aria-hidden='true' className='session-context-menu-icon' size={14} stroke={1.8} />
         Copy Relative Path
       </button>
       <button
-        className="session-context-menu-item manage-file-context-menu-item"
+        className='session-context-menu-item manage-file-context-menu-item'
         disabled={isBusy}
         onClick={onCopyFullPath}
-        role="menuitem"
-        type="button"
+        role='menuitem'
+        type='button'
       >
-        <IconCopy aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
-        {pendingAction === "copyFullPath" ? "Copying Full Path" : "Copy Full Path"}
+        <IconCopy aria-hidden='true' className='session-context-menu-icon' size={14} stroke={1.8} />
+        {pendingAction === 'copyFullPath' ? 'Copying Full Path' : 'Copy Full Path'}
       </button>
       {canAddToSessionContext ? (
         <button
-          className="session-context-menu-item manage-file-context-menu-item"
+          className='session-context-menu-item manage-file-context-menu-item'
           disabled={isBusy}
           onClick={onAddToSessionContext}
-          role="menuitem"
-          type="button"
+          role='menuitem'
+          type='button'
         >
-          <IconMessagePlus aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
-          {pendingAction === "addToSessionContext" ? "Adding context" : "Add to Session Context"}
+          <IconMessagePlus aria-hidden='true' className='session-context-menu-icon' size={14} stroke={1.8} />
+          {pendingAction === 'addToSessionContext' ? 'Adding context' : 'Add to Session Context'}
         </button>
       ) : null}
       {canCreateHere ? (
         <>
-          <div className="session-context-menu-divider manage-file-context-menu-divider" role="separator" />
+          <div className='session-context-menu-divider manage-file-context-menu-divider' role='separator' />
           <button
             aria-expanded={createFileMenuOpen}
-            className="session-context-menu-item manage-file-context-menu-item"
+            className='session-context-menu-item manage-file-context-menu-item'
             disabled={isBusy}
             onClick={() => setCreateFileMenuOpen((current) => !current)}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <IconFile aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
+            <IconFile aria-hidden='true' className='session-context-menu-icon' size={14} stroke={1.8} />
             <span>New File Here</span>
-            <span className="manage-file-context-menu-spacer" />
+            <span className='manage-file-context-menu-spacer' />
             <IconChevronRight
-              aria-hidden="true"
-              className="manage-file-context-menu-chevron"
+              aria-hidden='true'
+              className='manage-file-context-menu-chevron'
               data-open={String(createFileMenuOpen)}
               size={14}
               stroke={1.8}
             />
           </button>
           {createFileMenuOpen ? (
-            <div className="manage-file-context-menu-nested" role="group">
+            <div className='manage-file-context-menu-nested' role='group'>
               <button
-                className="session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem"
+                className='session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem'
                 disabled={isBusy}
-                onClick={() => onCreateFileHere("markdown")}
-                role="menuitem"
-                type="button"
+                onClick={() => onCreateFileHere('markdown')}
+                role='menuitem'
+                type='button'
               >
-                <IconMarkdown aria-hidden="true" size={14} stroke={1.8} />
-                {creatingKind === "markdown" ? "Creating Markdown" : "Markdown"}
+                <IconMarkdown aria-hidden='true' size={14} stroke={1.8} />
+                {creatingKind === 'markdown' ? 'Creating Markdown' : 'Markdown'}
               </button>
               <button
-                className="session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem"
+                className='session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem'
                 disabled={isBusy}
-                onClick={() => onCreateFileHere("html")}
-                role="menuitem"
-                type="button"
+                onClick={() => onCreateFileHere('html')}
+                role='menuitem'
+                type='button'
               >
-                <IconFileTypeHtml aria-hidden="true" size={14} stroke={1.8} />
-                {creatingKind === "html" ? "Creating HTML" : "HTML"}
+                <IconFileTypeHtml aria-hidden='true' size={14} stroke={1.8} />
+                {creatingKind === 'html' ? 'Creating HTML' : 'HTML'}
               </button>
               <button
-                className="session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem"
+                className='session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem'
                 disabled={isBusy}
-                onClick={() => onCreateFileHere("excalidraw")}
-                role="menuitem"
-                type="button"
+                onClick={() => onCreateFileHere('excalidraw')}
+                role='menuitem'
+                type='button'
               >
-                <IconEdit aria-hidden="true" size={14} stroke={1.8} />
-                {creatingKind === "excalidraw" ? "Creating Excalidraw" : "Excalidraw"}
+                <IconEdit aria-hidden='true' size={14} stroke={1.8} />
+                {creatingKind === 'excalidraw' ? 'Creating Excalidraw' : 'Excalidraw'}
               </button>
             </div>
           ) : null}
           <button
-            className="session-context-menu-item manage-file-context-menu-item"
+            className='session-context-menu-item manage-file-context-menu-item'
             disabled={isBusy}
             onClick={onCreateFolderHere}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <IconFolderPlus aria-hidden="true" size={14} stroke={1.8} />
-            {isCreatingFolder ? "Creating Folder" : "New Folder Here"}
+            <IconFolderPlus aria-hidden='true' size={14} stroke={1.8} />
+            {isCreatingFolder ? 'Creating Folder' : 'New Folder Here'}
           </button>
         </>
       ) : null}
       {canDuplicate ? (
         <>
-          <div className="session-context-menu-divider manage-file-context-menu-divider" role="separator" />
+          <div className='session-context-menu-divider manage-file-context-menu-divider' role='separator' />
           <button
-            className="session-context-menu-item manage-file-context-menu-item"
+            className='session-context-menu-item manage-file-context-menu-item'
             disabled={isBusy}
             onClick={onDuplicate}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <IconCopyPlus aria-hidden="true" size={14} stroke={1.8} />
-            {pendingAction === "duplicate" ? "Duplicating" : "Duplicate"}
+            <IconCopyPlus aria-hidden='true' size={14} stroke={1.8} />
+            {pendingAction === 'duplicate' ? 'Duplicating' : 'Duplicate'}
           </button>
         </>
       ) : null}
       {canRenameOrDelete ? (
         <>
-          {!canDuplicate ? <div className="session-context-menu-divider manage-file-context-menu-divider" role="separator" /> : null}
+          {!canDuplicate ? (
+            <div className='session-context-menu-divider manage-file-context-menu-divider' role='separator' />
+          ) : null}
           <button
-            className="session-context-menu-item manage-file-context-menu-item"
+            className='session-context-menu-item manage-file-context-menu-item'
             disabled={isBusy}
             onClick={onRename}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <IconEdit aria-hidden="true" size={14} stroke={1.8} />
+            <IconEdit aria-hidden='true' size={14} stroke={1.8} />
             Rename
           </button>
           <button
-            className="session-context-menu-item session-context-menu-item-danger manage-file-context-menu-item manage-file-context-menu-item-danger"
+            className='session-context-menu-item session-context-menu-item-danger manage-file-context-menu-item manage-file-context-menu-item-danger'
             data-confirming={String(confirmingDelete)}
             disabled={isBusy}
             onClick={onDelete}
-            role="menuitem"
-            type="button"
+            role='menuitem'
+            type='button'
           >
-            <IconTrash aria-hidden="true" size={14} stroke={1.8} />
-            {pendingAction === "delete" ? "Deleting" : confirmingDelete ? "Confirm delete" : "Delete"}
+            <IconTrash aria-hidden='true' size={14} stroke={1.8} />
+            {pendingAction === 'delete' ? 'Deleting' : confirmingDelete ? 'Confirm delete' : 'Delete'}
           </button>
         </>
       ) : null}
@@ -590,12 +587,12 @@ export function ManageRenameDialog({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         onCancel();
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onCancel]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -608,50 +605,45 @@ export function ManageRenameDialog({
 
   return createPortal(
     <>
-      <button
-        aria-label="Cancel rename"
-        className="manage-rename-backdrop"
-        onClick={onCancel}
-        type="button"
-      />
-      <form className="manage-rename-dialog" onSubmit={submit}>
-        <div className="manage-rename-header">
+      <button aria-label='Cancel rename' className='manage-rename-backdrop' onClick={onCancel} type='button' />
+      <form className='manage-rename-dialog' onSubmit={submit}>
+        <div className='manage-rename-header'>
           <span>Rename item</span>
           <button
-            aria-label="Cancel rename"
-            className="manage-icon-button manage-rename-close"
+            aria-label='Cancel rename'
+            className='manage-icon-button manage-rename-close'
             onClick={onCancel}
-            type="button"
+            type='button'
           >
-            <IconX aria-hidden="true" size={15} stroke={1.8} />
+            <IconX aria-hidden='true' size={15} stroke={1.8} />
           </button>
         </div>
         <input
-          aria-label="Item name"
-          className="manage-rename-input"
+          aria-label='Item name'
+          className='manage-rename-input'
           disabled={isRenaming}
           onChange={(event) => onChange(event.currentTarget.value)}
           ref={inputRef}
           value={value}
         />
-        {error ? <div className="manage-rename-error">{error}</div> : null}
-        <div className="manage-rename-actions">
-          <button className="manage-rename-secondary" disabled={isRenaming} onClick={onCancel} type="button">
+        {error ? <div className='manage-rename-error'>{error}</div> : null}
+        <div className='manage-rename-actions'>
+          <button className='manage-rename-secondary' disabled={isRenaming} onClick={onCancel} type='button'>
             Cancel
           </button>
-          <button className="manage-rename-primary" disabled={isSubmitDisabled} type="submit">
-            {isRenaming ? "Renaming" : "Rename"}
+          <button className='manage-rename-primary' disabled={isSubmitDisabled} type='submit'>
+            {isRenaming ? 'Renaming' : 'Rename'}
           </button>
         </div>
       </form>
     </>,
-    document.body,
+    document.body
   );
 }
 
 export function ManageEmptyState({ icon, text }: { icon: ReactNode; text: string }) {
   return (
-    <div className="manage-empty">
+    <div className='manage-empty'>
       {icon}
       <span>{text}</span>
     </div>

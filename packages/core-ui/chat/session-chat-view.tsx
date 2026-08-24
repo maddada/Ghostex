@@ -3,62 +3,44 @@
 // the composer while showing. Hosts inject a SessionChatTransport; everything
 // else is derived by useSessionChat.
 
-import { IconEyeFilled, IconEyeOff, IconRobot } from "@tabler/icons-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ClipboardEvent, KeyboardEvent } from "react";
-import { Button } from "../../components/ui/button";
-import { cn } from "@/packages/components/utils";
-import type { SessionChatSkill, SessionChatTheme } from "../../shared/session-chat";
-import { getDefaultSidebarAgentById } from "../../shared/sidebar-agents";
-import { getBrandAgentLogoStyle } from "../agent-logos";
-import { AppTooltip, TooltipProvider } from "../app-tooltip";
-import {
-  SessionChatComposer,
-  type SessionChatComposerHandle,
-} from "./session-chat-composer";
-import { sessionChatEmptyStateCopy } from "./session-chat-empty-state";
+import { IconEyeFilled, IconEyeOff, IconRobot } from '@tabler/icons-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ClipboardEvent, KeyboardEvent } from 'react';
+import { Button } from '../../components/ui/button';
+import { cn } from '@/packages/components/utils';
+import type { SessionChatSkill, SessionChatTheme } from '../../shared/session-chat';
+import { getDefaultSidebarAgentById } from '../../shared/sidebar-agents';
+import { getBrandAgentLogoStyle } from '../agent-logos';
+import { AppTooltip, TooltipProvider } from '../app-tooltip';
+import { SessionChatComposer, type SessionChatComposerHandle } from './session-chat-composer';
+import { sessionChatEmptyStateCopy } from './session-chat-empty-state';
 import {
   SessionChatHostActionsCluster,
   type SessionChatHostAction,
   type SessionChatHostActions,
-} from "./session-chat-host-actions-cluster";
-import { SessionChatImageViewerProvider } from "./session-chat-image-viewer";
-import {
-  SessionChatHostLinksProvider,
-  type SessionChatHostLinks,
-} from "./session-chat-links";
-import { SessionChatInteractiveCard } from "./session-chat-interactive-card";
-import { SessionChatMessageList } from "./session-chat-message-list";
-import {
-  SessionChatSearch,
-  type SessionChatHostSearchBridge,
-} from "./session-chat-search";
+} from './session-chat-host-actions-cluster';
+import { SessionChatImageViewerProvider } from './session-chat-image-viewer';
+import { SessionChatHostLinksProvider, type SessionChatHostLinks } from './session-chat-links';
+import { SessionChatInteractiveCard } from './session-chat-interactive-card';
+import { SessionChatMessageList } from './session-chat-message-list';
+import { SessionChatSearch, type SessionChatHostSearchBridge } from './session-chat-search';
 import {
   SessionChatTerminalNoticeCard,
   sessionChatTerminalNoticeDismissKey,
-} from "./session-chat-terminal-notice-card";
-import {
-  SessionChatSessionOptionPills,
-  useSessionChatSessionOptions,
-} from "./session-chat-option-pills";
-import { sessionChatOptionCommandNames } from "./session-chat-session-options";
-import {
-  readStoredSessionChatVerbose,
-  writeStoredSessionChatVerbose,
-} from "./session-chat-verbose-override";
-import {
-  sessionChatSlashCommandsForAgent,
-  sessionChatSlashHeadingForAgent,
-} from "./session-chat-slash-commands";
-import type { SessionChatTransport } from "./session-chat-transport";
-import { useSessionChat } from "./use-session-chat";
+} from './session-chat-terminal-notice-card';
+import { SessionChatSessionOptionPills, useSessionChatSessionOptions } from './session-chat-option-pills';
+import { sessionChatOptionCommandNames } from './session-chat-session-options';
+import { readStoredSessionChatVerbose, writeStoredSessionChatVerbose } from './session-chat-verbose-override';
+import { sessionChatSlashCommandsForAgent, sessionChatSlashHeadingForAgent } from './session-chat-slash-commands';
+import type { SessionChatTransport } from './session-chat-transport';
+import { useSessionChat } from './use-session-chat';
 
 const INTERACTIVE_TARGET_SELECTOR = [
-  "a[href]",
-  "button",
-  "input",
-  "select",
-  "textarea",
+  'a[href]',
+  'button',
+  'input',
+  'select',
+  'textarea',
   '[contenteditable]:not([contenteditable="false"])',
   '[role="button"]',
   '[role="checkbox"]',
@@ -70,14 +52,9 @@ const INTERACTIVE_TARGET_SELECTOR = [
   '[role="switch"]',
   '[role="textbox"]',
   '[data-session-chat-typing-redirect-ignore="true"]',
-].join(", ");
+].join(', ');
 
-export type {
-  SessionChatHostAction,
-  SessionChatHostActions,
-  SessionChatHostLinks,
-  SessionChatHostSearchBridge,
-};
+export type { SessionChatHostAction, SessionChatHostActions, SessionChatHostLinks, SessionChatHostSearchBridge };
 
 /** Where a stash left the durable copy of the text it was given. */
 export interface SessionChatStashedPrompt {
@@ -118,10 +95,7 @@ export interface SessionChatHostComposerBridge {
    * work would be worse than not offering one. Absent it, the composer's stash
    * control is not rendered and the chat → terminal handoff is unavailable.
    */
-  stashPrompt?: (
-    content: string,
-    options?: { transient?: boolean },
-  ) => Promise<SessionChatStashedPrompt | undefined>;
+  stashPrompt?: (content: string, options?: { transient?: boolean }) => Promise<SessionChatStashedPrompt | undefined>;
 }
 
 export interface SessionChatViewProps {
@@ -166,7 +140,7 @@ export interface SessionChatViewProps {
   /** Reveal thinking-owned tool calls without requiring a click. */
   verboseMode?: boolean;
   /** Presentation of the transcript search box (see SessionChatSearch). */
-  searchLayout?: "inline" | "overlay";
+  searchLayout?: 'inline' | 'overlay';
   /** Lets a native host open transcript search from its own chrome. */
   hostSearchBridge?: SessionChatHostSearchBridge;
   /**
@@ -183,17 +157,11 @@ export interface SessionChatViewProps {
   className?: string;
 }
 
-function EmptyState({
-  detail,
-  title,
-}: {
-  detail: string;
-  title: string;
-}) {
+function EmptyState({ detail, title }: { detail: string; title: string }) {
   return (
-    <div className="ghostex-chat-empty-state">
-      <div className="ghostex-chat-empty-title">{title}</div>
-      <div className="ghostex-chat-empty-detail">{detail}</div>
+    <div className='ghostex-chat-empty-state'>
+      <div className='ghostex-chat-empty-title'>{title}</div>
+      <div className='ghostex-chat-empty-detail'>{detail}</div>
     </div>
   );
 }
@@ -205,9 +173,7 @@ function displayAgentName(agentLabel?: string | null): string | null {
   }
   return (
     getDefaultSidebarAgentById(normalized)?.name ??
-    normalized
-      .replace(/[-_]+/g, " ")
-      .replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase())
+    normalized.replace(/[-_]+/g, ' ').replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase())
   );
 }
 
@@ -219,55 +185,33 @@ cards stacked above the composer. Living in flow means the cards take their
 height first and the welcome centers in whatever is left; `showTitle` drops the
 headline once a card is up, so the remaining space belongs to the logo alone.
 */
-function NewSessionWelcome({
-  agentLabel,
-  showTitle = true,
-}: {
-  agentLabel?: string | null;
-  showTitle?: boolean;
-}) {
+function NewSessionWelcome({ agentLabel, showTitle = true }: { agentLabel?: string | null; showTitle?: boolean }) {
   const agent = agentLabel ? getDefaultSidebarAgentById(agentLabel) : undefined;
   const agentName = displayAgentName(agentLabel);
 
   return (
-    <div className="ghostex-chat-new-session pointer-events-none min-h-0 flex-1 overflow-hidden">
-      <div
-        aria-label={agentName ?? "Agent"}
-        className="ghostex-chat-new-session-agent"
-        role="img"
-      >
+    <div className='ghostex-chat-new-session pointer-events-none min-h-0 flex-1 overflow-hidden'>
+      <div aria-label={agentName ?? 'Agent'} className='ghostex-chat-new-session-agent' role='img'>
         {agent?.icon ? (
           <span
-            aria-hidden="true"
-            className="ghostex-chat-new-session-agent-logo"
+            aria-hidden='true'
+            className='ghostex-chat-new-session-agent-logo'
             style={getBrandAgentLogoStyle(agent.icon)}
           />
         ) : (
-          <IconRobot aria-hidden="true" size={28} stroke={1.7} />
+          <IconRobot aria-hidden='true' size={28} stroke={1.7} />
         )}
       </div>
       {showTitle ? (
-        <div className="ghostex-chat-new-session-title">
-          {agentName ? (
-            <>
-              What should we build with {agentName}?
-            </>
-          ) : (
-            "What should we work on?"
-          )}
+        <div className='ghostex-chat-new-session-title'>
+          {agentName ? <>What should we build with {agentName}?</> : 'What should we work on?'}
         </div>
       ) : null}
     </div>
   );
 }
 
-function SessionAgentIdentity({
-  agentLabel,
-  showName = true,
-}: {
-  agentLabel?: string | null;
-  showName?: boolean;
-}) {
+function SessionAgentIdentity({ agentLabel, showName = true }: { agentLabel?: string | null; showName?: boolean }) {
   const agent = agentLabel ? getDefaultSidebarAgentById(agentLabel) : undefined;
   const agentName = displayAgentName(agentLabel);
   if (!agentName) {
@@ -277,22 +221,15 @@ function SessionAgentIdentity({
   return (
     <div
       aria-label={`Agent ${agentName}`}
-      className="ghostex-chat-agent-identity flex min-w-0 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground"
+      className='ghostex-chat-agent-identity flex min-w-0 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground'
     >
       {agent?.icon ? (
-        <span
-          aria-hidden="true"
-          className="block size-3.5 shrink-0"
-          style={getBrandAgentLogoStyle(agent.icon)}
-        />
+        <span aria-hidden='true' className='block size-3.5 shrink-0' style={getBrandAgentLogoStyle(agent.icon)} />
       ) : (
-        <IconRobot aria-hidden="true" className="size-3.5 shrink-0" stroke={1.8} />
+        <IconRobot aria-hidden='true' className='size-3.5 shrink-0' stroke={1.8} />
       )}
       {showName ? (
-        <span
-          className="ghostex-chat-agent-name min-w-0 truncate"
-          style={{ maxWidth: "6rem" }}
-        >
+        <span className='ghostex-chat-agent-name min-w-0 truncate' style={{ maxWidth: '6rem' }}>
           {agentName}
         </span>
       ) : null}
@@ -305,30 +242,24 @@ Verbose pill: a per-session override of the sessionChatVerboseMode setting.
 The setting stays the default for chats that never touch the pill; a session
 that does keeps its own value (session-chat-verbose-override.ts).
 */
-function SessionVerbosePill({
-  onToggle,
-  verbose,
-}: {
-  onToggle: () => void;
-  verbose: boolean;
-}) {
+function SessionVerbosePill({ onToggle, verbose }: { onToggle: () => void; verbose: boolean }) {
   const Icon = verbose ? IconEyeFilled : IconEyeOff;
-  const verboseLabel = verbose ? "Verbose mode on" : "Verbose mode off";
+  const verboseLabel = verbose ? 'Verbose mode on' : 'Verbose mode off';
   return (
     <AppTooltip content={verboseLabel}>
-      <span className="ghostex-chat-verbose-wrapper inline-flex">
+      <span className='ghostex-chat-verbose-wrapper inline-flex'>
         <Button
           aria-label={verboseLabel}
           aria-pressed={verbose}
           className={cn(
-            "ghostex-chat-footer-control ghostex-chat-verbose-control rounded-full",
-            verbose ? "text-foreground" : "text-muted-foreground",
+            'ghostex-chat-footer-control ghostex-chat-verbose-control rounded-full',
+            verbose ? 'text-foreground' : 'text-muted-foreground'
           )}
           onClick={onToggle}
-          size="icon-xs"
-          variant={verbose ? "secondary" : "ghost"}
+          size='icon-xs'
+          variant={verbose ? 'secondary' : 'ghost'}
         >
-          <Icon aria-hidden="true" className="size-4 shrink-0" stroke={2} />
+          <Icon aria-hidden='true' className='size-4 shrink-0' stroke={2} />
         </Button>
       </span>
     </AppTooltip>
@@ -349,11 +280,11 @@ export function SessionChatView({
   sendOnEnter = true,
   sessionKey,
   hostSearchBridge,
-  searchLayout = "inline",
+  searchLayout = 'inline',
   showComposerAgentName = true,
   showNewSessionWelcomeTitle = true,
   showVerbosePill = true,
-  theme = "dark",
+  theme = 'dark',
   transport,
   verboseMode = false,
   working,
@@ -363,19 +294,13 @@ export function SessionChatView({
     // palette on body so those explicitly scoped popup surfaces match.
     document.body.dataset.sessionChatTheme = theme;
   }, [theme]);
-  const slashCommands = useMemo(
-    () => sessionChatSlashCommandsForAgent(agentLabel ?? null),
-    [agentLabel],
-  );
+  const slashCommands = useMemo(() => sessionChatSlashCommandsForAgent(agentLabel ?? null), [agentLabel]);
   // The option pills type commands the "/" picker does not offer (/effort,
   // /fast). They still have to classify as commands so a dispatched pill
   // renders the same muted "Ran /model sonnet" row a typed one does.
   const slashCommandNames = useMemo(
-    () => [
-      ...slashCommands.map((command) => command.name),
-      ...sessionChatOptionCommandNames(agentLabel ?? null),
-    ],
-    [agentLabel, slashCommands],
+    () => [...slashCommands.map((command) => command.name), ...sessionChatOptionCommandNames(agentLabel ?? null)],
+    [agentLabel, slashCommands]
   );
   const chat = useSessionChat({
     commandCatalog: commandCatalog ?? slashCommandNames,
@@ -383,7 +308,7 @@ export function SessionChatView({
     transport,
     working,
   });
-  const initialTranscriptLoading = chat.view.kind === "loading";
+  const initialTranscriptLoading = chat.view.kind === 'loading';
   const [skills, setSkills] = useState<readonly SessionChatSkill[]>([]);
   useEffect(() => {
     const readSkills = transport.readSkills?.bind(transport);
@@ -448,7 +373,7 @@ export function SessionChatView({
   });
   // null = this chat has never been toggled, so it follows the global setting.
   const [verboseOverride, setVerboseOverride] = useState<boolean | null>(() =>
-    readStoredSessionChatVerbose(sessionKey),
+    readStoredSessionChatVerbose(sessionKey)
   );
   useEffect(() => {
     setVerboseOverride(readStoredSessionChatVerbose(sessionKey));
@@ -478,7 +403,7 @@ export function SessionChatView({
   const composerRef = useRef<SessionChatComposerHandle | null>(null);
   const stashComposerDraft = useCallback((): void => {
     const composer = composerRef.current;
-    const draft = composer?.getDraft() ?? "";
+    const draft = composer?.getDraft() ?? '';
     const stashPrompt = hostComposerBridge?.stashPrompt;
     if (!stashPrompt || !draft.trim()) {
       return;
@@ -498,12 +423,12 @@ export function SessionChatView({
   }, [hostComposerBridge]);
   const handoffComposerDraft = useCallback(async (): Promise<SessionChatComposerHandoff> => {
     const composer = composerRef.current;
-    const draft = composer?.getDraft() ?? "";
+    const draft = composer?.getDraft() ?? '';
     if (!draft.trim()) {
       if (draft.length > 0) {
         composer?.clearDraft(draft);
       }
-      return { content: "" };
+      return { content: '' };
     }
     const stashPrompt = hostComposerBridge?.stashPrompt;
     if (!stashPrompt) {
@@ -512,7 +437,7 @@ export function SessionChatView({
       copy of the text. A host that cannot stash simply cannot move a draft, so
       say so and stay in chat with every character intact.
       */
-      throw new Error("This host cannot move the draft out of chat.");
+      throw new Error('This host cannot move the draft out of chat.');
     }
     const stashed = await stashPrompt(draft, { transient: true });
     // The exact snapshot that became durable must still own the composer.
@@ -521,7 +446,7 @@ export function SessionChatView({
     // above stays in Saved Prompts: a visible duplicate is the correct price
     // for never being able to lose the text.
     if (composerRef.current?.clearDraft(draft) !== true) {
-      throw new Error("The draft changed while it was being moved.");
+      throw new Error('The draft changed while it was being moved.');
     }
     return {
       content: draft,
@@ -538,24 +463,17 @@ export function SessionChatView({
       insertPrompt: (content) => composerRef.current?.insertTypedText(content) ?? false,
       requestStash: stashComposerDraft,
     });
-  }, [
-    handoffComposerDraft,
-    hostComposerBridge,
-    initialTranscriptLoading,
-    stashComposerDraft,
-  ]);
+  }, [handoffComposerDraft, hostComposerBridge, initialTranscriptLoading, stashComposerDraft]);
   const pasteImage = useMemo(() => {
     const saveImage = transport.saveImage?.bind(transport);
     return saveImage
-      ? async (payload: { base64Data: string; suggestedName?: string }) =>
-          (await saveImage(payload)).path
+      ? async (payload: { base64Data: string; suggestedName?: string }) => (await saveImage(payload)).path
       : undefined;
   }, [transport]);
   const attachFile = useMemo(() => {
     const saveAttachment = transport.saveAttachment?.bind(transport);
     return saveAttachment
-      ? async (payload: { base64Data: string; suggestedName?: string }) =>
-          (await saveAttachment(payload)).path
+      ? async (payload: { base64Data: string; suggestedName?: string }) => (await saveAttachment(payload)).path
       : undefined;
   }, [transport]);
   const pickPaths = useMemo(() => {
@@ -564,9 +482,7 @@ export function SessionChatView({
   }, [transport]);
   const saveImageAs = useMemo(() => {
     const save = transport.saveImageAs?.bind(transport);
-    return save
-      ? (params: { base64Data: string; suggestedName: string }) => save(params)
-      : undefined;
+    return save ? (params: { base64Data: string; suggestedName: string }) => save(params) : undefined;
   }, [transport]);
   // Machine-path image bytes as a data URL: chat-log overlay + picked-image
   // composer thumbnails both read through it.
@@ -597,9 +513,8 @@ export function SessionChatView({
   // interactive card's Allow/Deny buttons use.
   const chatAnswerPrompt = chat.answerPrompt;
   const sendNoticeKeys = useCallback(
-    (send: string): Promise<void> =>
-      chatAnswerPrompt({ approvalSend: send, kind: "approval" }),
-    [chatAnswerPrompt],
+    (send: string): Promise<void> => chatAnswerPrompt({ approvalSend: send, kind: 'approval' }),
+    [chatAnswerPrompt]
   );
 
   /*
@@ -615,7 +530,7 @@ export function SessionChatView({
   const answerNoticeChoice = useCallback(
     async (choiceIndex: number): Promise<void> => {
       try {
-        await chatAnswerPrompt({ choiceIndex, kind: "terminalChoice" });
+        await chatAnswerPrompt({ choiceIndex, kind: 'terminalChoice' });
       } catch (error) {
         /*
         The answer did not land, which the daemon only reports after PROVING
@@ -631,10 +546,9 @@ export function SessionChatView({
         throw error;
       }
     },
-    [chatAnswerPrompt, noticeKey],
+    [chatAnswerPrompt, noticeKey]
   );
-  const terminalChoicePending =
-    (chat.terminalNotice?.choices?.length ?? 0) > 0 && noticeKey !== retiredNoticeKey;
+  const terminalChoicePending = (chat.terminalNotice?.choices?.length ?? 0) > 0 && noticeKey !== retiredNoticeKey;
   const composerEnabled = canSend && !terminalChoicePending;
 
   // A command the user types themselves reconciles the pills (§1.4), so the
@@ -646,7 +560,7 @@ export function SessionChatView({
       reconcileTypedCommand(text);
       return chatSend(text);
     },
-    [chatSend, reconcileTypedCommand],
+    [chatSend, reconcileTypedCommand]
   );
 
   // Typing anywhere in the pane lands in the composer (§11.1): a single
@@ -661,28 +575,18 @@ export function SessionChatView({
       if (target?.closest?.(INTERACTIVE_TARGET_SELECTOR)) {
         return;
       }
-      if (
-        (event.key === "Backspace" || event.key === "Delete") &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey
-      ) {
+      if ((event.key === 'Backspace' || event.key === 'Delete') && !event.metaKey && !event.ctrlKey && !event.altKey) {
         composerRef.current?.focus();
         return;
       }
-      if (
-        event.key.length === 1 &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !event.nativeEvent.isComposing
-      ) {
+      if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) {
         if (composerRef.current?.insertTypedText(event.key)) {
           event.preventDefault();
           event.stopPropagation();
         }
       }
     },
-    [questionActive],
+    [questionActive]
   );
 
   // Pasting after a click on the pane background lands in the composer too,
@@ -702,7 +606,7 @@ export function SessionChatView({
         event.stopPropagation();
       }
     },
-    [questionActive],
+    [questionActive]
   );
 
   // The initial read cannot yet distinguish an existing transcript from a
@@ -711,12 +615,8 @@ export function SessionChatView({
   if (initialTranscriptLoading) {
     return (
       <div
-        aria-busy="true"
-        className={cn(
-          "ghostex-session-chat-scope h-full min-h-0 bg-background",
-          theme === "dark" && "dark",
-          className,
-        )}
+        aria-busy='true'
+        className={cn('ghostex-session-chat-scope h-full min-h-0 bg-background', theme === 'dark' && 'dark', className)}
         data-chat-theme={theme}
         onContextMenu={(event) => event.preventDefault()}
       />
@@ -724,29 +624,25 @@ export function SessionChatView({
   }
 
   const emptyKind =
-    chat.view.kind === "ready"
-      ? null
-      : chat.view.kind === "error"
-        ? ("error" as const)
-        : chat.view.kind;
+    chat.view.kind === 'ready' ? null : chat.view.kind === 'error' ? ('error' as const) : chat.view.kind;
   const bottomCardVisible = noticeCardVisible || interactiveCardVisible;
   const showNewSessionWelcome =
     // A new agent reports `starting` until its first transcript file exists.
     // Keep the designed welcome visible throughout that pre-transcript window.
-    emptyKind === "starting" || emptyKind === "empty";
+    emptyKind === 'starting' || emptyKind === 'empty';
 
   return (
     <TooltipProvider>
       <div
         className={cn(
-        // The app theme zeroes --radius for its square chrome; restore the
-        // shadcn default inside the chat so bubbles and cards keep their
-        // rounded look. The scope class lifts the SquareTheme border-radius
-        // override (packages/core-ui/styles.css) for controls inside the chat.
-        "ghostex-session-chat-scope relative flex h-full min-h-0 flex-col bg-background text-foreground outline-none [--radius:0.625rem]",
-        theme === "dark" && "dark",
-        className,
-      )}
+          // The app theme zeroes --radius for its square chrome; restore the
+          // shadcn default inside the chat so bubbles and cards keep their
+          // rounded look. The scope class lifts the SquareTheme border-radius
+          // override (packages/core-ui/styles.css) for controls inside the chat.
+          'ghostex-session-chat-scope relative flex h-full min-h-0 flex-col bg-background text-foreground outline-none [--radius:0.625rem]',
+          theme === 'dark' && 'dark',
+          className
+        )}
         data-chat-theme={theme}
         onContextMenu={(event) => event.preventDefault()}
         onKeyDownCapture={handleKeyDownCapture}
@@ -754,146 +650,137 @@ export function SessionChatView({
         ref={chatRootRef}
         tabIndex={-1}
       >
-      <SessionChatImageViewerProvider
-        {...(loadImageDataUrl ? { loadImage: loadImageDataUrl } : {})}
-        {...(saveImageAs ? { saveImageAs } : {})}
-      >
-      <SessionChatHostLinksProvider {...(hostLinks ? { links: hostLinks } : {})}>
-      <div className="relative flex min-h-0 flex-1 flex-col">
-      <SessionChatSearch
-        {...(hostSearchBridge ? { hostBridge: hostSearchBridge } : {})}
-        layout={searchLayout}
-        rootRef={chatRootRef}
-        searchRevision={chat.messages}
-      />
-      <div className="relative flex min-h-0 flex-1 flex-col">
-      {hostActions ? (
-        <SessionChatHostActionsCluster hostActions={hostActions} surface="chat" />
-      ) : null}
-      <div className="flex min-h-0 flex-1 flex-col">
-        {chat.view.kind === "ready" ? (
-          <SessionChatMessageList
-            hasMore={chat.hasMore}
-            isWorking={chat.view.isWorking}
-            loadingEarlier={chat.loadingEarlier}
-            messages={chat.messages}
-            onLoadEarlier={chat.loadEarlier}
-            terminalActivity={chat.terminalActivity}
-            verboseMode={verbose}
-          />
-        ) : showNewSessionWelcome ? (
-          <NewSessionWelcome
-            agentLabel={agentLabel}
-            showTitle={showNewSessionWelcomeTitle && !bottomCardVisible}
-          />
-        ) : emptyKind ? (
-          chat.view.kind === "error" ? (
-            <EmptyState
-              detail={sessionChatEmptyStateCopy("error").detail}
-              title={sessionChatEmptyStateCopy("error").title}
-            />
-          ) : (
-            <EmptyState
-              detail={sessionChatEmptyStateCopy(emptyKind, agentLabel).detail}
-              title={sessionChatEmptyStateCopy(emptyKind, agentLabel).title}
-            />
-          )
-        ) : null}
-      </div>
-      <div className="mx-auto grid w-full max-w-3xl flex-none gap-2 px-4 pt-2 pb-3">
-        <SessionChatTerminalNoticeCard
-          canSend={canSend}
-          notice={chat.terminalNotice}
-          onAnswerChoice={answerNoticeChoice}
-          onSendKeys={sendNoticeKeys}
-          onVisibleChange={setNoticeCardVisible}
-          {...(hostActions?.onSwitchToTerminal
-            ? { onSwitchToTerminal: hostActions.onSwitchToTerminal }
-            : {})}
-        />
-        <SessionChatInteractiveCard
-          canSend={canSend}
-          onAnswer={chat.answerPrompt}
-          onInterrupt={interrupt}
-          onShowingChange={setInteractiveCardVisible}
-          onShowingQuestionChange={setQuestionActive}
-          onSwitchToTerminal={hostActions?.onSwitchToTerminal}
-          prompt={chat.prompt}
-        />
-        {questionActive ? null : (
-          <SessionChatComposer
-            agentFleet={chat.agentFleet}
-            disabled={!composerEnabled}
-            draftSync={chat.draft}
-            isWorking={chat.working}
-            key={sessionKey}
-            monacoVsBaseUrl={monacoVsBaseUrl}
-            queue={chat.queue}
-            sessionKey={sessionKey}
-            theme={theme}
-            onAttachFile={attachFile}
-            onInterrupt={interrupt}
-            onLoadImagePreview={loadImageDataUrl}
-            onPasteImage={pasteImage}
-            onPickPaths={pickPaths}
-            onSend={send}
-            sendOnEnter={sendOnEnter}
-            {...(hostComposerBridge?.stashPrompt ? { onStash: stashComposerDraft } : {})}
-            optionPills={
-              <>
-                {chat.view.kind === "ready" ? (
-                  <SessionAgentIdentity
-                    agentLabel={agentLabel}
-                    showName={showComposerAgentName}
+        <SessionChatImageViewerProvider
+          {...(loadImageDataUrl ? { loadImage: loadImageDataUrl } : {})}
+          {...(saveImageAs ? { saveImageAs } : {})}
+        >
+          <SessionChatHostLinksProvider {...(hostLinks ? { links: hostLinks } : {})}>
+            <div className='relative flex min-h-0 flex-1 flex-col'>
+              <SessionChatSearch
+                {...(hostSearchBridge ? { hostBridge: hostSearchBridge } : {})}
+                layout={searchLayout}
+                rootRef={chatRootRef}
+                searchRevision={chat.messages}
+              />
+              <div className='relative flex min-h-0 flex-1 flex-col'>
+                {hostActions ? <SessionChatHostActionsCluster hostActions={hostActions} surface='chat' /> : null}
+                <div className='flex min-h-0 flex-1 flex-col'>
+                  {chat.view.kind === 'ready' ? (
+                    <SessionChatMessageList
+                      hasMore={chat.hasMore}
+                      isWorking={chat.view.isWorking}
+                      loadingEarlier={chat.loadingEarlier}
+                      messages={chat.messages}
+                      onLoadEarlier={chat.loadEarlier}
+                      terminalActivity={chat.terminalActivity}
+                      verboseMode={verbose}
+                    />
+                  ) : showNewSessionWelcome ? (
+                    <NewSessionWelcome
+                      agentLabel={agentLabel}
+                      showTitle={showNewSessionWelcomeTitle && !bottomCardVisible}
+                    />
+                  ) : emptyKind ? (
+                    chat.view.kind === 'error' ? (
+                      <EmptyState
+                        detail={sessionChatEmptyStateCopy('error').detail}
+                        title={sessionChatEmptyStateCopy('error').title}
+                      />
+                    ) : (
+                      <EmptyState
+                        detail={sessionChatEmptyStateCopy(emptyKind, agentLabel).detail}
+                        title={sessionChatEmptyStateCopy(emptyKind, agentLabel).title}
+                      />
+                    )
+                  ) : null}
+                </div>
+                <div className='mx-auto grid w-full max-w-3xl flex-none gap-2 px-4 pt-2 pb-3'>
+                  <SessionChatTerminalNoticeCard
+                    canSend={canSend}
+                    notice={chat.terminalNotice}
+                    onAnswerChoice={answerNoticeChoice}
+                    onSendKeys={sendNoticeKeys}
+                    onVisibleChange={setNoticeCardVisible}
+                    {...(hostActions?.onSwitchToTerminal ? { onSwitchToTerminal: hostActions.onSwitchToTerminal } : {})}
                   />
-                ) : null}
-                <SessionChatSessionOptionPills
-                  canSend={canSend}
-                  canSendKey={chat.sendKey !== undefined}
-                  controller={sessionOptions}
-                  isWorking={chat.working}
-                  screenProbed={chat.screenProbed}
-                  onDispatchCommand={send}
-                  onDispatchKey={async (key, marker) => {
-                    await chat.sendKey?.(key, marker);
-                  }}
-                  {...(onSwitchToTerminalForAgentPicker || hostActions?.onSwitchToTerminal
-                    ? {
-                      onSwitchToTerminal:
-                          onSwitchToTerminalForAgentPicker ??
-                          hostActions?.onSwitchToTerminalForAgentPicker ??
-                          hostActions?.onSwitchToTerminal,
+                  <SessionChatInteractiveCard
+                    canSend={canSend}
+                    onAnswer={chat.answerPrompt}
+                    onInterrupt={interrupt}
+                    onShowingChange={setInteractiveCardVisible}
+                    onShowingQuestionChange={setQuestionActive}
+                    onSwitchToTerminal={hostActions?.onSwitchToTerminal}
+                    prompt={chat.prompt}
+                  />
+                  {questionActive ? null : (
+                    <SessionChatComposer
+                      agentFleet={chat.agentFleet}
+                      disabled={!composerEnabled}
+                      draftSync={chat.draft}
+                      isWorking={chat.working}
+                      key={sessionKey}
+                      monacoVsBaseUrl={monacoVsBaseUrl}
+                      queue={chat.queue}
+                      sessionKey={sessionKey}
+                      theme={theme}
+                      onAttachFile={attachFile}
+                      onInterrupt={interrupt}
+                      onLoadImagePreview={loadImageDataUrl}
+                      onPasteImage={pasteImage}
+                      onPickPaths={pickPaths}
+                      onSend={send}
+                      sendOnEnter={sendOnEnter}
+                      {...(hostComposerBridge?.stashPrompt ? { onStash: stashComposerDraft } : {})}
+                      optionPills={
+                        <>
+                          {chat.view.kind === 'ready' ? (
+                            <SessionAgentIdentity agentLabel={agentLabel} showName={showComposerAgentName} />
+                          ) : null}
+                          <SessionChatSessionOptionPills
+                            canSend={canSend}
+                            canSendKey={chat.sendKey !== undefined}
+                            controller={sessionOptions}
+                            isWorking={chat.working}
+                            screenProbed={chat.screenProbed}
+                            onDispatchCommand={send}
+                            onDispatchKey={async (key, marker) => {
+                              await chat.sendKey?.(key, marker);
+                            }}
+                            {...(onSwitchToTerminalForAgentPicker || hostActions?.onSwitchToTerminal
+                              ? {
+                                  onSwitchToTerminal:
+                                    onSwitchToTerminalForAgentPicker ??
+                                    hostActions?.onSwitchToTerminalForAgentPicker ??
+                                    hostActions?.onSwitchToTerminal,
+                                }
+                              : {})}
+                          />
+                          {showVerbosePill ? <SessionVerbosePill onToggle={toggleVerbose} verbose={verbose} /> : null}
+                        </>
                       }
-                    : {})}
-                />
-                {showVerbosePill ? (
-                  <SessionVerbosePill onToggle={toggleVerbose} verbose={verbose} />
-                ) : null}
-              </>
-            }
-            placeholder={
-              !canSend
-                ? "Input is held by another device."
-                : terminalChoicePending
-                  ? "Answer the question above to continue."
-                  : undefined
-            }
-            ref={composerRef}
-            slashCommands={slashCommands}
-            slashHeading={sessionChatSlashHeadingForAgent(agentLabel ?? null)}
-            skills={skills}
-            files={files}
-            filesLoading={filesLoading}
-            onRequestFiles={requestFiles}
-            fileHeading="Project files"
-            skillHeading={`${displayAgentName(agentLabel) ?? "Agent"} skills`}
-          />
-        )}
-      </div>
-      </div>
-      </div>
-      </SessionChatHostLinksProvider>
-      </SessionChatImageViewerProvider>
+                      placeholder={
+                        !canSend
+                          ? 'Input is held by another device.'
+                          : terminalChoicePending
+                            ? 'Answer the question above to continue.'
+                            : undefined
+                      }
+                      ref={composerRef}
+                      slashCommands={slashCommands}
+                      slashHeading={sessionChatSlashHeadingForAgent(agentLabel ?? null)}
+                      skills={skills}
+                      files={files}
+                      filesLoading={filesLoading}
+                      onRequestFiles={requestFiles}
+                      fileHeading='Project files'
+                      skillHeading={`${displayAgentName(agentLabel) ?? 'Agent'} skills`}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </SessionChatHostLinksProvider>
+        </SessionChatImageViewerProvider>
       </div>
     </TooltipProvider>
   );

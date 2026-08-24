@@ -592,7 +592,8 @@ pub mod ffi {
         terminal: GhosttyTerminal,
         userdata: *mut c_void,
         write: *const GhosttyClipboardWrite,
-    ) -> GhosttyClipboardWriteResult;
+    )
+        -> GhosttyClipboardWriteResult;
 
     pub type GhosttyStyleColorTag = c_int;
     pub const GHOSTTY_STYLE_COLOR_NONE: GhosttyStyleColorTag = 0;

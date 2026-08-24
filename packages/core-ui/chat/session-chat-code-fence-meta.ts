@@ -18,7 +18,7 @@
  * the block renderer.
  */
 
-import { sessionChatFilePathIcon } from "./session-chat-file-paths";
+import { sessionChatFilePathIcon } from './session-chat-file-paths';
 
 interface MarkdownAstNode {
   children?: MarkdownAstNode[];
@@ -32,9 +32,9 @@ interface MarkdownAstNode {
 export function remarkSessionChatCodeMeta() {
   return (tree: MarkdownAstNode) => {
     const visit = (node: MarkdownAstNode) => {
-      if (node.type === "code" && typeof node.meta === "string") {
+      if (node.type === 'code' && typeof node.meta === 'string') {
         const meta = node.meta.trim();
-        if (meta !== "") {
+        if (meta !== '') {
           node.data = {
             ...node.data,
             hProperties: { ...node.data?.hProperties, dataCodeMeta: meta },
@@ -59,15 +59,12 @@ interface FenceHastNode {
 /** The meta string of the fence this <pre> node came from, if it had one. */
 export function sessionChatFenceMeta(node: unknown): string | null {
   const children = (node as FenceHastNode | undefined)?.children;
-  const code = children?.find(
-    (child) => child?.type === "element" && child.tagName === "code",
-  );
+  const code = children?.find((child) => child?.type === 'element' && child.tagName === 'code');
   const meta = code?.properties?.dataCodeMeta;
-  return typeof meta === "string" && meta !== "" ? meta : null;
+  return typeof meta === 'string' && meta !== '' ? meta : null;
 }
 
-const FENCE_TITLE_ATTRIBUTE =
-  /(?:^|\s)(?:title|file(?:name)?)=(?:"([^"]+)"|'([^']+)'|(\S+))/i;
+const FENCE_TITLE_ATTRIBUTE = /(?:^|\s)(?:title|file(?:name)?)=(?:"([^"]+)"|'([^']+)'|(\S+))/i;
 /*
  * A bare token only counts as a filename when it reads like one: something
  * before a dot, an extension after it, and nothing but path characters in
@@ -94,6 +91,6 @@ export function sessionChatFenceTitle(meta: string | null): string | null {
  * named by a fence and the same path named mid-sentence carry one icon.
  */
 export function sessionChatFenceTitleIcon(title: string) {
-  const separator = Math.max(title.lastIndexOf("/"), title.lastIndexOf("\\"));
+  const separator = Math.max(title.lastIndexOf('/'), title.lastIndexOf('\\'));
   return sessionChatFilePathIcon(title.slice(separator + 1));
 }

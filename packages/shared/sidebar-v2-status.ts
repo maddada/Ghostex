@@ -1,4 +1,4 @@
-import type { SidebarV2Session } from "./sidebar-v2-session";
+import type { SidebarV2Session } from './sidebar-v2-session';
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
@@ -13,15 +13,9 @@ structured data only (kind/label/hue/recede/pulse); CSS classes and JSX stay in
 the V2 render tree.
 */
 
-export type SidebarV2StatusHue = "amber" | "indigo" | "neutral" | "red" | "sky";
+export type SidebarV2StatusHue = 'amber' | 'indigo' | 'neutral' | 'red' | 'sky';
 
-export type SidebarV2StatusKind =
-  | "approval"
-  | "done"
-  | "failed"
-  | "idle"
-  | "input"
-  | "working";
+export type SidebarV2StatusKind = 'approval' | 'done' | 'failed' | 'idle' | 'input' | 'working';
 
 export type SidebarV2Status = {
   hue: SidebarV2StatusHue;
@@ -53,9 +47,7 @@ export function parseTimestampMs(isoDate: string | null | undefined): number {
 /** First VALID timestamp wins: `a ?? b` falls through on null, but a present-
     yet-malformed string must also fall through to the next candidate rather
     than sink the row to the epoch. */
-export function firstValidTimestampMs(
-  ...candidates: readonly (string | null | undefined)[]
-): number | null {
+export function firstValidTimestampMs(...candidates: readonly (string | null | undefined)[]): number | null {
   for (const candidate of candidates) {
     if (candidate == null) {
       continue;
@@ -70,9 +62,7 @@ export function firstValidTimestampMs(
 
 /** String twin of `firstValidTimestampMs` for callers that need the ISO string
     (display labels, tick anchors) rather than epoch ms. */
-export function firstValidTimestamp(
-  ...candidates: readonly (string | null | undefined)[]
-): string | null {
+export function firstValidTimestamp(...candidates: readonly (string | null | undefined)[]): string | null {
   for (const candidate of candidates) {
     if (candidate == null) {
       continue;
@@ -86,12 +76,7 @@ export function firstValidTimestamp(
 
 export type SidebarV2StatusSession = Pick<
   SidebarV2Session,
-  | "activity"
-  | "activityLabel"
-  | "attentionKind"
-  | "lastInteractionAt"
-  | "lifecycleState"
-  | "workingStartedAt"
+  'activity' | 'activityLabel' | 'attentionKind' | 'lastInteractionAt' | 'lifecycleState' | 'workingStartedAt'
 >;
 
 export type ResolveSidebarV2StatusOptions = {
@@ -112,7 +97,7 @@ export type ResolveSidebarV2StatusOptions = {
  * gxserver has not published a stint (older daemons, native-host sessions).
  */
 export function resolveSidebarV2WorkingStartedAtMs(
-  session: Pick<SidebarV2Session, "lastInteractionAt" | "workingStartedAt">,
+  session: Pick<SidebarV2Session, 'lastInteractionAt' | 'workingStartedAt'>
 ): number | null {
   return firstValidTimestampMs(session.workingStartedAt, session.lastInteractionAt);
 }
@@ -133,7 +118,7 @@ export function formatWorkingDurationLabel(elapsedMs: number): string {
     "2w". Deliberately unit-only so it never widens the row. */
 export function formatSidebarV2RelativeTime(elapsedMs: number): string {
   if (!Number.isFinite(elapsedMs) || elapsedMs < MINUTE_MS) {
-    return "now";
+    return 'now';
   }
   if (elapsedMs < HOUR_MS) {
     return `${Math.floor(elapsedMs / MINUTE_MS)}m`;
@@ -154,10 +139,10 @@ export function formatSidebarV2RelativeTime(elapsedMs: number): string {
  * marker, not the status label.
  */
 export function hasUnseenCompletion(
-  session: Pick<SidebarV2Session, "activity" | "lastInteractionAt">,
-  options: { lastVisitedAtMs?: number | null },
+  session: Pick<SidebarV2Session, 'activity' | 'lastInteractionAt'>,
+  options: { lastVisitedAtMs?: number | null }
 ): boolean {
-  if (session.activity !== "idle") {
+  if (session.activity !== 'idle') {
     return false;
   }
   const completedAtMs = firstValidTimestampMs(session.lastInteractionAt);
@@ -183,11 +168,11 @@ export function hasUnseenCompletion(
  */
 export function resolveSidebarV2Status(
   session: SidebarV2StatusSession,
-  options: ResolveSidebarV2StatusOptions,
+  options: ResolveSidebarV2StatusOptions
 ): SidebarV2Status {
   const activityLabel = session.activityLabel?.trim();
 
-  if (session.activity === "attention") {
+  if (session.activity === 'attention') {
     /*
      * Ghostex cannot tell an approval prompt from a plain input prompt: gxserver
      * publishes one `attention` activity and no `attentionKind`, and attention
@@ -196,30 +181,28 @@ export function resolveSidebarV2Status(
      * publishes `attentionKind: "input"` (P2+ can start doing that without any
      * further change here).
      */
-    const kind: SidebarV2StatusKind = session.attentionKind === "approval" ? "approval" : "input";
+    const kind: SidebarV2StatusKind = session.attentionKind === 'approval' ? 'approval' : 'input';
     return {
-      hue: session.attentionKind === "input" ? "indigo" : "amber",
+      hue: session.attentionKind === 'input' ? 'indigo' : 'amber',
       kind,
-      label: activityLabel || (kind === "approval" ? "Approval" : "Input"),
+      label: activityLabel || (kind === 'approval' ? 'Approval' : 'Input'),
       pulse: false,
       recede: false,
     };
   }
 
-  if (session.activity === "working") {
+  if (session.activity === 'working') {
     const startedAtMs = resolveSidebarV2WorkingStartedAtMs(session);
     const label =
-      startedAtMs === null
-        ? "Working"
-        : `Working ${formatWorkingDurationLabel(options.nowMs - startedAtMs)}`;
-    return { hue: "sky", kind: "working", label, pulse: true, recede: false };
+      startedAtMs === null ? 'Working' : `Working ${formatWorkingDurationLabel(options.nowMs - startedAtMs)}`;
+    return { hue: 'sky', kind: 'working', label, pulse: true, recede: false };
   }
 
-  if (session.lifecycleState === "error") {
+  if (session.lifecycleState === 'error') {
     return {
-      hue: "red",
-      kind: "failed",
-      label: activityLabel || "Failed",
+      hue: 'red',
+      kind: 'failed',
+      label: activityLabel || 'Failed',
       pulse: false,
       recede: false,
     };
@@ -227,7 +210,7 @@ export function resolveSidebarV2Status(
 
   const lastActivityMs = firstValidTimestampMs(session.lastInteractionAt);
   if (lastActivityMs === null) {
-    return { hue: "neutral", kind: "idle", label: "", pulse: false, recede: true };
+    return { hue: 'neutral', kind: 'idle', label: '', pulse: false, recede: true };
   }
 
   const elapsedMs = options.nowMs - lastActivityMs;
@@ -237,12 +220,12 @@ export function resolveSidebarV2Status(
     Number.isFinite(options.lastVisitedAtMs) &&
     options.lastVisitedAtMs >= lastActivityMs;
   if (elapsedMs >= 0 && elapsedMs < doneWindowMs && !isVisitedSinceActivity) {
-    return { hue: "neutral", kind: "done", label: "Done", pulse: false, recede: false };
+    return { hue: 'neutral', kind: 'done', label: 'Done', pulse: false, recede: false };
   }
 
   return {
-    hue: "neutral",
-    kind: "idle",
+    hue: 'neutral',
+    kind: 'idle',
     label: formatSidebarV2RelativeTime(Math.max(0, elapsedMs)),
     pulse: false,
     recede: true,
@@ -266,9 +249,7 @@ export function sidebarV2StatusPriority(kind: SidebarV2StatusKind): number {
  * Roll-up indicator for a collapsed project group: the loudest status among its
  * sessions, or null when everything is resting.
  */
-export function resolveSidebarV2GroupStatus(
-  statuses: readonly SidebarV2Status[],
-): SidebarV2Status | null {
+export function resolveSidebarV2GroupStatus(statuses: readonly SidebarV2Status[]): SidebarV2Status | null {
   let loudest: SidebarV2Status | null = null;
   for (const status of statuses) {
     if (status.recede) {

@@ -1,6 +1,24 @@
 // @ts-nocheck
-import { EditorState, Compartment, Transaction, StateEffect, StateField, RangeSetBuilder, type ChangeSpec, type Extension } from '@codemirror/state';
-import { EditorView, keymap, highlightActiveLine, lineNumbers, highlightActiveLineGutter, scrollPastEnd, Decoration, type ViewUpdate } from '@codemirror/view';
+import {
+  EditorState,
+  Compartment,
+  Transaction,
+  StateEffect,
+  StateField,
+  RangeSetBuilder,
+  type ChangeSpec,
+  type Extension,
+} from '@codemirror/state';
+import {
+  EditorView,
+  keymap,
+  highlightActiveLine,
+  lineNumbers,
+  highlightActiveLineGutter,
+  scrollPastEnd,
+  Decoration,
+  type ViewUpdate,
+} from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess, undo, redo } from '@codemirror/commands';
 import { markdown, markdownKeymap, markdownLanguage } from '@codemirror/lang-markdown';
 import { indentUnit, syntaxHighlighting, syntaxTree, forceParsing } from '@codemirror/language';
@@ -20,7 +38,7 @@ import {
   gitDiffGutterBaselineExtensions,
   gitDiffGutterLiveRenderExtensions,
   gitDiffGutterRenderExtensions,
-  setGitBaseline as applyGitBaseline
+  setGitBaseline as applyGitBaseline,
 } from './helpers/gitDiffGutter';
 import { gitDiffLineHighlightsField } from './helpers/gitDiffLineHighlights';
 import { createGitDiffOverviewRulerController } from './helpers/gitDiffOverviewRuler';
@@ -40,12 +58,17 @@ import {
   handleEnterBeforeNestedList,
   collectOrderedListRenumberChanges,
   indentListByTwoSpaces,
-  outdentListByTwoSpaces
+  outdentListByTwoSpaces,
 } from './helpers/listMarkers';
 import { insertTable, sourceTableHeaderLineField } from './helpers/tables';
 import { parseFrontmatter, sourceFrontmatterField } from './helpers/frontmatter';
 import { collectLatexMathRanges } from './helpers/math';
-import { diagnosticDataField, diagnosticField, setDiagnosticsEffect, type EditorDiagnostic } from './helpers/diagnostics';
+import {
+  diagnosticDataField,
+  diagnosticField,
+  setDiagnosticsEffect,
+  type EditorDiagnostic,
+} from './helpers/diagnostics';
 
 declare module '@codemirror/view' {
   interface EditorView {
@@ -107,9 +130,7 @@ const buildSearchDecorations = (state: EditorState, searchQuery: SearchQueryStat
   const selectionFrom = Math.min(selection.from, selection.to);
   const selectionTo = Math.max(selection.from, selection.to);
   for (const match of matches) {
-    const mark = match.start === selectionFrom && match.end === selectionTo
-      ? activeSearchMatchMark
-      : searchMatchMark;
+    const mark = match.start === selectionFrom && match.end === selectionTo ? activeSearchMatchMark : searchMatchMark;
     builder.add(match.start, match.end, mark);
   }
   return builder.finish();
@@ -126,7 +147,7 @@ const searchQueryField = StateField.define({
       }
     }
     return value;
-  }
+  },
 });
 
 const searchMatchField = StateField.define<any>({
@@ -149,7 +170,7 @@ const searchMatchField = StateField.define<any>({
   },
   provide(field: any) {
     return EditorView.decorations.from(field);
-  }
+  },
 });
 
 export function createEditor({
@@ -172,7 +193,7 @@ export function createEditor({
   initialVimKeybindings = [],
   initialVimLeader = '\\',
   initialDiagnostics = [],
-  externalExtensions = [] as Extension[]
+  externalExtensions = [] as Extension[],
 }) {
   // VS Code webviews can hit cross-origin window access issues in the EditContext path.
   // Disable it explicitly for stability in embedded Chromium.
@@ -294,9 +315,8 @@ export function createEditor({
     const firstLineEnd = text.indexOf('\n');
     return firstLineEnd === -1 ? text.length : firstLineEnd;
   })();
-  const targetElementFrom = (target) => (
-    target instanceof Element ? target : target instanceof Node ? target.parentElement : null
-  );
+  const targetElementFrom = (target) =>
+    target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
   const openLinkIfModifierClick = (event, editorView) => {
     if (!isPrimaryModifierPointerClick(event)) {
       return false;
@@ -333,9 +353,8 @@ export function createEditor({
     setSourceLinkHoverCursor(editorView, Boolean(href));
   };
   const isLiveMode = (editorView) => editorView.dom.classList.contains('meo-mode-live');
-  const isPlainPrimaryPointerEvent = (event) => (
-    event.button === 0 && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey
-  );
+  const isPlainPrimaryPointerEvent = (event) =>
+    event.button === 0 && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
   const frontmatterBoundaryCursorEnd = (state, pos) => {
     const frontmatter = parseFrontmatter(state);
     if (!frontmatter) {
@@ -385,7 +404,7 @@ export function createEditor({
     }
     frontmatterBoundaryClick = {
       pointerId: event.pointerId,
-      cursorEnd
+      cursorEnd,
     };
   };
 
@@ -450,13 +469,11 @@ export function createEditor({
     const clampX = (x) => Math.min(Math.max(x, contentRect.left + 1), contentRect.right - 1);
     const probeXs = [
       clampX(caretRect.left + 1),
-      clampX(contentRect.left + Math.min(24, Math.max(8, contentRect.width * 0.05)))
+      clampX(contentRect.left + Math.min(24, Math.max(8, contentRect.width * 0.05))),
     ];
 
     for (const offsetY of tableEntryProbeOffsetsY) {
-      const y = direction === 'down'
-        ? caretRect.bottom + offsetY
-        : caretRect.top - offsetY;
+      const y = direction === 'down' ? caretRect.bottom + offsetY : caretRect.top - offsetY;
       if (y < 0 || y >= window.innerHeight) {
         if (direction === 'down' && y >= window.innerHeight) break;
         continue;
@@ -490,10 +507,22 @@ export function createEditor({
     view.dom.classList.toggle('meo-mode-source', currentMode !== 'live');
     // Keep active typography vars explicitly synced to mode so source/live
     // font sizing and line-height don't depend on selector cascade.
-    view.dom.style.setProperty('--meo-active-editor-font', isLiveModeActive ? 'var(--meo-font-live)' : 'var(--meo-font-source)');
-    view.dom.style.setProperty('--meo-active-editor-font-weight', isLiveModeActive ? 'var(--meo-font-live-weight)' : 'var(--meo-font-source-weight)');
-    view.dom.style.setProperty('--meo-active-editor-font-size', isLiveModeActive ? 'var(--meo-font-live-size)' : 'var(--meo-font-source-size)');
-    view.dom.style.setProperty('--meo-active-editor-line-height', isLiveModeActive ? 'var(--meo-line-height-live)' : 'var(--meo-line-height-source)');
+    view.dom.style.setProperty(
+      '--meo-active-editor-font',
+      isLiveModeActive ? 'var(--meo-font-live)' : 'var(--meo-font-source)'
+    );
+    view.dom.style.setProperty(
+      '--meo-active-editor-font-weight',
+      isLiveModeActive ? 'var(--meo-font-live-weight)' : 'var(--meo-font-source-weight)'
+    );
+    view.dom.style.setProperty(
+      '--meo-active-editor-font-size',
+      isLiveModeActive ? 'var(--meo-font-live-size)' : 'var(--meo-font-source-size)'
+    );
+    view.dom.style.setProperty(
+      '--meo-active-editor-line-height',
+      isLiveModeActive ? 'var(--meo-line-height-live)' : 'var(--meo-line-height-source)'
+    );
     if (currentMode !== 'source') {
       setSourceLinkHoverCursor(view, false);
     }
@@ -551,7 +580,7 @@ export function createEditor({
       wholeWord: searchQuery.wholeWord,
       caseSensitive: searchQuery.caseSensitive,
       selectionFrom: Math.min(selection.from, selection.to),
-      selectionTo: Math.max(selection.from, selection.to)
+      selectionTo: Math.max(selection.from, selection.to),
     };
     (view.dom as any).__meoSearchState = detail;
     const signature = JSON.stringify(detail);
@@ -606,7 +635,7 @@ export function createEditor({
       to: sourceRange.from + selectionEnd,
       anchorX: coords.left,
       anchorY: coords.top,
-      anchorBottomY: coords.top + (Number.isFinite(lineHeight) ? lineHeight : 20)
+      anchorBottomY: coords.top + (Number.isFinite(lineHeight) ? lineHeight : 20),
     };
   };
 
@@ -615,9 +644,11 @@ export function createEditor({
       return false;
     }
     const detail = { committed: false };
-    document.dispatchEvent(new CustomEvent('meo-commit-table-edits', {
-      detail
-    }));
+    document.dispatchEvent(
+      new CustomEvent('meo-commit-table-edits', {
+        detail,
+      })
+    );
     return detail.committed;
   };
 
@@ -661,7 +692,7 @@ export function createEditor({
     const inputRect = input.getBoundingClientRect();
     const coords = {
       left: inputRect.left + (markerRect.left - mirrorRect.left),
-      top: inputRect.top + (markerRect.top - mirrorRect.top)
+      top: inputRect.top + (markerRect.top - mirrorRect.top),
     };
 
     mirror.remove();
@@ -682,18 +713,14 @@ export function createEditor({
       align: diagnostic ? 'start' : undefined,
       anchorX: selection.anchorX,
       anchorY: selection.anchorY,
-      anchorBottomY: selection.anchorBottomY
+      anchorBottomY: selection.anchorBottomY,
     };
   };
 
   const updateActiveTableInput = (input, nextValue, anchor, head = anchor) => {
     input.value = nextValue;
     input.focus({ preventScroll: true });
-    input.setSelectionRange(
-      Math.min(anchor, head),
-      Math.max(anchor, head),
-      anchor <= head ? 'forward' : 'backward'
-    );
+    input.setSelectionRange(Math.min(anchor, head), Math.max(anchor, head), anchor <= head ? 'forward' : 'backward');
     input.dispatchEvent(new Event('input', { bubbles: true }));
     emitSelectionChange();
     return true;
@@ -738,21 +765,12 @@ export function createEditor({
             value.slice(0, start - openMarker.length) +
             value.slice(start, trimmedEnd) +
             value.slice(trimmedEnd + closeMarker.length);
-          return updateActiveTableInput(
-            input,
-            nextValue,
-            start - openMarker.length,
-            trimmedEnd - openMarker.length
-          );
+          return updateActiveTableInput(input, nextValue, start - openMarker.length, trimmedEnd - openMarker.length);
         }
       }
 
       const nextValue =
-        value.slice(0, start) +
-        openMarker +
-        value.slice(start, trimmedEnd) +
-        closeMarker +
-        value.slice(trimmedEnd);
+        value.slice(0, start) + openMarker + value.slice(start, trimmedEnd) + closeMarker + value.slice(trimmedEnd);
       if (!selectWrapped) {
         const cursor = start + openMarker.length + (trimmedEnd - start) + closeMarker.length;
         return updateActiveTableInput(input, nextValue, cursor);
@@ -877,12 +895,7 @@ export function createEditor({
       return;
     }
 
-    view.dispatch(
-      state.update(
-        { changes },
-        { changes: renumberChanges, sequential: true }
-      )
-    );
+    view.dispatch(state.update({ changes }, { changes: renumberChanges, sequential: true }));
   };
 
   const isSearchMatchSelection = (from, to) => {
@@ -941,13 +954,12 @@ export function createEditor({
     return {
       anchorX: topRect.left,
       anchorY: topRect.top,
-      anchorBottomY: topRect.bottom
+      anchorBottomY: topRect.bottom,
     };
   };
 
-  const isDiagnosticSelectionRange = (from: number, to: number): boolean => currentDiagnostics.some((diagnostic) => (
-    diagnostic.from === from && diagnostic.to === to
-  ));
+  const isDiagnosticSelectionRange = (from: number, to: number): boolean =>
+    currentDiagnostics.some((diagnostic) => diagnostic.from === from && diagnostic.to === to);
 
   const emitSelectionChange = () => {
     if (!view || typeof onSelectionChange !== 'function') {
@@ -988,7 +1000,7 @@ export function createEditor({
         align,
         anchorX: nativeAnchor.anchorX,
         anchorY: nativeAnchor.anchorY,
-        anchorBottomY: nativeAnchor.anchorBottomY
+        anchorBottomY: nativeAnchor.anchorBottomY,
       });
       return;
     }
@@ -1012,17 +1024,12 @@ export function createEditor({
       align,
       anchorX,
       anchorY,
-      anchorBottomY
+      anchorBottomY,
     });
   };
 
-  const diagnosticKey = (diagnostic: EditorDiagnostic): string => [
-    diagnostic.from,
-    diagnostic.to,
-    diagnostic.message,
-    diagnostic.source ?? '',
-    diagnostic.code ?? ''
-  ].join('\u001f');
+  const diagnosticKey = (diagnostic: EditorDiagnostic): string =>
+    [diagnostic.from, diagnostic.to, diagnostic.message, diagnostic.source ?? '', diagnostic.code ?? ''].join('\u001f');
 
   const clearDiagnosticSuggestionState = (): void => {
     lastDiagnosticClick = null;
@@ -1090,7 +1097,7 @@ export function createEditor({
     return {
       anchorX: charCoords?.left ?? fromCoords.left,
       anchorY: charCoords ? Math.min(fromCoords.top, charCoords.top) : fromCoords.top,
-      anchorBottomY: charCoords ? Math.max(fromCoords.bottom, charCoords.bottom) : fromCoords.bottom
+      anchorBottomY: charCoords ? Math.max(fromCoords.bottom, charCoords.bottom) : fromCoords.bottom,
     };
   };
 
@@ -1125,7 +1132,7 @@ export function createEditor({
       to: diagnostic.to,
       anchorX: anchor.anchorX,
       anchorY: anchor.anchorY,
-      anchorBottomY: anchor.anchorBottomY ?? anchor.anchorY
+      anchorBottomY: anchor.anchorBottomY ?? anchor.anchorY,
     };
     return true;
   };
@@ -1167,7 +1174,7 @@ export function createEditor({
     const anchor = {
       anchorX: event.clientX,
       anchorY: event.clientY,
-      anchorBottomY: event.clientY
+      anchorBottomY: event.clientY,
     };
     return requestDiagnosticSuggestionsFor(diagnostic, anchor);
   };
@@ -1215,7 +1222,7 @@ export function createEditor({
   const selectSearchMatch = (from, to, { focusEditor = true } = {}) => {
     view.dispatch({
       selection: { anchor: from, head: to },
-      effects: EditorView.scrollIntoView(from, { y: 'center' })
+      effects: EditorView.scrollIntoView(from, { y: 'center' }),
     });
     if (focusEditor) {
       view.focus();
@@ -1231,7 +1238,7 @@ export function createEditor({
 
     if (selection.anchor === nextAnchor && selection.head === nextHead) {
       view.dispatch({
-        effects: EditorView.scrollIntoView(nextAnchor, { y })
+        effects: EditorView.scrollIntoView(nextAnchor, { y }),
       });
       if (focusEditor) {
         view.focus();
@@ -1241,7 +1248,7 @@ export function createEditor({
 
     view.dispatch({
       selection: { anchor: nextAnchor, head: nextHead },
-      effects: EditorView.scrollIntoView(nextAnchor, { y })
+      effects: EditorView.scrollIntoView(nextAnchor, { y }),
     });
     if (focusEditor) {
       view.focus();
@@ -1259,7 +1266,7 @@ export function createEditor({
     return {
       line,
       lineBlock,
-      hiddenTopPixels: scrollTop - lineBlock.top
+      hiddenTopPixels: scrollTop - lineBlock.top,
     };
   };
 
@@ -1282,7 +1289,7 @@ export function createEditor({
     }
     view.dispatch({
       selection: { anchor },
-      annotations: Transaction.addToHistory.of(false)
+      annotations: Transaction.addToHistory.of(false),
     });
   };
 
@@ -1290,7 +1297,7 @@ export function createEditor({
     const { line, hiddenTopPixels } = getTopLineMetrics();
     return {
       lineNumber: line.number,
-      lineOffset: normalizeTopLineOffset(hiddenTopPixels)
+      lineOffset: normalizeTopLineOffset(hiddenTopPixels),
     };
   };
 
@@ -1368,7 +1375,7 @@ export function createEditor({
     return {
       found: true,
       current: matchIndex + 1,
-      total
+      total,
     };
   };
 
@@ -1389,7 +1396,7 @@ export function createEditor({
 
     view.dispatch({
       changes: { from, to, insert: replacement },
-      selection: { anchor: from, head: from + replacement.length }
+      selection: { anchor: from, head: from + replacement.length },
     });
     const nextMatch = findMatch(query, false, options);
     if (nextMatch.found) {
@@ -1420,19 +1427,21 @@ export function createEditor({
             handleEnterOnEmptyListItem(view) ||
             handleEnterAtListContentStart(view) ||
             handleEnterContinueList(view) ||
-            handleEnterBeforeNestedList(view)
+            handleEnterBeforeNestedList(view),
         },
         { key: 'Shift-Enter', run: insertTableCellLineBreak },
         { key: 'ArrowUp', run: (view) => tryEnterAdjacentTable(view, 'up') },
         { key: 'ArrowDown', run: (view) => tryEnterAdjacentTable(view, 'down') },
         ...markdownKeymap,
         ...defaultKeymap,
-        ...historyKeymap
+        ...historyKeymap,
       ]),
       history(),
       lineNumbers(),
       ...gitDiffGutterBaselineExtensions(),
-      gitGutterCompartment.of(startMode === 'live' ? gitDiffGutterLiveRenderExtensions() : gitDiffGutterRenderExtensions()),
+      gitGutterCompartment.of(
+        startMode === 'live' ? gitDiffGutterLiveRenderExtensions() : gitDiffGutterRenderExtensions()
+      ),
       highlightActiveLineGutter(),
       highlightActiveLine(),
       shikiCodeHighlight,
@@ -1480,9 +1489,7 @@ export function createEditor({
           inlineCodeClick = {
             pointerId: event.pointerId,
             inInlineCode:
-              currentMode === 'live' &&
-              targetElement &&
-              targetElement.closest('.meo-md-inline-code') !== null
+              currentMode === 'live' && targetElement && targetElement.closest('.meo-md-inline-code') !== null,
           };
 
           if (view.dom.setPointerCapture) {
@@ -1514,11 +1521,7 @@ export function createEditor({
           releasePointerCaptureIfHeld(event.pointerId);
           capturedPointerId = null;
 
-          if (
-            inlineCodeClick?.pointerId === event.pointerId &&
-            inlineCodeClick.inInlineCode &&
-            isLiveMode(view)
-          ) {
+          if (inlineCodeClick?.pointerId === event.pointerId && inlineCodeClick.inInlineCode && isLiveMode(view)) {
             const { head, empty } = view.state.selection.main;
             if (empty) {
               const clamped = inlineCodeCaretPosition(view.state, head);
@@ -1587,7 +1590,7 @@ export function createEditor({
         pointerleave(_event, view) {
           setSourceLinkHoverCursor(view, false);
           return false;
-        }
+        },
       }),
       ...headingCollapseSharedExtensions(),
       modeCompartment.of(startMode === 'live' ? liveModeExtensions() : sourceMode()),
@@ -1637,7 +1640,7 @@ export function createEditor({
           applyingRenumber = true;
           view.dispatch({
             changes: renumberChanges,
-            annotations: Transaction.addToHistory.of(false)
+            annotations: Transaction.addToHistory.of(false),
           });
           applyingRenumber = false;
           onApplyChanges(view.state.doc.toString());
@@ -1645,8 +1648,8 @@ export function createEditor({
         }
 
         onApplyChanges(update.state.doc.toString());
-      })
-    ]
+      }),
+    ],
   });
 
   const initialScrollTo = (() => {
@@ -1661,7 +1664,7 @@ export function createEditor({
   view = new EditorView({
     state,
     parent,
-    scrollTo: initialScrollTo
+    scrollTo: initialScrollTo,
   });
   if (typeof initialTopLine === 'number' && Number.isFinite(initialTopLine)) {
     restoreTopVisibleLine(initialTopLine, initialTopLineOffset, { syncCursor: true });
@@ -1695,13 +1698,13 @@ export function createEditor({
       getMode: () => currentMode,
       requestBlame: onRequestGitBlame,
       openRevisionForLine: onOpenGitRevisionForLine,
-      openWorktreeForLine: onOpenGitWorktreeForLine
+      openWorktreeForLine: onOpenGitWorktreeForLine,
     });
   }
   gitDiffOverviewRuler = createGitDiffOverviewRulerController({
     view,
     getMode: () => currentMode,
-    isGitChangesVisible: () => gitGutterVisible
+    isGitChangesVisible: () => gitGutterVisible,
   });
   syncModeClasses();
   syncLineNumbersVisibility();
@@ -1724,8 +1727,8 @@ export function createEditor({
       view.dispatch({
         selection: {
           anchor: 0,
-          head: view.state.doc.length
-        }
+          head: view.state.doc.length,
+        },
       });
       return true;
     },
@@ -1750,7 +1753,7 @@ export function createEditor({
 
       view.dispatch({
         selection: { anchor: nextAnchor, head: nextHead },
-        annotations: Transaction.addToHistory.of(false)
+        annotations: Transaction.addToHistory.of(false),
       });
       return true;
     },
@@ -1781,7 +1784,7 @@ export function createEditor({
       const nextText = replaceMatchRanges(text, matches, replacement);
       view.dispatch({
         changes: { from: 0, to: text.length, insert: nextText },
-        selection: { anchor: 0 }
+        selection: { anchor: 0 },
       });
       return { replaced, total: countMatches(nextText, query, options) };
     },
@@ -1802,7 +1805,7 @@ export function createEditor({
         return;
       }
       view.dispatch({
-        effects: setSearchQueryEffect.of(nextQuery)
+        effects: setSearchQueryEffect.of(nextQuery),
       });
     },
     hasFocus() {
@@ -1860,7 +1863,7 @@ export function createEditor({
       applyingExternal = true;
       view.dispatch({
         changes: syncChange,
-        selection: { anchor: mappedAnchor, head: mappedHead }
+        selection: { anchor: mappedAnchor, head: mappedHead },
       });
       applyingExternal = false;
       pendingExternalUndoSelectionPreserve = true;
@@ -1887,8 +1890,8 @@ export function createEditor({
             gitGutterCompartment.reconfigure(
               nextMode === 'live' ? gitDiffGutterLiveRenderExtensions() : gitDiffGutterRenderExtensions()
             ),
-            vimCompartment.reconfigure(vimExtensionsForState())
-          ]
+            vimCompartment.reconfigure(vimExtensionsForState()),
+          ],
         });
         forceParsing(view, view.state.doc.length, 500);
       } catch (error) {
@@ -1929,10 +1932,13 @@ export function createEditor({
         clearVimKeybindings();
       }
       view.dispatch({
-        effects: vimCompartment.reconfigure(vimExtensionsForState())
+        effects: vimCompartment.reconfigure(vimExtensionsForState()),
       });
     },
-    setVimKeybindings(bindings: Array<{ before: string; after: string; mode: string; recursive: boolean }>, leaderKey: string) {
+    setVimKeybindings(
+      bindings: Array<{ before: string; after: string; mode: string; recursive: boolean }>,
+      leaderKey: string
+    ) {
       vimKeybindings = bindings;
       vimLeader = leaderKey;
       if (vimModeEnabled) {
@@ -1952,9 +1958,8 @@ export function createEditor({
         if (cachedInlineSelection) {
           return cachedInlineSelection;
         }
-        cachedInlineSelection = currentMode === 'live'
-          ? normalizeLiveInlineSelectionForListContent(state, selection)
-          : selection;
+        cachedInlineSelection =
+          currentMode === 'live' ? normalizeLiveInlineSelectionForListContent(state, selection) : selection;
         return cachedInlineSelection;
       };
 
@@ -2017,7 +2022,7 @@ export function createEditor({
 
       view.dispatch({
         changes: { from: contentStart, to: contentStart + oldMarkerLen, insert },
-        selection: { anchor: newCursorPos }
+        selection: { anchor: newCursorPos },
       });
     },
     getHeadings() {
@@ -2048,7 +2053,8 @@ export function createEditor({
 
       const textWithoutSource = currentText.slice(0, source.sectionFrom) + currentText.slice(source.sectionTo);
       const sourceLength = source.sectionTo - source.sectionFrom;
-      const adjustedInsertionPoint = insertionPoint >= source.sectionTo ? insertionPoint - sourceLength : insertionPoint;
+      const adjustedInsertionPoint =
+        insertionPoint >= source.sectionTo ? insertionPoint - sourceLength : insertionPoint;
       const nextText =
         textWithoutSource.slice(0, adjustedInsertionPoint) +
         movedText +
@@ -2062,7 +2068,7 @@ export function createEditor({
       view.dispatch({
         changes: { from: 0, to: currentText.length, insert: nextText },
         selection: { anchor: nextAnchor },
-        effects: EditorView.scrollIntoView(nextAnchor, { y: 'start' })
+        effects: EditorView.scrollIntoView(nextAnchor, { y: 'start' }),
       });
       return true;
     },
@@ -2077,7 +2083,7 @@ export function createEditor({
       const position = computeTopVisiblePosition();
       return {
         line: position.lineNumber,
-        lineOffset: position.lineOffset
+        lineOffset: position.lineOffset,
       };
     },
     getTopVisibleLine() {
@@ -2109,11 +2115,12 @@ export function createEditor({
         return;
       }
 
-      const diagnostic = currentDiagnostics.find((item) => (
-        item.from === payload.from &&
-        item.to === payload.to &&
-        diagnosticKey(item) === pendingDiagnosticSuggestionRequest?.key
-      ));
+      const diagnostic = currentDiagnostics.find(
+        (item) =>
+          item.from === payload.from &&
+          item.to === payload.to &&
+          diagnosticKey(item) === pendingDiagnosticSuggestionRequest?.key
+      );
       if (!diagnostic) {
         pendingDiagnosticSuggestionRequest = null;
         return;
@@ -2130,19 +2137,14 @@ export function createEditor({
         diagnosticSuggestions: payload.suggestions.map((text) => ({
           from: payload.from,
           to: payload.to,
-          text
-        }))
+          text,
+        })),
       });
     },
     applyDiagnosticSuggestion(from: number, to: number, insert: string) {
       const activeTableInput = getActiveTableInput();
       const tableSourceRange = activeTableInput ? getTableInputSourceRange(activeTableInput) : null;
-      if (
-        activeTableInput &&
-        tableSourceRange &&
-        from >= tableSourceRange.from &&
-        to <= tableSourceRange.to
-      ) {
+      if (activeTableInput && tableSourceRange && from >= tableSourceRange.from && to <= tableSourceRange.to) {
         const localFrom = from - tableSourceRange.from;
         const localTo = to - tableSourceRange.from;
         clearDiagnosticSuggestionState();
@@ -2160,7 +2162,7 @@ export function createEditor({
       clearDiagnosticSuggestionState();
       view.dispatch({
         changes: { from: safeFrom, to: safeTo, insert },
-        selection: { anchor: safeFrom + insert.length }
+        selection: { anchor: safeFrom + insert.length },
       });
       emitSelectionChange();
     },
@@ -2178,7 +2180,7 @@ export function createEditor({
     },
     clearGitUiTransientState() {
       gitBlameHover?.hide();
-    }
+    },
   };
 }
 
@@ -2192,7 +2194,7 @@ function insertTableCellLineBreak(view) {
   const insert = '<br>';
   view.dispatch({
     changes: { from: selection.from, to: selection.to, insert },
-    selection: { anchor: selection.from + insert.length }
+    selection: { anchor: selection.from + insert.length },
   });
   return true;
 }
@@ -2213,7 +2215,7 @@ function handleEnterContinueQuotedCodeBlock(view) {
   const nextPos = selection.from + insert.length;
   view.dispatch({
     changes: { from: selection.from, to: selection.from, insert },
-    selection: { anchor: nextPos }
+    selection: { anchor: nextPos },
   });
   return true;
 }
@@ -2271,7 +2273,7 @@ function deleteTableCellLineBreakBackward(view) {
   const start = pos - match[0].length;
   view.dispatch({
     changes: { from: start, to: pos },
-    selection: { anchor: start }
+    selection: { anchor: start },
   });
   return true;
 }
@@ -2319,7 +2321,7 @@ function findSyncChange(previousText, nextText) {
   return {
     from,
     to: previousTo,
-    insert: nextText.slice(from, nextTo)
+    insert: nextText.slice(from, nextTo),
   };
 }
 
@@ -2344,7 +2346,7 @@ function createSearchQueryState(query: string | null | undefined, options: Searc
   return {
     text: query ?? '',
     wholeWord: options.wholeWord === true,
-    caseSensitive: options.caseSensitive === true
+    caseSensitive: options.caseSensitive === true,
   };
 }
 
@@ -2470,7 +2472,7 @@ function insertInlineCode(view, selection) {
     const insert = `\`${selectedText}\``;
     view.dispatch({
       changes: { from, to, insert },
-      selection: { anchor: from + insert.length }
+      selection: { anchor: from + insert.length },
     });
     return;
   }
@@ -2478,7 +2480,7 @@ function insertInlineCode(view, selection) {
   const insert = '``';
   view.dispatch({
     changes: { from: selection.from, insert },
-    selection: { anchor: selection.from + 1 }
+    selection: { anchor: selection.from + 1 },
   });
 }
 
@@ -2489,7 +2491,7 @@ function toggleInlineWrapper(view, selection, openMarker, closeMarker = openMark
     const insert = `${openMarker}${closeMarker}`;
     view.dispatch({
       changes: { from: selection.from, insert },
-      selection: { anchor: selection.from + openMarker.length }
+      selection: { anchor: selection.from + openMarker.length },
     });
     return;
   }
@@ -2508,12 +2510,12 @@ function toggleInlineWrapper(view, selection, openMarker, closeMarker = openMark
     view.dispatch({
       changes: [
         { from: to, to: to + closeMarker.length, insert: '' },
-        { from: from - openMarker.length, to: from, insert: '' }
+        { from: from - openMarker.length, to: from, insert: '' },
       ],
       selection: {
         anchor: from - openMarker.length,
-        head: to - openMarker.length
-      }
+        head: to - openMarker.length,
+      },
     });
     return;
   }
@@ -2521,12 +2523,12 @@ function toggleInlineWrapper(view, selection, openMarker, closeMarker = openMark
   view.dispatch({
     changes: [
       { from: to, insert: closeMarker },
-      { from, insert: openMarker }
+      { from, insert: openMarker },
     ],
     selection: {
       anchor: from + openMarker.length,
-      head: to + openMarker.length
-    }
+      head: to + openMarker.length,
+    },
   });
 }
 
@@ -2555,7 +2557,7 @@ function insertQuote(view, selection) {
 
   view.dispatch({
     changes: { from: contentStart, insert },
-    selection: { anchor: contentStart + insert.length + cursorOffset }
+    selection: { anchor: contentStart + insert.length + cursorOffset },
   });
 }
 
@@ -2570,14 +2572,14 @@ function insertHr(view, selection) {
     const cursorPos = line.from + insert.length;
     view.dispatch({
       changes: { from: line.from, to: line.to, insert },
-      selection: { anchor: cursorPos }
+      selection: { anchor: cursorPos },
     });
   } else {
     const insert = '\n---';
     const cursorPos = line.to + insert.length;
     view.dispatch({
       changes: { from: line.to, insert },
-      selection: { anchor: cursorPos }
+      selection: { anchor: cursorPos },
     });
   }
 }
@@ -2595,7 +2597,7 @@ function insertLink(view, selection) {
     const insert = `[${selectedText}]()`;
     view.dispatch({
       changes: { from, to, insert },
-      selection: { anchor: from + insert.length - 1 }
+      selection: { anchor: from + insert.length - 1 },
     });
     return;
   }
@@ -2603,7 +2605,7 @@ function insertLink(view, selection) {
   const insert = '[]()';
   view.dispatch({
     changes: { from: selection.from, insert },
-    selection: { anchor: selection.from + 3 }
+    selection: { anchor: selection.from + 3 },
   });
 }
 
@@ -2620,7 +2622,7 @@ function insertImage(view, selection) {
     const insert = `![${selectedText}]()`;
     view.dispatch({
       changes: { from, to, insert },
-      selection: { anchor: from + insert.length - 1 }
+      selection: { anchor: from + insert.length - 1 },
     });
     return;
   }
@@ -2628,7 +2630,7 @@ function insertImage(view, selection) {
   const insert = '![]()';
   view.dispatch({
     changes: { from: selection.from, insert },
-    selection: { anchor: selection.from + 4 }
+    selection: { anchor: selection.from + 4 },
   });
 }
 
@@ -2645,7 +2647,7 @@ function insertWikiLink(view, selection) {
     const insert = `[[${selectedText}]]`;
     view.dispatch({
       changes: { from, to, insert },
-      selection: { anchor: from + insert.length }
+      selection: { anchor: from + insert.length },
     });
     return;
   }
@@ -2653,7 +2655,7 @@ function insertWikiLink(view, selection) {
   const insert = '[[]]';
   view.dispatch({
     changes: { from: selection.from, insert },
-    selection: { anchor: selection.from + 2 }
+    selection: { anchor: selection.from + 2 },
   });
 }
 
@@ -2663,7 +2665,7 @@ function sourceMode() {
       base: markdownLanguage,
       addKeymap: false,
       codeLanguages: resolveCodeLanguage,
-      extensions: [{ remove: ['SetextHeading'] }]
+      extensions: [{ remove: ['SetextHeading'] }],
     }),
     syntaxHighlighting(highlightStyle),
     sourceCodeBlockField,
@@ -2678,7 +2680,7 @@ function sourceMode() {
     sourceFrontmatterField,
     gitDiffLineHighlightsField,
     ...headingCollapseSourceSpacerExtensions(),
-    ...mergeConflictSourceExtensions()
+    ...mergeConflictSourceExtensions(),
   ];
 }
 
@@ -2691,7 +2693,7 @@ const blockedInlineSelectionAncestors = new Set([
   'Autolink',
   'HTMLBlock',
   'HTMLTag',
-  'TableDelimiter'
+  'TableDelimiter',
 ]);
 
 const latexSelectionBlockCache = new WeakMap<object, Array<{ from: number; to: number }>>();

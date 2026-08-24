@@ -1,4 +1,4 @@
-import { createPortal } from "react-dom";
+import { createPortal } from 'react-dom';
 import {
   useEffect,
   useLayoutEffect,
@@ -8,13 +8,13 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
-} from "react";
+} from 'react';
 import type {
   NativePortlessAdminAction,
   NativePortlessAdminResult,
   NativePortlessProtocol,
-} from "../shared/native-ghostty-host-protocol";
-import type { WebviewApi } from "./webview-api";
+} from '../shared/native-ghostty-host-protocol';
+import type { WebviewApi } from './webview-api';
 
 /**
  * CDXC:SidebarContextMenu 2026-07-30:
@@ -62,12 +62,10 @@ type GhostexNativeSidebarBridge = {
   togglePetOverlayFromTitlebar: () => void;
   toggleCommandsPanelFromTitlebar: () => void;
   runSidebarCommandFromTitlebar: (commandId: string) => void;
-  runSidebarGitActionFromTitlebar: (
-    action: "commit" | "push" | "pr" | "syncMain" | "multiRelease" | "release",
-  ) => void;
+  runSidebarGitActionFromTitlebar: (action: 'commit' | 'push' | 'pr' | 'syncMain' | 'multiRelease' | 'release') => void;
   runPortlessAdminAction: (
     action: NativePortlessAdminAction,
-    options?: { protocol?: NativePortlessProtocol; requestId?: string; timeoutMs?: number },
+    options?: { protocol?: NativePortlessProtocol; requestId?: string; timeoutMs?: number }
   ) => Promise<NativePortlessAdminResult>;
 };
 
@@ -102,7 +100,7 @@ function notifySidebarContextMenuOpened(vscode?: WebviewApi): void {
     window.__ghostex_NATIVE_SIDEBAR__.notifySidebarContextMenuOpened();
     return;
   }
-  vscode?.postMessage({ type: "sidebarContextMenuOpened" });
+  vscode?.postMessage({ type: 'sidebarContextMenuOpened' });
 }
 
 function notifySidebarContextMenuClosed(vscode?: WebviewApi): void {
@@ -110,15 +108,15 @@ function notifySidebarContextMenuClosed(vscode?: WebviewApi): void {
     window.__ghostex_NATIVE_SIDEBAR__.notifySidebarContextMenuClosed();
     return;
   }
-  vscode?.postMessage({ type: "sidebarContextMenuClosed" });
+  vscode?.postMessage({ type: 'sidebarContextMenuClosed' });
 }
 
 function getCssPixelValue(value: CSSProperties[keyof CSSProperties]): number | undefined {
-  if (typeof value === "number") {
+  if (typeof value === 'number') {
     return value;
   }
 
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
 
@@ -133,21 +131,14 @@ function getCssPixelValue(value: CSSProperties[keyof CSSProperties]): number | u
  * parent menu uses. A second copy of this arithmetic is how the parent menu and
  * its flyout end up disagreeing about the sidebar's edges.
  */
-export function getClampedSidebarContextMenuCoordinate(
-  value: number,
-  size: number,
-  viewportSize: number,
-): number {
+export function getClampedSidebarContextMenuCoordinate(value: number, size: number, viewportSize: number): number {
   return Math.max(
     CONTEXT_MENU_VIEWPORT_MARGIN_PX,
-    Math.min(value, viewportSize - size - CONTEXT_MENU_VIEWPORT_MARGIN_PX),
+    Math.min(value, viewportSize - size - CONTEXT_MENU_VIEWPORT_MARGIN_PX)
   );
 }
 
-function areMenuStylesEqual(
-  previousStyle: CSSProperties | undefined,
-  nextStyle: CSSProperties,
-): boolean {
+function areMenuStylesEqual(previousStyle: CSSProperties | undefined, nextStyle: CSSProperties): boolean {
   if (!previousStyle) {
     return false;
   }
@@ -161,10 +152,7 @@ function areMenuStylesEqual(
   return true;
 }
 
-function getViewportClampedMenuStyle(
-  menuStyle: CSSProperties | undefined,
-  menuElement: HTMLDivElement,
-): CSSProperties {
+function getViewportClampedMenuStyle(menuStyle: CSSProperties | undefined, menuElement: HTMLDivElement): CSSProperties {
   const bounds = menuElement.getBoundingClientRect();
   const menuWidth = bounds.width;
   const menuHeight = bounds.height;
@@ -184,13 +172,9 @@ function getViewportClampedMenuStyle(
     bottom: undefined,
     left: `${getClampedSidebarContextMenuCoordinate(rawLeft, menuWidth, window.innerWidth)}px`,
     maxHeight: `calc(100vh - ${CONTEXT_MENU_VIEWPORT_MARGIN_PX * 2}px)`,
-    overflowY: menuHeight > maxMenuHeight ? "auto" : menuStyle?.overflowY,
+    overflowY: menuHeight > maxMenuHeight ? 'auto' : menuStyle?.overflowY,
     right: undefined,
-    top: `${getClampedSidebarContextMenuCoordinate(
-      rawTop,
-      Math.min(menuHeight, maxMenuHeight),
-      window.innerHeight,
-    )}px`,
+    top: `${getClampedSidebarContextMenuCoordinate(rawTop, Math.min(menuHeight, maxMenuHeight), window.innerHeight)}px`,
   };
 }
 
@@ -206,7 +190,7 @@ export function getSidebarContextMenuBackdropRetarget({
   elementFromPoint: (x: number, y: number) => Element | null;
 }): Element | undefined {
   const previousPointerEvents = backdrop.style.pointerEvents;
-  backdrop.style.pointerEvents = "none";
+  backdrop.style.pointerEvents = 'none';
 
   try {
     const target = elementFromPoint(clientX, clientY);
@@ -220,12 +204,9 @@ export function getSidebarContextMenuBackdropRetarget({
   }
 }
 
-function dispatchBackdropContextMenuToRetarget(
-  event: ReactMouseEvent<HTMLButtonElement>,
-  target: Element,
-): void {
+function dispatchBackdropContextMenuToRetarget(event: ReactMouseEvent<HTMLButtonElement>, target: Element): void {
   target.dispatchEvent(
-    new MouseEvent("contextmenu", {
+    new MouseEvent('contextmenu', {
       altKey: event.altKey,
       bubbles: true,
       button: event.button,
@@ -239,7 +220,7 @@ function dispatchBackdropContextMenuToRetarget(
       screenY: event.screenY,
       shiftKey: event.shiftKey,
       view: window,
-    }),
+    })
   );
 }
 
@@ -269,7 +250,7 @@ function dispatchBackdropContextMenuToRetarget(
  */
 export function SidebarContextMenuPortal({
   children,
-  menuClassName = "session-context-menu",
+  menuClassName = 'session-context-menu',
   menuRef,
   menuStyle,
   onDismiss,
@@ -277,7 +258,7 @@ export function SidebarContextMenuPortal({
 }: SidebarContextMenuPortalProps) {
   const internalMenuRef = useRef<HTMLDivElement>(null);
   const activeMenuRef = menuRef ?? internalMenuRef;
-  const resolvedMenuClassName = menuClassName.includes("vertical-scroll-fade-mask")
+  const resolvedMenuClassName = menuClassName.includes('vertical-scroll-fade-mask')
     ? menuClassName
     : `${menuClassName} vertical-scroll-fade-mask`;
   const [viewportClampedMenuStyle, setViewportClampedMenuStyle] = useState<CSSProperties>();
@@ -302,26 +283,25 @@ export function SidebarContextMenuPortal({
     const clampMenu = () => {
       const nextStyle = getViewportClampedMenuStyle(menuStyle, menuElement);
       setViewportClampedMenuStyle((previousStyle) =>
-        areMenuStylesEqual(previousStyle, nextStyle) ? previousStyle : nextStyle,
+        areMenuStylesEqual(previousStyle, nextStyle) ? previousStyle : nextStyle
       );
     };
 
     clampMenu();
-    window.addEventListener("resize", clampMenu);
+    window.addEventListener('resize', clampMenu);
 
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(clampMenu);
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(clampMenu);
     resizeObserver?.observe(menuElement);
 
     return () => {
-      window.removeEventListener("resize", clampMenu);
+      window.removeEventListener('resize', clampMenu);
       resizeObserver?.disconnect();
     };
   }, [activeMenuRef, menuStyle]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         onDismiss();
       }
     };
@@ -337,19 +317,19 @@ export function SidebarContextMenuPortal({
       onDismiss();
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("blur", handleWindowBlur);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleWindowBlur);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("blur", handleWindowBlur);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleWindowBlur);
     };
   }, [onDismiss]);
 
   return createPortal(
     <>
       <button
-        aria-label="Close context menu"
-        className="sidebar-context-menu-backdrop"
+        aria-label='Close context menu'
+        className='sidebar-context-menu-backdrop'
         onPointerDown={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -369,7 +349,7 @@ export function SidebarContextMenuPortal({
             dispatchBackdropContextMenuToRetarget(event, retarget);
           }
         }}
-        type="button"
+        type='button'
       />
       <div
         className={resolvedMenuClassName}
@@ -381,12 +361,12 @@ export function SidebarContextMenuPortal({
           event.stopPropagation();
         }}
         ref={activeMenuRef}
-        role="menu"
+        role='menu'
         style={viewportClampedMenuStyle ?? menuStyle}
       >
         {children}
       </div>
     </>,
-    document.body,
+    document.body
   );
 }

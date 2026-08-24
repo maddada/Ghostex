@@ -377,6 +377,4 @@ impl GhostexGpuiApp {
         })
         .detach();
     }
-
 }
-

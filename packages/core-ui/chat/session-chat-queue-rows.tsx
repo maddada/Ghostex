@@ -20,22 +20,22 @@ import {
   IconPencil,
   IconRefresh,
   IconTrash,
-} from "@tabler/icons-react";
-import { PointerSensor } from "@dnd-kit/dom";
-import { DragDropProvider, type DragDropEventHandlers } from "@dnd-kit/react";
-import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
-import type { ReactNode } from "react";
-import type { SessionChatQueuedPrompt } from "../../shared/session-chat";
-import { Button } from "../../components/ui/button";
-import { cn } from "@/packages/components/utils";
-import { AppTooltip } from "../app-tooltip";
+} from '@tabler/icons-react';
+import { PointerSensor } from '@dnd-kit/dom';
+import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
+import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
+import type { ReactNode } from 'react';
+import type { SessionChatQueuedPrompt } from '../../shared/session-chat';
+import { Button } from '../../components/ui/button';
+import { cn } from '@/packages/components/utils';
+import { AppTooltip } from '../app-tooltip';
 import {
   getSessionChatQueueDragActivationConstraints,
   isSessionChatQueueRowBusy,
   moveSessionChatQueueRow,
   sessionChatQueuePromptIds,
   sessionChatQueueRowPreview,
-} from "./session-chat-queue";
+} from './session-chat-queue';
 
 const queueRowSensors = [
   PointerSensor.configure({
@@ -86,17 +86,12 @@ export function SessionChatQueueRows({
     if (!source) {
       return;
     }
-    const toIndex =
-      "index" in source && typeof source.index === "number" ? source.index : target?.index;
+    const toIndex = 'index' in source && typeof source.index === 'number' ? source.index : target?.index;
     if (toIndex == null || source.initialIndex === toIndex) {
       return;
     }
-    onReorder(
-      sessionChatQueuePromptIds(
-        moveSessionChatQueueRow(prompts, source.initialIndex, toIndex),
-      ),
-    );
-  }) satisfies DragDropEventHandlers["onDragEnd"];
+    onReorder(sessionChatQueuePromptIds(moveSessionChatQueueRow(prompts, source.initialIndex, toIndex)));
+  }) satisfies DragDropEventHandlers['onDragEnd'];
 
   // The provider is unconditional: useSortable needs a manager in context, and
   // rows without a reachable reorder endpoint simply mount their sortable
@@ -116,11 +111,7 @@ export function SessionChatQueueRows({
   ));
 
   return (
-    <div
-      aria-label="Queued prompts"
-      className="ghostex-chat-queue-rows"
-      role="list"
-    >
+    <div aria-label='Queued prompts' className='ghostex-chat-queue-rows' role='list'>
       <DragDropProvider onDragEnd={handleDragEnd}>{rows}</DragDropProvider>
     </div>
   );
@@ -142,18 +133,18 @@ function SessionChatQueueRow({
   prompt: SessionChatQueuedPrompt;
 }) {
   const busy = isSessionChatQueueRowBusy(prompt);
-  const failed = prompt.state === "failed";
+  const failed = prompt.state === 'failed';
   // A row the scheduler already claimed must not be edited, reordered or
   // deleted: those would race the send that is already in flight.
   const locked = disabled || busy;
   const sortable = useSortable({
-    accept: "session-chat-queued-prompt",
+    accept: 'session-chat-queued-prompt',
     disabled: !canDrag || busy,
-    group: "session-chat-queue",
+    group: 'session-chat-queue',
     id: prompt.id,
     index,
     sensors: queueRowSensors,
-    type: "session-chat-queued-prompt",
+    type: 'session-chat-queued-prompt',
   });
   const { handleRef, isDragging } = sortable;
   const setRowRef = (element: HTMLDivElement | null): void => {
@@ -163,20 +154,20 @@ function SessionChatQueueRow({
 
   return (
     <div
-      className={cn("ghostex-chat-queue-row", failed && "ghostex-chat-queue-row-failed")}
-      data-dragging={isDragging ? "true" : undefined}
+      className={cn('ghostex-chat-queue-row', failed && 'ghostex-chat-queue-row-failed')}
+      data-dragging={isDragging ? 'true' : undefined}
       data-state={prompt.state}
       ref={setRowRef}
-      role="listitem"
+      role='listitem'
     >
       {canDrag && !busy ? (
         <button
-          aria-label="Reorder queued prompt"
-          className="ghostex-chat-queue-row-handle"
+          aria-label='Reorder queued prompt'
+          className='ghostex-chat-queue-row-handle'
           ref={handleRef}
-          type="button"
+          type='button'
         >
-          <IconGripVertical aria-hidden="true" size={14} stroke={1.8} />
+          <IconGripVertical aria-hidden='true' size={14} stroke={1.8} />
         </button>
       ) : (
         /*
@@ -185,60 +176,53 @@ function SessionChatQueueRow({
         a row already being delivered — shows the grip inert (or the delivery
         spinner) instead of a blank column the text is pushed away from.
         */
-        <span aria-hidden="true" className="ghostex-chat-queue-row-handle-slot">
+        <span aria-hidden='true' className='ghostex-chat-queue-row-handle-slot'>
           {busy ? (
-            <IconLoader2 className="animate-spin" size={13} stroke={2} />
+            <IconLoader2 className='animate-spin' size={13} stroke={2} />
           ) : (
-            <IconGripVertical
-              className="ghostex-chat-queue-row-handle-inert"
-              size={14}
-              stroke={1.8}
-            />
+            <IconGripVertical className='ghostex-chat-queue-row-handle-inert' size={14} stroke={1.8} />
           )}
         </span>
       )}
-      <span className="ghostex-chat-queue-row-text" title={prompt.text}>
+      <span className='ghostex-chat-queue-row-text' title={prompt.text}>
         {sessionChatQueueRowPreview(prompt.text)}
       </span>
       {failed ? (
-        <span
-          className="ghostex-chat-queue-row-error"
-          title={prompt.errorMessage ?? "Delivery failed."}
-        >
-          <IconAlertTriangle aria-hidden="true" size={13} stroke={2} />
-          {prompt.errorMessage ?? "Delivery failed."}
+        <span className='ghostex-chat-queue-row-error' title={prompt.errorMessage ?? 'Delivery failed.'}>
+          <IconAlertTriangle aria-hidden='true' size={13} stroke={2} />
+          {prompt.errorMessage ?? 'Delivery failed.'}
         </span>
       ) : null}
-      <span className="ghostex-chat-queue-row-actions">
+      <span className='ghostex-chat-queue-row-actions'>
         {failed && onRetry ? (
           <QueueRowButton
             disabled={disabled}
-            icon={<IconRefresh aria-hidden="true" size={14} stroke={2} />}
-            label="Retry"
+            icon={<IconRefresh aria-hidden='true' size={14} stroke={2} />}
+            label='Retry'
             onClick={() => onRetry(prompt)}
           />
         ) : null}
         {onEdit ? (
           <QueueRowButton
             disabled={locked}
-            icon={<IconPencil aria-hidden="true" size={14} stroke={2} />}
-            label="Edit"
+            icon={<IconPencil aria-hidden='true' size={14} stroke={2} />}
+            label='Edit'
             onClick={() => onEdit(prompt)}
           />
         ) : null}
         {onSendNow ? (
           <QueueRowButton
             disabled={locked}
-            icon={<IconArrowUp aria-hidden="true" size={14} stroke={2.2} />}
-            label="Send now"
+            icon={<IconArrowUp aria-hidden='true' size={14} stroke={2.2} />}
+            label='Send now'
             onClick={() => onSendNow(prompt)}
           />
         ) : null}
         {onDelete ? (
           <QueueRowButton
             disabled={locked}
-            icon={<IconTrash aria-hidden="true" size={14} stroke={2} />}
-            label="Delete"
+            icon={<IconTrash aria-hidden='true' size={14} stroke={2} />}
+            label='Delete'
             onClick={() => onDelete(prompt)}
           />
         ) : null}
@@ -260,15 +244,15 @@ function QueueRowButton({
 }) {
   return (
     <AppTooltip content={label}>
-      <span className="inline-flex">
+      <span className='inline-flex'>
         <Button
           aria-label={label}
-          className="ghostex-chat-queue-row-button"
+          className='ghostex-chat-queue-row-button'
           disabled={disabled}
           onClick={onClick}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
+          size='icon-sm'
+          type='button'
+          variant='ghost'
         >
           {icon}
         </Button>

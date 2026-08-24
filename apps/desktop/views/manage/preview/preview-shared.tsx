@@ -1,8 +1,8 @@
-import { type ReactNode } from "react";
+import { type ReactNode } from 'react';
 
 export function ManagePreviewMessage({ icon, title }: { icon: ReactNode; title: string }) {
   return (
-    <div className="manage-preview-message">
+    <div className='manage-preview-message'>
       {icon}
       <span>{title}</span>
     </div>

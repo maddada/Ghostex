@@ -7,14 +7,12 @@ import type {
   SessionChatMessage,
   SessionChatToolCallBlock,
   SessionChatToolResultBlock,
-} from "../../shared/session-chat";
+} from '../../shared/session-chat';
 
 export function isToolOnlySessionChatMessage(message: SessionChatMessage): boolean {
   return (
     message.blocks.length > 0 &&
-    message.blocks.every(
-      (block) => block.type === "tool-call" || block.type === "tool-result",
-    )
+    message.blocks.every((block) => block.type === 'tool-call' || block.type === 'tool-result')
   );
 }
 
@@ -30,7 +28,7 @@ export function isToolOnlySessionChatMessage(message: SessionChatMessage): boole
  */
 export function foldSessionChatToolMessages(
   messages: readonly SessionChatMessage[],
-  isTransparent?: (message: SessionChatMessage) => boolean,
+  isTransparent?: (message: SessionChatMessage) => boolean
 ): SessionChatMessage[] {
   const output: SessionChatMessage[] = [];
   let anchorIndex = -1;
@@ -41,10 +39,7 @@ export function foldSessionChatToolMessages(
       continue;
     }
     const anchor = anchorIndex >= 0 ? output[anchorIndex] : undefined;
-    if (
-      isToolOnlySessionChatMessage(message) &&
-      (anchor?.role === "assistant" || anchor?.role === "reasoning")
-    ) {
+    if (isToolOnlySessionChatMessage(message) && (anchor?.role === 'assistant' || anchor?.role === 'reasoning')) {
       if (!anchorCloned) {
         output[anchorIndex] = { ...anchor, blocks: [...anchor.blocks] };
         anchorCloned = true;
@@ -67,20 +62,20 @@ export interface SessionChatToolPair {
 /** Per-message-block-list FIFO pairing. */
 export function pairSessionChatToolBlocks(
   blocks: readonly SessionChatBlock[],
-  limit: number = Number.POSITIVE_INFINITY,
+  limit: number = Number.POSITIVE_INFINITY
 ): SessionChatToolPair[] {
   const pairs: SessionChatToolPair[] = [];
   const callSlots: (number | null)[] = [];
   let resultOrdinal = 0;
   for (const block of blocks) {
-    if (block.type === "tool-call") {
+    if (block.type === 'tool-call') {
       if (pairs.length < limit) {
         callSlots.push(pairs.length);
         pairs.push({ call: block });
       } else {
         callSlots.push(null);
       }
-    } else if (block.type === "tool-result") {
+    } else if (block.type === 'tool-result') {
       const slot = callSlots[resultOrdinal];
       if (slot === undefined) {
         // Orphan result.
@@ -106,13 +101,11 @@ export interface SessionChatSplitBlocks {
   tools: (SessionChatToolCallBlock | SessionChatToolResultBlock)[];
 }
 
-export function splitSessionChatBlocks(
-  blocks: readonly SessionChatBlock[],
-): SessionChatSplitBlocks {
+export function splitSessionChatBlocks(blocks: readonly SessionChatBlock[]): SessionChatSplitBlocks {
   const prose: SessionChatBlock[] = [];
   const tools: (SessionChatToolCallBlock | SessionChatToolResultBlock)[] = [];
   for (const block of blocks) {
-    if (block.type === "tool-call" || block.type === "tool-result") {
+    if (block.type === 'tool-call' || block.type === 'tool-result') {
       tools.push(block);
     } else {
       prose.push(block);

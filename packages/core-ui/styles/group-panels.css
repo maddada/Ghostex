@@ -53,7 +53,6 @@
   pointer-events: none;
 }
 
-
 .session-groups-top {
   display: grid;
   gap: calc(10px * var(--sidebar-density-scale));
@@ -72,13 +71,13 @@
   min-width: 0;
 }
 
-.session-groups-panel[data-dimmed="true"] {
+.session-groups-panel[data-dimmed='true'] {
   filter: saturate(0.7);
   opacity: 0.4;
   pointer-events: none;
 }
 
-.session-groups-panel[data-dimmed="true"] .section-titlebar-label {
+.session-groups-panel[data-dimmed='true'] .section-titlebar-label {
   color: color-mix(in srgb, var(--app-foreground) 44%, transparent);
 }
 
@@ -97,8 +96,7 @@
   margin-left: 0;
   margin-right: 0;
   min-width: 0;
-  padding: calc(2px * var(--sidebar-density-scale)) 0
-    calc(2px * var(--sidebar-density-scale)) 6px;
+  padding: calc(2px * var(--sidebar-density-scale)) 0 calc(2px * var(--sidebar-density-scale)) 6px;
   position: relative;
   transition: background-color 120ms ease;
   z-index: 4;
@@ -106,19 +104,19 @@
 
 .section-titlebar::before {
   border-radius: 0;
-  content: "";
+  content: '';
   inset: 0;
   pointer-events: none;
   position: absolute;
   transition: background-color 120ms ease;
 }
 
-.section-titlebar[data-collapsible="true"] {
+.section-titlebar[data-collapsible='true'] {
   cursor: pointer;
 }
 
-.section-titlebar[data-collapsible="true"]:hover::before,
-.section-titlebar[data-collapsible="true"]:has(:focus-visible)::before {
+.section-titlebar[data-collapsible='true']:hover::before,
+.section-titlebar[data-collapsible='true']:has(:focus-visible)::before {
   background: color-mix(in srgb, var(--app-foreground) 6%, transparent);
 }
 
@@ -155,7 +153,7 @@
   outline: none;
 }
 
-.section-titlebar-toggle[data-collapsed="false"] {
+.section-titlebar-toggle[data-collapsed='false'] {
   --section-titlebar-toggle-rotation: 90deg;
 }
 
@@ -177,31 +175,27 @@
   transform: rotate(var(--section-titlebar-toggle-rotation));
 }
 
-.section-titlebar-toggle[data-has-idle-icon="true"] .section-titlebar-toggle-chevron-icon {
+.section-titlebar-toggle[data-has-idle-icon='true'] .section-titlebar-toggle-chevron-icon {
   opacity: 0;
   transform: rotate(var(--section-titlebar-toggle-rotation)) scale(0.82);
 }
 
-.section-titlebar-toggle[data-has-idle-icon="true"] .section-titlebar-toggle-idle-icon {
+.section-titlebar-toggle[data-has-idle-icon='true'] .section-titlebar-toggle-idle-icon {
   opacity: 1;
   transform: scale(1);
 }
 
-.section-titlebar:hover
-  .section-titlebar-toggle[data-has-idle-icon="true"]
-  .section-titlebar-toggle-chevron-icon,
+.section-titlebar:hover .section-titlebar-toggle[data-has-idle-icon='true'] .section-titlebar-toggle-chevron-icon,
 .section-titlebar:has(.section-titlebar-toggle:focus-visible)
-  .section-titlebar-toggle[data-has-idle-icon="true"]
+  .section-titlebar-toggle[data-has-idle-icon='true']
   .section-titlebar-toggle-chevron-icon {
   opacity: 1;
   transform: rotate(var(--section-titlebar-toggle-rotation)) scale(1);
 }
 
-.section-titlebar:hover
-  .section-titlebar-toggle[data-has-idle-icon="true"]
-  .section-titlebar-toggle-idle-icon,
+.section-titlebar:hover .section-titlebar-toggle[data-has-idle-icon='true'] .section-titlebar-toggle-idle-icon,
 .section-titlebar:has(.section-titlebar-toggle:focus-visible)
-  .section-titlebar-toggle[data-has-idle-icon="true"]
+  .section-titlebar-toggle[data-has-idle-icon='true']
   .section-titlebar-toggle-idle-icon {
   opacity: 0;
   transform: scale(0.72);
@@ -239,8 +233,8 @@
 
 .stack:hover .section-titlebar-actions:has(.sidebar-titlebar-controls),
 .stack:has(:focus-visible) .section-titlebar-actions:has(.sidebar-titlebar-controls),
-.section-titlebar-actions:has(.sidebar-titlebar-controls[data-controls-visible="true"]),
-.section-titlebar-actions:has(.sidebar-titlebar-controls[data-menu-open="true"]) {
+.section-titlebar-actions:has(.sidebar-titlebar-controls[data-controls-visible='true']),
+.section-titlebar-actions:has(.sidebar-titlebar-controls[data-menu-open='true']) {
   max-width: calc(140px * var(--sidebar-density-scale));
 }
 
@@ -266,7 +260,7 @@
     opacity var(--sidebar-collapse-duration, 0ms) ease;
 }
 
-.sidebar-collapse-shell[data-collapsed="true"] {
+.sidebar-collapse-shell[data-collapsed='true'] {
   /*
    * CDXC:SidebarScroll 2026-05-20-08:08:
    * Collapsed project bodies must not contribute their hidden session rows to
@@ -281,7 +275,7 @@
   pointer-events: none;
 }
 
-.group-sessions-shell[data-project-session-list-clipped="true"][data-collapsed="false"] {
+.group-sessions-shell[data-project-session-list-clipped='true'][data-collapsed='false'] {
   /*
    * CDXC:SidebarCollapseAnimation 2026-08-19:
    * Show more / Show less and the inner scroll cap only describe an *expanded*
@@ -304,7 +298,7 @@
   overflow: hidden;
 }
 
-.group-sessions-shell[data-project-session-list-scrollable="true"][data-collapsed="false"] {
+.group-sessions-shell[data-project-session-list-scrollable='true'][data-collapsed='false'] {
   /*
    * CDXC:ProjectSessionLists 2026-06-25-12:20:
    * Keep the Show more / Show less interaction, but make the expanded project
@@ -327,10 +321,7 @@
    * state. Plain overflow keeps long projects usable while avoiding compositor
    * work during every scroll frame.
    */
-  max-height: var(
-    --project-session-list-scroll-height,
-    calc(var(--sidebar-collapse-content-height) + 4px)
-  );
+  max-height: var(--project-session-list-scroll-height, calc(var(--sidebar-collapse-content-height) + 4px));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: none;
@@ -354,28 +345,28 @@
  * position is preserved). scrollbar-gutter keeps the 2px webkit scrollbar
  * gutter reserved so rows do not shift while the lock is on.
  */
-.sidebar-reference-layout[data-project-reorder-drag="true"]
-  .group-sessions-shell[data-project-session-list-scrollable="true"] {
+.sidebar-reference-layout[data-project-reorder-drag='true']
+  .group-sessions-shell[data-project-session-list-scrollable='true'] {
   overflow-y: hidden;
   scrollbar-gutter: stable;
 }
 
-.group-sessions-shell[data-project-session-list-scrollable="true"]::-webkit-scrollbar {
+.group-sessions-shell[data-project-session-list-scrollable='true']::-webkit-scrollbar {
   display: block;
   height: 0;
   width: 2px;
 }
 
-.group-sessions-shell[data-project-session-list-scrollable="true"]::-webkit-scrollbar-track {
+.group-sessions-shell[data-project-session-list-scrollable='true']::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.group-sessions-shell[data-project-session-list-scrollable="true"]::-webkit-scrollbar-thumb {
+.group-sessions-shell[data-project-session-list-scrollable='true']::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 2px;
 }
 
-.group-sessions-shell[data-project-session-list-scrollable="true"]:hover::-webkit-scrollbar-thumb {
+.group-sessions-shell[data-project-session-list-scrollable='true']:hover::-webkit-scrollbar-thumb {
   background: #585858;
 }
 
@@ -403,7 +394,7 @@
   position: relative;
 }
 
-.session-groups-content[data-scrollable-y="false"] {
+.session-groups-content[data-scrollable-y='false'] {
   /*
    * CDXC:SidebarScroll 2026-05-05-05:29
    * Sparse Combined sidebars with only a chat and a collapsed project should
@@ -488,8 +479,7 @@
   width: calc(24px * var(--sidebar-density-scale));
 }
 
-.session-search-input-shell[data-has-trailing-control="true"][data-has-query="true"]
-  .session-search-clear-button {
+.session-search-input-shell[data-has-trailing-control='true'][data-has-query='true'] .session-search-clear-button {
   right: calc(34px * var(--sidebar-density-scale));
 }
 
@@ -532,7 +522,7 @@
  * as a peer section to Chats and Projects. Use the same section heading inset
  * and vertical rhythm so search does not pin the header to the webview edge.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-previous-group {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-previous-group {
   background: transparent;
   border-color: transparent;
   border-radius: 0;
@@ -546,7 +536,7 @@
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-previous-group .group-head {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-previous-group .group-head {
   /*
    * CDXC:SidebarSearch 2026-05-08-15:07
    * Filtered Previous Sessions appears after the Projects results section and
@@ -560,23 +550,17 @@
   padding: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-search-previous-group
-  .group-head::before {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-previous-group .group-head::before {
   content: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-search-previous-group
-  .group-title-row {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-previous-group .group-title-row {
   align-items: center;
   gap: 0;
   min-height: 22px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-search-previous-group
-  .group-title {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-previous-group .group-title {
   color: #686868;
   font-size: 16px;
   font-weight: 500;
@@ -585,9 +569,7 @@
   text-transform: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-search-previous-group
-  .group-sessions {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-previous-group .group-sessions {
   justify-items: center;
   width: 100%;
 }
@@ -631,11 +613,11 @@
   display: contents;
 }
 
-body:has(.sidebar-reference-layout[data-reference-sidebar="true"]),
-body:has(.sidebar-reference-layout[data-reference-sidebar="true"]) #root,
-body:has(.sidebar-reference-layout[data-reference-sidebar="true"]) .native-sidebar-shell,
-body:has(.sidebar-reference-layout[data-reference-sidebar="true"]) .native-sidebar-main,
-body:has(.sidebar-reference-layout[data-reference-sidebar="true"]) .stack {
+body:has(.sidebar-reference-layout[data-reference-sidebar='true']),
+body:has(.sidebar-reference-layout[data-reference-sidebar='true']) #root,
+body:has(.sidebar-reference-layout[data-reference-sidebar='true']) .native-sidebar-shell,
+body:has(.sidebar-reference-layout[data-reference-sidebar='true']) .native-sidebar-main,
+body:has(.sidebar-reference-layout[data-reference-sidebar='true']) .stack {
   background: var(--app-background);
 }
 
@@ -659,27 +641,14 @@ body:has(.sidebar-reference-layout[data-reference-sidebar="true"]) .stack {
  * sidebar gradient as a normal background so scroll frames do not pay for
  * fixed-background compositing.
  */
-body[data-custom-sidebar-titlebar-colors="true"]:has(
-    .sidebar-reference-layout[data-reference-sidebar="true"]
-  ),
-body[data-custom-sidebar-titlebar-colors="true"]:has(
-    .sidebar-reference-layout[data-reference-sidebar="true"]
-  )
-  #root,
-body[data-custom-sidebar-titlebar-colors="true"]:has(
-    .sidebar-reference-layout[data-reference-sidebar="true"]
-  )
+body[data-custom-sidebar-titlebar-colors='true']:has(.sidebar-reference-layout[data-reference-sidebar='true']),
+body[data-custom-sidebar-titlebar-colors='true']:has(.sidebar-reference-layout[data-reference-sidebar='true']) #root,
+body[data-custom-sidebar-titlebar-colors='true']:has(.sidebar-reference-layout[data-reference-sidebar='true'])
   .native-sidebar-shell,
-body[data-custom-sidebar-titlebar-colors="true"]:has(
-    .sidebar-reference-layout[data-reference-sidebar="true"]
-  )
+body[data-custom-sidebar-titlebar-colors='true']:has(.sidebar-reference-layout[data-reference-sidebar='true'])
   .native-sidebar-main,
-body[data-custom-sidebar-titlebar-colors="true"]:has(
-    .sidebar-reference-layout[data-reference-sidebar="true"]
-  )
-  .stack,
-body[data-custom-sidebar-titlebar-colors="true"]
-  .sidebar-reference-layout[data-reference-sidebar="true"] {
+body[data-custom-sidebar-titlebar-colors='true']:has(.sidebar-reference-layout[data-reference-sidebar='true']) .stack,
+body[data-custom-sidebar-titlebar-colors='true'] .sidebar-reference-layout[data-reference-sidebar='true'] {
   background: linear-gradient(
     180deg,
     var(--custom-sidebar-titlebar-gradient-top-color),
@@ -687,8 +656,7 @@ body[data-custom-sidebar-titlebar-colors="true"]
   );
 }
 
-body[data-custom-sidebar-titlebar-colors="true"]
-  .sidebar-reference-layout[data-reference-sidebar="true"] {
+body[data-custom-sidebar-titlebar-colors='true'] .sidebar-reference-layout[data-reference-sidebar='true'] {
   --reference-sidebar-background: linear-gradient(
     180deg,
     var(--custom-sidebar-titlebar-gradient-top-color),
@@ -702,11 +670,7 @@ body[data-custom-sidebar-titlebar-colors="true"]
     var(--custom-sidebar-titlebar-foreground-color) 56%,
     var(--custom-sidebar-titlebar-background-color) 44%
   );
-  --app-border: color-mix(
-    in srgb,
-    var(--custom-sidebar-titlebar-foreground-color) 12%,
-    transparent
-  );
+  --app-border: color-mix(in srgb, var(--custom-sidebar-titlebar-foreground-color) 12%, transparent);
   --app-card: color-mix(
     in srgb,
     var(--custom-sidebar-titlebar-foreground-color) 4%,
@@ -739,7 +703,7 @@ body[data-custom-sidebar-titlebar-colors="true"]
   color: var(--custom-sidebar-titlebar-foreground-color);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] {
   --sidebar-density-scale: 1;
   --reference-sidebar-background: var(--app-background);
   --reference-sidebar-main-edge-bleed-left: 15px;
@@ -815,7 +779,7 @@ body[data-custom-sidebar-titlebar-colors="true"]
   padding: 5px 1px 7px 8px;
 }
 
-body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar="true"] {
+body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'] {
   /*
    * CDXC:SidebarReferenceBounds 2026-06-22-01:11:
    * The macOS native sidebar needs 5px more left inset, and the primary buttons for Agents Hub, Automations, Mobile, and Search must honor that inset instead of bleeding back to the viewport edge. Override only the native body contract so non-native reference layouts keep the shared 8px content inset.
@@ -824,22 +788,22 @@ body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar="true"
   padding-left: 13px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"],
-.sidebar-reference-layout[data-reference-sidebar="true"] * {
+.sidebar-reference-layout[data-reference-sidebar='true'],
+.sidebar-reference-layout[data-reference-sidebar='true'] * {
   font-weight: 300 !important;
 }
 
-.native-sidebar-shell[data-sidebar-mode="combined"] .native-sidebar-main {
+.native-sidebar-shell[data-sidebar-mode='combined'] .native-sidebar-main {
   padding: 0;
 }
 
-body:has(.sidebar-reference-layout[data-reference-sidebar="true"])
-  .native-sidebar-shell[data-sidebar-mode="combined"]
+body:has(.sidebar-reference-layout[data-reference-sidebar='true'])
+  .native-sidebar-shell[data-sidebar-mode='combined']
   .native-sidebar-main {
   padding: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .sidebar-floating-overflow-trigger {
+.sidebar-reference-layout[data-reference-sidebar='true'] .sidebar-floating-overflow-trigger {
   display: none;
 }
 
@@ -863,15 +827,15 @@ body:has(.sidebar-reference-layout[data-reference-sidebar="true"])
   width: 14px;
 }
 
-body:focus-within .reference-sidebar-window-dot[data-window-dot="close"] {
+body:focus-within .reference-sidebar-window-dot[data-window-dot='close'] {
   background: #ff5f57;
 }
 
-body:focus-within .reference-sidebar-window-dot[data-window-dot="minimize"] {
+body:focus-within .reference-sidebar-window-dot[data-window-dot='minimize'] {
   background: #ffca3a;
 }
 
-body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
+body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
   background: #5fcf65;
 }
 
@@ -1012,10 +976,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   margin-right: calc(-1 * var(--reference-sidebar-edge-bleed-right));
   min-width: 0;
   padding: 4px 0 5px;
-  width: calc(
-    100% + var(--reference-sidebar-footer-edge-bleed-left) +
-      var(--reference-sidebar-edge-bleed-right)
-  );
+  width: calc(100% + var(--reference-sidebar-footer-edge-bleed-left) + var(--reference-sidebar-edge-bleed-right));
 }
 
 .reference-sidebar-footer > .reference-sidebar-search-slot {
@@ -1023,7 +984,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   min-width: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-footer
   .reference-sidebar-footer-quick-access-button {
   height: 35px;
@@ -1044,9 +1005,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   white-space: nowrap;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-footer
-  .reference-sidebar-nav-icon-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-footer .reference-sidebar-nav-icon-button {
   border: none;
   border-radius: 5px;
   height: 35px;
@@ -1058,39 +1017,35 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-footer
   .reference-sidebar-footer-label-short {
   display: none;
 }
 
 @container reference-sidebar-footer (max-width: 200px) {
-  .sidebar-reference-layout[data-reference-sidebar="true"]
+  .sidebar-reference-layout[data-reference-sidebar='true']
     .reference-sidebar-footer
     .reference-sidebar-footer-label-full {
     display: none;
   }
 
-  .sidebar-reference-layout[data-reference-sidebar="true"]
+  .sidebar-reference-layout[data-reference-sidebar='true']
     .reference-sidebar-footer
     .reference-sidebar-footer-label-short {
     display: block;
   }
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-primary-nav
-  > .reference-sidebar-nav-item,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-primary-nav
-  > .reference-sidebar-nav-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-primary-nav > .reference-sidebar-nav-item,
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-primary-nav > .reference-sidebar-nav-button,
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-primary-icon-row,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-search-more-row,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-search-slot {
   margin-left: calc(-1 * var(--reference-sidebar-primary-nav-edge-bleed-left));
@@ -1116,7 +1071,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   letter-spacing: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-nav-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-nav-button {
   align-items: center;
   box-sizing: border-box;
   display: flex;
@@ -1136,56 +1091,46 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
-  > :is(
-    .reference-sidebar-nav-item,
-    .reference-sidebar-nav-button,
-    .reference-sidebar-search-slot
-  )
+  > :is(.reference-sidebar-nav-item, .reference-sidebar-nav-button, .reference-sidebar-search-slot)
   .reference-sidebar-nav-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-search-more-row
   .reference-sidebar-search-slot
   .reference-sidebar-nav-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-nav-button {
   padding-left: calc(10px + var(--reference-sidebar-primary-nav-edge-bleed-left));
   padding-right: calc(10px + var(--reference-sidebar-edge-bleed-right));
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-nav-button {
   max-width: none;
-  width: calc(
-    100% + var(--reference-sidebar-primary-nav-edge-bleed-left) +
-      var(--reference-sidebar-edge-bleed-right)
-  );
+  width: calc(100% + var(--reference-sidebar-primary-nav-edge-bleed-left) + var(--reference-sidebar-edge-bleed-right));
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-primary-icon-row,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-search-more-row,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-nav
   > .reference-sidebar-search-slot {
   max-width: none;
-  width: calc(
-    100% + var(--reference-sidebar-primary-nav-edge-bleed-left) +
-      var(--reference-sidebar-edge-bleed-right)
-  );
+  width: calc(100% + var(--reference-sidebar-primary-nav-edge-bleed-left) + var(--reference-sidebar-edge-bleed-right));
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-icon-row
   .reference-sidebar-nav-icon-button,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-more-row
   .reference-sidebar-nav-icon-button {
   border: none;
@@ -1199,14 +1144,12 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-search-slot
-  .reference-sidebar-nav-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-search-slot .reference-sidebar-nav-button {
   border: none;
   border-radius: 5px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-more-row
   .reference-sidebar-search-slot
   .reference-sidebar-nav-button {
@@ -1214,18 +1157,18 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   min-height: 35px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-icon-row
-  .reference-sidebar-nav-icon-button[data-state="open"],
-.sidebar-reference-layout[data-reference-sidebar="true"]
+  .reference-sidebar-nav-icon-button[data-state='open'],
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-icon-row
-  .reference-sidebar-nav-icon-button[data-active="true"],
-.sidebar-reference-layout[data-reference-sidebar="true"]
+  .reference-sidebar-nav-icon-button[data-active='true'],
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-more-row
-  .reference-sidebar-nav-icon-button[data-state="open"],
-.sidebar-reference-layout[data-reference-sidebar="true"]
+  .reference-sidebar-nav-icon-button[data-state='open'],
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-search-more-row
-  .reference-sidebar-nav-icon-button[data-active="true"] {
+  .reference-sidebar-nav-icon-button[data-active='true'] {
   background: color-mix(in srgb, var(--app-foreground) 10%, transparent);
 }
 
@@ -1323,11 +1266,11 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   margin: 4px 6px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-actions-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-actions-button {
   padding-right: 42px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-nav-item:has(.reference-sidebar-hover-action):is(:hover, :focus-within)
   .reference-sidebar-nav-button {
   padding-right: 47px;
@@ -1354,7 +1297,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
  * Search history controls moved into More, so shared hover-action padding only
  * protects rows that still render secondary hover buttons.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-primary-nav > * {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-primary-nav > * {
   min-width: 0;
 }
 
@@ -1468,7 +1411,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   }
 }
 
-.reference-sidebar-nav-item[data-inline-search="true"]:has(.reference-sidebar-inline-search-clear)
+.reference-sidebar-nav-item[data-inline-search='true']:has(.reference-sidebar-inline-search-clear)
   .reference-sidebar-inline-search-row {
   padding-right: 47px;
 }
@@ -1523,7 +1466,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   border-radius: var(--ghostex-tooltip-radius, 5px);
   box-shadow: var(--ghostex-tooltip-shadow, 0 12px 30px rgba(0, 0, 0, 0.35));
   color: var(--ghostex-tooltip-foreground, rgba(255, 255, 255, 0.78));
-  font: var(--ghostex-tooltip-font, 500 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif);
+  font: var(--ghostex-tooltip-font, 500 12px/1.35 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif);
   opacity: 1;
   overflow-wrap: anywhere;
   padding: 6px 12px;
@@ -1544,26 +1487,24 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
  * dismiss visible tooltips through events, not set a persistent CSS flag that
  * prevents later hover from showing a tooltip until the user clicks.
  */
-body[data-sidebar-tooltips-suppressed="true"] .reference-sidebar-hover-action-tooltip::after,
-body[data-sidebar-tooltips-suppressed="true"]
+body[data-sidebar-tooltips-suppressed='true'] .reference-sidebar-hover-action-tooltip::after,
+body[data-sidebar-tooltips-suppressed='true']
   .reference-sidebar-section-action.reference-sidebar-hover-action-tooltip::after,
-body[data-sidebar-tooltips-suppressed="true"] .session-local-tooltip-popup,
-body[data-sidebar-tooltips-suppressed="true"] .sidebar-fixed-tooltip-popup,
-body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
+body[data-sidebar-tooltips-suppressed='true'] .session-local-tooltip-popup,
+body[data-sidebar-tooltips-suppressed='true'] .sidebar-fixed-tooltip-popup,
+body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
   opacity: 0 !important;
   transition-delay: 0s !important;
   visibility: hidden !important;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-nav-button
-  svg.reference-sidebar-nav-icon {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-nav-button svg.reference-sidebar-nav-icon {
   flex: none;
   height: 15px !important;
   width: 15px !important;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-nav-label {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-nav-label {
   display: block;
   flex: 1 1 auto;
   line-height: 18px;
@@ -1587,25 +1528,25 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
  * The sidebar Keep Awake shortcut must not change background color when hovered, focused, running, or when its dropdown is open.
  * Scope the stable-background override to opted-in shortcut buttons so other sidebar controls keep their filled hover/open affordance.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-primary-icon-row
-  .reference-sidebar-nav-icon-button[data-stable-background="true"]:is(
+  .reference-sidebar-nav-icon-button[data-stable-background='true']:is(
     :hover,
     :focus-visible,
-    [data-state="open"],
-    [data-active="true"]
+    [data-state='open'],
+    [data-active='true']
   ) {
   background: transparent;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .stack {
+.sidebar-reference-layout[data-reference-sidebar='true'] .stack {
   flex: 1 1 auto;
   grid-template-rows: minmax(0, 1fr);
   height: auto;
   min-height: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-groups-panel {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-panel {
   gap: 0;
   /*
    * CDXC:SidebarReferenceScroll 2026-05-24-14:05:
@@ -1627,19 +1568,16 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   margin-left: calc(-1 * var(--reference-sidebar-scroll-edge-bleed-left));
   margin-right: calc(-1 * var(--reference-sidebar-edge-bleed-right));
   min-height: 0;
-  width: calc(
-    100% + var(--reference-sidebar-scroll-edge-bleed-left) +
-      var(--reference-sidebar-edge-bleed-right)
-  );
+  width: calc(100% + var(--reference-sidebar-scroll-edge-bleed-left) + var(--reference-sidebar-edge-bleed-right));
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-groups-top {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-top {
   margin-top: 4px;
   padding-left: 6px;
   padding-right: 7px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-toolbar {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-toolbar {
   padding: 0;
   /*
    * CDXC:SidebarSearch 2026-05-31-18:39:
@@ -1656,11 +1594,11 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   width: calc(100% - 5px);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-input-shell {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-input-shell {
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-input {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-input {
   background: color-mix(in srgb, var(--app-foreground) 5%, transparent);
   border: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
   border-radius: 0;
@@ -1676,26 +1614,26 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-input::placeholder {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-input::placeholder {
   color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-input:focus {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-input:focus {
   border-color: color-mix(in srgb, var(--app-button-background) 46%, var(--app-border));
   box-shadow: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-input-icon {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-input-icon {
   color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
   right: 10px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-search-clear-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-search-clear-button {
   color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
   right: 5px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-groups-content {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-content {
   /*
    * CDXC:SidebarStickyHeaders 2026-05-20-10:15:
    * Project folder headers previously stuck to the top of the scroll area.
@@ -1740,19 +1678,18 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   scrollbar-width: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-groups-scroll-shell {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-scroll-shell {
   margin-left: 0;
   margin-right: 0;
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .session-groups-content::-webkit-scrollbar {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-content::-webkit-scrollbar {
   height: 0;
   width: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-groups-content[data-scrollable-y="false"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-content[data-scrollable-y='false'] {
   animation: none !important;
   -webkit-mask-image: none !important;
   mask-image: none !important;
@@ -1803,7 +1740,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
    */
 }
 
-.reference-sidebar-section-row[data-reference-section="projects"] {
+.reference-sidebar-section-row[data-reference-section='projects'] {
   /*
    * CDXC:SidebarStickyHeaders 2026-05-20-09:55:
    * The first project folder should sit close to the normal Projects section
@@ -1829,7 +1766,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   margin-top: 0;
 }
 
-.reference-remote-machine-section[data-dragging="true"] {
+.reference-remote-machine-section[data-dragging='true'] {
   opacity: 0.28;
 }
 
@@ -1844,7 +1781,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 .reference-remote-machine-section > .reference-sidebar-section-row::before,
 .reference-remote-machine-section > .reference-sidebar-section-row::after {
   background: #c8cdd5;
-  content: "";
+  content: '';
   height: 2px;
   left: calc(6px * var(--sidebar-density-scale));
   opacity: 0;
@@ -1854,14 +1791,12 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   z-index: 8;
 }
 
-.reference-remote-machine-section[data-remote-machine-drop-position="before"]
-  > .reference-sidebar-section-row::before {
+.reference-remote-machine-section[data-remote-machine-drop-position='before'] > .reference-sidebar-section-row::before {
   opacity: 0.72;
   top: -15px;
 }
 
-.reference-remote-machine-section[data-remote-machine-drop-position="after"]
-  > .reference-sidebar-section-row::after {
+.reference-remote-machine-section[data-remote-machine-drop-position='after'] > .reference-sidebar-section-row::after {
   bottom: -7px;
   opacity: 0.72;
 }
@@ -1887,13 +1822,11 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   cursor: grabbing;
 }
 
-.reference-sidebar-section-row[data-reference-section="remote"]
-  .reference-sidebar-section-heading {
+.reference-sidebar-section-row[data-reference-section='remote'] .reference-sidebar-section-heading {
   cursor: grab;
 }
 
-.reference-remote-machine-section[data-dragging="true"]
-  .reference-sidebar-section-heading {
+.reference-remote-machine-section[data-dragging='true'] .reference-sidebar-section-heading {
   cursor: grabbing;
 }
 
@@ -1905,15 +1838,11 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
  * instead of the whole group container — a parent-level opacity would dim the
  * still-clickable browser rows too.
  */
-.reference-remote-machine-section
-  .reference-project-group-list[data-stale="true"]
-  .group-head {
+.reference-remote-machine-section .reference-project-group-list[data-stale='true'] .group-head {
   opacity: 0.55;
 }
 
-.reference-remote-machine-section
-  .reference-project-group-list[data-stale="true"]
-  .session[data-stale-remote="true"] {
+.reference-remote-machine-section .reference-project-group-list[data-stale='true'] .session[data-stale-remote='true'] {
   cursor: default;
   opacity: 0.55;
 }
@@ -1929,41 +1858,40 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   margin-top: 17px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .session-groups-content
   > .reference-sidebar-section-row:first-child {
   margin-top: calc(
-    23px - var(--reference-sidebar-scroll-top-offset, 15px) +
-      var(--reference-sidebar-quick-top-extra, 5px)
+    23px - var(--reference-sidebar-scroll-top-offset, 15px) + var(--reference-sidebar-quick-top-extra, 5px)
   );
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .session-groups-content
-  > .reference-chat-group-list[data-collapsed="false"]
+  > .reference-chat-group-list[data-collapsed='false']
   + .reference-sidebar-section-row,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .session-groups-content
   > .reference-sidebar-section-row
   + .reference-sidebar-section-row {
   margin-top: 17px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .session-groups-content
-  > .reference-chat-group-list[data-collapsed="true"]
+  > .reference-chat-group-list[data-collapsed='true']
   + .reference-sidebar-section-row {
   margin-top: 17px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .session-groups-content
-  > .reference-chat-group-list[data-collapsed="false"]:has(.group-empty-state)
+  > .reference-chat-group-list[data-collapsed='false']:has(.group-empty-state)
   + .reference-sidebar-section-row {
   margin-top: 23px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-collapsible-body {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-collapsible-body {
   /*
    * CDXC:SidebarScroll 2026-05-20-08:08:
    * Expanded Projects can contain a real workspace like zmux with dozens of
@@ -1984,8 +1912,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   visibility: visible;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-collapsible-body[data-collapsed="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-collapsible-body[data-collapsed='true'] {
   /*
    * CDXC:SidebarCollapseAnimation 2026-08-19:
    * `height: 0` plus `overflow: hidden` is the whole collapsed contract here.
@@ -2005,7 +1932,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
     transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] {
+.sidebar-reference-layout[data-reference-sidebar='true'] {
   interpolate-size: allow-keywords;
 }
 
@@ -2035,7 +1962,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
  * jumped. Animate the block padding to zero alongside the height so the final
  * animated box is exactly the unmounted box.
  */
-.sidebar-animated-collapse-body[data-collapsed="true"] {
+.sidebar-animated-collapse-body[data-collapsed='true'] {
   height: 0;
   opacity: 0;
   padding-block: 0;
@@ -2058,48 +1985,46 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
     transition-duration: 0ms !important;
   }
 
-  .reference-sidebar-collapsible-body[data-animate-children="true"] > * {
+  .reference-sidebar-collapsible-body[data-animate-children='true'] > * {
     animation: none !important;
   }
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-sidebar-collapsible-body[data-collapsed='false'][data-animate-children='true']
   > * {
-  animation: reference-sidebar-child-fade-in
-    calc(var(--sidebar-collapse-duration, 0ms) * 0.6) ease both;
+  animation: reference-sidebar-child-fade-in calc(var(--sidebar-collapse-duration, 0ms) * 0.6) ease both;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-sidebar-collapsible-body[data-collapsed='false'][data-animate-children='true']
   > :nth-child(1) {
   animation-delay: 0ms;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-sidebar-collapsible-body[data-collapsed='false'][data-animate-children='true']
   > :nth-child(2) {
   animation-delay: calc(var(--sidebar-collapse-duration, 0ms) * 0.1);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-sidebar-collapsible-body[data-collapsed='false'][data-animate-children='true']
   > :nth-child(3) {
   animation-delay: calc(var(--sidebar-collapse-duration, 0ms) * 0.2);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-sidebar-collapsible-body[data-collapsed='false'][data-animate-children='true']
   > :nth-child(4) {
   animation-delay: calc(var(--sidebar-collapse-duration, 0ms) * 0.3);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-sidebar-collapsible-body[data-collapsed='false'][data-animate-children='true']
   > :nth-child(n + 5) {
   animation-delay: calc(var(--sidebar-collapse-duration, 0ms) * 0.4);
 }
-
 
 @keyframes reference-sidebar-child-fade-in {
   from {
@@ -2152,7 +2077,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
     transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.reference-sidebar-section-heading[aria-expanded="false"] .reference-sidebar-section-chevron {
+.reference-sidebar-section-heading[aria-expanded='false'] .reference-sidebar-section-chevron {
   transform: rotate(0deg);
 }
 
@@ -2169,8 +2094,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
  * leading cloud with status feedback. The heading shrinks only for the
  * trailing Connect control.
  */
-.reference-sidebar-section-row[data-has-remote-connection-control="true"]
-  .reference-sidebar-section-heading {
+.reference-sidebar-section-row[data-has-remote-connection-control='true'] .reference-sidebar-section-heading {
   flex: 0 1 auto;
 }
 
@@ -2221,19 +2145,18 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   outline: none;
 }
 
-.reference-remote-machine-connection-control[data-kind="connect"]:hover {
+.reference-remote-machine-connection-control[data-kind='connect']:hover {
   color: color-mix(in srgb, var(--vscode-foreground) 88%, transparent);
 }
 
-.reference-sidebar-section-row[data-has-remote-connection-control="true"]
-  .reference-sidebar-section-actions {
+.reference-sidebar-section-row[data-has-remote-connection-control='true'] .reference-sidebar-section-actions {
   margin-left: 0;
 }
 
-.reference-sidebar-section-row[data-has-remote-connection-control="true"]:is(
+.reference-sidebar-section-row[data-has-remote-connection-control='true']:is(
     :hover,
     :has(:focus-visible),
-    [data-actions-always-visible="true"]
+    [data-actions-always-visible='true']
   )
   .reference-sidebar-section-actions {
   margin-left: auto;
@@ -2263,7 +2186,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   transition: opacity 120ms ease;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true']
   .reference-sidebar-section-actions
   .reference-sidebar-section-agent-picker {
   /*
@@ -2281,7 +2204,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 
 .reference-sidebar-section-row:hover .reference-sidebar-section-actions,
 .reference-sidebar-section-row:has(:focus-visible) .reference-sidebar-section-actions,
-.reference-sidebar-section-row[data-actions-always-visible="true"] .reference-sidebar-section-actions {
+.reference-sidebar-section-row[data-actions-always-visible='true'] .reference-sidebar-section-actions {
   max-width: var(--reference-sidebar-section-actions-max-width);
   opacity: 1;
   overflow: visible;
@@ -2290,8 +2213,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 
 .reference-sidebar-section-row:hover .reference-sidebar-section-status-counts,
 .reference-sidebar-section-row:has(:focus-visible) .reference-sidebar-section-status-counts,
-.reference-sidebar-section-row[data-actions-always-visible="true"]
-  .reference-sidebar-section-status-counts {
+.reference-sidebar-section-row[data-actions-always-visible='true'] .reference-sidebar-section-status-counts {
   display: none;
   gap: 0;
   margin-left: 0;
@@ -2319,7 +2241,7 @@ The Quick and Projects sort picker is compact header chrome, not a settings
 surface. Keep the filter icon aligned with existing hover actions while making
 manual mode visibly selected without adding text to the section row.
 */
-.reference-sidebar-section-sort-action[data-selected="true"] {
+.reference-sidebar-section-sort-action[data-selected='true'] {
   color: color-mix(in srgb, var(--app-foreground) 86%, transparent);
 }
 
@@ -2327,15 +2249,15 @@ manual mode visibly selected without adding text to the section row.
   min-width: 204px;
 }
 
-.reference-sidebar-sort-menu .session-context-menu-icon[data-visible="false"] {
+.reference-sidebar-sort-menu .session-context-menu-icon[data-visible='false'] {
   opacity: 0;
 }
 
-.reference-sidebar-tag-filter-check[data-visible="false"] {
+.reference-sidebar-tag-filter-check[data-visible='false'] {
   opacity: 0;
 }
 
-.reference-sidebar-tag-filter-item[data-selected="true"] {
+.reference-sidebar-tag-filter-item[data-selected='true'] {
   color: var(--app-foreground);
 }
 
@@ -2350,32 +2272,29 @@ manual mode visibly selected without adding text to the section row.
   transform: rotate(90deg);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-section {
   margin-top: 6px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .reference-remote-machine-section
-  .recent-projects-section {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-remote-machine-section .recent-projects-section {
   margin-top: 4px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section-header {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-section-header {
   margin-bottom: 1px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section-heading {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-section-heading {
   color: var(--app-muted);
   min-height: 28px;
   pointer-events: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section-list {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-section-list {
   gap: 0;
 }
 
-
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row.group-head {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-row.group-head {
   border-radius: 0;
   box-sizing: border-box;
   justify-self: center;
@@ -2390,26 +2309,24 @@ manual mode visibly selected without adding text to the section row.
  * user-created project groups are next, and individual project rows remain
  * one step lighter so nesting is readable without changing type size.
  */
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-nav-label,
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-inline-search-input,
-.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-section-heading,
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section-heading {
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-nav-label,
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-inline-search-input,
+.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-section-heading,
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-section-heading {
   font-weight: 800;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .project-collection-title,
-.sidebar-reference-layout[data-reference-sidebar="true"] .project-collection-title-input {
+.sidebar-reference-layout[data-reference-sidebar='true'] .project-collection-title,
+.sidebar-reference-layout[data-reference-sidebar='true'] .project-collection-title-input {
   font-weight: 800;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .group[data-project-group="true"]
-  .group-title {
+.sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-title {
   font-weight: 700;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row-title,
-.sidebar-reference-layout[data-reference-sidebar="true"]
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-row-title,
+.sidebar-reference-layout[data-reference-sidebar='true']
   .recent-projects-row.group-head
   .recent-projects-row-title.group-title {
   color: inherit;
@@ -2420,8 +2337,7 @@ manual mode visibly selected without adding text to the section row.
   text-transform: none;
 }
 
-
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row.group-head {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-row.group-head {
   align-items: center;
   display: flex;
   height: 34px;
@@ -2429,19 +2345,19 @@ manual mode visibly selected without adding text to the section row.
   padding: 0 10px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row .group-title-wrap {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-row .group-title-wrap {
   align-items: center;
   display: flex;
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row .group-title-row {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-row .group-title-row {
   align-items: center;
   gap: 12px;
   min-height: 0;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-session-count.group-add-button {
+.sidebar-reference-layout[data-reference-sidebar='true'] .recent-projects-session-count.group-add-button {
   background: transparent;
   border: none;
   color: var(--app-muted);
@@ -2532,7 +2448,15 @@ manual mode visibly selected without adding text to the section row.
     inset 0 1px rgb(255 255 255 / 10%),
     0 1px 1px rgb(0 0 0 / 22%);
   color: rgb(255 255 255 / 92%);
-  font-family: var(--app-font-family, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-family: var(
+    --app-font-family,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif
+  );
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0;

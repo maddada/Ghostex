@@ -4,73 +4,73 @@
    shadcn, and workspace surfaces so CSS generation does not depend on package
    resolution for a tiny app-level behavior. */
 @property --tw-scroll-mask-left {
-  syntax: "*";
+  syntax: '*';
   inherits: false;
   initial-value: linear-gradient(#fff, #fff);
 }
 
 @property --tw-scroll-mask-right {
-  syntax: "*";
+  syntax: '*';
   inherits: false;
   initial-value: linear-gradient(#fff, #fff);
 }
 
 @property --tw-scroll-mask-top {
-  syntax: "*";
+  syntax: '*';
   inherits: false;
   initial-value: linear-gradient(#fff, #fff);
 }
 
 @property --tw-scroll-mask-bottom {
-  syntax: "*";
+  syntax: '*';
   inherits: false;
   initial-value: linear-gradient(#fff, #fff);
 }
 
 @property --tw-scroll-mask-left-size {
-  syntax: "<length-percentage>";
+  syntax: '<length-percentage>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --tw-scroll-mask-right-size {
-  syntax: "<length-percentage>";
+  syntax: '<length-percentage>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --tw-scroll-mask-top-size {
-  syntax: "<length-percentage>";
+  syntax: '<length-percentage>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --tw-scroll-mask-bottom-size {
-  syntax: "<length-percentage>";
+  syntax: '<length-percentage>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --tw-scroll-mask-left-fade {
-  syntax: "<length-percentage>";
+  syntax: '<length-percentage>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --tw-scroll-mask-right-fade {
-  syntax: "<length-percentage>";
+  syntax: '<length-percentage>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --tw-scroll-mask-top-fade {
-  syntax: "<length-percentage>";
+  syntax: '<length-percentage>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --tw-scroll-mask-bottom-fade {
-  syntax: "<length-percentage>";
+  syntax: '<length-percentage>';
   inherits: false;
   initial-value: 0px;
 }
@@ -107,31 +107,31 @@
  * bottom edge color-independent across custom sidebar gradients and tints.
  */
 @property --top-fade {
-  syntax: "<length>";
+  syntax: '<length>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --bottom-fade {
-  syntax: "<length>";
+  syntax: '<length>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --edge-fade-distance {
-  syntax: "<length>";
+  syntax: '<length>';
   inherits: false;
   initial-value: 1rem;
 }
 
 @property --left-fade {
-  syntax: "<length>";
+  syntax: '<length>';
   inherits: false;
   initial-value: 0px;
 }
 
 @property --right-fade {
-  syntax: "<length>";
+  syntax: '<length>';
   inherits: false;
   initial-value: 0px;
 }
@@ -250,18 +250,8 @@
 }
 
 .vertical-scroll-fade-mask-bottom {
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    black 0,
-    black calc(100% - var(--bottom-fade)),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    black 0,
-    black calc(100% - var(--bottom-fade)),
-    transparent 100%
-  );
+  -webkit-mask-image: linear-gradient(to bottom, black 0, black calc(100% - var(--bottom-fade)), transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0, black calc(100% - var(--bottom-fade)), transparent 100%);
 }
 
 /*
@@ -343,18 +333,8 @@
   }
 
   .vertical-scroll-fade-mask-bottom:not([data-open]):not([data-closed]) {
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      black 0,
-      black calc(100% - var(--bottom-fade)),
-      transparent 100%
-    );
-    mask-image: linear-gradient(
-      to bottom,
-      black 0,
-      black calc(100% - var(--bottom-fade)),
-      transparent 100%
-    );
+    -webkit-mask-image: linear-gradient(to bottom, black 0, black calc(100% - var(--bottom-fade)), transparent 100%);
+    mask-image: linear-gradient(to bottom, black 0, black calc(100% - var(--bottom-fade)), transparent 100%);
     animation-name: edge-fade-bottom;
     animation-timing-function: linear;
     animation-fill-mode: both;
@@ -367,33 +347,12 @@
   --tw-scroll-mask-right-size: 1rem;
   --tw-scroll-mask-top-size: 1rem;
   --tw-scroll-mask-bottom-size: 1rem;
-  --tw-scroll-mask-left: linear-gradient(
-    to right,
-    transparent,
-    black var(--tw-scroll-mask-left-fade),
-    black
-  );
-  --tw-scroll-mask-right: linear-gradient(
-    to left,
-    transparent,
-    black var(--tw-scroll-mask-right-fade),
-    black
-  );
-  --tw-scroll-mask-top: linear-gradient(
-    to bottom,
-    transparent,
-    black var(--tw-scroll-mask-top-fade),
-    black
-  );
-  --tw-scroll-mask-bottom: linear-gradient(
-    to top,
-    transparent,
-    black var(--tw-scroll-mask-bottom-fade),
-    black
-  );
+  --tw-scroll-mask-left: linear-gradient(to right, transparent, black var(--tw-scroll-mask-left-fade), black);
+  --tw-scroll-mask-right: linear-gradient(to left, transparent, black var(--tw-scroll-mask-right-fade), black);
+  --tw-scroll-mask-top: linear-gradient(to bottom, transparent, black var(--tw-scroll-mask-top-fade), black);
+  --tw-scroll-mask-bottom: linear-gradient(to top, transparent, black var(--tw-scroll-mask-bottom-fade), black);
   mask-image:
-    var(--tw-scroll-mask-left), var(--tw-scroll-mask-right), var(--tw-scroll-mask-top),
-    var(--tw-scroll-mask-bottom);
+    var(--tw-scroll-mask-left), var(--tw-scroll-mask-right), var(--tw-scroll-mask-top), var(--tw-scroll-mask-bottom);
   mask-composite: intersect;
 
   @media (prefers-reduced-motion: no-preference) {
@@ -408,8 +367,7 @@
         calc(100% - var(--tw-scroll-mask-right-size)) 100%,
         0 var(--tw-scroll-mask-top-size),
         calc(100% - var(--tw-scroll-mask-bottom-size)) 100%;
-      animation-timeline:
-        scroll(self inline), scroll(self inline), scroll(self block), scroll(self block);
+      animation-timeline: scroll(self inline), scroll(self inline), scroll(self block), scroll(self block);
     }
   }
 }
@@ -423,33 +381,12 @@
   --tw-scroll-mask-top-size: --value([length], [percentage], [*]);
   --tw-scroll-mask-bottom-size: --spacing(--value(integer));
   --tw-scroll-mask-bottom-size: --value([length], [percentage], [*]);
-  --tw-scroll-mask-left: linear-gradient(
-    to right,
-    transparent,
-    black var(--tw-scroll-mask-left-fade),
-    black
-  );
-  --tw-scroll-mask-right: linear-gradient(
-    to left,
-    transparent,
-    black var(--tw-scroll-mask-right-fade),
-    black
-  );
-  --tw-scroll-mask-top: linear-gradient(
-    to bottom,
-    transparent,
-    black var(--tw-scroll-mask-top-fade),
-    black
-  );
-  --tw-scroll-mask-bottom: linear-gradient(
-    to top,
-    transparent,
-    black var(--tw-scroll-mask-bottom-fade),
-    black
-  );
+  --tw-scroll-mask-left: linear-gradient(to right, transparent, black var(--tw-scroll-mask-left-fade), black);
+  --tw-scroll-mask-right: linear-gradient(to left, transparent, black var(--tw-scroll-mask-right-fade), black);
+  --tw-scroll-mask-top: linear-gradient(to bottom, transparent, black var(--tw-scroll-mask-top-fade), black);
+  --tw-scroll-mask-bottom: linear-gradient(to top, transparent, black var(--tw-scroll-mask-bottom-fade), black);
   mask-image:
-    var(--tw-scroll-mask-left), var(--tw-scroll-mask-right), var(--tw-scroll-mask-top),
-    var(--tw-scroll-mask-bottom);
+    var(--tw-scroll-mask-left), var(--tw-scroll-mask-right), var(--tw-scroll-mask-top), var(--tw-scroll-mask-bottom);
   mask-composite: intersect;
 
   @media (prefers-reduced-motion: no-preference) {
@@ -464,8 +401,7 @@
         calc(100% - var(--tw-scroll-mask-right-size)) 100%,
         0 var(--tw-scroll-mask-top-size),
         calc(100% - var(--tw-scroll-mask-bottom-size)) 100%;
-      animation-timeline:
-        scroll(self inline), scroll(self inline), scroll(self block), scroll(self block);
+      animation-timeline: scroll(self inline), scroll(self inline), scroll(self block), scroll(self block);
     }
   }
 }
@@ -473,21 +409,10 @@
 @utility scroll-mask-x {
   --tw-scroll-mask-left-size: 1rem;
   --tw-scroll-mask-right-size: 1rem;
-  --tw-scroll-mask-left: linear-gradient(
-    to right,
-    transparent,
-    black var(--tw-scroll-mask-left-fade),
-    black
-  );
-  --tw-scroll-mask-right: linear-gradient(
-    to left,
-    transparent,
-    black var(--tw-scroll-mask-right-fade),
-    black
-  );
+  --tw-scroll-mask-left: linear-gradient(to right, transparent, black var(--tw-scroll-mask-left-fade), black);
+  --tw-scroll-mask-right: linear-gradient(to left, transparent, black var(--tw-scroll-mask-right-fade), black);
   mask-image:
-    var(--tw-scroll-mask-left), var(--tw-scroll-mask-right), var(--tw-scroll-mask-top),
-    var(--tw-scroll-mask-bottom);
+    var(--tw-scroll-mask-left), var(--tw-scroll-mask-right), var(--tw-scroll-mask-top), var(--tw-scroll-mask-bottom);
   mask-composite: intersect;
 
   @media (prefers-reduced-motion: no-preference) {
@@ -502,8 +427,7 @@
         calc(100% - var(--tw-scroll-mask-right-size)) 100%,
         0 var(--tw-scroll-mask-top-size),
         calc(100% - var(--tw-scroll-mask-bottom-size)) 100%;
-      animation-timeline:
-        scroll(self inline), scroll(self inline), scroll(self block), scroll(self block);
+      animation-timeline: scroll(self inline), scroll(self inline), scroll(self block), scroll(self block);
     }
   }
 }
@@ -511,21 +435,10 @@
 @utility scroll-mask-y {
   --tw-scroll-mask-top-size: 1rem;
   --tw-scroll-mask-bottom-size: 1rem;
-  --tw-scroll-mask-top: linear-gradient(
-    to bottom,
-    transparent,
-    black var(--tw-scroll-mask-top-fade),
-    black
-  );
-  --tw-scroll-mask-bottom: linear-gradient(
-    to top,
-    transparent,
-    black var(--tw-scroll-mask-bottom-fade),
-    black
-  );
+  --tw-scroll-mask-top: linear-gradient(to bottom, transparent, black var(--tw-scroll-mask-top-fade), black);
+  --tw-scroll-mask-bottom: linear-gradient(to top, transparent, black var(--tw-scroll-mask-bottom-fade), black);
   mask-image:
-    var(--tw-scroll-mask-left), var(--tw-scroll-mask-right), var(--tw-scroll-mask-top),
-    var(--tw-scroll-mask-bottom);
+    var(--tw-scroll-mask-left), var(--tw-scroll-mask-right), var(--tw-scroll-mask-top), var(--tw-scroll-mask-bottom);
   mask-composite: intersect;
 
   @media (prefers-reduced-motion: no-preference) {
@@ -540,8 +453,7 @@
         calc(100% - var(--tw-scroll-mask-right-size)) 100%,
         0 var(--tw-scroll-mask-top-size),
         calc(100% - var(--tw-scroll-mask-bottom-size)) 100%;
-      animation-timeline:
-        scroll(self inline), scroll(self inline), scroll(self block), scroll(self block);
+      animation-timeline: scroll(self inline), scroll(self inline), scroll(self block), scroll(self block);
     }
   }
 }

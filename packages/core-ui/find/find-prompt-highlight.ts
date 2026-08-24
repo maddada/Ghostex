@@ -25,10 +25,7 @@ function utf8Length(codePoint: number): number {
  * A character is highlighted when its first byte is one of `byteOffsets`, which
  * is the same rule the terminal picker paints with.
  */
-export function splitHighlightedSegments(
-  text: string,
-  byteOffsets: readonly number[],
-): FindPromptSegment[] {
+export function splitHighlightedSegments(text: string, byteOffsets: readonly number[]): FindPromptSegment[] {
   if (!text) {
     return [];
   }
@@ -40,13 +37,13 @@ export function splitHighlightedSegments(
   const segments: FindPromptSegment[] = [];
   let byteOffset = 0;
   let runHighlighted = false;
-  let run = "";
+  let run = '';
 
   for (const character of text) {
     const highlighted = marks.has(byteOffset);
     if (run && highlighted !== runHighlighted) {
       segments.push({ highlighted: runHighlighted, text: run });
-      run = "";
+      run = '';
     }
     runHighlighted = highlighted;
     run += character;
@@ -63,7 +60,7 @@ export function splitHighlightedSegments(
  * same sanitizing the terminal picker does before drawing a result row.
  */
 export function flattenPromptLine(text: string): string {
-  return text.replace(/[\r\n\t]+/gu, " ");
+  return text.replace(/[\r\n\t]+/gu, ' ');
 }
 
 /**
@@ -72,21 +69,21 @@ export function flattenPromptLine(text: string): string {
  */
 export function flattenPromptLineWithOffsets(
   text: string,
-  byteOffsets: readonly number[],
+  byteOffsets: readonly number[]
 ): { offsets: number[]; text: string } {
   const marks = new Set(byteOffsets);
   const nextOffsets: number[] = [];
   let byteOffset = 0;
   let nextByteOffset = 0;
-  let out = "";
+  let out = '';
   let pendingWhitespace = false;
 
   for (const character of text) {
     const size = utf8Length(character.codePointAt(0) ?? 0);
-    const isCollapsible = character === "\n" || character === "\r" || character === "\t";
+    const isCollapsible = character === '\n' || character === '\r' || character === '\t';
     if (isCollapsible) {
       if (!pendingWhitespace) {
-        out += " ";
+        out += ' ';
         nextByteOffset += 1;
         pendingWhitespace = true;
       }

@@ -5,15 +5,15 @@ import {
   IconPlus,
   IconTerminal2,
   IconWorld,
-} from "@tabler/icons-react";
-import { useState } from "react";
-import type { SidebarNewSessionEnvMode } from "../../shared/ghostex-settings";
-import type { SidebarAgentButton } from "../../shared/sidebar-agents";
-import { AppTooltip } from "../app-tooltip";
-import { AgentMenuChatIndicator } from "../agent-menu-chat-indicator";
-import { ProjectAgentLauncherIcon } from "../project-agent-launcher-icon";
-import { SidebarContextMenuPortal } from "../sidebar-context-menu-portal";
-import type { WebviewApi } from "../webview-api";
+} from '@tabler/icons-react';
+import { useState } from 'react';
+import type { SidebarNewSessionEnvMode } from '../../shared/ghostex-settings';
+import type { SidebarAgentButton } from '../../shared/sidebar-agents';
+import { AppTooltip } from '../app-tooltip';
+import { AgentMenuChatIndicator } from '../agent-menu-chat-indicator';
+import { ProjectAgentLauncherIcon } from '../project-agent-launcher-icon';
+import { SidebarContextMenuPortal } from '../sidebar-context-menu-portal';
+import type { WebviewApi } from '../webview-api';
 
 /*
  * CDXC:SidebarV2Worktree 2026-07-29:
@@ -110,7 +110,7 @@ export function SidebarV2CreateButton({
     return { clientX: rect.left, clientY: rect.bottom + 4 };
   };
 
-  const worktreeIsDefault = canCreateWorktree && defaultEnvMode === "worktree";
+  const worktreeIsDefault = canCreateWorktree && defaultEnvMode === 'worktree';
 
   /*
    * CDXC:SidebarV2SingleCreateControl 2026-07-30:
@@ -125,20 +125,15 @@ export function SidebarV2CreateButton({
    * menu opens.
    */
   const pickableAgents = onCreateAgentSession ? (agents ?? []) : [];
-  const hasQuickItems =
-    onCreateQuickTerminal !== undefined || onCreateQuickBrowserTab !== undefined;
-  const hasMenu =
-    canCreateWorktree ||
-    pickableAgents.length > 0 ||
-    hasQuickItems ||
-    onAddProject !== undefined;
+  const hasQuickItems = onCreateQuickTerminal !== undefined || onCreateQuickBrowserTab !== undefined;
+  const hasMenu = canCreateWorktree || pickableAgents.length > 0 || hasQuickItems || onAddProject !== undefined;
 
   return (
-    <div className="sidebar-v2-create-split" data-can-worktree={String(canCreateWorktree)}>
-      <AppTooltip content={worktreeIsDefault ? "New worktree session" : label}>
+    <div className='sidebar-v2-create-split' data-can-worktree={String(canCreateWorktree)}>
+      <AppTooltip content={worktreeIsDefault ? 'New worktree session' : label}>
         <button
           aria-label={label}
-          className="sidebar-v2-create-button"
+          className='sidebar-v2-create-button'
           onClick={(event) => {
             event.stopPropagation();
             if (worktreeIsDefault) {
@@ -147,50 +142,50 @@ export function SidebarV2CreateButton({
             }
             onCreateInstantSession();
           }}
-          type="button"
+          type='button'
         >
-          <IconPlus aria-hidden="true" size={14} stroke={2} />
+          <IconPlus aria-hidden='true' size={14} stroke={2} />
         </button>
       </AppTooltip>
       {hasMenu ? (
         <button
           aria-expanded={menuPosition !== undefined}
-          aria-haspopup="menu"
-          aria-label="New session options"
-          className="sidebar-v2-create-chevron"
+          aria-haspopup='menu'
+          aria-label='New session options'
+          className='sidebar-v2-create-chevron'
           onClick={(event) => {
             event.stopPropagation();
             setMenuPosition(popoverPositionFrom(event.currentTarget));
           }}
-          type="button"
+          type='button'
         >
-          <IconChevronDown aria-hidden="true" size={12} stroke={2} />
+          <IconChevronDown aria-hidden='true' size={12} stroke={2} />
         </button>
       ) : null}
       {menuPosition ? (
         <SidebarContextMenuPortal
-          menuClassName="session-context-menu sidebar-v2-create-menu"
+          menuClassName='session-context-menu sidebar-v2-create-menu'
           menuStyle={{ left: `${menuPosition.clientX}px`, top: `${menuPosition.clientY}px` }}
           onDismiss={() => setMenuPosition(undefined)}
           vscode={vscode}
         >
           {/*
-            * CDXC:SidebarV2SingleCreateControl 2026-07-30:
-            * Section one is "create in the resolved target project": every
-            * agent this host has configured, then the worktree entry point.
-            * Picking an agent here launches it the same way the plain half
-            * launches the primary one — same target, same message — so the
-            * picker is a create action and not a preference editor. (It does
-            * update the last-used agent, because it launches through the
-            * caller's own agent path, which is the behavior V1's picker has.)
-            */}
+           * CDXC:SidebarV2SingleCreateControl 2026-07-30:
+           * Section one is "create in the resolved target project": every
+           * agent this host has configured, then the worktree entry point.
+           * Picking an agent here launches it the same way the plain half
+           * launches the primary one — same target, same message — so the
+           * picker is a create action and not a preference editor. (It does
+           * update the last-used agent, because it launches through the
+           * caller's own agent path, which is the behavior V1's picker has.)
+           */}
           {pickableAgents.length > 0 || canCreateWorktree ? (
-            <div className="session-context-menu-section">
+            <div className='session-context-menu-section'>
               {pickableAgents.map((agent) => (
                 <button
                   aria-label={agent.name}
                   aria-pressed={agent.agentId === primaryAgentId}
-                  className="session-context-menu-item group-agent-menu-item sidebar-v2-create-menu-agent"
+                  className='session-context-menu-item group-agent-menu-item sidebar-v2-create-menu-agent'
                   data-agent-id={agent.agentId}
                   data-selected={String(agent.agentId === primaryAgentId)}
                   key={agent.agentId}
@@ -198,82 +193,67 @@ export function SidebarV2CreateButton({
                     setMenuPosition(undefined);
                     onCreateAgentSession?.(agent);
                   }}
-                  role="menuitem"
-                  type="button"
+                  role='menuitem'
+                  type='button'
                 >
-                  <ProjectAgentLauncherIcon agent={agent} colorMode="brand" />
-                  <span className="group-agent-menu-label">{agent.name}</span>
+                  <ProjectAgentLauncherIcon agent={agent} colorMode='brand' />
+                  <span className='group-agent-menu-label'>{agent.name}</span>
                   <AgentMenuChatIndicator agent={agent} />
                 </button>
               ))}
               {canCreateWorktree ? (
                 <button
-                  className="session-context-menu-item"
+                  className='session-context-menu-item'
                   onClick={() => {
                     const position = menuPosition;
                     setMenuPosition(undefined);
                     onOpenWorktreePopover(position);
                   }}
-                  role="menuitem"
-                  type="button"
+                  role='menuitem'
+                  type='button'
                 >
-                  <IconGitBranch
-                    aria-hidden="true"
-                    className="session-context-menu-icon"
-                    size={16}
-                    stroke={1.8}
-                  />
+                  <IconGitBranch aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
                   New worktree session…
                 </button>
               ) : null}
             </div>
           ) : null}
           {/*
-            * CDXC:SidebarV2SingleCreateControl 2026-07-30:
-            * The Quick entries are the ONLY create paths in V2 that land in the
-            * Quick collection, and they say so in their labels. Everything
-            * above targets a real project, so a projectless session is now
-            * always something the user asked for by name.
-            */}
+           * CDXC:SidebarV2SingleCreateControl 2026-07-30:
+           * The Quick entries are the ONLY create paths in V2 that land in the
+           * Quick collection, and they say so in their labels. Everything
+           * above targets a real project, so a projectless session is now
+           * always something the user asked for by name.
+           */}
           {hasQuickItems ? (
             <>
-              <div className="session-context-menu-divider" role="separator" />
-              <div className="session-context-menu-section">
+              <div className='session-context-menu-divider' role='separator' />
+              <div className='session-context-menu-section'>
                 {onCreateQuickTerminal ? (
                   <button
-                    className="session-context-menu-item"
+                    className='session-context-menu-item'
                     onClick={() => {
                       setMenuPosition(undefined);
                       onCreateQuickTerminal();
                     }}
-                    role="menuitem"
-                    type="button"
+                    role='menuitem'
+                    type='button'
                   >
-                    <IconTerminal2
-                      aria-hidden="true"
-                      className="session-context-menu-icon"
-                      size={16}
-                      stroke={1.8}
-                    />
+                    <IconTerminal2 aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
                     Quick Terminal
                   </button>
                 ) : null}
                 {onCreateQuickBrowserTab ? (
                   <button
-                    className="session-context-menu-item"
+                    className='session-context-menu-item'
                     onClick={() => {
                       setMenuPosition(undefined);
                       onCreateQuickBrowserTab();
                     }}
-                    role="menuitem"
-                    type="button"
+                    role='menuitem'
+                    type='button'
                   >
-                    <IconWorld
-                      aria-hidden="true"
-                      className="session-context-menu-icon"
-                      size={16}
-                      stroke={1.8}
-                    />
+                    <IconWorld aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
                     Quick Browser Tab
                   </button>
                 ) : null}
@@ -281,31 +261,26 @@ export function SidebarV2CreateButton({
             </>
           ) : null}
           {/*
-            * CDXC:AddProject 2026-07-30:
-            * Adding a project is not creating a session, so it gets its own
-            * section below the create paths. It opens the shared add-project
-            * dialog, which owns machine selection, browsing, and cloning.
-            */}
+           * CDXC:AddProject 2026-07-30:
+           * Adding a project is not creating a session, so it gets its own
+           * section below the create paths. It opens the shared add-project
+           * dialog, which owns machine selection, browsing, and cloning.
+           */}
           {onAddProject ? (
             <>
-              <div className="session-context-menu-divider" role="separator" />
-              <div className="session-context-menu-section">
+              <div className='session-context-menu-divider' role='separator' />
+              <div className='session-context-menu-section'>
                 <button
-                  className="session-context-menu-item"
-                  data-sidebar-v2-create-menu-item="addProject"
+                  className='session-context-menu-item'
+                  data-sidebar-v2-create-menu-item='addProject'
                   onClick={() => {
                     setMenuPosition(undefined);
                     onAddProject();
                   }}
-                  role="menuitem"
-                  type="button"
+                  role='menuitem'
+                  type='button'
                 >
-                  <IconFolderPlus
-                    aria-hidden="true"
-                    className="session-context-menu-icon"
-                    size={16}
-                    stroke={1.8}
-                  />
+                  <IconFolderPlus aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
                   Add project…
                 </button>
               </div>
@@ -313,20 +288,20 @@ export function SidebarV2CreateButton({
           ) : null}
           {canCreateWorktree && onSetDefaultEnvMode ? (
             <>
-              <div className="session-context-menu-divider" role="separator" />
-              <div className="session-context-menu-section">
+              <div className='session-context-menu-divider' role='separator' />
+              <div className='session-context-menu-section'>
                 <button
-                  aria-checked={defaultEnvMode === "worktree"}
-                  className="session-context-menu-item"
+                  aria-checked={defaultEnvMode === 'worktree'}
+                  className='session-context-menu-item'
                   onClick={() => {
                     setMenuPosition(undefined);
-                    onSetDefaultEnvMode(defaultEnvMode === "worktree" ? "local" : "worktree");
+                    onSetDefaultEnvMode(defaultEnvMode === 'worktree' ? 'local' : 'worktree');
                   }}
-                  role="menuitemcheckbox"
-                  type="button"
+                  role='menuitemcheckbox'
+                  type='button'
                 >
-                  <span className="session-context-menu-icon" aria-hidden="true">
-                    {defaultEnvMode === "worktree" ? "✓" : ""}
+                  <span className='session-context-menu-icon' aria-hidden='true'>
+                    {defaultEnvMode === 'worktree' ? '✓' : ''}
                   </span>
                   Default new sessions to worktree
                 </button>

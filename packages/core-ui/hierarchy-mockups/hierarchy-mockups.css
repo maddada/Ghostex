@@ -28,7 +28,7 @@
   overflow-y: auto;
   background: #04060a;
   color: #c8cdd5;
-  font-family: -apple-system, "system-ui", "Segoe UI", sans-serif;
+  font-family: -apple-system, 'system-ui', 'Segoe UI', sans-serif;
   font-size: 12px;
   line-height: 1.35;
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -44,7 +44,7 @@
 }
 
 .hxm-variant-title {
-  font-family: -apple-system, "system-ui", "Segoe UI", sans-serif;
+  font-family: -apple-system, 'system-ui', 'Segoe UI', sans-serif;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -177,7 +177,7 @@
 }
 
 .hxm-count-badge::before {
-  content: "";
+  content: '';
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -290,7 +290,7 @@
 }
 
 .hxm-a .hxm-a-kind-label::after {
-  content: "";
+  content: '';
   flex: 1 1 auto;
   height: 1px;
   background: rgba(255, 255, 255, 0.05);
@@ -436,7 +436,7 @@
 }
 
 .hxm-c .hxm-c-section::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 5px;
   top: 26px;

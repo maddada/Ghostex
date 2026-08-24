@@ -95,9 +95,7 @@ export function normalizeSessionChatImageTranscriptMessages(
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index]!;
     if (message.role !== 'user' || message.source !== 'transcript') {
-      normalized.push(
-        message.role === 'user' ? extractLinkedImageMarkers(message) ?? message : message
-      );
+      normalized.push(message.role === 'user' ? (extractLinkedImageMarkers(message) ?? message) : message);
       continue;
     }
 

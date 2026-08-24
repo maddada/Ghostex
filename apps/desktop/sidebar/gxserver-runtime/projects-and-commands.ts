@@ -3,40 +3,35 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import { GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS } from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
-import {
-  normalizeGpuiReplacementProjectFolderPick,
-  normalizeGpuiWorkspaceFolderPick,
-} from "./helpers/folder-picker";
-import { isGpuiPresentationQuickDomainProject } from "./helpers/presentation-projection";
-import { normalizeNonEmptyString } from "./helpers/records";
+import { GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS } from './constants';
+import type { GpuiSidebarRuntime } from './core';
+import { normalizeGpuiReplacementProjectFolderPick, normalizeGpuiWorkspaceFolderPick } from './helpers/folder-picker';
+import { isGpuiPresentationQuickDomainProject } from './helpers/presentation-projection';
+import { normalizeNonEmptyString } from './helpers/records';
 import {
   parseGpuiRemotePresentationGroupId,
   parseGpuiRemotePresentationProjectId,
-} from "./helpers/remote-presentation";
-import { gpuiProjectNameFromPath, normalizeGpuiProjectPath } from "./helpers/worktrees";
-import type { GpuiSidebarRuntimeSnapshotKind } from "./types-and-protocol";
-import { openAppModal, postAppModalHostMessage } from "@/packages/core-ui/app-modal-host-bridge";
-import {
-  parseGxserverPresentationProjectGroupId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from './helpers/remote-presentation';
+import { gpuiProjectNameFromPath, normalizeGpuiProjectPath } from './helpers/worktrees';
+import type { GpuiSidebarRuntimeSnapshotKind } from './types-and-protocol';
+import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import { parseGxserverPresentationProjectGroupId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverProjectDomainState,
   GxserverRecentProjectDomainState,
   GxserverSidebarHudSettingsMutationParams,
   GxserverSidebarHudSettingsMutationResult,
-} from "@/packages/shared/gxserver-protocol";
-import type { SidebarToExtensionMessage } from "@/packages/shared/session-grid-contract";
-import type { SidebarAgentButton } from "@/packages/shared/sidebar-agents";
-import { createSidebarAgentButtons } from "@/packages/shared/sidebar-agents";
-import type { SidebarCommandButton, SidebarCommandScope } from "@/packages/shared/sidebar-commands";
+} from '@/packages/shared/gxserver-protocol';
+import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
+import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
+import { createSidebarAgentButtons } from '@/packages/shared/sidebar-agents';
+import type { SidebarCommandButton, SidebarCommandScope } from '@/packages/shared/sidebar-commands';
 import {
   createSidebarCommandButtons,
   isSidebarCommandConfigured,
   isSidebarCommandRunMode,
   normalizeSidebarCommandLinks,
-} from "@/packages/shared/sidebar-commands";
+} from '@/packages/shared/sidebar-commands';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -52,17 +47,16 @@ export interface GpuiSidebarRuntimeProjectAndCommandMethods {
   updateProjectBeadsDirectory(projectId: string, directory: string): Promise<void>;
   updateProjectDocsDirectory(projectId: string, directory: string): Promise<void>;
   registerDomainProjectPath(project: GxserverProjectDomainState): Promise<GxserverProjectDomainState>;
-  registerProjectPath(input: {
-    name: string;
-    path: string;
-  }): Promise<GxserverProjectDomainState>;
-  saveSidebarAgent(message: Extract<SidebarToExtensionMessage, { type: "saveSidebarAgent" }>): Promise<void>;
+  registerProjectPath(input: { name: string; path: string }): Promise<GxserverProjectDomainState>;
+  saveSidebarAgent(message: Extract<SidebarToExtensionMessage, { type: 'saveSidebarAgent' }>): Promise<void>;
   deleteSidebarAgent(agentId: string): Promise<void>;
   syncSidebarAgentOrder(requestId: string, agentIds: readonly string[]): Promise<void>;
-  saveSidebarCommand(message: Extract<SidebarToExtensionMessage, { type: "saveSidebarCommand" }>): Promise<void>;
+  saveSidebarCommand(message: Extract<SidebarToExtensionMessage, { type: 'saveSidebarCommand' }>): Promise<void>;
   deleteSidebarCommand(commandId: string): Promise<void>;
   syncSidebarCommandOrder(requestId: string, commandIds: readonly string[]): Promise<void>;
-  saveGlobalSidebarCommand(message: Extract<SidebarToExtensionMessage, { type: "saveGlobalSidebarCommand" }>): Promise<void>;
+  saveGlobalSidebarCommand(
+    message: Extract<SidebarToExtensionMessage, { type: 'saveGlobalSidebarCommand' }>
+  ): Promise<void>;
   deleteGlobalSidebarCommand(commandId: string): Promise<void>;
   syncGlobalSidebarCommandOrder(requestId: string, commandIds: readonly string[]): Promise<void>;
   pickWorkspaceFolder(originalMessage: SidebarToExtensionMessage): void;
@@ -85,18 +79,25 @@ export interface GpuiSidebarRuntimeProjectAndCommandMethods {
   resolveSidebarAgent(agentId: string): SidebarAgentButton | undefined;
   resolveSidebarCommand(commandId: string, scope?: SidebarCommandScope): SidebarCommandButton | undefined;
   resolveSidebarCommandForProject(commandId: string, projectId: string | undefined): SidebarCommandButton | undefined;
-  createSidebarCommandSelectionMessage(commandId: string, originalMessage: SidebarToExtensionMessage): Extract<SidebarToExtensionMessage, { type: "runSidebarCommand" }> | undefined;
+  createSidebarCommandSelectionMessage(
+    commandId: string,
+    originalMessage: SidebarToExtensionMessage
+  ): Extract<SidebarToExtensionMessage, { type: 'runSidebarCommand' }> | undefined;
   runSidebarCommand(commandId: string, originalMessage: SidebarToExtensionMessage, scope?: SidebarCommandScope): void;
   endSidebarCommandRun(commandId: string, originalMessage: SidebarToExtensionMessage): void;
-  mutateSidebarHudSettings(params: GxserverSidebarHudSettingsMutationParams): Promise<GxserverSidebarHudSettingsMutationResult | undefined>;
-  updateProjectDomainState(projectId: string, params: Record<string, unknown>): Promise<GxserverProjectDomainState | undefined>;
+  mutateSidebarHudSettings(
+    params: GxserverSidebarHudSettingsMutationParams
+  ): Promise<GxserverSidebarHudSettingsMutationResult | undefined>;
+  updateProjectDomainState(
+    projectId: string,
+    params: Record<string, unknown>
+  ): Promise<GxserverProjectDomainState | undefined>;
   upsertDomainProject(nextProject: GxserverProjectDomainState): void;
   refreshDomainPresentationFromClient(kind: GpuiSidebarRuntimeSnapshotKind): Promise<void>;
   refreshDomainPresentationSnapshotFromClient(kind: GpuiSidebarRuntimeSnapshotKind): Promise<void>;
 }
 
 export const gpuiSidebarRuntimeProjectAndCommandMethods = {
-
   async updateProjectBeadsDisplayKey(this: GpuiSidebarRuntime, projectId: string, displayKey: string): Promise<void> {
     const project = this.domainProjectById(projectId);
     if (!project || !this.client) {
@@ -105,7 +106,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const normalizedDisplayKey = displayKey
       .trim()
       .toUpperCase()
-      .replace(/[^A-Z0-9]/gu, "")
+      .replace(/[^A-Z0-9]/gu, '')
       .slice(0, 3);
     await this.updateProjectDomainState(project.projectId, {
       gitConfig: {
@@ -154,12 +155,13 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     });
   },
 
-  async registerDomainProjectPath(this: GpuiSidebarRuntime,
-    project: GxserverProjectDomainState,
+  async registerDomainProjectPath(
+    this: GpuiSidebarRuntime,
+    project: GxserverProjectDomainState
   ): Promise<GxserverProjectDomainState> {
     const path = normalizeGpuiProjectPath(project.path);
     if (!path) {
-      throw new Error("Project has no registered path.");
+      throw new Error('Project has no registered path.');
     }
     return this.registerProjectPath({
       name: project.name || gpuiProjectNameFromPath(path),
@@ -167,26 +169,27 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     });
   },
 
-  async registerProjectPath(this: GpuiSidebarRuntime, input: {
-    name: string;
-    path: string;
-  }): Promise<GxserverProjectDomainState> {
-    if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+  async registerProjectPath(
+    this: GpuiSidebarRuntime,
+    input: {
+      name: string;
+      path: string;
     }
-    const response = await this.client.rpc<{ project: GxserverProjectDomainState }>(
-      "/api/addProjectPath",
-      {
-        name: input.name,
-        path: input.path,
-      },
-    );
+  ): Promise<GxserverProjectDomainState> {
+    if (!this.client) {
+      throw new Error('gxserver is unavailable.');
+    }
+    const response = await this.client.rpc<{ project: GxserverProjectDomainState }>('/api/addProjectPath', {
+      name: input.name,
+      path: input.path,
+    });
     this.upsertDomainProject(response.project);
     return response.project;
   },
 
-  async saveSidebarAgent(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "saveSidebarAgent" }>,
+  async saveSidebarAgent(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'saveSidebarAgent' }>
   ): Promise<void> {
     const name = message.name.trim();
     const command = message.command.trim();
@@ -200,8 +203,8 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       command,
       icon: message.icon,
       name,
-      operation: "save",
-      target: "agent",
+      operation: 'save',
+      target: 'agent',
     });
   },
 
@@ -212,35 +215,33 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     await this.mutateSidebarHudSettings({
       activeProjectId: this.activeProjectId,
       agentId,
-      operation: "delete",
-      target: "agent",
+      operation: 'delete',
+      target: 'agent',
     });
   },
 
-  async syncSidebarAgentOrder(this: GpuiSidebarRuntime,
-    requestId: string,
-    agentIds: readonly string[],
-  ): Promise<void> {
+  async syncSidebarAgentOrder(this: GpuiSidebarRuntime, requestId: string, agentIds: readonly string[]): Promise<void> {
     if (!this.client) {
       return;
     }
     const result = await this.mutateSidebarHudSettings({
       activeProjectId: this.activeProjectId,
       agentIds,
-      operation: "order",
-      target: "agent",
+      operation: 'order',
+      target: 'agent',
     });
     this.messageSource.postMessage({
       itemIds: result?.itemIds ?? [],
-      kind: "agent",
+      kind: 'agent',
       requestId,
-      status: "success",
-      type: "sidebarOrderSyncResult",
+      status: 'success',
+      type: 'sidebarOrderSyncResult',
     });
   },
 
-  async saveSidebarCommand(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "saveSidebarCommand" }>,
+  async saveSidebarCommand(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'saveSidebarCommand' }>
   ): Promise<void> {
     const project = this.activeDomainProject();
     if (!project || !this.client) {
@@ -252,26 +253,25 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     if (!name && !message.icon) {
       return;
     }
-    if (message.actionType === "browser" && !url) {
+    if (message.actionType === 'browser' && !url) {
       return;
     }
-    if (message.actionType === "terminal" && !command) {
+    if (message.actionType === 'terminal' && !command) {
       return;
     }
     await this.mutateSidebarHudSettings({
       actionType: message.actionType,
       activeProjectId: project.projectId,
-      closeTerminalOnExit: message.actionType === "terminal" ? message.closeTerminalOnExit : false,
+      closeTerminalOnExit: message.actionType === 'terminal' ? message.closeTerminalOnExit : false,
       command,
       commandId: message.commandId,
       icon: message.icon,
-      links:
-        message.actionType === "terminal" ? normalizeSidebarCommandLinks(message.links) : undefined,
+      links: message.actionType === 'terminal' ? normalizeSidebarCommandLinks(message.links) : undefined,
       name,
-      playCompletionSound: message.actionType === "terminal" ? message.playCompletionSound : false,
-      operation: "save",
+      playCompletionSound: message.actionType === 'terminal' ? message.playCompletionSound : false,
+      operation: 'save',
       showOnProjectRow: message.showOnProjectRow,
-      target: "command",
+      target: 'command',
       url,
     });
   },
@@ -284,14 +284,15 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     await this.mutateSidebarHudSettings({
       activeProjectId: project.projectId,
       commandId,
-      operation: "delete",
-      target: "command",
+      operation: 'delete',
+      target: 'command',
     });
   },
 
-  async syncSidebarCommandOrder(this: GpuiSidebarRuntime,
+  async syncSidebarCommandOrder(
+    this: GpuiSidebarRuntime,
     requestId: string,
-    commandIds: readonly string[],
+    commandIds: readonly string[]
   ): Promise<void> {
     const project = this.activeDomainProject();
     if (!project || !this.client) {
@@ -300,15 +301,15 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const result = await this.mutateSidebarHudSettings({
       activeProjectId: project.projectId,
       commandIds,
-      operation: "order",
-      target: "command",
+      operation: 'order',
+      target: 'command',
     });
     this.messageSource.postMessage({
       itemIds: result?.itemIds ?? [],
-      kind: "command",
+      kind: 'command',
       requestId,
-      status: "success",
-      type: "sidebarOrderSyncResult",
+      status: 'success',
+      type: 'sidebarOrderSyncResult',
     });
   },
 
@@ -320,8 +321,9 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   mirrors the project path so a save that gxserver would reject never leaves
   the renderer.
   */
-  async saveGlobalSidebarCommand(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "saveGlobalSidebarCommand" }>,
+  async saveGlobalSidebarCommand(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'saveGlobalSidebarCommand' }>
   ): Promise<void> {
     if (!this.client) {
       return;
@@ -332,23 +334,22 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     if (!name && !message.icon) {
       return;
     }
-    if (message.actionType === "browser" && !url) {
+    if (message.actionType === 'browser' && !url) {
       return;
     }
-    if (message.actionType === "terminal" && !command) {
+    if (message.actionType === 'terminal' && !command) {
       return;
     }
     await this.mutateSidebarHudSettings({
       actionType: message.actionType,
-      closeTerminalOnExit: message.actionType === "terminal" ? message.closeTerminalOnExit : false,
+      closeTerminalOnExit: message.actionType === 'terminal' ? message.closeTerminalOnExit : false,
       command,
       commandId: message.commandId,
       icon: message.icon,
-      links:
-        message.actionType === "terminal" ? normalizeSidebarCommandLinks(message.links) : undefined,
+      links: message.actionType === 'terminal' ? normalizeSidebarCommandLinks(message.links) : undefined,
       name,
-      playCompletionSound: message.actionType === "terminal" ? message.playCompletionSound : false,
-      operation: "save",
+      playCompletionSound: message.actionType === 'terminal' ? message.playCompletionSound : false,
+      operation: 'save',
       /*
       CDXC:GlobalActions 2026-08-07:
       gxserver stores showOnProjectRow for both lists, so a global save that
@@ -356,7 +357,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       sticks. Forward it exactly like the project save above.
       */
       showOnProjectRow: message.showOnProjectRow,
-      target: "globalCommand",
+      target: 'globalCommand',
       url,
     });
   },
@@ -367,38 +368,36 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     }
     await this.mutateSidebarHudSettings({
       commandId,
-      operation: "delete",
-      target: "globalCommand",
+      operation: 'delete',
+      target: 'globalCommand',
     });
   },
 
-  async syncGlobalSidebarCommandOrder(this: GpuiSidebarRuntime,
+  async syncGlobalSidebarCommandOrder(
+    this: GpuiSidebarRuntime,
     requestId: string,
-    commandIds: readonly string[],
+    commandIds: readonly string[]
   ): Promise<void> {
     if (!this.client) {
       return;
     }
     const result = await this.mutateSidebarHudSettings({
       commandIds,
-      operation: "order",
-      target: "globalCommand",
+      operation: 'order',
+      target: 'globalCommand',
     });
     this.messageSource.postMessage({
       itemIds: result?.itemIds ?? [],
-      kind: "command",
+      kind: 'command',
       requestId,
-      status: "success",
-      type: "sidebarOrderSyncResult",
+      status: 'success',
+      type: 'sidebarOrderSyncResult',
     });
   },
 
   pickWorkspaceFolder(this: GpuiSidebarRuntime, originalMessage: SidebarToExtensionMessage): void {
     try {
-      postAppModalHostMessage(
-        { type: "pickWorkspaceFolder" },
-        "GPUISidebarWorkspaceProjects:pickWorkspaceFolder",
-      );
+      postAppModalHostMessage({ type: 'pickWorkspaceFolder' }, 'GPUISidebarWorkspaceProjects:pickWorkspaceFolder');
     } catch {
       this.handleUnsupportedSidebarMessage(originalMessage);
     }
@@ -415,28 +414,28 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       return;
     }
     if (!this.client) {
-      this.postSidebarActionToast("error", "Add Project failed", {
-        description: "gxserver is not connected.",
+      this.postSidebarActionToast('error', 'Add Project failed', {
+        description: 'gxserver is not connected.',
       });
       return;
     }
     try {
       const response = await this.client.rpc<{ project?: GxserverProjectDomainState }>(
-        "/api/addProjectPath",
-        pick.name ? { name: pick.name, path: pick.path } : { path: pick.path },
+        '/api/addProjectPath',
+        pick.name ? { name: pick.name, path: pick.path } : { path: pick.path }
       );
       const project = response.project;
       if (!project) {
-        throw new Error("gxserver did not return the added project.");
+        throw new Error('gxserver did not return the added project.');
       }
       this.upsertDomainProject(project);
       this.focusProjectId(project.projectId);
-      await this.refreshDomainPresentationSnapshotFromClient("patch").catch(() => {
+      await this.refreshDomainPresentationSnapshotFromClient('patch').catch(() => {
         this.publishHudPatch();
       });
     } catch {
-      this.postSidebarActionToast("error", "Add Project failed", {
-        description: "Ghostex could not add the selected folder.",
+      this.postSidebarActionToast('error', 'Add Project failed', {
+        description: 'Ghostex could not add the selected folder.',
       });
     }
   },
@@ -444,11 +443,10 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   ensureLocalProjectPathAvailable(this: GpuiSidebarRuntime, projectId: string): boolean {
     const group = this.latestGroups.find(
       (candidate) =>
-        candidate.remoteMachineContext === undefined &&
-        candidate.projectContext?.editor.projectId === projectId,
+        candidate.remoteMachineContext === undefined && candidate.projectContext?.editor.projectId === projectId
     );
     const state = group?.projectContext?.pathState;
-    if (state === undefined || state === "available") {
+    if (state === undefined || state === 'available') {
       return true;
     }
     this.presentMissingProjectFolder(projectId);
@@ -458,46 +456,44 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   presentMissingProjectFolder(this: GpuiSidebarRuntime, projectId: string): boolean {
     const group = this.latestGroups.find(
       (candidate) =>
-        candidate.remoteMachineContext === undefined &&
-        candidate.projectContext?.editor.projectId === projectId,
+        candidate.remoteMachineContext === undefined && candidate.projectContext?.editor.projectId === projectId
     );
     const projectPath = normalizeNonEmptyString(group?.projectContext?.path);
     if (!group || !projectPath) {
-      this.postSidebarActionToast("warning", "Project folder unavailable", {
+      this.postSidebarActionToast('warning', 'Project folder unavailable', {
         description: "Ghostex could not resolve this project's saved folder.",
       });
       return false;
     }
     openAppModal({
-      modal: "missingProjectFolder",
+      modal: 'missingProjectFolder',
       projectId,
       projectName: group.title,
       projectPath,
-      type: "open",
+      type: 'open',
     });
     return true;
   },
 
   async relocateProjectFolder(this: GpuiSidebarRuntime, projectId: string, path: string): Promise<void> {
     if (!this.client) {
-      this.postSidebarActionToast("error", "Could not update project folder", {
-        description: "gxserver is not connected.",
+      this.postSidebarActionToast('error', 'Could not update project folder', {
+        description: 'gxserver is not connected.',
       });
       return;
     }
     try {
-      const response = await this.client.rpc<{ project: GxserverProjectDomainState }>(
-        "/api/relocateProject",
-        { path, projectId },
-      );
+      const response = await this.client.rpc<{ project: GxserverProjectDomainState }>('/api/relocateProject', {
+        path,
+        projectId,
+      });
       this.upsertDomainProject(response.project);
-      await this.refreshDomainPresentationSnapshotFromClient("patch");
-      postAppModalHostMessage({ type: "close" }, "GPUIMissingProjectFolder:resolved");
-      this.postSidebarActionToast("info", "Project folder updated");
+      await this.refreshDomainPresentationSnapshotFromClient('patch');
+      postAppModalHostMessage({ type: 'close' }, 'GPUIMissingProjectFolder:resolved');
+      this.postSidebarActionToast('info', 'Project folder updated');
     } catch (error) {
-      this.postSidebarActionToast("error", "Could not update project folder", {
-        description:
-          error instanceof Error ? error.message : "Ghostex could not use the selected folder.",
+      this.postSidebarActionToast('error', 'Could not update project folder', {
+        description: error instanceof Error ? error.message : 'Ghostex could not use the selected folder.',
       });
     }
   },
@@ -511,7 +507,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     if (!this.client) {
       return;
     }
-    await this.client.rpc("/api/removeProject", {
+    await this.client.rpc('/api/removeProject', {
       projectId,
     });
   },
@@ -528,7 +524,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const response = await this.client.rpc<{
       project?: GxserverProjectDomainState;
       recentProjects: GxserverRecentProjectDomainState[];
-    }>("/api/restoreRecentProject", {
+    }>('/api/restoreRecentProject', {
       projectId,
     });
     /*
@@ -540,7 +536,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     }
     this.recentProjects = [...response.recentProjects];
     this.focusProjectId(projectId);
-    await this.refreshDomainPresentationSnapshotFromClient("patch").catch(() => {
+    await this.refreshDomainPresentationSnapshotFromClient('patch').catch(() => {
       this.publishHudPatch();
     });
   },
@@ -556,7 +552,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     }
     const response = await this.client.rpc<{
       recentProjects: GxserverRecentProjectDomainState[];
-    }>("/api/removeRecentProject", {
+    }>('/api/removeRecentProject', {
       projectId,
     });
     this.domainProjects = this.domainProjects.filter((project) => project.projectId !== projectId);
@@ -568,8 +564,8 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const remoteScope = this.resolveRemotePresentationProjectScope({ groupId });
     if (parseGpuiRemotePresentationGroupId(groupId)) {
       if (!remoteScope) {
-        this.postRemoteToast("warning", "Remote project close unavailable", {
-          description: "Reconnect the remote machine before closing the project.",
+        this.postRemoteToast('warning', 'Remote project close unavailable', {
+          description: 'Reconnect the remote machine before closing the project.',
         });
         return;
       }
@@ -590,7 +586,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const response = await this.client.rpc<{
       project: GxserverProjectDomainState;
       recentProjects: GxserverRecentProjectDomainState[];
-    }>("/api/closeProjectToRecent", {
+    }>('/api/closeProjectToRecent', {
       projectId,
     });
     this.upsertDomainProject(response.project);
@@ -601,7 +597,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     }
     this.removeLocalPresentationProject(projectId);
     if (this.presentation) {
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
       return;
     }
     this.publishHudPatch();
@@ -611,8 +607,8 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const remoteScope = this.resolveRemotePresentationProjectScope({ groupId });
     if (parseGpuiRemotePresentationGroupId(groupId)) {
       if (!remoteScope) {
-        this.postRemoteToast("warning", "Remote project removal unavailable", {
-          description: "Reconnect the remote machine before removing the project.",
+        this.postRemoteToast('warning', 'Remote project removal unavailable', {
+          description: 'Reconnect the remote machine before removing the project.',
         });
         return;
       }
@@ -644,8 +640,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     return this.activeProjectId
       ? this.domainProjectById(this.activeProjectId)
       : this.domainProjects.find(
-          (project) =>
-            project.isRecentProject !== true && !isGpuiPresentationQuickDomainProject(project),
+          (project) => project.isRecentProject !== true && !isGpuiPresentationQuickDomainProject(project)
         );
   },
 
@@ -653,10 +648,13 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     return this.domainProjects.find((project) => project.projectId === projectId);
   },
 
-  resolveDomainProjectScope(this: GpuiSidebarRuntime, scope: {
-    projectId?: string;
-    projectPath?: string;
-  }): GxserverProjectDomainState | undefined {
+  resolveDomainProjectScope(
+    this: GpuiSidebarRuntime,
+    scope: {
+      projectId?: string;
+      projectPath?: string;
+    }
+  ): GxserverProjectDomainState | undefined {
     if (scope.projectId) {
       const byId = this.domainProjectById(scope.projectId);
       if (byId) {
@@ -667,9 +665,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     if (!normalizedPath) {
       return undefined;
     }
-    return this.domainProjects.find(
-      (project) => normalizeGpuiProjectPath(project.path) === normalizedPath,
-    );
+    return this.domainProjects.find((project) => normalizeGpuiProjectPath(project.path) === normalizedPath);
   },
 
   resolveSidebarAgent(this: GpuiSidebarRuntime, agentId: string): SidebarAgentButton | undefined {
@@ -691,15 +687,16 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
    * user did not click. Global ids are additionally barred from the reserved
    * built-in names at save time, so the two spaces cannot collide there either.
    */
-  resolveSidebarCommand(this: GpuiSidebarRuntime,
+  resolveSidebarCommand(
+    this: GpuiSidebarRuntime,
     commandId: string,
-    scope: SidebarCommandScope = "project",
+    scope: SidebarCommandScope = 'project'
   ): SidebarCommandButton | undefined {
     const normalizedCommandId = commandId.trim();
     if (!normalizedCommandId) {
       return undefined;
     }
-    if (scope === "global") {
+    if (scope === 'global') {
       const globalCommands = (this.sidebarHud?.globalCommands ?? []) as SidebarCommandButton[];
       return globalCommands.find((command) => command.commandId === normalizedCommandId);
     }
@@ -717,9 +714,10 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   no per-project entry only falls back to the flat active list when it IS the
   active project; otherwise the click is an unsupported no-op.
   */
-  resolveSidebarCommandForProject(this: GpuiSidebarRuntime,
+  resolveSidebarCommandForProject(
+    this: GpuiSidebarRuntime,
     commandId: string,
-    projectId: string | undefined,
+    projectId: string | undefined
   ): SidebarCommandButton | undefined {
     if (!projectId) {
       return this.resolveSidebarCommand(commandId);
@@ -731,7 +729,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const projectCommands = this.sidebarHud?.commandsByProject?.[projectId];
     if (projectCommands) {
       return ([...projectCommands] as SidebarCommandButton[]).find(
-        (command) => command.commandId === normalizedCommandId,
+        (command) => command.commandId === normalizedCommandId
       );
     }
     if (projectId !== this.activeProjectId) {
@@ -740,25 +738,22 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     return this.resolveSidebarCommand(commandId);
   },
 
-  createSidebarCommandSelectionMessage(this: GpuiSidebarRuntime,
+  createSidebarCommandSelectionMessage(
+    this: GpuiSidebarRuntime,
     commandId: string,
-    originalMessage: SidebarToExtensionMessage,
-  ): Extract<SidebarToExtensionMessage, { type: "runSidebarCommand" }> | undefined {
+    originalMessage: SidebarToExtensionMessage
+  ): Extract<SidebarToExtensionMessage, { type: 'runSidebarCommand' }> | undefined {
     /*
     CDXC:GPUICommandPane 2026-06-27-07:54:
     The GPUI SidebarApp/Command Palette Action launch boundary accepts only selector-shaped `runSidebarCommand` objects: type, command id, and an own optional runMode. Renderer-supplied command text, URLs, cwd/env, paths, output, logs, run ids, and status fields are unsupported instead of being stripped into a launch.
     */
-    if (
-      Object.keys(originalMessage).some(
-        (key) => !GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS.has(key),
-      )
-    ) {
+    if (Object.keys(originalMessage).some((key) => !GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS.has(key))) {
       return undefined;
     }
-    if (!Object.prototype.hasOwnProperty.call(originalMessage, "runMode")) {
+    if (!Object.prototype.hasOwnProperty.call(originalMessage, 'runMode')) {
       return {
         commandId,
-        type: "runSidebarCommand",
+        type: 'runSidebarCommand',
       };
     }
     const runMode = (originalMessage as { runMode?: unknown }).runMode;
@@ -768,14 +763,15 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     return {
       commandId,
       runMode,
-      type: "runSidebarCommand",
+      type: 'runSidebarCommand',
     };
   },
 
-  runSidebarCommand(this: GpuiSidebarRuntime,
+  runSidebarCommand(
+    this: GpuiSidebarRuntime,
     commandId: string,
     originalMessage: SidebarToExtensionMessage,
-    scope: SidebarCommandScope = "project",
+    scope: SidebarCommandScope = 'project'
   ): void {
     /*
      * CDXC:GPUICommandPane 2026-06-26-05:11:
@@ -821,14 +817,10 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
      * normalizer rejects the key — so it keeps running in the active project.
      */
     const groupId =
-      originalMessage.type !== "runSidebarCommand"
-        ? undefined
-        : normalizeNonEmptyString(originalMessage.groupId ?? "");
-    const targetProjectId = groupId
-      ? parseGxserverPresentationProjectGroupId(groupId)
-      : undefined;
+      originalMessage.type !== 'runSidebarCommand' ? undefined : normalizeNonEmptyString(originalMessage.groupId ?? '');
+    const targetProjectId = groupId ? parseGxserverPresentationProjectGroupId(groupId) : undefined;
     const command =
-      scope === "global"
+      scope === 'global'
         ? this.resolveSidebarCommand(commandId, scope)
         : this.resolveSidebarCommandForProject(commandId, targetProjectId);
     if (!command) {
@@ -836,7 +828,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       return;
     }
     if (!isSidebarCommandConfigured(command)) {
-      this.openAppModal("settings");
+      this.openAppModal('settings');
       return;
     }
     if (targetProjectId && targetProjectId !== this.activeProjectId) {
@@ -849,7 +841,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
        * unrelated delta arrived. This matches every other project-switching
        * call site in this file.
        */
-      this.publishPresentation("patch");
+      this.publishPresentation('patch');
     }
     if (this.postSidebarCommandAction(command, selectionMessage)) {
       return;
@@ -857,18 +849,16 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     this.handleUnsupportedSidebarMessage(selectionMessage);
   },
 
-  endSidebarCommandRun(this: GpuiSidebarRuntime,
-    commandId: string,
-    originalMessage: SidebarToExtensionMessage,
-  ): void {
+  endSidebarCommandRun(this: GpuiSidebarRuntime, commandId: string, originalMessage: SidebarToExtensionMessage): void {
     if (this.postSidebarCommandRunEnd(commandId, originalMessage)) {
       return;
     }
     this.handleUnsupportedSidebarMessage(originalMessage);
   },
 
-  async mutateSidebarHudSettings(this: GpuiSidebarRuntime,
-    params: GxserverSidebarHudSettingsMutationParams,
+  async mutateSidebarHudSettings(
+    this: GpuiSidebarRuntime,
+    params: GxserverSidebarHudSettingsMutationParams
   ): Promise<GxserverSidebarHudSettingsMutationResult | undefined> {
     const client = this.client;
     if (!client) {
@@ -903,20 +893,18 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     return response;
   },
 
-  async updateProjectDomainState(this: GpuiSidebarRuntime,
+  async updateProjectDomainState(
+    this: GpuiSidebarRuntime,
     projectId: string,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): Promise<GxserverProjectDomainState | undefined> {
     if (!this.client) {
       return undefined;
     }
-    const response = await this.client.rpc<{ project: GxserverProjectDomainState }>(
-      "/api/updateProject",
-      {
-        ...params,
-        projectId,
-      },
-    );
+    const response = await this.client.rpc<{ project: GxserverProjectDomainState }>('/api/updateProject', {
+      ...params,
+      projectId,
+    });
     this.upsertDomainProject(response.project);
     this.publishHudPatch();
     this.refreshSidebarHudFromClient();
@@ -924,19 +912,16 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   },
 
   upsertDomainProject(this: GpuiSidebarRuntime, nextProject: GxserverProjectDomainState): void {
-    const existingIndex = this.domainProjects.findIndex(
-      (project) => project.projectId === nextProject.projectId,
-    );
+    const existingIndex = this.domainProjects.findIndex((project) => project.projectId === nextProject.projectId);
     this.domainProjects =
       existingIndex >= 0
-        ? this.domainProjects.map((project, index) =>
-            index === existingIndex ? nextProject : project,
-          )
+        ? this.domainProjects.map((project, index) => (index === existingIndex ? nextProject : project))
         : [...this.domainProjects, nextProject];
   },
 
-  async refreshDomainPresentationFromClient(this: GpuiSidebarRuntime,
-    kind: GpuiSidebarRuntimeSnapshotKind,
+  async refreshDomainPresentationFromClient(
+    this: GpuiSidebarRuntime,
+    kind: GpuiSidebarRuntimeSnapshotKind
   ): Promise<void> {
     const client = this.client;
     if (!client) {
@@ -955,8 +940,9 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     this.applyPresentationSnapshot(snapshot, kind);
   },
 
-  async refreshDomainPresentationSnapshotFromClient(this: GpuiSidebarRuntime,
-    kind: GpuiSidebarRuntimeSnapshotKind,
+  async refreshDomainPresentationSnapshotFromClient(
+    this: GpuiSidebarRuntime,
+    kind: GpuiSidebarRuntimeSnapshotKind
   ): Promise<void> {
     const client = this.client;
     if (!client) {
@@ -974,5 +960,6 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   },
 };
 
-const gpuiSidebarRuntimeProjectAndCommandMethodsShapeCheck: GpuiSidebarRuntimeProjectAndCommandMethods = gpuiSidebarRuntimeProjectAndCommandMethods;
+const gpuiSidebarRuntimeProjectAndCommandMethodsShapeCheck: GpuiSidebarRuntimeProjectAndCommandMethods =
+  gpuiSidebarRuntimeProjectAndCommandMethods;
 void gpuiSidebarRuntimeProjectAndCommandMethodsShapeCheck;

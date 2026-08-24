@@ -4,18 +4,18 @@
 // turn), and only while working. A stale preview from a finished turn never
 // shows.
 
-import type { SessionChatMessage } from "../../shared/session-chat";
+import type { SessionChatMessage } from '../../shared/session-chat';
 
-export const SESSION_CHAT_STREAMING_ID = "streaming";
+export const SESSION_CHAT_STREAMING_ID = 'streaming';
 
 function assistantText(message: SessionChatMessage | undefined): string {
-  if (!message || message.role !== "assistant") {
-    return "";
+  if (!message || message.role !== 'assistant') {
+    return '';
   }
   return message.blocks
-    .filter((block) => block.type === "text")
+    .filter((block) => block.type === 'text')
     .map((block) => block.text)
-    .join("")
+    .join('')
     .trim();
 }
 
@@ -40,10 +40,10 @@ export function deriveSessionChatStreamingText(input: {
 
 export function sessionChatStreamingMessage(text: string): SessionChatMessage {
   return {
-    blocks: [{ text, type: "text" }],
+    blocks: [{ text, type: 'text' }],
     id: SESSION_CHAT_STREAMING_ID,
-    role: "assistant",
-    source: "hook",
+    role: 'assistant',
+    source: 'hook',
     timestamp: null,
   };
 }

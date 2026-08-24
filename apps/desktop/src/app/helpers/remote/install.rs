@@ -265,7 +265,9 @@ pub(crate) fn gpui_extract_remote_install_target(stdout: &str) -> Option<GpuiRem
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_bundled_remote_gxserver_package_dir(target: &GpuiRemoteInstallTarget) -> Option<PathBuf> {
+pub(crate) fn gpui_bundled_remote_gxserver_package_dir(
+    target: &GpuiRemoteInstallTarget,
+) -> Option<PathBuf> {
     let names = gpui_bundled_remote_gxserver_package_resource_names(target);
     if names.is_empty() {
         return None;
@@ -543,4 +545,3 @@ pub(crate) fn gpui_elf_machine(data: &[u8]) -> Option<u16> {
         _ => None,
     }
 }
-

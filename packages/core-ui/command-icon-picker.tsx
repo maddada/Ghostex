@@ -1,6 +1,6 @@
-import { IconChevronDown } from "@tabler/icons-react";
-import { useEffect, useId, useState } from "react";
-import { flushSync } from "react-dom";
+import { IconChevronDown } from '@tabler/icons-react';
+import { useEffect, useId, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   Command,
   CommandEmpty,
@@ -8,24 +8,21 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/packages/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/packages/components/ui/popover";
+} from '@/packages/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/packages/components/ui/popover';
 import {
   DEFAULT_SIDEBAR_COMMAND_ICON,
   getSidebarCommandIconLabel,
   type SidebarCommandIcon,
-} from "../shared/sidebar-command-icons";
-import { SIDEBAR_COMMAND_ICON_OPTIONS, SidebarCommandIconGlyph } from "./sidebar-command-icon";
+} from '../shared/sidebar-command-icons';
+import { SIDEBAR_COMMAND_ICON_OPTIONS, SidebarCommandIconGlyph } from './sidebar-command-icon';
 
 export type CommandIconPickerProps = {
   icon?: SidebarCommandIcon;
   onIconChange: (icon: SidebarCommandIcon) => void;
 };
 
-export function CommandIconPicker({
-  icon,
-  onIconChange,
-}: CommandIconPickerProps) {
+export function CommandIconPicker({ icon, onIconChange }: CommandIconPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [iconListElement, setIconListElement] = useState<HTMLDivElement | null>(null);
   const labelId = useId();
@@ -42,10 +39,7 @@ export function CommandIconPicker({
 
     const handleWheel = (event: WheelEvent) => {
       const maxScrollTop = iconListElement.scrollHeight - iconListElement.clientHeight;
-      const nextScrollTop = Math.max(
-        0,
-        Math.min(maxScrollTop, iconListElement.scrollTop + event.deltaY),
-      );
+      const nextScrollTop = Math.max(0, Math.min(maxScrollTop, iconListElement.scrollTop + event.deltaY));
 
       if (nextScrollTop !== iconListElement.scrollTop) {
         event.preventDefault();
@@ -54,16 +48,16 @@ export function CommandIconPicker({
       }
     };
 
-    iconListElement.addEventListener("wheel", handleWheel, { passive: false });
+    iconListElement.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
-      iconListElement.removeEventListener("wheel", handleWheel);
+      iconListElement.removeEventListener('wheel', handleWheel);
     };
   }, [iconListElement, isOpen]);
 
   return (
-    <div className="command-icon-picker-fields">
-      <div className="command-config-field command-icon-picker-field">
-        <span className="command-config-label" id={labelId}>
+    <div className='command-icon-picker-fields'>
+      <div className='command-config-field command-icon-picker-field'>
+        <span className='command-config-label' id={labelId}>
           Icon
         </span>
         <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -72,30 +66,22 @@ export function CommandIconPicker({
               <button
                 aria-expanded={isOpen}
                 aria-labelledby={labelId}
-                className="group-title-input command-config-input command-icon-picker-trigger"
-                type="button"
+                className='group-title-input command-config-input command-icon-picker-trigger'
+                type='button'
               >
-                <span className="command-icon-picker-trigger-value">
-                  <span aria-hidden="true" className="command-button-icon-shell">
-                    <SidebarCommandIconGlyph
-                      className="command-button-leading-icon"
-                      icon={selectedIcon}
-                      size={16}
-                    />
+                <span className='command-icon-picker-trigger-value'>
+                  <span aria-hidden='true' className='command-button-icon-shell'>
+                    <SidebarCommandIconGlyph className='command-button-leading-icon' icon={selectedIcon} size={16} />
                   </span>
                   <span>{getSidebarCommandIconLabel(selectedIcon)}</span>
                 </span>
-                <IconChevronDown
-                  aria-hidden="true"
-                  className="command-icon-picker-trigger-chevron"
-                  size={16}
-                />
+                <IconChevronDown aria-hidden='true' className='command-icon-picker-trigger-chevron' size={16} />
               </button>
             }
           />
           <PopoverContent
-            align="start"
-            className="command-icon-picker-menu"
+            align='start'
+            className='command-icon-picker-menu'
             onOpenAutoFocus={(event) => event.preventDefault()}
           >
             <Command>
@@ -126,23 +112,18 @@ export function CommandIconPicker({
                * action glyphs should match the titlebar icons beside them.
                */}
               <CommandInput
-                aria-label="Search icons"
-                className="command-icon-picker-search pl-3"
-                clearLabel="Clear icon search"
-                placeholder="Search icons"
+                aria-label='Search icons'
+                className='command-icon-picker-search pl-3'
+                clearLabel='Clear icon search'
+                placeholder='Search icons'
                 spellCheck={false}
               />
-              <CommandList
-                className="command-icon-picker-options scroll-mask-y"
-                ref={setIconListElement}
-              >
-                <CommandEmpty className="command-icon-picker-empty-state">
-                  No matching icons
-                </CommandEmpty>
+              <CommandList className='command-icon-picker-options scroll-mask-y' ref={setIconListElement}>
+                <CommandEmpty className='command-icon-picker-empty-state'>No matching icons</CommandEmpty>
                 <CommandGroup>
                   {SIDEBAR_COMMAND_ICON_OPTIONS.map((option) => (
                     <CommandItem
-                      className="command-icon-picker-option"
+                      className='command-icon-picker-option'
                       data-checked={selectedIcon === option.icon}
                       key={option.icon}
                       onSelect={() => {
@@ -160,14 +141,10 @@ export function CommandIconPicker({
                       }}
                       value={option.label}
                     >
-                      <span aria-hidden="true" className="command-button-icon-shell">
-                        <SidebarCommandIconGlyph
-                          className="command-button-leading-icon"
-                          icon={option.icon}
-                          size={16}
-                        />
+                      <span aria-hidden='true' className='command-button-icon-shell'>
+                        <SidebarCommandIconGlyph className='command-button-leading-icon' icon={option.icon} size={16} />
                       </span>
-                      <span className="command-icon-picker-option-copy">{option.label}</span>
+                      <span className='command-icon-picker-option-copy'>{option.label}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

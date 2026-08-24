@@ -1,15 +1,10 @@
-import { type ReactNode } from "react";
-import { cn } from "@/packages/components/utils";
-import { Button } from "@/packages/components/ui/button";
-import { ButtonGroup } from "@/packages/components/ui/button-group";
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldTitle,
-} from "@/packages/components/ui/field";
-import { Switch } from "@/packages/components/ui/switch";
-import { AppTooltip } from "../../app-tooltip";
+import { type ReactNode } from 'react';
+import { cn } from '@/packages/components/utils';
+import { Button } from '@/packages/components/ui/button';
+import { ButtonGroup } from '@/packages/components/ui/button-group';
+import { Field, FieldContent, FieldDescription, FieldTitle } from '@/packages/components/ui/field';
+import { Switch } from '@/packages/components/ui/switch';
+import { AppTooltip } from '../../app-tooltip';
 import {
   IconBolt,
   IconCodeDots,
@@ -22,37 +17,33 @@ import {
   IconPlayerPlay,
   IconRefresh,
   IconWorld,
-} from "@tabler/icons-react";
+} from '@tabler/icons-react';
 import {
   type SidebarGhostexCliStatusMessage,
   type SidebarPluginSettingsItem,
   type SidebarPluginSettingsStatusMessage,
-} from "../../../shared/session-grid-contract";
-import { type ghostexSettings } from "../../../shared/ghostex-settings";
-import {
-  SettingButton,
-  SettingsNativeScrollArea,
-  SettingsSection,
-} from "../fields";
+} from '../../../shared/session-grid-contract';
+import { type ghostexSettings } from '../../../shared/ghostex-settings';
+import { SettingButton, SettingsNativeScrollArea, SettingsSection } from '../fields';
 import {
   SettingsTabSearch,
   hasVisibleSettingsSearchResult,
   shouldShowSetting,
   shouldShowSettingsSection,
-} from "../search";
-import { IntegrationSettingsRow } from "./integrations";
+} from '../search';
+import { IntegrationSettingsRow } from './integrations';
 
 export type PluginVisibilitySettingKey =
-  | "codeViewTabHidden"
-  | "browserViewTabHidden"
-  | "kanbanViewTabHidden"
-  | "automateViewTabHidden"
-  | "docsViewTabHidden"
-  | "tipsAndTricksTitlebarButtonHidden"
-  | "resourcesTitlebarButtonHidden"
-  | "gitActionsTitlebarButtonHidden"
-  | "quickActionsTitlebarButtonHidden"
-  | "openInTitlebarButtonHidden";
+  | 'codeViewTabHidden'
+  | 'browserViewTabHidden'
+  | 'kanbanViewTabHidden'
+  | 'automateViewTabHidden'
+  | 'docsViewTabHidden'
+  | 'tipsAndTricksTitlebarButtonHidden'
+  | 'resourcesTitlebarButtonHidden'
+  | 'gitActionsTitlebarButtonHidden'
+  | 'quickActionsTitlebarButtonHidden'
+  | 'openInTitlebarButtonHidden';
 
 export function PluginsSettingsTab({
   ghostexCliStatus,
@@ -73,7 +64,7 @@ export function PluginsSettingsTab({
   onInstallCuaDriver?: () => void;
   onRequestGhostexCliStatus?: () => void;
   onRequestStatus?: () => void;
-  onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem["id"]) => void;
+  onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem['id']) => void;
   onUpdateSetting: (key: PluginVisibilitySettingKey, value: boolean) => void;
   search: SettingsTabSearch;
   searchEmptyState?: ReactNode;
@@ -82,95 +73,91 @@ export function PluginsSettingsTab({
   statusLoading: boolean;
 }) {
   const statusById = new Map(status?.plugins.map((plugin) => [plugin.id, plugin]));
-  const code = statusById.get("code");
-  const kanban = statusById.get("kanban");
-  const cef = statusById.get("cef");
+  const code = statusById.get('code');
+  const kanban = statusById.get('kanban');
+  const cef = statusById.get('cef');
   const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
-  const cuaDriverManagedUpdatesSupported =
-    ghostexCliStatus?.cuaDriverManagedUpdatesSupported !== false;
+  const cuaDriverManagedUpdatesSupported = ghostexCliStatus?.cuaDriverManagedUpdatesSupported !== false;
   const cuaDriverUpdateAvailable = ghostexCliStatus?.cuaDriverUpdateAvailable;
   const cuaDriverStatus =
     ghostexCliStatusLoading || !ghostexCliStatus
-      ? "Checking"
+      ? 'Checking'
       : !cuaDriverInstalled
-        ? "Not installed"
+        ? 'Not installed'
         : cuaDriverUpdateAvailable === true
-          ? "Update available"
+          ? 'Update available'
           : cuaDriverUpdateAvailable === false
-            ? "Up to date"
-            : "Installed";
+            ? 'Up to date'
+            : 'Installed';
   const cuaDriverActionLabel = !cuaDriverManagedUpdatesSupported
     ? cuaDriverInstalled
-      ? "View downloads"
-      : "Download"
+      ? 'View downloads'
+      : 'Download'
     : !cuaDriverInstalled
-      ? "Install"
+      ? 'Install'
       : cuaDriverUpdateAvailable === true
-        ? "Upgrade"
-        : "Check for updates";
+        ? 'Upgrade'
+        : 'Check for updates';
   const showViewTab = (key: string) => shouldShowSetting(search.sections.viewTabs, key);
-  const showQuickAccessButton = (key: string) =>
-    shouldShowSetting(search.sections.quickAccessButtons, key);
+  const showQuickAccessButton = (key: string) => shouldShowSetting(search.sections.quickAccessButtons, key);
 
   return (
-    <SettingsNativeScrollArea className="h-full min-h-0">
-      <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">
-        {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab)
-          ? searchEmptyState
-          : null}
+    <SettingsNativeScrollArea className='h-full min-h-0'>
+      <div className='settings-page-width flex flex-col gap-6 px-5 pb-5'>
+        {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
         {shouldShowSettingsSection(search.sections.viewTabs) ? (
           <SettingsSection
-            description="Choose which project workareas appear in the title bar. Hiding a tab does not stop its runtime or disable its other entry points."
-            title="Plugins"
+            description='Choose which project workareas appear in the title bar. Hiding a tab does not stop its runtime or disable its other entry points.'
+            title='Plugins'
           >
-            {showViewTab("code") ? (
+            {showViewTab('code') ? (
               <PluginManagedSettingsRow
-                description="Explore, edit, and search your project in a familiar, full-featured workspace without ever leaving Ghostex."
+                description='Explore, edit, and search your project in a familiar, full-featured workspace without ever leaving Ghostex.'
                 icon={IconCodeDots}
-                onReinstall={() => onReinstallPlugin?.("code")}
-                onVisibleChange={(visible) => onUpdateSetting("codeViewTabHidden", !visible)}
+                onReinstall={() => onReinstallPlugin?.('code')}
+                onVisibleChange={(visible) => onUpdateSetting('codeViewTabHidden', !visible)}
                 reinstallAvailable={Boolean(onReinstallPlugin && code?.canReinstall)}
                 runtime={code}
-                title="Code"
+                title='Code'
                 visible={!settings.codeViewTabHidden}
               />
             ) : null}
-            {showViewTab("browser") ? (
+            {showViewTab('browser') ? (
               <PluginManagedSettingsRow
-                description="Open websites alongside your project and keep useful pages organized without leaving Ghostex. If it’s the last choice beside Agents, hiding it clears the switcher too."
+                description='Open websites alongside your project and keep useful pages organized without leaving Ghostex. If it’s the last choice beside Agents, hiding it clears the switcher too.'
                 icon={IconWorld}
-                onVisibleChange={(visible) => onUpdateSetting("browserViewTabHidden", !visible)}
-                title="Browser"
+                onVisibleChange={(visible) => onUpdateSetting('browserViewTabHidden', !visible)}
+                title='Browser'
                 visible={!settings.browserViewTabHidden}
               />
             ) : null}
-            {showViewTab("kanban") ? (
+            {showViewTab('kanban') ? (
               <PluginManagedSettingsRow
-                description="Plan upcoming work, organize tasks by progress, and keep your whole project easy to follow at a glance."
+                description='Plan upcoming work, organize tasks by progress, and keep your whole project easy to follow at a glance.'
                 icon={IconPlayerPlay}
-                onReinstall={() => onReinstallPlugin?.("kanban")}
-                onVisibleChange={(visible) => onUpdateSetting("kanbanViewTabHidden", !visible)}
+                onReinstall={() => onReinstallPlugin?.('kanban')}
+                onVisibleChange={(visible) => onUpdateSetting('kanbanViewTabHidden', !visible)}
                 reinstallAvailable={Boolean(onReinstallPlugin && kanban?.canReinstall)}
                 runtime={kanban}
-                title="Kanban"
+                title='Kanban'
                 visible={!settings.kanbanViewTabHidden}
               />
             ) : null}
-            {showViewTab("automate") ? (
+            {showViewTab('automate') ? (
               <PluginManagedSettingsRow
-                description="Turn repeatable project routines into simple workflows you can run whenever you need them."
+                description='Turn repeatable project routines into simple workflows you can run whenever you need them.'
                 icon={IconBolt}
-                onVisibleChange={(visible) => onUpdateSetting("automateViewTabHidden", !visible)}
-                title="Automate"
+                onVisibleChange={(visible) => onUpdateSetting('automateViewTabHidden', !visible)}
+                title='Automate'
                 visible={!settings.automateViewTabHidden}
               />
             ) : null}
-            {showViewTab("docs") ? (
+            {showViewTab('docs') ? (
               <PluginManagedSettingsRow
-                description="Browse your project’s notes, plans, and reference files together in one focused reading space."
+                description='Browse your project’s notes, plans, and reference files together in one focused reading space.'
                 icon={IconFileText}
-                onVisibleChange={(visible) => onUpdateSetting("docsViewTabHidden", !visible)}
-                title="Docs"
+                onVisibleChange={(visible) => onUpdateSetting('docsViewTabHidden', !visible)}
+                title='Docs'
                 visible={!settings.docsViewTabHidden}
               />
             ) : null}
@@ -181,87 +168,73 @@ export function PluginsSettingsTab({
           <SettingsSection
             actions={
               <SettingButton
-                disabled={
-                  statusLoading ||
-                  ghostexCliStatusLoading ||
-                  (!onRequestStatus && !onRequestGhostexCliStatus)
-                }
+                disabled={statusLoading || ghostexCliStatusLoading || (!onRequestStatus && !onRequestGhostexCliStatus)}
                 disabledReason={
                   statusLoading || ghostexCliStatusLoading
-                    ? "Plugin status is being checked."
-                    : "Status refresh isn’t available here."
+                    ? 'Plugin status is being checked.'
+                    : 'Status refresh isn’t available here.'
                 }
                 onClick={() => {
                   onRequestStatus?.();
                   onRequestGhostexCliStatus?.();
                 }}
-                type="button"
-                variant="ghost"
+                type='button'
+                variant='ghost'
               >
                 <IconRefresh
-                  aria-hidden="true"
-                  className={cn((statusLoading || ghostexCliStatusLoading) && "animate-spin")}
-                  data-icon="inline-start"
+                  aria-hidden='true'
+                  className={cn((statusLoading || ghostexCliStatusLoading) && 'animate-spin')}
+                  data-icon='inline-start'
                 />
                 Refresh
               </SettingButton>
             }
             description={
               <>
-                <span className="block">
-                  Runtime components shared by Ghostex surfaces and agent workflows.
-                </span>
-                <span className="block">Check their status and keep them up to date here.</span>
+                <span className='block'>Runtime components shared by Ghostex surfaces and agent workflows.</span>
+                <span className='block'>Check their status and keep them up to date here.</span>
               </>
             }
-            descriptionClassName="pb-2"
-            title="Shared components"
+            descriptionClassName='pb-2'
+            title='Shared components'
           >
-            {shouldShowSetting(search.sections.components, "cuaDriver") ? (
+            {shouldShowSetting(search.sections.components, 'cuaDriver') ? (
               <IntegrationSettingsRow
-                description="Cua Driver powers /ghostex-browser-use and /ghostex-computer-use. Install both skills from the Integrations page."
+                description='Cua Driver powers /ghostex-browser-use and /ghostex-computer-use. Install both skills from the Integrations page.'
                 icon={IconDeviceDesktop}
                 status={cuaDriverStatus}
-                title="Cua Driver"
-                tone={
-                  cuaDriverUpdateAvailable === true
-                    ? "warning"
-                    : cuaDriverInstalled
-                      ? "success"
-                      : "warning"
-                }
+                title='Cua Driver'
+                tone={cuaDriverUpdateAvailable === true ? 'warning' : cuaDriverInstalled ? 'success' : 'warning'}
                 version={ghostexCliStatus?.cuaDriverVersion}
               >
                 <SettingButton
                   disabled={ghostexCliStatusLoading || !onInstallCuaDriver}
                   disabledReason={
                     ghostexCliStatusLoading
-                      ? "Cua Driver status is being checked."
-                      : "Cua Driver installation isn’t available here."
+                      ? 'Cua Driver status is being checked.'
+                      : 'Cua Driver installation isn’t available here.'
                   }
                   onClick={onInstallCuaDriver}
-                  type="button"
-                  variant={
-                    cuaDriverInstalled && cuaDriverUpdateAvailable !== true ? "outline" : "default"
-                  }
+                  type='button'
+                  variant={cuaDriverInstalled && cuaDriverUpdateAvailable !== true ? 'outline' : 'default'}
                 >
                   {cuaDriverManagedUpdatesSupported && cuaDriverInstalled ? (
-                    <IconRefresh aria-hidden="true" data-icon="inline-start" />
+                    <IconRefresh aria-hidden='true' data-icon='inline-start' />
                   ) : (
-                    <IconDownload aria-hidden="true" data-icon="inline-start" />
+                    <IconDownload aria-hidden='true' data-icon='inline-start' />
                   )}
                   {cuaDriverActionLabel}
                 </SettingButton>
               </IntegrationSettingsRow>
             ) : null}
-            {shouldShowSetting(search.sections.components, "cef") ? (
+            {shouldShowSetting(search.sections.components, 'cef') ? (
               <PluginManagedSettingsRow
-                description="Chromium Embedded Framework powers Ghostex web surfaces and remains enabled because the app requires it."
+                description='Chromium Embedded Framework powers Ghostex web surfaces and remains enabled because the app requires it.'
                 icon={IconDeviceDesktop}
-                onReinstall={() => onReinstallPlugin?.("cef")}
+                onReinstall={() => onReinstallPlugin?.('cef')}
                 reinstallAvailable={Boolean(onReinstallPlugin && cef?.canReinstall)}
                 runtime={cef}
-                title="Chromium runtime (CEF)"
+                title='Chromium runtime (CEF)'
               />
             ) : null}
           </SettingsSection>
@@ -269,82 +242,70 @@ export function PluginsSettingsTab({
 
         {shouldShowSettingsSection(search.sections.quickAccessButtons) ? (
           <SettingsSection
-            description="This is the same button cluster shown on the right side of the title bar. Click any button to show or hide it; its feature stays available everywhere else."
-            title="Quick access buttons"
+            description='This is the same button cluster shown on the right side of the title bar. Click any button to show or hide it; its feature stays available everywhere else.'
+            title='Quick access buttons'
           >
-            <Field className="rounded-none border border-border bg-muted/20 px-4 py-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Field className='rounded-none border border-border bg-muted/20 px-4 py-3'>
+              <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                 <FieldContent>
-                  <FieldTitle className="text-sm">Titlebar preview</FieldTitle>
-                  <FieldDescription className="text-xs text-muted-foreground">
+                  <FieldTitle className='text-sm'>Titlebar preview</FieldTitle>
+                  <FieldDescription className='text-xs text-muted-foreground'>
                     Bright buttons are enabled and shown. Outlined buttons are hidden.
                   </FieldDescription>
                 </FieldContent>
                 <ButtonGroup
-                  aria-label="Quick access button visibility"
-                  className="shrink-0 gap-[2px] [&>[data-slot]~[data-slot]]:border-l!"
+                  aria-label='Quick access button visibility'
+                  className='shrink-0 gap-[2px] [&>[data-slot]~[data-slot]]:border-l!'
                 >
-                  {showQuickAccessButton("tips") ? (
+                  {showQuickAccessButton('tips') ? (
                     <QuickAccessTitlebarButton
                       icon={IconInfoCircle}
-                      label="Tips"
+                      label='Tips'
                       onToggle={() =>
                         onUpdateSetting(
-                          "tipsAndTricksTitlebarButtonHidden",
-                          !settings.tipsAndTricksTitlebarButtonHidden,
+                          'tipsAndTricksTitlebarButtonHidden',
+                          !settings.tipsAndTricksTitlebarButtonHidden
                         )
                       }
                       visible={!settings.tipsAndTricksTitlebarButtonHidden}
                     />
                   ) : null}
-                  {showQuickAccessButton("resources") ? (
+                  {showQuickAccessButton('resources') ? (
                     <QuickAccessTitlebarButton
                       icon={IconDeviceDesktop}
-                      label="Resources"
+                      label='Resources'
                       onToggle={() =>
-                        onUpdateSetting(
-                          "resourcesTitlebarButtonHidden",
-                          !settings.resourcesTitlebarButtonHidden,
-                        )
+                        onUpdateSetting('resourcesTitlebarButtonHidden', !settings.resourcesTitlebarButtonHidden)
                       }
                       visible={!settings.resourcesTitlebarButtonHidden}
                     />
                   ) : null}
-                  {showQuickAccessButton("gitActions") ? (
+                  {showQuickAccessButton('gitActions') ? (
                     <QuickAccessTitlebarButton
                       icon={IconGitCommit}
-                      label="Git actions"
+                      label='Git actions'
                       onToggle={() =>
-                        onUpdateSetting(
-                          "gitActionsTitlebarButtonHidden",
-                          !settings.gitActionsTitlebarButtonHidden,
-                        )
+                        onUpdateSetting('gitActionsTitlebarButtonHidden', !settings.gitActionsTitlebarButtonHidden)
                       }
                       visible={!settings.gitActionsTitlebarButtonHidden}
                     />
                   ) : null}
-                  {showQuickAccessButton("quickActions") ? (
+                  {showQuickAccessButton('quickActions') ? (
                     <QuickAccessTitlebarButton
                       icon={IconPlayerPlay}
-                      label="Quick Actions"
+                      label='Quick Actions'
                       onToggle={() =>
-                        onUpdateSetting(
-                          "quickActionsTitlebarButtonHidden",
-                          !settings.quickActionsTitlebarButtonHidden,
-                        )
+                        onUpdateSetting('quickActionsTitlebarButtonHidden', !settings.quickActionsTitlebarButtonHidden)
                       }
                       visible={!settings.quickActionsTitlebarButtonHidden}
                     />
                   ) : null}
-                  {showQuickAccessButton("openIn") ? (
+                  {showQuickAccessButton('openIn') ? (
                     <QuickAccessTitlebarButton
                       icon={IconFolderOpen}
-                      label="Open In"
+                      label='Open In'
                       onToggle={() =>
-                        onUpdateSetting(
-                          "openInTitlebarButtonHidden",
-                          !settings.openInTitlebarButtonHidden,
-                        )
+                        onUpdateSetting('openInTitlebarButtonHidden', !settings.openInTitlebarButtonHidden)
                       }
                       visible={!settings.openInTitlebarButtonHidden}
                     />
@@ -378,23 +339,21 @@ export function PluginManagedSettingsRow({
   title: string;
   visible?: boolean;
 }) {
-  const busy = runtime !== undefined && !["installed", "notInstalled", "failed"].includes(runtime.status);
-  const actionLabel = runtime?.status === "notInstalled" ? "Install" : "Reinstall";
-  const detail = runtime
-    ? `${description}${runtime.errorMessage ? ` · ${runtime.errorMessage}` : ""}`
-    : description;
+  const busy = runtime !== undefined && !['installed', 'notInstalled', 'failed'].includes(runtime.status);
+  const actionLabel = runtime?.status === 'notInstalled' ? 'Install' : 'Reinstall';
+  const detail = runtime ? `${description}${runtime.errorMessage ? ` · ${runtime.errorMessage}` : ''}` : description;
   const tone = runtime
-    ? runtime.status === "installed"
-      ? "success"
-      : runtime.status === "failed"
-        ? "warning"
-        : "neutral"
-    : "success";
+    ? runtime.status === 'installed'
+      ? 'success'
+      : runtime.status === 'failed'
+        ? 'warning'
+        : 'neutral'
+    : 'success';
   return (
     <IntegrationSettingsRow
       description={detail}
       icon={icon}
-      status={runtime?.statusLabel ?? "Built in"}
+      status={runtime?.statusLabel ?? 'Built in'}
       title={title}
       tone={tone}
       version={runtime?.version}
@@ -403,30 +362,20 @@ export function PluginManagedSettingsRow({
         <SettingButton
           disabled={busy || !reinstallAvailable}
           disabledReason={
-            busy
-              ? `${title} is being installed.`
-              : "This build does not provide a reinstallable remote component."
+            busy ? `${title} is being installed.` : 'This build does not provide a reinstallable remote component.'
           }
           onClick={onReinstall}
-          type="button"
-          variant="outline"
+          type='button'
+          variant='outline'
         >
-          <IconRefresh
-            aria-hidden="true"
-            className={cn(busy && "animate-spin")}
-            data-icon="inline-start"
-          />
+          <IconRefresh aria-hidden='true' className={cn(busy && 'animate-spin')} data-icon='inline-start' />
           {actionLabel}
         </SettingButton>
       ) : null}
       {onVisibleChange && visible !== undefined ? (
-        <label className="flex h-8 items-center gap-2 px-1 text-xs text-muted-foreground">
+        <label className='flex h-8 items-center gap-2 px-1 text-xs text-muted-foreground'>
           Visible
-          <Switch
-            aria-label={`Show ${title} in the title bar`}
-            checked={visible}
-            onCheckedChange={onVisibleChange}
-          />
+          <Switch aria-label={`Show ${title} in the title bar`} checked={visible} onCheckedChange={onVisibleChange} />
         </label>
       ) : null}
     </IntegrationSettingsRow>
@@ -445,23 +394,17 @@ export function QuickAccessTitlebarButton({
   visible: boolean;
 }) {
   return (
-    <AppTooltip
-      content={`${label} is ${visible ? "shown" : "hidden"}. Click to ${visible ? "hide" : "show"}.`}
-    >
+    <AppTooltip content={`${label} is ${visible ? 'shown' : 'hidden'}. Click to ${visible ? 'hide' : 'show'}.`}>
       <Button
-        aria-label={`${visible ? "Hide" : "Show"} ${label} in the title bar`}
+        aria-label={`${visible ? 'Hide' : 'Show'} ${label} in the title bar`}
         aria-pressed={visible}
         onClick={onToggle}
-        size="icon"
-        style={
-          visible
-            ? { backgroundColor: "#e5e5e5", borderColor: "#e5e5e5", color: "#0a0a0a" }
-            : undefined
-        }
-        type="button"
-        variant="outline"
+        size='icon'
+        style={visible ? { backgroundColor: '#e5e5e5', borderColor: '#e5e5e5', color: '#0a0a0a' } : undefined}
+        type='button'
+        variant='outline'
       >
-        <Icon aria-hidden="true" />
+        <Icon aria-hidden='true' />
       </Button>
     </AppTooltip>
   );

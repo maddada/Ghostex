@@ -367,7 +367,9 @@ pub(crate) fn gpui_gxserver_presentation_focus_state_path() -> PathBuf {
 /// re-materialize the previously focused session (Decision #3). The file
 /// carries only the fixed focus-state contract shape — no titles, paths,
 /// commands, or terminal content.
-pub(crate) fn persist_gpui_gxserver_presentation_focus_state(state: &GpuiGxserverPresentationFocusState) {
+pub(crate) fn persist_gpui_gxserver_presentation_focus_state(
+    state: &GpuiGxserverPresentationFocusState,
+) {
     let path = gpui_gxserver_presentation_focus_state_path();
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
@@ -405,5 +407,5 @@ pub(crate) fn load_gpui_gxserver_presentation_focus_state() -> GpuiGxserverPrese
 // keep them in sync when the shared revisions bump so both apps replay the
 // refreshed onboarding exactly once.
 pub(crate) const GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION: &str = "2026-06-18-short-first-launch";
-pub(crate) const GPUI_HIGHLIGHTED_FEATURES_SEEN_REVISION: &str = "2026-06-16-highlighted-features-launch";
-
+pub(crate) const GPUI_HIGHLIGHTED_FEATURES_SEEN_REVISION: &str =
+    "2026-06-16-highlighted-features-launch";

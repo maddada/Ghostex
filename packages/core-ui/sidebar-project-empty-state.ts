@@ -1,8 +1,9 @@
 export type SidebarProjectInventoryGroupsById = Record<
   string,
-  {
-    isChatCollection?: boolean;
-  } | undefined
+  | {
+      isChatCollection?: boolean;
+    }
+  | undefined
 >;
 
 /**
@@ -34,7 +35,7 @@ export function hasKnownSidebarProjectInventory({
       return false;
     }
 
-    const group = groupsById[ groupId ];
+    const group = groupsById[groupId];
     return group !== undefined && group.isChatCollection !== true;
   });
 }

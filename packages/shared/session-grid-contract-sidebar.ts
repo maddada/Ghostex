@@ -1,34 +1,29 @@
-import type { CompletionSoundSetting } from "./completion-sound";
-import type { BundledGhostexAgentSkillId } from "./ghostex-agent-skills";
-import type { AgentAcceptAllMode } from "./sidebar-agent-accept-all";
-import type { SidebarAgentButton, SidebarAgentIcon } from "./sidebar-agents";
-import type { SidebarCommandIcon } from "./sidebar-command-icons";
-import type { WorkspaceProjectIcon } from "./workspace-project-appearance";
+import type { CompletionSoundSetting } from './completion-sound';
+import type { BundledGhostexAgentSkillId } from './ghostex-agent-skills';
+import type { AgentAcceptAllMode } from './sidebar-agent-accept-all';
+import type { SidebarAgentButton, SidebarAgentIcon } from './sidebar-agents';
+import type { SidebarCommandIcon } from './sidebar-command-icons';
+import type { WorkspaceProjectIcon } from './workspace-project-appearance';
 import type {
   SidebarActionType,
   SidebarCommandButton,
   SidebarCommandLink,
   SidebarCommandRunMode,
   SidebarCommandScope,
-} from "./sidebar-commands";
-import type {
-  SidebarGitAction,
-  SidebarGitChangedFile,
-  SidebarGitFileDiffDraft,
-  SidebarGitState,
-} from "./sidebar-git";
-import type { SidebarProjectDiffStats } from "./project-diff-stats";
+} from './sidebar-commands';
+import type { SidebarGitAction, SidebarGitChangedFile, SidebarGitFileDiffDraft, SidebarGitState } from './sidebar-git';
+import type { SidebarProjectDiffStats } from './project-diff-stats';
 import type {
   ghostexSettings,
   ghostexSettingsPatch,
   ghostexSettingsUpdateSource,
   DiagnosticLoggingScenarioId,
   KeepAwakeDurationMinutes,
-} from "./ghostex-settings";
-import type { ghostexHotkeyActionId } from "./ghostex-hotkeys";
-import type { WorkspaceIdeTargetApp } from "./workspace-open-targets";
-import type { SidebarPinnedPrompt } from "./sidebar-pinned-prompts";
-import type { SidebarSessionTag, SidebarSessionTagFilter } from "./session-tags";
+} from './ghostex-settings';
+import type { ghostexHotkeyActionId } from './ghostex-hotkeys';
+import type { WorkspaceIdeTargetApp } from './workspace-open-targets';
+import type { SidebarPinnedPrompt } from './sidebar-pinned-prompts';
+import type { SidebarSessionTag, SidebarSessionTagFilter } from './session-tags';
 import type {
   GxserverPortlessPresentation,
   GxserverPortlessStatus,
@@ -36,13 +31,13 @@ import type {
   GxserverSidebarProjectCollectionsState,
   GxserverStashedPrompt,
   GxserverStashedPromptTag,
-} from "./gxserver-protocol";
+} from './gxserver-protocol';
 import type {
   NativePortlessAdminAction,
   NativePortlessAdminInstallAction,
   NativePortlessAdminResult,
   NativePortlessProtocol,
-} from "./native-ghostty-host-protocol";
+} from './native-ghostty-host-protocol';
 import type {
   SessionLifecycleState,
   SessionGridSnapshot,
@@ -51,9 +46,9 @@ import type {
   TerminalSessionPersistenceProvider,
   TerminalViewMode,
   VisibleSessionCount,
-} from "./session-grid-contract-core";
+} from './session-grid-contract-core';
 
-export type SidebarActiveSessionsSortMode = "manual" | "lastActivity";
+export type SidebarActiveSessionsSortMode = 'manual' | 'lastActivity';
 
 export type SidebarTitleObservationState = {
   failureCount?: number;
@@ -61,10 +56,10 @@ export type SidebarTitleObservationState = {
   lastObservedAt?: string;
   lastStartedAt?: string;
   nextRetryAt?: string;
-  status: "active" | "failed" | "retrying" | "starting";
+  status: 'active' | 'failed' | 'retrying' | 'starting';
 };
 
-export type AgentsHubTab = "mds" | "skills" | "hooks" | "configs";
+export type AgentsHubTab = 'mds' | 'skills' | 'hooks' | 'configs';
 
 export type AgentsHubProfile = {
   agentIcon: SidebarAgentIcon;
@@ -94,7 +89,7 @@ export type AgentsHubGroup = {
 export type AgentsHubCatalogMessage = {
   generatedAt: string;
   groupsByTab: Record<AgentsHubTab, AgentsHubGroup[]>;
-  type: "agentsHubCatalog";
+  type: 'agentsHubCatalog';
 };
 
 export type AgentsHubFileContentMessage = {
@@ -102,10 +97,10 @@ export type AgentsHubFileContentMessage = {
   errorMessage?: string;
   filePath: string;
   requestId: string;
-  type: "agentsHubFileContent";
+  type: 'agentsHubFileContent';
 };
 
-export type SidebarAgentHookStatus = "installed" | "missing" | "cliMissing" | "notRequired" | "updateRequired";
+export type SidebarAgentHookStatus = 'installed' | 'missing' | 'cliMissing' | 'notRequired' | 'updateRequired';
 
 export type SidebarAgentHookStatusItem = {
   agentId: string;
@@ -127,7 +122,7 @@ export type SidebarAgentHookStatusMessage = {
   generatedAt: string;
   hookStateDirectory: string;
   notifyHookPath: string;
-  type: "agentHookStatus";
+  type: 'agentHookStatus';
 };
 
 export type SidebarGhostexCliStatusMessage = {
@@ -207,39 +202,29 @@ export type SidebarGhostexCliStatusMessage = {
   gxPath?: string;
   gxUsable: boolean;
   installed: boolean;
-  type: "ghostexCliStatus";
+  type: 'ghostexCliStatus';
 };
 
 export type SidebarOSIntegrationStatusTarget =
-  | "bundleRegistration"
-  | "editor"
-  | "platform"
-  | "scriptRunner"
-  | "terminalLinks";
+  'bundleRegistration' | 'editor' | 'platform' | 'scriptRunner' | 'terminalLinks';
 
-export type SidebarOSIntegrationStatusOperation =
-  | "readStatus"
-  | "registerBundle"
-  | "setDefault";
+export type SidebarOSIntegrationStatusOperation = 'readStatus' | 'registerBundle' | 'setDefault';
 
-export type SidebarOSIntegrationStatusState =
-  | "failed"
-  | "skipped"
-  | "unsupported";
+export type SidebarOSIntegrationStatusState = 'failed' | 'skipped' | 'unsupported';
 
 export type SidebarOSIntegrationStatusReason =
-  | "bundleIdentifierMissing"
-  | "bundleRegistrationFailed"
-  | "contentTypeUnavailable"
-  | "invalidTarget"
-  | "launchServicesRejected"
-  | "unsupportedPlatform";
+  | 'bundleIdentifierMissing'
+  | 'bundleRegistrationFailed'
+  | 'contentTypeUnavailable'
+  | 'invalidTarget'
+  | 'launchServicesRejected'
+  | 'unsupportedPlatform';
 
 export type SidebarOSIntegrationStatusItem = {
   extension?: string;
   operation: SidebarOSIntegrationStatusOperation;
   reason: SidebarOSIntegrationStatusReason;
-  scheme?: "ghostex";
+  scheme?: 'ghostex';
   status: SidebarOSIntegrationStatusState;
   target: SidebarOSIntegrationStatusTarget;
 };
@@ -267,7 +252,7 @@ export type SidebarOSIntegrationStatusMessage = {
   scriptDefaults: Record<string, string>;
   statusItems?: SidebarOSIntegrationStatusItem[];
   terminalLinkDefaultBundleId?: string;
-  type: "osIntegrationStatus";
+  type: 'osIntegrationStatus';
 };
 
 /**
@@ -277,7 +262,7 @@ export type SidebarOSIntegrationStatusMessage = {
  * auto-settle. gxserver keeps an unpublished `settledOverrideAt` so real
  * activity newer than the override clears it server-side.
  */
-export type SidebarSessionSettledOverride = "active" | "settled";
+export type SidebarSessionSettledOverride = 'active' | 'settled';
 
 /**
  * CDXC:SidebarV2Git 2026-07-29:
@@ -289,7 +274,7 @@ export type SidebarSessionSettledOverride = "active" | "settled";
 export type SidebarSessionGitStatus = GxserverPresentationSessionGitStatus;
 
 /** Change-request state a `SidebarSessionGitStatus` can report. */
-export type SidebarSessionPrState = NonNullable<SidebarSessionGitStatus["prState"]>;
+export type SidebarSessionPrState = NonNullable<SidebarSessionGitStatus['prState']>;
 
 /**
  * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -321,9 +306,9 @@ export type SidebarSessionLifecycleCapabilities = {
 };
 
 export type SidebarSessionItem = {
-  kind?: "browser" | "workspace";
-  sessionKind?: "browser" | "terminal";
-  activity: "idle" | "working" | "attention";
+  kind?: 'browser' | 'workspace';
+  sessionKind?: 'browser' | 'terminal';
+  activity: 'idle' | 'working' | 'attention';
   activityLabel?: string;
   agentIcon?: SidebarAgentIcon;
   /**
@@ -459,8 +444,8 @@ export type SidebarSessionItem = {
    * clear the terminal provider is absent because persistence is off, not
    * because some unrelated disabled flag was set.
    */
-  nativePaneState?: "mounted" | "mounting" | "unmounted";
-  providerSessionState?: "exists" | "missing" | "persistence-disabled" | "unknown";
+  nativePaneState?: 'mounted' | 'mounting' | 'unmounted';
+  providerSessionState?: 'exists' | 'missing' | 'persistence-disabled' | 'unknown';
   isLive?: boolean;
   /** @deprecated Use nativePaneState/providerSessionState plus isLive. */
   isSleeping?: boolean;
@@ -529,26 +514,26 @@ export type SidebarSessionItem = {
 export function getSidebarSessionLifecycleState(
   session: Pick<
     SidebarSessionItem,
-    "isLive" | "isRunning" | "isSleeping" | "lifecycleState" | "nativePaneState" | "providerSessionState"
-  >,
+    'isLive' | 'isRunning' | 'isSleeping' | 'lifecycleState' | 'nativePaneState' | 'providerSessionState'
+  >
 ): SessionLifecycleState {
   if (session.lifecycleState) {
     return session.lifecycleState;
   }
 
   if (session.isLive === true) {
-    return "running";
+    return 'running';
   }
 
-  if (session.nativePaneState === "mounted" || session.providerSessionState === "exists") {
-    return "running";
+  if (session.nativePaneState === 'mounted' || session.providerSessionState === 'exists') {
+    return 'running';
   }
 
   if (session.isSleeping) {
-    return "sleeping";
+    return 'sleeping';
   }
 
-  return session.isRunning ? "running" : "done";
+  return session.isRunning ? 'running' : 'done';
 }
 
 export type SidebarPreviousSessionItem = SidebarSessionItem & {
@@ -572,7 +557,7 @@ export type SidebarPreviousSessionItem = SidebarSessionItem & {
 };
 
 export type SidebarSessionGroup = {
-  kind?: "browser" | "workspace";
+  kind?: 'browser' | 'workspace';
   groupId: string;
   isActive: boolean;
   /**
@@ -666,7 +651,7 @@ export type SidebarSessionGroup = {
      */
     gitRepositoryRootPath?: string;
     path: string;
-    pathState?: "available" | "missing" | "notDirectory" | "unavailable";
+    pathState?: 'available' | 'missing' | 'notDirectory' | 'unavailable';
     /**
      * CDXC:EditorPanes 2026-05-06-14:21
      * Combined project cards expose one project-owned code editor surface.
@@ -685,7 +670,7 @@ export type SidebarSessionGroup = {
       isOpen: boolean;
       isSleeping: boolean;
       projectId: string;
-      status: "idle" | "opening" | "running" | "error";
+      status: 'idle' | 'opening' | 'running' | 'error';
     };
     theme?: SidebarTheme;
     themeColor?: string;
@@ -786,14 +771,11 @@ export type SidebarCommandSessionIndicator = {
   delayedSendRemainingMs?: number;
   isActive?: boolean;
   sessionId: string;
-  status: "idle" | "running" | "error";
+  status: 'idle' | 'running' | 'error';
   title?: string;
 };
 
-export type SidebarPortlessNativeAdminUnavailableReason =
-  | "localMacOnly"
-  | "notRecommended"
-  | "setupNotGhostexOwned";
+export type SidebarPortlessNativeAdminUnavailableReason = 'localMacOnly' | 'notRecommended' | 'setupNotGhostexOwned';
 
 export type SidebarPortlessNativeAdminActionAvailability = {
   action: NativePortlessAdminAction;
@@ -881,9 +863,7 @@ export type SidebarHudState = {
    * button that the remote daemon would reject.
    */
   lifecycleCapabilities?: SidebarSessionLifecycleCapabilities;
-  lifecycleCapabilitiesByMachineId?: Readonly<
-    Record<string, SidebarSessionLifecycleCapabilities>
-  >;
+  lifecycleCapabilitiesByMachineId?: Readonly<Record<string, SidebarSessionLifecycleCapabilities>>;
   /**
    * CDXC:SidebarV2LogicalProjects 2026-07-29:
    * The inactivity auto-settle window each daemon actually applies, in days,
@@ -926,19 +906,19 @@ export type SidebarHudState = {
   renameSessionOnDoubleClick: boolean;
   showCloseButtonOnSessionCards: boolean;
   theme:
-    | "dark-1"
-    | "dark-2"
-    | "plain-dark"
-    | "plain-light"
-    | "dark-green"
-    | "dark-blue"
-    | "dark-red"
-    | "dark-pink"
-    | "dark-orange"
-    | "light-blue"
-    | "light-green"
-    | "light-pink"
-    | "light-orange";
+    | 'dark-1'
+    | 'dark-2'
+    | 'plain-dark'
+    | 'plain-light'
+    | 'dark-green'
+    | 'dark-blue'
+    | 'dark-red'
+    | 'dark-pink'
+    | 'dark-orange'
+    | 'light-blue'
+    | 'light-green'
+    | 'light-pink'
+    | 'light-orange';
   highlightedVisibleCount: VisibleSessionCount;
   visibleCount: VisibleSessionCount;
   visibleSlotLabels: string[];
@@ -949,12 +929,10 @@ export type SidebarHydrateMessage = {
   groups: SidebarSessionGroup[];
   pinnedPrompts: SidebarPinnedPrompt[];
   previousSessions: SidebarPreviousSessionItem[];
-  remoteSidebarProjectCollectionsByMachineId?: Readonly<
-    Record<string, GxserverSidebarProjectCollectionsState>
-  >;
+  remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
   revision: number;
   scratchPadContent: string;
-  type: "hydrate";
+  type: 'hydrate';
   hud: SidebarHudState;
 };
 
@@ -964,14 +942,14 @@ export type SidebarSessionStateMessage = {
   previousSessions: SidebarPreviousSessionItem[];
   revision: number;
   scratchPadContent: string;
-  type: "sessionState";
+  type: 'sessionState';
   hud: SidebarHudState;
 };
 
 export type SidebarSessionPresentationChangedMessage = {
   revision?: number;
   session: SidebarSessionItem;
-  type: "sessionPresentationChanged";
+  type: 'sessionPresentationChanged';
 };
 
 export type SidebarGroupsChangedMessage = {
@@ -984,7 +962,7 @@ export type SidebarGroupsChangedMessage = {
   CDXC:SidebarHydration 2026-06-09-23:01:
   Routine gxserver presentation changes must patch the React sidebar tree instead of posting a full hydrate. Carry changed groups, removals, and authoritative order so session add/remove/reorder/project deltas update visible rows without replacing unrelated sidebar state or letting WKWebView refreshes steal terminal focus.
   */
-  type: "sidebarGroupsChanged";
+  type: 'sidebarGroupsChanged';
 };
 
 export type SidebarProjectCollectionsChangedMessage = {
@@ -997,7 +975,7 @@ export type SidebarProjectCollectionsChangedMessage = {
   */
   sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
   remoteMachineId?: string;
-  type: "sidebarProjectCollectionsChanged";
+  type: 'sidebarProjectCollectionsChanged';
 };
 
 export type SidebarHudChangedMessage = {
@@ -1007,16 +985,16 @@ export type SidebarHudChangedMessage = {
   CDXC:SidebarHydration 2026-06-09-23:01:
   Live presentation patches still need HUD-derived chrome such as focused title, counts, and command indicators. Send HUD as its own patch so gxserver deltas do not force a session-tree hydrate just to keep non-row controls current.
   */
-  type: "sidebarHudChanged";
+  type: 'sidebarHudChanged';
 };
 
 export type SidebarPlayCompletionSoundMessage = {
   sound: CompletionSoundSetting;
   sessionId?: string;
-  type: "playCompletionSound";
+  type: 'playCompletionSound';
 };
 
-export type SidebarOrderSyncKind = "agent" | "command";
+export type SidebarOrderSyncKind = 'agent' | 'command';
 
 export type SidebarOrderSyncResultMessage = {
   /**
@@ -1028,22 +1006,22 @@ export type SidebarOrderSyncResultMessage = {
   itemIds: readonly string[];
   kind: SidebarOrderSyncKind;
   requestId: string;
-  status: "error" | "success";
-  type: "sidebarOrderSyncResult";
+  status: 'error' | 'success';
+  type: 'sidebarOrderSyncResult';
 };
 
-export type SidebarCommandRunState = "error" | "running" | "success";
+export type SidebarCommandRunState = 'error' | 'running' | 'success';
 
 export type SidebarCommandRunStateChangedMessage = {
   commandId: string;
   runId: string;
   state: SidebarCommandRunState;
-  type: "sidebarCommandRunStateChanged";
+  type: 'sidebarCommandRunStateChanged';
 };
 
 export type SidebarCommandRunStateClearedMessage = {
   commandId: string;
-  type: "sidebarCommandRunStateCleared";
+  type: 'sidebarCommandRunStateCleared';
 };
 
 /**
@@ -1058,7 +1036,7 @@ export type SidebarCommandRunStateClearedMessage = {
 export type SidebarRevealSessionMessage = {
   requestId: number;
   sessionId: string;
-  type: "revealSidebarSession";
+  type: 'revealSidebarSession';
 };
 
 export type SidebarDaemonInfo = {
@@ -1070,7 +1048,7 @@ export type SidebarDaemonInfo = {
 
 export type SidebarDaemonSessionItem = {
   agentName?: string;
-  agentStatus: "idle" | "working" | "attention";
+  agentStatus: 'idle' | 'working' | 'attention';
   cols: number;
   cwd: string;
   endedAt?: string;
@@ -1082,13 +1060,13 @@ export type SidebarDaemonSessionItem = {
    * CDXC:SessionInventoryOwnership 2026-06-02-17:19:
    * Running Sessions may show gxserver-backed terminal rows and macOS-local panes in one modal. Carry ownership on the contract so the UI and external consumers can label local-only rows instead of treating every row as shared daemon state.
    */
-  ownership?: "gxserver" | "local";
-  restoreState: "live" | "replayed";
+  ownership?: 'gxserver' | 'local';
+  restoreState: 'live' | 'replayed';
   rows: number;
   sessionId: string;
   shell: string;
   startedAt: string;
-  status: "starting" | "running" | "exited" | "error" | "disconnected";
+  status: 'starting' | 'running' | 'exited' | 'error' | 'disconnected';
   title?: string;
   workspaceId: string;
 };
@@ -1097,7 +1075,7 @@ export type SidebarDaemonSessionsStateMessage = {
   daemon?: SidebarDaemonInfo;
   errorMessage?: string;
   sessions: SidebarDaemonSessionItem[];
-  type: "daemonSessionsState";
+  type: 'daemonSessionsState';
 };
 
 export type SidebarPromptGitCommitMessage = {
@@ -1121,7 +1099,7 @@ export type SidebarPromptGitCommitMessage = {
   showCommitMessage?: boolean;
   suggestedBody?: string;
   suggestedSubject: string;
-  type: "promptGitCommit";
+  type: 'promptGitCommit';
   worktreeName?: string;
 };
 
@@ -1133,7 +1111,7 @@ export type SidebarGitFileDiffMessage = {
   */
   draft: SidebarGitFileDiffDraft;
   requestId: string;
-  type: "sidebarGitFileDiff";
+  type: 'sidebarGitFileDiff';
 };
 
 export type SidebarGitPreferenceScope = {
@@ -1164,15 +1142,16 @@ export type SidebarGhostexFolderStatsMessage = {
   folders: SidebarGhostexFolderStat[];
   generatedAt: string;
   totalBytes: number;
-  type: "ghostexFolderStats";
+  type: 'ghostexFolderStats';
 };
 
 export type SidebarPluginSettingsItem = {
   canReinstall: boolean;
   errorMessage?: string;
-  id: "code" | "kanban" | "cef";
+  id: 'code' | 'kanban' | 'cef';
   sizeBytes: number;
-  status: "installed" | "notInstalled" | "checking" | "downloading" | "verifying" | "installing" | "finishing" | "failed";
+  status:
+    'installed' | 'notInstalled' | 'checking' | 'downloading' | 'verifying' | 'installing' | 'finishing' | 'failed';
   statusLabel: string;
   version: string;
 };
@@ -1180,7 +1159,7 @@ export type SidebarPluginSettingsItem = {
 /** Native component-store state shown by Settings -> Plugins. */
 export type SidebarPluginSettingsStatusMessage = {
   plugins: SidebarPluginSettingsItem[];
-  type: "pluginSettingsStatus";
+  type: 'pluginSettingsStatus';
 };
 
 /**
@@ -1193,7 +1172,7 @@ export type SidebarShowSessionRenameModalMessage = {
   initialTitle: string;
   sessionAgentIcon?: string;
   sessionId: string;
-  type: "showSessionRenameModal";
+  type: 'showSessionRenameModal';
 };
 
 export type SidebarPreviousSessionsResultMessage = {
@@ -1201,7 +1180,7 @@ export type SidebarPreviousSessionsResultMessage = {
   previousSessions: SidebarPreviousSessionItem[];
   query?: string;
   requestId: string;
-  type: "previousSessionsResult";
+  type: 'previousSessionsResult';
 };
 
 /*
@@ -1219,7 +1198,7 @@ export type SidebarStashedPromptsResultMessage = {
    * counts, and the row chips all paint from one answer instead of three.
    */
   tags?: GxserverStashedPromptTag[];
-  type: "stashedPromptsResult";
+  type: 'stashedPromptsResult';
 };
 
 /**
@@ -1236,7 +1215,7 @@ export type SidebarStashedPromptTagsResultMessage = {
   ok: boolean;
   requestId: string;
   tags: GxserverStashedPromptTag[];
-  type: "stashedPromptTagsResult";
+  type: 'stashedPromptTagsResult';
 };
 
 /** Answer to `setStashedPromptTags`, carrying the canonical re-tagged row. */
@@ -1245,7 +1224,7 @@ export type SidebarSetStashedPromptTagsResultMessage = {
   ok: boolean;
   prompt?: GxserverStashedPrompt;
   requestId: string;
-  type: "setStashedPromptTagsResult";
+  type: 'setStashedPromptTagsResult';
 };
 
 /**
@@ -1258,7 +1237,7 @@ export type SidebarSaveStashedPromptResultMessage = {
   ok: boolean;
   prompt?: GxserverStashedPrompt;
   requestId: string;
-  type: "saveStashedPromptResult";
+  type: 'saveStashedPromptResult';
 };
 
 /*
@@ -1276,7 +1255,7 @@ export type SidebarWorktreeSessionResultMessage = {
   requestId: string;
   /** Sidebar-scoped id of the created session, when the host published one. */
   sessionId?: string;
-  type: "worktreeSessionResult";
+  type: 'worktreeSessionResult';
   worktreePath?: string;
 };
 
@@ -1290,7 +1269,7 @@ export type SidebarSessionWorktreeRemovalResultMessage = {
   ok: boolean;
   removed: boolean;
   requestId: string;
-  type: "sessionWorktreeRemovalResult";
+  type: 'sessionWorktreeRemovalResult';
   warnings?: string[];
   worktreePath: string;
 };
@@ -1298,7 +1277,7 @@ export type SidebarSessionWorktreeRemovalResultMessage = {
 export type SidebarRecentProjectsResultMessage = {
   machineId?: string;
   recentProjects: SidebarRecentProject[];
-  type: "recentProjectsResult";
+  type: 'recentProjectsResult';
 };
 
 export type SidebarRemoteMachineStatusMessage = {
@@ -1318,24 +1297,24 @@ export type SidebarRemoteMachineStatusMessage = {
    * collapsing everything that is not "connected".
    */
   state:
-    | "connecting"
-    | "connected"
-    | "disconnected"
-    | "downloadingRemoteServerPackage"
-    | "installApprovalRequired"
-    | "installFailed"
-    | "installing"
-    | "invalid"
-    | "keychainFailed"
-    | "presentationStreamFailed"
-    | "presentationSubscribeFailed"
-    | "sshFailed"
-    | "tokenUnavailable"
-    | "tunnelFailed"
-    | "unsupported"
-    | "unsupportedRemotePlatform"
-    | "failed";
-  type: "remoteMachineStatus";
+    | 'connecting'
+    | 'connected'
+    | 'disconnected'
+    | 'downloadingRemoteServerPackage'
+    | 'installApprovalRequired'
+    | 'installFailed'
+    | 'installing'
+    | 'invalid'
+    | 'keychainFailed'
+    | 'presentationStreamFailed'
+    | 'presentationSubscribeFailed'
+    | 'sshFailed'
+    | 'tokenUnavailable'
+    | 'tunnelFailed'
+    | 'unsupported'
+    | 'unsupportedRemotePlatform'
+    | 'failed';
+  type: 'remoteMachineStatus';
 };
 
 export type SidebarNativeHotkeyMessage = {
@@ -1344,7 +1323,7 @@ export type SidebarNativeHotkeyMessage = {
    * AppKit owns Cmd+number while terminal panes have focus, then forwards the shared hotkey action id into the sidebar so React can resolve session slots from the currently rendered row order, including collapsed-project filtering.
    */
   actionId: ghostexHotkeyActionId;
-  type: "nativeHotkey";
+  type: 'nativeHotkey';
 };
 
 /**
@@ -1371,7 +1350,7 @@ export type SidebarAppIconStateMessage = {
   icons: SidebarAppIconInfo[];
   ok: boolean;
   selectedId: string;
-  type: "appIconState";
+  type: 'appIconState';
 };
 
 export type SidebarGpuiProjectSlotHotkeyMessage = {
@@ -1380,7 +1359,7 @@ export type SidebarGpuiProjectSlotHotkeyMessage = {
    * GPUI project slot hotkeys resolve locally in SidebarApp because SidebarApp owns the rendered Projects row order. Carry only the 1-based slot number so host payloads do not expose paths, titles, session ids, command text, URLs, or project metadata.
    */
   slotNumber: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
-  type: "gpuiProjectSlotHotkey";
+  type: 'gpuiProjectSlotHotkey';
 };
 
 export type ExtensionToSidebarMessage =
@@ -1430,16 +1409,16 @@ export type ExtensionToSidebarMessage =
  * registry without any daemon round trip.
  */
 export type SidebarAddProjectDialogOperation =
-  | "add"
-  | "browse"
-  | "cancelCloneJob"
-  | "createDirectory"
-  | "discoverSourceControl"
-  | "listMachines"
-  | "lookupRepository"
-  | "previewClone"
-  | "readCloneJob"
-  | "startClone";
+  | 'add'
+  | 'browse'
+  | 'cancelCloneJob'
+  | 'createDirectory'
+  | 'discoverSourceControl'
+  | 'listMachines'
+  | 'lookupRepository'
+  | 'previewClone'
+  | 'readCloneJob'
+  | 'startClone';
 
 /**
  * CDXC:AddProject 2026-07-30:
@@ -1473,10 +1452,10 @@ export type SidebarToExtensionMessage =
        * The gxserver failure toast needs a Retry action that returns to the
        * trusted sidebar command router, then native performs the daemon restart.
        */
-      type: "retryGxserverStart";
+      type: 'retryGxserverStart';
     }
   | {
-      type: "openSettings";
+      type: 'openSettings';
     }
   | {
       /**
@@ -1485,7 +1464,7 @@ export type SidebarToExtensionMessage =
        * questions, and contributors. Native owns URL opening so the sidebar
        * does not depend on webview popup behavior.
        */
-      type: "openExternalUrl";
+      type: 'openExternalUrl';
       url: string;
     }
   | {
@@ -1493,13 +1472,13 @@ export type SidebarToExtensionMessage =
        * CDXC:SidebarTopChrome 2026-06-29-01:43:
        * The sidebar Keep Awake dropdown moved into top chrome but must command the existing titlebar runtime owner instead of duplicating caffeinate lifecycle state in the sidebar renderer.
        */
-      action: "start";
+      action: 'start';
       durationMinutes: KeepAwakeDurationMinutes;
-      type: "runTitlebarKeepAwakeCommand";
+      type: 'runTitlebarKeepAwakeCommand';
     }
   | {
-      action: "stop";
-      type: "runTitlebarKeepAwakeCommand";
+      action: 'stop';
+      type: 'runTitlebarKeepAwakeCommand';
     }
   | {
       /**
@@ -1507,7 +1486,7 @@ export type SidebarToExtensionMessage =
        * The settings modal can request Ghostex folder stats lazily, but native
        * resolves the folder path itself and never trusts a path from React.
        */
-      type: "requestGhostexFolderStats" | "openGhostexFolder";
+      type: 'requestGhostexFolderStats' | 'openGhostexFolder';
     }
   | {
       /**
@@ -1519,10 +1498,7 @@ export type SidebarToExtensionMessage =
        * agentIds while Settings can omit agentIds to inspect the full supported
        * provider set.
        */
-      type:
-        | "requestAgentHookStatus"
-        | "installAgentHooks"
-        | "uninstallAgentHooks";
+      type: 'requestAgentHookStatus' | 'installAgentHooks' | 'uninstallAgentHooks';
       agentIds?: readonly string[];
     }
   | {
@@ -1532,7 +1508,7 @@ export type SidebarToExtensionMessage =
        * was already installed through Homebrew. Native owns PATH inspection so
        * the production modal and Storybook mock can share the same UI contract.
        */
-      type: "requestGhostexCliStatus";
+      type: 'requestGhostexCliStatus';
     }
   | {
       /**
@@ -1542,17 +1518,17 @@ export type SidebarToExtensionMessage =
        * refreshes the shared integration status afterward.
        */
       type:
-        | "installGhostexCli"
-        | "installBrowserControl"
-        | "installBrowserUseSkill"
-        | "installComputerUseSkill"
-        | "installAgentOrchestrationSkill"
-        | "installFable56OrchestrationSkill"
-        | "installFindPrevSessionSkill"
-        | "installGenerateTitleSkill"
-        | "installMoveCodexSessionSkill"
-        | "uninstallBundledAgentSkills"
-        | "installCuaDriver";
+        | 'installGhostexCli'
+        | 'installBrowserControl'
+        | 'installBrowserUseSkill'
+        | 'installComputerUseSkill'
+        | 'installAgentOrchestrationSkill'
+        | 'installFable56OrchestrationSkill'
+        | 'installFindPrevSessionSkill'
+        | 'installGenerateTitleSkill'
+        | 'installMoveCodexSessionSkill'
+        | 'uninstallBundledAgentSkills'
+        | 'installCuaDriver';
     }
   | {
       /**
@@ -1561,7 +1537,7 @@ export type SidebarToExtensionMessage =
        * maps this closed ID to a fixed directory instead of accepting a path.
        */
       skillId: BundledGhostexAgentSkillId;
-      type: "uninstallBundledAgentSkill";
+      type: 'uninstallBundledAgentSkill';
     }
   | {
       /**
@@ -1570,29 +1546,29 @@ export type SidebarToExtensionMessage =
        * registers it as an available handler; default editor, terminal-link,
        * and script-runner ownership changes happen only through this command.
        */
-      target: "editor" | "terminalLinks" | "scriptRunner" | "all";
-      type: "setOSIntegrationDefaults";
+      target: 'editor' | 'terminalLinks' | 'scriptRunner' | 'all';
+      type: 'setOSIntegrationDefaults';
     }
   | {
-      type: "requestOSIntegrationStatus";
+      type: 'requestOSIntegrationStatus';
     }
   | {
-      type: "requestPluginSettingsStatus";
+      type: 'requestPluginSettingsStatus';
     }
   | {
-      pluginId: SidebarPluginSettingsItem["id"];
-      type: "reinstallPlugin";
+      pluginId: SidebarPluginSettingsItem['id'];
+      type: 'reinstallPlugin';
     }
   | {
       source?: ghostexSettingsUpdateSource;
       settings: ghostexSettings;
-      type: "updateSettings";
+      type: 'updateSettings';
     }
   | {
       baseRevision?: number;
       patch: ghostexSettingsPatch;
       source: ghostexSettingsUpdateSource;
-      type: "updateSettingsPatch";
+      type: 'updateSettingsPatch';
     }
   | {
       /*
@@ -1603,10 +1579,10 @@ export type SidebarToExtensionMessage =
       carries one boolean, and dismissals carry only intent so full settings,
       project data, paths, domains, URLs, and command text never cross here.
       */
-      action: Extract<NativePortlessAdminInstallAction, "install" | "reconfigure">;
+      action: Extract<NativePortlessAdminInstallAction, 'install' | 'reconfigure'>;
       protocol: NativePortlessProtocol;
       requestId: string;
-      type: "runPortlessSetupPromptAdminAction";
+      type: 'runPortlessSetupPromptAdminAction';
     }
   | {
       /*
@@ -1619,19 +1595,19 @@ export type SidebarToExtensionMessage =
       action: NativePortlessAdminInstallAction;
       protocol: NativePortlessProtocol;
       requestId: string;
-      type: "runPortlessSettingsAdminAction";
+      type: 'runPortlessSettingsAdminAction';
     }
   | {
-      action: "remove";
+      action: 'remove';
       requestId: string;
-      type: "runPortlessSettingsAdminAction";
+      type: 'runPortlessSettingsAdminAction';
     }
   | {
-      type: "postponePortlessSetupPrompt" | "cancelPortlessSetupPrompt";
+      type: 'postponePortlessSetupPrompt' | 'cancelPortlessSetupPrompt';
     }
   | {
       enabled: false;
-      type: "setPortlessEnabled";
+      type: 'setPortlessEnabled';
     }
   | {
       /**
@@ -1642,7 +1618,7 @@ export type SidebarToExtensionMessage =
        */
       password: string;
       remoteMachineId: string;
-      type: "saveRemoteMachinePassword";
+      type: 'saveRemoteMachinePassword';
     }
   | {
       /**
@@ -1657,14 +1633,14 @@ export type SidebarToExtensionMessage =
        * or trigger the permission prompt by itself.
        */
       type:
-        | "applyRecommendedGhosttySettings"
-        | "openAccessibilityPreferences"
-        | "openScreenRecordingPreferences"
-        | "requestMacOSNotificationPermission"
-        | "openMacOSNotificationSettings"
-        | "openGhosttyConfigFile"
-        | "openGhosttySettingsDocs"
-        | "resetGhosttySettingsToDefault";
+        | 'applyRecommendedGhosttySettings'
+        | 'openAccessibilityPreferences'
+        | 'openScreenRecordingPreferences'
+        | 'requestMacOSNotificationPermission'
+        | 'openMacOSNotificationSettings'
+        | 'openGhosttyConfigFile'
+        | 'openGhosttySettingsDocs'
+        | 'resetGhosttySettingsToDefault';
     }
   | {
       /**
@@ -1676,7 +1652,7 @@ export type SidebarToExtensionMessage =
        * agent the seeded follow-up conversation runs.
        */
       agentId?: string;
-      type: "revealExportedTranscript" | "startExportedTranscriptConversation";
+      type: 'revealExportedTranscript' | 'startExportedTranscriptConversation';
     }
   | {
       /**
@@ -1684,7 +1660,7 @@ export type SidebarToExtensionMessage =
        * Settings' test button should exercise the same native attention
        * completion flow as a real agent task without mutating any session.
        */
-      type: "testAgentTaskCompletion";
+      type: 'testAgentTaskCompletion';
     }
   | {
       /**
@@ -1694,31 +1670,31 @@ export type SidebarToExtensionMessage =
        * avoiding notification side effects.
        */
       sound: CompletionSoundSetting;
-      type: "playCompletionSoundPreview";
+      type: 'playCompletionSoundPreview';
     }
   | {
-      type: "toggleCompletionBell";
+      type: 'toggleCompletionBell';
     }
   | {
-      type: "cycleSessionPersistenceProvider";
+      type: 'cycleSessionPersistenceProvider';
     }
   | {
       delta: -1 | 1;
-      type: "adjustTerminalFontSize";
+      type: 'adjustTerminalFontSize';
     }
   | {
-      type: "refreshDaemonSessions";
+      type: 'refreshDaemonSessions';
     }
   | {
-      type: "killTerminalDaemon";
+      type: 'killTerminalDaemon';
     }
   | {
-      type: "killDaemonSession";
+      type: 'killDaemonSession';
       sessionId: string;
       workspaceId: string;
     }
   | {
-      type: "moveSidebarToOtherSide";
+      type: 'moveSidebarToOtherSide';
     }
   | {
       /**
@@ -1726,7 +1702,7 @@ export type SidebarToExtensionMessage =
        * Cmd+B and command-palette execution need a native chrome command that
        * collapses the whole AppKit sidebar, not only React sidebar content.
        */
-      type: "toggleSidebarCollapsed";
+      type: 'toggleSidebarCollapsed';
     }
   | {
       /**
@@ -1735,10 +1711,10 @@ export type SidebarToExtensionMessage =
        * terminal, titlebar, and other non-sidebar surfaces dismiss the menu
        * while the original AppKit click still reaches its target.
        */
-      type: "sidebarContextMenuOpened";
+      type: 'sidebarContextMenuOpened';
     }
   | {
-      type: "sidebarContextMenuClosed";
+      type: 'sidebarContextMenuClosed';
     }
   | {
       /**
@@ -1747,10 +1723,10 @@ export type SidebarToExtensionMessage =
        * reuses the sidebar settings owner instead of mutating pet visibility
        * inside the detached modal host.
        */
-      type: "togglePetOverlay";
+      type: 'togglePetOverlay';
     }
   | {
-      type: "createSession";
+      type: 'createSession';
     }
   | {
       /**
@@ -1760,7 +1736,7 @@ export type SidebarToExtensionMessage =
        * available command list cannot drift from actual app behavior.
        */
       actionId: ghostexHotkeyActionId;
-      type: "runGhostexHotkeyAction";
+      type: 'runGhostexHotkeyAction';
     }
   | {
       /**
@@ -1770,7 +1746,7 @@ export type SidebarToExtensionMessage =
        * terminal as the selected tab in the focused session's tab group so pane
        * sizes and tab groupings remain unchanged.
        */
-      type: "createFullWidthTerminalPane";
+      type: 'createFullWidthTerminalPane';
     }
   | {
       /**
@@ -1780,7 +1756,7 @@ export type SidebarToExtensionMessage =
        * title/icon detection stays identical to project sessions.
        */
       title?: string;
-      type: "createChat";
+      type: 'createChat';
     }
   | {
       /**
@@ -1789,7 +1765,7 @@ export type SidebarToExtensionMessage =
        * browser pane under Chats, not inside the active project. Keep this
        * separate from generic browser actions because its destination is fixed.
        */
-      type: "openPluginsBrowserChat";
+      type: 'openPluginsBrowserChat';
     }
   | {
       /**
@@ -1802,14 +1778,14 @@ export type SidebarToExtensionMessage =
        * Mobile should use the canonical download URL rather than the GitHub
        * README anchor so mobile setup starts from the product site.
        */
-      type: "openMobileBrowserChat";
+      type: 'openMobileBrowserChat';
     }
   | {
       /**
        * CDXC:Automations 2026-06-29-15:55:
        * The top-sidebar Automations entry now opens the project Automation page backed by server, but keep the old toast message in the contract for older native bundles during the cutover.
        */
-      type: "showAutomationsComingSoonToast";
+      type: 'showAutomationsComingSoonToast';
     }
   | {
       /**
@@ -1819,7 +1795,7 @@ export type SidebarToExtensionMessage =
        * CDXC:Automations 2026-06-30-11:05:
        * Sidebar Automations is a Quick-level global page that aggregates automations from all projects. Project-scoped automation access belongs to the titlebar Automate view instead of reusing the Kanban surface.
        */
-      type: "openAutomationsPage";
+      type: 'openAutomationsPage';
     }
   | {
       /**
@@ -1828,7 +1804,7 @@ export type SidebarToExtensionMessage =
        * still need native filesystem affordances from the sidebar bridge.
        */
       path: string;
-      type: "openAgentsHubPathInFinder";
+      type: 'openAgentsHubPathInFinder';
     }
   | {
       /**
@@ -1836,7 +1812,7 @@ export type SidebarToExtensionMessage =
        * validate the catalog path before handing it to their embedded editor.
        */
       filePath: string;
-      type: "openAgentsHubFileInBuiltInEditor";
+      type: 'openAgentsHubFileInBuiltInEditor';
     }
   | {
       /**
@@ -1849,7 +1825,7 @@ export type SidebarToExtensionMessage =
        * paint the Hub immediately without pushing every file buffer through the
        * native process-result bridge.
        */
-      type: "requestAgentsHubCatalog";
+      type: 'requestAgentsHubCatalog';
     }
   | {
       /**
@@ -1860,7 +1836,7 @@ export type SidebarToExtensionMessage =
        */
       filePath: string;
       requestId: string;
-      type: "requestAgentsHubFileContent";
+      type: 'requestAgentsHubFileContent';
     }
   | {
       /**
@@ -1870,7 +1846,7 @@ export type SidebarToExtensionMessage =
        */
       content: string;
       filePath: string;
-      type: "saveAgentsHubFile";
+      type: 'saveAgentsHubFile';
     }
   | {
       /**
@@ -1879,10 +1855,10 @@ export type SidebarToExtensionMessage =
        * action beside New Chat. It creates a new projectless chat and opens a
        * browser pane there, without requiring a concrete chat group id.
        */
-      type: "openBrowserChat";
+      type: 'openBrowserChat';
     }
   | {
-      type: "openBrowser";
+      type: 'openBrowser';
     }
   | {
       /**
@@ -1891,7 +1867,7 @@ export type SidebarToExtensionMessage =
        * legacy Chrome Canary attachment route has been removed.
        */
       url?: string;
-      type: "openBrowserPane";
+      type: 'openBrowserPane';
     }
   | {
       /**
@@ -1901,10 +1877,10 @@ export type SidebarToExtensionMessage =
        * creating the browser pane.
        */
       groupId: string;
-      type: "openBrowserPaneInGroup";
+      type: 'openBrowserPaneInGroup';
     }
   | {
-      type: "openWorkspaceWelcome";
+      type: 'openWorkspaceWelcome';
     }
   | {
       /*
@@ -1917,32 +1893,32 @@ export type SidebarToExtensionMessage =
        * Keep this legacy command for callers, but native routes it to the
        * tutorial video modal so Highlighted Features can remain unused.
        */
-      type: "openHighlightedFeatures";
+      type: 'openHighlightedFeatures';
     }
   | {
-     /*
-      * CDXC:GhostexTutorialVideo 2026-06-18-04:49:
-      * Help surfaces need a dedicated request for the one-page Ghostex tutorial
+      /*
+       * CDXC:GhostexTutorialVideo 2026-06-18-04:49:
+       * Help surfaces need a dedicated request for the one-page Ghostex tutorial
        * video modal.
        *
        * CDXC:GhostexTutorialVideo 2026-06-18-05:31:
        * Current Features/help entry points should open this video modal while
        * leaving the old Highlighted Features modal unused.
-      */
-     type: "openGhostexTutorialVideo";
-   }
+       */
+      type: 'openGhostexTutorialVideo';
+    }
   | {
       /**
        * CDXC:NativeWorkspacePicker 2026-05-08-18:45
        * The reference Projects header add button should open the trusted native
        * folder picker.
        */
-      type: "pickWorkspaceFolder";
+      type: 'pickWorkspaceFolder';
     }
   | {
       /** The missing-folder child modal asks native to locate this durable project again. */
       projectId: string;
-      type: "pickReplacementProjectFolder";
+      type: 'pickReplacementProjectFolder';
     }
   | {
       /*
@@ -1954,7 +1930,7 @@ export type SidebarToExtensionMessage =
        * rules.
        */
       targetId: string;
-      type: "openCurrentProjectInTarget";
+      type: 'openCurrentProjectInTarget';
     }
   | {
       /*
@@ -1963,7 +1939,7 @@ export type SidebarToExtensionMessage =
        * mirrors the main titlebar Open In affordance without sending a raw path
        * through React.
        */
-      type: "openCurrentProjectInFinder";
+      type: 'openCurrentProjectInFinder';
     }
   | {
       /**
@@ -1977,7 +1953,7 @@ export type SidebarToExtensionMessage =
        */
       installApproved?: boolean;
       remoteMachineId: string;
-      type: "reconnectRemoteMachine";
+      type: 'reconnectRemoteMachine';
     }
   | {
       /**
@@ -1990,7 +1966,7 @@ export type SidebarToExtensionMessage =
        * `remoteGxserverInstallState` host message.
        */
       remoteMachineId: string;
-      type: "probeRemoteGxserverInstall";
+      type: 'probeRemoteGxserverInstall';
     }
   | {
       /**
@@ -2003,7 +1979,7 @@ export type SidebarToExtensionMessage =
       partialPath: string;
       remoteMachineId: string;
       requestId: string;
-      type: "browseRemoteProjectDirectories";
+      type: 'browseRemoteProjectDirectories';
     }
   | {
       /**
@@ -2016,7 +1992,7 @@ export type SidebarToExtensionMessage =
       path: string;
       remoteMachineId: string;
       requestId: string;
-      type: "addRemoteProjectPath";
+      type: 'addRemoteProjectPath';
     }
   | {
       /**
@@ -2032,10 +2008,10 @@ export type SidebarToExtensionMessage =
       operation: SidebarAddProjectDialogOperation;
       params?: SidebarAddProjectDialogRequestParams;
       requestId: string;
-      type: "addProjectDialogRequest";
+      type: 'addProjectDialogRequest';
     }
   | {
-      type: "createSessionInGroup";
+      type: 'createSessionInGroup';
       groupId: string;
     }
   | {
@@ -2044,15 +2020,15 @@ export type SidebarToExtensionMessage =
        * subgroup add button so the GPUI Windows host can own the WSL
        * create-and-attach sequence without changing other group creation.
        */
-      type: "createProjectTerminal";
+      type: 'createProjectTerminal';
       groupId: string;
     }
   | {
-      type: "focusGroup";
+      type: 'focusGroup';
       groupId: string;
     }
   | {
-      type: "toggleFullscreenSession";
+      type: 'toggleFullscreenSession';
     }
   | {
       /*
@@ -2060,17 +2036,17 @@ export type SidebarToExtensionMessage =
        * The macOS focused-pane border must be preserved only for real sidebar session-row clicks. Send a hover-scoped native hint from the session card so AppKit's pre-dispatch mouseDown path can distinguish session focus clicks from other sidebar chrome before WebKit temporarily becomes first responder.
        */
       isSessionCard: boolean;
-      type: "setSidebarSessionFocusBorderHandoffHitTarget";
+      type: 'setSidebarSessionFocusBorderHandoffHitTarget';
     }
   | {
       /*
        * CDXC:SidebarSessionFocus 2026-06-29-02:04:
        * If a session-row mouseDown is actually a child control, modified click, or context-menu path, cancel the pre-dispatch border handoff so only session focus selection keeps the old border during the AppKit sidebar responder gap.
        */
-      type: "cancelSidebarSessionFocusBorderHandoff";
+      type: 'cancelSidebarSessionFocusBorderHandoff';
     }
   | {
-      type: "focusSession";
+      type: 'focusSession';
       sessionId: string;
     }
   | {
@@ -2081,19 +2057,19 @@ export type SidebarToExtensionMessage =
        * command because it must also switch from Code/Browser/Project/Manage
        * surfaces back to Agents while remembering the prior surface for unfocus.
        */
-      type: "focusSessionMode";
+      type: 'focusSessionMode';
       sessionId: string;
     }
   | {
-      type: "promptRenameSession";
+      type: 'promptRenameSession';
       sessionId: string;
     }
   | {
-      type: "restartSession";
+      type: 'restartSession';
       sessionId: string;
     }
   | {
-      type: "renameSession";
+      type: 'renameSession';
       agentId?: string;
       sessionId: string;
       title: string;
@@ -2106,7 +2082,7 @@ export type SidebarToExtensionMessage =
       shouldGenerateTitle?: boolean;
     }
   | {
-      type: "renameGroup";
+      type: 'renameGroup';
       groupId: string;
       title: string;
     }
@@ -2115,16 +2091,16 @@ export type SidebarToExtensionMessage =
        * CDXC:WorktreeDelete 2026-05-28-07:46:
        * Combined project rows render worktrees as project headers, so project-name edits and delete confirmation prompts must route through trusted group ids instead of trusting DOM-provided paths.
        */
-      type: "renameWorkspaceProjectForGroup";
+      type: 'renameWorkspaceProjectForGroup';
       groupId: string;
       title: string;
     }
   | {
-      type: "copyWorkspaceProjectPathForGroup";
+      type: 'copyWorkspaceProjectPathForGroup';
       groupId: string;
     }
   | {
-      type: "restoreRecentProject";
+      type: 'restoreRecentProject';
       projectId: string;
     }
   | {
@@ -2135,11 +2111,7 @@ export type SidebarToExtensionMessage =
        * and removal actions by trusted project id so the sidebar does not send
        * raw paths back to native.
        */
-      type:
-        | "copyRecentProjectPath"
-        | "openRecentProjectInFinder"
-        | "openRecentProjectTerminal"
-        | "removeRecentProject";
+      type: 'copyRecentProjectPath' | 'openRecentProjectInFinder' | 'openRecentProjectTerminal' | 'removeRecentProject';
       projectId: string;
     }
   | {
@@ -2149,7 +2121,7 @@ export type SidebarToExtensionMessage =
        * right-click menu. The native sidebar resolves the group id to its
        * trusted stored workspace path instead of accepting a client path.
        */
-      type: "openWorkspaceProjectInFinderForGroup" | "openWorkspaceProjectInIdeForGroup";
+      type: 'openWorkspaceProjectInFinderForGroup' | 'openWorkspaceProjectInIdeForGroup';
       groupId: string;
     }
   | {
@@ -2164,9 +2136,9 @@ export type SidebarToExtensionMessage =
        * session; route close through the same trusted project/group resolver.
        */
       type:
-        | "closeWorkspaceProjectEditorForGroup"
-        | "openWorkspaceProjectEditorForGroup"
-        | "refreshWorkspaceProjectDiffForGroup";
+        | 'closeWorkspaceProjectEditorForGroup'
+        | 'openWorkspaceProjectEditorForGroup'
+        | 'refreshWorkspaceProjectDiffForGroup';
       groupId: string;
     }
   | {
@@ -2176,7 +2148,7 @@ export type SidebarToExtensionMessage =
        * Route these commands through the native sidebar so stored workspace
        * paths remain trusted on the app side instead of being accepted from DOM.
        */
-      type: "openActiveWorkspaceProjectInFinder";
+      type: 'openActiveWorkspaceProjectInFinder';
     }
   | {
       /**
@@ -2186,8 +2158,8 @@ export type SidebarToExtensionMessage =
        * being inferred from Settings, so choosing VS Code or Zed immediately
        * opens the project in that exact app.
        */
-      targetApp: Extract<WorkspaceIdeTargetApp, "vscode" | "zed">;
-      type: "openActiveWorkspaceProjectInIde";
+      targetApp: Extract<WorkspaceIdeTargetApp, 'vscode' | 'zed'>;
+      type: 'openActiveWorkspaceProjectInIde';
     }
   | {
       /**
@@ -2197,7 +2169,7 @@ export type SidebarToExtensionMessage =
        * override is being removed, so icon and project-header tinting cannot
        * keep using stale custom CSS variables after a preset is selected.
        */
-      type: "setWorkspaceProjectThemeForGroup";
+      type: 'setWorkspaceProjectThemeForGroup';
       groupId: string;
       theme?: SidebarTheme;
       themeColor?: string | null;
@@ -2209,7 +2181,7 @@ export type SidebarToExtensionMessage =
        * drawer instead of deleting their stored sessions. Remove remains the
        * explicit project-delete path.
        */
-      type: "closeWorkspaceProjectForGroup" | "removeWorkspaceProjectForGroup";
+      type: 'closeWorkspaceProjectForGroup' | 'removeWorkspaceProjectForGroup';
       groupId: string;
     }
   | {
@@ -2219,7 +2191,7 @@ export type SidebarToExtensionMessage =
        * then the native sidebar opens the full-window confirmation modal before
        * any checkout directory is removed.
        */
-      type: "promptDeleteWorktreeForGroup";
+      type: 'promptDeleteWorktreeForGroup';
       groupId: string;
     }
   | {
@@ -2232,28 +2204,28 @@ export type SidebarToExtensionMessage =
        * itself. This is separate from the label-only `Rename` above it, which
        * changes the project row's title and nothing on disk.
        */
-      type: "promptRenameWorktreeForGroup";
+      type: 'promptRenameWorktreeForGroup';
       groupId: string;
     }
   | {
-      type: "closeGroup";
+      type: 'closeGroup';
       groupId: string;
     }
   | {
-      type: "closeSession";
+      type: 'closeSession';
       sessionId: string;
     }
   | {
-      type: "closeSessions";
+      type: 'closeSessions';
       sessionIds: string[];
     }
   | {
-      type: "setSessionSleeping";
+      type: 'setSessionSleeping';
       sessionId: string;
       sleeping: boolean;
     }
   | {
-      type: "setSessionsSleeping";
+      type: 'setSessionsSleeping';
       sessionIds: string[];
       sleeping: boolean;
       /**
@@ -2262,21 +2234,21 @@ export type SidebarToExtensionMessage =
        * setSessionsSleeping callers without logging session ids, titles, paths,
        * commands, or user text. Keep this as an enum-like action source only.
        */
-      source?: "sleepBelow";
+      source?: 'sleepBelow';
     }
   | {
       favorite: boolean;
-      type: "setSessionFavorite";
+      type: 'setSessionFavorite';
       sessionId: string;
     }
   | {
       sessionId: string;
       sessionTag?: SidebarSessionTag | null;
-      type: "setSessionTag";
+      type: 'setSessionTag';
     }
   | {
       pinned: boolean;
-      type: "setSessionPinned";
+      type: 'setSessionPinned';
       sessionId: string;
     }
   | {
@@ -2291,16 +2263,16 @@ export type SidebarToExtensionMessage =
        * the presentation delta that follows the write is what moves the row.
        */
       sessionId: string;
-      type: "settleSession" | "unsettleSession" | "unsnoozeSession";
+      type: 'settleSession' | 'unsettleSession' | 'unsnoozeSession';
     }
   | {
       sessionId: string;
       /** ISO wake time; gxserver rejects anything not strictly in the future. */
       snoozedUntil: string;
-      type: "snoozeSession";
+      type: 'snoozeSession';
     }
   | {
-      type: "setGroupSleeping";
+      type: 'setGroupSleeping';
       groupId: string;
       sleeping: boolean;
     }
@@ -2312,7 +2284,7 @@ export type SidebarToExtensionMessage =
        * inactive sessions so running, working, and attention sessions stay
        * awake.
        */
-      type: "sleepInactiveProjectSessions";
+      type: 'sleepInactiveProjectSessions';
       groupId: string;
     }
   | {
@@ -2322,7 +2294,7 @@ export type SidebarToExtensionMessage =
        * It closes idle terminal sessions while preserving working and attention
        * sessions, and it must not park the whole project in Recent Projects.
        */
-      type: "closeInactiveProjectSessions";
+      type: 'closeInactiveProjectSessions';
       groupId: string;
     }
   | {
@@ -2332,15 +2304,15 @@ export type SidebarToExtensionMessage =
        * every workspace group because the row does not carry a concrete native
        * workspace group id.
        */
-      type: "wakeProjectSleepingSessions";
+      type: 'wakeProjectSleepingSessions';
       groupId: string;
     }
   | {
-      type: "copyResumeCommand";
+      type: 'copyResumeCommand';
       sessionId: string;
     }
   | {
-      type: "copyAttachCommand";
+      type: 'copyAttachCommand';
       sessionId: string;
     }
   | {
@@ -2349,7 +2321,7 @@ export type SidebarToExtensionMessage =
        * The React sidebar builds Copy details text from its rendered session row
        * and sends only that user-requested clipboard payload to native.
        */
-      type: "copySessionDetails";
+      type: 'copySessionDetails';
       detailsText: string;
       sessionId: string;
     }
@@ -2369,7 +2341,7 @@ export type SidebarToExtensionMessage =
       sendWhenAllProjectSessionsStop?: boolean;
       sendWhenAgentStops?: boolean;
       sessionId: string;
-      type: "scheduleDelayedSend";
+      type: 'scheduleDelayedSend';
     }
   | {
       /**
@@ -2378,7 +2350,7 @@ export type SidebarToExtensionMessage =
        * modal/sidebar affordance that shows the remaining countdown.
        */
       sessionId: string;
-      type: "cancelDelayedSend";
+      type: 'cancelDelayedSend';
     }
   | {
       /**
@@ -2388,14 +2360,14 @@ export type SidebarToExtensionMessage =
        * stability timer and routes closure through the existing close path.
        */
       sessionId: string;
-      type: "toggleCloseAfterDone";
+      type: 'toggleCloseAfterDone';
     }
   | {
-      type: "forkSession";
+      type: 'forkSession';
       sessionId: string;
     }
   | {
-      type: "fullReloadSession";
+      type: 'fullReloadSession';
       sessionId: string;
     }
   | {
@@ -2406,10 +2378,10 @@ export type SidebarToExtensionMessage =
        * current session record, matching the focused-pane hotkey behavior.
        */
       sessionId: string;
-      type: "popOutPane";
+      type: 'popOutPane';
     }
   | {
-      type: "fullReloadGroup";
+      type: 'fullReloadGroup';
       groupId: string;
     }
   | {
@@ -2420,7 +2392,7 @@ export type SidebarToExtensionMessage =
        * so project-level reload never interrupts working or attention sessions
        * and never tries to restore sleeping/detached history records.
        */
-      type: "fullReloadProjectZmxSessions";
+      type: 'fullReloadProjectZmxSessions';
       groupId: string;
     }
   | {
@@ -2431,9 +2403,9 @@ export type SidebarToExtensionMessage =
        * and profile selection. The native host owns the macOS UI and WebKit/CEF
        * work.
        */
-      action: "devtools" | "feedback-tool" | "profile-picker";
+      action: 'devtools' | 'feedback-tool' | 'profile-picker';
       sessionId: string;
-      type: "runBrowserPaneAction";
+      type: 'runBrowserPaneAction';
     }
   | {
       /**
@@ -2445,19 +2417,19 @@ export type SidebarToExtensionMessage =
       query?: string;
       requestId: string;
       sessionTags?: SidebarSessionTagFilter[];
-      type: "requestPreviousSessions";
+      type: 'requestPreviousSessions';
     }
   | {
       machineId?: string;
-      type: "requestRecentProjects";
+      type: 'requestRecentProjects';
     }
   | {
       historyId: string;
-      type: "restorePreviousSession";
+      type: 'restorePreviousSession';
     }
   | {
       historyId: string;
-      type: "deletePreviousSession";
+      type: 'deletePreviousSession';
     }
   | {
       /**
@@ -2475,17 +2447,17 @@ export type SidebarToExtensionMessage =
        * agent-based previous-session prompt path has been removed. This command
        * remains the direct Search row launcher only.
        */
-      type: "searchPreviousSessionsByText";
+      type: 'searchPreviousSessionsByText';
     }
   | {
       content: string;
-      type: "saveScratchPad";
+      type: 'saveScratchPad';
     }
   | {
       content: string;
       promptId?: string;
       title: string;
-      type: "savePinnedPrompt";
+      type: 'savePinnedPrompt';
     }
   | {
       /**
@@ -2496,11 +2468,11 @@ export type SidebarToExtensionMessage =
        */
       projectId?: string;
       requestId: string;
-      type: "requestStashedPrompts";
+      type: 'requestStashedPrompts';
     }
   | {
       promptId: string;
-      type: "deleteStashedPrompt";
+      type: 'deleteStashedPrompt';
     }
   | {
       /**
@@ -2512,20 +2484,20 @@ export type SidebarToExtensionMessage =
       name: string;
       requestId: string;
       tagId?: string;
-      type: "saveStashedPromptTag";
+      type: 'saveStashedPromptTag';
     }
   | {
       /** Unfiles every prompt carrying this tag; the prompts themselves stay. */
       requestId: string;
       tagId: string;
-      type: "deleteStashedPromptTag";
+      type: 'deleteStashedPromptTag';
     }
   | {
       /** Replaces one prompt's whole tag set, including its Favorites star. */
       promptId: string;
       requestId: string;
       tagIds: string[];
-      type: "setStashedPromptTags";
+      type: 'setStashedPromptTags';
     }
   | {
       content: string;
@@ -2533,7 +2505,7 @@ export type SidebarToExtensionMessage =
       projectId?: string;
       requestId: string;
       sessionId?: string;
-      type: "saveStashedPrompt";
+      type: 'saveStashedPrompt';
     }
   | {
       /**
@@ -2545,26 +2517,26 @@ export type SidebarToExtensionMessage =
       content: string;
       promptId: string;
       sessionId?: string;
-      type: "insertStashedPrompt";
+      type: 'insertStashedPrompt';
     }
   | {
-      type: "moveSessionToGroup";
+      type: 'moveSessionToGroup';
       groupId: string;
       sessionId: string;
       targetIndex?: number;
     }
   | {
-      type: "sidebarDebugLog";
+      type: 'sidebarDebugLog';
       event: string;
       details?: unknown;
       scenarioId: DiagnosticLoggingScenarioId;
     }
   | {
-      type: "createGroupFromSession";
+      type: 'createGroupFromSession';
       sessionId: string;
     }
   | {
-      type: "createGroup";
+      type: 'createGroup';
       /**
        * CDXC:SidebarContract 2026-07-02-03:49:
        * GPUI can create a group inside a specific project section, while legacy macOS sidebar handlers can still use the active project fallback.
@@ -2576,29 +2548,29 @@ export type SidebarToExtensionMessage =
       groupId?: string;
     }
   | {
-      type: "setVisibleCount";
+      type: 'setVisibleCount';
       visibleCount: VisibleSessionCount;
       groupId?: string;
     }
   | {
-      type: "setViewMode";
+      type: 'setViewMode';
       viewMode: TerminalViewMode;
     }
   | {
-      type: "toggleActiveSessionsSortMode";
+      type: 'toggleActiveSessionsSortMode';
     }
   | {
       manualSessionIdsByGroup?: Record<string, string[]>;
       sortMode: SidebarActiveSessionsSortMode;
-      type: "setActiveSessionsSortMode";
+      type: 'setActiveSessionsSortMode';
     }
   | {
-      type: "syncSessionOrder";
+      type: 'syncSessionOrder';
       groupId: string;
       sessionIds: string[];
     }
   | {
-      type: "syncGroupOrder";
+      type: 'syncGroupOrder';
       groupIds: string[];
     }
   | {
@@ -2611,7 +2583,7 @@ export type SidebarToExtensionMessage =
       */
       state: GxserverSidebarProjectCollectionsState;
       remoteMachineId?: string;
-      type: "updateSidebarProjectCollections";
+      type: 'updateSidebarProjectCollections';
     }
   | {
       /*
@@ -2633,27 +2605,27 @@ export type SidebarToExtensionMessage =
       are unchanged. A global selector may still carry the row's group id —
       that names the project the Action runs in, not the list it came from.
       */
-      type: "runSidebarCommand";
+      type: 'runSidebarCommand';
       commandId: string;
       groupId?: string;
       runMode?: SidebarCommandRunMode;
       scope?: SidebarCommandScope;
     }
   | {
-      type: "endSidebarCommandRun";
+      type: 'endSidebarCommandRun';
       commandId: string;
     }
   | {
       action: SidebarGitAction;
       groupId?: string;
       projectId?: string;
-      type: "runSidebarGitAction";
+      type: 'runSidebarGitAction';
     }
   | {
       action: SidebarGitAction;
       groupId?: string;
       projectId?: string;
-      type: "setSidebarGitPrimaryAction";
+      type: 'setSidebarGitPrimaryAction';
     }
   | {
       /*
@@ -2662,19 +2634,19 @@ export type SidebarToExtensionMessage =
       */
       groupId?: string;
       projectId?: string;
-      type: "refreshGitState";
+      type: 'refreshGitState';
     }
   | {
       enabled: boolean;
       groupId?: string;
       projectId?: string;
-      type: "setSidebarGitCommitConfirmationEnabled";
+      type: 'setSidebarGitCommitConfirmationEnabled';
     }
   | {
       enabled: boolean;
       groupId?: string;
       projectId?: string;
-      type: "setSidebarGitGenerateCommitBodyEnabled";
+      type: 'setSidebarGitGenerateCommitBodyEnabled';
     }
   | {
       commitOnNewRef?: boolean;
@@ -2683,7 +2655,7 @@ export type SidebarToExtensionMessage =
       filePaths?: string[];
       message: string;
       requestId: string;
-      type: "confirmSidebarGitCommit";
+      type: 'confirmSidebarGitCommit';
     }
   | {
       deleteWorktreeAfter?: boolean;
@@ -2691,12 +2663,12 @@ export type SidebarToExtensionMessage =
       filePaths?: string[];
       message: string;
       requestId: string;
-      type: "confirmSidebarGitDirectMerge";
+      type: 'confirmSidebarGitDirectMerge';
     }
   | {
       agentId?: string;
       requestId: string;
-      type: "runSidebarGitMultipleCommits";
+      type: 'runSidebarGitMultipleCommits';
     }
   | {
       filePath: string;
@@ -2710,16 +2682,16 @@ export type SidebarToExtensionMessage =
       groupId?: string;
       projectId?: string;
       requestId?: string;
-      type: "openSidebarGitChangedFile";
+      type: 'openSidebarGitChangedFile';
     }
   | {
       filePath: string;
       requestId?: string;
-      type: "openSidebarGitChangedFileDiff";
+      type: 'openSidebarGitChangedFileDiff';
     }
   | {
       requestId: string;
-      type: "cancelSidebarGitCommit";
+      type: 'cancelSidebarGitCommit';
     }
   | {
       /**
@@ -2731,11 +2703,11 @@ export type SidebarToExtensionMessage =
       deleteLocalBranch?: boolean;
       deleteRemoteBranch?: boolean;
       projectId: string;
-      type: "confirmDeleteWorktree";
+      type: 'confirmDeleteWorktree';
     }
   | {
       groupId: string;
-      type: "commitWorktreeBeforeDelete";
+      type: 'commitWorktreeBeforeDelete';
     }
   | {
       /**
@@ -2748,10 +2720,10 @@ export type SidebarToExtensionMessage =
       name: string;
       projectId: string;
       renameBranch?: boolean;
-      type: "confirmRenameWorktree";
+      type: 'confirmRenameWorktree';
     }
   | {
-      type: "saveSidebarCommand";
+      type: 'saveSidebarCommand';
       actionType: SidebarActionType;
       closeTerminalOnExit: boolean;
       commandId?: string;
@@ -2764,12 +2736,12 @@ export type SidebarToExtensionMessage =
       url?: string;
     }
   | {
-      type: "deleteSidebarCommand";
+      type: 'deleteSidebarCommand';
       commandId: string;
     }
   | {
       requestId: string;
-      type: "syncSidebarCommandOrder";
+      type: 'syncSidebarCommandOrder';
       commandIds: string[];
     }
   /*
@@ -2781,7 +2753,7 @@ export type SidebarToExtensionMessage =
    * into whichever project happened to be active.
    */
   | {
-      type: "saveGlobalSidebarCommand";
+      type: 'saveGlobalSidebarCommand';
       actionType: SidebarActionType;
       closeTerminalOnExit: boolean;
       commandId?: string;
@@ -2801,33 +2773,33 @@ export type SidebarToExtensionMessage =
       url?: string;
     }
   | {
-      type: "deleteGlobalSidebarCommand";
+      type: 'deleteGlobalSidebarCommand';
       commandId: string;
     }
   | {
       requestId: string;
-      type: "syncGlobalSidebarCommandOrder";
+      type: 'syncGlobalSidebarCommandOrder';
       commandIds: string[];
     }
   | {
-      type: "runSidebarAgent";
+      type: 'runSidebarAgent';
       agentId: string;
       groupId?: string;
     }
   | {
-      type: "createProjectWorktree";
+      type: 'createProjectWorktree';
       agentId?: string;
       baseBranch?: string;
       existingWorktreeKey?: string;
       existingWorktreePath?: string;
-      mode?: "create" | "openExisting";
+      mode?: 'create' | 'openExisting';
       prompt?: string;
       projectId?: string;
       projectPath?: string;
       remoteMachineId?: string;
     }
   | {
-      type: "requestProjectWorktrees";
+      type: 'requestProjectWorktrees';
       projectId?: string;
       projectPath?: string;
       requestId: string;
@@ -2855,28 +2827,28 @@ export type SidebarToExtensionMessage =
       projectId: string;
       requestId: string;
       startFromOrigin?: boolean;
-      type: "createWorktreeSession";
+      type: 'createWorktreeSession';
     }
   | {
       /** Retry after a `dirty: true` answer: remove the checkout anyway. */
       force?: boolean;
       projectId: string;
       requestId: string;
-      type: "removeSessionWorktree";
+      type: 'removeSessionWorktree';
       worktreePath: string;
     }
   | {
-      type: "setProjectWorktreeCommand";
+      type: 'setProjectWorktreeCommand';
       command: string;
       projectId: string;
     }
   | {
-      type: "setProjectBeadsDisplayKey";
+      type: 'setProjectBeadsDisplayKey';
       displayKey: string;
       projectId: string;
     }
   | {
-      type: "setProjectBeadsDirectory";
+      type: 'setProjectBeadsDirectory';
       directory: string;
       projectId: string;
     }
@@ -2887,7 +2859,7 @@ export type SidebarToExtensionMessage =
        * project's own docs. Blank clears the override so the project inherits
        * the Docs directory Global Default.
        */
-      type: "setProjectDocsDirectory";
+      type: 'setProjectDocsDirectory';
       directory: string;
       projectId: string;
     }
@@ -2896,24 +2868,24 @@ export type SidebarToExtensionMessage =
        * CDXC:ProjectSettings 2026-06-17-17:13:
        * The Projects settings selector lists durable project rows, so Settings must be able to remove any selected project through the same native removeProject path used by project headers instead of limiting deletion to sidebar context menus.
        */
-      type: "removeProject";
+      type: 'removeProject';
       projectId: string;
     }
   | {
       acceptAllMode?: AgentAcceptAllMode;
-      type: "saveSidebarAgent";
+      type: 'saveSidebarAgent';
       agentId?: string;
       command: string;
       icon?: SidebarAgentIcon;
       name: string;
     }
   | {
-      type: "deleteSidebarAgent";
+      type: 'deleteSidebarAgent';
       agentId: string;
     }
   | {
       requestId: string;
-      type: "syncSidebarAgentOrder";
+      type: 'syncSidebarAgentOrder';
       agentIds: string[];
     }
   /**
@@ -2926,17 +2898,17 @@ export type SidebarToExtensionMessage =
    * (confirm-before-persist) so a failed native swap never sticks in settings.
    */
   | {
-      type: "listAppIcons";
+      type: 'listAppIcons';
     }
   | {
-      type: "setAppIcon";
+      type: 'setAppIcon';
       sourceId: string;
     }
   | {
-      type: "pickAppIconFile";
+      type: 'pickAppIconFile';
     }
   | {
-      type: "revealAppIconsFolder";
+      type: 'revealAppIconsFolder';
     }
   /**
    * CDXC:TerminalBackgroundImage 2026-08-01:
@@ -2945,15 +2917,10 @@ export type SidebarToExtensionMessage =
    * terminalBackgroundImageFilePicked host message and fills the path field.
    */
   | {
-      type: "pickTerminalBackgroundImageFile";
+      type: 'pickTerminalBackgroundImageFile';
     };
 
 export type SidebarHudSnapshot = Pick<
   SessionGridSnapshot,
-  | "focusedSessionId"
-  | "fullscreenRestoreVisibleCount"
-  | "sessions"
-  | "visibleCount"
-  | "visibleSessionIds"
-  | "viewMode"
+  'focusedSessionId' | 'fullscreenRestoreVisibleCount' | 'sessions' | 'visibleCount' | 'visibleSessionIds' | 'viewMode'
 >;

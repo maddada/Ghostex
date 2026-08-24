@@ -136,7 +136,7 @@
   border-top: 1px solid color-mix(in srgb, var(--app-border) 60%, transparent);
 }
 
-.session-tag-menu-item[data-selected="true"] {
+.session-tag-menu-item[data-selected='true'] {
   color: var(--app-foreground);
 }
 
@@ -149,7 +149,7 @@
   opacity: 0;
 }
 
-.session-tag-menu-item-check[data-visible="true"] {
+.session-tag-menu-item-check[data-visible='true'] {
   opacity: 1;
 }
 
@@ -266,7 +266,7 @@
   box-shadow: var(--ghostex-tooltip-shadow, 0 12px 30px rgba(0, 0, 0, 0.35));
   color: var(--ghostex-tooltip-foreground, rgba(255, 255, 255, 0.78));
   display: grid;
-  font: var(--ghostex-tooltip-font, 500 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif);
+  font: var(--ghostex-tooltip-font, 500 12px/1.35 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif);
   gap: 6px;
   left: var(--session-local-tooltip-left, 50vw);
   max-width: var(--session-local-tooltip-width, 100vw);
@@ -299,7 +299,7 @@
   border-radius: var(--ghostex-tooltip-radius, 5px);
   background: var(--ghostex-tooltip-background, rgba(24, 24, 24, 0.98));
   color: var(--ghostex-tooltip-foreground, rgba(255, 255, 255, 0.78));
-  font: var(--ghostex-tooltip-font, 500 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif);
+  font: var(--ghostex-tooltip-font, 500 12px/1.35 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif);
   white-space: pre-line;
   box-shadow: var(--ghostex-tooltip-shadow, 0 12px 30px rgba(0, 0, 0, 0.35));
 }

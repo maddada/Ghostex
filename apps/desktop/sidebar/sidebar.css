@@ -24,21 +24,17 @@ body {
  * actually owns focus. The focused opacity is 40% above the shared sidebar's
  * 0.62 baseline; the visible tier is 20% below that focused treatment.
  */
-.gpui-sidebar
-  .sidebar-reference-layout[data-reference-sidebar="true"]
-  .session[data-visible="true"]::after {
+.gpui-sidebar .sidebar-reference-layout[data-reference-sidebar='true'] .session[data-visible='true']::after {
   opacity: 0.7;
 }
 
-.gpui-sidebar
-  .sidebar-reference-layout[data-reference-sidebar="true"]
-  .session[data-focused="true"]::after {
+.gpui-sidebar .sidebar-reference-layout[data-reference-sidebar='true'] .session[data-focused='true']::after {
   opacity: 0.87;
 }
 
 .gpui-sidebar
-  .sidebar-reference-layout[data-reference-sidebar="true"]
-  .session:is(:hover, :focus-visible, [data-search-selected="true"])::after {
+  .sidebar-reference-layout[data-reference-sidebar='true']
+  .session:is(:hover, :focus-visible, [data-search-selected='true'])::after {
   opacity: 1;
 }
 
@@ -51,7 +47,11 @@ body {
   color: var(--app-button-foreground);
   cursor: pointer;
   display: flex;
-  font: 600 12.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font:
+    600 12.5px/1 -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Text',
+    sans-serif;
   justify-content: center;
   margin-top: 14px;
   min-height: 28px;

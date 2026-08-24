@@ -7,11 +7,13 @@ import { getMermaidColonBlocks, rangeOverlapsMermaidColonBlock } from './mermaid
 import { collectLatexMathRanges, resolveFencedDisplayMathInnerLineRange } from './math';
 import { isTableDelimiterLine, parseTableInfo } from './tables';
 
-type LineFlagLike = {
-  added?: boolean;
-  modified?: boolean;
-  trailingEofProxyOnly?: boolean;
-} | undefined;
+type LineFlagLike =
+  | {
+      added?: boolean;
+      modified?: boolean;
+      trailingEofProxyOnly?: boolean;
+    }
+  | undefined;
 
 export type LiveRenderedBlockKind = 'table' | 'mermaid' | 'math';
 export type LiveGitChangeKind = 'added' | 'modified';
@@ -35,10 +37,13 @@ export interface LiveCollapsedGitBlock {
 }
 
 const renderedBlockCache = new WeakMap<EditorState, { tree: any; blocks: LiveRenderedBlock[] }>();
-const collapsedBlockCache = new WeakMap<EditorState, {
-  lineFlags: readonly LineFlagLike[];
-  blocks: LiveCollapsedGitBlock[];
-}>();
+const collapsedBlockCache = new WeakMap<
+  EditorState,
+  {
+    lineFlags: readonly LineFlagLike[];
+    blocks: LiveCollapsedGitBlock[];
+  }
+>();
 
 function createRenderedBlock(
   kind: LiveRenderedBlockKind,
@@ -57,7 +62,7 @@ function createRenderedBlock(
       endLine,
       delimiterLine,
       lineNumberHiddenFrom: startLine,
-      lineNumberHiddenTo: endLine
+      lineNumberHiddenTo: endLine,
     };
   }
 
@@ -67,7 +72,7 @@ function createRenderedBlock(
     endLine,
     delimiterLine: null,
     lineNumberHiddenFrom: startLine + 1,
-    lineNumberHiddenTo: endLine - 1
+    lineNumberHiddenTo: endLine - 1,
   };
 }
 
@@ -155,13 +160,13 @@ function collectCodeLikeRanges(
       }
       ranges.push({ from: node.from, to: node.to });
       return false;
-    }
+    },
   });
 
   for (const block of mermaidColonBlocks) {
     ranges.push({
       from: block.from,
-      to: block.to
+      to: block.to,
     });
   }
 
@@ -169,21 +174,15 @@ function collectCodeLikeRanges(
   return ranges;
 }
 
-function resolveMathHiddenLineRange(
-  startLine: number,
-  endLine: number
-): { from: number; to: number } | null {
-  const innerLineRange = resolveFencedDisplayMathInnerLineRange(
-    startLine,
-    endLine
-  );
+function resolveMathHiddenLineRange(startLine: number, endLine: number): { from: number; to: number } | null {
+  const innerLineRange = resolveFencedDisplayMathInnerLineRange(startLine, endLine);
   if (!innerLineRange) {
     return null;
   }
 
   return {
     from: innerLineRange.innerStartLine,
-    to: innerLineRange.innerEndLine
+    to: innerLineRange.innerEndLine,
   };
 }
 
@@ -242,7 +241,7 @@ export function getLiveRenderedBlocks(state: EditorState): LiveRenderedBlock[] {
       if (block) {
         blocks.push(block);
       }
-    }
+    },
   });
 
   for (const block of mermaidColonBlocks) {
@@ -253,7 +252,7 @@ export function getLiveRenderedBlocks(state: EditorState): LiveRenderedBlock[] {
   }
 
   const mathRanges = collectLatexMathRanges(state.doc.toString(), {
-    excludedRanges: codeLikeRanges
+    excludedRanges: codeLikeRanges,
   });
   for (const mathRange of mathRanges) {
     if (mathRange.mode !== 'display' || mathRange.fencedDisplay !== true) {
@@ -282,10 +281,7 @@ export function getLiveRenderedBlocks(state: EditorState): LiveRenderedBlock[] {
   }
 
   blocks.push(...detectFallbackTableBlocks(state, tree, parsedTableRanges, mermaidColonBlocks));
-  blocks.sort((left, right) => (
-    left.startLine - right.startLine ||
-    left.endLine - right.endLine
-  ));
+  blocks.sort((left, right) => left.startLine - right.startLine || left.endLine - right.endLine);
   renderedBlockCache.set(state, { tree, blocks });
   return blocks;
 }
@@ -303,7 +299,7 @@ function createCollapsedBlock(
     aggregateChangeKind,
     containsLine(lineNo: number): boolean {
       return lineNo >= block.startLine && lineNo <= block.endLine;
-    }
+    },
   };
 }
 
@@ -381,10 +377,7 @@ function findCollapsedBlockAtLine(
   return null;
 }
 
-function findRenderedBlockAtLine(
-  blocks: readonly LiveRenderedBlock[],
-  lineNo: number
-): LiveRenderedBlock | null {
+function findRenderedBlockAtLine(blocks: readonly LiveRenderedBlock[], lineNo: number): LiveRenderedBlock | null {
   let low = 0;
   let high = blocks.length - 1;
 
@@ -405,10 +398,7 @@ function findRenderedBlockAtLine(
   return null;
 }
 
-export function getLiveRenderedBlockAtLine(
-  state: EditorState,
-  lineNo: number
-): LiveRenderedBlock | null {
+export function getLiveRenderedBlockAtLine(state: EditorState, lineNo: number): LiveRenderedBlock | null {
   const blocks = getLiveRenderedBlocks(state);
   if (!blocks.length) {
     return null;

@@ -13,6 +13,8 @@ use std::time::SystemTime;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
+use crate::terminal_surface_host::NativeTerminalSurfaceHost;
+use crate::terminal_surface_lifecycle::NativeTerminalSurfaceLifecycleState;
 use gpui::ClipboardItem;
 use gpui::Entity;
 use gpui::Pixels;
@@ -20,8 +22,6 @@ use gpui::Window;
 use gpui_component::WindowExt;
 use gpui_component::native_menu::NativeMenu;
 use gpui_component::notification::Notification;
-use crate::terminal_surface_host::NativeTerminalSurfaceHost;
-use crate::terminal_surface_lifecycle::NativeTerminalSurfaceLifecycleState;
 
 use crate::app::actions::*;
 use crate::app::consts::*;
@@ -205,7 +205,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn single_live_agents_shell_session_for_app_shot(&self) -> Option<TerminalSessionId> {
+    pub(crate) fn single_live_agents_shell_session_for_app_shot(
+        &self,
+    ) -> Option<TerminalSessionId> {
         let mut sessions = self.live_agents_shell_sessions_for_app_shot().into_iter();
         let session_id = sessions.next()?;
         sessions.next().is_none().then_some(session_id)
@@ -228,7 +230,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn focused_live_agents_shell_session_for_app_shot(&self) -> Option<TerminalSessionId> {
+    pub(crate) fn focused_live_agents_shell_session_for_app_shot(
+        &self,
+    ) -> Option<TerminalSessionId> {
         #[cfg(target_os = "macos")]
         {
             let slot_id = focused_agents_terminal_surface_mount_slot(
@@ -852,7 +856,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn swap_agents_workspace_for_active_project(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+    pub(crate) fn swap_agents_workspace_for_active_project(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         let new_project_id =
             gpui_active_project_id_from_snapshot(self.latest_sidebar_project_snapshot.as_ref())
                 .map(str::to_string);
@@ -1705,13 +1712,11 @@ impl GhostexGpuiApp {
         if !self.browser_tabs.focus_pane(pane_id) {
             return;
         }
-        let created_tab_id = self
-            .browser_tabs
-            .add_loaded_popup_tab(
-                url.clone(),
-                self.browser_profiles.active_profile_id(),
-                cef::BrowserPopupPlacement::Selected,
-            );
+        let created_tab_id = self.browser_tabs.add_loaded_popup_tab(
+            url.clone(),
+            self.browser_profiles.active_profile_id(),
+            cef::BrowserPopupPlacement::Selected,
+        );
         let Some(created_tab_id) = created_tab_id else {
             return;
         };
@@ -1726,7 +1731,11 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn remove_browser_surface(&mut self, tab_id: BrowserTabId, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn remove_browser_surface(
+        &mut self,
+        tab_id: BrowserTabId,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if let Some(surface) = self.browser_surfaces.remove(&tab_id) {
             surface.update(cx, |surface, _| surface.set_visible(false));
         }
@@ -1827,7 +1836,11 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn add_browser_tab_from_hotkey(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn add_browser_tab_from_hotkey(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUIFocusedNewTabs 2026-06-22-12:51:
         Cmd+N is an explicit Browser-opening command in the GPUI shell. Switch to Browser before reusing the normal new-tab helper so the new address-only tab is inserted in the focused Browser pane, Browser lifecycle is marked awake, shell focus moves to Browser, address/CEF visibility sync runs, the active tab scrolls into view, and shell state persists.

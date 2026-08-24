@@ -57,7 +57,7 @@ export function collectStrikethroughRanges(tree: any): StrikeRange[] {
       if (node.name === 'Strikethrough') {
         ranges.push({ from: node.from, to: node.to });
       }
-    }
+    },
   });
   return ranges;
 }
@@ -134,7 +134,7 @@ export function collectSingleTildeStrikePairs(state: EditorState, strikeRanges: 
           closeFrom: line.from + close,
           closeTo: line.from + close + 1,
           strikeFrom,
-          strikeTo
+          strikeTo,
         });
       }
 
@@ -157,7 +157,7 @@ function computeSourceStrikeMarkers(state: EditorState): any {
         return;
       }
       ranges.add(node.from, node.to, sourceStrikeMarkerDeco);
-    }
+    },
   });
 
   const pairs = collectSingleTildeStrikePairs(state, strikeRanges);
@@ -187,5 +187,5 @@ export const sourceStrikeMarkerField = StateField.define<any>({
       return markers;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });

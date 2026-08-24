@@ -1,7 +1,7 @@
-import type { SidebarSessionGroup } from "../shared/session-grid-contract";
-import type { WebviewApi } from "./webview-api";
+import type { SidebarSessionGroup } from '../shared/session-grid-contract';
+import type { WebviewApi } from './webview-api';
 
-export const SIDEBAR_REFRESH_DEBUG_EVENT_PREFIX = "sidebar.refresh.";
+export const SIDEBAR_REFRESH_DEBUG_EVENT_PREFIX = 'sidebar.refresh.';
 let sidebarRefreshDebugInstanceSequence = 0;
 
 type SidebarRefreshSnapshotMessage = {
@@ -28,7 +28,7 @@ export function postSidebarRefreshDebugLog(
   enabled: boolean | undefined,
   vscode: WebviewApi,
   event: string,
-  details: Record<string, unknown>,
+  details: Record<string, unknown>
 ): void {
   if (!enabled) {
     return;
@@ -37,14 +37,14 @@ export function postSidebarRefreshDebugLog(
   vscode.postMessage({
     details,
     event: `${SIDEBAR_REFRESH_DEBUG_EVENT_PREFIX}${event}`,
-    scenarioId: "native.sidebar.refresh",
-    type: "sidebarDebugLog",
+    scenarioId: 'native.sidebar.refresh',
+    type: 'sidebarDebugLog',
   });
 }
 
 export function summarizeSidebarRefreshMessage(
   message: SidebarRefreshSnapshotMessage,
-  previousRevision: number,
+  previousRevision: number
 ): Record<string, unknown> {
   const sessionCount = countSidebarRefreshSessions(message.groups);
   /**

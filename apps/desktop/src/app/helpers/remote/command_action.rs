@@ -47,7 +47,10 @@ pub(crate) fn gpui_command_action_execution_text_for_current_backend(
     gpui_command_action_execution_text(command, run_id)
 }
 
-pub(crate) fn gpui_command_action_startup_text(execution_text: &str, status_file_path: &Path) -> String {
+pub(crate) fn gpui_command_action_startup_text(
+    execution_text: &str,
+    status_file_path: &Path,
+) -> String {
     #[cfg(target_os = "windows")]
     if matches!(
         windows_terminal_backend::resolve_current(),
@@ -142,7 +145,11 @@ pub(crate) fn gpui_shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-pub(crate) fn gpui_command_action_status_stamp_text(status: &str, run_id: &str, exit_code: &str) -> String {
+pub(crate) fn gpui_command_action_status_stamp_text(
+    status: &str,
+    run_id: &str,
+    exit_code: &str,
+) -> String {
     /*
     CDXC:GPUICommandPaneActions 2026-06-26-06:18:
     Command Action status stamps must keep macOS parity by writing a replacement file beside the session-state file with shell process uniqueness before atomically moving it into place. Do not use a shared fixed temp file because concurrent command/status writers can clobber the idle stamp that drives completion sound.
@@ -340,7 +347,9 @@ pub(crate) fn gpui_command_action_title_key(title: &str) -> String {
         .to_lowercase()
 }
 
-pub(crate) fn gpui_command_action_status_from_file(path: &Path) -> Option<GpuiCommandActionStatusFile> {
+pub(crate) fn gpui_command_action_status_from_file(
+    path: &Path,
+) -> Option<GpuiCommandActionStatusFile> {
     let metadata = fs::metadata(path).ok()?;
     if metadata.len() > 8 * 1024 {
         return None;
@@ -414,4 +423,3 @@ pub(crate) fn gpui_remote_attach_session_reference_from_project_id(
         session_id: session_id.to_string(),
     })
 }
-

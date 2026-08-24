@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 /*
 CDXC:GPUIProjectEditorPlaceholders 2026-06-28-17:09:
 Source, Kanban, Automate, and Docs neutral placeholders are unavailable/loading/error surfaces only. Real Source/Kanban/Automate/Docs replacement is owned by the direct runtime URL plus normal-layout CefSurface gate, so placeholder rendering must not create CEF views, start code-server, run file operations, synthesize fallback URLs, persist private details, or add WKWebView/WebKit paths.
@@ -18,14 +17,12 @@ pub(crate) struct ProjectEditorPlaceholderSignature {
     pub(crate) actions: Vec<ProjectEditorPlaceholderAction>,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProjectEditorPlaceholderAction {
     HideCodeViewTab,
     InstallSourceComponent,
     RetrySourceLoad,
 }
-
 
 impl ProjectEditorPlaceholderSignature {
     pub(crate) fn for_mode(mode: TitlebarMode) -> Option<Self> {
@@ -71,7 +68,6 @@ impl ProjectEditorPlaceholderSignature {
     }
 }
 
-
 /*
 CDXC:GPUIProjectEditorSleepingPlaceholders 2026-06-28-17:09:
 Selected sleeping/restored project-editor modes remain real layout participants with neutral text-only shell surfaces. Surface activation expresses wake intent for shell state; Browser hides existing CEF while sleeping, and Source/Kanban/Automate/Docs must not mount or replace runtime surfaces until their awake direct CEF gates permit it.
@@ -82,7 +78,6 @@ pub(crate) struct ProjectEditorSleepingPlaceholderSignature {
     pub(crate) title: &'static str,
     pub(crate) message: &'static str,
 }
-
 
 impl ProjectEditorSleepingPlaceholderSignature {
     pub(crate) fn for_mode(mode: TitlebarMode) -> Option<Self> {
@@ -121,7 +116,6 @@ impl ProjectEditorSleepingPlaceholderSignature {
         })
     }
 }
-
 
 /*
 Agents Hub Source opens are process-local navigation intent. Keep the validated

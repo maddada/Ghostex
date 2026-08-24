@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) activity: AgentTerminalActivity,
@@ -18,7 +17,6 @@ pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) title: String,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarWorkspaceTerminalFocusMessage {
     pub(crate) force_remount: bool,
@@ -28,14 +26,12 @@ pub(crate) struct GpuiSidebarWorkspaceTerminalFocusMessage {
     pub(crate) session_id: String,
 }
 
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum GpuiPreferredAgentInterface {
     Chat,
     #[default]
     Terminal,
 }
-
 
 impl GpuiPreferredAgentInterface {
     pub(crate) fn from_str(value: &str) -> Option<Self> {
@@ -47,7 +43,6 @@ impl GpuiPreferredAgentInterface {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarCreateProjectAgentMessage {
     pub(crate) agent_id: String,
@@ -55,12 +50,10 @@ pub(crate) struct GpuiSidebarCreateProjectAgentMessage {
     pub(crate) project_id: String,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarCreateProjectTerminalMessage {
     pub(crate) project_id: String,
 }
-
 
 /// True for sidebar bridge events that act on per-project runtime state, so
 /// they must not run ahead of a project switch that is still queued behind the
@@ -87,14 +80,12 @@ pub(crate) fn gpui_sidebar_bridge_event_must_follow_pending_project_switch(
     )
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiBrowserRendererOpenReuse {
     Exact,
     None,
     Similar,
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarOpenBrowserUrlMessage {
@@ -104,13 +95,11 @@ pub(crate) struct GpuiSidebarOpenBrowserUrlMessage {
     pub(crate) project_id: Option<String>,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarBrowserTabFocusMessage {
     pub(crate) project_id: String,
     pub(crate) tab_id: BrowserTabId,
 }
-
 
 /*
 CDXC:GPUISidebarRename 2026-07-28:
@@ -125,7 +114,6 @@ pub(crate) enum GpuiWorkspaceTerminalRenameCommandKind {
     Title,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarWorkspaceTerminalRenameCommandMessage {
     pub(crate) command: GpuiWorkspaceTerminalRenameCommandKind,
@@ -133,7 +121,6 @@ pub(crate) struct GpuiSidebarWorkspaceTerminalRenameCommandMessage {
     pub(crate) session_id: String,
     pub(crate) title: String,
 }
-
 
 /*
 CDXC:GPUIWorkspaceRenameCommand 2026-07-29:
@@ -148,13 +135,11 @@ pub(crate) enum GpuiWorkspaceRenameCommandDelivery {
     TargetInvalid,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarWorkspaceTerminalEnterMessage {
     pub(crate) project_id: String,
     pub(crate) session_id: String,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiWorkspaceTerminalRenameCommandTarget {
@@ -163,7 +148,6 @@ pub(crate) struct GpuiWorkspaceTerminalRenameCommandTarget {
     pub(crate) slot_id: AgentsTerminalBodyMountSlotId,
     pub(crate) needs_tab_selection: bool,
 }
-
 
 pub(crate) fn gpui_workspace_terminal_rename_command_target_from_model(
     workspace: &WorkspaceModel,

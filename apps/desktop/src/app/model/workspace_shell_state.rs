@@ -5,13 +5,11 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiWorkspaceShellStateRestoreVersion {
     Current,
     LegacyUnversioned,
 }
-
 
 pub(crate) fn gpui_workspace_shell_state_restore_version(
     object: &serde_json::Map<String, serde_json::Value>,
@@ -28,7 +26,6 @@ pub(crate) fn gpui_workspace_shell_state_restore_version(
     gpui_workspace_shell_state_is_legacy_unversioned_object(object)
         .then_some(GpuiWorkspaceShellStateRestoreVersion::LegacyUnversioned)
 }
-
 
 pub(crate) fn gpui_workspace_shell_state_has_current_required_fields(
     object: &serde_json::Map<String, serde_json::Value>,
@@ -59,7 +56,6 @@ pub(crate) fn gpui_workspace_shell_state_has_current_required_fields(
             .is_some_and(|value| value.is_object())
 }
 
-
 pub(crate) fn gpui_workspace_shell_state_is_legacy_unversioned_object(
     object: &serde_json::Map<String, serde_json::Value>,
 ) -> bool {
@@ -82,7 +78,6 @@ pub(crate) fn gpui_workspace_shell_state_is_legacy_unversioned_object(
             .get("projectEditorShell")
             .is_some_and(|value| value.is_object())
 }
-
 
 pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_json::Value {
     let active_mode = app.available_titlebar_mode_or_agents(app.active_mode);
@@ -164,7 +159,6 @@ pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_jso
     })
 }
 
-
 pub(crate) fn persist_gpui_workspace_shell_state(app: &GhostexGpuiApp) {
     /*
     CDXC:GPUIPrivacyAudit 2026-06-23-13:18:
@@ -179,7 +173,6 @@ pub(crate) fn persist_gpui_workspace_shell_state(app: &GhostexGpuiApp) {
     }
 }
 
-
 pub(crate) fn sole_local_workspace_mapping_project_id(
     mappings: &HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
 ) -> Option<String> {
@@ -189,7 +182,6 @@ pub(crate) fn sole_local_workspace_mapping_project_id(
         .all(|candidate| candidate == project_id)
         .then(|| project_id.to_string())
 }
-
 
 pub(crate) fn agents_workspace_project_state_to_shell_state_json(
     workspace: &WorkspaceModel,
@@ -225,7 +217,6 @@ pub(crate) fn agents_workspace_project_state_to_shell_state_json(
         ),
     })
 }
-
 
 pub(crate) fn agents_workspace_project_state_from_shell_state(
     value: &serde_json::Value,
@@ -279,7 +270,6 @@ pub(crate) fn agents_workspace_project_state_from_shell_state(
     ))
 }
 
-
 pub(crate) fn agents_chat_mode_sessions_to_shell_state_json(
     sessions: &HashSet<TerminalSessionId>,
     workspace: &WorkspaceModel,
@@ -292,7 +282,6 @@ pub(crate) fn agents_chat_mode_sessions_to_shell_state_json(
     session_ids.sort_unstable();
     serde_json::json!(session_ids)
 }
-
 
 pub(crate) fn agents_chat_mode_sessions_from_shell_state(
     value: Option<&serde_json::Value>,
@@ -307,7 +296,6 @@ pub(crate) fn agents_chat_mode_sessions_from_shell_state(
         .filter(|session_id| workspace.has_session(*session_id))
         .collect()
 }
-
 
 pub(crate) fn agents_delayed_sends_to_shell_state_json(
     mappings: &HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
@@ -362,7 +350,6 @@ pub(crate) fn agents_delayed_sends_to_shell_state_json(
     entries.sort_by_key(|(shell_session_id, _)| *shell_session_id);
     serde_json::Value::Array(entries.into_iter().map(|(_, entry)| entry).collect())
 }
-
 
 pub(crate) fn agents_delayed_send_restore_intents_from_shell_state(
     value: &serde_json::Value,
@@ -437,7 +424,6 @@ pub(crate) fn agents_delayed_send_restore_intents_from_shell_state(
     Some(intents)
 }
 
-
 pub(crate) fn workspace_model_to_shell_state_json(model: &WorkspaceModel) -> serde_json::Value {
     /*
     CDXC:GPUIAgentsTabStatus 2026-06-22-16:27:
@@ -470,7 +456,6 @@ pub(crate) fn workspace_model_to_shell_state_json(model: &WorkspaceModel) -> ser
     })
 }
 
-
 pub(crate) fn workspace_node_to_shell_state_json(node: &WorkspaceNode) -> serde_json::Value {
     match node {
         WorkspaceNode::Leaf(leaf) => serde_json::json!({
@@ -496,8 +481,9 @@ pub(crate) fn workspace_node_to_shell_state_json(node: &WorkspaceNode) -> serde_
     }
 }
 
-
-pub(crate) fn workspace_model_from_shell_state(value: &serde_json::Value) -> Option<WorkspaceModel> {
+pub(crate) fn workspace_model_from_shell_state(
+    value: &serde_json::Value,
+) -> Option<WorkspaceModel> {
     let object = value.as_object()?;
     let sessions = json_array_field(object, "terminalSessions")?
         .iter()
@@ -633,8 +619,9 @@ pub(crate) fn workspace_model_from_shell_state(value: &serde_json::Value) -> Opt
     Some(model)
 }
 
-
-pub(crate) fn terminal_session_from_shell_state(value: &serde_json::Value) -> Option<TerminalSession> {
+pub(crate) fn terminal_session_from_shell_state(
+    value: &serde_json::Value,
+) -> Option<TerminalSession> {
     let object = value.as_object()?;
     let id = TerminalSessionId(json_u64_field(object, "id")?);
     if id.0 == 0 {
@@ -670,7 +657,6 @@ pub(crate) fn terminal_session_from_shell_state(value: &serde_json::Value) -> Op
     }
     Some(session)
 }
-
 
 pub(crate) fn workspace_node_from_shell_state(
     value: &serde_json::Value,
@@ -756,7 +742,6 @@ pub(crate) fn workspace_node_from_shell_state(
     }
 }
 
-
 pub(crate) fn collect_workspace_node_session_ids(
     node: &WorkspaceNode,
     session_ids: &mut Vec<TerminalSessionId>,
@@ -772,8 +757,10 @@ pub(crate) fn collect_workspace_node_session_ids(
     }
 }
 
-
-pub(crate) fn collect_workspace_split_ids(node: &WorkspaceNode, split_ids: &mut Vec<WorkspaceSplitId>) {
+pub(crate) fn collect_workspace_split_ids(
+    node: &WorkspaceNode,
+    split_ids: &mut Vec<WorkspaceSplitId>,
+) {
     match node {
         WorkspaceNode::Leaf(_) => {}
         WorkspaceNode::Split(split) => {

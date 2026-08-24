@@ -4,7 +4,7 @@
  * metadata, and the Ghostty recommended/default buttons. Plain render-time
  * factory (no React hooks).
  */
-import { type Dispatch, type RefObject, type SetStateAction } from "react";
+import { type Dispatch, type RefObject, type SetStateAction } from 'react';
 import {
   DEFAULT_ghostex_SETTINGS,
   applySidebarSettingsPreset,
@@ -13,16 +13,16 @@ import {
   type ghostexSettings,
   type ghostexSettingsPatch,
   type ghostexSettingsUpdateSource,
-} from "../../shared/ghostex-settings";
-import { type WebviewApi } from "../webview-api";
-import { isAdvancedMainSetting } from "./search";
-import { SettingModificationProps } from "./types";
+} from '../../shared/ghostex-settings';
+import { type WebviewApi } from '../webview-api';
+import { isAdvancedMainSetting } from './search';
+import { SettingModificationProps } from './types';
 
 export type GhosttySettingsAction =
-  | "applyRecommendedGhosttySettings"
-  | "openGhosttyConfigFile"
-  | "openGhosttySettingsDocs"
-  | "resetGhosttySettingsToDefault";
+  | 'applyRecommendedGhosttySettings'
+  | 'openGhosttyConfigFile'
+  | 'openGhosttySettingsDocs'
+  | 'resetGhosttySettingsToDefault';
 
 export function createSettingsActions({
   applySettings,
@@ -34,14 +34,8 @@ export function createSettingsActions({
   setAppIconError,
   vscode,
 }: {
-  applySettings: (
-    nextSettings: ghostexSettings,
-    source?: ghostexSettingsUpdateSource,
-  ) => void;
-  applySettingsPatch: (
-    patch: ghostexSettingsPatch,
-    source?: ghostexSettingsUpdateSource,
-  ) => void;
+  applySettings: (nextSettings: ghostexSettings, source?: ghostexSettingsUpdateSource) => void;
+  applySettingsPatch: (patch: ghostexSettingsPatch, source?: ghostexSettingsUpdateSource) => void;
   draft: ghostexSettings;
   onGhosttySettingsAction: ((action: GhosttySettingsAction) => void) | undefined;
   pendingAppIconSourceIdRef: RefObject<string | undefined>;
@@ -62,9 +56,9 @@ export function createSettingsActions({
      * defaults so the current app session does not keep showing a stale custom
      * icon until restart.
      */
-    pendingAppIconSourceIdRef.current = "";
+    pendingAppIconSourceIdRef.current = '';
     setAppIconError(undefined);
-    vscode?.postMessage({ type: "setAppIcon", sourceId: "" });
+    vscode?.postMessage({ type: 'setAppIcon', sourceId: '' });
     applySettings({
       ...DEFAULT_ghostex_SETTINGS,
       remoteMachines: (pendingSettingsRef.current ?? draft).remoteMachines,
@@ -74,7 +68,7 @@ export function createSettingsActions({
     applySettingsPatch({ [key]: DEFAULT_ghostex_SETTINGS[key] } as Pick<ghostexSettings, Key>);
   };
   const getSettingModificationProps = <Key extends keyof ghostexSettings>(
-    key: Key,
+    key: Key
   ): Required<SettingModificationProps> => ({
     advanced: isAdvancedMainSetting(String(key)),
     isModified: !Object.is(draft[key], DEFAULT_ghostex_SETTINGS[key]),
@@ -89,8 +83,8 @@ export function createSettingsActions({
      */
     applySettings({
       ...draft,
-      terminalCursorStyle: "bar",
-      terminalFontFamily: "JetBrains Mono",
+      terminalCursorStyle: 'bar',
+      terminalFontFamily: 'JetBrains Mono',
       terminalFontSize: 13,
       terminalFontWeight: 400,
       terminalLetterSpacing: 0,
@@ -98,7 +92,7 @@ export function createSettingsActions({
       terminalMouseScrollMultiplierDiscrete: 1,
       terminalMouseScrollMultiplierPrecision: 1,
     });
-    onGhosttySettingsAction?.("applyRecommendedGhosttySettings");
+    onGhosttySettingsAction?.('applyRecommendedGhosttySettings');
   };
 
   const resetGhosttySettingsToDefault = () => {
@@ -116,13 +110,11 @@ export function createSettingsActions({
       terminalFontWeight: DEFAULT_ghostex_SETTINGS.terminalFontWeight,
       terminalLetterSpacing: DEFAULT_ghostex_SETTINGS.terminalLetterSpacing,
       terminalLineHeight: DEFAULT_ghostex_SETTINGS.terminalLineHeight,
-      terminalMouseScrollMultiplierDiscrete:
-        DEFAULT_ghostex_SETTINGS.terminalMouseScrollMultiplierDiscrete,
-      terminalMouseScrollMultiplierPrecision:
-        DEFAULT_ghostex_SETTINGS.terminalMouseScrollMultiplierPrecision,
+      terminalMouseScrollMultiplierDiscrete: DEFAULT_ghostex_SETTINGS.terminalMouseScrollMultiplierDiscrete,
+      terminalMouseScrollMultiplierPrecision: DEFAULT_ghostex_SETTINGS.terminalMouseScrollMultiplierPrecision,
       terminalScrollToBottomWhenTyping: DEFAULT_ghostex_SETTINGS.terminalScrollToBottomWhenTyping,
     });
-    onGhosttySettingsAction?.("resetGhosttySettingsToDefault");
+    onGhosttySettingsAction?.('resetGhosttySettingsToDefault');
   };
 
   return {

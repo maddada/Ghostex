@@ -14,9 +14,9 @@ import type {
   SearchAgentPromptsResult,
   ToggleAgentPromptFavoriteParams,
   ToggleAgentPromptFavoriteResult,
-} from "@/packages/shared/agent-prompt-search";
-import type { FindPromptsTransport } from "@/packages/core-ui/find/find-prompts-transport";
-import { rpcForMachine } from "../connections/connection-registry";
+} from '@/packages/shared/agent-prompt-search';
+import type { FindPromptsTransport } from '@/packages/core-ui/find/find-prompts-transport';
+import { rpcForMachine } from '../connections/connection-registry';
 
 export interface WebFindPromptsHostActions {
   /** Brings an already-open session tab to the front. */
@@ -25,10 +25,7 @@ export interface WebFindPromptsHostActions {
   close(): void;
 }
 
-export function createFindPromptsTransport(
-  machineId: string,
-  host: WebFindPromptsHostActions,
-): FindPromptsTransport {
+export function createFindPromptsTransport(machineId: string, host: WebFindPromptsHostActions): FindPromptsTransport {
   return {
     close() {
       host.close();
@@ -46,30 +43,18 @@ export function createFindPromptsTransport(
      * resolved command instead of a button that would quietly do nothing.
      */
     readText(params: ReadAgentPromptTextParams) {
-      return rpcForMachine<ReadAgentPromptTextResult>(
-        machineId,
-        "/api/readAgentPromptText",
-        { ...params },
-      );
+      return rpcForMachine<ReadAgentPromptTextResult>(machineId, '/api/readAgentPromptText', { ...params });
     },
     resolveLaunch(params: ResolveAgentPromptLaunchParams) {
-      return rpcForMachine<ResolveAgentPromptLaunchResult>(
-        machineId,
-        "/api/resolveAgentPromptLaunch",
-        { ...params },
-      );
+      return rpcForMachine<ResolveAgentPromptLaunchResult>(machineId, '/api/resolveAgentPromptLaunch', { ...params });
     },
     search(params: SearchAgentPromptsParams) {
-      return rpcForMachine<SearchAgentPromptsResult>(machineId, "/api/searchAgentPrompts", {
+      return rpcForMachine<SearchAgentPromptsResult>(machineId, '/api/searchAgentPrompts', {
         ...params,
       });
     },
     toggleFavorite(params: ToggleAgentPromptFavoriteParams) {
-      return rpcForMachine<ToggleAgentPromptFavoriteResult>(
-        machineId,
-        "/api/toggleAgentPromptFavorite",
-        { ...params },
-      );
+      return rpcForMachine<ToggleAgentPromptFavoriteResult>(machineId, '/api/toggleAgentPromptFavorite', { ...params });
     },
   };
 }

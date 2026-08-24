@@ -3,23 +3,21 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import type { GpuiSessionAttentionTarget } from "../types-and-protocol";
-import { normalizeNonEmptyString } from "./records";
-import { createGpuiRemotePresentationSessionId } from "./remote-presentation";
-import {
-  createGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type { GxserverPresentationSession } from "@/packages/shared/gxserver-protocol";
+import type { GpuiSessionAttentionTarget } from '../types-and-protocol';
+import { normalizeNonEmptyString } from './records';
+import { createGpuiRemotePresentationSessionId } from './remote-presentation';
+import { createGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { GxserverPresentationSession } from '@/packages/shared/gxserver-protocol';
 
 export function gpuiSessionAttentionTargetKey(target: GpuiSessionAttentionTarget): string {
-  return target.kind === "remote"
+  return target.kind === 'remote'
     ? createGpuiRemotePresentationSessionId(target.machineId, target.projectId, target.sessionId)
     : createGxserverPresentationProjectSessionId(target.projectId, target.sessionId);
 }
 
 export function getGpuiSessionAttentionEventKey(
   sessionKey: string,
-  attentionEventId: string | undefined,
+  attentionEventId: string | undefined
 ): string | undefined {
   const normalizedSessionKey = normalizeNonEmptyString(sessionKey)?.trim();
   const normalizedAttentionEventId = normalizeNonEmptyString(attentionEventId)?.trim();
@@ -30,13 +28,13 @@ export function getGpuiSessionAttentionEventKey(
 }
 
 export function getGpuiPresentationAttentionEventId(
-  session: Pick<GxserverPresentationSession, "activity" | "attention">,
+  session: Pick<GxserverPresentationSession, 'activity' | 'attention'>
 ): string | undefined {
   /*
   Presentation attention rows carry eventId for sound dedupe; enteredAt stays
   a compatibility key for older daemon payloads, matching macOS.
   */
-  if (session.activity !== "attention") {
+  if (session.activity !== 'attention') {
     return undefined;
   }
   const eventId = session.attention?.eventId?.trim();

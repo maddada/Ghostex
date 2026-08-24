@@ -7,13 +7,13 @@
  * portless "suppressed until restart" flag, the single-modal slot, the Windows
  * first-launch followup) are deliberately NOT persisted.
  */
-import type { FirstRunOnboardingStateFile, SimEnvState } from "../state/types";
-import { createBundledSkills, createDefaultEnv, createDefaultStateFile } from "./env-defaults";
-import { SIM_AGENT_IDS, BUNDLED_SKILL_IDS } from "../state/types";
+import type { FirstRunOnboardingStateFile, SimEnvState } from '../state/types';
+import { createBundledSkills, createDefaultEnv, createDefaultStateFile } from './env-defaults';
+import { SIM_AGENT_IDS, BUNDLED_SKILL_IDS } from '../state/types';
 
-const ENV_KEY = "ghostex.onboardingSandbox.env";
-const STATE_FILE_KEY = "ghostex.onboardingSandbox.stateFile";
-const LAUNCH_COUNT_KEY = "ghostex.onboardingSandbox.launchCount";
+const ENV_KEY = 'ghostex.onboardingSandbox.env';
+const STATE_FILE_KEY = 'ghostex.onboardingSandbox.stateFile';
+const LAUNCH_COUNT_KEY = 'ghostex.onboardingSandbox.launchCount';
 
 function readJson(key: string): unknown {
   try {
@@ -33,9 +33,7 @@ function writeJson(key: string, value: unknown): void {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 /**
@@ -59,10 +57,7 @@ export function loadEnv(): SimEnvState {
     }
     agents[agentId] = {
       cliInstalled: entry.cliInstalled === true,
-      hookState:
-        entry.hookState === "installed" || entry.hookState === "outdated"
-          ? entry.hookState
-          : "notInstalled",
+      hookState: entry.hookState === 'installed' || entry.hookState === 'outdated' ? entry.hookState : 'notInstalled',
     };
   }
   const bundledSkills = createBundledSkills(false);
@@ -92,12 +87,11 @@ export function loadStateFile(): FirstRunOnboardingStateFile {
   if (!stored) {
     return defaults;
   }
-  const revision = (key: string): string | null =>
-    typeof stored[key] === "string" ? (stored[key] as string) : null;
+  const revision = (key: string): string | null => (typeof stored[key] === 'string' ? (stored[key] as string) : null);
   return {
     tipsAndTricksSeen: stored.tipsAndTricksSeen === true,
-    highlightedFeaturesSeenRevision: revision("highlightedFeaturesSeenRevision"),
-    firstLaunchSetupSeenRevision: revision("firstLaunchSetupSeenRevision"),
+    highlightedFeaturesSeenRevision: revision('highlightedFeaturesSeenRevision'),
+    firstLaunchSetupSeenRevision: revision('firstLaunchSetupSeenRevision'),
     osIntegrationOnboardingSeen: stored.osIntegrationOnboardingSeen === true,
     firstLaunchSetupComplete: stored.firstLaunchSetupComplete === true,
     windowsTerminalSetupComplete: stored.windowsTerminalSetupComplete === true,
@@ -110,9 +104,7 @@ export function saveStateFile(stateFile: FirstRunOnboardingStateFile): void {
 
 export function loadLaunchCount(): number {
   const stored = readJson(LAUNCH_COUNT_KEY);
-  return typeof stored === "number" && Number.isFinite(stored) && stored >= 0
-    ? Math.floor(stored)
-    : 0;
+  return typeof stored === 'number' && Number.isFinite(stored) && stored >= 0 ? Math.floor(stored) : 0;
 }
 
 export function saveLaunchCount(launchCount: number): void {

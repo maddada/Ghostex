@@ -6,8 +6,8 @@ and multiple-commits release flow) and the commit review modal's changed-file
 diff/IDE-open methods. See `index.ts` for how the runtime's Git methods are
 recombined.
 */
-import { GPUI_GIT_MULTIPLE_COMMITS_PROMPT } from "../constants";
-import type { GpuiSidebarRuntime } from "../core";
+import { GPUI_GIT_MULTIPLE_COMMITS_PROMPT } from '../constants';
+import type { GpuiSidebarRuntime } from '../core';
 import {
   buildGpuiMergeConflictPrompt,
   formatGpuiGitAgentWorkflowTitle,
@@ -15,57 +15,54 @@ import {
   normalizeGpuiRelativeGitFilePath,
   resolveGpuiSidebarGitConfirmLabel,
   resolveGpuiSidebarGitPromptDescription,
-} from "../helpers/git";
-import { stringFromRecord } from "../helpers/records";
-import { normalizeGpuiProjectPath, normalizeGpuiWorktreeMetadata } from "../helpers/worktrees";
+} from '../helpers/git';
+import { stringFromRecord } from '../helpers/records';
+import { normalizeGpuiProjectPath, normalizeGpuiWorktreeMetadata } from '../helpers/worktrees';
 import type {
   GpuiPendingGitCommitRequest,
   GpuiRemoteProjectReference,
   GpuiRemoteProjectScope,
   GpuiTrustedGitReviewFileSelection,
   GpuiWorktreeMetadata,
-} from "../types-and-protocol";
-import { openAppModal, postAppModalHostMessage } from "@/packages/core-ui/app-modal-host-bridge";
+} from '../types-and-protocol';
+import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import type {
   GxserverMergeWorktreeIntoMainResult,
   GxserverProjectDomainState,
-} from "@/packages/shared/gxserver-protocol";
-import type {
-  SidebarPromptGitCommitMessage,
-  SidebarToExtensionMessage,
-} from "@/packages/shared/session-grid-contract";
-import type { SidebarAgentButton } from "@/packages/shared/sidebar-agents";
-import type {
-  SidebarGitAction,
-  SidebarGitFileDiffDraft,
-  SidebarGitState,
-} from "@/packages/shared/sidebar-git";
+} from '@/packages/shared/gxserver-protocol';
+import type { SidebarPromptGitCommitMessage, SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
+import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
+import type { SidebarGitAction, SidebarGitFileDiffDraft, SidebarGitState } from '@/packages/shared/sidebar-git';
 
 export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
-  async mergeRemoteWorktreeIntoMain(this: GpuiSidebarRuntime,
-    remoteScope: GpuiRemoteProjectScope,
+  async mergeRemoteWorktreeIntoMain(
+    this: GpuiSidebarRuntime,
+    remoteScope: GpuiRemoteProjectScope
   ): Promise<GxserverMergeWorktreeIntoMainResult> {
     return this.requestRemoteGxserver<GxserverMergeWorktreeIntoMainResult>(
       remoteScope.machineId,
-      "/api/mergeWorktreeIntoMain",
+      '/api/mergeWorktreeIntoMain',
       { projectId: remoteScope.projectId },
-      { timeoutMs: 60_000 },
+      { timeoutMs: 60_000 }
     );
   },
 
-  async mergeWorktreeIntoMain(this: GpuiSidebarRuntime, input: {
-    branch?: string | null;
-    conflictAgent: SidebarAgentButton;
-    deleteWorktreeAfter: boolean;
-    worktreeProject: GxserverProjectDomainState;
-  }): Promise<"conflicts" | "merged"> {
+  async mergeWorktreeIntoMain(
+    this: GpuiSidebarRuntime,
+    input: {
+      branch?: string | null;
+      conflictAgent: SidebarAgentButton;
+      deleteWorktreeAfter: boolean;
+      worktreeProject: GxserverProjectDomainState;
+    }
+  ): Promise<'conflicts' | 'merged'> {
     const worktree = normalizeGpuiWorktreeMetadata(input.worktreeProject.worktree);
     if (!worktree) {
-      throw new Error("Direct merge requires a worktree project.");
+      throw new Error('Direct merge requires a worktree project.');
     }
     const branch = input.branch?.trim() || worktree.branch;
     if (!branch) {
-      throw new Error("Create and checkout a branch before merging.");
+      throw new Error('Create and checkout a branch before merging.');
     }
     const parentProject = this.domainProjectById(worktree.parentProjectId);
     if (
@@ -74,33 +71,33 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
       parentProject.isRecentProject === true ||
       !normalizeGpuiProjectPath(parentProject.path)
     ) {
-      throw new Error("The gxserver worktree parent project is unavailable.");
+      throw new Error('The gxserver worktree parent project is unavailable.');
     }
 
     const mainCheck = await this.runGitAction(parentProject, {
-      action: "verifyRef",
-      ref: "main",
+      action: 'verifyRef',
+      ref: 'main',
     });
     if (mainCheck.exitCode !== 0) {
       throw new Error('The parent project does not have a local "main" branch.');
     }
-    const parentStatus = await this.runGitAction(parentProject, { action: "status" });
+    const parentStatus = await this.runGitAction(parentProject, { action: 'status' });
     if (parentStatus.exitCode !== 0) {
-      throw new Error("Could not read parent project status.");
+      throw new Error('Could not read parent project status.');
     }
     if (hasGpuiGxserverShortStatusChanges(parentStatus.stdout)) {
-      throw new Error("Commit or stash changes in the main project before merging this worktree.");
+      throw new Error('Commit or stash changes in the main project before merging this worktree.');
     }
 
     const checkoutResult = await this.runGitAction(parentProject, {
-      action: "checkout",
-      branch: "main",
+      action: 'checkout',
+      branch: 'main',
     });
     if (checkoutResult.exitCode !== 0) {
-      throw new Error("Could not checkout main.");
+      throw new Error('Could not checkout main.');
     }
     const mergeResult = await this.runGitAction(parentProject, {
-      action: "merge",
+      action: 'merge',
       branch,
     });
     /*
@@ -133,29 +130,32 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
         worktree,
         worktreeProject: input.worktreeProject,
       });
-      return "conflicts";
+      return 'conflicts';
     }
 
     if (input.deleteWorktreeAfter) {
       await this.deleteWorktreeAfterCompletedGitAction(input.worktreeProject);
     }
-    return "merged";
+    return 'merged';
   },
 
-  async launchMergeConflictAgent(this: GpuiSidebarRuntime, input: {
-    agent: SidebarAgentButton;
-    branch: string;
-    mergeOutput: string;
-    parentProject: GxserverProjectDomainState;
-    worktree: GpuiWorktreeMetadata;
-    worktreeProject: GxserverProjectDomainState;
-  }): Promise<void> {
+  async launchMergeConflictAgent(
+    this: GpuiSidebarRuntime,
+    input: {
+      agent: SidebarAgentButton;
+      branch: string;
+      mergeOutput: string;
+      parentProject: GxserverProjectDomainState;
+      worktree: GpuiWorktreeMetadata;
+      worktreeProject: GxserverProjectDomainState;
+    }
+  ): Promise<void> {
     this.focusProjectId(input.parentProject.projectId);
     await this.createAgentSessionForProject(
       input.parentProject,
       input.agent,
       buildGpuiMergeConflictPrompt(input),
-      formatGpuiGitAgentWorkflowTitle("Merge Conflicts"),
+      formatGpuiGitAgentWorkflowTitle('Merge Conflicts')
     );
   },
 
@@ -165,41 +165,35 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
     if (pending?.remoteReference) {
       const remoteScope = this.resolveRemotePresentationProjectScope(pending.remoteReference);
       if (!remoteScope) {
-        this.postRemoteToast("warning", "Remote Git unavailable", {
-          description: "Reconnect the remote machine before starting this Git workflow.",
+        this.postRemoteToast('warning', 'Remote Git unavailable', {
+          description: 'Reconnect the remote machine before starting this Git workflow.',
         });
         return;
       }
       await this.runRemoteSidebarGitPromptAction(
         remoteScope,
-        "Multiple Commits",
+        'Multiple Commits',
         GPUI_GIT_MULTIPLE_COMMITS_PROMPT,
-        agentId,
+        agentId
       );
       return;
     }
-    const project = pending
-      ? this.domainProjectById(pending.projectId)
-      : this.activeDomainProject();
+    const project = pending ? this.domainProjectById(pending.projectId) : this.activeDomainProject();
     if (!project) {
-      this.postGitToast("warning", "Git unavailable", {
-        description: "No active gxserver project is available.",
+      this.postGitToast('warning', 'Git unavailable', {
+        description: 'No active gxserver project is available.',
       });
       this.publishHudPatch();
       return;
     }
-    await this.runSidebarGitPromptAction(
-      project,
-      "Multiple Commits",
-      GPUI_GIT_MULTIPLE_COMMITS_PROMPT,
-      agentId,
-    );
+    await this.runSidebarGitPromptAction(project, 'Multiple Commits', GPUI_GIT_MULTIPLE_COMMITS_PROMPT, agentId);
   },
 
-  promptSidebarGitActionReview(this: GpuiSidebarRuntime,
+  promptSidebarGitActionReview(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
     gitState: SidebarGitState,
-    action: Extract<SidebarGitAction, "commit" | "pr" | "push">,
+    action: Extract<SidebarGitAction, 'commit' | 'pr' | 'push'>
   ): void {
     const requestId = `gpui-git-action-${Date.now().toString(36)}`;
     const hasCommit = gitState.hasWorkingTreeChanges;
@@ -213,7 +207,7 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
       files: [...gitState.files],
       hasCommit,
       projectId: project.projectId,
-      subject: "",
+      subject: '',
     });
     const modalDraft: SidebarPromptGitCommitMessage = {
       action,
@@ -223,16 +217,16 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
       confirmLabel: resolveGpuiSidebarGitConfirmLabel(action, hasCommit),
       deleteWorktreeAfterDefault: false,
       description: hasCommit
-        ? "Review and confirm your commit. Leave the message blank to auto-generate one."
+        ? 'Review and confirm your commit. Leave the message blank to auto-generate one.'
         : resolveGpuiSidebarGitPromptDescription(action),
-      isDefaultRef: gitState.branch === "main" || gitState.branch === "master",
+      isDefaultRef: gitState.branch === 'main' || gitState.branch === 'master',
       isWorktree: normalizeGpuiWorktreeMetadata(project.worktree) !== undefined,
       requestId,
       showCommitMessage: hasCommit,
       suggestedBody: undefined,
-      suggestedSubject: "",
-      type: "promptGitCommit",
-      worktreeName: stringFromRecord(project.worktree, "name"),
+      suggestedSubject: '',
+      type: 'promptGitCommit',
+      worktreeName: stringFromRecord(project.worktree, 'name'),
     };
     this.openSidebarGitCommitReviewModal(modalDraft);
     this.gitState = { ...gitState, isBusy: false };
@@ -242,8 +236,8 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
   openSidebarGitCommitReviewModal(this: GpuiSidebarRuntime, draft: SidebarPromptGitCommitMessage): void {
     openAppModal({
       gitCommitDraft: draft,
-      modal: "gitCommit",
-      type: "open",
+      modal: 'gitCommit',
+      type: 'open',
     });
   },
 
@@ -265,26 +259,26 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
     try {
       const [stagedDiff, unstagedDiff] = await Promise.all([
         this.runGitAction(project, {
-          action: "diffCachedNoExt",
+          action: 'diffCachedNoExt',
           filePath: normalizedFilePath,
         }),
         this.runGitAction(project, {
-          action: "diffNoExt",
+          action: 'diffNoExt',
           filePath: normalizedFilePath,
         }),
       ]);
       const patchParts = [stagedDiff.stdout.trimEnd(), unstagedDiff.stdout.trimEnd()].filter(
-        (part) => part.trim().length > 0,
+        (part) => part.trim().length > 0
       );
-      let patch = patchParts.join("\n\n");
+      let patch = patchParts.join('\n\n');
       if (!patch.trim()) {
         const untracked = await this.runGitAction(project, {
-          action: "isUntrackedFile",
+          action: 'isUntrackedFile',
           filePath: normalizedFilePath,
         });
         if (untracked.stdout.trim()) {
           const noIndexDiff = await this.runGitAction(project, {
-            action: "diffNoIndexAgainstNull",
+            action: 'diffNoIndexAgainstNull',
             filePath: normalizedFilePath,
           });
           patch = noIndexDiff.stdout.trimEnd() || noIndexDiff.stderr.trimEnd();
@@ -306,10 +300,11 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
     }
   },
 
-  async openRemoteSidebarGitChangedFileDiff(this: GpuiSidebarRuntime,
+  async openRemoteSidebarGitChangedFileDiff(
+    this: GpuiSidebarRuntime,
     remoteReference: GpuiRemoteProjectReference,
     filePath: string,
-    requestId?: string,
+    requestId?: string
   ): Promise<void> {
     const request = requestId ? this.pendingGitCommitRequests.get(requestId) : undefined;
     const remoteScope = this.resolveRemotePresentationProjectScope(remoteReference);
@@ -324,26 +319,26 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
     try {
       const [stagedDiff, unstagedDiff] = await Promise.all([
         this.runRemoteGitAction(remoteScope, {
-          action: "diffCachedNoExt",
+          action: 'diffCachedNoExt',
           filePath: normalizedFilePath,
         }),
         this.runRemoteGitAction(remoteScope, {
-          action: "diffNoExt",
+          action: 'diffNoExt',
           filePath: normalizedFilePath,
         }),
       ]);
       const patchParts = [stagedDiff.stdout.trimEnd(), unstagedDiff.stdout.trimEnd()].filter(
-        (part) => part.trim().length > 0,
+        (part) => part.trim().length > 0
       );
-      let patch = patchParts.join("\n\n");
+      let patch = patchParts.join('\n\n');
       if (!patch.trim()) {
         const untracked = await this.runRemoteGitAction(remoteScope, {
-          action: "isUntrackedFile",
+          action: 'isUntrackedFile',
           filePath: normalizedFilePath,
         });
         if (untracked.stdout.trim()) {
           const noIndexDiff = await this.runRemoteGitAction(remoteScope, {
-            action: "diffNoIndexAgainstNull",
+            action: 'diffNoIndexAgainstNull',
             filePath: normalizedFilePath,
           });
           patch = noIndexDiff.stdout.trimEnd() || noIndexDiff.stderr.trimEnd();
@@ -365,8 +360,9 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
     }
   },
 
-  async openSidebarGitChangedFileInIde(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "openSidebarGitChangedFile" }>,
+  async openSidebarGitChangedFileInIde(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'openSidebarGitChangedFile' }>
   ): Promise<void> {
     /*
     CDXC:GPUISidebarGit 2026-06-24-21:26:
@@ -374,67 +370,49 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
     Scoped non-review opens must re-read the owning local or remote gxserver project instead of using the active local HUD file list, so remote rows cannot open stale or cross-project file candidates.
     */
     const normalizedFilePath = normalizeGpuiRelativeGitFilePath(message.filePath);
-    const request = message.requestId
-      ? this.pendingGitCommitRequests.get(message.requestId)
-      : undefined;
+    const request = message.requestId ? this.pendingGitCommitRequests.get(message.requestId) : undefined;
     if (request?.remoteReference) {
       const remoteScope = this.resolveRemotePresentationProjectScope(request.remoteReference);
-      if (
-        !normalizedFilePath ||
-        !remoteScope ||
-        !request.files.some((file) => file.path === normalizedFilePath)
-      ) {
-        this.postRemoteToast("warning", "Remote file open unavailable", {
-          description: "Choose a changed file from the current remote Git review.",
+      if (!normalizedFilePath || !remoteScope || !request.files.some((file) => file.path === normalizedFilePath)) {
+        this.postRemoteToast('warning', 'Remote file open unavailable', {
+          description: 'Choose a changed file from the current remote Git review.',
         });
         return;
       }
-      this.postRemoteProjectNativeAction(
-        "openRemoteSidebarGitChangedFileInIde",
-        remoteScope,
-        message,
-        {
-          filePath: normalizedFilePath,
-        },
-      );
+      this.postRemoteProjectNativeAction('openRemoteSidebarGitChangedFileInIde', remoteScope, message, {
+        filePath: normalizedFilePath,
+      });
       return;
     }
     if (!request) {
       const remoteScope = this.resolveGitPreferenceRemoteScope(message);
       if (remoteScope) {
         if (!normalizedFilePath) {
-          this.postRemoteToast("warning", "Remote file open unavailable", {
-            description: "Choose a changed file from the current remote Git state.",
+          this.postRemoteToast('warning', 'Remote file open unavailable', {
+            description: 'Choose a changed file from the current remote Git state.',
           });
           return;
         }
         const gitState = await this.readRemoteSidebarGitState(remoteScope);
         if (!gitState.files.some((file) => file.path === normalizedFilePath)) {
-          this.postRemoteToast("warning", "Remote file open unavailable", {
-            description: "Choose a changed file from the current remote Git state.",
+          this.postRemoteToast('warning', 'Remote file open unavailable', {
+            description: 'Choose a changed file from the current remote Git state.',
           });
           return;
         }
-        this.postRemoteProjectNativeAction(
-          "openRemoteSidebarGitChangedFileInIde",
-          remoteScope,
-          message,
-          {
-            filePath: normalizedFilePath,
-          },
-        );
+        this.postRemoteProjectNativeAction('openRemoteSidebarGitChangedFileInIde', remoteScope, message, {
+          filePath: normalizedFilePath,
+        });
         return;
       }
       if (this.isGitPreferenceRemoteScope(message)) {
-        this.postRemoteToast("warning", "Remote file open unavailable", {
-          description: "Reconnect the remote machine before opening changed files.",
+        this.postRemoteToast('warning', 'Remote file open unavailable', {
+          description: 'Reconnect the remote machine before opening changed files.',
         });
         return;
       }
     }
-    const project = request
-      ? this.domainProjectById(request.projectId)
-      : this.activeDomainProject();
+    const project = request ? this.domainProjectById(request.projectId) : this.activeDomainProject();
     const explicitScope = !request && Boolean(message.groupId?.trim() || message.projectId?.trim());
     const scopedProject = request
       ? project
@@ -450,36 +428,32 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
       scopedProject.isRecentProject === true ||
       !trustedFiles.some((file) => file.path === normalizedFilePath)
     ) {
-      this.postGitToast("warning", "Open file unavailable", {
-        description: "Choose a changed file from the current Git state.",
+      this.postGitToast('warning', 'Open file unavailable', {
+        description: 'Choose a changed file from the current Git state.',
       });
       return;
     }
-    this.postNativeProjectPathAction(
-      "openSidebarGitChangedFileInIde",
-      scopedProject.projectId,
-      message,
-      {
-        filePath: normalizedFilePath,
-      },
-    );
+    this.postNativeProjectPathAction('openSidebarGitChangedFileInIde', scopedProject.projectId, message, {
+      filePath: normalizedFilePath,
+    });
   },
 
   postSidebarGitFileDiff(this: GpuiSidebarRuntime, requestId: string, draft: SidebarGitFileDiffDraft): void {
     postAppModalHostMessage(
       {
         gitFileDiff: draft,
-        modal: "gitFileDiff",
+        modal: 'gitFileDiff',
         requestId,
-        type: "open",
+        type: 'open',
       },
-      "AppModals:gpuiGitFileDiff",
+      'AppModals:gpuiGitFileDiff'
     );
   },
 
-  resolveTrustedGitReviewFileSelection(this: GpuiSidebarRuntime,
+  resolveTrustedGitReviewFileSelection(
+    this: GpuiSidebarRuntime,
     request: GpuiPendingGitCommitRequest,
-    filePaths?: readonly string[],
+    filePaths?: readonly string[]
   ): GpuiTrustedGitReviewFileSelection {
     const explicit = filePaths !== undefined;
     const candidatePaths = explicit ? filePaths : request.files.map((file) => file.path);
@@ -489,16 +463,15 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
       const normalizedPath = normalizeGpuiRelativeGitFilePath(filePath);
       const trustedPath = normalizedPath ? allowedPaths.get(normalizedPath) : undefined;
       if (!trustedPath) {
-        throw new Error("Selected file is not part of the current Git review.");
+        throw new Error('Selected file is not part of the current Git review.');
       }
       if (!selectedPaths.includes(trustedPath)) {
         selectedPaths.push(trustedPath);
       }
     }
     if (selectedPaths.length === 0) {
-      throw new Error("Select at least one changed file.");
+      throw new Error('Select at least one changed file.');
     }
     return { explicit, filePaths: selectedPaths };
   },
-
 };

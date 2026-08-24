@@ -3,11 +3,18 @@ name: Release assemble
 on:
   workflow_dispatch:
     inputs:
-      version: { description: "Semver release version", required: true, type: string }
-      source_sha: { description: "Immutable application source commit", required: true, type: string }
-      channel: { description: "Release channel", required: false, default: stable, type: choice, options: [stable, prerelease, test] }
-      update_sparkle: { description: "Publish production Sparkle last", required: true, default: true, type: boolean }
-      prerequisite_run_id: { description: "Optional prerequisite workflow run", required: false, type: string }
+      version: { description: 'Semver release version', required: true, type: string }
+      source_sha: { description: 'Immutable application source commit', required: true, type: string }
+      channel:
+        {
+          description: 'Release channel',
+          required: false,
+          default: stable,
+          type: choice,
+          options: [stable, prerelease, test],
+        }
+      update_sparkle: { description: 'Publish production Sparkle last', required: true, default: true, type: boolean }
+      prerequisite_run_id: { description: 'Optional prerequisite workflow run', required: false, type: string }
 
 permissions:
   actions: read

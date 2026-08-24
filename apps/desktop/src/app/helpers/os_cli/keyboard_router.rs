@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::atomic::Ordering,
-};
+use std::{collections::HashMap, sync::atomic::Ordering};
 
 use crate::app::helpers::*;
 use crate::*;
@@ -570,4 +567,3 @@ pub(crate) fn route_gpui_native_keyboard_event(
         .detach();
     true
 }
-

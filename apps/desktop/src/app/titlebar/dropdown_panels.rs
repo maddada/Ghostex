@@ -385,5 +385,4 @@ impl GhostexGpuiApp {
             );
         gpui_titlebar_tips_unread_count_from_settings().saturating_add(notice_count)
     }
-
 }

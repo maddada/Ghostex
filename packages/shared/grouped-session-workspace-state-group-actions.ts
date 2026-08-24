@@ -2,21 +2,18 @@ import {
   MAX_GROUP_COUNT,
   createDefaultSessionGridSnapshot,
   type GroupedSessionWorkspaceSnapshot,
-} from "./session-grid-contract";
-import { focusSessionInSnapshot, removeSessionInSnapshot } from "./session-grid-state";
+} from './session-grid-contract';
+import { focusSessionInSnapshot, removeSessionInSnapshot } from './session-grid-state';
 import {
   findGroupContainingSession,
   getSessionRecord,
   insertSessionIntoGroup,
-} from "./grouped-session-workspace-state-helpers";
-import {
-  getGroupById,
-  normalizeGroupedSessionWorkspaceSnapshot,
-} from "./grouped-session-workspace-state-core";
+} from './grouped-session-workspace-state-helpers';
+import { getGroupById, normalizeGroupedSessionWorkspaceSnapshot } from './grouped-session-workspace-state-core';
 
 export function focusGroupInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  groupId: string,
+  groupId: string
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
   if (!normalizedSnapshot.groups.some((group) => group.groupId === groupId)) {
@@ -37,7 +34,7 @@ export function focusGroupInWorkspace(
 
 export function focusGroupByIndexInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  groupIndex: number,
+  groupIndex: number
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
   const targetGroup = normalizedSnapshot.groups[groupIndex - 1];
@@ -49,7 +46,7 @@ export function focusGroupByIndexInWorkspace(
 export function renameGroupInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
   groupId: string,
-  title: string,
+  title: string
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
   const normalizedTitle = title.trim();
@@ -72,19 +69,14 @@ export function renameGroupInWorkspace(
 
 export function removeGroupInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  groupId: string,
+  groupId: string
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
-  if (
-    normalizedSnapshot.groups.length <= 1 ||
-    !normalizedSnapshot.groups.some((group) => group.groupId === groupId)
-  ) {
+  if (normalizedSnapshot.groups.length <= 1 || !normalizedSnapshot.groups.some((group) => group.groupId === groupId)) {
     return { changed: false, snapshot: normalizedSnapshot };
   }
 
-  const removedGroupIndex = normalizedSnapshot.groups.findIndex(
-    (group) => group.groupId === groupId,
-  );
+  const removedGroupIndex = normalizedSnapshot.groups.findIndex((group) => group.groupId === groupId);
   const groups = normalizedSnapshot.groups.filter((group) => group.groupId !== groupId);
 
   return {
@@ -102,7 +94,7 @@ export function removeGroupInWorkspace(
 
 export function syncGroupOrderInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  groupIds: readonly string[],
+  groupIds: readonly string[]
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
   const currentGroupIds = normalizedSnapshot.groups.map((group) => group.groupId);
@@ -176,7 +168,7 @@ export function moveSessionToGroupInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
   sessionId: string,
   targetGroupId: string,
-  targetIndex?: number,
+  targetIndex?: number
 ): { changed: boolean; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
   const sourceLocation = findGroupContainingSession(normalizedSnapshot, sessionId);
@@ -190,13 +182,10 @@ export function moveSessionToGroupInWorkspace(
     return { changed: false, snapshot: normalizedSnapshot };
   }
 
-  const removedSourceSnapshot = removeSessionInSnapshot(
-    sourceLocation.group.snapshot,
-    sessionId,
-  ).snapshot;
+  const removedSourceSnapshot = removeSessionInSnapshot(sourceLocation.group.snapshot, sessionId).snapshot;
   const focusedTargetSnapshot = focusSessionInSnapshot(
     insertSessionIntoGroup(targetGroup.snapshot, sessionRecord, targetIndex),
-    sessionId,
+    sessionId
   ).snapshot;
 
   return {
@@ -219,7 +208,7 @@ export function moveSessionToGroupInWorkspace(
 
 export function createGroupFromSessionInWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
-  sessionId: string,
+  sessionId: string
 ): { changed: boolean; groupId?: string; snapshot: GroupedSessionWorkspaceSnapshot } {
   const normalizedSnapshot = normalizeGroupedSessionWorkspaceSnapshot(snapshot);
   if (normalizedSnapshot.groups.length >= MAX_GROUP_COUNT) {
@@ -239,7 +228,7 @@ export function createGroupFromSessionInWorkspace(
   const groupId = `group-${normalizedSnapshot.nextGroupNumber}`;
   const nextGroupSnapshot = focusSessionInSnapshot(
     insertSessionIntoGroup(createDefaultSessionGridSnapshot(), sessionRecord),
-    sessionId,
+    sessionId
   ).snapshot;
 
   return {
@@ -255,7 +244,7 @@ export function createGroupFromSessionInWorkspace(
                 ...group,
                 snapshot: removeSessionInSnapshot(group.snapshot, sessionId).snapshot,
               }
-            : group,
+            : group
         ),
         {
           groupId,

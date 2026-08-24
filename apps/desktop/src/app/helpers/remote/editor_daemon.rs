@@ -129,7 +129,9 @@ pub(crate) fn gpui_ghostex_editor_socket_path() -> PathBuf {
 }
 
 #[cfg(unix)]
-pub(crate) fn gpui_ghostex_editor_daemon_request(request: &serde_json::Value) -> Option<serde_json::Value> {
+pub(crate) fn gpui_ghostex_editor_daemon_request(
+    request: &serde_json::Value,
+) -> Option<serde_json::Value> {
     use std::io::{BufRead as _, BufReader, Write as _};
     let mut stream =
         std::os::unix::net::UnixStream::connect(gpui_ghostex_editor_socket_path()).ok()?;
@@ -220,4 +222,3 @@ pub(crate) fn gpui_prewarm_ghostex_editor_daemon() {
     }
     let _ = command.spawn();
 }
-

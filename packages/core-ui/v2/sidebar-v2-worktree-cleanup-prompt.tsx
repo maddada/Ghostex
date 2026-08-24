@@ -1,6 +1,6 @@
-import { createPortal } from "react-dom";
-import { useEffect } from "react";
-import { formatWorktreePathForDisplay } from "../../shared/sidebar-v2-worktree-cleanup";
+import { createPortal } from 'react-dom';
+import { useEffect } from 'react';
+import { formatWorktreePathForDisplay } from '../../shared/sidebar-v2-worktree-cleanup';
 
 /*
  * CDXC:SidebarV2Worktree 2026-07-29:
@@ -50,71 +50,71 @@ export function SidebarV2WorktreeCleanupPrompt({
 }: SidebarV2WorktreeCleanupPromptProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         onCancel();
       }
     };
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onCancel]);
 
   const worktreeName = formatWorktreePathForDisplay(worktreePath);
 
   return createPortal(
-    <div className="confirm-modal-root sidebar-v2-worktree-cleanup" role="presentation">
-      <button className="confirm-modal-backdrop" onClick={onCancel} type="button" />
+    <div className='confirm-modal-root sidebar-v2-worktree-cleanup' role='presentation'>
+      <button className='confirm-modal-backdrop' onClick={onCancel} type='button' />
       <div
-        aria-labelledby="sidebar-v2-worktree-cleanup-title"
-        aria-modal="true"
-        className="confirm-modal"
-        role="dialog"
+        aria-labelledby='sidebar-v2-worktree-cleanup-title'
+        aria-modal='true'
+        className='confirm-modal'
+        role='dialog'
       >
-        <div className="confirm-modal-header">
-          <div className="confirm-modal-title" id="sidebar-v2-worktree-cleanup-title">
-            {isDirty ? "Worktree has uncommitted changes" : "Remove this worktree?"}
+        <div className='confirm-modal-header'>
+          <div className='confirm-modal-title' id='sidebar-v2-worktree-cleanup-title'>
+            {isDirty ? 'Worktree has uncommitted changes' : 'Remove this worktree?'}
           </div>
-          <div className="confirm-modal-description">
+          <div className='confirm-modal-description'>
             {isDirty
               ? `${worktreeName} still has uncommitted work. Removing it discards those changes.`
               : `This was the last session in ${worktreeName}.`}
           </div>
         </div>
         {warnings && warnings.length > 0 ? (
-          <ul className="sidebar-v2-worktree-cleanup-warnings">
+          <ul className='sidebar-v2-worktree-cleanup-warnings'>
             {warnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>
         ) : null}
         {errorMessage ? (
-          <p className="sidebar-v2-worktree-error" role="alert">
+          <p className='sidebar-v2-worktree-error' role='alert'>
             {errorMessage}
           </p>
         ) : null}
-        <div className="confirm-modal-actions">
+        <div className='confirm-modal-actions'>
           <button
-            className="secondary confirm-modal-button"
-            data-worktree-cleanup-action="keep"
+            className='secondary confirm-modal-button'
+            data-worktree-cleanup-action='keep'
             disabled={isPending}
             onClick={onKeepWorktree}
-            type="button"
+            type='button'
           >
             Close, keep worktree
           </button>
           <button
-            className="primary confirm-modal-button"
-            data-worktree-cleanup-action={isDirty ? "force" : "remove"}
+            className='primary confirm-modal-button'
+            data-worktree-cleanup-action={isDirty ? 'force' : 'remove'}
             disabled={isPending}
             onClick={onRemoveWorktree}
-            type="button"
+            type='button'
           >
-            {isPending ? "Removing…" : isDirty ? "Remove anyway" : "Close and remove worktree"}
+            {isPending ? 'Removing…' : isDirty ? 'Remove anyway' : 'Close and remove worktree'}
           </button>
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }

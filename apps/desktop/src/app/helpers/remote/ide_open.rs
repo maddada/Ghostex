@@ -497,7 +497,9 @@ pub(crate) fn gpui_percent_encode_remote_ssh_path(value: &str) -> String {
     encoded
 }
 
-pub(crate) fn gpui_vscode_remote_ssh_authority(config: &GpuiRemoteMachineConfig) -> Result<String, String> {
+pub(crate) fn gpui_vscode_remote_ssh_authority(
+    config: &GpuiRemoteMachineConfig,
+) -> Result<String, String> {
     if config.ssh_identity_file.is_some() || config.ssh_port.is_some() {
         return Err(
             "Remote IDE open requires a saved machine that VS Code Remote-SSH can address by host and user."
@@ -594,4 +596,3 @@ pub(crate) fn gpui_remote_gxserver_git_action_result(
         Duration::from_secs(15),
     )
 }
-

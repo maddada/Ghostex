@@ -1,8 +1,8 @@
-import type { SessionPaneLayoutNode } from "./session-grid-contract-core";
+import type { SessionPaneLayoutNode } from './session-grid-contract-core';
 
 export function collectActivePaneOwnerSessionIds(
   layout: SessionPaneLayoutNode | undefined,
-  options: { validSessionIds?: ReadonlySet<string> | readonly string[] } = {},
+  options: { validSessionIds?: ReadonlySet<string> | readonly string[] } = {}
 ): string[] {
   if (!layout) {
     return [];
@@ -12,7 +12,7 @@ export function collectActivePaneOwnerSessionIds(
 }
 
 function normalizeValidSessionIds(
-  validSessionIds: ReadonlySet<string> | readonly string[] | undefined,
+  validSessionIds: ReadonlySet<string> | readonly string[] | undefined
 ): ReadonlySet<string> | undefined {
   if (!validSessionIds) {
     return undefined;
@@ -22,12 +22,12 @@ function normalizeValidSessionIds(
 
 function collectActivePaneOwnerSessionIdsFromNode(
   node: SessionPaneLayoutNode,
-  validSessionIds: ReadonlySet<string> | undefined,
+  validSessionIds: ReadonlySet<string> | undefined
 ): string[] {
   switch (node.kind) {
-    case "leaf":
+    case 'leaf':
       return isValidPaneOwnerSession(node.sessionId, validSessionIds) ? [node.sessionId] : [];
-    case "tabs": {
+    case 'tabs': {
       /*
        * CDXC:AutoSleep 2026-06-09-20:33:
        * Auto Sleep protects the selected owner of every persisted split pane,
@@ -44,16 +44,11 @@ function collectActivePaneOwnerSessionIdsFromNode(
           : node.sessionIds.find((sessionId) => isValidPaneOwnerSession(sessionId, validSessionIds));
       return activeSessionId ? [activeSessionId] : [];
     }
-    case "split":
-      return node.children.flatMap((child) =>
-        collectActivePaneOwnerSessionIdsFromNode(child, validSessionIds),
-      );
+    case 'split':
+      return node.children.flatMap((child) => collectActivePaneOwnerSessionIdsFromNode(child, validSessionIds));
   }
 }
 
-function isValidPaneOwnerSession(
-  sessionId: string,
-  validSessionIds: ReadonlySet<string> | undefined,
-): boolean {
+function isValidPaneOwnerSession(sessionId: string, validSessionIds: ReadonlySet<string> | undefined): boolean {
   return validSessionIds === undefined || validSessionIds.has(sessionId);
 }

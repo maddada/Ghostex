@@ -81,7 +81,7 @@ export function getMermaidColonBlocks(state: EditorState): MermaidColonBlock[] {
           from,
           to,
           fullBlockText: state.doc.sliceString(from, to),
-          diagramText: pending.contentLines.join('\n')
+          diagramText: pending.contentLines.join('\n'),
         });
         pending = null;
         continue;
@@ -95,10 +95,7 @@ export function getMermaidColonBlocks(state: EditorState): MermaidColonBlock[] {
     if (standardFenceLine) {
       if (!standardFence) {
         standardFence = standardFenceLine;
-      } else if (
-        standardFence.char === standardFenceLine.char &&
-        standardFenceLine.length >= standardFence.length
-      ) {
+      } else if (standardFence.char === standardFenceLine.char && standardFenceLine.length >= standardFence.length) {
         standardFence = null;
       }
       continue;
@@ -116,7 +113,7 @@ export function getMermaidColonBlocks(state: EditorState): MermaidColonBlock[] {
     pending = {
       startLine: lineNo,
       colonCount: mermaidOpenColonCount,
-      contentLines: []
+      contentLines: [],
     };
   }
 

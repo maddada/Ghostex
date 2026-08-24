@@ -11,14 +11,11 @@ import {
   type SidebarSessionItem,
   type SidebarSessionStateMessage,
   type SidebarToExtensionMessage,
-} from "../shared/session-grid-contract";
-import type {
-  SidebarV2SessionOverrides,
-  SidebarV2SessionSource,
-} from "../shared/sidebar-v2-session";
-import type { SidebarAgentButton } from "../shared/sidebar-agents";
-import type { SidebarCommandButton } from "../shared/sidebar-commands";
-import { normalizeghostexSettings, type ghostexSettings } from "../shared/ghostex-settings";
+} from '../shared/session-grid-contract';
+import type { SidebarV2SessionOverrides, SidebarV2SessionSource } from '../shared/sidebar-v2-session';
+import type { SidebarAgentButton } from '../shared/sidebar-agents';
+import type { SidebarCommandButton } from '../shared/sidebar-commands';
+import { normalizeghostexSettings, type ghostexSettings } from '../shared/ghostex-settings';
 import {
   createGroupInWorkspace,
   createGroupFromSessionInWorkspace,
@@ -31,16 +28,16 @@ import {
   syncGroupOrderInWorkspace,
   syncSessionOrderInWorkspace,
   toggleFullscreenSessionInWorkspace,
-} from "../shared/grouped-session-workspace-state";
+} from '../shared/grouped-session-workspace-state';
 
 type SidebarStoryWorkspaceOptions = {
-  activeSessionsSortMode: SidebarHydrateMessage["hud"]["activeSessionsSortMode"];
+  activeSessionsSortMode: SidebarHydrateMessage['hud']['activeSessionsSortMode'];
   agentManagerZoomPercent: number;
   agents: SidebarAgentButton[];
   commands: SidebarCommandButton[];
   commandSessionIndicators: SidebarCommandSessionIndicator[];
   completionBellEnabled: boolean;
-  completionSound: SidebarHydrateMessage["hud"]["completionSound"];
+  completionSound: SidebarHydrateMessage['hud']['completionSound'];
   debuggingMode: boolean;
   /*
    * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -49,7 +46,7 @@ type SidebarStoryWorkspaceOptions = {
    * without it the V2 shelves classify nothing and the lifecycle stories would
    * pass against an empty inbox.
    */
-  lifecycleCapabilities?: SidebarHydrateMessage["hud"]["lifecycleCapabilities"];
+  lifecycleCapabilities?: SidebarHydrateMessage['hud']['lifecycleCapabilities'];
   /*
    * CDXC:SidebarV2LogicalProjects 2026-07-29:
    * Per-remote-machine capability and per-daemon auto-settle window. Same
@@ -57,30 +54,30 @@ type SidebarStoryWorkspaceOptions = {
    * round trip, so a multi-machine story would lose its remote machine's
    * lifecycle answers and its own settle window on the first re-render.
    */
-  autoSettleAfterDays?: SidebarHydrateMessage["hud"]["autoSettleAfterDays"];
-  autoSettleAfterDaysByMachineId?: SidebarHydrateMessage["hud"]["autoSettleAfterDaysByMachineId"];
-  lifecycleCapabilitiesByMachineId?: SidebarHydrateMessage["hud"]["lifecycleCapabilitiesByMachineId"];
-  recentProjects: SidebarHydrateMessage["hud"]["recentProjects"];
+  autoSettleAfterDays?: SidebarHydrateMessage['hud']['autoSettleAfterDays'];
+  autoSettleAfterDaysByMachineId?: SidebarHydrateMessage['hud']['autoSettleAfterDaysByMachineId'];
+  lifecycleCapabilitiesByMachineId?: SidebarHydrateMessage['hud']['lifecycleCapabilitiesByMachineId'];
+  recentProjects: SidebarHydrateMessage['hud']['recentProjects'];
   scratchPadContent: string;
   showCloseButtonOnSessionCards: boolean;
   settings?: ghostexSettings;
-  theme: SidebarHydrateMessage["hud"]["theme"];
+  theme: SidebarHydrateMessage['hud']['theme'];
 };
 
 type SidebarSessionDecoration = Pick<
   SidebarSessionItem,
-  | "activity"
-  | "activityLabel"
-  | "agentIcon"
-  | "createdAt"
+  | 'activity'
+  | 'activityLabel'
+  | 'agentIcon'
+  | 'createdAt'
   /*
    * CDXC:SidebarV2Worktree 2026-07-29:
    * The session's working directory. V2 identifies a worktree by the PAIR of
    * cwd and branch, so dropping it here would make every worktree story
    * unreachable even with the branch present.
    */
-  | "cwd"
-  | "detail"
+  | 'cwd'
+  | 'detail'
   /*
    * CDXC:SidebarV2ContextMenuParity 2026-07-30:
    * The four fields the session context menu gates items on. Without them the
@@ -90,21 +87,21 @@ type SidebarSessionDecoration = Pick<
    * items could never be exercised in Storybook — the items would simply be
    * missing and a story asserting them would look like a real product bug.
    */
-  | "firstUserMessage"
-  | "sessionPersistenceName"
-  | "sessionPersistenceProvider"
-  | "sessionTag"
+  | 'firstUserMessage'
+  | 'sessionPersistenceName'
+  | 'sessionPersistenceProvider'
+  | 'sessionTag'
   /*
    * CDXC:SidebarV2Git 2026-07-29:
    * gxserver's per-session git/PR probe. It has to survive this round trip or
    * no story can ever show the card's branch line — the snapshot rebuild below
    * only keeps fields named here.
    */
-  | "gitStatus"
-  | "isPinned"
-  | "lifecycleState"
-  | "isRunning"
-  | "lastInteractionAt"
+  | 'gitStatus'
+  | 'isPinned'
+  | 'lifecycleState'
+  | 'isRunning'
+  | 'lastInteractionAt'
   /*
    * CDXC:SessionChatPromptQueue 2026-08-21-b:
    * The queued-prompt badge's two inputs. The snapshot rebuild below keeps only
@@ -112,10 +109,10 @@ type SidebarSessionDecoration = Pick<
    * — neither the yellow waiting badge nor the red failed one — and a layout
    * check against the real component is impossible.
    */
-  | "queuedPromptCount"
-  | "queuedPromptFailedCount"
-  | "terminalTitle"
-  | "workingStartedAt"
+  | 'queuedPromptCount'
+  | 'queuedPromptFailedCount'
+  | 'terminalTitle'
+  | 'workingStartedAt'
 > &
   /*
    * CDXC:SidebarV2 2026-07-29:
@@ -132,20 +129,20 @@ export type SidebarStoryWorkspace = {
     Record<
       string,
       Pick<
-        SidebarHydrateMessage["groups"][number],
+        SidebarHydrateMessage['groups'][number],
         /*
          * CDXC:SidebarV2ContextMenuParity 2026-07-30:
          * `canFocusMode` is per-group host state ("this group has split panes to
          * zoom"), and both sidebars' Focus item is gated on it. It has to survive
          * the round trip or Focus can never appear in any story.
          */
-        "canFocusMode" | "isChatCollection" | "kind" | "projectContext" | "remoteMachineContext"
+        'canFocusMode' | 'isChatCollection' | 'kind' | 'projectContext' | 'remoteMachineContext'
       >
     >
   >;
   options: SidebarStoryWorkspaceOptions;
-  pinnedPrompts: SidebarHydrateMessage["pinnedPrompts"];
-  previousSessions: SidebarHydrateMessage["previousSessions"];
+  pinnedPrompts: SidebarHydrateMessage['pinnedPrompts'];
+  previousSessions: SidebarHydrateMessage['previousSessions'];
   sessionDecorationsById: Readonly<Record<string, SidebarSessionDecoration>>;
   snapshot: GroupedSessionWorkspaceSnapshot;
 };
@@ -194,7 +191,7 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
            */
           remoteMachineContext: group.remoteMachineContext,
         },
-      ]),
+      ])
     ),
     pinnedPrompts: message.pinnedPrompts.map((prompt) => ({ ...prompt })),
     previousSessions: message.previousSessions.map((session) => ({ ...session })),
@@ -235,14 +232,11 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
               workingStartedAt: session.workingStartedAt,
             } satisfies SidebarSessionDecoration,
           ];
-        }),
-      ),
+        })
+      )
     ),
     snapshot: normalizeGroupedSessionWorkspaceSnapshot({
-      activeGroupId:
-        message.groups.find((group) => group.isActive)?.groupId ??
-        message.groups[0]?.groupId ??
-        "group-1",
+      activeGroupId: message.groups.find((group) => group.isActive)?.groupId ?? message.groups[0]?.groupId ?? 'group-1',
       groups: message.groups.map((group) => createSessionGroupRecord(group)),
       nextGroupNumber: getNextGroupNumber(message.groups),
       nextSessionDisplayId: Number.NaN,
@@ -253,20 +247,19 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
 
 export function createSidebarStoryMessage(
   workspace: SidebarStoryWorkspace,
-  type: SidebarHydrateMessage["type"] | SidebarSessionStateMessage["type"] = "sessionState",
+  type: SidebarHydrateMessage['type'] | SidebarSessionStateMessage['type'] = 'sessionState'
 ): SidebarHydrateMessage | SidebarSessionStateMessage {
   const activeGroup =
     workspace.snapshot.groups.find((group) => group.groupId === workspace.snapshot.activeGroupId) ??
     workspace.snapshot.groups[0];
 
   const groups = workspace.snapshot.groups.map((group) => {
-    const items = createSidebarSessionItems(group.snapshot, "mac").map((item) => ({
+    const items = createSidebarSessionItems(group.snapshot, 'mac').map((item) => ({
       ...item,
       ...workspace.sessionDecorationsById[item.sessionId],
-      activity: workspace.sessionDecorationsById[item.sessionId]?.activity ?? "idle",
+      activity: workspace.sessionDecorationsById[item.sessionId]?.activity ?? 'idle',
       agentIcon: workspace.sessionDecorationsById[item.sessionId]?.agentIcon,
-      lifecycleState:
-        workspace.sessionDecorationsById[item.sessionId]?.lifecycleState ?? item.lifecycleState,
+      lifecycleState: workspace.sessionDecorationsById[item.sessionId]?.lifecycleState ?? item.lifecycleState,
       isRunning: workspace.sessionDecorationsById[item.sessionId]?.isRunning ?? item.isRunning,
       lastInteractionAt: workspace.sessionDecorationsById[item.sessionId]?.lastInteractionAt,
       terminalTitle: workspace.sessionDecorationsById[item.sessionId]?.terminalTitle,
@@ -307,7 +300,7 @@ export function createSidebarStoryMessage(
     workspace.options.commandSessionIndicators.map((indicator) => ({
       ...indicator,
       isActive: indicator.sessionId === activeGroup?.snapshot.focusedSessionId,
-    })),
+    }))
   );
 
   return {
@@ -319,8 +312,7 @@ export function createSidebarStoryMessage(
         : {}),
       ...(workspace.options.lifecycleCapabilitiesByMachineId
         ? {
-            lifecycleCapabilitiesByMachineId:
-              workspace.options.lifecycleCapabilitiesByMachineId,
+            lifecycleCapabilitiesByMachineId: workspace.options.lifecycleCapabilitiesByMachineId,
           }
         : {}),
       ...(workspace.options.autoSettleAfterDays === undefined
@@ -341,7 +333,7 @@ export function createSidebarStoryMessage(
         groups
           .map((group) => group.projectContext?.editor.projectId)
           .filter((projectId): projectId is string => Boolean(projectId))
-          .map((projectId) => [projectId, workspace.options.commands]),
+          .map((projectId) => [projectId, workspace.options.commands])
       ),
       recentProjects: workspace.options.recentProjects,
       settings: workspace.options.settings,
@@ -356,69 +348,64 @@ export function createSidebarStoryMessage(
 
 export function reduceSidebarStoryWorkspace(
   workspace: SidebarStoryWorkspace,
-  message: SidebarToExtensionMessage,
+  message: SidebarToExtensionMessage
 ): SidebarStoryWorkspace | undefined {
   switch (message.type) {
-    case "sidebarDebugLog":
+    case 'sidebarDebugLog':
       return undefined;
 
-    case "moveSessionToGroup": {
+    case 'moveSessionToGroup': {
       const result = moveSessionToGroupInWorkspace(
         workspace.snapshot,
         message.sessionId,
         message.groupId,
-        message.targetIndex,
+        message.targetIndex
       );
       return result.changed ? { ...workspace, snapshot: result.snapshot } : undefined;
     }
 
-    case "syncSessionOrder": {
-      const result = syncSessionOrderInWorkspace(
-        workspace.snapshot,
-        message.groupId,
-        message.sessionIds,
-      );
+    case 'syncSessionOrder': {
+      const result = syncSessionOrderInWorkspace(workspace.snapshot, message.groupId, message.sessionIds);
       return result.changed ? { ...workspace, snapshot: result.snapshot } : undefined;
     }
 
-    case "syncGroupOrder": {
+    case 'syncGroupOrder': {
       const result = syncGroupOrderInWorkspace(workspace.snapshot, message.groupIds);
       return result.changed ? { ...workspace, snapshot: result.snapshot } : undefined;
     }
 
-    case "focusSession": {
+    case 'focusSession': {
       const result = focusSessionInWorkspace(workspace.snapshot, message.sessionId);
       return result.changed ? { ...workspace, snapshot: result.snapshot } : undefined;
     }
 
-    case "focusGroup": {
+    case 'focusGroup': {
       const result = focusGroupInWorkspace(workspace.snapshot, message.groupId);
       return result.changed ? { ...workspace, snapshot: result.snapshot } : undefined;
     }
 
-    case "setVisibleCount":
+    case 'setVisibleCount':
       return {
         ...workspace,
         snapshot: setVisibleCountInWorkspace(workspace.snapshot, message.visibleCount),
       };
 
-    case "setViewMode":
+    case 'setViewMode':
       return {
         ...workspace,
         snapshot: setViewModeInWorkspace(workspace.snapshot, message.viewMode),
       };
 
-    case "toggleActiveSessionsSortMode":
+    case 'toggleActiveSessionsSortMode':
       return {
         ...workspace,
         options: {
           ...workspace.options,
-          activeSessionsSortMode:
-            workspace.options.activeSessionsSortMode === "manual" ? "lastActivity" : "manual",
+          activeSessionsSortMode: workspace.options.activeSessionsSortMode === 'manual' ? 'lastActivity' : 'manual',
         },
       };
 
-    case "setActiveSessionsSortMode":
+    case 'setActiveSessionsSortMode':
       return {
         ...workspace,
         options: {
@@ -436,8 +423,8 @@ export function reduceSidebarStoryWorkspace(
      * version switch in particular is asserted by several V1 stories that expect
      * the classic sidebar to stay mounted after the click.
      */
-    case "updateSettingsPatch":
-      return message.source === "sidebar:projectGrouping" && workspace.options.settings
+    case 'updateSettingsPatch':
+      return message.source === 'sidebar:projectGrouping' && workspace.options.settings
         ? {
             ...workspace,
             options: {
@@ -450,7 +437,7 @@ export function reduceSidebarStoryWorkspace(
           }
         : undefined;
 
-    case "cycleSessionPersistenceProvider":
+    case 'cycleSessionPersistenceProvider':
       return workspace.options.settings
         ? {
             ...workspace,
@@ -459,25 +446,25 @@ export function reduceSidebarStoryWorkspace(
               settings: {
                 ...workspace.options.settings,
                 sessionPersistenceProvider:
-                  workspace.options.settings.sessionPersistenceProvider === "off"
-                    ? "tmux"
-                    : workspace.options.settings.sessionPersistenceProvider === "tmux"
-                      ? "zmx"
-                      : workspace.options.settings.sessionPersistenceProvider === "zmx"
-                        ? "zellij"
-                        : "off",
+                  workspace.options.settings.sessionPersistenceProvider === 'off'
+                    ? 'tmux'
+                    : workspace.options.settings.sessionPersistenceProvider === 'tmux'
+                      ? 'zmx'
+                      : workspace.options.settings.sessionPersistenceProvider === 'zmx'
+                        ? 'zellij'
+                        : 'off',
               },
             },
           }
         : undefined;
 
-    case "toggleFullscreenSession":
+    case 'toggleFullscreenSession':
       return {
         ...workspace,
         snapshot: toggleFullscreenSessionInWorkspace(workspace.snapshot),
       };
 
-    case "saveScratchPad":
+    case 'saveScratchPad':
       return {
         ...workspace,
         options: {
@@ -486,7 +473,7 @@ export function reduceSidebarStoryWorkspace(
         },
       };
 
-    case "savePinnedPrompt": {
+    case 'savePinnedPrompt': {
       const now = new Date().toISOString();
       const promptId = message.promptId ?? `story-prompt-${workspace.pinnedPrompts.length}`;
       const existingPrompt = workspace.pinnedPrompts.find((prompt) => prompt.promptId === promptId);
@@ -498,9 +485,7 @@ export function reduceSidebarStoryWorkspace(
         updatedAt: now,
       };
       const nextPinnedPrompts = existingPrompt
-        ? workspace.pinnedPrompts.map((prompt) =>
-            prompt.promptId === promptId ? nextPrompt : prompt,
-          )
+        ? workspace.pinnedPrompts.map((prompt) => (prompt.promptId === promptId ? nextPrompt : prompt))
         : [nextPrompt, ...workspace.pinnedPrompts];
 
       return {
@@ -509,43 +494,34 @@ export function reduceSidebarStoryWorkspace(
       };
     }
 
-    case "deletePreviousSession":
+    case 'deletePreviousSession':
       return {
         ...workspace,
-        previousSessions: workspace.previousSessions.filter(
-          (session) => session.historyId !== message.historyId,
-        ),
+        previousSessions: workspace.previousSessions.filter((session) => session.historyId !== message.historyId),
       };
 
-    case "restorePreviousSession":
+    case 'restorePreviousSession':
       return {
         ...workspace,
-        previousSessions: workspace.previousSessions.filter(
-          (session) => session.historyId !== message.historyId,
-        ),
+        previousSessions: workspace.previousSessions.filter((session) => session.historyId !== message.historyId),
       };
 
-    case "saveSidebarCommand": {
-      const nextCommandId =
-        message.commandId ?? `custom-story-${workspace.options.commands.length}`;
+    case 'saveSidebarCommand': {
+      const nextCommandId = message.commandId ?? `custom-story-${workspace.options.commands.length}`;
       const nextCommands = [...workspace.options.commands];
-      const existingIndex = nextCommands.findIndex(
-        (command) => command.commandId === nextCommandId,
-      );
+      const existingIndex = nextCommands.findIndex((command) => command.commandId === nextCommandId);
       const nextCommand = {
         actionType: message.actionType,
-        closeTerminalOnExit:
-          message.actionType === "terminal" ? message.closeTerminalOnExit : false,
-        command: message.actionType === "terminal" ? message.command : undefined,
+        closeTerminalOnExit: message.actionType === 'terminal' ? message.closeTerminalOnExit : false,
+        command: message.actionType === 'terminal' ? message.command : undefined,
         commandId: nextCommandId,
         icon: message.icon,
         isDefault: existingIndex >= 0 ? nextCommands[existingIndex]?.isDefault === true : false,
-        links: message.actionType === "terminal" ? message.links : undefined,
+        links: message.actionType === 'terminal' ? message.links : undefined,
         name: message.name,
-        playCompletionSound:
-          message.actionType === "terminal" ? message.playCompletionSound : false,
+        playCompletionSound: message.actionType === 'terminal' ? message.playCompletionSound : false,
         showOnProjectRow: message.showOnProjectRow,
-        url: message.actionType === "browser" ? message.url : undefined,
+        url: message.actionType === 'browser' ? message.url : undefined,
       };
 
       if (existingIndex >= 0) {
@@ -563,9 +539,8 @@ export function reduceSidebarStoryWorkspace(
       };
     }
 
-    case "saveSidebarAgent": {
-      const nextAgentId =
-        message.agentId ?? `custom-agent-story-${workspace.options.agents.length}`;
+    case 'saveSidebarAgent': {
+      const nextAgentId = message.agentId ?? `custom-agent-story-${workspace.options.agents.length}`;
       const nextAgents = [...workspace.options.agents];
       const existingIndex = nextAgents.findIndex((agent) => agent.agentId === nextAgentId);
       const nextAgent = {
@@ -592,21 +567,17 @@ export function reduceSidebarStoryWorkspace(
       };
     }
 
-    case "deleteSidebarCommand":
+    case 'deleteSidebarCommand':
       return {
         ...workspace,
         options: {
           ...workspace.options,
-          commands: workspace.options.commands.filter(
-            (command) => command.commandId !== message.commandId,
-          ),
+          commands: workspace.options.commands.filter((command) => command.commandId !== message.commandId),
         },
       };
 
-    case "syncSidebarCommandOrder": {
-      const commandById = new Map(
-        workspace.options.commands.map((command) => [command.commandId, command] as const),
-      );
+    case 'syncSidebarCommandOrder': {
+      const commandById = new Map(workspace.options.commands.map((command) => [command.commandId, command] as const));
       const nextCommands = message.commandIds
         .map((commandId) => commandById.get(commandId))
         .filter((command): command is SidebarCommandButton => command !== undefined);
@@ -626,7 +597,7 @@ export function reduceSidebarStoryWorkspace(
       };
     }
 
-    case "deleteSidebarAgent":
+    case 'deleteSidebarAgent':
       return {
         ...workspace,
         options: {
@@ -637,15 +608,13 @@ export function reduceSidebarStoryWorkspace(
                   ...agent,
                   hidden: true,
                 }
-              : agent,
+              : agent
           ),
         },
       };
 
-    case "syncSidebarAgentOrder": {
-      const agentById = new Map(
-        workspace.options.agents.map((agent) => [agent.agentId, agent] as const),
-      );
+    case 'syncSidebarAgentOrder': {
+      const agentById = new Map(workspace.options.agents.map((agent) => [agent.agentId, agent] as const));
       const nextAgents = message.agentIds
         .map((agentId) => agentById.get(agentId))
         .filter((agent): agent is SidebarAgentButton => agent !== undefined);
@@ -665,12 +634,12 @@ export function reduceSidebarStoryWorkspace(
       };
     }
 
-    case "createGroupFromSession": {
+    case 'createGroupFromSession': {
       const result = createGroupFromSessionInWorkspace(workspace.snapshot, message.sessionId);
       return result.changed ? { ...workspace, snapshot: result.snapshot } : undefined;
     }
 
-    case "createGroup": {
+    case 'createGroup': {
       const result = createGroupInWorkspace(workspace.snapshot);
       return result.changed ? { ...workspace, snapshot: result.snapshot } : undefined;
     }
@@ -680,9 +649,7 @@ export function reduceSidebarStoryWorkspace(
   }
 }
 
-function createSessionGroupRecord(
-  group: SidebarHydrateMessage["groups"][number],
-): SessionGroupRecord {
+function createSessionGroupRecord(group: SidebarHydrateMessage['groups'][number]): SessionGroupRecord {
   return {
     groupId: group.groupId,
     snapshot: {
@@ -692,9 +659,7 @@ function createSessionGroupRecord(
       sessions: group.sessions.map((session) => createSessionRecord(session)),
       viewMode: group.viewMode,
       visibleCount: group.visibleCount,
-      visibleSessionIds: group.sessions
-        .filter((session) => session.isVisible)
-        .map((session) => session.sessionId),
+      visibleSessionIds: group.sessions.filter((session) => session.isVisible).map((session) => session.sessionId),
     },
     title: group.title,
   };
@@ -712,20 +677,20 @@ function createSessionRecord(session: SidebarSessionItem): SessionRecord {
     title: session.primaryTitle ?? session.terminalTitle ?? session.alias,
   };
 
-  if (session.kind === "browser") {
+  if (session.kind === 'browser') {
     return {
       ...baseRecord,
       browser: {
-        url: session.detail ?? "",
+        url: session.detail ?? '',
       },
-      kind: "browser",
+      kind: 'browser',
     };
   }
 
   return {
     ...baseRecord,
-    kind: "terminal",
-    terminalEngine: "ghostty-native",
+    kind: 'terminal',
+    terminalEngine: 'ghostty-native',
   };
 }
 
@@ -737,22 +702,22 @@ function parseShortcutIndex(shortcutLabel: string): number {
 
 function parseDisplayId(shortcutLabel: string): string {
   const matchedIndex = shortcutLabel.match(/(\d+)$/)?.[1];
-  return matchedIndex ? matchedIndex.padStart(2, "0") : "00";
+  return matchedIndex ? matchedIndex.padStart(2, '0') : '00';
 }
 
-function getNextGroupNumber(groups: readonly SidebarHydrateMessage["groups"][number][]): number {
+function getNextGroupNumber(groups: readonly SidebarHydrateMessage['groups'][number][]): number {
   return (
     Math.max(
       1,
       ...groups.map((group) => {
         const matchedNumber = group.groupId.match(/group-(\d+)$/)?.[1];
         return matchedNumber ? Number.parseInt(matchedNumber, 10) : 1;
-      }),
+      })
     ) + 1
   );
 }
 
-function getNextSessionNumber(groups: readonly SidebarHydrateMessage["groups"][number][]): number {
+function getNextSessionNumber(groups: readonly SidebarHydrateMessage['groups'][number][]): number {
   return (
     Math.max(
       0,
@@ -760,8 +725,8 @@ function getNextSessionNumber(groups: readonly SidebarHydrateMessage["groups"][n
         group.sessions.map((session) => {
           const matchedNumber = session.sessionId.match(/session-(\d+)$/)?.[1];
           return matchedNumber ? Number.parseInt(matchedNumber, 10) : 0;
-        }),
-      ),
+        })
+      )
     ) + 1
   );
 }

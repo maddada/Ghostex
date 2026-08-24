@@ -1,12 +1,9 @@
-import Fuse from "fuse.js";
-import { Command } from "@/packages/components/ui/command";
-import {
-  APP_SHOTS_HOTKEY_OPTIONS,
-  SESSION_TITLE_GENERATION_AGENT_OPTIONS,
-} from "../../shared/ghostex-settings";
-import { BUILT_IN_WORKSPACE_OPEN_TARGETS } from "../../shared/workspace-open-targets";
-import { BUNDLED_GHOSTEX_AGENT_SKILLS } from "../../shared/ghostex-agent-skills";
-import { DEFAULT_SIDEBAR_AGENTS } from "../../shared/sidebar-agents";
+import Fuse from 'fuse.js';
+import { Command } from '@/packages/components/ui/command';
+import { APP_SHOTS_HOTKEY_OPTIONS, SESSION_TITLE_GENERATION_AGENT_OPTIONS } from '../../shared/ghostex-settings';
+import { BUILT_IN_WORKSPACE_OPEN_TARGETS } from '../../shared/workspace-open-targets';
+import { BUNDLED_GHOSTEX_AGENT_SKILLS } from '../../shared/ghostex-agent-skills';
+import { DEFAULT_SIDEBAR_AGENTS } from '../../shared/sidebar-agents';
 import {
   ADVANCED_MAIN_SETTING_KEYS,
   AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS,
@@ -16,11 +13,11 @@ import {
   SettingSearchDefinition,
   SettingsSectionMeasurementItem,
   SettingsSectionSearchResult,
-} from "./types";
+} from './types';
 
 export function getMostlyVisibleSettingsSectionId<SectionId extends string>(
   viewport: HTMLElement,
-  sections: readonly SettingsSectionMeasurementItem<SectionId>[],
+  sections: readonly SettingsSectionMeasurementItem<SectionId>[]
 ): SectionId | undefined {
   /*
    * CDXC:SettingsNavigation 2026-06-15-22:28:
@@ -47,7 +44,7 @@ export function getMostlyVisibleSettingsSectionId<SectionId extends string>(
     const sectionRect = element.getBoundingClientRect();
     const visibleHeight = Math.max(
       0,
-      Math.min(sectionRect.bottom, viewportRect.bottom) - Math.max(sectionRect.top, viewportRect.top),
+      Math.min(sectionRect.bottom, viewportRect.bottom) - Math.max(sectionRect.top, viewportRect.top)
     );
     if (visibleHeight <= 0) {
       continue;
@@ -79,20 +76,20 @@ export function getHotkeySettingsSectionSearches({
   return Object.fromEntries(
     HOTKEY_SETTINGS_SECTIONS.map((section) => {
       const projectJumpSettings: SettingSearchDefinition[] =
-        section.id === "projects"
+        section.id === 'projects'
           ? [
               {
-                key: "expandCollapsedProjectsOnJump",
-                subtitle: "Reveal a collapsed Projects row before focusing it from Jump to Project hotkeys.",
-                title: "Expand collapsed projects on jump",
+                key: 'expandCollapsedProjectsOnJump',
+                subtitle: 'Reveal a collapsed Projects row before focusing it from Jump to Project hotkeys.',
+                title: 'Expand collapsed projects on jump',
               },
               ...(expandCollapsedProjectsOnJump
                 ? [
                     {
-                      key: "showLessForExpandedProjectJumps",
+                      key: 'showLessForExpandedProjectJumps',
                       subtitle:
-                        "After a project jump expands a collapsed project, switch that project session list to Show less.",
-                      title: "Use Show less after jump expand",
+                        'After a project jump expands a collapsed project, switch that project session list to Show less.',
+                      title: 'Use Show less after jump expand',
                     },
                   ]
                 : []),
@@ -100,35 +97,31 @@ export function getHotkeySettingsSectionSearches({
           : [];
       return [
         section.id,
-        getSettingsSectionSearch(
-          searchQuery,
-          section.title,
-          [
-            ...projectJumpSettings,
-            ...section.ids.flatMap((id) => {
-              const definition = definitionsById.get(id);
-              return definition
-                ? [
-                    {
-                      key: definition.id,
-                      options: [{ label: definition.defaultKey, value: definition.defaultKey }],
-                      subtitle: definition.description,
-                      title: definition.title,
-                    },
-                  ]
-                : [];
-            }),
-          ],
-        ),
+        getSettingsSectionSearch(searchQuery, section.title, [
+          ...projectJumpSettings,
+          ...section.ids.flatMap((id) => {
+            const definition = definitionsById.get(id);
+            return definition
+              ? [
+                  {
+                    key: definition.id,
+                    options: [{ label: definition.defaultKey, value: definition.defaultKey }],
+                    subtitle: definition.description,
+                    title: definition.title,
+                  },
+                ]
+              : [];
+          }),
+        ]),
       ];
-    }),
+    })
   ) as HotkeySettingsSectionSearches;
 }
 
 export function getSettingsSectionSearch(
   query: string,
   sectionTitle: string,
-  settings: ReadonlyArray<SettingSearchDefinition>,
+  settings: ReadonlyArray<SettingSearchDefinition>
 ): SettingsSectionSearchResult {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) {
@@ -141,15 +134,15 @@ export function getSettingsSectionSearch(
 
   const searchItems = [
     {
-      id: "__section",
+      id: '__section',
       options: [],
-      subtitle: "",
+      subtitle: '',
       title: sectionTitle,
     },
     ...settings.map((setting) => ({
       id: setting.key,
       options: setting.options?.flatMap((option) => [option.label, option.value]) ?? [],
-      subtitle: setting.subtitle ?? "",
+      subtitle: setting.subtitle ?? '',
       title: setting.title,
     })),
   ];
@@ -157,9 +150,9 @@ export function getSettingsSectionSearch(
     ignoreLocation: true,
     includeScore: true,
     keys: [
-      { name: "title", weight: 0.55 },
-      { name: "subtitle", weight: 0.25 },
-      { name: "options", weight: 0.2 },
+      { name: 'title', weight: 0.55 },
+      { name: 'subtitle', weight: 0.25 },
+      { name: 'options', weight: 0.2 },
     ],
     /**
      * CDXC:SettingsSearch 2026-05-13-16:05
@@ -170,14 +163,12 @@ export function getSettingsSectionSearch(
     threshold: 0.24,
   });
   const results = fuse.search(trimmedQuery);
-  const sectionMatches = results.some((result) => result.item.id === "__section");
+  const sectionMatches = results.some((result) => result.item.id === '__section');
   return {
     isSearching: true,
     sectionMatches,
     visibleSettingKeys: new Set(
-      results
-        .map((result) => result.item.id)
-        .filter((settingKey) => settingKey !== "__section"),
+      results.map((result) => result.item.id).filter((settingKey) => settingKey !== '__section')
     ),
   };
 }
@@ -185,7 +176,7 @@ export function getSettingsSectionSearch(
 export function getGroupedSettingsSectionSearch(
   query: string,
   sectionTitle: string,
-  sections: readonly SettingsSectionSearchResult[],
+  sections: readonly SettingsSectionSearchResult[]
 ): SettingsSectionSearchResult {
   const groupTitleResult = getSettingsSectionSearch(query, sectionTitle, []);
   const visibleSettingKeys = new Set<string>(groupTitleResult.visibleSettingKeys);
@@ -197,8 +188,7 @@ export function getGroupedSettingsSectionSearch(
   return {
     groupTitleMatches: groupTitleResult.sectionMatches,
     isSearching: groupTitleResult.isSearching || sections.some((section) => section.isSearching),
-    sectionMatches:
-      groupTitleResult.sectionMatches || sections.some((section) => section.sectionMatches),
+    sectionMatches: groupTitleResult.sectionMatches || sections.some((section) => section.sectionMatches),
     visibleSettingKeys,
   };
 }
@@ -219,15 +209,7 @@ export type SettingsTabSearch = {
 };
 
 export type SearchableExtraSettingsTabId =
-  | "about"
-  | "actions"
-  | "agents"
-  | "integrations"
-  | "plugins"
-  | "openTargets"
-  | "osIntegration"
-  | "projects"
-  | "remote";
+  'about' | 'actions' | 'agents' | 'integrations' | 'plugins' | 'openTargets' | 'osIntegration' | 'projects' | 'remote';
 
 export type ExtraSettingsTabSearches = Record<SearchableExtraSettingsTabId, SettingsTabSearch>;
 
@@ -245,422 +227,412 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
   about: {
     sections: [
       {
-        id: "about",
+        id: 'about',
         settings: [
-          { key: "version", subtitle: "Ghostex app version.", title: "Version" },
-          { key: "discord", subtitle: "Chat with the community and get help.", title: "Join Discord" },
+          { key: 'version', subtitle: 'Ghostex app version.', title: 'Version' },
+          { key: 'discord', subtitle: 'Chat with the community and get help.', title: 'Join Discord' },
           {
-            key: "github",
-            subtitle: "View the source, releases, and report issues.",
-            title: "View on GitHub",
+            key: 'github',
+            subtitle: 'View the source, releases, and report issues.',
+            title: 'View on GitHub',
           },
           {
-            key: "sponsor",
-            subtitle: "Support the continued development of Ghostex.",
-            title: "Sponsor Ghostex",
+            key: 'sponsor',
+            subtitle: 'Support the continued development of Ghostex.',
+            title: 'Sponsor Ghostex',
           },
         ],
-        title: "About",
+        title: 'About',
       },
     ],
-    title: "About",
+    title: 'About',
   },
   actions: {
     sections: [
       {
-        id: "actions",
+        id: 'actions',
         settings: [
           {
-            key: "terminalAction",
+            key: 'terminalAction',
             subtitle:
-              "Add terminal actions to run saved commands in quick command terminals with one click or a hotkey.",
-            title: "Terminal Action",
+              'Add terminal actions to run saved commands in quick command terminals with one click or a hotkey.',
+            title: 'Terminal Action',
           },
           {
-            key: "browserAction",
-            subtitle: "Add browser actions to open saved URLs in browser panes.",
-            title: "Browser Action",
+            key: 'browserAction',
+            subtitle: 'Add browser actions to open saved URLs in browser panes.',
+            title: 'Browser Action',
           },
           {
-            key: "actionShortcuts",
+            key: 'actionShortcuts',
+            subtitle: 'Actions are custom shortcuts for repeat work, shared between a main project and its worktrees.',
+            title: 'Custom actions',
+          },
+          {
+            key: 'globalActions',
             subtitle:
-              "Actions are custom shortcuts for repeat work, shared between a main project and its worktrees.",
-            title: "Custom actions",
+              'Global actions apply to every project, are stored by the Ghostex daemon, and appear in the tab strip above your tabs.',
+            title: 'Global Actions',
           },
           {
-            key: "globalActions",
-            subtitle:
-              "Global actions apply to every project, are stored by the Ghostex daemon, and appear in the tab strip above your tabs.",
-            title: "Global Actions",
+            key: 'hideTabStripNewTerminalButton',
+            subtitle: 'Hide the New Terminal button from the tab strip.',
+            title: 'Hide New Terminal button',
           },
           {
-            key: "hideTabStripNewTerminalButton",
-            subtitle: "Hide the New Terminal button from the tab strip.",
-            title: "Hide New Terminal button",
-          },
-          {
-            key: "hideTabStripNewBrowserButton",
-            subtitle: "Hide the New Browser Tab button from the tab strip.",
-            title: "Hide New Browser Tab button",
+            key: 'hideTabStripNewBrowserButton',
+            subtitle: 'Hide the New Browser Tab button from the tab strip.',
+            title: 'Hide New Browser Tab button',
           },
         ],
-        title: "Actions",
+        title: 'Actions',
       },
     ],
-    title: "Actions",
+    title: 'Actions',
   },
   agents: {
     sections: [
       {
-        id: "agentHooks",
+        id: 'agentHooks',
         settings: [
           {
-            key: "agentResumeHooks",
+            key: 'agentResumeHooks',
             options: AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS.map((agent) => ({
               label: agent.name,
               value: agent.name,
             })),
             subtitle:
               "Install hooks so Ghostex can capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Uninstall a single agent's hook from its row, or remove every Ghostex-owned hook with Uninstall All.",
-            title: "Agent resume hooks",
+            title: 'Agent resume hooks',
           },
         ],
-        title: "Agent Hooks",
+        title: 'Agent Hooks',
       },
       {
-        id: "config",
+        id: 'config',
         settings: [
           {
-            key: "defaultPromptAgent",
+            key: 'defaultPromptAgent',
             subtitle:
-              "Choose the agent used by Git helper prompts, project board Start Work, and the default worktree first-prompt selection.",
-            title: "Default Prompt Agent",
+              'Choose the agent used by Git helper prompts, project board Start Work, and the default worktree first-prompt selection.',
+            title: 'Default Prompt Agent',
           },
           {
-            key: "titleGenerationAgent",
+            key: 'titleGenerationAgent',
             options: SESSION_TITLE_GENERATION_AGENT_OPTIONS,
-            subtitle:
-              "Choose the headless agent Ghostex uses for first-prompt session title generation.",
-            title: "Title Generation Agent",
+            subtitle: 'Choose the headless agent Ghostex uses for first-prompt session title generation.',
+            title: 'Title Generation Agent',
           },
           {
-            key: "titleGenerationCommand",
-            subtitle:
-              "Preview of the command Ghostex sends to generate automatic first-prompt session titles.",
-            title: "Title Generation Command",
+            key: 'titleGenerationCommand',
+            subtitle: 'Preview of the command Ghostex sends to generate automatic first-prompt session titles.',
+            title: 'Title Generation Command',
           },
           {
-            key: "customTitleCommand",
-            subtitle:
-              "Run this command with the title prompt on stdin. It should print only the title.",
-            title: "Custom Title Command",
+            key: 'customTitleCommand',
+            subtitle: 'Run this command with the title prompt on stdin. It should print only the title.',
+            title: 'Custom Title Command',
           },
           {
-            key: "acceptAll",
+            key: 'acceptAll',
             subtitle:
               "Enable each supported agent's permission-bypass mode when launching sessions. Per-agent settings can inherit or override this default.",
-            title: "Accept All",
+            title: 'Accept All',
           },
         ],
-        title: "Config",
+        title: 'Config',
       },
       {
-        id: "agentList",
+        id: 'agentList',
         settings: [
           {
-            key: "addAgent",
+            key: 'addAgent',
             options: DEFAULT_SIDEBAR_AGENTS.map((agent) => ({
               label: agent.name,
               value: agent.name,
             })),
-            subtitle: "Add, reorder, edit, or delete agent launchers used to start new sessions.",
-            title: "Add Agent",
+            subtitle: 'Add, reorder, edit, or delete agent launchers used to start new sessions.',
+            title: 'Add Agent',
           },
         ],
-        title: "Agents",
+        title: 'Agents',
       },
     ],
-    title: "Agents",
+    title: 'Agents',
   },
   integrations: {
     sections: [
       {
-        id: "integrations",
+        id: 'integrations',
         settings: [
           {
-            key: "ghostexCli",
+            key: 'ghostexCli',
             subtitle:
-              "Ghostex keeps the app-bundled ghostex command linked automatically for mobile apps and CLI-backed integration setup.",
-            title: "Ghostex CLI",
+              'Ghostex keeps the app-bundled ghostex command linked automatically for mobile apps and CLI-backed integration setup.',
+            title: 'Ghostex CLI',
           },
           {
-            key: "bundledAgentSkills",
+            key: 'bundledAgentSkills',
             options: BUNDLED_GHOSTEX_AGENT_SKILLS.map((skill) => ({
               label: skill.name,
               value: skill.skillName,
             })),
             subtitle:
-              "Install the Ghostex skills you want agents to discover. Each skill is copied to ~/.agents/skills and can be updated or uninstalled independently, or removed together with Uninstall All.",
-            title: "Bundled Agent Skills",
+              'Install the Ghostex skills you want agents to discover. Each skill is copied to ~/.agents/skills and can be updated or uninstalled independently, or removed together with Uninstall All.',
+            title: 'Bundled Agent Skills',
           },
           {
-            key: "appShots",
+            key: 'appShots',
             options: APP_SHOTS_HOTKEY_OPTIONS,
             subtitle:
-              "Capture the frontmost app window, then stage it in the focused or recent agent session as local image context.",
-            title: "App Shots",
+              'Capture the frontmost app window, then stage it in the focused or recent agent session as local image context.',
+            title: 'App Shots',
           },
           {
-            key: "cuaPermissions",
+            key: 'cuaPermissions',
             subtitle:
-              "Cua Driver needs Accessibility to click and type in apps, and Screen Recording to understand what is visible on the desktop.",
-            title: "Cua Permissions",
+              'Cua Driver needs Accessibility to click and type in apps, and Screen Recording to understand what is visible on the desktop.',
+            title: 'Cua Permissions',
           },
         ],
-        title: "Integrations",
+        title: 'Integrations',
       },
     ],
-    title: "Integrations",
+    title: 'Integrations',
   },
   plugins: {
     sections: [
       {
-        id: "viewTabs",
+        id: 'viewTabs',
         settings: [
-          { key: "code", subtitle: "Show Code in the title bar and manage its VS Code runtime.", title: "Code" },
-          { key: "browser", subtitle: "Show or hide Browser in the title bar.", title: "Browser" },
-          { key: "kanban", subtitle: "Show Kanban in the title bar and manage its Beads runtime.", title: "Kanban" },
-          { key: "automate", subtitle: "Show or hide Automate in the title bar.", title: "Automate" },
-          { key: "docs", subtitle: "Show or hide Docs in the title bar.", title: "Docs" },
+          { key: 'code', subtitle: 'Show Code in the title bar and manage its VS Code runtime.', title: 'Code' },
+          { key: 'browser', subtitle: 'Show or hide Browser in the title bar.', title: 'Browser' },
+          { key: 'kanban', subtitle: 'Show Kanban in the title bar and manage its Beads runtime.', title: 'Kanban' },
+          { key: 'automate', subtitle: 'Show or hide Automate in the title bar.', title: 'Automate' },
+          { key: 'docs', subtitle: 'Show or hide Docs in the title bar.', title: 'Docs' },
         ],
-        title: "Plugins",
+        title: 'Plugins',
       },
       {
-        id: "components",
+        id: 'components',
         settings: [
           {
-            key: "cuaDriver",
-            subtitle:
-              "Install or upgrade Cua Driver for Ghostex Browser Use and native Desktop Control.",
-            title: "Cua Driver",
+            key: 'cuaDriver',
+            subtitle: 'Install or upgrade Cua Driver for Ghostex Browser Use and native Desktop Control.',
+            title: 'Cua Driver',
           },
-          { key: "cef", subtitle: "Inspect or reinstall the Chromium runtime used by Ghostex web surfaces.", title: "Chromium runtime (CEF)" },
+          {
+            key: 'cef',
+            subtitle: 'Inspect or reinstall the Chromium runtime used by Ghostex web surfaces.',
+            title: 'Chromium runtime (CEF)',
+          },
         ],
-        title: "Shared components",
+        title: 'Shared components',
       },
       {
-        id: "quickAccessButtons",
+        id: 'quickAccessButtons',
         settings: [
-          { key: "tips", subtitle: "Show or hide the Tips & Tricks titlebar button.", title: "Tips & Tricks" },
-          { key: "resources", subtitle: "Show or hide the Resources titlebar button.", title: "Resources" },
-          { key: "gitActions", subtitle: "Show or hide the Git actions titlebar button.", title: "Git actions" },
-          { key: "quickActions", subtitle: "Show or hide the Quick Actions titlebar button.", title: "Quick Actions" },
-          { key: "openIn", subtitle: "Show or hide the Open In titlebar button.", title: "Open In" },
+          { key: 'tips', subtitle: 'Show or hide the Tips & Tricks titlebar button.', title: 'Tips & Tricks' },
+          { key: 'resources', subtitle: 'Show or hide the Resources titlebar button.', title: 'Resources' },
+          { key: 'gitActions', subtitle: 'Show or hide the Git actions titlebar button.', title: 'Git actions' },
+          { key: 'quickActions', subtitle: 'Show or hide the Quick Actions titlebar button.', title: 'Quick Actions' },
+          { key: 'openIn', subtitle: 'Show or hide the Open In titlebar button.', title: 'Open In' },
         ],
-        title: "Quick access buttons",
+        title: 'Quick access buttons',
       },
     ],
-    title: "Customize",
+    title: 'Customize',
   },
   openTargets: {
     sections: [
       {
-        id: "openIn",
+        id: 'openIn',
         settings: BUILT_IN_WORKSPACE_OPEN_TARGETS.map((target) => ({
           key: `builtin:${target.id}`,
-          subtitle: "Show or hide this app on session Open In menus.",
+          subtitle: 'Show or hide this app on session Open In menus.',
           title: target.label,
         })),
-        title: "Open In",
+        title: 'Open In',
       },
       {
-        id: "customOpenTargets",
+        id: 'customOpenTargets',
         settings: [
           {
-            key: "addTarget",
-            subtitle: "Add a custom command Ghostex uses to open workspaces.",
-            title: "Add target",
+            key: 'addTarget',
+            subtitle: 'Add a custom command Ghostex uses to open workspaces.',
+            title: 'Add target',
           },
         ],
-        title: "Custom Open Targets",
+        title: 'Custom Open Targets',
       },
     ],
-    title: "Open In",
+    title: 'Open In',
   },
   osIntegration: {
     sections: [
       {
-        id: "defaults",
+        id: 'defaults',
         settings: [
           {
-            key: "setDefaultEditor",
-            subtitle: "Make Ghostex the default macOS editor for supported file types.",
-            title: "Set as Default Editor",
+            key: 'setDefaultEditor',
+            subtitle: 'Make Ghostex the default macOS editor for supported file types.',
+            title: 'Set as Default Editor',
           },
           {
-            key: "setTerminalLinks",
-            subtitle: "Make Ghostex the handler for ghostex:// terminal links.",
-            title: "Set Terminal Links",
+            key: 'setTerminalLinks',
+            subtitle: 'Make Ghostex the handler for ghostex:// terminal links.',
+            title: 'Set Terminal Links',
           },
           {
-            key: "setScriptRunner",
-            subtitle: "Make Ghostex the default macOS script runner.",
-            title: "Set Script Runner",
+            key: 'setScriptRunner',
+            subtitle: 'Make Ghostex the default macOS script runner.',
+            title: 'Set Script Runner',
           },
           {
-            key: "setAll",
-            subtitle: "Set Ghostex as default editor, terminal-link handler, and script runner.",
-            title: "Set All",
+            key: 'setAll',
+            subtitle: 'Set Ghostex as default editor, terminal-link handler, and script runner.',
+            title: 'Set All',
           },
         ],
-        title: "Defaults",
+        title: 'Defaults',
       },
       {
-        id: "cli",
+        id: 'cli',
         settings: [
           {
-            key: "cliCommands",
-            subtitle: "Command-line examples: ghostex open, ghostex edit, ghostex terminal.",
-            title: "ghostex command line",
+            key: 'cliCommands',
+            subtitle: 'Command-line examples: ghostex open, ghostex edit, ghostex terminal.',
+            title: 'ghostex command line',
           },
         ],
-        title: "CLI",
+        title: 'CLI',
       },
       {
-        id: "diagnostics",
+        id: 'diagnostics',
         settings: [
           {
-            key: "handlerStatus",
+            key: 'handlerStatus',
             subtitle:
-              "Check macOS Launch Services registration for editor defaults, script runner, and ghostex:// links.",
-            title: "macOS handler status",
+              'Check macOS Launch Services registration for editor defaults, script runner, and ghostex:// links.',
+            title: 'macOS handler status',
           },
         ],
-        title: "Diagnostics",
+        title: 'Diagnostics',
       },
     ],
-    title: "OS Integration",
+    title: 'OS Integration',
   },
   projects: {
     sections: [
       {
-        id: "docs",
+        id: 'docs',
         settings: [
           {
-            key: "docsFolders",
-            subtitle:
-              "Comma-separated project-relative folders to scan recursively in Docs.",
-            title: "Docs folders",
+            key: 'docsFolders',
+            subtitle: 'Comma-separated project-relative folders to scan recursively in Docs.',
+            title: 'Docs folders',
           },
         ],
-        title: "Docs",
+        title: 'Docs',
       },
       {
-        id: "globalDefaults",
+        id: 'globalDefaults',
         settings: [
           {
-            key: "globalWorktreeCommand",
-            subtitle: "Worktree command every project uses unless it sets its own.",
-            title: "Global worktree command",
+            key: 'globalWorktreeCommand',
+            subtitle: 'Worktree command every project uses unless it sets its own.',
+            title: 'Global worktree command',
           },
           {
-            key: "globalTicketKey",
-            subtitle: "Ticket key every project uses unless it sets its own.",
-            title: "Global ticket key",
+            key: 'globalTicketKey',
+            subtitle: 'Ticket key every project uses unless it sets its own.',
+            title: 'Global ticket key',
           },
           {
-            key: "globalBeadsDirectory",
-            subtitle: "Beads directory every project uses unless it sets its own.",
-            title: "Global Beads directory",
+            key: 'globalBeadsDirectory',
+            subtitle: 'Beads directory every project uses unless it sets its own.',
+            title: 'Global Beads directory',
           },
           {
-            key: "globalDocsDirectory",
-            subtitle:
-              "Extra folder Docs shows in every project, alongside that project's own docs.",
-            title: "Global Docs directory",
+            key: 'globalDocsDirectory',
+            subtitle: "Extra folder Docs shows in every project, alongside that project's own docs.",
+            title: 'Global Docs directory',
           },
         ],
-        title: "Global Defaults",
+        title: 'Global Defaults',
       },
       {
-        id: "projectSettings",
+        id: 'projectSettings',
         settings: [
           {
-            key: "worktreeCommand",
+            key: 'worktreeCommand',
             subtitle:
-              "Runs in the new worktree folder before the project is added (useful for .envs, installing dependencies, etc.).",
-            title: "Worktree command",
+              'Runs in the new worktree folder before the project is added (useful for .envs, installing dependencies, etc.).',
+            title: 'Worktree command',
           },
           {
-            key: "ticketKey",
-            subtitle:
-              "Three-letter prefix used for Linear-style ticket numbers on the Project board.",
-            title: "Ticket key",
+            key: 'ticketKey',
+            subtitle: 'Three-letter prefix used for Linear-style ticket numbers on the Project board.',
+            title: 'Ticket key',
           },
           {
-            key: "beadsDirectory",
-            subtitle:
-              "Absolute path the Project board reads its Beads workspace (.beads) from.",
-            title: "Beads directory",
+            key: 'beadsDirectory',
+            subtitle: 'Absolute path the Project board reads its Beads workspace (.beads) from.',
+            title: 'Beads directory',
           },
           {
-            key: "docsDirectory",
-            subtitle:
-              "Extra folder this project's Docs surface shows, in addition to its own docs.",
-            title: "Docs directory",
+            key: 'docsDirectory',
+            subtitle: "Extra folder this project's Docs surface shows, in addition to its own docs.",
+            title: 'Docs directory',
           },
         ],
-        title: "Project settings",
+        title: 'Project settings',
       },
     ],
-    title: "Projects",
+    title: 'Projects',
   },
   remote: {
     sections: [
       {
-        id: "remoteMachines",
+        id: 'remoteMachines',
         settings: [
           {
-            key: "addMachine",
-            subtitle: "Saved SSH machines appear as separate sidebar sections.",
-            title: "Add remote machine",
+            key: 'addMachine',
+            subtitle: 'Saved SSH machines appear as separate sidebar sections.',
+            title: 'Add remote machine',
           },
-          { key: "sshHost", subtitle: "Remote machine SSH host.", title: "SSH host" },
-          { key: "sshUser", subtitle: "Remote machine SSH user.", title: "SSH user" },
-          { key: "sshPort", subtitle: "Remote machine SSH port.", title: "SSH port" },
+          { key: 'sshHost', subtitle: 'Remote machine SSH host.', title: 'SSH host' },
+          { key: 'sshUser', subtitle: 'Remote machine SSH user.', title: 'SSH user' },
+          { key: 'sshPort', subtitle: 'Remote machine SSH port.', title: 'SSH port' },
           {
-            key: "identityFile",
-            subtitle: "SSH identity file used to connect to the remote machine.",
-            title: "Identity file",
-          },
-          {
-            key: "password",
-            subtitle: "SSH passwords are stored in macOS Keychain.",
-            title: "Password",
+            key: 'identityFile',
+            subtitle: 'SSH identity file used to connect to the remote machine.',
+            title: 'Identity file',
           },
           {
-            key: "tailscaleSetup",
-            subtitle:
-              "Use Tailscale when the remote machine is not reachable on your local network.",
-            title: "Tailscale setup",
+            key: 'password',
+            subtitle: 'SSH passwords are stored in macOS Keychain.',
+            title: 'Password',
           },
           {
-            key: "installGxserver",
-            subtitle: "Install, update, or connect gxserver on a saved remote machine.",
-            title: "Install / Connect gxserver",
+            key: 'tailscaleSetup',
+            subtitle: 'Use Tailscale when the remote machine is not reachable on your local network.',
+            title: 'Tailscale setup',
+          },
+          {
+            key: 'installGxserver',
+            subtitle: 'Install, update, or connect gxserver on a saved remote machine.',
+            title: 'Install / Connect gxserver',
           },
         ],
-        title: "Remote machines",
+        title: 'Remote machines',
       },
     ],
-    title: "Remote",
+    title: 'Remote',
   },
 };
 
-export function getExtraSettingsTabSearch(
-  query: string,
-  tab: SearchableExtraSettingsTabId,
-): SettingsTabSearch {
+export function getExtraSettingsTabSearch(query: string, tab: SearchableExtraSettingsTabId): SettingsTabSearch {
   const definition = EXTRA_SETTINGS_TAB_SEARCH_SECTIONS[tab];
   const tabTitleResult = getSettingsSectionSearch(query, definition.title, []);
   const sections = Object.fromEntries(
@@ -670,11 +642,9 @@ export function getExtraSettingsTabSearch(
         section.id,
         // A tab-title match (e.g. "remote") should reveal the whole page, so
         // treat every section on that page as matching.
-        tabTitleResult.sectionMatches
-          ? { ...sectionResult, sectionMatches: true }
-          : sectionResult,
+        tabTitleResult.sectionMatches ? { ...sectionResult, sectionMatches: true } : sectionResult,
       ];
-    }),
+    })
   );
   return {
     sections,
@@ -684,9 +654,10 @@ export function getExtraSettingsTabSearch(
 
 export function getExtraSettingsTabSearches(query: string): ExtraSettingsTabSearches {
   return Object.fromEntries(
-    (Object.keys(EXTRA_SETTINGS_TAB_SEARCH_SECTIONS) as SearchableExtraSettingsTabId[]).map(
-      (tab) => [tab, getExtraSettingsTabSearch(query, tab)],
-    ),
+    (Object.keys(EXTRA_SETTINGS_TAB_SEARCH_SECTIONS) as SearchableExtraSettingsTabId[]).map((tab) => [
+      tab,
+      getExtraSettingsTabSearch(query, tab),
+    ])
   ) as ExtraSettingsTabSearches;
 }
 
@@ -698,10 +669,7 @@ export function isAdvancedMainSetting(settingKey: string): boolean {
   return ADVANCED_MAIN_SETTING_KEYS.has(settingKey);
 }
 
-export function shouldShowSettingsSection(
-  result: SettingsSectionSearchResult,
-  showAdvancedSettings = true,
-): boolean {
+export function shouldShowSettingsSection(result: SettingsSectionSearchResult, showAdvancedSettings = true): boolean {
   if (!hasVisibleSettingsSearchResult(result)) {
     return false;
   }
@@ -714,7 +682,7 @@ export function shouldShowSettingsSection(
 export function shouldShowSetting(
   result: SettingsSectionSearchResult,
   settingKey: string,
-  showAdvancedSettings = true,
+  showAdvancedSettings = true
 ): boolean {
   if (result.isSearching) {
     return result.sectionMatches || result.visibleSettingKeys.has(settingKey);

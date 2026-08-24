@@ -19,45 +19,35 @@
 // full-width rows carrying their 1-9 shortcut key, and a free-text answer in
 // the bottom row next to the send button.
 
-import {
-  IconArrowLeft,
-  IconChevronRight,
-  IconTerminal2,
-  IconX,
-} from "@tabler/icons-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { IconArrowLeft, IconChevronRight, IconTerminal2, IconX } from '@tabler/icons-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type {
   GxserverAnswerSessionChatPromptParams,
   SessionChatInteractivePrompt,
   SessionChatQuestionSelection,
-} from "../../shared/session-chat";
-import { cn } from "@/packages/components/utils";
-import { Button } from "../../components/ui/button";
-import { SessionChatChoiceRows } from "./session-chat-choice-rows";
+} from '../../shared/session-chat';
+import { cn } from '@/packages/components/utils';
+import { Button } from '../../components/ui/button';
+import { SessionChatChoiceRows } from './session-chat-choice-rows';
 
-export function sessionChatCardDismissKey(
-  prompt: SessionChatInteractivePrompt | null,
-): string | null {
+export function sessionChatCardDismissKey(prompt: SessionChatInteractivePrompt | null): string | null {
   if (!prompt) {
     return null;
   }
-  if (prompt.kind === "question") {
-    return `question:${prompt.questions.length}:${prompt.questions[0]?.question ?? ""}`;
+  if (prompt.kind === 'question') {
+    return `question:${prompt.questions.length}:${prompt.questions[0]?.question ?? ''}`;
   }
   const title = `Allow ${prompt.tool}?`;
-  return `approval:${title}:${prompt.summary ?? ""}`;
+  return `approval:${title}:${prompt.summary ?? ''}`;
 }
 
-const DELIVERY_FAILED_NOTICE =
-  "Couldn't deliver the answer — switch to Terminal View to answer there.";
-const READ_ONLY_NOTICE = "Switch to Terminal to answer";
+const DELIVERY_FAILED_NOTICE = "Couldn't deliver the answer — switch to Terminal View to answer there.";
+const READ_ONLY_NOTICE = 'Switch to Terminal to answer';
 
 export interface SessionChatInteractiveCardProps {
   prompt: SessionChatInteractivePrompt | null;
   canSend: boolean;
-  onAnswer: (
-    params: Omit<GxserverAnswerSessionChatPromptParams, "projectId" | "sessionId">,
-  ) => Promise<void>;
+  onAnswer: (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>) => Promise<void>;
   /** Cancel/close: dismisses the card and interrupts the agent prompt (ESC). */
   onInterrupt: () => void;
   /** The question card replaces the composer while showing. */
@@ -78,16 +68,10 @@ interface DraftAnswer {
 }
 
 /** Composer-shaped surface: the card stands in for the composer while live. */
-function CardShell({
-  children,
-  kind,
-}: {
-  children?: React.ReactNode;
-  kind: string;
-}) {
+function CardShell({ children, kind }: { children?: React.ReactNode; kind: string }) {
   return (
     <div
-      className="ghostex-chat-question-card min-w-0 overflow-hidden rounded-3xl border border-input bg-card"
+      className='ghostex-chat-question-card min-w-0 overflow-hidden rounded-3xl border border-input bg-card'
       data-kind={kind}
     >
       {children}
@@ -97,7 +81,7 @@ function CardShell({
 
 /** The panel half of the card: everything above the answer row. */
 function CardPanel({ children }: { children: React.ReactNode }) {
-  return <div className="border-b border-border/65 bg-muted/20">{children}</div>;
+  return <div className='border-b border-border/65 bg-muted/20'>{children}</div>;
 }
 
 /**
@@ -124,58 +108,52 @@ function CardHeader({
     <>
       <span
         className={cn(
-          "text-[11px] font-semibold tracking-widest text-muted-foreground uppercase",
-          onToggleCollapsed && "group-hover/header:text-foreground",
+          'text-[11px] font-semibold tracking-widest text-muted-foreground uppercase',
+          onToggleCollapsed && 'group-hover/header:text-foreground'
         )}
       >
         {label}
       </span>
       {counter ? (
-        <span className="flex h-5 shrink-0 items-center rounded-md bg-muted/60 px-1.5 text-[10px] font-medium text-muted-foreground tabular-nums">
+        <span className='flex h-5 shrink-0 items-center rounded-md bg-muted/60 px-1.5 text-[10px] font-medium text-muted-foreground tabular-nums'>
           {counter}
         </span>
       ) : null}
       {collapsed && collapsedSummary ? (
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-          {collapsedSummary}
-        </span>
+        <span className='min-w-0 flex-1 truncate text-xs text-muted-foreground'>{collapsedSummary}</span>
       ) : null}
     </>
   );
 
   return (
-    <div className="flex items-center gap-1 px-2.5 py-2.5">
+    <div className='flex items-center gap-1 px-2.5 py-2.5'>
       {onToggleCollapsed ? (
         <button
-          className="group/header flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2.5 py-1.5 text-left outline-none transition-colors duration-150"
+          className='group/header flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2.5 py-1.5 text-left outline-none transition-colors duration-150'
           // The sidebar's legacy `button:where(:not([data-slot]))` base paints a
           // 1px app border on every bare button; naming the slot opts these
           // custom rows out so their Tailwind borders/fills are the only ones.
-          data-slot="session-chat-question-header"
+          data-slot='session-chat-question-header'
           onClick={onToggleCollapsed}
-          title={
-            collapsed
-              ? "Show the question and its options"
-              : "Hide the question and its options"
-          }
-          type="button"
+          title={collapsed ? 'Show the question and its options' : 'Hide the question and its options'}
+          type='button'
         >
           {labelRow}
           {/* Control tier, like every other expander in the chat. */}
           <IconChevronRight
-            aria-hidden="true"
+            aria-hidden='true'
             className={cn(
-              "ghostex-chat-disclosure-chevron ml-auto text-muted-foreground group-hover/header:text-foreground",
-              !collapsed && "is-open",
+              'ghostex-chat-disclosure-chevron ml-auto text-muted-foreground group-hover/header:text-foreground',
+              !collapsed && 'is-open'
             )}
           />
         </button>
       ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-3 px-2.5 py-1.5">{labelRow}</div>
+        <div className='flex min-w-0 flex-1 items-center gap-3 px-2.5 py-1.5'>{labelRow}</div>
       )}
       {onDismiss ? (
-        <Button aria-label="Dismiss" onClick={onDismiss} size="icon-xs" variant="ghost">
-          <IconX aria-hidden="true" stroke={2} />
+        <Button aria-label='Dismiss' onClick={onDismiss} size='icon-xs' variant='ghost'>
+          <IconX aria-hidden='true' stroke={2} />
         </Button>
       ) : null}
     </div>
@@ -189,20 +167,20 @@ function CardNotice({
 }: {
   onSwitchToTerminal?: () => void;
   text: string;
-  tone: "destructive" | "muted";
+  tone: 'destructive' | 'muted';
 }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-[11px]",
-        tone === "destructive" ? "text-destructive/80" : "text-muted-foreground",
+        'flex items-center gap-2 text-[11px]',
+        tone === 'destructive' ? 'text-destructive/80' : 'text-muted-foreground'
       )}
-      role="status"
+      role='status'
     >
-      <span className="min-w-0 flex-1 leading-snug">{text}</span>
+      <span className='min-w-0 flex-1 leading-snug'>{text}</span>
       {onSwitchToTerminal ? (
-        <Button onClick={onSwitchToTerminal} size="xs" variant="outline">
-          <IconTerminal2 aria-hidden="true" stroke={2} />
+        <Button onClick={onSwitchToTerminal} size='xs' variant='outline'>
+          <IconTerminal2 aria-hidden='true' stroke={2} />
           Terminal
         </Button>
       ) : null}
@@ -211,17 +189,11 @@ function CardNotice({
 }
 
 /** Composer-shaped bottom row: notices, free text, and the primary action. */
-function CardActionRow({
-  children,
-  notice,
-}: {
-  children: React.ReactNode;
-  notice?: React.ReactNode;
-}) {
+function CardActionRow({ children, notice }: { children: React.ReactNode; notice?: React.ReactNode }) {
   return (
-    <div className="grid gap-2 px-4 py-2.5">
+    <div className='grid gap-2 px-4 py-2.5'>
       {notice}
-      <div className="flex items-center gap-2">{children}</div>
+      <div className='flex items-center gap-2'>{children}</div>
     </div>
   );
 }
@@ -245,10 +217,10 @@ export function SessionChatInteractiveCard({
 
   const cardKey = sessionChatCardDismissKey(prompt);
   const showing = prompt !== null && cardKey !== dismissedKey;
-  const showingQuestion = showing && prompt?.kind === "question";
+  const showingQuestion = showing && prompt?.kind === 'question';
   const readOnly = !canSend;
 
-  const questions = prompt?.kind === "question" ? prompt.questions : [];
+  const questions = prompt?.kind === 'question' ? prompt.questions : [];
   const questionIndex = Math.min(activeQuestion, Math.max(questions.length - 1, 0));
   const question = questions[questionIndex];
 
@@ -268,8 +240,8 @@ export function SessionChatInteractiveCard({
     setDeliveryFailed(false);
     setActiveQuestion(0);
     setCollapsed(false);
-    if (prompt?.kind === "question") {
-      setDrafts(prompt.questions.map(() => ({ indices: [], other: "" })));
+    if (prompt?.kind === 'question') {
+      setDrafts(prompt.questions.map(() => ({ indices: [], other: '' })));
     } else {
       setDrafts([]);
     }
@@ -304,10 +276,10 @@ export function SessionChatInteractiveCard({
             };
           }
           return { ...entry, indices: [optionIndex] };
-        }),
+        })
       );
     },
-    [question, questionIndex, readOnly],
+    [question, questionIndex, readOnly]
   );
 
   // Number keys 1-9 pick the matching option while focus sits outside an
@@ -325,10 +297,7 @@ export function SessionChatInteractiveCard({
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
         return;
       }
-      if (
-        target instanceof HTMLElement &&
-        target.closest('[contenteditable]:not([contenteditable="false"])')
-      ) {
+      if (target instanceof HTMLElement && target.closest('[contenteditable]:not([contenteditable="false"])')) {
         return;
       }
       const digit = Number.parseInt(event.key, 10);
@@ -342,17 +311,15 @@ export function SessionChatInteractiveCard({
       event.preventDefault();
       toggleOption(optionIndex);
     };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
   }, [collapsed, question, readOnly, showingQuestion, submitting, toggleOption]);
 
   if (!showing || !prompt) {
     return null;
   }
 
-  const submitAnswer = (
-    params: Omit<GxserverAnswerSessionChatPromptParams, "projectId" | "sessionId">,
-  ): void => {
+  const submitAnswer = (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>): void => {
     if (submittingRef.current || readOnly) {
       return;
     }
@@ -382,30 +349,23 @@ export function SessionChatInteractiveCard({
   const notice = deliveryFailed ? (
     <CardNotice
       text={DELIVERY_FAILED_NOTICE}
-      tone="destructive"
+      tone='destructive'
       {...(onSwitchToTerminal ? { onSwitchToTerminal } : {})}
     />
   ) : readOnly ? (
-    <CardNotice
-      text={READ_ONLY_NOTICE}
-      tone="muted"
-      {...(onSwitchToTerminal ? { onSwitchToTerminal } : {})}
-    />
+    <CardNotice text={READ_ONLY_NOTICE} tone='muted' {...(onSwitchToTerminal ? { onSwitchToTerminal } : {})} />
   ) : null;
 
-  if (prompt.kind === "approval") {
+  if (prompt.kind === 'approval') {
     return (
-      <CardShell kind="approval">
+      <CardShell kind='approval'>
         <CardPanel>
-          <CardHeader
-            label="Pending approval"
-            {...(readOnly ? {} : { onDismiss: dismiss })}
-          />
-          <div className="min-w-0 px-4 pt-1 pb-3.5 sm:px-5">
-            <p className="text-sm text-foreground/90">{`Allow ${prompt.tool}?`}</p>
+          <CardHeader label='Pending approval' {...(readOnly ? {} : { onDismiss: dismiss })} />
+          <div className='min-w-0 px-4 pt-1 pb-3.5 sm:px-5'>
+            <p className='text-sm text-foreground/90'>{`Allow ${prompt.tool}?`}</p>
             {prompt.summary ? (
-              <div className="mt-3 min-w-0 rounded-lg border border-border/65 bg-background/70 p-3">
-                <pre className="max-h-40 min-w-0 overflow-auto font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
+              <div className='mt-3 min-w-0 rounded-lg border border-border/65 bg-background/70 p-3'>
+                <pre className='max-h-40 min-w-0 overflow-auto font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]'>
                   {prompt.summary}
                 </pre>
               </div>
@@ -413,25 +373,25 @@ export function SessionChatInteractiveCard({
           </div>
         </CardPanel>
         <CardActionRow {...(notice ? { notice } : {})}>
-          <div className="ml-auto flex items-center gap-2">
+          <div className='ml-auto flex items-center gap-2'>
             <Button
-              data-chat-answer-control=""
+              data-chat-answer-control=''
               disabled={submitting || readOnly}
               onClick={() => {
-                submitAnswer({ approvalSend: "", kind: "approval" });
+                submitAnswer({ approvalSend: '', kind: 'approval' });
               }}
-              size="sm"
-              variant="outline"
+              size='sm'
+              variant='outline'
             >
               Deny
             </Button>
             <Button
-              data-chat-answer-control=""
+              data-chat-answer-control=''
               disabled={submitting || readOnly}
               onClick={() => {
-                submitAnswer({ approvalSend: "1", kind: "approval" });
+                submitAnswer({ approvalSend: '1', kind: 'approval' });
               }}
-              size="sm"
+              size='sm'
             >
               Allow
             </Button>
@@ -441,28 +401,23 @@ export function SessionChatInteractiveCard({
     );
   }
 
-  const draft = drafts[questionIndex] ?? { indices: [], other: "" };
+  const draft = drafts[questionIndex] ?? { indices: [], other: '' };
   const isLastQuestion = questionIndex >= questions.length - 1;
   const customAnswerActive = draft.other.trim().length > 0;
 
   const questionAnswered = (index: number): boolean => {
     const entry = drafts[index];
-    return (
-      entry !== undefined &&
-      (entry.indices.length > 0 || entry.other.trim().length > 0)
-    );
+    return entry !== undefined && (entry.indices.length > 0 || entry.other.trim().length > 0);
   };
 
-  const hasAnswer = drafts.some(
-    (entry) => entry.indices.length > 0 || entry.other.trim().length > 0,
-  );
+  const hasAnswer = drafts.some((entry) => entry.indices.length > 0 || entry.other.trim().length > 0);
 
   const submitQuestions = (): void => {
     const selections: SessionChatQuestionSelection[] = drafts.map((entry) => ({
       indices: entry.indices,
       ...(entry.other.trim() ? { other: entry.other.trim() } : {}),
     }));
-    submitAnswer({ kind: "question", selections });
+    submitAnswer({ kind: 'question', selections });
   };
 
   const advance = (): void => {
@@ -481,33 +436,31 @@ export function SessionChatInteractiveCard({
   // Trailing button cycles Skip → Next → Send answer → Sending… (§2.6);
   // selecting an option never auto-submits.
   const trailingLabel = submitting
-    ? "Sending…"
+    ? 'Sending…'
     : isLastQuestion
-      ? "Send answer"
+      ? 'Send answer'
       : questionAnswered(questionIndex)
-        ? "Next"
-        : "Skip";
+        ? 'Next'
+        : 'Skip';
 
   return (
-    <CardShell kind="question">
+    <CardShell kind='question'>
       <CardPanel>
         <CardHeader
           collapsed={collapsed}
-          label={question?.header ?? (questions.length === 1 ? "Question" : "Questions")}
+          label={question?.header ?? (questions.length === 1 ? 'Question' : 'Questions')}
           onToggleCollapsed={() => setCollapsed((value) => !value)}
           {...(question ? { collapsedSummary: question.question } : {})}
-          {...(questions.length > 1
-            ? { counter: `${questionIndex + 1}/${questions.length}` }
-            : {})}
+          {...(questions.length > 1 ? { counter: `${questionIndex + 1}/${questions.length}` } : {})}
           {...(readOnly ? {} : { onDismiss: dismiss })}
         />
         {question && !collapsed ? (
-          <div className="px-4 pt-1 pb-3 sm:px-5">
-            <p className="text-sm text-foreground/90">{question.question}</p>
+          <div className='px-4 pt-1 pb-3 sm:px-5'>
+            <p className='text-sm text-foreground/90'>{question.question}</p>
             {question.multiSelect ? (
-              <p className="mt-1 text-xs text-muted-foreground">Select one or more options.</p>
+              <p className='mt-1 text-xs text-muted-foreground'>Select one or more options.</p>
             ) : null}
-            <div className="mt-3">
+            <div className='mt-3'>
               <SessionChatChoiceRows
                 onSelect={toggleOption}
                 options={question.options}
@@ -522,42 +475,40 @@ export function SessionChatInteractiveCard({
       <CardActionRow {...(notice ? { notice } : {})}>
         {questionIndex > 0 ? (
           <Button
-            aria-label="Previous question"
+            aria-label='Previous question'
             disabled={submitting}
             onClick={() => setActiveQuestion(questionIndex - 1)}
-            size="icon-sm"
-            variant="ghost"
+            size='icon-sm'
+            variant='ghost'
           >
-            <IconArrowLeft aria-hidden="true" stroke={2} />
+            <IconArrowLeft aria-hidden='true' stroke={2} />
           </Button>
         ) : null}
         <input
-          className="min-w-0 flex-1 bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-default"
+          className='min-w-0 flex-1 bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-default'
           disabled={readOnly}
           onChange={(event) => {
             const value = event.target.value;
             setDrafts((current) =>
-              current.map((entry, index) =>
-                index === questionIndex ? { ...entry, other: value } : entry,
-              ),
+              current.map((entry, index) => (index === questionIndex ? { ...entry, other: value } : entry))
             );
           }}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
               advance();
             }
           }}
-          placeholder="Write a custom answer…"
-          type="text"
+          placeholder='Write a custom answer…'
+          type='text'
           value={draft.other}
         />
         <Button
-          className="min-w-24"
-          data-chat-answer-control=""
+          className='min-w-24'
+          data-chat-answer-control=''
           disabled={readOnly || submitting || (isLastQuestion && !hasAnswer)}
           onClick={advance}
-          size="sm"
+          size='sm'
         >
           {trailingLabel}
         </Button>

@@ -5,15 +5,15 @@
  * their original order, so this hook must keep being called from the same spot
  * in SettingsModal.
  */
-import { useMemo, type RefObject } from "react";
-import { GHOSTEX_HOTKEY_DEFINITIONS } from "../../shared/ghostex-hotkeys";
-import { type ghostexSettings } from "../../shared/ghostex-settings";
+import { useMemo, type RefObject } from 'react';
+import { GHOSTEX_HOTKEY_DEFINITIONS } from '../../shared/ghostex-hotkeys';
+import { type ghostexSettings } from '../../shared/ghostex-settings';
 import {
   getExtraSettingsTabSearches,
   getHotkeySettingsSectionSearches,
   getSettingsSectionSearch,
   shouldShowSettingsSection,
-} from "./search";
+} from './search';
 import {
   HOTKEY_SETTINGS_SECTIONS,
   HotkeySettingsDefinitionById,
@@ -21,7 +21,7 @@ import {
   HotkeySettingsSectionRefs,
   HotkeySettingsSectionSearches,
   SettingsSectionNavigationItem,
-} from "./types";
+} from './types';
 
 export function useHotkeySettings({
   draft,
@@ -46,7 +46,7 @@ export function useHotkeySettings({
 }) {
   const hotkeyDefinitionsById = useMemo<HotkeySettingsDefinitionById>(
     () => new Map(GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition])),
-    [],
+    []
   );
   const hotkeySectionSearches = useMemo(() => {
     const sectionSearches = getHotkeySettingsSectionSearches({
@@ -59,19 +59,19 @@ export function useHotkeySettings({
      * A query matching the Hotkeys page title (e.g. "hotkeys") should reveal
      * the whole page, mirroring how section-title matches reveal their rows.
      */
-    if (!getSettingsSectionSearch(settingsSearchQuery, "Hotkeys", []).sectionMatches) {
+    if (!getSettingsSectionSearch(settingsSearchQuery, 'Hotkeys', []).sectionMatches) {
       return sectionSearches;
     }
     return Object.fromEntries(
       Object.entries(sectionSearches).map(([sectionId, sectionResult]) => [
         sectionId,
         { ...sectionResult, sectionMatches: true },
-      ]),
+      ])
     ) as HotkeySettingsSectionSearches;
   }, [draft.expandCollapsedProjectsOnJump, hotkeyDefinitionsById, settingsSearchQuery]);
   const extraSettingsTabSearches = useMemo(
     () => getExtraSettingsTabSearches(settingsSearchQuery),
-    [settingsSearchQuery],
+    [settingsSearchQuery]
   );
   const isSettingsSearching = !isFirstLaunchSetup && settingsSearchQuery.trim().length > 0;
   const hotkeySectionRefs: HotkeySettingsSectionRefs = {
@@ -83,7 +83,7 @@ export function useHotkeySettings({
     sessionSlots: hotkeySessionSlotsSectionRef,
   };
   const visibleHotkeySections = HOTKEY_SETTINGS_SECTIONS.filter((section) =>
-    shouldShowSettingsSection(hotkeySectionSearches[section.id]),
+    shouldShowSettingsSection(hotkeySectionSearches[section.id])
   );
   const visibleHotkeySectionNavigation: SettingsSectionNavigationItem<HotkeySettingsSectionId>[] =
     visibleHotkeySections.map((section) => ({
@@ -91,7 +91,7 @@ export function useHotkeySettings({
       title: section.title,
     }));
   const scrollHotkeySettingsSectionIntoView = (sectionId: HotkeySettingsSectionId) => {
-    hotkeySectionRefs[sectionId].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    hotkeySectionRefs[sectionId].current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return {
@@ -106,8 +106,6 @@ export function useHotkeySettings({
   };
 }
 
-export type ExtraSettingsTabSearches = ReturnType<typeof useHotkeySettings>["extraSettingsTabSearches"];
-export type VisibleHotkeySections = ReturnType<typeof useHotkeySettings>["visibleHotkeySections"];
-export type VisibleHotkeySectionNavigation = ReturnType<
-  typeof useHotkeySettings
->["visibleHotkeySectionNavigation"];
+export type ExtraSettingsTabSearches = ReturnType<typeof useHotkeySettings>['extraSettingsTabSearches'];
+export type VisibleHotkeySections = ReturnType<typeof useHotkeySettings>['visibleHotkeySections'];
+export type VisibleHotkeySectionNavigation = ReturnType<typeof useHotkeySettings>['visibleHotkeySectionNavigation'];

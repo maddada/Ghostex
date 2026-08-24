@@ -36,24 +36,27 @@ pub(crate) enum GpuiCustomWorkspaceEditorExecutable {
 }
 
 pub(crate) const GPUI_WORKSPACE_EDITOR_VSCODE_APP_NAMES: &[&str] = &["Visual Studio Code"];
-pub(crate) const GPUI_WORKSPACE_EDITOR_VSCODE_INSIDERS_APP_NAMES: &[&str] = &["Visual Studio Code - Insiders"];
+pub(crate) const GPUI_WORKSPACE_EDITOR_VSCODE_INSIDERS_APP_NAMES: &[&str] =
+    &["Visual Studio Code - Insiders"];
 pub(crate) const GPUI_WORKSPACE_EDITOR_CODIUM_APP_NAMES: &[&str] = &["VSCodium"];
 pub(crate) const GPUI_WORKSPACE_EDITOR_CURSOR_APP_NAMES: &[&str] = &["Cursor"];
 pub(crate) const GPUI_WORKSPACE_EDITOR_WINDSURF_APP_NAMES: &[&str] = &["Windsurf"];
 pub(crate) const GPUI_WORKSPACE_EDITOR_ZED_APP_NAMES: &[&str] = &["Zed", "Zed Preview"];
 pub(crate) const GPUI_WORKSPACE_EDITOR_SUBLIME_APP_NAMES: &[&str] = &["Sublime Text"];
 
-pub(crate) const GPUI_WORKSPACE_EDITOR_VSCODE_TARGET: GpuiWorkspaceEditorTarget = GpuiWorkspaceEditorTarget {
-    command: "code",
-    app_names: GPUI_WORKSPACE_EDITOR_VSCODE_APP_NAMES,
-    launch_kind: GpuiWorkspaceEditorLaunchKind::VscodeCompatible,
-};
+pub(crate) const GPUI_WORKSPACE_EDITOR_VSCODE_TARGET: GpuiWorkspaceEditorTarget =
+    GpuiWorkspaceEditorTarget {
+        command: "code",
+        app_names: GPUI_WORKSPACE_EDITOR_VSCODE_APP_NAMES,
+        launch_kind: GpuiWorkspaceEditorLaunchKind::VscodeCompatible,
+    };
 
-pub(crate) const GPUI_WORKSPACE_EDITOR_ZED_TARGET: GpuiWorkspaceEditorTarget = GpuiWorkspaceEditorTarget {
-    command: "zed",
-    app_names: GPUI_WORKSPACE_EDITOR_ZED_APP_NAMES,
-    launch_kind: GpuiWorkspaceEditorLaunchKind::ZedCompatible,
-};
+pub(crate) const GPUI_WORKSPACE_EDITOR_ZED_TARGET: GpuiWorkspaceEditorTarget =
+    GpuiWorkspaceEditorTarget {
+        command: "zed",
+        app_names: GPUI_WORKSPACE_EDITOR_ZED_APP_NAMES,
+        launch_kind: GpuiWorkspaceEditorLaunchKind::ZedCompatible,
+    };
 
 pub(crate) fn gpui_open_project_path_for_native_ide_action(
     action: GpuiSidebarNativeProjectPathAction,
@@ -223,7 +226,9 @@ pub(crate) fn gpui_parse_custom_workspace_editor_command(
     })
 }
 
-pub(crate) fn gpui_custom_workspace_editor_command_has_unsupported_shell_syntax(value: &str) -> bool {
+pub(crate) fn gpui_custom_workspace_editor_command_has_unsupported_shell_syntax(
+    value: &str,
+) -> bool {
     value.chars().any(|character| {
         character.is_control()
             || matches!(
@@ -246,7 +251,9 @@ pub(crate) fn gpui_custom_workspace_editor_command_has_unsupported_shell_syntax(
     })
 }
 
-pub(crate) fn gpui_split_custom_workspace_editor_argv(command: &str) -> Result<Vec<String>, String> {
+pub(crate) fn gpui_split_custom_workspace_editor_argv(
+    command: &str,
+) -> Result<Vec<String>, String> {
     let mut argv = Vec::new();
     let mut current = String::new();
     let mut quote: Option<char> = None;
@@ -324,4 +331,3 @@ pub(crate) fn gpui_split_custom_workspace_editor_argv(command: &str) -> Result<V
     }
     Ok(argv)
 }
-

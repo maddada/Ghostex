@@ -7,14 +7,14 @@ import { collectInlineFootnoteMarkerRanges } from './inlineFootnotes';
 const sourceLinkMarkerDeco = Decoration.mark({
   class: 'meo-md-link-marker',
   attributes: {
-    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;'
-  }
+    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;',
+  },
 });
 const sourceFootnoteMarkerDeco = Decoration.mark({
   class: 'meo-md-footnote-marker',
   attributes: {
-    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;'
-  }
+    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;',
+  },
 });
 
 function addRange(builder: RangeSetBuilder<Decoration>, from: number, to: number, deco: Decoration): void {
@@ -92,7 +92,7 @@ function computeSourceFootnoteMarkerDecorations(state: EditorState): DecorationS
         return;
       }
       addInlineFootnoteMarkerDecorations(builder, node.from, markerRanges);
-    }
+    },
   });
 
   return builder.finish();
@@ -118,5 +118,5 @@ export const sourceFootnoteMarkerField = StateField.define<DecorationSet>({
       return decorations;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });

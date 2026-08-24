@@ -1,9 +1,9 @@
-import type { GxserverRepositoryClonePreviewResult } from "../shared/gxserver-protocol";
-import { isRepositoryCloneBranchNameInputValid, parseRepositoryCloneInput } from "../shared/repository-clone";
+import type { GxserverRepositoryClonePreviewResult } from '../shared/gxserver-protocol';
+import { isRepositoryCloneBranchNameInputValid, parseRepositoryCloneInput } from '../shared/repository-clone';
 
 export type AddRepositoryCloneSubmitState = {
   branchName: string;
-  clonePreview?: Pick<GxserverRepositoryClonePreviewResult, "destinationExists">;
+  clonePreview?: Pick<GxserverRepositoryClonePreviewResult, 'destinationExists'>;
   folderPath: string;
   isCloning: boolean;
   newFolderName: string;

@@ -1,9 +1,6 @@
-import type {
-  SidebarPreviousSessionItem,
-  SidebarSessionItem,
-} from "../shared/session-grid-contract";
-import { isDefaultSessionSearchTitle } from "../shared/session-grid-contract";
-import { getSessionHistoryCardTitle } from "./session-history-card-title";
+import type { SidebarPreviousSessionItem, SidebarSessionItem } from '../shared/session-grid-contract';
+import { isDefaultSessionSearchTitle } from '../shared/session-grid-contract';
+import { getSessionHistoryCardTitle } from './session-history-card-title';
 
 /*
  * CDXC:CommandPalette 2026-06-14-02:05:
@@ -32,12 +29,12 @@ export type CommandPaletteCurrentSessionItem = {
 };
 
 export type CommandPaletteSessionSection = {
-  heading: "Current Project" | "Other Active Projects" | "Collapsed Projects";
+  heading: 'Current Project' | 'Other Active Projects' | 'Collapsed Projects';
   items: CommandPaletteCurrentSessionItem[];
-  key: "currentProject" | "activeProjects" | "collapsedProjects";
+  key: 'currentProject' | 'activeProjects' | 'collapsedProjects';
 };
 
-const COMMAND_MODE_PREFIX = ">";
+const COMMAND_MODE_PREFIX = '>';
 
 export function isCommandPaletteCommandMode(value: string): boolean {
   return value.trimStart().startsWith(COMMAND_MODE_PREFIX);
@@ -45,15 +42,10 @@ export function isCommandPaletteCommandMode(value: string): boolean {
 
 export function getCommandPaletteCommandQuery(value: string): string {
   const trimmedStart = value.trimStart();
-  return trimmedStart.startsWith(COMMAND_MODE_PREFIX)
-    ? trimmedStart.slice(COMMAND_MODE_PREFIX.length).trim()
-    : "";
+  return trimmedStart.startsWith(COMMAND_MODE_PREFIX) ? trimmedStart.slice(COMMAND_MODE_PREFIX.length).trim() : '';
 }
 
-export function getCommandPaletteQueryForRequestedMode(
-  currentValue: string,
-  requestedInitialQuery: string,
-): string {
+export function getCommandPaletteQueryForRequestedMode(currentValue: string, requestedInitialQuery: string): string {
   const wantsCommandMode = isCommandPaletteCommandMode(requestedInitialQuery);
   const isCurrentlyCommandMode = isCommandPaletteCommandMode(currentValue);
   if (wantsCommandMode === isCurrentlyCommandMode) {
@@ -73,7 +65,7 @@ export function getCommandPaletteQueryForRequestedMode(
   const valueWithoutPrefix = commandValue.startsWith(COMMAND_MODE_PREFIX)
     ? commandValue.slice(COMMAND_MODE_PREFIX.length)
     : commandValue;
-  return valueWithoutPrefix.startsWith(" ") ? valueWithoutPrefix.slice(1) : valueWithoutPrefix;
+  return valueWithoutPrefix.startsWith(' ') ? valueWithoutPrefix.slice(1) : valueWithoutPrefix;
 }
 
 export function getCommandPaletteModeSwitchSelectionRange(value: string): {
@@ -84,9 +76,7 @@ export function getCommandPaletteModeSwitchSelectionRange(value: string): {
     return { end: value.length, start: 0 };
   }
   const commandPrefixIndex = value.indexOf(COMMAND_MODE_PREFIX);
-  const queryStart = value[commandPrefixIndex + 1] === " "
-    ? commandPrefixIndex + 2
-    : commandPrefixIndex + 1;
+  const queryStart = value[commandPrefixIndex + 1] === ' ' ? commandPrefixIndex + 2 : commandPrefixIndex + 1;
   return { end: value.length, start: queryStart };
 }
 
@@ -134,7 +124,7 @@ export function createCommandPaletteSessionSections(
   }: {
     collapsedGroupsById: Record<string, true>;
     currentGroupId?: string;
-  },
+  }
 ): CommandPaletteSessionSection[] {
   /*
    * CDXC:CommandPalette 2026-06-13-22:48:
@@ -172,26 +162,26 @@ export function createCommandPaletteSessionSections(
 
   const sections: CommandPaletteSessionSection[] = [
     {
-      heading: "Current Project",
+      heading: 'Current Project',
       items: sortCommandPaletteCurrentSessionItemsByLastActive(currentProjectItems),
-      key: "currentProject",
+      key: 'currentProject',
     },
     {
-      heading: "Other Active Projects",
+      heading: 'Other Active Projects',
       items: sortCommandPaletteCurrentSessionItemsByLastActive(activeProjectItems),
-      key: "activeProjects",
+      key: 'activeProjects',
     },
     {
-      heading: "Collapsed Projects",
+      heading: 'Collapsed Projects',
       items: sortCommandPaletteCurrentSessionItemsByLastActive(collapsedProjectItems),
-      key: "collapsedProjects",
+      key: 'collapsedProjects',
     },
   ];
   return sections.filter((section) => section.items.length > 0);
 }
 
 export function sortCommandPaletteCurrentSessionItemsByLastActive(
-  items: readonly CommandPaletteCurrentSessionItem[],
+  items: readonly CommandPaletteCurrentSessionItem[]
 ): CommandPaletteCurrentSessionItem[] {
   /*
    * CDXC:CommandPalette 2026-06-13-23:06:
@@ -204,15 +194,17 @@ export function sortCommandPaletteCurrentSessionItemsByLastActive(
 }
 
 export function sortCommandPalettePreviousSessionsByLastActive(
-  sessions: readonly SidebarPreviousSessionItem[],
+  sessions: readonly SidebarPreviousSessionItem[]
 ): SidebarPreviousSessionItem[] {
-  return sortCommandPaletteRowsByLastActive(sessions, (session) => session, (session) =>
-    getCommandPaletteSessionTimestamp(session.closedAt),
+  return sortCommandPaletteRowsByLastActive(
+    sessions,
+    (session) => session,
+    (session) => getCommandPaletteSessionTimestamp(session.closedAt)
   );
 }
 
 export function getCommandPaletteCurrentGroupId(
-  items: readonly CommandPaletteCurrentSessionItem[],
+  items: readonly CommandPaletteCurrentSessionItem[]
 ): string | undefined {
   return items.find((item) => item.groupIsActive)?.groupId;
 }
@@ -220,7 +212,7 @@ export function getCommandPaletteCurrentGroupId(
 export function filterCommandPaletteItems<T>(
   items: readonly T[],
   query: string,
-  getSearchText: (item: T) => string,
+  getSearchText: (item: T) => string
 ): T[] {
   /*
    * Keep command finding on Tinycast's relevance ladder: exact, prefix,
@@ -248,7 +240,7 @@ export function filterCommandPaletteItems<T>(
         return scoreDelta;
       }
       const alphabetical = left.searchText.localeCompare(right.searchText, undefined, {
-        sensitivity: "base",
+        sensitivity: 'base',
       });
       return alphabetical !== 0 ? alphabetical : left.itemIndex - right.itemIndex;
     })
@@ -257,15 +249,16 @@ export function filterCommandPaletteItems<T>(
 
 export function filterCommandPaletteCurrentSessionItems(
   items: readonly CommandPaletteCurrentSessionItem[],
-  query: string,
+  query: string
 ): CommandPaletteCurrentSessionItem[] {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
     return items.filter((item) => !isDefaultSessionSearchTitle(item.searchText));
   }
-  return items.filter((item) =>
-    !isDefaultSessionSearchTitle(item.searchText) &&
-    matchesCommandPaletteTitleSearchQuery(item.searchText, normalizedQuery),
+  return items.filter(
+    (item) =>
+      !isDefaultSessionSearchTitle(item.searchText) &&
+      matchesCommandPaletteTitleSearchQuery(item.searchText, normalizedQuery)
   );
 }
 
@@ -275,24 +268,22 @@ export function createPreviousSessionSearchText(session: SidebarPreviousSessionI
 
 export function filterCommandPalettePreviousSessions(
   sessions: readonly SidebarPreviousSessionItem[],
-  query: string,
+  query: string
 ): SidebarPreviousSessionItem[] {
   const normalizedQuery = query.trim();
   const searchableSessions = sessions.filter(
-    (session) => !isDefaultSessionSearchTitle(createPreviousSessionSearchText(session)),
+    (session) => !isDefaultSessionSearchTitle(createPreviousSessionSearchText(session))
   );
   if (!normalizedQuery) {
     return searchableSessions;
   }
 
   return searchableSessions.filter((session) =>
-    matchesCommandPaletteTitleSearchQuery(createPreviousSessionSearchText(session), normalizedQuery),
+    matchesCommandPaletteTitleSearchQuery(createPreviousSessionSearchText(session), normalizedQuery)
   );
 }
 
-export function getPreviousSessionProjectLabel(
-  session: SidebarPreviousSessionItem,
-): string | undefined {
+export function getPreviousSessionProjectLabel(session: SidebarPreviousSessionItem): string | undefined {
   const projectName = session.projectName?.trim();
   if (projectName) {
     return projectName;
@@ -309,16 +300,14 @@ export function getPreviousSessionProjectLabel(
 
 function sortCommandPaletteRowsByLastActive<T>(
   items: readonly T[],
-  getSession: (item: T) => Pick<SidebarSessionItem, "lastInteractionAt">,
-  getFallbackTimestamp: (item: T) => number = () => 0,
+  getSession: (item: T) => Pick<SidebarSessionItem, 'lastInteractionAt'>,
+  getFallbackTimestamp: (item: T) => number = () => 0
 ): T[] {
   return items
     .map((item, itemIndex) => ({
       item,
       itemIndex,
-      timestamp:
-        getCommandPaletteSessionTimestamp(getSession(item).lastInteractionAt) ||
-        getFallbackTimestamp(item),
+      timestamp: getCommandPaletteSessionTimestamp(getSession(item).lastInteractionAt) || getFallbackTimestamp(item),
     }))
     .sort((left, right) => {
       const timestampDelta = right.timestamp - left.timestamp;
@@ -347,13 +336,13 @@ function matchesCommandPaletteTitleSearchQuery(searchText: string, query: string
 
 function normalizeCommandPaletteSearchValue(value: string | undefined): string {
   if (!value) {
-    return "";
+    return '';
   }
   return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[-_/\\.]+/g, " ")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_/\\.]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
 }
@@ -416,7 +405,7 @@ function scoreCommandPaletteFuzzyMatch(normalizedQuery: string, rawCandidate: st
 function normalizeCommandPaletteFuzzyValue(value: string): string {
   return Array.from(value)
     .filter((character) => !/\p{Cf}/u.test(character))
-    .join("")
+    .join('')
     .toLowerCase();
 }
 
@@ -438,9 +427,7 @@ function createCurrentSessionTitleSearchText(session: SidebarSessionItem): strin
   return getSessionHistoryCardTitle(session);
 }
 
-function getCurrentSessionProjectLabel(
-  group: CommandPaletteSessionGroup | undefined,
-): string | undefined {
+function getCurrentSessionProjectLabel(group: CommandPaletteSessionGroup | undefined): string | undefined {
   const title = group?.title?.trim();
   if (title) {
     return title;

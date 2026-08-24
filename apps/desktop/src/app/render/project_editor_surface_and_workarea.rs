@@ -84,7 +84,9 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    pub(crate) fn source_workarea_placeholder_signature(&self) -> ProjectEditorPlaceholderSignature {
+    pub(crate) fn source_workarea_placeholder_signature(
+        &self,
+    ) -> ProjectEditorPlaceholderSignature {
         let fallback = ProjectEditorPlaceholderSignature::for_mode(TitlebarMode::Source)
             .expect("Source placeholder signature must exist");
         let Some(snapshot) = self.latest_sidebar_project_snapshot.as_ref() else {
@@ -165,7 +167,10 @@ impl GhostexGpuiApp {
         .unwrap_or(fallback)
     }
 
-    pub(crate) fn render_source_workarea_surface(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_source_workarea_surface(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         /*
         CDXC:GPUISourceWorkarea 2026-06-23-12:16:
         Source has its own render dispatch instead of sharing the generic Kanban/Automate/Manage placeholder branch. Source must not synthesize readiness from project paths, URLs, localhost values, or native constants.
@@ -196,7 +201,10 @@ impl GhostexGpuiApp {
         self.render_project_editor_placeholder(signature, cx)
     }
 
-    pub(crate) fn render_kanban_workarea_surface(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_kanban_workarea_surface(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         /*
         CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
         Kanban now checks the permanent app-owned CEF surface map first. When a real Kanban runtime URL has already produced an owned CefSurface and the gate permits replacement, render returns that normal-layout CEF child; otherwise the placeholder remains because real navigable URL authority is absent.
@@ -216,7 +224,10 @@ impl GhostexGpuiApp {
         self.render_project_editor_placeholder(signature, cx)
     }
 
-    pub(crate) fn render_automate_workarea_surface(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_automate_workarea_surface(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         /*
         CDXC:GPUIAutomateWorkarea 2026-07-04-23:18:
         Automate uses the bundled Kanban/tasks page as a first-party CEF workarea with `surface=automations`, matching macOS. It may replace the placeholder only through the same direct runtime URL plus owned CEF surface gate as Kanban; Quick/projectless contexts and missing Automate identity stay on the static placeholder.
@@ -230,7 +241,10 @@ impl GhostexGpuiApp {
         self.render_project_editor_placeholder(signature, cx)
     }
 
-    pub(crate) fn render_manage_workarea_surface(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+    pub(crate) fn render_manage_workarea_surface(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         /*
         CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
         Manage now checks the permanent app-owned CEF surface map first. When a real Manage runtime URL has already produced an owned CefSurface and the CEF/file-bridge gate permits replacement, render returns that normal-layout CEF child; otherwise the placeholder remains because real navigable URL and file-bridge authority are absent.
@@ -449,5 +463,4 @@ impl GhostexGpuiApp {
             )
             .into_any_element()
     }
-
 }

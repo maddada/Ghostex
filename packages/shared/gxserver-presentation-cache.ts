@@ -6,7 +6,7 @@ import type {
   GxserverProjectDomainState,
   GxserverProjectId,
   GxserverSessionId,
-} from "./gxserver-protocol";
+} from './gxserver-protocol';
 
 /*
 CDXC:GxserverPresentationParity 2026-06-24-10:45:
@@ -15,21 +15,19 @@ GPUI and macOS sidebar clients must apply gxserver presentation deltas through t
 export function reduceGxserverPresentationDelta(
   presentation: GxserverPresentationSnapshot,
   delta: GxserverPresentationDelta,
-  revision: number,
+  revision: number
 ): GxserverPresentationSnapshot {
-  const nextRevision = revision as GxserverPresentationSnapshot["revision"];
+  const nextRevision = revision as GxserverPresentationSnapshot['revision'];
   switch (delta.type) {
-    case "sessionAdded":
-    case "sessionUpdated":
-    case "sessionMoved":
-    case "sessionTitleChanged":
-    case "sessionActivityChanged":
-    case "sessionLifecycleChanged":
-    case "sessionSurfaceChanged":
-    case "sessionPresentationChanged": {
-      const sessions = orderPresentationSessions(
-        upsertPresentationSession(presentation.sessions, delta.session),
-      );
+    case 'sessionAdded':
+    case 'sessionUpdated':
+    case 'sessionMoved':
+    case 'sessionTitleChanged':
+    case 'sessionActivityChanged':
+    case 'sessionLifecycleChanged':
+    case 'sessionSurfaceChanged':
+    case 'sessionPresentationChanged': {
+      const sessions = orderPresentationSessions(upsertPresentationSession(presentation.sessions, delta.session));
       return {
         ...presentation,
         groups: reconcilePresentationGroupSessionIds(presentation.groups, sessions),
@@ -37,9 +35,9 @@ export function reduceGxserverPresentationDelta(
         sessions,
       };
     }
-    case "sessionRemoved": {
+    case 'sessionRemoved': {
       const sessions = presentation.sessions.filter(
-        (session) => session.projectId !== delta.projectId || session.sessionId !== delta.sessionId,
+        (session) => session.projectId !== delta.projectId || session.sessionId !== delta.sessionId
       );
       return {
         ...presentation,
@@ -48,15 +46,15 @@ export function reduceGxserverPresentationDelta(
         sessions,
       };
     }
-    case "projectAdded":
-    case "projectUpdated":
+    case 'projectAdded':
+    case 'projectUpdated':
       return {
         ...presentation,
         groups: upsertPresentationProjectGroup(presentation.groups, delta.project),
         projects: upsertPresentationProject(presentation.projects, delta.project),
         revision: nextRevision,
       };
-    case "projectRemoved":
+    case 'projectRemoved':
       return {
         ...presentation,
         groups: presentation.groups.filter((group) => group.projectId !== delta.projectId),
@@ -64,22 +62,22 @@ export function reduceGxserverPresentationDelta(
         sessions: presentation.sessions.filter((session) => session.projectId !== delta.projectId),
         revision: nextRevision,
       };
-    case "groupAdded":
-    case "groupUpdated":
-    case "groupOrderChanged":
+    case 'groupAdded':
+    case 'groupUpdated':
+    case 'groupOrderChanged':
       return {
         ...presentation,
         groups: upsertPresentationGroup(presentation.groups, delta.group),
         revision: nextRevision,
       };
-    case "groupRemoved": {
+    case 'groupRemoved': {
       const groups = presentation.groups.filter((group) => group.groupId !== delta.groupId);
       return {
         ...presentation,
         groups,
         revision: nextRevision,
         sessions: presentation.sessions.filter(
-          (session) => session.projectId !== delta.projectId || session.groupId !== delta.groupId,
+          (session) => session.projectId !== delta.projectId || session.groupId !== delta.groupId
         ),
       };
     }
@@ -90,12 +88,12 @@ export function reduceGxserverPresentationDelta(
 
 export function reduceGxserverProjectCacheForPresentationDelta(
   projects: readonly GxserverProjectDomainState[],
-  delta: GxserverPresentationDelta,
+  delta: GxserverPresentationDelta
 ): GxserverProjectDomainState[] {
-  if ((delta.type === "projectAdded" || delta.type === "projectUpdated") && delta.domainProject) {
+  if ((delta.type === 'projectAdded' || delta.type === 'projectUpdated') && delta.domainProject) {
     return upsertGxserverProjectDomainState(projects, delta.domainProject);
   }
-  if (delta.type === "projectRemoved") {
+  if (delta.type === 'projectRemoved') {
     return projects.filter((project) => project.projectId !== delta.projectId);
   }
   return [...projects];
@@ -104,7 +102,7 @@ export function reduceGxserverProjectCacheForPresentationDelta(
 export function reorderPresentationProjectSessions(
   presentation: GxserverPresentationSnapshot,
   projectId: GxserverProjectId,
-  orderedSessionIds: readonly GxserverSessionId[],
+  orderedSessionIds: readonly GxserverSessionId[]
 ): GxserverPresentationSnapshot {
   const sidebarOrderBySessionId = new Map<GxserverSessionId, number>();
   orderedSessionIds.forEach((sessionId, index) => {
@@ -147,9 +145,9 @@ export function reorderPresentationProjectSessions(
 }
 
 export function createPresentationProjectFromGxserverProject(
-  project: GxserverProjectDomainState,
+  project: GxserverProjectDomainState
 ): GxserverPresentationProject {
-  const pinRank = project.isPinned ? "0" : project.isFavorite ? "1" : "2";
+  const pinRank = project.isPinned ? '0' : project.isFavorite ? '1' : '2';
   return {
     createdAt: project.createdAt,
     groupIds: [`${project.projectId}:active`],
@@ -166,7 +164,7 @@ export function createPresentationProjectFromGxserverProject(
 
 export function upsertGxserverProjectDomainState(
   projects: readonly GxserverProjectDomainState[],
-  nextProject: GxserverProjectDomainState,
+  nextProject: GxserverProjectDomainState
 ): GxserverProjectDomainState[] {
   const index = projects.findIndex((project) => project.projectId === nextProject.projectId);
   if (index === -1) {
@@ -179,7 +177,7 @@ export function upsertGxserverProjectDomainState(
 
 export function upsertPresentationProject(
   projects: readonly GxserverPresentationProject[],
-  nextProject: GxserverPresentationProject,
+  nextProject: GxserverPresentationProject
 ): GxserverPresentationProject[] {
   const index = projects.findIndex((project) => project.projectId === nextProject.projectId);
   if (index === -1) {
@@ -192,7 +190,7 @@ export function upsertPresentationProject(
 
 export function upsertPresentationProjectGroup(
   groups: readonly GxserverPresentationGroup[],
-  project: GxserverPresentationProject,
+  project: GxserverPresentationProject
 ): GxserverPresentationGroup[] {
   const groupId = project.groupIds[0] ?? `${project.projectId}:active`;
   const index = groups.findIndex((group) => group.projectId === project.projectId || group.groupId === groupId);
@@ -204,7 +202,7 @@ export function upsertPresentationProjectGroup(
         projectId: project.projectId,
         sessionIds: [],
         sortKey: `${project.sortKey}:active`,
-        title: "Active",
+        title: 'Active',
       },
     ]);
   }
@@ -219,11 +217,11 @@ export function upsertPresentationProjectGroup(
 }
 
 function upsertPresentationSession(
-  sessions: readonly GxserverPresentationSnapshot["sessions"][number][],
-  nextSession: GxserverPresentationSnapshot["sessions"][number],
-): GxserverPresentationSnapshot["sessions"][number][] {
+  sessions: readonly GxserverPresentationSnapshot['sessions'][number][],
+  nextSession: GxserverPresentationSnapshot['sessions'][number]
+): GxserverPresentationSnapshot['sessions'][number][] {
   const index = sessions.findIndex(
-    (session) => session.projectId === nextSession.projectId && session.sessionId === nextSession.sessionId,
+    (session) => session.projectId === nextSession.projectId && session.sessionId === nextSession.sessionId
   );
   if (index === -1) {
     return [...sessions, nextSession];
@@ -235,7 +233,7 @@ function upsertPresentationSession(
 
 function upsertPresentationGroup(
   groups: readonly GxserverPresentationGroup[],
-  nextGroup: GxserverPresentationGroup,
+  nextGroup: GxserverPresentationGroup
 ): GxserverPresentationGroup[] {
   const index = groups.findIndex((group) => group.groupId === nextGroup.groupId);
   if (index === -1) {
@@ -248,7 +246,7 @@ function upsertPresentationGroup(
 
 function reconcilePresentationGroupSessionIds(
   groups: readonly GxserverPresentationGroup[],
-  sessions: readonly GxserverPresentationSnapshot["sessions"][number][],
+  sessions: readonly GxserverPresentationSnapshot['sessions'][number][]
 ): GxserverPresentationGroup[] {
   const sessionIdsByGroupKey = new Map<string, GxserverSessionId[]>();
   for (const session of orderPresentationSessions(sessions)) {
@@ -261,7 +259,7 @@ function reconcilePresentationGroupSessionIds(
     groups.map((group) => ({
       ...group,
       sessionIds: sessionIdsByGroupKey.get(presentationGroupKey(group.projectId, group.groupId)) ?? [],
-    })),
+    }))
   );
 }
 
@@ -269,43 +267,36 @@ function presentationGroupKey(projectId: string, groupId: string): string {
   return `${projectId}\u0000${groupId}`;
 }
 
-function orderPresentationProjects(
-  projects: readonly GxserverPresentationProject[],
-): GxserverPresentationProject[] {
-  return [...projects].sort((left, right) =>
-    left.sortKey.localeCompare(right.sortKey) || left.projectId.localeCompare(right.projectId),
+function orderPresentationProjects(projects: readonly GxserverPresentationProject[]): GxserverPresentationProject[] {
+  return [...projects].sort(
+    (left, right) => left.sortKey.localeCompare(right.sortKey) || left.projectId.localeCompare(right.projectId)
   );
 }
 
-function orderPresentationGroups(
-  groups: readonly GxserverPresentationGroup[],
-): GxserverPresentationGroup[] {
-  return [...groups].sort((left, right) =>
-    left.sortKey.localeCompare(right.sortKey) || left.groupId.localeCompare(right.groupId),
+function orderPresentationGroups(groups: readonly GxserverPresentationGroup[]): GxserverPresentationGroup[] {
+  return [...groups].sort(
+    (left, right) => left.sortKey.localeCompare(right.sortKey) || left.groupId.localeCompare(right.groupId)
   );
 }
 
 function orderPresentationSessions(
-  sessions: readonly GxserverPresentationSnapshot["sessions"][number][],
-): GxserverPresentationSnapshot["sessions"][number][] {
-  return [...sessions].sort((left, right) =>
-    left.projectId.localeCompare(right.projectId) ||
-    left.groupId.localeCompare(right.groupId) ||
-    left.sortKey.localeCompare(right.sortKey) ||
-    left.sessionId.localeCompare(right.sessionId),
+  sessions: readonly GxserverPresentationSnapshot['sessions'][number][]
+): GxserverPresentationSnapshot['sessions'][number][] {
+  return [...sessions].sort(
+    (left, right) =>
+      left.projectId.localeCompare(right.projectId) ||
+      left.groupId.localeCompare(right.groupId) ||
+      left.sortKey.localeCompare(right.sortKey) ||
+      left.sessionId.localeCompare(right.sessionId)
   );
 }
 
 function createPresentationSessionSortKeyWithSidebarOrder(
-  session: GxserverPresentationSnapshot["sessions"][number],
-  sidebarOrder: number,
+  session: GxserverPresentationSnapshot['sessions'][number],
+  sidebarOrder: number
 ): string {
-  const activeRank = session.lifecycleState === "running" || session.lifecycleState === "sleeping" ? "0" : "1";
-  const pinRank = session.isPinned
-    ? "0"
-    : session.sessionTag === "favorite" || session.isFavorite
-      ? "1"
-      : "2";
+  const activeRank = session.lifecycleState === 'running' || session.lifecycleState === 'sleeping' ? '0' : '1';
+  const pinRank = session.isPinned ? '0' : session.sessionTag === 'favorite' || session.isFavorite ? '1' : '2';
   const timestamp = session.lastActiveAt ?? session.updatedAt;
   /*
   CDXC:ManualSessionSorting 2026-06-05-12:30:
@@ -315,5 +306,5 @@ function createPresentationSessionSortKeyWithSidebarOrder(
   dragging rows does not wait for the next presentation delta. Put manual order
   before active/pinned ranks so saved Manual Sorting order can be exact.
   */
-  return `${String(sidebarOrder).padStart(12, "0")}:${activeRank}:${pinRank}:${timestamp}:${session.sessionId}`;
+  return `${String(sidebarOrder).padStart(12, '0')}:${activeRank}:${pinRank}:${timestamp}:${session.sessionId}`;
 }

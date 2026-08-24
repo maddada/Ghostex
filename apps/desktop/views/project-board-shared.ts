@@ -1,13 +1,13 @@
-import Fuse from "fuse.js";
+import Fuse from 'fuse.js';
 
-import type { ProjectBoardConversationLinkView } from "@/packages/shared/bead-conversation-links";
+import type { ProjectBoardConversationLinkView } from '@/packages/shared/bead-conversation-links';
 
 /*
   CDXC:ProjectBoard 2026-05-23-14:10:
   Shared Beads board helpers keep display-id formatting, t-shirt estimate mapping, and filter logic consistent between the Project WKWebView surface and future Storybook coverage.
 */
 
-export type BoardBuiltinStatusKey = "backlog" | "todo" | "in_progress" | "test" | "review" | "done";
+export type BoardBuiltinStatusKey = 'backlog' | 'todo' | 'in_progress' | 'test' | 'review' | 'done';
 
 /*
   CDXC:ProjectBoardCustomColumns 2026-08-21:
@@ -71,29 +71,29 @@ export type BoardTicket = BeadsIssue & {
 };
 
 export type BeadsBridgeAction =
-  | "addComment"
-  | "addLabel"
-  | "configGet"
-  | "configGetIssuePrefix"
-  | "configSet"
-  | "create"
-  | "delete"
-  | "depAdd"
-  | "depRemove"
-  | "generateTitle"
-  | "list"
-  | "listIssues"
-  | "listAllLabels"
-  | "renamePrefix"
-  | "removeLabel"
-  | "search"
-  | "setLabels"
-  | "show"
-  | "updateDescription"
-  | "updateEstimate"
-  | "updatePriority"
-  | "updateStatus"
-  | "updateTitle";
+  | 'addComment'
+  | 'addLabel'
+  | 'configGet'
+  | 'configGetIssuePrefix'
+  | 'configSet'
+  | 'create'
+  | 'delete'
+  | 'depAdd'
+  | 'depRemove'
+  | 'generateTitle'
+  | 'list'
+  | 'listIssues'
+  | 'listAllLabels'
+  | 'renamePrefix'
+  | 'removeLabel'
+  | 'search'
+  | 'setLabels'
+  | 'show'
+  | 'updateDescription'
+  | 'updateEstimate'
+  | 'updatePriority'
+  | 'updateStatus'
+  | 'updateTitle';
 
 export type BeadsBridgeRequest = {
   /*
@@ -148,17 +148,15 @@ const BUILTIN_BOARD_COLUMNS: ReadonlyArray<BoardColumn> = [
     The Kanban Project view needs a Backlog swim lane positioned before Todo, persisted as the Beads custom status `backlog` so drag/drop, edit-status selects, and reloads all share the same workflow state.
     New ticket creation remains in Todo; Backlog is an explicit planning lane users move work into.
   */
-  { key: "backlog", label: "Backlog", beadsStatus: "backlog", tone: "muted" },
-  { key: "todo", label: "Todo", beadsStatus: "open", tone: "neutral" },
-  { key: "in_progress", label: "In Progress", beadsStatus: "in_progress", tone: "blue" },
-  { key: "test", label: "Test", beadsStatus: "test", tone: "amber" },
-  { key: "review", label: "Review", beadsStatus: "review", tone: "violet" },
-  { key: "done", label: "Done", beadsStatus: "closed", tone: "green" },
+  { key: 'backlog', label: 'Backlog', beadsStatus: 'backlog', tone: 'muted' },
+  { key: 'todo', label: 'Todo', beadsStatus: 'open', tone: 'neutral' },
+  { key: 'in_progress', label: 'In Progress', beadsStatus: 'in_progress', tone: 'blue' },
+  { key: 'test', label: 'Test', beadsStatus: 'test', tone: 'amber' },
+  { key: 'review', label: 'Review', beadsStatus: 'review', tone: 'violet' },
+  { key: 'done', label: 'Done', beadsStatus: 'closed', tone: 'green' },
 ];
 
-const BUILTIN_BOARD_STATUS_NAMES = new Set(
-  BUILTIN_BOARD_COLUMNS.flatMap((column) => [column.key, column.beadsStatus]),
-);
+const BUILTIN_BOARD_STATUS_NAMES = new Set(BUILTIN_BOARD_COLUMNS.flatMap((column) => [column.key, column.beadsStatus]));
 
 /*
   CDXC:ProjectBoardCustomColumns 2026-08-21:
@@ -169,8 +167,8 @@ const BUILTIN_BOARD_STATUS_NAMES = new Set(
 export function buildBoardColumns(customStatusConfig: string): BoardColumn[] {
   const extraColumns: BoardColumn[] = [];
   const seenNames = new Set<string>();
-  for (const entry of customStatusConfig.split(",")) {
-    const name = entry.split(":")[0].trim();
+  for (const entry of customStatusConfig.split(',')) {
+    const name = entry.split(':')[0].trim();
     if (!name || BUILTIN_BOARD_STATUS_NAMES.has(name) || seenNames.has(name)) {
       continue;
     }
@@ -179,7 +177,7 @@ export function buildBoardColumns(customStatusConfig: string): BoardColumn[] {
       key: name,
       label: boardStatusNameToLabel(name),
       beadsStatus: name,
-      tone: "muted",
+      tone: 'muted',
     });
   }
   return [...BUILTIN_BOARD_COLUMNS, ...extraColumns];
@@ -190,7 +188,7 @@ function boardStatusNameToLabel(name: string): string {
     .split(/[\s_-]+/u)
     .filter(Boolean)
     .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
-    .join(" ");
+    .join(' ');
 }
 
 /*
@@ -207,24 +205,24 @@ export type BoardColumnConfigEntry = {
 export function parseBoardColumnConfig(config: string): BoardColumnConfigEntry[] {
   const entries: BoardColumnConfigEntry[] = [];
   const seen = new Set<string>();
-  for (const raw of config.split(",")) {
+  for (const raw of config.split(',')) {
     const entry = raw.trim();
     if (!entry) {
       continue;
     }
-    const separatorIndex = entry.indexOf(":");
+    const separatorIndex = entry.indexOf(':');
     const name = (separatorIndex === -1 ? entry : entry.slice(0, separatorIndex)).trim();
     if (!name || seen.has(name)) {
       continue;
     }
     seen.add(name);
-    entries.push({ name, suffix: separatorIndex === -1 ? "" : entry.slice(separatorIndex) });
+    entries.push({ name, suffix: separatorIndex === -1 ? '' : entry.slice(separatorIndex) });
   }
   return entries;
 }
 
 export function serializeBoardColumnConfig(entries: ReadonlyArray<BoardColumnConfigEntry>): string {
-  return entries.map((entry) => `${entry.name}${entry.suffix}`).join(",");
+  return entries.map((entry) => `${entry.name}${entry.suffix}`).join(',');
 }
 
 export function isManagedBoardColumnName(name: string): boolean {
@@ -244,30 +242,26 @@ export function managedBoardColumnNames(config: string): string[] {
 export function boardColumnNameError(name: string, config: string): string {
   const trimmed = name.trim();
   if (!trimmed) {
-    return "Enter a column name.";
+    return 'Enter a column name.';
   }
   if (trimmed.length > 64) {
-    return "Column names are limited to 64 characters.";
+    return 'Column names are limited to 64 characters.';
   }
-  if (
-    !trimmed.split("").every((ch, index) =>
-      index === 0 ? /[A-Za-z]/u.test(ch) : /[A-Za-z0-9_-]/u.test(ch),
-    )
-  ) {
-    return "Use letters, numbers, hyphens and underscores, starting with a letter.";
+  if (!trimmed.split('').every((ch, index) => (index === 0 ? /[A-Za-z]/u.test(ch) : /[A-Za-z0-9_-]/u.test(ch)))) {
+    return 'Use letters, numbers, hyphens and underscores, starting with a letter.';
   }
   if (!isManagedBoardColumnName(trimmed)) {
     return `${boardStatusNameToLabel(trimmed)} is a built-in lane.`;
   }
   if (parseBoardColumnConfig(config).some((entry) => entry.name === trimmed)) {
-    return "That column already exists.";
+    return 'That column already exists.';
   }
-  return "";
+  return '';
 }
 
 export function addBoardColumn(config: string, name: string): string {
   const entries = parseBoardColumnConfig(config);
-  entries.push({ name: name.trim(), suffix: "" });
+  entries.push({ name: name.trim(), suffix: '' });
   return serializeBoardColumnConfig(entries);
 }
 
@@ -291,9 +285,7 @@ export function beginBoardColumnRename(config: string, from: string, to: string)
 
 export function removeBoardColumn(config: string, name: string): string {
   return serializeBoardColumnConfig(
-    parseBoardColumnConfig(config).filter(
-      (entry) => !(entry.name === name && isManagedBoardColumnName(entry.name)),
-    ),
+    parseBoardColumnConfig(config).filter((entry) => !(entry.name === name && isManagedBoardColumnName(entry.name)))
   );
 }
 
@@ -324,27 +316,27 @@ export const PRIORITY_OPTIONS = [
     CDXC:ProjectBoard 2026-05-28-09:18:
     Project board priority controls must show user-facing urgency labels instead of Beads' numeric P0/P1/P2/P3/P4 shorthand. Keep persisted priority values numeric for bd compatibility and collapse legacy lowest-priority value 4 into the visible Low tier.
   */
-  { label: "Urgent", value: "0" },
-  { label: "High", value: "1" },
-  { label: "Medium", value: "2" },
-  { label: "Low", value: "3" },
+  { label: 'Urgent', value: '0' },
+  { label: 'High', value: '1' },
+  { label: 'Medium', value: '2' },
+  { label: 'Low', value: '3' },
 ] as const;
 
 export const TSHIRT_OPTIONS = [
-  { label: "XS", minutes: 15 },
-  { label: "S", minutes: 30 },
-  { label: "M", minutes: 60 },
-  { label: "L", minutes: 120 },
-  { label: "XL", minutes: 240 },
+  { label: 'XS', minutes: 15 },
+  { label: 'S', minutes: 30 },
+  { label: 'M', minutes: 60 },
+  { label: 'L', minutes: 120 },
+  { label: 'XL', minutes: 240 },
 ] as const;
 
-export type TshirtSize = (typeof TSHIRT_OPTIONS)[number]["label"];
-export type BoardPriorityFilter = "all" | (typeof PRIORITY_OPTIONS)[number]["value"];
-export type BoardEstimateFilter = "all" | "none" | TshirtSize;
+export type TshirtSize = (typeof TSHIRT_OPTIONS)[number]['label'];
+export type BoardPriorityFilter = 'all' | (typeof PRIORITY_OPTIONS)[number]['value'];
+export type BoardEstimateFilter = 'all' | 'none' | TshirtSize;
 export type BoardTagFilter = string;
-export type BoardSortDirection = "asc" | "desc";
-export type BoardSortKey = "created" | "priority" | "updated";
-export type BoardSortOption = "default" | `${BoardSortKey}-${BoardSortDirection}`;
+export type BoardSortDirection = 'asc' | 'desc';
+export type BoardSortKey = 'created' | 'priority' | 'updated';
+export type BoardSortOption = 'default' | `${BoardSortKey}-${BoardSortDirection}`;
 
 /*
   CDXC:ProjectBoardSort 2026-08-07:
@@ -352,13 +344,13 @@ export type BoardSortOption = "default" | `${BoardSortKey}-${BoardSortDirection}
   Direction values describe the underlying field, so `asc` means oldest first for timestamps and urgent first for priority; the visible labels carry that meaning for users.
 */
 export const BOARD_SORT_OPTIONS: ReadonlyArray<{ label: string; value: BoardSortOption }> = [
-  { label: "Default order", value: "default" },
-  { label: "Last updated (newest first)", value: "updated-desc" },
-  { label: "Last updated (oldest first)", value: "updated-asc" },
-  { label: "Created (newest first)", value: "created-desc" },
-  { label: "Created (oldest first)", value: "created-asc" },
-  { label: "Priority (urgent first)", value: "priority-asc" },
-  { label: "Priority (low first)", value: "priority-desc" },
+  { label: 'Default order', value: 'default' },
+  { label: 'Last updated (newest first)', value: 'updated-desc' },
+  { label: 'Last updated (oldest first)', value: 'updated-asc' },
+  { label: 'Created (newest first)', value: 'created-desc' },
+  { label: 'Created (oldest first)', value: 'created-asc' },
+  { label: 'Priority (urgent first)', value: 'priority-asc' },
+  { label: 'Priority (low first)', value: 'priority-desc' },
 ];
 
 export type ProjectBoardViewPreferences = {
@@ -380,64 +372,53 @@ export type ProjectBoardViewPreferences = {
   The tag filter only ever includes: there is no hide-by-tag mode, because a board silently omitting cards the user never asked to hide is the failure this control exists to fix.
 */
 export const DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES: ProjectBoardViewPreferences = {
-  estimateFilter: "all",
-  priorityFilter: "all",
-  sortOption: "default",
-  tagFilter: "all",
+  estimateFilter: 'all',
+  priorityFilter: 'all',
+  sortOption: 'default',
+  tagFilter: 'all',
 };
 
-export const PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY = "ghostex-project-board-view";
+export const PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY = 'ghostex-project-board-view';
 const BOARD_PRIORITY_FILTER_VALUES: ReadonlyArray<BoardPriorityFilter> = [
-  "all",
+  'all',
   ...PRIORITY_OPTIONS.map((option) => option.value),
 ];
 const BOARD_ESTIMATE_FILTER_VALUES: ReadonlyArray<BoardEstimateFilter> = [
-  "all",
-  "none",
+  'all',
+  'none',
   ...TSHIRT_OPTIONS.map((option) => option.label),
 ];
-const BOARD_SORT_OPTION_VALUES: ReadonlyArray<BoardSortOption> = BOARD_SORT_OPTIONS.map(
-  (option) => option.value,
-);
+const BOARD_SORT_OPTION_VALUES: ReadonlyArray<BoardSortOption> = BOARD_SORT_OPTIONS.map((option) => option.value);
 
-const REQUIRED_CUSTOM_STATUS_CONFIG = "backlog,test,review";
-const PROJECT_BOARD_COMMENT_METADATA_SEPARATOR = "---";
-const PROJECT_BOARD_COMMENT_AGENT_PREFIX = "Agent:";
-const PROJECT_BOARD_COMMENT_SESSION_PREFIX = "Session:";
+const REQUIRED_CUSTOM_STATUS_CONFIG = 'backlog,test,review';
+const PROJECT_BOARD_COMMENT_METADATA_SEPARATOR = '---';
+const PROJECT_BOARD_COMMENT_AGENT_PREFIX = 'Agent:';
+const PROJECT_BOARD_COMMENT_SESSION_PREFIX = 'Session:';
 
 /*
   CDXC:ProjectBoardCustomColumns 2026-08-21:
   Status resolution reads the caller's column list instead of a fixed table so a bead sitting in one of the board's own statuses lands in that lane. Todo remains the home for a status with no lane at all — a bead whose status was removed from the board config still has to be visible somewhere.
 */
-export function beadsStatusToBoardStatus(
-  status: string,
-  columns: ReadonlyArray<BoardColumn>,
-): BoardStatusKey {
-  return columns.find((column) => column.beadsStatus === status)?.key ?? "todo";
+export function beadsStatusToBoardStatus(status: string, columns: ReadonlyArray<BoardColumn>): BoardStatusKey {
+  return columns.find((column) => column.beadsStatus === status)?.key ?? 'todo';
 }
 
-export function boardStatusLabel(
-  status: BoardStatusKey,
-  columns: ReadonlyArray<BoardColumn>,
-): string {
-  return columns.find((column) => column.key === status)?.label ?? "Todo";
+export function boardStatusLabel(status: BoardStatusKey, columns: ReadonlyArray<BoardColumn>): string {
+  return columns.find((column) => column.key === status)?.label ?? 'Todo';
 }
 
-export function boardStatusBeadsValue(
-  status: BoardStatusKey,
-  columns: ReadonlyArray<BoardColumn>,
-): string {
-  return columns.find((column) => column.key === status)?.beadsStatus ?? "open";
+export function boardStatusBeadsValue(status: BoardStatusKey, columns: ReadonlyArray<BoardColumn>): string {
+  return columns.find((column) => column.key === status)?.beadsStatus ?? 'open';
 }
 
 export function normalizeIssuePrefix(value: string | undefined): string {
-  const normalized = (value ?? "")
+  const normalized = (value ?? '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9-]/gu, "")
+    .replace(/[^a-z0-9-]/gu, '')
     .slice(0, 8);
   if (!normalized) {
-    return "zmux";
+    return 'zmux';
   }
   return /^[a-z]/u.test(normalized) ? normalized : `p-${normalized}`;
 }
@@ -451,37 +432,34 @@ export function normalizeIssuePrefix(value: string | undefined): string {
  * every issue id and all text references on each board load — which also breaks the beadId values
  * persisted in beadConversationLinks.
  */
-const BOOTSTRAP_ISSUE_PREFIXES = new Set(["gxserver", "zmux"]);
+const BOOTSTRAP_ISSUE_PREFIXES = new Set(['gxserver', 'zmux']);
 
 export async function ensureIssuePrefix(
-  runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
-  desiredPrefix: string,
+  runBeads: (request: Omit<BeadsBridgeRequest, 'cwd' | 'requestId'>) => Promise<unknown>,
+  desiredPrefix: string
 ): Promise<void> {
   const normalizedDesiredPrefix = normalizeIssuePrefix(desiredPrefix);
-  const payload = await runBeads({ action: "configGetIssuePrefix" });
+  const payload = await runBeads({ action: 'configGetIssuePrefix' });
   const currentValue = normalizeBeadsConfigString(payload);
   const normalizedCurrentPrefix = normalizeIssuePrefix(currentValue);
-  if (
-    normalizedCurrentPrefix !== normalizedDesiredPrefix &&
-    BOOTSTRAP_ISSUE_PREFIXES.has(normalizedCurrentPrefix)
-  ) {
-    await runBeads({ action: "renamePrefix", value: beadsRenamePrefixValue(normalizedDesiredPrefix) });
+  if (normalizedCurrentPrefix !== normalizedDesiredPrefix && BOOTSTRAP_ISSUE_PREFIXES.has(normalizedCurrentPrefix)) {
+    await runBeads({ action: 'renamePrefix', value: beadsRenamePrefixValue(normalizedDesiredPrefix) });
   }
 }
 
 export function normalizeDisplayIssueKey(value: string | undefined): string {
-  const normalized = (value ?? "")
+  const normalized = (value ?? '')
     .trim()
     .toUpperCase()
-    .replace(/[^A-Z0-9]/gu, "")
+    .replace(/[^A-Z0-9]/gu, '')
     .slice(0, 3);
-  return normalized || "PRJ";
+  return normalized || 'PRJ';
 }
 
 export function buildDisplayIdMap(issues: BeadsIssue[]): Map<string, string> {
   const sorted = [...issues].sort((left, right) => {
-    const leftTime = Date.parse(left.created_at ?? "");
-    const rightTime = Date.parse(right.created_at ?? "");
+    const leftTime = Date.parse(left.created_at ?? '');
+    const rightTime = Date.parse(right.created_at ?? '');
     if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
       return leftTime - rightTime;
     }
@@ -491,9 +469,9 @@ export function buildDisplayIdMap(issues: BeadsIssue[]): Map<string, string> {
 }
 
 export function formatTicketDisplayId(
-  issue: Pick<BeadsIssue, "id">,
+  issue: Pick<BeadsIssue, 'id'>,
   displayKey: string,
-  serialByIssueId: Map<string, string>,
+  serialByIssueId: Map<string, string>
 ): string {
   const serial = serialByIssueId.get(issue.id);
   return serial ? `${displayKey}-${serial}` : issue.id;
@@ -502,11 +480,11 @@ export function formatTicketDisplayId(
 export function toBoardTickets(
   issues: BeadsIssue[],
   displayKey: string,
-  columns: ReadonlyArray<BoardColumn>,
+  columns: ReadonlyArray<BoardColumn>
 ): BoardTicket[] {
   const serialByIssueId = buildDisplayIdMap(issues);
   return issues
-    .filter((issue) => issue && typeof issue.id === "string")
+    .filter((issue) => issue && typeof issue.id === 'string')
     .map((issue) => ({
       ...issue,
       boardStatus: beadsStatusToBoardStatus(issue.status, columns),
@@ -520,10 +498,7 @@ export function toBoardTickets(
   redundant noise when it is the same person as the assignee, so display surfaces resolve the
   creator through here instead of each deciding when to hide it.
 */
-export function ticketCreatorName(
-  createdBy: string | undefined,
-  assignee: string | undefined,
-): string | undefined {
+export function ticketCreatorName(createdBy: string | undefined, assignee: string | undefined): string | undefined {
   return createdBy && createdBy !== assignee ? createdBy : undefined;
 }
 
@@ -543,12 +518,12 @@ export function tshirtToEstimate(label: TshirtSize | undefined): number | undefi
 
 export function priorityLabel(priority: number | undefined): string {
   const value = priority ?? 2;
-  return PRIORITY_OPTIONS.find((option) => Number(option.value) === value)?.label ?? "Low";
+  return PRIORITY_OPTIONS.find((option) => Number(option.value) === value)?.label ?? 'Low';
 }
 
 export function prioritySelectValue(priority: number | undefined): string {
   const value = priority ?? 2;
-  return PRIORITY_OPTIONS.some((option) => Number(option.value) === value) ? String(value) : "3";
+  return PRIORITY_OPTIONS.some((option) => Number(option.value) === value) ? String(value) : '3';
 }
 
 export function parseBeadsJson(stdout: string): unknown {
@@ -560,7 +535,7 @@ export function parseBeadsJson(stdout: string): unknown {
 }
 
 export function normalizeBeadsPayload<T>(payload: unknown, fallback: T): T {
-  if (isRecord(payload) && "data" in payload) {
+  if (isRecord(payload) && 'data' in payload) {
     return payload.data as T;
   }
   return (payload ?? fallback) as T;
@@ -568,13 +543,13 @@ export function normalizeBeadsPayload<T>(payload: unknown, fallback: T): T {
 
 function normalizeBeadsConfigString(payload: unknown): string {
   const normalized = normalizeBeadsPayload<unknown>(payload, undefined);
-  if (typeof normalized === "string") {
+  if (typeof normalized === 'string') {
     return normalized;
   }
-  if (isRecord(normalized) && typeof normalized.value === "string") {
+  if (isRecord(normalized) && typeof normalized.value === 'string') {
     return normalized.value;
   }
-  return "";
+  return '';
 }
 
 function beadsRenamePrefixValue(value: string): string {
@@ -582,11 +557,11 @@ function beadsRenamePrefixValue(value: string): string {
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
 function beadsJsonEnvelope(line: string): Record<string, unknown> | undefined {
-  if (!line.startsWith("{")) {
+  if (!line.startsWith('{')) {
     return undefined;
   }
   try {
@@ -600,16 +575,16 @@ function beadsJsonEnvelope(line: string): Record<string, unknown> | undefined {
 function beadsEnvelopeError(payload: Record<string, unknown>): string {
   const body = isRecord(payload.data) ? payload.data : payload;
   const firstFailure = (Array.isArray(body.failed) ? body.failed : []).find(isRecord);
-  if (firstFailure && typeof firstFailure.error === "string" && firstFailure.error) {
-    return firstFailure.error.replace(/^updating issue:\s*/iu, "");
+  if (firstFailure && typeof firstFailure.error === 'string' && firstFailure.error) {
+    return firstFailure.error.replace(/^updating issue:\s*/iu, '');
   }
-  if (typeof body.error === "string" && body.error) {
+  if (typeof body.error === 'string' && body.error) {
     return body.error;
   }
-  if (typeof payload.error === "string" && payload.error) {
+  if (typeof payload.error === 'string' && payload.error) {
     return payload.error;
   }
-  return "";
+  return '';
 }
 
 function beadsReportableLines(trimmed: string): string[] {
@@ -632,7 +607,7 @@ function beadsReportableLines(trimmed: string): string[] {
       inWarning = true;
       continue;
     }
-    if (inWarning && rawLine.startsWith(" ")) {
+    if (inWarning && rawLine.startsWith(' ')) {
       continue;
     }
     inWarning = false;
@@ -644,7 +619,7 @@ function beadsReportableLines(trimmed: string): string[] {
 export function beadsErrorMessage(message: string): string {
   const trimmed = message.trim();
   if (!trimmed) {
-    return "The Beads command failed.";
+    return 'The Beads command failed.';
   }
   const lines = beadsReportableLines(trimmed);
   if (lines.length === 0) {
@@ -659,9 +634,9 @@ export function beadsErrorMessage(message: string): string {
    * envelope's nested per-issue error only when Beads printed none. The envelope
    * is parsed as one block because `--json` pretty-prints it across lines.
    */
-  const envelopeStart = lines.findIndex((line) => line.startsWith("{"));
+  const envelopeStart = lines.findIndex((line) => line.startsWith('{'));
   const proseLines = envelopeStart === -1 ? lines : lines.slice(0, envelopeStart);
-  const envelopeText = envelopeStart === -1 ? "" : lines.slice(envelopeStart).join("\n");
+  const envelopeText = envelopeStart === -1 ? '' : lines.slice(envelopeStart).join('\n');
   const envelope = envelopeText ? beadsJsonEnvelope(envelopeText) : undefined;
   /*
    * CDXC:ProjectBoardBeadsMigration 2026-08-12:
@@ -673,9 +648,9 @@ export function beadsErrorMessage(message: string): string {
     return envelopeText;
   }
   if (proseLines.length > 0) {
-    return proseLines.join(" ");
+    return proseLines.join(' ');
   }
-  return (envelope ? beadsEnvelopeError(envelope) : "") || lines.join(" ");
+  return (envelope ? beadsEnvelopeError(envelope) : '') || lines.join(' ');
 }
 
 /*
@@ -689,79 +664,78 @@ export function beadsErrorMessage(message: string): string {
  * so the generic notice is left to genuine environment failures.
  */
 export type BeadsRejection =
-  | { blockerIds: string[]; issueId: string; kind: "close-blocked" }
-  | { issueId: string; kind: "close-open-children"; openChildren: number }
-  | { kind: "dependency-cycle" }
-  | { blockerId: string; issueId: string; kind: "dependency-hierarchy"; relation: "ancestor" | "descendant" }
-  | { issueId: string; kind: "dependency-self" }
+  | { blockerIds: string[]; issueId: string; kind: 'close-blocked' }
+  | { issueId: string; kind: 'close-open-children'; openChildren: number }
+  | { kind: 'dependency-cycle' }
+  | { blockerId: string; issueId: string; kind: 'dependency-hierarchy'; relation: 'ancestor' | 'descendant' }
+  | { issueId: string; kind: 'dependency-self' }
   | {
       dependsOnId: string;
       existingType: string;
       issueId: string;
-      kind: "dependency-type-conflict";
+      kind: 'dependency-type-conflict';
       requestedType: string;
     }
-  | { issueId: string; kind: "issue-missing" };
+  | { issueId: string; kind: 'issue-missing' };
 
 export function parseBeadsRejection(message: string): BeadsRejection | undefined {
   const closeBlocked =
     /cannot close blocked issue:\s*(?<issueId>[^\s:]+)\s+is blocked by\s*\[(?<blockers>[^\]]*)\]/iu.exec(message);
   if (closeBlocked?.groups?.issueId) {
-    const blockerIds = (closeBlocked.groups.blockers ?? "")
+    const blockerIds = (closeBlocked.groups.blockers ?? '')
       .split(/[,\s]+/u)
       .map((blockerId) => blockerId.trim())
       .filter(Boolean);
     if (blockerIds.length > 0) {
-      return { blockerIds, issueId: closeBlocked.groups.issueId, kind: "close-blocked" };
+      return { blockerIds, issueId: closeBlocked.groups.issueId, kind: 'close-blocked' };
     }
   }
-  const openChildren =
-    /cannot close\s+(?<issueId>[^\s:]+):\s*(?<count>\d+)\s+open child issue/iu.exec(message);
+  const openChildren = /cannot close\s+(?<issueId>[^\s:]+):\s*(?<count>\d+)\s+open child issue/iu.exec(message);
   if (openChildren?.groups?.issueId) {
     return {
       issueId: openChildren.groups.issueId,
-      kind: "close-open-children",
-      openChildren: Number.parseInt(openChildren.groups.count ?? "0", 10) || 0,
+      kind: 'close-open-children',
+      openChildren: Number.parseInt(openChildren.groups.count ?? '0', 10) || 0,
     };
   }
   const typeConflict =
     /dependency\s+(?<issueId>\S+)\s+->\s+(?<dependsOnId>\S+)\s+already exists with type\s+"(?<existingType>[^"]*)"\s+\(requested\s+"(?<requestedType>[^"]*)"\)/iu.exec(
-      message,
+      message
     );
   if (typeConflict?.groups?.issueId && typeConflict.groups.dependsOnId) {
     return {
       dependsOnId: typeConflict.groups.dependsOnId,
-      existingType: typeConflict.groups.existingType ?? "",
+      existingType: typeConflict.groups.existingType ?? '',
       issueId: typeConflict.groups.issueId,
-      kind: "dependency-type-conflict",
-      requestedType: typeConflict.groups.requestedType ?? "",
+      kind: 'dependency-type-conflict',
+      requestedType: typeConflict.groups.requestedType ?? '',
     };
   }
   const hierarchy =
     /(?<issueId>\S+)\s+cannot be blocked by its\s+(?<relation>ancestor|descendant)\s+(?<blockerId>[^\s:]+)/iu.exec(
-      message,
+      message
     );
   if (hierarchy?.groups?.issueId && hierarchy.groups.blockerId) {
     return {
       blockerId: hierarchy.groups.blockerId,
       issueId: hierarchy.groups.issueId,
-      kind: "dependency-hierarchy",
-      relation: hierarchy.groups.relation?.toLowerCase() === "ancestor" ? "ancestor" : "descendant",
+      kind: 'dependency-hierarchy',
+      relation: hierarchy.groups.relation?.toLowerCase() === 'ancestor' ? 'ancestor' : 'descendant',
     };
   }
   const selfDependency = /cannot add self-dependency(?::\s*(?<issueId>\S+))?/iu.exec(message);
   if (selfDependency) {
-    return { issueId: selfDependency.groups?.issueId ?? "", kind: "dependency-self" };
+    return { issueId: selfDependency.groups?.issueId ?? '', kind: 'dependency-self' };
   }
   if (/adding dependency would create a cycle/iu.test(message)) {
-    return { kind: "dependency-cycle" };
+    return { kind: 'dependency-cycle' };
   }
   const missingIssue = /no issue found matching\s+"(?<issueId>[^"]*)"/iu.exec(message);
   if (missingIssue) {
-    return { issueId: missingIssue.groups?.issueId ?? "", kind: "issue-missing" };
+    return { issueId: missingIssue.groups?.issueId ?? '', kind: 'issue-missing' };
   }
   if (/no issues found matching the provided IDs/iu.test(message)) {
-    return { issueId: "", kind: "issue-missing" };
+    return { issueId: '', kind: 'issue-missing' };
   }
   return undefined;
 }
@@ -783,31 +757,26 @@ export function projectBoardRawProjectIdFromUrlParam(projectId: string): string 
   }
 }
 
-export function normalizeProjectBoardViewPreferences(
-  candidate: unknown,
-): ProjectBoardViewPreferences {
-  const stored =
-    typeof candidate === "object" && candidate !== null
-      ? (candidate as Record<string, unknown>)
-      : {};
+export function normalizeProjectBoardViewPreferences(candidate: unknown): ProjectBoardViewPreferences {
+  const stored = typeof candidate === 'object' && candidate !== null ? (candidate as Record<string, unknown>) : {};
   return {
     estimateFilter: normalizeBoardViewPreference(
       stored.estimateFilter,
       BOARD_ESTIMATE_FILTER_VALUES,
-      DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.estimateFilter,
+      DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.estimateFilter
     ),
     priorityFilter: normalizeBoardViewPreference(
       stored.priorityFilter,
       BOARD_PRIORITY_FILTER_VALUES,
-      DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.priorityFilter,
+      DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.priorityFilter
     ),
     sortOption: normalizeBoardViewPreference(
       stored.sortOption,
       BOARD_SORT_OPTION_VALUES,
-      DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.sortOption,
+      DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.sortOption
     ),
     tagFilter:
-      typeof stored.tagFilter === "string" && stored.tagFilter.trim().length > 0
+      typeof stored.tagFilter === 'string' && stored.tagFilter.trim().length > 0
         ? stored.tagFilter
         : DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.tagFilter,
   };
@@ -816,7 +785,7 @@ export function normalizeProjectBoardViewPreferences(
 function normalizeBoardViewPreference<TValue extends string>(
   candidate: unknown,
   allowedValues: ReadonlyArray<TValue>,
-  fallback: TValue,
+  fallback: TValue
 ): TValue {
   return allowedValues.includes(candidate as TValue) ? (candidate as TValue) : fallback;
 }
@@ -828,36 +797,36 @@ function normalizeBoardViewPreference<TValue extends string>(
   initial and manual loads call ensureWorkflowStatuses to reconcile Ghostex's required lanes.
 */
 export async function readWorkflowStatuses(
-  runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
+  runBeads: (request: Omit<BeadsBridgeRequest, 'cwd' | 'requestId'>) => Promise<unknown>
 ): Promise<string> {
-  const payload = await runBeads({ action: "configGet" });
-  return normalizeBeadsPayload<{ value?: string }>(payload, {}).value ?? "";
+  const payload = await runBeads({ action: 'configGet' });
+  return normalizeBeadsPayload<{ value?: string }>(payload, {}).value ?? '';
 }
 
 export async function ensureWorkflowStatuses(
-  runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
+  runBeads: (request: Omit<BeadsBridgeRequest, 'cwd' | 'requestId'>) => Promise<unknown>
 ): Promise<string> {
   const currentValue = await readWorkflowStatuses(runBeads);
-  const requiredEntries = REQUIRED_CUSTOM_STATUS_CONFIG.split(",");
-  const requiredNames = new Set(requiredEntries.map((entry) => entry.split(":")[0]));
+  const requiredEntries = REQUIRED_CUSTOM_STATUS_CONFIG.split(',');
+  const requiredNames = new Set(requiredEntries.map((entry) => entry.split(':')[0]));
   const currentEntries = currentValue
-    .split(",")
+    .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
-  const currentNames = new Set(currentEntries.map((entry) => entry.split(":")[0]));
+  const currentNames = new Set(currentEntries.map((entry) => entry.split(':')[0]));
   const nextEntries = currentEntries.map((entry) => {
-    const name = entry.split(":")[0];
+    const name = entry.split(':')[0];
     return requiredNames.has(name) ? name : entry;
   });
   for (const entry of requiredEntries) {
-    const name = entry.split(":")[0];
+    const name = entry.split(':')[0];
     if (!currentNames.has(name)) {
       nextEntries.push(entry);
     }
   }
-  const nextValue = nextEntries.join(",");
+  const nextValue = nextEntries.join(',');
   if (nextValue !== currentValue) {
-    await runBeads({ action: "configSet", value: nextValue });
+    await runBeads({ action: 'configSet', value: nextValue });
   }
   return nextValue;
 }
@@ -873,12 +842,12 @@ export function boardTagFilterOptions(tickets: BoardTicket[]): BoardTagFilter[] 
       tags.add(label);
     }
   }
-  return ["all", ...Array.from(tags).sort((left, right) => left.localeCompare(right))];
+  return ['all', ...Array.from(tags).sort((left, right) => left.localeCompare(right))];
 }
 
 export function resolveBoardTagFilter(
   tagFilter: BoardTagFilter,
-  options: ReadonlyArray<BoardTagFilter>,
+  options: ReadonlyArray<BoardTagFilter>
 ): BoardTagFilter {
   return options.includes(tagFilter) ? tagFilter : DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.tagFilter;
 }
@@ -888,7 +857,7 @@ export function filterBoardTickets(
   query: string,
   priorityFilter: BoardPriorityFilter,
   estimateFilter: BoardEstimateFilter,
-  tagFilter: BoardTagFilter,
+  tagFilter: BoardTagFilter
 ): BoardTicket[] {
   const normalizedQuery = query.trim();
   /*
@@ -897,25 +866,22 @@ export function filterBoardTickets(
     Priority matching uses the same normalized visible tier as ticket controls, and estimate matching treats missing estimates as their own selectable state.
   */
   let filtered =
-    priorityFilter === "all"
+    priorityFilter === 'all'
       ? tickets
       : tickets.filter((ticket) => prioritySelectValue(ticket.priority) === priorityFilter);
   filtered =
-    estimateFilter === "all"
+    estimateFilter === 'all'
       ? filtered
       : filtered.filter((ticket) => {
           const ticketEstimate = estimateToTshirt(ticket.estimate);
-          return estimateFilter === "none" ? ticketEstimate === undefined : ticketEstimate === estimateFilter;
+          return estimateFilter === 'none' ? ticketEstimate === undefined : ticketEstimate === estimateFilter;
         });
-  filtered =
-    tagFilter === "all"
-      ? filtered
-      : filtered.filter((ticket) => ticket.labels?.includes(tagFilter) ?? false);
+  filtered = tagFilter === 'all' ? filtered : filtered.filter((ticket) => ticket.labels?.includes(tagFilter) ?? false);
   if (!normalizedQuery) {
     return filtered;
   }
   const fuse = new Fuse(filtered, {
-    keys: ["title", "description", "id", "displayId", "labels"],
+    keys: ['title', 'description', 'id', 'displayId', 'labels'],
     threshold: 0.38,
   });
   return fuse.search(normalizedQuery).map((result) => result.item);
@@ -928,35 +894,26 @@ export function filterBoardTickets(
   Done therefore defaults to newest-closed-first while the other lanes keep the Beads order they have always shown, and an explicit sort selection applies to every lane in its chosen direction.
   Direction also drives the priority tie-break so the two priority views are exact reverses of each other rather than differing only in their tiers.
 */
-export function sortBoardTickets(
-  tickets: BoardTicket[],
-  sort: BoardSortOption,
-  column: BoardStatusKey,
-): BoardTicket[] {
-  if (sort === "default") {
-    return column === "done"
+export function sortBoardTickets(tickets: BoardTicket[], sort: BoardSortOption, column: BoardStatusKey): BoardTicket[] {
+  if (sort === 'default') {
+    return column === 'done'
       ? [...tickets].sort((left, right) =>
-          compareBoardTicketTimes(boardTicketClosedTime(left), boardTicketClosedTime(right), "desc"),
+          compareBoardTicketTimes(boardTicketClosedTime(left), boardTicketClosedTime(right), 'desc')
         )
       : tickets;
   }
-  const [sortKey, sortDirection] = sort.split("-") as [BoardSortKey, BoardSortDirection];
-  if (sortKey === "priority") {
+  const [sortKey, sortDirection] = sort.split('-') as [BoardSortKey, BoardSortDirection];
+  if (sortKey === 'priority') {
     return [...tickets].sort((left, right) => {
-      const priorityDelta =
-        Number(prioritySelectValue(left.priority)) - Number(prioritySelectValue(right.priority));
+      const priorityDelta = Number(prioritySelectValue(left.priority)) - Number(prioritySelectValue(right.priority));
       return priorityDelta !== 0
         ? applyBoardSortDirection(priorityDelta, sortDirection)
-        : compareBoardTicketTimes(
-            boardTicketUpdatedTime(left),
-            boardTicketUpdatedTime(right),
-            sortDirection,
-          );
+        : compareBoardTicketTimes(boardTicketUpdatedTime(left), boardTicketUpdatedTime(right), sortDirection);
     });
   }
-  const ticketTime = sortKey === "created" ? boardTicketCreatedTime : boardTicketUpdatedTime;
+  const ticketTime = sortKey === 'created' ? boardTicketCreatedTime : boardTicketUpdatedTime;
   return [...tickets].sort((left, right) =>
-    compareBoardTicketTimes(ticketTime(left), ticketTime(right), sortDirection),
+    compareBoardTicketTimes(ticketTime(left), ticketTime(right), sortDirection)
   );
 }
 
@@ -973,15 +930,11 @@ function boardTicketCreatedTime(ticket: BoardTicket): number {
 }
 
 function parseBoardTicketTime(value: string | undefined): number {
-  const parsed = Date.parse(value ?? "");
+  const parsed = Date.parse(value ?? '');
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 }
 
-function compareBoardTicketTimes(
-  left: number,
-  right: number,
-  direction: BoardSortDirection,
-): number {
+function compareBoardTicketTimes(left: number, right: number, direction: BoardSortDirection): number {
   if (left === right) {
     return 0;
   }
@@ -999,14 +952,14 @@ function compareBoardTicketTimes(
 }
 
 function applyBoardSortDirection(ascendingComparison: number, direction: BoardSortDirection): number {
-  return direction === "asc" ? ascendingComparison : -ascendingComparison;
+  return direction === 'asc' ? ascendingComparison : -ascendingComparison;
 }
 
 export function appendImageMarkdownToDescription(
   description: string,
   imagePath: string,
   selectionStart?: number,
-  selectionEnd?: number,
+  selectionEnd?: number
 ): string {
   const snippet = `[Image #${getNextDescriptionImageIndex(description)}](${imagePath})`;
   /**
@@ -1036,7 +989,7 @@ export function extractDescriptionImageReferences(description: string): Descript
   const references: DescriptionImageReference[] = [];
   for (const match of description.matchAll(descriptionImageMarkdownPattern())) {
     const markdown = match[0];
-    const src = (match[1] ?? "").trim();
+    const src = (match[1] ?? '').trim();
     if (!isDescriptionImageSource(src)) {
       continue;
     }
@@ -1052,7 +1005,7 @@ export function extractDescriptionImageReferences(description: string): Descript
 
   let lineStartOffset = 0;
   for (const line of description.split(/(\n)/u)) {
-    if (line === "\n") {
+    if (line === '\n') {
       lineStartOffset += line.length;
       continue;
     }
@@ -1060,7 +1013,7 @@ export function extractDescriptionImageReferences(description: string): Descript
     if (
       isDescriptionImageSource(src) &&
       !references.some(
-        (reference) => lineStartOffset <= reference.startOffset && reference.endOffset <= lineStartOffset + line.length,
+        (reference) => lineStartOffset <= reference.startOffset && reference.endOffset <= lineStartOffset + line.length
       )
     ) {
       const leadingWhitespaceLength = line.length - line.trimStart().length;
@@ -1099,8 +1052,8 @@ export function removeDescriptionImageReference(description: string, imageId: st
     return description;
   }
   return `${description.slice(0, reference.startOffset)}${description.slice(reference.endOffset)}`
-    .replace(/[ \t]+\n/gu, "\n")
-    .replace(/\n{3,}/gu, "\n\n")
+    .replace(/[ \t]+\n/gu, '\n')
+    .replace(/\n{3,}/gu, '\n\n')
     .trim();
 }
 
@@ -1109,14 +1062,14 @@ export function isDescriptionImageSource(source: string): boolean {
   if (!trimmed) {
     return false;
   }
-  if (trimmed.toLowerCase().startsWith("data:image/")) {
+  if (trimmed.toLowerCase().startsWith('data:image/')) {
     return true;
   }
   if (
-    trimmed.startsWith("/") ||
-    trimmed.startsWith("~/") ||
-    trimmed.startsWith("file://") ||
-    trimmed.startsWith("~/.ghostex/i/")
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('~/') ||
+    trimmed.startsWith('file://') ||
+    trimmed.startsWith('~/.ghostex/i/')
   ) {
     return descriptionImageFileExtensionPattern.test(trimmed);
   }
@@ -1126,7 +1079,7 @@ export function isDescriptionImageSource(source: string): boolean {
 function getNextDescriptionImageIndex(description: string): number {
   let highestIndex = 0;
   for (const match of description.matchAll(/\[Image #(\d+)\]\(/gu)) {
-    const index = Number.parseInt(match[1] ?? "", 10);
+    const index = Number.parseInt(match[1] ?? '', 10);
     if (Number.isFinite(index)) {
       highestIndex = Math.max(highestIndex, index);
     }
@@ -1138,29 +1091,27 @@ function insertDescriptionSnippet(
   description: string,
   snippet: string,
   selectionStart?: number,
-  selectionEnd?: number,
+  selectionEnd?: number
 ): string {
   const start =
-    typeof selectionStart === "number" && Number.isFinite(selectionStart)
+    typeof selectionStart === 'number' && Number.isFinite(selectionStart)
       ? Math.max(0, Math.min(description.length, selectionStart))
       : description.length;
   const end =
-    typeof selectionEnd === "number" && Number.isFinite(selectionEnd)
+    typeof selectionEnd === 'number' && Number.isFinite(selectionEnd)
       ? Math.max(start, Math.min(description.length, selectionEnd))
       : start;
   const prefix = description.slice(0, start);
   const suffix = description.slice(end);
-  const before = prefix.length === 0 || prefix.endsWith("\n") ? prefix : `${prefix}\n\n`;
-  const after = suffix.length === 0 || suffix.startsWith("\n") ? suffix : `\n\n${suffix}`;
+  const before = prefix.length === 0 || prefix.endsWith('\n') ? prefix : `${prefix}\n\n`;
+  const after = suffix.length === 0 || suffix.startsWith('\n') ? suffix : `\n\n${suffix}`;
   return `${before}${snippet}${after}`;
 }
 
 function persistableDescriptionImageReferences(description: string): DescriptionImageReference[] {
   const references = extractDescriptionImageReferences(description);
   const hasPathReference = references.some((reference) => !isLegacyDataImageSource(reference.src));
-  return hasPathReference
-    ? references.filter((reference) => !isLegacyDataImageSource(reference.src))
-    : references;
+  return hasPathReference ? references.filter((reference) => !isLegacyDataImageSource(reference.src)) : references;
 }
 
 function previewableDescriptionImageReferences(description: string): DescriptionImageReference[] {
@@ -1168,7 +1119,7 @@ function previewableDescriptionImageReferences(description: string): Description
 }
 
 function isLegacyDataImageSource(source: string): boolean {
-  return source.trim().toLowerCase().startsWith("data:image/");
+  return source.trim().toLowerCase().startsWith('data:image/');
 }
 
 /*
@@ -1189,32 +1140,29 @@ export function buildAgentWorkPrompt(ticket: BoardTicket): string {
   const beadId = ticket.id;
   return [
     `Work on bead ${beadId} (${ticket.displayId}): ${ticket.title}`,
-    "",
-    ticket.description?.trim() || "No prompt provided.",
-    "",
-    "After each turn where you made progress on this bead, add a bead comment summarizing what you did:",
+    '',
+    ticket.description?.trim() || 'No prompt provided.',
+    '',
+    'After each turn where you made progress on this bead, add a bead comment summarizing what you did:',
     `- \`bd comment ${beadId} "<summary>"\``,
-    "- Focus on user-facing requirements delivered and high-level technical approach.",
-    "- Do not list specific files or line numbers.",
-    "- End the comment with `Agent: <agent name>` and `Session: <saved agent CLI session id>` lines so the ticket view can show the agent after the user name and the resumable agent session id at the bottom.",
-    "",
-    "Status workflow for this project board:",
+    '- Focus on user-facing requirements delivered and high-level technical approach.',
+    '- Do not list specific files or line numbers.',
+    '- End the comment with `Agent: <agent name>` and `Session: <saved agent CLI session id>` lines so the ticket view can show the agent after the user name and the resumable agent session id at the bottom.',
+    '',
+    'Status workflow for this project board:',
     `- Park for later: \`bd update ${beadId} --status backlog\``,
     `- When you start: \`bd update ${beadId} --status in_progress\``,
     `- When implementation is ready for test: \`bd update ${beadId} --status test\``,
     `- When ready for review: \`bd update ${beadId} --status review\``,
     `- When done: \`bd close ${beadId}\``,
-  ].join("\n");
+  ].join('\n');
 }
 
 /*
  * CDXC:ProjectBoardComments 2026-06-05-06:43:
  * The ticket editor stores agent/session attribution in a bd-compatible plain-text footer because Beads comments only expose author, timestamp, and text. Parse that footer at the display boundary so old comments still render, while new comments get structured UI treatment without changing Beads storage.
  */
-export function formatProjectBoardCommentText(
-  body: string,
-  metadata: ProjectBoardCommentMetadata = {},
-): string {
+export function formatProjectBoardCommentText(body: string, metadata: ProjectBoardCommentMetadata = {}): string {
   const trimmedBody = body.trim();
   const agentName = normalizeCommentMetadataValue(metadata.agentName);
   const sessionId = normalizeCommentMetadataValue(metadata.sessionId);
@@ -1225,18 +1173,13 @@ export function formatProjectBoardCommentText(
   if (metadataLines.length === 0) {
     return trimmedBody;
   }
-  return [
-    trimmedBody,
-    "",
-    PROJECT_BOARD_COMMENT_METADATA_SEPARATOR,
-    ...metadataLines,
-  ].join("\n");
+  return [trimmedBody, '', PROJECT_BOARD_COMMENT_METADATA_SEPARATOR, ...metadataLines].join('\n');
 }
 
 export function parseProjectBoardCommentText(text: string | undefined): ParsedProjectBoardComment {
-  const originalBody = (text ?? "").trim();
+  const originalBody = (text ?? '').trim();
   if (!originalBody) {
-    return { body: "" };
+    return { body: '' };
   }
   const lines = originalBody.split(/\r?\n/u);
   let cursor = lines.length - 1;
@@ -1244,13 +1187,13 @@ export function parseProjectBoardCommentText(text: string | undefined): ParsedPr
   let agentName: string | undefined;
   let hasMetadataSeparator = false;
 
-  const sessionLine = lines[cursor]?.trim() ?? "";
+  const sessionLine = lines[cursor]?.trim() ?? '';
   if (sessionLine.startsWith(PROJECT_BOARD_COMMENT_SESSION_PREFIX)) {
     sessionId = normalizeCommentMetadataValue(sessionLine.slice(PROJECT_BOARD_COMMENT_SESSION_PREFIX.length));
     cursor -= 1;
   }
 
-  const agentLine = lines[cursor]?.trim() ?? "";
+  const agentLine = lines[cursor]?.trim() ?? '';
   if (agentLine.startsWith(PROJECT_BOARD_COMMENT_AGENT_PREFIX)) {
     agentName = normalizeCommentMetadataValue(agentLine.slice(PROJECT_BOARD_COMMENT_AGENT_PREFIX.length));
     cursor -= 1;
@@ -1260,7 +1203,7 @@ export function parseProjectBoardCommentText(text: string | undefined): ParsedPr
     return { body: originalBody };
   }
 
-  while (cursor >= 0 && lines[cursor]?.trim() === "") {
+  while (cursor >= 0 && lines[cursor]?.trim() === '') {
     cursor -= 1;
   }
   if (lines[cursor]?.trim() === PROJECT_BOARD_COMMENT_METADATA_SEPARATOR) {
@@ -1270,13 +1213,16 @@ export function parseProjectBoardCommentText(text: string | undefined): ParsedPr
   if (sessionId && !agentName && !hasMetadataSeparator) {
     return { body: originalBody };
   }
-  while (cursor >= 0 && lines[cursor]?.trim() === "") {
+  while (cursor >= 0 && lines[cursor]?.trim() === '') {
     cursor -= 1;
   }
 
   return {
     agentName,
-    body: lines.slice(0, cursor + 1).join("\n").trim(),
+    body: lines
+      .slice(0, cursor + 1)
+      .join('\n')
+      .trim(),
     sessionId,
   };
 }
@@ -1307,11 +1253,11 @@ function normalizeCommentMetadataValue(value: string | undefined): string | unde
  * pass fails, so an agent literally named "claude-code" still wins over "claude"
  * and no bead resolves to an agent the exact pass could already reach.
  */
-const AGENT_TOOL_NAME_SUFFIXES = ["-code", "-cli"] as const;
+const AGENT_TOOL_NAME_SUFFIXES = ['-code', '-cli'] as const;
 
 export function resolveAssignedAgentId(
   assignee: string | undefined,
-  agents: readonly { agentId: string; label: string }[],
+  agents: readonly { agentId: string; label: string }[]
 ): string | undefined {
   const normalizedAssignee = assignee?.trim().toLowerCase();
   if (!normalizedAssignee) {
@@ -1319,9 +1265,7 @@ export function resolveAssignedAgentId(
   }
   const matchAgentName = (candidate: string): string | undefined =>
     agents.find(
-      (agent) =>
-        agent.label.trim().toLowerCase() === candidate ||
-        agent.agentId.trim().toLowerCase() === candidate,
+      (agent) => agent.label.trim().toLowerCase() === candidate || agent.agentId.trim().toLowerCase() === candidate
     )?.agentId;
   const exactMatch = matchAgentName(normalizedAssignee);
   if (exactMatch) {
@@ -1345,31 +1289,29 @@ export function getBlockedByIds(issue: BeadsIssue): string[] {
 
 export function getBlockingIds(issueId: string, issues: BeadsIssue[]): string[] {
   return issues
-    .filter((candidate) =>
-      (candidate.dependencies ?? []).some((dependency) => dependency.depends_on_id === issueId),
-    )
+    .filter((candidate) => (candidate.dependencies ?? []).some((dependency) => dependency.depends_on_id === issueId))
     .map((candidate) => candidate.id);
 }
 
 export function formatShortDate(value?: string): string {
   if (!value) {
-    return "";
+    return '';
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "";
+    return '';
   }
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 export function conversationLinkLabel(link: ProjectBoardConversationLinkView): string {
-  return link.sessionTitle || link.agentName || link.agentId || link.agentSessionId || "Agent session";
+  return link.sessionTitle || link.agentName || link.agentId || link.agentSessionId || 'Agent session';
 }
 
-export type ProjectBoardConversationLinkActionKind = "jump" | "none" | "resume";
+export type ProjectBoardConversationLinkActionKind = 'jump' | 'none' | 'resume';
 
 export function conversationLinkActionKind(
-  link: ProjectBoardConversationLinkView | undefined,
+  link: ProjectBoardConversationLinkView | undefined
 ): ProjectBoardConversationLinkActionKind {
   /*
    * CDXC:ProjectBoardBeads 2026-08-07:
@@ -1379,15 +1321,13 @@ export function conversationLinkActionKind(
    * user and gets its own affordance.
    */
   if (link?.isLive || link?.isRestorable) {
-    return "jump";
+    return 'jump';
   }
-  return link?.isResumable ? "resume" : "none";
+  return link?.isResumable ? 'resume' : 'none';
 }
 
-export function isUsableConversationLink(
-  link: ProjectBoardConversationLinkView | undefined,
-): boolean {
-  return conversationLinkActionKind(link) !== "none";
+export function isUsableConversationLink(link: ProjectBoardConversationLinkView | undefined): boolean {
+  return conversationLinkActionKind(link) !== 'none';
 }
 
 export function conversationLinkStatusText(link: ProjectBoardConversationLinkView): string {
@@ -1399,14 +1339,14 @@ export function conversationLinkStatusText(link: ProjectBoardConversationLinkVie
    */
   const lastWorkedDate = formatShortDate(link.updatedAt);
   const sessionStatus = link.isSleeping
-    ? "Sleeping"
+    ? 'Sleeping'
     : link.isLive
-      ? "Live"
+      ? 'Live'
       : link.isRestorable
-        ? "Restorable"
+        ? 'Restorable'
         : lastWorkedDate
           ? `Last worked ${lastWorkedDate}`
-          : "Last worked";
-  const agentSessionPreview = link.agentSessionId ? ` · ${link.agentSessionId.slice(0, 8)}` : "";
+          : 'Last worked';
+  const agentSessionPreview = link.agentSessionId ? ` · ${link.agentSessionId.slice(0, 8)}` : '';
   return `${sessionStatus}${agentSessionPreview}`;
 }

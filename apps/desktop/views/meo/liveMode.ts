@@ -14,7 +14,7 @@ import {
   addTopLinePillLabel,
   addMermaidDiagram,
   addMermaidDiagramBlock,
-  addCopyCodeButton
+  addCopyCodeButton,
 } from './helpers/codeBlocks';
 import { ImageWidget, getImageData, isImageUrl } from './helpers/images';
 import { highlightStyle } from './theme';
@@ -27,31 +27,32 @@ import {
   headingCollapseSharedExtensions,
   getCollapsedHeadingSections,
   getDetailsBlocks,
-  toggleCollapsibleSection
+  toggleCollapsibleSection,
 } from './helpers/headingCollapse';
 import {
   addListMarkerDecoration,
   listMarkerData,
   detectListIndentStylesByLine,
-  nextOrderedSequenceNumber
+  nextOrderedSequenceNumber,
 } from './helpers/listMarkers';
-import { addTableDecorations, addTableDecorationsForLineRange, isTableDelimiterLine, parseTableInfo } from './helpers/tables';
+import {
+  addTableDecorations,
+  addTableDecorationsForLineRange,
+  isTableDelimiterLine,
+  parseTableInfo,
+} from './helpers/tables';
 import {
   forEachYamlFrontmatterField,
   parseFrontmatter,
   parseSimpleYamlFlowArrayValue,
   isInsideFrontmatter,
   isInsideFrontmatterContent,
-  isThematicBreakLine
+  isThematicBreakLine,
 } from './helpers/frontmatter';
 import { isWikiLinkNode, parseWikiLinkData, getWikiLinkStatus } from './helpers/wikiLinks';
 import { getLocalLinkStatus, normalizeLocalLinkTarget, isLikelyLocalLinkTarget } from './helpers/localLinks';
 import { mergeConflictSourceExtensions, parseMergeConflicts } from './helpers/mergeConflicts';
-import {
-  AlertType,
-  AlertIconWidget,
-  detectAlertInBlockquote
-} from './helpers/alerts';
+import { AlertType, AlertIconWidget, detectAlertInBlockquote } from './helpers/alerts';
 import { parseFootnotes, footnoteReferenceKey } from './helpers/footnotes';
 import { getLiveRenderedBlocks, type LiveRenderedBlock } from './helpers/liveRenderedBlocks';
 import { getMermaidColonBlocks, rangeOverlapsMermaidColonBlock } from './helpers/mermaidColonBlocks';
@@ -63,7 +64,7 @@ import {
   renderLatexMathToHtml,
   resolveFencedDisplayMathInnerLineRange,
   type LatexMathRange,
-  type LatexMathMode
+  type LatexMathMode,
 } from './helpers/math';
 import { diagnosticDataField } from './helpers/diagnostics';
 
@@ -75,25 +76,29 @@ const activeLinkMarkerDeco = Decoration.mark({ class: 'meo-md-marker-active meo-
 const linkLabelBracketDeco = Decoration.mark({
   class: 'meo-md-link-label-bracket',
   attributes: {
-    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;'
-  }
+    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;',
+  },
 });
 const activeLinkLabelBracketDeco = Decoration.mark({
   class: 'meo-md-link-label-bracket-active',
   attributes: {
-    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;'
-  }
+    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;',
+  },
 });
 const footnoteMarkerDeco = Decoration.mark({
   class: 'meo-md-footnote-marker',
   attributes: {
-    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;'
-  }
+    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;',
+  },
 });
 const footnoteLiteralDeco = Decoration.mark({ class: 'meo-md-footnote-literal' });
 const wikiLinkMarkerDeco = Decoration.mark({ class: 'meo-md-marker meo-md-link-marker meo-md-wiki-marker' });
-const activeWikiLinkMarkerDeco = Decoration.mark({ class: 'meo-md-marker-active meo-md-link-marker-active meo-md-wiki-marker' });
-const emptyWikiLinkMarkerDeco = Decoration.mark({ class: 'meo-md-marker meo-md-link-marker meo-md-wiki-marker meo-md-wiki-empty-marker' });
+const activeWikiLinkMarkerDeco = Decoration.mark({
+  class: 'meo-md-marker-active meo-md-link-marker-active meo-md-wiki-marker',
+});
+const emptyWikiLinkMarkerDeco = Decoration.mark({
+  class: 'meo-md-marker meo-md-link-marker meo-md-wiki-marker meo-md-wiki-empty-marker',
+});
 const strikeMarkerDeco = Decoration.mark({ class: 'meo-md-marker meo-md-strike-marker' });
 const activeStrikeMarkerDeco = Decoration.mark({ class: 'meo-md-marker-active meo-md-strike-marker-active' });
 const codeMarkerDeco = Decoration.mark({ class: 'meo-md-code-marker' });
@@ -104,7 +109,7 @@ const hiddenLinkUrlDeco = Decoration.mark({ class: 'meo-md-link-url-hidden' });
 const linkBoundaryDeco = Decoration.mark({ class: 'meo-md-url-boundary' });
 const collapsedHeadingBodyDeco = Decoration.replace({
   inclusiveStart: false,
-  inclusiveEnd: false
+  inclusiveEnd: false,
 });
 const collapsedHeadingLineDeco = Decoration.line({ class: 'meo-md-heading-collapsed' });
 const tableDelimiterGutterLineClassMarker = new (class extends GutterMarker {
@@ -128,7 +133,7 @@ const lineStyleDecos = {
   frontmatterContent: Decoration.line({ class: 'meo-md-frontmatter-content' }),
   frontmatterBoundary: Decoration.line({ class: 'meo-md-hr meo-md-frontmatter-boundary' }),
   hrActive: Decoration.line({ class: 'meo-md-hr-active' }),
-  hr: Decoration.line({ class: 'meo-md-hr' })
+  hr: Decoration.line({ class: 'meo-md-hr' }),
 };
 
 const alertLineDecos: Record<AlertType, ReturnType<typeof Decoration.line>> = {
@@ -136,7 +141,7 @@ const alertLineDecos: Record<AlertType, ReturnType<typeof Decoration.line>> = {
   TIP: Decoration.line({ class: 'meo-md-alert meo-md-alert-tip' }),
   IMPORTANT: Decoration.line({ class: 'meo-md-alert meo-md-alert-important' }),
   WARNING: Decoration.line({ class: 'meo-md-alert meo-md-alert-warning' }),
-  CAUTION: Decoration.line({ class: 'meo-md-alert meo-md-alert-caution' })
+  CAUTION: Decoration.line({ class: 'meo-md-alert meo-md-alert-caution' }),
 };
 
 const alertMarkerDeco = Decoration.mark({ class: 'meo-md-alert-marker' });
@@ -157,7 +162,7 @@ const rawFileUrlBlockedAncestorNames = new Set([
   'CodeBlock',
   'HTMLTag',
   'HTMLBlock',
-  'Table'
+  'Table',
 ]);
 
 const listLineDecoCache = new Map();
@@ -271,8 +276,8 @@ function listLineDeco(
   deco = Decoration.line({
     class: classes.join(' '),
     attributes: {
-      style: `--meo-list-hanging-indent:${offset}ch;--meo-list-indent-columns:${indent}ch;--meo-list-guide-step:${guideStep}ch;--meo-task-hidden-prefix-columns:${hiddenTaskPrefix}ch;`
-    }
+      style: `--meo-list-hanging-indent:${offset}ch;--meo-list-indent-columns:${indent}ch;--meo-list-guide-step:${guideStep}ch;--meo-task-hidden-prefix-columns:${hiddenTaskPrefix}ch;`,
+    },
   });
   listLineDecoCache.set(key, deco);
   return deco;
@@ -282,7 +287,7 @@ const inlineStyleDecos = {
   em: Decoration.mark({ class: 'meo-md-em' }),
   strong: Decoration.mark({ class: 'meo-md-strong' }),
   strike: Decoration.mark({ class: 'meo-md-strike' }),
-  inlineCode: Decoration.mark({ class: 'meo-md-inline-code' })
+  inlineCode: Decoration.mark({ class: 'meo-md-inline-code' }),
 };
 
 function addFrontmatterBoundaryDecorations(builder, state, frontmatter, activeLines) {
@@ -293,15 +298,16 @@ function addFrontmatterBoundaryDecorations(builder, state, frontmatter, activeLi
       if (valueFrom !== null && valueFrom < valueTo) {
         const lineIsActive = activeLines.has(line.number);
         const selectionOverlapsValue = overlapsSelection(state, valueFrom, valueTo);
-        const parsedArrayValue = !lineIsActive && !selectionOverlapsValue
-          ? parseSimpleYamlFlowArrayValue(line.text, valueFrom - line.from)
-          : null;
+        const parsedArrayValue =
+          !lineIsActive && !selectionOverlapsValue
+            ? parseSimpleYamlFlowArrayValue(line.text, valueFrom - line.from)
+            : null;
 
         if (parsedArrayValue) {
           builder.push(
             Decoration.replace({
               widget: frontmatterArrayPillsWidget(parsedArrayValue.items.map((item) => item.text)),
-              inclusive: false
+              inclusive: false,
             }).range(line.from + parsedArrayValue.fromOffset, line.from + parsedArrayValue.toOffset)
           );
           return;
@@ -314,7 +320,7 @@ function addFrontmatterBoundaryDecorations(builder, state, frontmatter, activeLi
 
   const boundaries = [
     { from: frontmatter.openingFrom, to: frontmatter.openingTo, isOpening: true },
-    { from: frontmatter.closingFrom, to: frontmatter.closingTo }
+    { from: frontmatter.closingFrom, to: frontmatter.closingTo },
   ];
 
   for (const boundary of boundaries) {
@@ -348,11 +354,7 @@ function addThematicBreakDecorations(builder, state, from, to, activeLines) {
 function addForcedThematicBreakDecorations(builder, state, activeLines, frontmatter, codeBlockLines = null) {
   for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
     const line = state.doc.line(lineNo);
-    if (
-      !isThematicBreakLine(line.text) ||
-      isInsideFrontmatter(frontmatter, line.from) ||
-      codeBlockLines?.has(lineNo)
-    ) {
+    if (!isThematicBreakLine(line.text) || isInsideFrontmatter(frontmatter, line.from) || codeBlockLines?.has(lineNo)) {
       continue;
     }
     addThematicBreakDecorations(builder, state, line.from, line.to, activeLines);
@@ -374,7 +376,7 @@ function addLinkMark(builder, from, to, href) {
     to,
     Decoration.mark({
       class: 'meo-md-link',
-      attributes: { 'data-meo-link-href': href }
+      attributes: { 'data-meo-link-href': href },
     })
   );
 }
@@ -440,7 +442,7 @@ class ClearLinkUrlWidget extends WidgetType {
       }
       view.dispatch({
         changes: { from: this.urlFrom, to: this.urlTo, insert: '' },
-        selection: { anchor: this.urlFrom }
+        selection: { anchor: this.urlFrom },
       });
       view.focus();
     });
@@ -627,7 +629,7 @@ class FootnoteReferenceWidget extends WidgetType {
       event.stopPropagation();
       view.dispatch({
         selection: { anchor: this.definitionFrom },
-        effects: EditorView.scrollIntoView(this.definitionFrom, { y: 'center' })
+        effects: EditorView.scrollIntoView(this.definitionFrom, { y: 'center' }),
       });
       view.focus();
     });
@@ -676,7 +678,7 @@ class FootnoteBacklinkWidget extends WidgetType {
       event.stopPropagation();
       view.dispatch({
         selection: { anchor: this.referenceFrom },
-        effects: EditorView.scrollIntoView(this.referenceFrom, { y: 'center' })
+        effects: EditorView.scrollIntoView(this.referenceFrom, { y: 'center' }),
       });
       view.focus();
     });
@@ -716,7 +718,7 @@ function addMarkdownLinkDecorations(builder, state, node, activeLines) {
     builder.push(
       Decoration.widget({
         widget: new MissingLocalLinkWidget(),
-        side: -1
+        side: -1,
       }).range(iconPos)
     );
   }
@@ -734,7 +736,7 @@ function addMarkdownLinkDecorations(builder, state, node, activeLines) {
   builder.push(
     Decoration.widget({
       widget: new ClearLinkUrlWidget(urlNode.from, urlNode.to),
-      side: 1
+      side: 1,
     }).range(urlNode.to)
   );
 }
@@ -747,7 +749,7 @@ function addFootnoteReferenceDecorations(builder, state, reference, activeLines)
   builder.push(
     Decoration.replace({
       widget: new FootnoteReferenceWidget(reference.number as number, reference.definition!.lineFrom),
-      inclusive: false
+      inclusive: false,
     }).range(reference.from, reference.to)
   );
 
@@ -839,7 +841,7 @@ function addWikiLinkDecorations(builder, state, node, activeLines) {
     builder.push(
       Decoration.widget({
         widget: new MissingWikiLinkWidget(),
-        side: -1
+        side: -1,
       }).range(iconPos)
     );
   }
@@ -950,9 +952,7 @@ function addDetailsBlockDecorations(builder, state, detailsBlocks, activeLines) 
       addLineClass(builder, state, detailsBlock.lineFrom, detailsBlock.lineTo, lineStyleDecos.detailsSummary);
 
       if (detailsBlock.summaryFrom > detailsBlock.anchorFrom) {
-        builder.push(
-          collapsedHeadingBodyDeco.range(detailsBlock.anchorFrom, detailsBlock.summaryFrom)
-        );
+        builder.push(collapsedHeadingBodyDeco.range(detailsBlock.anchorFrom, detailsBlock.summaryFrom));
       }
 
       builder.push(
@@ -962,14 +962,12 @@ function addDetailsBlockDecorations(builder, state, detailsBlocks, activeLines) 
             detailsBlock.lineFrom,
             detailsBlock.summaryText,
             detailsBlock.collapsed
-          )
+          ),
         }).range(detailsBlock.summaryFrom, detailsBlock.summaryTo)
       );
 
       if (detailsBlock.anchorTo > detailsBlock.summaryTo) {
-        builder.push(
-          collapsedHeadingBodyDeco.range(detailsBlock.summaryTo, detailsBlock.anchorTo)
-        );
+        builder.push(collapsedHeadingBodyDeco.range(detailsBlock.summaryTo, detailsBlock.anchorTo));
       }
     }
 
@@ -1005,7 +1003,7 @@ function addFootnoteDefinitionDecorations(builder, state, footnotes, activeLines
     builder.push(
       Decoration.replace({
         widget: new FootnoteBacklinkWidget(definition.number, definition.firstReferenceFrom),
-        inclusive: false
+        inclusive: false,
       }).range(definition.markerFrom, definition.markerTo)
     );
     builder.push(lineStyleDecos.footnote.range(firstLine.from));
@@ -1016,14 +1014,14 @@ function addFootnoteDefinitionDecorations(builder, state, footnotes, activeLines
         builder.push(
           Decoration.replace({
             widget: new FootnoteBackrefSpacerWidget(definition.number),
-            inclusive: false
+            inclusive: false,
           }).range(continuationLine.hideIndentFrom, continuationLine.hideIndentTo)
         );
         if (continuationLine.extraIndentColumns > 0) {
           builder.push(
             Decoration.widget({
               widget: listIndentWidget(continuationLine.extraIndentColumns),
-              side: 1
+              side: 1,
             }).range(continuationLine.hideIndentTo)
           );
         }
@@ -1078,7 +1076,7 @@ function addListLineDecorations(builder, state, indentSelectedLines, frontmatter
       // Keep front matter list-like values rendered literally (source-style),
       // while still tinting the prefix as a list marker.
       addListMarkerDecoration(builder, state, line.from, orderedDisplayIndex, style, {
-        useSourceStyleLiteral: true
+        useSourceStyleLiteral: true,
       });
       continue;
     }
@@ -1087,7 +1085,7 @@ function addListLineDecorations(builder, state, indentSelectedLines, frontmatter
       builder.push(
         Decoration.replace({
           widget: listIndentWidget(marker.indentColumns ?? 0),
-          inclusive: false
+          inclusive: false,
         }).range(line.from, line.from + marker.fromOffset)
       );
     }
@@ -1118,10 +1116,7 @@ function buildDecorations(state) {
   const detailsBlocks = getDetailsBlocks(state);
   const strikeRanges = collectStrikethroughRanges(tree);
   const codeBlockLines = collectCodeBlockLines(state, tree, mermaidColonBlocks);
-  const renderedTableRanges = collectRenderedTableRanges(
-    state,
-    getLiveRenderedBlocks(state)
-  );
+  const renderedTableRanges = collectRenderedTableRanges(state, getLiveRenderedBlocks(state));
   const parsedTableRanges = [];
   let tableDepth = 0;
 
@@ -1142,15 +1137,7 @@ function buildDecorations(state) {
       if (hasCodeBlockAncestor(node)) {
         if (node.name === 'QuoteMark') {
           const line = state.doc.lineAt(node.from);
-          addLineAwareRange(
-            ranges,
-            activeLines,
-            line.number,
-            node.from,
-            node.to,
-            markerDeco,
-            activeLineMarkerDeco
-          );
+          addLineAwareRange(ranges, activeLines, line.number, node.from, node.to, markerDeco, activeLineMarkerDeco);
           return;
         }
         if (!node.name.endsWith('Mark') || !isFenceMarker(state, node.from, node.to)) {
@@ -1253,7 +1240,7 @@ function buildDecorations(state) {
             ranges.push(
               Decoration.widget({
                 widget: footnoteReferenceSeparatorWidget,
-                side: 1
+                side: 1,
               }).range(currentReference.to)
             );
           }
@@ -1279,7 +1266,7 @@ function buildDecorations(state) {
               ranges.push(
                 Decoration.replace({
                   widget: new ImageWidget(emptyImageUrl, '', ''),
-                  inclusive: false
+                  inclusive: false,
                 }).range(node.from, node.to)
               );
               return;
@@ -1308,7 +1295,7 @@ function buildDecorations(state) {
               Decoration.widget({
                 widget: new ImageWidget(url, altText, linkUrl),
                 side: 1,
-                block: true
+                block: true,
               }).range(line.to)
             );
           }
@@ -1320,7 +1307,7 @@ function buildDecorations(state) {
           ranges.push(
             Decoration.replace({
               widget: new ImageWidget(url, altText, linkUrl),
-              inclusive: false
+              inclusive: false,
             }).range(node.from, node.to)
           );
         }
@@ -1346,7 +1333,15 @@ function buildDecorations(state) {
         // Show fence markers on all lines (not just active)
         addLineAwareRange(ranges, activeLines, line.number, node.from, node.to, fenceMarkerDeco, activeLineMarkerDeco);
       } else if (node.name === 'StrikethroughMark') {
-        addLineAwareRange(ranges, activeLines, line.number, node.from, node.to, strikeMarkerDeco, activeStrikeMarkerDeco);
+        addLineAwareRange(
+          ranges,
+          activeLines,
+          line.number,
+          node.from,
+          node.to,
+          strikeMarkerDeco,
+          activeStrikeMarkerDeco
+        );
       } else if (node.name === 'CodeMark') {
         addLineAwareRange(ranges, activeLines, line.number, node.from, node.to, codeMarkerDeco, activeCodeMarkerDeco);
       } else if (node.name === 'LinkMark') {
@@ -1451,7 +1446,7 @@ function addAlertBlockDecorations(builder, state, node, alertBlock, activeLines)
     builder.push(
       Decoration.widget({
         widget: new AlertIconWidget(alertBlock.type),
-        side: -1
+        side: -1,
       }).range(startLine.from)
     );
     addRange(builder, alertBlock.directiveFrom, alertBlock.directiveTo, hiddenAlertMarkerDeco);
@@ -1469,7 +1464,7 @@ function safeBuildDecorations(state, fallback, context, extra = {}) {
       context,
       docLength: state.doc.length,
       ...extra,
-      error
+      error,
     });
     return fallback;
   }
@@ -1478,7 +1473,7 @@ function safeBuildDecorations(state, fallback, context, extra = {}) {
 function mergeConflictRanges(state) {
   return parseMergeConflicts(state).map((conflict) => ({
     from: conflict.blockFrom,
-    to: conflict.blockTo
+    to: conflict.blockTo,
   }));
 }
 
@@ -1508,9 +1503,7 @@ function filterDecorationsOutsideMergeConflicts(state, decorations) {
 
   const filtered = [];
   decorations.between(0, state.doc.length, (from, to, value) => {
-    const overlaps = to > from
-      ? rangeOverlapsRanges(from, to, conflicts)
-      : pointInsideRanges(from, conflicts);
+    const overlaps = to > from ? rangeOverlapsRanges(from, to, conflicts) : pointInsideRanges(from, conflicts);
     if (!overlaps) {
       filtered.push(value.range(from, to));
     }
@@ -1533,7 +1526,7 @@ function collectCodeBlockLines(state, tree, mermaidColonBlocks) {
         lines.add(lineNo);
       }
       return false;
-    }
+    },
   });
 
   for (const block of mermaidColonBlocks) {
@@ -1573,7 +1566,7 @@ function addMermaidColonFenceDecorations(builder, state, mermaidColonBlocks, act
       startLine: block.startLine,
       endLine: block.endLine,
       diagramText: block.diagramText,
-      fullBlockText: block.fullBlockText
+      fullBlockText: block.fullBlockText,
     });
   }
 }
@@ -1622,13 +1615,7 @@ class LatexMathWidget extends WidgetType {
   startLine: number;
   endLine: number;
 
-  constructor(
-    html: string,
-    mode: LatexMathMode,
-    fencedDisplay = false,
-    startLine = 0,
-    endLine = 0
-  ) {
+  constructor(html: string, mode: LatexMathMode, fencedDisplay = false, startLine = 0, endLine = 0) {
     super();
     this.html = html;
     this.mode = mode;
@@ -1733,7 +1720,7 @@ function collectRenderedTableRanges(
     }
     ranges.push({
       from: state.doc.line(block.startLine).from,
-      to: state.doc.line(block.endLine).to
+      to: state.doc.line(block.endLine).to,
     });
   }
   return ranges;
@@ -1769,16 +1756,12 @@ function collectInlineCodeRanges(tree): Array<{ from: number; to: number }> {
       if (node.name === 'InlineCode' || node.name === 'CodeText') {
         ranges.push({ from: node.from, to: node.to });
       }
-    }
+    },
   });
   return ranges;
 }
 
-function collectCodeBlockRanges(
-  state,
-  tree,
-  mermaidColonBlocks
-): Array<{ from: number; to: number }> {
+function collectCodeBlockRanges(state, tree, mermaidColonBlocks): Array<{ from: number; to: number }> {
   const ranges: Array<{ from: number; to: number }> = [];
 
   tree.iterate({
@@ -1788,30 +1771,24 @@ function collectCodeBlockRanges(
       }
       ranges.push({ from: node.from, to: node.to });
       return false;
-    }
+    },
   });
 
   for (const block of mermaidColonBlocks) {
     ranges.push({
       from: state.doc.line(block.startLine).from,
-      to: state.doc.line(block.endLine).to
+      to: state.doc.line(block.endLine).to,
     });
   }
 
   return ranges;
 }
 
-function collectMathRanges(
-  state,
-  tree,
-  mermaidColonBlocks,
-  renderedTableRanges,
-  frontmatter = null
-): LatexMathRange[] {
+function collectMathRanges(state, tree, mermaidColonBlocks, renderedTableRanges, frontmatter = null): LatexMathRange[] {
   const excludedRanges = [
     ...collectInlineCodeRanges(tree),
     ...collectCodeBlockRanges(state, tree, mermaidColonBlocks),
-    ...renderedTableRanges
+    ...renderedTableRanges,
   ];
 
   if (frontmatter) {
@@ -1824,7 +1801,7 @@ function collectMathRanges(
   }
 
   return collectLatexMathRanges(text, {
-    excludedRanges: mergeSimpleRanges(excludedRanges)
+    excludedRanges: mergeSimpleRanges(excludedRanges),
   });
 }
 
@@ -1833,10 +1810,7 @@ function resolveFencedMathRenderSpan(
   startLineNo: number,
   endLineNo: number
 ): { innerFrom: number; innerTo: number } | null {
-  const innerLineRange = resolveFencedDisplayMathInnerLineRange(
-    startLineNo,
-    endLineNo
-  );
+  const innerLineRange = resolveFencedDisplayMathInnerLineRange(startLineNo, endLineNo);
   if (!innerLineRange) {
     return null;
   }
@@ -1849,7 +1823,7 @@ function resolveFencedMathRenderSpan(
 
   return {
     innerFrom: innerStartLine.from,
-    innerTo: innerEndLine.to
+    innerTo: innerEndLine.to,
   };
 }
 
@@ -1875,9 +1849,7 @@ function addMathDecorations(builder, state, mathRanges: ReadonlyArray<LatexMathR
       if (!activeLines.has(openingLine.number)) {
         addTopLinePillLabel(builder, openingLine.to, 'latex');
       }
-      const copyContent = renderSpan
-        ? state.doc.sliceString(renderSpan.innerFrom, renderSpan.innerTo)
-        : '';
+      const copyContent = renderSpan ? state.doc.sliceString(renderSpan.innerFrom, renderSpan.innerTo) : '';
       if (copyContent) {
         addTopLineCopyButton(builder, openingLine.to, copyContent);
       }
@@ -1911,7 +1883,7 @@ function addMathDecorations(builder, state, mathRanges: ReadonlyArray<LatexMathR
       builder.push(
         Decoration.replace({
           widget: getMathWidget(html, mathRange.mode, true, startLineNo, endLineNo),
-          block: true
+          block: true,
         }).range(renderSpan.innerFrom, renderSpan.innerTo)
       );
       continue;
@@ -1929,7 +1901,7 @@ function addMathDecorations(builder, state, mathRanges: ReadonlyArray<LatexMathR
     builder.push(
       Decoration.replace({
         widget: getMathWidget(html, mathRange.mode, false, 0, 0),
-        inclusive: false
+        inclusive: false,
       }).range(mathRange.from, mathRange.to)
     );
   }
@@ -1982,7 +1954,7 @@ function addKbdTagDecorations(
       builder.push(
         Decoration.replace({
           widget: getKbdWidget(keyText),
-          inclusive: false
+          inclusive: false,
         }).range(kbdRange.from, kbdRange.to)
       );
     }
@@ -2008,12 +1980,7 @@ function getEmojiWidget(emoji: string): WidgetType {
   return widget;
 }
 
-function addEmojiDecorationsWithMath(
-  builder,
-  state,
-  mathRanges,
-  codeBlockLines = null
-) {
+function addEmojiDecorationsWithMath(builder, state, mathRanges, codeBlockLines = null) {
   for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
     if (codeBlockLines?.has(lineNo)) {
       continue;
@@ -2036,7 +2003,7 @@ function addEmojiDecorationsWithMath(
       builder.push(
         Decoration.replace({
           widget: getEmojiWidget(emojiRange.emoji),
-          inclusive: false
+          inclusive: false,
         }).range(emojiRange.from, emojiRange.to)
       );
     }
@@ -2052,7 +2019,7 @@ const liveDecorationField = StateField.define({
     // that may arrive without direct doc/selection changes.
     const next = safeBuildDecorations(transaction.state, decorations, 'update', {
       docChanged: transaction.docChanged,
-      selection: transaction.selection
+      selection: transaction.selection,
     });
 
     // Guard against transient empty parse results on selection-only transactions.
@@ -2062,7 +2029,7 @@ const liveDecorationField = StateField.define({
 
     return next;
   },
-  provide: (field) => EditorView.decorations.from(field)
+  provide: (field) => EditorView.decorations.from(field),
 });
 
 function buildLiveLineNumberMarkers(state) {
@@ -2200,7 +2167,7 @@ const liveLineNumberMarkerField = StateField.define({
     }
     return buildLiveLineNumberMarkers(transaction.state);
   },
-  provide: (field) => gutterLineClass.from(field)
+  provide: (field) => gutterLineClass.from(field),
 });
 
 export function liveModeExtensions() {
@@ -2209,14 +2176,14 @@ export function liveModeExtensions() {
       base: markdownLanguage,
       addKeymap: false,
       codeLanguages: resolveCodeLanguage,
-      extensions: [{ remove: ['SetextHeading'] }]
+      extensions: [{ remove: ['SetextHeading'] }],
     }),
     syntaxHighlighting(highlightStyle),
     liveDecorationField,
     liveLineNumberMarkerField,
     ...mergeConflictSourceExtensions(),
     ...headingCollapseSharedExtensions(),
-    ...headingCollapseLiveExtensions()
+    ...headingCollapseLiveExtensions(),
   ];
 }
 

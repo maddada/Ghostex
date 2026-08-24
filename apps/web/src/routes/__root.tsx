@@ -1,47 +1,32 @@
-import { createRootRoute, Outlet } from "@tanstack/react-router";
-import {
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
-import { AppTooltip, TooltipProvider } from "@/packages/core-ui/app-tooltip";
-import { NavigationHistoryButtons } from "@/packages/shared/navigation-history/navigation-history-buttons";
-import {
-  getConnectionStates,
-  subscribeConnectionStates,
-} from "../connections/connection-registry";
-import {
-  getActiveSidebarProject,
-  subscribeActiveSidebarProject,
-} from "../sidebar-runtime/active-project-store";
-import { AddProjectModalHost } from "../app/add-project-modal-host";
-import { DelayedActionsModalHost } from "../app/delayed-actions-modal-host";
-import { ExportTranscriptModalHost } from "../app/export-transcript-modal-host";
-import { FindPromptsModalHost } from "../app/find-prompts-host";
-import { RecentProjectsModalHost } from "../app/recent-projects-modal-host";
-import { SettingsModalHost } from "../app/settings-modal-host";
-import { TitlebarActions } from "../app/titlebar-actions";
-import { MachinesControl } from "../machines/MachinesControl";
-import { WebSidebar } from "../sidebar-runtime/WebSidebar";
-import {
-  createWebSidebarRuntime,
-  type WebSidebarRuntime,
-} from "../sidebar-runtime/sidebar-runtime";
+import { createRootRoute, Outlet } from '@tanstack/react-router';
+import { useEffect, useMemo, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react';
+import { AppTooltip, TooltipProvider } from '@/packages/core-ui/app-tooltip';
+import { NavigationHistoryButtons } from '@/packages/shared/navigation-history/navigation-history-buttons';
+import { getConnectionStates, subscribeConnectionStates } from '../connections/connection-registry';
+import { getActiveSidebarProject, subscribeActiveSidebarProject } from '../sidebar-runtime/active-project-store';
+import { AddProjectModalHost } from '../app/add-project-modal-host';
+import { DelayedActionsModalHost } from '../app/delayed-actions-modal-host';
+import { ExportTranscriptModalHost } from '../app/export-transcript-modal-host';
+import { FindPromptsModalHost } from '../app/find-prompts-host';
+import { RecentProjectsModalHost } from '../app/recent-projects-modal-host';
+import { SettingsModalHost } from '../app/settings-modal-host';
+import { TitlebarActions } from '../app/titlebar-actions';
+import { MachinesControl } from '../machines/MachinesControl';
+import { WebSidebar } from '../sidebar-runtime/WebSidebar';
+import { createWebSidebarRuntime, type WebSidebarRuntime } from '../sidebar-runtime/sidebar-runtime';
 
 const WEB_TITLEBAR_HIDDEN_SECTIONS = true;
-const SIDEBAR_WIDTH_STORAGE_KEY = "ghostexWeb.sidebarWidth.v1";
+const SIDEBAR_WIDTH_STORAGE_KEY = 'ghostexWeb.sidebarWidth.v1';
 const DEFAULT_SIDEBAR_WIDTH = 296;
 const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 520;
 
-const VIEW_TABS = ["Agents", "Source", "Browser", "Kanban", "Automate", "Docs"] as const;
+const VIEW_TABS = ['Agents', 'Source', 'Browser', 'Kanban', 'Automate', 'Docs'] as const;
 
-type IconName = "sidebar";
+type IconName = 'sidebar';
 
 const ICON_PATHS: Record<IconName, string> = {
-  sidebar: "M4 5h16v14H4zM9 5v14",
+  sidebar: 'M4 5h16v14H4zM9 5v14',
 };
 
 function clampSidebarWidth(width: number): number {
@@ -50,14 +35,12 @@ function clampSidebarWidth(width: number): number {
 
 function readSidebarWidth(): number {
   const storedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
-  return Number.isFinite(storedWidth) && storedWidth > 0
-    ? clampSidebarWidth(storedWidth)
-    : DEFAULT_SIDEBAR_WIDTH;
+  return Number.isFinite(storedWidth) && storedWidth > 0 ? clampSidebarWidth(storedWidth) : DEFAULT_SIDEBAR_WIDTH;
 }
 
 function ShellIcon({ name }: { name: IconName }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
+    <svg aria-hidden='true' viewBox='0 0 24 24'>
       <path d={ICON_PATHS[name]} />
     </svg>
   );
@@ -75,21 +58,15 @@ function TitlebarProjectName() {
   const activeProject = useSyncExternalStore(
     subscribeActiveSidebarProject,
     getActiveSidebarProject,
-    getActiveSidebarProject,
+    getActiveSidebarProject
   );
-  const connections = useSyncExternalStore(
-    subscribeConnectionStates,
-    getConnectionStates,
-    getConnectionStates,
-  );
+  const connections = useSyncExternalStore(subscribeConnectionStates, getConnectionStates, getConnectionStates);
   const title = activeProject
     ? connections
-      .find((state) => state.machine.machineId === activeProject.machineId)
-      ?.presentation?.projects.find(
-        (project) => project.projectId === activeProject.projectId,
-      )?.title
+        .find((state) => state.machine.machineId === activeProject.machineId)
+        ?.presentation?.projects.find((project) => project.projectId === activeProject.projectId)?.title
     : undefined;
-  return <span className="web-titlebar__title">{title ?? "Ghostex"}</span>;
+  return <span className='web-titlebar__title'>{title ?? 'Ghostex'}</span>;
 }
 
 function Titlebar({
@@ -102,45 +79,41 @@ function Titlebar({
   toggleSidebar(): void;
 }) {
   return (
-    <header className="web-titlebar">
-      <div className="web-titlebar__left">
-        <AppTooltip content={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}>
+    <header className='web-titlebar'>
+      <div className='web-titlebar__left'>
+        <AppTooltip content={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}>
           <button
-            aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-            className="web-titlebar__icon-button web-titlebar__sidebar-toggle"
+            aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+            className='web-titlebar__icon-button web-titlebar__sidebar-toggle'
             onClick={toggleSidebar}
-            type="button"
+            type='button'
           >
-            <ShellIcon name="sidebar" />
+            <ShellIcon name='sidebar' />
           </button>
         </AppTooltip>
         <NavigationHistoryButtons
-          buttonClassName="web-titlebar__icon-button web-titlebar__nav-button"
-          className="web-titlebar__nav"
+          buttonClassName='web-titlebar__icon-button web-titlebar__nav-button'
+          className='web-titlebar__nav'
           controller={runtime.navigationHistory}
         />
         <TitlebarProjectName />
         <MachinesControl />
       </div>
 
-      <nav
-        aria-label="Ghostex views"
-        className="web-titlebar__center"
-        hidden={WEB_TITLEBAR_HIDDEN_SECTIONS}
-      >
+      <nav aria-label='Ghostex views' className='web-titlebar__center' hidden={WEB_TITLEBAR_HIDDEN_SECTIONS}>
         {VIEW_TABS.map((view) => (
           <button
-            aria-current={view === "Agents" ? "page" : undefined}
-            className="web-titlebar__view-tab"
+            aria-current={view === 'Agents' ? 'page' : undefined}
+            className='web-titlebar__view-tab'
             key={view}
-            type="button"
+            type='button'
           >
             {view}
           </button>
         ))}
       </nav>
 
-      <div className="web-titlebar__right">
+      <div className='web-titlebar__right'>
         <TitlebarActions />
       </div>
     </header>
@@ -153,8 +126,8 @@ function GhostexWebShell() {
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
 
   useEffect(() => {
-    document.body.dataset.sidebarTheme = "plain-dark";
-    document.body.classList.add("vscode-dark", "native-sidebar-body");
+    document.body.dataset.sidebarTheme = 'plain-dark';
+    document.body.classList.add('vscode-dark', 'native-sidebar-body');
     runtime.start();
     return () => runtime.stop();
   }, [runtime]);
@@ -183,37 +156,35 @@ function GhostexWebShell() {
 
   return (
     <TooltipProvider>
-      <div className="ghostex-web-shell">
+      <div className='ghostex-web-shell'>
         <Titlebar
           runtime={runtime}
           sidebarCollapsed={sidebarCollapsed}
           toggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
         <div
-          className="ghostex-web-shell__body"
+          className='ghostex-web-shell__body'
           style={{
-            gridTemplateColumns: sidebarCollapsed
-              ? "minmax(0, 1fr)"
-              : `${sidebarWidth}px 5px minmax(0, 1fr)`,
+            gridTemplateColumns: sidebarCollapsed ? 'minmax(0, 1fr)' : `${sidebarWidth}px 5px minmax(0, 1fr)`,
           }}
         >
           {!sidebarCollapsed && (
             <>
-              <aside aria-label="Sessions sidebar" className="web-sidebar">
+              <aside aria-label='Sessions sidebar' className='web-sidebar'>
                 <WebSidebar runtime={runtime} />
               </aside>
               <div
-                aria-label="Resize sidebar"
-                className="web-sidebar-divider"
+                aria-label='Resize sidebar'
+                className='web-sidebar-divider'
                 onPointerCancel={endSidebarResize}
                 onPointerDown={beginSidebarResize}
                 onPointerMove={resizeSidebar}
                 onPointerUp={endSidebarResize}
-                role="separator"
+                role='separator'
               />
             </>
           )}
-          <main className="web-workspace">
+          <main className='web-workspace'>
             <Outlet />
           </main>
         </div>

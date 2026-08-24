@@ -4,7 +4,7 @@ import {
   type SidebarSettingsPresetKey,
   type SidebarSettingsPresetSettings,
   type ghostexSettings,
-} from "./types";
+} from './types';
 
 /**
  * CDXC:SidebarSettingsPresets 2026-05-16-10:11:
@@ -83,19 +83,19 @@ export const SIDEBAR_SETTINGS_PRESETS: ReadonlyArray<{
   settings: SidebarSettingsPresetSettings;
 }> = [
   {
-    id: "recommended",
-    label: "Recommended",
+    id: 'recommended',
+    label: 'Recommended',
     settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended,
   },
-  { id: "codex", label: "Codex", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.codex },
-  { id: "minimal", label: "Minimal", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.minimal },
-  { id: "detailed", label: "Detailed", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.detailed },
+  { id: 'codex', label: 'Codex', settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.codex },
+  { id: 'minimal', label: 'Minimal', settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.minimal },
+  { id: 'detailed', label: 'Detailed', settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.detailed },
 ];
 
 export function getSidebarSettingsPresetId(
-  settings: Pick<ghostexSettings, SidebarSettingsPresetKey>,
+  settings: Pick<ghostexSettings, SidebarSettingsPresetKey>
 ): SidebarSettingsPresetId | undefined {
   return SIDEBAR_SETTINGS_PRESETS.find((preset) =>
-    SIDEBAR_SETTINGS_PRESET_KEYS.every((key) => Object.is(settings[key], preset.settings[key])),
+    SIDEBAR_SETTINGS_PRESET_KEYS.every((key) => Object.is(settings[key], preset.settings[key]))
   )?.id;
 }

@@ -7,20 +7,12 @@
 // Values are local (see session-chat-session-options.ts): a dispatch marks the
 // value "dispatched", never "confirmed".
 
-import { IconChevronDown } from "@tabler/icons-react";
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { AppTooltip } from "../app-tooltip";
-import type { SessionChatSendKey } from "../../shared/session-chat";
-import { Button } from "../../components/ui/button";
-import { cn } from "@/packages/components/utils";
+import { IconChevronDown } from '@tabler/icons-react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AppTooltip } from '../app-tooltip';
+import type { SessionChatSendKey } from '../../shared/session-chat';
+import { Button } from '../../components/ui/button';
+import { cn } from '@/packages/components/utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +23,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../../components/ui/dropdown-menu";
+} from '../../components/ui/dropdown-menu';
 import {
   applySessionChatDetectedOptions,
   readStoredSessionChatOptions,
@@ -51,7 +43,7 @@ import {
   type SessionChatOptionDescriptor,
   type SessionChatOptionState,
   type SessionChatSessionOptionCatalog,
-} from "./session-chat-session-options";
+} from './session-chat-session-options';
 
 export interface SessionChatSessionOptionsController {
   catalog: SessionChatSessionOptionCatalog | null;
@@ -82,16 +74,14 @@ export function useSessionChatSessionOptions({
   // Reseed whenever the session or the agent changes: the stored values are
   // per (session, agent), and a different agent has a different catalog.
   useEffect(() => {
-    setState(
-      catalog ? seedSessionChatOptionState(catalog, readStoredSessionChatOptions(sessionKey)) : {},
-    );
+    setState(catalog ? seedSessionChatOptionState(catalog, readStoredSessionChatOptions(sessionKey)) : {});
   }, [catalog, sessionKey]);
 
   const optionDescriptors = useMemo(() => {
     if (!catalog) {
       return [];
     }
-    const modelValue = state[catalog.model.id]?.value ?? catalog.model.defaultValue ?? "";
+    const modelValue = state[catalog.model.id]?.value ?? catalog.model.defaultValue ?? '';
     return catalog.optionsForModel(modelValue);
   }, [catalog, state]);
 
@@ -100,16 +90,14 @@ export function useSessionChatSessionOptions({
       writeStoredSessionChatOptions(sessionKey, next);
       return next;
     },
-    [sessionKey],
+    [sessionKey]
   );
 
   const recordDispatched = useCallback(
     (descriptorId: string, value: string) => {
-      setState((current) =>
-        persist(setSessionChatOptionValue(current, descriptorId, value, "dispatched")),
-      );
+      setState((current) => persist(setSessionChatOptionValue(current, descriptorId, value, 'dispatched')));
     },
-    [persist],
+    [persist]
   );
 
   const reconcileTypedCommand = useCallback(
@@ -122,7 +110,7 @@ export function useSessionChatSessionOptions({
         return next === current ? current : persist(next);
       });
     },
-    [catalog, persist],
+    [catalog, persist]
   );
 
   const applyDetected = useCallback(
@@ -135,7 +123,7 @@ export function useSessionChatSessionOptions({
         return next === current ? current : persist(next);
       });
     },
-    [catalog, persist],
+    [catalog, persist]
   );
 
   return {
@@ -189,38 +177,31 @@ function PillTrigger({
   className?: string;
   disabled: boolean;
   label: string;
-  skeleton?: "model" | "options" | "combined";
+  skeleton?: 'model' | 'options' | 'combined';
   title: string;
 }) {
   // A skeleton has no value to name, so the tooltip and the accessible name
   // say what is happening instead of reading out the category word.
-  const loadingText = skeleton === "options" ? "Reading options…" : "Reading model…";
+  const loadingText = skeleton === 'options' ? 'Reading options…' : 'Reading model…';
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
       <DropdownMenuTrigger
         render={
           <Button
             aria-label={skeleton ? loadingText : ariaLabel}
-            className={cn(
-              "ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground",
-              className,
-            )}
+            className={cn('ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground', className)}
             disabled={disabled || skeleton !== undefined}
-            size="xs"
-            variant="ghost"
+            size='xs'
+            variant='ghost'
           />
         }
       >
         {skeleton ? (
-          <span
-            aria-hidden="true"
-            className="ghostex-chat-pill-skeleton"
-            data-pill={skeleton}
-          />
+          <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
         ) : (
-          <span className="truncate">{label}</span>
+          <span className='truncate'>{label}</span>
         )}
-        <IconChevronDown aria-hidden="true" className="size-3 shrink-0" stroke={2} />
+        <IconChevronDown aria-hidden='true' className='size-3 shrink-0' stroke={2} />
       </DropdownMenuTrigger>
     </AppTooltip>
   );
@@ -246,31 +227,24 @@ function PillButton({
   disabled: boolean;
   label: string;
   onClick: () => void;
-  skeleton?: "model" | "options" | "combined";
+  skeleton?: 'model' | 'options' | 'combined';
   title: string;
 }) {
-  const loadingText = skeleton === "options" ? "Reading options…" : "Reading model…";
+  const loadingText = skeleton === 'options' ? 'Reading options…' : 'Reading model…';
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
       <Button
         aria-label={skeleton ? loadingText : ariaLabel}
-        className={cn(
-          "ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground",
-          className,
-        )}
+        className={cn('ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground', className)}
         disabled={disabled || skeleton !== undefined}
         onClick={onClick}
-        size="xs"
-        variant="ghost"
+        size='xs'
+        variant='ghost'
       >
         {skeleton ? (
-          <span
-            aria-hidden="true"
-            className="ghostex-chat-pill-skeleton"
-            data-pill={skeleton}
-          />
+          <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
         ) : (
-          <span className="truncate">{label}</span>
+          <span className='truncate'>{label}</span>
         )}
       </Button>
     </AppTooltip>
@@ -303,11 +277,9 @@ export function SessionChatSessionOptionPills({
     () =>
       optionDescriptors.filter(
         (descriptor) =>
-          (descriptor.dispatch.kind !== "key" &&
-            descriptor.dispatch.kind !== "bounded-key-steps") ||
-          canSendKey,
+          (descriptor.dispatch.kind !== 'key' && descriptor.dispatch.kind !== 'bounded-key-steps') || canSendKey
       ),
-    [canSendKey, optionDescriptors],
+    [canSendKey, optionDescriptors]
   );
 
   const dispatch = useCallback(
@@ -316,37 +288,37 @@ export function SessionChatSessionOptionPills({
       setFailure(null);
       const run = async (): Promise<void> => {
         const { dispatch: delivery } = descriptor;
-        if (delivery.kind === "command") {
-          await onDispatchCommand(delivery.build(value ?? ""));
+        if (delivery.kind === 'command') {
+          await onDispatchCommand(delivery.build(value ?? ''));
           if (value !== undefined) {
             recordDispatched(descriptor.id, value);
           }
           return;
         }
-        if (delivery.kind === "toggle-command") {
+        if (delivery.kind === 'toggle-command') {
           await onDispatchCommand(delivery.command);
           return;
         }
-        if (delivery.kind === "agent-picker") {
+        if (delivery.kind === 'agent-picker') {
           await onDispatchCommand(delivery.command);
           onSwitchToTerminal?.();
           return;
         }
-        if (delivery.kind === "terminal-handoff") {
+        if (delivery.kind === 'terminal-handoff') {
           // Nothing is typed: the agent's own picker owns the change.
           onSwitchToTerminal?.();
           return;
         }
-        if (delivery.kind === "bounded-key-steps") {
+        if (delivery.kind === 'bounded-key-steps') {
           const keys = sessionChatBoundedKeySteps(
             descriptor.choices ?? [],
             state[descriptor.id]?.value,
-            value ?? "",
+            value ?? '',
             delivery.decreaseKey,
-            delivery.increaseKey,
+            delivery.increaseKey
           );
           for (const key of keys) {
-            await onDispatchKey(key, "");
+            await onDispatchKey(key, '');
           }
           if (value !== undefined) {
             recordDispatched(descriptor.id, value);
@@ -358,7 +330,7 @@ export function SessionChatSessionOptionPills({
       void run()
         .catch(() => {
           if (mountedRef.current) {
-            setFailure("Could not update option");
+            setFailure('Could not update option');
           }
         })
         .finally(() => {
@@ -367,7 +339,7 @@ export function SessionChatSessionOptionPills({
           }
         });
     },
-    [onDispatchCommand, onDispatchKey, onSwitchToTerminal, recordDispatched, state],
+    [onDispatchCommand, onDispatchKey, onSwitchToTerminal, recordDispatched, state]
   );
 
   if (!catalog) {
@@ -382,24 +354,18 @@ export function SessionChatSessionOptionPills({
       return (
         <DropdownMenuRadioGroup
           onValueChange={(value) => {
-            if (typeof value === "string" && value !== current?.value) {
+            if (typeof value === 'string' && value !== current?.value) {
               dispatch(descriptor, value);
             }
           }}
-          value={current?.value ?? ""}
+          value={current?.value ?? ''}
         >
           {(descriptor.choices ?? []).map((choice) => (
-            <DropdownMenuRadioItem
-              className="rounded-md"
-              key={choice.value}
-              value={choice.value}
-            >
-              <span className="grid min-w-0 gap-0.5">
-                <span className="truncate">{choice.label}</span>
+            <DropdownMenuRadioItem className='rounded-md' key={choice.value} value={choice.value}>
+              <span className='grid min-w-0 gap-0.5'>
+                <span className='truncate'>{choice.label}</span>
                 {choice.description ? (
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {choice.description}
-                  </span>
+                  <span className='text-xs font-normal text-muted-foreground'>{choice.description}</span>
                 ) : null}
               </span>
             </DropdownMenuRadioItem>
@@ -408,10 +374,7 @@ export function SessionChatSessionOptionPills({
       );
     }
     return (
-      <DropdownMenuItem
-        className="rounded-md whitespace-nowrap"
-        onClick={() => dispatch(descriptor)}
-      >
+      <DropdownMenuItem className='rounded-md whitespace-nowrap' onClick={() => dispatch(descriptor)}>
         {descriptor.actionLabel ?? descriptor.label}
       </DropdownMenuItem>
     );
@@ -420,13 +383,11 @@ export function SessionChatSessionOptionPills({
   const modelLabel = sessionChatOptionValueLabel(catalog.model, state);
   const optionsLabel = sessionChatOptionsPillLabel(visibleOptions, state);
   const combinedPickerEffort = visibleOptions.find(
-    (descriptor) =>
-      descriptor.id === "effort" && descriptor.dispatch.kind === "agent-picker",
+    (descriptor) => descriptor.id === 'effort' && descriptor.dispatch.kind === 'agent-picker'
   );
-  const usesCombinedAgentPicker =
-    catalog.model.dispatch.kind === "agent-picker" && combinedPickerEffort !== undefined;
+  const usesCombinedAgentPicker = catalog.model.dispatch.kind === 'agent-picker' && combinedPickerEffort !== undefined;
   const modelTitle = modelLabel ? `${catalog.model.label} ${modelLabel}` : catalog.model.label;
-  const optionsTitle = optionsLabel ? `Options ${optionsLabel}` : "Options";
+  const optionsTitle = optionsLabel ? `Options ${optionsLabel}` : 'Options';
   /*
   An unconfirmed dispatch is the weaker claim, so it wins the tooltip while any
   shown value is still only "sent". Once every shown value has agent-owned
@@ -434,16 +395,16 @@ export function SessionChatSessionOptionPills({
   */
   const hintFor = (descriptors: readonly SessionChatOptionDescriptor[]): string | null => {
     const sources = descriptors.map((descriptor) => state[descriptor.id]?.source);
-    if (sources.includes("dispatched")) {
+    if (sources.includes('dispatched')) {
       return SESSION_CHAT_DISPATCHED_HINT;
     }
     const detectedValues = descriptors
       .map((descriptor) => state[descriptor.id])
-      .filter((value) => value?.source === "detected");
-    if (detectedValues.some((value) => value?.detectedSource === "terminal")) {
+      .filter((value) => value?.source === 'detected');
+    if (detectedValues.some((value) => value?.detectedSource === 'terminal')) {
       return SESSION_CHAT_DETECTED_HINT;
     }
-    if (detectedValues.some((value) => value?.detectedSource === "transcript")) {
+    if (detectedValues.some((value) => value?.detectedSource === 'transcript')) {
       return SESSION_CHAT_TRANSCRIPT_HINT;
     }
     return detectedValues.length > 0 ? SESSION_CHAT_DETECTED_HINT : null;
@@ -460,10 +421,9 @@ export function SessionChatSessionOptionPills({
   never falls back to a skeleton while the agent repaints.
   */
   const skeletonFor = (
-    pill: "model" | "options" | "combined",
-    value: string | null | undefined,
-  ): "model" | "options" | "combined" | undefined =>
-    !screenProbed && !value ? pill : undefined;
+    pill: 'model' | 'options' | 'combined',
+    value: string | null | undefined
+  ): 'model' | 'options' | 'combined' | undefined => (!screenProbed && !value ? pill : undefined);
 
   /*
   Read-only pills (grok): both values come from the statusline gxserver reads,
@@ -471,33 +431,33 @@ export function SessionChatSessionOptionPills({
   the "set it in the CLI, then come back" toast — instead of opening a menu
   this side cannot honour.
   */
-  if (catalog.model.dispatch.kind === "terminal-handoff") {
+  if (catalog.model.dispatch.kind === 'terminal-handoff') {
     const handoffTitle = (category: string, value: string | null): string =>
       value ? `${category} ${value} — change it in the CLI` : `${category} — set it in the CLI`;
     const modelHandoffTitle = handoffTitle(catalog.model.label, modelLabel);
     const optionsHandoffTitle = handoffTitle(
-      visibleOptions.length === 1 ? (visibleOptions[0]?.label ?? "Options") : "Options",
-      optionsLabel,
+      visibleOptions.length === 1 ? (visibleOptions[0]?.label ?? 'Options') : 'Options',
+      optionsLabel
     );
     return (
       <>
         <PillButton
           ariaLabel={modelHandoffTitle}
-          className="ghostex-chat-model-pill"
+          className='ghostex-chat-model-pill'
           disabled={onSwitchToTerminal === undefined}
           label={modelLabel ?? catalog.model.label}
           onClick={() => onSwitchToTerminal?.()}
-          skeleton={skeletonFor("model", modelLabel)}
+          skeleton={skeletonFor('model', modelLabel)}
           title={modelHandoffTitle}
         />
         {visibleOptions.length > 0 ? (
           <PillButton
             ariaLabel={optionsHandoffTitle}
-            className="ghostex-chat-options-pill"
+            className='ghostex-chat-options-pill'
             disabled={onSwitchToTerminal === undefined}
-            label={optionsLabel ?? "Options"}
+            label={optionsLabel ?? 'Options'}
             onClick={() => onSwitchToTerminal?.()}
-            skeleton={skeletonFor("options", optionsLabel)}
+            skeleton={skeletonFor('options', optionsLabel)}
             title={optionsHandoffTitle}
           />
         ) : null}
@@ -507,18 +467,16 @@ export function SessionChatSessionOptionPills({
 
   if (usesCombinedAgentPicker) {
     const effortLabel = sessionChatOptionValueLabel(combinedPickerEffort, state);
-    const selectedLabel = [modelLabel, effortLabel].filter(Boolean).join(" · ");
-    const combinedLabel = selectedLabel || "Model & Effort";
-    const combinedTitle = selectedLabel
-      ? `Model & Effort ${selectedLabel}`
-      : "Model & Effort";
+    const selectedLabel = [modelLabel, effortLabel].filter(Boolean).join(' · ');
+    const combinedLabel = selectedLabel || 'Model & Effort';
+    const combinedTitle = selectedLabel ? `Model & Effort ${selectedLabel}` : 'Model & Effort';
     const combinedHint = hintFor([catalog.model, combinedPickerEffort]);
 
     return (
       <>
         {failure ? (
           <AppTooltip content={failure}>
-            <span className="max-w-32 truncate text-[11px] text-destructive/80" role="status">
+            <span className='max-w-32 truncate text-[11px] text-destructive/80' role='status'>
               {failure}
             </span>
           </AppTooltip>
@@ -526,20 +484,14 @@ export function SessionChatSessionOptionPills({
         <DropdownMenu>
           <PillTrigger
             ariaLabel={combinedTitle}
-            className="ghostex-chat-model-pill"
+            className='ghostex-chat-model-pill'
             disabled={disabled}
             label={combinedLabel}
-            skeleton={skeletonFor("combined", selectedLabel)}
+            skeleton={skeletonFor('combined', selectedLabel)}
             title={tooltipText(combinedTitle, combinedHint)}
           />
-          <DropdownMenuContent
-            align="start"
-            className="ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]"
-          >
-            <DropdownMenuItem
-              className="rounded-md"
-              onClick={() => dispatch(catalog.model)}
-            >
+          <DropdownMenuContent align='start' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
+            <DropdownMenuItem className='rounded-md' onClick={() => dispatch(catalog.model)}>
               Select Model &amp; Effort in CLI
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -552,7 +504,7 @@ export function SessionChatSessionOptionPills({
     <>
       {failure ? (
         <AppTooltip content={failure}>
-          <span className="max-w-32 truncate text-[11px] text-destructive/80" role="status">
+          <span className='max-w-32 truncate text-[11px] text-destructive/80' role='status'>
             {failure}
           </span>
         </AppTooltip>
@@ -560,23 +512,18 @@ export function SessionChatSessionOptionPills({
       <DropdownMenu>
         <PillTrigger
           ariaLabel={modelTitle}
-          className="ghostex-chat-model-pill"
+          className='ghostex-chat-model-pill'
           disabled={disabled}
           label={modelLabel ?? catalog.model.label}
-          skeleton={skeletonFor("model", modelLabel)}
+          skeleton={skeletonFor('model', modelLabel)}
           title={tooltipText(modelTitle, modelHint)}
         />
-        <DropdownMenuContent
-          align="end"
-          className="ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]"
->
+        <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
           {/* Base UI's GroupLabel throws outside a Menu.Group context. */}
           <DropdownMenuGroup>
             <DropdownMenuLabel>{catalog.model.label}</DropdownMenuLabel>
             {catalog.model.description ? (
-              <DropdownMenuLabel className="whitespace-normal pt-0">
-                {catalog.model.description}
-              </DropdownMenuLabel>
+              <DropdownMenuLabel className='whitespace-normal pt-0'>{catalog.model.description}</DropdownMenuLabel>
             ) : null}
             {menuRows(catalog.model)}
           </DropdownMenuGroup>
@@ -586,16 +533,13 @@ export function SessionChatSessionOptionPills({
         <DropdownMenu>
           <PillTrigger
             ariaLabel={optionsTitle}
-            className="ghostex-chat-options-pill"
+            className='ghostex-chat-options-pill'
             disabled={disabled}
-            label={optionsLabel ?? "Options"}
-            skeleton={skeletonFor("options", optionsLabel)}
+            label={optionsLabel ?? 'Options'}
+            skeleton={skeletonFor('options', optionsLabel)}
             title={tooltipText(optionsTitle, optionsHint)}
           />
-          <DropdownMenuContent
-            align="end"
-            className="ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]"
->
+          <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
             {visibleOptions.map((descriptor, index) => (
               <Fragment key={descriptor.id}>
                 {index > 0 ? <DropdownMenuSeparator /> : null}
@@ -603,9 +547,7 @@ export function SessionChatSessionOptionPills({
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>{descriptor.label}</DropdownMenuLabel>
                   {descriptor.description ? (
-                    <DropdownMenuLabel className="whitespace-normal pt-0">
-                      {descriptor.description}
-                    </DropdownMenuLabel>
+                    <DropdownMenuLabel className='whitespace-normal pt-0'>{descriptor.description}</DropdownMenuLabel>
                   ) : null}
                   {menuRows(descriptor)}
                 </DropdownMenuGroup>

@@ -1,7 +1,4 @@
-use std::{
-    env, fs,
-    path::Path,
-};
+use std::{env, fs, path::Path};
 
 use crate::app::helpers::*;
 
@@ -57,7 +54,10 @@ pub(crate) fn gpui_os_integration_has_ghostex_url_registration(info_plist: &str)
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_macos_default_role_handlers(extensions: &[&str], role: u32) -> serde_json::Value {
+pub(crate) fn gpui_macos_default_role_handlers(
+    extensions: &[&str],
+    role: u32,
+) -> serde_json::Value {
     let handlers = extensions
         .iter()
         .filter_map(|file_extension| {
@@ -219,7 +219,10 @@ unsafe extern "C" {
         c_str: *const std::ffi::c_char,
         encoding: u32,
     ) -> CFStringRef;
-    pub(crate) fn CFStringGetCStringPtr(the_string: CFStringRef, encoding: u32) -> *const std::ffi::c_char;
+    pub(crate) fn CFStringGetCStringPtr(
+        the_string: CFStringRef,
+        encoding: u32,
+    ) -> *const std::ffi::c_char;
     pub(crate) fn CFStringGetCString(
         the_string: CFStringRef,
         buffer: *mut std::ffi::c_char,
@@ -239,7 +242,10 @@ unsafe extern "C" {
         tag: CFStringRef,
         conforming_to_uti: CFStringRef,
     ) -> CFStringRef;
-    pub(crate) fn LSCopyDefaultRoleHandlerForContentType(content_type: CFStringRef, role: u32) -> CFStringRef;
+    pub(crate) fn LSCopyDefaultRoleHandlerForContentType(
+        content_type: CFStringRef,
+        role: u32,
+    ) -> CFStringRef;
     pub(crate) fn LSSetDefaultRoleHandlerForContentType(
         content_type: CFStringRef,
         role: u32,
@@ -252,4 +258,3 @@ unsafe extern "C" {
     ) -> i32;
     pub(crate) fn LSRegisterURL(url: CFURLRef, update: u8) -> i32;
 }
-

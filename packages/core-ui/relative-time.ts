@@ -34,36 +34,33 @@ export type FormatRelativeTimeOptions = {
 
 export function formatRelativeTime(
   isoDate: string,
-  options: FormatRelativeTimeOptions = {},
+  options: FormatRelativeTimeOptions = {}
 ): { value: string; suffix: string | null } {
   const diffMs = getRelativeTimeDiffMs(isoDate, options.nowMs);
   const seconds = Math.floor(diffMs / 1000);
   if (options.allowJustNow !== false && seconds < 5) {
-    return { value: "just now", suffix: null };
+    return { value: 'just now', suffix: null };
   }
 
   if (seconds < 60) {
-    return { value: formatCompactRelativeUnit(seconds, "s"), suffix: "ago" };
+    return { value: formatCompactRelativeUnit(seconds, 's'), suffix: 'ago' };
   }
 
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
-    return { value: formatCompactRelativeUnit(minutes, "m"), suffix: "ago" };
+    return { value: formatCompactRelativeUnit(minutes, 'm'), suffix: 'ago' };
   }
 
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
-    return { value: formatCompactRelativeUnit(hours, "h"), suffix: "ago" };
+    return { value: formatCompactRelativeUnit(hours, 'h'), suffix: 'ago' };
   }
 
   const days = Math.floor(hours / 24);
-  return { value: formatCompactRelativeUnit(days, "d"), suffix: "ago" };
+  return { value: formatCompactRelativeUnit(days, 'd'), suffix: 'ago' };
 }
 
-export function formatRelativeTimeLabel(
-  isoDate: string,
-  options?: FormatRelativeTimeOptions,
-): string {
+export function formatRelativeTimeLabel(isoDate: string, options?: FormatRelativeTimeOptions): string {
   const relative = formatRelativeTime(isoDate, options);
   return relative.suffix ? `${relative.value} ${relative.suffix}` : relative.value;
 }
@@ -82,5 +79,5 @@ export function getRelativeTimeColor(isoDate: string): string {
     return buildMutedMixedGreen(FADED_GREEN_WEIGHT);
   }
 
-  return "var(--app-muted)";
+  return 'var(--app-muted)';
 }

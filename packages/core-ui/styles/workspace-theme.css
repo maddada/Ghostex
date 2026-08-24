@@ -35,7 +35,7 @@ the pointer movement that needs to restore hover tooltips without a click.
   padding: calc(12px * var(--sidebar-density-scale));
 }
 
-.native-sidebar-shell[data-sidebar-mode="combined"] .native-sidebar-main {
+.native-sidebar-shell[data-sidebar-mode='combined'] .native-sidebar-main {
   /*
   CDXC:SidebarHover 2026-05-04-07:00:
   Combined mode uses one column, so Agents, Actions, and project group headers share the same 8px edge inset from the native sidebar viewport.
@@ -57,54 +57,54 @@ body.native-sidebar-body .stack,
   overscroll-behavior: contain;
 }
 
-.workspace-theme-swatch[data-workspace-theme="dark-1"] {
+.workspace-theme-swatch[data-workspace-theme='dark-1'] {
   --workspace-theme-swatch-background: #191919;
   --workspace-theme-swatch-border: #525252;
   --workspace-theme-swatch-foreground: #ffffff;
 }
 
-.workspace-theme-swatch[data-workspace-theme="dark-2"],
-.workspace-theme-swatch[data-workspace-theme="plain-dark"] {
+.workspace-theme-swatch[data-workspace-theme='dark-2'],
+.workspace-theme-swatch[data-workspace-theme='plain-dark'] {
   --workspace-theme-swatch-background: #252525;
   --workspace-theme-swatch-border: #525252;
   --workspace-theme-swatch-foreground: #ffffff;
 }
 
-.workspace-theme-swatch[data-workspace-theme="plain-light"] {
+.workspace-theme-swatch[data-workspace-theme='plain-light'] {
   --workspace-theme-swatch-background: #dddddd;
   --workspace-theme-swatch-border: #969696;
   --workspace-theme-swatch-foreground: #262626;
 }
 
-.workspace-theme-swatch[data-workspace-theme="dark-blue"],
-.workspace-theme-swatch[data-workspace-theme="light-blue"] {
+.workspace-theme-swatch[data-workspace-theme='dark-blue'],
+.workspace-theme-swatch[data-workspace-theme='light-blue'] {
   --workspace-theme-swatch-background: #1e3762;
   --workspace-theme-swatch-border: #4f75bf;
   --workspace-theme-swatch-foreground: #ffffff;
 }
 
-.workspace-theme-swatch[data-workspace-theme="dark-green"],
-.workspace-theme-swatch[data-workspace-theme="light-green"] {
+.workspace-theme-swatch[data-workspace-theme='dark-green'],
+.workspace-theme-swatch[data-workspace-theme='light-green'] {
   --workspace-theme-swatch-background: #1f4b31;
   --workspace-theme-swatch-border: #4c9b63;
   --workspace-theme-swatch-foreground: #ffffff;
 }
 
-.workspace-theme-swatch[data-workspace-theme="dark-red"] {
+.workspace-theme-swatch[data-workspace-theme='dark-red'] {
   --workspace-theme-swatch-background: #662d36;
   --workspace-theme-swatch-border: #b85b68;
   --workspace-theme-swatch-foreground: #ffffff;
 }
 
-.workspace-theme-swatch[data-workspace-theme="dark-pink"],
-.workspace-theme-swatch[data-workspace-theme="light-pink"] {
+.workspace-theme-swatch[data-workspace-theme='dark-pink'],
+.workspace-theme-swatch[data-workspace-theme='light-pink'] {
   --workspace-theme-swatch-background: #67314f;
   --workspace-theme-swatch-border: #b9638d;
   --workspace-theme-swatch-foreground: #ffffff;
 }
 
-.workspace-theme-swatch[data-workspace-theme="dark-orange"],
-.workspace-theme-swatch[data-workspace-theme="light-orange"] {
+.workspace-theme-swatch[data-workspace-theme='dark-orange'],
+.workspace-theme-swatch[data-workspace-theme='light-orange'] {
   --workspace-theme-swatch-background: #6e421f;
   --workspace-theme-swatch-border: #bb7740;
   --workspace-theme-swatch-foreground: #ffffff;
@@ -114,7 +114,7 @@ body.native-sidebar-body .stack,
   margin-left: auto;
 }
 
-.workspace-theme-menu-item[data-selected="true"] {
+.workspace-theme-menu-item[data-selected='true'] {
   background: color-mix(in srgb, var(--app-button-background) 24%, transparent);
 }
 

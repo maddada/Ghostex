@@ -17,9 +17,9 @@ pub fn clipboard_candidates() -> Vec<Vec<&'static str>> {
         vec![vec!["pbcopy"]]
     } else {
         vec![
-            vec!["wl-copy"],                            // wayland
-            vec!["xclip", "-selection", "clipboard"],   // x11
-            vec!["xsel", "--clipboard", "--input"],     // x11 alt
+            vec!["wl-copy"],                          // wayland
+            vec!["xclip", "-selection", "clipboard"], // x11
+            vec!["xsel", "--clipboard", "--input"],   // x11 alt
         ]
     }
 }
@@ -81,7 +81,10 @@ fn usable_project(project: &str) -> Option<&Path> {
 pub fn fork_session(rec: &Record, agent: Agent) -> Result<(), String> {
     let argv = agent.fresh_session_argv(&rec.text);
     let project = usable_project(&rec.project);
-    let mut note = format!("\x1b[90m→ forking prompt into a new {} session", agent.label());
+    let mut note = format!(
+        "\x1b[90m→ forking prompt into a new {} session",
+        agent.label()
+    );
     if let Some(path) = project {
         note.push_str(&format!(" in {}", path.display()));
     }
@@ -151,7 +154,10 @@ pub fn focus_live_ghostex_session(rec: &Record) -> GhostexFocusOutcome {
 /// when that still exists.
 pub fn resume_session(rec: &Record, accept_all: bool) -> Result<(), String> {
     if rec.session.is_empty() {
-        return Err(format!("no session id recorded for this {} entry", rec.agent.label()));
+        return Err(format!(
+            "no session id recorded for this {} entry",
+            rec.agent.label()
+        ));
     }
 
     match focus_live_ghostex_session(rec) {
@@ -170,11 +176,18 @@ pub fn resume_session(rec: &Record, accept_all: bool) -> Result<(), String> {
     // it no longer exists (moved/deleted), rather than failing the spawn.
     let project = usable_project(&rec.project);
 
-    let mut note = format!("\x1b[90m→ resuming {} session {}", rec.agent.label(), rec.session);
+    let mut note = format!(
+        "\x1b[90m→ resuming {} session {}",
+        rec.agent.label(),
+        rec.session
+    );
     if let Some(path) = project {
         note.push_str(&format!(" in {}", path.display()));
     } else if !rec.project.is_empty() {
-        note.push_str(&format!(" (project {} missing — using current dir)", rec.project));
+        note.push_str(&format!(
+            " (project {} missing — using current dir)",
+            rec.project
+        ));
     }
     note.push_str("\x1b[0m");
     println!("{note}");
@@ -188,7 +201,11 @@ pub fn resume_session(rec: &Record, accept_all: bool) -> Result<(), String> {
         Ok(_) => Ok(()),
         Err(e) => {
             let manual = argv.join(" ");
-            let dir = if rec.project.is_empty() { "." } else { &rec.project };
+            let dir = if rec.project.is_empty() {
+                "."
+            } else {
+                &rec.project
+            };
             Err(format!(
                 "failed to launch {} ({e})\nRun manually:\n  cd {dir} && {manual}",
                 argv[0]
@@ -215,8 +232,17 @@ mod tests {
 
     #[test]
     fn focus_exit_codes_map_to_outcomes() {
-        assert_eq!(ghostex_focus_outcome_for_exit_code(0), GhostexFocusOutcome::Focused);
-        assert_eq!(ghostex_focus_outcome_for_exit_code(3), GhostexFocusOutcome::NotRunning);
-        assert_eq!(ghostex_focus_outcome_for_exit_code(1), GhostexFocusOutcome::Failed);
+        assert_eq!(
+            ghostex_focus_outcome_for_exit_code(0),
+            GhostexFocusOutcome::Focused
+        );
+        assert_eq!(
+            ghostex_focus_outcome_for_exit_code(3),
+            GhostexFocusOutcome::NotRunning
+        );
+        assert_eq!(
+            ghostex_focus_outcome_for_exit_code(1),
+            GhostexFocusOutcome::Failed
+        );
     }
 }

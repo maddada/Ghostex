@@ -7,9 +7,7 @@ use std::{
 // just the macOS-only shims that first introduced the import.
 use std::cell::RefCell;
 
-use gpui::{
-    Bounds, Window, WindowBounds, px, size,
-};
+use gpui::{Bounds, Window, WindowBounds, px, size};
 
 use crate::app::helpers::*;
 

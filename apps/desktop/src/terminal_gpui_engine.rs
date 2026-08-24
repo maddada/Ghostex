@@ -238,18 +238,26 @@ pub(crate) struct GpuiEngineTerminalRecord {
 /// system install. Idempotent per process; call once at startup.
 pub(crate) fn register_gpui_terminal_engine_fonts(cx: &App) {
     let fonts: Vec<std::borrow::Cow<'static, [u8]>> = vec![
-        include_bytes!("../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Regular.ttf")
-            .as_slice()
-            .into(),
-        include_bytes!("../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Bold.ttf")
-            .as_slice()
-            .into(),
-        include_bytes!("../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Italic.ttf")
-            .as_slice()
-            .into(),
-        include_bytes!("../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-BoldItalic.ttf")
-            .as_slice()
-            .into(),
+        include_bytes!(
+            "../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Regular.ttf"
+        )
+        .as_slice()
+        .into(),
+        include_bytes!(
+            "../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Bold.ttf"
+        )
+        .as_slice()
+        .into(),
+        include_bytes!(
+            "../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Italic.ttf"
+        )
+        .as_slice()
+        .into(),
+        include_bytes!(
+            "../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-BoldItalic.ttf"
+        )
+        .as_slice()
+        .into(),
     ];
     if let Err(error) = cx.text_system().add_fonts(fonts) {
         eprintln!("gpui terminal engine font registration failed: {error}");

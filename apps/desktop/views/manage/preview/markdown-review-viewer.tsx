@@ -1,20 +1,29 @@
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EditorView } from '@codemirror/view';
+import { type Extension } from '@codemirror/state';
+import { type ProjectDocsGitBaseline as ManageGitBaseline } from '@/packages/shared/project-docs';
+import { MANAGE_MEO_CONTENT_MAX_WIDTH } from '../constants';
 import {
-  type CSSProperties,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { EditorView } from "@codemirror/view";
-import { type Extension } from "@codemirror/state";
-import { type ProjectDocsGitBaseline as ManageGitBaseline } from "@/packages/shared/project-docs";
-import { MANAGE_MEO_CONTENT_MAX_WIDTH } from "../constants";
-import { ManageAnnotation, ManageAnnotationPreview, ManageCapturedSelection, ManageMeoEditor, ManageMeoMode, ManageMeoSelectionState, ManageSelectionToolbarMode } from "../types";
-import { ManageMeoSelectionFormatToolbar, ManageMeoTopToolbar, applyManageMeoTheme, createManageMeoAnnotationDecorations, manageMeoAnnotationEffect, manageMeoAnnotationField, syncManageMeoAnnotationReviewState } from "../meo-toolbar";
-import { sanitizeManageHref } from "../html-sanitize";
-import { createEditor as createMeoEditor } from "../../meo/editor";
-import "../../meo/styles.css";
+  ManageAnnotation,
+  ManageAnnotationPreview,
+  ManageCapturedSelection,
+  ManageMeoEditor,
+  ManageMeoMode,
+  ManageMeoSelectionState,
+  ManageSelectionToolbarMode,
+} from '../types';
+import {
+  ManageMeoSelectionFormatToolbar,
+  ManageMeoTopToolbar,
+  applyManageMeoTheme,
+  createManageMeoAnnotationDecorations,
+  manageMeoAnnotationEffect,
+  manageMeoAnnotationField,
+  syncManageMeoAnnotationReviewState,
+} from '../meo-toolbar';
+import { sanitizeManageHref } from '../html-sanitize';
+import { createEditor as createMeoEditor } from '../../meo/editor';
+import '../../meo/styles.css';
 
 export function ManageMarkdownReviewViewer({
   annotations,
@@ -46,12 +55,12 @@ export function ManageMarkdownReviewViewer({
   const latestContentRef = useRef(content);
   const annotationsRef = useRef(annotations);
   const [contentMaxWidthEnabled, setContentMaxWidthEnabled] = useState(false);
-  const [currentMode, setCurrentMode] = useState<ManageMeoMode>("live");
+  const [currentMode, setCurrentMode] = useState<ManageMeoMode>('live');
   const [findCaseSensitive, setFindCaseSensitive] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
-  const [findQuery, setFindQuery] = useState("");
-  const [findReplacement, setFindReplacement] = useState("");
-  const [findStatus, setFindStatus] = useState("");
+  const [findQuery, setFindQuery] = useState('');
+  const [findReplacement, setFindReplacement] = useState('');
+  const [findStatus, setFindStatus] = useState('');
   const [findStatusIsError, setFindStatusIsError] = useState(false);
   const [findWholeWord, setFindWholeWord] = useState(false);
   const [gitGutterVisible, setGitGutterVisible] = useState(true);
@@ -130,7 +139,7 @@ export function ManageMarkdownReviewViewer({
       caseSensitive: findCaseSensitive,
       wholeWord: findWholeWord,
     }),
-    [findCaseSensitive, findWholeWord],
+    [findCaseSensitive, findWholeWord]
   );
 
   const setFindStatusText = useCallback((text: string, isError = false) => {
@@ -145,12 +154,12 @@ export function ManageMarkdownReviewViewer({
     }
     editor.setSearchQuery?.(findQuery, findOptions);
     if (!findQuery) {
-      setFindStatusText("");
+      setFindStatusText('');
       return;
     }
     const total = editor.countMatches?.(findQuery, findOptions) ?? 0;
     if (total === 0) {
-      setFindStatusText("No matches", true);
+      setFindStatusText('No matches', true);
       return;
     }
     setFindStatusText(`${total} matches`);
@@ -163,19 +172,19 @@ export function ManageMarkdownReviewViewer({
         return;
       }
       if (!findQuery) {
-        setFindStatusText("Enter text", true);
+        setFindStatusText('Enter text', true);
         return;
       }
       const result = backward
         ? editor.findPrevious?.(findQuery, findOptions)
         : editor.findNext?.(findQuery, findOptions);
       if (!result?.found) {
-        setFindStatusText("No matches", true);
+        setFindStatusText('No matches', true);
         return;
       }
       setFindStatusText(`${result.current}/${result.total}`);
     },
-    [findOptions, findQuery, setFindStatusText],
+    [findOptions, findQuery, setFindStatusText]
   );
 
   const replaceCurrentFindMatch = useCallback(() => {
@@ -184,7 +193,7 @@ export function ManageMarkdownReviewViewer({
       return;
     }
     if (!findQuery) {
-      setFindStatusText("Enter text", true);
+      setFindStatusText('Enter text', true);
       return;
     }
     const result = editor.replaceCurrent?.(findQuery, findReplacement, findOptions);
@@ -192,7 +201,7 @@ export function ManageMarkdownReviewViewer({
       if (result?.found) {
         setFindStatusText(`${result.current}/${result.total}`);
       } else {
-        setFindStatusText("No matches", true);
+        setFindStatusText('No matches', true);
       }
       return;
     }
@@ -200,7 +209,7 @@ export function ManageMarkdownReviewViewer({
       setFindStatusText(`Replaced - ${result.current}/${result.total}`);
       return;
     }
-    setFindStatusText(result.total ? `Replaced - ${result.total} remaining` : "Replaced");
+    setFindStatusText(result.total ? `Replaced - ${result.total} remaining` : 'Replaced');
   }, [findOptions, findQuery, findReplacement, setFindStatusText]);
 
   const replaceAllFindMatches = useCallback(() => {
@@ -209,12 +218,12 @@ export function ManageMarkdownReviewViewer({
       return;
     }
     if (!findQuery) {
-      setFindStatusText("Enter text", true);
+      setFindStatusText('Enter text', true);
       return;
     }
     const result = editor.replaceAll?.(findQuery, findReplacement, findOptions);
     if (!result?.replaced) {
-      setFindStatusText("No matches", true);
+      setFindStatusText('No matches', true);
       return;
     }
     setFindStatusText(`Replaced ${result.replaced} matches`);
@@ -222,16 +231,16 @@ export function ManageMarkdownReviewViewer({
 
   const closeFind = useCallback(() => {
     setFindOpen(false);
-    setFindQuery("");
-    setFindReplacement("");
-    setFindStatusText("");
-    editorRef.current?.setSearchQuery?.("", findOptions);
+    setFindQuery('');
+    setFindReplacement('');
+    setFindStatusText('');
+    editorRef.current?.setSearchQuery?.('', findOptions);
     editorRef.current?.focus();
   }, [findOptions, setFindStatusText]);
 
   useEffect(() => {
     if (!findOpen) {
-      editorRef.current?.setSearchQuery?.("", findOptions);
+      editorRef.current?.setSearchQuery?.('', findOptions);
       return;
     }
     updateFindStatusSummary();
@@ -240,9 +249,9 @@ export function ManageMarkdownReviewViewer({
   useEffect(() => {
     setMeoSelectionState({ visible: false });
     setFindOpen(false);
-    setFindQuery("");
-    setFindReplacement("");
-    setFindStatusText("");
+    setFindQuery('');
+    setFindReplacement('');
+    setFindStatusText('');
   }, [documentKey, setFindStatusText]);
 
   useEffect(() => {
@@ -272,7 +281,7 @@ export function ManageMarkdownReviewViewer({
       annotations,
       onSelectionCaptureRef.current,
       onSelectionClearRef.current,
-      onAnnotationPreviewChangeRef.current,
+      onAnnotationPreviewChangeRef.current
     );
   }, [annotations, content]);
 
@@ -297,7 +306,7 @@ export function ManageMarkdownReviewViewer({
             annotationsRef.current,
             onSelectionCaptureRef.current,
             onSelectionClearRef.current,
-            onAnnotationPreviewChangeRef.current,
+            onAnnotationPreviewChangeRef.current
           );
         }),
       ] satisfies Extension[],
@@ -314,13 +323,15 @@ export function ManageMarkdownReviewViewer({
         latestContentRef.current = nextContent;
         onContentChangeRef.current(nextContent);
         mountedEditor?.view.dispatch({
-          effects: manageMeoAnnotationEffect.of(createManageMeoAnnotationDecorations(nextContent, annotationsRef.current)),
+          effects: manageMeoAnnotationEffect.of(
+            createManageMeoAnnotationDecorations(nextContent, annotationsRef.current)
+          ),
         });
       },
       onOpenLink: (href: string) => {
         const safeHref = sanitizeManageHref(href);
         if (safeHref) {
-          window.open(safeHref, "_blank", "noopener,noreferrer");
+          window.open(safeHref, '_blank', 'noopener,noreferrer');
         }
       },
     }) as ManageMeoEditor;
@@ -335,7 +346,7 @@ export function ManageMarkdownReviewViewer({
       annotationsRef.current,
       onSelectionCaptureRef.current,
       onSelectionClearRef.current,
-      onAnnotationPreviewChangeRef.current,
+      onAnnotationPreviewChangeRef.current
     );
     window.requestAnimationFrame(() => editor.refreshLayout?.());
     return () => {
@@ -347,11 +358,15 @@ export function ManageMarkdownReviewViewer({
   }, [documentKey]);
 
   return (
-    <div className="manage-markdown-review manage-markdown-meo-review">
-      <section className="manage-markdown-review-main">
+    <div className='manage-markdown-review manage-markdown-meo-review'>
+      <section className='manage-markdown-review-main'>
         <div
-          className={`manage-meo-markdown-editor editor-root${contentMaxWidthEnabled ? " meo-content-max-width-enabled" : ""}`}
-          style={{ "--meo-content-max-width": contentMaxWidthEnabled ? MANAGE_MEO_CONTENT_MAX_WIDTH : "100%" } as CSSProperties}
+          className={`manage-meo-markdown-editor editor-root${contentMaxWidthEnabled ? ' meo-content-max-width-enabled' : ''}`}
+          style={
+            {
+              '--meo-content-max-width': contentMaxWidthEnabled ? MANAGE_MEO_CONTENT_MAX_WIDTH : '100%',
+            } as CSSProperties
+          }
         >
           <ManageMeoTopToolbar
             contentMaxWidthEnabled={contentMaxWidthEnabled}
@@ -380,13 +395,13 @@ export function ManageMarkdownReviewViewer({
             onToggleGitGutter={toggleMeoGitGutter}
             onToggleLineNumbers={toggleMeoLineNumbers}
           />
-          <div className="editor-wrapper" data-outline-position="right">
-            <div className="editor-host" ref={editorHostRef} />
+          <div className='editor-wrapper' data-outline-position='right'>
+            <div className='editor-host' ref={editorHostRef} />
           </div>
-          {selectionToolbarMode === "formatting" && selection ? (
+          {selectionToolbarMode === 'formatting' && selection ? (
             <ManageMeoSelectionFormatToolbar
               anchor={selection.anchor}
-              onAnnotate={() => onSelectionToolbarModeChange("annotations")}
+              onAnnotate={() => onSelectionToolbarModeChange('annotations')}
               onFormat={applyMeoFormat}
               selectionState={meoSelectionState}
             />

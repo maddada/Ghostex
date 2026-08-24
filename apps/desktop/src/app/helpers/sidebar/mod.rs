@@ -15,8 +15,8 @@ pub(crate) mod metadata_write_builders;
 pub(crate) mod native_action_exec;
 pub(crate) mod native_action_types;
 pub(crate) mod runtime_settings;
-pub(crate) mod sidebar_defaults_types;
 pub(crate) mod settings_messages_and_width;
+pub(crate) mod sidebar_defaults_types;
 pub(crate) mod workspace_terminal_actions;
 
 pub(crate) use command_id_helpers::*;
@@ -28,6 +28,6 @@ pub(crate) use metadata_write_builders::*;
 pub(crate) use native_action_exec::*;
 pub(crate) use native_action_types::*;
 pub(crate) use runtime_settings::*;
-pub(crate) use sidebar_defaults_types::*;
 pub(crate) use settings_messages_and_width::*;
+pub(crate) use sidebar_defaults_types::*;
 pub(crate) use workspace_terminal_actions::*;

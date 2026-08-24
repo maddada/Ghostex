@@ -5,13 +5,11 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TerminalBodyMousePosition {
     pub(crate) x: f64,
     pub(crate) y: f64,
 }
-
 
 pub(crate) fn terminal_body_relative_mouse_position(
     bounds: Bounds<Pixels>,
@@ -27,15 +25,15 @@ pub(crate) fn terminal_body_relative_mouse_position(
     })
 }
 
-
-pub(crate) fn terminal_body_relative_mouse_position_for_slot<MountSlotId: Copy + Eq + std::hash::Hash>(
+pub(crate) fn terminal_body_relative_mouse_position_for_slot<
+    MountSlotId: Copy + Eq + std::hash::Hash,
+>(
     bounds_by_slot: &HashMap<MountSlotId, Bounds<Pixels>>,
     slot_id: MountSlotId,
     position: Point<Pixels>,
 ) -> Option<TerminalBodyMousePosition> {
     terminal_body_relative_mouse_position(*bounds_by_slot.get(&slot_id)?, position)
 }
-
 
 /*
 CDXC:GPUITerminalTextInput 2026-06-23-10:13:
@@ -57,7 +55,6 @@ pub(crate) fn committed_terminal_text_from_key_down_event(event: &KeyDownEvent) 
     committed_terminal_text_from_keystroke(&event.keystroke)
 }
 
-
 pub(crate) fn committed_terminal_text_from_keystroke(keystroke: &Keystroke) -> Option<&str> {
     let modifiers = keystroke.modifiers;
     if modifiers.platform || modifiers.control {
@@ -68,8 +65,9 @@ pub(crate) fn committed_terminal_text_from_keystroke(keystroke: &Keystroke) -> O
     if text.is_empty() { None } else { Some(text) }
 }
 
-
-pub(crate) fn command_pane_sleeping_placeholder_keystroke_requests_wake(keystroke: &Keystroke) -> bool {
+pub(crate) fn command_pane_sleeping_placeholder_keystroke_requests_wake(
+    keystroke: &Keystroke,
+) -> bool {
     /*
     CDXC:GPUICommandSleepingPlaceholder 2026-06-25-14:49:
     Sleeping command placeholders wake on plain alphanumeric key-downs like native AppKit. Reject Cmd, Control, and Option/Alt modified keys, and use GPUI's layout key only as a wake-affordance identity for shifted digits rather than as terminal input.
@@ -86,8 +84,9 @@ pub(crate) fn command_pane_sleeping_placeholder_keystroke_requests_wake(keystrok
         || command_pane_sleeping_placeholder_wake_text_is_alphanumeric(Some(&keystroke.key))
 }
 
-
-pub(crate) fn command_pane_sleeping_placeholder_wake_text_is_alphanumeric(text: Option<&str>) -> bool {
+pub(crate) fn command_pane_sleeping_placeholder_wake_text_is_alphanumeric(
+    text: Option<&str>,
+) -> bool {
     let Some(text) = text else {
         return false;
     };
@@ -98,14 +97,12 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_text_is_alphanumeric(text: 
     chars.next().is_none() && character.is_ascii_alphanumeric()
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FocusedTerminalTextTarget {
     Agents,
     Command,
     ProjectEditorCompanion,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FocusedTerminalTextMountTarget {
@@ -114,13 +111,11 @@ pub(crate) enum FocusedTerminalTextMountTarget {
     ProjectEditorCompanion(ProjectEditorCompanionTerminalBodyMountSlotId),
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TerminalTextMarkedRange {
     pub(crate) target: FocusedTerminalTextMountTarget,
     pub(crate) range: Range<usize>,
 }
-
 
 pub(crate) fn focused_terminal_text_target(
     active_mode: TitlebarMode,
@@ -144,7 +139,6 @@ pub(crate) fn focused_terminal_text_target(
     }
 }
 
-
 pub(crate) fn terminal_text_marked_range_for_preedit(
     replacement_range: Option<Range<usize>>,
     new_text: &str,
@@ -157,7 +151,6 @@ pub(crate) fn terminal_text_marked_range_for_preedit(
     let marked_start = replacement_range.map_or(0, |range| range.start);
     Some(marked_start..marked_start.saturating_add(marked_len_utf16))
 }
-
 
 pub(crate) fn terminal_ime_bounds_from_ghostty_point(
     body_bounds: Bounds<Pixels>,
@@ -184,7 +177,6 @@ pub(crate) fn terminal_ime_bounds_from_ghostty_point(
     ))
 }
 
-
 /*
 CDXC:GPUITerminalMouseModifiers 2026-06-23-09:45:
 Mounted Agents and command terminal bodies must translate GPUI mouse-event keyboard modifiers into Ghostty input.Mods bits for pointer position and button events. Map shift, control, alt, and platform to Ghostty shift, ctrl, alt, and super while intentionally ignoring function; scroll events keep Ghostty ScrollMods precision-only and forward keyboard modifiers only through the preceding pointer position update.
@@ -210,7 +202,6 @@ pub(crate) fn ghostty_mouse_mods_from_gpui_modifiers(
     mods
 }
 
-
 /*
 CDXC:GPUITerminalMouseButtons 2026-06-23-10:23:
 Mounted Agents and command terminal bodies must forward Ghostty's exact left, right, and middle mouse button values while rejecting GPUI navigation buttons. Keep the mapper pure so button parity does not store raw input state, coordinates, modifiers, terminal content, command text, paths, URLs, or titles.
@@ -229,7 +220,6 @@ pub(crate) fn ghostty_mouse_button_from_gpui_button(
     }
 }
 
-
 /*
 CDXC:GPUITerminalPressureForwarding 2026-06-23-09:51:
 Mounted Agents and command terminal pressure events must preserve the GPUI stage contract when crossing into Ghostty. Map Zero to none, Normal to normal, and Force to deep without clamping, fallback stages, logging, persistence, or raw input storage.
@@ -241,7 +231,6 @@ pub(crate) fn ghostty_mouse_pressure_stage_from_gpui_stage(stage: PressureStage)
         PressureStage::Force => GHOSTTY_MOUSE_PRESSURE_STAGE_DEEP,
     }
 }
-
 
 /*
 CDXC:GPUITerminalScrollForwarding 2026-06-23-09:32:
@@ -263,7 +252,6 @@ pub(crate) fn terminal_ghostty_scroll_delta(
     }
 }
 
-
 pub(crate) fn agents_terminal_body_relative_mouse_position_for_slot(
     bounds_by_slot: &HashMap<AgentsTerminalBodyMountSlotId, Bounds<Pixels>>,
     slot_id: AgentsTerminalBodyMountSlotId,
@@ -271,7 +259,6 @@ pub(crate) fn agents_terminal_body_relative_mouse_position_for_slot(
 ) -> Option<TerminalBodyMousePosition> {
     terminal_body_relative_mouse_position_for_slot(bounds_by_slot, slot_id, position)
 }
-
 
 pub(crate) fn command_terminal_body_relative_mouse_position_for_slot(
     bounds_by_slot: &HashMap<CommandTerminalBodyMountSlotId, Bounds<Pixels>>,

@@ -5,20 +5,17 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy)]
 pub(crate) struct SidebarDragState {
     pub(crate) start_x: f32,
     pub(crate) start_width: f32,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiSidebarSide {
     Left,
     Right,
 }
-
 
 impl GpuiSidebarSide {
     #[allow(dead_code)] // no caller: sidebar side comes from the persisted shell state, not a settings string
@@ -30,7 +27,6 @@ impl GpuiSidebarSide {
         }
     }
 }
-
 
 /*
 CDXC:GPUICommandPaneSide 2026-08-16:
@@ -46,7 +42,6 @@ pub(crate) enum GpuiCommandPaneSide {
     Right,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiSidebarBodyChromePart {
     Sidebar,
@@ -54,16 +49,13 @@ pub(crate) enum GpuiSidebarBodyChromePart {
     Workspace,
 }
 
-
 pub(crate) fn gpui_next_sidebar_collapsed_state(collapsed: bool) -> bool {
     !collapsed
 }
 
-
 pub(crate) fn gpui_sidebar_chrome_visible(sidebar_collapsed: bool) -> bool {
     !sidebar_collapsed
 }
-
 
 pub(crate) fn gpui_next_sidebar_side(side: GpuiSidebarSide) -> GpuiSidebarSide {
     /*
@@ -75,7 +67,6 @@ pub(crate) fn gpui_next_sidebar_side(side: GpuiSidebarSide) -> GpuiSidebarSide {
         GpuiSidebarSide::Right => GpuiSidebarSide::Left,
     }
 }
-
 
 #[allow(dead_code)] // no caller: the body row is laid out inline in the root render() in app/core.rs; kept as the CDXC:GPUISidebarSide ordering contract
 pub(crate) fn gpui_sidebar_body_chrome_order(
@@ -103,8 +94,11 @@ pub(crate) fn gpui_sidebar_body_chrome_order(
     }
 }
 
-
-pub(crate) fn gpui_sidebar_resize_delta(side: GpuiSidebarSide, current_x: f32, start_x: f32) -> f32 {
+pub(crate) fn gpui_sidebar_resize_delta(
+    side: GpuiSidebarSide,
+    current_x: f32,
+    start_x: f32,
+) -> f32 {
     /*
     CDXC:GPUISidebarSide 2026-06-26-23:35:
     Right-side sidebar resizing reverses the horizontal delta because the visible divider sits on the workspace edge. Dragging that divider left grows the sidebar, matching native AppKit layout math.
@@ -114,7 +108,6 @@ pub(crate) fn gpui_sidebar_resize_delta(side: GpuiSidebarSide, current_x: f32, s
         GpuiSidebarSide::Right => start_x - current_x,
     }
 }
-
 
 pub(crate) fn gpui_sidebar_divider_x_bounds(
     side: GpuiSidebarSide,

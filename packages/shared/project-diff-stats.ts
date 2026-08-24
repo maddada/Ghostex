@@ -12,9 +12,7 @@ export type SidebarProjectDiffStats = {
  * for each project. Keep the parsing pure so native sidebar process output can
  * be tested without touching the filesystem or shelling out from tests.
  */
-export function createDefaultSidebarProjectDiffStats(
-  isLoading = false,
-): SidebarProjectDiffStats {
+export function createDefaultSidebarProjectDiffStats(isLoading = false): SidebarProjectDiffStats {
   return {
     additions: 0,
     deletions: 0,
@@ -27,7 +25,7 @@ export function createDefaultSidebarProjectDiffStats(
 export function parseGitNumstatDiffStats(stdout: string): SidebarProjectDiffStats {
   const totals = stdout
     .trim()
-    .split("\n")
+    .split('\n')
     .filter(Boolean)
     .reduce(
       (stats, line) => {
@@ -38,7 +36,7 @@ export function parseGitNumstatDiffStats(stdout: string): SidebarProjectDiffStat
           files: stats.files + 1,
         };
       },
-      { additions: 0, deletions: 0, files: 0 },
+      { additions: 0, deletions: 0, files: 0 }
     );
 
   return {
@@ -50,7 +48,7 @@ export function parseGitNumstatDiffStats(stdout: string): SidebarProjectDiffStat
 
 export function mergeSidebarProjectDiffStats(
   left: SidebarProjectDiffStats,
-  right: SidebarProjectDiffStats,
+  right: SidebarProjectDiffStats
 ): SidebarProjectDiffStats {
   return {
     additions: left.additions + right.additions,
@@ -85,11 +83,11 @@ export function resolveSidebarProjectDiffStats({
 }
 
 export function parseGitZeroDelimitedPaths(stdout: string): string[] {
-  return stdout.split("\0").filter((path) => path.length > 0);
+  return stdout.split('\0').filter((path) => path.length > 0);
 }
 
 function normalizeGitNumstatValue(value: string | undefined): number {
-  if (!value || value === "-") {
+  if (!value || value === '-') {
     return 0;
   }
   const parsed = Number(value);

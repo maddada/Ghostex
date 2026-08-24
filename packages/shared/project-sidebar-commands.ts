@@ -2,7 +2,7 @@ import {
   normalizeStoredSidebarCommandOrder,
   normalizeStoredSidebarCommands,
   type StoredSidebarCommand,
-} from "./sidebar-commands";
+} from './sidebar-commands';
 
 /**
  * CDXC:ProjectActions 2026-05-19-12:00:
@@ -31,10 +31,8 @@ export function createDefaultProjectSidebarCommandsState(): ProjectSidebarComman
   };
 }
 
-export function normalizeProjectSidebarCommandsState(
-  candidate: unknown,
-): ProjectSidebarCommandsState | undefined {
-  if (!candidate || typeof candidate !== "object") {
+export function normalizeProjectSidebarCommandsState(candidate: unknown): ProjectSidebarCommandsState | undefined {
+  if (!candidate || typeof candidate !== 'object') {
     return undefined;
   }
 
@@ -46,10 +44,8 @@ export function normalizeProjectSidebarCommandsState(
   };
 }
 
-export function normalizeProjectSidebarCommandsStore(
-  candidate: unknown,
-): ProjectSidebarCommandsStore {
-  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+export function normalizeProjectSidebarCommandsStore(candidate: unknown): ProjectSidebarCommandsStore {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return {};
   }
 
@@ -69,15 +65,12 @@ export function normalizeProjectSidebarCommandsStore(
 
 export function getProjectSidebarCommandsState(
   store: ProjectSidebarCommandsStore,
-  projectId: string,
+  projectId: string
 ): ProjectSidebarCommandsState {
   return store[projectId] ?? createDefaultProjectSidebarCommandsState();
 }
 
-export function resolveProjectCommandsOwnerId(
-  projectId: string,
-  parentProjectId?: string,
-): string {
+export function resolveProjectCommandsOwnerId(projectId: string, parentProjectId?: string): string {
   const normalizedParentProjectId = parentProjectId?.trim();
   return normalizedParentProjectId || projectId;
 }

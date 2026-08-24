@@ -141,7 +141,8 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
       if let requestId = request["requestId"] as? String,
         let title = request["title"] as? String,
         !title.isEmpty,
-        let session = sessions[requestId] {
+        let session = sessions[requestId]
+      {
         session.retitle(title)
       }
     case "watch":
@@ -210,7 +211,8 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
   }
 
   func saveWindowFrame(_ window: NSWindow) {
-    UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: Self.savedWindowFrameDefaultsKey)
+    UserDefaults.standard.set(
+      NSStringFromRect(window.frame), forKey: Self.savedWindowFrameDefaultsKey)
   }
 
   func cascade(_ window: NSWindow) {
@@ -258,8 +260,11 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
 
   private static func clampedWindowFrame(_ frame: NSRect, preferredScreen: NSScreen?) -> NSRect {
     let visibleFrame = visibleFrameForRestoring(frame, preferredScreen: preferredScreen)
-    let width = min(max(frame.width, minimumWindowSize.width), max(visibleFrame.width, minimumWindowSize.width))
-    let height = min(max(frame.height, minimumWindowSize.height), max(visibleFrame.height, minimumWindowSize.height))
+    let width = min(
+      max(frame.width, minimumWindowSize.width), max(visibleFrame.width, minimumWindowSize.width))
+    let height = min(
+      max(frame.height, minimumWindowSize.height),
+      max(visibleFrame.height, minimumWindowSize.height))
     let maxX = max(visibleFrame.minX, visibleFrame.maxX - width)
     let maxY = max(visibleFrame.minY, visibleFrame.maxY - height)
     return NSRect(
@@ -270,7 +275,9 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
     )
   }
 
-  private static func visibleFrameForRestoring(_ frame: NSRect, preferredScreen: NSScreen?) -> NSRect {
+  private static func visibleFrameForRestoring(_ frame: NSRect, preferredScreen: NSScreen?)
+    -> NSRect
+  {
     if let matchingScreen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(frame) }) {
       return matchingScreen.visibleFrame
     }
@@ -288,7 +295,8 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
 
   func sessionDidFinish(_ session: EditorSession) {
     if let cursorOffset = session.latestCursorOffset {
-      lastCursorSnapshot = EditorCursorSnapshot(text: session.latestDraft, cursorOffset: cursorOffset)
+      lastCursorSnapshot = EditorCursorSnapshot(
+        text: session.latestDraft, cursorOffset: cursorOffset)
     }
     sessions.removeValue(forKey: session.requestId)
     notifyOpenCountWatchers()
@@ -329,7 +337,8 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
   }
 
   private func startAcceptingConnections() {
-    let source = DispatchSource.makeReadSource(fileDescriptor: listenerFileDescriptor, queue: acceptQueue)
+    let source = DispatchSource.makeReadSource(
+      fileDescriptor: listenerFileDescriptor, queue: acceptQueue)
     acceptSource = source
     source.setEventHandler { [weak self] in
       self?.acceptAvailableConnections()
@@ -417,7 +426,8 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
       connection.sendError("open request requires absolute filePath")
       return
     }
-    guard let statusFilePath = request["statusFile"] as? String, statusFilePath.hasPrefix("/") else {
+    guard let statusFilePath = request["statusFile"] as? String, statusFilePath.hasPrefix("/")
+    else {
       connection.sendError("open request requires absolute statusFile")
       return
     }
@@ -441,7 +451,8 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
     }
 
     do {
-      let initialCursorOffset = lastCursorSnapshot?.text == initialText ? lastCursorSnapshot?.cursorOffset : nil
+      let initialCursorOffset =
+        lastCursorSnapshot?.text == initialText ? lastCursorSnapshot?.cursorOffset : nil
       let session = EditorSession(
         daemon: self,
         requestId: requestId,

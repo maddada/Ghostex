@@ -7,32 +7,28 @@ methods. See `index.ts` for how the runtime's Git methods are recombined.
 import {
   GPUI_PROJECT_DIFF_STATS_BACKGROUND_INTERVAL_MS,
   GPUI_PROJECT_DIFF_STATS_MIN_PROBE_SPACING_MS,
-} from "../constants";
-import type { GpuiSidebarRuntime } from "../core";
-import { createGpuiSidebarSettings } from "../helpers/bootstrap";
-import { chunkUntrackedLineCountPaths, haveSameSidebarProjectDiffStats } from "../helpers/git";
-import { isGpuiPresentationQuickDomainProject } from "../helpers/presentation-projection";
+} from '../constants';
+import type { GpuiSidebarRuntime } from '../core';
+import { createGpuiSidebarSettings } from '../helpers/bootstrap';
+import { chunkUntrackedLineCountPaths, haveSameSidebarProjectDiffStats } from '../helpers/git';
+import { isGpuiPresentationQuickDomainProject } from '../helpers/presentation-projection';
 import {
   createGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationProjectId,
-} from "../helpers/remote-presentation";
-import { normalizeGpuiProjectPath } from "../helpers/worktrees";
-import type {
-  GpuiProjectDiffStatsRefreshTarget,
-  GpuiRemoteProjectReference,
-} from "../types-and-protocol";
-import type { GxserverProjectDomainState } from "@/packages/shared/gxserver-protocol";
-import type { SidebarProjectDiffStats } from "@/packages/shared/project-diff-stats";
+} from '../helpers/remote-presentation';
+import { normalizeGpuiProjectPath } from '../helpers/worktrees';
+import type { GpuiProjectDiffStatsRefreshTarget, GpuiRemoteProjectReference } from '../types-and-protocol';
+import type { GxserverProjectDomainState } from '@/packages/shared/gxserver-protocol';
+import type { SidebarProjectDiffStats } from '@/packages/shared/project-diff-stats';
 import {
   createDefaultSidebarProjectDiffStats,
   parseGitNumstatDiffStats,
   parseGitZeroDelimitedPaths,
   resolveSidebarProjectDiffStats,
-} from "@/packages/shared/project-diff-stats";
-import type { SidebarSessionGroup } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/project-diff-stats';
+import type { SidebarSessionGroup } from '@/packages/shared/session-grid-contract';
 
 export const gpuiSidebarRuntimeGitDiffStatsMethods = {
-
   /**
    * One background Git polling driver owns both project diff stats (all
    * visible non-Quick projects, local and remote) and the full titlebar Git
@@ -62,7 +58,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     */
     const cycleLengthMs = Math.max(
       GPUI_PROJECT_DIFF_STATS_BACKGROUND_INTERVAL_MS,
-      targets.length * GPUI_PROJECT_DIFF_STATS_MIN_PROBE_SPACING_MS,
+      targets.length * GPUI_PROJECT_DIFF_STATS_MIN_PROBE_SPACING_MS
     );
     const staggerStepMs = cycleLengthMs / Math.max(1, targets.length);
     targets.forEach((target, index) => {
@@ -71,7 +67,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
           this.gitPollingTimeoutIds.delete(timeoutId);
           this.refreshProjectDiffStatsTarget(target);
         },
-        Math.floor(index * staggerStepMs),
+        Math.floor(index * staggerStepMs)
       );
       this.gitPollingTimeoutIds.add(timeoutId);
     });
@@ -97,7 +93,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     than a `GxserverProjectId` the compiler can vouch for.
     */
     const localProjectsById = new Map<string, GxserverProjectDomainState>(
-      this.domainProjects.map((project) => [project.projectId, project]),
+      this.domainProjects.map((project) => [project.projectId, project])
     );
     for (const group of this.latestGroups) {
       const projectId = group.projectContext?.editor.projectId;
@@ -111,7 +107,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
         }
         targetsByKey.set(`remote:${projectId}`, {
           key: `remote:${projectId}`,
-          kind: "remote",
+          kind: 'remote',
           reference: remoteReference,
         });
         continue;
@@ -127,7 +123,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
       }
       targetsByKey.set(`local:${projectId}`, {
         key: `local:${projectId}`,
-        kind: "local",
+        kind: 'local',
         project,
       });
     }
@@ -135,7 +131,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
   },
 
   refreshProjectDiffStatsTarget(this: GpuiSidebarRuntime, target: GpuiProjectDiffStatsRefreshTarget): void {
-    if (target.kind === "remote") {
+    if (target.kind === 'remote') {
       void this.refreshRemoteProjectDiffStats(target.reference);
       return;
     }
@@ -175,14 +171,14 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     */
     try {
       if (!this.gitRepoProjectIds.has(projectId)) {
-        const repoCheck = await this.runGitAction(project, { action: "isInsideWorkTree" });
-        if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
+        const repoCheck = await this.runGitAction(project, { action: 'isInsideWorkTree' });
+        if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== 'true') {
           this.setProjectDiffStats(projectId, createDefaultSidebarProjectDiffStats(false));
           return;
         }
         this.gitRepoProjectIds.add(projectId);
       }
-      const trackedDiff = await this.runGitAction(project, { action: "diffNumstat" });
+      const trackedDiff = await this.runGitAction(project, { action: 'diffNumstat' });
       if (trackedDiff.exitCode !== 0) {
         this.gitRepoProjectIds.delete(projectId);
         return;
@@ -192,7 +188,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
       const settings = createGpuiSidebarSettings(this.runtimeSettings);
       let resolvedStats = trackedStats;
       if (settings.showUntrackedProjectDiffWhenNoTrackedChanges && !hasTrackedLineChanges) {
-        const untrackedFiles = await this.runGitAction(project, { action: "listUntracked" });
+        const untrackedFiles = await this.runGitAction(project, { action: 'listUntracked' });
         const untrackedPaths = parseGitZeroDelimitedPaths(untrackedFiles.stdout);
         resolvedStats = resolveSidebarProjectDiffStats({
           showUntrackedWhenNoTrackedChanges: true,
@@ -214,13 +210,8 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     }
   },
 
-  async refreshRemoteProjectDiffStats(this: GpuiSidebarRuntime,
-    reference: GpuiRemoteProjectReference,
-  ): Promise<void> {
-    const scopedProjectId = createGpuiRemotePresentationProjectId(
-      reference.machineId,
-      reference.projectId,
-    );
+  async refreshRemoteProjectDiffStats(this: GpuiSidebarRuntime, reference: GpuiRemoteProjectReference): Promise<void> {
+    const scopedProjectId = createGpuiRemotePresentationProjectId(reference.machineId, reference.projectId);
     if (this.pendingProjectDiffRefreshProjectIds.has(scopedProjectId)) {
       return;
     }
@@ -230,15 +221,15 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     try {
       if (!this.gitRepoProjectIds.has(scopedProjectId)) {
         const repoCheck = await this.runRemoteGitAction(reference, {
-          action: "isInsideWorkTree",
+          action: 'isInsideWorkTree',
         });
-        if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
+        if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== 'true') {
           this.setProjectDiffStats(scopedProjectId, createDefaultSidebarProjectDiffStats(false));
           return;
         }
         this.gitRepoProjectIds.add(scopedProjectId);
       }
-      const trackedDiff = await this.runRemoteGitAction(reference, { action: "diffNumstat" });
+      const trackedDiff = await this.runRemoteGitAction(reference, { action: 'diffNumstat' });
       if (trackedDiff.exitCode !== 0) {
         this.gitRepoProjectIds.delete(scopedProjectId);
         return;
@@ -249,7 +240,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
       let resolvedStats = trackedStats;
       if (settings.showUntrackedProjectDiffWhenNoTrackedChanges && !hasTrackedLineChanges) {
         const untrackedFiles = await this.runRemoteGitAction(reference, {
-          action: "listUntracked",
+          action: 'listUntracked',
         });
         const untrackedPaths = parseGitZeroDelimitedPaths(untrackedFiles.stdout);
         resolvedStats = resolveSidebarProjectDiffStats({
@@ -272,36 +263,38 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     }
   },
 
-  async countUntrackedProjectLines(this: GpuiSidebarRuntime,
+  async countUntrackedProjectLines(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
-    paths: readonly string[],
+    paths: readonly string[]
   ): Promise<number> {
     let lines = 0;
     for (const filePaths of chunkUntrackedLineCountPaths(paths)) {
       const result = await this.runGitAction(project, {
-        action: "countFileLines",
+        action: 'countFileLines',
         filePaths,
       });
       if (result.exitCode !== 0) {
-        throw new Error("Could not count untracked file lines.");
+        throw new Error('Could not count untracked file lines.');
       }
       lines += Number(result.stdout.trim()) || 0;
     }
     return lines;
   },
 
-  async countRemoteUntrackedProjectLines(this: GpuiSidebarRuntime,
+  async countRemoteUntrackedProjectLines(
+    this: GpuiSidebarRuntime,
     reference: GpuiRemoteProjectReference,
-    paths: readonly string[],
+    paths: readonly string[]
   ): Promise<number> {
     let lines = 0;
     for (const filePaths of chunkUntrackedLineCountPaths(paths)) {
       const result = await this.runRemoteGitAction(reference, {
-        action: "countFileLines",
+        action: 'countFileLines',
         filePaths,
       });
       if (result.exitCode !== 0) {
-        throw new Error("Could not count remote untracked file lines.");
+        throw new Error('Could not count remote untracked file lines.');
       }
       lines += Number(result.stdout.trim()) || 0;
     }
@@ -361,8 +354,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
       removedGroupIds: [],
       removedSessionIds: [],
       revision: ++this.revision,
-      type: "sidebarGroupsChanged",
+      type: 'sidebarGroupsChanged',
     });
   },
-
 };

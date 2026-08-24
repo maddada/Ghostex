@@ -4,7 +4,11 @@ const sourceRawUrlRe = /(?:https?:\/\/|mailto:|file:|www\.)[^\s<>"'`]+/gi;
 
 function trimTrailingUrlPunctuation(value: string): string {
   let trimmed = value.replace(/[.,!?;:]+$/g, '');
-  const pairs: Array<[string, string]> = [['(', ')'], ['[', ']'], ['{', '}']];
+  const pairs: Array<[string, string]> = [
+    ['(', ')'],
+    ['[', ']'],
+    ['{', '}'],
+  ];
   for (const [open, close] of pairs) {
     while (trimmed.endsWith(close)) {
       const openCount = trimmed.split(open).length - 1;
@@ -21,9 +25,11 @@ function trimTrailingUrlPunctuation(value: string): string {
 function trimMatchingUrlQuotes(value: string): string {
   let trimmed = value;
   while (trimmed.length >= 2) {
-    if ((trimmed.startsWith('"') && trimmed.endsWith('"'))
-      || (trimmed.startsWith("'") && trimmed.endsWith("'"))
-      || (trimmed.startsWith('`') && trimmed.endsWith('`'))) {
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+      (trimmed.startsWith('`') && trimmed.endsWith('`'))
+    ) {
       trimmed = trimmed.slice(1, -1);
       continue;
     }
@@ -69,7 +75,7 @@ export function findRawSourceUrlMatches(text: string): RawSourceUrlMatch[] {
     matches.push({
       index: match.index,
       href,
-      length: match[0].length
+      length: match[0].length,
     });
   }
   return matches;

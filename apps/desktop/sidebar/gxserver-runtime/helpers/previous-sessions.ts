@@ -3,22 +3,22 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import { resolveGpuiSidebarAgentIcon } from "./presentation-projection";
-import type { GxserverPresentationSearchResult } from "@/packages/shared/gxserver-protocol";
-import type { SidebarPreviousSessionItem } from "@/packages/shared/session-grid-contract";
-import { DEFAULT_TERMINAL_SESSION_TITLE } from "@/packages/shared/session-grid-contract";
+import { resolveGpuiSidebarAgentIcon } from './presentation-projection';
+import type { GxserverPresentationSearchResult } from '@/packages/shared/gxserver-protocol';
+import type { SidebarPreviousSessionItem } from '@/packages/shared/session-grid-contract';
+import { DEFAULT_TERMINAL_SESSION_TITLE } from '@/packages/shared/session-grid-contract';
 
 export function gxserverSearchResultToPreviousSessionItem(
   result: GxserverPresentationSearchResult,
-  options: { historyIdPrefix?: string; projectNamePrefix?: string } = {},
+  options: { historyIdPrefix?: string; projectNamePrefix?: string } = {}
 ): SidebarPreviousSessionItem {
-  const title = result.displayTitle || result.primaryTitle || result.title || "Previous Session";
+  const title = result.displayTitle || result.primaryTitle || result.title || 'Previous Session';
   const closedAt = result.closedAt ?? result.updatedAt ?? result.createdAt;
   const agentName = result.agentName ?? result.agentId;
-  const sessionPersistenceProvider = result.sessionPersistenceProvider ?? "zmx";
+  const sessionPersistenceProvider = result.sessionPersistenceProvider ?? 'zmx';
   const sessionPersistenceName = result.sessionPersistenceName ?? result.zmxName;
   return {
-    activity: "idle",
+    activity: 'idle',
     agentIcon: resolveGpuiSidebarAgentIcon(result.agentIcon ?? agentName),
     agentSessionId: result.agentSessionId,
     alias: title,
@@ -26,7 +26,7 @@ export function gxserverSearchResultToPreviousSessionItem(
     column: 0,
     displayTitle: result.displayTitle,
     displayTitleTooltip: result.displayTitleTooltip,
-    historyId: `${options.historyIdPrefix ?? "gxserver"}:${result.projectId}:${result.sessionId}`,
+    historyId: `${options.historyIdPrefix ?? 'gxserver'}:${result.projectId}:${result.sessionId}`,
     isFavorite: result.isFavorite,
     isFocused: false,
     isGeneratedName: false,
@@ -36,7 +36,7 @@ export function gxserverSearchResultToPreviousSessionItem(
     isRunning: false,
     isVisible: false,
     lastInteractionAt: result.lastActiveAt,
-    lifecycleState: "done",
+    lifecycleState: 'done',
     primaryTitle: result.primaryTitle ?? title,
     projectId: result.projectId,
     projectName: options.projectNamePrefix
@@ -44,18 +44,18 @@ export function gxserverSearchResultToPreviousSessionItem(
       : result.projectTitle,
     row: 0,
     sessionId: result.sessionId,
-    sessionKind: "terminal",
+    sessionKind: 'terminal',
     sessionPersistenceName,
     sessionPersistenceProvider,
     sessionTag: result.sessionTag,
-    shortcutLabel: "",
+    shortcutLabel: '',
     terminalTitle: result.terminalTitle,
   };
 }
 
 export function comparePreviousSessionItemsByClosedTime(
   left: SidebarPreviousSessionItem,
-  right: SidebarPreviousSessionItem,
+  right: SidebarPreviousSessionItem
 ): number {
   return previousSessionClosedTime(right) - previousSessionClosedTime(left);
 }
@@ -66,7 +66,7 @@ export function previousSessionClosedTime(session: SidebarPreviousSessionItem): 
 }
 
 export function parseGpuiGxserverPreviousSessionHistoryId(
-  historyId: string,
+  historyId: string
 ): { projectId: string; sessionId: string } | undefined {
   const match = /^gxserver:([^:]+):([^:]+)$/u.exec(historyId);
   if (!match) {
@@ -76,7 +76,7 @@ export function parseGpuiGxserverPreviousSessionHistoryId(
 }
 
 export function parseGpuiRemotePreviousSessionHistoryId(
-  historyId: string,
+  historyId: string
 ): { machineId: string; projectId: string; sessionId: string } | undefined {
   const match = /^remote-gxserver:([^:]+):([^:]+):([^:]+)$/u.exec(historyId);
   if (!match) {

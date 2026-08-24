@@ -343,7 +343,10 @@ pub(crate) fn gpui_websocket_read_exact(
     Ok(true)
 }
 
-pub(crate) fn gpui_websocket_write_text_frame(stream: &mut TcpStream, payload: &[u8]) -> Result<(), String> {
+pub(crate) fn gpui_websocket_write_text_frame(
+    stream: &mut TcpStream,
+    payload: &[u8],
+) -> Result<(), String> {
     gpui_websocket_write_frame(stream, 0x1, payload)
 }
 
@@ -431,7 +434,9 @@ pub(crate) fn gpui_remote_gxserver_presentation_event_payload(
     }
 }
 
-pub(crate) fn gpui_remote_gxserver_presentation_snapshot_allowed(value: &serde_json::Value) -> bool {
+pub(crate) fn gpui_remote_gxserver_presentation_snapshot_allowed(
+    value: &serde_json::Value,
+) -> bool {
     let Some(object) = value.as_object() else {
         return false;
     };
@@ -467,4 +472,3 @@ pub(crate) fn gpui_json_revision(value: &serde_json::Value) -> Option<u64> {
         })
     })
 }
-

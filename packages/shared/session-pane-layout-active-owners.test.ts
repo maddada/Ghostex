@@ -1,9 +1,9 @@
-import { describe, expect, test } from "vitest";
-import type { SessionPaneLayoutNode } from "./session-grid-contract-core";
-import { collectActivePaneOwnerSessionIds } from "./session-pane-layout-active-owners";
+import { describe, expect, test } from 'vitest';
+import type { SessionPaneLayoutNode } from './session-grid-contract-core';
+import { collectActivePaneOwnerSessionIds } from './session-pane-layout-active-owners';
 
-describe("collectActivePaneOwnerSessionIds", () => {
-  test("collects one selected owner from each split pane", () => {
+describe('collectActivePaneOwnerSessionIds', () => {
+  test('collects one selected owner from each split pane', () => {
     /*
      * CDXC:AutoSleep 2026-06-09-20:33:
      * Split protection is based on persisted pane ownership, not only current
@@ -12,31 +12,31 @@ describe("collectActivePaneOwnerSessionIds", () => {
      */
     const layout: SessionPaneLayoutNode = {
       children: [
-        { kind: "leaf", sessionId: "G-left" },
+        { kind: 'leaf', sessionId: 'G-left' },
         {
-          activeSessionId: "G-right-active",
-          kind: "tabs",
-          sessionIds: ["G-right-parked", "G-right-active"],
+          activeSessionId: 'G-right-active',
+          kind: 'tabs',
+          sessionIds: ['G-right-parked', 'G-right-active'],
         },
       ],
-      direction: "horizontal",
-      kind: "split",
+      direction: 'horizontal',
+      kind: 'split',
     };
 
-    expect(collectActivePaneOwnerSessionIds(layout)).toEqual(["G-left", "G-right-active"]);
+    expect(collectActivePaneOwnerSessionIds(layout)).toEqual(['G-left', 'G-right-active']);
   });
 
-  test("falls back to the first valid tab when active tab state is stale", () => {
+  test('falls back to the first valid tab when active tab state is stale', () => {
     const layout: SessionPaneLayoutNode = {
-      activeSessionId: "G-missing",
-      kind: "tabs",
-      sessionIds: ["G-stale", "G-valid"],
+      activeSessionId: 'G-missing',
+      kind: 'tabs',
+      sessionIds: ['G-stale', 'G-valid'],
     };
 
     expect(
       collectActivePaneOwnerSessionIds(layout, {
-        validSessionIds: new Set(["G-valid"]),
-      }),
-    ).toEqual(["G-valid"]);
+        validSessionIds: new Set(['G-valid']),
+      })
+    ).toEqual(['G-valid']);
   });
 });

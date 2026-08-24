@@ -1,19 +1,13 @@
-import { IconSearch, IconX } from "@tabler/icons-react";
-import {
-  useEffect,
-  type ComponentProps,
-  type KeyboardEventHandler,
-  type ReactNode,
-  type RefObject,
-} from "react";
-import type { SidebarPreviousSessionItem } from "../shared/session-grid-contract";
-import { SessionHistoryCard } from "./session-history-card";
+import { IconSearch, IconX } from '@tabler/icons-react';
+import { useEffect, type ComponentProps, type KeyboardEventHandler, type ReactNode, type RefObject } from 'react';
+import type { SidebarPreviousSessionItem } from '../shared/session-grid-contract';
+import { SessionHistoryCard } from './session-history-card';
 
 export type SidebarSessionSearchFieldProps = {
   ariaLabel?: string;
-  autoCapitalize?: ComponentProps<"input">["autoCapitalize"];
+  autoCapitalize?: ComponentProps<'input'>['autoCapitalize'];
   autoComplete?: string;
-  autoCorrect?: ComponentProps<"input">["autoCorrect"];
+  autoCorrect?: ComponentProps<'input'>['autoCorrect'];
   clearLabel?: string;
   inputClassName?: string;
   inputRef: RefObject<HTMLInputElement | null>;
@@ -24,22 +18,22 @@ export type SidebarSessionSearchFieldProps = {
   shellClassName?: string;
   setQuery: (query: string) => void;
   shouldFocusOnQueryChange?: (inputElement: HTMLInputElement) => boolean;
-  spellCheck?: ComponentProps<"input">["spellCheck"];
+  spellCheck?: ComponentProps<'input'>['spellCheck'];
   toolbarClassName?: string;
   trailingControl?: ReactNode;
 };
 
 export function SidebarSessionSearchField({
-  ariaLabel = "Search current sessions and sessions to reopen",
+  ariaLabel = 'Search current sessions and sessions to reopen',
   autoCapitalize,
   autoComplete,
   autoCorrect,
-  clearLabel = "Clear session search",
+  clearLabel = 'Clear session search',
   inputClassName,
   inputRef,
   onEmptyBlur,
   onKeyDown,
-  placeholder = "Search sessions",
+  placeholder = 'Search sessions',
   query,
   shellClassName,
   setQuery,
@@ -51,7 +45,7 @@ export function SidebarSessionSearchField({
   const hasQuery = query.length > 0;
   const hasTrailingControl = trailingControl != null;
   const clearQueryAndFocus = () => {
-    setQuery("");
+    setQuery('');
     inputRef.current?.focus();
   };
 
@@ -72,8 +66,8 @@ export function SidebarSessionSearchField({
 
   return (
     <div
-      className={["session-search-toolbar", toolbarClassName].filter(Boolean).join(" ")}
-      data-empty-space-blocking="true"
+      className={['session-search-toolbar', toolbarClassName].filter(Boolean).join(' ')}
+      data-empty-space-blocking='true'
     >
       {/*
        * CDXC:SearchInputs 2026-06-04-02:59:
@@ -90,7 +84,7 @@ export function SidebarSessionSearchField({
        * the Settings modal says no editable field already owns typing focus.
        */}
       <div
-        className={["session-search-input-shell", shellClassName].filter(Boolean).join(" ")}
+        className={['session-search-input-shell', shellClassName].filter(Boolean).join(' ')}
         data-has-query={String(hasQuery)}
         data-has-trailing-control={String(hasTrailingControl)}
       >
@@ -99,9 +93,7 @@ export function SidebarSessionSearchField({
           autoCapitalize={autoCapitalize}
           autoComplete={autoComplete}
           autoCorrect={autoCorrect}
-          className={["group-title-input session-search-input", inputClassName]
-            .filter(Boolean)
-            .join(" ")}
+          className={['group-title-input session-search-input', inputClassName].filter(Boolean).join(' ')}
           onBlur={() => {
             /**
              * CDXC:SidebarSearch 2026-05-08-11:49
@@ -118,7 +110,7 @@ export function SidebarSessionSearchField({
             setQuery(event.target.value);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Escape" && query.length > 0) {
+            if (event.key === 'Escape' && query.length > 0) {
               event.preventDefault();
               event.stopPropagation();
               clearQueryAndFocus();
@@ -129,33 +121,23 @@ export function SidebarSessionSearchField({
           placeholder={placeholder}
           ref={inputRef}
           spellCheck={spellCheck}
-          type="text"
+          type='text'
           value={query}
         />
         {hasQuery ? (
           <button
             aria-label={clearLabel}
-            className="session-search-clear-button"
+            className='session-search-clear-button'
             onClick={clearQueryAndFocus}
-            type="button"
+            type='button'
           >
-            <IconX
-              aria-hidden="true"
-              className="session-search-input-icon"
-              size={16}
-              stroke={1.9}
-            />
+            <IconX aria-hidden='true' className='session-search-input-icon' size={16} stroke={1.9} />
           </button>
         ) : null}
         {hasTrailingControl ? (
-          <span className="session-search-trailing-control">{trailingControl}</span>
+          <span className='session-search-trailing-control'>{trailingControl}</span>
         ) : !hasQuery ? (
-          <IconSearch
-            aria-hidden="true"
-            className="session-search-input-icon"
-            size={16}
-            stroke={1.9}
-          />
+          <IconSearch aria-hidden='true' className='session-search-input-icon' size={16} stroke={1.9} />
         ) : null}
       </div>
     </div>
@@ -182,17 +164,17 @@ export function SidebarPreviousSessionsSearchGroup({
   }
 
   return (
-    <section className="group session-search-previous-group" data-search-results="true">
-      <div className="group-head">
-        <div className="group-title-wrap">
-          <div className="group-title-row">
-            <div className="group-title-handle">
-              <div className="group-title">Reopen a Session</div>
+    <section className='group session-search-previous-group' data-search-results='true'>
+      <div className='group-head'>
+        <div className='group-title-wrap'>
+          <div className='group-title-row'>
+            <div className='group-title-handle'>
+              <div className='group-title'>Reopen a Session</div>
             </div>
           </div>
         </div>
       </div>
-      <div className="group-sessions">
+      <div className='group-sessions'>
         {previousSessions.map((session) => (
           <SessionHistoryCard
             key={session.historyId}

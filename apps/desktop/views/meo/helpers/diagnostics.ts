@@ -17,7 +17,7 @@ const severityClasses = [
   'meo-diagnostic-error',
   'meo-diagnostic-warning',
   'meo-diagnostic-info',
-  'meo-diagnostic-hint'
+  'meo-diagnostic-hint',
 ];
 
 function diagnosticTitle(diagnostic: EditorDiagnostic): string {
@@ -38,9 +38,9 @@ function buildDiagnosticDecorations(docLength: number, diagnostics: EditorDiagno
   }
 
   const builder = new RangeSetBuilder<Decoration>();
-  const sortedDiagnostics = [...diagnostics].sort((left, right) => (
+  const sortedDiagnostics = [...diagnostics].sort((left, right) =>
     left.from === right.from ? left.to - right.to : left.from - right.from
-  ));
+  );
   for (const diagnostic of sortedDiagnostics) {
     const from = Math.max(0, Math.min(Math.floor(diagnostic.from), docLength));
     const to = Math.max(from, Math.min(Math.floor(diagnostic.to), docLength));
@@ -55,8 +55,8 @@ function buildDiagnosticDecorations(docLength: number, diagnostics: EditorDiagno
       Decoration.mark({
         class: `meo-diagnostic ${severityClass}`,
         attributes: {
-          title: diagnosticTitle(diagnostic)
-        }
+          title: diagnosticTitle(diagnostic),
+        },
       })
     );
   }
@@ -99,10 +99,10 @@ export const diagnosticDataField = StateField.define<EditorDiagnostic[]>({
       diagnostics.map((diagnostic) => ({
         ...diagnostic,
         from: tr.changes.mapPos(diagnostic.from),
-        to: tr.changes.mapPos(diagnostic.to)
+        to: tr.changes.mapPos(diagnostic.to),
       }))
     );
-  }
+  },
 });
 
 export const diagnosticField = StateField.define<DecorationSet>({
@@ -122,5 +122,5 @@ export const diagnosticField = StateField.define<DecorationSet>({
   },
   provide(field) {
     return EditorView.decorations.from(field);
-  }
+  },
 });

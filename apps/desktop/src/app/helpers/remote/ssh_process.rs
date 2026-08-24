@@ -28,7 +28,9 @@ pub(crate) const TEMP_REMOTE_LOCAL_READY_TITLE: &str = "TEMP_REMOTE_LOCAL_READY_
 pub(crate) const TEMP_REMOTE_SSH_READY_TITLE: &str = "TEMP_REMOTE_SSH_READY_20260814";
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_read_remote_ssh_password_from_keychain(remote_machine_id: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn gpui_read_remote_ssh_password_from_keychain(
+    remote_machine_id: &str,
+) -> Result<Vec<u8>, String> {
     const PASSWORD_CAPACITY: usize = 4_096;
     let remote_machine_id = std::ffi::CString::new(remote_machine_id)
         .map_err(|_| "Could not read the saved SSH password from Keychain.".to_string())?;
@@ -361,4 +363,3 @@ pub(crate) fn gpui_terminate_remote_process(child: &mut Child) {
         let _ = kill(child.id() as i32, SIGTERM);
     }
 }
-

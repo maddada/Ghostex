@@ -1,49 +1,49 @@
 type SessionDragData = {
   groupId: string;
-  kind: "session";
+  kind: 'session';
   sessionId: string;
 };
 
 type GroupDropData = {
   groupId: string;
-  kind: "group";
+  kind: 'group';
 };
 
 export type SidebarGroupDropTarget = {
   groupId: string;
-  position: "before" | "after";
+  position: 'before' | 'after';
 };
 
 type CreateGroupDropData = {
-  kind: "create-group";
+  kind: 'create-group';
 };
 
 type RemoteMachineDragData = {
-  kind: "remote-machine";
+  kind: 'remote-machine';
   remoteMachineId: string;
 };
 
 type ProjectCollectionDragData = {
   collectionId: string;
-  kind: "project-collection";
+  kind: 'project-collection';
 };
 
 export type SidebarSessionDropTarget =
   | {
       groupId: string;
-      kind: "group";
-      position: "start" | "end";
+      kind: 'group';
+      position: 'start' | 'end';
     }
   | {
       groupId: string;
-      kind: "session";
-      position: "before" | "after";
+      kind: 'session';
+      position: 'before' | 'after';
       sessionId: string;
     };
 
 type SessionDropTargetData = {
   dropTarget: SidebarSessionDropTarget;
-  kind: "session-drop-target";
+  kind: 'session-drop-target';
 };
 
 export type SidebarDropData =
@@ -54,13 +54,13 @@ export type SidebarDropData =
   | CreateGroupDropData
   | SessionDropTargetData;
 
-const SIDEBAR_GROUP_SELECTOR = "[data-sidebar-group-id]";
-const SIDEBAR_SESSION_SELECTOR = "[data-sidebar-session-id]";
+const SIDEBAR_GROUP_SELECTOR = '[data-sidebar-group-id]';
+const SIDEBAR_SESSION_SELECTOR = '[data-sidebar-session-id]';
 
 export function createSessionDragData(groupId: string, sessionId: string): SessionDragData {
   return {
     groupId,
-    kind: "session",
+    kind: 'session',
     sessionId,
   };
 }
@@ -68,43 +68,39 @@ export function createSessionDragData(groupId: string, sessionId: string): Sessi
 export function createGroupDropData(groupId: string): GroupDropData {
   return {
     groupId,
-    kind: "group",
+    kind: 'group',
   };
 }
 
 export function createCreateGroupDropData(): CreateGroupDropData {
   return {
-    kind: "create-group",
+    kind: 'create-group',
   };
 }
 
 export function createRemoteMachineDragData(remoteMachineId: string): RemoteMachineDragData {
   return {
-    kind: "remote-machine",
+    kind: 'remote-machine',
     remoteMachineId,
   };
 }
 
-export function createProjectCollectionDragData(
-  collectionId: string,
-): ProjectCollectionDragData {
+export function createProjectCollectionDragData(collectionId: string): ProjectCollectionDragData {
   return {
     collectionId,
-    kind: "project-collection",
+    kind: 'project-collection',
   };
 }
 
-export function createSessionDropTargetData(
-  dropTarget: SidebarSessionDropTarget,
-): SessionDropTargetData {
+export function createSessionDropTargetData(dropTarget: SidebarSessionDropTarget): SessionDropTargetData {
   return {
     dropTarget,
-    kind: "session-drop-target",
+    kind: 'session-drop-target',
   };
 }
 
 export function createSessionDropTargetId(dropTarget: SidebarSessionDropTarget): string {
-  if (dropTarget.kind === "group") {
+  if (dropTarget.kind === 'group') {
     return `session-drop-target:${dropTarget.groupId}:group:${dropTarget.position}`;
   }
 
@@ -117,52 +113,52 @@ export function getSidebarDropData(candidate: unknown): SidebarDropData | undefi
   }
 
   const data = candidate.data;
-  if (!isObjectRecord(data) || !("kind" in data)) {
+  if (!isObjectRecord(data) || !('kind' in data)) {
     return undefined;
   }
 
   switch (data.kind) {
-    case "session":
-      return typeof data.groupId === "string" && typeof data.sessionId === "string"
+    case 'session':
+      return typeof data.groupId === 'string' && typeof data.sessionId === 'string'
         ? {
             groupId: data.groupId,
-            kind: "session",
+            kind: 'session',
             sessionId: data.sessionId,
           }
         : undefined;
 
-    case "group":
-      return typeof data.groupId === "string"
+    case 'group':
+      return typeof data.groupId === 'string'
         ? {
             groupId: data.groupId,
-            kind: "group",
+            kind: 'group',
           }
         : undefined;
 
-    case "create-group":
-      return { kind: "create-group" };
+    case 'create-group':
+      return { kind: 'create-group' };
 
-    case "remote-machine":
-      return typeof data.remoteMachineId === "string"
+    case 'remote-machine':
+      return typeof data.remoteMachineId === 'string'
         ? {
-            kind: "remote-machine",
+            kind: 'remote-machine',
             remoteMachineId: data.remoteMachineId,
           }
         : undefined;
 
-    case "project-collection":
-      return typeof data.collectionId === "string"
+    case 'project-collection':
+      return typeof data.collectionId === 'string'
         ? {
             collectionId: data.collectionId,
-            kind: "project-collection",
+            kind: 'project-collection',
           }
         : undefined;
 
-    case "session-drop-target":
+    case 'session-drop-target':
       return isSidebarSessionDropTarget(data.dropTarget)
         ? {
             dropTarget: data.dropTarget,
-            kind: "session-drop-target",
+            kind: 'session-drop-target',
           }
         : undefined;
 
@@ -172,20 +168,18 @@ export function getSidebarDropData(candidate: unknown): SidebarDropData | undefi
 }
 
 export function getSidebarSessionDropTarget(
-  candidate: SidebarDropData | undefined,
+  candidate: SidebarDropData | undefined
 ): SidebarSessionDropTarget | undefined {
-  return candidate?.kind === "session-drop-target" ? candidate.dropTarget : undefined;
+  return candidate?.kind === 'session-drop-target' ? candidate.dropTarget : undefined;
 }
 
-export function getClientPoint(
-  event: Event | null | undefined,
-): { x: number; y: number } | undefined {
+export function getClientPoint(event: Event | null | undefined): { x: number; y: number } | undefined {
   if (
     !event ||
-    !("clientX" in event) ||
-    !("clientY" in event) ||
-    typeof event.clientX !== "number" ||
-    typeof event.clientY !== "number"
+    !('clientX' in event) ||
+    !('clientY' in event) ||
+    typeof event.clientX !== 'number' ||
+    typeof event.clientY !== 'number'
   ) {
     return undefined;
   }
@@ -197,12 +191,12 @@ export function getClientPoint(
 }
 
 export function getSidebarSessionDropTargetAtPoint(
-  documentLike: Pick<Document, "elementFromPoint"> & Partial<Pick<Document, "elementsFromPoint">>,
+  documentLike: Pick<Document, 'elementFromPoint'> & Partial<Pick<Document, 'elementsFromPoint'>>,
   x: number,
-  y: number,
+  y: number
 ): SidebarSessionDropTarget | undefined {
   const elements =
-    typeof documentLike.elementsFromPoint === "function"
+    typeof documentLike.elementsFromPoint === 'function'
       ? documentLike.elementsFromPoint(x, y)
       : [documentLike.elementFromPoint(x, y)];
 
@@ -221,7 +215,7 @@ export function getSidebarSessionDropTargetAtPoint(
 }
 
 export function getSidebarSessionDropTargetFromEvent(
-  event: Event | null | undefined,
+  event: Event | null | undefined
 ): SidebarSessionDropTarget | undefined {
   const point = getClientPoint(event);
   const target = event?.target;
@@ -234,12 +228,12 @@ export function getSidebarSessionDropTargetFromEvent(
 }
 
 export function getSidebarGroupDropTargetAtPoint(
-  documentLike: Pick<Document, "elementFromPoint"> & Partial<Pick<Document, "elementsFromPoint">>,
+  documentLike: Pick<Document, 'elementFromPoint'> & Partial<Pick<Document, 'elementsFromPoint'>>,
   x: number,
-  y: number,
+  y: number
 ): SidebarGroupDropTarget | undefined {
   const elements =
-    typeof documentLike.elementsFromPoint === "function"
+    typeof documentLike.elementsFromPoint === 'function'
       ? documentLike.elementsFromPoint(x, y)
       : [documentLike.elementFromPoint(x, y)];
 
@@ -258,7 +252,7 @@ export function getSidebarGroupDropTargetAtPoint(
 }
 
 export function getSidebarGroupDropTargetFromEvent(
-  event: Event | null | undefined,
+  event: Event | null | undefined
 ): SidebarGroupDropTarget | undefined {
   const point = getClientPoint(event);
   const target = event?.target;
@@ -273,7 +267,7 @@ export function getSidebarGroupDropTargetFromEvent(
 export function moveGroupIdsByDropTarget(
   groupIds: readonly string[],
   sourceGroupId: string,
-  target: SidebarGroupDropTarget,
+  target: SidebarGroupDropTarget
 ): string[] {
   const sourceIndex = groupIds.indexOf(sourceGroupId);
   const targetIndex = groupIds.indexOf(target.groupId);
@@ -285,7 +279,7 @@ export function moveGroupIdsByDropTarget(
     return [...groupIds];
   }
 
-  const insertIndex = targetIndex + (target.position === "after" ? 1 : 0);
+  const insertIndex = targetIndex + (target.position === 'after' ? 1 : 0);
   const adjustedInsertIndex = insertIndex > sourceIndex ? insertIndex - 1 : insertIndex;
   const nextGroupIds = groupIds.filter((groupId) => groupId !== sourceGroupId);
   nextGroupIds.splice(clampIndex(adjustedInsertIndex, nextGroupIds.length), 0, sourceGroupId);
@@ -295,7 +289,7 @@ export function moveGroupIdsByDropTarget(
 export function moveSessionIdsByDropTarget(
   sessionIdsByGroup: Record<string, string[]>,
   sessionId: string,
-  target: SidebarSessionDropTarget,
+  target: SidebarSessionDropTarget
 ): Record<string, string[]> {
   const sourceGroupId = findSessionGroupId(sessionIdsByGroup, sessionId);
   if (!sourceGroupId) {
@@ -351,10 +345,10 @@ export function moveSessionIdsByDropTarget(
 
 function getTargetInsertIndex(
   targetSessionIds: readonly string[],
-  target: SidebarSessionDropTarget,
+  target: SidebarSessionDropTarget
 ): number | undefined {
-  if (target.kind === "group") {
-    return target.position === "end" ? targetSessionIds.length : 0;
+  if (target.kind === 'group') {
+    return target.position === 'end' ? targetSessionIds.length : 0;
   }
 
   const hoveredSessionIndex = targetSessionIds.indexOf(target.sessionId);
@@ -362,7 +356,7 @@ function getTargetInsertIndex(
     return undefined;
   }
 
-  return hoveredSessionIndex + (target.position === "after" ? 1 : 0);
+  return hoveredSessionIndex + (target.position === 'after' ? 1 : 0);
 }
 
 function clampIndex(index: number, max: number): number {
@@ -371,16 +365,14 @@ function clampIndex(index: number, max: number): number {
 
 function findSessionGroupId(
   sessionIdsByGroup: Record<string, readonly string[]>,
-  sessionId: string,
+  sessionId: string
 ): string | undefined {
-  return Object.entries(sessionIdsByGroup).find(([, sessionIds]) =>
-    sessionIds.includes(sessionId),
-  )?.[0];
+  return Object.entries(sessionIdsByGroup).find(([, sessionIds]) => sessionIds.includes(sessionId))?.[0];
 }
 
 function getSidebarSessionDropTargetFromElement(
   element: Element,
-  clientY: number | undefined,
+  clientY: number | undefined
 ): SidebarSessionDropTarget | undefined {
   const sessionElement = element.closest<HTMLElement>(SIDEBAR_SESSION_SELECTOR);
   if (sessionElement) {
@@ -396,8 +388,7 @@ function getSidebarSessionDropTargetFromElement(
        * Treat the midpoint as the first pixel of the lower half so center/down
        * shows an after-line and center/up shows a before-line.
        */
-      const position: "after" | "before" =
-        relativeY >= bounds.top + bounds.height / 2 ? "after" : "before";
+      const position: 'after' | 'before' = relativeY >= bounds.top + bounds.height / 2 ? 'after' : 'before';
       return canonicalizeSessionRowBoundary(groupElement, groupId, sessionElement, sessionId, position);
     }
   }
@@ -430,8 +421,8 @@ function getSidebarSessionDropTargetFromElement(
         if (clientY < rowBounds.top + rowBounds.height / 2) {
           return {
             groupId,
-            kind: "session",
-            position: "before",
+            kind: 'session',
+            position: 'before',
             sessionId: rowSessionId,
           };
         }
@@ -441,8 +432,8 @@ function getSidebarSessionDropTargetFromElement(
       if (lastRowSessionId) {
         return {
           groupId,
-          kind: "session",
-          position: "after",
+          kind: 'session',
+          position: 'after',
           sessionId: lastRowSessionId,
         };
       }
@@ -453,14 +444,12 @@ function getSidebarSessionDropTargetFromElement(
   const relativeY = clientY ?? bounds.top + bounds.height / 2;
   return {
     groupId,
-    kind: "group",
-    position: relativeY > bounds.top + bounds.height / 2 ? "end" : "start",
+    kind: 'group',
+    position: relativeY > bounds.top + bounds.height / 2 ? 'end' : 'start',
   };
 }
 
-export function canonicalizeSidebarSessionDropTarget(
-  target: SidebarSessionDropTarget,
-): SidebarSessionDropTarget {
+export function canonicalizeSidebarSessionDropTarget(target: SidebarSessionDropTarget): SidebarSessionDropTarget {
   /*
    * CDXC:SidebarDragDrop 2026-07-02-13:05:
    * Targets resolved from dnd-kit drop data bypass the DOM hit-testing path,
@@ -468,13 +457,13 @@ export function canonicalizeSidebarSessionDropTarget(
    * to the same "before next row" form as pointer hit testing so every
    * resolution path draws the boundary line in the same spot.
    */
-  if (target.kind !== "session" || target.position !== "after" || typeof document === "undefined") {
+  if (target.kind !== 'session' || target.position !== 'after' || typeof document === 'undefined') {
     return target;
   }
 
-  const groupElement = Array.from(
-    document.querySelectorAll<HTMLElement>(SIDEBAR_GROUP_SELECTOR),
-  ).find((candidate) => candidate.dataset.sidebarGroupId === target.groupId);
+  const groupElement = Array.from(document.querySelectorAll<HTMLElement>(SIDEBAR_GROUP_SELECTOR)).find(
+    (candidate) => candidate.dataset.sidebarGroupId === target.groupId
+  );
   if (!groupElement) {
     return target;
   }
@@ -485,8 +474,8 @@ export function canonicalizeSidebarSessionDropTarget(
   return nextRowSessionId
     ? {
         groupId: target.groupId,
-        kind: "session",
-        position: "before",
+        kind: 'session',
+        position: 'before',
         sessionId: nextRowSessionId,
       }
     : target;
@@ -497,10 +486,10 @@ function canonicalizeSessionRowBoundary(
   groupId: string,
   sessionElement: HTMLElement,
   sessionId: string,
-  position: "after" | "before",
+  position: 'after' | 'before'
 ): SidebarSessionDropTarget {
-  if (position === "before") {
-    return { groupId, kind: "session", position, sessionId };
+  if (position === 'before') {
+    return { groupId, kind: 'session', position, sessionId };
   }
 
   /*
@@ -514,36 +503,31 @@ function canonicalizeSessionRowBoundary(
   const rowIndex = rows.indexOf(sessionElement);
   const nextRowSessionId = rowIndex >= 0 ? rows[rowIndex + 1]?.dataset.sidebarSessionId : undefined;
   return nextRowSessionId
-    ? { groupId, kind: "session", position: "before", sessionId: nextRowSessionId }
-    : { groupId, kind: "session", position: "after", sessionId };
+    ? { groupId, kind: 'session', position: 'before', sessionId: nextRowSessionId }
+    : { groupId, kind: 'session', position: 'after', sessionId };
 }
 
 function getVisibleSessionRowElements(groupElement: HTMLElement): HTMLElement[] {
-  if (typeof groupElement.querySelectorAll !== "function") {
+  if (typeof groupElement.querySelectorAll !== 'function') {
     return [];
   }
 
-  return Array.from(groupElement.querySelectorAll<HTMLElement>(SIDEBAR_SESSION_SELECTOR)).filter(
-    (row) => {
-      if (
-        row.dataset.projectSessionListMoreRow === "true" ||
-        row.dataset.projectSessionListOverflow === "true"
-      ) {
-        return false;
-      }
+  return Array.from(groupElement.querySelectorAll<HTMLElement>(SIDEBAR_SESSION_SELECTOR)).filter((row) => {
+    if (row.dataset.projectSessionListMoreRow === 'true' || row.dataset.projectSessionListOverflow === 'true') {
+      return false;
+    }
 
-      if (row.closest("[data-dnd-dragging]") !== null) {
-        return false;
-      }
+    if (row.closest('[data-dnd-dragging]') !== null) {
+      return false;
+    }
 
-      return row.getBoundingClientRect().height > 0;
-    },
-  );
+    return row.getBoundingClientRect().height > 0;
+  });
 }
 
 function getSidebarGroupDropTargetFromElement(
   element: Element,
-  clientY: number | undefined,
+  clientY: number | undefined
 ): SidebarGroupDropTarget | undefined {
   const groupElement = element.closest<HTMLElement>(SIDEBAR_GROUP_SELECTOR);
   const groupId = groupElement?.dataset.sidebarGroupId;
@@ -562,24 +546,24 @@ function getSidebarGroupDropTargetFromElement(
   const relativeY = clientY ?? bounds.top + bounds.height / 2;
   return {
     groupId,
-    position: relativeY > bounds.top + bounds.height / 2 ? "after" : "before",
+    position: relativeY > bounds.top + bounds.height / 2 ? 'after' : 'before',
   };
 }
 
 function getSidebarGroupDropBoundsElement(groupElement: HTMLElement): HTMLElement {
-  if (typeof groupElement.querySelector !== "function") {
+  if (typeof groupElement.querySelector !== 'function') {
     return groupElement;
   }
 
-  return groupElement.querySelector<HTMLElement>(".group-head") ?? groupElement;
+  return groupElement.querySelector<HTMLElement>('.group-head') ?? groupElement;
 }
 
 function hasData(candidate: unknown): candidate is { data?: unknown } {
-  return isObjectRecord(candidate) && "data" in candidate;
+  return isObjectRecord(candidate) && 'data' in candidate;
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
 function isDraggingElement(element: Element): boolean {
@@ -587,21 +571,21 @@ function isDraggingElement(element: Element): boolean {
 }
 
 function isDomElement(candidate: unknown): candidate is Element {
-  return typeof candidate === "object" && candidate !== null && "closest" in candidate;
+  return typeof candidate === 'object' && candidate !== null && 'closest' in candidate;
 }
 
 function isSidebarSessionDropTarget(candidate: unknown): candidate is SidebarSessionDropTarget {
-  if (!isObjectRecord(candidate) || typeof candidate.groupId !== "string") {
+  if (!isObjectRecord(candidate) || typeof candidate.groupId !== 'string') {
     return false;
   }
 
-  if (candidate.kind === "group") {
-    return candidate.position === "start" || candidate.position === "end";
+  if (candidate.kind === 'group') {
+    return candidate.position === 'start' || candidate.position === 'end';
   }
 
   return (
-    candidate.kind === "session" &&
-    typeof candidate.sessionId === "string" &&
-    (candidate.position === "before" || candidate.position === "after")
+    candidate.kind === 'session' &&
+    typeof candidate.sessionId === 'string' &&
+    (candidate.position === 'before' || candidate.position === 'after')
   );
 }

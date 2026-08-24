@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy)]
 pub(crate) struct GpuiNativeTitlebarTip {
     pub(crate) body: &'static str,
@@ -13,7 +12,6 @@ pub(crate) struct GpuiNativeTitlebarTip {
     pub(crate) id: &'static str,
     pub(crate) title: &'static str,
 }
-
 
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiNativeResourceProcess {
@@ -25,7 +23,6 @@ pub(crate) struct GpuiNativeResourceProcess {
     pub(crate) system_pid: u32,
 }
 
-
 /// One TCP listener sampled for the titlebar Resources "Dev Servers" section.
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiNativeResourceServer {
@@ -34,7 +31,6 @@ pub(crate) struct GpuiNativeResourceServer {
     pub(crate) port: u16,
     pub(crate) url: String,
 }
-
 
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiNativeResourceRow {
@@ -51,7 +47,6 @@ pub(crate) struct GpuiNativeResourceRow {
     pub(crate) url: Option<String>,
 }
 
-
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiNativeResourceChild {
     pub(crate) cpu: f64,
@@ -59,7 +54,6 @@ pub(crate) struct GpuiNativeResourceChild {
     pub(crate) memory_mb: f64,
     pub(crate) pid: u32,
 }
-
 
 #[derive(Clone, Debug)]
 pub(crate) enum GpuiNativeResourceAction {
@@ -70,7 +64,6 @@ pub(crate) enum GpuiNativeResourceAction {
     Server,
     Session,
 }
-
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiNativeResourcesSnapshot {
@@ -87,7 +80,6 @@ pub(crate) struct GpuiNativeResourcesSnapshot {
     pub(crate) total_memory_mb: f64,
 }
 
-
 /// Fixed selector set for titlebar Git menu rows. Menu selections dispatch
 /// only one of these validated selectors back into the sidebar runtime's
 /// `runSidebarGitAction` path; labels, branch text, and reasons from the
@@ -102,7 +94,6 @@ pub(crate) enum GpuiTitlebarGitMenuActionId {
     MultiRelease,
     Release,
 }
-
 
 impl GpuiTitlebarGitMenuActionId {
     pub(crate) fn from_selector(value: &str) -> Option<Self> {
@@ -131,7 +122,6 @@ impl GpuiTitlebarGitMenuActionId {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiTitlebarGitMenuRow {
     pub(crate) action: GpuiTitlebarGitMenuActionId,
@@ -139,7 +129,6 @@ pub(crate) struct GpuiTitlebarGitMenuRow {
     pub(crate) label: String,
     pub(crate) primary: bool,
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiTitlebarGitMenuState {
@@ -156,8 +145,9 @@ pub(crate) struct GpuiTitlebarGitMenuState {
     pub(crate) sync_remote_disabled: bool,
 }
 
-
-pub(crate) fn gpui_titlebar_git_menu_state_from_payload(payload: &str) -> Option<GpuiTitlebarGitMenuState> {
+pub(crate) fn gpui_titlebar_git_menu_state_from_payload(
+    payload: &str,
+) -> Option<GpuiTitlebarGitMenuState> {
     let value = serde_json::from_str::<serde_json::Value>(payload).ok()?;
     let object = value.as_object()?;
     if object.get("type").and_then(serde_json::Value::as_str)
@@ -230,7 +220,6 @@ pub(crate) fn gpui_titlebar_git_menu_state_from_payload(payload: &str) -> Option
             == Some(true),
     })
 }
-
 
 pub(crate) fn bounded_gpui_titlebar_git_menu_text(value: &str, max_chars: usize) -> Option<String> {
     let trimmed = value.trim();

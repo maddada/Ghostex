@@ -1,4 +1,4 @@
-import { PointerActivationConstraints } from "@dnd-kit/dom";
+import { PointerActivationConstraints } from '@dnd-kit/dom';
 
 const SIDEBAR_REORDER_HOLD_DELAY_MS = 250;
 const SIDEBAR_REORDER_HOLD_TOLERANCE_PX = 12;
@@ -12,10 +12,8 @@ const TOUCH_SIDEBAR_REORDER_HOLD_TOLERANCE_PX = 12;
  * Mouse users can either hold briefly or move decisively. Touch stays
  * hold-only so scrolling cannot turn into a reorder gesture.
  */
-export function getSidebarReorderActivationConstraints(
-  event: Pick<PointerEvent, "pointerType">,
-) {
-  if (event.pointerType === "touch") {
+export function getSidebarReorderActivationConstraints(event: Pick<PointerEvent, 'pointerType'>) {
+  if (event.pointerType === 'touch') {
     return [
       new PointerActivationConstraints.Delay({
         tolerance: TOUCH_SIDEBAR_REORDER_HOLD_TOLERANCE_PX,

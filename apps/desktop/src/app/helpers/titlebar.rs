@@ -11,7 +11,6 @@ use std::{
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Security::Cryptography::{
     BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
@@ -21,21 +20,21 @@ use anyhow::{Context as _, Result};
 use futures::StreamExt as _;
 use gpui::http_client::HttpRequestExt as _;
 use gpui::{
-    Action, App, AppContext as _, Asset, Bounds, Element, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div, point, prelude::FluentBuilder as _, px, rgb, size, svg,
+    Action, App, AppContext as _, Asset, Bounds, Element, FontWeight, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div,
+    point, prelude::FluentBuilder as _, px, rgb, size, svg,
 };
-use gpui_component::{
-    Theme, ThemeMode,
-    h_flex,
-    menu::PopupMenu,
-    tooltip::Tooltip,
-    v_flex,
-};
+use gpui_component::{Theme, ThemeMode, h_flex, menu::PopupMenu, tooltip::Tooltip, v_flex};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
 use crate::app::helpers::*;
 use crate::*;
 
-pub(crate) fn titlebar_svg_icon(path: &'static str, icon_size: f32, color: Hsla) -> impl IntoElement {
+pub(crate) fn titlebar_svg_icon(
+    path: &'static str,
+    icon_size: f32,
+    color: Hsla,
+) -> impl IntoElement {
     svg().size(px(icon_size)).path(path).text_color(color)
 }
 
@@ -641,7 +640,10 @@ pub(crate) fn titlebar_popup_tip_row(
         )
 }
 
-pub(crate) fn titlebar_popup_resource_row(row: GpuiNativeResourceRow, disabled: bool) -> impl IntoElement {
+pub(crate) fn titlebar_popup_resource_row(
+    row: GpuiNativeResourceRow,
+    disabled: bool,
+) -> impl IntoElement {
     let foreground = if disabled {
         titlebar_popup_menu_disabled_text_color()
     } else {
@@ -856,7 +858,10 @@ pub(crate) fn titlebar_popup_git_section_label(label: &'static str) -> impl Into
         .child(label)
 }
 
-pub(crate) fn titlebar_popup_git_branch_menu_row(branch: String, disabled: bool) -> impl IntoElement {
+pub(crate) fn titlebar_popup_git_branch_menu_row(
+    branch: String,
+    disabled: bool,
+) -> impl IntoElement {
     titlebar_popup_git_status_menu_row(
         TITLEBAR_ICON_GIT_COMMIT,
         "Branch".to_string(),
@@ -865,7 +870,10 @@ pub(crate) fn titlebar_popup_git_branch_menu_row(branch: String, disabled: bool)
     )
 }
 
-pub(crate) fn titlebar_popup_git_changes_menu_row(additions: u64, deletions: u64) -> impl IntoElement {
+pub(crate) fn titlebar_popup_git_changes_menu_row(
+    additions: u64,
+    deletions: u64,
+) -> impl IntoElement {
     titlebar_popup_git_status_menu_row(
         TITLEBAR_ICON_CODE,
         "Changes".to_string(),
@@ -1668,7 +1676,10 @@ pub(crate) fn gpui_titlebar_resources_browser_url_allowed(url: &str) -> bool {
             .is_some_and(|state| gpui_titlebar_resources_portless_host_allowed(host, state))
 }
 
-pub(crate) fn gpui_titlebar_resources_portless_host_allowed(host: &str, state: &serde_json::Value) -> bool {
+pub(crate) fn gpui_titlebar_resources_portless_host_allowed(
+    host: &str,
+    state: &serde_json::Value,
+) -> bool {
     let presentation = state.get("presentation");
     if presentation
         .and_then(|presentation| presentation.get("routePreviewStatus"))
@@ -2485,7 +2496,9 @@ pub(crate) fn titlebar_mode_switcher_items(
     availability.titlebar_mode_switcher_items()
 }
 
-pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(mode: TitlebarMode) -> Option<&'static str> {
+pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(
+    mode: TitlebarMode,
+) -> Option<&'static str> {
     match mode {
         TitlebarMode::Source => Some(SOURCE_CODE_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Browser => Some(BROWSER_VIEW_TAB_HIDDEN_SETTINGS_KEY),
@@ -2538,4 +2551,3 @@ pub(crate) fn gpui_titlebar_git_action_script(message: &serde_json::Value) -> St
         "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onTitlebarGitAction==='function'){{bridge.onTitlebarGitAction(payload);}}else{{const pending=Array.isArray(bridge.pendingTitlebarGitActions)?bridge.pendingTitlebarGitActions:[];pending.push(payload);bridge.pendingTitlebarGitActions=pending;}}}})(); undefined;"
     )
 }
-

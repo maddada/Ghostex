@@ -7,34 +7,33 @@ export interface SessionChatEmptyStateCopy {
 }
 
 export function sessionChatEmptyStateCopy(
-  kind: "loading" | "empty" | "error" | "unsupported" | "starting",
-  agentLabel?: string | null,
+  kind: 'loading' | 'empty' | 'error' | 'unsupported' | 'starting',
+  agentLabel?: string | null
 ): SessionChatEmptyStateCopy {
   switch (kind) {
-    case "loading":
+    case 'loading':
       return {
-        detail: "Reading the agent transcript.",
-        title: "Loading conversation…",
+        detail: 'Reading the agent transcript.',
+        title: 'Loading conversation…',
       };
-    case "empty": {
-      const agent = agentLabel?.trim() || "the agent";
+    case 'empty': {
+      const agent = agentLabel?.trim() || 'the agent';
       return {
         detail: `Ask ${agent} to inspect code, explain output, or make a change.`,
         title: `Start a chat with ${agent}`,
       };
     }
-    case "error":
+    case 'error':
       return {
-        detail:
-          "The transcript could not be read. Toggle back to the terminal to keep working.",
-        title: "Could not load conversation",
+        detail: 'The transcript could not be read. Toggle back to the terminal to keep working.',
+        title: 'Could not load conversation',
       };
-    case "unsupported":
+    case 'unsupported':
       return {
-        detail: "This terminal is not running a recognized coding agent.",
-        title: "No conversation here",
+        detail: 'This terminal is not running a recognized coding agent.',
+        title: 'No conversation here',
       };
-    case "starting":
-      return sessionChatEmptyStateCopy("loading", agentLabel);
+    case 'starting':
+      return sessionChatEmptyStateCopy('loading', agentLabel);
   }
 }

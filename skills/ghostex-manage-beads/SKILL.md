@@ -68,7 +68,7 @@ gx board start-work <bead-id> [--agent <agentId>] [--project-id <id>] [--json]
 
 - **The command is the dispatch.** It creates and starts the visible worker
   session in the bead's board project, sends the canonical bead work prompt,
-  and links the conversation to the card. Call it *instead of* launching a
+  and links the conversation to the card. Call it _instead of_ launching a
   worker session yourself — it is not a preparation step before separately
   starting another worker. Calling it and then starting your own worker puts
   two workers on the same card.

@@ -1,6 +1,6 @@
-import type { SidebarSessionItem } from "../shared/session-grid-contract";
+import type { SidebarSessionItem } from '../shared/session-grid-contract';
 
-type ConnectorEligibleSession = Pick<SidebarSessionItem, "sessionId">;
+type ConnectorEligibleSession = Pick<SidebarSessionItem, 'sessionId'>;
 
 export function shouldShowSessionGroupConnector({
   sessions,

@@ -6,26 +6,21 @@ import {
   IconFile,
   IconFolderOpen,
   IconRefresh,
-} from "@tabler/icons-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import { Button } from "@/packages/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/packages/components/ui/dialog";
-import { Input } from "@/packages/components/ui/input";
-import { ScrollArea } from "@/packages/components/ui/scroll-area";
-import { Separator } from "@/packages/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/packages/components/ui/tabs";
-import { Textarea } from "@/packages/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/packages/components/ui/tooltip";
-import { cn } from "@/packages/components/utils";
-import { getBrandAgentLogoStyle } from "./agent-logos";
-import type { WebviewApi } from "./webview-api";
-import { applySavedAgentsHubContents } from "../shared/agents-hub-catalog";
+} from '@tabler/icons-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Button } from '@/packages/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
+import { Input } from '@/packages/components/ui/input';
+import { ScrollArea } from '@/packages/components/ui/scroll-area';
+import { Separator } from '@/packages/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/packages/components/ui/tabs';
+import { Textarea } from '@/packages/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/packages/components/ui/tooltip';
+import { cn } from '@/packages/components/utils';
+import { getBrandAgentLogoStyle } from './agent-logos';
+import type { WebviewApi } from './webview-api';
+import { applySavedAgentsHubContents } from '../shared/agents-hub-catalog';
 import type {
   AgentsHubCatalogMessage,
   AgentsHubFile,
@@ -33,7 +28,7 @@ import type {
   AgentsHubGroup,
   AgentsHubProfile,
   AgentsHubTab,
-} from "../shared/session-grid-contract";
+} from '../shared/session-grid-contract';
 
 type MonacoAmdRequire = {
   (deps: string[], callback: () => void): void;
@@ -47,7 +42,7 @@ declare global {
       editor: {
         create: (
           element: HTMLElement,
-          options: Record<string, unknown>,
+          options: Record<string, unknown>
         ) => {
           dispose: () => void;
           getModel: () => unknown;
@@ -63,10 +58,10 @@ declare global {
 }
 
 const tabLabels: Record<AgentsHubTab, string> = {
-  configs: "Configs & MCPs",
-  hooks: "Hooks",
-  mds: "MDs",
-  skills: "Skills",
+  configs: 'Configs & MCPs',
+  hooks: 'Hooks',
+  mds: 'MDs',
+  skills: 'Skills',
 };
 
 const emptyGroupsByTab: Record<AgentsHubTab, AgentsHubGroup[]> = {
@@ -104,9 +99,9 @@ export function AgentsHubModal({
   return (
     <TooltipProvider>
       <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-        <DialogContent className="agents-hub-dialog ghostex-settings-shadcn" showCloseButton={false}>
-          <DialogHeader className="ghostex-modal-heading-bar agents-hub-header">
-            <DialogTitle className="ghostex-modal-heading-title agents-hub-title">
+        <DialogContent className='agents-hub-dialog ghostex-settings-shadcn' showCloseButton={false}>
+          <DialogHeader className='ghostex-modal-heading-bar agents-hub-header'>
+            <DialogTitle className='ghostex-modal-heading-title agents-hub-title'>
               {/*
                * CDXC:ExperimentalFeatures 2026-06-28-07:41:
                * Agents Hub is no longer gated by Enable Experimental Features,
@@ -131,7 +126,7 @@ export function AgentsHubModal({
 function AgentsHubSurface({
   catalog,
   fileContent,
-  initialTab = "mds",
+  initialTab = 'mds',
   isOpen,
   vscode,
 }: {
@@ -142,12 +137,8 @@ function AgentsHubSurface({
   vscode: WebviewApi;
 }) {
   const [fileContentsByPath, setFileContentsByPath] = useState<Record<string, string>>({});
-  const [fileContentErrorsByPath, setFileContentErrorsByPath] = useState<Record<string, string>>(
-    {},
-  );
-  const [pendingFileContentRequestsByPath, setPendingFileContentRequestsByPath] = useState<
-    Record<string, string>
-  >({});
+  const [fileContentErrorsByPath, setFileContentErrorsByPath] = useState<Record<string, string>>({});
+  const [pendingFileContentRequestsByPath, setPendingFileContentRequestsByPath] = useState<Record<string, string>>({});
   const [savedContentOverlay, setSavedContentOverlay] = useState<AgentsHubSavedContentOverlay>({
     contentsByPath: emptySavedContentsByPath,
   });
@@ -156,17 +147,16 @@ function AgentsHubSurface({
       ? savedContentOverlay.contentsByPath
       : emptySavedContentsByPath;
   const groupsByTab = useMemo(
-    () =>
-      applySavedAgentsHubContents(catalog?.groupsByTab ?? emptyGroupsByTab, activeSavedContentsByPath),
-    [activeSavedContentsByPath, catalog?.groupsByTab],
+    () => applySavedAgentsHubContents(catalog?.groupsByTab ?? emptyGroupsByTab, activeSavedContentsByPath),
+    [activeSavedContentsByPath, catalog?.groupsByTab]
   );
   const [activeTab, setActiveTab] = useState<AgentsHubTab>(initialTab);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [selectedFileIds, setSelectedFileIds] = useState<Record<AgentsHubTab, string>>({
-    configs: firstFileId(emptyGroupsByTab, "configs"),
-    hooks: firstFileId(emptyGroupsByTab, "hooks"),
-    mds: firstFileId(emptyGroupsByTab, "mds"),
-    skills: firstFileId(emptyGroupsByTab, "skills"),
+    configs: firstFileId(emptyGroupsByTab, 'configs'),
+    hooks: firstFileId(emptyGroupsByTab, 'hooks'),
+    mds: firstFileId(emptyGroupsByTab, 'mds'),
+    skills: firstFileId(emptyGroupsByTab, 'skills'),
   });
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const didResetSkillExpansionForOpenRef = useRef(false);
@@ -180,7 +170,7 @@ function AgentsHubSurface({
      * CDXC:AgentsHub 2026-05-14-08:29:
      * The Hub catalog is filesystem-owned data. Request it from native on each open so profile-specific files, installed skills, and config files reflect the current machine without baking private file contents into the web bundle.
      */
-    vscode.postMessage({ type: "requestAgentsHubCatalog" });
+    vscode.postMessage({ type: 'requestAgentsHubCatalog' });
   }, [isOpen, vscode]);
 
   useEffect(() => {
@@ -221,18 +211,12 @@ function AgentsHubSurface({
 
   useEffect(() => {
     setSelectedFileIds((current) => ({
-      configs: findFile(groupsByTab, "configs", current.configs)
+      configs: findFile(groupsByTab, 'configs', current.configs)
         ? current.configs
-        : firstFileId(groupsByTab, "configs"),
-      hooks: findFile(groupsByTab, "hooks", current.hooks)
-        ? current.hooks
-        : firstFileId(groupsByTab, "hooks"),
-      mds: findFile(groupsByTab, "mds", current.mds)
-        ? current.mds
-        : firstFileId(groupsByTab, "mds"),
-      skills: findFile(groupsByTab, "skills", current.skills)
-        ? current.skills
-        : firstFileId(groupsByTab, "skills"),
+        : firstFileId(groupsByTab, 'configs'),
+      hooks: findFile(groupsByTab, 'hooks', current.hooks) ? current.hooks : firstFileId(groupsByTab, 'hooks'),
+      mds: findFile(groupsByTab, 'mds', current.mds) ? current.mds : firstFileId(groupsByTab, 'mds'),
+      skills: findFile(groupsByTab, 'skills', current.skills) ? current.skills : firstFileId(groupsByTab, 'skills'),
     }));
     setExpandedIds((current) => {
       const next = new Set(current);
@@ -245,11 +229,8 @@ function AgentsHubSurface({
 
   const activeFile = findFile(groupsByTab, activeTab, selectedFileIds[activeTab]);
   const activeFileContent =
-    activeFile === undefined
-      ? undefined
-      : activeFile.content ?? fileContentsByPath[activeFile.path];
-  const activeFileLoadError =
-    activeFile === undefined ? undefined : fileContentErrorsByPath[activeFile.path];
+    activeFile === undefined ? undefined : (activeFile.content ?? fileContentsByPath[activeFile.path]);
+  const activeFileLoadError = activeFile === undefined ? undefined : fileContentErrorsByPath[activeFile.path];
   const isActiveFileContentLoading =
     activeFile !== undefined && activeFileContent === undefined && activeFileLoadError === undefined;
 
@@ -267,7 +248,7 @@ function AgentsHubSurface({
       return next;
     });
 
-    if (typeof fileContent.content === "string") {
+    if (typeof fileContent.content === 'string') {
       setFileContentsByPath((current) => ({
         ...current,
         [fileContent.filePath]: fileContent.content!,
@@ -285,7 +266,7 @@ function AgentsHubSurface({
 
     setFileContentErrorsByPath((current) => ({
       ...current,
-      [fileContent.filePath]: fileContent.errorMessage ?? "Unable to load file contents.",
+      [fileContent.filePath]: fileContent.errorMessage ?? 'Unable to load file contents.',
     }));
   }, [fileContent]);
 
@@ -299,9 +280,7 @@ function AgentsHubSurface({
       return;
     }
 
-    const requestId = `agents-hub-file-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2)}`;
+    const requestId = `agents-hub-file-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     setPendingFileContentRequestsByPath((current) => ({
       ...current,
       [activeFile.path]: requestId,
@@ -317,23 +296,13 @@ function AgentsHubSurface({
     vscode.postMessage({
       filePath: activeFile.path,
       requestId,
-      type: "requestAgentsHubFileContent",
+      type: 'requestAgentsHubFileContent',
     });
-  }, [
-    activeFile,
-    activeFileContent,
-    isOpen,
-    pendingFileContentRequestsByPath,
-    vscode,
-  ]);
+  }, [activeFile, activeFileContent, isOpen, pendingFileContentRequestsByPath, vscode]);
 
   return (
-    <Tabs
-      className="agents-hub-tabs"
-      onValueChange={(value) => setActiveTab(value as AgentsHubTab)}
-      value={activeTab}
-    >
-      <TabsList className="agents-hub-tabs-list app-modal-tab-rail">
+    <Tabs className='agents-hub-tabs' onValueChange={(value) => setActiveTab(value as AgentsHubTab)} value={activeTab}>
+      <TabsList className='agents-hub-tabs-list app-modal-tab-rail'>
         {(Object.keys(tabLabels) as AgentsHubTab[]).map((tab) => (
           <TabsTrigger key={tab} value={tab}>
             {tabLabels[tab]}
@@ -341,25 +310,25 @@ function AgentsHubSurface({
         ))}
       </TabsList>
       {(Object.keys(tabLabels) as AgentsHubTab[]).map((tab) => (
-        <TabsContent className="agents-hub-tab-content" key={tab} value={tab}>
-          <section className="agents-hub-layout">
-            <aside className="agents-hub-list-pane">
+        <TabsContent className='agents-hub-tab-content' key={tab} value={tab}>
+          <section className='agents-hub-layout'>
+            <aside className='agents-hub-list-pane'>
               {/*
                * CDXC:AgentsHub 2026-06-12-02:53:
                * Agents Hub should not render search icons in the search field,
                * empty list, or editor loading states. Repeated magnifiers make
                * the modal look broken when the catalog is still loading.
                */}
-              <div className="agents-hub-search">
+              <div className='agents-hub-search'>
                 <Input
                   aria-label={`Search ${tabLabels[tab]}`}
-                  className="h-8"
+                  className='h-8'
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={`Search ${tabLabels[tab]}`}
                   value={query}
                 />
               </div>
-              <ScrollArea className="agents-hub-scroll">
+              <ScrollArea className='agents-hub-scroll'>
                 <GroupList
                   activeFileId={selectedFileIds[tab]}
                   activeTab={tab}
@@ -396,7 +365,7 @@ function AgentsHubSurface({
                    * Clear the saved-content overlay before requesting a new native scan so stale in-modal buffers cannot mask the latest disk contents.
                    */
                   setSavedContentOverlay({ contentsByPath: emptySavedContentsByPath });
-                  vscode.postMessage({ type: "requestAgentsHubCatalog" });
+                  vscode.postMessage({ type: 'requestAgentsHubCatalog' });
                 }}
                 onSaveContent={(filePath, content) => {
                   /**
@@ -423,9 +392,9 @@ function AgentsHubSurface({
                 isLoading={isActiveFileContentLoading}
               />
             ) : (
-              <div className="agents-hub-editor-frame">
-                <div className="agents-hub-empty">
-                  <span>{catalog ? "No files found." : "Loading agent files..."}</span>
+              <div className='agents-hub-editor-frame'>
+                <div className='agents-hub-empty'>
+                  <span>{catalog ? 'No files found.' : 'Loading agent files...'}</span>
                 </div>
               </div>
             )}
@@ -458,71 +427,71 @@ function GroupList({
   vscode: WebviewApi;
 }) {
   const groups = useFilteredGroups(groupsByTab, activeTab, query);
-  const expandable = activeTab !== "mds";
+  const expandable = activeTab !== 'mds';
 
   if (groups.length === 0) {
     return (
-      <div className="agents-hub-empty">
-        <span>{isCatalogLoading ? "Loading agent files..." : "No matching files."}</span>
+      <div className='agents-hub-empty'>
+        <span>{isCatalogLoading ? 'Loading agent files...' : 'No matching files.'}</span>
       </div>
     );
   }
 
   return (
-    <div className="agents-hub-group-list">
+    <div className='agents-hub-group-list'>
       {groups.map((group) => {
         const isExpanded = expandedIds.has(group.id);
         const isActiveGroup = group.files.some((file) => file.id === activeFileId);
-        const isCollapsedSkill = activeTab === "skills" && !isExpanded;
+        const isCollapsedSkill = activeTab === 'skills' && !isExpanded;
         const primaryFile = group.files[0]!;
 
         return (
-          <section className={cn("agents-hub-group", isActiveGroup && "is-active")} key={group.id}>
+          <section className={cn('agents-hub-group', isActiveGroup && 'is-active')} key={group.id}>
             <button
-              className="agents-hub-group-main"
+              className='agents-hub-group-main'
               onClick={() => {
                 if (expandable) {
                   onToggleExpanded(group.id);
                 }
                 onSelectFile(primaryFile.id);
               }}
-              type="button"
+              type='button'
             >
-              <span className="agents-hub-group-title-row">
+              <span className='agents-hub-group-title-row'>
                 {expandable ? (
                   isExpanded ? (
-                    <IconChevronDown data-icon="inline-start" />
+                    <IconChevronDown data-icon='inline-start' />
                   ) : (
-                    <IconChevronRight data-icon="inline-start" />
+                    <IconChevronRight data-icon='inline-start' />
                   )
                 ) : (
-                  <IconFile data-icon="inline-start" />
+                  <IconFile data-icon='inline-start' />
                 )}
-                <span className="agents-hub-group-title">{group.name}</span>
+                <span className='agents-hub-group-title'>{group.name}</span>
                 {!isCollapsedSkill ? (
-                  <span className="agents-hub-count">
-                    {group.files.length} {group.files.length === 1 ? "file" : "files"}
+                  <span className='agents-hub-count'>
+                    {group.files.length} {group.files.length === 1 ? 'file' : 'files'}
                   </span>
                 ) : null}
               </span>
               {!isCollapsedSkill ? (
                 <>
-                  <span className="agents-hub-path">{group.path}</span>
-                  <span className="agents-hub-description">{group.description}</span>
+                  <span className='agents-hub-path'>{group.path}</span>
+                  <span className='agents-hub-description'>{group.description}</span>
                 </>
               ) : null}
             </button>
             {!isCollapsedSkill ? <ProfileRow profiles={group.profiles} vscode={vscode} /> : null}
             {expandable && isExpanded ? (
-              <div className="agents-hub-file-list">
+              <div className='agents-hub-file-list'>
                 {group.files.map((file) => (
                   <button
-                    className={cn("agents-hub-file-row", file.id === activeFileId && "is-active")}
+                    className={cn('agents-hub-file-row', file.id === activeFileId && 'is-active')}
                     key={file.id}
                     onClick={() => onSelectFile(file.id)}
-                    type="button"
+                    type='button'
                   >
-                    <IconFile data-icon="inline-start" />
+                    <IconFile data-icon='inline-start' />
                     <span>{file.name}</span>
                   </button>
                 ))}
@@ -544,7 +513,7 @@ function ProfileRow({ profiles, vscode }: { profiles: AgentsHubProfile[]; vscode
    * Filesystem actions in Agents Hub should use OS-agnostic "Open Folder" language so the shared modal does not expose Finder-specific copy outside macOS implementation details.
    */
   return (
-    <div className="agents-hub-profile-row" aria-label="Profiles using this item">
+    <div className='agents-hub-profile-row' aria-label='Profiles using this item'>
       {profiles.map((profile) => {
         const profileBadge = getAgentProfileBadge(profile.profilePath);
 
@@ -554,43 +523,41 @@ function ProfileRow({ profiles, vscode }: { profiles: AgentsHubProfile[]; vscode
               render={
                 <button
                   aria-label={`Open ${profile.label} profile folder`}
-                  className="agents-hub-agent-icon"
+                  className='agents-hub-agent-icon'
                   onClick={(event) => {
                     event.stopPropagation();
                     vscode.postMessage({
                       path: profile.profilePath,
-                      type: "openAgentsHubPathInFinder",
+                      type: 'openAgentsHubPathInFinder',
                     });
                   }}
-                  type="button"
+                  type='button'
                 >
                   <span
-                    aria-hidden="true"
-                    className="agents-hub-agent-logo"
+                    aria-hidden='true'
+                    className='agents-hub-agent-logo'
                     data-agent-icon={profile.agentIcon}
                     style={getBrandAgentLogoStyle(profile.agentIcon)}
                   />
-                  {profileBadge ? (
-                    <span className="agents-hub-agent-badge">{profileBadge}</span>
-                  ) : null}
+                  {profileBadge ? <span className='agents-hub-agent-badge'>{profileBadge}</span> : null}
                 </button>
               }
             />
-            <TooltipContent align="start">
-              <div className="agents-hub-profile-tooltip">
-                <div className="agents-hub-profile-tooltip-main">
-                  <div className="agents-hub-profile-tooltip-title">{profile.label}</div>
-                  <div className="agents-hub-profile-tooltip-path">{profile.filePath}</div>
+            <TooltipContent align='start'>
+              <div className='agents-hub-profile-tooltip'>
+                <div className='agents-hub-profile-tooltip-main'>
+                  <div className='agents-hub-profile-tooltip-title'>{profile.label}</div>
+                  <div className='agents-hub-profile-tooltip-path'>{profile.filePath}</div>
                 </div>
                 {profile.targetPath ? (
-                  <div className="agents-hub-profile-tooltip-target">
-                    <div aria-hidden="true" className="agents-hub-profile-tooltip-arrow">
+                  <div className='agents-hub-profile-tooltip-target'>
+                    <div aria-hidden='true' className='agents-hub-profile-tooltip-arrow'>
                       -&gt;
                     </div>
-                    <div className="agents-hub-profile-tooltip-path">{profile.targetPath}</div>
+                    <div className='agents-hub-profile-tooltip-path'>{profile.targetPath}</div>
                   </div>
                 ) : null}
-                <div className="agents-hub-profile-tooltip-action">Click to open folder</div>
+                <div className='agents-hub-profile-tooltip-action'>Click to open folder</div>
               </div>
             </TooltipContent>
           </Tooltip>
@@ -608,11 +575,11 @@ function getAgentProfileBadge(profilePath: string): string | undefined {
    * profile folder name, so `personal` maps to P and `work` maps to W without
    * hard-coded per-agent badge labels.
    */
-  if (!profilePath.includes("-profiles/")) {
+  if (!profilePath.includes('-profiles/')) {
     return undefined;
   }
 
-  const profileFolder = profilePath.split("/").filter(Boolean).at(-1)?.toLowerCase();
+  const profileFolder = profilePath.split('/').filter(Boolean).at(-1)?.toLowerCase();
   return profileFolder?.match(/[a-z0-9]/i)?.[0]?.toUpperCase();
 }
 
@@ -626,16 +593,16 @@ function FileContentStatePane({
   isLoading: boolean;
 }) {
   return (
-    <div className="agents-hub-editor-frame">
-      <div className="agents-hub-editor-toolbar">
-        <div className="agents-hub-editor-file">
-          <span className="agents-hub-editor-name">{file.name}</span>
-          <span className="agents-hub-path">{file.path}</span>
+    <div className='agents-hub-editor-frame'>
+      <div className='agents-hub-editor-toolbar'>
+        <div className='agents-hub-editor-file'>
+          <span className='agents-hub-editor-name'>{file.name}</span>
+          <span className='agents-hub-path'>{file.path}</span>
         </div>
       </div>
       <Separator />
-      <div className="agents-hub-empty">
-        <span>{errorMessage ?? (isLoading ? "Loading file..." : "Select a file.")}</span>
+      <div className='agents-hub-empty'>
+        <span>{errorMessage ?? (isLoading ? 'Loading file...' : 'Select a file.')}</span>
       </div>
     </div>
   );
@@ -653,9 +620,7 @@ function EditorPane({
   vscode: WebviewApi;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const editorRef = useRef<ReturnType<NonNullable<typeof window.monaco>["editor"]["create"]> | null>(
-    null,
-  );
+  const editorRef = useRef<ReturnType<NonNullable<typeof window.monaco>['editor']['create']> | null>(null);
   const latestFileRef = useRef(file);
   const [fallbackValue, setFallbackValue] = useState(file.content);
   const [savedValue, setSavedValue] = useState(file.content);
@@ -683,7 +648,7 @@ function EditorPane({
         const initialFile = latestFileRef.current;
         const editor = window.monaco.editor.create(containerRef.current, {
           automaticLayout: true,
-          fontFamily: "var(--font-mono)",
+          fontFamily: 'var(--font-mono)',
           fontSize: 13,
           language: initialFile.language,
           minimap: { enabled: false },
@@ -700,7 +665,7 @@ function EditorPane({
             horizontalScrollbarSize: 7,
             verticalScrollbarSize: 7,
           },
-          theme: "vs-dark",
+          theme: 'vs-dark',
           value: initialFile.content,
         });
         contentDisposable = editor.onDidChangeModelContent(() => {
@@ -753,7 +718,7 @@ function EditorPane({
     vscode.postMessage({
       content: value,
       filePath: file.path,
-      type: "saveAgentsHubFile",
+      type: 'saveAgentsHubFile',
     });
     onSaveContent(file.path, value);
     setSavedValue(value);
@@ -762,13 +727,13 @@ function EditorPane({
   };
 
   return (
-    <div className="agents-hub-editor-frame">
-      <div className="agents-hub-editor-toolbar">
-        <div className="agents-hub-editor-file">
-          <span className="agents-hub-editor-name">{file.name}</span>
-          <span className="agents-hub-path">{file.path}</span>
+    <div className='agents-hub-editor-frame'>
+      <div className='agents-hub-editor-toolbar'>
+        <div className='agents-hub-editor-file'>
+          <span className='agents-hub-editor-name'>{file.name}</span>
+          <span className='agents-hub-path'>{file.path}</span>
         </div>
-        <div className="agents-hub-editor-actions">
+        <div className='agents-hub-editor-actions'>
           {/*
            * CDXC:AgentsHub 2026-06-04-13:39:
            * The selected file header keeps Open Folder beside the built-in
@@ -778,50 +743,47 @@ function EditorPane({
            * Editor toolbar actions should be compact icon-only controls with descriptive hover tooltips, and Refresh should sit immediately before Save so disk changes can be reloaded without closing Agents Hub.
            */}
           <EditorToolbarButton
-            label="Open containing folder"
+            label='Open containing folder'
             onClick={() =>
               vscode.postMessage({
                 path: file.path,
-                type: "openAgentsHubPathInFinder",
+                type: 'openAgentsHubPathInFinder',
               })
             }
           >
-            <IconFolderOpen aria-hidden="true" />
+            <IconFolderOpen aria-hidden='true' />
           </EditorToolbarButton>
           <EditorToolbarButton
-            label="Open in built-in editor"
+            label='Open in built-in editor'
             onClick={() =>
               vscode.postMessage({
                 filePath: file.path,
-                type: "openAgentsHubFileInBuiltInEditor",
+                type: 'openAgentsHubFileInBuiltInEditor',
               })
             }
           >
-            <IconEdit aria-hidden="true" />
+            <IconEdit aria-hidden='true' />
           </EditorToolbarButton>
-          <EditorToolbarButton
-            label="Refresh contents from disk"
-            onClick={onRefreshCatalog}
-          >
-            <IconRefresh aria-hidden="true" />
+          <EditorToolbarButton label='Refresh contents from disk' onClick={onRefreshCatalog}>
+            <IconRefresh aria-hidden='true' />
           </EditorToolbarButton>
           <EditorToolbarButton
             disabled={!isDirty || isSaving}
-            label={isDirty ? "Save changes" : "No changes to save"}
+            label={isDirty ? 'Save changes' : 'No changes to save'}
             onClick={handleSave}
           >
-            <IconDeviceFloppy aria-hidden="true" />
+            <IconDeviceFloppy aria-hidden='true' />
           </EditorToolbarButton>
         </div>
       </div>
       <Separator />
-      <div className="agents-hub-editor-body">
+      <div className='agents-hub-editor-body'>
         {monacoAvailable ? (
-          <div className="agents-hub-monaco" ref={containerRef} />
+          <div className='agents-hub-monaco' ref={containerRef} />
         ) : (
           <Textarea
             aria-label={`${file.name} contents`}
-            className="agents-hub-editor-fallback"
+            className='agents-hub-editor-fallback'
             onChange={(event) => setFallbackValue(event.target.value)}
             spellCheck={false}
             value={fallbackValue}
@@ -850,21 +812,21 @@ function EditorToolbarButton({
           <Button
             aria-disabled={disabled}
             aria-label={label}
-            className={cn("agents-hub-editor-action-button", disabled && "is-disabled")}
+            className={cn('agents-hub-editor-action-button', disabled && 'is-disabled')}
             onClick={() => {
               if (!disabled) {
                 onClick();
               }
             }}
-            size="icon"
-            type="button"
-            variant="outline"
+            size='icon'
+            type='button'
+            variant='outline'
           >
             {children}
           </Button>
         }
       />
-      <TooltipContent className="agents-hub-editor-action-tooltip" sideOffset={6}>
+      <TooltipContent className='agents-hub-editor-action-tooltip' sideOffset={6}>
         {label}
       </TooltipContent>
     </Tooltip>
@@ -874,7 +836,7 @@ function EditorToolbarButton({
 function useFilteredGroups(
   groupsByTab: Record<AgentsHubTab, AgentsHubGroup[]>,
   tab: AgentsHubTab,
-  query: string,
+  query: string
 ): AgentsHubGroup[] {
   return useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -885,7 +847,7 @@ function useFilteredGroups(
       const groupText = `${group.name} ${group.path} ${group.description}`.toLowerCase();
       const fileText = group.files
         .map((file) => `${file.name} ${file.path}`)
-        .join(" ")
+        .join(' ')
         .toLowerCase();
       return groupText.includes(normalizedQuery) || fileText.includes(normalizedQuery);
     });
@@ -895,7 +857,7 @@ function useFilteredGroups(
 function findFile(
   groupsByTab: Record<AgentsHubTab, AgentsHubGroup[]>,
   tab: AgentsHubTab,
-  fileId: string,
+  fileId: string
 ): AgentsHubFile | undefined {
   for (const group of groupsByTab[tab]) {
     const file = group.files.find((candidate) => candidate.id === fileId);
@@ -907,7 +869,7 @@ function findFile(
 }
 
 function firstFileId(groupsByTab: Record<AgentsHubTab, AgentsHubGroup[]>, tab: AgentsHubTab): string {
-  return groupsByTab[tab][0]?.files[0]?.id ?? "";
+  return groupsByTab[tab][0]?.files[0]?.id ?? '';
 }
 
 function getMonacoRequire(): MonacoAmdRequire | undefined {
@@ -922,10 +884,10 @@ function loadMonaco(): Promise<void> {
   return new Promise((resolve, reject) => {
     const configureLoader = (amdRequire: MonacoAmdRequire) => {
       window.MonacoEnvironment = {
-        getWorkerUrl: () => "./monaco/vs/base/worker/workerMain.js",
+        getWorkerUrl: () => './monaco/vs/base/worker/workerMain.js',
       };
-      amdRequire.config?.({ paths: { vs: "./monaco/vs" } });
-      amdRequire(["vs/editor/editor.main"], resolve);
+      amdRequire.config?.({ paths: { vs: './monaco/vs' } });
+      amdRequire(['vs/editor/editor.main'], resolve);
     };
 
     const existingRequire = getMonacoRequire();
@@ -934,17 +896,17 @@ function loadMonaco(): Promise<void> {
       return;
     }
 
-    const script = document.createElement("script");
-    script.src = "./monaco/vs/loader.js";
+    const script = document.createElement('script');
+    script.src = './monaco/vs/loader.js';
     script.onload = () => {
       const loadedRequire = getMonacoRequire();
       if (loadedRequire) {
         configureLoader(loadedRequire);
       } else {
-        reject(new Error("Monaco loader did not expose require"));
+        reject(new Error('Monaco loader did not expose require'));
       }
     };
-    script.onerror = () => reject(new Error("Unable to load Monaco"));
+    script.onerror = () => reject(new Error('Unable to load Monaco'));
     document.body.appendChild(script);
   });
 }

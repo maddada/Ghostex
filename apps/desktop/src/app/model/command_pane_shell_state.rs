@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 pub(crate) fn command_pane_model_to_shell_state_json_with_delayed_send_timers(
     model: &CommandPaneModel,
     delayed_send_timers: &HashMap<CommandSessionId, GpuiCommandDelayedSendTimer>,
@@ -17,7 +16,6 @@ pub(crate) fn command_pane_model_to_shell_state_json_with_delayed_send_timers(
         Some(now),
     )
 }
-
 
 pub(crate) fn command_pane_model_to_shell_state_json_with_optional_delayed_send_timers(
     model: &CommandPaneModel,
@@ -149,7 +147,6 @@ pub(crate) fn command_pane_model_to_shell_state_json_with_optional_delayed_send_
     state
 }
 
-
 pub(crate) fn command_pane_node_to_shell_state_json(node: &CommandPaneNode) -> serde_json::Value {
     match node {
         CommandPaneNode::Leaf(leaf) => serde_json::json!({
@@ -173,7 +170,6 @@ pub(crate) fn command_pane_node_to_shell_state_json(node: &CommandPaneNode) -> s
         }),
     }
 }
-
 
 pub(crate) fn command_pane_model_from_shell_state_with_default_height_px(
     value: &serde_json::Value,
@@ -359,8 +355,9 @@ pub(crate) fn command_pane_model_from_shell_state_with_default_height_px(
     Some(model)
 }
 
-
-pub(crate) fn command_session_from_shell_state(value: &serde_json::Value) -> Option<CommandTerminalSession> {
+pub(crate) fn command_session_from_shell_state(
+    value: &serde_json::Value,
+) -> Option<CommandTerminalSession> {
     let object = value.as_object()?;
     let id = CommandSessionId(json_u64_field(object, "id")?);
     if id.0 == 0 {
@@ -391,13 +388,11 @@ pub(crate) fn command_session_from_shell_state(value: &serde_json::Value) -> Opt
     Some(session)
 }
 
-
 pub(crate) fn command_session_action_command_id_from_shell_state(
     object: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<String> {
     valid_action_command_id(json_string_field(object, "actionCommandId")?)
 }
-
 
 pub(crate) fn valid_action_command_id(value: &str) -> Option<String> {
     let command_id = value.trim();
@@ -407,7 +402,6 @@ pub(crate) fn valid_action_command_id(value: &str) -> Option<String> {
         && !command_id.chars().any(char::is_control))
     .then(|| command_id.to_string())
 }
-
 
 pub(crate) fn command_session_title_from_shell_state(
     object: &serde_json::Map<String, serde_json::Value>,
@@ -426,7 +420,6 @@ pub(crate) fn command_session_title_from_shell_state(
     }
     command_session_title_for_id(id)
 }
-
 
 pub(crate) fn command_session_gxserver_key_from_shell_state(
     object: &serde_json::Map<String, serde_json::Value>,
@@ -452,7 +445,6 @@ pub(crate) fn command_session_gxserver_key_from_shell_state(
     })
 }
 
-
 pub(crate) fn command_gxserver_session_mappings_from_command_model(
     command_pane: &CommandPaneModel,
 ) -> HashMap<CommandSessionId, GpuiLocalWorkspaceSessionKey> {
@@ -467,7 +459,6 @@ pub(crate) fn command_gxserver_session_mappings_from_command_model(
         })
         .collect()
 }
-
 
 pub(crate) fn pending_command_gxserver_cleanup_from_shell_state(
     value: Option<&serde_json::Value>,
@@ -495,7 +486,6 @@ pub(crate) fn pending_command_gxserver_cleanup_from_shell_state(
         .collect()
 }
 
-
 pub(crate) fn pending_command_gxserver_cleanup_to_shell_state(
     pending: &HashSet<GpuiLocalWorkspaceSessionKey>,
 ) -> serde_json::Value {
@@ -517,7 +507,6 @@ pub(crate) fn pending_command_gxserver_cleanup_to_shell_state(
             .collect(),
     )
 }
-
 
 pub(crate) fn collect_command_pane_shell_state_leaf_active_session_ids(
     node: Option<&serde_json::Value>,
@@ -541,7 +530,6 @@ pub(crate) fn collect_command_pane_shell_state_leaf_active_session_ids(
         active_session_ids,
     );
 }
-
 
 pub(crate) fn split_command_pane_shell_state_json_by_gxserver_project(
     pane_json: &serde_json::Value,
@@ -655,7 +643,6 @@ pub(crate) fn split_command_pane_shell_state_json_by_gxserver_project(
         .collect()
 }
 
-
 pub(crate) fn command_delayed_send_restore_timers_from_shell_state(
     value: &serde_json::Value,
     command_pane: &CommandPaneModel,
@@ -694,7 +681,6 @@ pub(crate) fn command_delayed_send_restore_timers_from_shell_state(
         .collect()
 }
 
-
 pub(crate) fn command_delayed_send_stale_runtime_timer_session_ids(
     command_pane: &CommandPaneModel,
     delayed_send_timers: &HashMap<CommandSessionId, GpuiCommandDelayedSendTimer>,
@@ -712,7 +698,6 @@ pub(crate) fn command_delayed_send_stale_runtime_timer_session_ids(
         })
         .collect()
 }
-
 
 pub(crate) fn command_startup_activity_restore_intents_from_shell_state(
     value: &serde_json::Value,
@@ -747,7 +732,6 @@ pub(crate) fn command_startup_activity_restore_intents_from_shell_state(
         })
         .collect()
 }
-
 
 pub(crate) fn command_pane_apply_startup_activity_restore_intents(
     command_pane: &mut CommandPaneModel,
@@ -800,7 +784,6 @@ pub(crate) fn command_pane_apply_startup_activity_restore_intents(
     changed
 }
 
-
 pub(crate) fn command_pane_apply_delayed_send_restore_intent(
     command_pane: &mut CommandPaneModel,
     session_id: CommandSessionId,
@@ -843,7 +826,6 @@ pub(crate) fn command_pane_apply_delayed_send_restore_intent(
     session.is_sleeping = false;
     changed
 }
-
 
 pub(crate) fn command_pane_node_from_shell_state(
     value: &serde_json::Value,
@@ -917,8 +899,10 @@ pub(crate) fn command_pane_node_from_shell_state(
     }
 }
 
-
-pub(crate) fn collect_command_leaf_ids(node: &CommandPaneNode, group_ids: &mut Vec<CommandPaneGroupId>) {
+pub(crate) fn collect_command_leaf_ids(
+    node: &CommandPaneNode,
+    group_ids: &mut Vec<CommandPaneGroupId>,
+) {
     match node {
         CommandPaneNode::Leaf(leaf) => {
             if !leaf.tab_group.tabs.is_empty() {
@@ -931,7 +915,6 @@ pub(crate) fn collect_command_leaf_ids(node: &CommandPaneNode, group_ids: &mut V
         }
     }
 }
-
 
 pub(crate) fn collect_command_node_session_ids(
     node: &CommandPaneNode,
@@ -948,8 +931,10 @@ pub(crate) fn collect_command_node_session_ids(
     }
 }
 
-
-pub(crate) fn collect_command_split_ids(node: &CommandPaneNode, split_ids: &mut Vec<CommandPaneSplitId>) {
+pub(crate) fn collect_command_split_ids(
+    node: &CommandPaneNode,
+    split_ids: &mut Vec<CommandPaneSplitId>,
+) {
     match node {
         CommandPaneNode::Leaf(_) => {}
         CommandPaneNode::Split(split) => {

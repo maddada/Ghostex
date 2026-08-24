@@ -4,10 +4,10 @@
  * the inline HTML that iOS has to parse before showing the chat surface.
  * Keep this entry limited to the shared primitives and chat-specific chrome.
  */
-@import "@/packages/core-ui/styles/shadcn.generated.css";
-@import "@/packages/core-ui/styles/theme.css";
-@import "@/packages/core-ui/styles/workspace-theme.css";
-@import "@/packages/core-ui/styles/chat.css";
+@import '@/packages/core-ui/styles/shadcn.generated.css';
+@import '@/packages/core-ui/styles/theme.css';
+@import '@/packages/core-ui/styles/workspace-theme.css';
+@import '@/packages/core-ui/styles/chat.css';
 
 /*
  * Phone/tablet transcript gutter. The shared rule reserves 30px each side
@@ -17,12 +17,12 @@
  * desktop and web hosts read. The narrow-viewport full-bleed case the shared
  * sheet already handles stays full-bleed.
  */
-.ghostex-session-chat-scope [data-slot="message-scroller-content"] {
+.ghostex-session-chat-scope [data-slot='message-scroller-content'] {
   max-width: calc(100% - 20px);
 }
 
 @media (max-width: 1070px) {
-  .ghostex-session-chat-scope [data-slot="message-scroller-content"] {
+  .ghostex-session-chat-scope [data-slot='message-scroller-content'] {
     max-width: 100%;
   }
 }

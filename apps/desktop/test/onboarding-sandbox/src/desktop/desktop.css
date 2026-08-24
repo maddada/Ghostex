@@ -40,7 +40,7 @@
   width: 100%;
 }
 
-.sbx-window-slot[data-modal-open="true"] {
+.sbx-window-slot[data-modal-open='true'] {
   transform: scale(0.995);
 }
 

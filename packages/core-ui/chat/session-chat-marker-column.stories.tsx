@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
   IconAlertTriangle,
   IconCheck,
@@ -10,18 +10,11 @@ import {
   IconTerminal2,
   IconTool,
   IconWorldSearch,
-} from "@tabler/icons-react";
-import { createPortal } from "react-dom";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import type { SessionChatMessage } from "../../shared/session-chat";
-import { SessionChatMessageList } from "./session-chat-message-list";
+} from '@tabler/icons-react';
+import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import type { SessionChatMessage } from '../../shared/session-chat';
+import { SessionChatMessageList } from './session-chat-message-list';
 
 /*
 CDXC:SessionChatMarkerColumn 2026-08-23:
@@ -235,10 +228,10 @@ const BEFORE_SHEET = `
 
 /** Rows that carry a prose bullet, and so host the glyph variant's SVG. */
 const BULLET_ROW_SELECTOR = [
-  ".ghostex-chat-agent-message",
-  ".ghostex-chat-thinking-line",
-  ".ghostex-chat-suppressed-inline",
-].join(", ");
+  '.ghostex-chat-agent-message',
+  '.ghostex-chat-thinking-line',
+  '.ghostex-chat-suppressed-inline',
+].join(', ');
 
 /* --- Mock transcript --------------------------------------------------------
  *
@@ -251,74 +244,74 @@ const BULLET_ROW_SELECTOR = [
  */
 
 const suppressedOutput = [
-  "<bash-stdout>",
-  "  gxserver  starting on 127.0.0.1:8421",
-  "  gxserver  loaded 14 projects, 61 sessions, 3 sleeping",
-  "  gxserver  agent registry: claude, codex, pi, opencode, cursor-agent, grok",
-  "  gxserver  prompt index warm in 214ms (41,882 prompts across 9 roots)",
-  "  gxserver  hook socket at ~/.ghostex/run/hooks.sock",
-  "  gxserver  ready",
-  "</bash-stdout>",
-].join("\n");
+  '<bash-stdout>',
+  '  gxserver  starting on 127.0.0.1:8421',
+  '  gxserver  loaded 14 projects, 61 sessions, 3 sleeping',
+  '  gxserver  agent registry: claude, codex, pi, opencode, cursor-agent, grok',
+  '  gxserver  prompt index warm in 214ms (41,882 prompts across 9 roots)',
+  '  gxserver  hook socket at ~/.ghostex/run/hooks.sock',
+  '  gxserver  ready',
+  '</bash-stdout>',
+].join('\n');
 
 const STORY_MESSAGES: SessionChatMessage[] = [
   {
-    blocks: [{ text: "Why is the left margin so noisy?", type: "text" }],
-    id: "user-1",
-    role: "user",
-    source: "transcript",
+    blocks: [{ text: 'Why is the left margin so noisy?', type: 'text' }],
+    id: 'user-1',
+    role: 'user',
+    source: 'transcript',
     timestamp: 1_000,
   },
   {
     blocks: [
       {
-        text: "Reading the transcript stylesheet for every rule that paints in the gutter.",
-        type: "text",
+        text: 'Reading the transcript stylesheet for every rule that paints in the gutter.',
+        type: 'text',
       },
-      { input: { cmd: "rg -n '::before' chat.css" }, name: "exec", type: "tool-call" },
-      { output: "9 matches", type: "tool-result" },
+      { input: { cmd: "rg -n '::before' chat.css" }, name: 'exec', type: 'tool-call' },
+      { output: '9 matches', type: 'tool-result' },
     ],
-    id: "reasoning-1",
-    role: "reasoning",
-    source: "transcript",
+    id: 'reasoning-1',
+    role: 'reasoning',
+    source: 'transcript',
     timestamp: 2_000,
   },
   {
     blocks: [
       {
-        text: "Four glyphs at three indents, and two of them are disclosures that disagree about what a disclosure looks like.",
-        type: "text",
+        text: 'Four glyphs at three indents, and two of them are disclosures that disagree about what a disclosure looks like.',
+        type: 'text',
       },
     ],
-    id: "assistant-1",
-    role: "assistant",
-    source: "transcript",
+    id: 'assistant-1',
+    role: 'assistant',
+    source: 'transcript',
     timestamp: 7_000,
   },
   {
     blocks: [
       {
-        text: "<task-notification><status>completed</status><summary>Prompt index rebuilt</summary></task-notification>",
-        type: "text",
+        text: '<task-notification><status>completed</status><summary>Prompt index rebuilt</summary></task-notification>',
+        type: 'text',
       },
     ],
-    id: "status-1",
-    role: "user",
-    source: "transcript",
+    id: 'status-1',
+    role: 'user',
+    source: 'transcript',
     timestamp: 8_000,
   },
   {
-    blocks: [{ text: suppressedOutput, type: "text" }],
-    id: "suppressed-1",
-    role: "user",
-    source: "transcript",
+    blocks: [{ text: suppressedOutput, type: 'text' }],
+    id: 'suppressed-1',
+    role: 'user',
+    source: 'transcript',
     timestamp: 9_000,
   },
   {
-    blocks: [{ text: "Put every marker on one axis.", type: "text" }],
-    id: "user-2",
-    role: "user",
-    source: "transcript",
+    blocks: [{ text: 'Put every marker on one axis.', type: 'text' }],
+    id: 'user-2',
+    role: 'user',
+    source: 'transcript',
     timestamp: 10_000,
   },
   /*
@@ -330,82 +323,82 @@ const STORY_MESSAGES: SessionChatMessage[] = [
    */
   {
     blocks: [
-      { input: { cmd: "bunx tsc --noEmit" }, name: "exec", type: "tool-call" },
-      { output: "clean", type: "tool-result" },
+      { input: { cmd: 'bunx tsc --noEmit' }, name: 'exec', type: 'tool-call' },
+      { output: 'clean', type: 'tool-result' },
       {
-        input: { file_path: "packages/core-ui/chat/session-chat-tool-run.tsx" },
-        name: "edit_file",
-        type: "tool-call",
+        input: { file_path: 'packages/core-ui/chat/session-chat-tool-run.tsx' },
+        name: 'edit_file',
+        type: 'tool-call',
       },
-      { output: "applied", type: "tool-result" },
-      { input: { query: "tabler chevron stroke" }, name: "web_search", type: "tool-call" },
-      { output: "3 results", type: "tool-result" },
+      { output: 'applied', type: 'tool-result' },
+      { input: { query: 'tabler chevron stroke' }, name: 'web_search', type: 'tool-call' },
+      { output: '3 results', type: 'tool-result' },
     ],
-    id: "tools-1",
-    role: "tool",
-    source: "transcript",
+    id: 'tools-1',
+    role: 'tool',
+    source: 'transcript',
     timestamp: 10_500,
   },
   {
     blocks: [
       {
-        text: "The gutter is the contract, not the glyph — so the width and the inset have to be tokens the rows share.",
-        type: "text",
+        text: 'The gutter is the contract, not the glyph — so the width and the inset have to be tokens the rows share.',
+        type: 'text',
       },
     ],
-    id: "reasoning-2",
-    role: "reasoning",
-    source: "transcript",
+    id: 'reasoning-2',
+    role: 'reasoning',
+    source: 'transcript',
     timestamp: 11_000,
   },
   {
     blocks: [
       {
-        text: "Checking which rows already agree.\n\nThe prose bullet and the reasoning bullet share a slot; nothing else does.",
-        type: "text",
+        text: 'Checking which rows already agree.\n\nThe prose bullet and the reasoning bullet share a slot; nothing else does.',
+        type: 'text',
       },
-      { input: { cmd: "rg -n 'grid-template-columns' chat.css" }, name: "exec", type: "tool-call" },
-      { output: "4 matches", type: "tool-result" },
+      { input: { cmd: "rg -n 'grid-template-columns' chat.css" }, name: 'exec', type: 'tool-call' },
+      { output: '4 matches', type: 'tool-result' },
     ],
-    id: "reasoning-3",
-    role: "reasoning",
-    source: "transcript",
+    id: 'reasoning-3',
+    role: 'reasoning',
+    source: 'transcript',
     timestamp: 12_000,
   },
   {
     blocks: [
       {
-        text: "Now sizing the slot.\n\nA 1rem box is the smallest that holds a 14px chevron without clipping its corners, and it centres a 4px dot cleanly.",
-        type: "text",
+        text: 'Now sizing the slot.\n\nA 1rem box is the smallest that holds a 14px chevron without clipping its corners, and it centres a 4px dot cleanly.',
+        type: 'text',
       },
       {
-        input: { file_path: "packages/core-ui/styles/chat.css" },
-        name: "read_file",
-        type: "tool-call",
+        input: { file_path: 'packages/core-ui/styles/chat.css' },
+        name: 'read_file',
+        type: 'tool-call',
       },
-      { output: "1,842 lines", type: "tool-result" },
+      { output: '1,842 lines', type: 'tool-result' },
     ],
-    id: "reasoning-4",
-    role: "reasoning",
-    source: "transcript",
+    id: 'reasoning-4',
+    role: 'reasoning',
+    source: 'transcript',
     timestamp: 13_000,
   },
   {
     blocks: [
       {
-        text: "Every top-level row now leads with the same 1rem gutter at the same 2px inset, so the dot, the chevron and the tool icon land on one vertical axis.",
-        type: "text",
+        text: 'Every top-level row now leads with the same 1rem gutter at the same 2px inset, so the dot, the chevron and the tool icon land on one vertical axis.',
+        type: 'text',
       },
       {
-        input: { file_path: "packages/core-ui/styles/chat.css" },
-        name: "edit_file",
-        type: "tool-call",
+        input: { file_path: 'packages/core-ui/styles/chat.css' },
+        name: 'edit_file',
+        type: 'tool-call',
       },
-      { output: "applied", type: "tool-result" },
+      { output: 'applied', type: 'tool-result' },
     ],
-    id: "assistant-2",
-    role: "assistant",
-    source: "transcript",
+    id: 'assistant-2',
+    role: 'assistant',
+    source: 'transcript',
     timestamp: 14_000,
   },
 ];
@@ -435,16 +428,11 @@ interface AxisReading {
 /** Centre of a grid row's marker cell, relative to the pane. */
 function gridMarkerCentre(row: Element, paneLeft: number): number | null {
   const style = getComputedStyle(row);
-  const firstTrack = Number.parseFloat(style.gridTemplateColumns.split(" ")[0] ?? "");
+  const firstTrack = Number.parseFloat(style.gridTemplateColumns.split(' ')[0] ?? '');
   if (Number.isNaN(firstTrack)) {
     return null;
   }
-  return (
-    row.getBoundingClientRect().left -
-    paneLeft +
-    Number.parseFloat(style.paddingLeft) +
-    firstTrack / 2
-  );
+  return row.getBoundingClientRect().left - paneLeft + Number.parseFloat(style.paddingLeft) + firstTrack / 2;
 }
 
 /** Centre of a rendered glyph box, relative to the pane. */
@@ -467,7 +455,7 @@ function glyphCentre(glyph: Element | null | undefined, paneLeft: number): numbe
  */
 function topLevel(pane: HTMLElement, selector: string): Element | null {
   for (const node of pane.querySelectorAll(selector)) {
-    if (!node.closest(".ghostex-chat-expansion-body")) {
+    if (!node.closest('.ghostex-chat-expansion-body')) {
       return node;
     }
   }
@@ -476,14 +464,12 @@ function topLevel(pane: HTMLElement, selector: string): Element | null {
 
 function measureAxis(pane: HTMLElement): AxisReading | null {
   const paneLeft = pane.getBoundingClientRect().left;
-  const prose = topLevel(pane, ".ghostex-chat-agent-message");
+  const prose = topLevel(pane, '.ghostex-chat-agent-message');
   if (!prose) {
     return null;
   }
   const proseStyle = getComputedStyle(prose);
-  const proseSlot = Number.parseFloat(
-    proseStyle.gridTemplateColumns.split(" ")[0] ?? "",
-  );
+  const proseSlot = Number.parseFloat(proseStyle.gridTemplateColumns.split(' ')[0] ?? '');
   const glyphAxis = gridMarkerCentre(prose, paneLeft);
   if (glyphAxis === null) {
     return null;
@@ -494,47 +480,20 @@ function measureAxis(pane: HTMLElement): AxisReading | null {
    * rather than inferred from the grid track — the whole question about it is
    * whether the SVG's ink lands where the CSS round's does.
    */
-  const bulletGlyph = topLevel(pane, ".ghostex-chat-agent-message .story-bullet-glyph");
+  const bulletGlyph = topLevel(pane, '.ghostex-chat-agent-message .story-bullet-glyph');
   const bulletBox = bulletGlyph?.getBoundingClientRect() ?? null;
 
   const candidates: [string, number | null][] = [
-    ["prose bullet", glyphCentre(bulletGlyph, paneLeft) ?? glyphAxis],
+    ['prose bullet', glyphCentre(bulletGlyph, paneLeft) ?? glyphAxis],
+    ['reasoning bullet', gridMarkerCentre(topLevel(pane, '.ghostex-chat-thinking-line') ?? prose, paneLeft)],
+    ['reasoning chevron', glyphCentre(topLevel(pane, '.ghostex-chat-thinking-icon svg'), paneLeft)],
     [
-      "reasoning bullet",
-      gridMarkerCentre(
-        topLevel(pane, ".ghostex-chat-thinking-line") ?? prose,
-        paneLeft,
-      ),
+      'tool-group chevron',
+      glyphCentre(topLevel(pane, '.ghostex-chat-tool-run-toggle .ghostex-chat-work-icon svg'), paneLeft),
     ],
-    [
-      "reasoning chevron",
-      glyphCentre(topLevel(pane, ".ghostex-chat-thinking-icon svg"), paneLeft),
-    ],
-    [
-      "tool-group chevron",
-      glyphCentre(
-        topLevel(pane, ".ghostex-chat-tool-run-toggle .ghostex-chat-work-icon svg"),
-        paneLeft,
-      ),
-    ],
-    [
-      "tool-row icon",
-      glyphCentre(
-        topLevel(pane, ".ghostex-chat-work-trigger .ghostex-chat-work-icon svg"),
-        paneLeft,
-      ),
-    ],
-    [
-      "suppressed chevron",
-      glyphCentre(topLevel(pane, ".ghostex-chat-suppressed-trigger svg"), paneLeft),
-    ],
-    [
-      "completed-work chevron",
-      glyphCentre(
-        topLevel(pane, ".ghostex-chat-completed-work-trigger svg"),
-        paneLeft,
-      ),
-    ],
+    ['tool-row icon', glyphCentre(topLevel(pane, '.ghostex-chat-work-trigger .ghostex-chat-work-icon svg'), paneLeft)],
+    ['suppressed chevron', glyphCentre(topLevel(pane, '.ghostex-chat-suppressed-trigger svg'), paneLeft)],
+    ['completed-work chevron', glyphCentre(topLevel(pane, '.ghostex-chat-completed-work-trigger svg'), paneLeft)],
   ];
 
   const samples: AxisSample[] = [];
@@ -551,15 +510,14 @@ function measureAxis(pane: HTMLElement): AxisReading | null {
     glyphAxis,
     samples,
     spread: Math.max(...centres) - Math.min(...centres),
-    textAxis:
-      glyphAxis + proseSlot / 2 + Number.parseFloat(proseStyle.columnGap || "0"),
+    textAxis: glyphAxis + proseSlot / 2 + Number.parseFloat(proseStyle.columnGap || '0'),
   };
 }
 
 /* --- The pane ------------------------------------------------------------- */
 
 /** css = the shipped 4px round · off = retired · glyph = tabler point-filled. */
-type BulletMode = "css" | "off" | "glyph";
+type BulletMode = 'css' | 'off' | 'glyph';
 
 function ChatPane({
   bullets,
@@ -567,8 +525,8 @@ function ChatPane({
   variant,
 }: {
   bullets: BulletMode;
-  theme: "dark" | "light";
-  variant: "before" | "after";
+  theme: 'dark' | 'light';
+  variant: 'before' | 'after';
 }) {
   const paneRef = useRef<HTMLDivElement>(null);
   const [reading, setReading] = useState<AxisReading | null>(null);
@@ -587,13 +545,11 @@ function ChatPane({
    * icon the genuine component with its genuine attributes.
    */
   useLayoutEffect(() => {
-    if (bullets !== "glyph" || !paneRef.current) {
+    if (bullets !== 'glyph' || !paneRef.current) {
       setBulletHosts([]);
       return;
     }
-    setBulletHosts(
-      Array.from(paneRef.current.querySelectorAll<HTMLElement>(BULLET_ROW_SELECTOR)),
-    );
+    setBulletHosts(Array.from(paneRef.current.querySelectorAll<HTMLElement>(BULLET_ROW_SELECTOR)));
   }, [bullets, theme, variant]);
 
   /*
@@ -605,9 +561,7 @@ function ChatPane({
    */
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      const triggers = paneRef.current?.querySelectorAll<HTMLButtonElement>(
-        ".ghostex-chat-thinking-trigger",
-      );
+      const triggers = paneRef.current?.querySelectorAll<HTMLButtonElement>('.ghostex-chat-thinking-trigger');
       triggers?.[1]?.click();
       window.requestAnimationFrame(remeasure);
     });
@@ -618,9 +572,9 @@ function ChatPane({
   useEffect(remeasure, [bulletHosts, bullets, remeasure, theme, variant]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className='flex min-h-0 flex-1 flex-col'>
       <div
-        className="ghostex-session-chat-scope relative flex min-h-0 flex-1 flex-col bg-background text-foreground"
+        className='ghostex-session-chat-scope relative flex min-h-0 flex-1 flex-col bg-background text-foreground'
         data-chat-bullets={bullets}
         data-chat-theme={theme}
         data-marker-variant={variant}
@@ -636,25 +590,25 @@ function ChatPane({
           <>
             <div
               style={{
-                background: "rgba(244, 63, 94, 0.75)",
+                background: 'rgba(244, 63, 94, 0.75)',
                 bottom: 0,
                 left: `${reading.glyphAxis}px`,
-                pointerEvents: "none",
-                position: "absolute",
+                pointerEvents: 'none',
+                position: 'absolute',
                 top: 0,
-                width: "1px",
+                width: '1px',
                 zIndex: 10,
               }}
             />
             <div
               style={{
-                background: "rgba(56, 189, 248, 0.4)",
+                background: 'rgba(56, 189, 248, 0.4)',
                 bottom: 0,
                 left: `${reading.textAxis}px`,
-                pointerEvents: "none",
-                position: "absolute",
+                pointerEvents: 'none',
+                position: 'absolute',
                 top: 0,
-                width: "1px",
+                width: '1px',
                 zIndex: 10,
               }}
             />
@@ -670,10 +624,10 @@ function ChatPane({
         />
         {bulletHosts.map((host, index) =>
           createPortal(
-            <IconPointFilled aria-hidden="true" className="story-bullet-glyph" />,
+            <IconPointFilled aria-hidden='true' className='story-bullet-glyph' />,
             host,
-            `story-bullet-${index}`,
-          ),
+            `story-bullet-${index}`
+          )
         )}
       </div>
       <AxisReadout bullets={bullets} count={bulletHosts.length} reading={reading} />
@@ -681,54 +635,36 @@ function ChatPane({
   );
 }
 
-function AxisReadout({
-  bullets,
-  count,
-  reading,
-}: {
-  bullets: BulletMode;
-  count: number;
-  reading: AxisReading | null;
-}) {
+function AxisReadout({ bullets, count, reading }: { bullets: BulletMode; count: number; reading: AxisReading | null }) {
   if (!reading) {
     return null;
   }
   const aligned = reading.spread < 0.5;
   return (
-    <div className="shrink-0 border-t border-white/10 bg-black/70 px-2 py-1.5 font-mono text-[10px] leading-[1.5] text-white/55">
+    <div className='shrink-0 border-t border-white/10 bg-black/70 px-2 py-1.5 font-mono text-[10px] leading-[1.5] text-white/55'>
       {reading.samples.map((sample) => (
-        <div className="flex justify-between gap-2" key={sample.label}>
-          <span className="truncate">{sample.label}</span>
-          <span
-            className={
-              Math.abs(sample.centre - reading.glyphAxis) < 0.5
-                ? "text-emerald-400"
-                : "text-rose-400"
-            }
-          >
+        <div className='flex justify-between gap-2' key={sample.label}>
+          <span className='truncate'>{sample.label}</span>
+          <span className={Math.abs(sample.centre - reading.glyphAxis) < 0.5 ? 'text-emerald-400' : 'text-rose-400'}>
             {sample.centre.toFixed(1)}px
           </span>
         </div>
       ))}
-      <div className="mt-1 flex justify-between gap-2 border-t border-white/10 pt-1">
+      <div className='mt-1 flex justify-between gap-2 border-t border-white/10 pt-1'>
         <span>spread</span>
-        <span className={aligned ? "text-emerald-400" : "text-rose-400"}>
-          {reading.spread.toFixed(1)}px
-        </span>
+        <span className={aligned ? 'text-emerald-400' : 'text-rose-400'}>{reading.spread.toFixed(1)}px</span>
       </div>
       {/* What the glyph bullet actually costs: the drawn ink next to the 4px
           round it replaces, and one SVG element per bulleted row. */}
-      {bullets === "glyph" && reading.bulletInk !== null ? (
+      {bullets === 'glyph' && reading.bulletInk !== null ? (
         <>
-          <div className="flex justify-between gap-2">
+          <div className='flex justify-between gap-2'>
             <span>bullet ink</span>
-            <span className="text-amber-300">
-              {reading.bulletInk.toFixed(2)}px vs 4.00px css
-            </span>
+            <span className='text-amber-300'>{reading.bulletInk.toFixed(2)}px vs 4.00px css</span>
           </div>
-          <div className="flex justify-between gap-2">
+          <div className='flex justify-between gap-2'>
             <span>extra svg nodes</span>
-            <span className="text-amber-300">{count}</span>
+            <span className='text-amber-300'>{count}</span>
           </div>
         </>
       ) : null}
@@ -745,42 +681,31 @@ function AxisReadout({
  * axis, and a size step between them would put the column back where it
  * started — so the distinction they carry is shape plus stroke weight.
  */
-function GlyphRamp({ theme }: { theme: "dark" | "light" }) {
+function GlyphRamp({ theme }: { theme: 'dark' | 'light' }) {
   return (
     <div
-      className="ghostex-session-chat-scope flex shrink-0 items-stretch gap-4 border-b border-white/10 bg-background px-3 py-2 text-foreground"
+      className='ghostex-session-chat-scope flex shrink-0 items-stretch gap-4 border-b border-white/10 bg-background px-3 py-2 text-foreground'
       data-chat-theme={theme}
     >
-      <RampTier
-        detail="14px · stroke 2 · this row expands"
-        label="control"
-        title="--chat-glyph-control-*"
-      >
-        <IconChevronRight aria-hidden="true" className="ghostex-chat-disclosure-chevron" />
-        <IconChevronRight
-          aria-hidden="true"
-          className="ghostex-chat-disclosure-chevron is-open"
-        />
+      <RampTier detail='14px · stroke 2 · this row expands' label='control' title='--chat-glyph-control-*'>
+        <IconChevronRight aria-hidden='true' className='ghostex-chat-disclosure-chevron' />
+        <IconChevronRight aria-hidden='true' className='ghostex-chat-disclosure-chevron is-open' />
+      </RampTier>
+      <RampTier detail='14px · stroke 1.75 · this row means something' label='semantic' title='--chat-glyph-semantic-*'>
+        <IconTerminal2 aria-hidden='true' className='ghostex-chat-glyph-semantic' />
+        <IconPencil aria-hidden='true' className='ghostex-chat-glyph-semantic' />
+        <IconFileText aria-hidden='true' className='ghostex-chat-glyph-semantic' />
+        <IconWorldSearch aria-hidden='true' className='ghostex-chat-glyph-semantic' />
+        <IconTool aria-hidden='true' className='ghostex-chat-glyph-semantic' />
       </RampTier>
       <RampTier
-        detail="14px · stroke 1.75 · this row means something"
-        label="semantic"
-        title="--chat-glyph-semantic-*"
+        detail='12px · stroke 1.75 · this glyph has its own chrome'
+        label='badge'
+        title='--chat-glyph-badge-size'
       >
-        <IconTerminal2 aria-hidden="true" className="ghostex-chat-glyph-semantic" />
-        <IconPencil aria-hidden="true" className="ghostex-chat-glyph-semantic" />
-        <IconFileText aria-hidden="true" className="ghostex-chat-glyph-semantic" />
-        <IconWorldSearch aria-hidden="true" className="ghostex-chat-glyph-semantic" />
-        <IconTool aria-hidden="true" className="ghostex-chat-glyph-semantic" />
-      </RampTier>
-      <RampTier
-        detail="12px · stroke 1.75 · this glyph has its own chrome"
-        label="badge"
-        title="--chat-glyph-badge-size"
-      >
-        <IconCheck aria-hidden="true" className="ghostex-chat-glyph-badge" />
-        <IconAlertTriangle aria-hidden="true" className="ghostex-chat-glyph-badge" />
-        <IconInfoCircle aria-hidden="true" className="ghostex-chat-glyph-badge" />
+        <IconCheck aria-hidden='true' className='ghostex-chat-glyph-badge' />
+        <IconAlertTriangle aria-hidden='true' className='ghostex-chat-glyph-badge' />
+        <IconInfoCircle aria-hidden='true' className='ghostex-chat-glyph-badge' />
       </RampTier>
     </div>
   );
@@ -798,13 +723,13 @@ function RampTier({
   title: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <span className="font-mono text-[10px] tracking-wide uppercase">{label}</span>
-        <span className="font-mono text-[10px] opacity-60">{title}</span>
+    <div className='flex min-w-0 flex-col gap-1'>
+      <div className='flex items-center gap-2 text-muted-foreground'>
+        <span className='font-mono text-[10px] tracking-wide uppercase'>{label}</span>
+        <span className='font-mono text-[10px] opacity-60'>{title}</span>
       </div>
-      <div className="flex items-center gap-2 text-foreground">{children}</div>
-      <div className="font-mono text-[10px] text-muted-foreground">{detail}</div>
+      <div className='flex items-center gap-2 text-foreground'>{children}</div>
+      <div className='font-mono text-[10px] text-muted-foreground'>{detail}</div>
     </div>
   );
 }
@@ -813,7 +738,7 @@ function RampTier({
 
 function PaneLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="shrink-0 border-b border-white/10 px-3 py-1.5 font-mono text-[11px] tracking-wide text-white/60 uppercase">
+    <div className='shrink-0 border-b border-white/10 px-3 py-1.5 font-mono text-[11px] tracking-wide text-white/60 uppercase'>
       {children}
     </div>
   );
@@ -827,12 +752,12 @@ function Column({
 }: {
   bullets: BulletMode;
   label: string;
-  theme: "dark" | "light";
-  variant: "before" | "after";
+  theme: 'dark' | 'light';
+  variant: 'before' | 'after';
 }) {
   return (
     <div
-      className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-white/10"
+      className='flex min-h-0 flex-col overflow-hidden rounded-lg border border-white/10'
       style={{
         height: `${TRANSCRIPT_HEIGHT_PX}px`,
         width: `${TRANSCRIPT_WIDTH_PX}px`,
@@ -844,37 +769,17 @@ function Column({
   );
 }
 
-function SessionChatMarkerColumnStory({ theme }: { theme: "dark" | "light" }) {
+function SessionChatMarkerColumnStory({ theme }: { theme: 'dark' | 'light' }) {
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0a0a]">
+    <div className='flex min-h-screen flex-col bg-[#0a0a0a]'>
       {/* eslint-disable-next-line react/no-danger -- story-local override sheet */}
       <style dangerouslySetInnerHTML={{ __html: BEFORE_SHEET }} />
       <GlyphRamp theme={theme} />
-      <div className="story-marker-columns">
-        <Column
-          bullets="css"
-          label="before — 4 glyphs, 3 indents"
-          theme={theme}
-          variant="before"
-        />
-        <Column
-          bullets="css"
-          label="A+B — one glyph, one column"
-          theme={theme}
-          variant="after"
-        />
-        <Column
-          bullets="off"
-          label="A+B+C — bullets retired"
-          theme={theme}
-          variant="after"
-        />
-        <Column
-          bullets="glyph"
-          label="A+B+D — tabler point bullet"
-          theme={theme}
-          variant="after"
-        />
+      <div className='story-marker-columns'>
+        <Column bullets='css' label='before — 4 glyphs, 3 indents' theme={theme} variant='before' />
+        <Column bullets='css' label='A+B — one glyph, one column' theme={theme} variant='after' />
+        <Column bullets='off' label='A+B+C — bullets retired' theme={theme} variant='after' />
+        <Column bullets='glyph' label='A+B+D — tabler point bullet' theme={theme} variant='after' />
       </div>
     </div>
   );
@@ -882,17 +787,17 @@ function SessionChatMarkerColumnStory({ theme }: { theme: "dark" | "light" }) {
 
 const meta = {
   argTypes: {
-    theme: { control: "inline-radio", options: ["dark", "light"] },
+    theme: { control: 'inline-radio', options: ['dark', 'light'] },
   },
   component: SessionChatMarkerColumnStory,
-  parameters: { layout: "fullscreen" },
-  title: "Chat/Marker column",
+  parameters: { layout: 'fullscreen' },
+  title: 'Chat/Marker column',
 } satisfies Meta<typeof SessionChatMarkerColumnStory>;
 
 export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Dark: Story = { args: { theme: "dark" } };
+export const Dark: Story = { args: { theme: 'dark' } };
 
-export const Light: Story = { args: { theme: "light" } };
+export const Light: Story = { args: { theme: 'light' } };

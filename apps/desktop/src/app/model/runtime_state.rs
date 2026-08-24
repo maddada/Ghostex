@@ -4,13 +4,11 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiKeepAwakeRuntimeSource {
     Manual,
     Automatic,
 }
-
 
 #[cfg(target_os = "macos")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,12 +18,12 @@ pub(crate) enum GpuiKeepAwakeLidSleepAction {
     Heartbeat,
 }
 
-
 pub(crate) struct GpuiKeepAwakeRuntime {
     pub(crate) runtime_id: u64,
     pub(crate) duration_minutes: shared_settings::SharedKeepAwakeDurationMinutes,
     pub(crate) source: GpuiKeepAwakeRuntimeSource,
-    #[allow(dead_code)] // keep-awake runtime bookkeeping: recorded for diagnostics, nothing reads it back
+    #[allow(dead_code)]
+    // keep-awake runtime bookkeeping: recorded for diagnostics, nothing reads it back
     pub(crate) started_at: Instant,
     pub(crate) fire_at: Option<Instant>,
     #[cfg(target_os = "macos")]
@@ -42,7 +40,6 @@ pub(crate) struct GpuiKeepAwakeRuntime {
     pub(crate) lid_sleep_prevention_last_refresh_at: Option<Instant>,
 }
 
-
 /*
 CDXC:GPUIRemoteNewTerminal 2026-08-20:
 A remote machine runs the gxserver package this app installed for it, so it can
@@ -58,7 +55,6 @@ pub(crate) struct GpuiRemoteGxserverCapabilities {
     pub(crate) code_server_prompt_editor: bool,
 }
 
-
 pub(crate) struct GpuiRemoteGxserverConnection {
     pub(crate) _base_url: String,
     pub(crate) capabilities: GpuiRemoteGxserverCapabilities,
@@ -71,7 +67,6 @@ pub(crate) struct GpuiRemoteGxserverConnection {
     pub(crate) child: Child,
     pub(crate) health_check_failures: u8,
 }
-
 
 impl GpuiRemoteGxserverConnection {
     pub(crate) fn request_target(&self) -> GpuiRemoteGxserverRequestTarget {
@@ -92,23 +87,21 @@ impl GpuiRemoteGxserverConnection {
     }
 }
 
-
 #[derive(Clone)]
 pub(crate) struct GpuiRemoteGxserverRequestTarget {
     pub(crate) capabilities: GpuiRemoteGxserverCapabilities,
-    #[allow(dead_code)] // carried from the connection's capability probe; no request builder reads it back today
+    #[allow(dead_code)]
+    // carried from the connection's capability probe; no request builder reads it back today
     pub(crate) code_server_component_platform: Option<String>,
     pub(crate) execution_target: GpuiRemoteExecutionTarget,
     pub(crate) local_port: u16,
     pub(crate) token: String,
 }
 
-
 pub(crate) enum GpuiRemoteGxserverPresentationStreamMessage {
     Event(serde_json::Value),
     Failed,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct GpuiRemoteRepositoryCloneRequest {
@@ -117,13 +110,11 @@ pub(crate) struct GpuiRemoteRepositoryCloneRequest {
     pub(crate) toast_id: String,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiProjectContext {
     Project,
     QuickProjectless,
 }
-
 
 impl GpuiProjectContext {
     pub(crate) fn from_project_is_quick_bridge(project_is_quick: bool) -> Self {
@@ -143,7 +134,6 @@ impl GpuiProjectContext {
         matches!(self, Self::Project)
     }
 }
-
 
 /*
 CDXC:GPUIProjectSnapshot 2026-06-24-07:41:
@@ -183,7 +173,6 @@ Browser active-project readiness no longer has a GPUI proof store. Keep `browser
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct GpuiProjectId(pub(crate) String);
 
-
 #[allow(dead_code)]
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct GpuiProjectSurfaceIds {
@@ -192,7 +181,6 @@ pub(crate) struct GpuiProjectSurfaceIds {
     pub(crate) automate_board_id: Option<String>,
     pub(crate) manage_workspace_id: Option<String>,
 }
-
 
 #[allow(dead_code)]
 impl GpuiProjectSurfaceIds {
@@ -217,7 +205,6 @@ impl GpuiProjectSurfaceIds {
     }
 }
 
-
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiProjectScopedFeatureAvailability {
@@ -227,7 +214,6 @@ pub(crate) struct GpuiProjectScopedFeatureAvailability {
     pub(crate) automate: bool,
     pub(crate) manage: bool,
 }
-
 
 #[allow(dead_code)]
 impl GpuiProjectScopedFeatureAvailability {
@@ -257,7 +243,6 @@ impl GpuiProjectScopedFeatureAvailability {
     }
 }
 
-
 #[allow(dead_code)]
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct GpuiProjectSnapshot {
@@ -271,7 +256,6 @@ pub(crate) struct GpuiProjectSnapshot {
     pub(crate) surface_ids: GpuiProjectSurfaceIds,
 }
 
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct GpuiGxserverPresentationFocusState {
     pub(crate) active_project_id: Option<String>,
@@ -280,14 +264,12 @@ pub(crate) struct GpuiGxserverPresentationFocusState {
     pub(crate) visible_session_ids: Vec<String>,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiProjectSwitchRequestKind {
     ActiveProjectContext,
     GxserverPresentationFocusState,
     WorkspaceTerminalFocus,
 }
-
 
 impl GpuiProjectSwitchRequestKind {
     pub(crate) fn breadcrumb_id(self) -> &'static str {
@@ -309,7 +291,6 @@ impl GpuiProjectSwitchRequestKind {
     }
 }
 
-
 /// A sidebar request collapsed into the trailing edge of a project switch.
 /// `ActiveProjectContext` carries no payload because the parsed snapshot is
 /// already stored in `latest_sidebar_project_snapshot`; replaying the marker
@@ -320,7 +301,6 @@ pub(crate) enum GpuiPendingProjectSwitchPayload {
     GxserverPresentationFocusState(GpuiGxserverPresentationFocusState),
     WorkspaceTerminalFocus(GpuiSidebarWorkspaceTerminalFocusMessage),
 }
-
 
 impl GpuiPendingProjectSwitchPayload {
     pub(crate) fn kind(&self) -> GpuiProjectSwitchRequestKind {
@@ -334,13 +314,11 @@ impl GpuiPendingProjectSwitchPayload {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiPendingProjectSwitchRequest {
     pub(crate) target_project_id: Option<String>,
     pub(crate) payload: GpuiPendingProjectSwitchPayload,
 }
-
 
 #[allow(dead_code)]
 impl GpuiProjectSnapshot {
@@ -365,7 +343,6 @@ impl GpuiProjectSnapshot {
     }
 }
 
-
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiProjectSnapshotContractError {
@@ -379,7 +356,6 @@ pub(crate) enum GpuiProjectSnapshotContractError {
     InconsistentProjectContext,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiGxserverPresentationFocusStateContractError {
     MalformedJson,
@@ -391,13 +367,11 @@ pub(crate) enum GpuiGxserverPresentationFocusStateContractError {
     UnexpectedMessageType,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiProjectSnapshotStoreResult {
     Changed,
     Unchanged,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ProjectScopedWorkareaAvailability {
@@ -405,7 +379,6 @@ pub(crate) struct ProjectScopedWorkareaAvailability {
     pub(crate) project_features: GpuiProjectScopedFeatureAvailability,
     pub(crate) active_project_is_remote: bool,
 }
-
 
 impl ProjectScopedWorkareaAvailability {
     pub(crate) fn from_env_bridge() -> Self {
@@ -493,7 +466,8 @@ impl ProjectScopedWorkareaAvailability {
                             | TitlebarMode::Kanban
                             | TitlebarMode::Automate
                             | TitlebarMode::Manage
-                    ) {
+                    )
+                {
                     Some(TITLEBAR_PROJECT_CONTEXT_DISABLED_REASON)
                 } else {
                     None
@@ -508,7 +482,6 @@ impl ProjectScopedWorkareaAvailability {
     }
 }
 
-
 /*
 CDXC:GPUISourceRuntimeCleanup 2026-06-28-17:09:
 Keep only the lean runtime value types needed to launch Source and create Source/Kanban/Automate/Manage CEF surfaces. These structs are process-local implementation state, not retired proof records, and must not grow JSON status APIs, persisted URL fields, private logging, fallback navigation, or placeholder-preflight evidence.
@@ -520,7 +493,6 @@ pub(crate) enum ProjectWorkareaCefSurfaceSlotKey {
     Automate,
     Manage,
 }
-
 
 impl ProjectWorkareaCefSurfaceSlotKey {
     pub(crate) fn project_placeholder_slots() -> [Self; 4] {
@@ -554,12 +526,10 @@ impl ProjectWorkareaCefSurfaceSlotKey {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ProjectWorkareaRealRuntimeUrl {
     pub(crate) value: String,
 }
-
 
 impl ProjectWorkareaRealRuntimeUrl {
     pub(crate) fn from_authorized_runtime_url(value: String) -> Option<Self> {
@@ -582,7 +552,6 @@ impl ProjectWorkareaRealRuntimeUrl {
     }
 }
 
-
 /*
 CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-29-00:15:
 Project workarea CEF ownership keeps only the process-local direct runtime URL identity beside the CefSurface so active-project changes can prune stale slot reuse. This identity is not a readiness/proof store, must not be serialized or logged, and must only be compared against `project_workarea_runtime_url_for_slot`.
@@ -592,13 +561,11 @@ pub(crate) struct ProjectWorkareaRuntimeCefSurface {
     pub(crate) surface: Entity<CefSurface>,
 }
 
-
 impl ProjectWorkareaRuntimeCefSurface {
     pub(crate) fn matches_runtime_url(&self, runtime_url: &ProjectWorkareaRealRuntimeUrl) -> bool {
         self.runtime_url.eq(runtime_url)
     }
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct SourceCodeServerRuntimeTarget {
@@ -607,7 +574,6 @@ pub(crate) struct SourceCodeServerRuntimeTarget {
     pub(crate) project_path: PathBuf,
     pub(crate) endpoint: SourceCodeServerRuntimeEndpoint,
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum SourceCodeServerRuntimeEndpoint {
@@ -620,7 +586,6 @@ pub(crate) enum SourceCodeServerRuntimeEndpoint {
         remote_machine_id: String,
     },
 }
-
 
 impl SourceCodeServerRuntimeTarget {
     pub(crate) fn component_platform(&self) -> Option<&str> {
@@ -654,7 +619,6 @@ impl SourceCodeServerRuntimeTarget {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RemotePromptEditorDeliveryTarget {
     #[cfg(target_os = "macos")]
@@ -667,7 +631,6 @@ pub(crate) enum RemotePromptEditorDeliveryTarget {
     NativeView(usize),
 }
 
-
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct PendingRemotePromptEditorRequest {
     pub(crate) shell_session_id: TerminalSessionId,
@@ -678,7 +641,6 @@ pub(crate) struct PendingRemotePromptEditorRequest {
     pub(crate) delivery_target: RemotePromptEditorDeliveryTarget,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SourceCodeServerRuntimeSettings {
     pub(crate) link_vscode_user_config: bool,
@@ -686,9 +648,10 @@ pub(crate) struct SourceCodeServerRuntimeSettings {
     pub(crate) vscode_user_config_dir: String,
 }
 
-
 impl SourceCodeServerRuntimeSettings {
-    pub(crate) fn from_shared_settings(settings: &shared_settings::SharedSidebarSettingsSnapshot) -> Self {
+    pub(crate) fn from_shared_settings(
+        settings: &shared_settings::SharedSidebarSettingsSnapshot,
+    ) -> Self {
         let link_vscode_user_config = settings
             .object()
             .get("codeServerLinkVscodeUserConfig")
@@ -713,7 +676,9 @@ impl SourceCodeServerRuntimeSettings {
         }
     }
 
-    pub(crate) fn from_sidebar_runtime_settings(settings: &cef::SidebarRuntimeSettingsSnapshot) -> Self {
+    pub(crate) fn from_sidebar_runtime_settings(
+        settings: &cef::SidebarRuntimeSettingsSnapshot,
+    ) -> Self {
         let object = serde_json::from_str::<serde_json::Value>(&settings.saved_settings_json)
             .ok()
             .and_then(|value| value.as_object().cloned())
@@ -729,7 +694,6 @@ impl SourceCodeServerRuntimeSettings {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum SourceCodeServerRuntimeLaunchState {
     #[default]
@@ -741,7 +705,6 @@ pub(crate) enum SourceCodeServerRuntimeLaunchState {
     Failed,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SourceCodeServerRuntimeFailure {
     InstallDownload,
@@ -749,7 +712,6 @@ pub(crate) enum SourceCodeServerRuntimeFailure {
     InstallOther,
     Launch,
 }
-
 
 impl SourceCodeServerRuntimeFailure {
     pub(crate) fn placeholder_message(self) -> &'static str {
@@ -766,7 +728,6 @@ impl SourceCodeServerRuntimeFailure {
     }
 }
 
-
 pub(crate) struct SourceCodeServerRuntimeOwner {
     pub(crate) child: Option<Child>,
     pub(crate) failure: Option<SourceCodeServerRuntimeFailure>,
@@ -780,7 +741,6 @@ pub(crate) struct SourceCodeServerRuntimeOwner {
     pub(crate) prompt_editor_ipc_ready: bool,
     pub(crate) pending_remote_prompt_editor_request: Option<PendingRemotePromptEditorRequest>,
 }
-
 
 impl SourceCodeServerRuntimeOwner {
     pub(crate) fn new() -> Self {
@@ -804,7 +764,10 @@ impl SourceCodeServerRuntimeOwner {
         self.generation
     }
 
-    pub(crate) fn queue_remote_prompt_editor_request(&mut self, request: PendingRemotePromptEditorRequest) {
+    pub(crate) fn queue_remote_prompt_editor_request(
+        &mut self,
+        request: PendingRemotePromptEditorRequest,
+    ) {
         self.pending_remote_prompt_editor_request = Some(request);
     }
 
@@ -1094,7 +1057,6 @@ impl SourceCodeServerRuntimeOwner {
     }
 }
 
-
 pub(crate) struct SourceCodeServerRuntimeStartOutput {
     pub(crate) child: Child,
     pub(crate) runtime_origin: String,
@@ -1103,7 +1065,5 @@ pub(crate) struct SourceCodeServerRuntimeStartOutput {
     pub(crate) http_runtime_ready: bool,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AgentsTerminalRuntimeSessionId(pub(crate) u64);
-

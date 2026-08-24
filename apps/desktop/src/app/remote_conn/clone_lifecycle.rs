@@ -278,6 +278,4 @@ impl GhostexGpuiApp {
         );
         self.dispatch_gpui_repository_clone_result(request_id, false, None, Some(message), cx);
     }
-
 }
-

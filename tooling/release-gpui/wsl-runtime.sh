@@ -10,18 +10,24 @@ LINUX_ARCHIVE="${3:-}"
 OUTPUT="${4:-$(release_gpui_default_output "$REPO_ROOT" "$VERSION" "gxserver-wsl-windows-$ARCH")}"
 release_gpui_require_version "$VERSION"
 case "$ARCH" in
-  x64 | arm64) ;;
-  *) echo "WSL package architecture must be x64 or arm64, got: ${ARCH:-<empty>}" >&2; exit 2 ;;
+x64 | arm64) ;;
+*)
+	echo "WSL package architecture must be x64 or arm64, got: ${ARCH:-<empty>}" >&2
+	exit 2
+	;;
 esac
 release_gpui_require_command node
 release_gpui_require_command zip
 release_gpui_prepare_output "$REPO_ROOT" "$OUTPUT"
 
-[[ -f "$LINUX_ARCHIVE" ]] || { echo "Linux gxserver runtime archive is missing: $LINUX_ARCHIVE" >&2; exit 1; }
+[[ -f "$LINUX_ARCHIVE" ]] || {
+	echo "Linux gxserver runtime archive is missing: $LINUX_ARCHIVE" >&2
+	exit 1
+}
 EXPECTED_NAME="gxserver-linux-$ARCH.tar.gz"
 [[ "$(basename "$LINUX_ARCHIVE")" == "$EXPECTED_NAME" ]] || {
-  echo "Expected $EXPECTED_NAME, got $(basename "$LINUX_ARCHIVE")" >&2
-  exit 1
+	echo "Expected $EXPECTED_NAME, got $(basename "$LINUX_ARCHIVE")" >&2
+	exit 1
 }
 
 STAGE_ROOT="$REPO_ROOT/build/release-gpui/wsl-package-stage-$ARCH"
@@ -35,11 +41,11 @@ cp "$LINUX_ARCHIVE" "$PACKAGE_ROOT/$EXPECTED_NAME"
 cp "$SCRIPT_DIR/install-gxserver-wsl.ps1" "$PACKAGE_ROOT/install-gxserver-wsl.ps1"
 PAYLOAD_SHA="$(release_gpui_sha256 "$PACKAGE_ROOT/$EXPECTED_NAME")"
 GHOSTEX_WSL_PACKAGE_ROOT="$PACKAGE_ROOT" \
-GHOSTEX_WSL_VERSION="$VERSION" \
-GHOSTEX_WSL_ARCH="$ARCH" \
-GHOSTEX_WSL_PAYLOAD_NAME="$EXPECTED_NAME" \
-GHOSTEX_WSL_PAYLOAD_SHA="$PAYLOAD_SHA" \
-node <<'JS'
+	GHOSTEX_WSL_VERSION="$VERSION" \
+	GHOSTEX_WSL_ARCH="$ARCH" \
+	GHOSTEX_WSL_PAYLOAD_NAME="$EXPECTED_NAME" \
+	GHOSTEX_WSL_PAYLOAD_SHA="$PAYLOAD_SHA" \
+	node <<'JS'
 const { statSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 const env = process.env;
@@ -71,8 +77,8 @@ EOF
 
 ARCHIVE="$OUTPUT/$PACKAGE_NAME.zip"
 (
-  cd "$STAGE_ROOT"
-  zip -X -q -r "$ARCHIVE" "$PACKAGE_NAME"
+	cd "$STAGE_ROOT"
+	zip -X -q -r "$ARCHIVE" "$PACKAGE_NAME"
 )
 release_gpui_write_manifest "$OUTPUT" "gxserver-wsl-windows-$ARCH" "$VERSION" "$ARCHIVE"
 printf 'Built WSL gxserver %s release payload in %s\n' "$ARCH" "$OUTPUT"

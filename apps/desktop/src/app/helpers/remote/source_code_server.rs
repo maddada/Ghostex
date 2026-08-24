@@ -214,7 +214,9 @@ pub(crate) fn source_code_server_remote_candidate_ports() -> Vec<u16> {
         .collect()
 }
 
-pub(crate) fn source_code_server_validate_remote_linux_payload(repo_root: &Path) -> Result<(), String> {
+pub(crate) fn source_code_server_validate_remote_linux_payload(
+    repo_root: &Path,
+) -> Result<(), String> {
     for relative_path in [
         "lib/node",
         "out/node/entry.js",
@@ -354,4 +356,3 @@ pub(crate) fn read_remote_manage_docs_resource(
     let data = BASE64_STANDARD.decode(encoded).ok()?;
     (data.len() <= MANAGE_REMOTE_RESOURCE_MAX_BYTES).then_some(data)
 }
-

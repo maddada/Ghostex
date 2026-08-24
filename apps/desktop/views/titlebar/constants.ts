@@ -1,4 +1,4 @@
-import type { TitlebarDropdownPanelKind, TitlebarDropdownPanelSize } from "./types";
+import type { TitlebarDropdownPanelKind, TitlebarDropdownPanelSize } from './types';
 
 /*
  * CDXC:TipsAndTricks 2026-06-16-19:42:
@@ -11,28 +11,26 @@ import type { TitlebarDropdownPanelKind, TitlebarDropdownPanelSize } from "./typ
  * Third-party skill recommendations from Tips should open as current-project
  * browser panes so users can inspect the setup detail without leaving Ghostex.
  */
-export const GHOSTEX_CHANGELOG_URL = "https://github.com/maddada/ghostex/releases";
-export const GHOSTEX_DOCS_URL = "https://ghostex.dev/docs";
-export const GHOSTEX_DISCORD_URL = "https://discord.gg/df7b3G92CS";
-export const FASTER_CHROME_DEVTOOLS_SKILL_URL = "https://github.com/zeke/faster-chrome-devtools-skill";
+export const GHOSTEX_CHANGELOG_URL = 'https://github.com/maddada/ghostex/releases';
+export const GHOSTEX_DOCS_URL = 'https://ghostex.dev/docs';
+export const GHOSTEX_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
+export const FASTER_CHROME_DEVTOOLS_SKILL_URL = 'https://github.com/zeke/faster-chrome-devtools-skill';
 export const TITLEBAR_GRADIENT_BLEND_START_PERCENT = 40;
 export const DEFAULT_CODE_SERVER_RESOURCE_PORT = 3775;
 
 export function codeServerResourcePort(): number {
   const port = window.__ghostex_NATIVE_HOST__?.codeServerRuntime?.port;
-  return typeof port === "number" && Number.isInteger(port) && port > 0
-    ? port
-    : DEFAULT_CODE_SERVER_RESOURCE_PORT;
+  return typeof port === 'number' && Number.isInteger(port) && port > 0 ? port : DEFAULT_CODE_SERVER_RESOURCE_PORT;
 }
 
-export const LAST_OPEN_TARGET_STORAGE_KEY = "ghostex.titlebar.lastOpenTargetId";
-export const LAST_ACTION_COMMAND_STORAGE_PREFIX = "ghostex.titlebar.lastActionCommandByProject:";
-export const KEEP_AWAKE_RUNTIME_STORAGE_KEY = "ghostex.titlebar.keepAwakeRuntime";
-export const KEEP_AWAKE_RUNTIME_SYNC_STORAGE_KEY = "ghostex.titlebar.keepAwakeRuntimeSync";
-export const KEEP_AWAKE_RUNTIME_CHANGED_EVENT = "ghostex:titlebar-keep-awake-runtime-changed";
-export const KEEP_AWAKE_LID_SLEEP_STORAGE_KEY = "ghostex.titlebar.lidSleepPrevention";
-export const TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX = "ghostex.titlebar.gitState.";
-export const TITLEBAR_TIPS_READ_STORAGE_KEY = "ghostex.titlebar.tips.readIds";
+export const LAST_OPEN_TARGET_STORAGE_KEY = 'ghostex.titlebar.lastOpenTargetId';
+export const LAST_ACTION_COMMAND_STORAGE_PREFIX = 'ghostex.titlebar.lastActionCommandByProject:';
+export const KEEP_AWAKE_RUNTIME_STORAGE_KEY = 'ghostex.titlebar.keepAwakeRuntime';
+export const KEEP_AWAKE_RUNTIME_SYNC_STORAGE_KEY = 'ghostex.titlebar.keepAwakeRuntimeSync';
+export const KEEP_AWAKE_RUNTIME_CHANGED_EVENT = 'ghostex:titlebar-keep-awake-runtime-changed';
+export const KEEP_AWAKE_LID_SLEEP_STORAGE_KEY = 'ghostex.titlebar.lidSleepPrevention';
+export const TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX = 'ghostex.titlebar.gitState.';
+export const TITLEBAR_TIPS_READ_STORAGE_KEY = 'ghostex.titlebar.tips.readIds';
 export const KEEP_AWAKE_POWER_CHECK_INTERVAL_MS = 30_000;
 export const KEEP_AWAKE_WORKING_SESSION_GRACE_MS = 20 * 60_000;
 export const KEEP_AWAKE_ADMIN_PROCESS_TIMEOUT_MS = 120_000;
@@ -51,7 +49,7 @@ export const TITLEBAR_EVENT_LOOP_STALL_LOG_THROTTLE_MS = 10_000;
  * without query parameters. Swift injects the panel kind at document start so
  * WebKit does not treat a synthetic local-file URL as the document resource.
  */
-export const TITLEBAR_PANEL_QUERY_PARAM = "ghostexTitlebarPanel";
+export const TITLEBAR_PANEL_QUERY_PARAM = 'ghostexTitlebarPanel';
 export const TITLEBAR_DROPDOWN_RESOURCES_PANEL_WIDTH = 656;
 /**
  * CDXC:TipsAndTricks 2026-06-12-08:56:
@@ -63,19 +61,15 @@ export const TITLEBAR_DROPDOWN_READING_PANEL_HEIGHT = 650;
 
 export function readTitlebarDropdownPanelKind(): TitlebarDropdownPanelKind | undefined {
   const injectedKind =
-    typeof window.__ghostex_TITLEBAR_PANEL_KIND__ === "string"
-      ? window.__ghostex_TITLEBAR_PANEL_KIND__
-      : undefined;
+    typeof window.__ghostex_TITLEBAR_PANEL_KIND__ === 'string' ? window.__ghostex_TITLEBAR_PANEL_KIND__ : undefined;
   const rawKind = injectedKind ?? new URLSearchParams(window.location.search).get(TITLEBAR_PANEL_QUERY_PARAM);
-  if (rawKind === "resources" || rawKind === "tips") {
+  if (rawKind === 'resources' || rawKind === 'tips') {
     return rawKind;
   }
   return undefined;
 }
 
-export function createTitlebarDropdownPanelPreferredSize(
-  kind: TitlebarDropdownPanelKind,
-): TitlebarDropdownPanelSize {
+export function createTitlebarDropdownPanelPreferredSize(kind: TitlebarDropdownPanelKind): TitlebarDropdownPanelSize {
   /*
    * CDXC:ReactTitlebar 2026-06-12-02:50:
    * Compact native titlebar dropdown panels must be sized from the number and
@@ -84,12 +78,12 @@ export function createTitlebarDropdownPanelPreferredSize(
    * post-open WebKit measurement feedback.
    */
   switch (kind) {
-    case "resources":
+    case 'resources':
       return {
         height: TITLEBAR_DROPDOWN_READING_PANEL_HEIGHT,
         width: TITLEBAR_DROPDOWN_RESOURCES_PANEL_WIDTH,
       };
-    case "tips":
+    case 'tips':
       return {
         height: TITLEBAR_DROPDOWN_READING_PANEL_HEIGHT,
         width: TITLEBAR_DROPDOWN_TIPS_PANEL_WIDTH,

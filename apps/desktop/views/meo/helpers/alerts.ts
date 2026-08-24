@@ -8,7 +8,10 @@ export const ALERT_TYPES: readonly AlertType[] = ['NOTE', 'TIP', 'IMPORTANT', 'W
 
 const ALERT_DIRECTIVE_REGEX = />\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/;
 
-function getAlertDirectiveDetails(lineText: string, lineFrom: number): {
+function getAlertDirectiveDetails(
+  lineText: string,
+  lineFrom: number
+): {
   type: AlertType;
   directiveFrom: number;
   directiveTo: number;
@@ -32,7 +35,7 @@ function getAlertDirectiveDetails(lineText: string, lineFrom: number): {
     directiveFrom,
     directiveTo,
     labelFrom,
-    labelTo: labelFrom + match[1].length
+    labelTo: labelFrom + match[1].length,
   };
 }
 
@@ -111,6 +114,6 @@ export function detectAlertInBlockquote(state: any, node: any): AlertBlock | nul
     directiveFrom: directive.directiveFrom,
     directiveTo: directive.directiveTo,
     labelFrom: directive.labelFrom,
-    labelTo: directive.labelTo
+    labelTo: directive.labelTo,
   };
 }

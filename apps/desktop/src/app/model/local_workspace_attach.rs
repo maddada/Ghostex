@@ -5,20 +5,17 @@
 
 use crate::*;
 
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct GpuiLocalWorkspaceSessionKey {
     pub(crate) project_id: String,
     pub(crate) session_id: String,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiLocalWorkspaceAttachIntent {
     Attach,
     Wake,
 }
-
 
 impl GpuiLocalWorkspaceAttachIntent {
     pub(crate) fn rpc_path(self) -> &'static str {
@@ -29,7 +26,6 @@ impl GpuiLocalWorkspaceAttachIntent {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiLocalWorkspaceAttachOrigin {
     SidebarFocus,
@@ -37,13 +33,11 @@ pub(crate) enum GpuiLocalWorkspaceAttachOrigin {
     WakeRecovery,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarWorkspaceTerminalLifecycleResultMessage {
     pub(crate) ok: bool,
     pub(crate) request_id: u64,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiLocalWorkspaceLifecycleAction {
@@ -51,7 +45,6 @@ pub(crate) enum GpuiLocalWorkspaceLifecycleAction {
     Sleep,
     Wake,
 }
-
 
 impl GpuiLocalWorkspaceLifecycleAction {
     pub(crate) fn as_str(self) -> &'static str {
@@ -63,7 +56,6 @@ impl GpuiLocalWorkspaceLifecycleAction {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiLocalWorkspaceLifecycleMutationKind {
     DirectClose,
@@ -72,7 +64,6 @@ pub(crate) enum GpuiLocalWorkspaceLifecycleMutationKind {
     DirectWake,
     ScopedSleep,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiLocalWorkspaceLifecycleRequest {
@@ -83,7 +74,6 @@ pub(crate) struct GpuiLocalWorkspaceLifecycleRequest {
     pub(crate) replacement_shell_session_id: Option<TerminalSessionId>,
     pub(crate) shell_session_id: TerminalSessionId,
 }
-
 
 pub(crate) fn gpui_local_workspace_lifecycle_request_is_pending(
     requests: &HashMap<u64, GpuiLocalWorkspaceLifecycleRequest>,
@@ -96,7 +86,6 @@ pub(crate) fn gpui_local_workspace_lifecycle_request_is_pending(
     requests.values().any(|pending| pending == request)
 }
 
-
 impl From<&GpuiSidebarWorkspaceTerminalFocusMessage> for GpuiLocalWorkspaceSessionKey {
     fn from(message: &GpuiSidebarWorkspaceTerminalFocusMessage) -> Self {
         Self {
@@ -105,7 +94,6 @@ impl From<&GpuiSidebarWorkspaceTerminalFocusMessage> for GpuiLocalWorkspaceSessi
         }
     }
 }
-
 
 impl From<&GpuiSidebarWorkspaceTerminalRenameCommandMessage> for GpuiLocalWorkspaceSessionKey {
     fn from(message: &GpuiSidebarWorkspaceTerminalRenameCommandMessage) -> Self {
@@ -116,7 +104,6 @@ impl From<&GpuiSidebarWorkspaceTerminalRenameCommandMessage> for GpuiLocalWorksp
     }
 }
 
-
 impl From<&GpuiSidebarWorkspaceTerminalEnterMessage> for GpuiLocalWorkspaceSessionKey {
     fn from(message: &GpuiSidebarWorkspaceTerminalEnterMessage) -> Self {
         Self {
@@ -125,7 +112,6 @@ impl From<&GpuiSidebarWorkspaceTerminalEnterMessage> for GpuiLocalWorkspaceSessi
         }
     }
 }
-
 
 pub(crate) fn local_workspace_session_mappings_to_shell_state_json(
     mappings: &HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
@@ -156,7 +142,6 @@ pub(crate) fn local_workspace_session_mappings_to_shell_state_json(
             .collect(),
     )
 }
-
 
 pub(crate) fn remote_workspace_session_mappings_to_shell_state_json(
     mappings: &HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
@@ -200,7 +185,6 @@ pub(crate) fn remote_workspace_session_mappings_to_shell_state_json(
     )
 }
 
-
 pub(crate) fn local_workspace_session_mappings_from_shell_state(
     value: &serde_json::Value,
     workspace: &WorkspaceModel,
@@ -241,7 +225,6 @@ pub(crate) fn local_workspace_session_mappings_from_shell_state(
     }
     Some(mappings)
 }
-
 
 pub(crate) fn remote_workspace_session_mappings_from_shell_state(
     value: &serde_json::Value,

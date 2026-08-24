@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 
-const modalHostSource = readFileSync(new URL("./modal-host.tsx", import.meta.url), "utf8");
+const modalHostSource = readFileSync(new URL('./modal-host.tsx', import.meta.url), 'utf8');
 
-describe("default prompt agent settings source", () => {
-  test("does not save modal default settings before native hydrate", () => {
+describe('default prompt agent settings source', () => {
+  test('does not save modal default settings before native hydrate', () => {
     /*
      * CDXC:GxserverAgentSettings 2026-06-19-08:58:
      * The modal store initializes with DEFAULT_ghostex_SETTINGS. Settings and
@@ -20,16 +20,13 @@ describe("default prompt agent settings source", () => {
      * First Launch uses the same hydrated Settings store gate, so it must also
      * block native presentation until the modal host has applied native state.
      */
-    expect(modalHostSource).toContain("const revision = useSidebarStore((state) => state.revision);");
-    expect(modalHostSource).toContain("const hasNativeSettingsHydrated = revision > 0;");
-    expect(modalHostSource).toContain("const isSettingsModal = isSettingsModalKind(activeModal);");
-    expect(modalHostSource).toContain("const isSettingsRenderable = isSettingsModal && hasNativeSettingsHydrated;");
+    expect(modalHostSource).toContain('const revision = useSidebarStore((state) => state.revision);');
+    expect(modalHostSource).toContain('const hasNativeSettingsHydrated = revision > 0;');
+    expect(modalHostSource).toContain('const isSettingsModal = isSettingsModalKind(activeModal);');
+    expect(modalHostSource).toContain('const isSettingsRenderable = isSettingsModal && hasNativeSettingsHydrated;');
     expect(modalHostSource).toContain(
-      "const isFirstLaunchSetupRenderable = isFirstLaunchSetupModal && hasNativeSettingsHydrated;",
+      'const isFirstLaunchSetupRenderable = isFirstLaunchSetupModal && hasNativeSettingsHydrated;'
     );
-    expect(modalHostSource).toContain(
-      "(!isFirstLaunchSetupModal || isFirstLaunchSetupRenderable)",
-    );
+    expect(modalHostSource).toContain('(!isFirstLaunchSetupModal || isFirstLaunchSetupRenderable)');
   });
-
 });

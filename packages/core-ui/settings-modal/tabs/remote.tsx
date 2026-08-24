@@ -1,16 +1,7 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { cn } from "@/packages/components/utils";
-import { Button } from "@/packages/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardTitle,
-} from "@/packages/components/ui/card";
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { cn } from '@/packages/components/utils';
+import { Button } from '@/packages/components/ui/button';
+import { Card, CardContent, CardTitle } from '@/packages/components/ui/card';
 import {
   Popover,
   PopoverContent,
@@ -18,13 +9,8 @@ import {
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
-} from "@/packages/components/ui/popover";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/packages/components/ui/field";
+} from '@/packages/components/ui/popover';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import {
   IconDeviceDesktop,
   IconDownload,
@@ -33,20 +19,11 @@ import {
   IconRefresh,
   IconDeviceFloppy,
   IconTrash,
-} from "@tabler/icons-react";
-import {
-  normalizeRemoteMachineSettings,
-  type RemoteMachineSettings,
-} from "../../../shared/ghostex-settings";
-import { type WebviewApi } from "../../webview-api";
-import {
-  SettingButton,
-  SettingsInput,
-} from "../fields";
-import {
-  SettingsTabSearch,
-  hasVisibleSettingsSearchResult,
-} from "../search";
+} from '@tabler/icons-react';
+import { normalizeRemoteMachineSettings, type RemoteMachineSettings } from '../../../shared/ghostex-settings';
+import { type WebviewApi } from '../../webview-api';
+import { SettingButton, SettingsInput } from '../fields';
+import { SettingsTabSearch, hasVisibleSettingsSearchResult } from '../search';
 
 export type RemoteMachineDraft = {
   id: string;
@@ -65,51 +42,48 @@ export const REMOTE_GXSERVER_INSTALL_PROBE_DEBOUNCE_MS = 600;
 export function createRemoteMachineDraft(): RemoteMachineDraft {
   return {
     id: `remote-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-    name: "",
-    sshHost: "",
-    sshIdentityFile: "",
-    sshPassword: "",
+    name: '',
+    sshHost: '',
+    sshIdentityFile: '',
+    sshPassword: '',
     sshPasswordSaved: false,
-    sshPort: "",
-    sshUser: "",
-    wslDistribution: "",
+    sshPort: '',
+    sshUser: '',
+    wslDistribution: '',
   };
 }
 
 export function createRemoteMachineDraftFromSettings(
   machine: RemoteMachineSettings,
-  sshPassword = "",
+  sshPassword = ''
 ): RemoteMachineDraft {
   return {
     id: machine.id,
     name: machine.name,
     sshHost: machine.sshHost,
-    sshIdentityFile: machine.sshIdentityFile ?? "",
+    sshIdentityFile: machine.sshIdentityFile ?? '',
     sshPassword,
     sshPasswordSaved: machine.sshPasswordSaved === true,
-    sshPort: machine.sshPort ? String(machine.sshPort) : "",
-    sshUser: machine.sshUser ?? "",
-    wslDistribution: machine.wslDistribution ?? "",
+    sshPort: machine.sshPort ? String(machine.sshPort) : '',
+    sshUser: machine.sshUser ?? '',
+    wslDistribution: machine.wslDistribution ?? '',
   };
 }
 
 export function applyRemoteMachineDraftPatch(
   draft: RemoteMachineDraft,
-  patch: Partial<RemoteMachineDraft>,
+  patch: Partial<RemoteMachineDraft>
 ): RemoteMachineDraft {
   return {
     ...draft,
     name: patch.name !== undefined ? patch.name : draft.name,
     sshHost: patch.sshHost !== undefined ? patch.sshHost : draft.sshHost,
-    sshIdentityFile:
-      patch.sshIdentityFile !== undefined ? patch.sshIdentityFile : draft.sshIdentityFile,
+    sshIdentityFile: patch.sshIdentityFile !== undefined ? patch.sshIdentityFile : draft.sshIdentityFile,
     sshPassword: patch.sshPassword !== undefined ? patch.sshPassword : draft.sshPassword,
-    sshPasswordSaved:
-      patch.sshPasswordSaved !== undefined ? patch.sshPasswordSaved : draft.sshPasswordSaved,
+    sshPasswordSaved: patch.sshPasswordSaved !== undefined ? patch.sshPasswordSaved : draft.sshPasswordSaved,
     sshPort: patch.sshPort !== undefined ? patch.sshPort : draft.sshPort,
     sshUser: patch.sshUser !== undefined ? patch.sshUser : draft.sshUser,
-    wslDistribution:
-      patch.wslDistribution !== undefined ? patch.wslDistribution : draft.wslDistribution,
+    wslDistribution: patch.wslDistribution !== undefined ? patch.wslDistribution : draft.wslDistribution,
   };
 }
 
@@ -133,9 +107,7 @@ export function RemoteSettingsTab({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isTailscaleHelpOpen, setIsTailscaleHelpOpen] = useState(false);
   const [newMachine, setNewMachine] = useState<RemoteMachineDraft>(() => createRemoteMachineDraft());
-  const [remoteMachineDraftsById, setRemoteMachineDraftsById] = useState<
-    Record<string, RemoteMachineDraft>
-  >({});
+  const [remoteMachineDraftsById, setRemoteMachineDraftsById] = useState<Record<string, RemoteMachineDraft>>({});
   const [sshPasswordDrafts, setSshPasswordDrafts] = useState<Record<string, string>>({});
   const lastTargetedRemoteMachineIdRef = useRef<string | undefined>(undefined);
   /*
@@ -170,30 +142,29 @@ export function RemoteSettingsTab({
       const message = (event as CustomEvent<unknown>).detail;
       if (
         !message ||
-        typeof message !== "object" ||
-        !("type" in message) ||
-        message.type !== "remoteGxserverInstallState"
+        typeof message !== 'object' ||
+        !('type' in message) ||
+        message.type !== 'remoteGxserverInstallState'
       ) {
         return;
       }
       const machineId =
-        "remoteMachineId" in message && typeof message.remoteMachineId === "string"
+        'remoteMachineId' in message && typeof message.remoteMachineId === 'string'
           ? message.remoteMachineId.trim()
-          : "";
+          : '';
       if (!machineId) {
         return;
       }
-      const installed = "installed" in message && message.installed === true;
-      const version =
-        "version" in message && typeof message.version === "string" ? message.version.trim() : "";
+      const installed = 'installed' in message && message.installed === true;
+      const version = 'version' in message && typeof message.version === 'string' ? message.version.trim() : '';
       setRemoteGxserverInstallsById((current) => ({
         ...current,
         [machineId]: { installed, version: version || undefined },
       }));
     };
-    window.addEventListener("ghostex-app-modal-host-message", handleHostMessage);
+    window.addEventListener('ghostex-app-modal-host-message', handleHostMessage);
     return () => {
-      window.removeEventListener("ghostex-app-modal-host-message", handleHostMessage);
+      window.removeEventListener('ghostex-app-modal-host-message', handleHostMessage);
     };
   }, []);
 
@@ -221,10 +192,10 @@ export function RemoteSettingsTab({
         const probeKey = [
           machine.id,
           sshHost,
-          machine.sshUser?.trim() ?? "",
-          machine.sshPort ?? "",
-          machine.wslDistribution?.trim() ?? "",
-        ].join("|");
+          machine.sshUser?.trim() ?? '',
+          machine.sshPort ?? '',
+          machine.wslDistribution?.trim() ?? '',
+        ].join('|');
         if (probedRemoteGxserverKeysRef.current.has(probeKey)) {
           continue;
         }
@@ -237,7 +208,7 @@ export function RemoteSettingsTab({
           delete next[machine.id];
           return next;
         });
-        vscode.postMessage({ remoteMachineId: machine.id, type: "probeRemoteGxserverInstall" });
+        vscode.postMessage({ remoteMachineId: machine.id, type: 'probeRemoteGxserverInstall' });
       }
     }, REMOTE_GXSERVER_INSTALL_PROBE_DEBOUNCE_MS);
     return () => clearTimeout(timeout);
@@ -255,7 +226,7 @@ export function RemoteSettingsTab({
     }
     const animationFrame = requestAnimationFrame(() => {
       const targetCard = Array.from(
-        containerRef.current?.querySelectorAll<HTMLElement>("[data-settings-remote-machine-id]") ?? [],
+        containerRef.current?.querySelectorAll<HTMLElement>('[data-settings-remote-machine-id]') ?? []
       ).find((candidate) => candidate.dataset.settingsRemoteMachineId === initialRemoteMachineId);
       if (!targetCard) {
         return;
@@ -266,7 +237,7 @@ export function RemoteSettingsTab({
        * editable card, not just the generic Remote settings tab. Focus the name
        * field after scrolling because it is the first user-facing machine field.
        */
-      targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+      targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
       targetCard
         .querySelector<HTMLInputElement>("input[aria-label='Remote machine name']")
         ?.focus({ preventScroll: true });
@@ -278,7 +249,7 @@ export function RemoteSettingsTab({
   const getRemoteMachineEditDraft = (machine: RemoteMachineSettings): RemoteMachineDraft => {
     const draft =
       remoteMachineDraftsById[machine.id] ??
-      createRemoteMachineDraftFromSettings(machine, sshPasswordDrafts[machine.id] ?? "");
+      createRemoteMachineDraftFromSettings(machine, sshPasswordDrafts[machine.id] ?? '');
     return {
       ...draft,
       sshPassword: sshPasswordDrafts[machine.id] ?? draft.sshPassword,
@@ -294,7 +265,7 @@ export function RemoteSettingsTab({
     if (patch.sshPassword !== undefined) {
       setSshPasswordDrafts((drafts) => ({
         ...drafts,
-        [machineId]: patch.sshPassword ?? "",
+        [machineId]: patch.sshPassword ?? '',
       }));
     }
     const settingsPatch = {
@@ -308,10 +279,7 @@ export function RemoteSettingsTab({
     if (Object.values(settingsPatch).every((value) => value === undefined)) {
       return;
     }
-    const nextDraft = applyRemoteMachineDraftPatch(
-      getRemoteMachineEditDraft(currentMachine),
-      patch,
-    );
+    const nextDraft = applyRemoteMachineDraftPatch(getRemoteMachineEditDraft(currentMachine), patch);
     setRemoteMachineDraftsById((drafts) => ({
       ...drafts,
       [machineId]: nextDraft,
@@ -394,19 +362,19 @@ export function RemoteSettingsTab({
     vscode?.postMessage({
       password,
       remoteMachineId,
-      type: "saveRemoteMachinePassword",
+      type: 'saveRemoteMachinePassword',
     });
   };
 
   const saveRemoteMachinePassword = (machine: RemoteMachineSettings) => {
-    const password = sshPasswordDrafts[machine.id] ?? "";
+    const password = sshPasswordDrafts[machine.id] ?? '';
     if (!password && machine.sshPasswordSaved !== true) {
       return;
     }
     postRemoteMachinePasswordSave(machine.id, password);
     setSshPasswordDrafts((drafts) => ({
       ...drafts,
-      [machine.id]: "",
+      [machine.id]: '',
     }));
   };
 
@@ -414,40 +382,32 @@ export function RemoteSettingsTab({
 
   if (search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab)) {
     return (
-      <div className="settings-tab-scroll" ref={containerRef}>
-        <div className="settings-management-layout">{searchEmptyState}</div>
+      <div className='settings-tab-scroll' ref={containerRef}>
+        <div className='settings-management-layout'>{searchEmptyState}</div>
       </div>
     );
   }
 
   return (
-    <div className="settings-tab-scroll" ref={containerRef}>
-      <div className="settings-management-layout">
-        <header className="settings-management-header">
-          <div className="settings-management-header-text">
-            <h3 className="settings-management-heading">Remote machines</h3>
-            <p className="settings-management-description">
-              Saved SSH machines appear as separate sidebar sections.
-            </p>
+    <div className='settings-tab-scroll' ref={containerRef}>
+      <div className='settings-management-layout'>
+        <header className='settings-management-header'>
+          <div className='settings-management-header-text'>
+            <h3 className='settings-management-heading'>Remote machines</h3>
+            <p className='settings-management-description'>Saved SSH machines appear as separate sidebar sections.</p>
           </div>
           <Popover onOpenChange={setIsTailscaleHelpOpen} open={isTailscaleHelpOpen}>
-              <PopoverTrigger
-                render={
-                  <Button
-                    className="settings-management-help-button"
-                    type="button"
-                    variant="outline"
-                  />
-                }
-              >
-                <IconInfoCircle aria-hidden="true" data-icon="inline-start" />
-                Tailscale setup
-              </PopoverTrigger>
+            <PopoverTrigger
+              render={<Button className='settings-management-help-button' type='button' variant='outline' />}
+            >
+              <IconInfoCircle aria-hidden='true' data-icon='inline-start' />
+              Tailscale setup
+            </PopoverTrigger>
             <PopoverContent
-              align="end"
-              className="w-80 max-w-[calc(100vw-2rem)] gap-3 p-4"
+              align='end'
+              className='w-80 max-w-[calc(100vw-2rem)] gap-3 p-4'
               onOpenAutoFocus={(event) => event.preventDefault()}
-              side="top"
+              side='top'
               sideOffset={8}
             >
               {/*
@@ -458,25 +418,25 @@ export function RemoteSettingsTab({
                * The Remote machines header stacks the title over its muted subtitle on the left and pins Tailscale setup as an outline button on the right edge, so the contextual help reads as a real action opposite the header rather than a faint control wedged beside the subtitle.
                */}
               <PopoverHeader>
-                <PopoverTitle className="text-sm">Tailscale setup</PopoverTitle>
-                <PopoverDescription className="text-xs leading-5">
+                <PopoverTitle className='text-sm'>Tailscale setup</PopoverTitle>
+                <PopoverDescription className='text-xs leading-5'>
                   Use Tailscale when the remote machine is not reachable on your local network.
                 </PopoverDescription>
               </PopoverHeader>
-              <ol className="flex list-decimal flex-col gap-2 pl-5 text-xs leading-5 text-muted-foreground">
+              <ol className='flex list-decimal flex-col gap-2 pl-5 text-xs leading-5 text-muted-foreground'>
                 <li>Install Tailscale on this Mac and sign in.</li>
                 <li>Install Tailscale on the remote machine and sign in to the same tailnet.</li>
                 <li>Confirm both machines are connected in Tailscale.</li>
                 <li>Use the remote machine's Tailscale DNS name or Tailscale IP as the SSH host.</li>
               </ol>
-              <p className="text-xs leading-5 text-muted-foreground">
+              <p className='text-xs leading-5 text-muted-foreground'>
                 Ghostex still connects with SSH only; no Tailscale tokens or remote gxserver listener are required.
               </p>
             </PopoverContent>
           </Popover>
         </header>
 
-        <div className="settings-management-list settings-remote-machine-list">
+        <div className='settings-management-list settings-remote-machine-list'>
           {/*
            * CDXC:RemoteMachines 2026-06-12-05:42:
            * Add remote machine is the fixed first grid item (top-left), saved machines fill the remaining slots and wrap to new rows, and the empty placeholder occupies the slot beside the add card so the Remote tab always reads as a single uniform grid.
@@ -484,44 +444,44 @@ export function RemoteSettingsTab({
            * CDXC:RemoteMachines 2026-06-02-23:47:
            * Remote settings require a human name and SSH host before saving because the sidebar section title comes from this user label and v1 remote connections support SSH only.
            */}
-          <Card className="settings-remote-machine-card settings-remote-machine-add-card" size="sm">
-            <div className="settings-remote-machine-summary settings-remote-machine-add-summary settings-management-row">
-              <span aria-hidden="true" className="settings-management-icon settings-remote-machine-add-icon">
+          <Card className='settings-remote-machine-card settings-remote-machine-add-card' size='sm'>
+            <div className='settings-remote-machine-summary settings-remote-machine-add-summary settings-management-row'>
+              <span aria-hidden='true' className='settings-management-icon settings-remote-machine-add-icon'>
                 <IconPlus size={16} />
               </span>
-              <span className="settings-management-main min-w-0 flex-1">
-                <CardTitle className="settings-management-title">Add remote machine</CardTitle>
-                <span className="settings-management-detail">New SSH machine</span>
+              <span className='settings-management-main min-w-0 flex-1'>
+                <CardTitle className='settings-management-title'>Add remote machine</CardTitle>
+                <span className='settings-management-detail'>New SSH machine</span>
               </span>
             </div>
-            <CardContent className="settings-remote-machine-body">
+            <CardContent className='settings-remote-machine-body'>
               <RemoteMachineFields
                 draft={newMachine}
-                identityDescription="Provide either an SSH identity file now or an SSH password below."
+                identityDescription='Provide either an SSH identity file now or an SSH password below.'
                 onChange={(patch) => setNewMachine((draft) => ({ ...draft, ...patch }))}
-                passwordDescription="Passwords are stored in macOS Keychain. Leave blank to add the machine without a saved password."
+                passwordDescription='Passwords are stored in macOS Keychain. Leave blank to add the machine without a saved password.'
               />
-              <div className="settings-management-actions settings-remote-machine-add-actions">
+              <div className='settings-management-actions settings-remote-machine-add-actions'>
                 <SettingButton
                   disabled={!canAddMachine}
-                  disabledReason="Enter a machine name and SSH host first."
+                  disabledReason='Enter a machine name and SSH host first.'
                   onClick={addRemoteMachine}
-                  type="button"
+                  type='button'
                 >
-                  <IconPlus aria-hidden="true" />
+                  <IconPlus aria-hidden='true' />
                   Add Machine
                 </SettingButton>
               </div>
             </CardContent>
           </Card>
           {remoteMachines.length === 0 ? (
-            <div className="settings-remote-machine-empty">
-              <span aria-hidden="true" className="settings-remote-machine-empty-icon">
+            <div className='settings-remote-machine-empty'>
+              <span aria-hidden='true' className='settings-remote-machine-empty-icon'>
                 <IconDeviceDesktop size={18} />
               </span>
-              <span className="settings-remote-machine-empty-text">
-                <span className="settings-remote-machine-empty-title">No machines yet</span>
-                <span className="settings-remote-machine-empty-hint">
+              <span className='settings-remote-machine-empty-text'>
+                <span className='settings-remote-machine-empty-title'>No machines yet</span>
+                <span className='settings-remote-machine-empty-hint'>
                   Add one to reach it over SSH from the sidebar.
                 </span>
               </span>
@@ -534,34 +494,32 @@ export function RemoteSettingsTab({
               const gxserverInstalled = gxserverInstall?.installed === true;
               return (
                 <Card
-                  className="settings-remote-machine-card"
+                  className='settings-remote-machine-card'
                   data-settings-remote-machine-id={machine.id}
                   key={machine.id}
-                  size="sm"
+                  size='sm'
                 >
-                  <div className="settings-remote-machine-summary settings-management-row">
-                    <span className="settings-management-icon flex size-9 shrink-0 items-center justify-center bg-muted">
-                      <IconDeviceDesktop aria-hidden="true" />
+                  <div className='settings-remote-machine-summary settings-management-row'>
+                    <span className='settings-management-icon flex size-9 shrink-0 items-center justify-center bg-muted'>
+                      <IconDeviceDesktop aria-hidden='true' />
                     </span>
-                    <span className="settings-management-main min-w-0 flex-1">
-                      <span className="settings-management-title">{summaryMachine.name}</span>
-                      <span className="settings-management-detail">
-                        {formatRemoteMachineSshTarget(summaryMachine)}
-                      </span>
+                    <span className='settings-management-main min-w-0 flex-1'>
+                      <span className='settings-management-title'>{summaryMachine.name}</span>
+                      <span className='settings-management-detail'>{formatRemoteMachineSshTarget(summaryMachine)}</span>
                     </span>
-                    <span className="settings-management-row-actions">
+                    <span className='settings-management-row-actions'>
                       <Button
                         aria-label={`Remove ${machine.name}`}
                         onClick={() => removeRemoteMachine(machine.id)}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
+                        size='icon-sm'
+                        type='button'
+                        variant='ghost'
                       >
-                        <IconTrash aria-hidden="true" />
+                        <IconTrash aria-hidden='true' />
                       </Button>
                     </span>
                   </div>
-                  <CardContent className="settings-remote-machine-body">
+                  <CardContent className='settings-remote-machine-body'>
                     <RemoteMachineFields
                       draft={machineDraft}
                       onChange={(patch) => updateRemoteMachine(machine.id, patch)}
@@ -576,36 +534,30 @@ export function RemoteSettingsTab({
                      * gxserver is missing, and otherwise connects the existing
                      * remote daemon without reinstalling it.
                      */}
-                    <div className="settings-management-actions settings-remote-machine-install-actions">
+                    <div className='settings-management-actions settings-remote-machine-install-actions'>
                       {gxserverInstalled ? (
-                        <span className="settings-remote-machine-installed-version">
-                          {gxserverInstall?.version
-                            ? `gxserver ${gxserverInstall.version}`
-                            : "gxserver installed"}
+                        <span className='settings-remote-machine-installed-version'>
+                          {gxserverInstall?.version ? `gxserver ${gxserverInstall.version}` : 'gxserver installed'}
                         </span>
                       ) : null}
                       <SettingButton
                         disabled={!vscode || !machineDraft.sshHost.trim()}
                         disabledReason={
                           !machineDraft.sshHost.trim()
-                            ? "Enter an SSH host first."
-                            : "This action needs the Ghostex app connection."
+                            ? 'Enter an SSH host first.'
+                            : 'This action needs the Ghostex app connection.'
                         }
                         onClick={() => {
                           vscode?.postMessage({
                             remoteMachineId: machine.id,
-                            type: "reconnectRemoteMachine",
+                            type: 'reconnectRemoteMachine',
                           });
                         }}
-                        type="button"
-                        variant="secondary"
+                        type='button'
+                        variant='secondary'
                       >
-                        {gxserverInstalled ? (
-                          <IconRefresh aria-hidden="true" />
-                        ) : (
-                          <IconDownload aria-hidden="true" />
-                        )}
-                        {gxserverInstalled ? "Update gxserver" : "Install / Connect gxserver"}
+                        {gxserverInstalled ? <IconRefresh aria-hidden='true' /> : <IconDownload aria-hidden='true' />}
+                        {gxserverInstalled ? 'Update gxserver' : 'Install / Connect gxserver'}
                       </SettingButton>
                     </div>
                   </CardContent>
@@ -634,130 +586,126 @@ export function RemoteMachineFields({
   passwordSaveDisabled?: boolean;
   passwordDescription?: string;
 }) {
-  const showPasswordSaveButton = typeof onPasswordSave === "function";
+  const showPasswordSaveButton = typeof onPasswordSave === 'function';
   const canSavePassword =
-    !passwordSaveDisabled &&
-    showPasswordSaveButton &&
-    (draft.sshPassword.trim().length > 0 || draft.sshPasswordSaved);
+    !passwordSaveDisabled && showPasswordSaveButton && (draft.sshPassword.trim().length > 0 || draft.sshPasswordSaved);
   return (
-    <FieldGroup className="settings-remote-machine-fields">
-      <Field className="settings-remote-machine-field">
-        <FieldLabel className="settings-remote-machine-field-label">Name</FieldLabel>
+    <FieldGroup className='settings-remote-machine-fields'>
+      <Field className='settings-remote-machine-field'>
+        <FieldLabel className='settings-remote-machine-field-label'>Name</FieldLabel>
         <SettingsInput
-          aria-label="Remote machine name"
-          className="settings-remote-machine-input"
+          aria-label='Remote machine name'
+          className='settings-remote-machine-input'
           maxLength={80}
           onChange={(event) => onChange({ name: event.currentTarget.value })}
-          placeholder="Machine one"
+          placeholder='Machine one'
           value={draft.name}
         />
       </Field>
-      <Field className="settings-remote-machine-field">
-        <FieldLabel className="settings-remote-machine-field-label">SSH host</FieldLabel>
+      <Field className='settings-remote-machine-field'>
+        <FieldLabel className='settings-remote-machine-field-label'>SSH host</FieldLabel>
         <SettingsInput
-          aria-label="Remote machine SSH host"
-          className="settings-remote-machine-input"
+          aria-label='Remote machine SSH host'
+          className='settings-remote-machine-input'
           maxLength={200}
           onChange={(event) => onChange({ sshHost: event.currentTarget.value })}
-          placeholder="100.77.81.4"
+          placeholder='100.77.81.4'
           value={draft.sshHost}
         />
       </Field>
-      <div className="settings-remote-machine-user-port">
-        <Field className="settings-remote-machine-field">
-          <FieldLabel className="settings-remote-machine-field-label">SSH user</FieldLabel>
+      <div className='settings-remote-machine-user-port'>
+        <Field className='settings-remote-machine-field'>
+          <FieldLabel className='settings-remote-machine-field-label'>SSH user</FieldLabel>
           <SettingsInput
-            aria-label="Remote machine SSH user"
-            className="settings-remote-machine-input"
+            aria-label='Remote machine SSH user'
+            className='settings-remote-machine-input'
             maxLength={120}
             onChange={(event) => onChange({ sshUser: event.currentTarget.value })}
-            placeholder="machine username"
+            placeholder='machine username'
             value={draft.sshUser}
           />
         </Field>
-        <Field className="settings-remote-machine-field">
-          <FieldLabel className="settings-remote-machine-field-label">SSH port</FieldLabel>
+        <Field className='settings-remote-machine-field'>
+          <FieldLabel className='settings-remote-machine-field-label'>SSH port</FieldLabel>
           <SettingsInput
-            aria-label="Remote machine SSH port"
-            className="settings-remote-machine-input"
-            inputMode="numeric"
+            aria-label='Remote machine SSH port'
+            className='settings-remote-machine-input'
+            inputMode='numeric'
             maxLength={5}
-            onChange={(event) => onChange({ sshPort: event.currentTarget.value.replace(/[^0-9]/gu, "") })}
-            placeholder="22"
+            onChange={(event) => onChange({ sshPort: event.currentTarget.value.replace(/[^0-9]/gu, '') })}
+            placeholder='22'
             value={draft.sshPort}
           />
         </Field>
       </div>
-      <Field className="settings-remote-machine-field">
-        <FieldLabel className="settings-remote-machine-field-label">Identity file</FieldLabel>
+      <Field className='settings-remote-machine-field'>
+        <FieldLabel className='settings-remote-machine-field-label'>Identity file</FieldLabel>
         <SettingsInput
-          aria-label="Remote machine SSH identity file"
-          className="settings-remote-machine-input"
+          aria-label='Remote machine SSH identity file'
+          className='settings-remote-machine-input'
           maxLength={500}
           onChange={(event) => onChange({ sshIdentityFile: event.currentTarget.value })}
-          placeholder="~/.ssh/id_ed25519"
+          placeholder='~/.ssh/id_ed25519'
           value={draft.sshIdentityFile}
         />
-        <FieldDescription className="settings-remote-machine-field-description">
-          {identityDescription ?? "Provide either an SSH identity file or save an SSH password below."}
+        <FieldDescription className='settings-remote-machine-field-description'>
+          {identityDescription ?? 'Provide either an SSH identity file or save an SSH password below.'}
         </FieldDescription>
       </Field>
-      <Field className="settings-remote-machine-field">
-        <FieldLabel className="settings-remote-machine-field-label">
-          Windows WSL distribution
-        </FieldLabel>
+      <Field className='settings-remote-machine-field'>
+        <FieldLabel className='settings-remote-machine-field-label'>Windows WSL distribution</FieldLabel>
         <SettingsInput
-          aria-label="Remote machine WSL distribution"
-          className="settings-remote-machine-input"
+          aria-label='Remote machine WSL distribution'
+          className='settings-remote-machine-input'
           maxLength={120}
           onChange={(event) => onChange({ wslDistribution: event.currentTarget.value })}
-          placeholder="Ubuntu-24.04"
+          placeholder='Ubuntu-24.04'
           value={draft.wslDistribution}
         />
-        <FieldDescription className="settings-remote-machine-field-description">
-          Optional. Windows remotes run gxserver inside this WSL2 distribution; leave blank to use
-          the default distribution.
+        <FieldDescription className='settings-remote-machine-field-description'>
+          Optional. Windows remotes run gxserver inside this WSL2 distribution; leave blank to use the default
+          distribution.
         </FieldDescription>
       </Field>
-      <Field className="settings-remote-machine-field">
-        <FieldLabel className="settings-remote-machine-field-label">Password</FieldLabel>
+      <Field className='settings-remote-machine-field'>
+        <FieldLabel className='settings-remote-machine-field-label'>Password</FieldLabel>
         <div
           className={cn(
-            "settings-remote-machine-password-row",
-            !showPasswordSaveButton && "settings-remote-machine-password-row-single",
+            'settings-remote-machine-password-row',
+            !showPasswordSaveButton && 'settings-remote-machine-password-row-single'
           )}
         >
           <SettingsInput
-            aria-label="Remote machine SSH password"
-            autoComplete="off"
-            className="settings-remote-machine-input"
+            aria-label='Remote machine SSH password'
+            autoComplete='off'
+            className='settings-remote-machine-input'
             maxLength={500}
             onChange={(event) => onChange({ sshPassword: event.currentTarget.value })}
-            placeholder={draft.sshPasswordSaved ? "Saved in Keychain" : "SSH password"}
-            type="password"
+            placeholder={draft.sshPasswordSaved ? 'Saved in Keychain' : 'SSH password'}
+            type='password'
             value={draft.sshPassword}
           />
           {showPasswordSaveButton ? (
             <SettingButton
-              aria-label="Save SSH password"
+              aria-label='Save SSH password'
               disabled={!canSavePassword}
               disabledReason={
                 passwordSaveDisabled
-                  ? "Password saving needs the Ghostex app connection."
-                  : "Enter a password to save first."
+                  ? 'Password saving needs the Ghostex app connection.'
+                  : 'Enter a password to save first.'
               }
               onClick={onPasswordSave}
-              size="icon-sm"
-              type="button"
-              variant="secondary"
+              size='icon-sm'
+              type='button'
+              variant='secondary'
             >
-              <IconDeviceFloppy aria-hidden="true" />
+              <IconDeviceFloppy aria-hidden='true' />
             </SettingButton>
           ) : null}
         </div>
-        <FieldDescription className="settings-remote-machine-field-description">
+        <FieldDescription className='settings-remote-machine-field-description'>
           {passwordDescription ??
-            "Passwords are stored in macOS Keychain. Leave blank and press Save to remove a saved password."}
+            'Passwords are stored in macOS Keychain. Leave blank and press Save to remove a saved password.'}
         </FieldDescription>
       </Field>
     </FieldGroup>
@@ -765,13 +713,12 @@ export function RemoteMachineFields({
 }
 
 export function normalizeRemoteMachineDraft(
-  draft: RemoteMachineDraft & { id: string },
+  draft: RemoteMachineDraft & { id: string }
 ): RemoteMachineSettings | undefined {
   const wslDistribution = draft.wslDistribution.trim();
   if (
     wslDistribution &&
-    (wslDistribution.startsWith("-") ||
-      !/^[A-Za-z0-9][A-Za-z0-9._+() -]*$/u.test(wslDistribution))
+    (wslDistribution.startsWith('-') || !/^[A-Za-z0-9][A-Za-z0-9._+() -]*$/u.test(wslDistribution))
   ) {
     return undefined;
   }

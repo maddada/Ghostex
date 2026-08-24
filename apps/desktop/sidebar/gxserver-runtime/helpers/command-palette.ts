@@ -10,24 +10,22 @@ import {
   GPUI_SIDEBAR_COMMAND_PALETTE_SESSION_FOCUS_MESSAGE_VERSION,
   GPUI_SIDEBAR_WORKSPACE_TAB_SESSION_SELECTED_MESSAGE_TYPE,
   GPUI_SIDEBAR_WORKSPACE_TAB_SESSION_SELECTED_MESSAGE_VERSION,
-} from "../constants";
-import type { GpuiWorkspaceTabSessionSelectionPayload } from "../types-and-protocol";
-import { normalizeNonEmptyString, uniqueNonEmptyStrings } from "./records";
-import { parseGpuiRemotePresentationSessionId } from "./remote-presentation";
-import { gpuiStatusPetActivationSessionIdAllowed } from "./status-indicators";
-import {
-  parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type { SidebarToExtensionMessage } from "@/packages/shared/session-grid-contract";
-import type { SidebarCommandScope } from "@/packages/shared/sidebar-commands";
-import { isSidebarCommandRunMode } from "@/packages/shared/sidebar-commands";
+} from '../constants';
+import type { GpuiWorkspaceTabSessionSelectionPayload } from '../types-and-protocol';
+import { normalizeNonEmptyString, uniqueNonEmptyStrings } from './records';
+import { parseGpuiRemotePresentationSessionId } from './remote-presentation';
+import { gpuiStatusPetActivationSessionIdAllowed } from './status-indicators';
+import { parseGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
+import type { SidebarCommandScope } from '@/packages/shared/sidebar-commands';
+import { isSidebarCommandRunMode } from '@/packages/shared/sidebar-commands';
 
 export function normalizeGpuiCommandPaletteSessionFocus(value: unknown): string | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).some((key) => !["sessionId", "type", "version"].includes(key))) {
+  if (Object.keys(record).some((key) => !['sessionId', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -43,10 +41,7 @@ export function normalizeGpuiCommandPaletteSessionFocus(value: unknown): string 
   // Palette rows only ever carry projected sidebar ids: combined local
   // project-session ids or remote presentation ids. Raw daemon ids are not
   // routable from the palette and are rejected.
-  if (
-    !parseGpuiRemotePresentationSessionId(sessionId) &&
-    !parseGxserverPresentationProjectSessionId(sessionId)
-  ) {
+  if (!parseGpuiRemotePresentationSessionId(sessionId) && !parseGxserverPresentationProjectSessionId(sessionId)) {
     return undefined;
   }
   return sessionId;
@@ -60,23 +55,17 @@ export function normalizeGpuiCommandPaletteSessionFocus(value: unknown): string 
  * project action would launch the project one. Scope is optional and absent
  * means project, which keeps every existing palette sender unchanged.
  */
-export function normalizeGpuiCommandPaletteRunSidebarCommand(
-  value: unknown,
-):
+export function normalizeGpuiCommandPaletteRunSidebarCommand(value: unknown):
   | {
-      message: Extract<SidebarToExtensionMessage, { type: "runSidebarCommand" }>;
+      message: Extract<SidebarToExtensionMessage, { type: 'runSidebarCommand' }>;
       scope: SidebarCommandScope;
     }
   | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (
-    Object.keys(record).some(
-      (key) => !["commandId", "runMode", "scope", "type", "version"].includes(key),
-    )
-  ) {
+  if (Object.keys(record).some((key) => !['commandId', 'runMode', 'scope', 'type', 'version'].includes(key))) {
     return undefined;
   }
   if (
@@ -89,18 +78,18 @@ export function normalizeGpuiCommandPaletteRunSidebarCommand(
   if (!commandId) {
     return undefined;
   }
-  let scope: SidebarCommandScope = "project";
-  if (Object.prototype.hasOwnProperty.call(record, "scope")) {
-    if (record.scope !== "global" && record.scope !== "project") {
+  let scope: SidebarCommandScope = 'project';
+  if (Object.prototype.hasOwnProperty.call(record, 'scope')) {
+    if (record.scope !== 'global' && record.scope !== 'project') {
       return undefined;
     }
     scope = record.scope;
   }
-  if (!Object.prototype.hasOwnProperty.call(record, "runMode")) {
+  if (!Object.prototype.hasOwnProperty.call(record, 'runMode')) {
     return {
       message: {
         commandId,
-        type: "runSidebarCommand",
+        type: 'runSidebarCommand',
       },
       scope,
     };
@@ -112,16 +101,16 @@ export function normalizeGpuiCommandPaletteRunSidebarCommand(
     message: {
       commandId,
       runMode: record.runMode,
-      type: "runSidebarCommand",
+      type: 'runSidebarCommand',
     },
     scope,
   };
 }
 
 export function normalizeGpuiWorkspaceTabSessionSelection(
-  value: unknown,
+  value: unknown
 ): GpuiWorkspaceTabSessionSelectionPayload | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
@@ -129,14 +118,14 @@ export function normalizeGpuiWorkspaceTabSessionSelection(
     Object.keys(record).some(
       (key) =>
         ![
-          "localRuntimeMissing",
-          "localWasSleeping",
-          "projectId",
-          "sessionId",
-          "type",
-          "version",
-          "visibleSessionIds",
-        ].includes(key),
+          'localRuntimeMissing',
+          'localWasSleeping',
+          'projectId',
+          'sessionId',
+          'type',
+          'version',
+          'visibleSessionIds',
+        ].includes(key)
     )
   ) {
     return undefined;
@@ -165,7 +154,7 @@ export function normalizeGpuiWorkspaceTabSessionSelection(
   }
   const visibleSessionIds = Array.isArray(record.visibleSessionIds)
     ? uniqueNonEmptyStrings(record.visibleSessionIds)?.filter((visibleSessionId) =>
-        gpuiStatusPetActivationSessionIdAllowed(visibleSessionId),
+        gpuiStatusPetActivationSessionIdAllowed(visibleSessionId)
       )
     : undefined;
   if (

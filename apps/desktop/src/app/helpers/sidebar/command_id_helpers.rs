@@ -11,7 +11,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Security::Cryptography::{
     BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
@@ -62,7 +61,11 @@ pub(crate) fn gpui_reject_duplicate_sidebar_command_title(
     }
 }
 
-pub(crate) fn gpui_sidebar_command_title_key(name: &str, command: Option<&str>, url: Option<&str>) -> String {
+pub(crate) fn gpui_sidebar_command_title_key(
+    name: &str,
+    command: Option<&str>,
+    url: Option<&str>,
+) -> String {
     let title = gpui_normalized_sidebar_command_title(Some(name))
         .or_else(|| {
             gpui_normalized_sidebar_command_title(command.or(url))
@@ -107,7 +110,10 @@ pub(crate) fn gpui_sidebar_order_sync_result_message(
     })
 }
 
-pub(crate) fn gpui_is_sidebar_agent_visible(agents: &[GpuiStoredSidebarAgent], agent_id: &str) -> bool {
+pub(crate) fn gpui_is_sidebar_agent_visible(
+    agents: &[GpuiStoredSidebarAgent],
+    agent_id: &str,
+) -> bool {
     agents
         .iter()
         .find(|agent| agent.agent_id == agent_id)
@@ -115,13 +121,17 @@ pub(crate) fn gpui_is_sidebar_agent_visible(agents: &[GpuiStoredSidebarAgent], a
         .unwrap_or(true)
 }
 
-pub(crate) fn gpui_default_sidebar_agent_by_id(agent_id: &str) -> Option<&'static GpuiDefaultSidebarAgent> {
+pub(crate) fn gpui_default_sidebar_agent_by_id(
+    agent_id: &str,
+) -> Option<&'static GpuiDefaultSidebarAgent> {
     GPUI_DEFAULT_SIDEBAR_AGENTS
         .iter()
         .find(|agent| agent.agent_id == agent_id)
 }
 
-pub(crate) fn gpui_default_sidebar_agent_by_icon(icon: &str) -> Option<&'static GpuiDefaultSidebarAgent> {
+pub(crate) fn gpui_default_sidebar_agent_by_icon(
+    icon: &str,
+) -> Option<&'static GpuiDefaultSidebarAgent> {
     if icon == "browser" {
         return None;
     }
@@ -179,7 +189,9 @@ pub(crate) fn gpui_base36(mut value: u128) -> String {
     output.iter().rev().collect()
 }
 
-pub(crate) fn gpui_stored_sidebar_agents_value(agents: &[GpuiStoredSidebarAgent]) -> serde_json::Value {
+pub(crate) fn gpui_stored_sidebar_agents_value(
+    agents: &[GpuiStoredSidebarAgent],
+) -> serde_json::Value {
     serde_json::Value::Array(
         agents
             .iter()
@@ -217,7 +229,9 @@ pub(crate) fn gpui_stored_sidebar_agents_value(agents: &[GpuiStoredSidebarAgent]
     )
 }
 
-pub(crate) fn gpui_stored_sidebar_commands_value(commands: &[GpuiStoredSidebarCommand]) -> serde_json::Value {
+pub(crate) fn gpui_stored_sidebar_commands_value(
+    commands: &[GpuiStoredSidebarCommand],
+) -> serde_json::Value {
     serde_json::Value::Array(
         commands
             .iter()
@@ -277,4 +291,3 @@ pub(crate) fn gpui_string_array_value(items: &[String]) -> serde_json::Value {
             .collect(),
     )
 }
-

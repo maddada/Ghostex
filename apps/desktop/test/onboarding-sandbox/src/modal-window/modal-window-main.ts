@@ -14,10 +14,10 @@
  * here outbound messages are forwarded to the sandbox parent page.
  */
 
-const SANDBOX_MARKER = "__onboardingSandbox";
-const HOST_MESSAGE_EVENT = "ghostex-app-modal-host-message";
+const SANDBOX_MARKER = '__onboardingSandbox';
+const HOST_MESSAGE_EVENT = 'ghostex-app-modal-host-message';
 
-const windowId = new URLSearchParams(window.location.search).get("windowId") ?? "unknown";
+const windowId = new URLSearchParams(window.location.search).get('windowId') ?? 'unknown';
 const parentOrigin = window.location.origin;
 
 function postToSandboxParent(envelope: Record<string, unknown>): void {
@@ -30,11 +30,11 @@ function postToSandboxParent(envelope: Record<string, unknown>): void {
 }
 
 function forwardOutboundMessage(message: unknown): void {
-  postToSandboxParent({ [SANDBOX_MARKER]: "outbound", message, windowId });
+  postToSandboxParent({ [SANDBOX_MARKER]: 'outbound', message, windowId });
 }
 
-window.__ghostex_APP_MODAL_HOST_ID__ = "gpui";
-window.__ghostex_APP_MODAL_HOST_SURFACE__ = "nativeWindow";
+window.__ghostex_APP_MODAL_HOST_ID__ = 'gpui';
+window.__ghostex_APP_MODAL_HOST_SURFACE__ = 'nativeWindow';
 
 window.webkit = {
   ...window.webkit,
@@ -50,19 +50,19 @@ window.webkit = {
  * modal host listens for. The marker matters because the modal host re-emits
  * some transient results through `window.postMessage` itself.
  */
-window.addEventListener("message", (event: MessageEvent) => {
+window.addEventListener('message', (event: MessageEvent) => {
   const envelope = event.data as Record<string, unknown> | null | undefined;
-  if (!envelope || typeof envelope !== "object") {
+  if (!envelope || typeof envelope !== 'object') {
     return;
   }
-  if (envelope[SANDBOX_MARKER] !== "deliver") {
+  if (envelope[SANDBOX_MARKER] !== 'deliver') {
     return;
   }
-  if (typeof envelope.windowId === "string" && envelope.windowId !== windowId) {
+  if (typeof envelope.windowId === 'string' && envelope.windowId !== windowId) {
     return;
   }
   const detail = envelope.detail;
-  if (!detail || typeof detail !== "object") {
+  if (!detail || typeof detail !== 'object') {
     return;
   }
   window.dispatchEvent(new CustomEvent(HOST_MESSAGE_EVENT, { detail }));
@@ -74,6 +74,6 @@ window.addEventListener("message", (event: MessageEvent) => {
  * `{type:"ready"}` outbound before flushing queued host messages, because the
  * host only installs its CustomEvent listener when `<AppModalHost/>` mounts.
  */
-postToSandboxParent({ [SANDBOX_MARKER]: "iframeReady", windowId });
+postToSandboxParent({ [SANDBOX_MARKER]: 'iframeReady', windowId });
 
-void import("@/apps/desktop/views/modal-host");
+void import('@/apps/desktop/views/modal-host');

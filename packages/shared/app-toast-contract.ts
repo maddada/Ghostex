@@ -1,6 +1,6 @@
-import type { SidebarToExtensionMessage } from "./session-grid-contract";
+import type { SidebarToExtensionMessage } from './session-grid-contract';
 
-export type AppToastLevel = "info" | "success" | "warning" | "error";
+export type AppToastLevel = 'info' | 'success' | 'warning' | 'error';
 
 export type AppToastAction = {
   label: string;
@@ -22,24 +22,21 @@ export type AppToastRequest = {
   persistent?: boolean;
   title: string;
   toastId?: string;
-  type: "toast";
+  type: 'toast';
 };
 
-export type AppToastOptions = Omit<AppToastRequest, "description" | "level" | "title" | "type">;
+export type AppToastOptions = Omit<AppToastRequest, 'description' | 'level' | 'title' | 'type'>;
 
 function appToastComparableText(value: string): string {
   return value
     .trim()
-    .replace(/\s+/gu, " ")
-    .replace(/[.!?]+$/u, "")
+    .replace(/\s+/gu, ' ')
+    .replace(/[.!?]+$/u, '')
     .trim()
     .toLocaleLowerCase();
 }
 
-export function normalizeAppToastDescription(
-  title: string,
-  description?: string,
-): string | undefined {
+export function normalizeAppToastDescription(title: string, description?: string): string | undefined {
   const normalizedDescription = description?.trim();
   if (!normalizedDescription) {
     return undefined;
@@ -54,7 +51,7 @@ export function createAppToastRequest(
   level: AppToastLevel,
   title: string,
   description?: string,
-  options: AppToastOptions = {},
+  options: AppToastOptions = {}
 ): AppToastRequest {
   const normalizedDescription = normalizeAppToastDescription(title, description);
   return {
@@ -62,6 +59,6 @@ export function createAppToastRequest(
     ...(normalizedDescription ? { description: normalizedDescription } : {}),
     level,
     title: title.trim(),
-    type: "toast",
+    type: 'toast',
   };
 }

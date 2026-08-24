@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 pub(crate) fn focused_command_pane_create_split_hotkey_source(
     shell_focus: ShellFocusTarget,
     command_pane: &CommandPaneModel,
@@ -25,7 +24,6 @@ pub(crate) fn focused_command_pane_create_split_hotkey_source(
         .then_some((group_id, session_id))
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiCommandPaneFocusedSessionHotkeyAction {
     Rename,
@@ -35,7 +33,6 @@ pub(crate) enum GpuiCommandPaneFocusedSessionHotkeyAction {
     Wake,
     Close,
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiFocusedPaneHotkeyAction {
@@ -50,7 +47,6 @@ pub(crate) enum GpuiFocusedPaneHotkeyAction {
     CommandSession(GpuiCommandPaneFocusedSessionHotkeyAction),
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiFocusedPaneRuntimeAction {
     ForkSession,
@@ -58,20 +54,17 @@ pub(crate) enum GpuiFocusedPaneRuntimeAction {
     PopOutPane,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiCommandPaletteTabCycleHotkeyAction {
     Previous,
     Next,
 }
 
-
 impl GpuiCommandPaletteTabCycleHotkeyAction {
     pub(crate) fn reverse(self) -> bool {
         matches!(self, Self::Previous)
     }
 }
-
 
 pub(crate) fn gpui_command_palette_tab_cycle_hotkey_action(
     action_id: &str,
@@ -87,7 +80,6 @@ pub(crate) fn gpui_command_palette_tab_cycle_hotkey_action(
     }
 }
 
-
 pub(crate) fn gpui_command_palette_sidebar_slot_hotkey_action_id(action_id: &str) -> Option<&str> {
     /*
     CDXC:GPUICommandPalette 2026-06-26-23:20:
@@ -100,7 +92,6 @@ pub(crate) fn gpui_command_palette_sidebar_slot_hotkey_action_id(action_id: &str
         _ => None,
     }
 }
-
 
 pub(crate) fn gpui_command_palette_project_slot_hotkey_number(action_id: &str) -> Option<u8> {
     /*
@@ -120,7 +111,6 @@ pub(crate) fn gpui_command_palette_project_slot_hotkey_number(action_id: &str) -
         _ => None,
     }
 }
-
 
 pub(crate) fn gpui_command_pane_focused_session_hotkey_action(
     action_id: &str,
@@ -144,8 +134,9 @@ pub(crate) fn gpui_command_pane_focused_session_hotkey_action(
     }
 }
 
-
-pub(crate) fn gpui_focused_pane_hotkey_action(action_id: &str) -> Option<GpuiFocusedPaneHotkeyAction> {
+pub(crate) fn gpui_focused_pane_hotkey_action(
+    action_id: &str,
+) -> Option<GpuiFocusedPaneHotkeyAction> {
     /*
     CDXC:GPUICommandPalette 2026-06-25-17:32:
     The shared command palette posts focused-pane commands through `runGhostexHotkeyAction`. GPUI must route supported pane actions through the same shell helpers as direct keybindings so command-pane focus can split commands, non-command focus can open Browser, and Agents-only merge can no-op exactly like the native focused-pane dispatcher without fabricating fork/reload/pop-out runtime behavior.
@@ -187,8 +178,9 @@ pub(crate) fn gpui_focused_pane_hotkey_action(action_id: &str) -> Option<GpuiFoc
     }
 }
 
-
-pub(crate) fn gpui_command_palette_switch_workarea_hotkey_mode(action_id: &str) -> Option<TitlebarMode> {
+pub(crate) fn gpui_command_palette_switch_workarea_hotkey_mode(
+    action_id: &str,
+) -> Option<TitlebarMode> {
     /*
     CDXC:GPUICommandPalette 2026-06-26-07:24:
     Shared command-palette workarea rows post ordinary hotkey ids through `runGhostexHotkeyAction`. GPUI must translate only those exact switch ids to titlebar modes, with the shared GitHub row targeting the current Browser workarea field, then execute through the same titlebar availability and focus route as Option+1..5.
@@ -203,7 +195,6 @@ pub(crate) fn gpui_command_palette_switch_workarea_hotkey_mode(action_id: &str) 
     }
 }
 
-
 pub(crate) fn gpui_source_workarea_allowed_configured_hotkey_action_id(action_id: &str) -> bool {
     gpui_workarea_switch_hotkey_action_id(action_id)
         || matches!(
@@ -216,7 +207,6 @@ pub(crate) fn gpui_source_workarea_allowed_configured_hotkey_action_id(action_id
                 | "toggleCompanionPane"
         )
 }
-
 
 pub(crate) fn gpui_command_palette_action_slot_index(action_id: &str) -> Option<usize> {
     /*
@@ -233,7 +223,6 @@ pub(crate) fn gpui_command_palette_action_slot_index(action_id: &str) -> Option<
     }
 }
 
-
 pub(crate) fn gpui_command_palette_adjacent_group_focus_direction(
     action_id: &str,
 ) -> Option<WorkspaceFocusDirection> {
@@ -248,8 +237,9 @@ pub(crate) fn gpui_command_palette_adjacent_group_focus_direction(
     }
 }
 
-
-pub(crate) fn gpui_command_palette_adjacent_group_focus_source_allowed(shell_focus: ShellFocusTarget) -> bool {
+pub(crate) fn gpui_command_palette_adjacent_group_focus_source_allowed(
+    shell_focus: ShellFocusTarget,
+) -> bool {
     /*
     CDXC:GPUICommandPalette 2026-06-26-10:04:
     Adjacent-group focus is scoped to the command/Agents render-order model. Browser and project-editor focus do not enter this route, because doing so would turn a shared command-palette row into a cross-workarea project jump.
@@ -260,15 +250,15 @@ pub(crate) fn gpui_command_palette_adjacent_group_focus_source_allowed(shell_foc
     )
 }
 
-
-pub(crate) fn gpui_focused_pane_open_browser_hotkey_should_open(shell_focus: ShellFocusTarget) -> bool {
+pub(crate) fn gpui_focused_pane_open_browser_hotkey_should_open(
+    shell_focus: ShellFocusTarget,
+) -> bool {
     /*
     CDXC:GPUICommandPalette 2026-06-26-06:47:
     Native `runFocusedPaneHotkeyAction("openBrowserPane")` dispatches through `handleNativeTerminalTitleBarAction`; a live command terminal hits the command-panel branch and default-returns. GPUI should preserve that no-op for CommandPane focus while keeping Browser creation for Agents, Browser, and project-editor focus.
     */
     !matches!(shell_focus, ShellFocusTarget::CommandPane)
 }
-
 
 pub(crate) fn gpui_focused_pane_rotate_agents_hotkey_target(
     active_mode: TitlebarMode,
@@ -290,7 +280,6 @@ pub(crate) fn gpui_focused_pane_rotate_agents_hotkey_target(
         | ShellFocusTarget::AgentsPane(_) => None,
     }
 }
-
 
 pub(crate) fn apply_rotate_agents_panes_hotkey_model(
     active_mode: TitlebarMode,

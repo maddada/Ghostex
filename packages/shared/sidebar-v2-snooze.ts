@@ -12,7 +12,7 @@ millisecond offset. A spring-forward day is 23 hours long, so `23:30 + 24h`
 skips the whole next day and "Tomorrow 9am" would land on the day after.
 */
 
-export type SidebarV2SnoozePresetId = "evening" | "hour" | "next-week" | "tomorrow";
+export type SidebarV2SnoozePresetId = 'evening' | 'hour' | 'next-week' | 'tomorrow';
 
 export type SidebarV2SnoozePreset = {
   id: SidebarV2SnoozePresetId;
@@ -38,7 +38,7 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 function timeOfDayLabel(date: Date, options: SidebarV2SnoozeFormatOptions): string {
-  return date.toLocaleTimeString(options.locale, { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString(options.locale, { hour: 'numeric', minute: '2-digit' });
 }
 
 function atLocalHour(base: Date, hour: number): Date {
@@ -54,12 +54,7 @@ function addLocalDays(base: Date, days: number): Date {
   return next;
 }
 
-function toPreset(
-  id: SidebarV2SnoozePresetId,
-  label: string,
-  whenLabel: string,
-  wakeAt: Date,
-): SidebarV2SnoozePreset {
+function toPreset(id: SidebarV2SnoozePresetId, label: string, whenLabel: string, wakeAt: Date): SidebarV2SnoozePreset {
   return {
     id,
     label,
@@ -76,39 +71,34 @@ function toPreset(
  */
 export function resolveSidebarV2SnoozePresets(
   nowMs: number,
-  options: SidebarV2SnoozeFormatOptions = {},
+  options: SidebarV2SnoozeFormatOptions = {}
 ): SidebarV2SnoozePreset[] {
   const now = new Date(nowMs);
   const presets: SidebarV2SnoozePreset[] = [];
 
   const inAnHour = new Date(nowMs + HOUR_MS);
-  presets.push(toPreset("hour", "In 1 hour", timeOfDayLabel(inAnHour, options), inAnHour));
+  presets.push(toPreset('hour', 'In 1 hour', timeOfDayLabel(inAnHour, options), inAnHour));
 
   const evening = atLocalHour(now, SIDEBAR_V2_SNOOZE_EVENING_HOUR);
   // Suppress the evening preset once it is within an hour (or past): it would
   // duplicate "In 1 hour" or point at the past.
   if (evening.getTime() - nowMs > HOUR_MS) {
-    presets.push(
-      toPreset("evening", "This evening", timeOfDayLabel(evening, options), evening),
-    );
+    presets.push(toPreset('evening', 'This evening', timeOfDayLabel(evening, options), evening));
   }
 
   const tomorrow = atLocalHour(addLocalDays(now, 1), SIDEBAR_V2_SNOOZE_MORNING_HOUR);
-  presets.push(toPreset("tomorrow", "Tomorrow", timeOfDayLabel(tomorrow, options), tomorrow));
+  presets.push(toPreset('tomorrow', 'Tomorrow', timeOfDayLabel(tomorrow, options), tomorrow));
 
   // Next Monday 9:00 (a full week out when today is Monday).
   const daysUntilMonday = (1 - now.getDay() + 7) % 7 || 7;
-  const nextWeek = atLocalHour(
-    addLocalDays(now, daysUntilMonday),
-    SIDEBAR_V2_SNOOZE_MORNING_HOUR,
-  );
+  const nextWeek = atLocalHour(addLocalDays(now, daysUntilMonday), SIDEBAR_V2_SNOOZE_MORNING_HOUR);
   presets.push(
     toPreset(
-      "next-week",
-      "Next week",
-      `${nextWeek.toLocaleDateString(options.locale, { weekday: "short" })} ${timeOfDayLabel(nextWeek, options)}`,
-      nextWeek,
-    ),
+      'next-week',
+      'Next week',
+      `${nextWeek.toLocaleDateString(options.locale, { weekday: 'short' })} ${timeOfDayLabel(nextWeek, options)}`,
+      nextWeek
+    )
   );
 
   return presets;
@@ -120,11 +110,11 @@ export function resolveSidebarV2SnoozePresets(
  */
 export function formatSidebarV2SnoozeWakeLabel(snoozedUntilMs: number, nowMs: number): string {
   if (!Number.isFinite(snoozedUntilMs)) {
-    return "now";
+    return 'now';
   }
   const remainingMs = snoozedUntilMs - nowMs;
   if (remainingMs <= 0) {
-    return "now";
+    return 'now';
   }
   if (remainingMs < HOUR_MS) {
     return `${Math.max(1, Math.ceil(remainingMs / MINUTE_MS))}m`;
@@ -142,10 +132,10 @@ export function formatSidebarV2SnoozeWakeLabel(snoozedUntilMs: number, nowMs: nu
 export function formatSidebarV2SnoozeWakeDescription(
   snoozedUntilMs: number,
   nowMs: number,
-  options: SidebarV2SnoozeFormatOptions = {},
+  options: SidebarV2SnoozeFormatOptions = {}
 ): string {
   if (!Number.isFinite(snoozedUntilMs)) {
-    return "";
+    return '';
   }
   const wake = new Date(snoozedUntilMs);
   const time = timeOfDayLabel(wake, options);
@@ -163,7 +153,7 @@ export function formatSidebarV2SnoozeWakeDescription(
     return `tomorrow ${time}`;
   }
   if (dayDelta > 1 && dayDelta < 7) {
-    return `${wake.toLocaleDateString(options.locale, { weekday: "short" })} ${time}`;
+    return `${wake.toLocaleDateString(options.locale, { weekday: 'short' })} ${time}`;
   }
-  return `${wake.toLocaleDateString(options.locale, { day: "numeric", month: "short" })}, ${time}`;
+  return `${wake.toLocaleDateString(options.locale, { day: 'numeric', month: 'short' })}, ${time}`;
 }

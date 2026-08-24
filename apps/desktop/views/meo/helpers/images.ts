@@ -12,9 +12,12 @@ const imageRequestById = new Map<string, string>();
 let imageRequestCounter = 0;
 
 let imageSaveRequestCounter = 0;
-const pendingImageSaveRequests = new Map<string, {
-  resolve: (value: { success: boolean; path?: string; error?: string }) => void;
-}>();
+const pendingImageSaveRequests = new Map<
+  string,
+  {
+    resolve: (value: { success: boolean; path?: string; error?: string }) => void;
+  }
+>();
 
 const imageExtensionByMime: Record<string, string> = {
   'image/avif': 'avif',
@@ -27,27 +30,29 @@ const imageExtensionByMime: Record<string, string> = {
   'image/svg+xml': 'svg',
   'image/tiff': 'tiff',
   'image/webp': 'webp',
-  'image/x-icon': 'ico'
+  'image/x-icon': 'ico',
 };
 
 export function initializeImageHandling(vscode: any): void {
   vscodeApi = vscode;
 }
 
-const isImmediateImageSrc = (url: string): boolean => /^(?:https?:|data:|blob:|vscode-webview-resource:|vscode-resource:)/i.test(url);
+const isImmediateImageSrc = (url: string): boolean =>
+  /^(?:https?:|data:|blob:|vscode-webview-resource:|vscode-resource:)/i.test(url);
 
-const requestImageSrcResolution = (url: string): Promise<string> => new Promise((resolve) => {
-  const waiting = pendingImageResolvers.get(url);
-  if (waiting) {
-    waiting.push(resolve);
-    return;
-  }
+const requestImageSrcResolution = (url: string): Promise<string> =>
+  new Promise((resolve) => {
+    const waiting = pendingImageResolvers.get(url);
+    if (waiting) {
+      waiting.push(resolve);
+      return;
+    }
 
-  pendingImageResolvers.set(url, [resolve]);
-  const requestId = `img-${imageRequestCounter++}`;
-  imageRequestById.set(requestId, url);
-  vscodeApi?.postMessage({ type: 'resolveImageSrc', requestId, url });
-});
+    pendingImageResolvers.set(url, [resolve]);
+    const requestId = `img-${imageRequestCounter++}`;
+    imageRequestById.set(requestId, url);
+    vscodeApi?.postMessage({ type: 'resolveImageSrc', requestId, url });
+  });
 
 export const settleImageSrcRequest = (requestId: string, resolvedUrl: string | undefined): void => {
   const rawUrl = imageRequestById.get(requestId);
@@ -88,16 +93,23 @@ const fallbackImageExtensionFromMimeType = (mimeType: string): string => {
     return '';
   }
 
-  const subtype = normalized.slice('image/'.length).replace(/\+xml$/, '').replace(/^x-/, '');
+  const subtype = normalized
+    .slice('image/'.length)
+    .replace(/\+xml$/, '')
+    .replace(/^x-/, '');
   const sanitized = subtype.replace(/[^a-z0-9.+-]/g, '');
   return sanitized || '';
 };
 
-export const imageExtensionFromMimeType = (mimeType: string): string => (
-  imageExtensionByMime[mimeType.trim().toLowerCase()] ?? fallbackImageExtensionFromMimeType(mimeType)
-);
+export const imageExtensionFromMimeType = (mimeType: string): string =>
+  imageExtensionByMime[mimeType.trim().toLowerCase()] ?? fallbackImageExtensionFromMimeType(mimeType);
 
-export const handleSavedImagePath = (message: { requestId: string; success?: boolean; path?: string; error?: string }): void => {
+export const handleSavedImagePath = (message: {
+  requestId: string;
+  success?: boolean;
+  path?: string;
+  error?: string;
+}): void => {
   const pending = pendingImageSaveRequests.get(message.requestId);
   if (pending) {
     pendingImageSaveRequests.delete(message.requestId);
@@ -151,11 +163,7 @@ export const handleImagePaste = async (
     const requestId = `img-save-${imageSaveRequestCounter++}`;
     const timestamp = Date.now();
     const dataUrlMimeType = parseDataUrlMimeType(imageData);
-    const extension = (
-      imageExtensionFromMimeType(dataUrlMimeType) ||
-      imageExtensionFromMimeType(item.type) ||
-      'png'
-    );
+    const extension = imageExtensionFromMimeType(dataUrlMimeType) || imageExtensionFromMimeType(item.type) || 'png';
     const fileName = `${timestamp}.${extension}`;
 
     const promise = new Promise<{ success: boolean; path?: string; error?: string }>((resolve) => {
@@ -166,7 +174,7 @@ export const handleImagePaste = async (
       type: 'saveImageFromClipboard',
       requestId,
       imageData,
-      fileName
+      fileName,
     });
 
     try {
@@ -179,7 +187,7 @@ export const handleImagePaste = async (
         const insertAt = Math.min(targetLine.to, targetLine.from + context.lineOffset);
         editor.view.dispatch({
           changes: { from: insertAt, to: insertAt, insert: imageMarkdown },
-          selection: { anchor: insertAt + imageMarkdown.length }
+          selection: { anchor: insertAt + imageMarkdown.length },
         });
         editor.focus();
       }
@@ -193,8 +201,10 @@ export const handleImagePaste = async (
   return false;
 };
 
-export function setImageSrcResolver(resolver: (url: string) => string | Promise<string | null | undefined> | null | undefined): void {
-  imageSrcResolver = typeof resolver === 'function' ? resolver : ((url) => url);
+export function setImageSrcResolver(
+  resolver: (url: string) => string | Promise<string | null | undefined> | null | undefined
+): void {
+  imageSrcResolver = typeof resolver === 'function' ? resolver : (url) => url;
 }
 
 export function isImageUrl(url: string | null | undefined): boolean {
@@ -289,13 +299,15 @@ export class ImageWidget extends WidgetType {
   setImageSource(onSrc: (src: string) => void, onFail: () => void): void {
     const resolved = imageSrcResolver(this.url);
     if (isPromiseLike(resolved)) {
-      resolved.then((value) => {
-        if (!value || !document.contains(document.body)) {
-          onFail();
-          return;
-        }
-        onSrc(value);
-      }).catch(onFail);
+      resolved
+        .then((value) => {
+          if (!value || !document.contains(document.body)) {
+            onFail();
+            return;
+          }
+          onSrc(value);
+        })
+        .catch(onFail);
       return;
     }
 

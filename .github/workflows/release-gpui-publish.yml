@@ -23,12 +23,12 @@ on:
         type: boolean
       source_run_id:
         required: false
-        default: ""
+        default: ''
         type: string
       plan:
         description: Resolved release plan JSON from the prepare job
         required: false
-        default: ""
+        default: ''
         type: string
       amend:
         description: Merge into an existing public release instead of creating a tag
@@ -38,7 +38,7 @@ on:
       amend_products:
         description: Comma-separated product ids this amend is allowed to add or replace
         required: false
-        default: ""
+        default: ''
         type: string
   workflow_dispatch:
     inputs:
@@ -74,7 +74,7 @@ on:
           Resolved release plan JSON recorded by the source run. Leave empty to
           use the run's own release-plan artifact.
         required: false
-        default: ""
+        default: ''
         type: string
 
 permissions:

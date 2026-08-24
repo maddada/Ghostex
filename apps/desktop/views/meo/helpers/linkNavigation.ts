@@ -20,10 +20,7 @@ function childNodeByName(node: any, name: string): any | null {
 }
 
 function normalizeReferenceLabel(value: string): string {
-  return value
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 function parseReferenceLabel(text: string): string {
@@ -77,7 +74,7 @@ function getReferenceLinkMap(state: EditorState): Map<string, string> {
         return;
       }
       resolved.set(label, href);
-    }
+    },
   });
 
   linkReferenceCache.set(cacheKey, resolved);
@@ -90,9 +87,8 @@ function inlineLinkDestinationFromText(linkText: string): string {
     return '';
   }
   const rawDestination = match[1].trim();
-  const unwrapped = rawDestination.startsWith('<') && rawDestination.endsWith('>')
-    ? rawDestination.slice(1, -1)
-    : rawDestination;
+  const unwrapped =
+    rawDestination.startsWith('<') && rawDestination.endsWith('>') ? rawDestination.slice(1, -1) : rawDestination;
   return normalizeSourceHref(unwrapped);
 }
 

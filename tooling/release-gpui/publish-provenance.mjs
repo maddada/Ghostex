@@ -24,20 +24,20 @@
  *    both must still advance.
  */
 
-import path from "node:path";
+import path from 'node:path';
 
-import { PRODUCT_IDS, productDefinition } from "./product-inputs.mjs";
+import { PRODUCT_IDS, productDefinition } from './product-inputs.mjs';
 import {
   buildReleaseProvenance,
   releaseProvenanceAssetName,
   validateProductProvenance,
   validateReleaseProvenance,
-} from "./provenance.mjs";
-import { validatePlan } from "./plan.mjs";
+} from './provenance.mjs';
+import { validatePlan } from './plan.mjs';
 
-export const RELEASE_PLAN_ARTIFACT_DIRECTORY = "release-plan";
-export const RELEASE_PLAN_ARTIFACT_FILE = "release-plan.json";
-export const PRODUCT_PROVENANCE_FILE = "provenance.json";
+export const RELEASE_PLAN_ARTIFACT_DIRECTORY = 'release-plan';
+export const RELEASE_PLAN_ARTIFACT_FILE = 'release-plan.json';
+export const PRODUCT_PROVENANCE_FILE = 'provenance.json';
 
 /*
  * Artifact directories the publisher downloads that legitimately carry no
@@ -48,8 +48,8 @@ export const PRODUCT_PROVENANCE_FILE = "provenance.json";
 export function isNonProductArtifactDirectory(name) {
   return (
     name === RELEASE_PLAN_ARTIFACT_DIRECTORY ||
-    name.startsWith("release-provenance-") ||
-    name.startsWith("release-code-server-")
+    name.startsWith('release-provenance-') ||
+    name.startsWith('release-code-server-')
   );
 }
 
@@ -59,9 +59,9 @@ export function isNonProductArtifactDirectory(name) {
  * of the release in which mobile last changed and the release page must say so.
  * Every other non-version-stamped payload carries no marketing version at all.
  */
-const PRODUCTS_WITH_EMBEDDED_VERSION = new Set(["android"]);
+const PRODUCTS_WITH_EMBEDDED_VERSION = new Set(['android']);
 
-const PLAN_ACTION_TO_RECORD_ACTION = Object.freeze({ build: "built", reuse: "reused" });
+const PLAN_ACTION_TO_RECORD_ACTION = Object.freeze({ build: 'built', reuse: 'reused' });
 
 function refuse(message) {
   throw new Error(`Refusing to publish: ${message}`);
@@ -84,23 +84,14 @@ export function planActionToRecordAction(action) {
  * present they must agree exactly; a disagreement means someone hand-dispatched
  * a plan that does not describe these artifacts.
  */
-export function readPublishPlan({
-  artifactsRoot,
-  env = process.env,
-  fileExists,
-  readTextFile,
-}) {
-  const inline = (env.GHOSTEX_RELEASE_PLAN ?? "").trim();
-  const uploadedPath = path.join(
-    artifactsRoot,
-    RELEASE_PLAN_ARTIFACT_DIRECTORY,
-    RELEASE_PLAN_ARTIFACT_FILE,
-  );
-  const uploadedText = fileExists(uploadedPath) ? readTextFile(uploadedPath).trim() : "";
+export function readPublishPlan({ artifactsRoot, env = process.env, fileExists, readTextFile }) {
+  const inline = (env.GHOSTEX_RELEASE_PLAN ?? '').trim();
+  const uploadedPath = path.join(artifactsRoot, RELEASE_PLAN_ARTIFACT_DIRECTORY, RELEASE_PLAN_ARTIFACT_FILE);
+  const uploadedText = fileExists(uploadedPath) ? readTextFile(uploadedPath).trim() : '';
   if (!inline && !uploadedText) {
     refuse(
-      "no resolved release plan was supplied. Pass GHOSTEX_RELEASE_PLAN, or publish a run whose " +
-        `prepare job uploaded ${RELEASE_PLAN_ARTIFACT_DIRECTORY}/${RELEASE_PLAN_ARTIFACT_FILE}`,
+      'no resolved release plan was supplied. Pass GHOSTEX_RELEASE_PLAN, or publish a run whose ' +
+        `prepare job uploaded ${RELEASE_PLAN_ARTIFACT_DIRECTORY}/${RELEASE_PLAN_ARTIFACT_FILE}`
     );
   }
   const plan = validatePlan(JSON.parse(inline || uploadedText));
@@ -109,17 +100,17 @@ export function readPublishPlan({
 }
 
 export function assertPlansAgree(dispatched, uploaded) {
-  for (const field of ["version", "sourceSha", "algorithmRevision"]) {
+  for (const field of ['version', 'sourceSha', 'algorithmRevision']) {
     if (dispatched[field] !== uploaded[field]) {
       refuse(
-        `the dispatched plan ${field} ${dispatched[field]} does not match the run's recorded plan ${uploaded[field]}`,
+        `the dispatched plan ${field} ${dispatched[field]} does not match the run's recorded plan ${uploaded[field]}`
       );
     }
   }
   if (JSON.stringify(dispatched.expectedPlatforms) !== JSON.stringify(uploaded.expectedPlatforms)) {
     refuse(
-      `the dispatched plan expects ${dispatched.expectedPlatforms.join(", ")} but the run's recorded plan ` +
-        `expects ${uploaded.expectedPlatforms.join(", ")}`,
+      `the dispatched plan expects ${dispatched.expectedPlatforms.join(', ')} but the run's recorded plan ` +
+        `expects ${uploaded.expectedPlatforms.join(', ')}`
     );
   }
   for (const productId of PRODUCT_IDS) {
@@ -128,7 +119,7 @@ export function assertPlansAgree(dispatched, uploaded) {
     if (left.action !== right.action || left.fingerprint !== right.fingerprint) {
       refuse(
         `the dispatched plan resolves ${productId} as ${left.action}/${left.fingerprint.slice(0, 12)} but the run's ` +
-          `recorded plan resolves ${right.action}/${right.fingerprint.slice(0, 12)}`,
+          `recorded plan resolves ${right.action}/${right.fingerprint.slice(0, 12)}`
       );
     }
   }
@@ -148,27 +139,27 @@ export function assertPlansAgree(dispatched, uploaded) {
  */
 export function resolvePublishRecoveryInputs({ flags = {}, plan }) {
   const scope = plan?.scope;
-  if (!scope || typeof scope !== "object" || Array.isArray(scope)) {
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope)) {
     refuse("the source run's recorded plan carries no resolved scope; refusing publish-only recovery");
   }
-  const macosAction = plan.products?.["macos-arm64"]?.action ?? "skip";
+  const macosAction = plan.products?.['macos-arm64']?.action ?? 'skip';
   const recorded = {
     prerelease: Boolean(scope.prerelease),
     /* Mirrors the parent workflow: Sparkle needs macOS to actually ship. */
-    updateSparkle: Boolean(scope.updateSparkle) && macosAction !== "skip",
+    updateSparkle: Boolean(scope.updateSparkle) && macosAction !== 'skip',
     windowsSigned: Boolean(scope.signWindows),
   };
   const labels = {
-    prerelease: "--prerelease",
-    updateSparkle: "Sparkle (--skip-sparkle)",
-    windowsSigned: "--windows-signing",
+    prerelease: '--prerelease',
+    updateSparkle: 'Sparkle (--skip-sparkle)',
+    windowsSigned: '--windows-signing',
   };
   const conflicts = [];
-  for (const key of ["prerelease", "updateSparkle", "windowsSigned"]) {
+  for (const key of ['prerelease', 'updateSparkle', 'windowsSigned']) {
     if (flags[key] === undefined) continue;
     if (Boolean(flags[key]) !== recorded[key]) {
       conflicts.push(
-        `${labels[key]}: the command line says ${Boolean(flags[key])} but the source run recorded ${recorded[key]}`,
+        `${labels[key]}: the command line says ${Boolean(flags[key])} but the source run recorded ${recorded[key]}`
       );
     }
   }
@@ -188,8 +179,8 @@ export function assertPlanMatchesScope({ expectedPlatforms, plan, version }) {
   const planned = [...plan.expectedPlatforms].sort();
   if (JSON.stringify(requested) !== JSON.stringify(planned)) {
     refuse(
-      `GHOSTEX_RELEASE_EXPECTED_PLATFORMS (${requested.join(", ") || "empty"}) does not equal the plan's ` +
-        `expected platforms (${planned.join(", ") || "empty"})`,
+      `GHOSTEX_RELEASE_EXPECTED_PLATFORMS (${requested.join(', ') || 'empty'}) does not equal the plan's ` +
+        `expected platforms (${planned.join(', ') || 'empty'})`
     );
   }
   return plan.expectedPlatforms;
@@ -205,9 +196,9 @@ export function assertPlanMatchesScope({ expectedPlatforms, plan, version }) {
 export function validateProductAgainstPlan({ manifest, plan, record, version }) {
   const product = manifest.platform;
   const entry = plan.products?.[product];
-  if (!entry) refuseProduct(product, "the release plan has no entry for it");
-  if (entry.action === "skip") {
-    refuseProduct(product, "the plan skipped it, but the run uploaded an artifact for it");
+  if (!entry) refuseProduct(product, 'the release plan has no entry for it');
+  if (entry.action === 'skip') {
+    refuseProduct(product, 'the plan skipped it, but the run uploaded an artifact for it');
   }
   if (!record) refuseProduct(product, `its artifact carries no ${PRODUCT_PROVENANCE_FILE}`);
   let validated;
@@ -228,20 +219,20 @@ export function validateProductAgainstPlan({ manifest, plan, record, version }) 
   if (validated.sourceSha !== plan.sourceSha) {
     refuseProduct(
       product,
-      `it was produced at ${validated.sourceSha.slice(0, 12)} but the plan was computed at ${plan.sourceSha.slice(0, 12)}`,
+      `it was produced at ${validated.sourceSha.slice(0, 12)} but the plan was computed at ${plan.sourceSha.slice(0, 12)}`
     );
   }
-  if (validated.action === "reused") {
+  if (validated.action === 'reused') {
     const reuse = entry.reuse ?? {};
     const recordOrigin = validated.reusedFrom.tag ?? `run ${validated.reusedFrom.runId}`;
-    const planOrigin = reuse.tag ?? (reuse.runId ? `run ${reuse.runId}` : "(none)");
+    const planOrigin = reuse.tag ?? (reuse.runId ? `run ${reuse.runId}` : '(none)');
     if (recordOrigin !== planOrigin) {
       refuseProduct(product, `it was reused from ${recordOrigin} but the plan authorized ${planOrigin}`);
     }
     if (reuse.productVersion && reuse.productVersion !== validated.productVersion) {
       refuseProduct(
         product,
-        `it reports product version ${validated.productVersion} but the plan authorized ${reuse.productVersion}`,
+        `it reports product version ${validated.productVersion} but the plan authorized ${reuse.productVersion}`
       );
     }
   }
@@ -259,7 +250,7 @@ export function collectPublishProvenance({ manifests, plan, readProvenance, vers
     records[manifest.platform] = validateProductAgainstPlan({ manifest, plan, record, version });
   }
   for (const product of plan.expectedPlatforms) {
-    if (!records[product]) refuseProduct(product, "the plan expects it but no validated provenance record arrived");
+    if (!records[product]) refuseProduct(product, 'the plan expects it but no validated provenance record arrived');
   }
   return records;
 }
@@ -274,14 +265,14 @@ export function collectPublishProvenance({ manifests, plan, readProvenance, vers
 export function assertSingleBuildOrigin({ expectedRunId = null, records }) {
   const origins = new Map();
   for (const record of Object.values(records)) {
-    if (record.action !== "built") continue;
+    if (record.action !== 'built') continue;
     if (!origins.has(record.originRunId)) origins.set(record.originRunId, []);
     origins.get(record.originRunId).push(record.product);
   }
   if (origins.size > 1) {
     const description = [...origins.entries()]
-      .map(([runId, products]) => `${runId}: ${products.sort().join(", ")}`)
-      .join(" | ");
+      .map(([runId, products]) => `${runId}: ${products.sort().join(', ')}`)
+      .join(' | ');
     refuse(`the built artifacts come from more than one Actions run (${description})`);
   }
   const [originRunId] = [...origins.keys()];
@@ -298,16 +289,16 @@ export function assertSingleBuildOrigin({ expectedRunId = null, records }) {
  * entry does not, and both feeds still have to advance.
  */
 export function resolveMacosFeedScope({ plan, updateSparkleRequested }) {
-  const action = plan.products?.["macos-arm64"]?.action ?? "skip";
-  const inRelease = action !== "skip";
+  const action = plan.products?.['macos-arm64']?.action ?? 'skip';
+  const inRelease = action !== 'skip';
   if (updateSparkleRequested && !inRelease) {
-    refuse("Sparkle was requested but macOS is not part of this release");
+    refuse('Sparkle was requested but macOS is not part of this release');
   }
   const reason = !inRelease
-    ? "macOS is not part of this release"
-    : action === "reuse"
-      ? "macOS is reused into this same-version release, so its feed entries do not exist yet"
-      : "macOS was built for this release";
+    ? 'macOS is not part of this release'
+    : action === 'reuse'
+      ? 'macOS is reused into this same-version release, so its feed entries do not exist yet'
+      : 'macOS was built for this release';
   return {
     homebrew: inRelease,
     macosAction: action,
@@ -322,10 +313,10 @@ export function resolveMacosFeedScope({ plan, updateSparkleRequested }) {
 export function resolveWindowsFeedScope({ plan }) {
   const regenerated = [];
   const carriedForward = [];
-  for (const arch of ["x64", "arm64"]) {
-    const action = plan.products?.[`windows-${arch}`]?.action ?? "skip";
-    if (action === "build") regenerated.push(arch);
-    else if (action === "reuse") carriedForward.push(arch);
+  for (const arch of ['x64', 'arm64']) {
+    const action = plan.products?.[`windows-${arch}`]?.action ?? 'skip';
+    if (action === 'build') regenerated.push(arch);
+    else if (action === 'reuse') carriedForward.push(arch);
   }
   return { carriedForward, regenerated };
 }
@@ -399,8 +390,8 @@ export function assertLiveProvenanceMatches({ live, record }) {
   const computedProducts = Object.keys(record.products).sort();
   if (JSON.stringify(publishedProducts) !== JSON.stringify(computedProducts)) {
     refuse(
-      `the published provenance records ${publishedProducts.join(", ")} but this run validated ` +
-        `${computedProducts.join(", ")}`,
+      `the published provenance records ${publishedProducts.join(', ')} but this run validated ` +
+        `${computedProducts.join(', ')}`
     );
   }
   for (const [product, computed] of Object.entries(record.products)) {
@@ -409,21 +400,24 @@ export function assertLiveProvenanceMatches({ live, record }) {
       refuseProduct(
         product,
         `the published provenance records ${live.action}/${live.fingerprint.slice(0, 12)} but this run validated ` +
-          `${computed.action}/${computed.fingerprint.slice(0, 12)}`,
+          `${computed.action}/${computed.fingerprint.slice(0, 12)}`
       );
     }
     const digests = (entries) =>
-      [...entries].map((artifact) => `${artifact.name}\0${artifact.sha256}\0${artifact.size}`).sort().join("|");
+      [...entries]
+        .map((artifact) => `${artifact.name}\0${artifact.sha256}\0${artifact.size}`)
+        .sort()
+        .join('|');
     if (digests(live.artifacts) !== digests(computed.artifacts)) {
-      refuseProduct(product, "the published provenance records different artifact digests than this run validated");
+      refuseProduct(product, 'the published provenance records different artifact digests than this run validated');
     }
   }
   return published;
 }
 
 export function productOriginLabel(record) {
-  if (record.action === "built") return "this release";
-  if (record.reusedFrom?.tier === "release") return `unchanged since ${record.reusedFrom.tag}`;
+  if (record.action === 'built') return 'this release';
+  if (record.reusedFrom?.tier === 'release') return `unchanged since ${record.reusedFrom.tag}`;
   return `unchanged since run ${record.reusedFrom?.runId} (same version)`;
 }
 
@@ -431,35 +425,29 @@ export function productVersionCell(record) {
   if (record.versionStamped || PRODUCTS_WITH_EMBEDDED_VERSION.has(record.product)) {
     return record.productVersion;
   }
-  return "—";
+  return '—';
 }
 
 /* §Q12: the release page states, per product, built versus reused and from where. */
 export function renderBuildProvenanceNotes(releaseProvenance) {
-  const lines = ["## Build provenance", ""];
-  lines.push("| Product | Status | Product version | Source |");
-  lines.push("|---|---|---|---|");
+  const lines = ['## Build provenance', ''];
+  lines.push('| Product | Status | Product version | Source |');
+  lines.push('|---|---|---|---|');
   for (const product of PRODUCT_IDS) {
     const record = releaseProvenance.products[product];
     if (!record) continue;
-    lines.push(
-      `| ${product} | ${record.action} | ${productVersionCell(record)} | ${productOriginLabel(record)} |`,
-    );
+    lines.push(`| ${product} | ${record.action} | ${productVersionCell(record)} | ${productOriginLabel(record)} |`);
   }
   const componentLines = [];
   for (const [component, entry] of Object.entries(releaseProvenance.components ?? {})) {
     if (!entry.componentVersion) continue;
     componentLines.push(`\`${component}\` ${entry.componentVersion} (${entry.action})`);
   }
-  lines.push("");
-  if (componentLines.length > 0) lines.push(`Components: ${componentLines.join(" · ")}`, "");
-  lines.push(
-    "Reused artifacts are byte-identical to the release named above; their inputs did not change.",
-  );
-  lines.push(
-    `Full machine-readable record: \`${releaseProvenanceAssetName(releaseProvenance.version)}\`.`,
-  );
-  return lines.join("\n");
+  lines.push('');
+  if (componentLines.length > 0) lines.push(`Components: ${componentLines.join(' · ')}`, '');
+  lines.push('Reused artifacts are byte-identical to the release named above; their inputs did not change.');
+  lines.push(`Full machine-readable record: \`${releaseProvenanceAssetName(releaseProvenance.version)}\`.`);
+  return lines.join('\n');
 }
 
 /* The four-way status vocabulary (§11.3) used by the publisher and the verifier. */
@@ -474,12 +462,12 @@ export function summarizeReleaseProvenance(releaseProvenance, { plan = releasePr
         product,
         productVersion: productVersionCell(record),
       };
-      if (record.action === "built") summary.built.push(entry);
+      if (record.action === 'built') summary.built.push(entry);
       else summary.reused.push(entry);
       continue;
     }
     const planned = plan?.products?.[product];
-    if (planned?.action === "skip") {
+    if (planned?.action === 'skip') {
       summary.skippedByFlag.push({ product, reason: planned.reason });
     }
   }
@@ -489,15 +477,14 @@ export function summarizeReleaseProvenance(releaseProvenance, { plan = releasePr
 export function renderReleaseProvenanceReport(releaseProvenance, { plan } = {}) {
   const summary = summarizeReleaseProvenance(releaseProvenance, { plan });
   const lines = [];
-  const describe = (entry) =>
-    `${entry.product} (${entry.fingerprint.slice(0, 12)}, ${entry.origin})`;
-  lines.push(`BUILT     ${summary.built.map(describe).join(" · ") || "(none)"}`);
-  lines.push(`REUSED    ${summary.reused.map(describe).join(" · ") || "(none)"}`);
+  const describe = (entry) => `${entry.product} (${entry.fingerprint.slice(0, 12)}, ${entry.origin})`;
+  lines.push(`BUILT     ${summary.built.map(describe).join(' · ') || '(none)'}`);
+  lines.push(`REUSED    ${summary.reused.map(describe).join(' · ') || '(none)'}`);
   lines.push(
-    `SKIPPED   by flag: ${summary.skippedByFlag.map((entry) => entry.product).join(", ") || "(none)"}; ` +
-      `as unchanged: ${summary.skippedAsUnchanged.map((entry) => entry.product).join(", ") || "(none)"}`,
+    `SKIPPED   by flag: ${summary.skippedByFlag.map((entry) => entry.product).join(', ') || '(none)'}; ` +
+      `as unchanged: ${summary.skippedAsUnchanged.map((entry) => entry.product).join(', ') || '(none)'}`
   );
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /*
@@ -520,9 +507,7 @@ export function verifyReleaseProvenanceAgainstAssets({ liveAssets, releaseProven
         continue;
       }
       if (asset.sha256 && asset.sha256 !== artifact.sha256) {
-        failures.push(
-          `${artifact.name} live digest ${asset.sha256.slice(0, 12)} does not match the provenance record`,
-        );
+        failures.push(`${artifact.name} live digest ${asset.sha256.slice(0, 12)} does not match the provenance record`);
       }
       if (asset.size !== undefined && asset.size !== null && Number(asset.size) !== artifact.size) {
         failures.push(`${artifact.name} live size ${asset.size} does not match the provenance record`);
@@ -538,7 +523,7 @@ export function verifyReleaseProvenanceAgainstAssets({ liveAssets, releaseProven
 export function crossReleaseReuseOrigins(releaseProvenance) {
   const origins = [];
   for (const record of Object.values(releaseProvenance.products)) {
-    if (record.action !== "reused" || record.reusedFrom?.tier !== "release") continue;
+    if (record.action !== 'reused' || record.reusedFrom?.tier !== 'release') continue;
     origins.push({
       artifacts: record.artifacts.map((artifact) => ({ name: artifact.name, sha256: artifact.sha256 })),
       product: record.product,

@@ -29,44 +29,44 @@ mkdir -p "$ZIG_GLOBAL_CACHE_DIR"
 
 ROOTS=("$@")
 if [[ ${#ROOTS[@]} -eq 0 ]]; then
-  ROOTS=(ghostty zmx)
+	ROOTS=(ghostty zmx)
 fi
 
 zig_for_root() {
-  printf '%s\n' "${GHOSTEX_ZIG:-${ZIG:-zig}}"
+	printf '%s\n' "${GHOSTEX_ZIG:-${ZIG:-zig}}"
 }
 
 FETCHED=0
 SKIPPED=()
 for root in "${ROOTS[@]}"; do
-  ROOT_DIR="$REPO_ROOT/.dependencies/$root"
-  if [[ ! -f "$ROOT_DIR/build.zig.zon" ]]; then
-    # Submodules are only checked out for the jobs that build them; a missing
-    # root is not an error, it is a job that does not need those packages.
-    SKIPPED+=("$root")
-    continue
-  fi
-  ZIG_BIN="$(zig_for_root "$root")"
-  if ! command -v "$ZIG_BIN" >/dev/null 2>&1 && [[ ! -x "$ZIG_BIN" ]]; then
-    SKIPPED+=("$root (no zig)")
-    continue
-  fi
-  echo "Pre-fetching Zig dependencies for $root with $ZIG_BIN"
-  # Prefetching is a pure optimization: the compile fetches the same packages
-  # with the same pinned hashes if this misses. Failing the job here would make
-  # releases more fragile, not less, so a miss is a warning.
-  if release_gpui_retry 4 5 -- "$ZIG_BIN" build --fetch --build-file "$ROOT_DIR/build.zig" --cache-dir "$ROOT_DIR/.zig-cache"; then
-    FETCHED=$((FETCHED + 1))
-  else
-    echo "::warning::Zig dependency prefetch for $root did not complete; the build will fetch on demand"
-    SKIPPED+=("$root (prefetch failed)")
-  fi
+	ROOT_DIR="$REPO_ROOT/.dependencies/$root"
+	if [[ ! -f "$ROOT_DIR/build.zig.zon" ]]; then
+		# Submodules are only checked out for the jobs that build them; a missing
+		# root is not an error, it is a job that does not need those packages.
+		SKIPPED+=("$root")
+		continue
+	fi
+	ZIG_BIN="$(zig_for_root "$root")"
+	if ! command -v "$ZIG_BIN" >/dev/null 2>&1 && [[ ! -x "$ZIG_BIN" ]]; then
+		SKIPPED+=("$root (no zig)")
+		continue
+	fi
+	echo "Pre-fetching Zig dependencies for $root with $ZIG_BIN"
+	# Prefetching is a pure optimization: the compile fetches the same packages
+	# with the same pinned hashes if this misses. Failing the job here would make
+	# releases more fragile, not less, so a miss is a warning.
+	if release_gpui_retry 4 5 -- "$ZIG_BIN" build --fetch --build-file "$ROOT_DIR/build.zig" --cache-dir "$ROOT_DIR/.zig-cache"; then
+		FETCHED=$((FETCHED + 1))
+	else
+		echo "::warning::Zig dependency prefetch for $root did not complete; the build will fetch on demand"
+		SKIPPED+=("$root (prefetch failed)")
+	fi
 done
 
 echo "Pre-fetched Zig dependencies for $FETCHED root(s) into $ZIG_GLOBAL_CACHE_DIR"
 if [[ ${#SKIPPED[@]} -gt 0 ]]; then
-  echo "Skipped: ${SKIPPED[*]}"
+	echo "Skipped: ${SKIPPED[*]}"
 fi
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-  echo "- Zig dependency prefetch: ${FETCHED} root(s), skipped ${#SKIPPED[@]}" >>"$GITHUB_STEP_SUMMARY"
+	echo "- Zig dependency prefetch: ${FETCHED} root(s), skipped ${#SKIPPED[@]}" >>"$GITHUB_STEP_SUMMARY"
 fi

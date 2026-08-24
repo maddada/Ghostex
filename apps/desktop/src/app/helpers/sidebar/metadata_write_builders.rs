@@ -9,7 +9,6 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use anyhow::Result;
 
 use crate::app::helpers::*;
@@ -374,4 +373,3 @@ pub(crate) fn gpui_sidebar_metadata_mutation_item_ids(result: &serde_json::Value
         .map(|items| gpui_normalized_string_order_from_values(items))
         .unwrap_or_default()
 }
-

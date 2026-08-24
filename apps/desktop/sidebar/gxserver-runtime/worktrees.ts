@@ -3,16 +3,16 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import { GPUI_GXSERVER_CHATS_GROUP_ID } from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
-import { createGpuiGitToastId, hasGpuiGitShortStatusChanges } from "./helpers/git";
-import { normalizeNonEmptyString, stringFromRecord } from "./helpers/records";
+import { GPUI_GXSERVER_CHATS_GROUP_ID } from './constants';
+import type { GpuiSidebarRuntime } from './core';
+import { createGpuiGitToastId, hasGpuiGitShortStatusChanges } from './helpers/git';
+import { normalizeNonEmptyString, stringFromRecord } from './helpers/records';
 import {
   createGpuiRemotePresentationProjectId,
   createGpuiRemotePresentationSessionId,
   parseGpuiRemotePresentationGroupId,
   parseGpuiRemotePresentationProjectId,
-} from "./helpers/remote-presentation";
+} from './helpers/remote-presentation';
 import {
   createGpuiExistingWorktreeOptions,
   createGpuiWorktreeToastId,
@@ -31,20 +31,17 @@ import {
   normalizeGpuiWorktreeParentProjectId,
   parseGpuiWorktreeModalCommand,
   resolveGpuiWorktreeDeleteBranchMetadata,
-} from "./helpers/worktrees";
-import type {
-  GpuiCreatedProjectAgentSessionRecord,
-  GpuiRemoteProjectScope,
-} from "./types-and-protocol";
-import { postAppModalHostMessage } from "@/packages/core-ui/app-modal-host-bridge";
-import type { AppToastLevel } from "@/packages/shared/app-toast-contract";
-import { createAppToastRequest } from "@/packages/shared/app-toast-contract";
-import { normalizeghostexSettings } from "@/packages/shared/ghostex-settings";
+} from './helpers/worktrees';
+import type { GpuiCreatedProjectAgentSessionRecord, GpuiRemoteProjectScope } from './types-and-protocol';
+import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
+import { createAppToastRequest } from '@/packages/shared/app-toast-contract';
+import { normalizeghostexSettings } from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectGroupId,
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectGroupId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverCreateWorktreeSessionResult,
   GxserverDeleteWorktreeProjectResult,
@@ -53,9 +50,9 @@ import type {
   GxserverProjectWorktreeListResult,
   GxserverRemoveSessionWorktreeResult,
   GxserverTypedOperationResult,
-} from "@/packages/shared/gxserver-protocol";
-import type { SidebarToExtensionMessage } from "@/packages/shared/session-grid-contract";
-import { createAgentSessionDefaultTitle } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/gxserver-protocol';
+import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
+import { createAgentSessionDefaultTitle } from '@/packages/shared/session-grid-contract';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -68,89 +65,132 @@ at the bottom of this file is what keeps the two in step.
 */
 export interface GpuiSidebarRuntimeWorktreeMethods {
   handleGpuiWorktreeModalCommand(payload: unknown): void;
-  requestProjectWorktrees(message: Extract<SidebarToExtensionMessage, { type: "requestProjectWorktrees" }>): Promise<void>;
-  requestRemoteProjectWorktrees(message: Extract<SidebarToExtensionMessage, { type: "requestProjectWorktrees" }>, requestId: string): Promise<void>;
-  createProjectWorktree(message: Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>): Promise<void>;
-  createNewProjectWorktree(message: Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>, sourceProject: GxserverProjectDomainState): Promise<{ projectId: string; session: GpuiCreatedProjectAgentSessionRecord }>;
-  createRemoteProjectWorktree(message: Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>): Promise<void>;
-  openExistingProjectWorktree(message: Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>, sourceProject: GxserverProjectDomainState): Promise<void>;
-  postProjectWorktreesResult(requestId: string, result: {
+  requestProjectWorktrees(
+    message: Extract<SidebarToExtensionMessage, { type: 'requestProjectWorktrees' }>
+  ): Promise<void>;
+  requestRemoteProjectWorktrees(
+    message: Extract<SidebarToExtensionMessage, { type: 'requestProjectWorktrees' }>,
+    requestId: string
+  ): Promise<void>;
+  createProjectWorktree(message: Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>): Promise<void>;
+  createNewProjectWorktree(
+    message: Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>,
+    sourceProject: GxserverProjectDomainState
+  ): Promise<{ projectId: string; session: GpuiCreatedProjectAgentSessionRecord }>;
+  createRemoteProjectWorktree(
+    message: Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>
+  ): Promise<void>;
+  openExistingProjectWorktree(
+    message: Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>,
+    sourceProject: GxserverProjectDomainState
+  ): Promise<void>;
+  postProjectWorktreesResult(
+    requestId: string,
+    result: {
       branches?: unknown;
       error?: string;
       ok: boolean;
       worktrees?: unknown;
-    }): void;
-  createWorktreeSession(message: Extract<SidebarToExtensionMessage, { type: "createWorktreeSession" }>): Promise<void>;
-  createRemoteWorktreeSession(remoteGroup: { machineId: string; projectId: string }, message: Extract<SidebarToExtensionMessage, { type: "createWorktreeSession" }>, requestId: string): Promise<void>;
-  removeSessionWorktree(message: Extract<SidebarToExtensionMessage, { type: "removeSessionWorktree" }>): Promise<void>;
-  postWorktreeSessionResult(requestId: string, result: {
+    }
+  ): void;
+  createWorktreeSession(message: Extract<SidebarToExtensionMessage, { type: 'createWorktreeSession' }>): Promise<void>;
+  createRemoteWorktreeSession(
+    remoteGroup: { machineId: string; projectId: string },
+    message: Extract<SidebarToExtensionMessage, { type: 'createWorktreeSession' }>,
+    requestId: string
+  ): Promise<void>;
+  removeSessionWorktree(message: Extract<SidebarToExtensionMessage, { type: 'removeSessionWorktree' }>): Promise<void>;
+  postWorktreeSessionResult(
+    requestId: string,
+    result: {
       branch?: string;
       error?: string;
       ok: boolean;
       sessionId?: string;
       worktreePath?: string;
-    }): void;
-  postSessionWorktreeRemovalResult(requestId: string, worktreePath: string, result: {
+    }
+  ): void;
+  postSessionWorktreeRemovalResult(
+    requestId: string,
+    worktreePath: string,
+    result: {
       dirty?: boolean;
       error?: string;
       ok: boolean;
       removed: boolean;
       warnings?: string[];
-    }): void;
+    }
+  ): void;
   updateProjectWorktreeCommand(projectId: string, command: string): Promise<void>;
   deleteWorktreeAfterCompletedGitAction(worktreeProject: GxserverProjectDomainState): Promise<void>;
   deleteRemoteWorktreeAfterCompletedGitAction(remoteScope: GpuiRemoteProjectScope): Promise<void>;
   promptDeleteWorktreeForGroup(groupId: string): Promise<void>;
   promptRenameWorktreeForGroup(groupId: string): Promise<void>;
-  confirmRenameWorktree(message: Extract<SidebarToExtensionMessage, { type: "confirmRenameWorktree" }>): Promise<void>;
+  confirmRenameWorktree(message: Extract<SidebarToExtensionMessage, { type: 'confirmRenameWorktree' }>): Promise<void>;
   promptDeleteRemoteWorktreeForGroup(groupId: string): Promise<boolean>;
-  confirmDeleteWorktree(message: Extract<SidebarToExtensionMessage, { type: "confirmDeleteWorktree" }>): Promise<void>;
-  confirmDeleteRemoteWorktree(message: Extract<SidebarToExtensionMessage, { type: "confirmDeleteWorktree" }>): Promise<void>;
+  confirmDeleteWorktree(message: Extract<SidebarToExtensionMessage, { type: 'confirmDeleteWorktree' }>): Promise<void>;
+  confirmDeleteRemoteWorktree(
+    message: Extract<SidebarToExtensionMessage, { type: 'confirmDeleteWorktree' }>
+  ): Promise<void>;
   postGxserverWorktreeDeleteWarnings(result: GxserverDeleteWorktreeProjectResult): void;
   ensureWorktreeBeadsHooks(project: GxserverProjectDomainState): Promise<void>;
-  runWorktreeSetupCommandIfConfigured(worktreeProject: GxserverProjectDomainState, setupCommandProject: GxserverProjectDomainState): Promise<void>;
-  resolveUniqueWorktreeTarget(project: GxserverProjectDomainState, prompt: string): Promise<{ branch: string; name: string; path: string }>;
+  runWorktreeSetupCommandIfConfigured(
+    worktreeProject: GxserverProjectDomainState,
+    setupCommandProject: GxserverProjectDomainState
+  ): Promise<void>;
+  resolveUniqueWorktreeTarget(
+    project: GxserverProjectDomainState,
+    prompt: string
+  ): Promise<{ branch: string; name: string; path: string }>;
   resolveWorktreeFamilyParentProject(project: GxserverProjectDomainState): GxserverProjectDomainState | undefined;
-  isTrustedExistingWorktreePath(path: string, sourceProject: GxserverProjectDomainState, parentProject: GxserverProjectDomainState): boolean;
-  postWorktreeToast(level: AppToastLevel, title: string, options?: {
+  isTrustedExistingWorktreePath(
+    path: string,
+    sourceProject: GxserverProjectDomainState,
+    parentProject: GxserverProjectDomainState
+  ): boolean;
+  postWorktreeToast(
+    level: AppToastLevel,
+    title: string,
+    options?: {
       description?: string;
       persistent?: boolean;
       toastId?: string;
-    }): void;
+    }
+  ): void;
 }
 
 export const gpuiSidebarRuntimeWorktreeMethods = {
-
   handleGpuiWorktreeModalCommand(this: GpuiSidebarRuntime, payload: unknown): void {
     const message = parseGpuiWorktreeModalCommand(payload);
     if (!message) {
       return;
     }
     switch (message.type) {
-      case "requestProjectWorktrees":
+      case 'requestProjectWorktrees':
         void this.requestProjectWorktrees(message);
         return;
-      case "createProjectWorktree":
+      case 'createProjectWorktree':
         void this.createProjectWorktree(message);
         return;
-      case "confirmDeleteWorktree":
+      case 'confirmDeleteWorktree':
         void this.confirmDeleteWorktree(message);
         return;
-      case "confirmRenameWorktree":
+      case 'confirmRenameWorktree':
         void this.confirmRenameWorktree(message);
         return;
-      case "commitWorktreeBeforeDelete":
+      case 'commitWorktreeBeforeDelete':
         void this.runSidebarGitAction({
-          action: "commit",
+          action: 'commit',
           groupId: message.groupId,
-          type: "runSidebarGitAction",
+          type: 'runSidebarGitAction',
         });
         return;
     }
   },
 
-  async requestProjectWorktrees(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "requestProjectWorktrees" }>,
+  async requestProjectWorktrees(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'requestProjectWorktrees' }>
   ): Promise<void> {
     const requestId = message.requestId.trim();
     if (!requestId) {
@@ -164,7 +204,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     if (!sourceProject || !this.client) {
       this.trustedExistingWorktreeList = undefined;
       this.postProjectWorktreesResult(requestId, {
-        error: "No active gxserver project is available.",
+        error: 'No active gxserver project is available.',
         ok: false,
       });
       return;
@@ -172,23 +212,23 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     const parentProject = this.resolveWorktreeFamilyParentProject(sourceProject) ?? sourceProject;
     try {
       const [worktreeResult, branchResult] = await Promise.all([
-        this.client.rpc<GxserverTypedOperationResult>("/api/runWorktreeAction", {
-          action: "list",
+        this.client.rpc<GxserverTypedOperationResult>('/api/runWorktreeAction', {
+          action: 'list',
           projectId: parentProject.projectId,
         }),
-        this.client.rpc<GxserverTypedOperationResult>("/api/runGitAction", {
-          action: "listBranches",
+        this.client.rpc<GxserverTypedOperationResult>('/api/runGitAction', {
+          action: 'listBranches',
           projectId: parentProject.projectId,
         }),
       ]);
       if (worktreeResult.exitCode !== 0 || branchResult.exitCode !== 0) {
-        throw new Error("gxserver could not read worktree metadata.");
+        throw new Error('gxserver could not read worktree metadata.');
       }
       const worktrees = createGpuiExistingWorktreeOptions(
         worktreeResult.worktrees,
         parentProject,
         sourceProject,
-        this.domainProjects,
+        this.domainProjects
       );
       this.trustedExistingWorktreeList = {
         parentProjectId: parentProject.projectId,
@@ -203,15 +243,16 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     } catch {
       this.trustedExistingWorktreeList = undefined;
       this.postProjectWorktreesResult(requestId, {
-        error: "Could not load gxserver worktrees.",
+        error: 'Could not load gxserver worktrees.',
         ok: false,
       });
     }
   },
 
-  async requestRemoteProjectWorktrees(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "requestProjectWorktrees" }>,
-    requestId: string,
+  async requestRemoteProjectWorktrees(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'requestProjectWorktrees' }>,
+    requestId: string
   ): Promise<void> {
     const sourceProject = this.resolveRemotePresentationProjectScope({
       projectId: message.projectId,
@@ -220,7 +261,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     if (!sourceProject) {
       this.trustedExistingWorktreeList = undefined;
       this.postProjectWorktreesResult(requestId, {
-        error: "Reconnect the remote machine before loading worktrees.",
+        error: 'Reconnect the remote machine before loading worktrees.',
         ok: false,
       });
       return;
@@ -228,11 +269,11 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     try {
       const result = await this.requestRemoteGxserver<GxserverProjectWorktreeListResult>(
         sourceProject.machineId,
-        "/api/listProjectWorktrees",
+        '/api/listProjectWorktrees',
         {
           projectId: sourceProject.projectId,
         },
-        { timeoutMs: 30_000 },
+        { timeoutMs: 30_000 }
       );
       const worktrees = normalizeGpuiExistingWorktreeOptions(result.worktrees);
       this.trustedExistingWorktreeList = {
@@ -241,9 +282,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
         remoteMachineId: sourceProject.machineId,
         sourceProjectId: result.sourceProjectId,
         worktreeKeys: new Set(
-          worktrees
-            .map((worktree) => worktree.worktreeKey?.trim())
-            .filter((key): key is string => Boolean(key)),
+          worktrees.map((worktree) => worktree.worktreeKey?.trim()).filter((key): key is string => Boolean(key))
         ),
       };
       this.postProjectWorktreesResult(requestId, {
@@ -254,154 +293,136 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     } catch {
       this.trustedExistingWorktreeList = undefined;
       this.postProjectWorktreesResult(requestId, {
-        error: "Could not load remote gxserver worktrees.",
+        error: 'Could not load remote gxserver worktrees.',
         ok: false,
       });
     }
   },
 
-  async createProjectWorktree(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>,
+  async createProjectWorktree(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>
   ): Promise<void> {
     const mode =
-      message.mode === "openExisting" ||
+      message.mode === 'openExisting' ||
       normalizeGpuiProjectPath(message.existingWorktreePath) ||
       message.existingWorktreeKey?.trim()
-        ? "openExisting"
-        : "create";
+        ? 'openExisting'
+        : 'create';
     const toastId = createGpuiWorktreeToastId();
-    this.postWorktreeToast(
-      "info",
-      mode === "openExisting" ? "Opening worktree" : "Creating worktree",
-      {
-        persistent: true,
-        toastId,
-      },
-    );
+    this.postWorktreeToast('info', mode === 'openExisting' ? 'Opening worktree' : 'Creating worktree', {
+      persistent: true,
+      toastId,
+    });
     try {
       if (message.remoteMachineId?.trim()) {
         await this.createRemoteProjectWorktree(message);
         this.trustedExistingWorktreeList = undefined;
-        this.postWorktreeToast("success", "Remote worktree ready", { toastId });
+        this.postWorktreeToast('success', 'Remote worktree ready', { toastId });
         return;
       }
       if (!this.client) {
-        throw new Error("gxserver is unavailable.");
+        throw new Error('gxserver is unavailable.');
       }
       const sourceProject = this.resolveDomainProjectScope(message) ?? this.activeDomainProject();
       if (!sourceProject || !normalizeGpuiProjectPath(sourceProject.path)) {
-        throw new Error("Open an active code project before creating a worktree.");
+        throw new Error('Open an active code project before creating a worktree.');
       }
       if (sourceProject.isRecentProject === true) {
-        throw new Error("Restore the project before creating a worktree.");
+        throw new Error('Restore the project before creating a worktree.');
       }
 
-      if (mode === "openExisting") {
+      if (mode === 'openExisting') {
         await this.openExistingProjectWorktree(message, sourceProject);
       } else {
         await this.createNewProjectWorktree(message, sourceProject);
       }
       this.trustedExistingWorktreeList = undefined;
-      await this.refreshDomainPresentationFromClient("patch").catch(() => undefined);
-      this.postWorktreeToast("success", "Worktree ready", { toastId });
+      await this.refreshDomainPresentationFromClient('patch').catch(() => undefined);
+      this.postWorktreeToast('success', 'Worktree ready', { toastId });
     } catch (error) {
       this.postWorktreeToast(
-        "error",
-        mode === "openExisting" ? "Could not open worktree" : "Could not create worktree",
+        'error',
+        mode === 'openExisting' ? 'Could not open worktree' : 'Could not create worktree',
         {
           description: gpuiWorktreeUserVisibleErrorMessage(error),
           toastId,
-        },
+        }
       );
     }
   },
 
-  async createNewProjectWorktree(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>,
-    sourceProject: GxserverProjectDomainState,
+  async createNewProjectWorktree(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>,
+    sourceProject: GxserverProjectDomainState
   ): Promise<{ projectId: string; session: GpuiCreatedProjectAgentSessionRecord }> {
     if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+      throw new Error('gxserver is unavailable.');
     }
-    const prompt = message.prompt?.trim() ?? "";
-    const baseBranch = message.baseBranch?.trim() ?? "";
-    const agent = this.resolveSidebarAgent(message.agentId?.trim() ?? "");
+    const prompt = message.prompt?.trim() ?? '';
+    const baseBranch = message.baseBranch?.trim() ?? '';
+    const agent = this.resolveSidebarAgent(message.agentId?.trim() ?? '');
     if (!prompt) {
-      throw new Error("Worktree prompt is empty.");
+      throw new Error('Worktree prompt is empty.');
     }
     if (!baseBranch) {
-      throw new Error("Choose a base branch.");
+      throw new Error('Choose a base branch.');
     }
     if (!agent?.command?.trim()) {
-      throw new Error("Choose an agent with a configured command.");
+      throw new Error('Choose an agent with a configured command.');
     }
 
     const parentProject = this.resolveWorktreeFamilyParentProject(sourceProject) ?? sourceProject;
     const gxserverParentProject = await this.registerDomainProjectPath(parentProject);
     let gxserverOperationProject = gxserverParentProject;
     let gxserverSetupCommandProject = gxserverParentProject;
-    if (
-      normalizeGpuiProjectPath(sourceProject.path) !== normalizeGpuiProjectPath(parentProject.path)
-    ) {
+    if (normalizeGpuiProjectPath(sourceProject.path) !== normalizeGpuiProjectPath(parentProject.path)) {
       gxserverOperationProject = await this.registerDomainProjectPath(sourceProject);
       gxserverSetupCommandProject = gxserverOperationProject;
     }
 
     const target = await this.resolveUniqueWorktreeTarget(gxserverOperationProject, prompt);
-    const createResult = await this.client.rpc<GxserverTypedOperationResult>(
-      "/api/runWorktreeAction",
-      {
-        action: "create",
-        baseRef: baseBranch,
-        branch: target.branch,
-        projectId: gxserverOperationProject.projectId,
-        worktreePath: target.path,
-      },
-    );
+    const createResult = await this.client.rpc<GxserverTypedOperationResult>('/api/runWorktreeAction', {
+      action: 'create',
+      baseRef: baseBranch,
+      branch: target.branch,
+      projectId: gxserverOperationProject.projectId,
+      worktreePath: target.path,
+    });
     if (createResult.exitCode !== 0) {
-      throw new Error("git worktree add failed.");
+      throw new Error('git worktree add failed.');
     }
 
     const gxserverWorktreeProject = await this.registerProjectPath({
-      name: `${gxserverParentProject.name || gpuiProjectNameFromPath(gxserverParentProject.path ?? "")}-${target.name}`,
+      name: `${gxserverParentProject.name || gpuiProjectNameFromPath(gxserverParentProject.path ?? '')}-${target.name}`,
       path: target.path,
     });
     if (!normalizeGpuiWorktreeParentProjectId(gxserverWorktreeProject.worktree)) {
-      throw new Error("gxserver did not register the new checkout as a worktree project.");
+      throw new Error('gxserver did not register the new checkout as a worktree project.');
     }
     await this.ensureWorktreeBeadsHooks(gxserverWorktreeProject);
-    await this.runWorktreeSetupCommandIfConfigured(
-      gxserverWorktreeProject,
-      gxserverSetupCommandProject,
-    );
-    const session = await this.createAgentSessionRecordForProject(
-      gxserverWorktreeProject,
-      agent,
-      prompt,
-    );
+    await this.runWorktreeSetupCommandIfConfigured(gxserverWorktreeProject, gxserverSetupCommandProject);
+    const session = await this.createAgentSessionRecordForProject(gxserverWorktreeProject, agent, prompt);
     this.focusProjectId(gxserverWorktreeProject.projectId);
     return { projectId: gxserverWorktreeProject.projectId, session };
   },
 
-  async createRemoteProjectWorktree(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>,
+  async createRemoteProjectWorktree(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>
   ): Promise<void> {
     const remoteScope = this.resolveRemotePresentationProjectScope({
       projectId: message.projectId,
       remoteMachineId: message.remoteMachineId,
     });
     if (!remoteScope) {
-      throw new Error("Reconnect the remote machine before creating a worktree.");
+      throw new Error('Reconnect the remote machine before creating a worktree.');
     }
-    const mode =
-      message.mode === "openExisting" || message.existingWorktreeKey?.trim()
-        ? "openExisting"
-        : "create";
-    const prompt = message.prompt?.trim() ?? "";
-    const agentId = message.agentId?.trim() ?? "";
-    const agentTitle = createAgentSessionDefaultTitle(
-      this.resolveSidebarAgent(agentId)?.name ?? agentId,
-    );
+    const mode = message.mode === 'openExisting' || message.existingWorktreeKey?.trim() ? 'openExisting' : 'create';
+    const prompt = message.prompt?.trim() ?? '';
+    const agentId = message.agentId?.trim() ?? '';
+    const agentTitle = createAgentSessionDefaultTitle(this.resolveSidebarAgent(agentId)?.name ?? agentId);
     /*
     CDXC:RemoteWorktrees 2026-06-24-18:40:
     GPUI remote Add Worktree submits only the selected remote project id plus
@@ -410,98 +431,93 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     shared modal's optional Open Existing prompt behavior by creating an agent
     session after the daemon returns a registered project id.
     */
-    if (mode === "openExisting") {
-      const worktreeKey = message.existingWorktreeKey?.trim() ?? "";
+    if (mode === 'openExisting') {
+      const worktreeKey = message.existingWorktreeKey?.trim() ?? '';
       if (!worktreeKey || !this.isTrustedRemoteExistingWorktreeKey(worktreeKey, remoteScope)) {
-        throw new Error("Choose an existing remote worktree from the latest worktree list.");
+        throw new Error('Choose an existing remote worktree from the latest worktree list.');
       }
       const response = await this.requestRemoteGxserver<{
         project?: GxserverPresentationProject;
       }>(
         remoteScope.machineId,
-        "/api/openProjectWorktree",
+        '/api/openProjectWorktree',
         {
           projectId: remoteScope.projectId,
           worktreeKey,
         },
-        { timeoutMs: 45_000 },
+        { timeoutMs: 45_000 }
       );
-      const project = await this.resolveRemoteWorktreeMutationProject(
-        remoteScope.machineId,
-        response.project,
-      );
+      const project = await this.resolveRemoteWorktreeMutationProject(remoteScope.machineId, response.project);
       if (prompt) {
         if (!agentId) {
-          throw new Error("Choose an agent before starting a remote worktree prompt.");
+          throw new Error('Choose an agent before starting a remote worktree prompt.');
         }
         await this.createRemoteAgentSessionForProject(
           { machineId: remoteScope.machineId, projectId: project.projectId },
           agentId,
           prompt,
-          agentTitle,
+          agentTitle
         );
       }
       return;
     }
 
-    const baseRef = message.baseBranch?.trim() ?? "";
+    const baseRef = message.baseBranch?.trim() ?? '';
     if (!prompt) {
-      throw new Error("Worktree prompt is empty.");
+      throw new Error('Worktree prompt is empty.');
     }
     if (!baseRef) {
-      throw new Error("Choose a base branch.");
+      throw new Error('Choose a base branch.');
     }
     if (!agentId) {
-      throw new Error("Choose an agent before creating a remote worktree.");
+      throw new Error('Choose an agent before creating a remote worktree.');
     }
     const response = await this.requestRemoteGxserver<{
       project?: GxserverPresentationProject;
     }>(
       remoteScope.machineId,
-      "/api/createProjectWorktree",
+      '/api/createProjectWorktree',
       {
         baseRef,
         nameHint: gpuiWorktreeSlugFromPrompt(prompt),
         projectId: remoteScope.projectId,
       },
-      { timeoutMs: 90_000 },
+      { timeoutMs: 90_000 }
     );
-    const project = await this.resolveRemoteWorktreeMutationProject(
-      remoteScope.machineId,
-      response.project,
-    );
+    const project = await this.resolveRemoteWorktreeMutationProject(remoteScope.machineId, response.project);
     await this.createRemoteAgentSessionForProject(
       { machineId: remoteScope.machineId, projectId: project.projectId },
       agentId,
       prompt,
-      agentTitle,
+      agentTitle
     );
   },
 
-  async openExistingProjectWorktree(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>,
-    sourceProject: GxserverProjectDomainState,
+  async openExistingProjectWorktree(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'createProjectWorktree' }>,
+    sourceProject: GxserverProjectDomainState
   ): Promise<void> {
     const existingWorktreePath = normalizeGpuiProjectPath(message.existingWorktreePath);
     if (!existingWorktreePath) {
-      throw new Error("Choose an existing worktree.");
+      throw new Error('Choose an existing worktree.');
     }
     const parentProject = this.resolveWorktreeFamilyParentProject(sourceProject) ?? sourceProject;
     if (!this.isTrustedExistingWorktreePath(existingWorktreePath, sourceProject, parentProject)) {
-      throw new Error("Choose an existing worktree from the latest worktree list.");
+      throw new Error('Choose an existing worktree from the latest worktree list.');
     }
     const gxserverWorktreeProject = await this.registerProjectPath({
       name: gpuiProjectNameFromPath(existingWorktreePath),
       path: existingWorktreePath,
     });
     if (!normalizeGpuiWorktreeParentProjectId(gxserverWorktreeProject.worktree)) {
-      throw new Error("The selected checkout is not a registered worktree.");
+      throw new Error('The selected checkout is not a registered worktree.');
     }
     await this.ensureWorktreeBeadsHooks(gxserverWorktreeProject);
-    const prompt = message.prompt?.trim() ?? "";
-    const agent = this.resolveSidebarAgent(message.agentId?.trim() ?? "");
+    const prompt = message.prompt?.trim() ?? '';
+    const agent = this.resolveSidebarAgent(message.agentId?.trim() ?? '');
     if (prompt && !agent?.command?.trim()) {
-      throw new Error("Choose an agent with a configured command.");
+      throw new Error('Choose an agent with a configured command.');
     }
     if (prompt && agent) {
       await this.createAgentSessionForProject(gxserverWorktreeProject, agent, prompt);
@@ -509,14 +525,15 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     this.focusProjectId(gxserverWorktreeProject.projectId);
   },
 
-  postProjectWorktreesResult(this: GpuiSidebarRuntime,
+  postProjectWorktreesResult(
+    this: GpuiSidebarRuntime,
     requestId: string,
     result: {
       branches?: unknown;
       error?: string;
       ok: boolean;
       worktrees?: unknown;
-    },
+    }
   ): void {
     /*
     CDXC:SidebarV2Worktree 2026-07-29:
@@ -531,7 +548,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       error: result.error,
       ok: result.ok,
       requestId,
-      type: "projectWorktreesResult",
+      type: 'projectWorktreesResult',
       worktrees: result.worktrees,
     });
     // The Worktree modal lives in the native app-modal window, not in
@@ -544,10 +561,10 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
           error: result.error,
           ok: result.ok,
           requestId,
-          type: "projectWorktreesResult",
+          type: 'projectWorktreesResult',
           worktrees: result.worktrees,
         },
-        "AppModals:gpuiWorktree.projectWorktreesResult",
+        'AppModals:gpuiWorktree.projectWorktreesResult'
       );
     } catch {
       // Without the app-modal bridge there is no modal window waiting on this
@@ -578,8 +595,9 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     than by the sidebar, because only the host knows the workspace pane the
     session has to mount into.
   */
-  async createWorktreeSession(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "createWorktreeSession" }>,
+  async createWorktreeSession(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'createWorktreeSession' }>
   ): Promise<void> {
     const requestId = message.requestId.trim();
     if (!requestId) {
@@ -593,33 +611,30 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     const projectId = parseGxserverPresentationProjectGroupId(message.projectId);
     if (!projectId || !this.client) {
       this.postWorktreeSessionResult(requestId, {
-        error: "Open a code project before creating a worktree session.",
+        error: 'Open a code project before creating a worktree session.',
         ok: false,
       });
       return;
     }
     const existingWorktreePath = normalizeGpuiProjectPath(message.existingWorktreePath);
-    const agentId = message.agentId?.trim() ?? "";
-    const baseBranch = message.baseBranch?.trim() ?? "";
-    const firstPrompt = message.firstPrompt?.trim() ?? "";
+    const agentId = message.agentId?.trim() ?? '';
+    const baseBranch = message.baseBranch?.trim() ?? '';
+    const firstPrompt = message.firstPrompt?.trim() ?? '';
     try {
-      const result = await this.client.rpc<GxserverCreateWorktreeSessionResult>(
-        "/api/createWorktreeSession",
-        {
-          ...(agentId ? { agentId } : {}),
-          ...(baseBranch ? { baseBranch } : {}),
-          ...(existingWorktreePath ? { existingWorktree: { path: existingWorktreePath } } : {}),
-          ...(firstPrompt ? { firstPrompt } : {}),
-          projectId,
-          ...(message.startFromOrigin === true ? { startFromOrigin: true } : {}),
-        },
-      );
+      const result = await this.client.rpc<GxserverCreateWorktreeSessionResult>('/api/createWorktreeSession', {
+        ...(agentId ? { agentId } : {}),
+        ...(baseBranch ? { baseBranch } : {}),
+        ...(existingWorktreePath ? { existingWorktree: { path: existingWorktreePath } } : {}),
+        ...(firstPrompt ? { firstPrompt } : {}),
+        projectId,
+        ...(message.startFromOrigin === true ? { startFromOrigin: true } : {}),
+      });
       /*
       The session row arrives with the next presentation snapshot, so refresh
       before answering: the sidebar's pending state ends on a list that already
       contains the row it was waiting for.
       */
-      await this.refreshDomainPresentationFromClient("patch").catch(() => undefined);
+      await this.refreshDomainPresentationFromClient('patch').catch(() => undefined);
       const createdSessionId = normalizeNonEmptyString(result.sessionId);
       const createdProjectId = projectId;
       if (createdSessionId) {
@@ -635,7 +650,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       });
     } catch (error) {
       const description = gpuiWorktreeUserVisibleErrorMessage(error);
-      this.postSidebarActionToast("warning", "Could not create worktree session", {
+      this.postSidebarActionToast('warning', 'Could not create worktree session', {
         description,
       });
       this.postWorktreeSessionResult(requestId, { error: description, ok: false });
@@ -651,19 +666,20 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   read out of the id the HOST minted, never guessed from anything the renderer
   supplied.
   */
-  async createRemoteWorktreeSession(this: GpuiSidebarRuntime,
+  async createRemoteWorktreeSession(
+    this: GpuiSidebarRuntime,
     remoteGroup: { machineId: string; projectId: string },
-    message: Extract<SidebarToExtensionMessage, { type: "createWorktreeSession" }>,
-    requestId: string,
+    message: Extract<SidebarToExtensionMessage, { type: 'createWorktreeSession' }>,
+    requestId: string
   ): Promise<void> {
     const existingWorktreePath = normalizeGpuiProjectPath(message.existingWorktreePath);
-    const agentId = message.agentId?.trim() ?? "";
-    const baseBranch = message.baseBranch?.trim() ?? "";
-    const firstPrompt = message.firstPrompt?.trim() ?? "";
+    const agentId = message.agentId?.trim() ?? '';
+    const baseBranch = message.baseBranch?.trim() ?? '';
+    const firstPrompt = message.firstPrompt?.trim() ?? '';
     try {
       const result = await this.requestRemoteGxserver<GxserverCreateWorktreeSessionResult>(
         remoteGroup.machineId,
-        "/api/createWorktreeSession",
+        '/api/createWorktreeSession',
         {
           ...(agentId ? { agentId } : {}),
           ...(baseBranch ? { baseBranch } : {}),
@@ -677,11 +693,9 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
         own setup command on the far side of an SSH tunnel. The bridge's 20s
         default is a create-session budget, not a repository-clone budget.
         */
-        { timeoutMs: 120_000 },
+        { timeoutMs: 120_000 }
       );
-      await this.refreshRemotePresentationFromGxserver(remoteGroup.machineId).catch(
-        () => undefined,
-      );
+      await this.refreshRemotePresentationFromGxserver(remoteGroup.machineId).catch(() => undefined);
       const createdSessionId = normalizeNonEmptyString(result.sessionId);
       if (createdSessionId) {
         this.setRemotePresentationSessionFocus({
@@ -694,17 +708,13 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
         branch: normalizeNonEmptyString(result.branch),
         ok: true,
         sessionId: createdSessionId
-          ? createGpuiRemotePresentationSessionId(
-              remoteGroup.machineId,
-              remoteGroup.projectId,
-              createdSessionId,
-            )
+          ? createGpuiRemotePresentationSessionId(remoteGroup.machineId, remoteGroup.projectId, createdSessionId)
           : undefined,
         worktreePath: normalizeNonEmptyString(result.worktreePath),
       });
     } catch (error) {
       const description = gpuiWorktreeUserVisibleErrorMessage(error);
-      this.postSidebarActionToast("warning", "Could not create worktree session", {
+      this.postSidebarActionToast('warning', 'Could not create worktree session', {
         description,
       });
       this.postWorktreeSessionResult(requestId, { error: description, ok: false });
@@ -725,8 +735,9 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   it still applies its own dirty check and its own path-safety normalization
   before deleting anything.
   */
-  async removeSessionWorktree(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "removeSessionWorktree" }>,
+  async removeSessionWorktree(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'removeSessionWorktree' }>
   ): Promise<void> {
     const requestId = message.requestId.trim();
     const worktreePath = normalizeGpuiProjectPath(message.worktreePath);
@@ -734,12 +745,10 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       return;
     }
     const remoteGroup = parseGpuiRemotePresentationGroupId(message.projectId);
-    const projectId = remoteGroup
-      ? remoteGroup.projectId
-      : parseGxserverPresentationProjectGroupId(message.projectId);
+    const projectId = remoteGroup ? remoteGroup.projectId : parseGxserverPresentationProjectGroupId(message.projectId);
     if (!projectId || (!remoteGroup && !this.client)) {
       this.postSessionWorktreeRemovalResult(requestId, worktreePath, {
-        error: "gxserver is unavailable.",
+        error: 'gxserver is unavailable.',
         ok: false,
         removed: false,
       });
@@ -754,19 +763,17 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       const result = remoteGroup
         ? await this.requestRemoteGxserver<GxserverRemoveSessionWorktreeResult>(
             remoteGroup.machineId,
-            "/api/removeSessionWorktree",
+            '/api/removeSessionWorktree',
             params,
-            { timeoutMs: 60_000 },
+            { timeoutMs: 60_000 }
           )
-        : await this.client!.rpc<GxserverRemoveSessionWorktreeResult>(
-            "/api/removeSessionWorktree",
-            params,
-          );
+        : await this.client!.rpc<GxserverRemoveSessionWorktreeResult>('/api/removeSessionWorktree', params);
       const removed = result.removed === true;
       if (removed) {
-        await (remoteGroup
-          ? this.refreshRemotePresentationFromGxserver(remoteGroup.machineId)
-          : this.refreshDomainPresentationFromClient("patch")
+        await (
+          remoteGroup
+            ? this.refreshRemotePresentationFromGxserver(remoteGroup.machineId)
+            : this.refreshDomainPresentationFromClient('patch')
         ).catch(() => undefined);
       }
       this.postSessionWorktreeRemovalResult(requestId, worktreePath, {
@@ -774,14 +781,12 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
         ok: true,
         removed,
         warnings: Array.isArray(result.warnings)
-          ? result.warnings.filter(
-              (warning): warning is string => typeof warning === "string" && warning.trim() !== "",
-            )
+          ? result.warnings.filter((warning): warning is string => typeof warning === 'string' && warning.trim() !== '')
           : undefined,
       });
     } catch (error) {
       const description = gpuiWorktreeUserVisibleErrorMessage(error);
-      this.postSidebarActionToast("warning", "Could not remove worktree", { description });
+      this.postSidebarActionToast('warning', 'Could not remove worktree', { description });
       this.postSessionWorktreeRemovalResult(requestId, worktreePath, {
         error: description,
         ok: false,
@@ -790,7 +795,8 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     }
   },
 
-  postWorktreeSessionResult(this: GpuiSidebarRuntime,
+  postWorktreeSessionResult(
+    this: GpuiSidebarRuntime,
     requestId: string,
     result: {
       branch?: string;
@@ -798,7 +804,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       ok: boolean;
       sessionId?: string;
       worktreePath?: string;
-    },
+    }
   ): void {
     this.messageSource.postMessage({
       branch: result.branch,
@@ -806,12 +812,13 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       ok: result.ok,
       requestId,
       sessionId: result.sessionId,
-      type: "worktreeSessionResult",
+      type: 'worktreeSessionResult',
       worktreePath: result.worktreePath,
     });
   },
 
-  postSessionWorktreeRemovalResult(this: GpuiSidebarRuntime,
+  postSessionWorktreeRemovalResult(
+    this: GpuiSidebarRuntime,
     requestId: string,
     worktreePath: string,
     result: {
@@ -820,7 +827,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       ok: boolean;
       removed: boolean;
       warnings?: string[];
-    },
+    }
   ): void {
     this.messageSource.postMessage({
       dirty: result.dirty,
@@ -828,7 +835,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       ok: result.ok,
       removed: result.removed,
       requestId,
-      type: "sessionWorktreeRemovalResult",
+      type: 'sessionWorktreeRemovalResult',
       warnings: result.warnings,
       worktreePath,
     });
@@ -848,8 +855,9 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     });
   },
 
-  async deleteWorktreeAfterCompletedGitAction(this: GpuiSidebarRuntime,
-    worktreeProject: GxserverProjectDomainState,
+  async deleteWorktreeAfterCompletedGitAction(
+    this: GpuiSidebarRuntime,
+    worktreeProject: GxserverProjectDomainState
   ): Promise<void> {
     if (!this.client) {
       return;
@@ -857,14 +865,14 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     const currentProject = this.domainProjectById(worktreeProject.projectId) ?? worktreeProject;
     const worktree = normalizeGpuiWorktreeMetadata(currentProject.worktree);
     if (!worktree) {
-      this.postGitToast("warning", "Worktree cleanup skipped", {
-        description: "The selected gxserver project is no longer a worktree.",
+      this.postGitToast('warning', 'Worktree cleanup skipped', {
+        description: 'The selected gxserver project is no longer a worktree.',
       });
       return;
     }
     const parentProject = this.domainProjectById(worktree.parentProjectId);
     const toastId = createGpuiGitToastId();
-    this.postGitToast("info", "Removing worktree", {
+    this.postGitToast('info', 'Removing worktree', {
       persistent: true,
       toastId,
     });
@@ -882,18 +890,13 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     this.gitStateMemoByProjectId.delete(currentProject.projectId);
     this.gitHubStateMemoByProjectId.delete(currentProject.projectId);
     try {
-      const result = await this.client.rpc<GxserverDeleteWorktreeProjectResult>(
-        "/api/deleteWorktreeProject",
-        {
-          deleteLocalBranch: false,
-          deleteRemoteBranch: false,
-          projectId: currentProject.projectId,
-        },
-      );
+      const result = await this.client.rpc<GxserverDeleteWorktreeProjectResult>('/api/deleteWorktreeProject', {
+        deleteLocalBranch: false,
+        deleteRemoteBranch: false,
+        projectId: currentProject.projectId,
+      });
       this.postGxserverWorktreeDeleteWarnings(result);
-      this.domainProjects = this.domainProjects.filter(
-        (project) => project.projectId !== currentProject.projectId,
-      );
+      this.domainProjects = this.domainProjects.filter((project) => project.projectId !== currentProject.projectId);
       if (parentProject) {
         this.focusProjectId(parentProject.projectId);
       } else if (this.activeProjectId === currentProject.projectId) {
@@ -903,53 +906,52 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
           ? createGxserverPresentationProjectGroupId(fallbackProjectId)
           : GPUI_GXSERVER_CHATS_GROUP_ID;
       }
-      await this.refreshDomainPresentationFromClient("patch").catch(() => {
+      await this.refreshDomainPresentationFromClient('patch').catch(() => {
         this.publishHudPatch();
       });
-      this.postGitToast("success", "Worktree removed", { toastId });
+      this.postGitToast('success', 'Worktree removed', { toastId });
     } catch {
-      this.postGitToast("error", "Could not remove worktree", {
-        description: "gxserver worktree cleanup failed.",
+      this.postGitToast('error', 'Could not remove worktree', {
+        description: 'gxserver worktree cleanup failed.',
         toastId,
       });
     }
   },
 
-  async deleteRemoteWorktreeAfterCompletedGitAction(this: GpuiSidebarRuntime,
-    remoteScope: GpuiRemoteProjectScope,
+  async deleteRemoteWorktreeAfterCompletedGitAction(
+    this: GpuiSidebarRuntime,
+    remoteScope: GpuiRemoteProjectScope
   ): Promise<void> {
     const currentProject = this.findRemotePresentationProject(remoteScope) ?? remoteScope.project;
     const worktree = normalizeGpuiWorktreeMetadata(currentProject.worktree);
     if (!worktree) {
-      this.postRemoteToast("warning", "Remote worktree cleanup skipped", {
-        description: "The selected remote project is no longer a worktree.",
+      this.postRemoteToast('warning', 'Remote worktree cleanup skipped', {
+        description: 'The selected remote project is no longer a worktree.',
       });
       return;
     }
     const toastId = createGpuiGitToastId();
-    this.postGitToast("info", "Removing remote worktree", {
+    this.postGitToast('info', 'Removing remote worktree', {
       persistent: true,
       toastId,
     });
     try {
       const result = await this.requestRemoteGxserver<GxserverDeleteWorktreeProjectResult>(
         remoteScope.machineId,
-        "/api/deleteWorktreeProject",
+        '/api/deleteWorktreeProject',
         {
           deleteLocalBranch: false,
           deleteRemoteBranch: false,
           projectId: remoteScope.projectId,
         },
-        { timeoutMs: 45_000 },
+        { timeoutMs: 45_000 }
       );
       this.postGxserverWorktreeDeleteWarnings(result);
-      await this.refreshRemotePresentationFromGxserver(remoteScope.machineId).catch(
-        () => undefined,
-      );
-      this.postGitToast("success", "Remote worktree removed", { toastId });
+      await this.refreshRemotePresentationFromGxserver(remoteScope.machineId).catch(() => undefined);
+      this.postGitToast('success', 'Remote worktree removed', { toastId });
     } catch {
-      this.postGitToast("error", "Could not remove remote worktree", {
-        description: "Remote gxserver worktree cleanup failed.",
+      this.postGitToast('error', 'Could not remove remote worktree', {
+        description: 'Remote gxserver worktree cleanup failed.',
         toastId,
       });
     }
@@ -963,49 +965,47 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     const project = projectId ? this.domainProjectById(projectId) : undefined;
     const worktree = normalizeGpuiWorktreeMetadata(project?.worktree);
     if (!project || !worktree) {
-      this.postWorktreeToast("warning", "Not a worktree", {
-        description: "Only worktree projects can be deleted.",
+      this.postWorktreeToast('warning', 'Not a worktree', {
+        description: 'Only worktree projects can be deleted.',
       });
       return;
     }
     try {
       const [branch, status] = await Promise.all([
-        this.runGitAction(project, { action: "branch" }),
-        this.runGitAction(project, { action: "status" }),
+        this.runGitAction(project, { action: 'branch' }),
+        this.runGitAction(project, { action: 'status' }),
       ]);
       if (branch.exitCode !== 0 || status.exitCode !== 0) {
-        throw new Error("Could not read worktree status.");
+        throw new Error('Could not read worktree status.');
       }
       const branchName = normalizeGpuiWorktreeDeleteBranchName(branch.stdout, worktree.branch);
-      const branchMetadata = await resolveGpuiWorktreeDeleteBranchMetadata(
-        branchName,
-        (remoteName, remoteBranchName) =>
-          this.runGitAction(project, {
-            action: "remoteBranchExists",
-            branch: remoteBranchName,
-            remoteName,
-          }),
+      const branchMetadata = await resolveGpuiWorktreeDeleteBranchMetadata(branchName, (remoteName, remoteBranchName) =>
+        this.runGitAction(project, {
+          action: 'remoteBranchExists',
+          branch: remoteBranchName,
+          remoteName,
+        })
       );
       // Delete Worktree opens only after gxserver collects fresh Git status,
       // so dirty checkouts can offer Commit before the destructive removal.
       postAppModalHostMessage(
         {
-          modal: "deleteWorktree",
-          type: "open",
+          modal: 'deleteWorktree',
+          type: 'open',
           worktreeDeleteDraft: {
             ...branchMetadata,
             groupId,
             hasChanges: hasGpuiGitShortStatusChanges(status.stdout),
             projectId: project.projectId,
             statusSummary: status.stdout.trim(),
-            worktreeName: project.name || worktree.name || "worktree",
+            worktreeName: project.name || worktree.name || 'worktree',
           },
         },
-        "AppModals:gpuiDeleteWorktree",
+        'AppModals:gpuiDeleteWorktree'
       );
     } catch (error) {
-      this.postWorktreeToast("error", "Could not inspect worktree", {
-        description: error instanceof Error ? error.message : "git status failed.",
+      this.postWorktreeToast('error', 'Could not inspect worktree', {
+        description: error instanceof Error ? error.message : 'git status failed.',
       });
     }
   },
@@ -1032,8 +1032,8 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   */
   async promptRenameWorktreeForGroup(this: GpuiSidebarRuntime, groupId: string): Promise<void> {
     if (parseGpuiRemotePresentationGroupId(groupId)) {
-      this.postWorktreeToast("warning", "Not available for remote worktrees", {
-        description: "Rename a remote worktree from the machine that owns it.",
+      this.postWorktreeToast('warning', 'Not available for remote worktrees', {
+        description: 'Rename a remote worktree from the machine that owns it.',
       });
       return;
     }
@@ -1042,15 +1042,15 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     const worktree = normalizeGpuiWorktreeMetadata(project?.worktree);
     const projectPath = normalizeGpuiProjectPath(project?.path);
     if (!project || !worktree || !projectPath) {
-      this.postWorktreeToast("warning", "Not a worktree", {
-        description: "Only worktree projects can be renamed.",
+      this.postWorktreeToast('warning', 'Not a worktree', {
+        description: 'Only worktree projects can be renamed.',
       });
       return;
     }
     const parentProject = this.domainProjectById(worktree.parentProjectId);
     const parentProjectPath = normalizeGpuiProjectPath(parentProject?.path);
     if (!parentProject || !parentProjectPath) {
-      this.postWorktreeToast("warning", "Parent project unavailable", {
+      this.postWorktreeToast('warning', 'Parent project unavailable', {
         description: "The worktree's parent project is not registered.",
       });
       return;
@@ -1058,8 +1058,8 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
 
     try {
       const [branch, status, submodules] = await Promise.all([
-        this.runGitAction(project, { action: "branch" }),
-        this.runGitAction(project, { action: "status" }),
+        this.runGitAction(project, { action: 'branch' }),
+        this.runGitAction(project, { action: 'status' }),
         /*
         CDXC:WorktreeRename 2026-08-09-18:40:
         The submodule probe is an early warning, not the guard. A daemon that
@@ -1068,62 +1068,54 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
         refuses with the same sentence. Degrade to that refusal instead.
         */
         this.runWorktreeAction(parentProject, {
-          action: "hasPopulatedSubmodules",
+          action: 'hasPopulatedSubmodules',
           worktreePath: projectPath,
         }).catch(() => undefined),
       ]);
       if (branch.exitCode !== 0 || status.exitCode !== 0) {
-        throw new Error("Could not read worktree status.");
+        throw new Error('Could not read worktree status.');
       }
       const branchName = normalizeGpuiWorktreeDeleteBranchName(branch.stdout, worktree.branch);
-      const branchMetadata = await resolveGpuiWorktreeDeleteBranchMetadata(
-        branchName,
-        (remoteName, remoteBranchName) =>
-          this.runGitAction(project, {
-            action: "remoteBranchExists",
-            branch: remoteBranchName,
-            remoteName,
-          }),
+      const branchMetadata = await resolveGpuiWorktreeDeleteBranchMetadata(branchName, (remoteName, remoteBranchName) =>
+        this.runGitAction(project, {
+          action: 'remoteBranchExists',
+          branch: remoteBranchName,
+          remoteName,
+        })
       );
       const parentFolderName = gpuiProjectNameFromPath(parentProjectPath);
       const currentFolderName = gpuiProjectNameFromPath(projectPath);
-      const sessions = (this.presentation?.sessions ?? []).filter(
-        (session) => session.projectId === project.projectId,
-      );
-      const runningSessionCount = sessions.filter(
-        (session) => session.lifecycleState === "running",
-      ).length;
+      const sessions = (this.presentation?.sessions ?? []).filter((session) => session.projectId === project.projectId);
+      const runningSessionCount = sessions.filter((session) => session.lifecycleState === 'running').length;
       const warnings: string[] = [];
       if (branchMetadata.remoteBranchExists && branchName) {
         warnings.push(
-          `Renaming here only renames the local branch. ${branchMetadata.remoteName}/${branchName} keeps its old name, and your next push will be rejected until you set a new upstream.`,
+          `Renaming here only renames the local branch. ${branchMetadata.remoteName}/${branchName} keeps its old name, and your next push will be rejected until you set a new upstream.`
         );
       }
       if (hasGpuiGitShortStatusChanges(status.stdout)) {
-        warnings.push(
-          "This worktree has uncommitted changes. They move with the folder and are not touched.",
-        );
+        warnings.push('This worktree has uncommitted changes. They move with the folder and are not touched.');
       }
       if (runningSessionCount > 0) {
         warnings.push(
-          `${runningSessionCount} running session(s) will keep working, but their shell still thinks it is in the old folder until you cd or restart them.`,
+          `${runningSessionCount} running session(s) will keep working, but their shell still thinks it is in the old folder until you cd or restart them.`
         );
       }
       if (sessions.some((session) => Boolean(session.agentId))) {
         warnings.push(
-          "Agent history (Claude/Cursor) is filed under the old folder path and will not follow the rename.",
+          'Agent history (Claude/Cursor) is filed under the old folder path and will not follow the rename.'
         );
       }
 
       postAppModalHostMessage(
         {
-          modal: "renameWorktree",
-          type: "open",
+          modal: 'renameWorktree',
+          type: 'open',
           worktreeRenameDraft: {
             ...(submodules?.exitCode === 0
               ? {
                   blockingReason:
-                    "This worktree has initialised submodules, and git cannot move those. Remove them (git submodule deinit --all) or move the folder yourself.",
+                    'This worktree has initialised submodules, and git cannot move those. Remove them (git submodule deinit --all) or move the folder yourself.',
                 }
               : {}),
             ...(branchName ? { branch: branchName } : {}),
@@ -1141,29 +1133,30 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
             worktreeName: project.name || worktree.name || currentFolderName,
           },
         },
-        "AppModals:gpuiRenameWorktree",
+        'AppModals:gpuiRenameWorktree'
       );
     } catch (error) {
-      this.postWorktreeToast("error", "Could not inspect worktree", {
-        description: error instanceof Error ? error.message : "git status failed.",
+      this.postWorktreeToast('error', 'Could not inspect worktree', {
+        description: error instanceof Error ? error.message : 'git status failed.',
       });
     }
   },
 
-  async confirmRenameWorktree(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "confirmRenameWorktree" }>,
+  async confirmRenameWorktree(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'confirmRenameWorktree' }>
   ): Promise<void> {
     const project = this.domainProjectById(message.projectId);
     const worktree = normalizeGpuiWorktreeMetadata(project?.worktree);
     if (!project || !worktree || !this.client) {
-      this.postWorktreeToast("warning", "Worktree unavailable", {
-        description: "The selected worktree no longer exists.",
+      this.postWorktreeToast('warning', 'Worktree unavailable', {
+        description: 'The selected worktree no longer exists.',
       });
       return;
     }
     const parentProject = this.domainProjectById(worktree.parentProjectId);
     const toastId = createGpuiWorktreeToastId();
-    this.postWorktreeToast("info", "Renaming worktree", {
+    this.postWorktreeToast('info', 'Renaming worktree', {
       description: project.name,
       persistent: true,
       toastId,
@@ -1182,26 +1175,23 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     this.gitStateMemoByProjectId.delete(project.projectId);
     this.gitHubStateMemoByProjectId.delete(project.projectId);
     try {
-      const result = await this.client.rpc<{ project?: GxserverProjectDomainState }>(
-        "/api/renameWorktreeProject",
-        {
-          name: message.name,
-          projectId: project.projectId,
-          renameBranch: message.renameBranch === true,
-        },
-      );
+      const result = await this.client.rpc<{ project?: GxserverProjectDomainState }>('/api/renameWorktreeProject', {
+        name: message.name,
+        projectId: project.projectId,
+        renameBranch: message.renameBranch === true,
+      });
       if (result.project) {
         this.upsertDomainProject(result.project);
       }
-      await this.refreshDomainPresentationFromClient("patch").catch(() => {
+      await this.refreshDomainPresentationFromClient('patch').catch(() => {
         this.publishHudPatch();
       });
-      this.postWorktreeToast("success", "Worktree renamed", {
+      this.postWorktreeToast('success', 'Worktree renamed', {
         description: result.project?.name ?? project.name,
         toastId,
       });
     } catch (error) {
-      this.postWorktreeToast("error", "Could not rename worktree", {
+      this.postWorktreeToast('error', 'Could not rename worktree', {
         description: gpuiWorktreeRenameUserVisibleErrorMessage(error),
         toastId,
       });
@@ -1218,57 +1208,53 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       : undefined;
     const worktree = normalizeGpuiWorktreeMetadata(presentationProject?.worktree);
     if (!remoteScope || !presentationProject || !worktree) {
-      this.postRemoteToast("warning", "Remote worktree unavailable", {
-        description: "Reconnect the remote machine and try deleting the worktree again.",
+      this.postRemoteToast('warning', 'Remote worktree unavailable', {
+        description: 'Reconnect the remote machine and try deleting the worktree again.',
       });
       return true;
     }
     try {
       const [branch, status] = await Promise.all([
-        this.runRemoteGitAction(remoteScope, { action: "branch" }),
-        this.runRemoteGitAction(remoteScope, { action: "status" }),
+        this.runRemoteGitAction(remoteScope, { action: 'branch' }),
+        this.runRemoteGitAction(remoteScope, { action: 'status' }),
       ]);
       if (branch.exitCode !== 0 || status.exitCode !== 0) {
-        throw new Error("Could not read remote worktree status.");
+        throw new Error('Could not read remote worktree status.');
       }
       const branchName = normalizeGpuiWorktreeDeleteBranchName(branch.stdout, worktree.branch);
-      const branchMetadata = await resolveGpuiWorktreeDeleteBranchMetadata(
-        branchName,
-        (remoteName, remoteBranchName) =>
-          this.runRemoteGitAction(remoteScope, {
-            action: "remoteBranchExists",
-            branch: remoteBranchName,
-            remoteName,
-          }),
+      const branchMetadata = await resolveGpuiWorktreeDeleteBranchMetadata(branchName, (remoteName, remoteBranchName) =>
+        this.runRemoteGitAction(remoteScope, {
+          action: 'remoteBranchExists',
+          branch: remoteBranchName,
+          remoteName,
+        })
       );
       postAppModalHostMessage(
         {
-          modal: "deleteWorktree",
-          type: "open",
+          modal: 'deleteWorktree',
+          type: 'open',
           worktreeDeleteDraft: {
             ...branchMetadata,
             groupId,
             hasChanges: hasGpuiGitShortStatusChanges(status.stdout),
-            projectId: createGpuiRemotePresentationProjectId(
-              remoteScope.machineId,
-              remoteScope.projectId,
-            ),
+            projectId: createGpuiRemotePresentationProjectId(remoteScope.machineId, remoteScope.projectId),
             statusSummary: status.stdout.trim(),
-            worktreeName: presentationProject.title || worktree.name || "worktree",
+            worktreeName: presentationProject.title || worktree.name || 'worktree',
           },
         },
-        "AppModals:gpuiDeleteWorktree.remote",
+        'AppModals:gpuiDeleteWorktree.remote'
       );
     } catch (error) {
-      this.postRemoteToast("error", "Could not inspect remote worktree", {
-        description: error instanceof Error ? error.message : "git status failed.",
+      this.postRemoteToast('error', 'Could not inspect remote worktree', {
+        description: error instanceof Error ? error.message : 'git status failed.',
       });
     }
     return true;
   },
 
-  async confirmDeleteWorktree(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "confirmDeleteWorktree" }>,
+  async confirmDeleteWorktree(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'confirmDeleteWorktree' }>
   ): Promise<void> {
     if (parseGpuiRemotePresentationProjectId(message.projectId)) {
       await this.confirmDeleteRemoteWorktree(message);
@@ -1277,14 +1263,14 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     const project = this.domainProjectById(message.projectId);
     const worktree = normalizeGpuiWorktreeMetadata(project?.worktree);
     if (!project || !worktree || !this.client) {
-      this.postWorktreeToast("warning", "Worktree unavailable", {
-        description: "The selected worktree no longer exists.",
+      this.postWorktreeToast('warning', 'Worktree unavailable', {
+        description: 'The selected worktree no longer exists.',
       });
       return;
     }
     const parentProject = this.domainProjectById(worktree.parentProjectId);
     const toastId = createGpuiWorktreeToastId();
-    this.postWorktreeToast("info", "Deleting worktree", {
+    this.postWorktreeToast('info', 'Deleting worktree', {
       description: project.name,
       persistent: true,
       toastId,
@@ -1306,18 +1292,13 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     this.gitStateMemoByProjectId.delete(project.projectId);
     this.gitHubStateMemoByProjectId.delete(project.projectId);
     try {
-      const result = await this.client.rpc<GxserverDeleteWorktreeProjectResult>(
-        "/api/deleteWorktreeProject",
-        {
-          deleteLocalBranch: message.deleteLocalBranch === true,
-          deleteRemoteBranch: message.deleteRemoteBranch === true,
-          projectId: project.projectId,
-        },
-      );
+      const result = await this.client.rpc<GxserverDeleteWorktreeProjectResult>('/api/deleteWorktreeProject', {
+        deleteLocalBranch: message.deleteLocalBranch === true,
+        deleteRemoteBranch: message.deleteRemoteBranch === true,
+        projectId: project.projectId,
+      });
       this.postGxserverWorktreeDeleteWarnings(result);
-      this.domainProjects = this.domainProjects.filter(
-        (candidate) => candidate.projectId !== project.projectId,
-      );
+      this.domainProjects = this.domainProjects.filter((candidate) => candidate.projectId !== project.projectId);
       if (parentProject) {
         this.focusProjectId(parentProject.projectId);
       } else if (this.activeProjectId === project.projectId) {
@@ -1327,57 +1308,56 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
           ? createGxserverPresentationProjectGroupId(fallbackProjectId)
           : GPUI_GXSERVER_CHATS_GROUP_ID;
       }
-      await this.refreshDomainPresentationFromClient("patch").catch(() => {
+      await this.refreshDomainPresentationFromClient('patch').catch(() => {
         this.publishHudPatch();
       });
-      this.postWorktreeToast("success", "Worktree deleted", {
+      this.postWorktreeToast('success', 'Worktree deleted', {
         description: project.name,
         toastId,
       });
     } catch {
-      this.postWorktreeToast("error", "Could not delete worktree", {
-        description: "gxserver worktree removal failed.",
+      this.postWorktreeToast('error', 'Could not delete worktree', {
+        description: 'gxserver worktree removal failed.',
         toastId,
       });
     }
   },
 
-  async confirmDeleteRemoteWorktree(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "confirmDeleteWorktree" }>,
+  async confirmDeleteRemoteWorktree(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'confirmDeleteWorktree' }>
   ): Promise<void> {
     const remoteScope = this.resolveRemotePresentationProjectScope({
       projectId: message.projectId,
     });
     if (!remoteScope) {
-      this.postRemoteToast("warning", "Remote worktree unavailable", {
-        description: "Reconnect the remote machine and try deleting the worktree again.",
+      this.postRemoteToast('warning', 'Remote worktree unavailable', {
+        description: 'Reconnect the remote machine and try deleting the worktree again.',
       });
       return;
     }
     const toastId = createGpuiWorktreeToastId();
-    this.postWorktreeToast("info", "Deleting remote worktree", {
+    this.postWorktreeToast('info', 'Deleting remote worktree', {
       persistent: true,
       toastId,
     });
     try {
       const result = await this.requestRemoteGxserver<GxserverDeleteWorktreeProjectResult>(
         remoteScope.machineId,
-        "/api/deleteWorktreeProject",
+        '/api/deleteWorktreeProject',
         {
           deleteLocalBranch: message.deleteLocalBranch === true,
           deleteRemoteBranch: message.deleteRemoteBranch === true,
           projectId: remoteScope.projectId,
         },
-        { timeoutMs: 45_000 },
+        { timeoutMs: 45_000 }
       );
       this.postGxserverWorktreeDeleteWarnings(result);
-      await this.refreshRemotePresentationFromGxserver(remoteScope.machineId).catch(
-        () => undefined,
-      );
-      this.postWorktreeToast("success", "Remote worktree deleted", { toastId });
+      await this.refreshRemotePresentationFromGxserver(remoteScope.machineId).catch(() => undefined);
+      this.postWorktreeToast('success', 'Remote worktree deleted', { toastId });
     } catch {
-      this.postWorktreeToast("error", "Could not delete remote worktree", {
-        description: "Remote gxserver worktree removal failed.",
+      this.postWorktreeToast('error', 'Could not delete remote worktree', {
+        description: 'Remote gxserver worktree removal failed.',
         toastId,
       });
     }
@@ -1386,25 +1366,16 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   postGxserverWorktreeDeleteWarnings(this: GpuiSidebarRuntime, result: GxserverDeleteWorktreeProjectResult): void {
     for (const warning of result.warnings) {
       switch (warning.kind) {
-        case "localBranchDeleteFailed":
-        case "localBranchNotResolved":
-          this.postGitToast(
-            "warning",
-            "Worktree removed, but local branch cleanup needs attention",
-          );
+        case 'localBranchDeleteFailed':
+        case 'localBranchNotResolved':
+          this.postGitToast('warning', 'Worktree removed, but local branch cleanup needs attention');
           break;
-        case "remoteBranchDeleteFailed":
-        case "remoteBranchNotResolved":
-          this.postGitToast(
-            "warning",
-            "Worktree removed, but remote branch cleanup needs attention",
-          );
+        case 'remoteBranchDeleteFailed':
+        case 'remoteBranchNotResolved':
+          this.postGitToast('warning', 'Worktree removed, but remote branch cleanup needs attention');
           break;
-        case "pruneFailed":
-          this.postGitToast(
-            "warning",
-            "Worktree removed, but stale metadata cleanup needs attention",
-          );
+        case 'pruneFailed':
+          this.postGitToast('warning', 'Worktree removed, but stale metadata cleanup needs attention');
           break;
       }
     }
@@ -1412,20 +1383,21 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
 
   async ensureWorktreeBeadsHooks(this: GpuiSidebarRuntime, project: GxserverProjectDomainState): Promise<void> {
     if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+      throw new Error('gxserver is unavailable.');
     }
-    const result = await this.client.rpc<GxserverTypedOperationResult>("/api/runWorktreeAction", {
-      action: "ensureBeadsHooks",
+    const result = await this.client.rpc<GxserverTypedOperationResult>('/api/runWorktreeAction', {
+      action: 'ensureBeadsHooks',
       projectId: project.projectId,
     });
     if (result.exitCode !== 0) {
-      throw new Error("Could not prepare Beads hooks for this worktree.");
+      throw new Error('Could not prepare Beads hooks for this worktree.');
     }
   },
 
-  async runWorktreeSetupCommandIfConfigured(this: GpuiSidebarRuntime,
+  async runWorktreeSetupCommandIfConfigured(
+    this: GpuiSidebarRuntime,
     worktreeProject: GxserverProjectDomainState,
-    setupCommandProject: GxserverProjectDomainState,
+    setupCommandProject: GxserverProjectDomainState
   ): Promise<void> {
     /*
      * CDXC:GlobalProjectDefaults 2026-08-02:
@@ -1435,34 +1407,32 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
      * command would never run. gxserver still resolves the command it executes.
      */
     const setupCommand =
-      stringFromRecord(setupCommandProject.gitConfig, "worktreeCommand") ??
+      stringFromRecord(setupCommandProject.gitConfig, 'worktreeCommand') ??
       normalizeghostexSettings(this.runtimeSettings?.settings).globalWorktreeCommand;
     if (!setupCommand.trim() || !this.client) {
       return;
     }
-    const result = await this.client.rpc<GxserverTypedOperationResult>(
-      "/api/runProjectSetupCommand",
-      {
-        action: "worktreeSetupCommand",
-        projectId: worktreeProject.projectId,
-        setupCommandProjectId: setupCommandProject.projectId,
-      },
-    );
+    const result = await this.client.rpc<GxserverTypedOperationResult>('/api/runProjectSetupCommand', {
+      action: 'worktreeSetupCommand',
+      projectId: worktreeProject.projectId,
+      setupCommandProjectId: setupCommandProject.projectId,
+    });
     if (result.exitCode !== 0) {
-      throw new Error("Worktree setup command failed.");
+      throw new Error('Worktree setup command failed.');
     }
   },
 
-  async resolveUniqueWorktreeTarget(this: GpuiSidebarRuntime,
+  async resolveUniqueWorktreeTarget(
+    this: GpuiSidebarRuntime,
     project: GxserverProjectDomainState,
-    prompt: string,
+    prompt: string
   ): Promise<{ branch: string; name: string; path: string }> {
     if (!this.client) {
-      throw new Error("gxserver is unavailable.");
+      throw new Error('gxserver is unavailable.');
     }
     const sourcePath = normalizeGpuiProjectPath(project.path);
     if (!sourcePath) {
-      throw new Error("Project has no registered path.");
+      throw new Error('Project has no registered path.');
     }
     const parentDirectory = gpuiDirname(sourcePath);
     const projectFolderName = gpuiProjectNameFromPath(sourcePath);
@@ -1470,20 +1440,20 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     const registeredPaths = new Set(
       this.domainProjects
         .map((candidate) => normalizeGpuiProjectPath(candidate.path))
-        .filter((path): path is string => Boolean(path)),
+        .filter((path): path is string => Boolean(path))
     );
     for (let index = 0; index < 50; index += 1) {
       const name = index === 0 ? baseSlug : `${baseSlug}-${index + 1}`;
       const branch = name;
       const path = `${parentDirectory}/${projectFolderName}-${name}`;
       const [branchCheck, pathCheck] = await Promise.all([
-        this.client.rpc<GxserverTypedOperationResult>("/api/runGitAction", {
-          action: "verifyRef",
+        this.client.rpc<GxserverTypedOperationResult>('/api/runGitAction', {
+          action: 'verifyRef',
           projectId: project.projectId,
           ref: `refs/heads/${branch}`,
         }),
-        this.client.rpc<GxserverTypedOperationResult>("/api/runWorktreeAction", {
-          action: "pathExists",
+        this.client.rpc<GxserverTypedOperationResult>('/api/runWorktreeAction', {
+          action: 'pathExists',
           projectId: project.projectId,
           worktreePath: path,
         }),
@@ -1492,38 +1462,41 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
         return { branch, name, path };
       }
     }
-    throw new Error("Could not find an unused worktree name.");
+    throw new Error('Could not find an unused worktree name.');
   },
 
-  resolveWorktreeFamilyParentProject(this: GpuiSidebarRuntime,
-    project: GxserverProjectDomainState,
+  resolveWorktreeFamilyParentProject(
+    this: GpuiSidebarRuntime,
+    project: GxserverProjectDomainState
   ): GxserverProjectDomainState | undefined {
     const parentProjectId = normalizeGpuiWorktreeParentProjectId(project.worktree);
     return parentProjectId ? this.domainProjectById(parentProjectId) : project;
   },
 
-  isTrustedExistingWorktreePath(this: GpuiSidebarRuntime,
+  isTrustedExistingWorktreePath(
+    this: GpuiSidebarRuntime,
     path: string,
     sourceProject: GxserverProjectDomainState,
-    parentProject: GxserverProjectDomainState,
+    parentProject: GxserverProjectDomainState
   ): boolean {
     const trusted = this.trustedExistingWorktreeList;
     return Boolean(
       trusted &&
       trusted.sourceProjectId === sourceProject.projectId &&
       trusted.parentProjectId === parentProject.projectId &&
-      trusted.paths.has(path),
+      trusted.paths.has(path)
     );
   },
 
-  postWorktreeToast(this: GpuiSidebarRuntime,
+  postWorktreeToast(
+    this: GpuiSidebarRuntime,
     level: AppToastLevel,
     title: string,
     options: {
       description?: string;
       persistent?: boolean;
       toastId?: string;
-    } = {},
+    } = {}
   ): void {
     try {
       postAppModalHostMessage(
@@ -1531,7 +1504,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
           persistent: options.persistent,
           toastId: options.toastId,
         }),
-        "AppModals:gpuiWorktreeToast",
+        'AppModals:gpuiWorktreeToast'
       );
     } catch {
       /*
@@ -1544,5 +1517,6 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   },
 };
 
-const gpuiSidebarRuntimeWorktreeMethodsShapeCheck: GpuiSidebarRuntimeWorktreeMethods = gpuiSidebarRuntimeWorktreeMethods;
+const gpuiSidebarRuntimeWorktreeMethodsShapeCheck: GpuiSidebarRuntimeWorktreeMethods =
+  gpuiSidebarRuntimeWorktreeMethods;
 void gpuiSidebarRuntimeWorktreeMethodsShapeCheck;

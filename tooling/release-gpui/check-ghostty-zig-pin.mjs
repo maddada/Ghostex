@@ -18,13 +18,13 @@
  * zmx upstream sync that raises its minimum fails here instead of in CI.
  */
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { TOOLCHAIN } from "./product-inputs.mjs";
+import { TOOLCHAIN } from './product-inputs.mjs';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 export function parseZigTriple(version, label) {
   const match = /^(\d+)\.(\d+)\.(\d+)/u.exec(String(version).trim());
@@ -34,37 +34,37 @@ export function parseZigTriple(version, label) {
 
 /* Vendored Zig sources whose declared minimum must be satisfied by TOOLCHAIN.zig. */
 const ZIG_SOURCES = Object.freeze([
-  { manifest: ".dependencies/ghostty/build.zig.zon", source: "Ghostty" },
-  { manifest: ".dependencies/zmx/build.zig.zon", source: "zmx" },
+  { manifest: '.dependencies/ghostty/build.zig.zon', source: 'Ghostty' },
+  { manifest: '.dependencies/zmx/build.zig.zon', source: 'zmx' },
 ]);
 
-export function checkGhosttyZigPin({ minimum, pin, source = "Ghostty", manifest = ZIG_SOURCES[0].manifest }) {
+export function checkGhosttyZigPin({ minimum, pin, source = 'Ghostty', manifest = ZIG_SOURCES[0].manifest }) {
   const required = parseZigTriple(minimum, `${source} minimum_zig_version`);
-  const pinned = parseZigTriple(pin, "TOOLCHAIN.zig");
+  const pinned = parseZigTriple(pin, 'TOOLCHAIN.zig');
   const sameSeries = pinned.major === required.major && pinned.minor === required.minor;
   if (!sameSeries || pinned.patch < required.patch) {
     throw new Error(
       `The vendored ${source} source requires Zig ${minimum} (${manifest} minimum_zig_version) ` +
         `but the release toolchain pins Zig ${pin}. Update TOOLCHAIN.zig in ` +
-        "tooling/release-gpui/product-inputs.mjs; product-inputs.test.mjs then enumerates every " +
-        "workflow and script mirror that must move with it.",
+        'tooling/release-gpui/product-inputs.mjs; product-inputs.test.mjs then enumerates every ' +
+        'workflow and script mirror that must move with it.'
     );
   }
 }
 
 function readMinimumZig(manifest, root) {
-  const zon = readFileSync(path.join(root, manifest), "utf8");
+  const zon = readFileSync(path.join(root, manifest), 'utf8');
   const match = /\.minimum_zig_version\s*=\s*"([^"]+)"/u.exec(zon);
   if (!match) throw new Error(`${manifest} declares no minimum_zig_version`);
   return match[1];
 }
 
 export function readGhosttyMinimumZig(root = repoRoot) {
-  return readMinimumZig(".dependencies/ghostty/build.zig.zon", root);
+  return readMinimumZig('.dependencies/ghostty/build.zig.zon', root);
 }
 
 export function readZmxMinimumZig(root = repoRoot) {
-  return readMinimumZig(".dependencies/zmx/build.zig.zon", root);
+  return readMinimumZig('.dependencies/zmx/build.zig.zon', root);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -11,7 +11,7 @@ export {
   getSidebarTitlebarForegroundForBackground,
   type SidebarTitlebarGradientColors,
   getSidebarTitlebarGradientColors,
-} from "./ghostex-settings/titlebar-color";
+} from './ghostex-settings/titlebar-color';
 export {
   type DiagnosticLoggingScenarioId,
   type DiagnosticLoggingScenarioState,
@@ -23,7 +23,7 @@ export {
   setDiagnosticLoggingScenario,
   areDiagnosticLoggingSettingsEqual,
   normalizeDiagnosticLoggingSettings,
-} from "./ghostex-settings/diagnostic-logging";
+} from './ghostex-settings/diagnostic-logging';
 export {
   type GhosttyConfirmCloseSurface,
   type GhosttyCopyOnSelect,
@@ -85,13 +85,13 @@ export {
   SIDEBAR_SETTINGS_PRESET_KEYS,
   type SidebarSettingsPresetKey,
   type SidebarSettingsPresetSettings,
-} from "./ghostex-settings/types";
+} from './ghostex-settings/types';
 export {
   SIDEBAR_SETTINGS_PRESET_SETTINGS,
   SIDEBAR_SETTINGS_PRESETS,
   getSidebarSettingsPresetId,
-} from "./ghostex-settings/presets";
-export { DEFAULT_ghostex_SETTINGS } from "./ghostex-settings/defaults";
+} from './ghostex-settings/presets';
+export { DEFAULT_ghostex_SETTINGS } from './ghostex-settings/defaults';
 export {
   WEB_LINK_OPEN_TARGET_OPTIONS,
   SIDEBAR_THEME_SETTING_OPTIONS,
@@ -120,27 +120,24 @@ export {
   GHOSTTY_SCROLLBAR_OPTIONS,
   PROMPT_EDITOR_BACKEND_OPTIONS,
   GHOSTTY_THEME_SETTING_OPTIONS,
-} from "./ghostex-settings/option-tables";
-export {
-  type RemoteMachineSettings,
-  normalizeRemoteMachineSettings,
-} from "./ghostex-settings/remote-machines";
+} from './ghostex-settings/option-tables';
+export { type RemoteMachineSettings, normalizeRemoteMachineSettings } from './ghostex-settings/remote-machines';
 export {
   normalizeTerminalDevServerIgnoredPortRuleInput,
   normalizeTerminalDevServerIgnoredPortRules,
-} from "./ghostex-settings/terminal-dev-servers";
+} from './ghostex-settings/terminal-dev-servers';
 export {
   SESSION_TITLE_GENERATION_AGENT_OPTIONS,
   SESSION_TITLE_GENERATION_PROMPT_PLACEHOLDER,
   getSessionTitleGenerationCommandPreview,
-} from "./ghostex-settings/session-title-generation";
+} from './ghostex-settings/session-title-generation';
 export {
   SETTINGS_MODAL_NAVIGATION_TABS,
   type SettingsModalNavigationTab,
   type SettingsModalNavigationState,
   DEFAULT_SETTINGS_MODAL_NAVIGATION_STATE,
   normalizeSettingsModalNavigationState,
-} from "./ghostex-settings/settings-modal-navigation";
+} from './ghostex-settings/settings-modal-navigation';
 export {
   normalizeghostexSettings,
   getTerminalFontFamilyForghostexSettings,
@@ -151,4 +148,4 @@ export {
   normalizeGlobalBeadsDirectory,
   normalizeGlobalDocsDirectory,
   getDefaultEditorCommandForSettings,
-} from "./ghostex-settings/normalize";
+} from './ghostex-settings/normalize';

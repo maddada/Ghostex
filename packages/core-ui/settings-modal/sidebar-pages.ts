@@ -4,7 +4,7 @@
  * still match the active search query, and the section rows each expandable
  * page contributes. Plain render-time helper, no React hooks.
  */
-import { type Dispatch, type SetStateAction } from "react";
+import { type Dispatch, type SetStateAction } from 'react';
 import {
   IconCashEdit,
   IconCloud,
@@ -17,25 +17,21 @@ import {
   IconPlayerPlay,
   IconSettings,
   IconTools,
-} from "@tabler/icons-react";
-import { type SettingsModalTab } from "../settings-modal-tabs";
-import {
-  SearchableExtraSettingsTabId,
-  getSettingsSectionSearch,
-  settingsTabSearchHasMatches,
-} from "./search";
+} from '@tabler/icons-react';
+import { type SettingsModalTab } from '../settings-modal-tabs';
+import { SearchableExtraSettingsTabId, getSettingsSectionSearch, settingsTabSearchHasMatches } from './search';
 import {
   type ExtraSettingsTabSearches,
   type VisibleHotkeySectionNavigation,
   type VisibleHotkeySections,
-} from "./use-hotkey-settings";
-import { type VisibleMainSettingsSectionNavigation } from "./main-settings-visibility";
+} from './use-hotkey-settings';
+import { type VisibleMainSettingsSectionNavigation } from './main-settings-visibility';
 import {
   HotkeySettingsSectionId,
   MainSettingsScrollTargetId,
   MainSettingsSectionId,
   SettingsSidebarPage,
-} from "./types";
+} from './types';
 
 export function createSettingsSidebarPages({
   activeHotkeySettingsSectionId,
@@ -89,18 +85,13 @@ export function createSettingsSidebarPages({
     if (!isSettingsSearching) {
       return true;
     }
-    if (pageId === "settings") {
-      return (
-        hasVisibleMainSettings ||
-        getSettingsSectionSearch(settingsSearchQuery, "General", []).sectionMatches
-      );
+    if (pageId === 'settings') {
+      return hasVisibleMainSettings || getSettingsSectionSearch(settingsSearchQuery, 'General', []).sectionMatches;
     }
-    if (pageId === "hotkeys") {
+    if (pageId === 'hotkeys') {
       return visibleHotkeySections.length > 0;
     }
-    return settingsTabSearchHasMatches(
-      extraSettingsTabSearches[pageId as SearchableExtraSettingsTabId],
-    );
+    return settingsTabSearchHasMatches(extraSettingsTabSearches[pageId as SearchableExtraSettingsTabId]);
   };
   /*
    * CDXC:SettingsSearch 2026-07-22-00:00:
@@ -111,13 +102,13 @@ export function createSettingsSidebarPages({
   const allSettingsSidebarPages: SettingsSidebarPage[] = [
     {
       icon: IconSettings,
-      id: "settings",
+      id: 'settings',
       sections: visibleMainSettingsSectionNavigation.map((section) => ({
-        active: activeTab === "settings" && activeMainSettingsGroupId === section.id,
+        active: activeTab === 'settings' && activeMainSettingsGroupId === section.id,
         id: section.id,
         onSelect: () => {
           setActiveMainSettingsSectionId(section.id);
-          setActiveTab("settings");
+          setActiveTab('settings');
           requestAnimationFrame(() => scrollMainSettingsSectionIntoView(section.id));
         },
         /*
@@ -130,48 +121,48 @@ export function createSettingsSidebarPages({
         subsections: section.subsections
           .filter((subsection) => subsection.title !== section.title)
           .map((subsection) => ({
-            active: activeTab === "settings" && activeMainSettingsSectionId === subsection.id,
+            active: activeTab === 'settings' && activeMainSettingsSectionId === subsection.id,
             id: subsection.id,
             onSelect: () => {
               setActiveMainSettingsSectionId(subsection.id);
-              setActiveTab("settings");
+              setActiveTab('settings');
               requestAnimationFrame(() => scrollMainSettingsSectionIntoView(subsection.id));
             },
             title: subsection.title,
           })),
         title: section.title,
       })),
-      title: "General",
+      title: 'General',
     },
-    { icon: IconCodeDots, id: "agents", title: "Agents" },
-    { icon: IconTools, id: "integrations", title: "Integrations" },
-    { icon: IconCashEdit, id: "plugins", title: "Customize" },
-    { icon: IconCloud, id: "remote", title: "Remote" },
-    { icon: IconFolderOpen, id: "projects", title: "Projects" },
+    { icon: IconCodeDots, id: 'agents', title: 'Agents' },
+    { icon: IconTools, id: 'integrations', title: 'Integrations' },
+    { icon: IconCashEdit, id: 'plugins', title: 'Customize' },
+    { icon: IconCloud, id: 'remote', title: 'Remote' },
+    { icon: IconFolderOpen, id: 'projects', title: 'Projects' },
     {
       icon: IconKeyboard,
-      id: "hotkeys",
+      id: 'hotkeys',
       sections: visibleHotkeySectionNavigation.map((section) => ({
-        active: activeTab === "hotkeys" && activeHotkeySettingsSectionId === section.id,
+        active: activeTab === 'hotkeys' && activeHotkeySettingsSectionId === section.id,
         id: section.id,
         onSelect: () => {
           setActiveHotkeySettingsSectionId(section.id);
-          setActiveTab("hotkeys");
+          setActiveTab('hotkeys');
           requestAnimationFrame(() => scrollHotkeySettingsSectionIntoView(section.id));
         },
         title: section.title,
       })),
-      title: "Hotkeys",
+      title: 'Hotkeys',
     },
-    { icon: IconPlayerPlay, id: "actions", title: "Actions" },
-    { icon: IconExternalLink, id: "openTargets", title: "Open In" },
+    { icon: IconPlayerPlay, id: 'actions', title: 'Actions' },
+    { icon: IconExternalLink, id: 'openTargets', title: 'Open In' },
     ...(showOSIntegrationSettingsTab
-      ? [{ icon: IconDeviceDesktop, id: "osIntegration" as const, title: "OS Integration" }]
+      ? [{ icon: IconDeviceDesktop, id: 'osIntegration' as const, title: 'OS Integration' }]
       : []),
-    { icon: IconInfoCircle, id: "about", title: "About" },
+    { icon: IconInfoCircle, id: 'about', title: 'About' },
   ];
   const settingsSidebarPages: SettingsSidebarPage[] = allSettingsSidebarPages.filter((page) =>
-    settingsSidebarPageHasSearchMatches(page.id),
+    settingsSidebarPageHasSearchMatches(page.id)
   );
   const settingsSearchMatchingPages = isSettingsSearching ? settingsSidebarPages : [];
 

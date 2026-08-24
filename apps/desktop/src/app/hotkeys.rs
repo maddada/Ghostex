@@ -4,7 +4,6 @@
 
 use crate::*;
 
-
 /// A shared ghostex-hotkeys action id resolved from the user's configured
 /// hotkey table (settings `hotkeys`). Dispatching goes through the same
 /// runGhostexHotkeyAction route the sidebar and command palette use, so
@@ -15,7 +14,6 @@ use crate::*;
 pub(crate) struct RunConfiguredGhostexHotkey {
     pub(crate) action_id: String,
 }
-
 
 /*
 CDXC:Hotkeys 2026-08-22:
@@ -31,14 +29,12 @@ normalizes onto it.
 */
 pub(crate) const GPUI_RESERVED_GHOSTEX_HOTKEY_KEYSTROKES: &[&str] = &["cmd-k"];
 
-
 pub(crate) fn gpui_hotkey_is_reserved(key: &str) -> bool {
     cfg!(target_os = "macos")
         && gpui_keystroke_from_shared_hotkey(key).is_some_and(|keystroke| {
             GPUI_RESERVED_GHOSTEX_HOTKEY_KEYSTROKES.contains(&keystroke.as_str())
         })
 }
-
 
 pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
     action_id: &str,
@@ -59,7 +55,6 @@ pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
         key
     }
 }
-
 
 pub(crate) fn gpui_platform_hotkey_for_action<'a>(action_id: &str, key: &'a str) -> &'a str {
     if cfg!(target_os = "macos") {
@@ -112,7 +107,6 @@ pub(crate) fn gpui_platform_hotkey_for_action<'a>(action_id: &str, key: &'a str)
         }
     }
 }
-
 
 /// Converts a shared-settings hotkey ("cmd+shift+p") into gpui keystroke
 /// syntax ("cmd-shift-p"). Returns None for unbound/invalid entries and for
@@ -192,7 +186,6 @@ pub(crate) fn gpui_keystroke_from_shared_hotkey(key: &str) -> Option<String> {
     Some(keystroke)
 }
 
-
 /// Builds a shell-owned binding from the same cross-platform hotkey spelling
 /// used by shared Settings. In that contract `cmd` means the platform primary
 /// modifier: Command on macOS and Ctrl on Windows/Linux. Shell defaults must go
@@ -207,7 +200,6 @@ pub(crate) fn gpui_key_binding_from_shared_hotkey<A: Action>(
         .unwrap_or_else(|| panic!("invalid shell hotkey: {hotkey}"));
     KeyBinding::new(keystroke.as_str(), action, context)
 }
-
 
 /// Default hotkey chords mirrored from `DEFAULT_ghostex_HOTKEYS` in
 /// packages/shared/ghostex-hotkeys.ts (action id → default chord in shared "+"
@@ -292,7 +284,6 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("splitMoreDown", "cmd+shift+d"),
 ];
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn normalized_gpui_hotkey_text(value: &str) -> Option<String> {
     let mut command = false;
@@ -342,7 +333,6 @@ pub(crate) fn normalized_gpui_hotkey_text(value: &str) -> Option<String> {
     parts.push(key.as_str());
     Some(parts.join("+"))
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_native_hotkey_text(
@@ -403,9 +393,10 @@ pub(crate) fn gpui_native_hotkey_text(
     Some(parts.join("+"))
 }
 
-
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(hotkey_text: &str) -> Option<String> {
+pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
+    hotkey_text: &str,
+) -> Option<String> {
     if gpui_hotkey_is_reserved(hotkey_text) {
         // Reserved chords belong to the focused terminal, so the native
         // dispatch layer resolves no action and the key travels onward.
@@ -455,7 +446,6 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(hotkey_text: &str
     }
 }
 
-
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_application_keyboard_command_for_native_text(
     hotkey_text: &str,
@@ -469,14 +459,12 @@ pub(crate) fn gpui_application_keyboard_command_for_native_text(
     }
 }
 
-
 /// The Option+1..5 workarea switchers (Agents, Code, Browser, Kanban, Docs).
 /// Switching the top-level view is app chrome rather than page content, so it
 /// belongs to the shell no matter which surface owns the keyboard.
 pub(crate) fn gpui_workarea_switch_hotkey_action_id(action_id: &str) -> bool {
     gpui_command_palette_switch_workarea_hotkey_mode(action_id).is_some()
 }
-
 
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action_id: &str) -> bool {
@@ -565,7 +553,6 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action
     }
 }
 
-
 /// Builds native key bindings by overlaying the persisted shared hotkey map
 /// on the mirrored default table at read time (macOS
 /// `normalizeghostexHotkeySettings` parity). A persisted string — including an
@@ -649,7 +636,6 @@ pub(crate) fn gpui_configured_hotkey_key_bindings_from_settings() -> Vec<KeyBind
     bindings
 }
 
-
 pub(crate) fn gpui_configured_hotkey_unbinds_from_settings(
     snapshot: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> Vec<KeyBinding> {
@@ -686,4 +672,3 @@ pub(crate) fn gpui_configured_hotkey_unbinds_from_settings(
         })
         .collect()
 }
-

@@ -1,7 +1,4 @@
-import {
-  IconLayoutSidebar,
-  IconLayoutSidebarRight,
-} from "@tabler/icons-react";
+import { IconLayoutSidebar, IconLayoutSidebarRight } from '@tabler/icons-react';
 import {
   useCallback,
   useEffect,
@@ -10,29 +7,26 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-} from "react";
-import { cn } from "@/packages/components/utils";
-import { TooltipProvider } from "@/packages/core-ui/app-tooltip";
-import { openQuickAccess } from "@/packages/core-ui/app-modal-host-bridge";
-import {
-  isSidebarCommandConfigured,
-  type SidebarCommandButton,
-} from "@/packages/shared/sidebar-commands";
+} from 'react';
+import { cn } from '@/packages/components/utils';
+import { TooltipProvider } from '@/packages/core-ui/app-tooltip';
+import { openQuickAccess } from '@/packages/core-ui/app-modal-host-bridge';
+import { isSidebarCommandConfigured, type SidebarCommandButton } from '@/packages/shared/sidebar-commands';
 import {
   getSidebarTitlebarGradientColors,
   isDiagnosticLoggingScenarioEnabled,
   type KeepAwakeDurationMinutes,
   type SessionPersistenceProvider,
   type WebLinkOpenTarget,
-} from "@/packages/shared/ghostex-settings";
-import { parseRemoteProjectId } from "@/packages/shared/remote-terminal-selection";
+} from '@/packages/shared/ghostex-settings';
+import { parseRemoteProjectId } from '@/packages/shared/remote-terminal-selection';
 import {
   buildSidebarGitMenuItems,
   hasSidebarGitRemoteCommitDelta,
   resolveSidebarGitPrimaryActionState,
   type SidebarGitAction,
-} from "@/packages/shared/sidebar-git";
-import type { SidebarTheme } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/sidebar-git';
+import type { SidebarTheme } from '@/packages/shared/session-grid-contract';
 import {
   GHOSTEX_CHANGELOG_URL,
   GHOSTEX_DISCORD_URL,
@@ -51,14 +45,14 @@ import {
   TITLEBAR_GRADIENT_BLEND_START_PERCENT,
   createTitlebarDropdownPanelPreferredSize,
   initialTitlebarDropdownPanelKind,
-} from "./constants";
+} from './constants';
 import {
   TITLEBAR_DEBUGGING_MODE_NOTICE,
   TITLEBAR_PERSISTENCE_OFF_NOTICE,
   TITLEBAR_TIPS,
   createTitlebarGhostexCliNotice,
   createTitlebarMissingAgentHooksNotice,
-} from "./tips-data";
+} from './tips-data';
 import {
   appendTitlebarActionCrashDebugLog,
   appendTitlebarChromeResponsivenessDebugLog,
@@ -74,7 +68,7 @@ import {
   suppressTitlebarTooltipsFromDom,
   syncKeepAwakeRuntimeToMainTitlebar,
   titlebarModeSwitchLogDetails,
-} from "./native-bridge";
+} from './native-bridge';
 import {
   EMPTY_RESOURCE_GROUP_VIEWS,
   EMPTY_RESOURCE_PROCESS_TOTALS,
@@ -91,7 +85,7 @@ import {
   resourceBundleSidebarSessionIds,
   terminateResourceProcesses,
   uniqueResourceBundles,
-} from "./resource-processes";
+} from './resource-processes';
 import {
   applyKeepAwakeLidSleepPrevention,
   cacheTitlebarGitState,
@@ -103,9 +97,9 @@ import {
   readStoredKeepAwakeRuntime,
   readStoredTitlebarTipIds,
   writeStoredTitlebarTipIds,
-} from "./project-state";
-import { TitlebarTipsMenu } from "./tips-panel";
-import { TitlebarResourcesMenu } from "./resources-panel";
+} from './project-state';
+import { TitlebarTipsMenu } from './tips-panel';
+import { TitlebarResourcesMenu } from './resources-panel';
 import {
   createConfiguredOpenTargets,
   isRecord,
@@ -113,7 +107,7 @@ import {
   readLastActionCommandId,
   readLastOpenTargetId,
   resolveVisibleOpenTargets,
-} from "./settings-io";
+} from './settings-io';
 import type {
   KeepAwakeRuntimeState,
   KeepAwakeRuntimeSyncState,
@@ -134,7 +128,7 @@ import type {
   TitlebarProjectState,
   TitlebarRgbColor,
   TitlebarTip,
-} from "./types";
+} from './types';
 
 export function GhostexTitlebarHost() {
   return <App />;
@@ -144,16 +138,14 @@ export function App() {
   const bootstrap = window.__ghostex_NATIVE_HOST__ ?? {};
   const titlebarPanelKind = useMemo(() => initialTitlebarDropdownPanelKind, []);
   const isDropdownPanel = titlebarPanelKind !== undefined;
-  const [projectState, setProjectState] = useState<TitlebarProjectState>(() =>
-    createInitialProjectState(bootstrap),
-  );
+  const [projectState, setProjectState] = useState<TitlebarProjectState>(() => createInitialProjectState(bootstrap));
   const [selectedTargetId, setSelectedTargetId] = useState(() => readLastOpenTargetId());
   const [selectedActionCommandId, setSelectedActionCommandId] = useState(() =>
-    readLastActionCommandId(createInitialProjectState(bootstrap)),
+    readLastActionCommandId(createInitialProjectState(bootstrap))
   );
   const [nativeDropdownOpen, setNativeDropdownOpen] = useState<TitlebarDropdownPanelKind | undefined>();
-  const dropdownPanelSizeResolverRef = useRef<(kind: TitlebarDropdownPanelKind) => TitlebarDropdownPanelSize>(
-    (kind) => createTitlebarDropdownPanelPreferredSize(kind),
+  const dropdownPanelSizeResolverRef = useRef<(kind: TitlebarDropdownPanelKind) => TitlebarDropdownPanelSize>((kind) =>
+    createTitlebarDropdownPanelPreferredSize(kind)
   );
   const [readTipIds, setReadTipIds] = useState<Set<string>>(() => readStoredTitlebarTipIds());
   /*
@@ -163,12 +155,11 @@ export function App() {
    * the workspace interaction shield.
    */
   const titlebarOverlayOpen = false;
-  const [keepAwakeRuntime, setKeepAwakeRuntime] = useState<KeepAwakeRuntimeState | undefined>(
-    () => readStoredKeepAwakeRuntime(),
+  const [keepAwakeRuntime, setKeepAwakeRuntime] = useState<KeepAwakeRuntimeState | undefined>(() =>
+    readStoredKeepAwakeRuntime()
   );
   const [keepAwakeAutoStartSuppressed, setKeepAwakeAutoStartSuppressed] = useState(false);
-  const [keepAwakeWorkingSessionGraceUntilMs, setKeepAwakeWorkingSessionGraceUntilMs] =
-    useState<number | undefined>();
+  const [keepAwakeWorkingSessionGraceUntilMs, setKeepAwakeWorkingSessionGraceUntilMs] = useState<number | undefined>();
   const previousKeepAwakeWorkingSessionCountRef = useRef(projectState.keepAwake.workingSessionCount);
   const [resourceProcesses, setResourceProcesses] = useState<ResourceProcess[]>([]);
   /*
@@ -178,8 +169,7 @@ export function App() {
    * sidebar placement so left sidebars use IconLayoutSidebar and right sidebars
    * use IconLayoutSidebarRight.
    */
-  const SidebarCollapseIcon =
-    projectState.sidebarSide === "right" ? IconLayoutSidebarRight : IconLayoutSidebar;
+  const SidebarCollapseIcon = projectState.sidebarSide === 'right' ? IconLayoutSidebarRight : IconLayoutSidebar;
   const keepAwakeFeatureEnabled = projectState.keepAwake.featureEnabled === true;
   const [resourceServers, setResourceServers] = useState<ResourceListeningServer[]>([]);
   /*
@@ -187,7 +177,7 @@ export function App() {
    * The native Resources child panel should not render zero-memory or missing-session rows while the first `ps` snapshot is still loading.
    * Track first-sample readiness separately from the process array so an intentionally empty process sample can render, while AppKit keeps the child window hidden until the first real sample is committed.
    */
-  const [ resourceProcessSnapshotReady, setResourceProcessSnapshotReady ] = useState(false);
+  const [resourceProcessSnapshotReady, setResourceProcessSnapshotReady] = useState(false);
   const [collapsedResourceKeys, setCollapsedResourceKeys] = useState<Set<string>>(() => {
     /**
      * CDXC:TitlebarResources 2026-06-12-23:33:
@@ -216,7 +206,7 @@ export function App() {
   const diagnosticLoggingRef = useRef(projectState.diagnosticLogging);
   diagnosticLoggingRef.current = projectState.diagnosticLogging;
   const activeMode = optimisticMode ?? projectState.activeMode;
-  const resourcesPanelActive = titlebarPanelKind === "resources";
+  const resourcesPanelActive = titlebarPanelKind === 'resources';
   const resourceViews = useMemo(
     () =>
       resourcesPanelActive
@@ -225,7 +215,7 @@ export function App() {
             projectState.resourceGroups,
             resourceProcesses,
             resourceServers,
-            projectState.codeEditorProjectIds,
+            projectState.codeEditorProjectIds
           )
         : EMPTY_RESOURCE_GROUP_VIEWS,
     [
@@ -235,57 +225,42 @@ export function App() {
       resourceProcesses,
       resourceServers,
       resourcesPanelActive,
-    ],
+    ]
   );
   const resourceProcessTotals = useMemo(
     () =>
-      resourcesPanelActive
-        ? createGhostexResourceProcessTotals(resourceProcesses)
-        : EMPTY_RESOURCE_PROCESS_TOTALS,
-    [resourceProcesses, resourcesPanelActive],
+      resourcesPanelActive ? createGhostexResourceProcessTotals(resourceProcesses) : EMPTY_RESOURCE_PROCESS_TOTALS,
+    [resourceProcesses, resourcesPanelActive]
   );
   const resourceServerBundles = useMemo(
     () =>
       resourcesPanelActive
         ? createResourceServerBundles(resourceServers, resourceViews, resourceProcesses, projectState.portless)
         : [],
-    [projectState.portless, resourceProcesses, resourceServers, resourceViews, resourcesPanelActive],
+    [projectState.portless, resourceProcesses, resourceServers, resourceViews, resourcesPanelActive]
   );
   const inactiveTerminalSleepSessionIds = useMemo(
     () => createInactiveTerminalSleepSessionIds(projectState.resourceGroups),
-    [projectState.resourceGroups],
+    [projectState.resourceGroups]
   );
-  const unreadTips = useMemo(
-    () => TITLEBAR_TIPS.filter((tip) => !readTipIds.has(tip.id)),
-    [readTipIds],
-  );
-  const readTips = useMemo(
-    () => TITLEBAR_TIPS.filter((tip) => readTipIds.has(tip.id)),
-    [readTipIds],
-  );
+  const unreadTips = useMemo(() => TITLEBAR_TIPS.filter((tip) => !readTipIds.has(tip.id)), [readTipIds]);
+  const readTips = useMemo(() => TITLEBAR_TIPS.filter((tip) => readTipIds.has(tip.id)), [readTipIds]);
   const missingAgentHooksNotice = useMemo(
     () => createTitlebarMissingAgentHooksNotice(projectState.resourceGroups, projectState.agentHookStatus),
-    [projectState.agentHookStatus, projectState.resourceGroups],
+    [projectState.agentHookStatus, projectState.resourceGroups]
   );
   const ghostexCliNotice = useMemo(
     () => createTitlebarGhostexCliNotice(projectState.ghostexCliStatus),
-    [projectState.ghostexCliStatus],
+    [projectState.ghostexCliStatus]
   );
   const notices = useMemo(
     () => [
       ...(ghostexCliNotice ? [ghostexCliNotice] : []),
-      ...(projectState.sessionPersistenceProvider === "off"
-        ? [TITLEBAR_PERSISTENCE_OFF_NOTICE]
-        : []),
+      ...(projectState.sessionPersistenceProvider === 'off' ? [TITLEBAR_PERSISTENCE_OFF_NOTICE] : []),
       ...(projectState.debuggingMode ? [TITLEBAR_DEBUGGING_MODE_NOTICE] : []),
       ...(missingAgentHooksNotice ? [missingAgentHooksNotice] : []),
     ],
-    [
-      ghostexCliNotice,
-      missingAgentHooksNotice,
-      projectState.debuggingMode,
-      projectState.sessionPersistenceProvider,
-    ],
+    [ghostexCliNotice, missingAgentHooksNotice, projectState.debuggingMode, projectState.sessionPersistenceProvider]
   );
   const markTipRead = useCallback((tipId: string) => {
     setReadTipIds((current) => {
@@ -299,8 +274,8 @@ export function App() {
     });
   }, []);
   const requestRuntimeStatusForTips = useCallback(() => {
-    postTitlebarSidebarCommand({ type: "requestAgentHookStatus" });
-    postTitlebarSidebarCommand({ type: "requestGhostexCliStatus" });
+    postTitlebarSidebarCommand({ type: 'requestAgentHookStatus' });
+    postTitlebarSidebarCommand({ type: 'requestGhostexCliStatus' });
   }, []);
   const openHighlightedFeaturesFromTips = useCallback(() => {
     /*
@@ -312,7 +287,7 @@ export function App() {
      * The Tips modal Video button should open the tutorial video modal. Leave the
      * old Highlighted Features modal unused instead of deleting its implementation.
      */
-    postTitlebarSidebarCommand({ type: "openGhostexTutorialVideo" });
+    postTitlebarSidebarCommand({ type: 'openGhostexTutorialVideo' });
   }, []);
   const viewGhostexGuideFromTips = useCallback(() => {
     /*
@@ -326,17 +301,17 @@ export function App() {
      * The setup action label should be the shorter "Setup" copy so the header
      * can also fit Docs, Video, and Updates without truncating action text.
      */
-    postTitlebarSidebarCommand({ type: "openWorkspaceWelcome" });
+    postTitlebarSidebarCommand({ type: 'openWorkspaceWelcome' });
   }, []);
   const openDocsFromTips = useCallback(() => {
-    postTitlebarSidebarCommand({ type: "openBrowserPane", url: GHOSTEX_DOCS_URL });
+    postTitlebarSidebarCommand({ type: 'openBrowserPane', url: GHOSTEX_DOCS_URL });
   }, []);
   const openTipAction = useCallback((tip: TitlebarTip) => {
     const action = tip.action;
     if (!action) {
       return;
     }
-    if (action.type === "openSettings") {
+    if (action.type === 'openSettings') {
       /*
        * CDXC:TipsAndTricks 2026-06-28-08:00:
        * Clickable Ghostex skill tips should open Settings > Integrations with
@@ -345,13 +320,13 @@ export function App() {
        */
       window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
         initialSearchQuery: action.settingsSearchQuery,
-        initialTab: "integrations",
-        modal: "settings",
-        type: "open",
+        initialTab: 'integrations',
+        modal: 'settings',
+        type: 'open',
       });
       return;
     }
-    postTitlebarSidebarCommand({ type: "openBrowserPane", url: action.url });
+    postTitlebarSidebarCommand({ type: 'openBrowserPane', url: action.url });
   }, []);
   const openChangelogFromTips = useCallback(() => {
     /*
@@ -359,34 +334,31 @@ export function App() {
      * The Tips & Tricks header should expose the release changelog on the far
      * right and open it as a normal current-project browser session.
      */
-    postTitlebarSidebarCommand({ type: "openBrowserPane", url: GHOSTEX_CHANGELOG_URL });
+    postTitlebarSidebarCommand({ type: 'openBrowserPane', url: GHOSTEX_CHANGELOG_URL });
   }, []);
-  const syncKeepAwakeRuntimeState = useCallback(
-    (syncState: KeepAwakeRuntimeSyncState | undefined) => {
-      if (syncState && Object.prototype.hasOwnProperty.call(syncState, "runtime")) {
-        /*
-         * CDXC:TitlebarKeepAwake 2026-06-23-19:36:
-         * Native child dropdowns send the committed Keep Awake runtime directly into the main titlebar bridge. Treat an explicit null runtime as a committed stop so stale localStorage in another WKWebView cannot keep the titlebar icon active.
-         */
-        setKeepAwakeRuntime(syncState.runtime ?? undefined);
-        setKeepAwakeAutoStartSuppressed(syncState.suppressAutoStart === true);
-        return;
-      }
-      if (syncState?.suppressAutoStart === true) {
-        setKeepAwakeRuntime(undefined);
-        setKeepAwakeAutoStartSuppressed(true);
-        return;
-      }
-      const storedRuntime = readStoredKeepAwakeRuntime();
-      setKeepAwakeRuntime(storedRuntime);
-      if (syncState?.suppressAutoStart === false || storedRuntime) {
-        setKeepAwakeAutoStartSuppressed(false);
-      }
-    },
-    [],
-  );
+  const syncKeepAwakeRuntimeState = useCallback((syncState: KeepAwakeRuntimeSyncState | undefined) => {
+    if (syncState && Object.prototype.hasOwnProperty.call(syncState, 'runtime')) {
+      /*
+       * CDXC:TitlebarKeepAwake 2026-06-23-19:36:
+       * Native child dropdowns send the committed Keep Awake runtime directly into the main titlebar bridge. Treat an explicit null runtime as a committed stop so stale localStorage in another WKWebView cannot keep the titlebar icon active.
+       */
+      setKeepAwakeRuntime(syncState.runtime ?? undefined);
+      setKeepAwakeAutoStartSuppressed(syncState.suppressAutoStart === true);
+      return;
+    }
+    if (syncState?.suppressAutoStart === true) {
+      setKeepAwakeRuntime(undefined);
+      setKeepAwakeAutoStartSuppressed(true);
+      return;
+    }
+    const storedRuntime = readStoredKeepAwakeRuntime();
+    setKeepAwakeRuntime(storedRuntime);
+    if (syncState?.suppressAutoStart === false || storedRuntime) {
+      setKeepAwakeAutoStartSuppressed(false);
+    }
+  }, []);
   const closeTitlebarDropdownPanel = useCallback(() => {
-    postNative({ type: "closeTitlebarDropdownPanel" });
+    postNative({ type: 'closeTitlebarDropdownPanel' });
     setNativeDropdownOpen(undefined);
   }, []);
   useEffect(() => {
@@ -404,17 +376,13 @@ export function App() {
       closeTitlebarDropdownPanel();
     };
 
-    window.addEventListener("blur", closePanelWhenNativeFocusLeaves);
+    window.addEventListener('blur', closePanelWhenNativeFocusLeaves);
     return () => {
-      window.removeEventListener("blur", closePanelWhenNativeFocusLeaves);
+      window.removeEventListener('blur', closePanelWhenNativeFocusLeaves);
     };
   }, [closeTitlebarDropdownPanel, isDropdownPanel]);
   const showTitlebarDropdownPanel = useCallback(
-    (
-      kind: TitlebarDropdownPanelKind,
-      anchor: HTMLElement,
-      options: { closeWhenAlreadyOpen?: boolean } = {},
-    ) => {
+    (kind: TitlebarDropdownPanelKind, anchor: HTMLElement, options: { closeWhenAlreadyOpen?: boolean } = {}) => {
       /*
        * CDXC:ReactTitlebar 2026-06-11-23:20:
        * Native child-window dropdown triggers should behave like normal menu
@@ -432,8 +400,7 @@ export function App() {
         closeTitlebarDropdownPanel();
         return false;
       }
-      const anchorElement =
-        anchor.closest<HTMLElement>("[data-titlebar-dropdown-anchor]") ?? anchor;
+      const anchorElement = anchor.closest<HTMLElement>('[data-titlebar-dropdown-anchor]') ?? anchor;
       const rect = anchorElement.getBoundingClientRect();
       /*
        * CDXC:ReactTitlebar 2026-06-11-13:22:
@@ -452,18 +419,21 @@ export function App() {
         },
         kind,
         preferredSize: dropdownPanelSizeResolverRef.current(kind),
-        type: "showTitlebarDropdownPanel",
+        type: 'showTitlebarDropdownPanel',
       });
       return true;
     },
-    [closeTitlebarDropdownPanel, nativeDropdownOpen],
+    [closeTitlebarDropdownPanel, nativeDropdownOpen]
   );
-  const openTipsMenuFromTitlebar = useCallback((event: { currentTarget: HTMLElement }) => {
-    const didOpen = showTitlebarDropdownPanel("tips", event.currentTarget);
-    if (didOpen) {
-      requestRuntimeStatusForTips();
-    }
-  }, [requestRuntimeStatusForTips, showTitlebarDropdownPanel]);
+  const openTipsMenuFromTitlebar = useCallback(
+    (event: { currentTarget: HTMLElement }) => {
+      const didOpen = showTitlebarDropdownPanel('tips', event.currentTarget);
+      if (didOpen) {
+        requestRuntimeStatusForTips();
+      }
+    },
+    [requestRuntimeStatusForTips, showTitlebarDropdownPanel]
+  );
 
   const requestTitlebarBlankMouseDown = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -483,7 +453,7 @@ export function App() {
        */
       if (
         target.closest(
-          'button,a,input,textarea,select,[role="button"],[contenteditable="true"],[data-titlebar-dropdown-anchor]',
+          'button,a,input,textarea,select,[role="button"],[contenteditable="true"],[data-titlebar-dropdown-anchor]'
         )
       ) {
         return;
@@ -498,9 +468,9 @@ export function App() {
         return;
       }
       event.preventDefault();
-      postNative({ type: "titlebarBlankMouseDown" });
+      postNative({ type: 'titlebarBlankMouseDown' });
     },
-    [closeTitlebarDropdownPanel, isDropdownPanel, nativeDropdownOpen],
+    [closeTitlebarDropdownPanel, isDropdownPanel, nativeDropdownOpen]
   );
 
   useEffect(() => {
@@ -515,9 +485,9 @@ export function App() {
       event.preventDefault();
     };
 
-    document.addEventListener("contextmenu", suppressTitlebarWebviewContextMenu, true);
+    document.addEventListener('contextmenu', suppressTitlebarWebviewContextMenu, true);
     return () => {
-      document.removeEventListener("contextmenu", suppressTitlebarWebviewContextMenu, true);
+      document.removeEventListener('contextmenu', suppressTitlebarWebviewContextMenu, true);
     };
   }, []);
 
@@ -525,7 +495,7 @@ export function App() {
     if (isDropdownPanel) {
       return;
     }
-    const narrowTitlebarMedia = window.matchMedia("(max-width: 619.98px)");
+    const narrowTitlebarMedia = window.matchMedia('(max-width: 619.98px)');
     const closeMenusHiddenAtNarrowWidth = () => {
       /**
        * CDXC:ReactTitlebar 2026-05-29-16:05:
@@ -536,44 +506,31 @@ export function App() {
        * Those dropdowns are native child panels now, so close the panel when its
        * trigger leaves the visible titlebar instead of keeping an orphan window.
        */
-      if (
-        narrowTitlebarMedia.matches &&
-        (nativeDropdownOpen === "resources" || nativeDropdownOpen === "tips")
-      ) {
+      if (narrowTitlebarMedia.matches && (nativeDropdownOpen === 'resources' || nativeDropdownOpen === 'tips')) {
         closeTitlebarDropdownPanel();
       }
     };
     closeMenusHiddenAtNarrowWidth();
-    narrowTitlebarMedia.addEventListener("change", closeMenusHiddenAtNarrowWidth);
+    narrowTitlebarMedia.addEventListener('change', closeMenusHiddenAtNarrowWidth);
     return () => {
-      narrowTitlebarMedia.removeEventListener("change", closeMenusHiddenAtNarrowWidth);
+      narrowTitlebarMedia.removeEventListener('change', closeMenusHiddenAtNarrowWidth);
     };
   }, [closeTitlebarDropdownPanel, isDropdownPanel, nativeDropdownOpen]);
 
   const allTargets = useMemo(
     () => createConfiguredOpenTargets(projectState.workspaceOpenTargets),
-    [projectState.workspaceOpenTargets],
+    [projectState.workspaceOpenTargets]
   );
   const visibleTargets = useMemo(
     () => resolveVisibleOpenTargets(allTargets, projectState.workspaceOpenTargets.availability),
-    [allTargets, projectState.workspaceOpenTargets.availability],
+    [allTargets, projectState.workspaceOpenTargets.availability]
   );
   const activeTarget = visibleTargets.find((target) => target.id === selectedTargetId) ?? visibleTargets[0];
-  const visibleActions = useMemo(
-    () => projectState.sidebarActions.commands,
-    [projectState.sidebarActions.commands],
-  );
+  const visibleActions = useMemo(() => projectState.sidebarActions.commands, [projectState.sidebarActions.commands]);
   const activeAction =
-    visibleActions.find((command) => command.commandId === selectedActionCommandId) ??
-    visibleActions[0];
-  const gitPrimaryAction = useMemo(
-    () => resolveSidebarGitPrimaryActionState(projectState.git),
-    [projectState.git],
-  );
-  const gitMenuItems = useMemo(
-    () => buildSidebarGitMenuItems(projectState.git),
-    [projectState.git],
-  );
+    visibleActions.find((command) => command.commandId === selectedActionCommandId) ?? visibleActions[0];
+  const gitPrimaryAction = useMemo(() => resolveSidebarGitPrimaryActionState(projectState.git), [projectState.git]);
+  const gitMenuItems = useMemo(() => buildSidebarGitMenuItems(projectState.git), [projectState.git]);
   const publishTitlebarStripState = useCallback(() => {
     if (isDropdownPanel) {
       return;
@@ -586,7 +543,7 @@ export function App() {
      */
     postNative({
       overlayOpen: titlebarOverlayOpen,
-      type: "setReactTitlebarStripState",
+      type: 'setReactTitlebarStripState',
     });
   }, [titlebarOverlayOpen, isDropdownPanel]);
 
@@ -644,8 +601,8 @@ export function App() {
     if (isDropdownPanel) {
       return;
     }
-    window.addEventListener("resize", publishTitlebarStripState);
-    return () => window.removeEventListener("resize", publishTitlebarStripState);
+    window.addEventListener('resize', publishTitlebarStripState);
+    return () => window.removeEventListener('resize', publishTitlebarStripState);
   }, [publishTitlebarStripState, isDropdownPanel]);
 
   useEffect(() => {
@@ -666,7 +623,7 @@ export function App() {
       enableTitlebarTooltipsFromDom();
     };
     const suppressWhenHidden = () => {
-      if (document.visibilityState !== "visible") {
+      if (document.visibilityState !== 'visible') {
         suppressTitlebarTooltips();
       }
     };
@@ -677,26 +634,26 @@ export function App() {
       }
     };
 
-    window.addEventListener("blur", suppressTitlebarTooltips);
-    window.addEventListener("pagehide", suppressTitlebarTooltips);
-    document.addEventListener("visibilitychange", suppressWhenHidden);
-    document.addEventListener("mouseout", suppressWhenPointerLeavesDocument, true);
-    document.addEventListener("pointerout", suppressWhenPointerLeavesDocument, true);
-    document.addEventListener("pointercancel", suppressTitlebarTooltips, true);
-    document.addEventListener("mouseenter", enableTitlebarTooltips, true);
-    document.addEventListener("pointerenter", enableTitlebarTooltips, true);
-    document.addEventListener("pointermove", enableTitlebarTooltips, true);
+    window.addEventListener('blur', suppressTitlebarTooltips);
+    window.addEventListener('pagehide', suppressTitlebarTooltips);
+    document.addEventListener('visibilitychange', suppressWhenHidden);
+    document.addEventListener('mouseout', suppressWhenPointerLeavesDocument, true);
+    document.addEventListener('pointerout', suppressWhenPointerLeavesDocument, true);
+    document.addEventListener('pointercancel', suppressTitlebarTooltips, true);
+    document.addEventListener('mouseenter', enableTitlebarTooltips, true);
+    document.addEventListener('pointerenter', enableTitlebarTooltips, true);
+    document.addEventListener('pointermove', enableTitlebarTooltips, true);
 
     return () => {
-      window.removeEventListener("blur", suppressTitlebarTooltips);
-      window.removeEventListener("pagehide", suppressTitlebarTooltips);
-      document.removeEventListener("visibilitychange", suppressWhenHidden);
-      document.removeEventListener("mouseout", suppressWhenPointerLeavesDocument, true);
-      document.removeEventListener("pointerout", suppressWhenPointerLeavesDocument, true);
-      document.removeEventListener("pointercancel", suppressTitlebarTooltips, true);
-      document.removeEventListener("mouseenter", enableTitlebarTooltips, true);
-      document.removeEventListener("pointerenter", enableTitlebarTooltips, true);
-      document.removeEventListener("pointermove", enableTitlebarTooltips, true);
+      window.removeEventListener('blur', suppressTitlebarTooltips);
+      window.removeEventListener('pagehide', suppressTitlebarTooltips);
+      document.removeEventListener('visibilitychange', suppressWhenHidden);
+      document.removeEventListener('mouseout', suppressWhenPointerLeavesDocument, true);
+      document.removeEventListener('pointerout', suppressWhenPointerLeavesDocument, true);
+      document.removeEventListener('pointercancel', suppressTitlebarTooltips, true);
+      document.removeEventListener('mouseenter', enableTitlebarTooltips, true);
+      document.removeEventListener('pointerenter', enableTitlebarTooltips, true);
+      document.removeEventListener('pointermove', enableTitlebarTooltips, true);
       delete document.body.dataset.nativePointerInside;
     };
   }, [isDropdownPanel]);
@@ -714,7 +671,7 @@ export function App() {
        */
       postNative({
         overlayOpen: false,
-        type: "setReactTitlebarStripState",
+        type: 'setReactTitlebarStripState',
       });
     };
   }, [isDropdownPanel]);
@@ -760,7 +717,7 @@ export function App() {
     if (isRecord(window.__ghostex_PENDING_TITLEBAR_PROJECT_STATE__)) {
       window.__ghostex_TITLEBAR__.setActiveProjectState(window.__ghostex_PENDING_TITLEBAR_PROJECT_STATE__);
     }
-    if (typeof window.__ghostex_PENDING_TITLEBAR_UPDATE_AVAILABLE__ === "boolean") {
+    if (typeof window.__ghostex_PENDING_TITLEBAR_UPDATE_AVAILABLE__ === 'boolean') {
       /**
        * CDXC:AutoUpdate 2026-06-08-18:21:
        * Native may detect an app update before this React bridge exists. Apply
@@ -772,7 +729,7 @@ export function App() {
         updateAvailable: window.__ghostex_PENDING_TITLEBAR_UPDATE_AVAILABLE__,
       });
     }
-    if (typeof window.__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOADING__ === "boolean") {
+    if (typeof window.__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOADING__ === 'boolean') {
       /**
        * CDXC:AutoUpdate 2026-06-13-17:52:
        * Native may start the Sparkle download before this React bridge exists.
@@ -787,18 +744,13 @@ export function App() {
       const pendingDownloadState: Partial<TitlebarProjectState> = {
         updateDownloading: window.__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOADING__,
       };
-      if (
-        Object.prototype.hasOwnProperty.call(
-          window,
-          "__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOAD_PROGRESS__",
-        )
-      ) {
+      if (Object.prototype.hasOwnProperty.call(window, '__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOAD_PROGRESS__')) {
         pendingDownloadState.updateDownloadProgress =
           window.__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOAD_PROGRESS__ ?? null;
       }
       window.__ghostex_TITLEBAR__.setActiveProjectState(pendingDownloadState);
     }
-    if (typeof window.__ghostex_PENDING_TITLEBAR_WINDOW_FOCUSED__ === "boolean") {
+    if (typeof window.__ghostex_PENDING_TITLEBAR_WINDOW_FOCUSED__ === 'boolean') {
       setTitlebarWindowFocused(window.__ghostex_PENDING_TITLEBAR_WINDOW_FOCUSED__);
     }
     return () => {
@@ -818,7 +770,7 @@ export function App() {
   useEffect(() => {
     const handleHostEvent = (event: Event) => {
       const hostEvent = (event as CustomEvent<NativeHostEvent>).detail;
-      if (hostEvent?.type !== "processResult") {
+      if (hostEvent?.type !== 'processResult') {
         return;
       }
       const pending = pendingProcessResults.get(hostEvent.requestId);
@@ -829,12 +781,12 @@ export function App() {
       pendingProcessResults.delete(hostEvent.requestId);
       pending.resolve(hostEvent);
     };
-    window.addEventListener("ghostex-native-host-event", handleHostEvent);
-    return () => window.removeEventListener("ghostex-native-host-event", handleHostEvent);
+    window.addEventListener('ghostex-native-host-event', handleHostEvent);
+    return () => window.removeEventListener('ghostex-native-host-event', handleHostEvent);
   }, []);
 
   useEffect(() => {
-    if (!isDiagnosticLoggingScenarioEnabled(projectState.diagnosticLogging, "native.chrome.responsiveness")) {
+    if (!isDiagnosticLoggingScenarioEnabled(projectState.diagnosticLogging, 'native.chrome.responsiveness')) {
       return;
     }
     /*
@@ -858,7 +810,7 @@ export function App() {
       titlebarEventLoopLastLogAtRef.current = nowMs;
       appendTitlebarChromeResponsivenessDebugLog(
         projectState.diagnosticLogging,
-        "nativeChrome.titlebar.eventLoopStall",
+        'nativeChrome.titlebar.eventLoopStall',
         {
           driftMs: Math.round(driftMs),
           intervalMs: TITLEBAR_EVENT_LOOP_WATCHDOG_INTERVAL_MS,
@@ -867,8 +819,8 @@ export function App() {
           resourceServerCount: resourceServers.length,
           resourcesPanelActive,
           snapshotReady: resourceProcessSnapshotReady,
-          titlebarPanelKind: titlebarPanelKind ?? "main",
-        },
+          titlebarPanelKind: titlebarPanelKind ?? 'main',
+        }
       );
     }, TITLEBAR_EVENT_LOOP_WATCHDOG_INTERVAL_MS);
     return () => window.clearInterval(interval);
@@ -881,61 +833,61 @@ export function App() {
     titlebarPanelKind,
   ]);
 
-  const refreshResources = useCallback(async (generation: number) => {
-    if (resourceRefreshInFlightRef.current) {
-      appendTitlebarChromeResponsivenessDebugLog(
-        diagnosticLoggingRef.current,
-        "nativeChrome.titlebar.resourcesRefresh.skippedInFlight",
-        {
-          generationCurrent: generation === resourceRefreshGenerationRef.current,
-          resourcesPanelActive,
-        },
-      );
-      return;
-    }
-    resourceRefreshInFlightRef.current = true;
-    const startedAtMs = performance.now();
-    try {
-      const [processes, servers] = await Promise.all([
-        readResourceProcesses(),
-        readResourceListeningServers(),
-      ]);
-      const elapsedMs = Math.round(performance.now() - startedAtMs);
-      appendTitlebarChromeResponsivenessDebugLog(
-        diagnosticLoggingRef.current,
-        "nativeChrome.titlebar.resourcesRefresh.finished",
-        {
-          elapsedMs,
-          generationCurrent: generation === resourceRefreshGenerationRef.current,
-          processCount: processes.length,
-          resourcesPanelActive,
-          serverCount: servers.length,
-        },
-      );
-      if (generation === resourceRefreshGenerationRef.current) {
-        setResourceProcesses(processes);
-        setResourceServers(servers);
-        setResourceProcessSnapshotReady(true);
+  const refreshResources = useCallback(
+    async (generation: number) => {
+      if (resourceRefreshInFlightRef.current) {
+        appendTitlebarChromeResponsivenessDebugLog(
+          diagnosticLoggingRef.current,
+          'nativeChrome.titlebar.resourcesRefresh.skippedInFlight',
+          {
+            generationCurrent: generation === resourceRefreshGenerationRef.current,
+            resourcesPanelActive,
+          }
+        );
+        return;
       }
-    } catch (error) {
-      appendTitlebarChromeResponsivenessDebugLog(
-        diagnosticLoggingRef.current,
-        "nativeChrome.titlebar.resourcesRefresh.failed",
-        {
-          elapsedMs: Math.round(performance.now() - startedAtMs),
-          errorName: error instanceof Error ? error.name : typeof error,
-          generationCurrent: generation === resourceRefreshGenerationRef.current,
-          resourcesPanelActive,
-        },
-      );
-      console.warn("Failed to refresh Ghostex resources", error);
-      if (generation === resourceRefreshGenerationRef.current) {
-        setResourceProcessSnapshotReady(true);
+      resourceRefreshInFlightRef.current = true;
+      const startedAtMs = performance.now();
+      try {
+        const [processes, servers] = await Promise.all([readResourceProcesses(), readResourceListeningServers()]);
+        const elapsedMs = Math.round(performance.now() - startedAtMs);
+        appendTitlebarChromeResponsivenessDebugLog(
+          diagnosticLoggingRef.current,
+          'nativeChrome.titlebar.resourcesRefresh.finished',
+          {
+            elapsedMs,
+            generationCurrent: generation === resourceRefreshGenerationRef.current,
+            processCount: processes.length,
+            resourcesPanelActive,
+            serverCount: servers.length,
+          }
+        );
+        if (generation === resourceRefreshGenerationRef.current) {
+          setResourceProcesses(processes);
+          setResourceServers(servers);
+          setResourceProcessSnapshotReady(true);
+        }
+      } catch (error) {
+        appendTitlebarChromeResponsivenessDebugLog(
+          diagnosticLoggingRef.current,
+          'nativeChrome.titlebar.resourcesRefresh.failed',
+          {
+            elapsedMs: Math.round(performance.now() - startedAtMs),
+            errorName: error instanceof Error ? error.name : typeof error,
+            generationCurrent: generation === resourceRefreshGenerationRef.current,
+            resourcesPanelActive,
+          }
+        );
+        console.warn('Failed to refresh Ghostex resources', error);
+        if (generation === resourceRefreshGenerationRef.current) {
+          setResourceProcessSnapshotReady(true);
+        }
+      } finally {
+        resourceRefreshInFlightRef.current = false;
       }
-    } finally {
-      resourceRefreshInFlightRef.current = false;
-    }
-  }, [resourcesPanelActive]);
+    },
+    [resourcesPanelActive]
+  );
 
   useEffect(() => {
     if (!resourcesPanelActive) {
@@ -967,13 +919,13 @@ export function App() {
       window.clearInterval(interval);
       resourceRefreshGenerationRef.current += 1;
       setResourceProcessSnapshotReady(false);
-      setResourceProcesses((current) => current.length === 0 ? current : []);
-      setResourceServers((current) => current.length === 0 ? current : []);
+      setResourceProcesses((current) => (current.length === 0 ? current : []));
+      setResourceServers((current) => (current.length === 0 ? current : []));
     };
   }, [refreshResources, resourcesPanelActive]);
 
   useEffect(() => {
-    if (titlebarPanelKind !== "resources" || !resourceProcessSnapshotReady) {
+    if (titlebarPanelKind !== 'resources' || !resourceProcessSnapshotReady) {
       return;
     }
     /*
@@ -982,7 +934,7 @@ export function App() {
      * the first real process snapshot. Report readiness from an effect so AppKit
      * orders the child window onscreen after the non-loading content is painted.
      */
-    postNative({ kind: "resources", type: "titlebarDropdownPanelReady" });
+    postNative({ kind: 'resources', type: 'titlebarDropdownPanelReady' });
   }, [resourceProcessSnapshotReady, titlebarPanelKind]);
 
   useLayoutEffect(() => {
@@ -1007,10 +959,8 @@ export function App() {
      * as top-level sections.
      */
     resourcesOpenCollapseSeededRef.current = true;
-    setCollapsedResourceKeys((current) =>
-      applyResourceItemCollapsedState(current, resourceItemCollapseTargets, true),
-    );
-  }, [ resourceServerBundles, resourceViews, resourcesPanelActive ]);
+    setCollapsedResourceKeys((current) => applyResourceItemCollapsedState(current, resourceItemCollapseTargets, true));
+  }, [resourceServerBundles, resourceViews, resourcesPanelActive]);
 
   const openTarget = (target: ResolvedOpenTarget | undefined) => {
     if (!target || !projectState.projectPath) {
@@ -1018,31 +968,31 @@ export function App() {
     }
     setSelectedTargetId(target.id);
     localStorage.setItem(LAST_OPEN_TARGET_STORAGE_KEY, target.id);
-    if (target.id === "finder") {
-      postNative({ type: "openWorkspaceInFinder", workspacePath: projectState.projectPath });
+    if (target.id === 'finder') {
+      postNative({ type: 'openWorkspaceInFinder', workspacePath: projectState.projectPath });
       return;
     }
-    if (target.kind === "built-in") {
+    if (target.kind === 'built-in') {
       const targetApp = target.definition.targetApp;
       if (targetApp && target.resolvedCommand) {
         postNative({
           targetApp,
-          type: "openWorkspaceInIde",
+          type: 'openWorkspaceInIde',
           workspacePath: projectState.projectPath,
         });
         return;
       }
       const command = target.resolvedCommand ?? target.definition.commands?.[0];
       if (target.resolvedCommand) {
-        void runNativeProcess("/usr/bin/env", [
+        void runNativeProcess('/usr/bin/env', [
           target.resolvedCommand,
           ...(target.definition.baseArgs ?? []),
           projectState.projectPath,
         ]);
       } else if (target.resolvedAppName) {
-        void runNativeProcess("/usr/bin/open", ["-a", target.resolvedAppName, projectState.projectPath]);
+        void runNativeProcess('/usr/bin/open', ['-a', target.resolvedAppName, projectState.projectPath]);
       } else if (command) {
-        void runNativeProcess("/usr/bin/env", [
+        void runNativeProcess('/usr/bin/env', [
           command,
           ...(target.definition.baseArgs ?? []),
           projectState.projectPath,
@@ -1050,11 +1000,7 @@ export function App() {
       }
       return;
     }
-    void runNativeProcess("/usr/bin/env", [
-      target.command,
-      ...target.custom.args,
-      projectState.projectPath,
-    ]);
+    void runNativeProcess('/usr/bin/env', [target.command, ...target.custom.args, projectState.projectPath]);
   };
 
   const openSidebarActionsSettings = () => {
@@ -1062,11 +1008,11 @@ export function App() {
     CDXC:ProjectActions 2026-06-15-15:29:
     Empty or unconfigured titlebar Actions clicks should open Settings on the Actions page instead of showing the removed standalone Configure Action modal.
     */
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarActionsSettings");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarActionsSettings');
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialTab: "actions",
-      modal: "settings",
-      type: "open",
+      initialTab: 'actions',
+      modal: 'settings',
+      type: 'open',
     });
   };
 
@@ -1079,23 +1025,19 @@ export function App() {
       openSidebarActionsSettings();
       return;
     }
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarAction");
-    appendTitlebarActionCrashDebugLog(
-      projectState.diagnosticLogging,
-      "nativeSidebar.actionCrashTrace.titlebarClick",
-      {
-        actionType: command.actionType,
-        closeTerminalOnExit: command.closeTerminalOnExit,
-        commandId: command.commandId,
-        hasCommand: Boolean(command.command?.trim()),
-        hasUrl: Boolean(command.url?.trim()),
-        projectId: projectState.projectId,
-        projectPath: projectState.projectPath,
-      },
-    );
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarAction');
+    appendTitlebarActionCrashDebugLog(projectState.diagnosticLogging, 'nativeSidebar.actionCrashTrace.titlebarClick', {
+      actionType: command.actionType,
+      closeTerminalOnExit: command.closeTerminalOnExit,
+      commandId: command.commandId,
+      hasCommand: Boolean(command.command?.trim()),
+      hasUrl: Boolean(command.url?.trim()),
+      projectId: projectState.projectId,
+      projectPath: projectState.projectPath,
+    });
     setSelectedActionCommandId(command.commandId);
     persistLastActionCommandId(projectState, command.commandId);
-    postNative({ commandId: command.commandId, type: "runSidebarCommandFromTitlebar" });
+    postNative({ commandId: command.commandId, type: 'runSidebarCommandFromTitlebar' });
   };
 
   const runGitAction = (action: SidebarGitAction) => {
@@ -1104,45 +1046,45 @@ export function App() {
      * If the Commits row shows no remote delta, a stale titlebar child-window
      * click should be inert instead of starting an unnecessary pull/push flow.
      */
-    if (action === "syncRemote" && !hasSidebarGitRemoteCommitDelta(projectState.git)) {
+    if (action === 'syncRemote' && !hasSidebarGitRemoteCommitDelta(projectState.git)) {
       return;
     }
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarGitAction");
-    postNative({ action, type: "runSidebarGitActionFromTitlebar" });
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarGitAction');
+    postNative({ action, type: 'runSidebarGitActionFromTitlebar' });
   };
   const openTitlebarSettingsMenuSettings = () => {
     /*
      * CDXC:SidebarTopChrome 2026-06-29-01:43:
      * The visible Settings menu moved from the titlebar into the sidebar shortcut row. Keep this titlebar-panel compatibility route on the same app-modal host so any existing native child-window path still opens Settings as the native modal surface.
      */
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarSettingsMenu");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarSettingsMenu');
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      modal: "settings",
-      type: "open",
+      modal: 'settings',
+      type: 'open',
     });
   };
 
   const openTitlebarSettingsMenuCommands = () => {
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarCommandsMenu");
-    openQuickAccess("commands");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarCommandsMenu');
+    openQuickAccess('commands');
   };
 
   const openTitlebarSettingsMenuHotkeys = () => {
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarHotkeysMenu");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarHotkeysMenu');
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      modal: "hotkeys",
-      type: "open",
+      modal: 'hotkeys',
+      type: 'open',
     });
   };
 
   const wakePetFromTitlebarSettingsMenu = () => {
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarWakePetMenu");
-    postNative({ type: "togglePetOverlayFromTitlebar" });
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarWakePetMenu');
+    postNative({ type: 'togglePetOverlayFromTitlebar' });
   };
 
   const openTitlebarSettingsMenuDiscord = () => {
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarDiscordMenu");
-    postNative({ type: "openExternalUrl", url: GHOSTEX_DISCORD_URL });
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarDiscordMenu');
+    postNative({ type: 'openExternalUrl', url: GHOSTEX_DISCORD_URL });
   };
   const toggleResourceCollapse = (key: string) => {
     setCollapsedResourceKeys((current) => {
@@ -1156,10 +1098,7 @@ export function App() {
     });
   };
 
-  const setResourceItemsCollapsed = (
-    targets: readonly ResourceItemCollapseTarget[],
-    collapsed: boolean,
-  ) => {
+  const setResourceItemsCollapsed = (targets: readonly ResourceItemCollapseTarget[], collapsed: boolean) => {
     setCollapsedResourceKeys((current) => applyResourceItemCollapsedState(current, targets, collapsed));
   };
 
@@ -1176,7 +1115,7 @@ export function App() {
      * command. The native child window otherwise stays open over the newly
      * focused workspace, making a successful focus request look inert.
      */
-    postNative({ sessionId, type: "focusResourceSessionFromTitlebar" });
+    postNative({ sessionId, type: 'focusResourceSessionFromTitlebar' });
     closeTitlebarDropdownPanel();
   };
 
@@ -1215,7 +1154,7 @@ export function App() {
       postNative({
         projectIds: Array.from(new Set(projectIds)),
         sessionIds: Array.from(new Set(sessionIds)),
-        type: "quitResourcesFromTitlebar",
+        type: 'quitResourcesFromTitlebar',
       });
     }
     const processByPid = new Map(resourceProcesses.map((process) => [process.pid, process]));
@@ -1225,12 +1164,12 @@ export function App() {
           .flatMap((bundle) => bundle.pids)
           .map((pid) => processByPid.get(pid))
           .filter((process): process is ResourceProcess => process !== undefined)
-          .map((process) => [process.pid, process]),
-      ).values(),
+          .map((process) => [process.pid, process])
+      ).values()
     );
     const resourceRefreshGeneration = resourceRefreshGenerationRef.current;
     if (processes.length > 0) {
-      const gracefulSignal = uniqueBundles.every((bundle) => bundle.type === "server") ? "INT" : "TERM";
+      const gracefulSignal = uniqueBundles.every((bundle) => bundle.type === 'server') ? 'INT' : 'TERM';
       void terminateResourceProcesses(processes, { gracefulSignal }).finally(() => {
         window.setTimeout(() => {
           void refreshResources(resourceRefreshGeneration);
@@ -1249,53 +1188,56 @@ export function App() {
     }
     postNative({
       sessionIds: inactiveTerminalSleepSessionIds,
-      type: "sleepInactiveSessionsFromTitlebar",
+      type: 'sleepInactiveSessionsFromTitlebar',
     });
   };
 
   const startGxserverDaemon = () => {
-    postNative({ type: "startGxserverFromTitlebar" });
+    postNative({ type: 'startGxserverFromTitlebar' });
   };
 
   const stopGxserverDaemon = () => {
-    postNative({ type: "stopGxserverFromTitlebar" });
+    postNative({ type: 'stopGxserverFromTitlebar' });
   };
 
   const restartGxserverDaemon = () => {
-    postNative({ type: "restartGxserverFromTitlebar" });
+    postNative({ type: 'restartGxserverFromTitlebar' });
   };
 
   const setGxserverAlwaysStart = (enabled: boolean) => {
-    postNative({ enabled, type: "setGxserverAlwaysStartFromTitlebar" });
+    postNative({ enabled, type: 'setGxserverAlwaysStartFromTitlebar' });
   };
 
-  const stopKeepAwake = useCallback(async (options: { suppressAutoStart?: boolean } = {}) => {
-    const runtime = keepAwakeRuntime;
-    setKeepAwakeRuntime(undefined);
-    localStorage.removeItem(KEEP_AWAKE_RUNTIME_STORAGE_KEY);
-    if (options.suppressAutoStart !== false) {
-      setKeepAwakeAutoStartSuppressed(true);
-    }
-    const syncState = {
-      runtime: null,
-      suppressAutoStart: options.suppressAutoStart !== false,
-    };
-    publishKeepAwakeRuntimeSync(syncState);
-    syncKeepAwakeRuntimeToMainTitlebar(syncState);
-    if (!runtime) {
-      return;
-    }
-    try {
-      await runNativeProcess("/bin/kill", [String(runtime.pid)]);
-    } catch (error) {
-      console.warn("Failed to stop keep-awake process", error);
-    }
-  }, [keepAwakeRuntime]);
+  const stopKeepAwake = useCallback(
+    async (options: { suppressAutoStart?: boolean } = {}) => {
+      const runtime = keepAwakeRuntime;
+      setKeepAwakeRuntime(undefined);
+      localStorage.removeItem(KEEP_AWAKE_RUNTIME_STORAGE_KEY);
+      if (options.suppressAutoStart !== false) {
+        setKeepAwakeAutoStartSuppressed(true);
+      }
+      const syncState = {
+        runtime: null,
+        suppressAutoStart: options.suppressAutoStart !== false,
+      };
+      publishKeepAwakeRuntimeSync(syncState);
+      syncKeepAwakeRuntimeToMainTitlebar(syncState);
+      if (!runtime) {
+        return;
+      }
+      try {
+        await runNativeProcess('/bin/kill', [String(runtime.pid)]);
+      } catch (error) {
+        console.warn('Failed to stop keep-awake process', error);
+      }
+    },
+    [keepAwakeRuntime]
+  );
 
   const startKeepAwake = useCallback(
     async (
       durationMinutes: KeepAwakeDurationMinutes = projectState.keepAwake.defaultDurationMinutes,
-      options: { source?: KeepAwakeRuntimeState["source"] } = {},
+      options: { source?: KeepAwakeRuntimeState['source'] } = {}
     ) => {
       if (!keepAwakeFeatureEnabled) {
         setKeepAwakeAutoStartSuppressed(true);
@@ -1310,22 +1252,22 @@ export function App() {
        * Lid-close sleep is controlled by the separate Settings toggle because macOS does not treat it as a regular caffeinate idle-sleep assertion.
        */
       setKeepAwakeAutoStartSuppressed(false);
-      const flags = projectState.keepAwake.allowDisplaySleep ? "-is" : "-dis";
-      const timeout = durationMinutes > 0 ? ` -t ${durationMinutes * 60}` : "";
-      const result = await runNativeProcess("/bin/sh", [
-        "-lc",
+      const flags = projectState.keepAwake.allowDisplaySleep ? '-is' : '-dis';
+      const timeout = durationMinutes > 0 ? ` -t ${durationMinutes * 60}` : '';
+      const result = await runNativeProcess('/bin/sh', [
+        '-lc',
         `(/usr/bin/nohup /usr/bin/caffeinate ${flags}${timeout} >/dev/null 2>&1 & echo $!)`,
       ]);
       const pid = Number(result.stdout.trim().split(/\s+/u)[0]);
       if (result.exitCode !== 0 || !Number.isFinite(pid) || pid <= 0) {
-        console.warn("Failed to start keep-awake process", result.stderr || result.stdout);
+        console.warn('Failed to start keep-awake process', result.stderr || result.stdout);
         return;
       }
       const nextRuntime: KeepAwakeRuntimeState = {
         durationMinutes,
         fireAtMs: durationMinutes > 0 ? Date.now() + durationMinutes * 60_000 : undefined,
         pid,
-        source: options.source ?? "manual",
+        source: options.source ?? 'manual',
         startedAtMs: Date.now(),
       };
       setKeepAwakeRuntime(nextRuntime);
@@ -1340,7 +1282,7 @@ export function App() {
       projectState.keepAwake.allowDisplaySleep,
       projectState.keepAwake.defaultDurationMinutes,
       stopKeepAwake,
-    ],
+    ]
   );
 
   useEffect(() => {
@@ -1352,7 +1294,7 @@ export function App() {
        * CDXC:SidebarTopChrome 2026-06-29-01:43:
        * Keep Awake moved from the titlebar trigger strip into the sidebar shortcut row. Keep this bridge as the only sidebar entry point so the titlebar host remains the single owner of caffeinate start/stop and runtime sync.
        */
-      if (command.action === "stop") {
+      if (command.action === 'stop') {
         void stopKeepAwake();
         return;
       }
@@ -1368,9 +1310,9 @@ export function App() {
 
   const openPowerSettings = () => {
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialSection: "power",
-      modal: "settings",
-      type: "open",
+      initialSection: 'power',
+      modal: 'settings',
+      type: 'open',
     });
   };
 
@@ -1386,10 +1328,10 @@ export function App() {
      * the real `settings` tab; the retired `ghostty` id resolves to no page.
      */
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialSearchQuery: "Session Persistence",
-      initialTab: "settings",
-      modal: "settings",
-      type: "open",
+      initialSearchQuery: 'Session Persistence',
+      initialTab: 'settings',
+      modal: 'settings',
+      type: 'open',
     });
   };
 
@@ -1401,19 +1343,19 @@ export function App() {
      * chrome, so users land on the provider-specific status and install control.
      */
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialSearchQuery: "Agent Hooks",
-      initialTab: "integrations",
-      modal: "settings",
-      type: "open",
+      initialSearchQuery: 'Agent Hooks',
+      initialTab: 'integrations',
+      modal: 'settings',
+      type: 'open',
     });
   };
 
   const openDebuggingModeSettings = () => {
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialSearchQuery: "Debug logging and UI",
-      initialTab: "settings",
-      modal: "settings",
-      type: "open",
+      initialSearchQuery: 'Debug logging and UI',
+      initialTab: 'settings',
+      modal: 'settings',
+      type: 'open',
     });
   };
 
@@ -1425,24 +1367,24 @@ export function App() {
      * install controls.
      */
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialSearchQuery: "Ghostex CLI",
-      initialTab: "integrations",
-      modal: "settings",
-      type: "open",
+      initialSearchQuery: 'Ghostex CLI',
+      initialTab: 'integrations',
+      modal: 'settings',
+      type: 'open',
     });
   };
 
   const handleNoticeAction = (notice: TitlebarNotice) => {
     const target = notice.settingsTarget;
-    if (target === "agentHooks") {
+    if (target === 'agentHooks') {
       openAgentHooksSettings();
       return;
     }
-    if (target === "debuggingMode") {
+    if (target === 'debuggingMode') {
       openDebuggingModeSettings();
       return;
     }
-    if (target === "ghostexCli") {
+    if (target === 'ghostexCli') {
       openGhostexCliSettings();
       return;
     }
@@ -1451,34 +1393,27 @@ export function App() {
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (
-        event.key !== KEEP_AWAKE_RUNTIME_STORAGE_KEY &&
-        event.key !== KEEP_AWAKE_RUNTIME_SYNC_STORAGE_KEY
-      ) {
+      if (event.key !== KEEP_AWAKE_RUNTIME_STORAGE_KEY && event.key !== KEEP_AWAKE_RUNTIME_SYNC_STORAGE_KEY) {
         return;
       }
       if (event.key === KEEP_AWAKE_RUNTIME_STORAGE_KEY && event.newValue === null) {
         return;
       }
       syncKeepAwakeRuntimeState(
-        event.key === KEEP_AWAKE_RUNTIME_SYNC_STORAGE_KEY
-          ? readKeepAwakeRuntimeSyncState(event.newValue)
-          : undefined,
+        event.key === KEEP_AWAKE_RUNTIME_SYNC_STORAGE_KEY ? readKeepAwakeRuntimeSyncState(event.newValue) : undefined
       );
     };
     const handleLocalSync = (event: Event) => {
-      syncKeepAwakeRuntimeState(
-        event instanceof CustomEvent ? event.detail as KeepAwakeRuntimeSyncState : undefined,
-      );
+      syncKeepAwakeRuntimeState(event instanceof CustomEvent ? (event.detail as KeepAwakeRuntimeSyncState) : undefined);
     };
     /*
      * CDXC:TitlebarKeepAwake 2026-06-15-10:12:
      * The keep-awake dropdown renders in a native child titlebar window. Runtime changes from that child must update the main titlebar immediately and explicit Don't keep awake must suppress launch/display auto-start for this app run until the user starts keep-awake again.
      */
-    window.addEventListener("storage", handleStorage);
+    window.addEventListener('storage', handleStorage);
     window.addEventListener(KEEP_AWAKE_RUNTIME_CHANGED_EVENT, handleLocalSync);
     return () => {
-      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener('storage', handleStorage);
       window.removeEventListener(KEEP_AWAKE_RUNTIME_CHANGED_EVENT, handleLocalSync);
     };
   }, [syncKeepAwakeRuntimeState]);
@@ -1525,16 +1460,10 @@ export function App() {
       setKeepAwakeWorkingSessionGraceUntilMs(undefined);
       return;
     }
-    if (
-      projectState.keepAwake.workingSessionCount === 0 &&
-      previousWorkingSessionCount > 0
-    ) {
+    if (projectState.keepAwake.workingSessionCount === 0 && previousWorkingSessionCount > 0) {
       setKeepAwakeWorkingSessionGraceUntilMs(Date.now() + KEEP_AWAKE_WORKING_SESSION_GRACE_MS);
     }
-  }, [
-    projectState.keepAwake.whileWorkingSessions,
-    projectState.keepAwake.workingSessionCount,
-  ]);
+  }, [projectState.keepAwake.whileWorkingSessions, projectState.keepAwake.workingSessionCount]);
 
   useEffect(() => {
     if (
@@ -1571,18 +1500,17 @@ export function App() {
     const workingSessionHoldActive =
       projectState.keepAwake.whileWorkingSessions &&
       (projectState.keepAwake.workingSessionCount > 0 ||
-        (keepAwakeWorkingSessionGraceUntilMs !== undefined &&
-          keepAwakeWorkingSessionGraceUntilMs > Date.now()));
+        (keepAwakeWorkingSessionGraceUntilMs !== undefined && keepAwakeWorkingSessionGraceUntilMs > Date.now()));
     const shouldRunAutomaticKeepAwake =
       !keepAwakeAutoStartSuppressed && (delayedSendHoldActive || workingSessionHoldActive);
     if (!shouldRunAutomaticKeepAwake) {
-      if (keepAwakeRuntime?.source === "automatic") {
+      if (keepAwakeRuntime?.source === 'automatic') {
         void stopKeepAwake({ suppressAutoStart: false });
       }
       return;
     }
     if (!keepAwakeRuntime) {
-      void startKeepAwake(0, { source: "automatic" });
+      void startKeepAwake(0, { source: 'automatic' });
     }
   }, [
     keepAwakeAutoStartSuppressed,
@@ -1597,11 +1525,8 @@ export function App() {
   ]);
 
   useEffect(() => {
-    const desired = Boolean(
-      keepAwakeFeatureEnabled && keepAwakeRuntime && projectState.keepAwake.preventLidSleep,
-    );
-    const ghostexEnabledLidSleepPrevention =
-      localStorage.getItem(KEEP_AWAKE_LID_SLEEP_STORAGE_KEY) === "enabled";
+    const desired = Boolean(keepAwakeFeatureEnabled && keepAwakeRuntime && projectState.keepAwake.preventLidSleep);
+    const ghostexEnabledLidSleepPrevention = localStorage.getItem(KEEP_AWAKE_LID_SLEEP_STORAGE_KEY) === 'enabled';
     if (!desired && !ghostexEnabledLidSleepPrevention) {
       return;
     }
@@ -1614,7 +1539,7 @@ export function App() {
       if (!applied || cancelled) {
         return;
       }
-      localStorage.setItem(KEEP_AWAKE_LID_SLEEP_STORAGE_KEY, desired ? "enabled" : "disabled");
+      localStorage.setItem(KEEP_AWAKE_LID_SLEEP_STORAGE_KEY, desired ? 'enabled' : 'disabled');
     };
     if (needsPolicyChange) {
       void applyPolicy();
@@ -1624,7 +1549,7 @@ export function App() {
       interval = window.setInterval(() => {
         void applyKeepAwakeLidSleepPrevention(true, { installIfNeeded: false }).then((applied) => {
           if (applied && !cancelled) {
-            localStorage.setItem(KEEP_AWAKE_LID_SLEEP_STORAGE_KEY, "enabled");
+            localStorage.setItem(KEEP_AWAKE_LID_SLEEP_STORAGE_KEY, 'enabled');
           }
         });
       }, 10_000);
@@ -1646,7 +1571,7 @@ export function App() {
         await stopKeepAwake();
         return;
       }
-      const pidCheck = await runNativeProcess("/bin/kill", ["-0", String(keepAwakeRuntime.pid)]);
+      const pidCheck = await runNativeProcess('/bin/kill', ['-0', String(keepAwakeRuntime.pid)]);
       if (pidCheck.exitCode !== 0) {
         setKeepAwakeRuntime(undefined);
         localStorage.removeItem(KEEP_AWAKE_RUNTIME_STORAGE_KEY);
@@ -1666,10 +1591,8 @@ export function App() {
       !keepAwakeRuntime &&
       !keepAwakeAutoStartSuppressed &&
       projectState.keepAwake.activateOnExternalDisplay;
-    const shouldCheckBattery =
-      Boolean(keepAwakeRuntime && projectState.keepAwake.deactivateBelowBatteryThreshold);
-    const shouldCheckLowPowerMode =
-      Boolean(keepAwakeRuntime && projectState.keepAwake.deactivateOnLowPowerMode);
+    const shouldCheckBattery = Boolean(keepAwakeRuntime && projectState.keepAwake.deactivateBelowBatteryThreshold);
+    const shouldCheckLowPowerMode = Boolean(keepAwakeRuntime && projectState.keepAwake.deactivateOnLowPowerMode);
     if (!shouldCheckExternalDisplay && !shouldCheckBattery && !shouldCheckLowPowerMode) {
       return;
     }
@@ -1691,11 +1614,7 @@ export function App() {
         await stopKeepAwake();
         return;
       }
-      if (
-        keepAwakeRuntime &&
-        projectState.keepAwake.deactivateOnLowPowerMode &&
-        snapshot.lowPowerMode === true
-      ) {
+      if (keepAwakeRuntime && projectState.keepAwake.deactivateOnLowPowerMode && snapshot.lowPowerMode === true) {
         await stopKeepAwake();
         return;
       }
@@ -1726,46 +1645,40 @@ export function App() {
   ]);
 
   const openAgentsMode = () => {
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarAgentsMode");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarAgentsMode');
     appendTitlebarModeSwitchDebugLog(
       projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickStart",
-      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: "agents" }),
+      'titlebarModeSwitch.titlebarClickStart',
+      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: 'agents' })
     );
-    setOptimisticMode("agents");
-    postNative({ type: "openAgentsModeFromTitlebar" });
-    appendTitlebarModeSwitchDebugLog(
-      projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickPostedNative",
-      {
-      projectId: projectState.projectId ?? "none",
-      targetMode: "agents",
+    setOptimisticMode('agents');
+    postNative({ type: 'openAgentsModeFromTitlebar' });
+    appendTitlebarModeSwitchDebugLog(projectState.diagnosticLogging, 'titlebarModeSwitch.titlebarClickPostedNative', {
+      projectId: projectState.projectId ?? 'none',
+      targetMode: 'agents',
     });
   };
 
   const codeModeDisabledReason =
     projectState.projectId && parseRemoteProjectId(projectState.projectId)
-      ? "Code is currently disabled for remote projects"
+      ? 'Code is currently disabled for remote projects'
       : undefined;
 
   const openCodeMode = () => {
     if (codeModeDisabledReason) {
       return;
     }
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarSourceMode");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarSourceMode');
     appendTitlebarModeSwitchDebugLog(
       projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickStart",
-      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: "code" }),
+      'titlebarModeSwitch.titlebarClickStart',
+      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: 'code' })
     );
-    setOptimisticMode("code");
-    postNative({ type: "openActiveProjectEditorFromTitlebar" });
-    appendTitlebarModeSwitchDebugLog(
-      projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickPostedNative",
-      {
-      projectId: projectState.projectId ?? "none",
-      targetMode: "code",
+    setOptimisticMode('code');
+    postNative({ type: 'openActiveProjectEditorFromTitlebar' });
+    appendTitlebarModeSwitchDebugLog(projectState.diagnosticLogging, 'titlebarModeSwitch.titlebarClickPostedNative', {
+      projectId: projectState.projectId ?? 'none',
+      targetMode: 'code',
     });
   };
 
@@ -1779,9 +1692,7 @@ export function App() {
    * CDXC:ProjectBrowserTabs 2026-06-16-12:02:
    * Browser + tabs follow the same destination rule: project GitHub remote when available, otherwise Google.
    */
-  const browserModeDisabledReason = projectState.projectIsQuick
-    ? "Switch to a project to access this view"
-    : undefined;
+  const browserModeDisabledReason = projectState.projectIsQuick ? 'Switch to a project to access this view' : undefined;
   /*
    * CDXC:ModeSwitcher 2026-06-08-18:39:
    * Quick sessions are projectless work areas, so Kanban should be unavailable
@@ -1794,49 +1705,39 @@ export function App() {
    * requirement directly on hover. Use one shared message for Quick sessions so
    * users know switching to a project unlocks those views.
    */
-  const kanbanModeDisabledReason = projectState.projectIsQuick
-    ? "Switch to a project to access this view"
-    : undefined;
-  const manageModeDisabledReason = projectState.projectIsQuick
-    ? "Switch to a project to access this view"
-    : undefined;
+  const kanbanModeDisabledReason = projectState.projectIsQuick ? 'Switch to a project to access this view' : undefined;
+  const manageModeDisabledReason = projectState.projectIsQuick ? 'Switch to a project to access this view' : undefined;
 
   const openGitMode = () => {
     if (browserModeDisabledReason) {
       return;
     }
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarBrowserMode");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarBrowserMode');
     appendTitlebarModeSwitchDebugLog(
       projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickStart",
-      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: "git" }),
+      'titlebarModeSwitch.titlebarClickStart',
+      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: 'git' })
     );
-    setOptimisticMode("git");
-    postNative({ type: "openGitHubProjectFromTitlebar" });
-    appendTitlebarModeSwitchDebugLog(
-      projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickPostedNative",
-      {
-      projectId: projectState.projectId ?? "none",
-      targetMode: "git",
+    setOptimisticMode('git');
+    postNative({ type: 'openGitHubProjectFromTitlebar' });
+    appendTitlebarModeSwitchDebugLog(projectState.diagnosticLogging, 'titlebarModeSwitch.titlebarClickPostedNative', {
+      projectId: projectState.projectId ?? 'none',
+      targetMode: 'git',
     });
   };
 
   const openAutomateMode = () => {
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarAutomateMode");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarAutomateMode');
     appendTitlebarModeSwitchDebugLog(
       projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickStart",
-      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: "automate" }),
+      'titlebarModeSwitch.titlebarClickStart',
+      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: 'automate' })
     );
-    setOptimisticMode("automate");
-    postNative({ type: "openAutomateFromTitlebar" });
-    appendTitlebarModeSwitchDebugLog(
-      projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickPostedNative",
-      {
-      projectId: projectState.projectId ?? "none",
-      targetMode: "automate",
+    setOptimisticMode('automate');
+    postNative({ type: 'openAutomateFromTitlebar' });
+    appendTitlebarModeSwitchDebugLog(projectState.diagnosticLogging, 'titlebarModeSwitch.titlebarClickPostedNative', {
+      projectId: projectState.projectId ?? 'none',
+      targetMode: 'automate',
     });
   };
 
@@ -1844,20 +1745,17 @@ export function App() {
     if (kanbanModeDisabledReason) {
       return;
     }
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarKanbanMode");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarKanbanMode');
     appendTitlebarModeSwitchDebugLog(
       projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickStart",
-      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: "tasks" }),
+      'titlebarModeSwitch.titlebarClickStart',
+      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: 'tasks' })
     );
-    setOptimisticMode("tasks");
-    postNative({ type: "openTasksPlaceholderFromTitlebar" });
-    appendTitlebarModeSwitchDebugLog(
-      projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickPostedNative",
-      {
-      projectId: projectState.projectId ?? "none",
-      targetMode: "tasks",
+    setOptimisticMode('tasks');
+    postNative({ type: 'openTasksPlaceholderFromTitlebar' });
+    appendTitlebarModeSwitchDebugLog(projectState.diagnosticLogging, 'titlebarModeSwitch.titlebarClickPostedNative', {
+      projectId: projectState.projectId ?? 'none',
+      targetMode: 'tasks',
     });
   };
 
@@ -1865,48 +1763,40 @@ export function App() {
     if (manageModeDisabledReason) {
       return;
     }
-    closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarManageMode");
+    closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarManageMode');
     appendTitlebarModeSwitchDebugLog(
       projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickStart",
-      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: "manage" }),
+      'titlebarModeSwitch.titlebarClickStart',
+      titlebarModeSwitchLogDetails({ optimisticMode, projectState, targetMode: 'manage' })
     );
-    setOptimisticMode("manage");
-    postNative({ type: "openManageFromTitlebar" });
-    appendTitlebarModeSwitchDebugLog(
-      projectState.diagnosticLogging,
-      "titlebarModeSwitch.titlebarClickPostedNative",
-      {
-      projectId: projectState.projectId ?? "none",
-      targetMode: "manage",
+    setOptimisticMode('manage');
+    postNative({ type: 'openManageFromTitlebar' });
+    appendTitlebarModeSwitchDebugLog(projectState.diagnosticLogging, 'titlebarModeSwitch.titlebarClickPostedNative', {
+      projectId: projectState.projectId ?? 'none',
+      targetMode: 'manage',
     });
   };
 
   const toggleProjectEditorCompanion = () => {
-    appendTitlebarModeSwitchDebugLog(
-      projectState.diagnosticLogging,
-      "titlebarModeSwitch.companionToggle.dispatch",
-      {
+    appendTitlebarModeSwitchDebugLog(projectState.diagnosticLogging, 'titlebarModeSwitch.companionToggle.dispatch', {
       activeMode,
       editorIsOpen: projectState.editorIsOpen,
       nextProjectEditorCompanionPaneHidden: projectState.projectEditorCompanionPaneHidden !== true,
       projectEditorCompanionPaneHidden: projectState.projectEditorCompanionPaneHidden,
       projectId: projectState.projectId,
-      source: "click",
+      source: 'click',
     });
-    postNative({ type: "toggleProjectEditorCompanionFromTitlebar" });
+    postNative({ type: 'toggleProjectEditorCompanionFromTitlebar' });
   };
   const showUpdateDialog = () => {
     if (projectState.updateDownloading) {
       return;
     }
-    postNative({ type: "showUpdateDialogFromTitlebar" });
+    postNative({ type: 'showUpdateDialogFromTitlebar' });
   };
 
   const shouldShowCompanionToggleButton =
-    activeMode !== "agents" &&
-    projectState.editorIsOpen &&
-    !projectState.editorIsSleeping;
+    activeMode !== 'agents' && projectState.editorIsOpen && !projectState.editorIsSleeping;
   /*
    * CDXC:TitlebarModeTabs 2026-05-31-12:00:
    * macOS titlebar mode switcher labels use title case (Agents, Source, Browser, Kanban, Automate, Docs), not all-caps, so the segmented control reads like navigation chrome rather than shouting labels.
@@ -1932,67 +1822,65 @@ export function App() {
    */
   const configuredTitlebarModes = [
     {
-      label: "Agents",
+      label: 'Agents',
       onSelect: openAgentsMode,
-      value: "agents" as const,
+      value: 'agents' as const,
     },
     {
       disabled: codeModeDisabledReason !== undefined,
       disabledReason: codeModeDisabledReason,
-      label: "Source",
+      label: 'Source',
       onSelect: openCodeMode,
-      value: "code" as const,
+      value: 'code' as const,
     },
     {
       disabled: browserModeDisabledReason !== undefined,
       disabledReason: browserModeDisabledReason,
-      label: "Browser",
+      label: 'Browser',
       onSelect: openGitMode,
-      value: "git" as const,
+      value: 'git' as const,
     },
     {
       disabled: kanbanModeDisabledReason !== undefined,
       disabledReason: kanbanModeDisabledReason,
-      label: "Kanban",
+      label: 'Kanban',
       onSelect: openTasksMode,
-      value: "tasks" as const,
+      value: 'tasks' as const,
     },
     {
-      label: "Automate",
+      label: 'Automate',
       onSelect: openAutomateMode,
-      value: "automate" as const,
+      value: 'automate' as const,
     },
     {
       disabled: manageModeDisabledReason !== undefined,
       disabledReason: manageModeDisabledReason,
-      label: "Docs",
+      label: 'Docs',
       onSelect: openManageMode,
-      value: "manage" as const,
+      value: 'manage' as const,
     },
   ];
   const visibleTitlebarModes = configuredTitlebarModes.filter((mode) => {
     switch (mode.value) {
-      case "code":
+      case 'code':
         return !projectState.codeViewTabHidden;
-      case "git":
+      case 'git':
         return !projectState.browserViewTabHidden;
-      case "tasks":
+      case 'tasks':
         return !projectState.kanbanViewTabHidden;
-      case "automate":
+      case 'automate':
         return !projectState.automateViewTabHidden;
-      case "manage":
+      case 'manage':
         return !projectState.docsViewTabHidden;
-      case "agents":
+      case 'agents':
         return true;
     }
   });
   const titlebarModes =
-    visibleTitlebarModes.length === 1 && visibleTitlebarModes[0]?.value === "agents"
-      ? []
-      : visibleTitlebarModes;
+    visibleTitlebarModes.length === 1 && visibleTitlebarModes[0]?.value === 'agents' ? [] : visibleTitlebarModes;
   const resolveTitlebarDropdownPanelSize = useCallback(
     (kind: TitlebarDropdownPanelKind) => createTitlebarDropdownPanelPreferredSize(kind),
-    [],
+    []
   );
 
   useLayoutEffect(() => {
@@ -2020,7 +1908,7 @@ export function App() {
 
     if (projectState.customSidebarTitlebarColorsEnabled) {
       const titlebarGradientColors = getSidebarTitlebarGradientColors(
-        projectState.customSidebarTitlebarBackgroundColor,
+        projectState.customSidebarTitlebarBackgroundColor
       );
       const titlebarBackground = `linear-gradient(90deg, ${titlebarGradientColors.titlebarLeft} 0%, ${titlebarGradientColors.titlebarLeft} ${TITLEBAR_GRADIENT_BLEND_START_PERCENT}%, ${titlebarGradientColors.titlebarRight} 100%)`;
       /**
@@ -2049,49 +1937,40 @@ export function App() {
        * The titlebar gradient should now darken across the strip rather than
        * brighten at the right edge.
        */
-      document.body.dataset.customSidebarTitlebarColors = "true";
+      document.body.dataset.customSidebarTitlebarColors = 'true';
+      document.body.style.setProperty('--app-titlebar-background', titlebarGradientColors.titlebarLeft);
+      document.body.style.setProperty('--app-titlebar-surface-background', titlebarBackground);
       document.body.style.setProperty(
-        "--app-titlebar-background",
-        titlebarGradientColors.titlebarLeft,
+        '--custom-sidebar-titlebar-background-color',
+        titlebarGradientColors.titlebarLeft
       );
       document.body.style.setProperty(
-        "--app-titlebar-surface-background",
-        titlebarBackground,
+        '--custom-sidebar-titlebar-foreground-color',
+        projectState.customSidebarTitlebarForegroundColor
       );
+      document.body.style.setProperty('--app-foreground', projectState.customSidebarTitlebarForegroundColor);
       document.body.style.setProperty(
-        "--custom-sidebar-titlebar-background-color",
-        titlebarGradientColors.titlebarLeft,
-      );
-      document.body.style.setProperty(
-        "--custom-sidebar-titlebar-foreground-color",
-        projectState.customSidebarTitlebarForegroundColor,
-      );
-      document.body.style.setProperty(
-        "--app-foreground",
-        projectState.customSidebarTitlebarForegroundColor,
-      );
-      document.body.style.setProperty(
-        "--titlebar-button-border-color",
-        getTitlebarButtonSeparatorColorForBackground(titlebarGradientColors.titlebarLeft),
+        '--titlebar-button-border-color',
+        getTitlebarButtonSeparatorColorForBackground(titlebarGradientColors.titlebarLeft)
       );
     } else {
       delete document.body.dataset.customSidebarTitlebarColors;
-      document.body.style.removeProperty("--app-titlebar-background");
-      document.body.style.removeProperty("--app-titlebar-surface-background");
-      document.body.style.removeProperty("--app-foreground");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-background-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-foreground-color");
-      document.body.style.removeProperty("--titlebar-button-border-color");
+      document.body.style.removeProperty('--app-titlebar-background');
+      document.body.style.removeProperty('--app-titlebar-surface-background');
+      document.body.style.removeProperty('--app-foreground');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-background-color');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-foreground-color');
+      document.body.style.removeProperty('--titlebar-button-border-color');
     }
 
     return () => {
       delete document.body.dataset.customSidebarTitlebarColors;
-      document.body.style.removeProperty("--app-titlebar-background");
-      document.body.style.removeProperty("--app-titlebar-surface-background");
-      document.body.style.removeProperty("--app-foreground");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-background-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-foreground-color");
-      document.body.style.removeProperty("--titlebar-button-border-color");
+      document.body.style.removeProperty('--app-titlebar-background');
+      document.body.style.removeProperty('--app-titlebar-surface-background');
+      document.body.style.removeProperty('--app-foreground');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-background-color');
+      document.body.style.removeProperty('--custom-sidebar-titlebar-foreground-color');
+      document.body.style.removeProperty('--titlebar-button-border-color');
     };
   }, [
     projectState.customSidebarTitlebarBackgroundColor,
@@ -2099,7 +1978,7 @@ export function App() {
     projectState.customSidebarTitlebarForegroundColor,
   ]);
 
-  const isTitlebarDarkTheme = getTitlebarThemeVariant(projectState.sidebarTheme) === "dark";
+  const isTitlebarDarkTheme = getTitlebarThemeVariant(projectState.sidebarTheme) === 'dark';
 
   if (titlebarPanelKind) {
     return (
@@ -2139,9 +2018,7 @@ export function App() {
           sidebarTheme={projectState.sidebarTheme}
           linkOpenTarget={projectState.webLinkOpenTarget}
           sessionPersistenceProvider={
-            projectState.sessionPersistenceProvider === "off"
-              ? undefined
-              : projectState.sessionPersistenceProvider
+            projectState.sessionPersistenceProvider === 'off' ? undefined : projectState.sessionPersistenceProvider
           }
           unreadTips={unreadTips}
         />
@@ -2209,10 +2086,7 @@ export function TitlebarDropdownPanelSurface({
   onOpenNoticeSettings: (notice: TitlebarNotice) => void;
   onOpenTipAction: (tip: TitlebarTip) => void;
   onQuitResources: (bundles: ResourceProcessBundle[]) => void;
-  onSetResourceItemsCollapsed: (
-    targets: readonly ResourceItemCollapseTarget[],
-    collapsed: boolean,
-  ) => void;
+  onSetResourceItemsCollapsed: (targets: readonly ResourceItemCollapseTarget[], collapsed: boolean) => void;
   onSleepInactiveSessions: () => void;
   onViewGhostexGuide: () => void;
   onToggleResourceCollapse: (key: string) => void;
@@ -2225,38 +2099,38 @@ export function TitlebarDropdownPanelSurface({
   serverBundles: ResourceProcessBundle[];
   sidebarTheme: SidebarTheme;
   linkOpenTarget: WebLinkOpenTarget;
-  sessionPersistenceProvider: Exclude<SessionPersistenceProvider, "off"> | undefined;
+  sessionPersistenceProvider: Exclude<SessionPersistenceProvider, 'off'> | undefined;
   unreadTips: TitlebarTip[];
 }) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
   const closeAfter = (action: () => void | Promise<void>) => {
     void Promise.resolve()
       .then(action)
       .catch((error) => {
-        console.warn("Titlebar dropdown action failed", error);
+        console.warn('Titlebar dropdown action failed', error);
       })
       .finally(onClose);
   };
-  const isPanelDarkTheme = getTitlebarThemeVariant(sidebarTheme) === "dark";
+  const isPanelDarkTheme = getTitlebarThemeVariant(sidebarTheme) === 'dark';
 
   return (
     <div
-      className={cn(isPanelDarkTheme && "dark", "titlebar-dropdown-panel-root")}
+      className={cn(isPanelDarkTheme && 'dark', 'titlebar-dropdown-panel-root')}
       data-panel-kind={kind}
       data-sidebar-theme={sidebarTheme}
     >
-      {kind === "tips" ? (
-        <div className="titlebar-open-menu titlebar-tips-menu rounded-none border-border/80 p-0 text-[13px] text-foreground shadow-2xl">
+      {kind === 'tips' ? (
+        <div className='titlebar-open-menu titlebar-tips-menu rounded-none border-border/80 p-0 text-[13px] text-foreground shadow-2xl'>
           <TitlebarTipsMenu
             notices={notices}
             onMarkRead={onMarkTipRead}
@@ -2271,8 +2145,8 @@ export function TitlebarDropdownPanelSurface({
           />
         </div>
       ) : null}
-      {kind === "resources" ? (
-        <div className="titlebar-open-menu titlebar-resources-menu rounded-none border-border/80 p-0 text-[13px] text-foreground shadow-2xl">
+      {kind === 'resources' ? (
+        <div className='titlebar-open-menu titlebar-resources-menu rounded-none border-border/80 p-0 text-[13px] text-foreground shadow-2xl'>
           <TitlebarResourcesMenu
             browserBundles={browserBundles}
             codeIdeBundles={codeIdeBundles}
@@ -2306,8 +2180,8 @@ export function TitlebarDropdownPanelSurface({
   );
 }
 
-export function getTitlebarThemeVariant(theme: SidebarTheme): "dark" | "light" {
-  return theme.startsWith("light-") || theme === "plain-light" ? "light" : "dark";
+export function getTitlebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
+  return theme.startsWith('light-') || theme === 'plain-light' ? 'light' : 'dark';
 }
 
 export function parseTitlebarHexRgbColor(color: string): TitlebarRgbColor | undefined {
@@ -2352,7 +2226,7 @@ export function getTitlebarButtonSeparatorColorForBackground(backgroundColor: st
    */
   const color = parseTitlebarHexRgbColor(backgroundColor);
   if (!color) {
-    return "#252525";
+    return '#252525';
   }
 
   const averageChannel = Math.round((color.red + color.green + color.blue) / 3);
@@ -2362,6 +2236,6 @@ export function getTitlebarButtonSeparatorColorForBackground(backgroundColor: st
       : averageChannel <= 34
         ? Math.max(18, Math.min(37, Math.round(37 - (averageChannel - 22) * 1.5)))
         : 6;
-  const separatorHex = separatorChannel.toString(16).padStart(2, "0");
+  const separatorHex = separatorChannel.toString(16).padStart(2, '0');
   return `#${separatorHex}${separatorHex}${separatorHex}`;
 }

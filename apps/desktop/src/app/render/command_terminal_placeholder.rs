@@ -414,7 +414,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    pub(crate) fn command_pane_drop_zone(&self, group_id: CommandPaneGroupId) -> Option<WorkspaceDropZone> {
+    pub(crate) fn command_pane_drop_zone(
+        &self,
+        group_id: CommandPaneGroupId,
+    ) -> Option<WorkspaceDropZone> {
         match self.command_drop_feedback {
             Some(CommandPaneDropFeedback {
                 group_id: feedback_group_id,
@@ -468,5 +471,4 @@ impl GhostexGpuiApp {
             }
         }
     }
-
 }

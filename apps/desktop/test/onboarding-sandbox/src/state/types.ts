@@ -2,11 +2,11 @@
  * Shared contracts for the onboarding sandbox. All modules import from here.
  * Extend ADDITIVELY only — renaming/removing breaks parallel agents. See SPEC.md.
  */
-import type { AppModalKind } from "@/packages/core-ui/app-modal-host-bridge";
+import type { AppModalKind } from '@/packages/core-ui/app-modal-host-bridge';
 
 /** All modal kinds the sandbox can open. `updateAvailable` exists only in the
  * modal host's own union, not in the bridge export, so it is added here. */
-export type SandboxModalKind = AppModalKind | "updateAvailable";
+export type SandboxModalKind = AppModalKind | 'updateAvailable';
 
 /** Loose envelopes for the modal-host message protocol. The real host validates
  * shapes at runtime; the sandbox does not re-model the full unions. */
@@ -19,32 +19,32 @@ export type ModalHostOutboundMessage = { type: string } & Record<string, unknown
 
 /** The 17 agent CLIs gxserver knows about (server/src/agent_hooks/). */
 export const SIM_AGENT_IDS = [
-  "codex",
-  "claude",
-  "opencode",
-  "pi",
-  "cursor",
-  "gemini",
-  "kiro",
-  "copilot",
-  "droid",
-  "grok",
-  "antigravity",
-  "amp",
-  "omp",
-  "rovodev",
-  "hermes-agent",
-  "codebuddy",
-  "qoder",
+  'codex',
+  'claude',
+  'opencode',
+  'pi',
+  'cursor',
+  'gemini',
+  'kiro',
+  'copilot',
+  'droid',
+  'grok',
+  'antigravity',
+  'amp',
+  'omp',
+  'rovodev',
+  'hermes-agent',
+  'codebuddy',
+  'qoder',
 ] as const;
 export type SimAgentId = (typeof SIM_AGENT_IDS)[number];
 
 /** Agents whose hook state satisfies the first-launch "ready" gate. */
-export const PRIORITY_AGENT_IDS: readonly SimAgentId[] = ["codex", "claude", "opencode", "pi"];
+export const PRIORITY_AGENT_IDS: readonly SimAgentId[] = ['codex', 'claude', 'opencode', 'pi'];
 
 /** Raw on-disk hook state; the engine derives the contract status
  * (cliMissing/missing/updateRequired/installed) from this + cliInstalled. */
-export type SimHookState = "notInstalled" | "installed" | "outdated";
+export type SimHookState = 'notInstalled' | 'installed' | 'outdated';
 
 export interface SimAgentState {
   cliInstalled: boolean;
@@ -52,23 +52,19 @@ export interface SimAgentState {
 }
 
 export const BUNDLED_SKILL_IDS = [
-  "browser",
-  "embeddedBrowser",
-  "computerUse",
-  "agentOrchestration",
-  "fable56Orchestration",
-  "findPrevSession",
-  "generateTitle",
-  "moveCodexSession",
+  'browser',
+  'embeddedBrowser',
+  'computerUse',
+  'agentOrchestration',
+  'fable56Orchestration',
+  'findPrevSession',
+  'generateTitle',
+  'moveCodexSession',
 ] as const;
 export type BundledSkillId = (typeof BUNDLED_SKILL_IDS)[number];
 
 export type GxserverHealthScenario =
-  | "healthyToolsAvailable"
-  | "healthyToolsUnavailable"
-  | "buildMismatch"
-  | "protocolMismatch"
-  | "spawnFailure";
+  'healthyToolsAvailable' | 'healthyToolsUnavailable' | 'buildMismatch' | 'protocolMismatch' | 'spawnFailure';
 
 export interface SimTiming {
   /** Track A: delay before the gxserver health probe resolves. */
@@ -82,7 +78,7 @@ export interface SimTiming {
 }
 
 export interface SimEnvState {
-  platform: "macos" | "windows";
+  platform: 'macos' | 'windows';
   agents: Record<SimAgentId, SimAgentState>;
   ghostexCli: {
     installed: boolean;
@@ -122,20 +118,20 @@ export interface FirstRunOnboardingStateFile {
 }
 
 /** Revision constants mirrored from apps/desktop/src/app/helpers/board_gxserver/focus_state.rs. */
-export const FIRST_LAUNCH_SETUP_SEEN_REVISION = "2026-06-18-short-first-launch";
-export const HIGHLIGHTED_FEATURES_SEEN_REVISION = "2026-06-16-highlighted-features-launch";
+export const FIRST_LAUNCH_SETUP_SEEN_REVISION = '2026-06-18-short-first-launch';
+export const HIGHLIGHTED_FEATURES_SEEN_REVISION = '2026-06-16-highlighted-features-launch';
 
 // ---------------------------------------------------------------------------
 // Simulated app runtime
 // ---------------------------------------------------------------------------
 
-export type SimAppPhase = "notRunning" | "launching" | "running";
+export type SimAppPhase = 'notRunning' | 'launching' | 'running';
 
 export interface SimToast {
   id: string;
   title: string;
   message: string;
-  kind: "info" | "warning" | "error";
+  kind: 'info' | 'warning' | 'error';
   /** null = sticky until dismissed */
   autoDismissMs: number | null;
 }
@@ -146,7 +142,7 @@ export interface SimModalWindow {
   title: string;
   width: number;
   /** "fit" = one-shot fit-height modal; frame resizes on contentHeightMeasured. */
-  height: number | "fit";
+  height: number | 'fit';
   /** False until the modal host posts {type:"presented"} — frame stays hidden/loading. */
   presented: boolean;
   /** True when opened from the gallery, bypassing the single-modal slot. */
@@ -163,7 +159,7 @@ export interface SimModalWindow {
   nonReactHostUrl?: string;
 }
 
-export type SimEventKind = "flow" | "state" | "modal" | "toast" | "message" | "warning";
+export type SimEventKind = 'flow' | 'state' | 'modal' | 'toast' | 'message' | 'warning';
 
 export interface SimEvent {
   id: number;
@@ -179,7 +175,7 @@ export interface SimEvent {
 
 export interface SimTipsNotice {
   id: string;
-  severity: "info" | "warning";
+  severity: 'info' | 'warning';
   title: string;
   body: string;
 }
@@ -231,7 +227,7 @@ export interface SandboxActions {
   // event log
   clearEvents(): void;
   /** Engine-internal: append an event (auto id/at/launchIndex). */
-  emitEvent(event: Omit<SimEvent, "id" | "at" | "launchIndex">): void;
+  emitEvent(event: Omit<SimEvent, 'id' | 'at' | 'launchIndex'>): void;
 }
 
 export type SandboxStore = SandboxState & SandboxActions;

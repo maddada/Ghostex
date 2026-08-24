@@ -3,22 +3,22 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import { GPUI_AUTO_SLEEP_MINUTE_MS } from "../constants";
-import type { GpuiCommandPaneSessionSummary } from "../types-and-protocol";
-import { filterGpuiGxserverLocalCommandPaneSessions } from "./command-pane";
-import { normalizeNonEmptyString } from "./records";
-import { parseGpuiRemotePresentationSessionId } from "./remote-presentation";
-import type { ghostexSettings } from "@/packages/shared/ghostex-settings";
+import { GPUI_AUTO_SLEEP_MINUTE_MS } from '../constants';
+import type { GpuiCommandPaneSessionSummary } from '../types-and-protocol';
+import { filterGpuiGxserverLocalCommandPaneSessions } from './command-pane';
+import { normalizeNonEmptyString } from './records';
+import { parseGpuiRemotePresentationSessionId } from './remote-presentation';
+import type { ghostexSettings } from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverPresentationSession,
   GxserverPresentationSnapshot,
   GxserverSleepSessionResult,
-} from "@/packages/shared/gxserver-protocol";
-import type { SidebarSessionGroup } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/gxserver-protocol';
+import type { SidebarSessionGroup } from '@/packages/shared/session-grid-contract';
 
 /*
 CDXC:MobileKeepAwake 2026-08-19:
@@ -52,10 +52,10 @@ export function createGpuiAutoSleepAgentSessionIds({
   presentation: GxserverPresentationSnapshot;
   settings: Pick<
     ghostexSettings,
-    | "autoSleepAgentIdleMinutes"
-    | "autoSleepAgentSessionsEnabled"
-    | "autoSleepFavoriteAgentSessions"
-    | "autoSleepRequireAgentResumeCommand"
+    | 'autoSleepAgentIdleMinutes'
+    | 'autoSleepAgentSessionsEnabled'
+    | 'autoSleepFavoriteAgentSessions'
+    | 'autoSleepRequireAgentResumeCommand'
   >;
 }): string[] {
   /*
@@ -82,7 +82,7 @@ export function createGpuiAutoSleepAgentSessionIds({
       settings,
     })
       ? [createGxserverPresentationProjectSessionId(session.projectId, session.sessionId)]
-      : [],
+      : []
   );
 }
 
@@ -114,11 +114,7 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
   session is very much on screen.
   */
   for (const displayedSessionId of displayedWorkspaceSessionIds) {
-    addGpuiAutoSleepProtectedSessionId(
-      protectedProjectSessionKeys,
-      presentation,
-      displayedSessionId,
-    );
+    addGpuiAutoSleepProtectedSessionId(protectedProjectSessionKeys, presentation, displayedSessionId);
   }
   /*
   CDXC:AutoSleepDelayedSend 2026-08-20:
@@ -129,11 +125,7 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
   protected here; a daemon-owned send is caught by the eligibility check.
   */
   for (const delayedSendSessionId of delayedSendSessionIds) {
-    addGpuiAutoSleepProtectedSessionId(
-      protectedProjectSessionKeys,
-      presentation,
-      delayedSendSessionId,
-    );
+    addGpuiAutoSleepProtectedSessionId(protectedProjectSessionKeys, presentation, delayedSendSessionId);
   }
   for (const group of groups) {
     if (group.remoteMachineContext) {
@@ -146,7 +138,7 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
           protectedProjectSessionKeys,
           presentation,
           session.sessionId,
-          group.projectContext?.editor.projectId,
+          group.projectContext?.editor.projectId
         );
         hasProjectedOwner = true;
       }
@@ -155,7 +147,7 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
           protectedProjectSessionKeys,
           presentation,
           session.sessionId,
-          group.projectContext?.editor.projectId,
+          group.projectContext?.editor.projectId
         );
       }
     }
@@ -164,7 +156,7 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
         protectedProjectSessionKeys,
         presentation,
         group.sessions[0].sessionId,
-        group.projectContext?.editor.projectId,
+        group.projectContext?.editor.projectId
       );
     }
   }
@@ -183,7 +175,7 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
         protectedProjectSessionKeys,
         presentation,
         commandPaneSession.sessionId,
-        activeProjectId,
+        activeProjectId
       );
     }
   }
@@ -201,13 +193,13 @@ export function shouldAutoSleepGpuiPresentationAgentSession({
   session: GxserverPresentationSession;
   settings: Pick<
     ghostexSettings,
-    | "autoSleepAgentIdleMinutes"
-    | "autoSleepAgentSessionsEnabled"
-    | "autoSleepFavoriteAgentSessions"
-    | "autoSleepRequireAgentResumeCommand"
+    | 'autoSleepAgentIdleMinutes'
+    | 'autoSleepAgentSessionsEnabled'
+    | 'autoSleepFavoriteAgentSessions'
+    | 'autoSleepRequireAgentResumeCommand'
   >;
 }): boolean {
-  if (session.lifecycleState !== "running" || session.activity !== "idle") {
+  if (session.lifecycleState !== 'running' || session.activity !== 'idle') {
     return false;
   }
   if (session.actions.sleep !== true || !isGpuiAutoSleepAgentTerminalSession(session)) {
@@ -226,11 +218,7 @@ export function shouldAutoSleepGpuiPresentationAgentSession({
   if (session.hasEverBeenActive !== true) {
     return false;
   }
-  if (
-    protectedProjectSessionKeys.has(
-      gpuiAutoSleepProjectSessionKey(session.projectId, session.sessionId),
-    )
-  ) {
+  if (protectedProjectSessionKeys.has(gpuiAutoSleepProjectSessionKey(session.projectId, session.sessionId))) {
     return false;
   }
   if (gpuiAutoSleepSessionHasArmedDelayedSend(session)) {
@@ -242,10 +230,7 @@ export function shouldAutoSleepGpuiPresentationAgentSession({
   if (session.isFavorite === true && settings.autoSleepFavoriteAgentSessions !== true) {
     return false;
   }
-  if (
-    settings.autoSleepRequireAgentResumeCommand &&
-    !gpuiAutoSleepSessionHasAgentResumeReference(session)
-  ) {
+  if (settings.autoSleepRequireAgentResumeCommand && !gpuiAutoSleepSessionHasAgentResumeReference(session)) {
     return false;
   }
   const lastActivityMs = gpuiAutoSleepLastActivityMs(session);
@@ -271,9 +256,7 @@ export function gpuiAutoSleepSessionHasArmedDelayedSend(session: GxserverPresent
   );
 }
 
-export function gpuiAutoSleepSessionHasQueuedChatPrompts(
-  session: GxserverPresentationSession,
-): boolean {
+export function gpuiAutoSleepSessionHasQueuedChatPrompts(session: GxserverPresentationSession): boolean {
   /*
   CDXC:SessionChatPromptQueue 2026-08-21:
   A session with Ghostex-owned chat prompts still waiting is not idle in the
@@ -290,15 +273,12 @@ export function gpuiAutoSleepSessionHasQueuedChatPrompts(
   (`session_has_pending_session_chat_queue`, `state <> 'failed'`); otherwise a
   single failed row would keep a session awake forever.
   */
-  const total = typeof session.queuedPromptCount === "number" ? session.queuedPromptCount : 0;
-  const failed =
-    typeof session.queuedPromptFailedCount === "number" ? session.queuedPromptFailedCount : 0;
+  const total = typeof session.queuedPromptCount === 'number' ? session.queuedPromptCount : 0;
+  const failed = typeof session.queuedPromptFailedCount === 'number' ? session.queuedPromptFailedCount : 0;
   return total - failed > 0;
 }
 
-export function gpuiAutoSleepSessionHasAgentResumeReference(
-  session: GxserverPresentationSession,
-): boolean {
+export function gpuiAutoSleepSessionHasAgentResumeReference(session: GxserverPresentationSession): boolean {
   /*
   gxserver sleep kills the zmx provider and wake relaunches from the daemon's
   stored agent resume state, so a session without any published resume
@@ -310,22 +290,22 @@ export function gpuiAutoSleepSessionHasAgentResumeReference(
   return Boolean(
     normalizeNonEmptyString(session.agentSessionId) ||
     normalizeNonEmptyString(session.agentSessionPath) ||
-    normalizeNonEmptyString(session.trustedResumeTitle),
+    normalizeNonEmptyString(session.trustedResumeTitle)
   );
 }
 
 export function isGpuiAutoSleepAgentTerminalSession(session: GxserverPresentationSession): boolean {
-  if (session.surface !== "workspace" && session.surface !== "commands") {
+  if (session.surface !== 'workspace' && session.surface !== 'commands') {
     return false;
   }
-  if (session.kind === "agent") {
+  if (session.kind === 'agent') {
     return true;
   }
   return Boolean(
     normalizeNonEmptyString(session.agentId) ||
     normalizeNonEmptyString(session.agentName) ||
     normalizeNonEmptyString(session.agentSessionId) ||
-    normalizeNonEmptyString(session.agentSessionPath),
+    normalizeNonEmptyString(session.agentSessionPath)
   );
 }
 
@@ -339,7 +319,7 @@ export function addGpuiAutoSleepProtectedSessionId(
   protectedProjectSessionKeys: Set<string>,
   presentation: GxserverPresentationSnapshot,
   sessionId: string | undefined,
-  projectIdHint?: string,
+  projectIdHint?: string
 ): void {
   const normalizedSessionId = normalizeNonEmptyString(sessionId)?.trim();
   if (!normalizedSessionId || parseGpuiRemotePresentationSessionId(normalizedSessionId)) {
@@ -348,19 +328,15 @@ export function addGpuiAutoSleepProtectedSessionId(
   const scopedReference = parseGxserverPresentationProjectSessionId(normalizedSessionId);
   if (scopedReference) {
     protectedProjectSessionKeys.add(
-      gpuiAutoSleepProjectSessionKey(scopedReference.projectId, scopedReference.sessionId),
+      gpuiAutoSleepProjectSessionKey(scopedReference.projectId, scopedReference.sessionId)
     );
     return;
   }
   const matchingSessions = presentation.sessions.filter(
-    (session) =>
-      session.sessionId === normalizedSessionId &&
-      (!projectIdHint || session.projectId === projectIdHint),
+    (session) => session.sessionId === normalizedSessionId && (!projectIdHint || session.projectId === projectIdHint)
   );
   for (const session of matchingSessions) {
-    protectedProjectSessionKeys.add(
-      gpuiAutoSleepProjectSessionKey(session.projectId, session.sessionId),
-    );
+    protectedProjectSessionKeys.add(gpuiAutoSleepProjectSessionKey(session.projectId, session.sessionId));
   }
 }
 

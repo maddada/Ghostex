@@ -5,18 +5,14 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct BrowserTabId(pub(crate) u64);
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct BrowserPaneId(pub(crate) u64);
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct BrowserSplitId(pub(crate) u64);
-
 
 #[derive(Clone)]
 pub(crate) struct DraggedCommandTab {
@@ -26,24 +22,20 @@ pub(crate) struct DraggedCommandTab {
     pub(crate) tab_status: CommandTerminalTabStatus,
 }
 
-
 pub(crate) struct CommandTabDragPreview {
     pub(crate) title: String,
     pub(crate) tab_status: CommandTerminalTabStatus,
 }
-
 
 #[derive(Clone, Copy)]
 pub(crate) struct CommandPaneTab {
     pub(crate) session_id: CommandSessionId,
 }
 
-
 pub(crate) struct CommandPaneLeaf {
     pub(crate) group_id: CommandPaneGroupId,
     pub(crate) tab_group: CommandPaneTabGroup,
 }
-
 
 pub(crate) struct CommandPaneSplit {
     pub(crate) id: CommandPaneSplitId,
@@ -53,12 +45,10 @@ pub(crate) struct CommandPaneSplit {
     pub(crate) second: Box<CommandPaneNode>,
 }
 
-
 pub(crate) enum CommandPaneNode {
     Split(CommandPaneSplit),
     Leaf(CommandPaneLeaf),
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CommandPaneDropTarget {
@@ -66,13 +56,11 @@ pub(crate) enum CommandPaneDropTarget {
     PaneBody(WorkspaceDropZone),
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CommandPaneDropFeedback {
     pub(crate) group_id: CommandPaneGroupId,
     pub(crate) target: CommandPaneDropTarget,
 }
-
 
 /*
 CDXC:GPUIWorkspaceTabs 2026-06-26-06:34:
@@ -83,7 +71,6 @@ pub(crate) struct WorkspacePendingTabClick {
     pub(crate) pane_id: WorkspacePaneId,
     pub(crate) session_id: TerminalSessionId,
 }
-
 
 /*
 CDXC:GPUICommandTabSelection 2026-06-25-19:14:
@@ -96,13 +83,11 @@ pub(crate) struct CommandPanePendingTabClick {
     pub(crate) expand_on_click: bool,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BrowserTabState {
     Loaded,
     AddressOnly,
 }
-
 
 impl BrowserTabState {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -121,14 +106,12 @@ impl BrowserTabState {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BrowserTabChromeStatus {
     LoadedSurface,
     RestoredPlaceholder,
     AddressOnly,
 }
-
 
 impl BrowserTabChromeStatus {
     /*
@@ -148,7 +131,6 @@ impl BrowserTabChromeStatus {
     }
 }
 
-
 /*
 CDXC:GPUIBrowserTabs 2026-06-22-17:13:
 Browser tab chrome is focus-invariant: pane focus may drive toolbar ownership and CEF surface sync, but tab-bar brightness derives only from a tab's shell state, runtime surface presence, and active membership inside its own Browser tab group. BrowserTabModel.focused_pane is intentionally excluded.
@@ -159,7 +141,6 @@ pub(crate) struct BrowserTabChromeSignature {
     pub(crate) chrome_status: BrowserTabChromeStatus,
     pub(crate) active_in_tab_group: bool,
 }
-
 
 pub(crate) fn browser_tab_chrome_signature(
     tab_group: &BrowserTabGroup,
@@ -174,7 +155,6 @@ pub(crate) fn browser_tab_chrome_signature(
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BrowserRuntimeLifecycleInput {
     pub(crate) active_mode: TitlebarMode,
@@ -183,7 +163,6 @@ pub(crate) struct BrowserRuntimeLifecycleInput {
     pub(crate) command_tab_drag_active: bool,
     pub(crate) workspace_tab_drag_active: bool,
 }
-
 
 impl BrowserRuntimeLifecycleInput {
     /*
@@ -199,14 +178,12 @@ impl BrowserRuntimeLifecycleInput {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BrowserRuntimeSurfacePolicy {
     Visible,
     HiddenHold,
     RestoredPlaceholder,
 }
-
 
 impl BrowserRuntimeSurfacePolicy {
     /*
@@ -238,13 +215,11 @@ impl BrowserRuntimeSurfacePolicy {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BrowserPopupTargetPolicy {
     OpenLoadedTab,
     IgnoreWithoutTransfer,
 }
-
 
 impl BrowserPopupTargetPolicy {
     /*
@@ -267,13 +242,11 @@ impl BrowserPopupTargetPolicy {
     }
 }
 
-
 pub(crate) fn browser_loaded_popup_target_url(requested_url: &str) -> Option<String> {
     BrowserPopupTargetPolicy::for_target_url(requested_url)
         .opens_loaded_tab()
         .then(|| requested_url.trim().to_string())
 }
-
 
 pub(crate) fn browser_runtime_visible_surface_tab_ids(
     lifecycle: BrowserRuntimeLifecycleInput,
@@ -299,31 +272,26 @@ pub(crate) fn browser_runtime_visible_surface_tab_ids(
         .collect()
 }
 
-
 #[derive(Clone)]
 pub(crate) struct BrowserNavigationHistory {
     pub(crate) entries: Vec<String>,
     pub(crate) current_index: Option<usize>,
 }
 
-
 pub(crate) struct BrowserHistoryRow {
     pub(crate) index: usize,
     pub(crate) url: String,
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct BrowserFaviconImage {
     pub(crate) image: Arc<Image>,
 }
 
-
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct BrowserFaviconFetchSource {
     pub(crate) url: String,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct DraggedBrowserTab {
@@ -338,7 +306,6 @@ pub(crate) struct DraggedBrowserTab {
     pub(crate) chrome_status: BrowserTabChromeStatus,
 }
 
-
 pub(crate) struct BrowserTabDragPreview {
     pub(crate) profile_id: BrowserProfileId,
     pub(crate) title: String,
@@ -348,7 +315,6 @@ pub(crate) struct BrowserTabDragPreview {
     pub(crate) state: BrowserTabState,
     pub(crate) chrome_status: BrowserTabChromeStatus,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct BrowserTab {
@@ -392,15 +358,14 @@ pub(crate) struct BrowserTab {
     pub(crate) navigation_history: BrowserNavigationHistory,
 }
 
-
 pub(crate) struct BrowserBodyPlaceholder {
     pub(crate) state: BrowserTabState,
     pub(crate) safe_title: Option<String>,
-    #[allow(dead_code)] // placeholder shape: kept alongside safe_title so the browser body placeholder carries the full sanitised tab identity
+    #[allow(dead_code)]
+    // placeholder shape: kept alongside safe_title so the browser body placeholder carries the full sanitised tab identity
     pub(crate) safe_url: Option<String>,
     pub(crate) has_cef_surface: bool,
 }
-
 
 impl BrowserBodyPlaceholder {
     pub(crate) fn blank() -> Self {
@@ -430,7 +395,6 @@ impl BrowserBodyPlaceholder {
     }
 }
 
-
 #[derive(Clone)]
 pub(crate) struct BrowserTabModel {
     pub(crate) tabs: Vec<BrowserTab>,
@@ -442,13 +406,11 @@ pub(crate) struct BrowserTabModel {
     pub(crate) next_tab_id: u64,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BrowserTabDropTarget {
     TabStrip(usize),
     PaneBody(WorkspaceDropZone),
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BrowserDropFeedback {
@@ -456,12 +418,10 @@ pub(crate) struct BrowserDropFeedback {
     pub(crate) target: BrowserTabDropTarget,
 }
 
-
 #[derive(Clone)]
 pub(crate) struct BrowserPaneTab {
     pub(crate) tab_id: BrowserTabId,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct BrowserTabGroup {
@@ -469,13 +429,11 @@ pub(crate) struct BrowserTabGroup {
     pub(crate) active_tab: BrowserTabId,
 }
 
-
 #[derive(Clone)]
 pub(crate) struct BrowserLeaf {
     pub(crate) pane_id: BrowserPaneId,
     pub(crate) tab_group: BrowserTabGroup,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct BrowserSplit {
@@ -486,13 +444,11 @@ pub(crate) struct BrowserSplit {
     pub(crate) second: Box<BrowserNode>,
 }
 
-
 #[derive(Clone)]
 pub(crate) enum BrowserNode {
     Split(BrowserSplit),
     Leaf(BrowserLeaf),
 }
-
 
 impl BrowserNavigationHistory {
     pub(crate) fn empty() -> Self {
@@ -614,9 +570,6 @@ impl BrowserNavigationHistory {
     }
 }
 
-
-
-
 impl BrowserTabModel {
     #[allow(dead_code)] // no live caller: only the superseded native browser tab strip built a default tab model
     pub(crate) fn shell_default() -> Self {
@@ -716,7 +669,11 @@ impl BrowserTabModel {
             .or_else(|| self.tabs.first())
     }
 
-    pub(crate) fn select_tab_in_pane(&mut self, pane_id: BrowserPaneId, tab_id: BrowserTabId) -> bool {
+    pub(crate) fn select_tab_in_pane(
+        &mut self,
+        pane_id: BrowserPaneId,
+        tab_id: BrowserTabId,
+    ) -> bool {
         if !self.has_tab(tab_id) {
             return false;
         }
@@ -767,7 +724,10 @@ impl BrowserTabModel {
     }
 
     #[allow(dead_code)] // no live caller: only the superseded native browser tab strip added placeholder tabs
-    pub(crate) fn add_address_placeholder_tab(&mut self, profile_id: BrowserProfileId) -> BrowserTabId {
+    pub(crate) fn add_address_placeholder_tab(
+        &mut self,
+        profile_id: BrowserProfileId,
+    ) -> BrowserTabId {
         /*
         CDXC:GPUIFocusedNewTabs 2026-06-22-12:51:
         Browser new-tab commands, including Cmd+N and the clicked pane control, must insert the address-only placeholder immediately after the focused pane's active tab so creation stays adjacent to the user's current Browser work instead of appending to a long tab group.
@@ -873,7 +833,11 @@ impl BrowserTabModel {
         Some((tab.id, tab.profile_id))
     }
 
-    pub(crate) fn set_tab_profile(&mut self, tab_id: BrowserTabId, profile_id: BrowserProfileId) -> bool {
+    pub(crate) fn set_tab_profile(
+        &mut self,
+        tab_id: BrowserTabId,
+        profile_id: BrowserProfileId,
+    ) -> bool {
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == tab_id) else {
             return false;
         };
@@ -1077,7 +1041,11 @@ impl BrowserTabModel {
         Some(tab_id)
     }
 
-    pub(crate) fn close_tab(&mut self, tab_id: BrowserTabId, active_profile_id: BrowserProfileId) -> bool {
+    pub(crate) fn close_tab(
+        &mut self,
+        tab_id: BrowserTabId,
+        active_profile_id: BrowserProfileId,
+    ) -> bool {
         /*
         CDXC:GPUIBrowserTabs 2026-06-22-05:56:
         Closing Browser tabs must be modest but visible in the parity shell. Multi-tab closes remove the target and keep or select a neighboring tab in memory; closing the last tab resets it to an address-only placeholder so Browser mode never drops to an empty workspace while multiple CEF views and persisted tab lifecycles remain deferred.
@@ -1435,14 +1403,17 @@ impl BrowserTabModel {
             .unwrap_or_default()
     }
 
-    pub(crate) fn pane_history_rows(&self, pane_id: BrowserPaneId, max_rows: usize) -> Vec<BrowserHistoryRow> {
+    pub(crate) fn pane_history_rows(
+        &self,
+        pane_id: BrowserPaneId,
+        max_rows: usize,
+    ) -> Vec<BrowserHistoryRow> {
         self.active_tab_for_pane(pane_id)
             .filter(|tab| tab.state == BrowserTabState::Loaded)
             .map(|tab| tab.navigation_history.rows_around_current(max_rows))
             .unwrap_or_default()
     }
 }
-
 
 impl BrowserTab {
     pub(crate) fn address_value(&self) -> String {
@@ -1471,7 +1442,6 @@ impl BrowserTab {
         }
     }
 }
-
 
 impl BrowserTabGroup {
     pub(crate) fn active_tab_id(&self) -> Option<BrowserTabId> {
@@ -1545,7 +1515,6 @@ impl BrowserTabGroup {
     }
 }
 
-
 pub(crate) fn sanitize_browser_tab_url_for_state(url: &str) -> Option<String> {
     let trimmed = url.trim();
     if trimmed.is_empty() || trimmed.eq_ignore_ascii_case(BROWSER_ADDRESS_ONLY_CEF_URL) {
@@ -1568,7 +1537,6 @@ pub(crate) fn sanitize_browser_tab_url_for_state(url: &str) -> Option<String> {
     Some(format!("{scheme}://{authority}{path}"))
 }
 
-
 pub(crate) fn browser_placeholder_safe_origin_url(sanitized_url: &str) -> Option<String> {
     let (scheme, rest) = sanitized_url.trim().split_once("://")?;
     let scheme = scheme.to_ascii_lowercase();
@@ -1589,7 +1557,6 @@ pub(crate) fn browser_placeholder_safe_origin_url(sanitized_url: &str) -> Option
     Some(format!("{scheme}://{authority}"))
 }
 
-
 /*
 CDXC:SidebarBrowserTabReveal 2026-08-18:
 One pending sidebar reveal for a Browser tab the user just opened, held until
@@ -1599,5 +1566,3 @@ pub(crate) struct PendingSidebarBrowserTabReveal {
     pub(crate) project_id: String,
     pub(crate) tab_id: BrowserTabId,
 }
-
-

@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type RefObject } from 'react';
 
 export type ScrollGlowState = {
   hasOverflow: boolean;
@@ -19,9 +19,7 @@ function getScrollableContentHeight(element: HTMLElement): number {
   return element.scrollHeight;
 }
 
-export function useScrollGlowState(
-  scrollContainerRef: RefObject<HTMLElement | null>,
-): ScrollGlowState {
+export function useScrollGlowState(scrollContainerRef: RefObject<HTMLElement | null>): ScrollGlowState {
   const [scrollGlowState, setScrollGlowState] = useState<ScrollGlowState>({
     hasOverflow: false,
     showBottomGlow: false,
@@ -68,7 +66,7 @@ export function useScrollGlowState(
               hasOverflow,
               showBottomGlow,
               showTopGlow,
-            },
+            }
       );
     };
 
@@ -134,7 +132,7 @@ export function useScrollGlowState(
       characterData: true,
       subtree: true,
     });
-    window.addEventListener("resize", scheduleScrollGlowUpdate);
+    window.addEventListener('resize', scheduleScrollGlowUpdate);
     scheduleScrollGlowUpdate();
 
     return () => {
@@ -145,7 +143,7 @@ export function useScrollGlowState(
       observedContentChildren.clear();
       resizeObserver.disconnect();
       mutationObserver.disconnect();
-      window.removeEventListener("resize", scheduleScrollGlowUpdate);
+      window.removeEventListener('resize', scheduleScrollGlowUpdate);
     };
   }, [scrollContainerRef]);
 

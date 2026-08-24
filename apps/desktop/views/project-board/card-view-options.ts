@@ -30,16 +30,16 @@ export const BOARD_CARD_VIEW_FIELDS: Array<{
   key: keyof BoardCardViewOptions;
   label: string;
 }> = [
-  { key: "showId", label: "Ticket ID" },
-  { key: "showPriority", label: "Priority" },
-  { key: "showAssignee", label: "Assignee" },
-  { key: "showDescription", label: "Description" },
-  { key: "showLabels", label: "Labels" },
-  { key: "showDetails", label: "Details" },
-  { key: "showLinks", label: "Conversation links" },
+  { key: 'showId', label: 'Ticket ID' },
+  { key: 'showPriority', label: 'Priority' },
+  { key: 'showAssignee', label: 'Assignee' },
+  { key: 'showDescription', label: 'Description' },
+  { key: 'showLabels', label: 'Labels' },
+  { key: 'showDetails', label: 'Details' },
+  { key: 'showLinks', label: 'Conversation links' },
 ];
 
-export const BOARD_CARD_VIEW_STORAGE_KEY = "ghostexProjectBoardCardView.v1";
+export const BOARD_CARD_VIEW_STORAGE_KEY = 'ghostexProjectBoardCardView.v1';
 
 export function loadBoardCardViewOptions(): BoardCardViewOptions {
   try {
@@ -50,7 +50,7 @@ export function loadBoardCardViewOptions(): BoardCardViewOptions {
     const parsed = JSON.parse(raw) as Partial<BoardCardViewOptions>;
     const merged = { ...BOARD_CARD_VIEW_DEFAULTS };
     for (const field of BOARD_CARD_VIEW_FIELDS) {
-      if (typeof parsed[field.key] === "boolean") {
+      if (typeof parsed[field.key] === 'boolean') {
         merged[field.key] = parsed[field.key] as boolean;
       }
     }

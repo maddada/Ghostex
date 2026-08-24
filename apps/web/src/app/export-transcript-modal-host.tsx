@@ -8,13 +8,13 @@
 // only offer the path itself (copy) or hand it to a new agent session on that
 // same machine; there is no Reveal in Finder on web.
 
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { rpcForMachine } from "../connections/connection-registry";
-import type { GhostexWebFocusSessionDetail } from "../sidebar-runtime/sidebar-runtime";
-import type { ExportTranscriptStatusDetail } from "./action-events";
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { rpcForMachine } from '../connections/connection-registry';
+import type { GhostexWebFocusSessionDetail } from '../sidebar-runtime/sidebar-runtime';
+import type { ExportTranscriptStatusDetail } from './action-events';
 
 export function publishExportTranscriptStatus(detail: ExportTranscriptStatusDetail): void {
-  window.dispatchEvent(new CustomEvent("ghostex-web:exportTranscriptStatus", { detail }));
+  window.dispatchEvent(new CustomEvent('ghostex-web:exportTranscriptStatus', { detail }));
 }
 
 /*
@@ -38,17 +38,17 @@ export function ExportTranscriptModalHost() {
   const close = useCallback(() => setDetail(undefined), []);
 
   useEffect(() => {
-    const onStatus = (event: WindowEventMap["ghostex-web:exportTranscriptStatus"]) => {
+    const onStatus = (event: WindowEventMap['ghostex-web:exportTranscriptStatus']) => {
       setCopied(false);
       setStarting(false);
       setActionError(undefined);
       setDetail(event.detail);
     };
-    window.addEventListener("ghostex-web:exportTranscriptStatus", onStatus);
-    window.addEventListener("ghostex-web:closeAppModal", close);
+    window.addEventListener('ghostex-web:exportTranscriptStatus', onStatus);
+    window.addEventListener('ghostex-web:closeAppModal', close);
     return () => {
-      window.removeEventListener("ghostex-web:exportTranscriptStatus", onStatus);
-      window.removeEventListener("ghostex-web:closeAppModal", close);
+      window.removeEventListener('ghostex-web:exportTranscriptStatus', onStatus);
+      window.removeEventListener('ghostex-web:closeAppModal', close);
     };
   }, [close]);
 
@@ -57,12 +57,12 @@ export function ExportTranscriptModalHost() {
       return;
     }
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         close();
       }
     };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
   }, [close, detail]);
 
   if (!detail) {
@@ -78,7 +78,7 @@ export function ExportTranscriptModalHost() {
       (error: unknown) => {
         setCopied(false);
         setActionError(error instanceof Error ? error.message : String(error));
-      },
+      }
     );
   };
 
@@ -88,27 +88,27 @@ export function ExportTranscriptModalHost() {
     try {
       const { session } = await rpcForMachine<{
         session?: { projectId?: string; sessionId?: string };
-      }>(detail.machineId, "/api/createAgentSession", {
+      }>(detail.machineId, '/api/createAgentSession', {
         agentId,
         projectId: detail.projectId,
         requireLaunchCommand: true,
         runtimeSettings: { firstUserInputDraft: transcriptMentionDraft(path) },
-        surface: "workspace",
+        surface: 'workspace',
         title: `${agentId} Session`,
       });
       const sessionId = session?.sessionId;
       if (!sessionId) {
-        throw new Error("gxserver created the session without reporting its id.");
+        throw new Error('gxserver created the session without reporting its id.');
       }
       const focusDetail: GhostexWebFocusSessionDetail = {
         machineId: detail.machineId,
-        placement: "focusedPane",
+        placement: 'focusedPane',
         placementTargetSessionId: detail.sessionId,
         projectId: session?.projectId ?? detail.projectId,
         sessionId,
-        source: "sidebar",
+        source: 'sidebar',
       };
-      window.dispatchEvent(new CustomEvent("ghostex-web:focusSession", { detail: focusDetail }));
+      window.dispatchEvent(new CustomEvent('ghostex-web:focusSession', { detail: focusDetail }));
       close();
     } catch (error: unknown) {
       setStarting(false);
@@ -119,85 +119,89 @@ export function ExportTranscriptModalHost() {
   const stopPropagation = (event: MouseEvent) => event.stopPropagation();
 
   return (
-    <div className="export-transcript-backdrop" onMouseDown={close} role="presentation">
+    <div className='export-transcript-backdrop' onMouseDown={close} role='presentation'>
       <section
-        aria-labelledby="export-transcript-title"
-        aria-modal="true"
-        className="export-transcript-modal"
+        aria-labelledby='export-transcript-title'
+        aria-modal='true'
+        className='export-transcript-modal'
         onMouseDown={stopPropagation}
-        role="dialog"
+        role='dialog'
       >
-        <header className="export-transcript-modal__header">
+        <header className='export-transcript-modal__header'>
           <div>
-            <h2 id="export-transcript-title">Export Transcript</h2>
+            <h2 id='export-transcript-title'>Export Transcript</h2>
             <p>{detail.sessionTitle}</p>
           </div>
           <button
-            aria-label="Close export transcript"
-            className="export-transcript-modal__close"
+            aria-label='Close export transcript'
+            className='export-transcript-modal__close'
             onClick={close}
-            type="button"
+            type='button'
           >
             ×
           </button>
         </header>
 
-        <div className="export-transcript-modal__body">
-          {detail.status === "exporting" && (
-            <p className="export-transcript-modal__status" role="status">
+        <div className='export-transcript-modal__body'>
+          {detail.status === 'exporting' && (
+            <p className='export-transcript-modal__status' role='status'>
               Exporting the conversation to markdown…
             </p>
           )}
 
-          {detail.status === "failed" && (
-            <p className="export-transcript-modal__error" role="alert">{detail.message}</p>
+          {detail.status === 'failed' && (
+            <p className='export-transcript-modal__error' role='alert'>
+              {detail.message}
+            </p>
           )}
 
-          {detail.status === "exported" && (
+          {detail.status === 'exported' && (
             <>
-              <p className="export-transcript-modal__status">
+              <p className='export-transcript-modal__status'>
                 Saved on the machine running this session, not in this browser.
               </p>
-              <code className="export-transcript-modal__path">{detail.result.path}</code>
-              <p className="export-transcript-modal__meta">
+              <code className='export-transcript-modal__path'>{detail.result.path}</code>
+              <p className='export-transcript-modal__meta'>
                 {[
                   ...(detail.result.agent ? [detail.result.agent] : []),
                   `${detail.result.renderedEntries} of ${detail.result.parsedEntries} entries`,
                   `${detail.result.bytes.toLocaleString()} bytes`,
-                ].join(" · ")}
+                ].join(' · ')}
               </p>
               {actionError && (
-                <p className="export-transcript-modal__error" role="alert">{actionError}</p>
+                <p className='export-transcript-modal__error' role='alert'>
+                  {actionError}
+                </p>
               )}
               {detail.agentId ? (
-                <p className="export-transcript-modal__meta">
-                  Starting a new conversation waits with a mention of this file in its input.
-                  Nothing is sent until you write your prompt and send it.
+                <p className='export-transcript-modal__meta'>
+                  Starting a new conversation waits with a mention of this file in its input. Nothing is sent until you
+                  write your prompt and send it.
                 </p>
               ) : (
-                <p className="export-transcript-modal__meta">
+                <p className='export-transcript-modal__meta'>
                   This session reports no agent, so a follow-up conversation cannot be started.
                 </p>
               )}
-              <div className="export-transcript-modal__actions">
+              <div className='export-transcript-modal__actions'>
                 <button
-                  className="export-transcript-modal__button"
+                  className='export-transcript-modal__button'
                   onClick={() => copyPath(detail.result.path)}
-                  type="button"
+                  type='button'
                 >
-                  {copied ? "Copied" : "Copy path"}
+                  {copied ? 'Copied' : 'Copy path'}
                 </button>
                 <button
-                  className="export-transcript-modal__button export-transcript-modal__button--primary"
+                  className='export-transcript-modal__button export-transcript-modal__button--primary'
                   disabled={starting || !detail.agentId}
                   onClick={() => {
                     if (detail.agentId) {
                       void startNewConversation(detail.result.path, detail.agentId);
                     }
                   }}
-                  type="button"
+                  type='button'
                 >
-                  {starting ? "Starting…" : "Start new conversation"}
+                  {starting ? 'Starting…' : 'Start new conversation'}
                 </button>
               </div>
             </>

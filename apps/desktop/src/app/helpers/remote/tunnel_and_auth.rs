@@ -441,4 +441,3 @@ pub(crate) fn gpui_save_remote_gxserver_token_to_keychain(
 ) -> GpuiRemoteTokenKeychainResult {
     GpuiRemoteTokenKeychainResult::Unsupported
 }
-

@@ -15,17 +15,11 @@
 // and it also releases the cap so the whole thought can be read, selected, and
 // copied in one pass. It only renders once the content actually overflows.
 
-import { IconChevronDown } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { cn } from "@/packages/components/utils";
+import { IconChevronDown } from '@tabler/icons-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { cn } from '@/packages/components/utils';
 
-export function SessionChatScrollCap({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+export function SessionChatScrollCap({ children, className }: { children: ReactNode; className?: string }) {
   const capRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -57,29 +51,22 @@ export function SessionChatScrollCap({
   }, [children, measure]);
 
   return (
-    <div className={cn("ghostex-chat-scroll-cap-wrap", className)}>
+    <div className={cn('ghostex-chat-scroll-cap-wrap', className)}>
       <div
-        className={cn("ghostex-chat-scroll-cap", !expanded && "scroll-mask-y")}
-        data-expanded={expanded ? "true" : undefined}
+        className={cn('ghostex-chat-scroll-cap', !expanded && 'scroll-mask-y')}
+        data-expanded={expanded ? 'true' : undefined}
         ref={capRef}
       >
         {children}
       </div>
       {overflowing ? (
-        <button
-          className="ghostex-chat-scroll-cap-toggle"
-          onClick={() => setExpanded((value) => !value)}
-          type="button"
-        >
+        <button className='ghostex-chat-scroll-cap-toggle' onClick={() => setExpanded((value) => !value)} type='button'>
           <IconChevronDown
-            aria-hidden="true"
-            className={cn(
-              "size-3.5 shrink-0 transition-transform duration-150",
-              expanded && "rotate-180",
-            )}
+            aria-hidden='true'
+            className={cn('size-3.5 shrink-0 transition-transform duration-150', expanded && 'rotate-180')}
             stroke={2}
           />
-          {expanded ? "Show less" : "Show more"}
+          {expanded ? 'Show less' : 'Show more'}
         </button>
       ) : null}
     </div>

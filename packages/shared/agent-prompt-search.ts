@@ -11,19 +11,12 @@ acting on it, so keying by identity means the action still lands on the prompt
 they were looking at rather than on whatever moved into that slot.
 */
 
-export const FIND_PROMPT_AGENTS = [
-  "claude",
-  "codex",
-  "pi",
-  "opencode",
-  "cursor",
-  "grok",
-] as const;
+export const FIND_PROMPT_AGENTS = ['claude', 'codex', 'pi', 'opencode', 'cursor', 'grok'] as const;
 
 export type FindPromptAgent = (typeof FIND_PROMPT_AGENTS)[number];
 
 export function isFindPromptAgent(value: unknown): value is FindPromptAgent {
-  return typeof value === "string" && (FIND_PROMPT_AGENTS as readonly string[]).includes(value);
+  return typeof value === 'string' && (FIND_PROMPT_AGENTS as readonly string[]).includes(value);
 }
 
 export interface FindPromptUsage {
@@ -134,7 +127,7 @@ export interface ToggleAgentPromptFavoriteResult {
 
 export interface ResolveAgentPromptLaunchParams {
   /** `"resume"` re-enters the recorded session; `"fork"` starts a fresh one. */
-  action: "fork" | "resume";
+  action: 'fork' | 'resume';
   /** Adds the agent's permission-bypass flags where one exists. */
   acceptAll?: boolean;
   /** Target agent for `"fork"`; defaults to the prompt's own agent. */
@@ -145,7 +138,7 @@ export interface ResolveAgentPromptLaunchParams {
 /** A live Ghostex session already owns this agent conversation — focus it. */
 export interface FindPromptFocusPlan {
   key: string;
-  mode: "focus";
+  mode: 'focus';
   projectId: string;
   sessionId: string;
 }
@@ -160,7 +153,7 @@ export interface FindPromptLaunchPlan {
   /** False when the recorded project directory is gone. */
   cwdExists: boolean;
   key: string;
-  mode: "launch";
+  mode: 'launch';
   title: string;
 }
 

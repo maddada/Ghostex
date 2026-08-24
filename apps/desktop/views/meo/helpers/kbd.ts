@@ -36,7 +36,7 @@ export function parseKbdTagAt(text: string, index: number): ParsedKbdTag | null 
   const contentEnd = contentStart + closeMatch.index;
   return {
     content: text.slice(contentStart, contentEnd),
-    nextIndex: contentEnd + closeMatch[0].length
+    nextIndex: contentEnd + closeMatch[0].length,
   };
 }
 
@@ -56,7 +56,7 @@ export function collectKbdTagRangesFromText(text: string, lineFrom: number): Kbd
     ranges.push({
       from: lineFrom + index,
       to: lineFrom + parsed.nextIndex,
-      content: parsed.content
+      content: parsed.content,
     });
     index = text.indexOf('<', parsed.nextIndex);
   }

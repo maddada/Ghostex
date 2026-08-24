@@ -42,16 +42,16 @@ const FOUR_SPACE_INDENT_COLUMNS = 4;
 const listIndentStyle = {
   twoSpaces: {
     columns: TWO_SPACE_INDENT_COLUMNS,
-    insert: TWO_SPACE_INDENT
+    insert: TWO_SPACE_INDENT,
   },
   fourSpaces: {
     columns: FOUR_SPACE_INDENT_COLUMNS,
-    insert: FOUR_SPACE_INDENT
+    insert: FOUR_SPACE_INDENT,
   },
   tabs: {
     columns: FOUR_SPACE_INDENT_COLUMNS,
-    insert: TAB_INDENT
-  }
+    insert: TAB_INDENT,
+  },
 };
 
 const defaultListIndentStyle = listIndentStyle.twoSpaces;
@@ -60,13 +60,13 @@ const taskStatusByMarker: Record<string, TaskStatus> = {
   x: 'done',
   '~': 'inprogress',
   '-': 'dropped',
-  ' ': 'todo'
+  ' ': 'todo',
 };
 const taskStatusClassByStatus: Record<TaskStatus, string> = {
   todo: 'is-todo',
   inprogress: 'is-inprogress',
   done: 'is-done',
-  dropped: 'is-dropped'
+  dropped: 'is-dropped',
 };
 
 function listBorderDecoration(widthColumns = 1) {
@@ -78,7 +78,7 @@ function listBorderDecoration(widthColumns = 1) {
 
   deco = Decoration.mark({
     class: 'meo-md-list-border',
-    attributes: { style: `--meo-list-border-width:${width}ch;` }
+    attributes: { style: `--meo-list-border-width:${width}ch;` },
   });
   listBorderDecoCache.set(width, deco);
   return deco;
@@ -346,7 +346,7 @@ function parseListMarkerParts(lineText) {
     bullet: match[2],
     orderedNumber: match[3],
     orderedSuffix: match[4],
-    hasTask: match[5] !== undefined
+    hasTask: match[5] !== undefined,
   };
 }
 
@@ -378,7 +378,11 @@ function buildListMarkerText(parts, orderedNumber = parts?.orderedNumber) {
     : `${parts.leadingWhitespace}${orderedNumber}${parts.orderedSuffix} `;
 }
 
-export function listMarkerData(lineText: string, orderedDisplayIndex: string | null = null, style: ListIndentStyle = defaultListIndentStyle): ListMarkerData | null {
+export function listMarkerData(
+  lineText: string,
+  orderedDisplayIndex: string | null = null,
+  style: ListIndentStyle = defaultListIndentStyle
+): ListMarkerData | null {
   const match = listMarkerRegex.exec(lineText);
   if (!match) {
     return null;
@@ -415,11 +419,11 @@ export function listMarkerData(lineText: string, orderedDisplayIndex: string | n
     classes,
     orderedNumber,
     isTask: false,
-    taskHiddenPrefixColumns: 0
+    taskHiddenPrefixColumns: 0,
   };
 
   if (taskMarker !== undefined) {
-    const hiddenTaskPrefixLength = Math.max(0, (match[0].length - indent) - 1);
+    const hiddenTaskPrefixLength = Math.max(0, match[0].length - indent - 1);
     result.taskBracketStart = markerEndOffset + 1;
     result.taskStatus = taskStatusFromMarker(taskMarker);
     result.isTask = true;
@@ -481,7 +485,7 @@ class CheckboxWidget extends WidgetType {
     checkbox.addEventListener('change', () => {
       const newChar = checkbox.checked ? 'x' : ' ';
       view.dispatch({
-        changes: { from: this.bracketStart + 1, to: this.bracketStart + 2, insert: newChar }
+        changes: { from: this.bracketStart + 1, to: this.bracketStart + 2, insert: newChar },
       });
     });
 
@@ -526,7 +530,7 @@ export function addListMarkerDecoration(
     builder.push(
       Decoration.replace({
         widget: new CheckboxWidget(taskStatus, bracketStart),
-        inclusive: false
+        inclusive: false,
       }).range(indentEnd, fullEnd)
     );
 
@@ -540,11 +544,10 @@ export function addListMarkerDecoration(
     builder.push(
       Decoration.replace({
         widget: new ListMarkerWidget(marker.markerText, marker.classes),
-        inclusive: false
+        inclusive: false,
       }).range(indentEnd, markerEnd)
     );
   }
-
 }
 
 export function continuedListMarker(lineText) {
@@ -599,7 +602,7 @@ export function handleEnterContinueList(view) {
   const insert = `\n${marker}`;
   view.dispatch({
     changes: { from: position, insert },
-    selection: { anchor: position + insert.length }
+    selection: { anchor: position + insert.length },
   });
   return true;
 }
@@ -630,7 +633,7 @@ export function handleEnterOnEmptyListItem(view) {
 
   view.dispatch({
     changes: { from: line.from, to: contentStart, insert: '' },
-    selection: { anchor: line.from }
+    selection: { anchor: line.from },
   });
   return true;
 }
@@ -655,10 +658,7 @@ export function handleBackspaceAtListContentStart(view) {
   const markerVisualEnd = line.from + marker.markerEndOffset;
   const content = lineText.slice(marker.toOffset);
   const isAtContentStart = selection.head === contentStart;
-  const isAtEmptyItemMarkerEnd =
-    !content.trim() &&
-    selection.head >= markerVisualEnd &&
-    selection.head <= contentStart;
+  const isAtEmptyItemMarkerEnd = !content.trim() && selection.head >= markerVisualEnd && selection.head <= contentStart;
 
   if (!isAtContentStart && !isAtEmptyItemMarkerEnd) {
     return false;
@@ -673,10 +673,10 @@ export function handleBackspaceAtListContentStart(view) {
       ? {
           from: line.from,
           to: line.number < state.doc.lines ? state.doc.line(line.number + 1).from : line.to,
-          insert: ''
+          insert: '',
         }
       : { from: line.from, to: contentStart, insert: '' },
-    ...hoistChanges
+    ...hoistChanges,
   ];
 
   let selectionAnchor = line.from;
@@ -693,7 +693,7 @@ export function handleBackspaceAtListContentStart(view) {
 
   view.dispatch({
     changes,
-    selection: { anchor: selectionAnchor }
+    selection: { anchor: selectionAnchor },
   });
   return true;
 }
@@ -724,7 +724,7 @@ function collapsedSingleCursorListContext(state) {
     selection,
     line,
     marker,
-    contentStart: line.from + marker.toOffset
+    contentStart: line.from + marker.toOffset,
   };
 }
 
@@ -781,7 +781,7 @@ export function handleEnterAtListContentStart(view) {
   const insert = `${sameMarker}\n`;
   view.dispatch({
     changes: { from: line.from, insert },
-    selection: { anchor: line.from + sameMarker.length }
+    selection: { anchor: line.from + sameMarker.length },
   });
   return true;
 }
@@ -815,7 +815,7 @@ export function handleEnterBeforeNestedList(view) {
   const insert = `\n${marker}`;
   view.dispatch({
     changes: { from: position, insert },
-    selection: { anchor: position + insert.length }
+    selection: { anchor: position + insert.length },
   });
   return true;
 }
@@ -837,11 +837,7 @@ export function collectOrderedListRenumberChanges(state) {
     }
 
     const level = marker.indentLevel;
-    const { expected, isAnchor } = nextOrderedSequenceNumber(
-      orderedCountsByLevel,
-      level,
-      marker.orderedNumber
-    );
+    const { expected, isAnchor } = nextOrderedSequenceNumber(orderedCountsByLevel, level, marker.orderedNumber);
     if (expected === null || isAnchor) {
       continue;
     }
@@ -851,7 +847,7 @@ export function collectOrderedListRenumberChanges(state) {
       changes.push({
         from,
         to: from + marker.orderedNumber.length,
-        insert: expectedText
+        insert: expectedText,
       });
     }
   }
@@ -874,12 +870,7 @@ function computeSourceListBorders(state) {
     if (!marker || marker.fromOffset === 0) {
       continue;
     }
-    addListIndentBorders(
-      (from, to, deco) => ranges.add(from, to, deco),
-      line.from,
-      marker.leadingWhitespace,
-      style
-    );
+    addListIndentBorders((from, to, deco) => ranges.add(from, to, deco), line.from, marker.leadingWhitespace, style);
   }
   return ranges.finish();
 }
@@ -929,7 +920,7 @@ export const sourceListBorderField = StateField.define<any>({
       return borders;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });
 
 export const sourceListMarkerField = StateField.define<any>({
@@ -950,5 +941,5 @@ export const sourceListMarkerField = StateField.define<any>({
       return markers;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });

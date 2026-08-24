@@ -9,7 +9,6 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use anyhow::Result;
 
 use crate::app::helpers::*;
@@ -187,4 +186,3 @@ pub(crate) fn changed_sidebar_runtime_settings_snapshot(
 ) -> Option<cef::SidebarRuntimeSettingsSnapshot> {
     (current != &next).then_some(next)
 }
-

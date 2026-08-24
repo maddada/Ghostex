@@ -1,56 +1,46 @@
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
 #import <Foundation/Foundation.h>
-#import <stdbool.h>
+#import <dispatch/dispatch.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
-#import <dispatch/dispatch.h>
 #import <os/lock.h>
+#import <stdbool.h>
 #import <stdint.h>
 #import <stdlib.h>
 #import <string.h>
 
 void GhostexGpuiCEFDoMessageLoopWork(void);
-int GhostexGpuiCEFHandleSelectAllForNativeView(void* nativeView);
+int GhostexGpuiCEFHandleSelectAllForNativeView(void *nativeView);
 int GhostexGpuiCEFHandleSelectAllForActiveNativeView(void);
-int GhostexGpuiCEFHandleEditCommandForNativeView(void* nativeView, int command);
-void GhostexGpuiCEFLogClipboardRoute(
-  int command,
-  int bridgedDuringDispatch,
-  int responderWalkHandled,
-  const char* responderClass);
-void GhostexGpuiCEFLogDevToolsWindowActivation(
-  int windowIsKey,
-  int responderInsideNativeView,
-  const char* responderClass);
-int GhostexGpuiCEFHandleZoomCommandForNativeView(void* nativeView, int command);
-int GhostexGpuiCEFMarkNativeViewFocused(void* nativeView);
-void GhostexGpuiCEFLogNativeMouseDown(
-  void* nativeView,
-  double eventWindowX,
-  double eventWindowY,
-  double frameWindowX,
-  double frameWindowY,
-  double frameWidth,
-  double frameHeight,
-  double parentBoundsWidth,
-  double parentBoundsHeight,
-  int hidden,
-  const char* responderClass);
+int GhostexGpuiCEFHandleEditCommandForNativeView(void *nativeView, int command);
+void GhostexGpuiCEFLogClipboardRoute(int command, int bridgedDuringDispatch,
+                                     int responderWalkHandled,
+                                     const char *responderClass);
+void GhostexGpuiCEFLogDevToolsWindowActivation(int windowIsKey,
+                                               int responderInsideNativeView,
+                                               const char *responderClass);
+int GhostexGpuiCEFHandleZoomCommandForNativeView(void *nativeView, int command);
+int GhostexGpuiCEFMarkNativeViewFocused(void *nativeView);
+void GhostexGpuiCEFLogNativeMouseDown(void *nativeView, double eventWindowX,
+                                      double eventWindowY, double frameWindowX,
+                                      double frameWindowY, double frameWidth,
+                                      double frameHeight,
+                                      double parentBoundsWidth,
+                                      double parentBoundsHeight, int hidden,
+                                      const char *responderClass);
 void GhostexGpuiCEFClearActiveNativeView(void);
-int GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView(void* nativeView);
-void GhostexGpuiFirstResponderDidChange(void* gpuiRootView, void* responder);
-int GhostexGpuiKeyboardRouteNativeEvent(
-  void* gpuiRootView,
-  int action,
-  uint32_t keyCode,
-  uint64_t modifiers,
-  const char* charactersIgnoringModifiers,
-  const char* characters);
-int GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys(void* gpuiRootView);
-int GhostexGpuiKeyboardOwnerIsSessionChat(void* gpuiRootView);
-int GhostexGpuiKeyboardOwnerUsesDocsEditorHotkeys(void* gpuiRootView);
-bool GhostexGpuiNativeViewContainsResponder(void* rootNativeView, void* responder);
+int GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView(void *nativeView);
+void GhostexGpuiFirstResponderDidChange(void *gpuiRootView, void *responder);
+int GhostexGpuiKeyboardRouteNativeEvent(void *gpuiRootView, int action,
+                                        uint32_t keyCode, uint64_t modifiers,
+                                        const char *charactersIgnoringModifiers,
+                                        const char *characters);
+int GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys(void *gpuiRootView);
+int GhostexGpuiKeyboardOwnerIsSessionChat(void *gpuiRootView);
+int GhostexGpuiKeyboardOwnerUsesDocsEditorHotkeys(void *gpuiRootView);
+bool GhostexGpuiNativeViewContainsResponder(void *rootNativeView,
+                                            void *responder);
 
 // ABI contract with cef/shell.rs CefEditCommand::from_raw.
 typedef enum {
@@ -73,19 +63,20 @@ static BOOL g_ghostexGpuiCEFApplicationHooksInstalled = NO;
 static BOOL g_ghostexGpuiCEFHandlingSendEvent = NO;
 static BOOL g_ghostexGpuiCEFEditCommandBridged = NO;
 static BOOL g_ghostexGpuiCEFSelectAllBridged = NO;
-static const void* GhostexGpuiFirstResponderObserverKey =
-  &GhostexGpuiFirstResponderObserverKey;
-static const void* GhostexGpuiRootPointerTrackingAreaKey =
-  &GhostexGpuiRootPointerTrackingAreaKey;
-static const void* GhostexGpuiCEFMouseFocusPassiveKey =
-  &GhostexGpuiCEFMouseFocusPassiveKey;
-static const void* GhostexGpuiCEFPassiveFocusGrantKey =
-  &GhostexGpuiCEFPassiveFocusGrantKey;
+static const void *GhostexGpuiFirstResponderObserverKey =
+    &GhostexGpuiFirstResponderObserverKey;
+static const void *GhostexGpuiRootPointerTrackingAreaKey =
+    &GhostexGpuiRootPointerTrackingAreaKey;
+static const void *GhostexGpuiCEFMouseFocusPassiveKey =
+    &GhostexGpuiCEFMouseFocusPassiveKey;
+static const void *GhostexGpuiCEFPassiveFocusGrantKey =
+    &GhostexGpuiCEFPassiveFocusGrantKey;
 static BOOL g_ghostexGpuiCEFMessagePumpWorkPending = NO;
 static BOOL g_ghostexGpuiCEFMessagePumpWorkActive = NO;
 static BOOL g_ghostexGpuiCEFMessagePumpReentrancyDetected = NO;
 static uint64_t g_ghostexGpuiCEFMessagePumpGeneration = 0;
-static os_unfair_lock g_ghostexGpuiCEFMessagePumpDispatchLock = OS_UNFAIR_LOCK_INIT;
+static os_unfair_lock g_ghostexGpuiCEFMessagePumpDispatchLock =
+    OS_UNFAIR_LOCK_INIT;
 static BOOL g_ghostexGpuiCEFMessagePumpDispatchPending = NO;
 static int64_t g_ghostexGpuiCEFMessagePumpDispatchDelayMs = INT64_MAX;
 static uint64_t g_ghostexGpuiCEFMessagePumpDispatchEpoch = 0;
@@ -102,47 +93,56 @@ static BOOL GhostexGpuiCEFResizeDiagnosticsEnabled(void) {
 }
 
 static const int64_t GhostexGpuiCEFMessagePumpPlaceholderDelayMs = INT32_MAX;
-static const int64_t GhostexGpuiCEFMessagePumpImmediateTimerDelayMs = 1000 / 120;
+static const int64_t GhostexGpuiCEFMessagePumpImmediateTimerDelayMs =
+    1000 / 120;
 static const int64_t GhostexGpuiCEFMessagePumpMaxTimerDelayMs = 1000 / 30;
 
 static void GhostexGpuiCEFRunScheduledMessagePumpWork(void);
 static void GhostexGpuiCEFOnScheduleMessagePumpWork(int64_t delayMs);
 static void GhostexGpuiCEFInstallStandardEditMenu(void);
-static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd, NSEvent* event);
+static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd,
+                                               NSEvent *event);
 static BOOL GhostexGpuiCEFBrowserViewAcceptsFirstResponder(id self, SEL _cmd);
 static void GhostexGpuiCEFBrowserViewSelectAll(id self, SEL _cmd, id sender);
-static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd, NSEvent* event);
-static void GhostexGpuiCEFBrowserViewAddSubview(id self, SEL _cmd, NSView* subview);
-static void GhostexGpuiCEFBrowserViewDidChangeEffectiveAppearance(id self, SEL _cmd);
-static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView* view);
-static void GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(NSView* view);
+static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd,
+                                                          NSEvent *event);
+static void GhostexGpuiCEFBrowserViewAddSubview(id self, SEL _cmd,
+                                                NSView *subview);
+static void GhostexGpuiCEFBrowserViewDidChangeEffectiveAppearance(id self,
+                                                                  SEL _cmd);
+static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView *view);
+static void GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(NSView *view);
 static void GhostexGpuiCEFBrowserViewCut(id self, SEL _cmd, id sender);
 static void GhostexGpuiCEFBrowserViewCopy(id self, SEL _cmd, id sender);
 static void GhostexGpuiCEFBrowserViewPaste(id self, SEL _cmd, id sender);
-static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent* event);
-static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent* event);
-static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent* event);
-static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent* event);
-static GhostexGpuiCEFEditCommand GhostexGpuiCEFClipboardEditCommandForEvent(NSEvent* event);
-static GhostexGpuiCEFZoomCommand GhostexGpuiCEFZoomCommandForEvent(NSEvent* event);
+static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent *event);
+static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent *event);
+static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent *event);
+static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent *event);
+static GhostexGpuiCEFEditCommand
+GhostexGpuiCEFClipboardEditCommandForEvent(NSEvent *event);
+static GhostexGpuiCEFZoomCommand
+GhostexGpuiCEFZoomCommandForEvent(NSEvent *event);
 static BOOL GhostexGpuiCEFHandleSelectAllForResponder(id responder);
-static BOOL GhostexGpuiCEFHandleEditCommandForResponder(
-  id responder,
-  GhostexGpuiCEFEditCommand command);
-static BOOL GhostexGpuiCEFHandleZoomCommandForResponder(
-  id responder,
-  GhostexGpuiCEFZoomCommand command);
-static void GhostexGpuiCEFBrowserViewForwardEditActionToSuper(id self, SEL _cmd, id sender);
-static NSView* GhostexGpuiCEFMarkFocusedResponder(id responder);
-static NSView* GhostexGpuiCEFPassiveFocusRootForView(NSView* view);
-static BOOL GhostexGpuiCEFViewDeclinesMouseFocus(NSView* view);
-static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView* view);
-static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event);
-static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
-static void GhostexGpuiInstallRootPointerTrackingArea(NSView* view);
-static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event);
+static BOOL
+GhostexGpuiCEFHandleEditCommandForResponder(id responder,
+                                            GhostexGpuiCEFEditCommand command);
+static BOOL
+GhostexGpuiCEFHandleZoomCommandForResponder(id responder,
+                                            GhostexGpuiCEFZoomCommand command);
+static void GhostexGpuiCEFBrowserViewForwardEditActionToSuper(id self, SEL _cmd,
+                                                              id sender);
+static NSView *GhostexGpuiCEFMarkFocusedResponder(id responder);
+static NSView *GhostexGpuiCEFPassiveFocusRootForView(NSView *view);
+static BOOL GhostexGpuiCEFViewDeclinesMouseFocus(NSView *view);
+static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView *view);
+static NSEvent *GhostexGpuiNormalizedNavigationKeyEvent(NSEvent *event);
+static void GhostexGpuiFirstResponderReportWindow(NSWindow *window);
+static void GhostexGpuiInstallRootPointerTrackingArea(NSView *view);
+static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent *event);
 static void GhostexGpuiSidebarPointerTrackingReport(BOOL inside);
-static BOOL GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint);
+static BOOL
+GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint);
 
 /*
  CDXC:GPUISidebarPointerTracking 2026-08-02:
@@ -158,7 +158,7 @@ static BOOL GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenP
  forwards both into the sidebar page (the existing
  data-native-pointer-inside CSS contract and context-menu dismissal).
 */
-static __weak NSView* g_ghostexGpuiSidebarPointerTrackingView = nil;
+static __weak NSView *g_ghostexGpuiSidebarPointerTrackingView = nil;
 
 /*
  CDXC:GPUISidebarPointerTracking 2026-08-20:
@@ -187,24 +187,25 @@ typedef NS_ENUM(NSInteger, GhostexGpuiSidebarPointerTrackingState) {
 };
 
 static GhostexGpuiSidebarPointerTrackingState g_ghostexGpuiSidebarPointerState =
-  GhostexGpuiSidebarPointerTrackingStateUnknown;
+    GhostexGpuiSidebarPointerTrackingStateUnknown;
 
 extern void GhostexGpuiSidebarPointerInsideChanged(bool inside);
 extern void GhostexGpuiSidebarOutsideMouseDown(void);
 
-void GhostexGpuiCEFSetSidebarPointerTrackingView(void* view) {
-  NSView* sidebarView = (__bridge NSView*)view;
+void GhostexGpuiCEFSetSidebarPointerTrackingView(void *view) {
+  NSView *sidebarView = (__bridge NSView *)view;
   g_ghostexGpuiSidebarPointerTrackingView = sidebarView;
   // Unknown until the next mouse event recomputes it against the new view.
-  g_ghostexGpuiSidebarPointerState = GhostexGpuiSidebarPointerTrackingStateUnknown;
+  g_ghostexGpuiSidebarPointerState =
+      GhostexGpuiSidebarPointerTrackingStateUnknown;
   // Pointer-moved events are only generated for a window that asks for them.
   sidebarView.window.acceptsMouseMovedEvents = YES;
 }
 
 static void GhostexGpuiSidebarPointerTrackingReport(BOOL inside) {
   GhostexGpuiSidebarPointerTrackingState next =
-    inside ? GhostexGpuiSidebarPointerTrackingStateInside
-           : GhostexGpuiSidebarPointerTrackingStateOutside;
+      inside ? GhostexGpuiSidebarPointerTrackingStateInside
+             : GhostexGpuiSidebarPointerTrackingStateOutside;
   if (next == g_ghostexGpuiSidebarPointerState) {
     return;
   }
@@ -212,15 +213,17 @@ static void GhostexGpuiSidebarPointerTrackingReport(BOOL inside) {
   GhostexGpuiSidebarPointerInsideChanged(inside);
 }
 
-static BOOL GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint) {
-  NSView* sidebarView = g_ghostexGpuiSidebarPointerTrackingView;
-  NSWindow* window = sidebarView.window;
+static BOOL
+GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint) {
+  NSView *sidebarView = g_ghostexGpuiSidebarPointerTrackingView;
+  NSWindow *window = sidebarView.window;
   if (!sidebarView || !window || !window.isVisible ||
       sidebarView.isHiddenOrHasHiddenAncestor) {
     return NO;
   }
   NSPoint locationInWindow = [window convertPointFromScreen:screenPoint];
-  NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds toView:nil];
+  NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds
+                                           toView:nil];
   return NSPointInRect(locationInWindow, frameInWindow);
 }
 
@@ -245,31 +248,37 @@ void GhostexGpuiCEFReportSidebarPointerOutside(void) {
 */
 void GhostexGpuiCEFRefreshSidebarPointerInside(void) {
   GhostexGpuiSidebarPointerTrackingReport(
-    GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSEvent.mouseLocation));
+      GhostexGpuiSidebarPointerTrackingContainsScreenPoint(
+          NSEvent.mouseLocation));
 }
 
-static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event) {
+static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent *event) {
   NSEventType type = event.type;
-  BOOL isMove = type == NSEventTypeMouseMoved || type == NSEventTypeLeftMouseDragged ||
-                type == NSEventTypeRightMouseDragged || type == NSEventTypeOtherMouseDragged;
-  BOOL isDown = type == NSEventTypeLeftMouseDown || type == NSEventTypeRightMouseDown ||
+  BOOL isMove = type == NSEventTypeMouseMoved ||
+                type == NSEventTypeLeftMouseDragged ||
+                type == NSEventTypeRightMouseDragged ||
+                type == NSEventTypeOtherMouseDragged;
+  BOOL isDown = type == NSEventTypeLeftMouseDown ||
+                type == NSEventTypeRightMouseDown ||
                 type == NSEventTypeOtherMouseDown;
   if (!isMove && !isDown) {
     return;
   }
-  NSView* sidebarView = g_ghostexGpuiSidebarPointerTrackingView;
+  NSView *sidebarView = g_ghostexGpuiSidebarPointerTrackingView;
   if (!sidebarView) {
     return;
   }
   BOOL inside = NO;
-  NSWindow* window = event.window;
+  NSWindow *window = event.window;
   if (isDown) {
     // A window that never got armed at registration time (view not yet in a
     // window) still delivers button events, so re-arm from one of those.
     sidebarView.window.acceptsMouseMovedEvents = YES;
   }
-  if (window && sidebarView.window == window && !sidebarView.isHiddenOrHasHiddenAncestor) {
-    NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds toView:nil];
+  if (window && sidebarView.window == window &&
+      !sidebarView.isHiddenOrHasHiddenAncestor) {
+    NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds
+                                             toView:nil];
     inside = NSPointInRect(event.locationInWindow, frameInWindow);
   }
   GhostexGpuiSidebarPointerTrackingReport(inside);
@@ -279,13 +288,15 @@ static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event) {
 }
 
 @interface GhostexGpuiFirstResponderObserver : NSObject
-@property(nonatomic, weak) NSWindow* window;
-@property(nonatomic, weak) NSView* gpuiRootView;
-- (instancetype)initWithWindow:(NSWindow*)window gpuiRootView:(NSView*)gpuiRootView;
+@property(nonatomic, weak) NSWindow *window;
+@property(nonatomic, weak) NSView *gpuiRootView;
+- (instancetype)initWithWindow:(NSWindow *)window
+                  gpuiRootView:(NSView *)gpuiRootView;
 @end
 
 @implementation GhostexGpuiFirstResponderObserver
-- (instancetype)initWithWindow:(NSWindow*)window gpuiRootView:(NSView*)gpuiRootView {
+- (instancetype)initWithWindow:(NSWindow *)window
+                  gpuiRootView:(NSView *)gpuiRootView {
   self = [super init];
   if (!self) {
     return nil;
@@ -294,7 +305,8 @@ static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event) {
   _gpuiRootView = gpuiRootView;
   [window addObserver:self
            forKeyPath:@"firstResponder"
-              options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionNew
+              options:NSKeyValueObservingOptionInitial |
+                      NSKeyValueObservingOptionNew
               context:NULL];
   return self;
 }
@@ -302,54 +314,64 @@ static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event) {
 - (void)dealloc {
   @try {
     [_window removeObserver:self forKeyPath:@"firstResponder"];
-  } @catch (__unused NSException* exception) {
+  } @catch (__unused NSException *exception) {
   }
 }
 
-- (void)observeValueForKeyPath:(NSString*)keyPath
+- (void)observeValueForKeyPath:(NSString *)keyPath
                       ofObject:(id)object
-                        change:(NSDictionary<NSKeyValueChangeKey, id>*)change
-                       context:(void*)context {
+                        change:(NSDictionary<NSKeyValueChangeKey, id> *)change
+                       context:(void *)context {
   (void)change;
   (void)context;
-  if ([keyPath isEqualToString:@"firstResponder"] && [object isKindOfClass:NSWindow.class]) {
-    GhostexGpuiFirstResponderReportWindow((NSWindow*)object);
+  if ([keyPath isEqualToString:@"firstResponder"] &&
+      [object isKindOfClass:NSWindow.class]) {
+    GhostexGpuiFirstResponderReportWindow((NSWindow *)object);
     return;
   }
-  [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+  [super observeValueForKeyPath:keyPath
+                       ofObject:object
+                         change:change
+                        context:context];
 }
 @end
 
-static BOOL GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(NSWindow* window) {
-  GhostexGpuiFirstResponderObserver* observer =
-    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
-  NSView* gpuiRootView = observer.gpuiRootView;
-  return gpuiRootView &&
-    gpuiRootView.window == window &&
-    GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys((__bridge void*)gpuiRootView) != 0;
+static BOOL
+GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(NSWindow *window) {
+  GhostexGpuiFirstResponderObserver *observer =
+      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+  NSView *gpuiRootView = observer.gpuiRootView;
+  return gpuiRootView && gpuiRootView.window == window &&
+         GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys(
+             (__bridge void *)gpuiRootView) != 0;
 }
 
-static BOOL GhostexGpuiCEFSessionChatOwnsKeyboardInWindow(NSWindow* window) {
-  GhostexGpuiFirstResponderObserver* observer =
-    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
-  NSView* gpuiRootView = observer.gpuiRootView;
-  return gpuiRootView &&
-    gpuiRootView.window == window &&
-    GhostexGpuiKeyboardOwnerIsSessionChat((__bridge void*)gpuiRootView) != 0;
+static BOOL GhostexGpuiCEFSessionChatOwnsKeyboardInWindow(NSWindow *window) {
+  GhostexGpuiFirstResponderObserver *observer =
+      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+  NSView *gpuiRootView = observer.gpuiRootView;
+  return gpuiRootView && gpuiRootView.window == window &&
+         GhostexGpuiKeyboardOwnerIsSessionChat((__bridge void *)gpuiRootView) !=
+             0;
 }
 
-static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window) {
-  GhostexGpuiFirstResponderObserver* observer =
-    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
-  NSView* gpuiRootView = observer.gpuiRootView;
-  return gpuiRootView &&
-    gpuiRootView.window == window &&
-    GhostexGpuiKeyboardOwnerUsesDocsEditorHotkeys((__bridge void*)gpuiRootView) != 0;
+static BOOL
+GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
+  GhostexGpuiFirstResponderObserver *observer =
+      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+  NSView *gpuiRootView = observer.gpuiRootView;
+  return gpuiRootView && gpuiRootView.window == window &&
+         GhostexGpuiKeyboardOwnerUsesDocsEditorHotkeys(
+             (__bridge void *)gpuiRootView) != 0;
 }
 
 /*
  CDXC:GPUICefAppProtocol 2026-06-14-16:14:
- CEF's macOS external-run-loop path requires NSApplication to conform to CefAppProtocol before Chromium installs its CFRunLoop observers. Mirror the protocol definitions from cef_application_mac.h locally so this lightweight cef-rs shim can register the Objective-C category at load time without restoring a direct CEF C++ header dependency.
+ CEF's macOS external-run-loop path requires NSApplication to conform to
+ CefAppProtocol before Chromium installs its CFRunLoop observers. Mirror the
+ protocol definitions from cef_application_mac.h locally so this lightweight
+ cef-rs shim can register the Objective-C category at load time without
+ restoring a direct CEF C++ header dependency.
  */
 @protocol CrAppProtocol
 - (BOOL)isHandlingSendEvent;
@@ -365,13 +387,15 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
 @interface NSApplication (GhostexGpuiCEFApplication) <CefAppProtocol>
 - (BOOL)isHandlingSendEvent;
 - (void)setHandlingSendEvent:(BOOL)handlingSendEvent;
-- (void)ghostexGpuiCEFSendEvent:(NSEvent*)event;
+- (void)ghostexGpuiCEFSendEvent:(NSEvent *)event;
 @end
 
 @implementation NSApplication (GhostexGpuiCEFApplication)
 + (void)load {
-  Method originalSendEvent = class_getInstanceMethod(self, @selector(sendEvent:));
-  Method cefSendEvent = class_getInstanceMethod(self, @selector(ghostexGpuiCEFSendEvent:));
+  Method originalSendEvent =
+      class_getInstanceMethod(self, @selector(sendEvent:));
+  Method cefSendEvent =
+      class_getInstanceMethod(self, @selector(ghostexGpuiCEFSendEvent:));
   if (originalSendEvent && cefSendEvent) {
     method_exchangeImplementations(originalSendEvent, cefSendEvent);
   }
@@ -385,27 +409,26 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
   g_ghostexGpuiCEFHandlingSendEvent = handlingSendEvent;
 }
 
-- (void)ghostexGpuiCEFSendEvent:(NSEvent*)event {
+- (void)ghostexGpuiCEFSendEvent:(NSEvent *)event {
   // CPRAILDBG: temporary diagnostic for the command-pane resize-rail drag
   // investigation. Remove before handoff.
   if (event.type == NSEventTypeLeftMouseDown ||
       event.type == NSEventTypeLeftMouseDragged ||
       event.type == NSEventTypeLeftMouseUp) {
-    NSWindow* dbgWindow = event.window;
-    NSView* dbgContent = dbgWindow.contentView;
-    NSView* dbgHit = nil;
+    NSWindow *dbgWindow = event.window;
+    NSView *dbgContent = dbgWindow.contentView;
+    NSView *dbgHit = nil;
     if (dbgContent.superview) {
       dbgHit = [dbgContent.superview
-        hitTest:[dbgContent.superview convertPoint:event.locationInWindow fromView:nil]];
+          hitTest:[dbgContent.superview convertPoint:event.locationInWindow
+                                            fromView:nil]];
     }
     id dbgResponder = dbgWindow.firstResponder;
     NSLog(@"CPRAILDBG sendEvent type=%lu loc=(%.1f,%.1f) win=%p hit=%s fr=%s",
-      (unsigned long)event.type,
-      event.locationInWindow.x,
-      event.locationInWindow.y,
-      dbgWindow,
-      dbgHit ? object_getClassName(dbgHit) : "nil",
-      dbgResponder ? object_getClassName(dbgResponder) : "nil");
+          (unsigned long)event.type, event.locationInWindow.x,
+          event.locationInWindow.y, dbgWindow,
+          dbgHit ? object_getClassName(dbgHit) : "nil",
+          dbgResponder ? object_getClassName(dbgResponder) : "nil");
   }
   /*
    CDXC:GPUINavKeyEventNormalization 2026-07-04:
@@ -440,22 +463,20 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
    responder chain.
    */
   if (event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) {
-    NSWindow* window = event.window ?: NSApp.keyWindow;
-    GhostexGpuiFirstResponderObserver* observer =
-      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
-    NSView* gpuiRootView = observer.gpuiRootView;
+    NSWindow *window = event.window ?: NSApp.keyWindow;
+    GhostexGpuiFirstResponderObserver *observer =
+        objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+    NSView *gpuiRootView = observer.gpuiRootView;
     int action = event.type == NSEventTypeKeyUp ? 3 : (event.isARepeat ? 2 : 1);
-    NSString* charactersIgnoringModifiers = event.charactersIgnoringModifiers ?: @"";
-    NSString* characters = event.characters ?: @"";
-    if (gpuiRootView &&
-        gpuiRootView.window == window &&
+    NSString *charactersIgnoringModifiers =
+        event.charactersIgnoringModifiers ?: @"";
+    NSString *characters = event.characters ?: @"";
+    if (gpuiRootView && gpuiRootView.window == window &&
         GhostexGpuiKeyboardRouteNativeEvent(
-          (__bridge void*)gpuiRootView,
-          action,
-          (uint32_t)event.keyCode,
-          (uint64_t)event.modifierFlags,
-          charactersIgnoringModifiers.UTF8String,
-          characters.UTF8String) != 0) {
+            (__bridge void *)gpuiRootView, action, (uint32_t)event.keyCode,
+            (uint64_t)event.modifierFlags,
+            charactersIgnoringModifiers.UTF8String,
+            characters.UTF8String) != 0) {
       return;
     }
   }
@@ -470,11 +491,13 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
    renderer handles the chord instead of falling through to a stale GPUI
    terminal focus handle or AppKit's process-level Find action.
    */
-  NSWindow* sessionChatShortcutWindow = event.window ?: NSApp.keyWindow;
+  NSWindow *sessionChatShortcutWindow = event.window ?: NSApp.keyWindow;
   if (event.type == NSEventTypeKeyDown &&
-      GhostexGpuiCEFSessionChatOwnsKeyboardInWindow(sessionChatShortcutWindow)) {
+      GhostexGpuiCEFSessionChatOwnsKeyboardInWindow(
+          sessionChatShortcutWindow)) {
     id responder = sessionChatShortcutWindow.firstResponder;
-    GhostexGpuiCEFZoomCommand zoomCommand = GhostexGpuiCEFZoomCommandForEvent(event);
+    GhostexGpuiCEFZoomCommand zoomCommand =
+        GhostexGpuiCEFZoomCommandForEvent(event);
     if (zoomCommand != GhostexGpuiCEFZoomCommandNone &&
         GhostexGpuiCEFHandleZoomCommandForResponder(responder, zoomCommand)) {
       return;
@@ -498,7 +521,7 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
    Other surfaces keep their normal application and browser shortcuts,
    including macOS Command+H Hide.
    */
-  NSWindow* docsShortcutWindow = event.window ?: NSApp.keyWindow;
+  NSWindow *docsShortcutWindow = event.window ?: NSApp.keyWindow;
   if (event.type == NSEventTypeKeyDown &&
       GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(docsShortcutWindow) &&
       (GhostexGpuiCEFEventIsCommandF(event) ||
@@ -513,7 +536,12 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
 
   /*
    CDXC:GPUICefEditCommands 2026-06-14-17:25:
-   GPUI can keep its address-input focus handle after Chromium has accepted a page click, so AppKit command-key dispatch may never invoke selectAll: on CEF's responder chain. When the active native target is a registered CEF view, mirror only Cmd+A in the existing CEF NSApplication sendEvent hook and call Chromium's Frame::select_all after normal dispatch; GPUI chrome clicks clear that active target before their own text shortcuts run.
+   GPUI can keep its address-input focus handle after Chromium has accepted a
+   page click, so AppKit command-key dispatch may never invoke selectAll: on
+   CEF's responder chain. When the active native target is a registered CEF
+   view, mirror only Cmd+A in the existing CEF NSApplication sendEvent hook and
+   call Chromium's Frame::select_all after normal dispatch; GPUI chrome clicks
+   clear that active target before their own text shortcuts run.
    */
   /*
    CDXC:GPUICefRendererEditHotkeyPassthrough 2026-08-09:
@@ -525,8 +553,9 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
    text controls.
    */
   BOOL shouldSelectAllInActiveCEF =
-    GhostexGpuiCEFEventIsCommandA(event) &&
-    !GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(event.window ?: NSApp.keyWindow);
+      GhostexGpuiCEFEventIsCommandA(event) &&
+      !GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(
+          event.window ?: NSApp.keyWindow);
 
   /*
    CDXC:GPUICefEditCommands 2026-07-09:
@@ -540,7 +569,8 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
    dispatch already delivered the command to Chromium through the CEF view
    subclass, so no path can double-cut or double-paste.
    */
-  GhostexGpuiCEFEditCommand clipboardCommand = GhostexGpuiCEFClipboardEditCommandForEvent(event);
+  GhostexGpuiCEFEditCommand clipboardCommand =
+      GhostexGpuiCEFClipboardEditCommandForEvent(event);
 
   BOOL wasHandlingSendEvent = g_ghostexGpuiCEFHandlingSendEvent;
   BOOL wasEditCommandBridged = g_ghostexGpuiCEFEditCommandBridged;
@@ -572,19 +602,18 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
 
   BOOL bridgedDuringDispatch = g_ghostexGpuiCEFEditCommandBridged;
   BOOL responderWalkHandled = NO;
-  NSWindow* clipboardWindow = event.window ?: NSApp.keyWindow;
-  if (clipboardCommand != GhostexGpuiCEFEditCommandNone && !bridgedDuringDispatch) {
+  NSWindow *clipboardWindow = event.window ?: NSApp.keyWindow;
+  if (clipboardCommand != GhostexGpuiCEFEditCommandNone &&
+      !bridgedDuringDispatch) {
     responderWalkHandled = GhostexGpuiCEFHandleEditCommandForResponder(
-      clipboardWindow.firstResponder,
-      clipboardCommand);
+        clipboardWindow.firstResponder, clipboardCommand);
   }
   if (clipboardCommand != GhostexGpuiCEFEditCommandNone) {
     id responder = clipboardWindow.firstResponder;
     GhostexGpuiCEFLogClipboardRoute(
-      (int)clipboardCommand,
-      bridgedDuringDispatch ? 1 : 0,
-      responderWalkHandled ? 1 : 0,
-      responder ? object_getClassName(responder) : NULL);
+        (int)clipboardCommand, bridgedDuringDispatch ? 1 : 0,
+        responderWalkHandled ? 1 : 0,
+        responder ? object_getClassName(responder) : NULL);
   }
   g_ghostexGpuiCEFEditCommandBridged = wasEditCommandBridged;
 }
@@ -592,12 +621,16 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
 
 void GhostexGpuiCEFPrepareApplication(void) {
   @autoreleasepool {
-    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableDictionary* argumentDefaults =
-      [[defaults volatileDomainForName:NSArgumentDomain] mutableCopy] ?: [NSMutableDictionary dictionary];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSMutableDictionary *argumentDefaults =
+        [[defaults volatileDomainForName:NSArgumentDomain] mutableCopy]
+            ?: [NSMutableDictionary dictionary];
     /*
      CDXC:GPUICefCrashRestore 2026-06-14-15:25:
-     The GPUI CEF shell is launched repeatedly while Chromium embedding is under construction. Disable AppKit's crash-state restoration prompts in the process argument domain so a saved-state modal cannot block the first GPUI frame or the deferred CEF initialization path.
+     The GPUI CEF shell is launched repeatedly while Chromium embedding is under
+     construction. Disable AppKit's crash-state restoration prompts in the
+     process argument domain so a saved-state modal cannot block the first GPUI
+     frame or the deferred CEF initialization path.
      */
     argumentDefaults[@"ApplePersistenceIgnoreState"] = @YES;
     argumentDefaults[@"NSQuitAlwaysKeepsWindows"] = @NO;
@@ -606,7 +639,8 @@ void GhostexGpuiCEFPrepareApplication(void) {
 }
 
 bool GhostexGpuiCEFSystemUsesDarkPageAppearance(void) {
-  NSAppearance* appearance = NSApp.effectiveAppearance ?: NSAppearance.currentAppearance;
+  NSAppearance *appearance =
+      NSApp.effectiveAppearance ?: NSAppearance.currentAppearance;
   NSAppearanceName match = [appearance bestMatchFromAppearancesWithNames:@[
     NSAppearanceNameAqua,
     NSAppearanceNameDarkAqua,
@@ -621,10 +655,17 @@ void GhostexGpuiCEFInstallMessagePump(void) {
 
   /*
    CDXC:GPUICefMessagePump 2026-06-14-15:25:
-   GPUI owns the AppKit run loop, while cef-rs exposes a single-step CefDoMessageLoopWork pump. Let CEF's BrowserProcessHandler schedule each required step onto the main queue instead of handing the process to CefRunMessageLoop, matching Ghostex's GPUI-safe external-pump model without replacing GPUI's application loop.
+   GPUI owns the AppKit run loop, while cef-rs exposes a single-step
+   CefDoMessageLoopWork pump. Let CEF's BrowserProcessHandler schedule each
+   required step onto the main queue instead of handing the process to
+   CefRunMessageLoop, matching Ghostex's GPUI-safe external-pump model without
+   replacing GPUI's application loop.
 
    CDXC:GPUICefMessagePump 2026-06-14-17:38:
-   The cef-rs/Tauri external pump does not fire only once. It cancels stale work, caps placeholder delays to a short timer, and reschedules idle work so CEF renderers continue painting React sidebar content and browser pages after startup.
+   The cef-rs/Tauri external pump does not fire only once. It cancels stale
+   work, caps placeholder delays to a short timer, and reschedules idle work so
+   CEF renderers continue painting React sidebar content and browser pages after
+   startup.
    */
   g_ghostexGpuiCEFMessagePumpInstalled = YES;
   g_ghostexGpuiCEFMessagePumpWorkPending = NO;
@@ -692,7 +733,8 @@ void GhostexGpuiCEFScheduleMessagePumpWork(int64_t delayMs) {
     currentEpoch = epoch == g_ghostexGpuiCEFMessagePumpDispatchEpoch;
     if (currentEpoch) {
       requestedDelayMs = g_ghostexGpuiCEFMessagePumpDispatchDelayMs;
-      coalescedRequests = g_ghostexGpuiCEFMessagePumpDispatchRequests - firstRequest;
+      coalescedRequests =
+          g_ghostexGpuiCEFMessagePumpDispatchRequests - firstRequest;
       g_ghostexGpuiCEFMessagePumpDispatchPending = NO;
       g_ghostexGpuiCEFMessagePumpDispatchDelayMs = INT64_MAX;
       block = ++g_ghostexGpuiCEFMessagePumpDispatchBlocks;
@@ -706,12 +748,10 @@ void GhostexGpuiCEFScheduleMessagePumpWork(int64_t delayMs) {
     if (GhostexGpuiCEFResizeDiagnosticsEnabled()) {
       double queueMs = (CFAbsoluteTimeGetCurrent() - enqueuedAt) * 1000.0;
       if (coalescedRequests >= 4 || block % 120 == 0) {
-        NSLog(
-          @"[gpui-cef-pump] block=%llu coalesced=%llu delay_ms=%lld queue_ms=%.3f",
-          (unsigned long long)block,
-          (unsigned long long)coalescedRequests,
-          (long long)requestedDelayMs,
-          queueMs);
+        NSLog(@"[gpui-cef-pump] block=%llu coalesced=%llu delay_ms=%lld "
+              @"queue_ms=%.3f",
+              (unsigned long long)block, (unsigned long long)coalescedRequests,
+              (long long)requestedDelayMs, queueMs);
       }
     }
     GhostexGpuiCEFOnScheduleMessagePumpWork(requestedDelayMs);
@@ -741,7 +781,8 @@ static void GhostexGpuiCEFRunScheduledMessagePumpWork(void) {
   if (wasReentrant) {
     GhostexGpuiCEFScheduleMessagePumpWork(0);
   } else if (!g_ghostexGpuiCEFMessagePumpWorkPending) {
-    GhostexGpuiCEFScheduleMessagePumpWork(GhostexGpuiCEFMessagePumpPlaceholderDelayMs);
+    GhostexGpuiCEFScheduleMessagePumpWork(
+        GhostexGpuiCEFMessagePumpPlaceholderDelayMs);
   }
 }
 
@@ -767,16 +808,16 @@ static void GhostexGpuiCEFOnScheduleMessagePumpWork(int64_t delayMs) {
    pump opportunities per 60 Hz frame while AppKit/GPUI input and layout keep
    normal run-loop ownership.
   */
-  int64_t clampedDelayMs = delayMs <= 0
-    ? GhostexGpuiCEFMessagePumpImmediateTimerDelayMs
-    : delayMs;
+  int64_t clampedDelayMs =
+      delayMs <= 0 ? GhostexGpuiCEFMessagePumpImmediateTimerDelayMs : delayMs;
   if (clampedDelayMs > GhostexGpuiCEFMessagePumpMaxTimerDelayMs) {
     clampedDelayMs = GhostexGpuiCEFMessagePumpMaxTimerDelayMs;
   }
 
   g_ghostexGpuiCEFMessagePumpWorkPending = YES;
   uint64_t generation = g_ghostexGpuiCEFMessagePumpGeneration;
-  dispatch_time_t when = dispatch_time(DISPATCH_TIME_NOW, clampedDelayMs * NSEC_PER_MSEC);
+  dispatch_time_t when =
+      dispatch_time(DISPATCH_TIME_NOW, clampedDelayMs * NSEC_PER_MSEC);
   dispatch_after(when, dispatch_get_main_queue(), ^{
     if (!g_ghostexGpuiCEFMessagePumpInstalled ||
         !g_ghostexGpuiCEFMessagePumpWorkPending ||
@@ -802,10 +843,18 @@ void GhostexGpuiCEFInstallApplicationHooks(void) {
 
   /*
    CDXC:GPUICefAppProtocol 2026-06-14-15:25:
-   Tauri's CEF runtime makes its NSApplication subclass conform to CefAppProtocol and toggles isHandlingSendEvent during sendEvent:. GPUI must keep GPUIApplication as the concrete app class, so install the same protocol surface and send-event state on GPUIApplication at runtime without changing window layout or input routing.
+   Tauri's CEF runtime makes its NSApplication subclass conform to
+   CefAppProtocol and toggles isHandlingSendEvent during sendEvent:. GPUI must
+   keep GPUIApplication as the concrete app class, so install the same protocol
+   surface and send-event state on GPUIApplication at runtime without changing
+   window layout or input routing.
 
    CDXC:GPUICefAppProtocol 2026-06-14-16:14:
-   Chromium's message_pump_mac.mm traps if CefAppProtocol is missing when NSApplication's run loop is already active. Register the protocol through the NSApplication category above before main, then add the same protocol chain to GPUIApplication for direct conformance checks while leaving the early swizzled sendEvent implementation in place.
+   Chromium's message_pump_mac.mm traps if CefAppProtocol is missing when
+   NSApplication's run loop is already active. Register the protocol through the
+   NSApplication category above before main, then add the same protocol chain to
+   GPUIApplication for direct conformance checks while leaving the early
+   swizzled sendEvent implementation in place.
    */
   class_addProtocol(appClass, @protocol(CrAppProtocol));
   class_addProtocol(appClass, @protocol(CrAppControlProtocol));
@@ -813,15 +862,19 @@ void GhostexGpuiCEFInstallApplicationHooks(void) {
   g_ghostexGpuiCEFApplicationHooksInstalled = YES;
 }
 
-static NSMenuItem* GhostexGpuiCEFStandardEditMenuItem(NSString* title, SEL action, NSString* keyEquivalent) {
-  NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:title action:action keyEquivalent:keyEquivalent];
+static NSMenuItem *GhostexGpuiCEFStandardEditMenuItem(NSString *title,
+                                                      SEL action,
+                                                      NSString *keyEquivalent) {
+  NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title
+                                                action:action
+                                         keyEquivalent:keyEquivalent];
   item.target = nil;
   item.keyEquivalentModifierMask = NSEventModifierFlagCommand;
   return item;
 }
 
-static BOOL GhostexGpuiCEFMenuContainsAction(NSMenu* menu, SEL action) {
-  for (NSMenuItem* item in menu.itemArray) {
+static BOOL GhostexGpuiCEFMenuContainsAction(NSMenu *menu, SEL action) {
+  for (NSMenuItem *item in menu.itemArray) {
     if (item.action == action) {
       return YES;
     }
@@ -830,12 +883,9 @@ static BOOL GhostexGpuiCEFMenuContainsAction(NSMenu* menu, SEL action) {
 }
 
 static void GhostexGpuiCEFSetEditMenuKeyEquivalent(
-  NSMenu* menu,
-  SEL action,
-  NSString* keyEquivalent,
-  NSEventModifierFlags modifierMask,
-  BOOL sourceHotkeyPassthrough) {
-  for (NSMenuItem* item in menu.itemArray) {
+    NSMenu *menu, SEL action, NSString *keyEquivalent,
+    NSEventModifierFlags modifierMask, BOOL sourceHotkeyPassthrough) {
+  for (NSMenuItem *item in menu.itemArray) {
     if (item.action != action) {
       continue;
     }
@@ -849,22 +899,25 @@ static void GhostexGpuiCEFInstallStandardEditMenu(void) {
     return;
   }
 
-  NSMenu* mainMenu = NSApp.mainMenu;
+  NSMenu *mainMenu = NSApp.mainMenu;
   if (!mainMenu) {
     mainMenu = [[NSMenu alloc] initWithTitle:@""];
     NSApp.mainMenu = mainMenu;
   }
 
-  NSMenu* editMenu = nil;
-  for (NSMenuItem* item in mainMenu.itemArray) {
-    if ([item.title isEqualToString:@"Edit"] || [item.submenu.title isEqualToString:@"Edit"]) {
+  NSMenu *editMenu = nil;
+  for (NSMenuItem *item in mainMenu.itemArray) {
+    if ([item.title isEqualToString:@"Edit"] ||
+        [item.submenu.title isEqualToString:@"Edit"]) {
       editMenu = item.submenu;
       break;
     }
   }
 
   if (!editMenu) {
-    NSMenuItem* editItem = [[NSMenuItem alloc] initWithTitle:@"Edit" action:nil keyEquivalent:@""];
+    NSMenuItem *editItem = [[NSMenuItem alloc] initWithTitle:@"Edit"
+                                                      action:nil
+                                               keyEquivalent:@""];
     editMenu = [[NSMenu alloc] initWithTitle:@"Edit"];
     editItem.submenu = editMenu;
     NSInteger insertionIndex = mainMenu.numberOfItems > 0 ? 1 : 0;
@@ -873,14 +926,20 @@ static void GhostexGpuiCEFInstallStandardEditMenu(void) {
 
   /*
    CDXC:GPUICefEditCommands 2026-06-14-16:31:
-   Web-page inputs inside the embedded CEF browser need macOS standard Edit commands, including Cmd+A Select All. Install first-responder menu actions instead of synthesizing web-specific fallbacks so CEF, AppKit text views, and future browser surfaces receive the platform's normal text-command dispatch.
+   Web-page inputs inside the embedded CEF browser need macOS standard Edit
+   commands, including Cmd+A Select All. Install first-responder menu actions
+   instead of synthesizing web-specific fallbacks so CEF, AppKit text views, and
+   future browser surfaces receive the platform's normal text-command dispatch.
    */
   if (!GhostexGpuiCEFMenuContainsAction(editMenu, @selector(undo:))) {
-    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(@"Undo", @selector(undo:), @"z")];
+    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(
+                          @"Undo", @selector(undo:), @"z")];
   }
   if (!GhostexGpuiCEFMenuContainsAction(editMenu, @selector(redo:))) {
-    NSMenuItem* redo = GhostexGpuiCEFStandardEditMenuItem(@"Redo", @selector(redo:), @"Z");
-    redo.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagShift;
+    NSMenuItem *redo =
+        GhostexGpuiCEFStandardEditMenuItem(@"Redo", @selector(redo:), @"Z");
+    redo.keyEquivalentModifierMask =
+        NSEventModifierFlagCommand | NSEventModifierFlagShift;
     [editMenu addItem:redo];
   }
   if (!GhostexGpuiCEFMenuContainsAction(editMenu, @selector(cut:)) ||
@@ -888,16 +947,20 @@ static void GhostexGpuiCEFInstallStandardEditMenu(void) {
     [editMenu addItem:[NSMenuItem separatorItem]];
   }
   if (!GhostexGpuiCEFMenuContainsAction(editMenu, @selector(cut:))) {
-    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(@"Cut", @selector(cut:), @"x")];
+    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(
+                          @"Cut", @selector(cut:), @"x")];
   }
   if (!GhostexGpuiCEFMenuContainsAction(editMenu, @selector(copy:))) {
-    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(@"Copy", @selector(copy:), @"c")];
+    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(
+                          @"Copy", @selector(copy:), @"c")];
   }
   if (!GhostexGpuiCEFMenuContainsAction(editMenu, @selector(paste:))) {
-    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(@"Paste", @selector(paste:), @"v")];
+    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(
+                          @"Paste", @selector(paste:), @"v")];
   }
   if (!GhostexGpuiCEFMenuContainsAction(editMenu, @selector(selectAll:))) {
-    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(@"Select All", @selector(selectAll:), @"a")];
+    [editMenu addItem:GhostexGpuiCEFStandardEditMenuItem(
+                          @"Select All", @selector(selectAll:), @"a")];
   }
 
   /*
@@ -912,52 +975,31 @@ static void GhostexGpuiCEFInstallStandardEditMenu(void) {
    controls.
    */
   BOOL rendererEditHotkeyPassthrough =
-    GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(NSApp.keyWindow);
-  GhostexGpuiCEFSetEditMenuKeyEquivalent(
-    editMenu,
-    @selector(undo:),
-    @"z",
-    NSEventModifierFlagCommand,
-    rendererEditHotkeyPassthrough);
-  GhostexGpuiCEFSetEditMenuKeyEquivalent(
-    editMenu,
-    @selector(redo:),
-    @"Z",
-    NSEventModifierFlagCommand | NSEventModifierFlagShift,
-    rendererEditHotkeyPassthrough);
-  GhostexGpuiCEFSetEditMenuKeyEquivalent(
-    editMenu,
-    @selector(cut:),
-    @"x",
-    NSEventModifierFlagCommand,
-    rendererEditHotkeyPassthrough);
-  GhostexGpuiCEFSetEditMenuKeyEquivalent(
-    editMenu,
-    @selector(copy:),
-    @"c",
-    NSEventModifierFlagCommand,
-    rendererEditHotkeyPassthrough);
-  GhostexGpuiCEFSetEditMenuKeyEquivalent(
-    editMenu,
-    @selector(paste:),
-    @"v",
-    NSEventModifierFlagCommand,
-    rendererEditHotkeyPassthrough);
-  GhostexGpuiCEFSetEditMenuKeyEquivalent(
-    editMenu,
-    @selector(selectAll:),
-    @"a",
-    NSEventModifierFlagCommand,
-    rendererEditHotkeyPassthrough);
+      GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(NSApp.keyWindow);
+  GhostexGpuiCEFSetEditMenuKeyEquivalent(editMenu, @selector(undo:), @"z",
+                                         NSEventModifierFlagCommand,
+                                         rendererEditHotkeyPassthrough);
+  GhostexGpuiCEFSetEditMenuKeyEquivalent(editMenu, @selector(redo:), @"Z",
+                                         NSEventModifierFlagCommand |
+                                             NSEventModifierFlagShift,
+                                         rendererEditHotkeyPassthrough);
+  GhostexGpuiCEFSetEditMenuKeyEquivalent(editMenu, @selector(cut:), @"x",
+                                         NSEventModifierFlagCommand,
+                                         rendererEditHotkeyPassthrough);
+  GhostexGpuiCEFSetEditMenuKeyEquivalent(editMenu, @selector(copy:), @"c",
+                                         NSEventModifierFlagCommand,
+                                         rendererEditHotkeyPassthrough);
+  GhostexGpuiCEFSetEditMenuKeyEquivalent(editMenu, @selector(paste:), @"v",
+                                         NSEventModifierFlagCommand,
+                                         rendererEditHotkeyPassthrough);
+  GhostexGpuiCEFSetEditMenuKeyEquivalent(editMenu, @selector(selectAll:), @"a",
+                                         NSEventModifierFlagCommand,
+                                         rendererEditHotkeyPassthrough);
 }
 
-void GhostexGpuiCEFSetNativeViewFrame(
-  void* nativeView,
-  double x,
-  double y,
-  double width,
-  double height) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiCEFSetNativeViewFrame(void *nativeView, double x, double y,
+                                      double width, double height) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
@@ -974,7 +1016,7 @@ void GhostexGpuiCEFSetNativeViewFrame(
   */
   view.autoresizingMask = NSViewNotSizable;
 
-  NSView* parent = [view superview];
+  NSView *parent = [view superview];
   CGFloat nativeY = y;
   if (parent && ![parent isFlipped]) {
     nativeY = NSHeight(parent.bounds) - y - height;
@@ -984,48 +1026,35 @@ void GhostexGpuiCEFSetNativeViewFrame(
   if (GhostexGpuiCEFResizeDiagnosticsEnabled()) {
     double frameMs = (CFAbsoluteTimeGetCurrent() - startedAt) * 1000.0;
     if (frameMs >= 1.0) {
-      NSLog(
-        @"[gpui-cef-native-frame] frame_ms=%.3f rect=%.0f,%.0f,%.0fx%.0f",
-        frameMs,
-        x,
-        nativeY,
-        width,
-        height);
+      NSLog(@"[gpui-cef-native-frame] frame_ms=%.3f rect=%.0f,%.0f,%.0fx%.0f",
+            frameMs, x, nativeY, width, height);
     }
   }
 }
 
-void GhostexGpuiCEFLogResizeDiagnostic(
-  int browserId,
-  int width,
-  int height,
-  uint64_t frameUs,
-  uint64_t wasResizedUs,
-  uint64_t totalUs) {
+void GhostexGpuiCEFLogResizeDiagnostic(int browserId, int width, int height,
+                                       uint64_t frameUs, uint64_t wasResizedUs,
+                                       uint64_t totalUs) {
   if (!GhostexGpuiCEFResizeDiagnosticsEnabled()) {
     return;
   }
-  NSLog(
-    @"[gpui-cef-resize] browser=%d size=%dx%d frame_us=%llu was_resized_us=%llu total_us=%llu",
-    browserId,
-    width,
-    height,
-    (unsigned long long)frameUs,
-    (unsigned long long)wasResizedUs,
-    (unsigned long long)totalUs);
+  NSLog(@"[gpui-cef-resize] browser=%d size=%dx%d frame_us=%llu "
+        @"was_resized_us=%llu total_us=%llu",
+        browserId, width, height, (unsigned long long)frameUs,
+        (unsigned long long)wasResizedUs, (unsigned long long)totalUs);
 }
 
-void GhostexGpuiCEFSetNativeViewVisible(void* nativeView, bool visible) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiCEFSetNativeViewVisible(void *nativeView, bool visible) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
   view.hidden = visible ? NO : YES;
 }
 
-void GhostexGpuiCEFOrderNativeViewFront(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
-  NSView* parent = view.superview;
+void GhostexGpuiCEFOrderNativeViewFront(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
+  NSView *parent = view.superview;
   if (!view || !parent) {
     return;
   }
@@ -1044,15 +1073,18 @@ void GhostexGpuiCEFOrderNativeViewFront(void* nativeView) {
   [parent addSubview:view positioned:NSWindowAbove relativeTo:nil];
 }
 
-void GhostexGpuiCEFPrepareNativeViewForFocus(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiCEFPrepareNativeViewForFocus(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
 
   /*
    CDXC:GPUICefFocusRouting 2026-06-14-16:45:
-   Browser clicks land on CEF's native child view, not always on GPUI's hitbox tree. Make the exact CEF NSView accept first responder and claim it on mouseDown before forwarding the event, so macOS command-key text actions route to Chromium after the user leaves the GPUI address bar.
+   Browser clicks land on CEF's native child view, not always on GPUI's hitbox
+   tree. Make the exact CEF NSView accept first responder and claim it on
+   mouseDown before forwarding the event, so macOS command-key text actions
+   route to Chromium after the user leaves the GPUI address bar.
   */
   GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(view);
 }
@@ -1068,40 +1100,38 @@ void GhostexGpuiCEFPrepareNativeViewForFocus(void* nativeView) {
  on the exact registered browser root; no hit-testing or event routing is
  changed — clicks still reach Chromium normally.
 */
-void GhostexGpuiCEFSetNativeViewMouseFocusPassive(void* nativeView, bool passive) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiCEFSetNativeViewMouseFocusPassive(void *nativeView,
+                                                  bool passive) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
-  objc_setAssociatedObject(
-    view,
-    GhostexGpuiCEFMouseFocusPassiveKey,
-    passive ? @YES : nil,
-    OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  objc_setAssociatedObject(view, GhostexGpuiCEFMouseFocusPassiveKey,
+                           passive ? @YES : nil,
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-void GhostexGpuiCEFSetNativeViewPassiveFocusGrant(void* nativeView, bool granted) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiCEFSetNativeViewPassiveFocusGrant(void *nativeView,
+                                                  bool granted) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
-  objc_setAssociatedObject(
-    view,
-    GhostexGpuiCEFPassiveFocusGrantKey,
-    granted ? @YES : nil,
-    OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  objc_setAssociatedObject(view, GhostexGpuiCEFPassiveFocusGrantKey,
+                           granted ? @YES : nil,
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-void GhostexGpuiCEFReturnFocusToGpuiRootFromNativeView(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
-  NSWindow* window = view.window;
+void GhostexGpuiCEFReturnFocusToGpuiRootFromNativeView(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
+  NSWindow *window = view.window;
   if (!view || !window) {
     return;
   }
 
-  GhostexGpuiFirstResponderObserver* observer =
-    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
-  NSView* gpuiRootView = observer.gpuiRootView;
+  GhostexGpuiFirstResponderObserver *observer =
+      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+  NSView *gpuiRootView = observer.gpuiRootView;
   if (!gpuiRootView || gpuiRootView.window != window) {
     return;
   }
@@ -1115,52 +1145,51 @@ void GhostexGpuiCEFReturnFocusToGpuiRootFromNativeView(void* nativeView) {
   [window makeFirstResponder:gpuiRootView];
 }
 
-static NSView* GhostexGpuiCEFPassiveFocusRootForView(NSView* view) {
-  for (NSView* candidate = view; candidate; candidate = candidate.superview) {
-    if ([objc_getAssociatedObject(candidate, GhostexGpuiCEFMouseFocusPassiveKey) boolValue]) {
+static NSView *GhostexGpuiCEFPassiveFocusRootForView(NSView *view) {
+  for (NSView *candidate = view; candidate; candidate = candidate.superview) {
+    if ([objc_getAssociatedObject(candidate, GhostexGpuiCEFMouseFocusPassiveKey)
+            boolValue]) {
       return candidate;
     }
   }
   return nil;
 }
 
-static BOOL GhostexGpuiCEFViewDeclinesMouseFocus(NSView* view) {
-  NSView* passiveRoot = GhostexGpuiCEFPassiveFocusRootForView(view);
+static BOOL GhostexGpuiCEFViewDeclinesMouseFocus(NSView *view) {
+  NSView *passiveRoot = GhostexGpuiCEFPassiveFocusRootForView(view);
   if (!passiveRoot) {
     return NO;
   }
-  return ![objc_getAssociatedObject(passiveRoot, GhostexGpuiCEFPassiveFocusGrantKey) boolValue];
+  return ![objc_getAssociatedObject(
+      passiveRoot, GhostexGpuiCEFPassiveFocusGrantKey) boolValue];
 }
 
-void GhostexGpuiInstallFirstResponderObserverForNativeView(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiInstallFirstResponderObserverForNativeView(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view || !view.window) {
     return;
   }
 
   GhostexGpuiInstallRootPointerTrackingArea(view);
 
-  NSWindow* window = view.window;
-  GhostexGpuiFirstResponderObserver* observer =
-    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+  NSWindow *window = view.window;
+  GhostexGpuiFirstResponderObserver *observer =
+      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
   if (observer) {
     observer.gpuiRootView = view;
     GhostexGpuiFirstResponderReportWindow(window);
     return;
   }
 
-  observer = [[GhostexGpuiFirstResponderObserver alloc]
-    initWithWindow:window
-       gpuiRootView:view];
-  objc_setAssociatedObject(
-    window,
-    GhostexGpuiFirstResponderObserverKey,
-    observer,
-    OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  observer = [[GhostexGpuiFirstResponderObserver alloc] initWithWindow:window
+                                                          gpuiRootView:view];
+  objc_setAssociatedObject(window, GhostexGpuiFirstResponderObserverKey,
+                           observer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static void GhostexGpuiInstallRootPointerTrackingArea(NSView* view) {
-  if (!view || objc_getAssociatedObject(view, GhostexGpuiRootPointerTrackingAreaKey)) {
+static void GhostexGpuiInstallRootPointerTrackingArea(NSView *view) {
+  if (!view ||
+      objc_getAssociatedObject(view, GhostexGpuiRootPointerTrackingAreaKey)) {
     return;
   }
 
@@ -1178,29 +1207,25 @@ static void GhostexGpuiInstallRootPointerTrackingArea(NSView* view) {
    the existing view geometry only; it adds no overlay, hit-test override, or
    event rerouting, and CEF keeps first-responder ownership for page input.
   */
-  NSTrackingArea* trackingArea = [[NSTrackingArea alloc]
-    initWithRect:NSZeroRect
-         options:NSTrackingMouseMoved |
-                 NSTrackingActiveInKeyWindow |
-                 NSTrackingInVisibleRect
-           owner:view
-        userInfo:nil];
+  NSTrackingArea *trackingArea = [[NSTrackingArea alloc]
+      initWithRect:NSZeroRect
+           options:NSTrackingMouseMoved | NSTrackingActiveInKeyWindow |
+                   NSTrackingInVisibleRect
+             owner:view
+          userInfo:nil];
   [view addTrackingArea:trackingArea];
-  objc_setAssociatedObject(
-    view,
-    GhostexGpuiRootPointerTrackingAreaKey,
-    trackingArea,
-    OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  objc_setAssociatedObject(view, GhostexGpuiRootPointerTrackingAreaKey,
+                           trackingArea, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static void GhostexGpuiFirstResponderReportWindow(NSWindow* window) {
+static void GhostexGpuiFirstResponderReportWindow(NSWindow *window) {
   if (!window) {
     GhostexGpuiFirstResponderDidChange(NULL, NULL);
     return;
   }
-  GhostexGpuiFirstResponderObserver* observer =
-    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
-  NSView* gpuiRootView = observer.gpuiRootView;
+  GhostexGpuiFirstResponderObserver *observer =
+      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+  NSView *gpuiRootView = observer.gpuiRootView;
   id responder = window.firstResponder;
   /*
    CDXC:GPUIFirstResponderLifetime 2026-07-11:
@@ -1214,24 +1239,25 @@ static void GhostexGpuiFirstResponderReportWindow(NSWindow* window) {
    which is the correct answer for a dying responder.
    */
   GhostexGpuiFirstResponderDidChange(
-    (__bridge void*)gpuiRootView,
-    responder ? (void*)CFBridgingRetain(responder) : NULL);
+      (__bridge void *)gpuiRootView,
+      responder ? (void *)CFBridgingRetain(responder) : NULL);
 }
 
-void GhostexGpuiReleaseRetainedResponder(void* responder) {
+void GhostexGpuiReleaseRetainedResponder(void *responder) {
   if (responder) {
     CFRelease((CFTypeRef)responder);
   }
 }
 
-bool GhostexGpuiNativeViewContainsResponder(void* rootNativeView, void* responder) {
-  NSView* root = (__bridge NSView*)rootNativeView;
+bool GhostexGpuiNativeViewContainsResponder(void *rootNativeView,
+                                            void *responder) {
+  NSView *root = (__bridge NSView *)rootNativeView;
   id candidate = (__bridge id)responder;
   if (!root || ![candidate isKindOfClass:NSView.class]) {
     return false;
   }
 
-  for (NSView* view = (NSView*)candidate; view; view = view.superview) {
+  for (NSView *view = (NSView *)candidate; view; view = view.superview) {
     if (view == root) {
       return true;
     }
@@ -1239,12 +1265,12 @@ bool GhostexGpuiNativeViewContainsResponder(void* rootNativeView, void* responde
   return false;
 }
 
-bool GhostexGpuiCEFNativeViewOwnsFirstResponder(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
+bool GhostexGpuiCEFNativeViewOwnsFirstResponder(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return false;
   }
-  NSWindow* window = view.window;
+  NSWindow *window = view.window;
   if (!window) {
     return false;
   }
@@ -1252,91 +1278,69 @@ bool GhostexGpuiCEFNativeViewOwnsFirstResponder(void* nativeView) {
   if (!responder) {
     return false;
   }
-  return GhostexGpuiNativeViewContainsResponder(nativeView, (__bridge void*)responder);
+  return GhostexGpuiNativeViewContainsResponder(nativeView,
+                                                (__bridge void *)responder);
 }
 
-static void GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(NSView* view) {
+static void GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(NSView *view) {
   if (!view) {
     return;
   }
 
   GhostexGpuiCEFInstallBrowserViewFocusSubclass(view);
-  for (NSView* subview in view.subviews) {
+  for (NSView *subview in view.subviews) {
     GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(subview);
   }
 }
 
-static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView* view) {
+static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView *view) {
   Class originalClass = object_getClass(view);
   if (!originalClass) {
     return;
   }
 
-  const char* originalName = class_getName(originalClass);
+  const char *originalName = class_getName(originalClass);
   if (strncmp(originalName, "GhostexGpuiCEFFocus_", 21) == 0) {
     return;
   }
 
-  NSString* subclassName = [NSString stringWithFormat:@"GhostexGpuiCEFFocus_%s", originalName];
+  NSString *subclassName =
+      [NSString stringWithFormat:@"GhostexGpuiCEFFocus_%s", originalName];
   Class subclass = NSClassFromString(subclassName);
   if (!subclass) {
-    subclass = objc_allocateClassPair(originalClass, subclassName.UTF8String, 0);
+    subclass =
+        objc_allocateClassPair(originalClass, subclassName.UTF8String, 0);
     if (!subclass) {
       return;
     }
 
-    class_addMethod(
-      subclass,
-      @selector(mouseDown:),
-      (IMP)GhostexGpuiCEFBrowserViewMouseDown,
-      "v@:@");
-    class_addMethod(
-      subclass,
-      @selector(acceptsFirstResponder),
-      (IMP)GhostexGpuiCEFBrowserViewAcceptsFirstResponder,
-      "c@:");
-    class_addMethod(
-      subclass,
-      @selector(selectAll:),
-      (IMP)GhostexGpuiCEFBrowserViewSelectAll,
-      "v@:@");
-    class_addMethod(
-      subclass,
-      @selector(cut:),
-      (IMP)GhostexGpuiCEFBrowserViewCut,
-      "v@:@");
-    class_addMethod(
-      subclass,
-      @selector(copy:),
-      (IMP)GhostexGpuiCEFBrowserViewCopy,
-      "v@:@");
-    class_addMethod(
-      subclass,
-      @selector(paste:),
-      (IMP)GhostexGpuiCEFBrowserViewPaste,
-      "v@:@");
-    class_addMethod(
-      subclass,
-      @selector(performKeyEquivalent:),
-      (IMP)GhostexGpuiCEFBrowserViewPerformKeyEquivalent,
-      "c@:@");
-    class_addMethod(
-      subclass,
-      @selector(addSubview:),
-      (IMP)GhostexGpuiCEFBrowserViewAddSubview,
-      "v@:@");
-    class_addMethod(
-      subclass,
-      @selector(viewDidChangeEffectiveAppearance),
-      (IMP)GhostexGpuiCEFBrowserViewDidChangeEffectiveAppearance,
-      "v@:");
+    class_addMethod(subclass, @selector(mouseDown:),
+                    (IMP)GhostexGpuiCEFBrowserViewMouseDown, "v@:@");
+    class_addMethod(subclass, @selector(acceptsFirstResponder),
+                    (IMP)GhostexGpuiCEFBrowserViewAcceptsFirstResponder, "c@:");
+    class_addMethod(subclass, @selector(selectAll:),
+                    (IMP)GhostexGpuiCEFBrowserViewSelectAll, "v@:@");
+    class_addMethod(subclass, @selector(cut:),
+                    (IMP)GhostexGpuiCEFBrowserViewCut, "v@:@");
+    class_addMethod(subclass, @selector(copy:),
+                    (IMP)GhostexGpuiCEFBrowserViewCopy, "v@:@");
+    class_addMethod(subclass, @selector(paste:),
+                    (IMP)GhostexGpuiCEFBrowserViewPaste, "v@:@");
+    class_addMethod(subclass, @selector(performKeyEquivalent:),
+                    (IMP)GhostexGpuiCEFBrowserViewPerformKeyEquivalent, "c@:@");
+    class_addMethod(subclass, @selector(addSubview:),
+                    (IMP)GhostexGpuiCEFBrowserViewAddSubview, "v@:@");
+    class_addMethod(subclass, @selector(viewDidChangeEffectiveAppearance),
+                    (IMP)GhostexGpuiCEFBrowserViewDidChangeEffectiveAppearance,
+                    "v@:");
     objc_registerClassPair(subclass);
   }
 
   object_setClass(view, subclass);
 }
 
-static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd, NSEvent* event) {
+static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd,
+                                               NSEvent *event) {
   /*
    CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
    A mouse-focus-passive surface (the shared sidebar) never claims first
@@ -1345,27 +1349,26 @@ static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd, NSEvent* event
    elements arrives only through the explicit Rust editable-focus grant.
   */
   BOOL declinesMouseFocus =
-    [self isKindOfClass:NSView.class] && GhostexGpuiCEFViewDeclinesMouseFocus((NSView*)self);
-  NSView* browserRoot = declinesMouseFocus ? nil : GhostexGpuiCEFMarkFocusedResponder(self);
-  NSWindow* window = [self window];
+      [self isKindOfClass:NSView.class] &&
+      GhostexGpuiCEFViewDeclinesMouseFocus((NSView *)self);
+  NSView *browserRoot =
+      declinesMouseFocus ? nil : GhostexGpuiCEFMarkFocusedResponder(self);
+  NSWindow *window = [self window];
   if (window && !declinesMouseFocus) {
     [window makeFirstResponder:self];
   }
   if (browserRoot && event) {
-    NSRect frameInWindow = [browserRoot convertRect:browserRoot.bounds toView:nil];
-    NSView* parent = browserRoot.superview;
+    NSRect frameInWindow = [browserRoot convertRect:browserRoot.bounds
+                                             toView:nil];
+    NSView *parent = browserRoot.superview;
     GhostexGpuiCEFLogNativeMouseDown(
-      (__bridge void*)browserRoot,
-      event.locationInWindow.x,
-      event.locationInWindow.y,
-      frameInWindow.origin.x,
-      frameInWindow.origin.y,
-      frameInWindow.size.width,
-      frameInWindow.size.height,
-      parent ? NSWidth(parent.bounds) : 0.0,
-      parent ? NSHeight(parent.bounds) : 0.0,
-      browserRoot.hidden || browserRoot.isHiddenOrHasHiddenAncestor ? 1 : 0,
-      object_getClassName(self));
+        (__bridge void *)browserRoot, event.locationInWindow.x,
+        event.locationInWindow.y, frameInWindow.origin.x,
+        frameInWindow.origin.y, frameInWindow.size.width,
+        frameInWindow.size.height, parent ? NSWidth(parent.bounds) : 0.0,
+        parent ? NSHeight(parent.bounds) : 0.0,
+        browserRoot.hidden || browserRoot.isHiddenOrHasHiddenAncestor ? 1 : 0,
+        object_getClassName(self));
   }
   /*
    CDXC:GPUITitlebarDropdownCefDismissal 2026-07-15:
@@ -1382,10 +1385,11 @@ static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd, NSEvent* event
   }
 
   struct objc_super superInfo = {
-    .receiver = self,
-    .super_class = class_getSuperclass(object_getClass(self)),
+      .receiver = self,
+      .super_class = class_getSuperclass(object_getClass(self)),
   };
-  void (*sendSuper)(struct objc_super*, SEL, NSEvent*) = (void*)objc_msgSendSuper;
+  void (*sendSuper)(struct objc_super *, SEL, NSEvent *) =
+      (void *)objc_msgSendSuper;
   sendSuper(&superInfo, _cmd, event);
 }
 
@@ -1400,7 +1404,7 @@ static BOOL GhostexGpuiCEFBrowserViewAcceptsFirstResponder(id self, SEL _cmd) {
    makeFirstResponder, so granted transfers still succeed.
   */
   if ([self isKindOfClass:NSView.class] &&
-      GhostexGpuiCEFViewDeclinesMouseFocus((NSView*)self)) {
+      GhostexGpuiCEFViewDeclinesMouseFocus((NSView *)self)) {
     return NO;
   }
   return YES;
@@ -1409,10 +1413,18 @@ static BOOL GhostexGpuiCEFBrowserViewAcceptsFirstResponder(id self, SEL _cmd) {
 static void GhostexGpuiCEFBrowserViewSelectAll(id self, SEL _cmd, id sender) {
   /*
    CDXC:GPUICefEditCommands 2026-06-14-17:25:
-   Cmd+A in focused CEF page text fields must stay inside Chromium after the GPUI address bar has previously owned focus. Implement the standard AppKit selectAll: command on the exact CEF NSView and delegate to cef-rs Frame::select_all, so macOS command dispatch uses Chromium selection semantics without a hidden hit-test layer or page-specific fallback.
+   Cmd+A in focused CEF page text fields must stay inside Chromium after the
+   GPUI address bar has previously owned focus. Implement the standard AppKit
+   selectAll: command on the exact CEF NSView and delegate to cef-rs
+   Frame::select_all, so macOS command dispatch uses Chromium selection
+   semantics without a hidden hit-test layer or page-specific fallback.
 
    CDXC:GPUICefEditCommands 2026-06-14-17:25:
-   CEF can deliver page clicks to descendant NSViews below the browser host returned by cef-rs. Install the focus subclass on the CEF view tree and resolve selectAll: by walking ancestor views back to the registered browser root, so command-key focus follows the actual Chromium child that received the click.
+   CEF can deliver page clicks to descendant NSViews below the browser host
+   returned by cef-rs. Install the focus subclass on the CEF view tree and
+   resolve selectAll: by walking ancestor views back to the registered browser
+   root, so command-key focus follows the actual Chromium child that received
+   the click.
    */
   if (GhostexGpuiCEFHandleSelectAllForResponder(self)) {
     return;
@@ -1421,14 +1433,15 @@ static void GhostexGpuiCEFBrowserViewSelectAll(id self, SEL _cmd, id sender) {
   GhostexGpuiCEFBrowserViewForwardEditActionToSuper(self, _cmd, sender);
 }
 
-static void GhostexGpuiCEFBrowserViewForwardEditActionToSuper(id self, SEL _cmd, id sender) {
+static void GhostexGpuiCEFBrowserViewForwardEditActionToSuper(id self, SEL _cmd,
+                                                              id sender) {
   Class superClass = class_getSuperclass(object_getClass(self));
   if (superClass && class_getInstanceMethod(superClass, _cmd)) {
     struct objc_super superInfo = {
-      .receiver = self,
-      .super_class = superClass,
+        .receiver = self,
+        .super_class = superClass,
     };
-    void (*sendSuper)(struct objc_super*, SEL, id) = (void*)objc_msgSendSuper;
+    void (*sendSuper)(struct objc_super *, SEL, id) = (void *)objc_msgSendSuper;
     sendSuper(&superInfo, _cmd, sender);
   }
 }
@@ -1443,28 +1456,33 @@ static void GhostexGpuiCEFBrowserViewForwardEditActionToSuper(id self, SEL _cmd,
  mirror never issues the same clipboard command twice.
  */
 static void GhostexGpuiCEFBrowserViewCut(id self, SEL _cmd, id sender) {
-  if (GhostexGpuiCEFHandleEditCommandForResponder(self, GhostexGpuiCEFEditCommandCut)) {
+  if (GhostexGpuiCEFHandleEditCommandForResponder(
+          self, GhostexGpuiCEFEditCommandCut)) {
     return;
   }
   GhostexGpuiCEFBrowserViewForwardEditActionToSuper(self, _cmd, sender);
 }
 
 static void GhostexGpuiCEFBrowserViewCopy(id self, SEL _cmd, id sender) {
-  if (GhostexGpuiCEFHandleEditCommandForResponder(self, GhostexGpuiCEFEditCommandCopy)) {
+  if (GhostexGpuiCEFHandleEditCommandForResponder(
+          self, GhostexGpuiCEFEditCommandCopy)) {
     return;
   }
   GhostexGpuiCEFBrowserViewForwardEditActionToSuper(self, _cmd, sender);
 }
 
 static void GhostexGpuiCEFBrowserViewPaste(id self, SEL _cmd, id sender) {
-  if (GhostexGpuiCEFHandleEditCommandForResponder(self, GhostexGpuiCEFEditCommandPaste)) {
+  if (GhostexGpuiCEFHandleEditCommandForResponder(
+          self, GhostexGpuiCEFEditCommandPaste)) {
     return;
   }
   GhostexGpuiCEFBrowserViewForwardEditActionToSuper(self, _cmd, sender);
 }
 
-static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd, NSEvent* event) {
-  GhostexGpuiCEFZoomCommand zoomCommand = GhostexGpuiCEFZoomCommandForEvent(event);
+static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd,
+                                                          NSEvent *event) {
+  GhostexGpuiCEFZoomCommand zoomCommand =
+      GhostexGpuiCEFZoomCommandForEvent(event);
   if (zoomCommand != GhostexGpuiCEFZoomCommandNone &&
       GhostexGpuiCEFHandleZoomCommandForResponder(self, zoomCommand)) {
     return YES;
@@ -1478,13 +1496,15 @@ static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd, NSE
   }
 
   struct objc_super superInfo = {
-    .receiver = self,
-    .super_class = class_getSuperclass(object_getClass(self)),
+      .receiver = self,
+      .super_class = class_getSuperclass(object_getClass(self)),
   };
-  BOOL (*sendSuper)(struct objc_super*, SEL, NSEvent*) = (void*)objc_msgSendSuper;
+  BOOL (*sendSuper)(struct objc_super *, SEL, NSEvent *) =
+      (void *)objc_msgSendSuper;
   BOOL handled = sendSuper(&superInfo, _cmd, event);
 
-  GhostexGpuiCEFEditCommand clipboardCommand = GhostexGpuiCEFClipboardEditCommandForEvent(event);
+  GhostexGpuiCEFEditCommand clipboardCommand =
+      GhostexGpuiCEFClipboardEditCommandForEvent(event);
   if (clipboardCommand == GhostexGpuiCEFEditCommandNone) {
     return handled;
   }
@@ -1498,31 +1518,35 @@ static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd, NSE
   return GhostexGpuiCEFHandleEditCommandForResponder(self, clipboardCommand);
 }
 
-static void GhostexGpuiCEFBrowserViewAddSubview(id self, SEL _cmd, NSView* subview) {
+static void GhostexGpuiCEFBrowserViewAddSubview(id self, SEL _cmd,
+                                                NSView *subview) {
   struct objc_super superInfo = {
-    .receiver = self,
-    .super_class = class_getSuperclass(object_getClass(self)),
+      .receiver = self,
+      .super_class = class_getSuperclass(object_getClass(self)),
   };
-  void (*sendSuper)(struct objc_super*, SEL, NSView*) = (void*)objc_msgSendSuper;
+  void (*sendSuper)(struct objc_super *, SEL, NSView *) =
+      (void *)objc_msgSendSuper;
   sendSuper(&superInfo, _cmd, subview);
   GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(subview);
 }
 
-static void GhostexGpuiCEFBrowserViewDidChangeEffectiveAppearance(id self, SEL _cmd) {
+static void GhostexGpuiCEFBrowserViewDidChangeEffectiveAppearance(id self,
+                                                                  SEL _cmd) {
   struct objc_super superInfo = {
-    .receiver = self,
-    .super_class = class_getSuperclass(object_getClass(self)),
+      .receiver = self,
+      .super_class = class_getSuperclass(object_getClass(self)),
   };
-  void (*sendSuper)(struct objc_super*, SEL) = (void*)objc_msgSendSuper;
+  void (*sendSuper)(struct objc_super *, SEL) = (void *)objc_msgSendSuper;
   sendSuper(&superInfo, _cmd);
   if ([self isKindOfClass:NSView.class]) {
-    GhostexGpuiCEFRefreshSystemPageAppearanceForView((NSView*)self);
+    GhostexGpuiCEFRefreshSystemPageAppearanceForView((NSView *)self);
   }
 }
 
-static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView* view) {
-  for (NSView* candidate = view; candidate; candidate = candidate.superview) {
-    if (GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView((__bridge void*)candidate)) {
+static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView *view) {
+  for (NSView *candidate = view; candidate; candidate = candidate.superview) {
+    if (GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView(
+            (__bridge void *)candidate)) {
       return YES;
     }
   }
@@ -1536,8 +1560,9 @@ typedef struct {
   BOOL numericPad;
 } GhostexGpuiNavigationKeyNormalization;
 
-static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event) {
-  if (!event || (event.type != NSEventTypeKeyDown && event.type != NSEventTypeKeyUp)) {
+static NSEvent *GhostexGpuiNormalizedNavigationKeyEvent(NSEvent *event) {
+  if (!event ||
+      (event.type != NSEventTypeKeyDown && event.type != NSEventTypeKeyUp)) {
     return event;
   }
 
@@ -1549,53 +1574,54 @@ static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event) {
   // carries an empty payload: the shape TSM treats as a normal function
   // key (doCommand dispatch) instead of committable text.
   static const GhostexGpuiNavigationKeyNormalization normalizations[] = {
-    {123, NSLeftArrowFunctionKey, YES, YES},
-    {124, NSRightArrowFunctionKey, YES, YES},
-    {125, NSDownArrowFunctionKey, YES, YES},
-    {126, NSUpArrowFunctionKey, YES, YES},
-    {115, NSHomeFunctionKey, YES, NO},
-    {119, NSEndFunctionKey, YES, NO},
-    {116, NSPageUpFunctionKey, YES, NO},
-    {121, NSPageDownFunctionKey, YES, NO},
-    // Backspace/forward-delete carry raw layout payloads of 0x08/0x7F on
-    // CGEvent-synthesized keyboards, which TSM commits as invisible text
-    // instead of deleting. Backspace's canonical NSEvent character is DEL
-    // (0x7F) with no function modifier.
-    {51, 0x7F, NO, NO},
-    {117, NSDeleteFunctionKey, YES, NO},
-    /*
-     CDXC:GPUIFunctionKeyEventNormalization 2026-08-18:
-     F1-F20 carry the same defect in the same place: their raw layout
-     translation is the single control code 0x10, so a CGEvent-synthesized
-     F1 gets committed by TSM as a literal DLE character into whatever text
-     client has focus — Monaco's chat composer showed a control-character box
-     instead of opening its F1 command palette. Their canonical NSEvent
-     characters are the sequential F700-range function-key codes with the
-     function modifier set, which is exactly what a hardware F-key reports.
-     */
-    {122, NSF1FunctionKey, YES, NO},
-    {120, NSF2FunctionKey, YES, NO},
-    {99, NSF3FunctionKey, YES, NO},
-    {118, NSF4FunctionKey, YES, NO},
-    {96, NSF5FunctionKey, YES, NO},
-    {97, NSF6FunctionKey, YES, NO},
-    {98, NSF7FunctionKey, YES, NO},
-    {100, NSF8FunctionKey, YES, NO},
-    {101, NSF9FunctionKey, YES, NO},
-    {109, NSF10FunctionKey, YES, NO},
-    {103, NSF11FunctionKey, YES, NO},
-    {111, NSF12FunctionKey, YES, NO},
-    {105, NSF13FunctionKey, YES, NO},
-    {107, NSF14FunctionKey, YES, NO},
-    {113, NSF15FunctionKey, YES, NO},
-    {106, NSF16FunctionKey, YES, NO},
-    {64, NSF17FunctionKey, YES, NO},
-    {79, NSF18FunctionKey, YES, NO},
-    {80, NSF19FunctionKey, YES, NO},
-    {90, NSF20FunctionKey, YES, NO},
+      {123, NSLeftArrowFunctionKey, YES, YES},
+      {124, NSRightArrowFunctionKey, YES, YES},
+      {125, NSDownArrowFunctionKey, YES, YES},
+      {126, NSUpArrowFunctionKey, YES, YES},
+      {115, NSHomeFunctionKey, YES, NO},
+      {119, NSEndFunctionKey, YES, NO},
+      {116, NSPageUpFunctionKey, YES, NO},
+      {121, NSPageDownFunctionKey, YES, NO},
+      // Backspace/forward-delete carry raw layout payloads of 0x08/0x7F on
+      // CGEvent-synthesized keyboards, which TSM commits as invisible text
+      // instead of deleting. Backspace's canonical NSEvent character is DEL
+      // (0x7F) with no function modifier.
+      {51, 0x7F, NO, NO},
+      {117, NSDeleteFunctionKey, YES, NO},
+      /*
+       CDXC:GPUIFunctionKeyEventNormalization 2026-08-18:
+       F1-F20 carry the same defect in the same place: their raw layout
+       translation is the single control code 0x10, so a CGEvent-synthesized
+       F1 gets committed by TSM as a literal DLE character into whatever text
+       client has focus — Monaco's chat composer showed a control-character box
+       instead of opening its F1 command palette. Their canonical NSEvent
+       characters are the sequential F700-range function-key codes with the
+       function modifier set, which is exactly what a hardware F-key reports.
+       */
+      {122, NSF1FunctionKey, YES, NO},
+      {120, NSF2FunctionKey, YES, NO},
+      {99, NSF3FunctionKey, YES, NO},
+      {118, NSF4FunctionKey, YES, NO},
+      {96, NSF5FunctionKey, YES, NO},
+      {97, NSF6FunctionKey, YES, NO},
+      {98, NSF7FunctionKey, YES, NO},
+      {100, NSF8FunctionKey, YES, NO},
+      {101, NSF9FunctionKey, YES, NO},
+      {109, NSF10FunctionKey, YES, NO},
+      {103, NSF11FunctionKey, YES, NO},
+      {111, NSF12FunctionKey, YES, NO},
+      {105, NSF13FunctionKey, YES, NO},
+      {107, NSF14FunctionKey, YES, NO},
+      {113, NSF15FunctionKey, YES, NO},
+      {106, NSF16FunctionKey, YES, NO},
+      {64, NSF17FunctionKey, YES, NO},
+      {79, NSF18FunctionKey, YES, NO},
+      {80, NSF19FunctionKey, YES, NO},
+      {90, NSF20FunctionKey, YES, NO},
   };
 
-  for (size_t i = 0; i < sizeof(normalizations) / sizeof(normalizations[0]); i++) {
+  for (size_t i = 0; i < sizeof(normalizations) / sizeof(normalizations[0]);
+       i++) {
     GhostexGpuiNavigationKeyNormalization entry = normalizations[i];
     if (event.keyCode != entry.keyCode) {
       continue;
@@ -1609,14 +1635,14 @@ static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event) {
       CGEventKeyboardGetUnicodeString(cgEvent, 8, &payloadLength, payload);
     }
     BOOL payloadClean =
-      payloadLength == 0 ||
-      (payloadLength == 1 && payload[0] == (UniChar)canonicalCharacter);
+        payloadLength == 0 ||
+        (payloadLength == 1 && payload[0] == (UniChar)canonicalCharacter);
     if (payloadClean) {
       return event;
     }
 
-    NSString* canonicalCharacters = [NSString stringWithCharacters:&canonicalCharacter
-                                                             length:1];
+    NSString *canonicalCharacters =
+        [NSString stringWithCharacters:&canonicalCharacter length:1];
     NSEventModifierFlags canonicalFlags = event.modifierFlags;
     if (entry.functionModifier) {
       canonicalFlags |= NSEventModifierFlagFunction;
@@ -1624,7 +1650,7 @@ static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event) {
     if (entry.numericPad) {
       canonicalFlags |= NSEventModifierFlagNumericPad;
     }
-    NSEvent* normalized = [NSEvent keyEventWithType:event.type
+    NSEvent *normalized = [NSEvent keyEventWithType:event.type
                                            location:event.locationInWindow
                                       modifierFlags:canonicalFlags
                                           timestamp:event.timestamp
@@ -1640,12 +1666,13 @@ static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event) {
   return event;
 }
 
-static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent* event) {
+static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent *event) {
   if (!event || event.type != NSEventTypeKeyDown) {
     return NO;
   }
 
-  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   if ((modifiers & NSEventModifierFlagCommand) == 0) {
     return NO;
   }
@@ -1655,15 +1682,17 @@ static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent* event) {
     return NO;
   }
 
-  return [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"a"];
+  return
+      [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"a"];
 }
 
-static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent* event) {
+static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent *event) {
   if (!event || event.type != NSEventTypeKeyDown) {
     return NO;
   }
 
-  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   if ((modifiers & NSEventModifierFlagCommand) == 0) {
     return NO;
   }
@@ -1673,16 +1702,19 @@ static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent* event) {
     return NO;
   }
 
-  return [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"f"];
+  return
+      [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"f"];
 }
 
-static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent* event) {
+static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent *event) {
   if (!event || event.type != NSEventTypeKeyDown) {
     return NO;
   }
 
-  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
-  NSEventModifierFlags requiredModifiers = NSEventModifierFlagCommand | NSEventModifierFlagOption;
+  NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  NSEventModifierFlags requiredModifiers =
+      NSEventModifierFlagCommand | NSEventModifierFlagOption;
   if ((modifiers & requiredModifiers) != requiredModifiers) {
     return NO;
   }
@@ -1692,15 +1724,17 @@ static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent* event) {
     return NO;
   }
 
-  return [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"f"];
+  return
+      [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"f"];
 }
 
-static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent* event) {
+static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent *event) {
   if (!event || event.type != NSEventTypeKeyDown) {
     return NO;
   }
 
-  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   if ((modifiers & NSEventModifierFlagCommand) == 0) {
     return NO;
   }
@@ -1710,15 +1744,18 @@ static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent* event) {
     return NO;
   }
 
-  return [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"y"];
+  return
+      [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"y"];
 }
 
-static GhostexGpuiCEFEditCommand GhostexGpuiCEFClipboardEditCommandForEvent(NSEvent* event) {
+static GhostexGpuiCEFEditCommand
+GhostexGpuiCEFClipboardEditCommandForEvent(NSEvent *event) {
   if (!event || event.type != NSEventTypeKeyDown) {
     return GhostexGpuiCEFEditCommandNone;
   }
 
-  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   if ((modifiers & NSEventModifierFlagCommand) == 0) {
     return GhostexGpuiCEFEditCommandNone;
   }
@@ -1728,7 +1765,7 @@ static GhostexGpuiCEFEditCommand GhostexGpuiCEFClipboardEditCommandForEvent(NSEv
     return GhostexGpuiCEFEditCommandNone;
   }
 
-  NSString* key = event.charactersIgnoringModifiers.lowercaseString;
+  NSString *key = event.charactersIgnoringModifiers.lowercaseString;
   if ([key isEqualToString:@"x"]) {
     return GhostexGpuiCEFEditCommandCut;
   }
@@ -1741,19 +1778,20 @@ static GhostexGpuiCEFEditCommand GhostexGpuiCEFClipboardEditCommandForEvent(NSEv
   return GhostexGpuiCEFEditCommandNone;
 }
 
-static GhostexGpuiCEFZoomCommand GhostexGpuiCEFZoomCommandForEvent(NSEvent* event) {
+static GhostexGpuiCEFZoomCommand
+GhostexGpuiCEFZoomCommandForEvent(NSEvent *event) {
   if (!event || event.type != NSEventTypeKeyDown) {
     return GhostexGpuiCEFZoomCommandNone;
   }
 
   NSEventModifierFlags modifiers =
-    event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
   if ((modifiers & NSEventModifierFlagCommand) == 0) {
     return GhostexGpuiCEFZoomCommandNone;
   }
 
   modifiers &= ~NSEventModifierFlagCommand;
-  NSString* key = event.charactersIgnoringModifiers;
+  NSString *key = event.charactersIgnoringModifiers;
   if ((modifiers == 0 || modifiers == NSEventModifierFlagShift) &&
       ([key isEqualToString:@"="] || [key isEqualToString:@"+"])) {
     return GhostexGpuiCEFZoomCommandIn;
@@ -1775,8 +1813,8 @@ static BOOL GhostexGpuiCEFHandleSelectAllForResponder(id responder) {
     return NO;
   }
 
-  for (NSView* view = (NSView*)responder; view; view = view.superview) {
-    if (GhostexGpuiCEFHandleSelectAllForNativeView((__bridge void*)view)) {
+  for (NSView *view = (NSView *)responder; view; view = view.superview) {
+    if (GhostexGpuiCEFHandleSelectAllForNativeView((__bridge void *)view)) {
       g_ghostexGpuiCEFSelectAllBridged = YES;
       return YES;
     }
@@ -1784,15 +1822,17 @@ static BOOL GhostexGpuiCEFHandleSelectAllForResponder(id responder) {
   return NO;
 }
 
-static BOOL GhostexGpuiCEFHandleEditCommandForResponder(
-  id responder,
-  GhostexGpuiCEFEditCommand command) {
-  if (command == GhostexGpuiCEFEditCommandNone || ![responder isKindOfClass:NSView.class]) {
+static BOOL
+GhostexGpuiCEFHandleEditCommandForResponder(id responder,
+                                            GhostexGpuiCEFEditCommand command) {
+  if (command == GhostexGpuiCEFEditCommandNone ||
+      ![responder isKindOfClass:NSView.class]) {
     return NO;
   }
 
-  for (NSView* view = (NSView*)responder; view; view = view.superview) {
-    if (GhostexGpuiCEFHandleEditCommandForNativeView((__bridge void*)view, (int)command)) {
+  for (NSView *view = (NSView *)responder; view; view = view.superview) {
+    if (GhostexGpuiCEFHandleEditCommandForNativeView((__bridge void *)view,
+                                                     (int)command)) {
       g_ghostexGpuiCEFEditCommandBridged = YES;
       return YES;
     }
@@ -1800,10 +1840,11 @@ static BOOL GhostexGpuiCEFHandleEditCommandForResponder(
   return NO;
 }
 
-static BOOL GhostexGpuiCEFHandleZoomCommandForResponder(
-  id responder,
-  GhostexGpuiCEFZoomCommand command) {
-  if (command == GhostexGpuiCEFZoomCommandNone || ![responder isKindOfClass:NSView.class]) {
+static BOOL
+GhostexGpuiCEFHandleZoomCommandForResponder(id responder,
+                                            GhostexGpuiCEFZoomCommand command) {
+  if (command == GhostexGpuiCEFZoomCommandNone ||
+      ![responder isKindOfClass:NSView.class]) {
     return NO;
   }
 
@@ -1814,41 +1855,46 @@ static BOOL GhostexGpuiCEFHandleZoomCommandForResponder(
    Kanban, Automate, and Docs zoom local to the focused pane without window
    event rerouting, overlays, hit-test changes, or stale active-view fallback.
    */
-  for (NSView* view = (NSView*)responder; view; view = view.superview) {
-    if (GhostexGpuiCEFHandleZoomCommandForNativeView((__bridge void*)view, (int)command)) {
+  for (NSView *view = (NSView *)responder; view; view = view.superview) {
+    if (GhostexGpuiCEFHandleZoomCommandForNativeView((__bridge void *)view,
+                                                     (int)command)) {
       return YES;
     }
   }
   return NO;
 }
 
-static NSView* GhostexGpuiCEFMarkFocusedResponder(id responder) {
+static NSView *GhostexGpuiCEFMarkFocusedResponder(id responder) {
   if (![responder isKindOfClass:NSView.class]) {
     return nil;
   }
 
-  for (NSView* view = (NSView*)responder; view; view = view.superview) {
-    if (GhostexGpuiCEFMarkNativeViewFocused((__bridge void*)view)) {
+  for (NSView *view = (NSView *)responder; view; view = view.superview) {
+    if (GhostexGpuiCEFMarkNativeViewFocused((__bridge void *)view)) {
       return view;
     }
   }
   return nil;
 }
 
-void GhostexGpuiCEFFocusNativeView(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiCEFFocusNativeView(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view) {
     return;
   }
 
-  NSWindow* window = view.window;
+  NSWindow *window = view.window;
   if (!window) {
     return;
   }
 
   /*
    CDXC:GPUICefFocusRouting 2026-06-14-18:05:
-   CEF child views can remain the AppKit first responder after browser interaction. When the GPUI-owned address bar is clicked, return first-responder ownership to the exact GPUI parent view before focusing the GPUI input so typed keys edit the address field instead of continuing into Chromium.
+   CEF child views can remain the AppKit first responder after browser
+   interaction. When the GPUI-owned address bar is clicked, return
+   first-responder ownership to the exact GPUI parent view before focusing the
+   GPUI input so typed keys edit the address field instead of continuing into
+   Chromium.
    */
   if (!GhostexGpuiCEFMarkNativeViewFocused(nativeView)) {
     GhostexGpuiCEFClearActiveNativeView();
@@ -1856,9 +1902,9 @@ void GhostexGpuiCEFFocusNativeView(void* nativeView) {
   [window makeFirstResponder:view];
 }
 
-void GhostexGpuiCEFActivateNativeViewWindow(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
-  NSWindow* window = view.window;
+void GhostexGpuiCEFActivateNativeViewWindow(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
+  NSWindow *window = view.window;
   if (!view || !window) {
     return;
   }
@@ -1877,19 +1923,16 @@ void GhostexGpuiCEFActivateNativeViewWindow(void* nativeView) {
   [window makeKeyAndOrderFront:nil];
   [window makeFirstResponder:view];
   id responder = window.firstResponder;
-  BOOL responderInsideNativeView =
-    [responder isKindOfClass:NSView.class] &&
-    GhostexGpuiNativeViewContainsResponder(
-      nativeView,
-      (__bridge void*)responder);
+  BOOL responderInsideNativeView = [responder isKindOfClass:NSView.class] &&
+                                   GhostexGpuiNativeViewContainsResponder(
+                                       nativeView, (__bridge void *)responder);
   GhostexGpuiCEFLogDevToolsWindowActivation(
-    window.isKeyWindow ? 1 : 0,
-    responderInsideNativeView ? 1 : 0,
-    responder ? object_getClassName(responder) : NULL);
+      window.isKeyWindow ? 1 : 0, responderInsideNativeView ? 1 : 0,
+      responder ? object_getClassName(responder) : NULL);
 }
 
-void GhostexGpuiCEFFocusGpuiRootView(void* nativeView) {
-  NSView* view = (__bridge NSView*)nativeView;
+void GhostexGpuiCEFFocusGpuiRootView(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
   if (!view || !view.window) {
     return;
   }

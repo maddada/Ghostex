@@ -4,9 +4,9 @@
  * simulated persistence the engine owns (`ghostex.onboardingSandbox.*`): these
  * keys are inspector chrome only and must never influence the simulation.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useState } from 'react';
 
-const CONTROLS_STORAGE_PREFIX = "ghostex.onboardingSandbox.controls.";
+const CONTROLS_STORAGE_PREFIX = 'ghostex.onboardingSandbox.controls.';
 
 function readPersisted<T>(key: string, fallback: T): T {
   try {
@@ -29,7 +29,7 @@ export function usePersistedState<T>(key: string, fallback: T): [T, (next: T) =>
         /* private mode / quota — inspector prefs are disposable */
       }
     },
-    [key],
+    [key]
   );
   return [value, persist];
 }

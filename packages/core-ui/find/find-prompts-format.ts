@@ -5,10 +5,7 @@ same ("6m ago", "Today", "3 days ago", "last active Aug 18 23:47 UTC").
 */
 
 const SECONDS_PER_DAY = 86_400;
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-] as const;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
 export function findPromptDayKey(ts: number): number {
   if (!Number.isFinite(ts) || ts <= 0) {
@@ -23,7 +20,7 @@ function utcParts(ts: number) {
     day: date.getUTCDate(),
     hour: date.getUTCHours(),
     minute: date.getUTCMinutes(),
-    month: MONTHS[date.getUTCMonth()] ?? "???",
+    month: MONTHS[date.getUTCMonth()] ?? '???',
     year: date.getUTCFullYear(),
   };
 }
@@ -31,10 +28,10 @@ function utcParts(ts: number) {
 /** Compact last-active label shown under each result. */
 export function formatLastActiveCompact(ts: number, now: number): string {
   if (!Number.isFinite(ts) || ts <= 0) {
-    return "unknown";
+    return 'unknown';
   }
   const delta = Math.max(0, now - ts);
-  if (delta < 60) return "now";
+  if (delta < 60) return 'now';
   if (delta < 3_600) return `${Math.trunc(delta / 60)}m ago`;
   if (delta < SECONDS_PER_DAY) return `${Math.trunc(delta / 3_600)}h ago`;
   if (delta < 7 * SECONDS_PER_DAY) return `${Math.trunc(delta / SECONDS_PER_DAY)}d ago`;
@@ -45,11 +42,11 @@ export function formatLastActiveCompact(ts: number, now: number): string {
 /** Day-group header text when `^d` grouping is on. */
 export function formatDayHeader(dayKey: number, now: number): string {
   if (!Number.isFinite(dayKey)) {
-    return "Unknown day";
+    return 'Unknown day';
   }
   const today = findPromptDayKey(now);
-  if (dayKey === today) return "Today";
-  if (dayKey === today - 1) return "Yesterday";
+  if (dayKey === today) return 'Today';
+  if (dayKey === today - 1) return 'Yesterday';
   if (dayKey > today - 7 && dayKey < today) return `${today - dayKey} days ago`;
   const date = utcParts(dayKey * SECONDS_PER_DAY);
   const nowDate = utcParts(today * SECONDS_PER_DAY);
@@ -62,10 +59,10 @@ export function formatDayHeader(dayKey: number, now: number): string {
 /** The footer's "last active …" line. */
 export function formatLastActiveFull(ts: number): string {
   if (!Number.isFinite(ts) || ts <= 0) {
-    return "last active unknown";
+    return 'last active unknown';
   }
   const { day, hour, minute, month } = utcParts(ts);
-  const pad = (value: number) => String(value).padStart(2, "0");
+  const pad = (value: number) => String(value).padStart(2, '0');
   return `last active ${month} ${day} ${pad(hour)}:${pad(minute)} UTC`;
 }
 
@@ -97,13 +94,13 @@ export function formatPromptMetaLine(meta: {
     parts.push(
       usage.contextWindow > 0
         ? `${usage.ratePercent.toFixed(1)}%/${usage.contextWindow}`
-        : `${usage.ratePercent.toFixed(1)}%`,
+        : `${usage.ratePercent.toFixed(1)}%`
     );
   } else if (usage.contextWindow > 0) {
     parts.push(`/${usage.contextWindow}`);
   }
-  const model = [meta.provider ? `(${meta.provider})` : "", meta.model].filter(Boolean).join(" ");
+  const model = [meta.provider ? `(${meta.provider})` : '', meta.model].filter(Boolean).join(' ');
   if (model) parts.push(model);
   if (meta.thinking) parts.push(`• ${meta.thinking}`);
-  return parts.join(" ");
+  return parts.join(' ');
 }

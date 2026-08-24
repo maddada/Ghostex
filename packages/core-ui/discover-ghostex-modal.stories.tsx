@@ -1,14 +1,14 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import { DiscoverGhostexModal } from "./discover-ghostex-modal";
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { DiscoverGhostexModal } from './discover-ghostex-modal';
 
 const meta = {
-  title: "Sidebar/Highlighted Features Modal",
+  title: 'Sidebar/Highlighted Features Modal',
   parameters: {
-    layout: "fullscreen",
+    layout: 'fullscreen',
   },
   render: () => (
-    <div className="first-launch-setup-story-frame">
-      <DiscoverGhostexModal isOpen onClose={() => undefined} theme="dark-blue" />
+    <div className='first-launch-setup-story-frame'>
+      <DiscoverGhostexModal isOpen onClose={() => undefined} theme='dark-blue' />
     </div>
   ),
 } satisfies Meta;

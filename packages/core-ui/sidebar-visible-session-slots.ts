@@ -2,7 +2,7 @@ import {
   PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   getVisibleProjectSessionIds,
   type ProjectSessionListCollapsedState,
-} from "./project-session-list-toggle";
+} from './project-session-list-toggle';
 
 export type SidebarVisibleSlotGroup = {
   isChatCollection?: boolean;
@@ -52,7 +52,7 @@ export function createVisibleSidebarSessionSlotIds({
         isProjectGroup: Boolean(group.projectContext),
         isToggleEnabled: enableProjectSessionListToggle,
         sessionIds,
-      }),
+      })
     );
   };
 
@@ -67,11 +67,7 @@ export function createVisibleSidebarSessionSlotIds({
   if (!isReferenceProjectsCollapsed) {
     for (const groupId of displayedWorkspaceGroupIds) {
       const group = groupsById[groupId];
-      if (
-        group &&
-        group.isChatCollection !== true &&
-        !group.remoteMachineContext
-      ) {
+      if (group && group.isChatCollection !== true && !group.remoteMachineContext) {
         appendGroup(groupId);
       }
     }
@@ -112,9 +108,7 @@ export function resolveVisibleSidebarSessionSlotId({
   }
 
   const currentIndex = focusedIndex >= 0 ? focusedIndex : 0;
-  return visibleSessionIds[
-    (currentIndex - 1 + visibleSessionIds.length) % visibleSessionIds.length
-  ];
+  return visibleSessionIds[(currentIndex - 1 + visibleSessionIds.length) % visibleSessionIds.length];
 }
 
 export type RenderedSidebarSessionSlotElement = {
@@ -143,12 +137,12 @@ export type RenderedSidebarSessionSlotOptions = {
 
 export function createRenderedSidebarSessionSlots(
   elements: readonly RenderedSidebarSessionSlotElement[],
-  { skipPaneHiddenRows = true }: RenderedSidebarSessionSlotOptions = {},
+  { skipPaneHiddenRows = true }: RenderedSidebarSessionSlotOptions = {}
 ): RenderedSidebarSessionSlot[] {
   const visibleSlots: RenderedSidebarSessionSlot[] = [];
 
   for (const element of elements) {
-    const sessionId = element.getAttribute("data-sidebar-session-id");
+    const sessionId = element.getAttribute('data-sidebar-session-id');
     if (!sessionId) {
       continue;
     }
@@ -157,7 +151,7 @@ export function createRenderedSidebarSessionSlots(
       continue;
     }
 
-    if (skipPaneHiddenRows && element.getAttribute("data-visible") === "false") {
+    if (skipPaneHiddenRows && element.getAttribute('data-visible') === 'false') {
       continue;
     }
 
@@ -166,7 +160,7 @@ export function createRenderedSidebarSessionSlots(
     }
 
     visibleSlots.push({
-      isSleeping: element.getAttribute("data-sleeping") === "true",
+      isSleeping: element.getAttribute('data-sleeping') === 'true',
       sessionId,
     });
   }
@@ -176,7 +170,7 @@ export function createRenderedSidebarSessionSlots(
 
 export function createRenderedSidebarSessionSlotIds(
   elements: readonly RenderedSidebarSessionSlotElement[],
-  options?: RenderedSidebarSessionSlotOptions,
+  options?: RenderedSidebarSessionSlotOptions
 ): string[] {
   return createRenderedSidebarSessionSlots(elements, options).map((slot) => slot.sessionId);
 }
@@ -195,9 +189,7 @@ export function resolveAdjacentRenderedSidebarSessionSlotId({
     return undefined;
   }
 
-  const focusedIndex = focusedSessionId
-    ? slots.findIndex((slot) => slot.sessionId === focusedSessionId)
-    : -1;
+  const focusedIndex = focusedSessionId ? slots.findIndex((slot) => slot.sessionId === focusedSessionId) : -1;
   if (focusedIndex < 0) {
     return direction > 0 ? awakeSlots[0]?.sessionId : awakeSlots.at(-1)?.sessionId;
   }
@@ -272,30 +264,22 @@ export function resolveRenderedSidebarSessionAdditiveSelection({
 
 export function readRenderedSidebarSessionSlotIds(
   root: ParentNode = document,
-  options?: RenderedSidebarSessionSlotOptions,
+  options?: RenderedSidebarSessionSlotOptions
 ): string[] {
   /**
    * CDXC:Hotkeys 2026-06-05-21:17:
    * A user repro showed state-derived Cmd+number slots could include a hidden row, making Cmd+5 select the sixth visible session and Cmd+6 jump much lower in the sidebar. Read the rendered session-card rows at key time so slot numbers match the pixels shown in the sidebar and collapsed projects do not reserve indices.
    */
   return createRenderedSidebarSessionSlotIds(
-    Array.from(
-      root.querySelectorAll<HTMLElement>("[data-sidebar-session-id]"),
-    ),
-    options,
+    Array.from(root.querySelectorAll<HTMLElement>('[data-sidebar-session-id]')),
+    options
   );
 }
 
-export function readRenderedSidebarSessionSlots(
-  root: ParentNode = document,
-): RenderedSidebarSessionSlot[] {
+export function readRenderedSidebarSessionSlots(root: ParentNode = document): RenderedSidebarSessionSlot[] {
   /**
    * CDXC:Hotkeys 2026-06-07-14:05:
    * Cmd+Shift+[ / Cmd+Shift+] and Cmd+Shift+Tab / Cmd+Tab traverse sidebar rows exactly as rendered across expanded groups, but skip rows whose session card is sleeping. Read row state from the DOM so collapsed groups and filtered rows do not participate in navigation.
    */
-  return createRenderedSidebarSessionSlots(
-    Array.from(
-      root.querySelectorAll<HTMLElement>("[data-sidebar-session-id]"),
-    ),
-  );
+  return createRenderedSidebarSessionSlots(Array.from(root.querySelectorAll<HTMLElement>('[data-sidebar-session-id]')));
 }

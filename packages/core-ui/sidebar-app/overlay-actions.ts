@@ -1,12 +1,9 @@
-import type { Dispatch, SetStateAction } from "react";
-import type {
-  ghostexSettings,
-  KeepAwakeDurationMinutes,
-} from "../../shared/ghostex-settings";
-import { openAppModal, openQuickAccess } from "../app-modal-host-bridge";
-import type { WebviewApi } from "../webview-api";
-import { readSidebarKeepAwakeRuntime } from "./collapse-state";
-import type { SidebarKeepAwakeRuntimeState } from "./types";
+import type { Dispatch, SetStateAction } from 'react';
+import type { ghostexSettings, KeepAwakeDurationMinutes } from '../../shared/ghostex-settings';
+import { openAppModal, openQuickAccess } from '../app-modal-host-bridge';
+import type { WebviewApi } from '../webview-api';
+import { readSidebarKeepAwakeRuntime } from './collapse-state';
+import type { SidebarKeepAwakeRuntimeState } from './types';
 
 export type SidebarOverlayActionsOptions = {
   setIsDaemonSessionsOpen: Dispatch<SetStateAction<boolean>>;
@@ -43,7 +40,7 @@ export function useSidebarOverlayActions({
   const openSidebarSettings = () => {
     setIsPinnedPromptsOpen(false);
     if (!settings) {
-      vscode.postMessage({ type: "openSettings" });
+      vscode.postMessage({ type: 'openSettings' });
       return;
     }
     setIsPreviousSessionsOpen(false);
@@ -51,8 +48,8 @@ export function useSidebarOverlayActions({
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openAppModal({ modal: "settings", type: "open" });
+    setSessionSearchQuery('');
+    openAppModal({ modal: 'settings', type: 'open' });
   };
 
   const openHotkeys = () => {
@@ -66,8 +63,8 @@ export function useSidebarOverlayActions({
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openAppModal({ modal: "hotkeys", type: "open" });
+    setSessionSearchQuery('');
+    openAppModal({ modal: 'hotkeys', type: 'open' });
   };
 
   const openCommandPalette = () => {
@@ -83,15 +80,15 @@ export function useSidebarOverlayActions({
      * This launcher opens Commands; Cmd+P routes to the Sessions modal
      * id instead of encoding a mode in this input query.
      *
-   */
+     */
     setIsPinnedPromptsOpen(false);
     setIsPreviousSessionsOpen(false);
     setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openQuickAccess("commands");
+    setSessionSearchQuery('');
+    openQuickAccess('commands');
   };
 
   const openKeepAwakePowerSettings = () => {
@@ -101,11 +98,11 @@ export function useSidebarOverlayActions({
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
+    setSessionSearchQuery('');
     openAppModal({
-      initialSearchQuery: "Keep awake",
-      modal: "settings",
-      type: "open",
+      initialSearchQuery: 'Keep awake',
+      modal: 'settings',
+      type: 'open',
     });
   };
 
@@ -116,9 +113,9 @@ export function useSidebarOverlayActions({
      */
     setSidebarKeepAwakeRuntime({ durationMinutes });
     vscode.postMessage({
-      action: "start",
+      action: 'start',
       durationMinutes,
-      type: "runTitlebarKeepAwakeCommand",
+      type: 'runTitlebarKeepAwakeCommand',
     });
     window.setTimeout(() => {
       setSidebarKeepAwakeRuntime(readSidebarKeepAwakeRuntime() ?? { durationMinutes });
@@ -128,8 +125,8 @@ export function useSidebarOverlayActions({
   const stopSidebarKeepAwake = () => {
     setSidebarKeepAwakeRuntime(undefined);
     vscode.postMessage({
-      action: "stop",
-      type: "runTitlebarKeepAwakeCommand",
+      action: 'stop',
+      type: 'runTitlebarKeepAwakeCommand',
     });
     window.setTimeout(() => {
       setSidebarKeepAwakeRuntime(readSidebarKeepAwakeRuntime());
@@ -139,7 +136,7 @@ export function useSidebarOverlayActions({
   const closeSessionSearch = () => {
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
+    setSessionSearchQuery('');
   };
 
   return {

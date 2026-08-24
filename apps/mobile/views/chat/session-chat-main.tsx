@@ -1,6 +1,6 @@
-import { useSyncExternalStore } from "react";
-import { createRoot } from "react-dom/client";
-import "./session-chat.css";
+import { useSyncExternalStore } from 'react';
+import { createRoot } from 'react-dom/client';
+import './session-chat.css';
 import {
   normalizeSessionChatTheme,
   resolveSessionChatTranscriptAgent,
@@ -17,14 +17,14 @@ import {
   type GxserverSessionChatSnapshotEvent,
   type SessionChatQueuedPrompt,
   type SessionChatTheme,
-} from "@/packages/shared/session-chat";
-import { GXSERVER_PROTOCOL_VERSION } from "@/packages/shared/gxserver-protocol";
+} from '@/packages/shared/session-chat';
+import { GXSERVER_PROTOCOL_VERSION } from '@/packages/shared/gxserver-protocol';
 import {
   SessionChatView,
   type SessionChatHostComposerBridge,
   type SessionChatHostSearchBridge,
-} from "@/packages/core-ui/chat/session-chat-view";
-import type { SessionChatTransport } from "@/packages/core-ui/chat/session-chat-transport";
+} from '@/packages/core-ui/chat/session-chat-view';
+import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 
 /*
 CDXC:SessionChatMobileWebview 2026-07-31:
@@ -103,23 +103,23 @@ interface MobileChatHostState {
 }
 
 type BridgeOp =
-  | "read"
-  | "readSkills"
-  | "readFiles"
-  | "send"
-  | "sendKey"
-  | "switchToTerminalForAgentPicker"
-  | "answerPrompt"
-  | "interrupt"
-  | "saveImage"
-  | "saveAttachment"
-  | "loadImage"
-  | "queuePrompt"
-  | "updateQueuedPrompt"
-  | "removeQueuedPrompt"
-  | "reorderQueue"
-  | "sendQueuedPrompt"
-  | "setDraft";
+  | 'read'
+  | 'readSkills'
+  | 'readFiles'
+  | 'send'
+  | 'sendKey'
+  | 'switchToTerminalForAgentPicker'
+  | 'answerPrompt'
+  | 'interrupt'
+  | 'saveImage'
+  | 'saveAttachment'
+  | 'loadImage'
+  | 'queuePrompt'
+  | 'updateQueuedPrompt'
+  | 'removeQueuedPrompt'
+  | 'reorderQueue'
+  | 'sendQueuedPrompt'
+  | 'setDraft';
 
 const CONFIG_RETRY_DELAY_MS = 100;
 const CONFIG_MAX_ATTEMPTS = 100;
@@ -173,10 +173,10 @@ module scope, before React mounts, with a pending box: a transfer that lands
 before the composer registers is held rather than dropped.
 */
 let insertDraftIntoComposer: ((content: string) => boolean) | null = null;
-let pendingComposerDraft = "";
+let pendingComposerDraft = '';
 
 window.ghostexMobileChatInsertDraft = (content) => {
-  if (typeof content !== "string" || content.length === 0) {
+  if (typeof content !== 'string' || content.length === 0) {
     return;
   }
   if (insertDraftIntoComposer?.(content) === true) {
@@ -195,7 +195,7 @@ const mobileComposerBridge: SessionChatHostComposerBridge = {
   register(actions) {
     insertDraftIntoComposer = actions.insertPrompt;
     if (pendingComposerDraft.length > 0 && actions.insertPrompt(pendingComposerDraft)) {
-      pendingComposerDraft = "";
+      pendingComposerDraft = '';
     }
     return () => {
       if (insertDraftIntoComposer === actions.insertPrompt) {
@@ -239,8 +239,8 @@ const mobileSearchBridge: SessionChatHostSearchBridge = {
 
 window.ghostexMobileChatSetHostState = (state) => {
   const next: MobileChatHostState = {
-    canSend: typeof state?.canSend === "boolean" ? state.canSend : hostState.canSend,
-    working: typeof state?.working === "boolean" ? state.working : hostState.working,
+    canSend: typeof state?.canSend === 'boolean' ? state.canSend : hostState.canSend,
+    working: typeof state?.working === 'boolean' ? state.working : hostState.working,
   };
   if (next.canSend === hostState.canSend && next.working === hostState.working) {
     return;
@@ -253,18 +253,13 @@ window.ghostexMobileChatSetHostState = (state) => {
 
 function clampTranscriptWidthPercent(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_TRANSCRIPT_WIDTH_PERCENT;
-  const clamped = Math.min(
-    MAX_TRANSCRIPT_WIDTH_PERCENT,
-    Math.max(MIN_TRANSCRIPT_WIDTH_PERCENT, value),
-  );
-  return (
-    Math.round(clamped / TRANSCRIPT_WIDTH_PERCENT_STEP) * TRANSCRIPT_WIDTH_PERCENT_STEP
-  );
+  const clamped = Math.min(MAX_TRANSCRIPT_WIDTH_PERCENT, Math.max(MIN_TRANSCRIPT_WIDTH_PERCENT, value));
+  return Math.round(clamped / TRANSCRIPT_WIDTH_PERCENT_STEP) * TRANSCRIPT_WIDTH_PERCENT_STEP;
 }
 
 let presentationState: MobileChatPresentation = {
-  fontFamily: "",
-  theme: "dark",
+  fontFamily: '',
+  theme: 'dark',
   transcriptWidthPercent: DEFAULT_TRANSCRIPT_WIDTH_PERCENT,
   verboseMode: false,
 };
@@ -282,45 +277,33 @@ function readPresentation(): MobileChatPresentation {
 }
 
 function applyDocumentPresentation(presentation: MobileChatPresentation): void {
-  const background = presentation.theme === "light" ? "#fdfdfd" : "#0a0a0a";
+  const background = presentation.theme === 'light' ? '#fdfdfd' : '#0a0a0a';
   document.documentElement.style.colorScheme = presentation.theme;
   document.documentElement.style.backgroundColor = background;
   // CDXC:SessionChatTypeScale 2026-08-22: unset, not a written-out fallback —
   // the shared sheet owns the default face (see chat-main.tsx).
   if (presentation.fontFamily) {
-    document.documentElement.style.setProperty(
-      "--ghostex-session-chat-font-family",
-      presentation.fontFamily,
-    );
+    document.documentElement.style.setProperty('--ghostex-session-chat-font-family', presentation.fontFamily);
   } else {
-    document.documentElement.style.removeProperty("--ghostex-session-chat-font-family");
+    document.documentElement.style.removeProperty('--ghostex-session-chat-font-family');
   }
   document.documentElement.style.setProperty(
-    "--ghostex-session-chat-transcript-width-percent",
-    String(presentation.transcriptWidthPercent),
+    '--ghostex-session-chat-transcript-width-percent',
+    String(presentation.transcriptWidthPercent)
   );
   document.body.style.backgroundColor = background;
-  window.dispatchEvent(new Event("ghostex-session-chat-font-family-changed"));
+  window.dispatchEvent(new Event('ghostex-session-chat-font-family-changed'));
 }
 
 window.ghostexMobileChatSetPresentation = (state) => {
   const next: MobileChatPresentation = {
-    fontFamily:
-      typeof state?.fontFamily === "string"
-        ? state.fontFamily.trim()
-        : presentationState.fontFamily,
-    theme:
-      state?.theme === "dark" || state?.theme === "light"
-        ? state.theme
-        : presentationState.theme,
+    fontFamily: typeof state?.fontFamily === 'string' ? state.fontFamily.trim() : presentationState.fontFamily,
+    theme: state?.theme === 'dark' || state?.theme === 'light' ? state.theme : presentationState.theme,
     transcriptWidthPercent:
-      typeof state?.transcriptWidthPercent === "number"
+      typeof state?.transcriptWidthPercent === 'number'
         ? clampTranscriptWidthPercent(state.transcriptWidthPercent)
         : presentationState.transcriptWidthPercent,
-    verboseMode:
-      typeof state?.verboseMode === "boolean"
-        ? state.verboseMode
-        : presentationState.verboseMode,
+    verboseMode: typeof state?.verboseMode === 'boolean' ? state.verboseMode : presentationState.verboseMode,
   };
   if (
     next.fontFamily === presentationState.fontFamily &&
@@ -353,7 +336,7 @@ window.ghostexMobileChatDeliver = (response) => {
   if (response.ok) {
     entry.resolve(response.result);
   } else {
-    entry.reject(new Error(response.error || "The Ghostex bridge call failed."));
+    entry.reject(new Error(response.error || 'The Ghostex bridge call failed.'));
   }
 };
 
@@ -361,14 +344,14 @@ function bridgeCall<TResult>(op: BridgeOp, params?: Record<string, unknown>): Pr
   return new Promise<TResult>((resolve, reject) => {
     const host = window.ReactNativeWebView;
     if (!host) {
-      reject(new Error("This chat page is not hosted by the Ghostex app."));
+      reject(new Error('This chat page is not hosted by the Ghostex app.'));
       return;
     }
     const id = nextCallId;
     nextCallId += 1;
     const timer = window.setTimeout(() => {
       pendingCalls.delete(id);
-      reject(new Error("The Ghostex bridge call timed out."));
+      reject(new Error('The Ghostex bridge call timed out.'));
     }, BRIDGE_CALL_TIMEOUT_MS);
     pendingCalls.set(id, {
       reject,
@@ -404,63 +387,51 @@ function reportQueueCount(queue: readonly SessionChatQueuedPrompt[] | undefined)
   if (queue === undefined) {
     return;
   }
-  const count = queue.filter((prompt) => prompt.state !== "failed").length;
+  const count = queue.filter((prompt) => prompt.state !== 'failed').length;
   if (count === reportedQueueCount) {
     return;
   }
   reportedQueueCount = count;
-  window.ReactNativeWebView?.postMessage(JSON.stringify({ count, notice: "queueCount" }));
+  window.ReactNativeWebView?.postMessage(JSON.stringify({ count, notice: 'queueCount' }));
 }
 
 /** Pass-through that reports whatever queue an answer happened to carry. */
-function withQueueReport<TResult extends { queue?: readonly SessionChatQueuedPrompt[] }>(
-  result: TResult,
-): TResult {
+function withQueueReport<TResult extends { queue?: readonly SessionChatQueuedPrompt[] }>(result: TResult): TResult {
   reportQueueCount(result.queue);
   return result;
 }
 
-function snapshotEventFromRead(
-  result: GxserverReadSessionChatResult,
-): GxserverSessionChatSnapshotEvent {
+function snapshotEventFromRead(result: GxserverReadSessionChatResult): GxserverSessionChatSnapshotEvent {
   return {
     beforeOffset: result.beforeOffset,
     epoch: result.epoch,
     hasMore: result.hasMore,
     // The RN host scopes the whole bridge to one session, so identity fields
     // are placeholders the (already pre-filtered) transport never checks.
-    projectId: "",
-    sessionId: "",
+    projectId: '',
+    sessionId: '',
     protocolVersion: GXSERVER_PROTOCOL_VERSION,
     seq: result.seq,
-    serverId: "",
-    type: "sessionChatSnapshot",
+    serverId: '',
+    type: 'sessionChatSnapshot',
     messages: result.messages,
     ...(result.lifecycle !== undefined ? { lifecycle: result.lifecycle } : {}),
     ...(result.prompt !== undefined ? { prompt: result.prompt } : {}),
-    ...(result.agentSessionId !== undefined
-      ? { agentSessionId: result.agentSessionId }
-      : {}),
+    ...(result.agentSessionId !== undefined ? { agentSessionId: result.agentSessionId } : {}),
     // Detected model/effort: this host's only live channel is the synthesized
     // snapshot, so dropping it here would hide the pills' real values.
-    ...(result.selectedOptions !== undefined
-      ? { selectedOptions: result.selectedOptions }
-      : {}),
+    ...(result.selectedOptions !== undefined ? { selectedOptions: result.selectedOptions } : {}),
     // CDXC:SessionChatTerminalNotices 2026-08-19: terminal-screen state the
     // transcript can never show. Omitted means cleared, and this synthesized
     // snapshot is the host's only frame, so the omission has to survive too.
-    ...(result.terminalNotice !== undefined
-      ? { terminalNotice: result.terminalNotice }
-      : {}),
+    ...(result.terminalNotice !== undefined ? { terminalNotice: result.terminalNotice } : {}),
     /*
     CDXC:SessionChatTerminalActivity 2026-08-22: the transcript's progress row,
     same carriage rule. The phone's long poll re-reads whenever the bar moves
     (the fingerprint hashes its numbers), so this is what makes a compaction
     tick on a device with no event socket at all.
     */
-    ...(result.terminalActivity !== undefined
-      ? { terminalActivity: result.terminalActivity }
-      : {}),
+    ...(result.terminalActivity !== undefined ? { terminalActivity: result.terminalActivity } : {}),
     /*
     CDXC:SessionChatAgentFleet 2026-08-23: sub-agents, same carriage
     rule again. The read's fingerprint hashes the roster, so the phone's long
@@ -490,22 +461,22 @@ function snapshotEventFromRead(
 function createMobileSessionChatTransport(): SessionChatTransport {
   return {
     async answerPrompt(params) {
-      await bridgeCall("answerPrompt", params as unknown as Record<string, unknown>);
+      await bridgeCall('answerPrompt', params as unknown as Record<string, unknown>);
     },
     async interrupt() {
-      await bridgeCall("interrupt");
+      await bridgeCall('interrupt');
     },
     read(params) {
-      return bridgeCall<GxserverReadSessionChatResult>("read", {
+      return bridgeCall<GxserverReadSessionChatResult>('read', {
         ...(params.limit !== undefined ? { limit: params.limit } : {}),
         ...(params.beforeOffset !== undefined ? { beforeOffset: params.beforeOffset } : {}),
       }).then(withQueueReport);
     },
     readSkills() {
-      return bridgeCall<GxserverReadSessionChatSkillsResult>("readSkills");
+      return bridgeCall<GxserverReadSessionChatSkillsResult>('readSkills');
     },
     readFiles() {
-      return bridgeCall<GxserverReadSessionChatFilesResult>("readFiles");
+      return bridgeCall<GxserverReadSessionChatFilesResult>('readFiles');
     },
     /*
     Composer image paste. gxserver's saveSessionChatImage endpoint has no CLI
@@ -516,7 +487,7 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     goes into the message as `[Image #N](path)`.
     */
     saveImage(params) {
-      return bridgeCall<GxserverSaveSessionChatImageResult>("saveImage", {
+      return bridgeCall<GxserverSaveSessionChatImageResult>('saveImage', {
         base64Data: params.base64Data,
         ...(params.suggestedName !== undefined ? { suggestedName: params.suggestedName } : {}),
       });
@@ -524,7 +495,7 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     // Non-image attachments ride the same SFTP staging route into
     // ~/.ghostex/f; the returned machine path becomes "[File #N](path)".
     saveAttachment(params) {
-      return bridgeCall<GxserverSaveSessionChatAttachmentResult>("saveAttachment", {
+      return bridgeCall<GxserverSaveSessionChatAttachmentResult>('saveAttachment', {
         base64Data: params.base64Data,
         ...(params.suggestedName !== undefined ? { suggestedName: params.suggestedName } : {}),
       });
@@ -532,18 +503,18 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     // Machine-path image bytes for the chat-log overlay viewer (RN reads the
     // file over the machine's SSH channel).
     loadImage(params) {
-      return bridgeCall<GxserverReadSessionChatImageResult>("loadImage", {
+      return bridgeCall<GxserverReadSessionChatImageResult>('loadImage', {
         path: params.path,
       });
     },
     async send(text, imagePaths) {
-      await bridgeCall("send", {
+      await bridgeCall('send', {
         text,
         ...(imagePaths && imagePaths.length > 0 ? { imagePaths } : {}),
       });
     },
     async sendKey(key) {
-      await bridgeCall("sendKey", { key });
+      await bridgeCall('sendKey', { key });
     },
     /*
     Ghostex's prompt queue and the cross-client composer draft (plan 016).
@@ -555,29 +526,29 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     the strip no matter what this transport implements.
     */
     queuePrompt(params) {
-      return bridgeCall<GxserverQueueSessionChatPromptResult>("queuePrompt", {
+      return bridgeCall<GxserverQueueSessionChatPromptResult>('queuePrompt', {
         text: params.text,
       }).then(withQueueReport);
     },
     updateQueuedPrompt(params) {
-      return bridgeCall<GxserverSessionChatQueueResult>("updateQueuedPrompt", {
+      return bridgeCall<GxserverSessionChatQueueResult>('updateQueuedPrompt', {
         promptId: params.promptId,
         ...(params.text !== undefined ? { text: params.text } : {}),
         ...(params.retry !== undefined ? { retry: params.retry } : {}),
       }).then(withQueueReport);
     },
     removeQueuedPrompt(params) {
-      return bridgeCall<GxserverSessionChatRemoveQueuedPromptResult>("removeQueuedPrompt", {
+      return bridgeCall<GxserverSessionChatRemoveQueuedPromptResult>('removeQueuedPrompt', {
         promptId: params.promptId,
       }).then(withQueueReport);
     },
     reorderQueue(params) {
-      return bridgeCall<GxserverSessionChatQueueResult>("reorderQueue", {
+      return bridgeCall<GxserverSessionChatQueueResult>('reorderQueue', {
         promptIds: params.promptIds,
       }).then(withQueueReport);
     },
     sendQueuedPrompt(params) {
-      return bridgeCall<GxserverSendSessionChatQueuedPromptResult>("sendQueuedPrompt", {
+      return bridgeCall<GxserverSendSessionChatQueuedPromptResult>('sendQueuedPrompt', {
         promptId: params.promptId,
       }).then(withQueueReport);
     },
@@ -585,7 +556,7 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     // untouched is what keeps this device's own echo from reading as another
     // device and popping the conflict bar against itself.
     async setDraft(params) {
-      await bridgeCall("setDraft", {
+      await bridgeCall('setDraft', {
         clientId: params.clientId,
         content: params.content,
       });
@@ -602,11 +573,9 @@ function createMobileSessionChatTransport(): SessionChatTransport {
           // live conversation is never answered with fewer rows than shown.
           const limit = currentLimit?.();
           try {
-            result = await bridgeCall<GxserverReadSessionChatResult>("read", {
-              ...(typeof limit === "number" && limit > 0 ? { limit } : {}),
-              ...(fingerprint !== undefined
-                ? { fingerprint, waitMs: LONG_POLL_WAIT_MS }
-                : {}),
+            result = await bridgeCall<GxserverReadSessionChatResult>('read', {
+              ...(typeof limit === 'number' && limit > 0 ? { limit } : {}),
+              ...(fingerprint !== undefined ? { fingerprint, waitMs: LONG_POLL_WAIT_MS } : {}),
             });
           } catch {
             if (!stopped) {
@@ -643,7 +612,7 @@ function waitForConfig(): Promise<MobileChatConfig> {
   return new Promise((resolve) => {
     const poll = (attempt: number): void => {
       const config = window.__ghostexMobileChatConfig;
-      if (config && typeof config === "object") {
+      if (config && typeof config === 'object') {
         resolve(config);
         return;
       }
@@ -657,12 +626,12 @@ function waitForConfig(): Promise<MobileChatConfig> {
   });
 }
 
-const rootElement = document.getElementById("root");
+const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Ghostex session chat root element was not found.");
+  throw new Error('Ghostex session chat root element was not found.');
 }
-document.body.dataset.sidebarTheme = "plain-dark";
-document.body.classList.add("vscode-dark", "native-sidebar-body");
+document.body.dataset.sidebarTheme = 'plain-dark';
+document.body.classList.add('vscode-dark', 'native-sidebar-body');
 /*
 The document has to carry the page's starting presentation before any host
 push arrives: the setter below short-circuits when nothing changed, so a host
@@ -695,13 +664,10 @@ function trackVisualViewportHeight(): void {
   }
   const apply = (): void => {
     const height = Math.round(viewport.height + viewport.offsetTop);
-    document.documentElement.style.setProperty(
-      "--ghostex-mobile-chat-viewport-height",
-      `${height}px`,
-    );
+    document.documentElement.style.setProperty('--ghostex-mobile-chat-viewport-height', `${height}px`);
   };
-  viewport.addEventListener("resize", apply);
-  viewport.addEventListener("scroll", apply);
+  viewport.addEventListener('resize', apply);
+  viewport.addEventListener('scroll', apply);
   apply();
 }
 trackVisualViewportHeight();
@@ -715,32 +681,24 @@ function MobileSessionChat({
   sessionKey: string | undefined;
   transport: SessionChatTransport;
 }) {
-  const { canSend, working } = useSyncExternalStore(
-    subscribeHostState,
-    readHostState,
-    readHostState,
-  );
-  const { theme, verboseMode } = useSyncExternalStore(
-    subscribePresentation,
-    readPresentation,
-    readPresentation,
-  );
+  const { canSend, working } = useSyncExternalStore(subscribeHostState, readHostState, readHostState);
+  const { theme, verboseMode } = useSyncExternalStore(subscribePresentation, readPresentation, readPresentation);
   return (
-    <div className="native-sidebar-shell gpui-session-chat">
+    <div className='native-sidebar-shell gpui-session-chat'>
       <SessionChatView
         agentLabel={agentLabel}
         canSend={canSend}
-        className="gpui-session-chat-view"
+        className='gpui-session-chat-view'
         hostComposerBridge={mobileComposerBridge}
         hostSearchBridge={mobileSearchBridge}
         onSwitchToTerminalForAgentPicker={() => {
-          void bridgeCall("switchToTerminalForAgentPicker");
+          void bridgeCall('switchToTerminalForAgentPicker');
         }}
         sendOnEnter={false}
         sessionKey={sessionKey}
         showComposerAgentName={false}
         showNewSessionWelcomeTitle={false}
-        searchLayout="overlay"
+        searchLayout='overlay'
         showVerbosePill={false}
         theme={theme}
         transport={transport}
@@ -753,8 +711,8 @@ function MobileSessionChat({
 
 const root = createRoot(rootElement);
 void waitForConfig().then((config) => {
-  const agentId = config.agentId?.trim() ?? "";
-  const agentLabel = agentId ? resolveSessionChatTranscriptAgent(agentId) ?? agentId : null;
+  const agentId = config.agentId?.trim() ?? '';
+  const agentLabel = agentId ? (resolveSessionChatTranscriptAgent(agentId) ?? agentId) : null;
   const sessionKey = config.sessionKey?.trim() || undefined;
   window.ghostexMobileChatSetPresentation?.({
     fontFamily: config.fontFamily,
@@ -763,10 +721,6 @@ void waitForConfig().then((config) => {
     verboseMode: config.verboseMode,
   });
   root.render(
-    <MobileSessionChat
-      agentLabel={agentLabel}
-      sessionKey={sessionKey}
-      transport={createMobileSessionChatTransport()}
-    />,
+    <MobileSessionChat agentLabel={agentLabel} sessionKey={sessionKey} transport={createMobileSessionChatTransport()} />
   );
 });

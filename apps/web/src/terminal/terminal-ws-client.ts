@@ -8,16 +8,16 @@ import {
   type GxserverTerminalWsReadyMessage,
   type GxserverTerminalWsServerControlMessage,
   type GxserverZmxSessionName,
-} from "@/packages/shared/gxserver-protocol";
+} from '@/packages/shared/gxserver-protocol';
 
-const TERMINAL_PROTOCOL_VERSION = "1";
+const TERMINAL_PROTOCOL_VERSION = '1';
 const RESIZE_COALESCE_MS = 50;
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
 const TERMINAL_ERROR_CODES = new Set<GxserverTerminalWsErrorCode>([
-  "unauthorized",
-  "protocolMismatch",
-  "notFound",
-  "providerNotRunning",
+  'unauthorized',
+  'protocolMismatch',
+  'notFound',
+  'providerNotRunning',
 ]);
 
 interface TerminalSize {
@@ -39,7 +39,7 @@ export interface TerminalWsClientOptions extends TerminalSize {
   onReconnect?(): void;
 }
 
-function requireTerminalDimension(value: number, name: "cols" | "rows"): number {
+function requireTerminalDimension(value: number, name: 'cols' | 'rows'): number {
   if (!Number.isInteger(value) || value < 1) {
     throw new RangeError(`Terminal ${name} must be a positive integer.`);
   }
@@ -48,24 +48,24 @@ function requireTerminalDimension(value: number, name: "cols" | "rows"): number 
 
 function createTerminalUrl(options: TerminalWsClientOptions, size: TerminalSize): string {
   const url = new URL(GXSERVER_TERMINAL_WS_ENDPOINT, options.baseUrl);
-  if (url.protocol === "http:") {
-    url.protocol = "ws:";
-  } else if (url.protocol === "https:") {
-    url.protocol = "wss:";
-  } else if (url.protocol !== "ws:" && url.protocol !== "wss:") {
-    throw new TypeError("Terminal baseUrl must use http, https, ws, or wss.");
+  if (url.protocol === 'http:') {
+    url.protocol = 'ws:';
+  } else if (url.protocol === 'https:') {
+    url.protocol = 'wss:';
+  } else if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+    throw new TypeError('Terminal baseUrl must use http, https, ws, or wss.');
   }
-  url.searchParams.set("authToken", options.authToken);
-  url.searchParams.set("protocolVersion", TERMINAL_PROTOCOL_VERSION);
-  url.searchParams.set("projectId", options.projectId);
-  url.searchParams.set("sessionId", options.sessionId);
-  url.searchParams.set("cols", String(size.cols));
-  url.searchParams.set("rows", String(size.rows));
+  url.searchParams.set('authToken', options.authToken);
+  url.searchParams.set('protocolVersion', TERMINAL_PROTOCOL_VERSION);
+  url.searchParams.set('projectId', options.projectId);
+  url.searchParams.set('sessionId', options.sessionId);
+  url.searchParams.set('cols', String(size.cols));
+  url.searchParams.set('rows', String(size.rows));
   return url.toString();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
 function parseServerControlMessage(value: string): GxserverTerminalWsServerControlMessage {
@@ -73,14 +73,14 @@ function parseServerControlMessage(value: string): GxserverTerminalWsServerContr
   try {
     parsed = JSON.parse(value);
   } catch {
-    throw new Error("Terminal WebSocket sent malformed JSON control data.");
+    throw new Error('Terminal WebSocket sent malformed JSON control data.');
   }
-  if (!isRecord(parsed) || typeof parsed.type !== "string") {
-    throw new Error("Terminal WebSocket sent an invalid control message.");
+  if (!isRecord(parsed) || typeof parsed.type !== 'string') {
+    throw new Error('Terminal WebSocket sent an invalid control message.');
   }
   if (
-    parsed.type === "ready" &&
-    typeof parsed.zmxName === "string" &&
+    parsed.type === 'ready' &&
+    typeof parsed.zmxName === 'string' &&
     Number.isInteger(parsed.cols) &&
     Number(parsed.cols) > 0 &&
     Number.isInteger(parsed.rows) &&
@@ -89,29 +89,26 @@ function parseServerControlMessage(value: string): GxserverTerminalWsServerContr
     return {
       cols: Number(parsed.cols),
       rows: Number(parsed.rows),
-      type: "ready",
+      type: 'ready',
       zmxName: parsed.zmxName as GxserverZmxSessionName,
     };
   }
-  if (
-    parsed.type === "exit" &&
-    (parsed.code === null || Number.isInteger(parsed.code))
-  ) {
+  if (parsed.type === 'exit' && (parsed.code === null || Number.isInteger(parsed.code))) {
     return {
       code: parsed.code === null ? null : Number(parsed.code),
-      type: "exit",
+      type: 'exit',
     };
   }
   if (
-    parsed.type === "error" &&
-    typeof parsed.code === "string" &&
+    parsed.type === 'error' &&
+    typeof parsed.code === 'string' &&
     TERMINAL_ERROR_CODES.has(parsed.code as GxserverTerminalWsErrorCode) &&
-    typeof parsed.message === "string"
+    typeof parsed.message === 'string'
   ) {
     return {
       code: parsed.code as GxserverTerminalWsErrorCode,
       message: parsed.message,
-      type: "error",
+      type: 'error',
     };
   }
   throw new Error(`Terminal WebSocket sent an invalid ${parsed.type} control message.`);
@@ -131,8 +128,8 @@ export class TerminalWsClient {
 
   constructor(private readonly options: TerminalWsClientOptions) {
     this.currentSize = {
-      cols: requireTerminalDimension(options.cols, "cols"),
-      rows: requireTerminalDimension(options.rows, "rows"),
+      cols: requireTerminalDimension(options.cols, 'cols'),
+      rows: requireTerminalDimension(options.rows, 'rows'),
     };
     this.openSocket();
   }
@@ -142,15 +139,15 @@ export class TerminalWsClient {
     if (!socket || socket.readyState !== WebSocket.OPEN || !this.ready) {
       return false;
     }
-    const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
+    const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : input;
     socket.send(bytes);
     return true;
   }
 
   resize(cols: number, rows: number): void {
     const nextSize = {
-      cols: requireTerminalDimension(cols, "cols"),
-      rows: requireTerminalDimension(rows, "rows"),
+      cols: requireTerminalDimension(cols, 'cols'),
+      rows: requireTerminalDimension(rows, 'rows'),
     };
     if (nextSize.cols === this.currentSize.cols && nextSize.rows === this.currentSize.rows) {
       return;
@@ -180,7 +177,7 @@ export class TerminalWsClient {
     const socket = this.socket;
     this.socket = null;
     if (socket && socket.readyState < WebSocket.CLOSING) {
-      socket.close(1000, "terminal detached");
+      socket.close(1000, 'terminal detached');
     }
   }
 
@@ -193,12 +190,10 @@ export class TerminalWsClient {
       socket = new WebSocket(createTerminalUrl(this.options, this.currentSize));
     } catch (error) {
       this.wantsConnection = false;
-      this.options.onError?.(
-        error instanceof Error ? error : new Error("Unable to open terminal WebSocket."),
-      );
+      this.options.onError?.(error instanceof Error ? error : new Error('Unable to open terminal WebSocket.'));
       return;
     }
-    socket.binaryType = "arraybuffer";
+    socket.binaryType = 'arraybuffer';
     this.socket = socket;
     this.ready = false;
     this.terminalOutcomeReceived = false;
@@ -208,7 +203,7 @@ export class TerminalWsClient {
       if (this.socket !== socket) {
         return;
       }
-      if (typeof event.data === "string") {
+      if (typeof event.data === 'string') {
         this.handleControlMessage(socket, event.data);
         return;
       }
@@ -216,11 +211,11 @@ export class TerminalWsClient {
         this.options.onOutput?.(new Uint8Array(event.data));
         return;
       }
-      this.failProtocol(socket, new Error("Terminal WebSocket sent a non-binary output frame."));
+      this.failProtocol(socket, new Error('Terminal WebSocket sent a non-binary output frame.'));
     };
     socket.onerror = () => {
       if (this.socket === socket && this.wantsConnection) {
-        this.options.onError?.(new Error("Terminal WebSocket transport failed."));
+        this.options.onError?.(new Error('Terminal WebSocket transport failed.'));
       }
     };
     socket.onclose = (event) => {
@@ -241,13 +236,10 @@ export class TerminalWsClient {
     try {
       message = parseServerControlMessage(rawMessage);
     } catch (error) {
-      this.failProtocol(
-        socket,
-        error instanceof Error ? error : new Error("Terminal WebSocket protocol failed."),
-      );
+      this.failProtocol(socket, error instanceof Error ? error : new Error('Terminal WebSocket protocol failed.'));
       return;
     }
-    if (message.type === "ready") {
+    if (message.type === 'ready') {
       this.ready = true;
       this.reconnectAttempt = 0;
       this.options.onReady?.(message);
@@ -256,13 +248,13 @@ export class TerminalWsClient {
     }
     this.terminalOutcomeReceived = true;
     this.ready = false;
-    if (message.type === "exit") {
+    if (message.type === 'exit') {
       this.options.onExit?.(message);
     } else {
       this.options.onError?.(message);
     }
     if (socket.readyState < WebSocket.CLOSING) {
-      socket.close(1000, "terminal complete");
+      socket.close(1000, 'terminal complete');
     }
   }
 
@@ -271,7 +263,7 @@ export class TerminalWsClient {
     this.ready = false;
     this.options.onError?.(error);
     if (socket.readyState < WebSocket.CLOSING) {
-      socket.close(1002, "invalid terminal protocol");
+      socket.close(1002, 'invalid terminal protocol');
     }
   }
 
@@ -281,14 +273,11 @@ export class TerminalWsClient {
     if (!pendingSize || !socket || socket.readyState !== WebSocket.OPEN || !this.ready) {
       return;
     }
-    if (
-      this.lastSentSize?.cols === pendingSize.cols &&
-      this.lastSentSize.rows === pendingSize.rows
-    ) {
+    if (this.lastSentSize?.cols === pendingSize.cols && this.lastSentSize.rows === pendingSize.rows) {
       this.pendingSize = null;
       return;
     }
-    socket.send(JSON.stringify({ ...pendingSize, type: "resize" }));
+    socket.send(JSON.stringify({ ...pendingSize, type: 'resize' }));
     this.lastSentSize = pendingSize;
     this.pendingSize = null;
   }
@@ -297,8 +286,7 @@ export class TerminalWsClient {
     if (this.reconnectTimer) {
       return;
     }
-    const delay =
-      RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+    const delay = RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -310,4 +298,3 @@ export class TerminalWsClient {
     }, delay);
   }
 }
-

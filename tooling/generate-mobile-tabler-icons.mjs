@@ -14,32 +14,32 @@ Tabler dependency:
   bun run generate:mobile-tabler-icons
 */
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const tablerRoot = path.join(repoRoot, "node_modules", "@tabler", "icons", "icons");
-const outFile = path.join(repoRoot, "apps", "mobile", "app", "src", "assets", "tablerIcons.generated.tsx");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const tablerRoot = path.join(repoRoot, 'node_modules', '@tabler', 'icons', 'icons');
+const outFile = path.join(repoRoot, 'apps', 'mobile', 'app', 'src', 'assets', 'tablerIcons.generated.tsx');
 
 /**
  * Session tag glyphs, mirroring SIDEBAR_SESSION_TAG_ICONS in
  * packages/core-ui/session-tag-ui.tsx. Every tag icon is an outline variant there.
  */
 const TAG_ICONS = {
-  blocked: "barrier-block",
-  bug: "bug",
-  design: "palette",
-  done: "circle-check",
-  favorite: "star",
-  feature: "puzzle",
-  "high-priority": "alert-triangle",
-  "in-progress": "player-play",
-  "low-priority": "arrow-down",
-  "on-hold": "player-pause",
-  research: "microscope",
-  testing: "test-pipe",
-  todo: "checkbox",
+  blocked: 'barrier-block',
+  bug: 'bug',
+  design: 'palette',
+  done: 'circle-check',
+  favorite: 'star',
+  feature: 'puzzle',
+  'high-priority': 'alert-triangle',
+  'in-progress': 'player-play',
+  'low-priority': 'arrow-down',
+  'on-hold': 'player-pause',
+  research: 'microscope',
+  testing: 'test-pipe',
+  todo: 'checkbox',
 };
 
 /**
@@ -48,78 +48,76 @@ const TAG_ICONS = {
  * from Tabler's filled set rather than the outline set.
  */
 const COMMAND_ICONS = {
-  api: "api",
-  archive: "filled:archive",
-  bell: "filled:bell",
-  bolt: "filled:bolt",
-  book: "filled:book",
-  brain: "brain",
-  braces: "braces",
-  brandDocker: "brand-docker",
-  brandGithub: "filled:brand-github",
-  brandPython: "brand-python",
-  brandReact: "brand-react",
-  brandVscode: "brand-vscode",
-  bug: "filled:bug",
-  chartBar: "chart-bar",
-  checklist: "checklist",
-  clock: "filled:clock",
-  cloud: "filled:cloud",
-  code: "code",
-  command: "command",
-  cpu: "cpu",
-  database: "filled:database",
-  deviceDesktop: "filled:device-desktop",
-  deviceLaptop: "device-laptop",
-  download: "filled:download",
-  fileCode: "filled:file-code",
-  fileDiff: "filled:file-diff",
-  fileSearch: "file-search",
-  fileText: "filled:file-text",
-  flask: "filled:flask",
-  folder: "filled:folder",
-  folderOpen: "filled:folder-open",
-  gitBranch: "git-branch",
-  gitCommit: "git-commit",
-  gitMerge: "git-merge",
-  gitPullRequest: "git-pull-request",
-  key: "filled:key",
-  layoutDashboard: "filled:layout-dashboard",
-  link: "link",
-  lock: "filled:lock",
-  messageCircle: "filled:message-circle",
-  package: "package",
-  pencilCode: "pencil-code",
-  playerPlay: "filled:player-play",
-  refresh: "refresh",
-  robot: "robot",
-  route: "route",
-  rocket: "rocket",
-  search: "filled:search",
-  server: "server",
-  settings: "filled:settings",
-  shieldSearch: "shield-search",
-  sparkles: "filled:sparkles",
-  stack: "filled:stack",
-  terminal: "terminal-2",
-  testPipe: "test-pipe",
-  tool: "tool",
-  upload: "upload",
-  wand: "wand",
-  world: "world",
+  api: 'api',
+  archive: 'filled:archive',
+  bell: 'filled:bell',
+  bolt: 'filled:bolt',
+  book: 'filled:book',
+  brain: 'brain',
+  braces: 'braces',
+  brandDocker: 'brand-docker',
+  brandGithub: 'filled:brand-github',
+  brandPython: 'brand-python',
+  brandReact: 'brand-react',
+  brandVscode: 'brand-vscode',
+  bug: 'filled:bug',
+  chartBar: 'chart-bar',
+  checklist: 'checklist',
+  clock: 'filled:clock',
+  cloud: 'filled:cloud',
+  code: 'code',
+  command: 'command',
+  cpu: 'cpu',
+  database: 'filled:database',
+  deviceDesktop: 'filled:device-desktop',
+  deviceLaptop: 'device-laptop',
+  download: 'filled:download',
+  fileCode: 'filled:file-code',
+  fileDiff: 'filled:file-diff',
+  fileSearch: 'file-search',
+  fileText: 'filled:file-text',
+  flask: 'filled:flask',
+  folder: 'filled:folder',
+  folderOpen: 'filled:folder-open',
+  gitBranch: 'git-branch',
+  gitCommit: 'git-commit',
+  gitMerge: 'git-merge',
+  gitPullRequest: 'git-pull-request',
+  key: 'filled:key',
+  layoutDashboard: 'filled:layout-dashboard',
+  link: 'link',
+  lock: 'filled:lock',
+  messageCircle: 'filled:message-circle',
+  package: 'package',
+  pencilCode: 'pencil-code',
+  playerPlay: 'filled:player-play',
+  refresh: 'refresh',
+  robot: 'robot',
+  route: 'route',
+  rocket: 'rocket',
+  search: 'filled:search',
+  server: 'server',
+  settings: 'filled:settings',
+  shieldSearch: 'shield-search',
+  sparkles: 'filled:sparkles',
+  stack: 'filled:stack',
+  terminal: 'terminal-2',
+  testPipe: 'test-pipe',
+  tool: 'tool',
+  upload: 'upload',
+  wand: 'wand',
+  world: 'world',
 };
 
 /** Fallbacks the project-icon chain lands on when a project ships no icon. */
 const FALLBACK_ICONS = {
-  folder: "folder",
-  folderOpen: "folder-open",
-  worktree: "git-branch",
+  folder: 'folder',
+  folderOpen: 'folder-open',
+  worktree: 'git-branch',
 };
 
 function componentName(prefix, id) {
-  const cleaned = id.replace(/[^a-zA-Z0-9]+(.)?/g, (_, next) =>
-    next ? next.toUpperCase() : "",
-  );
+  const cleaned = id.replace(/[^a-zA-Z0-9]+(.)?/g, (_, next) => (next ? next.toUpperCase() : ''));
   return `${prefix}${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`;
 }
 
@@ -130,10 +128,10 @@ function componentName(prefix, id) {
  * are the only shapes in the pack, so the converter handles exactly those.
  */
 function convert(spec) {
-  const filled = spec.startsWith("filled:");
-  const name = filled ? spec.slice("filled:".length) : spec;
-  const file = path.join(tablerRoot, filled ? "filled" : "outline", `${name}.svg`);
-  const source = fs.readFileSync(file, "utf8");
+  const filled = spec.startsWith('filled:');
+  const name = filled ? spec.slice('filled:'.length) : spec;
+  const file = path.join(tablerRoot, filled ? 'filled' : 'outline', `${name}.svg`);
+  const source = fs.readFileSync(file, 'utf8');
   const paths = [...source.matchAll(/<path\s([^>]*?)\/>/g)]
     .map((match) => match[1])
     .filter((attributes) => !/stroke="none"[^>]*fill="none"/.test(attributes))
@@ -154,15 +152,13 @@ function renderComponent(prefix, id, spec) {
     .map((d) =>
       filled
         ? `      <Path d=${JSON.stringify(d)} fill={color} />`
-        : `      <Path d=${JSON.stringify(d)} stroke={color} />`,
+        : `      <Path d=${JSON.stringify(d)} stroke={color} />`
     )
-    .join("\n");
+    .join('\n');
   const svgProps = filled
     ? `width={size} height={size} viewBox="0 0 24 24" fill={color}`
     : `width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"`;
-  const signature = filled
-    ? "{ size, color }: TablerIconProps"
-    : "{ size, color, strokeWidth = 1.9 }: TablerIconProps";
+  const signature = filled ? '{ size, color }: TablerIconProps' : '{ size, color, strokeWidth = 1.9 }: TablerIconProps';
   return `function ${componentName(prefix, id)}(${signature}) {
   return (
     <Svg ${svgProps}>
@@ -176,18 +172,18 @@ ${body}
 const parts = [];
 const tagEntries = [];
 for (const [id, spec] of Object.entries(TAG_ICONS)) {
-  parts.push(renderComponent("Tag", id, spec));
-  tagEntries.push(`  ${JSON.stringify(id)}: ${componentName("Tag", id)},`);
+  parts.push(renderComponent('Tag', id, spec));
+  tagEntries.push(`  ${JSON.stringify(id)}: ${componentName('Tag', id)},`);
 }
 const commandEntries = [];
 for (const [id, spec] of Object.entries(COMMAND_ICONS)) {
-  parts.push(renderComponent("Cmd", id, spec));
-  commandEntries.push(`  ${JSON.stringify(id)}: ${componentName("Cmd", id)},`);
+  parts.push(renderComponent('Cmd', id, spec));
+  commandEntries.push(`  ${JSON.stringify(id)}: ${componentName('Cmd', id)},`);
 }
 const fallbackEntries = [];
 for (const [id, spec] of Object.entries(FALLBACK_ICONS)) {
-  parts.push(renderComponent("Fallback", id, spec));
-  fallbackEntries.push(`  ${JSON.stringify(id)}: ${componentName("Fallback", id)},`);
+  parts.push(renderComponent('Fallback', id, spec));
+  fallbackEntries.push(`  ${JSON.stringify(id)}: ${componentName('Fallback', id)},`);
 }
 
 const output = `// GENERATED by tooling/generate-mobile-tabler-icons.mjs in the Ghostex main
@@ -200,25 +196,25 @@ import Svg, { Path } from 'react-native-svg';
 export type TablerIconProps = { size: number; color: string; strokeWidth?: number };
 export type TablerIconComponent = (props: TablerIconProps) => React.JSX.Element;
 
-${parts.join("\n")}
+${parts.join('\n')}
 /** Session tag glyphs, keyed by the persisted tag value. */
 export const TAG_ICONS: Record<string, TablerIconComponent> = {
-${tagEntries.join("\n")}
+${tagEntries.join('\n')}
 };
 
 /** Project identity glyphs, keyed by SIDEBAR_COMMAND_ICON_IDS. */
 export const COMMAND_ICONS: Record<string, TablerIconComponent> = {
-${commandEntries.join("\n")}
+${commandEntries.join('\n')}
 };
 
 /** Project-icon fallbacks when a project ships no icon of its own. */
 export const PROJECT_FALLBACK_ICONS: Record<string, TablerIconComponent> = {
-${fallbackEntries.join("\n")}
+${fallbackEntries.join('\n')}
 };
 `;
 
 fs.mkdirSync(path.dirname(outFile), { recursive: true });
 fs.writeFileSync(outFile, output);
 console.log(
-  `Wrote ${path.relative(repoRoot, outFile)} (${Object.keys(TAG_ICONS).length} tag, ${Object.keys(COMMAND_ICONS).length} command, ${Object.keys(FALLBACK_ICONS).length} fallback icons).`,
+  `Wrote ${path.relative(repoRoot, outFile)} (${Object.keys(TAG_ICONS).length} tag, ${Object.keys(COMMAND_ICONS).length} command, ${Object.keys(FALLBACK_ICONS).length} fallback icons).`
 );

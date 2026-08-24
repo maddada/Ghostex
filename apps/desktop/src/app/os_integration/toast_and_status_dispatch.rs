@@ -225,8 +225,11 @@ impl GhostexGpuiApp {
         );
     }
 
-    pub(crate) fn run_gpui_app_modal_sidebar_status_task<F>(&mut self, task: F, cx: &mut gpui::Context<Self>)
-    where
+    pub(crate) fn run_gpui_app_modal_sidebar_status_task<F>(
+        &mut self,
+        task: F,
+        cx: &mut gpui::Context<Self>,
+    ) where
         F: FnOnce() -> serde_json::Value + Send + 'static,
     {
         let background = cx.background_executor().clone();
@@ -362,5 +365,4 @@ impl GhostexGpuiApp {
         })
         .detach();
     }
-
 }

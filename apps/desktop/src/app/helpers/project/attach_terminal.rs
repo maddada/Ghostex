@@ -411,7 +411,9 @@ pub(crate) fn gpui_local_workspace_attach_string<'a>(
         .filter(|value| !value.is_empty() && !value.contains('\0'))
 }
 
-pub(crate) fn gpui_workspace_attach_title(attach: &serde_json::Map<String, serde_json::Value>) -> String {
+pub(crate) fn gpui_workspace_attach_title(
+    attach: &serde_json::Map<String, serde_json::Value>,
+) -> String {
     attach
         .get("session")
         .and_then(|session| session.get("title"))
@@ -717,4 +719,3 @@ pub(crate) fn attach_gpui_surfaced_local_workspace_terminal(
     local_app_shot_session_mappings.insert(key.session_id.clone(), shell_session_id);
     Ok(shell_session_id)
 }
-

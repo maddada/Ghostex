@@ -1,26 +1,18 @@
-import { useEffect, useRef, type CSSProperties } from "react";
-import { cn } from "@/packages/components/utils";
-import type { PetId } from "../shared/pets";
-import booSpritesheetUrl from "./assets/pets/boo-spritesheet-codexpethub-8a8161fb.webp";
-import bsodSpritesheetUrl from "./assets/pets/bsod-spritesheet-v4-BRrRVy1T.webp";
-import codexSpritesheetUrl from "./assets/pets/codex-spritesheet-v4-Bl6P89d_.webp";
-import deweySpritesheetUrl from "./assets/pets/dewey-spritesheet-v4-gAYk_M9g.webp";
-import fireballSpritesheetUrl from "./assets/pets/fireball-spritesheet-v4-BtU8R9Qp.webp";
-import nullSignalSpritesheetUrl from "./assets/pets/null-signal-spritesheet-v4-CCoTR-8t.webp";
-import rockySpritesheetUrl from "./assets/pets/rocky-spritesheet-v4-3RlTi26B.webp";
-import seedySpritesheetUrl from "./assets/pets/seedy-spritesheet-v4-CdlE_fn9.webp";
-import stackySpritesheetUrl from "./assets/pets/stacky-spritesheet-v4-CaUJd4fY.webp";
+import { useEffect, useRef, type CSSProperties } from 'react';
+import { cn } from '@/packages/components/utils';
+import type { PetId } from '../shared/pets';
+import booSpritesheetUrl from './assets/pets/boo-spritesheet-codexpethub-8a8161fb.webp';
+import bsodSpritesheetUrl from './assets/pets/bsod-spritesheet-v4-BRrRVy1T.webp';
+import codexSpritesheetUrl from './assets/pets/codex-spritesheet-v4-Bl6P89d_.webp';
+import deweySpritesheetUrl from './assets/pets/dewey-spritesheet-v4-gAYk_M9g.webp';
+import fireballSpritesheetUrl from './assets/pets/fireball-spritesheet-v4-BtU8R9Qp.webp';
+import nullSignalSpritesheetUrl from './assets/pets/null-signal-spritesheet-v4-CCoTR-8t.webp';
+import rockySpritesheetUrl from './assets/pets/rocky-spritesheet-v4-3RlTi26B.webp';
+import seedySpritesheetUrl from './assets/pets/seedy-spritesheet-v4-CdlE_fn9.webp';
+import stackySpritesheetUrl from './assets/pets/stacky-spritesheet-v4-CaUJd4fY.webp';
 
 export type PetAnimationState =
-  | "failed"
-  | "idle"
-  | "jumping"
-  | "review"
-  | "running"
-  | "running-left"
-  | "running-right"
-  | "waving"
-  | "waiting";
+  'failed' | 'idle' | 'jumping' | 'review' | 'running' | 'running-left' | 'running-right' | 'waving' | 'waiting';
 
 type PetAnimationFrame = {
   columnIndex: number;
@@ -38,7 +30,7 @@ const PET_SPRITESHEETS: Record<PetId, string> = {
   codex: codexSpritesheetUrl,
   dewey: deweySpritesheetUrl,
   fireball: fireballSpritesheetUrl,
-  "null-signal": nullSignalSpritesheetUrl,
+  'null-signal': nullSignalSpritesheetUrl,
   rocky: rockySpritesheetUrl,
   seedy: seedySpritesheetUrl,
   stacky: stackySpritesheetUrl,
@@ -64,8 +56,8 @@ const ANIMATION_FRAMES: Record<PetAnimationState, PetAnimationFrame[]> = {
   jumping: createRowFrames(4, 5, 140, 280),
   review: createRowFrames(8, 6, 150, 280),
   running: createRowFrames(7, 6, 120, 220),
-  "running-left": createRowFrames(2, 8, 120, 220),
-  "running-right": createRowFrames(1, 8, 120, 220),
+  'running-left': createRowFrames(2, 8, 120, 220),
+  'running-right': createRowFrames(1, 8, 120, 220),
   waving: createRowFrames(3, 4, 140, 280),
   waiting: createRowFrames(6, 6, 150, 260),
 };
@@ -74,7 +66,7 @@ export function PetAvatar({
   className,
   petId,
   reducedMotion = false,
-  state = "idle",
+  state = 'idle',
 }: {
   className?: string;
   petId: PetId;
@@ -86,12 +78,12 @@ export function PetAvatar({
 
   return (
     <div
-      aria-hidden="true"
-      className={cn("pet-avatar-root", className)}
+      aria-hidden='true'
+      className={cn('pet-avatar-root', className)}
       data-pet-id={petId}
       data-pet-state={state}
       ref={avatarRef}
-      style={{ "--pet-spritesheet-url": `url(${PET_SPRITESHEETS[petId]})` } as CSSProperties}
+      style={{ '--pet-spritesheet-url': `url(${PET_SPRITESHEETS[petId]})` } as CSSProperties}
     />
   );
 }
@@ -151,7 +143,7 @@ function resolveAnimation(state: PetAnimationState, reducedMotion: boolean) {
   if (reducedMotion) {
     return { frames: [frames[0]!], loopStartIndex: undefined };
   }
-  if (state === "idle") {
+  if (state === 'idle') {
     return { frames: LONG_IDLE_FRAMES, loopStartIndex: 0 };
   }
 
@@ -163,7 +155,7 @@ function createRowFrames(
   rowIndex: number,
   length: number,
   frameDurationMs: number,
-  finalFrameDurationMs: number,
+  finalFrameDurationMs: number
 ): PetAnimationFrame[] {
   return Array.from({ length }, (_, columnIndex) => ({
     columnIndex,

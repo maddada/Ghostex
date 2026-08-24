@@ -284,4 +284,3 @@ pub(crate) fn project_board_base64_encode(bytes: &[u8]) -> String {
     }
     output
 }
-

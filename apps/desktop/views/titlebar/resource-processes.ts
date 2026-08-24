@@ -1,12 +1,12 @@
-import type { SidebarPortlessState } from "@/packages/shared/session-grid-contract-sidebar";
-import type { NativePortlessAdminInstallAction } from "@/packages/shared/native-ghostty-host-protocol";
+import type { SidebarPortlessState } from '@/packages/shared/session-grid-contract-sidebar';
+import type { NativePortlessAdminInstallAction } from '@/packages/shared/native-ghostty-host-protocol';
 import {
   createCombinedProjectSessionId,
   parseCombinedProjectGroupId,
   parseCombinedProjectSessionId,
-} from "../combined-sidebar-mode";
-import { codeServerResourcePort } from "./constants";
-import { runNativeProcess } from "./native-bridge";
+} from '../combined-sidebar-mode';
+import { codeServerResourcePort } from './constants';
+import { runNativeProcess } from './native-bridge';
 import type {
   ResourceGroupView,
   ResourceItemCollapseTarget,
@@ -18,11 +18,11 @@ import type {
   TitlebarBrowserTabResource,
   TitlebarResourceGroup,
   TitlebarResourceSession,
-} from "./types";
+} from './types';
 
 export function parseResourceProcessTable(stdout: string): ResourceProcess[] {
   return stdout
-    .split("\n")
+    .split('\n')
     .map((line) => {
       const match = /^\s*(\d+)\s+(\d+)\s+([0-9.]+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
       if (!match) {
@@ -36,7 +36,7 @@ export function parseResourceProcessTable(stdout: string): ResourceProcess[] {
         return undefined;
       }
       return {
-        command: match[5] ?? "",
+        command: match[5] ?? '',
         cpu,
         pid,
         ppid,
@@ -49,26 +49,26 @@ export function parseResourceProcessTable(stdout: string): ResourceProcess[] {
 export function parseResourceListeningServerTable(stdout: string): ResourceListeningServer[] {
   const servers: ResourceListeningServer[] = [];
   let currentPid: number | undefined;
-  let currentCommandName = "";
+  let currentCommandName = '';
 
-  for (const rawLine of stdout.split("\n")) {
+  for (const rawLine of stdout.split('\n')) {
     const line = rawLine.trim();
     if (!line) {
       continue;
     }
     const field = line[0];
     const value = line.slice(1);
-    if (field === "p") {
+    if (field === 'p') {
       const pid = Number(value);
       currentPid = Number.isFinite(pid) && pid > 0 ? pid : undefined;
-      currentCommandName = "";
+      currentCommandName = '';
       continue;
     }
-    if (field === "c") {
+    if (field === 'c') {
       currentCommandName = value.trim();
       continue;
     }
-    if (field !== "n" || currentPid === undefined) {
+    if (field !== 'n' || currentPid === undefined) {
       continue;
     }
     const endpoint = parseResourceListeningEndpoint(value);
@@ -76,7 +76,7 @@ export function parseResourceListeningServerTable(stdout: string): ResourceListe
       continue;
     }
     servers.push({
-      commandName: currentCommandName || "server",
+      commandName: currentCommandName || 'server',
       host: endpoint.host,
       pid: currentPid,
       port: endpoint.port,
@@ -87,23 +87,25 @@ export function parseResourceListeningServerTable(stdout: string): ResourceListe
   return uniqueResourceListeningServers(servers);
 }
 
-export function parseResourceListeningEndpoint(endpoint: string): { host: string; port: number; url: string } | undefined {
+export function parseResourceListeningEndpoint(
+  endpoint: string
+): { host: string; port: number; url: string } | undefined {
   const trimmed = endpoint.trim();
   if (!trimmed) {
     return undefined;
   }
 
-  let rawHost = "";
-  let rawPort = "";
-  if (trimmed.startsWith("[")) {
-    const hostEnd = trimmed.indexOf("]:");
+  let rawHost = '';
+  let rawPort = '';
+  if (trimmed.startsWith('[')) {
+    const hostEnd = trimmed.indexOf(']:');
     if (hostEnd < 0) {
       return undefined;
     }
     rawHost = trimmed.slice(1, hostEnd);
     rawPort = trimmed.slice(hostEnd + 2);
   } else {
-    const separatorIndex = trimmed.lastIndexOf(":");
+    const separatorIndex = trimmed.lastIndexOf(':');
     if (separatorIndex < 0) {
       return undefined;
     }
@@ -116,7 +118,7 @@ export function parseResourceListeningEndpoint(endpoint: string): { host: string
     return undefined;
   }
   const host = resourceServerDisplayHost(rawHost);
-  const formattedHost = host.includes(":") ? `[${host}]` : host;
+  const formattedHost = host.includes(':') ? `[${host}]` : host;
   return {
     host,
     port,
@@ -128,19 +130,19 @@ export function parseResourceListeningServerCwdTable(stdout: string): Map<number
   const cwdByPid = new Map<number, string>();
   let currentPid: number | undefined;
 
-  for (const rawLine of stdout.split("\n")) {
+  for (const rawLine of stdout.split('\n')) {
     const line = rawLine.trim();
     if (!line) {
       continue;
     }
     const field = line[0];
     const value = line.slice(1);
-    if (field === "p") {
+    if (field === 'p') {
       const pid = Number(value);
       currentPid = Number.isFinite(pid) && pid > 0 ? pid : undefined;
       continue;
     }
-    if (field === "n" && currentPid !== undefined && value.trim()) {
+    if (field === 'n' && currentPid !== undefined && value.trim()) {
       cwdByPid.set(currentPid, value.trim());
     }
   }
@@ -161,22 +163,19 @@ export function uniqueResourceListeningServers(servers: ResourceListeningServer[
 }
 
 export function resourceServerDisplayHost(host: string): string {
-  const normalized = host.trim().replace(/^\[|\]$/gu, "");
+  const normalized = host.trim().replace(/^\[|\]$/gu, '');
   return !normalized ||
-    normalized === "*" ||
-    normalized === "0.0.0.0" ||
-    normalized === "::" ||
-    normalized === "::1" ||
-    normalized === "127.0.0.1"
-    ? "localhost"
+    normalized === '*' ||
+    normalized === '0.0.0.0' ||
+    normalized === '::' ||
+    normalized === '::1' ||
+    normalized === '127.0.0.1'
+    ? 'localhost'
     : normalized;
 }
 
 export async function readResourceProcesses(): Promise<ResourceProcess[]> {
-  const result = await runNativeProcess("/bin/ps", [
-    "-axo",
-    "pid=,ppid=,pcpu=,rss=,command=",
-  ]);
+  const result = await runNativeProcess('/bin/ps', ['-axo', 'pid=,ppid=,pcpu=,rss=,command=']);
   return result.exitCode === 0 ? parseResourceProcessTable(result.stdout) : [];
 }
 
@@ -189,11 +188,9 @@ export async function readResourceListeningServers(): Promise<ResourceListeningS
    * or logging user paths.
    */
   try {
-    const listenerResult = await runNativeProcess(
-      "/usr/sbin/lsof",
-      ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"],
-      { timeoutMs: 10_000 },
-    );
+    const listenerResult = await runNativeProcess('/usr/sbin/lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-F', 'pcn'], {
+      timeoutMs: 10_000,
+    });
     if (listenerResult.exitCode !== 0) {
       return [];
     }
@@ -205,9 +202,9 @@ export async function readResourceListeningServers(): Promise<ResourceListeningS
     }
 
     const cwdResult = await runNativeProcess(
-      "/usr/sbin/lsof",
-      ["-nP", "-a", "-d", "cwd", "-F", "pn", "-p", pids.join(",")],
-      { timeoutMs: 10_000 },
+      '/usr/sbin/lsof',
+      ['-nP', '-a', '-d', 'cwd', '-F', 'pn', '-p', pids.join(',')],
+      { timeoutMs: 10_000 }
     );
     if (cwdResult.exitCode !== 0) {
       return servers;
@@ -237,19 +234,19 @@ export async function readResourceListeningServers(): Promise<ResourceListeningS
  */
 export async function terminateResourceProcesses(
   processes: ResourceProcess[],
-  options: { gracefulSignal?: "INT" | "TERM" } = {},
+  options: { gracefulSignal?: 'INT' | 'TERM' } = {}
 ): Promise<void> {
   const targets = new Map(
     processes
       .filter((process) => Number.isFinite(process.pid) && process.pid > 1)
-      .map((process) => [process.pid, process.command]),
+      .map((process) => [process.pid, process.command])
   );
   if (targets.size === 0) {
     return;
   }
 
-  const gracefulSignal = options.gracefulSignal ?? "TERM";
-  await runNativeProcess("/bin/kill", [`-${gracefulSignal}`, ...Array.from(targets.keys()).map(String)]);
+  const gracefulSignal = options.gracefulSignal ?? 'TERM';
+  await runNativeProcess('/bin/kill', [`-${gracefulSignal}`, ...Array.from(targets.keys()).map(String)]);
   window.setTimeout(() => {
     void (async () => {
       const liveProcesses = await readResourceProcesses();
@@ -257,10 +254,10 @@ export async function terminateResourceProcesses(
         .filter((process) => targets.get(process.pid) === process.command)
         .map((process) => process.pid);
       if (liveTargetPids.length > 0) {
-        await runNativeProcess("/bin/kill", ["-KILL", ...liveTargetPids.map(String)]);
+        await runNativeProcess('/bin/kill', ['-KILL', ...liveTargetPids.map(String)]);
       }
     })().catch((error) => {
-      console.warn("Failed to finish terminating Ghostex resources", error);
+      console.warn('Failed to finish terminating Ghostex resources', error);
     });
   }, 1_500);
 }
@@ -270,7 +267,7 @@ export function createResourceGroupViews(
   resourceGroups: TitlebarResourceGroup[],
   processes: ResourceProcess[],
   servers: ResourceListeningServer[],
-  codeEditorProjectIds: string[],
+  codeEditorProjectIds: string[]
 ): {
   browserBundles: ResourceProcessBundle[];
   codeIdeBundles: ResourceProcessBundle[];
@@ -304,13 +301,13 @@ export function createResourceGroupViews(
     processes,
     childrenByParent,
     claimedPids,
-    codeEditorProjectIds,
+    codeEditorProjectIds
   );
   claimAppRuntimeProcesses(processes, childrenByParent, claimedPids);
   const browserBundles = createBrowserBundles(
     browserTabs.filter((tab) => !groupedBrowserTabIds.has(tab.id)),
     processes,
-    claimedPids,
+    claimedPids
   );
   const orphanBundles = createOrphanBundles(processes, childrenByParent, claimedPids);
   return { browserBundles, codeIdeBundles, groupViews, orphanBundles };
@@ -340,7 +337,7 @@ export function createGhostexResourceProcessTotals(processes: ResourceProcess[])
 }
 
 export function isGhostexAppBundleProcess(process: ResourceProcess): boolean {
-  const executablePath = process.command.split(/\s+/, 1)[0] ?? "";
+  const executablePath = process.command.split(/\s+/, 1)[0] ?? '';
   return /\/Ghostex(?:-dev)?\.app\/Contents\//i.test(executablePath);
 }
 
@@ -348,7 +345,7 @@ export function createResourceServerBundles(
   servers: ResourceListeningServer[],
   resourceViews: ReturnType<typeof createResourceGroupViews>,
   processes: ResourceProcess[],
-  portless: SidebarPortlessState | undefined,
+  portless: SidebarPortlessState | undefined
 ): ResourceProcessBundle[] {
   /*
    * CDXC:TitlebarResources 2026-06-22-00:30:
@@ -368,8 +365,8 @@ export function createResourceServerBundles(
   const childrenByParent = createProcessChildrenMap(processes);
   const terminalOwners = resourceViews.groupViews.flatMap((view) =>
     view.bundles
-      .filter((bundle) => bundle.type === "session" && bundle.session?.sessionKind === "terminal")
-      .map((bundle) => ({ bundle, view })),
+      .filter((bundle) => bundle.type === 'session' && bundle.session?.sessionKind === 'terminal')
+      .map((bundle) => ({ bundle, view }))
   );
   const ownerByPid = new Map<number, { bundle: ResourceProcessBundle; view: ResourceGroupView }>();
   for (const owner of terminalOwners) {
@@ -378,8 +375,7 @@ export function createResourceServerBundles(
 
   return servers
     .map((server): ResourceProcessBundle | undefined => {
-      const owner =
-        ownerByPid.get(server.pid) ?? findResourceServerCwdOwner(server, terminalOwners);
+      const owner = ownerByPid.get(server.pid) ?? findResourceServerCwdOwner(server, terminalOwners);
       if (!owner) {
         return undefined;
       }
@@ -388,9 +384,7 @@ export function createResourceServerBundles(
       const tree = process ? collectProcessTree([process], childrenByParent) : [];
       const pids = tree.length > 0 ? tree.map((treeProcess) => treeProcess.pid) : [server.pid];
       const portlessPreview = owner.bundle.session
-        ? portlessPreviewsByOwnerAndPort.get(
-            createPortlessRoutePreviewKeyForSession(owner.bundle.session, server.port),
-          )
+        ? portlessPreviewsByOwnerAndPort.get(createPortlessRoutePreviewKeyForSession(owner.bundle.session, server.port))
         : undefined;
       return {
         childProcesses: process ? tree.filter((treeProcess) => treeProcess.pid !== process.pid) : [],
@@ -403,7 +397,7 @@ export function createResourceServerBundles(
         process,
         server,
         session: owner.bundle.session,
-        type: "server",
+        type: 'server',
       };
     })
     .filter((bundle): bundle is ResourceProcessBundle => bundle !== undefined)
@@ -416,7 +410,7 @@ export function createResourceServerBundles(
 
 export function findResourceServerCwdOwner(
   server: ResourceListeningServer,
-  terminalOwners: { bundle: ResourceProcessBundle; view: ResourceGroupView }[],
+  terminalOwners: { bundle: ResourceProcessBundle; view: ResourceGroupView }[]
 ): { bundle: ResourceProcessBundle; view: ResourceGroupView } | undefined {
   /*
    * CDXC:TitlebarResources 2026-07-26:
@@ -446,11 +440,11 @@ export function findResourceServerCwdOwner(
 }
 
 export function createPortlessRoutePreviewMap(
-  portless: SidebarPortlessState | undefined,
+  portless: SidebarPortlessState | undefined
 ): Map<string, ResourcePortlessServerPresentation> {
   const previewsByOwnerAndPort = new Map<string, ResourcePortlessServerPresentation>();
   const routePreviews = portless?.presentation?.routePreviews ?? [];
-  if (!portless || routePreviews.length === 0 || portless.presentation?.routePreviewStatus !== "current") {
+  if (!portless || routePreviews.length === 0 || portless.presentation?.routePreviewStatus !== 'current') {
     return previewsByOwnerAndPort;
   }
   for (const preview of routePreviews) {
@@ -475,62 +469,58 @@ export function createPortlessRoutePreviewKey(projectId: string, sessionId: stri
 }
 
 export function createPortlessRoutePreviewKeyForSession(
-  session: Pick<TitlebarResourceSession, "projectId" | "sessionId">,
-  port: number,
+  session: Pick<TitlebarResourceSession, 'projectId' | 'sessionId'>,
+  port: number
 ): string {
   const combinedSession = parseCombinedProjectSessionId(session.sessionId);
   return createPortlessRoutePreviewKey(
-    session.projectId ?? combinedSession?.projectId ?? "",
+    session.projectId ?? combinedSession?.projectId ?? '',
     combinedSession?.sessionId ?? session.sessionId,
-    port,
+    port
   );
 }
 
 export function isPortlessResourceSetupActive(portless: SidebarPortlessState): boolean {
   const health = portless.health;
-  return (
-    health.enabled === true &&
-    health.setupOwnership === "ghostex" &&
-    health.setupStatus === "active"
-  );
+  return health.enabled === true && health.setupOwnership === 'ghostex' && health.setupStatus === 'active';
 }
 
 export function getTitlebarPortlessResourcesSetupAction(
-  portless: SidebarPortlessState,
+  portless: SidebarPortlessState
 ): NativePortlessAdminInstallAction | undefined {
-  const actions: readonly NativePortlessAdminInstallAction[] = ["install", "reconfigure", "retry"];
+  const actions: readonly NativePortlessAdminInstallAction[] = ['install', 'reconfigure', 'retry'];
   return actions.find((action) => portless.nativeAdmin.actions[action]?.available === true);
 }
 
 export function getTitlebarPortlessResourcesSetupActionLabel(portless: SidebarPortlessState): string {
   const action = getTitlebarPortlessResourcesSetupAction(portless);
-  if (action === "retry") {
-    return "Retry";
+  if (action === 'retry') {
+    return 'Retry';
   }
-  if (action === "install" || action === "reconfigure") {
-    return "Set up";
+  if (action === 'install' || action === 'reconfigure') {
+    return 'Set up';
   }
-  return "Status";
+  return 'Status';
 }
 
 export function getTitlebarPortlessResourcesSetupStatusLabel(portless: SidebarPortlessState): string {
   const health = portless.health;
-  if (!health.enabled || health.setupStatus === "disabled") {
-    return "Portless disabled";
+  if (!health.enabled || health.setupStatus === 'disabled') {
+    return 'Portless disabled';
   }
-  if (health.setupStatus === "failed") {
-    return "Portless setup failed";
+  if (health.setupStatus === 'failed') {
+    return 'Portless setup failed';
   }
-  if (health.setupOwnership === "standalone") {
-    return "Portless needs reconfigure";
+  if (health.setupOwnership === 'standalone') {
+    return 'Portless needs reconfigure';
   }
-  if (health.setupStatus === "needed" || health.setupOwnership === "missing") {
-    return "Portless setup needed";
+  if (health.setupStatus === 'needed' || health.setupOwnership === 'missing') {
+    return 'Portless setup needed';
   }
-  return "Portless status";
+  return 'Portless status';
 }
 
-export function resourceServerLabel(server: Pick<ResourceListeningServer, "host" | "port">): string {
+export function resourceServerLabel(server: Pick<ResourceListeningServer, 'host' | 'port'>): string {
   return `${server.host}:${server.port}`;
 }
 
@@ -544,7 +534,7 @@ export function isResourcePathInsideOrEqualTo(childPath: string, parentPath: str
 }
 
 export function normalizeResourceOwnershipPath(path: string): string {
-  return path.trim().replace(/\/+$/gu, "");
+  return path.trim().replace(/\/+$/gu, '');
 }
 
 export const EMPTY_RESOURCE_GROUP_VIEWS: ReturnType<typeof createResourceGroupViews> = {
@@ -560,11 +550,13 @@ export const EMPTY_RESOURCE_PROCESS_TOTALS: ResourceProcessTotals = {
   processCount: 0,
 };
 
-export function createResourceItemCollapseTarget(bundle: ResourceProcessBundle): ResourceItemCollapseTarget | undefined {
+export function createResourceItemCollapseTarget(
+  bundle: ResourceProcessBundle
+): ResourceItemCollapseTarget | undefined {
   if (bundle.childProcesses.length === 0) {
     return undefined;
   }
-  const collapsedByDefault = bundle.type === "session" || bundle.type === "browser" || bundle.type === "server";
+  const collapsedByDefault = bundle.type === 'session' || bundle.type === 'browser' || bundle.type === 'server';
   return {
     collapsedWhenKeyPresent: !collapsedByDefault,
     key: collapsedByDefault ? `expanded:${bundle.key}` : bundle.key,
@@ -578,14 +570,12 @@ export function createResourceItemCollapseTargets(bundles: ResourceProcessBundle
 }
 
 export function isResourceItemCollapsed(target: ResourceItemCollapseTarget, collapsedKeys: Set<string>): boolean {
-  return target.collapsedWhenKeyPresent
-    ? collapsedKeys.has(target.key)
-    : !collapsedKeys.has(target.key);
+  return target.collapsedWhenKeyPresent ? collapsedKeys.has(target.key) : !collapsedKeys.has(target.key);
 }
 
 export function createResourceViewItemCollapseTargets(
   resourceViews: ReturnType<typeof createResourceGroupViews>,
-  serverBundles: ResourceProcessBundle[] = [],
+  serverBundles: ResourceProcessBundle[] = []
 ): ResourceItemCollapseTarget[] {
   /*
    * CDXC:TitlebarResources 2026-06-11-18:30:
@@ -605,9 +595,7 @@ export function createResourceViewItemCollapseTargets(
    */
   return createResourceItemCollapseTargets([
     ...serverBundles,
-    ...resourceViews.groupViews
-      .filter((view) => view.bundles.length > 0)
-      .flatMap((view) => view.bundles),
+    ...resourceViews.groupViews.filter((view) => view.bundles.length > 0).flatMap((view) => view.bundles),
     ...resourceViews.codeIdeBundles,
     ...resourceViews.browserBundles,
     ...resourceViews.orphanBundles,
@@ -617,7 +605,7 @@ export function createResourceViewItemCollapseTargets(
 export function applyResourceItemCollapsedState(
   current: Set<string>,
   targets: readonly ResourceItemCollapseTarget[],
-  collapsed: boolean,
+  collapsed: boolean
 ): Set<string> {
   const next = new Set(current);
   let changed = false;
@@ -633,10 +621,7 @@ export function applyResourceItemCollapsedState(
   return changed ? next : current;
 }
 
-export function isBrowserTabInResourceGroup(
-  tab: TitlebarBrowserTabResource,
-  group: TitlebarResourceGroup,
-): boolean {
+export function isBrowserTabInResourceGroup(tab: TitlebarBrowserTabResource, group: TitlebarResourceGroup): boolean {
   const tabSessionId = browserTabSessionId(tab);
   if (tabSessionId && group.sessions.some((session) => session.sessionId === tabSessionId)) {
     return true;
@@ -647,7 +632,7 @@ export function isBrowserTabInResourceGroup(
 
 export function resourceGroupProjectIdForBrowserTab(
   tab: TitlebarBrowserTabResource,
-  group: TitlebarResourceGroup,
+  group: TitlebarResourceGroup
 ): string | undefined {
   const tabSessionId = browserTabSessionId(tab);
   return group.projectId ?? group.sessions.find((session) => session.sessionId === tabSessionId)?.projectId;
@@ -665,7 +650,7 @@ export function createProcessChildrenMap(processes: ResourceProcess[]): Map<numb
 
 export function collectProcessTree(
   seedProcesses: ResourceProcess[],
-  childrenByParent: Map<number, ResourceProcess[]>,
+  childrenByParent: Map<number, ResourceProcess[]>
 ): ResourceProcess[] {
   const collected = new Map<number, ResourceProcess>();
   const queue = [...seedProcesses];
@@ -684,21 +669,15 @@ export function createSessionResourceBundle(
   session: TitlebarResourceSession,
   processes: ResourceProcess[],
   childrenByParent: Map<number, ResourceProcess[]>,
-  claimedPids: Set<number>,
+  claimedPids: Set<number>
 ): ResourceProcessBundle | undefined {
-  const matchTokens = [
-    session.sessionPersistenceName,
-    session.sessionId,
-    session.terminalTitle,
-  ]
+  const matchTokens = [session.sessionPersistenceName, session.sessionId, session.terminalTitle]
     .map((token) => token?.trim())
     .filter((token): token is string => Boolean(token && token.length >= 4));
-  const seedProcesses = processes.filter((process) =>
-    matchTokens.some((token) => process.command.includes(token)),
-  );
+  const seedProcesses = processes.filter((process) => matchTokens.some((token) => process.command.includes(token)));
   if (
     seedProcesses.length === 0 &&
-    session.sessionKind !== "browser" &&
+    session.sessionKind !== 'browser' &&
     !hasRunningZmxProviderForTitlebarResourceSession(session)
   ) {
     return undefined;
@@ -708,21 +687,21 @@ export function createSessionResourceBundle(
   return {
     childProcesses: tree.filter((process) => !seedProcesses.some((seed) => seed.pid === process.pid)),
     cpu: sumProcessCpu(tree),
-    key: `session:${session.projectId ?? "active"}:${session.sessionId}`,
+    key: `session:${session.projectId ?? 'active'}:${session.sessionId}`,
     label: session.title,
     memoryMb: sumProcessMemory(tree),
     pids: tree.map((process) => process.pid),
     process: seedProcesses[0],
     session,
-    type: "session",
+    type: 'session',
   };
 }
 
 export function hasRunningZmxProviderForTitlebarResourceSession(
   session: Pick<
     TitlebarResourceSession,
-    "providerSessionState" | "sessionKind" | "sessionPersistenceName" | "sessionPersistenceProvider"
-  >,
+    'providerSessionState' | 'sessionKind' | 'sessionPersistenceName' | 'sessionPersistenceProvider'
+  >
 ): boolean {
   /*
    * CDXC:TitlebarResources 2026-06-19-19:21:
@@ -733,10 +712,10 @@ export function hasRunningZmxProviderForTitlebarResourceSession(
    * attach CPU/RAM only when a sampled process tree can be matched.
    */
   return (
-    session.sessionKind === "terminal" &&
-    session.sessionPersistenceProvider === "zmx" &&
+    session.sessionKind === 'terminal' &&
+    session.sessionPersistenceProvider === 'zmx' &&
     Boolean(session.sessionPersistenceName?.trim()) &&
-    session.providerSessionState === "exists"
+    session.providerSessionState === 'exists'
   );
 }
 
@@ -745,7 +724,7 @@ export function createCodeIdeResourceBundles(
   processes: ResourceProcess[],
   childrenByParent: Map<number, ResourceProcess[]>,
   claimedPids: Set<number>,
-  codeEditorProjectIds: string[],
+  codeEditorProjectIds: string[]
 ): ResourceProcessBundle[] {
   /*
    * CDXC:TitlebarResources 2026-06-22-13:50:
@@ -758,10 +737,7 @@ export function createCodeIdeResourceBundles(
    * old global 3775 assumption.
    */
   const runtimePort = codeServerResourcePort();
-  const server = servers.find(
-    (candidate) =>
-      candidate.port === runtimePort && candidate.host === "localhost",
-  );
+  const server = servers.find((candidate) => candidate.port === runtimePort && candidate.host === 'localhost');
   if (!server) {
     return [];
   }
@@ -775,17 +751,15 @@ export function createCodeIdeResourceBundles(
   const pids = tree.length > 0 ? tree.map((process) => process.pid) : [server.pid];
   return [
     {
-      childProcesses: seedProcess
-        ? tree.filter((process) => process.pid !== seedProcess.pid)
-        : [],
+      childProcesses: seedProcess ? tree.filter((process) => process.pid !== seedProcess.pid) : [],
       cpu: sumProcessCpu(tree),
-      key: "code:ide",
-      label: "Code",
+      key: 'code:ide',
+      label: 'Code',
       memoryMb: sumProcessMemory(tree),
       pids,
       process: seedProcess,
       projectEditorIds: Array.from(new Set(codeEditorProjectIds)),
-      type: "code",
+      type: 'code',
     },
   ];
 }
@@ -793,12 +767,10 @@ export function createCodeIdeResourceBundles(
 export function claimAppRuntimeProcesses(
   processes: ResourceProcess[],
   childrenByParent: Map<number, ResourceProcess[]>,
-  claimedPids: Set<number>,
+  claimedPids: Set<number>
 ): void {
   const appProcesses = processes.filter(
-    (process) =>
-      !claimedPids.has(process.pid) &&
-      /ghostexHost|Ghostex\.app|ghostex/i.test(process.command),
+    (process) => !claimedPids.has(process.pid) && /ghostexHost|Ghostex\.app|ghostex/i.test(process.command)
   );
   const appPids = new Set(appProcesses.map((process) => process.pid));
   /**
@@ -825,7 +797,7 @@ export function claimAppRuntimeProcesses(
         (treeProcess) =>
           !claimedPids.has(treeProcess.pid) &&
           !isGhostexBrowserProcess(treeProcess) &&
-          (treeProcess.pid === process.pid || !isAgentRuntimeProcess(treeProcess)),
+          (treeProcess.pid === process.pid || !isAgentRuntimeProcess(treeProcess))
       );
       tree.forEach((treeProcess) => claimedPids.add(treeProcess.pid));
     });
@@ -835,7 +807,7 @@ export function createBrowserBundles(
   browserTabs: TitlebarBrowserTabResource[],
   processes: ResourceProcess[],
   claimedPids: Set<number>,
-  options: { includeRuntimeBundles?: boolean } = {},
+  options: { includeRuntimeBundles?: boolean } = {}
 ): ResourceProcessBundle[] {
   /**
    * CDXC:TitlebarResources 2026-05-17-03:09:
@@ -846,12 +818,12 @@ export function createBrowserBundles(
    * Browser Tabs section.
    */
   const browserProcesses = processes.filter(
-    (process) => !claimedPids.has(process.pid) && isGhostexBrowserProcess(process),
+    (process) => !claimedPids.has(process.pid) && isGhostexBrowserProcess(process)
   );
   const bundles: ResourceProcessBundle[] = [];
   for (const tab of browserTabs) {
     const tabProcesses = browserProcesses.filter(
-      (process) => browserProcessClientId(process) === String(tab.browserId),
+      (process) => browserProcessClientId(process) === String(tab.browserId)
     );
     if (tabProcesses.length === 0) {
       continue;
@@ -866,7 +838,7 @@ export function createBrowserBundles(
       memoryMb: sumProcessMemory(tabProcesses),
       pids: tabProcesses.map((process) => process.pid),
       process: tabProcesses[0],
-      type: "browser",
+      type: 'browser',
     });
   }
   if (options.includeRuntimeBundles === false) {
@@ -879,12 +851,12 @@ export function createBrowserBundles(
     bundles.push({
       childProcesses: unmatchedRendererProcesses.slice(0, 12),
       cpu: sumProcessCpu(unmatchedRendererProcesses),
-      key: "browser:unmatched-renderers",
-      label: "Unmatched browser renderers",
+      key: 'browser:unmatched-renderers',
+      label: 'Unmatched browser renderers',
       memoryMb: sumProcessMemory(unmatchedRendererProcesses),
       pids: unmatchedRendererProcesses.map((process) => process.pid),
       process: unmatchedRendererProcesses[0],
-      type: "browser",
+      type: 'browser',
     });
   }
   const runtimeProcesses = remainingProcesses.filter((process) => !claimedPids.has(process.pid));
@@ -893,12 +865,12 @@ export function createBrowserBundles(
     bundles.push({
       childProcesses: runtimeProcesses.slice(0, 12),
       cpu: sumProcessCpu(runtimeProcesses),
-      key: "browser:runtime",
-      label: "Browser runtime",
+      key: 'browser:runtime',
+      label: 'Browser runtime',
       memoryMb: sumProcessMemory(runtimeProcesses),
       pids: runtimeProcesses.map((process) => process.pid),
       process: runtimeProcesses[0],
-      type: "browser",
+      type: 'browser',
     });
   }
   return bundles.slice(0, 16);
@@ -907,13 +879,11 @@ export function createBrowserBundles(
 export function createOrphanBundles(
   processes: ResourceProcess[],
   childrenByParent: Map<number, ResourceProcess[]>,
-  claimedPids: Set<number>,
+  claimedPids: Set<number>
 ): ResourceProcessBundle[] {
   const ownedSeedProcesses = processes.filter(
     (process) =>
-      !claimedPids.has(process.pid) &&
-      isGhostexOwnedResourceProcess(process) &&
-      isAgentRuntimeProcess(process),
+      !claimedPids.has(process.pid) && isGhostexOwnedResourceProcess(process) && isAgentRuntimeProcess(process)
   );
   const ownedSeedPids = new Set(ownedSeedProcesses.map((process) => process.pid));
   return ownedSeedProcesses
@@ -921,7 +891,7 @@ export function createOrphanBundles(
     .slice(0, 16)
     .map((process) => {
       const tree = collectProcessTree([process], childrenByParent).filter(
-        (treeProcess) => !claimedPids.has(treeProcess.pid),
+        (treeProcess) => !claimedPids.has(treeProcess.pid)
       );
       tree.forEach((treeProcess) => claimedPids.add(treeProcess.pid));
       return {
@@ -932,7 +902,7 @@ export function createOrphanBundles(
         memoryMb: sumProcessMemory(tree),
         pids: tree.map((treeProcess) => treeProcess.pid),
         process,
-        type: "orphan" as const,
+        type: 'orphan' as const,
       };
     });
 }
@@ -1006,35 +976,35 @@ export function getBrowserProcessDisplayName(process: ResourceProcess): string {
   if (clientId) {
     return `Browser renderer client ${clientId}`;
   }
-  if (process.command.includes("--type=gpu-process")) {
-    return "Browser GPU";
+  if (process.command.includes('--type=gpu-process')) {
+    return 'Browser GPU';
   }
-  if (process.command.includes("--type=utility")) {
+  if (process.command.includes('--type=utility')) {
     return getBrowserUtilityProcessDisplayName(process);
   }
-  return "Browser renderer";
+  return 'Browser renderer';
 }
 
 export function getBrowserUtilityProcessDisplayName(process: ResourceProcess): string {
   const subtype = /--utility-sub-type=([^\s]+)/.exec(process.command)?.[1];
-  if (subtype?.includes("NetworkService")) {
-    return "Browser network service";
+  if (subtype?.includes('NetworkService')) {
+    return 'Browser network service';
   }
-  if (subtype?.includes("StorageService")) {
-    return "Browser storage service";
+  if (subtype?.includes('StorageService')) {
+    return 'Browser storage service';
   }
-  if (subtype?.includes("AudioService")) {
-    return "Browser audio service";
+  if (subtype?.includes('AudioService')) {
+    return 'Browser audio service';
   }
-  if (subtype?.includes("VideoCaptureService")) {
-    return "Browser video capture service";
+  if (subtype?.includes('VideoCaptureService')) {
+    return 'Browser video capture service';
   }
-  return "Browser utility";
+  return 'Browser utility';
 }
 
 export function getProcessDisplayName(process: ResourceProcess): string {
-  const command = process.command.split(/\s+/)[0] ?? "Process";
-  return command.split("/").pop() || command;
+  const command = process.command.split(/\s+/)[0] ?? 'Process';
+  return command.split('/').pop() || command;
 }
 
 export function sumProcessCpu(processes: ResourceProcess[]): number {
@@ -1076,32 +1046,32 @@ export function createInactiveTerminalSleepSessionIds(resourceGroups: TitlebarRe
     group.sessions
       .filter((session) => {
         return !(
-          session.sessionKind !== "terminal" ||
+          session.sessionKind !== 'terminal' ||
           session.isSleeping === true ||
-          session.activity === "working" ||
-          session.activity === "attention" ||
+          session.activity === 'working' ||
+          session.activity === 'attention' ||
           hasTitlebarResourceDelayedSend(session)
         );
       })
-      .map(titlebarResourceSidebarSessionId),
+      .map(titlebarResourceSidebarSessionId)
   );
 }
 
 export function hasTitlebarResourceDelayedSend(
   session: Pick<
     TitlebarResourceSession,
-    "delayedSendDeadlineAt" | "delayedSendRemainingLabel" | "delayedSendRemainingMs"
-  >,
+    'delayedSendDeadlineAt' | 'delayedSendRemainingLabel' | 'delayedSendRemainingMs'
+  >
 ): boolean {
   return Boolean(
     session.delayedSendRemainingLabel ||
-      session.delayedSendDeadlineAt ||
-      typeof session.delayedSendRemainingMs === "number",
+    session.delayedSendDeadlineAt ||
+    typeof session.delayedSendRemainingMs === 'number'
   );
 }
 
 export function titlebarResourceSidebarSessionId(
-  session: Pick<TitlebarResourceSession, "projectId" | "sessionId">,
+  session: Pick<TitlebarResourceSession, 'projectId' | 'sessionId'>
 ): string {
   /*
    * CDXC:TitlebarResources 2026-06-15-15:27:
@@ -1113,9 +1083,7 @@ export function titlebarResourceSidebarSessionId(
   if (parseCombinedProjectSessionId(session.sessionId)) {
     return session.sessionId;
   }
-  return session.projectId
-    ? createCombinedProjectSessionId(session.projectId, session.sessionId)
-    : session.sessionId;
+  return session.projectId ? createCombinedProjectSessionId(session.projectId, session.sessionId) : session.sessionId;
 }
 
 export function uniqueResourceBundles(bundles: ResourceProcessBundle[]): ResourceProcessBundle[] {
@@ -1134,11 +1102,11 @@ export function isResourceBundleActionable(bundle: ResourceProcessBundle): boole
    * CDXC:TitlebarResources 2026-06-15-13:45:
    * Resources must not expose Close for shared Chromium runtime bundles because killing GPU, network, storage, or unmatched renderer helpers can leave the app's embedded browser surfaces broken. Only user-owned browser tabs get resource Close controls; diagnostic browser helper rows stay visible for CPU/RAM accounting.
    */
-  return !(bundle.type === "browser" && !bundle.browserTab);
+  return !(bundle.type === 'browser' && !bundle.browserTab);
 }
 
 export function resourceBundleSidebarSessionIds(bundle: ResourceProcessBundle): string[] {
-  if (bundle.type === "server") {
+  if (bundle.type === 'server') {
     return [];
   }
   const session = bundle.session;
@@ -1168,7 +1136,7 @@ export function resourceBundleProjectEditorIds(bundle: ResourceProcessBundle): s
   if (bundle.projectEditorIds) {
     return bundle.projectEditorIds;
   }
-  if (bundle.type === "code") {
+  if (bundle.type === 'code') {
     const match = /^code:(?<groupId>.+)$/u.exec(bundle.key);
     const projectId = match?.groups?.groupId ? parseCombinedProjectGroupId(match.groups.groupId) : undefined;
     return projectId ? [projectId] : [];
@@ -1179,7 +1147,7 @@ export function resourceBundleProjectEditorIds(bundle: ResourceProcessBundle): s
 
 export function sortResourceBundlesForDisplay(
   bundles: ResourceProcessBundle[],
-  quittingKeys: Set<string>,
+  quittingKeys: Set<string>
 ): ResourceProcessBundle[] {
   return [...bundles].sort((left, right) => {
     const leftQuitting = quittingKeys.has(left.key);

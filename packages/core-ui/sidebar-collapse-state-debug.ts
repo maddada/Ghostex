@@ -1,4 +1,4 @@
-export const SIDEBAR_COLLAPSE_STATE_DEBUG_EVENT_PREFIX = "sidebar.collapseState.";
+export const SIDEBAR_COLLAPSE_STATE_DEBUG_EVENT_PREFIX = 'sidebar.collapseState.';
 
 export function hashSidebarCollapseDebugId(value: string): string {
   /*
@@ -12,7 +12,7 @@ export function hashSidebarCollapseDebugId(value: string): string {
     hash ^= value.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193);
   }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 export function summarizeSidebarCollapseDebugGroupIds(groupIds: readonly string[]): string[] {

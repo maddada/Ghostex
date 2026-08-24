@@ -2,17 +2,9 @@ import {
   BUILT_IN_WORKSPACE_OPEN_TARGETS,
   type WorkspaceOpenTargetAvailability,
   type WorkspaceOpenTargetDefinition,
-} from "@/packages/shared/workspace-open-targets";
-import {
-  LAST_ACTION_COMMAND_STORAGE_PREFIX,
-  LAST_OPEN_TARGET_STORAGE_KEY,
-} from "./constants";
-import type {
-  ResolvedOpenTarget,
-  TitlebarMode,
-  TitlebarOpenTargetsSettings,
-  TitlebarProjectState,
-} from "./types";
+} from '@/packages/shared/workspace-open-targets';
+import { LAST_ACTION_COMMAND_STORAGE_PREFIX, LAST_OPEN_TARGET_STORAGE_KEY } from './constants';
+import type { ResolvedOpenTarget, TitlebarMode, TitlebarOpenTargetsSettings, TitlebarProjectState } from './types';
 
 export function normalizeTitlebarMode(candidate: unknown): TitlebarMode {
   /**
@@ -28,33 +20,33 @@ export function normalizeTitlebarMode(candidate: unknown): TitlebarMode {
    * that optimistic value when sidebar state arrives so startup restore and
    * failed transitions remain synchronized with the real visible workarea.
    */
-  return candidate === "code" ||
-    candidate === "git" ||
-    candidate === "automate" ||
-    candidate === "tasks" ||
-    candidate === "manage"
+  return candidate === 'code' ||
+    candidate === 'git' ||
+    candidate === 'automate' ||
+    candidate === 'tasks' ||
+    candidate === 'manage'
     ? candidate
-    : "agents";
+    : 'agents';
 }
 
 export function resolveInitialTitlebarMode(bootstrap: Record<string, unknown>): TitlebarMode {
   const explicitMode = normalizeTitlebarMode(bootstrap.activeMode);
-  if (explicitMode !== "agents") {
+  if (explicitMode !== 'agents') {
     return explicitMode;
   }
   /*
   CDXC:ProjectSidebarOwnership 2026-06-02-12:29:
   The titlebar must not infer startup mode from the old native-sidebar-projects.json payload. gxserver owns shared project/session inventory now, while the macOS window owns the explicit active mode passed in bootstrap state.
   */
-  return "agents";
+  return 'agents';
 }
 
 export function parseSharedSettings(candidate: unknown): unknown {
-  if (typeof candidate !== "string") {
+  if (typeof candidate !== 'string') {
     return undefined;
   }
   try {
-    return JSON.parse(candidate || "null");
+    return JSON.parse(candidate || 'null');
   } catch {
     return undefined;
   }
@@ -67,36 +59,34 @@ export function createConfiguredOpenTargets(settings: TitlebarOpenTargetsSetting
       (definition): ResolvedOpenTarget => ({
         definition,
         id: definition.id,
-        kind: "built-in",
+        kind: 'built-in',
         label: definition.label,
-      }),
+      })
     ),
-    ...settings.customTargets.map(
-      (custom): ResolvedOpenTarget => ({
-        command: custom.command,
-        custom,
-        id: custom.id,
-        kind: "custom",
-        label: custom.label,
-      }),
-    ),
+    ...settings.customTargets.map((custom): ResolvedOpenTarget => ({
+      command: custom.command,
+      custom,
+      id: custom.id,
+      kind: 'custom',
+      label: custom.label,
+    })),
   ];
 }
 
 export function resolveVisibleOpenTargets(
   targets: ResolvedOpenTarget[],
-  availability: WorkspaceOpenTargetAvailability,
+  availability: WorkspaceOpenTargetAvailability
 ): ResolvedOpenTarget[] {
   const availableTargetIds = new Set(availability.availableTargetIds);
   return targets
     .map((target) => {
-      if (target.id === "finder") {
+      if (target.id === 'finder') {
         return target;
       }
-      if (target.kind === "custom") {
+      if (target.kind === 'custom') {
         return target;
       }
-      if (!availableTargetIds.has(target.id as WorkspaceOpenTargetDefinition["id"])) {
+      if (!availableTargetIds.has(target.id as WorkspaceOpenTargetDefinition['id'])) {
         return undefined;
       }
       /**
@@ -115,17 +105,19 @@ export function resolveVisibleOpenTargets(
 }
 
 export function readLastOpenTargetId(): string {
-  return localStorage.getItem(LAST_OPEN_TARGET_STORAGE_KEY) || "finder";
+  return localStorage.getItem(LAST_OPEN_TARGET_STORAGE_KEY) || 'finder';
 }
 
-export function readLastActionCommandId(state: Pick<TitlebarProjectState, "projectId" | "projectPath">): string | undefined {
+export function readLastActionCommandId(
+  state: Pick<TitlebarProjectState, 'projectId' | 'projectPath'>
+): string | undefined {
   const storageKey = getLastActionCommandStorageKey(state);
   return storageKey ? localStorage.getItem(storageKey)?.trim() || undefined : undefined;
 }
 
 export function persistLastActionCommandId(
-  state: Pick<TitlebarProjectState, "projectId" | "projectPath">,
-  commandId: string,
+  state: Pick<TitlebarProjectState, 'projectId' | 'projectPath'>,
+  commandId: string
 ): void {
   const storageKey = getLastActionCommandStorageKey(state);
   if (!storageKey) {
@@ -135,7 +127,7 @@ export function persistLastActionCommandId(
 }
 
 export function getLastActionCommandStorageKey(
-  state: Pick<TitlebarProjectState, "projectId" | "projectPath">,
+  state: Pick<TitlebarProjectState, 'projectId' | 'projectPath'>
 ): string | undefined {
   const projectKey = state.projectId?.trim() || state.projectPath.trim();
   if (!projectKey) {
@@ -151,5 +143,5 @@ export function getLastActionCommandStorageKey(
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

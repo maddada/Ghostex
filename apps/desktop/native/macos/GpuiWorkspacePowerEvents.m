@@ -20,7 +20,7 @@ static void GhostexGpuiRunWorkspacePowerEventsOnMain(dispatch_block_t block) {
 @implementation GhostexGpuiWorkspacePowerEventsObserver
 
 + (instancetype)sharedObserver {
-  static GhostexGpuiWorkspacePowerEventsObserver* observer = nil;
+  static GhostexGpuiWorkspacePowerEventsObserver *observer = nil;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     observer = [[GhostexGpuiWorkspacePowerEventsObserver alloc] init];
@@ -28,7 +28,7 @@ static void GhostexGpuiRunWorkspacePowerEventsOnMain(dispatch_block_t block) {
   return observer;
 }
 
-- (void)workspaceDidWake:(NSNotification*)notification {
+- (void)workspaceDidWake:(NSNotification *)notification {
   (void)notification;
   GhostexGpuiWorkspaceDidWake();
 }
@@ -42,10 +42,10 @@ void GhostexGpuiInstallWorkspacePowerEventsMonitor(void) {
         return;
       }
       [[[NSWorkspace sharedWorkspace] notificationCenter]
-        addObserver:[GhostexGpuiWorkspacePowerEventsObserver sharedObserver]
-           selector:@selector(workspaceDidWake:)
-               name:NSWorkspaceDidWakeNotification
-             object:nil];
+          addObserver:[GhostexGpuiWorkspacePowerEventsObserver sharedObserver]
+             selector:@selector(workspaceDidWake:)
+                 name:NSWorkspaceDidWakeNotification
+               object:nil];
       GhostexGpuiWorkspacePowerEventsMonitorInstalled = YES;
     });
   }
@@ -58,9 +58,10 @@ void GhostexGpuiRemoveWorkspacePowerEventsMonitor(void) {
         return;
       }
       [[[NSWorkspace sharedWorkspace] notificationCenter]
-        removeObserver:[GhostexGpuiWorkspacePowerEventsObserver sharedObserver]
-                  name:NSWorkspaceDidWakeNotification
-                object:nil];
+          removeObserver:[GhostexGpuiWorkspacePowerEventsObserver
+                             sharedObserver]
+                    name:NSWorkspaceDidWakeNotification
+                  object:nil];
       GhostexGpuiWorkspacePowerEventsMonitorInstalled = NO;
     });
   }

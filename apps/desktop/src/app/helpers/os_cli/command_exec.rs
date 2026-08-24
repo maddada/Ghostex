@@ -6,7 +6,6 @@ use std::{
 
 use anyhow::Result;
 
-
 pub(crate) fn gpui_run_command_with_timeout(
     command: &Path,
     args: &[&str],
@@ -138,10 +137,11 @@ where
     })
 }
 
-pub(crate) fn gpui_join_captured_output(reader: Option<std::thread::JoinHandle<Vec<u8>>>) -> String {
+pub(crate) fn gpui_join_captured_output(
+    reader: Option<std::thread::JoinHandle<Vec<u8>>>,
+) -> String {
     reader
         .and_then(|reader| reader.join().ok())
         .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
         .unwrap_or_default()
 }
-

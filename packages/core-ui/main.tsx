@@ -1,6 +1,6 @@
-import { createRoot } from "react-dom/client";
-import { SidebarApp } from "./sidebar-app";
-import "./styles.css";
+import { createRoot } from 'react-dom/client';
+import { SidebarApp } from './sidebar-app';
+import './styles.css';
 
 declare global {
   function acquireVsCodeApi(): {
@@ -34,8 +34,8 @@ function postSidebarBootstrapReproLog(event: string, details: Record<string, unk
       elapsedMs: getBootstrapElapsedMs(),
     },
     event: `repro.sidebarStartup.bootstrap.${event}`,
-    scenarioId: "native.sidebar.refresh",
-    type: "sidebarDebugLog",
+    scenarioId: 'native.sidebar.refresh',
+    type: 'sidebarDebugLog',
   });
 }
 
@@ -54,8 +54,8 @@ function describeBootstrapError(error: unknown): Record<string, unknown> {
 }
 
 function installBootstrapObservers(): void {
-  window.addEventListener("error", (event) => {
-    postSidebarBootstrapReproLog("windowError", {
+  window.addEventListener('error', (event) => {
+    postSidebarBootstrapReproLog('windowError', {
       colno: event.colno,
       filename: event.filename,
       lineno: event.lineno,
@@ -63,26 +63,26 @@ function installBootstrapObservers(): void {
     });
   });
 
-  window.addEventListener("unhandledrejection", (event) => {
-    postSidebarBootstrapReproLog("windowUnhandledRejection", {
+  window.addEventListener('unhandledrejection', (event) => {
+    postSidebarBootstrapReproLog('windowUnhandledRejection', {
       reason: describeBootstrapError(event.reason),
     });
   });
 
-  window.addEventListener("message", (event) => {
+  window.addEventListener('message', (event) => {
     const message = event.data;
-    if (!message || typeof message !== "object") {
+    if (!message || typeof message !== 'object') {
       return;
     }
 
-    const messageType = "type" in message ? message.type : undefined;
-    if (messageType !== "hydrate" && messageType !== "sessionState") {
+    const messageType = 'type' in message ? message.type : undefined;
+    if (messageType !== 'hydrate' && messageType !== 'sessionState') {
       return;
     }
 
-    const groups = "groups" in message && Array.isArray(message.groups) ? message.groups : [];
+    const groups = 'groups' in message && Array.isArray(message.groups) ? message.groups : [];
     const sessionCount = groups.reduce((total: number, group: unknown) => {
-      if (!group || typeof group !== "object" || !("sessions" in group)) {
+      if (!group || typeof group !== 'object' || !('sessions' in group)) {
         return total;
       }
 
@@ -90,35 +90,35 @@ function installBootstrapObservers(): void {
       return total + sessions.length;
     }, 0);
 
-    postSidebarBootstrapReproLog("windowMessageReceived", {
+    postSidebarBootstrapReproLog('windowMessageReceived', {
       groupCount: groups.length,
       messageType,
-      revision: "revision" in message ? message.revision : undefined,
+      revision: 'revision' in message ? message.revision : undefined,
       sessionCount,
     });
   });
 
-  window.addEventListener("focus", () => {
-    postSidebarBootstrapReproLog("windowFocus", {
+  window.addEventListener('focus', () => {
+    postSidebarBootstrapReproLog('windowFocus', {
       visibilityState: document.visibilityState,
     });
   });
 
-  window.addEventListener("blur", () => {
-    postSidebarBootstrapReproLog("windowBlur", {
+  window.addEventListener('blur', () => {
+    postSidebarBootstrapReproLog('windowBlur', {
       visibilityState: document.visibilityState,
     });
   });
 
-  window.addEventListener("pageshow", (event) => {
-    postSidebarBootstrapReproLog("pageShow", {
+  window.addEventListener('pageshow', (event) => {
+    postSidebarBootstrapReproLog('pageShow', {
       persisted: event.persisted,
       visibilityState: document.visibilityState,
     });
   });
 
-  document.addEventListener("visibilitychange", () => {
-    postSidebarBootstrapReproLog("visibilityChanged", {
+  document.addEventListener('visibilitychange', () => {
+    postSidebarBootstrapReproLog('visibilityChanged', {
       readyState: document.readyState,
       visibilityState: document.visibilityState,
     });
@@ -128,34 +128,34 @@ function installBootstrapObservers(): void {
 try {
   vscode = acquireVsCodeApi();
 } catch (error) {
-  console.error("Failed to acquire VS Code API for sidebar bootstrap logging.", error);
+  console.error('Failed to acquire VS Code API for sidebar bootstrap logging.', error);
   throw error;
 }
 
-postSidebarBootstrapReproLog("moduleStart", {
+postSidebarBootstrapReproLog('moduleStart', {
   readyState: document.readyState,
   visibilityState: document.visibilityState,
 });
 installBootstrapObservers();
 
-const rootElement = document.getElementById("root");
-postSidebarBootstrapReproLog("rootLookup", {
+const rootElement = document.getElementById('root');
+postSidebarBootstrapReproLog('rootLookup', {
   hasRootElement: rootElement !== null,
 });
 
 if (!rootElement) {
-  postSidebarBootstrapReproLog("rootMissing");
-  throw new Error("Sidebar root element was not found.");
+  postSidebarBootstrapReproLog('rootMissing');
+  throw new Error('Sidebar root element was not found.');
 }
 
 const root = createRoot(rootElement);
-postSidebarBootstrapReproLog("reactRootCreated");
+postSidebarBootstrapReproLog('reactRootCreated');
 
 try {
-  root.render(<SidebarApp vscode={vscode} windowScopeId="main" />);
-  postSidebarBootstrapReproLog("reactRenderCalled");
+  root.render(<SidebarApp vscode={vscode} windowScopeId='main' />);
+  postSidebarBootstrapReproLog('reactRenderCalled');
 } catch (error) {
-  postSidebarBootstrapReproLog("reactRenderFailed", {
+  postSidebarBootstrapReproLog('reactRenderFailed', {
     error: describeBootstrapError(error),
   });
   throw error;

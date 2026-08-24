@@ -5,16 +5,13 @@
 
 use crate::*;
 
-
 pub(crate) fn command_pane_height_ratio(ratio: f32) -> f32 {
     ratio.clamp(COMMAND_PANE_MIN_HEIGHT_RATIO, COMMAND_PANE_MAX_HEIGHT_RATIO)
 }
 
-
 pub(crate) fn command_pane_width_ratio(ratio: f32) -> f32 {
     ratio.clamp(COMMAND_PANE_MIN_WIDTH_RATIO, COMMAND_PANE_MAX_WIDTH_RATIO)
 }
-
 
 pub(crate) fn command_pane_default_height_px_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
@@ -36,7 +33,6 @@ pub(crate) fn command_pane_default_height_px_from_shared_settings(
         )
 }
 
-
 pub(crate) fn gpui_click_to_wake_sleeping_sessions_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> bool {
@@ -51,13 +47,11 @@ pub(crate) fn gpui_click_to_wake_sleeping_sessions_from_shared_settings(
         .unwrap_or(true)
 }
 
-
 pub(crate) fn command_pane_click_to_wake_sleeping_sessions_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> bool {
     gpui_click_to_wake_sleeping_sessions_from_shared_settings(settings)
 }
-
 
 pub(crate) fn command_pane_sleeping_tab_selection_wake_target(
     command_pane: &CommandPaneModel,
@@ -82,7 +76,6 @@ pub(crate) fn command_pane_sleeping_tab_selection_wake_target(
         .then_some((group_id, session_id))
 }
 
-
 pub(crate) fn command_pane_sleeping_placeholder_wake_label(
     active_session_is_sleeping: bool,
     click_to_wake_enabled: bool,
@@ -91,15 +84,15 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label(
         .then_some(COMMAND_PANE_SLEEPING_PLACEHOLDER_WAKE_LABEL)
 }
 
-
-pub(crate) fn command_pane_sleeping_placeholder_wake_label_is_private_data_safe(label: &str) -> bool {
+pub(crate) fn command_pane_sleeping_placeholder_wake_label_is_private_data_safe(
+    label: &str,
+) -> bool {
     /*
     CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
     The paint path may render only the fixed native wake affordance. Keep this guard at the writer boundary so future canvas callers cannot paint command text, session titles, paths, URLs, tokens, or terminal content into the sleeping command body.
     */
     label == COMMAND_PANE_SLEEPING_PLACEHOLDER_WAKE_LABEL
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CommandPaneSleepingPlaceholderWakeLabelFrame {
@@ -109,19 +102,16 @@ pub(crate) struct CommandPaneSleepingPlaceholderWakeLabelFrame {
     pub(crate) height: f32,
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CommandPaneSleepingPlaceholderWakeLabelLine {
     pub(crate) text: String,
     pub(crate) measured_width: f32,
 }
 
-
 pub(crate) struct CommandPaneSleepingPlaceholderWakeLabelPaintState {
     pub(crate) frame: CommandPaneSleepingPlaceholderWakeLabelFrame,
     pub(crate) label_lines: Vec<gpui::ShapedLine>,
 }
-
 
 pub(crate) fn command_pane_sleeping_placeholder_wake_label_max_size(
     body_width: f32,
@@ -141,7 +131,6 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_max_size(
         body_height - (COMMAND_PANE_SLEEPING_PLACEHOLDER_WAKE_LABEL_VERTICAL_PADDING * 2.0);
     (max_label_width > 0.0 && max_label_height > 0.0).then_some((max_label_width, max_label_height))
 }
-
 
 pub(crate) fn command_pane_sleeping_placeholder_wake_label_frame(
     body_width: f32,
@@ -179,7 +168,6 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_frame(
         height: label_height,
     })
 }
-
 
 pub(crate) fn command_pane_sleeping_placeholder_wake_label_char_wrap_lines(
     label: &str,
@@ -235,7 +223,6 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_char_wrap_lines(
     (!lines.is_empty()).then_some(lines)
 }
 
-
 pub(crate) fn command_pane_sleeping_placeholder_wake_label_text_run(len: usize) -> gpui::TextRun {
     let mut font = gpui::font(".SystemUIFont");
     font.weight = FontWeight::MEDIUM;
@@ -248,7 +235,6 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_text_run(len: usize) 
         strikethrough: None,
     }
 }
-
 
 pub(crate) fn command_pane_sleeping_placeholder_wake_label_shape_line(
     label: &str,
@@ -263,7 +249,6 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_shape_line(
         None,
     )
 }
-
 
 pub(crate) fn command_pane_sleeping_placeholder_wake_label_prepaint(
     bounds: Bounds<Pixels>,
@@ -313,7 +298,6 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_prepaint(
     Some(CommandPaneSleepingPlaceholderWakeLabelPaintState { frame, label_lines })
 }
 
-
 pub(crate) fn command_pane_sleeping_placeholder_wake_label_paint(
     body_bounds: Bounds<Pixels>,
     paint_state: CommandPaneSleepingPlaceholderWakeLabelPaintState,
@@ -355,7 +339,6 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_paint(
     );
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CommandPaneDelayedSendBadgeFrame {
     pub(crate) x: f32,
@@ -364,12 +347,10 @@ pub(crate) struct CommandPaneDelayedSendBadgeFrame {
     pub(crate) height: f32,
 }
 
-
 pub(crate) struct CommandPaneDelayedSendBadgePaintState {
     pub(crate) frame: CommandPaneDelayedSendBadgeFrame,
     pub(crate) label_line: gpui::ShapedLine,
 }
-
 
 pub(crate) fn command_pane_delayed_send_badge_label_is_private_data_safe(label: &str) -> bool {
     /*
@@ -401,8 +382,9 @@ pub(crate) fn command_pane_delayed_send_badge_label_is_private_data_safe(label: 
     }
 }
 
-
-pub(crate) fn command_pane_delayed_send_badge_fitting_size(label_text_width: f32) -> Option<(f32, f32)> {
+pub(crate) fn command_pane_delayed_send_badge_fitting_size(
+    label_text_width: f32,
+) -> Option<(f32, f32)> {
     if !label_text_width.is_finite() || label_text_width <= 0.0 {
         return None;
     }
@@ -412,7 +394,6 @@ pub(crate) fn command_pane_delayed_send_badge_fitting_size(label_text_width: f32
         COMMAND_PANE_DELAYED_SEND_BADGE_MIN_HEIGHT,
     ))
 }
-
 
 pub(crate) fn command_pane_delayed_send_badge_frame(
     body_width: f32,
@@ -452,7 +433,6 @@ pub(crate) fn command_pane_delayed_send_badge_frame(
     })
 }
 
-
 pub(crate) fn command_pane_delayed_send_badge_prepaint(
     bounds: Bounds<Pixels>,
     label: String,
@@ -488,7 +468,6 @@ pub(crate) fn command_pane_delayed_send_badge_prepaint(
 
     Some(CommandPaneDelayedSendBadgePaintState { frame, label_line })
 }
-
 
 pub(crate) fn command_pane_delayed_send_badge_paint(
     body_bounds: Bounds<Pixels>,
@@ -534,7 +513,6 @@ pub(crate) fn command_pane_delayed_send_badge_paint(
     );
 }
 
-
 pub(crate) fn command_pane_default_height_ratio_for_default_height_px(
     default_height_px: f32,
     content_height: f32,
@@ -542,11 +520,9 @@ pub(crate) fn command_pane_default_height_ratio_for_default_height_px(
     command_pane_height_ratio(default_height_px / content_height.max(1.0))
 }
 
-
 pub(crate) fn command_pane_content_height(window: &Window) -> f32 {
     (window.bounds().size.height.as_f32() - TITLEBAR_HEIGHT).max(1.0)
 }
-
 
 pub(crate) fn command_pane_workspace_width(
     window: &Window,
@@ -569,7 +545,6 @@ pub(crate) fn command_pane_workspace_width(
     (window.bounds().size.width.as_f32() - sidebar_chrome_width).max(0.0)
 }
 
-
 pub(crate) fn command_pane_panel_chrome_width(workspace_width: f32, floating: bool) -> f32 {
     if floating {
         (workspace_width - COMMAND_PANE_FLOATING_MARGIN * 2.0).max(0.0)
@@ -578,21 +553,17 @@ pub(crate) fn command_pane_panel_chrome_width(workspace_width: f32, floating: bo
     }
 }
 
-
 pub(crate) fn command_pane_owner_content_width(panel_chrome_width: f32) -> f32 {
     (panel_chrome_width - COMMAND_PANE_OUTER_CONTENT_RIGHT_INSET).max(0.0)
 }
-
 
 pub(crate) fn command_pane_height_for_ratio(ratio: f32, content_height: f32) -> f32 {
     command_pane_height_ratio(ratio) * content_height.max(1.0)
 }
 
-
 pub(crate) fn command_pane_width_for_ratio(ratio: f32, content_width: f32) -> f32 {
     command_pane_width_ratio(ratio) * content_width.max(1.0)
 }
-
 
 pub(crate) fn command_pane_resize_drag_height_ratio(
     drag: CommandPaneResizeDragState,
@@ -609,7 +580,6 @@ pub(crate) fn command_pane_resize_drag_height_ratio(
     command_pane_height_ratio((drag.start_extent + upward_delta) / content_height)
 }
 
-
 pub(crate) fn command_pane_resize_drag_width_ratio(
     drag: CommandPaneResizeDragState,
     current_x: f32,
@@ -622,7 +592,6 @@ pub(crate) fn command_pane_resize_drag_width_ratio(
     let leftward_delta = drag.start_position - current_x;
     command_pane_width_ratio((drag.start_extent + leftward_delta) / content_width)
 }
-
 
 pub(crate) fn command_pane_floating_height_for_ratio(ratio: f32, content_height: f32) -> f32 {
     /*

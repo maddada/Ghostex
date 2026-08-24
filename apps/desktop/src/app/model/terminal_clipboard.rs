@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 /*
 CDXC:GPUITerminalPaste 2026-06-23-09:59:
 Terminal paste may read the platform clipboard only at the command-action boundary and may forward only explicit string entries to the exact focused mounted Ghostty surface. Do not use ClipboardItem::text here because it can synthesize local file paths from external-path entries; path, image, metadata-only, and empty clipboard data must no-op without logging, persistence, or fallback text.
@@ -37,8 +36,9 @@ pub(crate) fn terminal_clipboard_paste_text(
     terminal_clipboard_explicit_string_entries_text(item)
 }
 
-
-pub(crate) fn terminal_clipboard_explicit_string_entries_text(item: &ClipboardItem) -> Option<String> {
+pub(crate) fn terminal_clipboard_explicit_string_entries_text(
+    item: &ClipboardItem,
+) -> Option<String> {
     let mut text = String::new();
 
     for entry in item.entries() {
@@ -50,8 +50,9 @@ pub(crate) fn terminal_clipboard_explicit_string_entries_text(item: &ClipboardIt
     if text.is_empty() { None } else { Some(text) }
 }
 
-
-pub(crate) fn terminal_clipboard_previewable_image_markdown_text(item: &ClipboardItem) -> Option<String> {
+pub(crate) fn terminal_clipboard_previewable_image_markdown_text(
+    item: &ClipboardItem,
+) -> Option<String> {
     let file_paths = terminal_clipboard_image_file_paths(item);
     if !file_paths.is_empty() {
         return Some(terminal_clipboard_markdown_image_references(&file_paths));
@@ -59,7 +60,6 @@ pub(crate) fn terminal_clipboard_previewable_image_markdown_text(item: &Clipboar
 
     terminal_clipboard_saved_image_markdown_text(item)
 }
-
 
 pub(crate) fn terminal_clipboard_image_file_paths(item: &ClipboardItem) -> Vec<PathBuf> {
     let external_paths = terminal_clipboard_external_image_file_paths(item);
@@ -69,7 +69,6 @@ pub(crate) fn terminal_clipboard_image_file_paths(item: &ClipboardItem) -> Vec<P
 
     terminal_clipboard_string_image_file_paths(item)
 }
-
 
 pub(crate) fn terminal_clipboard_external_image_file_paths(item: &ClipboardItem) -> Vec<PathBuf> {
     let mut image_paths = Vec::new();
@@ -87,7 +86,6 @@ pub(crate) fn terminal_clipboard_external_image_file_paths(item: &ClipboardItem)
 
     image_paths
 }
-
 
 pub(crate) fn terminal_clipboard_string_image_file_paths(item: &ClipboardItem) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
@@ -124,7 +122,6 @@ pub(crate) fn terminal_clipboard_string_image_file_paths(item: &ClipboardItem) -
     image_paths
 }
 
-
 pub(crate) fn terminal_clipboard_saved_image_markdown_text(item: &ClipboardItem) -> Option<String> {
     for entry in item.entries() {
         if let ClipboardEntry::Image(image) = entry {
@@ -145,7 +142,6 @@ pub(crate) fn terminal_clipboard_saved_image_markdown_text(item: &ClipboardItem)
     None
 }
 
-
 /*
 CDXC:GPUITerminalRemoteImagePaste 2026-08-21:
 The remote paste route needs the clipboard image *before* it is written
@@ -164,8 +160,9 @@ pub(crate) enum TerminalClipboardImagePayload {
     },
 }
 
-
-pub(crate) fn terminal_clipboard_image_payload(item: &ClipboardItem) -> Option<TerminalClipboardImagePayload> {
+pub(crate) fn terminal_clipboard_image_payload(
+    item: &ClipboardItem,
+) -> Option<TerminalClipboardImagePayload> {
     let file_paths = terminal_clipboard_image_file_paths(item);
     if !file_paths.is_empty() {
         return Some(TerminalClipboardImagePayload::FilePaths(file_paths));
@@ -188,7 +185,6 @@ pub(crate) fn terminal_clipboard_image_payload(item: &ClipboardItem) -> Option<T
     None
 }
 
-
 pub(crate) fn terminal_clipboard_absolute_path(path: PathBuf) -> Option<PathBuf> {
     if path.is_absolute() {
         Some(path)
@@ -199,7 +195,6 @@ pub(crate) fn terminal_clipboard_absolute_path(path: PathBuf) -> Option<PathBuf>
     }
 }
 
-
 pub(crate) fn terminal_clipboard_markdown_image_references(paths: &[PathBuf]) -> String {
     paths
         .iter()
@@ -209,11 +204,12 @@ pub(crate) fn terminal_clipboard_markdown_image_references(paths: &[PathBuf]) ->
         .join("\n")
 }
 
-
-pub(crate) fn terminal_clipboard_markdown_image_reference(path: &Path, image_number: usize) -> String {
+pub(crate) fn terminal_clipboard_markdown_image_reference(
+    path: &Path,
+    image_number: usize,
+) -> String {
     format!("[Image #{image_number}]({})", path.to_string_lossy())
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiTerminalAttachmentKind {
@@ -222,13 +218,11 @@ pub(crate) enum GpuiTerminalAttachmentKind {
     Folder,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiTerminalAttachmentReference {
     pub(crate) kind: GpuiTerminalAttachmentKind,
     pub(crate) path: String,
 }
-
 
 pub(crate) fn gpui_local_terminal_attachment_reference(
     path: &Path,
@@ -264,7 +258,6 @@ pub(crate) fn gpui_local_terminal_attachment_reference(
     })
 }
 
-
 pub(crate) fn gpui_terminal_attachment_markdown_text(
     references: &[GpuiTerminalAttachmentReference],
 ) -> String {
@@ -294,7 +287,6 @@ pub(crate) fn gpui_terminal_attachment_markdown_text(
         .join(" ")
 }
 
-
 pub(crate) fn terminal_runtime_clipboard_read_text(
     read_standard_clipboard: impl FnOnce() -> Option<ClipboardItem>,
     paste_previewable_images_enabled: bool,
@@ -304,14 +296,12 @@ pub(crate) fn terminal_runtime_clipboard_read_text(
     })
 }
 
-
 pub(crate) fn terminal_runtime_clipboard_write_standard_text(
     text: String,
     mut write_standard_clipboard: impl FnMut(ClipboardItem),
 ) {
     write_standard_clipboard(ClipboardItem::new_string(text));
 }
-
 
 pub(crate) fn terminal_runtime_clipboard_authorized_mounted_slot_ids<SlotId, Owner>(
     snapshot_slot_ids: impl IntoIterator<Item = SlotId>,

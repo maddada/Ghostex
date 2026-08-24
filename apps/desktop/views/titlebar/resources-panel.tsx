@@ -15,17 +15,14 @@ import {
   IconTerminal2,
   IconWorld,
   IconX,
-} from "@tabler/icons-react";
-import { useState, type ReactNode } from "react";
-import { AppTooltip } from "@/packages/core-ui/app-tooltip";
-import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "@/packages/core-ui/agent-logos";
-import type { SidebarAgentIcon } from "@/packages/shared/sidebar-agents";
-import type { NativePortlessAdminInstallAction } from "@/packages/shared/native-ghostty-host-protocol";
-import type {
-  SessionPersistenceProvider,
-  WebLinkOpenTarget,
-} from "@/packages/shared/ghostex-settings";
-import { postNative, postTitlebarSidebarCommand } from "./native-bridge";
+} from '@tabler/icons-react';
+import { useState, type ReactNode } from 'react';
+import { AppTooltip } from '@/packages/core-ui/app-tooltip';
+import { AGENT_LOGO_COLORS, AGENT_LOGOS } from '@/packages/core-ui/agent-logos';
+import type { SidebarAgentIcon } from '@/packages/shared/sidebar-agents';
+import type { NativePortlessAdminInstallAction } from '@/packages/shared/native-ghostty-host-protocol';
+import type { SessionPersistenceProvider, WebLinkOpenTarget } from '@/packages/shared/ghostex-settings';
+import { postNative, postTitlebarSidebarCommand } from './native-bridge';
 import {
   createResourceItemCollapseTarget,
   createResourceItemCollapseTargets,
@@ -39,7 +36,7 @@ import {
   sortResourceBundlesForDisplay,
   sumBundleCpu,
   sumBundleMemory,
-} from "./resource-processes";
+} from './resource-processes';
 import type {
   ResourceGroupView,
   ResourceItemCollapseTarget,
@@ -49,7 +46,7 @@ import type {
   ResourceProcessBundle,
   ResourceProcessTotals,
   TitlebarGxserverDaemonStatus,
-} from "./types";
+} from './types';
 
 /*
  * CDXC:TitlebarTooltips 2026-06-15-13:34:
@@ -98,10 +95,7 @@ export function TitlebarResourcesMenu({
   onGxserverStart: () => void;
   onGxserverStop: () => void;
   onQuit: (bundles: ResourceProcessBundle[]) => void;
-  onSetResourceItemsCollapsed: (
-    targets: readonly ResourceItemCollapseTarget[],
-    collapsed: boolean,
-  ) => void;
+  onSetResourceItemsCollapsed: (targets: readonly ResourceItemCollapseTarget[], collapsed: boolean) => void;
   processSnapshotReady: boolean;
   processTotals: ResourceProcessTotals;
   onSleepInactiveSessions: () => void;
@@ -110,18 +104,11 @@ export function TitlebarResourcesMenu({
   quittingKeys: Set<string>;
   serverBundles: ResourceProcessBundle[];
   linkOpenTarget: WebLinkOpenTarget;
-  sessionPersistenceProvider?: Exclude<SessionPersistenceProvider, "off">;
+  sessionPersistenceProvider?: Exclude<SessionPersistenceProvider, 'off'>;
 }) {
-  const visibleGroupViews = processSnapshotReady
-    ? groupViews.filter((view) => view.bundles.length > 0)
-    : [];
+  const visibleGroupViews = processSnapshotReady ? groupViews.filter((view) => view.bundles.length > 0) : [];
   const metricBundles = processSnapshotReady
-    ? [
-        ...visibleGroupViews.flatMap((view) => view.bundles),
-        ...codeIdeBundles,
-        ...browserBundles,
-        ...orphanBundles,
-      ]
+    ? [...visibleGroupViews.flatMap((view) => view.bundles), ...codeIdeBundles, ...browserBundles, ...orphanBundles]
     : [];
   /*
    * CDXC:TitlebarResources 2026-06-22-00:30:
@@ -160,12 +147,12 @@ export function TitlebarResourcesMenu({
    * tmux, zmx, or zellij.
    */
   const persistentSessionMode =
-    sessionPersistenceProvider === "tmux" ||
-    sessionPersistenceProvider === "zmx" ||
-    sessionPersistenceProvider === "zellij";
+    sessionPersistenceProvider === 'tmux' ||
+    sessionPersistenceProvider === 'zmx' ||
+    sessionPersistenceProvider === 'zellij';
   const sleepAllSessionBundles = visibleGroupViews
     .flatMap((view) => view.bundles)
-    .filter((bundle) => bundle.type === "session" && bundle.session?.sessionKind === "terminal");
+    .filter((bundle) => bundle.type === 'session' && bundle.session?.sessionKind === 'terminal');
   /**
    * CDXC:TitlebarResources 2026-05-24-20:58:
    * Resource summary and row-action tooltips must stay compact enough for the titlebar area.
@@ -191,33 +178,33 @@ export function TitlebarResourcesMenu({
    * always hit-testable, and styled by ordinary CSS :hover/:disabled states.
    * Avoid React hover gates and native-pointer body flags because they made the
    * child-panel buttons appear visible while still rejecting clicks.
-  */
+   */
   const resourceTooltipStyle = { maxWidth: 220 };
-  const liveCpuLabel = processSnapshotReady ? formatWholePercent(processTotals.cpu) : "--";
-  const liveMemoryLabel = processSnapshotReady ? formatResourceMemory(processTotals.memoryMb) : "--";
+  const liveCpuLabel = processSnapshotReady ? formatWholePercent(processTotals.cpu) : '--';
+  const liveMemoryLabel = processSnapshotReady ? formatResourceMemory(processTotals.memoryMb) : '--';
   const resourceItemCollapseTargets = createResourceItemCollapseTargets(allBundles);
   const allResourceItemsCollapsed =
     resourceItemCollapseTargets.length > 0 &&
     resourceItemCollapseTargets.every((target) => isResourceItemCollapsed(target, collapsedKeys));
   const resourceItemToggleLabel = allResourceItemsCollapsed
-    ? "Expand all resource items"
-    : "Collapse all resource items";
+    ? 'Expand all resource items'
+    : 'Collapse all resource items';
   const [resourcesInfoOpen, setResourcesInfoOpen] = useState(false);
   return (
-    <div className="titlebar-resources-panel">
-      <div className="titlebar-resources-header">
-        <div className="titlebar-resources-title">
-          <IconDeviceDesktop aria-hidden="true" size={18} />
+    <div className='titlebar-resources-panel'>
+      <div className='titlebar-resources-header'>
+        <div className='titlebar-resources-title'>
+          <IconDeviceDesktop aria-hidden='true' size={18} />
           <span>Resources</span>
         </div>
-        <div className="titlebar-resources-actions">
-          <div className="titlebar-resources-info-control">
+        <div className='titlebar-resources-actions'>
+          <div className='titlebar-resources-info-control'>
             <button
               aria-expanded={resourcesInfoOpen}
-              aria-label="Resources information"
-              className="titlebar-resources-info-button"
+              aria-label='Resources information'
+              className='titlebar-resources-info-button'
               onClick={() => setResourcesInfoOpen((open) => !open)}
-              type="button"
+              type='button'
             >
               {/*
                * CDXC:TitlebarResources 2026-06-16-01:08:
@@ -237,12 +224,14 @@ export function TitlebarResourcesMenu({
                * panel so the explanatory sentences can fit without looking
                * like the same dark layer as the modal behind it.
                */}
-              <IconInfoCircle aria-hidden="true" size={14} stroke={1.9} />
+              <IconInfoCircle aria-hidden='true' size={14} stroke={1.9} />
             </button>
             {resourcesInfoOpen ? (
-              <div className="titlebar-resources-info-popover" role="dialog">
-                <div className="titlebar-resources-info-note">
-                  <p>This app uses native Ghostty terminals as they're lighter on CPU & RAM than electron/web terminals.</p>
+              <div className='titlebar-resources-info-popover' role='dialog'>
+                <div className='titlebar-resources-info-note'>
+                  <p>
+                    This app uses native Ghostty terminals as they're lighter on CPU & RAM than electron/web terminals.
+                  </p>
                   <p>The RAM use you see here is the lowest possible for the Agent CLI that you're using.</p>
                   <p>Keep in mind that each CLI uses more/less RAM based on a lot of factors.</p>
                   <p>You can easily sleep all inactive terminals here (Auto-sleep can be configured in settings).</p>
@@ -252,12 +241,10 @@ export function TitlebarResourcesMenu({
           </div>
           <button
             aria-label={resourceItemToggleLabel}
-            className="titlebar-resources-collapse-all-button"
+            className='titlebar-resources-collapse-all-button'
             disabled={resourceItemCollapseTargets.length === 0}
-            onClick={() =>
-              onSetResourceItemsCollapsed(resourceItemCollapseTargets, !allResourceItemsCollapsed)
-            }
-            type="button"
+            onClick={() => onSetResourceItemsCollapsed(resourceItemCollapseTargets, !allResourceItemsCollapsed)}
+            type='button'
           >
             {/*
              * CDXC:TitlebarResources 2026-06-12-23:33:
@@ -272,50 +259,50 @@ export function TitlebarResourcesMenu({
              * action uses IconArrowsDiagonal2.
              */}
             {allResourceItemsCollapsed ? (
-              <IconArrowsDiagonal2 aria-hidden="true" size={14} stroke={1.9} />
+              <IconArrowsDiagonal2 aria-hidden='true' size={14} stroke={1.9} />
             ) : (
-              <IconArrowsDiagonalMinimize aria-hidden="true" size={14} stroke={1.9} />
+              <IconArrowsDiagonalMinimize aria-hidden='true' size={14} stroke={1.9} />
             )}
           </button>
           <button
-            className="titlebar-resources-action-button"
+            className='titlebar-resources-action-button'
             data-enabled={String(inactiveTerminalSleepSessionCount > 0)}
-            data-variant="sleep"
+            data-variant='sleep'
             disabled={inactiveTerminalSleepSessionCount === 0}
             onClick={onSleepInactiveSessions}
-            type="button"
+            type='button'
           >
-            <IconMoon aria-hidden="true" size={14} stroke={1.8} />
+            <IconMoon aria-hidden='true' size={14} stroke={1.8} />
             <span>Sleep Inactive</span>
           </button>
           {persistentSessionMode ? (
             <>
               <button
-                className="titlebar-resources-action-button"
-                data-variant="sleep"
+                className='titlebar-resources-action-button'
+                data-variant='sleep'
                 disabled={sleepAllSessionBundles.length === 0}
                 onClick={() => onQuit(sleepAllSessionBundles)}
-                type="button"
+                type='button'
               >
-                <IconMoon aria-hidden="true" size={14} stroke={1.9} />
+                <IconMoon aria-hidden='true' size={14} stroke={1.9} />
                 <span>Sleep All</span>
               </button>
             </>
           ) : null}
-          <div className="titlebar-resources-summary">
+          <div className='titlebar-resources-summary'>
             <AppTooltip
               {...TITLEBAR_TOOLTIP_ROOT_PROPS}
               content={
                 <>
-                  <span className="titlebar-resource-tooltip-title">Live CPU</span>
+                  <span className='titlebar-resource-tooltip-title'>Live CPU</span>
                   <span>CPU used by Ghostex and owned child processes.</span>
                 </>
               }
-              contentClassName="titlebar-resource-tooltip"
+              contentClassName='titlebar-resource-tooltip'
               contentStyle={resourceTooltipStyle}
             >
               <span>
-                <IconCpu aria-hidden="true" size={13} stroke={1.8} />
+                <IconCpu aria-hidden='true' size={13} stroke={1.8} />
                 {liveCpuLabel}
               </span>
             </AppTooltip>
@@ -323,22 +310,24 @@ export function TitlebarResourcesMenu({
               {...TITLEBAR_TOOLTIP_ROOT_PROPS}
               content={
                 <>
-                  <span className="titlebar-resource-tooltip-title">Live memory</span>
-                  <span>RAM used by Ghostex and owned child processes, including app runtime and helper processes.</span>
+                  <span className='titlebar-resource-tooltip-title'>Live memory</span>
+                  <span>
+                    RAM used by Ghostex and owned child processes, including app runtime and helper processes.
+                  </span>
                 </>
               }
-              contentClassName="titlebar-resource-tooltip"
+              contentClassName='titlebar-resource-tooltip'
               contentStyle={resourceTooltipStyle}
             >
               <span>
-                <IconDeviceDesktop aria-hidden="true" size={13} stroke={1.8} />
+                <IconDeviceDesktop aria-hidden='true' size={13} stroke={1.8} />
                 {liveMemoryLabel}
               </span>
             </AppTooltip>
           </div>
         </div>
       </div>
-      <div className="titlebar-resources-scroll" data-loading={String(!processSnapshotReady)}>
+      <div className='titlebar-resources-scroll' data-loading={String(!processSnapshotReady)}>
         <TitlebarGxserverDaemonSection
           daemon={daemon}
           onAlwaysStartChange={onGxserverAlwaysStartChange}
@@ -361,7 +350,7 @@ export function TitlebarResourcesMenu({
               onToggle={onToggle}
               quittingKeys={quittingKeys}
               linkOpenTarget={linkOpenTarget}
-              title="Dev Servers"
+              title='Dev Servers'
               bundles={serverBundles}
             />
             {visibleGroupViews.length > 0 ? (
@@ -378,7 +367,7 @@ export function TitlebarResourcesMenu({
                 />
               ))
             ) : (
-              <div className="titlebar-resources-empty">No grouped sessions matched running processes.</div>
+              <div className='titlebar-resources-empty'>No grouped sessions matched running processes.</div>
             )}
             {/*
              * CDXC:TitlebarResources 2026-06-22-13:50:
@@ -390,7 +379,7 @@ export function TitlebarResourcesMenu({
               onFocusSession={onFocusSession}
               onToggle={onToggle}
               quittingKeys={quittingKeys}
-              title="Code IDE"
+              title='Code IDE'
               bundles={codeIdeBundles}
             />
             <TitlebarResourceSection
@@ -399,7 +388,7 @@ export function TitlebarResourcesMenu({
               onFocusSession={onFocusSession}
               onToggle={onToggle}
               quittingKeys={quittingKeys}
-              title="Browser Tabs"
+              title='Browser Tabs'
               bundles={browserBundles}
             />
             <TitlebarResourceSection
@@ -408,13 +397,13 @@ export function TitlebarResourcesMenu({
               onFocusSession={onFocusSession}
               onToggle={onToggle}
               quittingKeys={quittingKeys}
-              title="Orphaned / Detached"
+              title='Orphaned / Detached'
               bundles={orphanBundles}
             />
           </>
         ) : (
-          <div className="titlebar-resources-loading" role="status" aria-live="polite">
-            <IconLoader2 aria-hidden="true" className="titlebar-resources-loading-icon" size={16} stroke={1.9} />
+          <div className='titlebar-resources-loading' role='status' aria-live='polite'>
+            <IconLoader2 aria-hidden='true' className='titlebar-resources-loading-icon' size={16} stroke={1.9} />
             <span>Loading resources...</span>
           </div>
         )}
@@ -436,56 +425,54 @@ export function TitlebarGxserverDaemonSection({
   onStart: () => void;
   onStop: () => void;
 }) {
-  const isRunning = daemon.state === "running";
-  const isStarting = daemon.state === "starting";
+  const isRunning = daemon.state === 'running';
+  const isStarting = daemon.state === 'starting';
   const shouldShowReloadApp = !isRunning;
-  const statusLabel = daemon.version
-    ? `${daemon.state} - v${daemon.version}`
-    : daemon.state;
+  const statusLabel = daemon.version ? `${daemon.state} - v${daemon.version}` : daemon.state;
   return (
-    <section className="titlebar-gxserver-daemon">
-      <div className="titlebar-gxserver-daemon-main">
-        <span className="titlebar-gxserver-daemon-dot" data-state={daemon.ok === false ? "error" : daemon.state} />
-        <div className="titlebar-gxserver-daemon-copy">
+    <section className='titlebar-gxserver-daemon'>
+      <div className='titlebar-gxserver-daemon-main'>
+        <span className='titlebar-gxserver-daemon-dot' data-state={daemon.ok === false ? 'error' : daemon.state} />
+        <div className='titlebar-gxserver-daemon-copy'>
           {daemon.message ? <span>{daemon.message}</span> : null}
           <span>{statusLabel}</span>
         </div>
       </div>
-      <div className="titlebar-gxserver-daemon-controls">
+      <div className='titlebar-gxserver-daemon-controls'>
         {/*
          * CDXC:TitlebarDaemonControls 2026-06-12-11:51:
          * The Resources dropdown should expose Restart as the primary daemon action. Hide manual Start/Stop controls so users do not manage daemon lifecycle from this compact status row.
          */}
         <AppTooltip
           {...TITLEBAR_TOOLTIP_ROOT_PROPS}
-          content="Restart daemon"
-          contentClassName="titlebar-resource-tooltip"
+          content='Restart daemon'
+          contentClassName='titlebar-resource-tooltip'
         >
           <button
-            aria-label="Restart gxserver"
-            className="titlebar-gxserver-daemon-icon-button"
+            aria-label='Restart gxserver'
+            className='titlebar-gxserver-daemon-icon-button'
             disabled={isStarting}
             onClick={onRestart}
-            type="button"
+            type='button'
           >
-            <IconRefresh aria-hidden="true" size={14} stroke={1.9} />
+            <IconRefresh aria-hidden='true' size={14} stroke={1.9} />
           </button>
         </AppTooltip>
         {shouldShowReloadApp ? (
           <AppTooltip
             {...TITLEBAR_TOOLTIP_ROOT_PROPS}
-            content="Reload app"
-            contentClassName="titlebar-resource-tooltip"
+            content='Reload app'
+            contentClassName='titlebar-resource-tooltip'
           >
             <button
-              aria-label="Reload Ghostex"
-              className="titlebar-gxserver-daemon-icon-button"
+              aria-label='Reload Ghostex'
+              className='titlebar-gxserver-daemon-icon-button'
               onClick={() => {
                 window.location.reload();
               }}
-              type="button"
+              type='button'
             >
-              <IconRefresh aria-hidden="true" size={14} stroke={1.9} />
+              <IconRefresh aria-hidden='true' size={14} stroke={1.9} />
             </button>
           </AppTooltip>
         ) : null}
@@ -537,23 +524,23 @@ export function TitlebarResourceSection({
   const sortedBundles = sortResourceBundlesForDisplay(bundles, quittingKeys);
   const actionableBundles = bundles.filter(isResourceBundleActionable);
   const hasTerminalSession = actionableBundles.some(
-    (bundle) => bundle.type === "session" && bundle.session?.sessionKind === "terminal",
+    (bundle) => bundle.type === 'session' && bundle.session?.sessionKind === 'terminal'
   );
-  const hasServer = actionableBundles.some((bundle) => bundle.type === "server");
+  const hasServer = actionableBundles.some((bundle) => bundle.type === 'server');
   const sectionActionBundles = hasTerminalSession
-    ? actionableBundles.filter((bundle) => bundle.type === "session" && bundle.session?.sessionKind === "terminal")
+    ? actionableBundles.filter((bundle) => bundle.type === 'session' && bundle.session?.sessionKind === 'terminal')
     : actionableBundles;
-  const sectionActionLabel = hasTerminalSession ? "Sleep Project" : hasServer ? "Stop Servers" : "Quit";
+  const sectionActionLabel = hasTerminalSession ? 'Sleep Project' : hasServer ? 'Stop Servers' : 'Quit';
   const sectionActionTooltipTitle = hasTerminalSession
-    ? "Sleep project"
+    ? 'Sleep project'
     : hasServer
-      ? "Stop servers"
-      : "Quit this group";
+      ? 'Stop servers'
+      : 'Quit this group';
   const sectionActionTooltipBody = hasTerminalSession
     ? "Sleeps this project's terminal sessions and keeps them restorable in the sidebar."
     : hasServer
-      ? "Stops the listener-backed server processes without sleeping the owning terminal sessions."
-      : "Stops user-owned live processes and closes related surfaces.";
+      ? 'Stops the listener-backed server processes without sleeping the owning terminal sessions.'
+      : 'Stops user-owned live processes and closes related surfaces.';
   /**
    * CDXC:TitlebarResources 2026-05-25-14:21:
    * Resource action tooltips share the compact width cap used by header and
@@ -589,20 +576,20 @@ export function TitlebarResourceSection({
    */
   const resourceTooltipStyle = { maxWidth: 220 };
   return (
-    <section className="titlebar-resource-section">
-      <div className="titlebar-resource-section-heading">
-        <div className="titlebar-resource-section-label">
+    <section className='titlebar-resource-section'>
+      <div className='titlebar-resource-section-heading'>
+        <div className='titlebar-resource-section-label'>
           <span>{title}</span>
-          <span className="titlebar-resource-section-summary">
+          <span className='titlebar-resource-section-summary'>
             <span>
-              <IconCpu aria-hidden="true" size={12} stroke={1.8} />
+              <IconCpu aria-hidden='true' size={12} stroke={1.8} />
               {formatWholePercent(sectionCpu)}
             </span>
             <span>
-              <IconDeviceDesktop aria-hidden="true" size={12} stroke={1.8} />
+              <IconDeviceDesktop aria-hidden='true' size={12} stroke={1.8} />
               {formatResourceMemory(sectionMemory)}
             </span>
-            <span className="titlebar-resource-section-count">{bundles.length}</span>
+            <span className='titlebar-resource-section-count'>{bundles.length}</span>
           </span>
         </div>
         {sectionActionBundles.length > 0 ? (
@@ -610,25 +597,25 @@ export function TitlebarResourceSection({
             {...TITLEBAR_TOOLTIP_ROOT_PROPS}
             content={
               <>
-                <span className="titlebar-resource-tooltip-title">{sectionActionTooltipTitle}</span>
+                <span className='titlebar-resource-tooltip-title'>{sectionActionTooltipTitle}</span>
                 <span>{sectionActionTooltipBody}</span>
               </>
             }
-            contentClassName="titlebar-resource-tooltip"
+            contentClassName='titlebar-resource-tooltip'
             contentStyle={resourceTooltipStyle}
           >
             <button
-              className="titlebar-resource-section-quit-button"
-              data-action={hasTerminalSession ? "sleep" : hasServer ? "stop" : "quit"}
+              className='titlebar-resource-section-quit-button'
+              data-action={hasTerminalSession ? 'sleep' : hasServer ? 'stop' : 'quit'}
               onClick={() => onQuit(sectionActionBundles)}
-              type="button"
+              type='button'
             >
               {sectionActionLabel}
             </button>
           </AppTooltip>
         ) : null}
       </div>
-      <div className="titlebar-resource-section-body">
+      <div className='titlebar-resource-section-body'>
         {sortedBundles.map((bundle) => (
           <TitlebarResourceBundle
             bundle={bundle}
@@ -678,9 +665,7 @@ export function TitlebarResourceBundle({
    */
   const bundleCollapseTarget = createResourceItemCollapseTarget(bundle);
   const bundleToggleKey = bundleCollapseTarget?.key ?? bundle.key;
-  const isCollapsed = bundleCollapseTarget
-    ? isResourceItemCollapsed(bundleCollapseTarget, collapsedKeys)
-    : false;
+  const isCollapsed = bundleCollapseTarget ? isResourceItemCollapsed(bundleCollapseTarget, collapsedKeys) : false;
   /**
    * CDXC:TitlebarResources 2026-05-23-10:52:
    * Terminal-session Quit from Resources terminates the live process tree but
@@ -688,14 +673,12 @@ export function TitlebarResourceBundle({
    * sleep affordance for those rows; keep the quit affordance for browser,
    * code, and detached process rows that are actually removed or closed.
    */
-  const preservesSidebarSession =
-    bundle.type === "session" && bundle.session?.sessionKind === "terminal";
-  const isServer = bundle.type === "server";
+  const preservesSidebarSession = bundle.type === 'session' && bundle.session?.sessionKind === 'terminal';
+  const isServer = bundle.type === 'server';
   const serverPortless = bundle.portless;
   const mainLabel = getResourceBundleMainLabel(bundle);
   const mainUrl = getResourceBundleMainUrl(bundle);
-  const showPortlessSetupAction =
-    isServer && serverPortless !== undefined && !serverPortless.isSetupActive;
+  const showPortlessSetupAction = isServer && serverPortless !== undefined && !serverPortless.isSetupActive;
   const focusSessionId = resourceBundleFocusSessionId(bundle);
   const isActionable = isResourceBundleActionable(bundle);
   const actionLabel = preservesSidebarSession
@@ -726,9 +709,9 @@ export function TitlebarResourceBundle({
    * the listener process tree and must not sleep the terminal session.
    */
   return (
-    <div className="titlebar-resource-bundle" data-quitting={String(isQuitting)}>
+    <div className='titlebar-resource-bundle' data-quitting={String(isQuitting)}>
       <div
-        className="titlebar-resource-row"
+        className='titlebar-resource-row'
         data-expandable={String(hasChildren)}
         onClick={() => {
           if (hasChildren) {
@@ -736,26 +719,26 @@ export function TitlebarResourceBundle({
           }
         }}
       >
-        <div className="titlebar-resource-main">
+        <div className='titlebar-resource-main'>
           {hasChildren ? (
             <button
-              className="titlebar-resource-collapse-button"
+              className='titlebar-resource-collapse-button'
               onClick={(event) => {
                 event.stopPropagation();
                 onToggle(bundleToggleKey);
               }}
-              type="button"
+              type='button'
             >
-              <IconChevronDown aria-hidden="true" data-collapsed={String(isCollapsed)} size={14} stroke={1.8} />
+              <IconChevronDown aria-hidden='true' data-collapsed={String(isCollapsed)} size={14} stroke={1.8} />
             </button>
           ) : (
-            <span className="titlebar-resource-collapse-spacer" />
+            <span className='titlebar-resource-collapse-spacer' />
           )}
-          <span className="titlebar-resource-avatar">{getResourceBundleAvatar(bundle)}</span>
-          <span className="titlebar-resource-text">
+          <span className='titlebar-resource-avatar'>{getResourceBundleAvatar(bundle)}</span>
+          <span className='titlebar-resource-text'>
             {mainUrl ? (
               <a
-                className="titlebar-resource-name titlebar-resource-main-link"
+                className='titlebar-resource-name titlebar-resource-main-link'
                 href={mainUrl}
                 onClick={(event) => {
                   event.preventDefault();
@@ -766,29 +749,29 @@ export function TitlebarResourceBundle({
                 {mainLabel}
               </a>
             ) : (
-              <span className="titlebar-resource-name">{mainLabel}</span>
+              <span className='titlebar-resource-name'>{mainLabel}</span>
             )}
-            <span className="titlebar-resource-meta">
+            <span className='titlebar-resource-meta'>
               {isQuitting ? (
                 preservesSidebarSession ? (
-                  "Sleeping..."
+                  'Sleeping...'
                 ) : isServer ? (
-                  "Stopping..."
+                  'Stopping...'
                 ) : (
-                  "Quitting..."
+                  'Quitting...'
                 )
               ) : (
                 <>
-                  <span className="titlebar-resource-meta-text">{getResourceBundleMeta(bundle)}</span>
+                  <span className='titlebar-resource-meta-text'>{getResourceBundleMeta(bundle)}</span>
                   {showPortlessSetupAction && serverPortless ? (
                     <button
-                      className="titlebar-resource-portless-action"
+                      className='titlebar-resource-portless-action'
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
                         runPortlessResourcesSetupAction(serverPortless);
                       }}
-                      type="button"
+                      type='button'
                     >
                       {serverPortless.setupActionLabel}
                     </button>
@@ -798,66 +781,66 @@ export function TitlebarResourceBundle({
             </span>
           </span>
         </div>
-        <div className="titlebar-resource-metrics" aria-label="Resource usage">
-          <span className="titlebar-resource-metric">
-            <IconCpu aria-hidden="true" size={13} stroke={1.8} />
+        <div className='titlebar-resource-metrics' aria-label='Resource usage'>
+          <span className='titlebar-resource-metric'>
+            <IconCpu aria-hidden='true' size={13} stroke={1.8} />
             {formatWholePercent(bundle.cpu)}
           </span>
-          <span className="titlebar-resource-metric">
-            <IconDeviceDesktop aria-hidden="true" size={13} stroke={1.8} />
+          <span className='titlebar-resource-metric'>
+            <IconDeviceDesktop aria-hidden='true' size={13} stroke={1.8} />
             {formatResourceMemory(bundle.memoryMb)}
           </span>
         </div>
         {focusSessionId ? (
           <button
             aria-label={`Focus ${bundle.label}`}
-            className="titlebar-resource-focus-button"
+            className='titlebar-resource-focus-button'
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
               onFocusSession(focusSessionId);
             }}
-            type="button"
+            type='button'
           >
-            <IconFocus2 aria-hidden="true" size={13} stroke={1.9} />
+            <IconFocus2 aria-hidden='true' size={13} stroke={1.9} />
           </button>
         ) : null}
         {isActionable ? (
           <button
             aria-label={actionLabel}
-            className="titlebar-resource-kill-button"
-            data-action={preservesSidebarSession ? "sleep" : isServer ? "stop" : "quit"}
+            className='titlebar-resource-kill-button'
+            data-action={preservesSidebarSession ? 'sleep' : isServer ? 'stop' : 'quit'}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onQuit([ bundle ]);
+              onQuit([bundle]);
             }}
-            type="button"
+            type='button'
           >
             {preservesSidebarSession ? (
-              <IconMoon aria-hidden="true" size={13} stroke={1.9} />
+              <IconMoon aria-hidden='true' size={13} stroke={1.9} />
             ) : isServer ? (
-              <IconSquareMinus aria-hidden="true" size={13} stroke={1.9} />
+              <IconSquareMinus aria-hidden='true' size={13} stroke={1.9} />
             ) : (
-              <IconX aria-hidden="true" size={13} stroke={2} />
+              <IconX aria-hidden='true' size={13} stroke={2} />
             )}
           </button>
         ) : null}
       </div>
       {hasChildren && !isCollapsed ? (
-        <div className="titlebar-resource-children">
+        <div className='titlebar-resource-children'>
           {bundle.childProcesses.slice(0, 8).map((process) => (
-            <div className="titlebar-resource-child-row" key={process.pid}>
-              <span className="titlebar-resource-child-name">
+            <div className='titlebar-resource-child-row' key={process.pid}>
+              <span className='titlebar-resource-child-name'>
                 {getResourceChildProcessName(bundle, process)} pid {process.pid}
               </span>
-              <div className="titlebar-resource-child-metrics" aria-label="Child process resource usage">
-                <span className="titlebar-resource-metric">
-                  <IconCpu aria-hidden="true" size={12} stroke={1.8} />
+              <div className='titlebar-resource-child-metrics' aria-label='Child process resource usage'>
+                <span className='titlebar-resource-metric'>
+                  <IconCpu aria-hidden='true' size={12} stroke={1.8} />
                   {formatWholePercent(process.cpu)}
                 </span>
-                <span className="titlebar-resource-metric">
-                  <IconDeviceDesktop aria-hidden="true" size={12} stroke={1.8} />
+                <span className='titlebar-resource-metric'>
+                  <IconDeviceDesktop aria-hidden='true' size={12} stroke={1.8} />
                   {formatResourceMemory(process.rssMb)}
                 </span>
               </div>
@@ -869,11 +852,8 @@ export function TitlebarResourceBundle({
   );
 }
 
-export function getResourceChildProcessName(
-  bundle: ResourceProcessBundle,
-  process: ResourceProcess,
-): string {
-  return bundle.type === "browser" ? getBrowserProcessDisplayName(process) : getProcessDisplayName(process);
+export function getResourceChildProcessName(bundle: ResourceProcessBundle, process: ResourceProcess): string {
+  return bundle.type === 'browser' ? getBrowserProcessDisplayName(process) : getProcessDisplayName(process);
 }
 
 export function getResourceBundleAvatar(bundle: ResourceProcessBundle): ReactNode {
@@ -888,8 +868,8 @@ export function getResourceBundleAvatar(bundle: ResourceProcessBundle): ReactNod
      */
     return (
       <span
-        aria-hidden="true"
-        className="titlebar-resource-avatar-logo"
+        aria-hidden='true'
+        className='titlebar-resource-avatar-logo'
         data-agent-icon={agentIcon}
         style={{
           backgroundColor: AGENT_LOGO_COLORS[agentIcon],
@@ -899,23 +879,23 @@ export function getResourceBundleAvatar(bundle: ResourceProcessBundle): ReactNod
       />
     );
   }
-  if (bundle.type === "code") {
-    return <IconCode aria-hidden="true" size={15} stroke={1.9} />;
+  if (bundle.type === 'code') {
+    return <IconCode aria-hidden='true' size={15} stroke={1.9} />;
   }
-  if (bundle.type === "browser") {
-    return <IconWorld aria-hidden="true" size={15} stroke={1.9} />;
+  if (bundle.type === 'browser') {
+    return <IconWorld aria-hidden='true' size={15} stroke={1.9} />;
   }
-  if (bundle.type === "server") {
-    return <IconWorld aria-hidden="true" size={15} stroke={1.9} />;
+  if (bundle.type === 'server') {
+    return <IconWorld aria-hidden='true' size={15} stroke={1.9} />;
   }
-  if (bundle.session?.sessionKind === "terminal") {
-    return <IconTerminal2 aria-hidden="true" size={15} stroke={1.9} />;
+  if (bundle.session?.sessionKind === 'terminal') {
+    return <IconTerminal2 aria-hidden='true' size={15} stroke={1.9} />;
   }
-  return <IconBox aria-hidden="true" size={15} stroke={1.9} />;
+  return <IconBox aria-hidden='true' size={15} stroke={1.9} />;
 }
 
 export function isSidebarAgentIcon(candidate: unknown): candidate is SidebarAgentIcon {
-  return typeof candidate === "string" && Object.prototype.hasOwnProperty.call(AGENT_LOGOS, candidate);
+  return typeof candidate === 'string' && Object.prototype.hasOwnProperty.call(AGENT_LOGOS, candidate);
 }
 
 export function getResourceBundleMainLabel(bundle: ResourceProcessBundle): string {
@@ -941,7 +921,7 @@ export function getResourceBundleMainUrl(bundle: ResourceProcessBundle): string 
 export function openResourceBundleMainUrl(
   bundle: ResourceProcessBundle,
   url: string,
-  linkOpenTarget: WebLinkOpenTarget | undefined,
+  linkOpenTarget: WebLinkOpenTarget | undefined
 ): void {
   /*
    * CDXC:TerminalDevServers 2026-06-23-19:22:
@@ -950,11 +930,11 @@ export function openResourceBundleMainUrl(
    * CDXC:WebLinkOpenTarget 2026-08-19:
    * That choice is now the app-wide webLinkOpenTarget shared with terminal and session chat links, so these rows stop disagreeing with the Browser setting.
    */
-  if (bundle.type === "server" && linkOpenTarget === "system-default-browser") {
-    postNative({ type: "openExternalUrl", url });
+  if (bundle.type === 'server' && linkOpenTarget === 'system-default-browser') {
+    postNative({ type: 'openExternalUrl', url });
     return;
   }
-  postTitlebarSidebarCommand({ type: "openBrowserPane", url });
+  postTitlebarSidebarCommand({ type: 'openBrowserPane', url });
 }
 
 export function getResourceBundleMeta(bundle: ResourceProcessBundle): string {
@@ -971,21 +951,21 @@ export function getResourceBundleMeta(bundle: ResourceProcessBundle): string {
   if (bundle.session) {
     const provider = bundle.session.sessionPersistenceProvider
       ? `${bundle.session.sessionPersistenceProvider} terminal`
-      : bundle.session.sessionKind ?? "session";
-    const pid = bundle.process?.pid ? ` pid ${bundle.process.pid}` : "";
+      : (bundle.session.sessionKind ?? 'session');
+    const pid = bundle.process?.pid ? ` pid ${bundle.process.pid}` : '';
     return `${provider}${pid}`;
   }
   if (bundle.browserTab) {
-    return bundle.browserTab.url?.trim() || "Browser tab";
+    return bundle.browserTab.url?.trim() || 'Browser tab';
   }
-  if (bundle.type === "browser") {
-    if (bundle.key === "browser:runtime") {
-      return "Shared GPU, network, and storage helpers";
+  if (bundle.type === 'browser') {
+    if (bundle.key === 'browser:runtime') {
+      return 'Shared GPU, network, and storage helpers';
     }
-    if (bundle.key === "browser:unmatched-renderers") {
-      return "No visible Browser tab matched these helpers";
+    if (bundle.key === 'browser:unmatched-renderers') {
+      return 'No visible Browser tab matched these helpers';
     }
-    return "Browser helper processes";
+    return 'Browser helper processes';
   }
   if (bundle.process?.pid) {
     return `pid ${bundle.process.pid}`;
@@ -993,15 +973,17 @@ export function getResourceBundleMeta(bundle: ResourceProcessBundle): string {
   return bundle.type;
 }
 
-export function resourceServerLocalhostLabel(server: Pick<ResourceListeningServer, "port">): string {
+export function resourceServerLocalhostLabel(server: Pick<ResourceListeningServer, 'port'>): string {
   return `localhost:${server.port}`;
 }
 
-export function resourceServerLocalhostUrl(server: Pick<ResourceListeningServer, "port">): string {
+export function resourceServerLocalhostUrl(server: Pick<ResourceListeningServer, 'port'>): string {
   return `http://${resourceServerLocalhostLabel(server)}`;
 }
 
-export function resourcePortlessUrl(portless: Pick<ResourcePortlessServerPresentation, "hostname" | "protocol">): string {
+export function resourcePortlessUrl(
+  portless: Pick<ResourcePortlessServerPresentation, 'hostname' | 'protocol'>
+): string {
   return `${portless.protocol}://${portless.hostname}`;
 }
 
@@ -1014,16 +996,16 @@ export function runPortlessResourcesSetupAction(portless: ResourcePortlessServer
     action: portless.setupAction,
     protocol: portless.protocol,
     requestId: createPortlessResourcesAdminRequestId(portless.setupAction),
-    type: "runPortlessSettingsAdminAction",
+    type: 'runPortlessSettingsAdminAction',
   });
 }
 
 export function openPortlessResourcesSettings(): void {
   window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-    initialSearchQuery: "Portless",
-    initialTab: "projects",
-    modal: "settings",
-    type: "open",
+    initialSearchQuery: 'Portless',
+    initialTab: 'projects',
+    modal: 'settings',
+    type: 'open',
   });
 }
 

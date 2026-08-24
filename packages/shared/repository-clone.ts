@@ -4,19 +4,19 @@ export type ParsedRepositoryCloneInput = {
 };
 
 const MAX_REPOSITORY_BRANCH_NAME_LENGTH = 255;
-const DEFAULT_REPOSITORY_HOST = "github.com";
+const DEFAULT_REPOSITORY_HOST = 'github.com';
 const REPOSITORY_BROWSER_PATH_STOP_SEGMENTS = new Set([
-  "-",
-  "branches",
-  "commit",
-  "commits",
-  "issues",
-  "pull",
-  "pulls",
-  "releases",
-  "src",
-  "tree",
-  "wiki",
+  '-',
+  'branches',
+  'commit',
+  'commits',
+  'issues',
+  'pull',
+  'pulls',
+  'releases',
+  'src',
+  'tree',
+  'wiki',
 ]);
 
 /**
@@ -34,7 +34,7 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
   const sshMatch = token.match(/^git@([^:]+):(.+)$/i);
   if (sshMatch) {
     const host = sshMatch[1]?.trim();
-    const path = normalizeRepositoryPath(sshMatch[2] ?? "");
+    const path = normalizeRepositoryPath(sshMatch[2] ?? '');
     if (!host || !path) {
       return undefined;
     }
@@ -47,7 +47,7 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
   const sshUrlMatch = token.match(/^ssh:\/\/(?:[^@/\s]+@)?([^/\s]+)\/(.+)$/i);
   if (sshUrlMatch) {
     const host = sshUrlMatch[1]?.trim();
-    const path = normalizeRepositoryPath(sshUrlMatch[2] ?? "");
+    const path = normalizeRepositoryPath(sshUrlMatch[2] ?? '');
     if (!host || !path) {
       return undefined;
     }
@@ -60,7 +60,7 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
   const httpMatch = token.match(/^(?:https?:\/\/)?([^/\s]+\.[^/\s]+)\/(.+)$/i);
   if (httpMatch) {
     const host = httpMatch[1]?.trim();
-    const path = normalizeRepositoryPath(httpMatch[2] ?? "");
+    const path = normalizeRepositoryPath(httpMatch[2] ?? '');
     if (!host || !path) {
       return undefined;
     }
@@ -71,7 +71,7 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
   }
 
   const shorthandPath = normalizeRepositoryPath(token);
-  if (!shorthandPath || shorthandPath.split("/").length < 2) {
+  if (!shorthandPath || shorthandPath.split('/').length < 2) {
     return undefined;
   }
   return {
@@ -93,20 +93,20 @@ export function isRepositoryCloneBranchNameInputValid(input: string): boolean {
   }
   if (
     branchName.length > MAX_REPOSITORY_BRANCH_NAME_LENGTH ||
-    branchName === "@" ||
-    branchName.startsWith("-") ||
-    branchName.startsWith("/") ||
-    branchName.endsWith("/") ||
-    branchName.endsWith(".") ||
-    branchName.includes("..") ||
-    branchName.includes("@{") ||
+    branchName === '@' ||
+    branchName.startsWith('-') ||
+    branchName.startsWith('/') ||
+    branchName.endsWith('/') ||
+    branchName.endsWith('.') ||
+    branchName.includes('..') ||
+    branchName.includes('@{') ||
     /[\s~^:?*[\\\x00-\x1F\x7F]/.test(branchName)
   ) {
     return false;
   }
 
-  return branchName.split("/").every((segment) => {
-    return Boolean(segment) && !segment.startsWith(".") && !segment.endsWith(".lock");
+  return branchName.split('/').every((segment) => {
+    return Boolean(segment) && !segment.startsWith('.') && !segment.endsWith('.lock');
   });
 }
 
@@ -116,12 +116,9 @@ function extractRepositoryInputToken(input: string): string | undefined {
     return undefined;
   }
 
-  const tokens = trimmed
-    .split(/\s+/)
-    .map(cleanRepositoryInputToken)
-    .filter(Boolean);
-  const ghCloneIndex = tokens.findIndex((token, index) =>
-    token === "clone" && tokens[index - 1] === "repo" && tokens[index - 2] === "gh"
+  const tokens = trimmed.split(/\s+/).map(cleanRepositoryInputToken).filter(Boolean);
+  const ghCloneIndex = tokens.findIndex(
+    (token, index) => token === 'clone' && tokens[index - 1] === 'repo' && tokens[index - 2] === 'gh'
   );
   if (ghCloneIndex >= 0) {
     return tokens.slice(ghCloneIndex + 1).find(isRepositoryLikeToken);
@@ -133,12 +130,12 @@ function extractRepositoryInputToken(input: string): string | undefined {
 function cleanRepositoryInputToken(token: string): string {
   return token
     .trim()
-    .replace(/^[<("'`]+/g, "")
-    .replace(/[>),."'`]+$/g, "");
+    .replace(/^[<("'`]+/g, '')
+    .replace(/[>),."'`]+$/g, '');
 }
 
 function isRepositoryLikeToken(token: string): boolean {
-  if (!token || token.startsWith("-")) {
+  if (!token || token.startsWith('-')) {
     return false;
   }
   return (
@@ -151,19 +148,17 @@ function isRepositoryLikeToken(token: string): boolean {
 }
 
 function normalizeRepositoryPath(path: string): string {
-  const beforeHash = path.split("#")[0] ?? "";
-  const beforeQuery = beforeHash.split("?")[0] ?? "";
-  const beforeGitSuffix = beforeQuery.replace(/\.git(?:\/.*)?$/i, ".git");
+  const beforeHash = path.split('#')[0] ?? '';
+  const beforeQuery = beforeHash.split('?')[0] ?? '';
+  const beforeGitSuffix = beforeQuery.replace(/\.git(?:\/.*)?$/i, '.git');
   const segments = beforeGitSuffix
-    .split("/")
+    .split('/')
     .map((segment) => decodeRepositoryPathSegment(segment))
     .filter(Boolean);
-  const stopIndex = segments.findIndex((segment) =>
-    REPOSITORY_BROWSER_PATH_STOP_SEGMENTS.has(segment.toLowerCase()),
-  );
+  const stopIndex = segments.findIndex((segment) => REPOSITORY_BROWSER_PATH_STOP_SEGMENTS.has(segment.toLowerCase()));
   const repositorySegments = stopIndex >= 0 ? segments.slice(0, stopIndex) : segments;
-  const normalizedPath = repositorySegments.join("/");
-  return normalizedPath.endsWith(".git") ? normalizedPath : `${normalizedPath}.git`;
+  const normalizedPath = repositorySegments.join('/');
+  return normalizedPath.endsWith('.git') ? normalizedPath : `${normalizedPath}.git`;
 }
 
 function decodeRepositoryPathSegment(segment: string): string {
@@ -175,6 +170,6 @@ function decodeRepositoryPathSegment(segment: string): string {
 }
 
 function repositoryNameFromPath(path: string): string {
-  const lastSegment = path.split("/").filter(Boolean).at(-1) ?? "repository";
-  return lastSegment.replace(/\.git$/i, "") || "repository";
+  const lastSegment = path.split('/').filter(Boolean).at(-1) ?? 'repository';
+  return lastSegment.replace(/\.git$/i, '') || 'repository';
 }

@@ -582,7 +582,10 @@ impl GhostexGpuiApp {
         true
     }
 
-    pub(crate) fn ensure_gpui_command_delayed_send_countdown_ticker(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn ensure_gpui_command_delayed_send_countdown_ticker(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUICommandDelayedSend 2026-06-25-15:42:
         The command-pane Delayed Send body badge is live countdown chrome. Run a process-local one-second ticker only while timers exist so the centered badge can update without persisting deadlines, logging command content, or creating a renderer-owned timer fallback.
@@ -710,7 +713,10 @@ impl GhostexGpuiApp {
         sent
     }
 
-    pub(crate) fn clear_gpui_command_delayed_send_timer(&mut self, session_id: CommandSessionId) -> bool {
+    pub(crate) fn clear_gpui_command_delayed_send_timer(
+        &mut self,
+        session_id: CommandSessionId,
+    ) -> bool {
         let removed = self
             .command_delayed_send_timers
             .remove(&session_id)
@@ -1204,7 +1210,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn ensure_gpui_agents_delayed_send_countdown_ticker(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn ensure_gpui_agents_delayed_send_countdown_ticker(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.agents_delayed_send_countdown_ticker_active
             || self.agents_delayed_send_timers.is_empty()
         {
@@ -1232,7 +1241,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn ensure_gpui_agents_delayed_send_persistence_ticker(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn ensure_gpui_agents_delayed_send_persistence_ticker(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.agents_delayed_send_persistence_ticker_active
             || (self.agents_delayed_send_timers.is_empty()
                 && self.agents_send_when_stopped_watchers.is_empty())
@@ -1618,7 +1630,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn clear_gpui_command_close_after_done_timer(&mut self, session_id: CommandSessionId) -> bool {
+    pub(crate) fn clear_gpui_command_close_after_done_timer(
+        &mut self,
+        session_id: CommandSessionId,
+    ) -> bool {
         let removed = self
             .command_close_after_done_timers
             .remove(&session_id)

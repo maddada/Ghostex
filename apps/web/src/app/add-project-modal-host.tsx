@@ -10,7 +10,7 @@
  * reaches the dialog's props, its state, or anything it logs.
  */
 
-import { AddProjectModal } from "@/packages/core-ui/add-project-modal/add-project-modal";
+import { AddProjectModal } from '@/packages/core-ui/add-project-modal/add-project-modal';
 import type {
   AddProjectAddInput,
   AddProjectAddResult,
@@ -28,7 +28,7 @@ import type {
   AddProjectRepositoryInfo,
   AddProjectRepositoryLookupInput,
   AddProjectSourceControlDiscovery,
-} from "@/packages/core-ui/add-project-modal/types";
+} from '@/packages/core-ui/add-project-modal/types';
 import type {
   GxserverCreateProjectDirectoryResult,
   GxserverDiscoverSourceControlResult,
@@ -37,14 +37,11 @@ import type {
   GxserverProjectDomainState,
   GxserverRepositoryCloneJobRpcResult,
   GxserverRepositoryClonePreviewRpcResult,
-} from "@/packages/shared/gxserver-protocol";
-import { useCallback, useEffect, useState } from "react";
-import type { OpenAddProjectModalDetail } from "./action-events";
-import {
-  getConnectionStates,
-  rpcForMachine,
-} from "../connections/connection-registry";
-import { getActiveSidebarProject } from "../sidebar-runtime/active-project-store";
+} from '@/packages/shared/gxserver-protocol';
+import { useCallback, useEffect, useState } from 'react';
+import type { OpenAddProjectModalDetail } from './action-events';
+import { getConnectionStates, rpcForMachine } from '../connections/connection-registry';
+import { getActiveSidebarProject } from '../sidebar-runtime/active-project-store';
 
 /*
  * The dialog surfaces a "still working" notice at 8s but never gives up on its
@@ -62,9 +59,7 @@ export function AddProjectModalHost() {
   const [modalState, setModalState] = useState<AddProjectModalState>();
 
   useEffect(() => {
-    const openModal = (
-      event: WindowEventMap["ghostex-web:openAddProjectModal"],
-    ) => {
+    const openModal = (event: WindowEventMap['ghostex-web:openAddProjectModal']) => {
       const activeProjectCwd = resolveActiveProjectCwd();
       setModalState({
         ...event.detail,
@@ -73,164 +68,134 @@ export function AddProjectModalHost() {
     };
     const closeModal = () => setModalState(undefined);
 
-    window.addEventListener("ghostex-web:openAddProjectModal", openModal);
-    window.addEventListener("ghostex-web:closeAppModal", closeModal);
+    window.addEventListener('ghostex-web:openAddProjectModal', openModal);
+    window.addEventListener('ghostex-web:closeAppModal', closeModal);
     return () => {
-      window.removeEventListener("ghostex-web:openAddProjectModal", openModal);
-      window.removeEventListener("ghostex-web:closeAppModal", closeModal);
+      window.removeEventListener('ghostex-web:openAddProjectModal', openModal);
+      window.removeEventListener('ghostex-web:closeAppModal', closeModal);
     };
   }, []);
 
   const listMachineOptions = useCallback(
-    (): Promise<readonly AddProjectMachineOption[]> =>
-      Promise.resolve(listConnectedMachineOptions()),
-    [],
+    (): Promise<readonly AddProjectMachineOption[]> => Promise.resolve(listConnectedMachineOptions()),
+    []
   );
 
-  const browse = useCallback(
-    async (input: AddProjectBrowseInput): Promise<AddProjectBrowseResult> => {
-      const result = await rpcForMachine<GxserverProjectDirectoryBrowseResult>(
-        input.machineId,
-        "/api/browseProjectDirectories",
-        {
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          partialPath: input.partialPath,
-        },
-      );
-      return { entries: result.entries, parentPath: result.parentPath };
-    },
-    [],
-  );
+  const browse = useCallback(async (input: AddProjectBrowseInput): Promise<AddProjectBrowseResult> => {
+    const result = await rpcForMachine<GxserverProjectDirectoryBrowseResult>(
+      input.machineId,
+      '/api/browseProjectDirectories',
+      {
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        partialPath: input.partialPath,
+      }
+    );
+    return { entries: result.entries, parentPath: result.parentPath };
+  }, []);
 
   const createDirectory = useCallback(
-    async (
-      input: AddProjectCreateDirectoryInput,
-    ): Promise<AddProjectCreateDirectoryResult> => {
+    async (input: AddProjectCreateDirectoryInput): Promise<AddProjectCreateDirectoryResult> => {
       const result = await rpcForMachine<GxserverCreateProjectDirectoryResult>(
         input.machineId,
-        "/api/createProjectDirectory",
-        { name: input.name, parentPath: input.parentPath },
+        '/api/createProjectDirectory',
+        { name: input.name, parentPath: input.parentPath }
       );
       return { name: result.name, parentPath: result.parentPath, path: result.path };
     },
-    [],
+    []
   );
 
-  const addProject = useCallback(
-    async (input: AddProjectAddInput): Promise<AddProjectAddResult> => {
-      const { project } = await withTimeout(
-        rpcForMachine<{ project: GxserverProjectDomainState }>(
-          input.machineId,
-          "/api/addProjectPath",
-          { createIfMissing: input.createIfMissing, path: input.path },
-        ),
-        "Adding the project timed out. The machine may still be reconnecting.",
-      );
-      /*
-       * `path` is optional on the shared domain type only because quick/chat
-       * projects have no workspace root. A project registered through
-       * `/api/addProjectPath` always has one, so an answer without it is a
-       * broken contract and is surfaced instead of being papered over with the
-       * unnormalized input path.
-       */
-      if (!project.path) {
-        throw new Error("gxserver registered the project without a workspace path.");
-      }
-      return {
-        machineId: input.machineId,
-        path: project.path,
-        projectId: project.projectId,
-      };
-    },
-    [],
-  );
+  const addProject = useCallback(async (input: AddProjectAddInput): Promise<AddProjectAddResult> => {
+    const { project } = await withTimeout(
+      rpcForMachine<{ project: GxserverProjectDomainState }>(input.machineId, '/api/addProjectPath', {
+        createIfMissing: input.createIfMissing,
+        path: input.path,
+      }),
+      'Adding the project timed out. The machine may still be reconnecting.'
+    );
+    /*
+     * `path` is optional on the shared domain type only because quick/chat
+     * projects have no workspace root. A project registered through
+     * `/api/addProjectPath` always has one, so an answer without it is a
+     * broken contract and is surfaced instead of being papered over with the
+     * unnormalized input path.
+     */
+    if (!project.path) {
+      throw new Error('gxserver registered the project without a workspace path.');
+    }
+    return {
+      machineId: input.machineId,
+      path: project.path,
+      projectId: project.projectId,
+    };
+  }, []);
 
   const discoverSourceControl = useCallback(
-    async (input: {
-      readonly machineId: string;
-    }): Promise<AddProjectSourceControlDiscovery> => {
+    async (input: { readonly machineId: string }): Promise<AddProjectSourceControlDiscovery> => {
       const { discovery } = await rpcForMachine<GxserverDiscoverSourceControlResult>(
         input.machineId,
-        "/api/discoverSourceControl",
+        '/api/discoverSourceControl'
       );
       return { providers: discovery.providers };
     },
-    [],
+    []
   );
 
   const lookupRepository = useCallback(
-    async (
-      input: AddProjectRepositoryLookupInput,
-    ): Promise<AddProjectRepositoryInfo> => {
+    async (input: AddProjectRepositoryLookupInput): Promise<AddProjectRepositoryInfo> => {
       const { repository } = await rpcForMachine<GxserverLookupRepositoryResult>(
         input.machineId,
-        "/api/lookupRepository",
-        { provider: input.provider, repository: input.repository },
+        '/api/lookupRepository',
+        { provider: input.provider, repository: input.repository }
       );
       return repository;
     },
-    [],
+    []
   );
 
-  const startClone = useCallback(
-    async (input: AddProjectCloneStartInput): Promise<AddProjectCloneJobHandle> => {
-      const { job } = await withTimeout(
-        rpcForMachine<GxserverRepositoryCloneJobRpcResult>(
-          input.machineId,
-          "/api/startRepositoryClone",
-          {
-            branchName: input.branchName,
-            cloneMainOnly: input.cloneMainOnly,
-            destinationPath: input.destinationPath,
-            remoteUrl: input.remoteUrl,
-            shallowClone: input.shallowClone,
-          },
-        ),
-        "Starting the clone timed out. The machine may still be reconnecting.",
-      );
-      return { jobId: job.jobId };
-    },
-    [],
-  );
+  const startClone = useCallback(async (input: AddProjectCloneStartInput): Promise<AddProjectCloneJobHandle> => {
+    const { job } = await withTimeout(
+      rpcForMachine<GxserverRepositoryCloneJobRpcResult>(input.machineId, '/api/startRepositoryClone', {
+        branchName: input.branchName,
+        cloneMainOnly: input.cloneMainOnly,
+        destinationPath: input.destinationPath,
+        remoteUrl: input.remoteUrl,
+        shallowClone: input.shallowClone,
+      }),
+      'Starting the clone timed out. The machine may still be reconnecting.'
+    );
+    return { jobId: job.jobId };
+  }, []);
 
-  const previewClone = useCallback(
-    async (input: AddProjectClonePreviewInput): Promise<AddProjectClonePreview> => {
-      const { preview } = await rpcForMachine<GxserverRepositoryClonePreviewRpcResult>(
-        input.machineId,
-        "/api/previewRepositoryClone",
-        {
-          branchName: input.branchName,
-          cloneMainOnly: input.cloneMainOnly,
-          destinationPath: input.destinationPath,
-          remoteUrl: input.remoteUrl,
-          shallowClone: input.shallowClone,
-        },
-      );
-      return preview;
-    },
-    [],
-  );
+  const previewClone = useCallback(async (input: AddProjectClonePreviewInput): Promise<AddProjectClonePreview> => {
+    const { preview } = await rpcForMachine<GxserverRepositoryClonePreviewRpcResult>(
+      input.machineId,
+      '/api/previewRepositoryClone',
+      {
+        branchName: input.branchName,
+        cloneMainOnly: input.cloneMainOnly,
+        destinationPath: input.destinationPath,
+        remoteUrl: input.remoteUrl,
+        shallowClone: input.shallowClone,
+      }
+    );
+    return preview;
+  }, []);
 
-  const readCloneJob = useCallback(
-    async (input: AddProjectCloneJobInput): Promise<AddProjectCloneJob> => {
-      const { job } = await rpcForMachine<GxserverRepositoryCloneJobRpcResult>(
-        input.machineId,
-        "/api/readRepositoryCloneJob",
-        { jobId: input.jobId },
-      );
-      return job;
-    },
-    [],
-  );
+  const readCloneJob = useCallback(async (input: AddProjectCloneJobInput): Promise<AddProjectCloneJob> => {
+    const { job } = await rpcForMachine<GxserverRepositoryCloneJobRpcResult>(
+      input.machineId,
+      '/api/readRepositoryCloneJob',
+      { jobId: input.jobId }
+    );
+    return job;
+  }, []);
 
-  const cancelCloneJob = useCallback(
-    async (input: AddProjectCloneJobInput): Promise<void> => {
-      await rpcForMachine(input.machineId, "/api/cancelRepositoryCloneJob", {
-        jobId: input.jobId,
-      });
-    },
-    [],
-  );
+  const cancelCloneJob = useCallback(async (input: AddProjectCloneJobInput): Promise<void> => {
+    await rpcForMachine(input.machineId, '/api/cancelRepositoryCloneJob', {
+      jobId: input.jobId,
+    });
+  }, []);
 
   return (
     <AddProjectModal
@@ -260,7 +225,7 @@ export function AddProjectModalHost() {
  */
 function listConnectedMachineOptions(): readonly AddProjectMachineOption[] {
   return getConnectionStates()
-    .filter((state) => state.status === "connected")
+    .filter((state) => state.status === 'connected')
     .map((state) => ({
       label: state.machine.label,
       machineId: state.machine.machineId,
@@ -269,10 +234,10 @@ function listConnectedMachineOptions(): readonly AddProjectMachineOption[] {
       if (left.machineId === right.machineId) {
         return 0;
       }
-      if (left.machineId === "local") {
+      if (left.machineId === 'local') {
         return -1;
       }
-      if (right.machineId === "local") {
+      if (right.machineId === 'local') {
         return 1;
       }
       return left.label.localeCompare(right.label);
@@ -291,19 +256,12 @@ function resolveActiveProjectCwd(): string | undefined {
   }
   return getConnectionStates()
     .find((state) => state.machine.machineId === active.machineId)
-    ?.presentation?.projects.find((project) => project.projectId === active.projectId)
-    ?.path;
+    ?.presentation?.projects.find((project) => project.projectId === active.projectId)?.path;
 }
 
-function withTimeout<TResult>(
-  operation: Promise<TResult>,
-  timeoutMessage: string,
-): Promise<TResult> {
+function withTimeout<TResult>(operation: Promise<TResult>, timeoutMessage: string): Promise<TResult> {
   return new Promise<TResult>((resolve, reject) => {
-    const timer = window.setTimeout(
-      () => reject(new Error(timeoutMessage)),
-      ADD_PROJECT_TIMEOUT_MS,
-    );
+    const timer = window.setTimeout(() => reject(new Error(timeoutMessage)), ADD_PROJECT_TIMEOUT_MS);
     operation.then(
       (result) => {
         window.clearTimeout(timer);
@@ -312,7 +270,7 @@ function withTimeout<TResult>(
       (error: unknown) => {
         window.clearTimeout(timer);
         reject(error instanceof Error ? error : new Error(String(error)));
-      },
+      }
     );
   });
 }

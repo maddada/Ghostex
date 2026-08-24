@@ -6,7 +6,12 @@ export type UrlDecorationRange = {
   to: number;
 };
 
-export function trimDecoratedUrlRange(rawFrom: number, rawTo: number, rawText: string, normalizedHref: string): UrlDecorationRange {
+export function trimDecoratedUrlRange(
+  rawFrom: number,
+  rawTo: number,
+  rawText: string,
+  normalizedHref: string
+): UrlDecorationRange {
   if (rawFrom >= rawTo) {
     return { from: rawFrom, to: rawTo };
   }
@@ -22,11 +27,7 @@ export function trimDecoratedUrlRange(rawFrom: number, rawTo: number, rawText: s
   while (trimmedText.length >= 2) {
     const open = trimmedText[0];
     const close = trimmedText[trimmedText.length - 1];
-    if (
-      (open === '"' && close === '"')
-      || (open === '\'' && close === '\'')
-      || (open === '`' && close === '`')
-    ) {
+    if ((open === '"' && close === '"') || (open === "'" && close === "'") || (open === '`' && close === '`')) {
       const unwrapped = trimmedText.slice(1, -1);
       if (normalizeSourceHref(unwrapped) === normalizedHref) {
         trimStart += 1;
@@ -40,7 +41,7 @@ export function trimDecoratedUrlRange(rawFrom: number, rawTo: number, rawText: s
 
   while (trimmedText.length > 0) {
     const last = trimmedText[trimmedText.length - 1];
-    if (last !== '"' && last !== '\'' && last !== '`') {
+    if (last !== '"' && last !== "'" && last !== '`') {
       break;
     }
     if (normalizeSourceHref(trimmedText.slice(0, -1)) === normalizeSourceHref(trimmedText)) {
@@ -53,6 +54,6 @@ export function trimDecoratedUrlRange(rawFrom: number, rawTo: number, rawText: s
 
   return {
     from: rawFrom + Math.min(trimStart, rawLength),
-    to: rawTo - Math.min(trimEnd, rawLength)
+    to: rawTo - Math.min(trimEnd, rawLength),
   };
 }

@@ -1,14 +1,14 @@
-import type { SidebarPortlessState } from "@/packages/shared/session-grid-contract-sidebar";
-import type { NativePortlessAdminInstallAction } from "@/packages/shared/native-ghostty-host-protocol";
-import { isDiagnosticLoggingScenarioEnabled, type DiagnosticLoggingSettings } from "@/packages/shared/ghostex-settings";
-import { KEEP_AWAKE_ADMIN_PROCESS_TIMEOUT_MS } from "./constants";
+import type { SidebarPortlessState } from '@/packages/shared/session-grid-contract-sidebar';
+import type { NativePortlessAdminInstallAction } from '@/packages/shared/native-ghostty-host-protocol';
+import { isDiagnosticLoggingScenarioEnabled, type DiagnosticLoggingSettings } from '@/packages/shared/ghostex-settings';
+import { KEEP_AWAKE_ADMIN_PROCESS_TIMEOUT_MS } from './constants';
 import type {
   KeepAwakeRuntimeSyncState,
   NativeProcessResult,
   NativeTitlebarCommand,
   TitlebarMode,
   TitlebarProjectState,
-} from "./types";
+} from './types';
 
 export const pendingProcessResults = new Map<
   string,
@@ -35,7 +35,7 @@ export function setTitlebarNativePointerInside(isInside: boolean): void {
    * the flag false until a titlebar click updates strip ownership, so titlebar
    * tooltips must rely on normal CSS hover and local tooltip state instead.
    */
-  document.body.dataset.nativePointerInside = isInside ? "true" : "false";
+  document.body.dataset.nativePointerInside = isInside ? 'true' : 'false';
 }
 
 export function setTitlebarWindowFocused(isFocused: boolean): void {
@@ -46,7 +46,7 @@ export function setTitlebarWindowFocused(isFocused: boolean): void {
    * windows without adding new native hit-test or routing behavior.
    */
   window.__ghostex_PENDING_TITLEBAR_WINDOW_FOCUSED__ = isFocused;
-  document.body.dataset.windowFocused = isFocused ? "true" : "false";
+  document.body.dataset.windowFocused = isFocused ? 'true' : 'false';
 }
 
 export function suppressTitlebarTooltipsFromDom(): void {
@@ -58,7 +58,7 @@ export function enableTitlebarTooltipsFromDom(): void {
 }
 
 export function normalizeTitlebarUpdateDownloadProgress(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     return null;
   }
   return Math.min(Math.max(value, 0), 1);
@@ -66,19 +66,19 @@ export function normalizeTitlebarUpdateDownloadProgress(value: unknown): number 
 
 export function postTitlebarSidebarCommand(
   message:
-    | { type: "openBrowserPane"; url: string }
-    | { type: "openGhostexTutorialVideo" }
-    | { type: "openWorkspaceWelcome" }
-    | { type: "requestAgentHookStatus" }
-    | { type: "requestGhostexCliStatus" }
-    | { type: "refreshDaemonSessions" }
-    | { type: "refreshGitState" }
+    | { type: 'openBrowserPane'; url: string }
+    | { type: 'openGhostexTutorialVideo' }
+    | { type: 'openWorkspaceWelcome' }
+    | { type: 'requestAgentHookStatus' }
+    | { type: 'requestGhostexCliStatus' }
+    | { type: 'refreshDaemonSessions' }
+    | { type: 'refreshGitState' }
     | {
         action: NativePortlessAdminInstallAction;
-        protocol: SidebarPortlessState["health"]["protocol"];
+        protocol: SidebarPortlessState['health']['protocol'];
         requestId: string;
-        type: "runPortlessSettingsAdminAction";
-      },
+        type: 'runPortlessSettingsAdminAction';
+      }
 ): void {
   /*
   CDXC:AgentHooks 2026-06-07-11:05:
@@ -110,7 +110,7 @@ export function postTitlebarSidebarCommand(
   */
   window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
     message,
-    type: "sidebarCommand",
+    type: 'sidebarCommand',
   });
 }
 
@@ -122,13 +122,13 @@ export function closeAppModalFromTitlebarNavigation(area: string): void {
    * run commands. Send the normal app-modal close message through the native
    * bridge so Settings, if open, closes without adding titlebar-specific state.
    */
-  window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({ area, type: "close" });
+  window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({ area, type: 'close' });
 }
 
 export function appendTitlebarActionCrashDebugLog(
   diagnosticLogging: DiagnosticLoggingSettings,
   event: string,
-  details?: unknown,
+  details?: unknown
 ): void {
   /**
    * CDXC:TitlebarActions 2026-05-15-17:23:
@@ -142,20 +142,20 @@ export function appendTitlebarActionCrashDebugLog(
    * titlebar hop only while the native.terminal.focus scenario is enabled so
    * routine action clicks do not persist as normal-mode crash warnings.
    */
-  if (!isDiagnosticLoggingScenarioEnabled(diagnosticLogging, "native.terminal.focus")) {
+  if (!isDiagnosticLoggingScenarioEnabled(diagnosticLogging, 'native.terminal.focus')) {
     return;
   }
   postNative({
     details: details === undefined ? undefined : JSON.stringify(details),
     event,
-    type: "appendTerminalFocusDebugLog",
+    type: 'appendTerminalFocusDebugLog',
   });
 }
 
 export function appendTitlebarModeSwitchDebugLog(
   diagnosticLogging: DiagnosticLoggingSettings,
   event: string,
-  details: Record<string, unknown> = {},
+  details: Record<string, unknown> = {}
 ): void {
   /**
    * CDXC:ModeSwitcherDiagnostics 2026-06-15-00:21:
@@ -169,25 +169,25 @@ export function appendTitlebarModeSwitchDebugLog(
    * scenario allowlist as the native writer so Debugging Mode can show debug UI
    * without enabling routine persistent logs.
    */
-  if (!isDiagnosticLoggingScenarioEnabled(diagnosticLogging, "native.mode.switcher")) {
+  if (!isDiagnosticLoggingScenarioEnabled(diagnosticLogging, 'native.mode.switcher')) {
     return;
   }
   postNative({
     details: JSON.stringify({
       ...details,
       performanceNowMs: performance.now(),
-      source: "titlebar",
+      source: 'titlebar',
       wallTimeMs: Date.now(),
     }),
     event,
-    type: "appendModeSwitcherDebugLog",
+    type: 'appendModeSwitcherDebugLog',
   });
 }
 
 export function appendTitlebarChromeResponsivenessDebugLog(
   diagnosticLogging: DiagnosticLoggingSettings,
   event: string,
-  details: Record<string, unknown> = {},
+  details: Record<string, unknown> = {}
 ): void {
   /*
    * CDXC:ChromeResponsivenessDiagnostics 2026-06-30-23:52:
@@ -196,18 +196,18 @@ export function appendTitlebarChromeResponsivenessDebugLog(
    * native.chrome.responsiveness scenario and send only counts, timings,
    * booleans, and enum-like phases to the native sanitized writer.
    */
-  if (!isDiagnosticLoggingScenarioEnabled(diagnosticLogging, "native.chrome.responsiveness")) {
+  if (!isDiagnosticLoggingScenarioEnabled(diagnosticLogging, 'native.chrome.responsiveness')) {
     return;
   }
   postNative({
     details: JSON.stringify({
       ...details,
       performanceNowMs: Math.round(performance.now()),
-      source: "titlebar",
+      source: 'titlebar',
       wallTimeMs: Date.now(),
     }),
     event,
-    type: "appendNativeChromeResponsivenessDebugLog",
+    type: 'appendNativeChromeResponsivenessDebugLog',
   });
 }
 
@@ -222,8 +222,8 @@ export function titlebarModeSwitchLogDetails(input: {
     editorIsSleeping: input.projectState.editorIsSleeping,
     editorStatus: input.projectState.editorStatus,
     hasOptimisticMode: input.optimisticMode !== undefined,
-    optimisticMode: input.optimisticMode ?? "none",
-    projectId: input.projectState.projectId ?? "none",
+    optimisticMode: input.optimisticMode ?? 'none',
+    projectId: input.projectState.projectId ?? 'none',
     projectIsQuick: input.projectState.projectIsQuick,
     targetMode: input.targetMode,
   };
@@ -232,23 +232,21 @@ export function titlebarModeSwitchLogDetails(input: {
 export function runNativeProcess(
   executable: string,
   args: string[],
-  options: { cwd?: string; env?: Record<string, string>; timeoutMs?: number } = {},
+  options: { cwd?: string; env?: Record<string, string>; timeoutMs?: number } = {}
 ): Promise<NativeProcessResult> {
-  const requestId = `titlebar-process-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
+  const requestId = `titlebar-process-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   postNative({
     args,
     cwd: options.cwd,
     env: options.env,
     executable,
     requestId,
-    type: "runProcess",
+    type: 'runProcess',
   });
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pendingProcessResults.delete(requestId);
-      reject(new Error(`${executable} ${args.join(" ")} timed out`));
+      reject(new Error(`${executable} ${args.join(' ')} timed out`));
     }, options.timeoutMs ?? 30_000);
     pendingProcessResults.set(requestId, { reject, resolve, timeout });
   });
@@ -256,16 +254,14 @@ export function runNativeProcess(
 
 export function runNativeKeepAwakeLidSleepPrevention(
   enabled: boolean,
-  options: { installIfNeeded?: boolean; timeoutMs?: number } = {},
+  options: { installIfNeeded?: boolean; timeoutMs?: number } = {}
 ): Promise<NativeProcessResult> {
-  const requestId = `titlebar-lid-sleep-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
+  const requestId = `titlebar-lid-sleep-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   postNative({
     enabled,
     installIfNeeded: options.installIfNeeded,
     requestId,
-    type: "setKeepAwakeLidSleepPrevention",
+    type: 'setKeepAwakeLidSleepPrevention',
   });
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
@@ -284,6 +280,6 @@ export function syncKeepAwakeRuntimeToMainTitlebar(syncState: KeepAwakeRuntimeSy
   postNative({
     runtime: syncState.runtime,
     suppressAutoStart: syncState.suppressAutoStart,
-    type: "syncTitlebarKeepAwakeRuntime",
+    type: 'syncTitlebarKeepAwakeRuntime',
   });
 }

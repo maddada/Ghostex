@@ -17,19 +17,18 @@
 // false, so fences render as plain `<pre>` without ever attempting a load that
 // cannot succeed.
 
-import type { HighlighterCore } from "shiki/core";
+import type { HighlighterCore } from 'shiki/core';
 
 export const SESSION_CHAT_HIGHLIGHTING_AVAILABLE = true;
 
 export async function createSessionChatHighlighterCore(): Promise<HighlighterCore> {
-  const [{ createHighlighterCore }, { createOnigurumaEngine }] =
-    await Promise.all([import("shiki/core"), import("shiki/engine/oniguruma")]);
+  const [{ createHighlighterCore }, { createOnigurumaEngine }] = await Promise.all([
+    import('shiki/core'),
+    import('shiki/engine/oniguruma'),
+  ]);
   return createHighlighterCore({
-    engine: createOnigurumaEngine(import("shiki/wasm")),
+    engine: createOnigurumaEngine(import('shiki/wasm')),
     langs: [],
-    themes: [
-      import("@shikijs/themes/github-light-default"),
-      import("@shikijs/themes/github-dark-default"),
-    ],
+    themes: [import('@shikijs/themes/github-light-default'), import('@shikijs/themes/github-dark-default')],
   });
 }

@@ -23,21 +23,21 @@ cd "$REPO_ROOT"
 bun apps/editor/scripts/build-editor-web.mjs
 
 if [[ -n "$EDITOR_SWIFT_DEVELOPER_DIR" ]]; then
-  export DEVELOPER_DIR="$EDITOR_SWIFT_DEVELOPER_DIR"
+	export DEVELOPER_DIR="$EDITOR_SWIFT_DEVELOPER_DIR"
 elif ! xcrun xcodebuild -version >/dev/null 2>&1; then
-  for developer_dir in \
-    "/Applications/Xcode.app/Contents/Developer" \
-    "/Applications/Xcode-beta.app/Contents/Developer"; do
-    if [[ -x "$developer_dir/usr/bin/xcodebuild" ]]; then
-      export DEVELOPER_DIR="$developer_dir"
-      break
-    fi
-  done
+	for developer_dir in \
+		"/Applications/Xcode.app/Contents/Developer" \
+		"/Applications/Xcode-beta.app/Contents/Developer"; do
+		if [[ -x "$developer_dir/usr/bin/xcodebuild" ]]; then
+			export DEVELOPER_DIR="$developer_dir"
+			break
+		fi
+	done
 fi
 
 SWIFT_BUILD_ARGS=(-c release --package-path "$MACOS_PACKAGE")
 if [[ -n "$EDITOR_ARCH" ]]; then
-  SWIFT_BUILD_ARGS+=(--triple "$EDITOR_ARCH-apple-macosx13.0")
+	SWIFT_BUILD_ARGS+=(--triple "$EDITOR_ARCH-apple-macosx13.0")
 fi
 
 swift build "${SWIFT_BUILD_ARGS[@]}"
@@ -45,16 +45,16 @@ BIN_DIR="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
 BUILT_BINARY="$BIN_DIR/GhostexEditor"
 
 if [[ ! -x "$BUILT_BINARY" ]]; then
-  echo "GhostexEditor binary was not produced at $BUILT_BINARY" >&2
-  exit 1
+	echo "GhostexEditor binary was not produced at $BUILT_BINARY" >&2
+	exit 1
 fi
 if [[ ! -f "$WEB_DIST/index.html" ]]; then
-  echo "Editor web build did not produce $WEB_DIST/index.html" >&2
-  exit 1
+	echo "Editor web build did not produce $WEB_DIST/index.html" >&2
+	exit 1
 fi
 if [[ ! -f "$WEB_DIST/monaco/vs/loader.js" ]]; then
-  echo "Editor web build did not produce $WEB_DIST/monaco/vs/loader.js" >&2
-  exit 1
+	echo "Editor web build did not produce $WEB_DIST/monaco/vs/loader.js" >&2
+	exit 1
 fi
 
 # Rebuild the bundle from scratch: a stale payload left behind by an earlier
@@ -98,8 +98,8 @@ cat >"$CONTENTS_DIR/Info.plist" <<'PLIST'
 PLIST
 
 if [[ -n "$EDITOR_ARCH" ]] && ! /usr/bin/lipo -archs "$MACOS_DIR/GhostexEditor" | tr ' ' '\n' | grep -Fxq "$EDITOR_ARCH"; then
-  echo "GhostexEditor binary does not contain $EDITOR_ARCH: $MACOS_DIR/GhostexEditor" >&2
-  exit 1
+	echo "GhostexEditor binary does not contain $EDITOR_ARCH: $MACOS_DIR/GhostexEditor" >&2
+	exit 1
 fi
 
 codesign --force --deep --sign - "$APP_ROOT"

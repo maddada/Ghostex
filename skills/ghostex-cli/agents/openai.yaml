@@ -1,7 +1,7 @@
 interface:
-  display_name: "Ghostex CLI"
-  short_description: "Discover and use Ghostex CLI commands"
-  default_prompt: "Use $ghostex-cli to discover the supported Ghostex CLI command, perform the requested operation, and verify the result."
+  display_name: 'Ghostex CLI'
+  short_description: 'Discover and use Ghostex CLI commands'
+  default_prompt: 'Use $ghostex-cli to discover the supported Ghostex CLI command, perform the requested operation, and verify the result.'
 
 policy:
   allow_implicit_invocation: true

@@ -7,8 +7,8 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
-import { Button } from "@/packages/components/ui/button";
+} from 'react';
+import { Button } from '@/packages/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -16,8 +16,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/packages/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/packages/components/ui/field";
+} from '@/packages/components/ui/dialog';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -25,13 +25,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/packages/components/ui/select";
-import { Textarea } from "@/packages/components/ui/textarea";
-import {
-  createSidebarAgentSelectItems,
-  type SidebarAgentButton,
-} from "../shared/sidebar-agents";
-import { normalizeSessionRenameTitle } from "../shared/session-grid-contract";
+} from '@/packages/components/ui/select';
+import { Textarea } from '@/packages/components/ui/textarea';
+import { createSidebarAgentSelectItems, type SidebarAgentButton } from '../shared/sidebar-agents';
+import { normalizeSessionRenameTitle } from '../shared/session-grid-contract';
 
 const SESSION_RENAME_GENERATE_NAME_THRESHOLD = 70;
 
@@ -71,24 +68,16 @@ export function SessionRenameModal({
   promptAgentId,
 }: SessionRenameModalProps) {
   const [title, setTitle] = useState(initialTitle);
-  const [localPromptAgentId, setLocalPromptAgentId] = useState("");
+  const [localPromptAgentId, setLocalPromptAgentId] = useState('');
   const agentSelectId = useId();
   const inputId = useId();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const userInteractedAfterOpenRef = useRef(false);
-  const promptAgents = useMemo(
-    () => agents.filter((agent) => agent.command?.trim()),
-    [agents],
-  );
-  const promptAgentSelectItems = useMemo(
-    () => createSidebarAgentSelectItems(promptAgents),
-    [promptAgents],
-  );
+  const promptAgents = useMemo(() => agents.filter((agent) => agent.command?.trim()), [agents]);
+  const promptAgentSelectItems = useMemo(() => createSidebarAgentSelectItems(promptAgents), [promptAgents]);
   const effectivePromptAgentId = promptAgentId ?? localPromptAgentId;
   const selectedPromptAgentId =
-    promptAgents.find((agent) => agent.agentId === effectivePromptAgentId)?.agentId ??
-    promptAgents[0]?.agentId ??
-    "";
+    promptAgents.find((agent) => agent.agentId === effectivePromptAgentId)?.agentId ?? promptAgents[0]?.agentId ?? '';
 
   useEffect(() => {
     if (!isOpen) {
@@ -140,9 +129,7 @@ export function SessionRenameModal({
       focusAndSelectInput();
     };
     const retryDelaysMs = [0, 16, 50, 100, 250, 500, 1000, 1600, 2400];
-    const timeoutIds = retryDelaysMs.map((delayMs) =>
-      window.setTimeout(focusUnlessUserInteracted, delayMs),
-    );
+    const timeoutIds = retryDelaysMs.map((delayMs) => window.setTimeout(focusUnlessUserInteracted, delayMs));
     const animationFrame = window.requestAnimationFrame(focusUnlessUserInteracted);
     const windowFocusTimeoutIds: number[] = [];
     const windowFocusAnimationFrames: number[] = [];
@@ -151,13 +138,13 @@ export function SessionRenameModal({
       windowFocusAnimationFrames.push(window.requestAnimationFrame(focusUnlessUserInteracted));
     };
 
-    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener('focus', handleWindowFocus);
     return () => {
       window.cancelAnimationFrame(animationFrame);
       timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
       windowFocusTimeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
       windowFocusAnimationFrames.forEach((frameId) => window.cancelAnimationFrame(frameId));
-      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener('focus', handleWindowFocus);
     };
   }, [focusAndSelectInput, initialTitle, isOpen]);
 
@@ -183,24 +170,19 @@ export function SessionRenameModal({
    * the session from its recent user-sent messages instead of the field text.
    */
   const canGenerateTitleFromSessionHistory =
-    canGenerateNameFromSessionHistory &&
-    (trimmedTitle.length === 0 || trimmedTitle === initialTitle.trim());
+    canGenerateNameFromSessionHistory && (trimmedTitle.length === 0 || trimmedTitle === initialTitle.trim());
   const confirmGenerateFromSessionHistory = () => {
-    onConfirm("", { agentId: selectedPromptAgentId || undefined, shouldGenerateTitle: true });
+    onConfirm('', { agentId: selectedPromptAgentId || undefined, shouldGenerateTitle: true });
   };
   const confirmTitle = (nextTitle: string, shouldGenerateTitle: boolean) => {
-    const normalizedTitle = shouldGenerateTitle
-      ? nextTitle.trim()
-      : normalizeSessionRenameTitle(nextTitle);
+    const normalizedTitle = shouldGenerateTitle ? nextTitle.trim() : normalizeSessionRenameTitle(nextTitle);
     if (!normalizedTitle) {
       return;
     }
 
     onConfirm(
       normalizedTitle,
-      shouldGenerateTitle
-        ? { agentId: selectedPromptAgentId || undefined, shouldGenerateTitle: true }
-        : undefined,
+      shouldGenerateTitle ? { agentId: selectedPromptAgentId || undefined, shouldGenerateTitle: true } : undefined
     );
   };
 
@@ -210,7 +192,7 @@ export function SessionRenameModal({
   };
 
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) {
       return;
     }
     if (event.shiftKey) {
@@ -257,29 +239,29 @@ export function SessionRenameModal({
       open={isOpen}
     >
       <DialogContent
-        className="command-config-modal-shadcn session-rename-modal-shadcn font-sans"
+        className='command-config-modal-shadcn session-rename-modal-shadcn font-sans'
         initialFocus={focusAndSelectInput}
       >
         <form
-          className="session-rename-form"
+          className='session-rename-form'
           onKeyDownCapture={markUserInteractedAfterOpen}
           onPointerDownCapture={markUserInteractedAfterOpen}
           onSubmit={submitRename}
         >
           <DialogHeader>
-            <DialogTitle className="text-xl">Rename Session</DialogTitle>
+            <DialogTitle className='text-xl'>Rename Session</DialogTitle>
             <DialogDescription>
               {canGenerateNameFromSessionHistory
                 ? "Rename directly, or Generate Name from longer text — leave the name unchanged to generate from the session's recent messages."
-                : "Rename directly or generate a name from longer text."}
+                : 'Rename directly or generate a name from longer text.'}
             </DialogDescription>
           </DialogHeader>
-          <FieldGroup className="session-rename-field-group">
+          <FieldGroup className='session-rename-field-group'>
             <Field>
               <FieldLabel htmlFor={inputId}>Session name</FieldLabel>
               <Textarea
-                aria-label="Session Name"
-                className="session-rename-textarea"
+                aria-label='Session Name'
+                className='session-rename-textarea'
                 id={inputId}
                 onChange={(event) => setTitle(event.currentTarget.value)}
                 onKeyDown={handleInputKeyDown}
@@ -298,8 +280,8 @@ export function SessionRenameModal({
                   onValueChange={handlePromptAgentChange}
                   value={selectedPromptAgentId}
                 >
-                  <SelectTrigger aria-label="Generate name agent" id={agentSelectId}>
-                    <SelectValue placeholder="Select agent" />
+                  <SelectTrigger aria-label='Generate name agent' id={agentSelectId}>
+                    <SelectValue placeholder='Select agent' />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
@@ -318,8 +300,8 @@ export function SessionRenameModal({
             <Button
               disabled={!directRenameTitle}
               onClick={() => confirmTitle(title, false)}
-              type="button"
-              variant="secondary"
+              type='button'
+              variant='secondary'
             >
               Rename
             </Button>
@@ -332,7 +314,7 @@ export function SessionRenameModal({
                 }
                 confirmTitle(title, true);
               }}
-              type="button"
+              type='button'
             >
               Generate Name
             </Button>

@@ -1,6 +1,6 @@
-import { IconCheck, IconCopy, IconFolderSearch } from "@tabler/icons-react";
-import { useEffect, useId, useMemo, useState } from "react";
-import { Button } from "@/packages/components/ui/button";
+import { IconCheck, IconCopy, IconFolderSearch } from '@tabler/icons-react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { Button } from '@/packages/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -8,8 +8,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/packages/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/packages/components/ui/field";
+} from '@/packages/components/ui/dialog';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -17,8 +17,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/packages/components/ui/select";
-import { type SidebarAgentButton } from "../shared/sidebar-agents";
+} from '@/packages/components/ui/select';
+import { type SidebarAgentButton } from '../shared/sidebar-agents';
 
 export type ExportTranscriptResultModalProps = {
   /** Configured agents offered for the follow-up conversation. */
@@ -56,23 +56,20 @@ export function ExportTranscriptResultModal({
   path,
 }: ExportTranscriptResultModalProps) {
   const agentSelectId = useId();
-  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState('');
   const [copied, setCopied] = useState(false);
-  const promptAgents = useMemo(
-    () => agents.filter((agent) => agent.command?.trim()),
-    [agents],
-  );
+  const promptAgents = useMemo(() => agents.filter((agent) => agent.command?.trim()), [agents]);
   const effectiveAgentId =
     promptAgents.find((agent) => agent.agentId === selectedAgentId)?.agentId ??
     promptAgents.find((agent) => agent.agentId === defaultAgentId)?.agentId ??
     promptAgents[0]?.agentId ??
-    "";
+    '';
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-    setSelectedAgentId("");
+    setSelectedAgentId('');
     setCopied(false);
   }, [isOpen, path]);
 
@@ -93,30 +90,27 @@ export function ExportTranscriptResultModal({
       }}
       open={isOpen}
     >
-      <DialogContent className="command-config-modal-shadcn export-transcript-result-modal-shadcn font-sans">
+      <DialogContent className='command-config-modal-shadcn export-transcript-result-modal-shadcn font-sans'>
         <DialogHeader>
-          <DialogTitle className="text-xl">Transcript Exported</DialogTitle>
+          <DialogTitle className='text-xl'>Transcript Exported</DialogTitle>
           <DialogDescription>
-            Start a new conversation with this file already mentioned in its input to carry the
-            context over, or take the path somewhere else.
+            Start a new conversation with this file already mentioned in its input to carry the context over, or take
+            the path somewhere else.
           </DialogDescription>
         </DialogHeader>
-        <FieldGroup className="export-transcript-result-field-group">
+        <FieldGroup className='export-transcript-result-field-group'>
           <Field>
             <FieldLabel htmlFor={`${agentSelectId}-path`}>Exported file</FieldLabel>
-            <code className="export-transcript-result-path" id={`${agentSelectId}-path`}>
+            <code className='export-transcript-result-path' id={`${agentSelectId}-path`}>
               {path}
             </code>
           </Field>
           {promptAgents.length > 0 ? (
             <Field>
               <FieldLabel htmlFor={agentSelectId}>Continue with</FieldLabel>
-              <Select
-                onValueChange={setSelectedAgentId}
-                value={effectiveAgentId}
-              >
-                <SelectTrigger aria-label="New conversation agent" id={agentSelectId}>
-                  <SelectValue placeholder="Select agent" />
+              <Select onValueChange={setSelectedAgentId} value={effectiveAgentId}>
+                <SelectTrigger aria-label='New conversation agent' id={agentSelectId}>
+                  <SelectValue placeholder='Select agent' />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -129,8 +123,8 @@ export function ExportTranscriptResultModal({
                 </SelectContent>
               </Select>
               <FieldDescription>
-                The new session starts in the same project with the transcript mentioned in its
-                input. Nothing is sent until you write your prompt and press Enter.
+                The new session starts in the same project with the transcript mentioned in its input. Nothing is sent
+                until you write your prompt and press Enter.
               </FieldDescription>
             </Field>
           ) : null}
@@ -140,30 +134,26 @@ export function ExportTranscriptResultModal({
             onClick={() => {
               void navigator.clipboard.writeText(path).then(
                 () => setCopied(true),
-                () => setCopied(false),
+                () => setCopied(false)
               );
             }}
-            type="button"
-            variant="secondary"
+            type='button'
+            variant='secondary'
           >
             {copied ? (
-              <IconCheck aria-hidden="true" size={15} stroke={1.9} />
+              <IconCheck aria-hidden='true' size={15} stroke={1.9} />
             ) : (
-              <IconCopy aria-hidden="true" size={15} stroke={1.9} />
+              <IconCopy aria-hidden='true' size={15} stroke={1.9} />
             )}
-            {copied ? "Copied" : "Copy Path"}
+            {copied ? 'Copied' : 'Copy Path'}
           </Button>
           {onRevealInFinder ? (
-            <Button onClick={onRevealInFinder} type="button" variant="secondary">
-              <IconFolderSearch aria-hidden="true" size={15} stroke={1.9} />
+            <Button onClick={onRevealInFinder} type='button' variant='secondary'>
+              <IconFolderSearch aria-hidden='true' size={15} stroke={1.9} />
               Reveal in Finder
             </Button>
           ) : null}
-          <Button
-            disabled={!effectiveAgentId}
-            onClick={() => onStartNewConversation(effectiveAgentId)}
-            type="button"
-          >
+          <Button disabled={!effectiveAgentId} onClick={() => onStartNewConversation(effectiveAgentId)} type='button'>
             Start New Conversation
           </Button>
         </DialogFooter>

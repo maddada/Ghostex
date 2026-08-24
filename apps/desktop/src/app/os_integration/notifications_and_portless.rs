@@ -20,7 +20,10 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    pub(crate) fn request_gpui_macos_notification_permission(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn request_gpui_macos_notification_permission(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUISettingsNotifications 2026-06-24-12:44:
         The GPUI Settings notification permission action mirrors the native Settings boundary: read macOS authorization, request only alert permission when it is notDetermined, report denied as a system-settings repair path, and never fake success with an in-app notification fallback.
@@ -403,7 +406,10 @@ impl GhostexGpuiApp {
     /// CDXC:GPUIPortlessPromptDeferral 2026-08-18: the app-modal host is free
     /// again, so a prompt that was deferred because the user had a modal open
     /// gets its check re-run instead of being lost for the rest of the run.
-    pub(crate) fn resume_deferred_gpui_portless_setup_prompt(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn resume_deferred_gpui_portless_setup_prompt(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if !self.portless_setup_prompt_pending_modal_close {
             return;
         }
@@ -544,5 +550,4 @@ impl GhostexGpuiApp {
         })
         .detach();
     }
-
 }

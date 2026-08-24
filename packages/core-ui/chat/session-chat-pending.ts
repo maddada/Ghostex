@@ -2,11 +2,8 @@
 // (upstream chat spec §10.3 port). Pending echoes render identically to real user turns so
 // replacement by the real transcript turn causes no visible state change.
 
-import type {
-  SessionChatAppCommand,
-  SessionChatMessage,
-} from "../../shared/session-chat";
-import { parseSessionChatCommandEnvelope } from "./session-chat-command-envelope";
+import type { SessionChatAppCommand, SessionChatMessage } from '../../shared/session-chat';
+import { parseSessionChatCommandEnvelope } from './session-chat-command-envelope';
 
 export const SESSION_CHAT_PENDING_SEND_LIMIT = 8;
 export const SESSION_CHAT_COMMAND_MARKER_LIMIT = 8;
@@ -21,8 +18,7 @@ const IMAGE_PROMPT_MARKER = /^\[Image #\d+\]\s*/;
 // the paste frame's stdin chunk and get recorded at the head of the message.
 // Never typeable content, so both sides drop all C0 controls except \t/\n/\r
 // (real text) and ESC (a bare strip would leave dangling ANSI fragments).
-const LEAKED_CONTROL_CHARS =
-  /[\u0000-\u0008\u000b\u000c\u000e-\u001a\u001c-\u001f\u007f]/g;
+const LEAKED_CONTROL_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001a\u001c-\u001f\u007f]/g;
 
 // A skill mention is typed as `[$name](path)`, but the harness owns the
 // destination: Codex resolves symlinked skill roots, so the echo and its
@@ -30,8 +26,7 @@ const LEAKED_CONTROL_CHARS =
 // Only the `$name` label is identity. Destinations follow
 // linkedSessionChatSkillMention: bare with \-escaped delimiters, or
 // angle-bracketed when the path carries whitespace.
-const SKILL_MENTION_LINK =
-  /\[(\$(?:[^\]\\\n]|\\.)+)\]\((?:<(?:[^>\\]|\\.)*>|(?:[^)\s\\]|\\.)*)\)/g;
+const SKILL_MENTION_LINK = /\[(\$(?:[^\]\\\n]|\\.)+)\]\((?:<(?:[^>\\]|\\.)*>|(?:[^)\s\\]|\\.)*)\)/g;
 
 const SKILL_CHIP_LINE = /^Skill: (.+)$/;
 
@@ -42,19 +37,19 @@ const SKILL_CHIP_LINE = /^Skill: (.+)$/;
  * that version skew.
  */
 function stripSkillChipLines(text: string): string {
-  if (!text.includes("Skill: ")) {
+  if (!text.includes('Skill: ')) {
     return text;
   }
-  const lines = text.split("\n");
+  const lines = text.split('\n');
   const kept = lines.filter((line, index) => {
     const name = SKILL_CHIP_LINE.exec(line.trim())?.[1];
     if (!name) {
       return true;
     }
-    const rest = lines.filter((_, other) => other !== index).join("\n");
+    const rest = lines.filter((_, other) => other !== index).join('\n');
     return !rest.includes(`$${name}`);
   });
-  return kept.length === lines.length ? text : kept.join("\n");
+  return kept.length === lines.length ? text : kept.join('\n');
 }
 
 export interface SessionChatPendingSend {
@@ -97,39 +92,34 @@ export function nextSessionChatPendingSendId(now: number = Date.now()): string {
 }
 
 export function isSessionChatPendingMessageId(id: string): boolean {
-  return id.startsWith("pending:");
+  return id.startsWith('pending:');
 }
 
 export function isSessionChatCommandMarkerId(id: string): boolean {
-  return id.startsWith("command:");
+  return id.startsWith('command:');
 }
 
 // --- Content keys / normalization -------------------------------------------
 
 export function stripSessionChatImagePromptMarker(text: string): string {
-  return text.replace(IMAGE_PROMPT_MARKER, "");
+  return text.replace(IMAGE_PROMPT_MARKER, '');
 }
 
 export function normalizeSessionChatPendingText(text: string): string {
   return stripSkillChipLines(
-    stripSessionChatImagePromptMarker(
-      text.replace(LEAKED_CONTROL_CHARS, ""),
-    ).replace(SKILL_MENTION_LINK, "$1"),
+    stripSessionChatImagePromptMarker(text.replace(LEAKED_CONTROL_CHARS, '')).replace(SKILL_MENTION_LINK, '$1')
   )
     .trim()
-    .replace(/\s+/g, " ");
+    .replace(/\s+/g, ' ');
 }
 
-export function sessionChatPendingContentKey(entry: {
-  text: string;
-  imagePaths?: readonly string[];
-}): string {
+export function sessionChatPendingContentKey(entry: { text: string; imagePaths?: readonly string[] }): string {
   const normalized = normalizeSessionChatPendingText(entry.text);
   if (normalized) {
     return `text:${normalized}`;
   }
   const paths = entry.imagePaths?.filter(Boolean) ?? [];
-  return paths.length ? `images:${JSON.stringify(paths)}` : "empty";
+  return paths.length ? `images:${JSON.stringify(paths)}` : 'empty';
 }
 
 export function sessionChatPendingMatchKey(entry: SessionChatPendingSend): string {
@@ -138,19 +128,13 @@ export function sessionChatPendingMatchKey(entry: SessionChatPendingSend): strin
 
 // --- Boundary filtering ------------------------------------------------------
 
-function messageIsAfterPendingTimestamp(
-  message: SessionChatMessage,
-  pending: SessionChatPendingSend,
-): boolean {
+function messageIsAfterPendingTimestamp(message: SessionChatMessage, pending: SessionChatPendingSend): boolean {
   if (message.timestamp === null) {
     // Some transcripts (Grok) never carry timestamps; excluding them would
     // strand a rank-pinned bubble at the list tail forever.
     return true;
   }
-  const boundary =
-    pending.matchingAfterTimestamp ??
-    pending.afterMessageTimestamp ??
-    pending.sentAt;
+  const boundary = pending.matchingAfterTimestamp ?? pending.afterMessageTimestamp ?? pending.sentAt;
   return pending.afterMessageTimestamp == null
     ? message.timestamp >= boundary // local send time: no existing record ⇒ inclusive
     : message.timestamp > boundary; // transcript-clock boundary describes an EXISTING msg ⇒ exclusive
@@ -158,7 +142,7 @@ function messageIsAfterPendingTimestamp(
 
 export function messagesAfterPendingBoundary(
   messages: readonly SessionChatMessage[],
-  pending: SessionChatPendingSend,
+  pending: SessionChatPendingSend
 ): readonly SessionChatMessage[] {
   if (pending.afterMessageId === undefined) {
     return messages;
@@ -179,23 +163,21 @@ export function messagesAfterPendingBoundary(
 
 function userMessageContentKey(message: SessionChatMessage): string {
   const text = message.blocks
-    .filter((block) => block.type === "text")
+    .filter((block) => block.type === 'text')
     .map((block) => block.text)
-    .join("\n");
+    .join('\n');
   const imagePaths = message.blocks
-    .filter((block) => block.type === "image-ref")
-    .map((block) => block.path ?? block.url ?? "")
+    .filter((block) => block.type === 'image-ref')
+    .map((block) => block.path ?? block.url ?? '')
     .filter(Boolean);
   return sessionChatPendingContentKey({ imagePaths, text });
 }
 
 /** ALL user messages, counted by content key. */
-export function matchingSessionChatUserContentCounts(
-  messages: readonly SessionChatMessage[],
-): Map<string, number> {
+export function matchingSessionChatUserContentCounts(messages: readonly SessionChatMessage[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const message of messages) {
-    if (message.role !== "user") {
+    if (message.role !== 'user') {
       continue;
     }
     const key = userMessageContentKey(message);
@@ -205,13 +187,11 @@ export function matchingSessionChatUserContentCounts(
 }
 
 /** Only user texts that have a LATER NON-USER turn. */
-export function advancedSessionChatUserContentCounts(
-  messages: readonly SessionChatMessage[],
-): Map<string, number> {
+export function advancedSessionChatUserContentCounts(messages: readonly SessionChatMessage[]): Map<string, number> {
   const counts = new Map<string, number>();
   let waiting: string[] = [];
   for (const message of messages) {
-    if (message.role === "user") {
+    if (message.role === 'user') {
       waiting.push(userMessageContentKey(message));
       continue;
     }
@@ -223,19 +203,16 @@ export function advancedSessionChatUserContentCounts(
   return counts;
 }
 
-function userTexts(
-  messages: readonly SessionChatMessage[],
-  advanced: boolean,
-): string[] {
+function userTexts(messages: readonly SessionChatMessage[], advanced: boolean): string[] {
   const texts: string[] = [];
   let waiting: string[] = [];
   for (const message of messages) {
-    if (message.role === "user") {
+    if (message.role === 'user') {
       const text = normalizeSessionChatPendingText(
         message.blocks
-          .filter((block) => block.type === "text")
+          .filter((block) => block.type === 'text')
           .map((block) => block.text)
-          .join("\n"),
+          .join('\n')
       );
       if (advanced) {
         waiting.push(text);
@@ -252,25 +229,18 @@ function userTexts(
   return texts;
 }
 
-export function matchingSessionChatUserTexts(
-  messages: readonly SessionChatMessage[],
-): string[] {
+export function matchingSessionChatUserTexts(messages: readonly SessionChatMessage[]): string[] {
   return userTexts(messages, false);
 }
 
-export function advancedSessionChatUserTexts(
-  messages: readonly SessionChatMessage[],
-): string[] {
+export function advancedSessionChatUserTexts(messages: readonly SessionChatMessage[]): string[] {
   return userTexts(messages, true);
 }
 
 // --- Rapid-send glue handling -------------------------------------------------
 
-export function countLeadingPendingTextsGluedToUserText(
-  pendingTexts: readonly string[],
-  userText: string,
-): number {
-  let combined = "";
+export function countLeadingPendingTextsGluedToUserText(pendingTexts: readonly string[], userText: string): number {
+  let combined = '';
   for (let i = 0; i < pendingTexts.length; i += 1) {
     const piece = pendingTexts[i];
     if (!piece) {
@@ -289,7 +259,7 @@ export function countLeadingPendingTextsGluedToUserText(
 
 export function selectPendingIndicesRepresentedByUserTexts(
   pending: readonly SessionChatPendingSend[],
-  userTextList: readonly string[],
+  userTextList: readonly string[]
 ): Set<number> {
   const represented = new Set<number>();
   if (pending.length < 2 || userTextList.length === 0) {
@@ -302,7 +272,7 @@ export function selectPendingIndicesRepresentedByUserTexts(
   for (const userText of userTextList) {
     const gluedCount = countLeadingPendingTextsGluedToUserText(
       remaining.map((entry) => entry.text),
-      userText,
+      userText
     );
     if (gluedCount < 2) {
       // 1 is an exact match — leave it to occurrence counting.
@@ -322,24 +292,20 @@ function filterPendingSends(
   pending: readonly SessionChatPendingSend[],
   messages: readonly SessionChatMessage[],
   counts: (messages: readonly SessionChatMessage[]) => Map<string, number>,
-  texts: (messages: readonly SessionChatMessage[]) => string[],
+  texts: (messages: readonly SessionChatMessage[]) => string[]
 ): readonly SessionChatPendingSend[] {
   const consumed = new Map<string, number>();
   const exactKeep: boolean[] = pending.map((entry) => {
     const contentKey = sessionChatPendingContentKey(entry);
     const matchKey = sessionChatPendingMatchKey(entry);
-    const available =
-      counts(messagesAfterPendingBoundary(messages, entry)).get(contentKey) ?? 0;
+    const available = counts(messagesAfterPendingBoundary(messages, entry)).get(contentKey) ?? 0;
     const used = consumed.get(matchKey) ?? 0;
     const occurrence = entry.matchingOccurrence ?? used + 1;
     consumed.set(matchKey, Math.max(used, occurrence));
     return occurrence > available;
   });
   const stillOpen = pending.filter((_, index) => exactKeep[index]);
-  const gluedRepresented = selectPendingIndicesRepresentedByUserTexts(
-    stillOpen,
-    texts(messages),
-  );
+  const gluedRepresented = selectPendingIndicesRepresentedByUserTexts(stillOpen, texts(messages));
   const embeddedRepresented = new Set<number>();
   stillOpen.forEach((entry, index) => {
     const pendingText = normalizeSessionChatPendingText(entry.text);
@@ -348,11 +314,11 @@ function filterPendingSends(
     // makes the pending text an exact suffix rather than an exact whole-turn
     // match. Only apply this rule to an actual steering bundle so ordinary
     // suffixes ("fun" in "jokes are fun") cannot consume an echo.
-    if (!pendingText.includes(" --- ")) {
+    if (!pendingText.includes(' --- ')) {
       return;
     }
     const represented = texts(messagesAfterPendingBoundary(messages, entry)).some(
-      (userText) => userText !== pendingText && userText.endsWith(pendingText),
+      (userText) => userText !== pendingText && userText.endsWith(pendingText)
     );
     if (represented) {
       embeddedRepresented.add(index);
@@ -377,14 +343,9 @@ function filterPendingSends(
  */
 export function pruneSessionChatPendingSends(
   pending: readonly SessionChatPendingSend[],
-  messages: readonly SessionChatMessage[],
+  messages: readonly SessionChatMessage[]
 ): readonly SessionChatPendingSend[] {
-  return filterPendingSends(
-    pending,
-    messages,
-    advancedSessionChatUserContentCounts,
-    advancedSessionChatUserTexts,
-  );
+  return filterPendingSends(pending, messages, advancedSessionChatUserContentCounts, advancedSessionChatUserTexts);
 }
 
 /**
@@ -394,43 +355,30 @@ export function pruneSessionChatPendingSends(
  */
 export function visibleSessionChatPendingSends(
   pending: readonly SessionChatPendingSend[],
-  messages: readonly SessionChatMessage[],
+  messages: readonly SessionChatMessage[]
 ): readonly SessionChatPendingSend[] {
-  return filterPendingSends(
-    pending,
-    messages,
-    matchingSessionChatUserContentCounts,
-    matchingSessionChatUserTexts,
-  );
+  return filterPendingSends(pending, messages, matchingSessionChatUserContentCounts, matchingSessionChatUserTexts);
 }
 
 // --- Occurrence assignment on append -----------------------------------------
 
 export function assignSessionChatPendingOccurrence(
   existing: readonly SessionChatPendingSend[],
-  entry: SessionChatPendingSend,
+  entry: SessionChatPendingSend
 ): SessionChatPendingSend {
   const entryKey = sessionChatPendingMatchKey(entry);
-  const matching = existing.filter(
-    (candidate) => sessionChatPendingMatchKey(candidate) === entryKey,
-  );
+  const matching = existing.filter((candidate) => sessionChatPendingMatchKey(candidate) === entryKey);
   if (matching.length === 0) {
     return entry;
   }
   let previousOccurrence = 0;
   matching.forEach((candidate, index) => {
-    previousOccurrence = Math.max(
-      previousOccurrence,
-      candidate.matchingOccurrence ?? index + 1,
-    );
+    previousOccurrence = Math.max(previousOccurrence, candidate.matchingOccurrence ?? index + 1);
   });
   const first = matching[0];
   return {
     ...entry,
-    matchingAfterTimestamp:
-      first?.matchingAfterTimestamp ??
-      first?.afterMessageTimestamp ??
-      first?.sentAt,
+    matchingAfterTimestamp: first?.matchingAfterTimestamp ?? first?.afterMessageTimestamp ?? first?.sentAt,
     // Pruning an earlier echo must not let a later identical send reuse the
     // same transcript occurrence.
     matchingOccurrence: previousOccurrence + 1,
@@ -439,21 +387,19 @@ export function assignSessionChatPendingOccurrence(
 
 // --- Rendering pending as messages -------------------------------------------
 
-export function sessionChatPendingSendsAsMessages(
-  pending: readonly SessionChatPendingSend[],
-): SessionChatMessage[] {
+export function sessionChatPendingSendsAsMessages(pending: readonly SessionChatPendingSend[]): SessionChatMessage[] {
   return pending.map((entry) => ({
     blocks: [
       ...(entry.imagePaths ?? []).map((path) => ({
         path,
-        type: "image-ref" as const,
+        type: 'image-ref' as const,
       })),
-      ...(entry.text.trim() ? [{ text: entry.text, type: "text" as const }] : []),
+      ...(entry.text.trim() ? [{ text: entry.text, type: 'text' as const }] : []),
     ],
     id: `pending:${entry.id}`,
-    role: "user" as const,
+    role: 'user' as const,
     // Lowest priority: the real transcript turn always supersedes.
-    source: "client" as const,
+    source: 'client' as const,
     timestamp: entry.sentAt,
   }));
 }
@@ -465,7 +411,7 @@ export function appendSessionChatCommandMarker(
   command: string,
   sentAt: number = Date.now(),
   label?: string,
-  compactionRecordsBefore?: number,
+  compactionRecordsBefore?: number
 ): readonly SessionChatCommandMarker[] {
   const next = [
     ...markers,
@@ -483,7 +429,7 @@ export function appendSessionChatCommandMarker(
 }
 
 function commandMarkerName(command: string): string {
-  return command.trim().toLowerCase().split(/\s+/, 1)[0] ?? "";
+  return command.trim().toLowerCase().split(/\s+/, 1)[0] ?? '';
 }
 
 export function sessionChatCommandMarkersAsMessages(
@@ -492,11 +438,11 @@ export function sessionChatCommandMarkersAsMessages(
    * Compactions the authoritative transcript records NOW, so a `/compact`
    * marker can retire the moment its own compaction lands.
    */
-  compactionRecords = 0,
+  compactionRecords = 0
 ): SessionChatMessage[] {
   return markers.flatMap((marker) => {
     const commandName = commandMarkerName(marker.command);
-    if (commandName === "/model" || commandName === "/effort") {
+    if (commandName === '/model' || commandName === '/effort') {
       // Not typed: these are what the model and effort pills dispatch. The
       // configuration they produce gets one authoritative status row, and a
       // "Ran /model" above it would narrate the implementation of a click.
@@ -511,20 +457,17 @@ export function sessionChatCommandMarkersAsMessages(
      * markers render after the transcript — an un-retired one would end up
      * below the "Compaction completed" / "Context compacted" row it precedes.
      */
-    if (
-      commandName === "/compact" &&
-      compactionRecords > (marker.compactionRecordsBefore ?? 0)
-    ) {
+    if (commandName === '/compact' && compactionRecords > (marker.compactionRecordsBefore ?? 0)) {
       return [];
     }
     return [
       {
         // Text deliberately avoids harness noise prefixes so the noise filter
         // keeps it.
-        blocks: [{ text: marker.label ?? `Ran ${marker.command}`, type: "text" as const }],
+        blocks: [{ text: marker.label ?? `Ran ${marker.command}`, type: 'text' as const }],
         id: `command:${marker.id}`,
-        role: "system" as const,
-        source: "client" as const,
+        role: 'system' as const,
+        source: 'client' as const,
         timestamp: marker.sentAt,
       },
     ];
@@ -546,20 +489,18 @@ double the row. Codex writes nothing, which is the whole reason these exist.
 */
 export function sessionChatAppCommandsAsMessages(
   commands: readonly SessionChatAppCommand[],
-  transcript: readonly SessionChatMessage[],
+  transcript: readonly SessionChatMessage[]
 ): SessionChatMessage[] {
   const recorded = new Set(
     transcript.flatMap((message) => {
       const envelope = parseSessionChatCommandEnvelope(
-        message.blocks
-          .map((block) => (block.type === "text" ? block.text : ""))
-          .join("\n"),
+        message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('\n')
       );
       if (!envelope) {
         return [];
       }
       return [normalizeSessionChatPendingText(`${envelope.name} ${envelope.args}`)];
-    }),
+    })
   );
   return commands.flatMap((entry) => {
     if (recorded.has(normalizeSessionChatPendingText(entry.command))) {
@@ -567,10 +508,10 @@ export function sessionChatAppCommandsAsMessages(
     }
     return [
       {
-        blocks: [{ text: `Ghostex sent ${entry.command}`, type: "text" as const }],
+        blocks: [{ text: `Ghostex sent ${entry.command}`, type: 'text' as const }],
         id: `app-command:${entry.id}`,
-        role: "system" as const,
-        source: "client" as const,
+        role: 'system' as const,
+        source: 'client' as const,
         timestamp: Date.parse(entry.sentAt) || null,
       },
     ];
@@ -578,7 +519,7 @@ export function sessionChatAppCommandsAsMessages(
 }
 
 export function isSessionChatClearCommand(command: string): boolean {
-  return command.trim().toLowerCase().split(/\s+/)[0] === "/clear";
+  return command.trim().toLowerCase().split(/\s+/)[0] === '/clear';
 }
 
 /**
@@ -588,7 +529,7 @@ export function isSessionChatClearCommand(command: string): boolean {
  */
 export function applySessionChatCommandMarkerBoundaries(
   messages: readonly SessionChatMessage[],
-  markers: readonly SessionChatCommandMarker[],
+  markers: readonly SessionChatCommandMarker[]
 ): readonly SessionChatMessage[] {
   let clearSentAt: number | null = null;
   for (const marker of markers) {
@@ -600,7 +541,5 @@ export function applySessionChatCommandMarkerBoundaries(
     return messages;
   }
   const boundary = clearSentAt;
-  return messages.filter(
-    (message) => message.timestamp !== null && message.timestamp > boundary,
-  );
+  return messages.filter((message) => message.timestamp !== null && message.timestamp > boundary);
 }

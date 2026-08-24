@@ -691,11 +691,7 @@ impl GhostexGpuiApp {
         first and answers with the copied link rather than a dead click.
         */
         if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Browser) {
-            self.copy_path_for_disabled_project_workarea(
-                &message.url,
-                "Browser",
-                cx,
-            );
+            self.copy_path_for_disabled_project_workarea(&message.url, "Browser", cx);
             return;
         }
         if let Some(project_id) = message.project_id.as_deref() {
@@ -723,13 +719,11 @@ impl GhostexGpuiApp {
             self.scroll_focused_browser_pane_active_tab();
             return;
         }
-        let created_tab_id = self
-            .browser_tabs
-            .add_loaded_popup_tab(
-                url,
-                self.browser_profiles.active_profile_id(),
-                cef::BrowserPopupPlacement::Selected,
-            );
+        let created_tab_id = self.browser_tabs.add_loaded_popup_tab(
+            url,
+            self.browser_profiles.active_profile_id(),
+            cef::BrowserPopupPlacement::Selected,
+        );
         let Some(created_tab_id) = created_tab_id else {
             return;
         };
@@ -1529,9 +1523,7 @@ impl GhostexGpuiApp {
             .rendered_leaf_order()
             .into_iter()
             .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
-            .filter(|session_id| {
-                !self.agents_chat_mode_sessions.contains(session_id)
-            })
+            .filter(|session_id| !self.agents_chat_mode_sessions.contains(session_id))
             .filter(|session_id| {
                 self.agents_session_chat_transcript_agent(*session_id)
                     .is_some()
@@ -1724,7 +1716,10 @@ impl GhostexGpuiApp {
         true
     }
 
-    pub(crate) fn reconcile_preferred_agents_chat_launch_intents(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn reconcile_preferred_agents_chat_launch_intents(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let intents = self
             .pending_agents_chat_launch_intents
             .iter()
@@ -1771,7 +1766,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn agents_session_chat_runtime_url(&self, session_id: TerminalSessionId) -> Option<String> {
+    pub(crate) fn agents_session_chat_runtime_url(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<String> {
         let agent = self.agents_session_chat_transcript_agent(session_id)?;
         let (project_id, gxserver_session_id, remote) =
             if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
@@ -1952,7 +1950,10 @@ impl GhostexGpuiApp {
     }
 
     /// The Chat CEF surface currently occupying a session's pane.
-    pub(crate) fn agents_pane_cef_surface(&self, session_id: TerminalSessionId) -> Option<&Entity<CefSurface>> {
+    pub(crate) fn agents_pane_cef_surface(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<&Entity<CefSurface>> {
         self.agents_chat_surfaces.get(&session_id)
     }
 

@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { cn } from "@/packages/components/utils";
+import type { ReactNode } from 'react';
+import { cn } from '@/packages/components/utils';
 
 /** Center a transcript row after React has committed its expanded content. */
 export function centerSessionChatExpansion(target: HTMLElement | null): void {
@@ -13,9 +13,9 @@ export function centerSessionChatExpansion(target: HTMLElement | null): void {
     window.requestAnimationFrame(() => {
       if (target.isConnected) {
         target.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-          inline: "nearest",
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest',
         });
       }
     });
@@ -36,16 +36,9 @@ export function SessionChatExpansion({
   onCollapse: () => void;
 }) {
   return (
-    <div className={cn("ghostex-chat-expansion", className)}>
-      <button
-        aria-label={label}
-        className="ghostex-chat-expansion-rail"
-        onClick={onCollapse}
-        type="button"
-      />
-      <div className={cn("ghostex-chat-expansion-body", bodyClassName)}>
-        {children}
-      </div>
+    <div className={cn('ghostex-chat-expansion', className)}>
+      <button aria-label={label} className='ghostex-chat-expansion-rail' onClick={onCollapse} type='button' />
+      <div className={cn('ghostex-chat-expansion-body', bodyClassName)}>{children}</div>
     </div>
   );
 }

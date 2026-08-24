@@ -4,7 +4,6 @@
 
 use crate::*;
 
-
 pub(crate) struct CommandPaneModel {
     pub(crate) terminal_sessions: Vec<CommandTerminalSession>,
     pub(crate) root: CommandPaneNode,
@@ -20,9 +19,11 @@ pub(crate) struct CommandPaneModel {
     pub(crate) next_session_id: u64,
 }
 
-
 impl CommandPaneModel {
-    pub(crate) fn shell_default_with_default_height_px(content_height: f32, default_height_px: f32) -> Self {
+    pub(crate) fn shell_default_with_default_height_px(
+        content_height: f32,
+        default_height_px: f32,
+    ) -> Self {
         /*
         CDXC:GPUICommandPane 2026-06-25-11:40:
         The production GPUI command pane starts with no command terminal sessions. Opening the pane creates the first `Command Terminal` placeholder at the open boundary, while Action runs and transferred tabs can still supply specific titles. Do not seed fake Command/Shell sessions into app startup or persisted fallback state.
@@ -60,7 +61,9 @@ impl CommandPaneModel {
         )
     }
 
-    pub(crate) fn active_group_and_session_id(&self) -> Option<(CommandPaneGroupId, CommandSessionId)> {
+    pub(crate) fn active_group_and_session_id(
+        &self,
+    ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         self.find_leaf(self.focused_group)
             .and_then(|leaf| leaf.tab_group.active_session_id())
             .map(|session_id| (self.focused_group, session_id))
@@ -73,7 +76,9 @@ impl CommandPaneModel {
             })
     }
 
-    pub(crate) fn focused_group_active_session_id(&self) -> Option<(CommandPaneGroupId, CommandSessionId)> {
+    pub(crate) fn focused_group_active_session_id(
+        &self,
+    ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
         CDXC:GPUICommandPaneFocus 2026-06-25-21:24:
         Native command-pane focus chrome and focused-session actions require the stored command focus and live responder to identify the same command session. GPUI shell focus is the responder proxy, so responder-style command helpers must not fall back to the first command group when focused_group is stale or missing.
@@ -89,7 +94,10 @@ impl CommandPaneModel {
             .find(|session| session.id == id)
     }
 
-    pub(crate) fn session_mut(&mut self, id: CommandSessionId) -> Option<&mut CommandTerminalSession> {
+    pub(crate) fn session_mut(
+        &mut self,
+        id: CommandSessionId,
+    ) -> Option<&mut CommandTerminalSession> {
         self.terminal_sessions
             .iter_mut()
             .find(|session| session.id == id)
@@ -377,7 +385,11 @@ impl CommandPaneModel {
         }
     }
 
-    pub(crate) fn set_session_sleeping(&mut self, session_id: CommandSessionId, is_sleeping: bool) -> bool {
+    pub(crate) fn set_session_sleeping(
+        &mut self,
+        session_id: CommandSessionId,
+        is_sleeping: bool,
+    ) -> bool {
         let Some(session) = self.session_mut(session_id) else {
             return false;
         };
@@ -428,7 +440,9 @@ impl CommandPaneModel {
         self.ensure_session_for_open()
     }
 
-    pub(crate) fn ensure_session_for_open(&mut self) -> Option<(CommandPaneGroupId, CommandSessionId, bool)> {
+    pub(crate) fn ensure_session_for_open(
+        &mut self,
+    ) -> Option<(CommandPaneGroupId, CommandSessionId, bool)> {
         /*
         CDXC:GPUICommandPane 2026-06-25-11:40:
         Opening an empty command pane mirrors macOS `openCommandsPanelForActiveProject`: create exactly one selected `Command Terminal` placeholder at open time. If a valid command tab already exists, preserve it and only expand/focus the pane so opening never invents extra tabs.
@@ -470,7 +484,11 @@ impl CommandPaneModel {
         session_id
     }
 
-    pub(crate) fn add_titled_session_to_focused_group(&mut self, session_id: CommandSessionId, title: String) {
+    pub(crate) fn add_titled_session_to_focused_group(
+        &mut self,
+        session_id: CommandSessionId,
+        title: String,
+    ) {
         self.terminal_sessions
             .push(CommandTerminalSession::placeholder(session_id, title));
         let tab = CommandPaneTab { session_id };
@@ -644,7 +662,10 @@ impl CommandPaneModel {
         }
     }
 
-    pub(crate) fn prune_stale_existing_action_sessions_before_new_run(&mut self, command_id: &str) -> bool {
+    pub(crate) fn prune_stale_existing_action_sessions_before_new_run(
+        &mut self,
+        command_id: &str,
+    ) -> bool {
         /*
         CDXC:GPUICommandPaneActions 2026-06-27-06:10:
         Native `runNativeSidebarCommand` closes an existing mapped Action session before creating a replacement when that mapped terminal is no longer running. Match that only for exact same-command sleeping or orphaned GPUI command tabs; keep running non-idle tabs alive, let idle running tabs reuse earlier, and do not prune title-only restored candidates for other command ids.
@@ -935,7 +956,9 @@ impl CommandPaneModel {
         true
     }
 
-    pub(crate) fn refresh_action_run_states_from_status_files(&mut self) -> CommandPaneActionRunRefresh {
+    pub(crate) fn refresh_action_run_states_from_status_files(
+        &mut self,
+    ) -> CommandPaneActionRunRefresh {
         /*
         CDXC:GPUICommandPane 2026-06-24-23:36:
         Command Action completion is observed only through the same session-state file env contract the hidden shell wrapper writes. Refreshing this state may change a live tab's safe activity enum and clear its run id. Shell state may retain only the validated bounded Action selector needed for restart reuse; command text, output, paths, env, tokens, run ids, and status-file paths remain runtime-only.
@@ -1336,7 +1359,10 @@ impl CommandPaneModel {
         }
     }
 
-    pub(crate) fn is_current_terminal_body_mount_slot(&self, slot_id: CommandTerminalBodyMountSlotId) -> bool {
+    pub(crate) fn is_current_terminal_body_mount_slot(
+        &self,
+        slot_id: CommandTerminalBodyMountSlotId,
+    ) -> bool {
         self.rendered_terminal_body_mount_slots()
             .into_iter()
             .any(|current_slot_id| current_slot_id == slot_id)
@@ -1380,7 +1406,10 @@ impl CommandPaneModel {
             .len()
     }
 
-    pub(crate) fn group_is_focus_mode_eligible_without_focus(&self, group_id: CommandPaneGroupId) -> bool {
+    pub(crate) fn group_is_focus_mode_eligible_without_focus(
+        &self,
+        group_id: CommandPaneGroupId,
+    ) -> bool {
         self.rendered_terminal_body_mount_slots_without_focus()
             .into_iter()
             .any(|slot_id| slot_id.group_id == group_id)
@@ -1623,7 +1652,10 @@ impl CommandPaneModel {
         find_command_leaf(&self.root, group_id)
     }
 
-    pub(crate) fn find_leaf_mut(&mut self, group_id: CommandPaneGroupId) -> Option<&mut CommandPaneLeaf> {
+    pub(crate) fn find_leaf_mut(
+        &mut self,
+        group_id: CommandPaneGroupId,
+    ) -> Option<&mut CommandPaneLeaf> {
         find_command_leaf_mut(&mut self.root, group_id)
     }
 
@@ -1742,7 +1774,11 @@ impl CommandPaneModel {
         );
     }
 
-    pub(crate) fn reset_height_with_default_height_px(&mut self, content_height: f32, default_height_px: f32) {
+    pub(crate) fn reset_height_with_default_height_px(
+        &mut self,
+        content_height: f32,
+        default_height_px: f32,
+    ) {
         self.height_ratio = command_pane_default_height_ratio_for_default_height_px(
             default_height_px,
             content_height,
@@ -1755,4 +1791,3 @@ impl CommandPaneModel {
         self.resize_drag = None;
     }
 }
-

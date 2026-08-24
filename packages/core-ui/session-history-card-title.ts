@@ -1,7 +1,7 @@
-import type { SidebarPreviousSessionItem } from "../shared/session-grid-contract";
+import type { SidebarPreviousSessionItem } from '../shared/session-grid-contract';
 
 export function getSessionHistoryCardTitle(
-  session: Pick<SidebarPreviousSessionItem, "alias" | "displayTitle" | "primaryTitle" | "terminalTitle">,
+  session: Pick<SidebarPreviousSessionItem, 'alias' | 'displayTitle' | 'primaryTitle' | 'terminalTitle'>
 ): string {
   const displayTitle = session.displayTitle?.trim();
   if (displayTitle) {

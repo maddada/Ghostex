@@ -25,21 +25,21 @@ import type {
   AddProjectRepositoryInfo,
   AddProjectRepositoryLookupInput,
   AddProjectSourceControlDiscovery,
-} from "./types";
+} from './types';
 
 export const ADD_PROJECT_STORY_LOCAL_MACHINE: AddProjectMachineOption = {
-  description: "This Mac",
-  label: "Local",
-  machineId: "local",
-  platform: "MacIntel",
+  description: 'This Mac',
+  label: 'Local',
+  machineId: 'local',
+  platform: 'MacIntel',
 };
 
 export const ADD_PROJECT_STORY_REMOTE_MACHINE: AddProjectMachineOption = {
-  addProjectBaseDirectory: "~/projects/",
-  description: "Connected remote machine",
-  label: "Bigbox",
-  machineId: "machine-bigbox",
-  platform: "Linux",
+  addProjectBaseDirectory: '~/projects/',
+  description: 'Connected remote machine',
+  label: 'Bigbox',
+  machineId: 'machine-bigbox',
+  platform: 'Linux',
 };
 
 /**
@@ -48,18 +48,18 @@ export const ADD_PROJECT_STORY_REMOTE_MACHINE: AddProjectMachineOption = {
  * dialog filters those the way the server would).
  */
 const ADD_PROJECT_STORY_TREE: Readonly<Record<string, readonly string[]>> = {
-  "/": ["Applications", "Library", "Users", "Volumes", "opt", "srv", "tmp"],
-  "/Volumes/": ["Backup SSD", "Macintosh HD", "Scratch"],
-  "/Users/story/": [".config", "Desktop", "dev", "Documents", "Downloads"],
-  "/Users/story/dev/": [".cache", "ghostex", "ghostex-web", "playground", "scratch"],
-  "/Users/story/dev/ghostex/": ["gpui", "sidebar", "shared"],
-  "/Users/story/dev/playground/": ["alpha", "beta"],
-  "/srv/": ["deploy", "projects"],
-  "/srv/projects/": ["api", "worker"],
+  '/': ['Applications', 'Library', 'Users', 'Volumes', 'opt', 'srv', 'tmp'],
+  '/Volumes/': ['Backup SSD', 'Macintosh HD', 'Scratch'],
+  '/Users/story/': ['.config', 'Desktop', 'dev', 'Documents', 'Downloads'],
+  '/Users/story/dev/': ['.cache', 'ghostex', 'ghostex-web', 'playground', 'scratch'],
+  '/Users/story/dev/ghostex/': ['gpui', 'sidebar', 'shared'],
+  '/Users/story/dev/playground/': ['alpha', 'beta'],
+  '/srv/': ['deploy', 'projects'],
+  '/srv/projects/': ['api', 'worker'],
 };
 
-const ADD_PROJECT_STORY_HOME = "/Users/story";
-const ADD_PROJECT_STORY_REMOTE_HOME = "/srv";
+const ADD_PROJECT_STORY_HOME = '/Users/story';
+const ADD_PROJECT_STORY_REMOTE_HOME = '/srv';
 
 export interface AddProjectStoryMockOptions {
   /** Milliseconds every mocked call waits before answering. Default 0. */
@@ -92,34 +92,32 @@ export interface AddProjectStoryCall {
 
 export const ADD_PROJECT_STORY_READY_PROVIDERS: readonly AddProjectProviderDiscovery[] = [
   {
-    auth: { detail: null, status: "authenticated" },
+    auth: { detail: null, status: 'authenticated' },
     installHint: null,
-    provider: "github",
-    status: "available",
-    version: "2.62.0",
+    provider: 'github',
+    status: 'available',
+    version: '2.62.0',
   },
   {
-    auth: { detail: "GitLab CLI is not authenticated. Run glab auth login.", status: "unauthenticated" },
+    auth: { detail: 'GitLab CLI is not authenticated. Run glab auth login.', status: 'unauthenticated' },
     installHint: null,
-    provider: "gitlab",
-    status: "available",
-    version: "1.48.0",
+    provider: 'gitlab',
+    status: 'available',
+    version: '1.48.0',
   },
   {
-    installHint: "Bitbucket support needs a CLI Ghostex does not ship yet.",
-    provider: "bitbucket",
-    status: "missing",
+    installHint: 'Bitbucket support needs a CLI Ghostex does not ship yet.',
+    provider: 'bitbucket',
+    status: 'missing',
   },
   {
-    installHint: "Azure DevOps support needs a CLI Ghostex does not ship yet.",
-    provider: "azure-devops",
-    status: "missing",
+    installHint: 'Azure DevOps support needs a CLI Ghostex does not ship yet.',
+    provider: 'azure-devops',
+    status: 'missing',
   },
 ];
 
-export function createAddProjectStoryMocks(
-  options: AddProjectStoryMockOptions = {},
-): AddProjectStoryMocks {
+export function createAddProjectStoryMocks(options: AddProjectStoryMockOptions = {}): AddProjectStoryMocks {
   const calls: AddProjectStoryCall[] = [];
   const latencyMs = options.latencyMs ?? 0;
   const machines = options.machines ?? [ADD_PROJECT_STORY_LOCAL_MACHINE];
@@ -136,9 +134,7 @@ export function createAddProjectStoryMocks(
    */
   const createdChildren = new Map<string, string[]>();
 
-  function browseWithCreatedDirectories(
-    input: AddProjectBrowseInput,
-  ): AddProjectBrowseResult | null {
+  function browseWithCreatedDirectories(input: AddProjectBrowseInput): AddProjectBrowseResult | null {
     const base = browseStoryTree(input);
     const parentPath = base
       ? base.parentPath
@@ -147,8 +143,8 @@ export function createAddProjectStoryMocks(
             input.partialPath,
             input.machineId === ADD_PROJECT_STORY_REMOTE_MACHINE.machineId
               ? ADD_PROJECT_STORY_REMOTE_HOME
-              : ADD_PROJECT_STORY_HOME,
-          ),
+              : ADD_PROJECT_STORY_HOME
+          )
         );
     const created = createdChildren.get(parentPath);
     if (!created) {
@@ -181,7 +177,7 @@ export function createAddProjectStoryMocks(
   return {
     calls,
     addProject: async (input: AddProjectAddInput): Promise<AddProjectAddResult> => {
-      record("addProject", input);
+      record('addProject', input);
       await settle(null);
       if (options.addProjectError) {
         throw new Error(options.addProjectError);
@@ -189,23 +185,21 @@ export function createAddProjectStoryMocks(
       return {
         machineId: input.machineId,
         path: input.path,
-        projectId: `project-${input.path.replace(/[^\w-]+/gu, "-")}`,
+        projectId: `project-${input.path.replace(/[^\w-]+/gu, '-')}`,
       };
     },
     browse: async (input: AddProjectBrowseInput): Promise<AddProjectBrowseResult | null> => {
-      record("browse", input);
+      record('browse', input);
       await settle(null);
       return browseWithCreatedDirectories(input);
     },
     cancelCloneJob: async (input: AddProjectCloneJobInput): Promise<void> => {
-      record("cancelCloneJob", input);
+      record('cancelCloneJob', input);
       cancelledCloneJobs.add(input.jobId);
       await settle(null);
     },
-    createDirectory: async (
-      input: AddProjectCreateDirectoryInput,
-    ): Promise<AddProjectCreateDirectoryResult> => {
-      record("createDirectory", input);
+    createDirectory: async (input: AddProjectCreateDirectoryInput): Promise<AddProjectCreateDirectoryResult> => {
+      record('createDirectory', input);
       await settle(null);
       if (options.createDirectoryError) {
         throw new Error(options.createDirectoryError);
@@ -220,7 +214,7 @@ export function createAddProjectStoryMocks(
     discoverSourceControl: async (input: {
       readonly machineId: string;
     }): Promise<AddProjectSourceControlDiscovery | null> => {
-      record("discoverSourceControl", input);
+      record('discoverSourceControl', input);
       await settle(null);
       if (options.discoveryUnavailable) {
         return null;
@@ -228,13 +222,11 @@ export function createAddProjectStoryMocks(
       return { providers };
     },
     listMachineOptions: async (): Promise<readonly AddProjectMachineOption[]> => {
-      record("listMachineOptions", null);
+      record('listMachineOptions', null);
       return settle(machines);
     },
-    lookupRepository: async (
-      input: AddProjectRepositoryLookupInput,
-    ): Promise<AddProjectRepositoryInfo> => {
-      record("lookupRepository", input);
+    lookupRepository: async (input: AddProjectRepositoryLookupInput): Promise<AddProjectRepositoryInfo> => {
+      record('lookupRepository', input);
       await settle(null);
       if (options.lookupError) {
         throw new Error(options.lookupError);
@@ -246,13 +238,11 @@ export function createAddProjectStoryMocks(
         url: `https://${input.provider}.com/${input.repository}`,
       };
     },
-    previewClone: async (
-      input: AddProjectClonePreviewInput,
-    ): Promise<AddProjectClonePreview> => {
-      record("previewClone", input);
+    previewClone: async (input: AddProjectClonePreviewInput): Promise<AddProjectClonePreview> => {
+      record('previewClone', input);
       await settle(null);
-      const normalizedDestination = input.destinationPath.replace(/\/+$/u, "");
-      const separatorIndex = normalizedDestination.lastIndexOf("/");
+      const normalizedDestination = input.destinationPath.replace(/\/+$/u, '');
+      const separatorIndex = normalizedDestination.lastIndexOf('/');
       return {
         ...(input.branchName ? { branchName: input.branchName } : {}),
         cloneMainOnly: input.cloneMainOnly,
@@ -261,39 +251,39 @@ export function createAddProjectStoryMocks(
         destinationExists: false,
         destinationFolderName: normalizedDestination.slice(separatorIndex + 1),
         destinationPath: normalizedDestination,
-        parentPath: normalizedDestination.slice(0, separatorIndex) || "/",
+        parentPath: normalizedDestination.slice(0, separatorIndex) || '/',
         repositoryName: normalizedDestination.slice(separatorIndex + 1),
         shallowClone: input.shallowClone,
       };
     },
     readCloneJob: async (input: AddProjectCloneJobInput): Promise<AddProjectCloneJob> => {
-      record("readCloneJob", input);
+      record('readCloneJob', input);
       await settle(null);
       if (cancelledCloneJobs.has(input.jobId)) {
-        return { jobId: input.jobId, message: "Clone canceled", state: "canceled" };
+        return { jobId: input.jobId, message: 'Clone canceled', state: 'canceled' };
       }
       const polls = (cloneJobPolls.get(input.jobId) ?? 0) + 1;
       cloneJobPolls.set(input.jobId, polls);
       if (polls <= cloneRunningPolls) {
-        return { jobId: input.jobId, message: "Receiving objects", state: "running" };
+        return { jobId: input.jobId, message: 'Receiving objects', state: 'running' };
       }
       if (options.cloneError) {
         return {
           error: options.cloneError,
           jobId: input.jobId,
           message: options.cloneError,
-          state: "failed",
+          state: 'failed',
         };
       }
       return {
         jobId: input.jobId,
-        message: "Clone completed",
-        projectPath: cloneJobDestinations.get(input.jobId) ?? "",
-        state: "completed",
+        message: 'Clone completed',
+        projectPath: cloneJobDestinations.get(input.jobId) ?? '',
+        state: 'completed',
       };
     },
     startClone: async (input: AddProjectCloneStartInput): Promise<AddProjectCloneJobHandle> => {
-      record("startClone", input);
+      record('startClone', input);
       await settle(null);
       const jobId = `clone-job-${cloneJobDestinations.size + 1}`;
       /* gxserver clones INTO destinationPath and registers that directory (spec §6.5). */
@@ -310,33 +300,33 @@ export function browseStoryTree(input: AddProjectBrowseInput): AddProjectBrowseR
       ? ADD_PROJECT_STORY_REMOTE_HOME
       : ADD_PROJECT_STORY_HOME;
   const expanded = expandStoryHome(input.partialPath, home);
-  const endsWithSeparator = expanded.endsWith("/");
-  const parentPath = endsWithSeparator ? expanded : `${expanded.slice(0, expanded.lastIndexOf("/") + 1)}`;
-  const prefix = endsWithSeparator ? "" : expanded.slice(expanded.lastIndexOf("/") + 1);
+  const endsWithSeparator = expanded.endsWith('/');
+  const parentPath = endsWithSeparator ? expanded : `${expanded.slice(0, expanded.lastIndexOf('/') + 1)}`;
+  const prefix = endsWithSeparator ? '' : expanded.slice(expanded.lastIndexOf('/') + 1);
   const entries = ADD_PROJECT_STORY_TREE[parentPath];
   if (!entries) {
     return null;
   }
-  const showHidden = endsWithSeparator || prefix.startsWith(".");
+  const showHidden = endsWithSeparator || prefix.startsWith('.');
   return {
     entries: entries
       .filter((name) => name.toLowerCase().startsWith(prefix.toLowerCase()))
-      .filter((name) => showHidden || !name.startsWith("."))
+      .filter((name) => showHidden || !name.startsWith('.'))
       .map((name) => ({ fullPath: `${parentPath}${name}`, name })),
     parentPath: trimStoryTrailingSeparator(parentPath),
   };
 }
 
 function expandStoryHome(value: string, home: string): string {
-  if (value === "~") {
+  if (value === '~') {
     return `${home}/`;
   }
-  if (value.startsWith("~/")) {
+  if (value.startsWith('~/')) {
     return `${home}/${value.slice(2)}`;
   }
   return value;
 }
 
 function trimStoryTrailingSeparator(value: string): string {
-  return value.length > 1 && value.endsWith("/") ? value.slice(0, -1) : value;
+  return value.length > 1 && value.endsWith('/') ? value.slice(0, -1) : value;
 }

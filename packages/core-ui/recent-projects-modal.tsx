@@ -1,4 +1,11 @@
-import { IconCopy, IconFolder, IconFolderOpen, IconRotateClockwise, IconTerminal2, IconTrash } from '@tabler/icons-react';
+import {
+  IconCopy,
+  IconFolder,
+  IconFolderOpen,
+  IconRotateClockwise,
+  IconTerminal2,
+  IconTrash,
+} from '@tabler/icons-react';
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { ExtensionToSidebarMessage, SidebarRecentProject } from '../shared/session-grid-contract';
@@ -186,10 +193,7 @@ export function RecentProjectsModal({
     [resolvedRecentProjects, searchQuery]
   );
   const sortedFilteredProjects = useMemo(() => sortRecentProjectsByClosedAt(filteredProjects), [filteredProjects]);
-  const groupedProjects = useMemo(
-    () => groupRecentProjectsByDay(sortedFilteredProjects),
-    [sortedFilteredProjects]
-  );
+  const groupedProjects = useMemo(() => groupRecentProjectsByDay(sortedFilteredProjects), [sortedFilteredProjects]);
 
   useLayoutEffect(() => {
     if (!canShowModal || lastSearchSelectionResetQueryRef.current === searchQuery) {

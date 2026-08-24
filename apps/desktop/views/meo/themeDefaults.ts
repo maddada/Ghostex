@@ -10,7 +10,7 @@ export const themeColorKeys = [
   'base06',
   'base07',
   'base08',
-  'base09'
+  'base09',
 ] as const;
 
 export type ThemeColorKey = (typeof themeColorKeys)[number];
@@ -60,272 +60,272 @@ export const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
     id: 'keyword',
     tags: [t.keyword, t.controlKeyword, t.moduleKeyword],
     paletteKey: 'base04',
-    style: { fontWeight: 'bold' }
+    style: { fontWeight: 'bold' },
   },
   {
     id: 'identifier',
     tags: [t.name, t.deleted, t.character],
     paletteKey: 'base05',
-    style: {}
+    style: {},
   },
   {
     id: 'macroName',
     tags: t.macroName,
     paletteKey: 'base06',
-    style: { fontStyle: 'italic' }
+    style: { fontStyle: 'italic' },
   },
   {
     id: 'variableName',
     tags: t.variableName,
     paletteKey: 'base01',
-    style: {}
+    style: {},
   },
   {
     id: 'propertyName',
     tags: t.propertyName,
     paletteKey: 'base09',
-    style: { fontStyle: 'normal' }
+    style: { fontStyle: 'normal' },
   },
   {
     id: 'typeName',
     tags: t.typeName,
     paletteKey: 'base06',
-    style: {}
+    style: {},
   },
   {
     id: 'className',
     tags: t.className,
     paletteKey: 'base09',
-    style: {}
+    style: {},
   },
   {
     id: 'namespace',
     tags: t.namespace,
     paletteKey: 'base05',
-    style: {}
+    style: {},
   },
   {
     id: 'operator',
     tags: t.operator,
     paletteKey: 'base01',
-    style: {}
+    style: {},
   },
   {
     id: 'operatorKeyword',
     tags: t.operatorKeyword,
     paletteKey: 'base04',
-    style: {}
+    style: {},
   },
   {
     id: 'punctuation',
     tags: [t.bracket, t.brace, t.punctuation, t.squareBracket, t.angleBracket],
     paletteKey: 'base01',
-    style: {}
+    style: {},
   },
   {
     id: 'functionName',
     tags: t.function(t.variableName),
     paletteKey: 'base06',
-    style: {}
+    style: {},
   },
   {
     id: 'labelName',
     tags: t.labelName,
     paletteKey: 'base02',
-    style: {}
+    style: {},
   },
   {
     id: 'definitionFunction',
     tags: t.definition(t.function(t.variableName)),
     paletteKey: 'base06',
-    style: {}
+    style: {},
   },
   {
     id: 'definedVariable',
     tags: t.definition(t.variableName),
     paletteKey: 'base05',
-    style: {}
+    style: {},
   },
   {
     id: 'number',
     tags: t.number,
     paletteKey: 'base08',
-    style: {}
+    style: {},
   },
   {
     id: 'changed',
     tags: t.changed,
     paletteKey: 'base08',
-    style: {}
+    style: {},
   },
   {
     id: 'annotation',
     tags: t.annotation,
     paletteKey: 'base04',
-    style: { fontStyle: 'italic' }
+    style: { fontStyle: 'italic' },
   },
   {
     id: 'modifier',
     tags: t.modifier,
     paletteKey: 'base04',
-    style: { fontStyle: 'italic' }
+    style: { fontStyle: 'italic' },
   },
   {
     id: 'self',
     tags: t.self,
     paletteKey: 'base04',
-    style: { fontStyle: 'italic' }
+    style: { fontStyle: 'italic' },
   },
   {
     id: 'color',
     tags: t.color,
     paletteKey: 'base08',
-    style: {}
+    style: {},
   },
   {
     id: 'constant',
     tags: [t.constant(t.name), t.standard(t.name)],
     paletteKey: 'base08',
-    style: {}
+    style: {},
   },
   {
     id: 'atom',
     tags: t.atom,
     paletteKey: 'base05',
-    style: {}
+    style: {},
   },
   {
     id: 'bool',
     tags: t.bool,
     paletteKey: 'base08',
-    style: {}
+    style: {},
   },
   {
     id: 'specialVariable',
     tags: t.special(t.variableName),
     paletteKey: 'base08',
-    style: {}
+    style: {},
   },
   {
     id: 'specialString',
     tags: t.special(t.string),
     paletteKey: 'base07',
-    style: {}
+    style: {},
   },
   {
     id: 'regexp',
     tags: t.regexp,
     paletteKey: 'base07',
-    style: {}
+    style: {},
   },
   {
     id: 'string',
     tags: t.string,
     paletteKey: 'base07',
-    style: {}
+    style: {},
   },
   {
     id: 'typeDefinition',
     tags: t.definition(t.typeName),
     paletteKey: 'base06',
-    style: { fontWeight: 'bold' }
+    style: { fontWeight: 'bold' },
   },
   {
     id: 'meta',
     tags: t.meta,
     paletteKey: 'base02',
-    style: {}
+    style: {},
   },
   {
     id: 'comment',
     tags: [t.comment, t.docComment],
     paletteKey: 'base02',
-    style: { fontStyle: 'italic' }
+    style: { fontStyle: 'italic' },
   },
   {
     id: 'tagName',
     tags: t.tagName,
     paletteKey: 'base04',
-    style: {}
+    style: {},
   },
   {
     id: 'attributeName',
     tags: t.attributeName,
     paletteKey: 'base09',
-    style: {}
+    style: {},
   },
   {
     id: 'invalid',
     tags: t.invalid,
     paletteKey: 'base01',
-    style: { textDecoration: 'underline wavy', borderBottom: '1px wavy #e06c75' }
+    style: { textDecoration: 'underline wavy', borderBottom: '1px wavy #e06c75' },
   },
   {
     id: 'deleted',
     tags: t.deleted,
     paletteKey: 'base04',
-    style: {}
+    style: {},
   },
   {
     id: 'monospace',
     tags: t.monospace,
     paletteKey: 'base07',
-    style: {}
+    style: {},
   },
   {
     id: 'heading',
     tags: t.heading,
     paletteKey: 'base04',
-    style: { fontWeight: '600' }
+    style: { fontWeight: '600' },
   },
   {
     id: 'emphasis',
     tags: t.emphasis,
     paletteKey: 'base01',
-    style: { fontStyle: 'italic' }
+    style: { fontStyle: 'italic' },
   },
   {
     id: 'strong',
     tags: t.strong,
     paletteKey: 'base07',
-    style: { fontWeight: '600' }
+    style: { fontWeight: '600' },
   },
   {
     id: 'strikethrough',
     tags: t.strikethrough,
     paletteKey: 'base01',
-    style: { textDecoration: 'line-through' }
+    style: { textDecoration: 'line-through' },
   },
   {
     id: 'quote',
     tags: t.quote,
     paletteKey: 'base07',
-    style: {}
+    style: {},
   },
   {
     id: 'contentSeparator',
     tags: t.contentSeparator,
     paletteKey: 'base02',
-    style: {}
+    style: {},
   },
   {
     id: 'link',
     tags: t.link,
     paletteKey: 'base05',
-    style: {}
+    style: {},
   },
   {
     id: 'url',
     tags: t.url,
     paletteKey: 'base05',
-    style: {}
+    style: {},
   },
   {
     id: 'processingInstruction',
     tags: t.processingInstruction,
     paletteKey: 'base02',
-    style: {}
-  }
+    style: {},
+  },
 ] as const;
 
 export type ThemeSyntaxTokenKey = (typeof SYNTAX_TAG_SPECS)[number]['id'];
@@ -354,7 +354,7 @@ export const defaultThemeColors: ThemeColors = {
   base06: '#66d9ef',
   base07: '#e5c07b',
   base08: '#c678dd',
-  base09: '#98c379'
+  base09: '#98c379',
 };
 
 export const defaultThemeBackgroundColor = 'var(--vscode-editor-background)';
@@ -380,7 +380,7 @@ export const defaultThemeFonts: ThemeFonts = {
   h5FontWeight: '600',
   h6FontWeight: '600',
   liveLineHeight: defaultThemeLineHeight,
-  sourceLineHeight: defaultThemeLineHeight
+  sourceLineHeight: defaultThemeLineHeight,
 };
 
 const defaultSyntaxTokenPalette = SYNTAX_TAG_SPECS.reduce((acc, spec) => {
@@ -420,9 +420,9 @@ const createThemeFromColors = (params: {
     colors,
     syntaxTokens: {
       ...buildSyntaxTokenColors(colors, params.syntaxTokenPaletteOverrides),
-      ...(params.syntaxTokenOverrides ?? {})
+      ...(params.syntaxTokenOverrides ?? {}),
     } as ThemeSyntaxTokens,
-    fonts: { ...defaultThemeFonts, ...(params.fonts ?? {}) }
+    fonts: { ...defaultThemeFonts, ...(params.fonts ?? {}) },
   };
 };
 
@@ -442,11 +442,11 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#56b6c2',
       base07: '#e5c07b',
       base08: '#d19a66',
-      base09: '#98c379'
+      base09: '#98c379',
     },
     syntaxTokenPaletteOverrides: {
-      string: 'base09'
-    }
+      string: 'base09',
+    },
   }),
   createThemeFromColors({
     id: 'dracula',
@@ -459,12 +459,12 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#8be9fd',
       base07: '#f1fa8c',
       base08: '#50fa7b',
-      base09: '#ffb86c'
+      base09: '#ffb86c',
     },
     syntaxTokenPaletteOverrides: {
       constant: 'base09',
-      bool: 'base09'
-    }
+      bool: 'base09',
+    },
   }),
   createThemeFromColors({
     id: 'gruvbox',
@@ -477,8 +477,8 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#8ec07c',
       base07: '#fabd2f',
       base08: '#d3869b',
-      base09: '#fe8019'
-    }
+      base09: '#fe8019',
+    },
   }),
   createThemeFromColors({
     id: 'nord',
@@ -491,8 +491,8 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#88c0d0',
       base07: '#ebcb8b',
       base08: '#b48ead',
-      base09: '#a3be8c'
-    }
+      base09: '#a3be8c',
+    },
   }),
   createThemeFromColors({
     id: 'solarized-dark',
@@ -505,8 +505,8 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#2aa198',
       base07: '#b58900',
       base08: '#d33682',
-      base09: '#859900'
-    }
+      base09: '#859900',
+    },
   }),
   createThemeFromColors({
     id: 'catppuccin-mocha',
@@ -519,8 +519,8 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#89dceb',
       base07: '#f9e2af',
       base08: '#cba6f7',
-      base09: '#a6e3a1'
-    }
+      base09: '#a6e3a1',
+    },
   }),
   createThemeFromColors({
     id: 'tokyo-night',
@@ -533,8 +533,8 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#7dcfff',
       base07: '#e0af68',
       base08: '#bb9af7',
-      base09: '#9ece6a'
-    }
+      base09: '#9ece6a',
+    },
   }),
   createThemeFromColors({
     id: 'github-dark',
@@ -547,8 +547,8 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#56d4dd',
       base07: '#d29922',
       base08: '#d2a8ff',
-      base09: '#56d364'
-    }
+      base09: '#56d364',
+    },
   }),
   createThemeFromColors({
     id: 'github-light',
@@ -563,21 +563,22 @@ export const themePresets: readonly ThemeSettings[] = [
       base06: '#1a7f37',
       base07: '#9a6700',
       base08: '#8250df',
-      base09: '#116329'
+      base09: '#116329',
     },
     syntaxTokenPaletteOverrides: {
       string: 'base09',
       comment: 'base02',
-      quote: 'base02'
-    }
-  })
+      quote: 'base02',
+    },
+  }),
 ] as const;
 
 export const defaultThemeSettings: ThemeSettings = themePresets[0] as ThemeSettings;
 
 const hexColorRegex = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const rgbColorRegex = /^rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0(?:\.\d+)?|1(?:\.0+)?|\d*\.?\d+))?\s*\)$/;
-const hslColorRegex = /^hsla?\(\s*(?:[+\-]?\d+(?:\.\d+)?(?:deg|rad|grad|turn)?\s*,\s*){2}\d{1,3}%?(?:\s*,\s*(?:0(?:\.\d+)?|1(?:\.0+)?|\d*\.?\d+))?\s*\)$/;
+const hslColorRegex =
+  /^hsla?\(\s*(?:[+\-]?\d+(?:\.\d+)?(?:deg|rad|grad|turn)?\s*,\s*){2}\d{1,3}%?(?:\s*,\s*(?:0(?:\.\d+)?|1(?:\.0+)?|\d*\.?\d+))?\s*\)$/;
 const cssVarColorRegex = /^var\(\s*--[A-Za-z0-9_-]+\s*(?:,\s*[^)]+)?\)$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -589,7 +590,7 @@ const normalizeString = (value: unknown, fallback: string): string => {
 };
 
 const sanitizeSyntaxTokenId = (value: string): ThemeSyntaxTokenKey | null => {
-  return (SYNTAX_TAG_SPECS.find((spec) => spec.id === value) ? (value as ThemeSyntaxTokenKey) : null);
+  return SYNTAX_TAG_SPECS.find((spec) => spec.id === value) ? (value as ThemeSyntaxTokenKey) : null;
 };
 
 const isValidThemeColor = (value: string): boolean => {
@@ -597,7 +598,12 @@ const isValidThemeColor = (value: string): boolean => {
     return false;
   }
   const candidate = value.trim();
-  return hexColorRegex.test(candidate) || rgbColorRegex.test(candidate) || hslColorRegex.test(candidate) || cssVarColorRegex.test(candidate);
+  return (
+    hexColorRegex.test(candidate) ||
+    rgbColorRegex.test(candidate) ||
+    hslColorRegex.test(candidate) ||
+    cssVarColorRegex.test(candidate)
+  );
 };
 
 const sanitizeThemeColor = (value: unknown, fallback: string): string => {
@@ -662,7 +668,7 @@ const headingFontSizeKeys = [
   'h3FontSize',
   'h4FontSize',
   'h5FontSize',
-  'h6FontSize'
+  'h6FontSize',
 ] as const satisfies readonly HeadingFontSizeKey[];
 
 const headingFontWeightKeys = [
@@ -671,7 +677,7 @@ const headingFontWeightKeys = [
   'h3FontWeight',
   'h4FontWeight',
   'h5FontWeight',
-  'h6FontWeight'
+  'h6FontWeight',
 ] as const satisfies readonly HeadingFontWeightKey[];
 
 const themeFontKeys = [
@@ -684,19 +690,25 @@ const themeFontKeys = [
   ...headingFontSizeKeys,
   ...headingFontWeightKeys,
   'liveLineHeight',
-  'sourceLineHeight'
+  'sourceLineHeight',
 ] as const satisfies readonly (keyof ThemeFonts)[];
 
 const resolveThemeFonts = (raw?: unknown): ThemeFonts => {
   const value = isRecord(raw) ? raw : {};
-  const resolvedHeadingFontSizes = headingFontSizeKeys.reduce((acc, key) => {
-    acc[key] = sanitizeThemeOptionalNumberInRange(value[key], defaultThemeFonts[key], 1, 3);
-    return acc;
-  }, {} as Pick<ThemeFonts, HeadingFontSizeKey>);
-  const resolvedHeadingFontWeights = headingFontWeightKeys.reduce((acc, key) => {
-    acc[key] = sanitizeThemeFont(value[key], defaultThemeFonts[key]);
-    return acc;
-  }, {} as Pick<ThemeFonts, HeadingFontWeightKey>);
+  const resolvedHeadingFontSizes = headingFontSizeKeys.reduce(
+    (acc, key) => {
+      acc[key] = sanitizeThemeOptionalNumberInRange(value[key], defaultThemeFonts[key], 1, 3);
+      return acc;
+    },
+    {} as Pick<ThemeFonts, HeadingFontSizeKey>
+  );
+  const resolvedHeadingFontWeights = headingFontWeightKeys.reduce(
+    (acc, key) => {
+      acc[key] = sanitizeThemeFont(value[key], defaultThemeFonts[key]);
+      return acc;
+    },
+    {} as Pick<ThemeFonts, HeadingFontWeightKey>
+  );
 
   return {
     liveFont: sanitizeThemeFont(value.liveFont, defaultThemeFonts.liveFont),
@@ -708,7 +720,7 @@ const resolveThemeFonts = (raw?: unknown): ThemeFonts => {
     ...resolvedHeadingFontSizes,
     ...resolvedHeadingFontWeights,
     liveLineHeight: sanitizeThemeLineHeight(value.liveLineHeight, defaultThemeFonts.liveLineHeight),
-    sourceLineHeight: sanitizeThemeLineHeight(value.sourceLineHeight, defaultThemeFonts.sourceLineHeight)
+    sourceLineHeight: sanitizeThemeLineHeight(value.sourceLineHeight, defaultThemeFonts.sourceLineHeight),
   };
 };
 
@@ -749,7 +761,7 @@ export const serializeThemeSettings = (theme: ThemeSettings): ThemeSettingsPaylo
     backgroundColor: theme.backgroundColor,
     colors: { ...theme.colors },
     syntaxTokens,
-    fonts: { ...theme.fonts }
+    fonts: { ...theme.fonts },
   };
 };
 
@@ -761,17 +773,19 @@ export const resolveTheme = (themeOverride?: Partial<ThemeSettings>): ThemeSetti
     backgroundColor: sanitizeThemeColor(themeOverride?.backgroundColor, defaultThemeBackgroundColor),
     colors,
     syntaxTokens: resolveThemeSyntaxTokens(themeOverride?.syntaxTokens, colors),
-    fonts: resolveThemeFonts(themeOverride?.fonts)
+    fonts: resolveThemeFonts(themeOverride?.fonts),
   };
 };
 
-export type ThemeValidationResult = {
-  success: true;
-  theme: ThemeSettings;
-} | {
-  success: false;
-  errors: string[];
-};
+export type ThemeValidationResult =
+  | {
+      success: true;
+      theme: ThemeSettings;
+    }
+  | {
+      success: false;
+      errors: string[];
+    };
 
 export const validateThemePayload = (value: unknown): ThemeValidationResult => {
   if (!isRecord(value)) {
@@ -803,7 +817,9 @@ export const validateThemePayload = (value: unknown): ThemeValidationResult => {
         errors.push(`Theme color "${key}" must be a valid hex, rgb, hsl, or var(--...) color string.`);
       }
     }
-    const unknownColorKeys = Object.keys(rawColors).filter((key) => !(themeColorKeys as readonly string[]).includes(key));
+    const unknownColorKeys = Object.keys(rawColors).filter(
+      (key) => !(themeColorKeys as readonly string[]).includes(key)
+    );
     if (unknownColorKeys.length) {
       errors.push(`Theme colors contains unknown keys: ${unknownColorKeys.join(', ')}.`);
     }
@@ -851,12 +867,22 @@ export const validateThemePayload = (value: unknown): ThemeValidationResult => {
     if (rawFonts.sourceFontWeight !== undefined && typeof rawFonts.sourceFontWeight !== 'string') {
       errors.push('Theme font "sourceFontWeight" must be a string.');
     }
-    if (rawFonts.liveFontSize !== null && rawFonts.liveFontSize !== undefined
-      && (typeof rawFonts.liveFontSize !== 'number' || !Number.isFinite(rawFonts.liveFontSize) || rawFonts.liveFontSize <= 0)) {
+    if (
+      rawFonts.liveFontSize !== null &&
+      rawFonts.liveFontSize !== undefined &&
+      (typeof rawFonts.liveFontSize !== 'number' ||
+        !Number.isFinite(rawFonts.liveFontSize) ||
+        rawFonts.liveFontSize <= 0)
+    ) {
       errors.push('Theme font "liveFontSize" must be null or a positive number.');
     }
-    if (rawFonts.sourceFontSize !== null && rawFonts.sourceFontSize !== undefined
-      && (typeof rawFonts.sourceFontSize !== 'number' || !Number.isFinite(rawFonts.sourceFontSize) || rawFonts.sourceFontSize <= 0)) {
+    if (
+      rawFonts.sourceFontSize !== null &&
+      rawFonts.sourceFontSize !== undefined &&
+      (typeof rawFonts.sourceFontSize !== 'number' ||
+        !Number.isFinite(rawFonts.sourceFontSize) ||
+        rawFonts.sourceFontSize <= 0)
+    ) {
       errors.push('Theme font "sourceFontSize" must be null or a positive number.');
     }
     for (const key of headingFontSizeKeys) {

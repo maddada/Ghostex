@@ -12,7 +12,6 @@ use std::{
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Security::Cryptography::{
     BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
@@ -22,8 +21,9 @@ use anyhow::Result;
 use futures::StreamExt as _;
 use gpui::http_client::HttpRequestExt as _;
 use gpui::{
-    AnyElement, App, AppContext as _, Asset, FontWeight, Hsla, Image,
-    ImageCacheError, ImageFormat, IntoElement, ParentElement as _, RenderImage, Styled as _, StyledImage as _, Window, div, img, prelude::FluentBuilder as _, px, rgb,
+    AnyElement, App, AppContext as _, Asset, FontWeight, Hsla, Image, ImageCacheError, ImageFormat,
+    IntoElement, ParentElement as _, RenderImage, Styled as _, StyledImage as _, Window, div, img,
+    prelude::FluentBuilder as _, px, rgb,
 };
 
 use crate::app::helpers::*;
@@ -282,7 +282,10 @@ pub(crate) fn browser_favicon_validate_encoded_dimensions(
     }
 }
 
-pub(crate) fn browser_favicon_encoded_dimensions(format: ImageFormat, bytes: &[u8]) -> Option<(u32, u32)> {
+pub(crate) fn browser_favicon_encoded_dimensions(
+    format: ImageFormat,
+    bytes: &[u8],
+) -> Option<(u32, u32)> {
     match format {
         ImageFormat::Png => browser_favicon_png_dimensions(bytes),
         ImageFormat::Jpeg => browser_favicon_jpeg_dimensions(bytes),
@@ -530,7 +533,9 @@ pub(crate) fn browser_favicon_image_format_for_mime(mime_type: &str) -> Option<I
     }
 }
 
-pub(crate) fn browser_safe_http_favicon_parts(value: &str) -> Option<(String, BrowserFaviconFetchSource)> {
+pub(crate) fn browser_safe_http_favicon_parts(
+    value: &str,
+) -> Option<(String, BrowserFaviconFetchSource)> {
     let value = value.trim();
     if value.len() > BROWSER_FAVICON_HTTP_URL_MAX_CHARS
         || value
@@ -662,7 +667,10 @@ pub(crate) fn browser_favicon_decode_base64(encoded: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
-pub(crate) fn browser_favicon_decode_base64_quartet(quartet: &[u8; 4], decoded: &mut Vec<u8>) -> Option<bool> {
+pub(crate) fn browser_favicon_decode_base64_quartet(
+    quartet: &[u8; 4],
+    decoded: &mut Vec<u8>,
+) -> Option<bool> {
     if quartet[0] == 64 || quartet[1] == 64 || (quartet[2] == 64 && quartet[3] != 64) {
         return None;
     }
@@ -855,7 +863,9 @@ pub(crate) fn browser_tab_favicon_marker_inner_element(favicon_url: &str) -> Any
         .into_any_element()
 }
 
-pub(crate) fn browser_tab_generic_icon_inner_element(chrome_status: BrowserTabChromeStatus) -> AnyElement {
+pub(crate) fn browser_tab_generic_icon_inner_element(
+    chrome_status: BrowserTabChromeStatus,
+) -> AnyElement {
     let is_placeholder = chrome_status == BrowserTabChromeStatus::AddressOnly;
     div()
         .size(px(if is_placeholder { 5.0 } else { 6.0 }))
@@ -870,7 +880,9 @@ pub(crate) fn browser_tab_favicon_bitmap_border_color(runtime_favicon_url: Optio
         .unwrap_or_else(|| rgb(0xffffff).opacity(0.24).into())
 }
 
-pub(crate) fn browser_tab_favicon_bitmap_background_color(runtime_favicon_url: Option<&str>) -> Hsla {
+pub(crate) fn browser_tab_favicon_bitmap_background_color(
+    runtime_favicon_url: Option<&str>,
+) -> Hsla {
     runtime_favicon_url
         .map(browser_tab_favicon_icon_background_color)
         .unwrap_or_else(|| rgb(0xffffff).opacity(0.08).into())
@@ -1275,7 +1287,9 @@ pub(crate) fn gpui_browser_tabs_project_key_allowed(value: &str) -> bool {
         || gpui_remote_project_reference_from_project_id(value).is_some()
 }
 
-pub(crate) fn gpui_open_existing_project_pull_request_in_browser(project_id: &str) -> Result<(), String> {
+pub(crate) fn gpui_open_existing_project_pull_request_in_browser(
+    project_id: &str,
+) -> Result<(), String> {
     /*
     CDXC:GPUISidebarGit 2026-06-24-15:43:
     Existing PR browser opens must derive the URL from gxserver's current GitHub state for the supplied project id. Renderer-provided URLs, DOM text, browser titles, cached labels, and arbitrary payload fields are not accepted as launch authority.
@@ -1299,7 +1313,9 @@ pub(crate) fn gpui_open_existing_project_pull_request_in_browser(project_id: &st
         .map_err(|_| "GPUI could not open the pull request.".to_string())
 }
 
-pub(crate) fn gpui_trusted_github_pull_request_url_from_pr_view_stdout(stdout: &str) -> Option<String> {
+pub(crate) fn gpui_trusted_github_pull_request_url_from_pr_view_stdout(
+    stdout: &str,
+) -> Option<String> {
     let value = serde_json::from_str::<serde_json::Value>(stdout.trim()).ok()?;
     let object = value.as_object()?;
     if !json_string_field(object, "state")?.eq_ignore_ascii_case("open") {
@@ -1348,7 +1364,8 @@ pub(crate) fn gpui_browser_media_permission_state_path() -> PathBuf {
 /// Browser microphone/camera answers live in GPUI-owned state rather than a
 /// CEF profile: Alloy-style CEF never persists media content settings, and the
 /// shell (not Chromium) owns the prompt that produced them.
-pub(crate) fn load_gpui_browser_media_permission_decisions() -> GpuiBrowserMediaPermissionDecisions {
+pub(crate) fn load_gpui_browser_media_permission_decisions() -> GpuiBrowserMediaPermissionDecisions
+{
     let Some(value) = fs::read_to_string(gpui_browser_media_permission_state_path())
         .ok()
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
@@ -1409,4 +1426,3 @@ pub(crate) fn persist_gpui_browser_media_permission_decisions(
     let payload = serde_json::json!({ "origins": origins });
     let _ = fs::write(path, payload.to_string());
 }
-

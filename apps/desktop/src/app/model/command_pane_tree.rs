@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 pub(crate) fn collect_command_tabs(
     node: &CommandPaneNode,
     tabs: &mut Vec<(CommandPaneGroupId, CommandSessionId)>,
@@ -26,7 +25,6 @@ pub(crate) fn collect_command_tabs(
     }
 }
 
-
 pub(crate) fn first_command_leaf(node: &CommandPaneNode) -> Option<&CommandPaneLeaf> {
     match node {
         CommandPaneNode::Leaf(leaf) if !leaf.tab_group.tabs.is_empty() => Some(leaf),
@@ -37,11 +35,9 @@ pub(crate) fn first_command_leaf(node: &CommandPaneNode) -> Option<&CommandPaneL
     }
 }
 
-
 pub(crate) fn first_command_leaf_id(node: &CommandPaneNode) -> Option<CommandPaneGroupId> {
     first_command_leaf(node).map(|leaf| leaf.group_id)
 }
-
 
 pub(crate) fn find_command_leaf(
     node: &CommandPaneNode,
@@ -54,7 +50,6 @@ pub(crate) fn find_command_leaf(
     }
 }
 
-
 pub(crate) fn find_command_leaf_mut(
     node: &mut CommandPaneNode,
     group_id: CommandPaneGroupId,
@@ -65,7 +60,6 @@ pub(crate) fn find_command_leaf_mut(
             .or_else(|| find_command_leaf_mut(&mut split.second, group_id)),
     }
 }
-
 
 pub(crate) fn find_command_split(
     node: &CommandPaneNode,
@@ -84,7 +78,6 @@ pub(crate) fn find_command_split(
     }
 }
 
-
 pub(crate) fn find_command_split_mut(
     node: &mut CommandPaneNode,
     split_id: CommandPaneSplitId,
@@ -102,11 +95,12 @@ pub(crate) fn find_command_split_mut(
     }
 }
 
-
-pub(crate) fn command_node_contains_group(node: &CommandPaneNode, group_id: CommandPaneGroupId) -> bool {
+pub(crate) fn command_node_contains_group(
+    node: &CommandPaneNode,
+    group_id: CommandPaneGroupId,
+) -> bool {
     find_command_leaf(node, group_id).is_some()
 }
-
 
 pub(crate) fn insert_command_leaf_split(
     node: &mut CommandPaneNode,
@@ -131,7 +125,6 @@ pub(crate) fn insert_command_leaf_split(
     }
     inserted
 }
-
 
 pub(crate) fn insert_command_leaf_split_inner(
     node: &mut CommandPaneNode,
@@ -196,7 +189,6 @@ pub(crate) fn insert_command_leaf_split_inner(
     }
 }
 
-
 pub(crate) fn insert_command_leaf_at_same_axis_split(
     split: &mut CommandPaneSplit,
     target_in_first: bool,
@@ -229,7 +221,6 @@ pub(crate) fn insert_command_leaf_at_same_axis_split(
         second: Box::new(second_second),
     }));
 }
-
 
 pub(crate) fn command_insert_target_axis_chain_uses_native_default_ratios(
     node: &CommandPaneNode,
@@ -264,7 +255,6 @@ pub(crate) fn command_insert_target_axis_chain_uses_native_default_ratios(
     }
 }
 
-
 pub(crate) fn command_split_axis_tree_uses_native_default_ratios(
     node: &CommandPaneNode,
     axis: WorkspaceSplitAxis,
@@ -279,14 +269,12 @@ pub(crate) fn command_split_axis_tree_uses_native_default_ratios(
     }
 }
 
-
 pub(crate) fn command_split_ratio_matches_native_default(split: &CommandPaneSplit) -> bool {
     let Some(expected_ratio) = command_split_native_default_ratio(split) else {
         return false;
     };
     (workspace_split_ratio(split.ratio) - expected_ratio).abs() < 0.001
 }
-
 
 pub(crate) fn command_split_native_default_ratio(split: &CommandPaneSplit) -> Option<f32> {
     let first_count = command_node_leaf_count(&split.first);
@@ -300,7 +288,6 @@ pub(crate) fn command_split_native_default_ratio(split: &CommandPaneSplit) -> Op
     ))
 }
 
-
 pub(crate) fn command_node_leaf_count(node: &CommandPaneNode) -> usize {
     match node {
         CommandPaneNode::Leaf(leaf) => usize::from(!leaf.tab_group.tabs.is_empty()),
@@ -309,9 +296,6 @@ pub(crate) fn command_node_leaf_count(node: &CommandPaneNode) -> usize {
         }
     }
 }
-
-
-
 
 pub(crate) fn rebalance_command_split_axis_chain_containing_group(
     node: &mut CommandPaneNode,
@@ -351,7 +335,6 @@ pub(crate) fn rebalance_command_split_axis_chain_containing_group(
     }
 }
 
-
 pub(crate) fn rebalance_command_split_axis_to_native_default_ratios(
     node: &mut CommandPaneNode,
     axis: WorkspaceSplitAxis,
@@ -370,8 +353,10 @@ pub(crate) fn rebalance_command_split_axis_to_native_default_ratios(
     }
 }
 
-
-pub(crate) fn collapse_empty_command_leaf(node: &mut CommandPaneNode, group_id: CommandPaneGroupId) -> bool {
+pub(crate) fn collapse_empty_command_leaf(
+    node: &mut CommandPaneNode,
+    group_id: CommandPaneGroupId,
+) -> bool {
     let mut replacement = None;
     let is_empty = match node {
         CommandPaneNode::Leaf(leaf) => leaf.group_id == group_id && leaf.tab_group.tabs.is_empty(),
@@ -393,13 +378,11 @@ pub(crate) fn collapse_empty_command_leaf(node: &mut CommandPaneNode, group_id: 
     }
 }
 
-
 pub(crate) fn take_command_node(node: &mut Box<CommandPaneNode>) -> CommandPaneNode {
     let mut replacement = Box::new(command_pane_dummy_node());
     std::mem::swap(node, &mut replacement);
     *replacement
 }
-
 
 pub(crate) fn command_pane_dummy_node() -> CommandPaneNode {
     CommandPaneNode::Leaf(CommandPaneLeaf {
@@ -411,8 +394,10 @@ pub(crate) fn command_pane_dummy_node() -> CommandPaneNode {
     })
 }
 
-
-pub(crate) fn command_node_axis_pane_count(node: &CommandPaneNode, axis: WorkspaceSplitAxis) -> usize {
+pub(crate) fn command_node_axis_pane_count(
+    node: &CommandPaneNode,
+    axis: WorkspaceSplitAxis,
+) -> usize {
     match node {
         CommandPaneNode::Leaf(_) => 1,
         CommandPaneNode::Split(split) => {

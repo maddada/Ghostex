@@ -42,7 +42,9 @@ pub(crate) fn gpui_titlebar_gxserver_daemon_status() -> serde_json::Value {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_on_demand_gxserver_asset_key(target: &GpuiRemoteInstallTarget) -> Option<&'static str> {
+pub(crate) fn gpui_on_demand_gxserver_asset_key(
+    target: &GpuiRemoteInstallTarget,
+) -> Option<&'static str> {
     if target.normalized_os() != "linux" {
         return None;
     }
@@ -165,4 +167,3 @@ pub(crate) fn gpui_install_gxserver_archive_and_read_token(
         GPUI_REMOTE_GXSERVER_INSTALL_TIMEOUT,
     )
 }
-

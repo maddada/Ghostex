@@ -115,7 +115,9 @@ pub(crate) fn workspace_tab_agent_icon_accent_color(agent_icon: &str) -> u32 {
     }
 }
 
-pub(crate) fn workspace_tab_agent_icon_opacity(visual_tone: WorkspaceTabLifecycleVisualTone) -> f32 {
+pub(crate) fn workspace_tab_agent_icon_opacity(
+    visual_tone: WorkspaceTabLifecycleVisualTone,
+) -> f32 {
     if visual_tone.uses_selected_treatment() {
         1.0
     } else if visual_tone.uses_inactive_running_treatment() {
@@ -144,7 +146,9 @@ pub(crate) fn agent_terminal_tab_status_color(tab_status: AgentTerminalTabStatus
     }
 }
 
-pub(crate) fn agent_terminal_tab_status_inactive_opacity(tab_status: AgentTerminalTabStatus) -> f32 {
+pub(crate) fn agent_terminal_tab_status_inactive_opacity(
+    tab_status: AgentTerminalTabStatus,
+) -> f32 {
     match tab_status {
         AgentTerminalTabStatus::Idle => 0.58,
         AgentTerminalTabStatus::Working => 0.52,
@@ -196,4 +200,3 @@ pub(crate) fn render_agents_first_prompt_title_overlay(
         )
         .into_any_element()
 }
-

@@ -10,13 +10,9 @@
 //
 // Agents without a catalog (unknown ids) get no pills at all.
 
-import type { SessionChatSendKey } from "../../shared/session-chat";
+import type { SessionChatSendKey } from '../../shared/session-chat';
 
-export type SessionChatOptionCategory =
-  | "model"
-  | "thought_level"
-  | "model_config"
-  | "mode";
+export type SessionChatOptionCategory = 'model' | 'thought_level' | 'model_config' | 'mode';
 
 /** Options-pill ordering (§1.2); the model category has its own pill. */
 const CATEGORY_ORDER: Record<SessionChatOptionCategory, number> = {
@@ -34,26 +30,26 @@ export interface SessionChatOptionChoice {
 
 export type SessionChatOptionDispatch =
   /** Types `build(value)` into the TUI; the chosen value becomes the local truth. */
-  | { kind: "command"; build: (value: string) => string }
+  | { kind: 'command'; build: (value: string) => string }
   /** Types a fixed command that FLIPS an unknown baseline (no value tracked). */
-  | { kind: "toggle-command"; command: string }
+  | { kind: 'toggle-command'; command: string }
   /** Types a command that opens the agent's own picker, then shows the terminal. */
-  | { kind: "agent-picker"; command: string }
+  | { kind: 'agent-picker'; command: string }
   /**
    * Nothing is typed: the pill shows the value gxserver read from the agent's
    * statusline and hands the user to the terminal to change it. For a TUI whose
    * picker cannot be driven blind from here (grok), a read-only pill plus a
    * handoff is the honest control — see GROK_CATALOG.
    */
-  | { kind: "terminal-handoff" }
+  | { kind: 'terminal-handoff' }
   /** Steps through a bounded TUI setting using shifted arrow keys. */
   | {
-      kind: "bounded-key-steps";
+      kind: 'bounded-key-steps';
       decreaseKey: SessionChatSendKey;
       increaseKey: SessionChatSendKey;
     }
   /** Writes a raw keystroke sequence (no text, no Enter). */
-  | { kind: "key"; key: SessionChatSendKey; marker: string };
+  | { kind: 'key'; key: SessionChatSendKey; marker: string };
 
 export interface SessionChatOptionDescriptor {
   /** Stable per agent; also the persistence key. */
@@ -83,44 +79,44 @@ export interface SessionChatSessionOptionCatalog {
 // ---------------------------------------------------------------------------
 
 const CLAUDE_MODELS: readonly SessionChatOptionChoice[] = [
-  { value: "fable", label: "Fable 5" },
-  { value: "opus", label: "Opus 5" },
-  { value: "sonnet", label: "Sonnet 5" },
-  { value: "haiku", label: "Haiku 4.5" },
+  { value: 'fable', label: 'Fable 5' },
+  { value: 'opus', label: 'Opus 5' },
+  { value: 'sonnet', label: 'Sonnet 5' },
+  { value: 'haiku', label: 'Haiku 4.5' },
 ];
 
 const CLAUDE_EFFORTS: readonly SessionChatOptionChoice[] = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra high" },
-  { value: "max", label: "Max" },
-  { value: "auto", label: "Auto" },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra high' },
+  { value: 'max', label: 'Max' },
+  { value: 'auto', label: 'Auto' },
 ];
 
 const CLAUDE_MODEL: SessionChatOptionDescriptor = {
-  id: "model",
-  label: "Model",
-  category: "model",
+  id: 'model',
+  label: 'Model',
+  category: 'model',
   choices: CLAUDE_MODELS,
-  dispatch: { kind: "command", build: (value) => `/model ${value}` },
+  dispatch: { kind: 'command', build: (value) => `/model ${value}` },
 };
 
 const CLAUDE_EFFORT: SessionChatOptionDescriptor = {
-  id: "effort",
-  label: "Effort",
-  category: "thought_level",
+  id: 'effort',
+  label: 'Effort',
+  category: 'thought_level',
   choices: CLAUDE_EFFORTS,
-  dispatch: { kind: "command", build: (value) => `/effort ${value}` },
+  dispatch: { kind: 'command', build: (value) => `/effort ${value}` },
 };
 
 const CLAUDE_FAST_MODE: SessionChatOptionDescriptor = {
-  id: "fastMode",
-  label: "Fast mode",
-  category: "model_config",
-  actionLabel: "Toggle Fast mode",
-  description: "Flips fast mode; the current state is only known to the agent.",
-  dispatch: { kind: "toggle-command", command: "/fast" },
+  id: 'fastMode',
+  label: 'Fast mode',
+  category: 'model_config',
+  actionLabel: 'Toggle Fast mode',
+  description: 'Flips fast mode; the current state is only known to the agent.',
+  dispatch: { kind: 'toggle-command', command: '/fast' },
 };
 
 /*
@@ -130,12 +126,12 @@ param. Cycling is blind (the TUI owns the order), which is exactly the
 "toggle-command" shape: an action row, no tracked value.
 */
 const CLAUDE_MODE: SessionChatOptionDescriptor = {
-  id: "mode",
-  label: "Mode",
-  category: "mode",
-  actionLabel: "Cycle mode (Shift+Tab)",
+  id: 'mode',
+  label: 'Mode',
+  category: 'mode',
+  actionLabel: 'Cycle mode (Shift+Tab)',
   description: "Steps through Claude Code's permission modes.",
-  dispatch: { kind: "key", key: "shift-tab", marker: "Sent Shift+Tab (mode cycle)" },
+  dispatch: { kind: 'key', key: 'shift-tab', marker: 'Sent Shift+Tab (mode cycle)' },
 };
 
 // ---------------------------------------------------------------------------
@@ -143,53 +139,51 @@ const CLAUDE_MODE: SessionChatOptionDescriptor = {
 // ---------------------------------------------------------------------------
 
 const CODEX_MODELS: readonly SessionChatOptionChoice[] = [
-  { value: "gpt-5.6-sol", label: "GPT-5.6 Sol" },
-  { value: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
-  { value: "gpt-5.6-luna", label: "GPT-5.6 Luna" },
-  { value: "gpt-5.5", label: "GPT-5.5" },
-  { value: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
+  { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' },
+  { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
+  { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+  { value: 'gpt-5.5', label: 'GPT-5.5' },
+  { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
 ];
 
 const CODEX_EFFORTS: readonly SessionChatOptionChoice[] = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra high" },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra high' },
 ];
 
-export function codexEffortChoices(
-  _modelValue: string,
-): readonly SessionChatOptionChoice[] {
+export function codexEffortChoices(_modelValue: string): readonly SessionChatOptionChoice[] {
   return CODEX_EFFORTS;
 }
 
 /* Codex owns model selection in its interactive terminal picker. */
 const CODEX_MODEL: SessionChatOptionDescriptor = {
-  id: "model",
-  label: "Model",
-  category: "model",
+  id: 'model',
+  label: 'Model',
+  category: 'model',
   choices: CODEX_MODELS,
   actionLabel: "Open the CLI's model picker",
-  dispatch: { kind: "agent-picker", command: "/model" },
+  dispatch: { kind: 'agent-picker', command: '/model' },
 };
 
 const CODEX_EFFORT: SessionChatOptionDescriptor = {
-  id: "effort",
-  label: "Reasoning effort",
-  category: "thought_level",
+  id: 'effort',
+  label: 'Reasoning effort',
+  category: 'thought_level',
   dispatch: {
-    kind: "bounded-key-steps",
-    decreaseKey: "shift-down",
-    increaseKey: "shift-up",
+    kind: 'bounded-key-steps',
+    decreaseKey: 'shift-down',
+    increaseKey: 'shift-up',
   },
 };
 
 const CODEX_MODE: SessionChatOptionDescriptor = {
-  id: "mode",
-  label: "Mode",
-  category: "mode",
-  actionLabel: "Switch to Plan mode",
-  dispatch: { kind: "command", build: () => "/plan" },
+  id: 'mode',
+  label: 'Mode',
+  category: 'mode',
+  actionLabel: 'Switch to Plan mode',
+  dispatch: { kind: 'command', build: () => '/plan' },
 };
 
 // ---------------------------------------------------------------------------
@@ -205,28 +199,28 @@ pills are read-only mirrors of the statusline gxserver already reads, and either
 one hands the user to the terminal to make the change.
 */
 const GROK_EFFORTS: readonly SessionChatOptionChoice[] = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra high" },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra high' },
 ];
 
 /** No `choices`: grok's model list is account-dependent and never typed here. */
 const GROK_MODEL: SessionChatOptionDescriptor = {
-  id: "model",
-  label: "Model",
-  category: "model",
-  actionLabel: "Change it in the CLI",
-  dispatch: { kind: "terminal-handoff" },
+  id: 'model',
+  label: 'Model',
+  category: 'model',
+  actionLabel: 'Change it in the CLI',
+  dispatch: { kind: 'terminal-handoff' },
 };
 
 const GROK_EFFORT: SessionChatOptionDescriptor = {
-  id: "effort",
-  label: "Reasoning effort",
-  category: "thought_level",
+  id: 'effort',
+  label: 'Reasoning effort',
+  category: 'thought_level',
   choices: GROK_EFFORTS,
-  actionLabel: "Change it in the CLI",
-  dispatch: { kind: "terminal-handoff" },
+  actionLabel: 'Change it in the CLI',
+  dispatch: { kind: 'terminal-handoff' },
 };
 
 // ---------------------------------------------------------------------------
@@ -239,8 +233,8 @@ const CLAUDE_CATALOG: SessionChatSessionOptionCatalog = {
     sortDescriptors([
       // Until gxserver confirms the model, do not offer effort controls that
       // may not exist for the actual model (Haiku has none).
-      ...(modelValue === "" || modelValue === "haiku" ? [] : [CLAUDE_EFFORT]),
-      ...(modelValue === "opus" ? [CLAUDE_FAST_MODE] : []),
+      ...(modelValue === '' || modelValue === 'haiku' ? [] : [CLAUDE_EFFORT]),
+      ...(modelValue === 'opus' ? [CLAUDE_FAST_MODE] : []),
       CLAUDE_MODE,
     ]),
 };
@@ -248,18 +242,11 @@ const CLAUDE_CATALOG: SessionChatSessionOptionCatalog = {
 const CODEX_CATALOG: SessionChatSessionOptionCatalog = {
   model: CODEX_MODEL,
   optionsForModel: (modelValue) =>
-    sortDescriptors([
-      { ...CODEX_EFFORT, choices: codexEffortChoices(modelValue) },
-      CODEX_MODE,
-    ]),
+    sortDescriptors([{ ...CODEX_EFFORT, choices: codexEffortChoices(modelValue) }, CODEX_MODE]),
 };
 
-function sortDescriptors(
-  descriptors: readonly SessionChatOptionDescriptor[],
-): readonly SessionChatOptionDescriptor[] {
-  return [...descriptors].sort(
-    (left, right) => CATEGORY_ORDER[left.category] - CATEGORY_ORDER[right.category],
-  );
+function sortDescriptors(descriptors: readonly SessionChatOptionDescriptor[]): readonly SessionChatOptionDescriptor[] {
+  return [...descriptors].sort((left, right) => CATEGORY_ORDER[left.category] - CATEGORY_ORDER[right.category]);
 }
 
 const GROK_CATALOG: SessionChatSessionOptionCatalog = {
@@ -275,7 +262,7 @@ const CATALOG_BY_AGENT: Record<string, SessionChatSessionOptionCatalog> = {
 };
 
 export function sessionChatSessionOptionCatalog(
-  agent: string | null | undefined,
+  agent: string | null | undefined
 ): SessionChatSessionOptionCatalog | null {
   if (agent === null || agent === undefined) {
     return null;
@@ -288,9 +275,7 @@ export function sessionChatSessionOptionCatalog(
  * a dispatched pill command as the same muted "Ran /model sonnet" row a typed
  * command gets. Names only (no slash), matching the slash-command catalog.
  */
-export function sessionChatOptionCommandNames(
-  agent: string | null | undefined,
-): readonly string[] {
+export function sessionChatOptionCommandNames(agent: string | null | undefined): readonly string[] {
   const catalog = sessionChatSessionOptionCatalog(agent);
   if (!catalog) {
     return [];
@@ -299,23 +284,23 @@ export function sessionChatOptionCommandNames(
   const collect = (descriptor: SessionChatOptionDescriptor): void => {
     const { dispatch } = descriptor;
     const command =
-      dispatch.kind === "command"
-        ? dispatch.build(descriptor.choices?.[0]?.value ?? "")
-        : dispatch.kind === "toggle-command" || dispatch.kind === "agent-picker"
+      dispatch.kind === 'command'
+        ? dispatch.build(descriptor.choices?.[0]?.value ?? '')
+        : dispatch.kind === 'toggle-command' || dispatch.kind === 'agent-picker'
           ? dispatch.command
           : null;
     if (command === null) {
       return;
     }
-    const name = command.trim().split(/\s+/, 1)[0]?.replace(/^\//, "") ?? "";
-    if (name !== "") {
+    const name = command.trim().split(/\s+/, 1)[0]?.replace(/^\//, '') ?? '';
+    if (name !== '') {
       names.add(name);
     }
   };
   collect(catalog.model);
   // Union over every model, so a name only reachable under one model (Claude's
   // /fast) still classifies as a command.
-  for (const choice of catalog.model.choices ?? [{ value: "", label: "" }]) {
+  for (const choice of catalog.model.choices ?? [{ value: '', label: '' }]) {
     for (const descriptor of catalog.optionsForModel(choice.value)) {
       collect(descriptor);
     }
@@ -327,7 +312,7 @@ export function sessionChatOptionCommandNames(
 // Local value state
 // ---------------------------------------------------------------------------
 
-export type SessionChatOptionSource = "default" | "dispatched" | "detected";
+export type SessionChatOptionSource = 'default' | 'dispatched' | 'detected';
 
 export interface SessionChatOptionValue {
   value: string;
@@ -341,19 +326,17 @@ export interface SessionChatOptionValue {
   /** ISO time this surface typed the option command (source "dispatched"). */
   dispatchedAt?: string;
   /** Agent-owned evidence used for a detected value. */
-  detectedSource?: "terminal" | "transcript";
+  detectedSource?: 'terminal' | 'transcript';
   /** ISO time gxserver read the value (source "detected"). */
   detectedAt?: string;
 }
 
 /** Descriptor id → local value. Only value-carrying options appear. */
-export type SessionChatOptionState = Readonly<
-  Record<string, SessionChatOptionValue>
->;
+export type SessionChatOptionState = Readonly<Record<string, SessionChatOptionValue>>;
 
-export const SESSION_CHAT_DISPATCHED_HINT = "Sent to the agent — not confirmed";
-export const SESSION_CHAT_DETECTED_HINT = "Read from the terminal";
-export const SESSION_CHAT_TRANSCRIPT_HINT = "Confirmed by the agent transcript";
+export const SESSION_CHAT_DISPATCHED_HINT = 'Sent to the agent — not confirmed';
+export const SESSION_CHAT_DETECTED_HINT = 'Read from the terminal';
+export const SESSION_CHAT_TRANSCRIPT_HINT = 'Confirmed by the agent transcript';
 
 /**
  * How long a just-typed option command outranks a DISAGREEING detection: the
@@ -363,20 +346,14 @@ export const SESSION_CHAT_TRANSCRIPT_HINT = "Confirmed by the agent transcript";
  */
 export const SESSION_CHAT_DISPATCH_GRACE_MS = 10_000;
 
-function isTrackedValue(
-  descriptor: SessionChatOptionDescriptor,
-  value: string,
-): boolean {
+function isTrackedValue(descriptor: SessionChatOptionDescriptor, value: string): boolean {
   return (descriptor.choices ?? []).some((choice) => choice.value === value);
 }
 
 /** Value-carrying descriptors: a select the pills can label from. */
-export function sessionChatOptionTracksValue(
-  descriptor: SessionChatOptionDescriptor,
-): boolean {
+export function sessionChatOptionTracksValue(descriptor: SessionChatOptionDescriptor): boolean {
   return (
-    (descriptor.dispatch.kind === "command" ||
-      descriptor.dispatch.kind === "bounded-key-steps") &&
+    (descriptor.dispatch.kind === 'command' || descriptor.dispatch.kind === 'bounded-key-steps') &&
     descriptor.choices !== undefined &&
     descriptor.choices.length > 0
   );
@@ -392,7 +369,7 @@ export function sessionChatBoundedKeySteps(
   currentValue: string | undefined,
   targetValue: string,
   decreaseKey: SessionChatSendKey,
-  increaseKey: SessionChatSendKey,
+  increaseKey: SessionChatSendKey
 ): SessionChatSendKey[] {
   const targetIndex = choices.findIndex((choice) => choice.value === targetValue);
   if (targetIndex < 0 || choices.length < 2) {
@@ -401,10 +378,7 @@ export function sessionChatBoundedKeySteps(
   const currentIndex = choices.findIndex((choice) => choice.value === currentValue);
   if (currentIndex >= 0) {
     const delta = targetIndex - currentIndex;
-    return Array.from(
-      { length: Math.abs(delta) },
-      () => (delta > 0 ? increaseKey : decreaseKey),
-    );
+    return Array.from({ length: Math.abs(delta) }, () => (delta > 0 ? increaseKey : decreaseKey));
   }
   const lastIndex = choices.length - 1;
   const fromLowerEdge = lastIndex + targetIndex;
@@ -422,7 +396,7 @@ export function sessionChatBoundedKeySteps(
 
 export function seedSessionChatOptionState(
   catalog: SessionChatSessionOptionCatalog,
-  stored: SessionChatOptionState = {},
+  stored: SessionChatOptionState = {}
 ): SessionChatOptionState {
   const next: Record<string, SessionChatOptionValue> = {};
   const seed = (descriptor: SessionChatOptionDescriptor): void => {
@@ -438,19 +412,16 @@ export function seedSessionChatOptionState(
     terminal while Chat is unmounted. gxserver will re-confirm it on the seed
     read; only still-pending local intent survives this synchronous reseed.
     */
-    if (
-      storedValue?.source === "dispatched" &&
-      isTrackedValue(descriptor, storedValue.value)
-    ) {
+    if (storedValue?.source === 'dispatched' && isTrackedValue(descriptor, storedValue.value)) {
       next[descriptor.id] = storedValue;
       return;
     }
     if (descriptor.defaultValue !== undefined) {
-      next[descriptor.id] = { value: descriptor.defaultValue, source: "default" };
+      next[descriptor.id] = { value: descriptor.defaultValue, source: 'default' };
     }
   };
   seed(catalog.model);
-  const modelValue = next[catalog.model.id]?.value ?? catalog.model.defaultValue ?? "";
+  const modelValue = next[catalog.model.id]?.value ?? catalog.model.defaultValue ?? '';
   for (const descriptor of catalog.optionsForModel(modelValue)) {
     seed(descriptor);
   }
@@ -462,14 +433,14 @@ export function setSessionChatOptionValue(
   descriptorId: string,
   value: string,
   source: SessionChatOptionSource,
-  now: () => number = Date.now,
+  now: () => number = Date.now
 ): SessionChatOptionState {
   const current = state[descriptorId];
   if (current?.value === value && current.source === source) {
     return state;
   }
   const next: SessionChatOptionValue = { value, source };
-  if (source === "dispatched") {
+  if (source === 'dispatched') {
     // Stamped so a detection can tell "the user just sent this" from "the
     // agent has been running this for a while".
     next.dispatchedAt = new Date(now()).toISOString();
@@ -485,27 +456,22 @@ export function setSessionChatOptionValue(
 export function reconcileSessionChatOptionsFromCommand(
   catalog: SessionChatSessionOptionCatalog,
   state: SessionChatOptionState,
-  text: string,
+  text: string
 ): SessionChatOptionState {
-  const normalized = text.trim().replace(/\s+/g, " ");
-  if (!normalized.startsWith("/")) {
+  const normalized = text.trim().replace(/\s+/g, ' ');
+  if (!normalized.startsWith('/')) {
     return state;
   }
-  const modelValue = state[catalog.model.id]?.value ?? catalog.model.defaultValue ?? "";
+  const modelValue = state[catalog.model.id]?.value ?? catalog.model.defaultValue ?? '';
   const descriptors = [catalog.model, ...catalog.optionsForModel(modelValue)];
   let next = state;
   for (const descriptor of descriptors) {
-    if (descriptor.dispatch.kind !== "command") {
+    if (descriptor.dispatch.kind !== 'command') {
       continue;
     }
     for (const choice of descriptor.choices ?? []) {
       if (descriptor.dispatch.build(choice.value) === normalized) {
-        next = setSessionChatOptionValue(
-          next,
-          descriptor.id,
-          choice.value,
-          "dispatched",
-        );
+        next = setSessionChatOptionValue(next, descriptor.id, choice.value, 'dispatched');
       }
     }
   }
@@ -524,8 +490,8 @@ the tooltip names the transcript or terminal evidence that confirmed it.
 Nothing detected ⇒ nothing here runs and no current value is claimed.
 */
 export interface SessionChatDetectedOptionInput {
-  model?: { value: string; label: string; source?: "terminal" | "transcript" };
-  effort?: { value: string; label: string; source?: "terminal" | "transcript" };
+  model?: { value: string; label: string; source?: 'terminal' | 'transcript' };
+  effort?: { value: string; label: string; source?: 'terminal' | 'transcript' };
   detectedAt: string;
 }
 
@@ -535,16 +501,16 @@ function applyDetectedChoice(
   detected: {
     value: string;
     label: string;
-    source?: "terminal" | "transcript";
+    source?: 'terminal' | 'transcript';
   },
-  detectedAt: string,
+  detectedAt: string
 ): SessionChatOptionState {
   const current = state[descriptorId];
   const detectedAtMs = Date.parse(detectedAt);
   const dispatchedAtMs = current?.dispatchedAt ? Date.parse(current.dispatchedAt) : Number.NaN;
   const agrees = current?.value === detected.value;
   if (
-    current?.source === "dispatched" &&
+    current?.source === 'dispatched' &&
     Number.isFinite(dispatchedAtMs) &&
     Number.isFinite(detectedAtMs) &&
     !agrees &&
@@ -555,7 +521,7 @@ function applyDetectedChoice(
     return state;
   }
   if (
-    current?.source === "detected" &&
+    current?.source === 'detected' &&
     agrees &&
     current.label === detected.label &&
     current.detectedSource === detected.source &&
@@ -567,7 +533,7 @@ function applyDetectedChoice(
     ...state,
     [descriptorId]: {
       value: detected.value,
-      source: "detected",
+      source: 'detected',
       label: detected.label,
       ...(detected.source ? { detectedSource: detected.source } : {}),
       detectedAt,
@@ -579,7 +545,7 @@ function applyDetectedChoice(
 export function applySessionChatDetectedOptions(
   catalog: SessionChatSessionOptionCatalog,
   state: SessionChatOptionState,
-  detected: SessionChatDetectedOptionInput | null | undefined,
+  detected: SessionChatDetectedOptionInput | null | undefined
 ): SessionChatOptionState {
   if (!detected) {
     return state;
@@ -589,13 +555,11 @@ export function applySessionChatDetectedOptions(
     next = applyDetectedChoice(next, catalog.model.id, detected.model, detected.detectedAt);
   }
   if (detected.effort) {
-    const modelValue = next[catalog.model.id]?.value ?? catalog.model.defaultValue ?? "";
+    const modelValue = next[catalog.model.id]?.value ?? catalog.model.defaultValue ?? '';
     // Only when the current model actually has an effort option (Haiku has none).
-    const hasEffort = catalog
-      .optionsForModel(modelValue)
-      .some((descriptor) => descriptor.id === "effort");
+    const hasEffort = catalog.optionsForModel(modelValue).some((descriptor) => descriptor.id === 'effort');
     if (hasEffort) {
-      next = applyDetectedChoice(next, "effort", detected.effort, detected.detectedAt);
+      next = applyDetectedChoice(next, 'effort', detected.effort, detected.detectedAt);
     }
   }
   return next;
@@ -610,7 +574,7 @@ export function applySessionChatDetectedOptions(
  */
 export function sessionChatOptionValueLabel(
   descriptor: SessionChatOptionDescriptor,
-  state: SessionChatOptionState,
+  state: SessionChatOptionState
 ): string | null {
   const current = state[descriptor.id];
   if (!current) {
@@ -630,19 +594,19 @@ export function sessionChatOptionValueLabel(
 /** Options-pill label: known non-model values joined by " · " (§1.2). */
 export function sessionChatOptionsPillLabel(
   descriptors: readonly SessionChatOptionDescriptor[],
-  state: SessionChatOptionState,
+  state: SessionChatOptionState
 ): string | null {
   const labels = descriptors
     .map((descriptor) => sessionChatOptionValueLabel(descriptor, state))
     .filter((label): label is string => label !== null);
-  return labels.length > 0 ? labels.join(" · ") : null;
+  return labels.length > 0 ? labels.join(' · ') : null;
 }
 
 // ---------------------------------------------------------------------------
 // Persistence — last dispatched values per session
 // ---------------------------------------------------------------------------
 
-const STORAGE_PREFIX = "ghostex.sessionChat.options.";
+const STORAGE_PREFIX = 'ghostex.sessionChat.options.';
 
 function storage(): Storage | null {
   try {
@@ -653,9 +617,7 @@ function storage(): Storage | null {
   }
 }
 
-export function readStoredSessionChatOptions(
-  sessionKey: string | null | undefined,
-): SessionChatOptionState {
+export function readStoredSessionChatOptions(sessionKey: string | null | undefined): SessionChatOptionState {
   if (!sessionKey) {
     return {};
   }
@@ -669,12 +631,12 @@ export function readStoredSessionChatOptions(
   } catch {
     return {};
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {};
   }
   const next: Record<string, SessionChatOptionValue> = {};
   for (const [id, entry] of Object.entries(parsed as Record<string, unknown>)) {
-    if (!entry || typeof entry !== "object") {
+    if (!entry || typeof entry !== 'object') {
       continue;
     }
     const { detectedAt, detectedSource, dispatchedAt, label, source, value } = entry as {
@@ -685,23 +647,20 @@ export function readStoredSessionChatOptions(
       source?: unknown;
       value?: unknown;
     };
-    if (
-      typeof value !== "string" ||
-      (source !== "default" && source !== "dispatched" && source !== "detected")
-    ) {
+    if (typeof value !== 'string' || (source !== 'default' && source !== 'dispatched' && source !== 'detected')) {
       continue;
     }
     const stored: SessionChatOptionValue = { value, source };
-    if (typeof label === "string" && label !== "") {
+    if (typeof label === 'string' && label !== '') {
       stored.label = label;
     }
-    if (typeof dispatchedAt === "string") {
+    if (typeof dispatchedAt === 'string') {
       stored.dispatchedAt = dispatchedAt;
     }
-    if (typeof detectedAt === "string") {
+    if (typeof detectedAt === 'string') {
       stored.detectedAt = detectedAt;
     }
-    if (detectedSource === "terminal" || detectedSource === "transcript") {
+    if (detectedSource === 'terminal' || detectedSource === 'transcript') {
       stored.detectedSource = detectedSource;
     }
     next[id] = stored;
@@ -711,7 +670,7 @@ export function readStoredSessionChatOptions(
 
 export function writeStoredSessionChatOptions(
   sessionKey: string | null | undefined,
-  state: SessionChatOptionState,
+  state: SessionChatOptionState
 ): void {
   if (!sessionKey) {
     return;

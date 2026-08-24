@@ -11,7 +11,6 @@ use std::collections::HashSet;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-
 use anyhow::Result;
 
 use crate::app::helpers::*;
@@ -253,7 +252,9 @@ pub(crate) fn gpui_default_sidebar_command_button_value(
     })
 }
 
-pub(crate) fn gpui_sidebar_command_button_value(command: &GpuiStoredSidebarCommand) -> serde_json::Value {
+pub(crate) fn gpui_sidebar_command_button_value(
+    command: &GpuiStoredSidebarCommand,
+) -> serde_json::Value {
     let mut button = serde_json::Map::new();
     button.insert(
         "actionType".to_string(),
@@ -470,4 +471,3 @@ pub(crate) fn gpui_normalized_string_order_from_values(items: &[serde_json::Valu
     }
     order
 }
-

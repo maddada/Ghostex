@@ -1,4 +1,4 @@
-import type { ghostexSettings } from "./ghostex-settings";
+import type { ghostexSettings } from './ghostex-settings';
 
 export type GhosttyTerminalConfigValues = {
   adjustCellHeightPercent: number;
@@ -54,9 +54,7 @@ export type GhosttyTerminalConfigValues = {
  * previewable images must reach macOS immediately, but it must not be emitted as
  * a Ghostty config key.
  */
-export function getGhosttyTerminalConfigValues(
-  settings: ghostexSettings,
-): GhosttyTerminalConfigValues {
+export function getGhosttyTerminalConfigValues(settings: ghostexSettings): GhosttyTerminalConfigValues {
   return {
     adjustCellHeightPercent: settings.terminalLineHeight - 1,
     adjustCellWidth: settings.terminalLetterSpacing,

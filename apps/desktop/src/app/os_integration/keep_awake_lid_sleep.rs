@@ -225,7 +225,10 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn spawn_gpui_keep_awake_lid_sleep_disable_cleanup(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn spawn_gpui_keep_awake_lid_sleep_disable_cleanup(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let background = cx.background_executor().clone();
         cx.spawn(async move |_this, _cx| {
             let _ = background
@@ -234,5 +237,4 @@ impl GhostexGpuiApp {
         })
         .detach();
     }
-
 }

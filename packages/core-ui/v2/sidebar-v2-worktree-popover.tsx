@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { SidebarAgentButton } from "../../shared/sidebar-agents";
-import { formatWorktreePathForDisplay } from "../../shared/sidebar-v2-worktree-cleanup";
-import { SidebarContextMenuPortal } from "../sidebar-context-menu-portal";
-import type { WebviewApi } from "../webview-api";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SidebarAgentButton } from '../../shared/sidebar-agents';
+import { formatWorktreePathForDisplay } from '../../shared/sidebar-v2-worktree-cleanup';
+import { SidebarContextMenuPortal } from '../sidebar-context-menu-portal';
+import type { WebviewApi } from '../webview-api';
 
 /*
  * CDXC:SidebarV2Worktree 2026-07-29:
@@ -58,10 +58,7 @@ type ProjectWorktreesResult = {
   worktrees?: unknown;
 };
 
-export type SidebarV2WorktreeEventSource = Pick<
-  Window,
-  "addEventListener" | "removeEventListener"
->;
+export type SidebarV2WorktreeEventSource = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 
 export type SidebarV2WorktreePopoverProps = {
   agents: readonly SidebarAgentButton[];
@@ -93,12 +90,12 @@ function normalizeBranchOptions(candidate: unknown): WorktreeBranchOption[] {
   const seen = new Set<string>();
   for (const entry of candidate) {
     const record =
-      typeof entry === "string"
+      typeof entry === 'string'
         ? { current: false, name: entry }
-        : entry && typeof entry === "object"
+        : entry && typeof entry === 'object'
           ? (entry as { current?: unknown; name?: unknown })
           : undefined;
-    const name = typeof record?.name === "string" ? record.name.trim() : "";
+    const name = typeof record?.name === 'string' ? record.name.trim() : '';
     if (!name || seen.has(name)) {
       continue;
     }
@@ -115,30 +112,27 @@ function normalizeExistingOptions(candidate: unknown): WorktreeExistingOption[] 
   const options: WorktreeExistingOption[] = [];
   const seen = new Set<string>();
   for (const entry of candidate) {
-    if (!entry || typeof entry !== "object") {
+    if (!entry || typeof entry !== 'object') {
       continue;
     }
     const record = entry as { branch?: unknown; path?: unknown };
-    const path = typeof record.path === "string" ? record.path.trim() : "";
+    const path = typeof record.path === 'string' ? record.path.trim() : '';
     if (!path || seen.has(path)) {
       continue;
     }
     seen.add(path);
     options.push({
-      branch: typeof record.branch === "string" && record.branch.trim() ? record.branch.trim() : undefined,
+      branch: typeof record.branch === 'string' && record.branch.trim() ? record.branch.trim() : undefined,
       path,
     });
   }
   return options;
 }
 
-function resolveInitialAgentId(
-  agents: readonly SidebarAgentButton[],
-  defaultAgentId: string | undefined,
-): string {
+function resolveInitialAgentId(agents: readonly SidebarAgentButton[], defaultAgentId: string | undefined): string {
   const configured = agents.filter((agent) => agent.command?.trim());
   const preferred = configured.find((agent) => agent.agentId === defaultAgentId);
-  return preferred?.agentId ?? configured[0]?.agentId ?? "";
+  return preferred?.agentId ?? configured[0]?.agentId ?? '';
 }
 
 export function SidebarV2WorktreePopover({
@@ -154,16 +148,11 @@ export function SidebarV2WorktreePopover({
   projectLabel,
   vscode,
 }: SidebarV2WorktreePopoverProps) {
-  const configuredAgents = useMemo(
-    () => agents.filter((agent) => agent.command?.trim()),
-    [agents],
-  );
-  const [agentId, setAgentId] = useState(() =>
-    resolveInitialAgentId(agents, defaultAgentId),
-  );
-  const [baseBranch, setBaseBranch] = useState("");
+  const configuredAgents = useMemo(() => agents.filter((agent) => agent.command?.trim()), [agents]);
+  const [agentId, setAgentId] = useState(() => resolveInitialAgentId(agents, defaultAgentId));
+  const [baseBranch, setBaseBranch] = useState('');
   const [startFromOrigin, setStartFromOrigin] = useState(false);
-  const [firstPrompt, setFirstPrompt] = useState("");
+  const [firstPrompt, setFirstPrompt] = useState('');
   const [branches, setBranches] = useState<WorktreeBranchOption[]>([]);
   const [existingWorktrees, setExistingWorktrees] = useState<WorktreeExistingOption[]>([]);
   const [listError, setListError] = useState<string>();
@@ -176,9 +165,7 @@ export function SidebarV2WorktreePopover({
    * not a correctness problem — gxserver re-resolves the branch at create time.
    */
   useEffect(() => {
-    const requestId = `sidebar-v2-worktrees-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    const requestId = `sidebar-v2-worktrees-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     requestIdRef.current = requestId;
     onRequestWorktrees(requestId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,31 +175,27 @@ export function SidebarV2WorktreePopover({
     const source: SidebarV2WorktreeEventSource = messageSource ?? window;
     const handleMessage = (event: Event) => {
       const data = (event as MessageEvent<ProjectWorktreesResult | undefined>).data;
-      if (!data || typeof data !== "object" || data.type !== "projectWorktreesResult") {
+      if (!data || typeof data !== 'object' || data.type !== 'projectWorktreesResult') {
         return;
       }
       if (data.requestId !== requestIdRef.current) {
         return;
       }
       if (data.ok !== true) {
-        setListError(
-          typeof data.error === "string" && data.error.trim()
-            ? data.error
-            : "Could not load branches.",
-        );
+        setListError(typeof data.error === 'string' && data.error.trim() ? data.error : 'Could not load branches.');
         return;
       }
       setListError(undefined);
       const branchOptions = normalizeBranchOptions(data.branches);
       setBranches(branchOptions);
-      setBaseBranch((current) =>
-        current || branchOptions.find((branch) => branch.isCurrent)?.name || branchOptions[0]?.name || "",
+      setBaseBranch(
+        (current) => current || branchOptions.find((branch) => branch.isCurrent)?.name || branchOptions[0]?.name || ''
       );
       setExistingWorktrees(normalizeExistingOptions(data.worktrees));
     };
-    source.addEventListener("message", handleMessage);
+    source.addEventListener('message', handleMessage);
     return () => {
-      source.removeEventListener("message", handleMessage);
+      source.removeEventListener('message', handleMessage);
     };
   }, [messageSource]);
 
@@ -230,30 +213,28 @@ export function SidebarV2WorktreePopover({
 
   return (
     <SidebarContextMenuPortal
-      menuClassName="session-context-menu sidebar-v2-worktree-popover"
+      menuClassName='session-context-menu sidebar-v2-worktree-popover'
       menuStyle={{ left: `${position.clientX}px`, top: `${position.clientY}px` }}
       onDismiss={onDismiss}
       vscode={vscode}
     >
-      <div className="sidebar-v2-worktree-form">
-        <div className="sidebar-v2-worktree-heading">
+      <div className='sidebar-v2-worktree-form'>
+        <div className='sidebar-v2-worktree-heading'>
           New worktree session
-          {projectLabel ? (
-            <span className="sidebar-v2-worktree-project">{projectLabel}</span>
-          ) : null}
+          {projectLabel ? <span className='sidebar-v2-worktree-project'>{projectLabel}</span> : null}
         </div>
 
-        <label className="sidebar-v2-worktree-field">
-          <span className="sidebar-v2-worktree-label">Agent</span>
+        <label className='sidebar-v2-worktree-field'>
+          <span className='sidebar-v2-worktree-label'>Agent</span>
           <select
-            aria-label="Worktree agent"
-            className="sidebar-v2-worktree-select"
-            data-worktree-field="agent"
+            aria-label='Worktree agent'
+            className='sidebar-v2-worktree-select'
+            data-worktree-field='agent'
             disabled={isPending}
             onChange={(event) => setAgentId(event.target.value)}
             value={agentId}
           >
-            {configuredAgents.length === 0 ? <option value="">No configured agents</option> : null}
+            {configuredAgents.length === 0 ? <option value=''>No configured agents</option> : null}
             {configuredAgents.map((agent) => (
               <option key={agent.agentId} value={agent.agentId}>
                 {agent.name}
@@ -262,8 +243,8 @@ export function SidebarV2WorktreePopover({
           </select>
         </label>
 
-        <label className="sidebar-v2-worktree-field">
-          <span className="sidebar-v2-worktree-label">Base branch</span>
+        <label className='sidebar-v2-worktree-field'>
+          <span className='sidebar-v2-worktree-label'>Base branch</span>
           {/*
            * The select appears only once the host answered. Before that (and
            * after a failed probe) the same field is a free text input, so a
@@ -272,9 +253,9 @@ export function SidebarV2WorktreePopover({
            */}
           {branches.length > 0 ? (
             <select
-              aria-label="Base branch"
-              className="sidebar-v2-worktree-select"
-              data-worktree-field="baseBranch"
+              aria-label='Base branch'
+              className='sidebar-v2-worktree-select'
+              data-worktree-field='baseBranch'
               disabled={isPending}
               onChange={(event) => setBaseBranch(event.target.value)}
               value={baseBranch}
@@ -287,36 +268,36 @@ export function SidebarV2WorktreePopover({
             </select>
           ) : (
             <input
-              aria-label="Base branch"
-              className="sidebar-v2-worktree-input"
-              data-worktree-field="baseBranch"
+              aria-label='Base branch'
+              className='sidebar-v2-worktree-input'
+              data-worktree-field='baseBranch'
               disabled={isPending}
               onChange={(event) => setBaseBranch(event.target.value)}
-              placeholder="Default branch"
-              type="text"
+              placeholder='Default branch'
+              type='text'
               value={baseBranch}
             />
           )}
         </label>
 
-        <label className="sidebar-v2-worktree-toggle">
+        <label className='sidebar-v2-worktree-toggle'>
           <input
-            aria-label="Start from origin"
+            aria-label='Start from origin'
             checked={startFromOrigin}
-            data-worktree-field="startFromOrigin"
+            data-worktree-field='startFromOrigin'
             disabled={isPending}
             onChange={(event) => setStartFromOrigin(event.target.checked)}
-            type="checkbox"
+            type='checkbox'
           />
           <span>Start from origin</span>
         </label>
 
-        <label className="sidebar-v2-worktree-field">
-          <span className="sidebar-v2-worktree-label">First prompt (optional)</span>
+        <label className='sidebar-v2-worktree-field'>
+          <span className='sidebar-v2-worktree-label'>First prompt (optional)</span>
           <textarea
-            aria-label="First prompt"
-            className="sidebar-v2-worktree-textarea"
-            data-worktree-field="firstPrompt"
+            aria-label='First prompt'
+            className='sidebar-v2-worktree-textarea'
+            data-worktree-field='firstPrompt'
             disabled={isPending}
             onChange={(event) => setFirstPrompt(event.target.value)}
             rows={3}
@@ -324,29 +305,29 @@ export function SidebarV2WorktreePopover({
           />
         </label>
 
-        {listError ? <p className="sidebar-v2-worktree-note">{listError}</p> : null}
+        {listError ? <p className='sidebar-v2-worktree-note'>{listError}</p> : null}
         {errorMessage ? (
-          <p className="sidebar-v2-worktree-error" role="alert">
+          <p className='sidebar-v2-worktree-error' role='alert'>
             {errorMessage}
           </p>
         ) : null}
 
         <button
-          className="sidebar-v2-worktree-submit"
+          className='sidebar-v2-worktree-submit'
           data-pending={String(isPending)}
           disabled={isPending}
           onClick={submitNew}
-          type="button"
+          type='button'
         >
-          {isPending ? "Creating…" : "Create worktree session"}
+          {isPending ? 'Creating…' : 'Create worktree session'}
         </button>
 
         {existingWorktrees.length > 0 ? (
-          <div className="sidebar-v2-worktree-existing">
-            <div className="sidebar-v2-worktree-label">Open existing worktree</div>
+          <div className='sidebar-v2-worktree-existing'>
+            <div className='sidebar-v2-worktree-label'>Open existing worktree</div>
             {existingWorktrees.map((worktree) => (
               <button
-                className="sidebar-v2-worktree-existing-item"
+                className='sidebar-v2-worktree-existing-item'
                 data-worktree-path={worktree.path}
                 disabled={isPending}
                 key={worktree.path}
@@ -365,13 +346,11 @@ export function SidebarV2WorktreePopover({
                     firstPrompt: firstPrompt.trim() || undefined,
                   });
                 }}
-                type="button"
+                type='button'
               >
-                <span className="sidebar-v2-worktree-existing-name">
-                  {formatWorktreePathForDisplay(worktree.path)}
-                </span>
+                <span className='sidebar-v2-worktree-existing-name'>{formatWorktreePathForDisplay(worktree.path)}</span>
                 {worktree.branch ? (
-                  <span className="sidebar-v2-worktree-existing-branch">{worktree.branch}</span>
+                  <span className='sidebar-v2-worktree-existing-branch'>{worktree.branch}</span>
                 ) : null}
               </button>
             ))}

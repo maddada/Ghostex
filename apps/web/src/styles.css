@@ -1,8 +1,14 @@
 :root {
   color: rgba(255, 255, 255, 0.84);
   background: #0a0a0a;
-  font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, Inter,
-    "Segoe UI", sans-serif;
+  font-family:
+    'SF Pro Text',
+    'SF Pro Display',
+    -apple-system,
+    BlinkMacSystemFont,
+    Inter,
+    'Segoe UI',
+    sans-serif;
   color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -194,7 +200,7 @@ button {
   border-right: 1px solid var(--web-border);
 }
 
-.web-titlebar__view-tab[aria-current="page"] {
+.web-titlebar__view-tab[aria-current='page'] {
   background: rgba(255, 255, 255, 0.11);
   color: var(--web-text-strong);
 }
@@ -575,7 +581,7 @@ button {
   border-radius: 5px;
   background: #090909;
   color: var(--web-text-strong);
-  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-family: 'SF Mono', ui-monospace, Menlo, monospace;
   font-size: 11.5px;
   user-select: all;
 }

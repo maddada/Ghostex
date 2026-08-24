@@ -18,25 +18,25 @@ export function sanitizeManageImageSrc(value: string): string | undefined {
 }
 
 export function sanitizeManageBlockHtml(html: string): string {
-  const template = document.createElement("template");
+  const template = document.createElement('template');
   template.innerHTML = html;
-  template.content.querySelectorAll("script, style, iframe, object, embed, link, meta").forEach((element) => {
+  template.content.querySelectorAll('script, style, iframe, object, embed, link, meta').forEach((element) => {
     element.remove();
   });
-  template.content.querySelectorAll("*").forEach((element) => {
+  template.content.querySelectorAll('*').forEach((element) => {
     for (const attribute of Array.from(element.attributes)) {
       const name = attribute.name.toLocaleLowerCase();
-      if (name.startsWith("on") || name === "style") {
+      if (name.startsWith('on') || name === 'style') {
         element.removeAttribute(attribute.name);
         continue;
       }
-      if ((name === "href" || name === "src") && !sanitizeManageHref(attribute.value)) {
+      if ((name === 'href' || name === 'src') && !sanitizeManageHref(attribute.value)) {
         element.removeAttribute(attribute.name);
       }
     }
-    if (element instanceof HTMLAnchorElement && element.href && !element.href.startsWith("#")) {
-      element.target = "_blank";
-      element.rel = "noreferrer";
+    if (element instanceof HTMLAnchorElement && element.href && !element.href.startsWith('#')) {
+      element.target = '_blank';
+      element.rel = 'noreferrer';
     }
   });
   return template.innerHTML;

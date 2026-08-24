@@ -7,39 +7,32 @@ import {
   GPUI_GXSERVER_CHATS_GROUP_ID,
   GPUI_REMOTE_MACHINE_STATUS_MESSAGE_MAX_CHARS,
   GPUI_REMOTE_MACHINE_STATUS_STATES,
-} from "../constants";
-import type { GpuiSidebarRemoteEvent } from "../types-and-protocol";
-import { isGpuiPresentationChatProjectPath } from "./presentation-projection";
-import { normalizeNonEmptyString, parseObject } from "./records";
-import { normalizeGpuiSidebarWorktreeMetadata } from "./worktrees";
-import type { ghostexSettings } from "@/packages/shared/ghostex-settings";
-import type {
-  GxserverPresentationCloseAfterDoneProjection,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import {
-  createGxserverPresentationSidebarGroups,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+} from '../constants';
+import type { GpuiSidebarRemoteEvent } from '../types-and-protocol';
+import { isGpuiPresentationChatProjectPath } from './presentation-projection';
+import { normalizeNonEmptyString, parseObject } from './records';
+import { normalizeGpuiSidebarWorktreeMetadata } from './worktrees';
+import type { ghostexSettings } from '@/packages/shared/ghostex-settings';
+import type { GxserverPresentationCloseAfterDoneProjection } from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import { createGxserverPresentationSidebarGroups } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverPresentationDelta,
   GxserverPresentationSession,
   GxserverPresentationSnapshot,
   GxserverRecentProjectDomainState,
   GxserverSidebarProjectCollectionsState,
-} from "@/packages/shared/gxserver-protocol";
-import { createDefaultSidebarProjectDiffStats } from "@/packages/shared/project-diff-stats";
+} from '@/packages/shared/gxserver-protocol';
+import { createDefaultSidebarProjectDiffStats } from '@/packages/shared/project-diff-stats';
 import {
   createRemoteProjectId,
   createRemoteTerminalSessionId,
   parseRemoteProjectId,
   parseRemoteTerminalSessionId,
-} from "@/packages/shared/remote-terminal-selection";
-import type { GxserverSessionChatEvent } from "@/packages/shared/session-chat";
-import type {
-  SidebarRemoteMachineStatusMessage,
-  SidebarSessionGroup,
-} from "@/packages/shared/session-grid-contract";
-import { resolveSidebarTheme } from "@/packages/shared/session-grid-contract";
-import type { SidebarAgentButton } from "@/packages/shared/sidebar-agents";
+} from '@/packages/shared/remote-terminal-selection';
+import type { GxserverSessionChatEvent } from '@/packages/shared/session-chat';
+import type { SidebarRemoteMachineStatusMessage, SidebarSessionGroup } from '@/packages/shared/session-grid-contract';
+import { resolveSidebarTheme } from '@/packages/shared/session-grid-contract';
+import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
 
 export function createGpuiRemotePresentationSidebarGroups({
   activeGroupId,
@@ -56,15 +49,12 @@ export function createGpuiRemotePresentationSidebarGroups({
   focusedSessionId?: string;
   presentationsByMachineId: ReadonlyMap<string, GxserverPresentationSnapshot>;
   remoteGroupOrderByMachineId?: ReadonlyMap<string, readonly string[]>;
-  remoteRecentProjectsByMachineId?: ReadonlyMap<
-    string,
-    readonly GxserverRecentProjectDomainState[]
-  >;
-  resolveAgentIcon: (agentName: string | undefined) => SidebarAgentButton["icon"];
+  remoteRecentProjectsByMachineId?: ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]>;
+  resolveAgentIcon: (agentName: string | undefined) => SidebarAgentButton['icon'];
   resolveCloseAfterDone?: (
     machineId: string,
     projectId: string,
-    sessionId: string,
+    sessionId: string
   ) => GxserverPresentationCloseAfterDoneProjection | undefined;
   settings: ghostexSettings;
   visibleSessionIds?: ReadonlySet<string>;
@@ -83,64 +73,47 @@ export function createGpuiRemotePresentationSidebarGroups({
     presentation group id, which is an opaque string rather than a
     `GxserverProjectId` the compiler can vouch for.
     */
-    const projectsById = new Map<string, GxserverPresentationSnapshot["projects"][number]>(
-      presentation.projects.map((project) => [project.projectId, project]),
+    const projectsById = new Map<string, GxserverPresentationSnapshot['projects'][number]>(
+      presentation.projects.map((project) => [project.projectId, project])
     );
     const orderedGroups = orderGpuiRemotePresentationGroups(
       presentation.groups,
-      remoteGroupOrderByMachineId?.get(machine.id),
+      remoteGroupOrderByMachineId?.get(machine.id)
     );
-    const orderIndexByProjectId = new Map(
-      orderedGroups.map((group, index) => [group.projectId, index]),
-    );
+    const orderIndexByProjectId = new Map(orderedGroups.map((group, index) => [group.projectId, index]));
     const hiddenProjectIds = new Set(
       presentation.projects.flatMap((project) =>
-        isGpuiRemoteProjectClosedToRecent(
-          machine.id,
-          project.projectId,
-          remoteRecentProjectsByMachineId,
-        )
+        isGpuiRemoteProjectClosedToRecent(machine.id, project.projectId, remoteRecentProjectsByMachineId)
           ? [project.projectId]
-          : [],
-      ),
+          : []
+      )
     );
     const chatProjectIds = new Set(
       presentation.projects.flatMap((project) =>
-        isGpuiPresentationChatProjectPath(project.path) ? [project.projectId] : [],
-      ),
+        isGpuiPresentationChatProjectPath(project.path) ? [project.projectId] : []
+      )
     );
-    const activeRemoteGroup = activeGroupId
-      ? parseGpuiRemotePresentationGroupId(activeGroupId)
-      : undefined;
-    const focusedRemoteSession = focusedSessionId
-      ? parseGpuiRemotePresentationSessionId(focusedSessionId)
-      : undefined;
+    const activeRemoteGroup = activeGroupId ? parseGpuiRemotePresentationGroupId(activeGroupId) : undefined;
+    const focusedRemoteSession = focusedSessionId ? parseGpuiRemotePresentationSessionId(focusedSessionId) : undefined;
     const activeProjectId =
-      activeRemoteGroup?.machineId === machine.id &&
-      activeRemoteGroup.projectId !== GPUI_GXSERVER_CHATS_GROUP_ID
+      activeRemoteGroup?.machineId === machine.id && activeRemoteGroup.projectId !== GPUI_GXSERVER_CHATS_GROUP_ID
         ? activeRemoteGroup.projectId
         : focusedRemoteSession?.machineId === machine.id
           ? focusedRemoteSession.projectId
           : undefined;
     const focusedRawSessionId =
-      focusedRemoteSession?.machineId === machine.id
-        ? focusedRemoteSession.sessionId
-        : undefined;
+      focusedRemoteSession?.machineId === machine.id ? focusedRemoteSession.sessionId : undefined;
     const visibleRawSessionIds = new Set(
       [...(visibleSessionIds ?? [])].flatMap((sessionId) => {
         const reference = parseGpuiRemotePresentationSessionId(sessionId);
         return reference?.machineId === machine.id ? [reference.sessionId] : [];
-      }),
+      })
     );
     const groups = createGxserverPresentationSidebarGroups({
       activeProjectId,
       chatProjectIds,
-      chatsGroupId: createGpuiRemotePresentationGroupId(
-        machine.id,
-        GPUI_GXSERVER_CHATS_GROUP_ID,
-      ),
-      createProjectGroupId: (projectId) =>
-        createGpuiRemotePresentationGroupId(machine.id, projectId),
+      chatsGroupId: createGpuiRemotePresentationGroupId(machine.id, GPUI_GXSERVER_CHATS_GROUP_ID),
+      createProjectGroupId: (projectId) => createGpuiRemotePresentationGroupId(machine.id, projectId),
       createProjectSessionId: (projectId, sessionId) =>
         createGpuiRemotePresentationSessionId(machine.id, projectId, sessionId),
       focusedSessionId: focusedRawSessionId,
@@ -154,19 +127,18 @@ export function createGpuiRemotePresentationSidebarGroups({
             isOpen: false,
             isSleeping: false,
             projectId: createGpuiRemotePresentationProjectId(machine.id, project.projectId),
-            status: "idle" as const,
+            status: 'idle' as const,
           },
           orderIndex: orderIndexByProjectId.get(project.projectId),
-          path: project.path ?? "",
+          path: project.path ?? '',
           projectId: project.projectId,
-          theme: resolveSidebarTheme(settings.sidebarTheme, "dark"),
+          theme: resolveSidebarTheme(settings.sidebarTheme, 'dark'),
           ...(worktree ? { worktree } : {}),
         };
       }),
       resolveAgentIcon,
       resolveCloseAfterDone: resolveCloseAfterDone
-        ? (projectId, sessionId) =>
-            resolveCloseAfterDone(machine.id, projectId, sessionId)
+        ? (projectId, sessionId) => resolveCloseAfterDone(machine.id, projectId, sessionId)
         : undefined,
       resolveSessionRoutingId: (projectId, sessionId) =>
         createGpuiRemotePresentationSessionRoutingId(machine.id, projectId, sessionId),
@@ -196,12 +168,12 @@ export function createGpuiRemotePresentationSidebarGroups({
         sessions: group.sessions.map((session) => ({
           ...session,
           canPopOutPane:
-            session.sessionKind === "terminal" &&
+            session.sessionKind === 'terminal' &&
             Boolean(session.agentIcon) &&
             session.isSleeping !== true &&
-            session.lifecycleState !== "sleeping",
-          canScheduleDelayedSend: session.sessionKind === "terminal",
-          canToggleCloseAfterDone: session.sessionKind === "terminal",
+            session.lifecycleState !== 'sleeping',
+          canScheduleDelayedSend: session.sessionKind === 'terminal',
+          canToggleCloseAfterDone: session.sessionKind === 'terminal',
           /*
           CDXC:GPUIRemoteVisibleFallback 2026-08-15:
           Mirror the local-group override in createSidebarGroups: the shared
@@ -213,8 +185,7 @@ export function createGpuiRemotePresentationSidebarGroups({
           terminals. Match the complete machine/project/session-scoped row id
           because gxserver session ids are unique only within a project.
           */
-          isVisible:
-            group.isActive === true && visibleSessionIds?.has(session.sessionId) === true,
+          isVisible: group.isActive === true && visibleSessionIds?.has(session.sessionId) === true,
         })),
       };
     });
@@ -223,7 +194,7 @@ export function createGpuiRemotePresentationSidebarGroups({
 
 export function orderGpuiRemotePresentationGroups<Group extends { projectId: string }>(
   groups: readonly Group[],
-  storedProjectIdOrder: readonly string[] | undefined,
+  storedProjectIdOrder: readonly string[] | undefined
 ): Group[] {
   /*
   CDXC:RemoteGroupReorder 2026-07-12:
@@ -234,14 +205,11 @@ export function orderGpuiRemotePresentationGroups<Group extends { projectId: str
   if (!storedProjectIdOrder || storedProjectIdOrder.length === 0) {
     return [...groups];
   }
-  const orderIndexByProjectId = new Map(
-    storedProjectIdOrder.map((projectId, index) => [projectId, index]),
-  );
+  const orderIndexByProjectId = new Map(storedProjectIdOrder.map((projectId, index) => [projectId, index]));
   const ordered = groups.filter((group) => orderIndexByProjectId.has(group.projectId));
   const unordered = groups.filter((group) => !orderIndexByProjectId.has(group.projectId));
   ordered.sort(
-    (left, right) =>
-      orderIndexByProjectId.get(left.projectId)! - orderIndexByProjectId.get(right.projectId)!,
+    (left, right) => orderIndexByProjectId.get(left.projectId)! - orderIndexByProjectId.get(right.projectId)!
   );
   return [...ordered, ...unordered];
 }
@@ -249,30 +217,27 @@ export function orderGpuiRemotePresentationGroups<Group extends { projectId: str
 export function isGpuiRemoteProjectClosedToRecent(
   machineId: string,
   projectId: string,
-  recentProjectsByMachineId:
-    ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]> | undefined,
+  recentProjectsByMachineId: ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]> | undefined
 ): boolean {
   /*
   CDXC:GPUIRemoteProjects 2026-06-27-19:37:
   Connected remote presentation projects render under their saved-machine sections, while client-parked remote projects render only as machine-scoped rows in Recent Projects. Filter the remote machine projection with GPUI's app-local recent list instead of mutating the remote gxserver project state.
   */
-  return (recentProjectsByMachineId?.get(machineId) ?? []).some(
-    (project) => project.projectId === projectId,
-  );
+  return (recentProjectsByMachineId?.get(machineId) ?? []).some((project) => project.projectId === projectId);
 }
 
 export function compareGpuiRemoteAttachCandidateSessions(
   left: GxserverPresentationSession,
-  right: GxserverPresentationSession,
+  right: GxserverPresentationSession
 ): number {
   const score = (session: GxserverPresentationSession): number => {
     let value = 0;
-    if (session.lifecycleState === "running") {
+    if (session.lifecycleState === 'running') {
       value += 100;
     }
-    if (session.activity === "attention") {
+    if (session.activity === 'attention') {
       value += 40;
-    } else if (session.activity === "working") {
+    } else if (session.activity === 'working') {
       value += 30;
     }
     if (session.isPinned) {
@@ -297,7 +262,7 @@ export function createGpuiRemotePresentationGroupId(machineId: string, projectId
 }
 
 export function parseGpuiRemotePresentationGroupId(
-  groupId: string,
+  groupId: string
 ): { machineId: string; projectId: string } | undefined {
   const match = /^remote:([^:]+):group:(.+)$/u.exec(groupId);
   if (!match) {
@@ -311,21 +276,17 @@ export function createGpuiRemotePresentationProjectId(machineId: string, project
 }
 
 export function parseGpuiRemotePresentationProjectId(
-  projectId: string,
+  projectId: string
 ): { machineId: string; projectId: string } | undefined {
   return parseRemoteProjectId(projectId);
 }
 
-export function createGpuiRemotePresentationSessionId(
-  machineId: string,
-  projectId: string,
-  sessionId: string,
-): string {
+export function createGpuiRemotePresentationSessionId(machineId: string, projectId: string, sessionId: string): string {
   return createRemoteTerminalSessionId({ machineId, projectId, sessionId });
 }
 
 export function parseGpuiRemotePresentationSessionId(
-  sessionId: string,
+  sessionId: string
 ): { machineId: string; projectId: string; sessionId: string } | undefined {
   return parseRemoteTerminalSessionId(sessionId);
 }
@@ -333,7 +294,7 @@ export function parseGpuiRemotePresentationSessionId(
 export function createGpuiRemotePresentationSessionRoutingId(
   machineId: string,
   projectId: string,
-  sessionId: string,
+  sessionId: string
 ): string {
   return `${machineId}:${projectId}:${sessionId}`;
 }
@@ -341,38 +302,32 @@ export function createGpuiRemotePresentationSessionRoutingId(
 export function isPresentationSnapshot(value: unknown): value is GxserverPresentationSnapshot {
   return (
     Boolean(value) &&
-    typeof value === "object" &&
+    typeof value === 'object' &&
     Array.isArray((value as GxserverPresentationSnapshot).groups) &&
     Array.isArray((value as GxserverPresentationSnapshot).projects) &&
     Array.isArray((value as GxserverPresentationSnapshot).sessions) &&
-    typeof (value as GxserverPresentationSnapshot).revision === "number"
+    typeof (value as GxserverPresentationSnapshot).revision === 'number'
   );
 }
 
 export function isPresentationDelta(value: unknown): value is GxserverPresentationDelta {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    typeof (value as { type?: unknown }).type === "string"
-  );
+  return Boolean(value) && typeof value === 'object' && typeof (value as { type?: unknown }).type === 'string';
 }
 
-export function isSidebarProjectCollectionsState(
-  value: unknown,
-): value is GxserverSidebarProjectCollectionsState {
+export function isSidebarProjectCollectionsState(value: unknown): value is GxserverSidebarProjectCollectionsState {
   return (
     Boolean(value) &&
-    typeof value === "object" &&
+    typeof value === 'object' &&
     !Array.isArray(value) &&
-    typeof (value as GxserverSidebarProjectCollectionsState).collections === "object" &&
+    typeof (value as GxserverSidebarProjectCollectionsState).collections === 'object' &&
     !Array.isArray((value as GxserverSidebarProjectCollectionsState).collections) &&
     Array.isArray((value as GxserverSidebarProjectCollectionsState).order) &&
-    typeof (value as GxserverSidebarProjectCollectionsState).nextCollectionNumber === "number"
+    typeof (value as GxserverSidebarProjectCollectionsState).nextCollectionNumber === 'number'
   );
 }
 
 export function isGpuiSessionChatEventMessage(
-  value: Record<string, unknown>,
+  value: Record<string, unknown>
 ): value is Record<string, unknown> & GxserverSessionChatEvent {
   /*
   CDXC:SessionChatCore 2026-07-31:
@@ -382,24 +337,24 @@ export function isGpuiSessionChatEventMessage(
   from the authenticated local socket like presentation snapshots are.
   */
   if (
-    typeof value.projectId !== "string" ||
+    typeof value.projectId !== 'string' ||
     value.projectId.length === 0 ||
-    typeof value.sessionId !== "string" ||
+    typeof value.sessionId !== 'string' ||
     value.sessionId.length === 0 ||
-    typeof value.epoch !== "number" ||
-    typeof value.seq !== "number"
+    typeof value.epoch !== 'number' ||
+    typeof value.seq !== 'number'
   ) {
     return false;
   }
   if (
-    (value.type === "sessionChatSnapshot" ||
-      value.type === "sessionChatAppended" ||
-      value.type === "sessionChatReplaced") &&
+    (value.type === 'sessionChatSnapshot' ||
+      value.type === 'sessionChatAppended' ||
+      value.type === 'sessionChatReplaced') &&
     !Array.isArray(value.messages)
   ) {
     return false;
   }
-  if (value.type === "sessionChatState" && typeof value.status !== "string") {
+  if (value.type === 'sessionChatState' && typeof value.status !== 'string') {
     return false;
   }
   return true;
@@ -407,30 +362,27 @@ export function isGpuiSessionChatEventMessage(
 
 export function normalizeGpuiSidebarRemoteEvent(value: unknown): GpuiSidebarRemoteEvent | undefined {
   const event = parseObject(value);
-  if (!event || typeof event.type !== "string") {
+  if (!event || typeof event.type !== 'string') {
     return undefined;
   }
-  if (event.type === "remoteMachineStatus") {
+  if (event.type === 'remoteMachineStatus') {
     const machineId = normalizeNonEmptyString(event.machineId);
     const state = event.state;
     if (!machineId || !GPUI_REMOTE_MACHINE_STATUS_STATES.has(state as string)) {
       return undefined;
     }
-    const message = normalizeNonEmptyString(event.message)?.slice(
-      0,
-      GPUI_REMOTE_MACHINE_STATUS_MESSAGE_MAX_CHARS,
-    );
+    const message = normalizeNonEmptyString(event.message)?.slice(0, GPUI_REMOTE_MACHINE_STATUS_MESSAGE_MAX_CHARS);
     return {
       machineId,
       ...(message ? { message } : {}),
-      state: state as SidebarRemoteMachineStatusMessage["state"],
-      type: "remoteMachineStatus",
+      state: state as SidebarRemoteMachineStatusMessage['state'],
+      type: 'remoteMachineStatus',
     };
   }
-  if (event.type === "remoteGxserverResponse") {
+  if (event.type === 'remoteGxserverResponse') {
     const remoteMachineId = normalizeNonEmptyString(event.remoteMachineId);
     const requestId = normalizeNonEmptyString(event.requestId);
-    if (!remoteMachineId || !requestId || typeof event.ok !== "boolean") {
+    if (!remoteMachineId || !requestId || typeof event.ok !== 'boolean') {
       return undefined;
     }
     return {
@@ -439,40 +391,40 @@ export function normalizeGpuiSidebarRemoteEvent(value: unknown): GpuiSidebarRemo
       remoteMachineId,
       requestId,
       result: event.result,
-      type: "remoteGxserverResponse",
+      type: 'remoteGxserverResponse',
     };
   }
-  if (event.type !== "remoteGxserverPresentation") {
+  if (event.type !== 'remoteGxserverPresentation') {
     return undefined;
   }
   const remoteMachineId = normalizeNonEmptyString(event.remoteMachineId);
   const payload = parseObject(event.payload);
-  if (!remoteMachineId || !payload || typeof payload.type !== "string") {
+  if (!remoteMachineId || !payload || typeof payload.type !== 'string') {
     return undefined;
   }
-  if (payload.type === "presentationSnapshot" && isPresentationSnapshot(payload.snapshot)) {
+  if (payload.type === 'presentationSnapshot' && isPresentationSnapshot(payload.snapshot)) {
     return {
       payload: {
         snapshot: payload.snapshot,
-        type: "presentationSnapshot",
+        type: 'presentationSnapshot',
       },
       remoteMachineId,
-      type: "remoteGxserverPresentation",
+      type: 'remoteGxserverPresentation',
     };
   }
   if (
-    payload.type === "presentationDelta" &&
+    payload.type === 'presentationDelta' &&
     isPresentationDelta(payload.delta) &&
-    typeof payload.revision === "number"
+    typeof payload.revision === 'number'
   ) {
     return {
       payload: {
         delta: payload.delta,
         revision: payload.revision,
-        type: "presentationDelta",
+        type: 'presentationDelta',
       },
       remoteMachineId,
-      type: "remoteGxserverPresentation",
+      type: 'remoteGxserverPresentation',
     };
   }
   return undefined;

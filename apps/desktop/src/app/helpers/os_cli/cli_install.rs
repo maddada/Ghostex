@@ -299,11 +299,19 @@ pub(crate) fn gpui_directory_accepts_temporary_write(directory: &Path) -> bool {
     }
 }
 
-pub(crate) fn gpui_can_replace_existing_ghostex_command(command: &str, path: &Path, cli_dir: &Path) -> bool {
+pub(crate) fn gpui_can_replace_existing_ghostex_command(
+    command: &str,
+    path: &Path,
+    cli_dir: &Path,
+) -> bool {
     gpui_is_ghostex_owned_command_path(command, path, cli_dir) || gpui_is_broken_symlink(path)
 }
 
-pub(crate) fn gpui_is_ghostex_owned_command_path(command: &str, path: &Path, cli_dir: &Path) -> bool {
+pub(crate) fn gpui_is_ghostex_owned_command_path(
+    command: &str,
+    path: &Path,
+    cli_dir: &Path,
+) -> bool {
     if gpui_file_contains_ghostex_cli_wrapper_marker(path) {
         return true;
     }
@@ -411,7 +419,10 @@ pub(crate) fn gpui_install_bundled_ghostex_skill_action(
     }
 }
 
-pub(crate) fn gpui_install_bundled_ghostex_skill(args: &[&str], display_name: &str) -> Result<String, String> {
+pub(crate) fn gpui_install_bundled_ghostex_skill(
+    args: &[&str],
+    display_name: &str,
+) -> Result<String, String> {
     /*
     CDXC:GPUISettingsAgentSkills 2026-06-24-12:56:
     GPUI Settings installs bundled Ghostex skills by resolving the fixed `ghostex` command on PATH and running only the known `ghostex <namespace> install-skill` argv. Command text never comes from React, child stdout/stderr are suppressed, failures are reported generically, and status is refreshed from disk afterward.
@@ -441,4 +452,3 @@ pub(crate) fn gpui_install_bundled_ghostex_skill(args: &[&str], display_name: &s
         )),
     }
 }
-

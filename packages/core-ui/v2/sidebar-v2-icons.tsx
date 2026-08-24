@@ -5,17 +5,17 @@ import {
   IconMessageCircle,
   IconTerminal2,
   IconWorld,
-} from "@tabler/icons-react";
-import type { CSSProperties } from "react";
-import type { SidebarSessionItem } from "../../shared/session-grid-contract";
+} from '@tabler/icons-react';
+import type { CSSProperties } from 'react';
+import type { SidebarSessionItem } from '../../shared/session-grid-contract';
 import {
   normalizeDiscoveredProjectIconDataUrl,
   resolveWorkspaceProjectIconDataUrl,
   type WorkspaceProjectIcon,
-} from "../../shared/workspace-project-appearance";
-import { AGENT_LOGOS, COLORED_AGENT_LOGOS } from "../agent-logos";
-import { SidebarCommandIconGlyph } from "../sidebar-command-icon";
-import { AppTooltip } from "../app-tooltip";
+} from '../../shared/workspace-project-appearance';
+import { AGENT_LOGOS, COLORED_AGENT_LOGOS } from '../agent-logos';
+import { SidebarCommandIconGlyph } from '../sidebar-command-icon';
+import { AppTooltip } from '../app-tooltip';
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -27,12 +27,12 @@ import { AppTooltip } from "../app-tooltip";
  */
 
 type SidebarV2AgentLogoStyle = CSSProperties & {
-  "--session-agent-logo": string;
-  "--session-agent-logo-colored": string;
+  '--session-agent-logo': string;
+  '--session-agent-logo-colored': string;
 };
 
 export type SidebarV2SessionIconProps = {
-  agentIcon: SidebarSessionItem["agentIcon"];
+  agentIcon: SidebarSessionItem['agentIcon'];
   faviconDataUrl?: string;
   isBrowser: boolean;
   /** Mirrors the Session Cards "colored agent icons" setting. */
@@ -45,23 +45,23 @@ export function SidebarV2SessionIcon({
   isBrowser,
   useColoredAgentIcons,
 }: SidebarV2SessionIconProps) {
-  if (isBrowser || agentIcon === "browser") {
+  if (isBrowser || agentIcon === 'browser') {
     if (faviconDataUrl) {
       return (
         <img
-          alt=""
-          aria-hidden="true"
-          className="sidebar-v2-session-icon"
-          data-icon-variant="favicon"
+          alt=''
+          aria-hidden='true'
+          className='sidebar-v2-session-icon'
+          data-icon-variant='favicon'
           src={faviconDataUrl}
         />
       );
     }
     return (
       <IconWorld
-        aria-hidden="true"
-        className="sidebar-v2-session-icon"
-        data-icon-variant="glyph"
+        aria-hidden='true'
+        className='sidebar-v2-session-icon'
+        data-icon-variant='glyph'
         size={16}
         stroke={1.8}
       />
@@ -71,9 +71,9 @@ export function SidebarV2SessionIcon({
   if (!agentIcon) {
     return (
       <IconTerminal2
-        aria-hidden="true"
-        className="sidebar-v2-session-icon"
-        data-icon-variant="glyph"
+        aria-hidden='true'
+        className='sidebar-v2-session-icon'
+        data-icon-variant='glyph'
         size={16}
         stroke={1.8}
       />
@@ -81,15 +81,15 @@ export function SidebarV2SessionIcon({
   }
 
   const logoStyle: SidebarV2AgentLogoStyle = {
-    "--session-agent-logo": `url("${AGENT_LOGOS[agentIcon]}")`,
-    "--session-agent-logo-colored": `url("${COLORED_AGENT_LOGOS[agentIcon]}")`,
+    '--session-agent-logo': `url("${AGENT_LOGOS[agentIcon]}")`,
+    '--session-agent-logo-colored': `url("${COLORED_AGENT_LOGOS[agentIcon]}")`,
   };
   return (
     <span
-      aria-hidden="true"
-      className="sidebar-v2-session-icon"
+      aria-hidden='true'
+      className='sidebar-v2-session-icon'
       data-agent-icon={agentIcon}
-      data-icon-variant={useColoredAgentIcons ? "logo-colored" : "logo"}
+      data-icon-variant={useColoredAgentIcons ? 'logo-colored' : 'logo'}
       style={logoStyle}
     />
   );
@@ -128,7 +128,7 @@ export type SidebarV2ProjectIconProps = {
    * image and above the typed glyph — see the chain above.
    */
   discoveredIconDataUrl?: string;
-  fallback?: "folder" | "folder-open" | "worktree";
+  fallback?: 'folder' | 'folder-open' | 'worktree';
   icon?: WorkspaceProjectIcon;
   iconDataUrl?: string;
   title: string;
@@ -137,7 +137,7 @@ export type SidebarV2ProjectIconProps = {
 
 export function SidebarV2ProjectIcon({
   discoveredIconDataUrl,
-  fallback = "folder",
+  fallback = 'folder',
   icon,
   iconDataUrl,
   title,
@@ -148,10 +148,10 @@ export function SidebarV2ProjectIcon({
     return (
       <AppTooltip content={title} delay={tooltipDelay}>
         <img
-          alt=""
-          aria-hidden="true"
-          className="sidebar-v2-project-icon"
-          data-icon-variant="image"
+          alt=''
+          aria-hidden='true'
+          className='sidebar-v2-project-icon'
+          data-icon-variant='image'
           src={imageDataUrl}
         />
       </AppTooltip>
@@ -169,46 +169,38 @@ export function SidebarV2ProjectIcon({
     return (
       <AppTooltip content={title} delay={tooltipDelay}>
         <img
-          alt=""
-          aria-hidden="true"
-          className="sidebar-v2-project-icon"
-          data-icon-variant="discovered"
+          alt=''
+          aria-hidden='true'
+          className='sidebar-v2-project-icon'
+          data-icon-variant='discovered'
           src={discovered}
         />
       </AppTooltip>
     );
   }
-  if (icon?.kind === "tabler") {
+  if (icon?.kind === 'tabler') {
     /*
      * The glyph is wrapped rather than styled directly because the shared
      * V1 glyph component owns its own svg attributes: the wrapper keeps the
      * 16px box identical to the image and folder variants and carries the
      * state hook, without teaching a V1 component about V2's markup.
-    */
+     */
     return (
       <AppTooltip content={title} delay={tooltipDelay}>
-        <span
-          aria-hidden="true"
-          className="sidebar-v2-project-icon"
-          data-icon-variant="tabler"
-        >
+        <span aria-hidden='true' className='sidebar-v2-project-icon' data-icon-variant='tabler'>
           <SidebarCommandIconGlyph color={icon.color} icon={icon.icon} size={16} stroke={1.8} />
         </span>
       </AppTooltip>
     );
   }
   const FallbackIcon =
-    fallback === "worktree"
-      ? IconGitBranch
-      : fallback === "folder-open"
-        ? IconFolderOpen
-        : IconFolder;
+    fallback === 'worktree' ? IconGitBranch : fallback === 'folder-open' ? IconFolderOpen : IconFolder;
   return (
     <FallbackIcon
-      aria-hidden="true"
-      className="sidebar-v2-project-icon"
+      aria-hidden='true'
+      className='sidebar-v2-project-icon'
       data-fallback-kind={fallback}
-      data-icon-variant="glyph"
+      data-icon-variant='glyph'
       size={16}
       stroke={1.8}
     />

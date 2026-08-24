@@ -1,22 +1,18 @@
 import {
   clampProjectSessionListCollapsedCount,
   DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
-} from "../shared/ghostex-settings";
+} from '../shared/ghostex-settings';
 
 export const PROJECT_SESSION_LIST_COLLAPSED_COUNT = DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT;
 export const PROJECT_SESSION_LIST_REFERENCE_ROW_HEIGHT_PX = 34;
 export const PROJECT_SESSION_LIST_REFERENCE_ROW_BOUNDARY_PX = 1;
-export const PROJECT_SESSION_LIST_COLLAPSED_STORAGE_KEY =
-  "ghostex-sidebar-project-session-list-collapsed";
-export const PROJECT_SESSION_LIST_COLLAPSED_CHANGED_EVENT =
-  "ghostex-sidebar-project-session-list-collapsed-changed";
+export const PROJECT_SESSION_LIST_COLLAPSED_STORAGE_KEY = 'ghostex-sidebar-project-session-list-collapsed';
+export const PROJECT_SESSION_LIST_COLLAPSED_CHANGED_EVENT = 'ghostex-sidebar-project-session-list-collapsed-changed';
 
 export type ProjectSessionListCollapsedState = Record<string, true>;
 
-export function normalizeStoredProjectSessionListCollapsedState(
-  candidate: unknown,
-): ProjectSessionListCollapsedState {
-  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+export function normalizeStoredProjectSessionListCollapsedState(candidate: unknown): ProjectSessionListCollapsedState {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return {};
   }
 
@@ -58,23 +54,14 @@ export function getVisibleProjectSessionIds({
    * CDXC:ProjectSessionLists 2026-06-10-13:39:
    * The collapsed cap is now Settings-owned, but the default remains six. Use the normalized cap for both row rendering and shortcut slot calculations so Show less can mean ten or another configured count without diverging from the visible sidebar.
    */
-  if (
-    !isProjectGroup ||
-    !isToggleEnabled ||
-    !isCollapsed ||
-    sessionIds.length <= normalizedCollapsedCount
-  ) {
+  if (!isProjectGroup || !isToggleEnabled || !isCollapsed || sessionIds.length <= normalizedCollapsedCount) {
     return sessionIds;
   }
 
   return sessionIds.slice(0, normalizedCollapsedCount);
 }
 
-export function getExpandedProjectSessionListScrollHeight({
-  rowCount,
-}: {
-  rowCount: number;
-}): number {
+export function getExpandedProjectSessionListScrollHeight({ rowCount }: { rowCount: number }): number {
   /*
    * CDXC:ProjectSessionLists 2026-06-30-12:55:
    * Reference sidebar session rows paint a 34px card plus a 1px row boundary in
@@ -84,8 +71,7 @@ export function getExpandedProjectSessionListScrollHeight({
    */
   const normalizedRowCount = Math.max(0, Math.floor(rowCount));
   return (
-    normalizedRowCount *
-    (PROJECT_SESSION_LIST_REFERENCE_ROW_HEIGHT_PX + PROJECT_SESSION_LIST_REFERENCE_ROW_BOUNDARY_PX)
+    normalizedRowCount * (PROJECT_SESSION_LIST_REFERENCE_ROW_HEIGHT_PX + PROJECT_SESSION_LIST_REFERENCE_ROW_BOUNDARY_PX)
   );
 }
 
@@ -112,11 +98,11 @@ export function getProjectSessionListBoundaryHeight({
    * math instead so large projects avoid layout reads and ResizeObserver work.
    */
   const sessionElement = boundarySessionId
-    ? Array.from(
-        sessionListElement.querySelectorAll<HTMLElement>("[data-sidebar-session-id]"),
-      ).find((element) => element.dataset.sidebarSessionId === boundarySessionId)
+    ? Array.from(sessionListElement.querySelectorAll<HTMLElement>('[data-sidebar-session-id]')).find(
+        (element) => element.dataset.sidebarSessionId === boundarySessionId
+      )
     : undefined;
-  const rowElement = sessionElement?.closest<HTMLElement>(".session-frame") ?? sessionElement;
+  const rowElement = sessionElement?.closest<HTMLElement>('.session-frame') ?? sessionElement;
   const listBounds = sessionListElement.getBoundingClientRect();
   const rowBounds = rowElement?.getBoundingClientRect();
   /**
@@ -126,16 +112,14 @@ export function getProjectSessionListBoundaryHeight({
    * so it stays visible as the bottom of the collapsed list.
    */
   const moreToggleElement = includeMoreToggle
-    ? sessionListElement.querySelector<HTMLElement>(
-        "[data-project-session-list-more-toggle='true']",
-      )
+    ? sessionListElement.querySelector<HTMLElement>("[data-project-session-list-more-toggle='true']")
     : null;
   if (!rowBounds && !moreToggleElement) {
     return boundarySessionId ? undefined : 0;
   }
   const clippedBottom = Math.max(
     rowBounds?.bottom ?? listBounds.top,
-    moreToggleElement?.getBoundingClientRect().bottom ?? rowBounds?.bottom ?? listBounds.top,
+    moreToggleElement?.getBoundingClientRect().bottom ?? rowBounds?.bottom ?? listBounds.top
   );
   return Math.max(0, Math.ceil(clippedBottom - listBounds.top));
 }
@@ -155,9 +139,7 @@ export function getProjectSessionListCollapsedHeight({
 }
 
 export function readProjectSessionListCollapsedState(
-  storage: Pick<Storage, "getItem"> | undefined = typeof localStorage === "undefined"
-    ? undefined
-    : localStorage,
+  storage: Pick<Storage, 'getItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage
 ): ProjectSessionListCollapsedState {
   if (!storage) {
     return {};
@@ -165,16 +147,14 @@ export function readProjectSessionListCollapsedState(
 
   try {
     return normalizeStoredProjectSessionListCollapsedState(
-      JSON.parse(storage.getItem(PROJECT_SESSION_LIST_COLLAPSED_STORAGE_KEY) ?? "null"),
+      JSON.parse(storage.getItem(PROJECT_SESSION_LIST_COLLAPSED_STORAGE_KEY) ?? 'null')
     );
   } catch {
     return {};
   }
 }
 
-export function writeProjectSessionListCollapsedState(
-  state: ProjectSessionListCollapsedState,
-): void {
+export function writeProjectSessionListCollapsedState(state: ProjectSessionListCollapsedState): void {
   /**
    * CDXC:ProjectSessionLists 2026-05-16-21:50:
    * Show less / Show more is per-project navigation state, not session data.

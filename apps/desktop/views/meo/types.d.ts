@@ -37,7 +37,6 @@ interface EditorDiagnostic {
   code?: string;
 }
 
-
 interface HeadingInfo {
   text: string;
   level: number;
@@ -47,5 +46,3 @@ interface HeadingInfo {
   lineTo: number;
   id: string;
 }
-
-

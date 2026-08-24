@@ -18,7 +18,7 @@
  *    full card.
  */
 
-[data-sidebar-version="v2"] {
+[data-sidebar-version='v2'] {
   /* Ghostex theme tokens, renamed locally so the V2 rules read as one system. */
   --sv2-foreground: var(--app-foreground);
   --sv2-muted: var(--app-muted);
@@ -65,10 +65,10 @@
   padding: 0 6px 8px;
 }
 
-body[data-sidebar-theme="plain-light"] [data-sidebar-version="v2"],
-body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
-.ghostex-root[data-sidebar-theme="plain-light"] [data-sidebar-version="v2"],
-.ghostex-root[data-sidebar-theme^="light-"] [data-sidebar-version="v2"] {
+body[data-sidebar-theme='plain-light'] [data-sidebar-version='v2'],
+body[data-sidebar-theme^='light-'] [data-sidebar-version='v2'],
+.ghostex-root[data-sidebar-theme='plain-light'] [data-sidebar-version='v2'],
+.ghostex-root[data-sidebar-theme^='light-'] [data-sidebar-version='v2'] {
   --sv2-status-approval: #b45309;
   --sv2-status-input: #4f46e5;
   --sv2-status-working: #0284c7;
@@ -88,14 +88,14 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 
 /* ---------------------------------------------------------------- toolbar */
 
-[data-sidebar-version="v2"] .sidebar-v2-toolbar {
+[data-sidebar-version='v2'] .sidebar-v2-toolbar {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 2px 2px 4px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-toolbar-label {
+[data-sidebar-version='v2'] .sidebar-v2-toolbar-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -107,7 +107,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   white-space: nowrap;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-layout-toggle {
+[data-sidebar-version='v2'] .sidebar-v2-layout-toggle {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -122,16 +122,16 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   outline: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-layout-toggle:hover {
+[data-sidebar-version='v2'] .sidebar-v2-layout-toggle:hover {
   background: var(--sv2-row-hover);
   color: var(--sv2-foreground);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-layout-toggle[aria-pressed="true"] {
+[data-sidebar-version='v2'] .sidebar-v2-layout-toggle[aria-pressed='true'] {
   color: color-mix(in srgb, var(--app-button-background) 85%, transparent);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-scope-trigger {
+[data-sidebar-version='v2'] .sidebar-v2-scope-trigger {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -150,13 +150,13 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   outline: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-scope-trigger:hover,
-[data-sidebar-version="v2"] .sidebar-v2-scope-trigger[aria-expanded="true"] {
+[data-sidebar-version='v2'] .sidebar-v2-scope-trigger:hover,
+[data-sidebar-version='v2'] .sidebar-v2-scope-trigger[aria-expanded='true'] {
   background: var(--sv2-row-hover);
   color: var(--sv2-foreground);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-scope-trigger-label {
+[data-sidebar-version='v2'] .sidebar-v2-scope-trigger-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -184,13 +184,13 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   font-variant-numeric: tabular-nums;
 }
 
-.sidebar-v2-scope-menu .sidebar-v2-scope-menu-item[aria-checked="true"] {
+.sidebar-v2-scope-menu .sidebar-v2-scope-menu-item[aria-checked='true'] {
   background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
 }
 
 /* ------------------------------------------------------------------- list */
 
-[data-sidebar-version="v2"] .sidebar-v2-list {
+[data-sidebar-version='v2'] .sidebar-v2-list {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -199,7 +199,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   list-style: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item {
+[data-sidebar-version='v2'] .sidebar-v2-row-item {
   position: relative;
   list-style: none;
   /*
@@ -210,19 +210,19 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   content-visibility: auto;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-dragging="true"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-dragging='true'] {
   opacity: 0.45;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-pinned-reorderable="true"] .sidebar-v2-row {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-pinned-reorderable='true'] .sidebar-v2-row {
   cursor: grab;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-dragging="true"] .sidebar-v2-row {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-dragging='true'] .sidebar-v2-row {
   cursor: grabbing;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-drop-position]::before {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-drop-position]::before {
   position: absolute;
   z-index: 3;
   right: 8px;
@@ -233,19 +233,19 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--app-button-background) 22%, transparent),
     0 0 14px color-mix(in srgb, var(--app-button-background) 28%, transparent);
-  content: "";
+  content: '';
   pointer-events: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-drop-position="before"]::before {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-drop-position='before']::before {
   top: 0;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-drop-position="after"]::before {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-drop-position='after']::before {
   bottom: 0;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-variant="card"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-variant='card'] {
   padding: 2px 0;
   contain-intrinsic-size: auto calc(82px * var(--sv2-density));
 }
@@ -256,21 +256,21 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * placeholder height has to follow the real line count or the scrollbar jumps
  * as rows realize.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-variant="card"][data-card-lines="2"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-variant='card'][data-card-lines='2'] {
   contain-intrinsic-size: auto calc(58px * var(--sv2-density));
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-variant="card"][data-card-lines="1"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-variant='card'][data-card-lines='1'] {
   contain-intrinsic-size: auto calc(40px * var(--sv2-density));
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-item[data-variant="slim"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-item[data-variant='slim'] {
   contain-intrinsic-size: auto calc(34px * var(--sv2-density));
 }
 
 /* -------------------------------------------------------------------- row */
 
-[data-sidebar-version="v2"] .sidebar-v2-row {
+[data-sidebar-version='v2'] .sidebar-v2-row {
   position: relative;
   width: 100%;
   overflow: hidden;
@@ -283,11 +283,11 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   user-select: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-variant="card"] {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='card'] {
   padding: calc(8px * var(--sv2-density)) 10px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-variant="slim"] {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim'] {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -295,17 +295,17 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   padding: 0 10px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row:hover {
+[data-sidebar-version='v2'] .sidebar-v2-row:hover {
   background: var(--sv2-session-row-hover);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-active="true"] {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-active='true'] {
   background: var(--sv2-row-active);
   box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border) !important;
   color: var(--sv2-foreground);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row:focus-visible {
+[data-sidebar-version='v2'] .sidebar-v2-row:focus-visible {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-button-background) 60%, transparent);
 }
 
@@ -314,54 +314,54 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * stays readable and stays findable, it just stops competing. Hover restores
  * full contrast so scanning the list never feels dim.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row[data-recede="true"] {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-recede='true'] {
   color: color-mix(in srgb, var(--sv2-muted) 85%, transparent);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-recede="true"]:hover {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-recede='true']:hover {
   color: var(--sv2-foreground);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-in-flight="true"][data-active="false"] {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-in-flight='true'][data-active='false'] {
   opacity: 0.72;
   transition: opacity 150ms ease;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-in-flight="true"][data-active="false"]:hover {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-in-flight='true'][data-active='false']:hover {
   opacity: 1;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-lifecycle-state="sleeping"] .sidebar-v2-session-icon {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-lifecycle-state='sleeping'] .sidebar-v2-session-icon {
   opacity: 0.45;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-line {
+[data-sidebar-version='v2'] .sidebar-v2-row-line {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 6px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-line[data-line="project"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-line[data-line='project'] {
   height: 20px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-line[data-line="title"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-line[data-line='title'] {
   height: 20px;
   margin-top: 4px;
 }
 
 /* Grouped mode: the title line IS line 1, so it must not carry line 2's gap. */
-[data-sidebar-version="v2"] .sidebar-v2-row-line[data-line="title"]:first-child {
+[data-sidebar-version='v2'] .sidebar-v2-row-line[data-line='title']:first-child {
   margin-top: 0;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-line[data-line="meta"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-line[data-line='meta'] {
   height: 16px;
   margin-top: 2px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-project {
+[data-sidebar-version='v2'] .sidebar-v2-row-project {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -372,11 +372,11 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   white-space: nowrap;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-recede="true"] .sidebar-v2-row-project {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-recede='true'] .sidebar-v2-row-project {
   font-weight: 400;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-title {
+[data-sidebar-version='v2'] .sidebar-v2-row-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -387,28 +387,26 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   white-space: nowrap;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-recede="true"] .sidebar-v2-row-title {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-recede='true'] .sidebar-v2-row-title {
   color: color-mix(in srgb, var(--sv2-muted) 88%, transparent);
   font-weight: 400;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-status-kind="done"] .sidebar-v2-row-title,
-[data-sidebar-version="v2"] .sidebar-v2-row[data-active="true"] .sidebar-v2-row-title {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-status-kind='done'] .sidebar-v2-row-title,
+[data-sidebar-version='v2'] .sidebar-v2-row[data-active='true'] .sidebar-v2-row-title {
   color: var(--sv2-foreground);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-variant="slim"] .sidebar-v2-row-title {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim'] .sidebar-v2-row-title {
   color: color-mix(in srgb, var(--sv2-muted) 75%, transparent);
   font-weight: 400;
 }
 
-[data-sidebar-version="v2"]
-  .sidebar-v2-row[data-variant="slim"]:hover
-  .sidebar-v2-row-title {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim']:hover .sidebar-v2-row-title {
   color: var(--sv2-foreground);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-rename-input {
+[data-sidebar-version='v2'] .sidebar-v2-row-rename-input {
   flex: 1;
   min-width: 0;
   height: 20px;
@@ -422,7 +420,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   outline: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-rename-input:focus {
+[data-sidebar-version='v2'] .sidebar-v2-row-rename-input:focus {
   border-color: color-mix(in srgb, var(--app-button-background) 70%, transparent);
 }
 
@@ -434,7 +432,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * says and pushed the branch off the card, so the line now renders git (below)
  * or the machine badge, and is dropped entirely when it has neither.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-machine {
+[data-sidebar-version='v2'] .sidebar-v2-row-machine {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -459,7 +457,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * are fixed-size and always win, because "#128 merged, +412 −87" is the part
  * you scan for and a truncated branch is still recognisable.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-git {
+[data-sidebar-version='v2'] .sidebar-v2-row-git {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -467,12 +465,12 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   gap: 6px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-git-spacer {
+[data-sidebar-version='v2'] .sidebar-v2-row-git-spacer {
   flex: 1;
   min-width: 0;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-branch {
+[data-sidebar-version='v2'] .sidebar-v2-row-branch {
   display: inline-flex;
   flex: 1;
   min-width: 0;
@@ -482,14 +480,14 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   font-size: 11px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-branch-name {
+[data-sidebar-version='v2'] .sidebar-v2-row-branch-name {
   overflow: hidden;
   font-family: var(--app-monospace-font, ui-monospace, SFMono-Regular, Menlo, monospace);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-diff {
+[data-sidebar-version='v2'] .sidebar-v2-row-diff {
   display: inline-flex;
   flex-shrink: 0;
   gap: 4px;
@@ -498,11 +496,11 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   font-variant-numeric: tabular-nums;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-diff-added {
+[data-sidebar-version='v2'] .sidebar-v2-row-diff-added {
   color: var(--sv2-diff-added);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-diff-removed {
+[data-sidebar-version='v2'] .sidebar-v2-row-diff-removed {
   color: var(--sv2-diff-removed);
 }
 
@@ -512,7 +510,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * Merged deliberately gets violet instead of the done-emerald,
  * so "the branch landed" never reads as "the agent finished a turn".
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-pr {
+[data-sidebar-version='v2'] .sidebar-v2-row-pr {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -528,20 +526,20 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   line-height: 1;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-pr[data-pr-state="open"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-pr[data-pr-state='open'] {
   --sv2-pr-color: var(--sv2-pr-open);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-pr[data-pr-state="draft"],
-[data-sidebar-version="v2"] .sidebar-v2-row-pr[data-pr-state="unknown"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-pr[data-pr-state='draft'],
+[data-sidebar-version='v2'] .sidebar-v2-row-pr[data-pr-state='unknown'] {
   --sv2-pr-color: var(--sv2-pr-draft);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-pr[data-pr-state="merged"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-pr[data-pr-state='merged'] {
   --sv2-pr-color: var(--sv2-pr-merged);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-pr[data-pr-state="closed"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-pr[data-pr-state='closed'] {
   --sv2-pr-color: var(--sv2-pr-closed);
 }
 
@@ -550,7 +548,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * loses its fill at rest and comes back on hover, matching how the favicon and
  * title behave on the same row.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row[data-variant="slim"] .sidebar-v2-row-pr {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim'] .sidebar-v2-row-pr {
   background: transparent;
   color: color-mix(in srgb, var(--sv2-pr-color) 55%, transparent);
   padding: 0;
@@ -558,16 +556,12 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 
 /* Inside the resting slot the badge leads the time label, so it needs the one
    gap the slot does not otherwise have. */
-[data-sidebar-version="v2"]
-  .sidebar-v2-row[data-variant="slim"]
-  .sidebar-v2-row-slot-status
-  .sidebar-v2-row-pr {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim'] .sidebar-v2-row-slot-status .sidebar-v2-row-pr {
   margin-right: 5px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-variant="slim"]:hover .sidebar-v2-row-pr,
-[data-sidebar-version="v2"] .sidebar-v2-row[data-variant="slim"][data-active="true"]
-  .sidebar-v2-row-pr {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim']:hover .sidebar-v2-row-pr,
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim'][data-active='true'] .sidebar-v2-row-pr {
   color: var(--sv2-pr-color);
 }
 
@@ -575,7 +569,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 
 /* The scope menu renders through the context-menu portal, OUTSIDE the V2 root,
    so the project icon is styled by class there as well as inside the tree. */
-[data-sidebar-version="v2"] .sidebar-v2-project-icon,
+[data-sidebar-version='v2'] .sidebar-v2-project-icon,
 .sidebar-v2-scope-menu .sidebar-v2-project-icon {
   flex-shrink: 0;
   width: 16px;
@@ -592,14 +586,14 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * color the user chose for the project, which is the whole point of showing it
  * instead of a folder.
  */
-[data-sidebar-version="v2"] .sidebar-v2-project-icon[data-icon-variant="tabler"],
-.sidebar-v2-scope-menu .sidebar-v2-project-icon[data-icon-variant="tabler"] {
+[data-sidebar-version='v2'] .sidebar-v2-project-icon[data-icon-variant='tabler'],
+.sidebar-v2-scope-menu .sidebar-v2-project-icon[data-icon-variant='tabler'] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-session-icon {
+[data-sidebar-version='v2'] .sidebar-v2-session-icon {
   display: inline-block;
   flex-shrink: 0;
   width: 15px;
@@ -608,7 +602,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   object-fit: contain;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-session-icon[data-icon-variant="logo"] {
+[data-sidebar-version='v2'] .sidebar-v2-session-icon[data-icon-variant='logo'] {
   background: currentcolor;
   mask-image: var(--session-agent-logo);
   mask-position: center;
@@ -620,25 +614,23 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   -webkit-mask-size: contain;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-session-icon[data-icon-variant="logo-colored"] {
+[data-sidebar-version='v2'] .sidebar-v2-session-icon[data-icon-variant='logo-colored'] {
   background-image: var(--session-agent-logo-colored);
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-variant="slim"] .sidebar-v2-session-icon {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim'] .sidebar-v2-session-icon {
   opacity: 0.45;
   filter: grayscale(1);
-  transition: opacity 150ms ease, filter 150ms ease;
+  transition:
+    opacity 150ms ease,
+    filter 150ms ease;
 }
 
-[data-sidebar-version="v2"]
-  .sidebar-v2-row[data-variant="slim"]:hover
-  .sidebar-v2-session-icon,
-[data-sidebar-version="v2"]
-  .sidebar-v2-row[data-variant="slim"][data-active="true"]
-  .sidebar-v2-session-icon {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim']:hover .sidebar-v2-session-icon,
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim'][data-active='true'] .sidebar-v2-session-icon {
   opacity: 1;
   filter: grayscale(0);
 }
@@ -674,7 +666,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * children: a hidden child must leave the tab order, the hit-test tree, and the
  * accessibility tree, or every row carries an invisible focusable pin button.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-slot {
+[data-sidebar-version='v2'] .sidebar-v2-row-slot {
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
@@ -686,7 +678,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   font-size: 11px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-slot-status {
+[data-sidebar-version='v2'] .sidebar-v2-row-slot-status {
   display: inline-flex;
   align-items: center;
   color: color-mix(in srgb, var(--sv2-muted) 75%, transparent);
@@ -704,14 +696,14 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * narrower than an unpinned one's, which is a difference between rows, never a
  * difference across a hover.)
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-pin-mark {
+[data-sidebar-version='v2'] .sidebar-v2-row-pin-mark {
   display: inline-flex;
   align-items: center;
   margin-right: 4px;
   color: color-mix(in srgb, var(--app-button-background) 60%, transparent);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-actions {
+[data-sidebar-version='v2'] .sidebar-v2-row-actions {
   position: absolute;
   inset-block: 0;
   right: 0;
@@ -733,16 +725,16 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * the actions before the next Tab can reach them, while a plain mouse click —
  * which also focuses the row — leaves the status showing.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row:hover .sidebar-v2-row-slot-status,
-[data-sidebar-version="v2"] .sidebar-v2-row:focus-visible .sidebar-v2-row-slot-status,
-[data-sidebar-version="v2"] .sidebar-v2-row:has(:focus-visible) .sidebar-v2-row-slot-status {
+[data-sidebar-version='v2'] .sidebar-v2-row:hover .sidebar-v2-row-slot-status,
+[data-sidebar-version='v2'] .sidebar-v2-row:focus-visible .sidebar-v2-row-slot-status,
+[data-sidebar-version='v2'] .sidebar-v2-row:has(:focus-visible) .sidebar-v2-row-slot-status {
   opacity: 0;
   visibility: hidden;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row:hover .sidebar-v2-row-actions,
-[data-sidebar-version="v2"] .sidebar-v2-row:focus-visible .sidebar-v2-row-actions,
-[data-sidebar-version="v2"] .sidebar-v2-row:has(:focus-visible) .sidebar-v2-row-actions {
+[data-sidebar-version='v2'] .sidebar-v2-row:hover .sidebar-v2-row-actions,
+[data-sidebar-version='v2'] .sidebar-v2-row:focus-visible .sidebar-v2-row-actions,
+[data-sidebar-version='v2'] .sidebar-v2-row:has(:focus-visible) .sidebar-v2-row-actions {
   opacity: 1;
   visibility: visible;
 }
@@ -757,7 +749,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * `.sidebar-v2-row-slot` on a 20px line, and a 22px chip would spill 1px past
  * the line it belongs to on both edges.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-action {
+[data-sidebar-version='v2'] .sidebar-v2-row-action {
   display: inline-flex;
   box-sizing: border-box;
   align-items: center;
@@ -782,14 +774,14 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   outline: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-action:hover,
-[data-sidebar-version="v2"] .sidebar-v2-row-action:focus-visible {
+[data-sidebar-version='v2'] .sidebar-v2-row-action:hover,
+[data-sidebar-version='v2'] .sidebar-v2-row-action:focus-visible {
   border-color: color-mix(in srgb, var(--app-button-background) 54%, var(--app-border));
   background: color-mix(in srgb, var(--app-button-background) 12%, var(--app-card-active) 88%);
   color: var(--app-button-background);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row-action:active {
+[data-sidebar-version='v2'] .sidebar-v2-row-action:active {
   border-color: color-mix(in srgb, var(--app-button-background) 54%, transparent);
   background: color-mix(in srgb, var(--app-button-background) 16%, transparent);
 }
@@ -799,7 +791,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * pinning is a context-menu action), so it carries the accent tint that used to
  * be smeared across every control on a pinned row.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-action[data-row-action="unpin"] {
+[data-sidebar-version='v2'] .sidebar-v2-row-action[data-row-action='unpin'] {
   color: color-mix(in srgb, var(--app-button-background) 80%, transparent);
 }
 
@@ -811,12 +803,12 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * portal, so :hover no longer holds. Pin the swap open explicitly, or the
  * actions vanish under the very menu they launched.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row[data-menu-open="true"] .sidebar-v2-row-slot-status {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-menu-open='true'] .sidebar-v2-row-slot-status {
   opacity: 0;
   visibility: hidden;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-row[data-menu-open="true"] .sidebar-v2-row-actions {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-menu-open='true'] .sidebar-v2-row-actions {
   opacity: 1;
   visibility: visible;
 }
@@ -828,16 +820,16 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * and keyboard focus — are pinned here, or the chips would float over an
  * untinted row. Active rows keep their own stronger surface.
  */
-[data-sidebar-version="v2"] .sidebar-v2-row[data-active="false"][data-menu-open="true"],
-[data-sidebar-version="v2"] .sidebar-v2-row[data-active="false"]:focus-visible,
-[data-sidebar-version="v2"] .sidebar-v2-row[data-active="false"]:has(:focus-visible) {
+[data-sidebar-version='v2'] .sidebar-v2-row[data-active='false'][data-menu-open='true'],
+[data-sidebar-version='v2'] .sidebar-v2-row[data-active='false']:focus-visible,
+[data-sidebar-version='v2'] .sidebar-v2-row[data-active='false']:has(:focus-visible) {
   background: var(--sv2-session-row-hover);
 }
 
 /* Settle is the one labelled action: it is the primary triage verb and the
    card has the width for it. Slim shelf rows render icon-only. It is the one
    chip that is not square — it grows to its label instead of squeezing it. */
-[data-sidebar-version="v2"] .sidebar-v2-row-action-labelled {
+[data-sidebar-version='v2'] .sidebar-v2-row-action-labelled {
   width: auto;
   padding: 0 6px;
   gap: 3px;
@@ -850,20 +842,20 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * control out, because the row is not going anywhere until the server's delta
  * says so and a disappearing button would read as "it worked".
  */
-[data-sidebar-version="v2"] .sidebar-v2-row-action:disabled {
+[data-sidebar-version='v2'] .sidebar-v2-row-action:disabled {
   cursor: default;
   opacity: 0.55;
 }
 
 /* A snoozed row's return ticket. Blue because it is a scheduled
    fact, not a status, so it must not borrow any of the three status hues. */
-[data-sidebar-version="v2"] .sidebar-v2-wake-label {
+[data-sidebar-version='v2'] .sidebar-v2-wake-label {
   color: var(--sv2-status-working);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-woke {
+[data-sidebar-version='v2'] .sidebar-v2-woke {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -879,7 +871,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * interaction state, and everything a row has to say about itself lives in this
  * one slot. `data-woke` on the row stays a state hook only.
  */
-[data-sidebar-version="v2"] .sidebar-v2-woke-mark {
+[data-sidebar-version='v2'] .sidebar-v2-woke-mark {
   display: inline-flex;
   align-items: center;
   margin-right: 4px;
@@ -888,7 +880,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 
 /* ------------------------------------------------ snooze presets / submenu */
 
-[data-sidebar-version="v2"] .sidebar-v2-snooze-preset,
+[data-sidebar-version='v2'] .sidebar-v2-snooze-preset,
 .sidebar-v2-snooze-popover .sidebar-v2-snooze-preset,
 .sidebar-v2-context-submenu-item {
   display: flex;
@@ -963,7 +955,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 
 /* ----------------------------------------------------------------- status */
 
-[data-sidebar-version="v2"] .sidebar-v2-status {
+[data-sidebar-version='v2'] .sidebar-v2-status {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -977,27 +969,27 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * exists for the day a host publishes `attentionKind: "input"`. Coloring by kind
  * would make the unknown case read as the quiet one.
  */
-[data-sidebar-version="v2"] .sidebar-v2-status[data-hue="amber"] {
+[data-sidebar-version='v2'] .sidebar-v2-status[data-hue='amber'] {
   color: var(--sv2-status-approval);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-status[data-hue="indigo"] {
+[data-sidebar-version='v2'] .sidebar-v2-status[data-hue='indigo'] {
   color: var(--sv2-status-input);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-status[data-kind="working"] {
+[data-sidebar-version='v2'] .sidebar-v2-status[data-kind='working'] {
   color: var(--sv2-status-working);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-status[data-kind="failed"] {
+[data-sidebar-version='v2'] .sidebar-v2-status[data-kind='failed'] {
   color: var(--sv2-status-failed);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-status[data-kind="done"] {
+[data-sidebar-version='v2'] .sidebar-v2-status[data-kind='done'] {
   color: var(--sv2-status-done);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-status[data-kind="idle"] {
+[data-sidebar-version='v2'] .sidebar-v2-status[data-kind='idle'] {
   color: color-mix(in srgb, var(--sv2-muted) 70%, transparent);
   font-weight: 400;
 }
@@ -1026,23 +1018,23 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   }
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-status[data-pulse="true"] {
+[data-sidebar-version='v2'] .sidebar-v2-status[data-pulse='true'] {
   animation: sidebar-v2-working-text 3.4s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-sidebar-version="v2"] .sidebar-v2-status[data-pulse="true"] {
+  [data-sidebar-version='v2'] .sidebar-v2-status[data-pulse='true'] {
     animation: none;
   }
 }
 
 /* ---------------------------------------------------------------- shelves */
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header-item {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header-item {
   list-style: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header {
   display: flex;
   width: 100%;
   align-items: center;
@@ -1056,43 +1048,43 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   text-align: left;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-label {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-label {
   font-size: 11px;
   font-weight: 500;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-rule {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-rule {
   flex: 1;
   height: 1px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-chevron {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-chevron {
   flex-shrink: 0;
   transition: transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-chevron[data-expanded="true"] {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-chevron[data-expanded='true'] {
   transform: rotate(180deg);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="settled"] .sidebar-v2-shelf-label,
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="settled"] .sidebar-v2-shelf-chevron,
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="browser"] .sidebar-v2-shelf-label,
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="browser"] .sidebar-v2-shelf-chevron {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='settled'] .sidebar-v2-shelf-label,
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='settled'] .sidebar-v2-shelf-chevron,
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='browser'] .sidebar-v2-shelf-label,
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='browser'] .sidebar-v2-shelf-chevron {
   color: color-mix(in srgb, var(--sv2-muted) 70%, transparent);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="settled"] .sidebar-v2-shelf-rule,
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="browser"] .sidebar-v2-shelf-rule {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='settled'] .sidebar-v2-shelf-rule,
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='browser'] .sidebar-v2-shelf-rule {
   background: color-mix(in srgb, var(--sv2-border) 70%, transparent);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="snoozed"] .sidebar-v2-shelf-label,
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="snoozed"] .sidebar-v2-shelf-chevron {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='snoozed'] .sidebar-v2-shelf-label,
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='snoozed'] .sidebar-v2-shelf-chevron {
   color: var(--sv2-snooze);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-shelf-header[data-tone="snoozed"] .sidebar-v2-shelf-rule {
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='snoozed'] .sidebar-v2-shelf-rule {
   background: color-mix(in srgb, var(--sv2-snooze) 22%, transparent);
 }
 
@@ -1115,7 +1107,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * `.sidebar-v2-group-title`, and `.sidebar-v2-group-header-row` (plus its nested
  * rule further down). None of those classnames are emitted any more.
  */
-[data-sidebar-version="v2"] .sidebar-v2-groups {
+[data-sidebar-version='v2'] .sidebar-v2-groups {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -1127,12 +1119,12 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * any more, so there is no idle icon to cross-fade a caret with — and the
  * project's own icon already sits immediately to the right of this.
  */
-[data-sidebar-version="v2"] .sidebar-v2-group-chevron {
+[data-sidebar-version='v2'] .sidebar-v2-group-chevron {
   flex-shrink: 0;
   transition: transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-group-chevron[data-expanded="true"] {
+[data-sidebar-version='v2'] .sidebar-v2-group-chevron[data-expanded='true'] {
   transform: rotate(90deg);
 }
 
@@ -1142,7 +1134,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * the right edge on hover (`margin-left: auto` in the reference block), so a
  * growing count would push the revealed controls off the row.
  */
-[data-sidebar-version="v2"] .sidebar-v2-group-count {
+[data-sidebar-version='v2'] .sidebar-v2-group-count {
   margin-left: 6px;
   flex-shrink: 0;
   color: color-mix(in srgb, var(--sv2-muted) 65%, transparent);
@@ -1150,7 +1142,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   font-variant-numeric: tabular-nums;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-group .sidebar-v2-list {
+[data-sidebar-version='v2'] .sidebar-v2-group .sidebar-v2-list {
   padding-left: 6px;
 }
 
@@ -1161,11 +1153,11 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * grace period), which suppresses V2's own copy without having anything to draw.
  * Collapse the padded block in that case instead of reserving dead space.
  */
-[data-sidebar-version="v2"] .sidebar-v2-empty:empty {
+[data-sidebar-version='v2'] .sidebar-v2-empty:empty {
   display: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-empty {
+[data-sidebar-version='v2'] .sidebar-v2-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1174,13 +1166,13 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   text-align: center;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-empty-message {
+[data-sidebar-version='v2'] .sidebar-v2-empty-message {
   margin: 0;
   color: color-mix(in srgb, var(--sv2-muted) 70%, transparent);
   font-size: 12px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-empty-action {
+[data-sidebar-version='v2'] .sidebar-v2-empty-action {
   padding: 4px 10px;
   border: 1px solid var(--sv2-border);
   border-radius: 8px;
@@ -1191,7 +1183,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   font-weight: 500;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-empty-action:hover {
+[data-sidebar-version='v2'] .sidebar-v2-empty-action:hover {
   background: var(--sv2-row-hover);
   color: var(--sv2-foreground);
 }
@@ -1206,7 +1198,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * focus ring — and so the plain half keeps working identically when the
  * chevron is absent (no worktree capability).
  */
-[data-sidebar-version="v2"] .sidebar-v2-create-split {
+[data-sidebar-version='v2'] .sidebar-v2-create-split {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -1214,8 +1206,8 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   border-radius: 6px;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-create-button,
-[data-sidebar-version="v2"] .sidebar-v2-create-chevron {
+[data-sidebar-version='v2'] .sidebar-v2-create-button,
+[data-sidebar-version='v2'] .sidebar-v2-create-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1227,17 +1219,17 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   outline: none;
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-create-button {
+[data-sidebar-version='v2'] .sidebar-v2-create-button {
   width: calc(24px * var(--sv2-density));
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-create-chevron {
+[data-sidebar-version='v2'] .sidebar-v2-create-chevron {
   width: calc(16px * var(--sv2-density));
   border-left: 1px solid color-mix(in srgb, var(--sv2-border) 60%, transparent);
 }
 
-[data-sidebar-version="v2"] .sidebar-v2-create-button:hover,
-[data-sidebar-version="v2"] .sidebar-v2-create-chevron:hover {
+[data-sidebar-version='v2'] .sidebar-v2-create-button:hover,
+[data-sidebar-version='v2'] .sidebar-v2-create-chevron:hover {
   background: var(--sv2-row-hover);
   color: var(--sv2-foreground);
 }

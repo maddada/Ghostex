@@ -10,14 +10,14 @@ Ghostex's bundled Zehn binary and its supported transcript stores.
 
 ## Supported agents
 
-| Agent | History source | Inactive-session resume command |
-| --- | --- | --- |
-| Claude Code | `~/.claude` | `claude --resume <id>` |
-| Codex | `~/.codex` | `codex resume <id>` |
-| Pi | `~/.pi` | `pi --session <id>` |
-| OpenCode | `~/.local/share/opencode/opencode.db` | `opencode --session <id>` |
-| Cursor Agent | `~/.cursor/projects` | `cursor-agent --resume <id>` |
-| Grok | `~/.grok/sessions` | `grok --resume <id>` |
+| Agent        | History source                        | Inactive-session resume command |
+| ------------ | ------------------------------------- | ------------------------------- |
+| Claude Code  | `~/.claude`                           | `claude --resume <id>`          |
+| Codex        | `~/.codex`                            | `codex resume <id>`             |
+| Pi           | `~/.pi`                               | `pi --session <id>`             |
+| OpenCode     | `~/.local/share/opencode/opencode.db` | `opencode --session <id>`       |
+| Cursor Agent | `~/.cursor/projects`                  | `cursor-agent --resume <id>`    |
+| Grok         | `~/.grok/sessions`                    | `grok --resume <id>`            |
 
 OpenCode history requires the `sqlite3` CLI. Zehn reports and skips OpenCode
 history when that database exists but `sqlite3` is unavailable.

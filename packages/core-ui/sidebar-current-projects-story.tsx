@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { DEFAULT_COMPLETION_SOUND, getCompletionSoundLabel } from "../shared/completion-sound";
-import { createDefaultSidebarAgentButtons } from "../shared/sidebar-agents";
-import { createDefaultSidebarCommandButtons } from "../shared/sidebar-commands";
-import { createDefaultSidebarGitState } from "../shared/sidebar-git";
+import { useEffect, useMemo, useState } from 'react';
+import { DEFAULT_COMPLETION_SOUND, getCompletionSoundLabel } from '../shared/completion-sound';
+import { createDefaultSidebarAgentButtons } from '../shared/sidebar-agents';
+import { createDefaultSidebarCommandButtons } from '../shared/sidebar-commands';
+import { createDefaultSidebarGitState } from '../shared/sidebar-git';
 import type {
   SessionGridSnapshot,
   SidebarHydrateMessage,
@@ -12,18 +12,16 @@ import type {
   SidebarTheme,
   TerminalViewMode,
   VisibleSessionCount,
-} from "../shared/session-grid-contract";
-import {
-  clampVisibleSessionCount,
-} from "../shared/session-grid-contract";
-import { createSidebarSessionItems } from "../shared/session-grid-contract-ui";
-import { createDefaultSidebarProjectDiffStats } from "../shared/project-diff-stats";
-import { SidebarStoryHarness } from "./sidebar-story-harness";
-import type { SidebarStoryArgs, SidebarStoryCurrentSettings } from "./sidebar-story-fixtures";
+} from '../shared/session-grid-contract';
+import { clampVisibleSessionCount } from '../shared/session-grid-contract';
+import { createSidebarSessionItems } from '../shared/session-grid-contract-ui';
+import { createDefaultSidebarProjectDiffStats } from '../shared/project-diff-stats';
+import { SidebarStoryHarness } from './sidebar-story-harness';
+import type { SidebarStoryArgs, SidebarStoryCurrentSettings } from './sidebar-story-fixtures';
 
-const COMBINED_CHATS_GROUP_ID = "combined-chats";
-const CURRENT_SETTINGS_ENDPOINT = "/__ghostex-current-sidebar-settings";
-const CURRENT_PROJECTS_ENDPOINT = "/__ghostex-current-sidebar-projects";
+const COMBINED_CHATS_GROUP_ID = 'combined-chats';
+const CURRENT_SETTINGS_ENDPOINT = '/__ghostex-current-sidebar-settings';
+const CURRENT_PROJECTS_ENDPOINT = '/__ghostex-current-sidebar-projects';
 
 type NativeProjectsSnapshot = {
   activeProjectId?: string;
@@ -67,7 +65,7 @@ export function CurrentProjectsSidebarStory({
 
   useEffect(() => {
     let isMounted = true;
-    void fetch(CURRENT_PROJECTS_ENDPOINT, { cache: "no-store" })
+    void fetch(CURRENT_PROJECTS_ENDPOINT, { cache: 'no-store' })
       .then((response) => response.json())
       .then((payload: unknown) => {
         if (isMounted && isNativeProjectsSnapshot(payload)) {
@@ -91,10 +89,10 @@ export function CurrentProjectsSidebarStory({
     }
 
     let isMounted = true;
-    void fetch(CURRENT_SETTINGS_ENDPOINT, { cache: "no-store" })
+    void fetch(CURRENT_SETTINGS_ENDPOINT, { cache: 'no-store' })
       .then((response) => response.json())
       .then((payload: unknown) => {
-        if (isMounted && payload && typeof payload === "object" && !Array.isArray(payload)) {
+        if (isMounted && payload && typeof payload === 'object' && !Array.isArray(payload)) {
           setFetchedSettings(payload as SidebarStoryCurrentSettings);
         }
       })
@@ -112,7 +110,7 @@ export function CurrentProjectsSidebarStory({
   const effectiveSettings = currentSettings ?? fetchedSettings;
   const message = useMemo(
     () => createCurrentProjectsSidebarMessage(snapshot, args, effectiveSettings),
-    [args, effectiveSettings, snapshot],
+    [args, effectiveSettings, snapshot]
   );
 
   return <SidebarStoryHarness message={message} />;
@@ -121,7 +119,7 @@ export function CurrentProjectsSidebarStory({
 function createCurrentProjectsSidebarMessage(
   snapshot: NativeProjectsSnapshot | undefined,
   args: SidebarStoryArgs,
-  currentSettings: SidebarStoryCurrentSettings | undefined,
+  currentSettings: SidebarStoryCurrentSettings | undefined
 ): SidebarHydrateMessage {
   const projects = snapshot?.projects?.filter(isNativeProjectWithId) ?? [];
   const activeProject = getActiveProject(projects, snapshot?.activeProjectId);
@@ -129,9 +127,7 @@ function createCurrentProjectsSidebarMessage(
     projects.length > 0
       ? createCurrentProjectGroups(projects, activeProject?.projectId)
       : createEmptyCurrentProjectsGroups();
-  const theme = currentSettings?.sidebarTheme
-    ? resolveSettingsSidebarTheme(currentSettings.sidebarTheme)
-    : args.theme;
+  const theme = currentSettings?.sidebarTheme ? resolveSettingsSidebarTheme(currentSettings.sidebarTheme) : args.theme;
   const visibleCount = args.visibleCount;
   const highlightedVisibleCount = args.highlightedVisibleCount;
 
@@ -143,19 +139,16 @@ function createCurrentProjectsSidebarMessage(
       visibleCount: group.isActive ? visibleCount : group.visibleCount,
     })),
     hud: {
-      activeSessionsSortMode: "manual",
+      activeSessionsSortMode: 'manual',
       agentManagerZoomPercent: currentSettings?.agentManagerZoomPercent ?? 100,
       agents: createDefaultSidebarAgentButtons(),
       commands: createDefaultSidebarCommandButtons(),
       commandSessionIndicators: [],
       completionBellEnabled: currentSettings?.completionBellEnabled ?? false,
       completionSound: currentSettings?.completionSound ?? DEFAULT_COMPLETION_SOUND,
-      completionSoundLabel: getCompletionSoundLabel(
-        currentSettings?.completionSound ?? DEFAULT_COMPLETION_SOUND,
-      ),
+      completionSoundLabel: getCompletionSoundLabel(currentSettings?.completionSound ?? DEFAULT_COMPLETION_SOUND),
       createSessionOnSidebarDoubleClick:
-        currentSettings?.createSessionOnSidebarDoubleClick ??
-        args.createSessionOnSidebarDoubleClick,
+        currentSettings?.createSessionOnSidebarDoubleClick ?? args.createSessionOnSidebarDoubleClick,
       debuggingMode: currentSettings?.debuggingMode ?? args.debuggingMode,
       focusedSessionTitle: getFocusedSessionTitle(groups),
       git: createDefaultSidebarGitState(),
@@ -163,8 +156,7 @@ function createCurrentProjectsSidebarMessage(
       isFocusModeActive: args.isFocusModeActive,
       pendingAgentIds: [],
       recentProjects: createCurrentRecentProjects(projects),
-      renameSessionOnDoubleClick:
-        currentSettings?.renameSessionOnDoubleClick ?? args.renameSessionOnDoubleClick,
+      renameSessionOnDoubleClick: currentSettings?.renameSessionOnDoubleClick ?? args.renameSessionOnDoubleClick,
       settings: currentSettings,
       showCloseButtonOnSessionCards:
         currentSettings?.showCloseButtonOnSessionCards ?? args.showCloseButtonOnSessionCards,
@@ -176,14 +168,14 @@ function createCurrentProjectsSidebarMessage(
     pinnedPrompts: [],
     previousSessions: [],
     revision: 1,
-    scratchPadContent: "",
-    type: "hydrate",
+    scratchPadContent: '',
+    type: 'hydrate',
   };
 }
 
 function createCurrentProjectGroups(
   projects: readonly NativeProjectWithId[],
-  activeProjectId: string | undefined,
+  activeProjectId: string | undefined
 ): SidebarSessionGroup[] {
   /**
    * CDXC:SidebarScroll 2026-05-20-08:08:
@@ -202,9 +194,7 @@ function createCurrentProjectGroups(
     ? createProjectedGroupsForProject(activeChatProject, activeProjectId)[0]
     : undefined;
   const chatSessions = chatProjects.flatMap((project) => {
-    const session = createProjectedGroupsForProject(project, activeProjectId).flatMap(
-      (group) => group.sessions,
-    )[0];
+    const session = createProjectedGroupsForProject(project, activeProjectId).flatMap((group) => group.sessions)[0];
     return session
       ? [
           {
@@ -223,11 +213,11 @@ function createCurrentProjectGroups(
       isActive: Boolean(activeChatProject),
       isChatCollection: true,
       isFocusModeActive: activeChatGroup?.isFocusModeActive ?? false,
-      kind: "workspace",
+      kind: 'workspace',
       layoutVisibleCount: activeChatGroup?.layoutVisibleCount ?? 1,
       sessions: chatSessions,
-      title: "Chats",
-      viewMode: activeChatGroup?.viewMode ?? "grid",
+      title: 'Chats',
+      viewMode: activeChatGroup?.viewMode ?? 'grid',
       visibleCount: activeChatGroup?.visibleCount ?? 1,
     },
     ...projectGroups,
@@ -236,31 +226,30 @@ function createCurrentProjectGroups(
 
 function createCurrentProjectGroup(
   project: NativeProjectWithId,
-  activeProjectId: string | undefined,
+  activeProjectId: string | undefined
 ): SidebarSessionGroup {
   const projectedGroups = createProjectedGroupsForProject(project, activeProjectId);
   const activeGroup =
-    projectedGroups.find((group) => group.groupId === project.workspace?.activeGroupId) ??
-    projectedGroups[0];
+    projectedGroups.find((group) => group.groupId === project.workspace?.activeGroupId) ?? projectedGroups[0];
   const isActiveProject = project.projectId === activeProjectId;
 
   return {
     groupId: createCombinedProjectGroupId(project.projectId),
     isActive: isActiveProject,
     isFocusModeActive: isActiveProject && activeGroup ? activeGroup.isFocusModeActive : false,
-    kind: "workspace",
+    kind: 'workspace',
     layoutVisibleCount: activeGroup?.layoutVisibleCount ?? 1,
     projectContext: {
       canRemoveProject: true,
-      path: project.path ?? "",
+      path: project.path ?? '',
       editor: {
         diffStats: createDefaultSidebarProjectDiffStats(),
         isOpen: false,
         isSleeping: false,
         projectId: project.projectId,
-        status: "idle",
+        status: 'idle',
       },
-      theme: project.theme ?? "plain-dark",
+      theme: project.theme ?? 'plain-dark',
       themeColor: project.themeColor,
     },
     sessions: projectedGroups.flatMap((group) =>
@@ -269,25 +258,25 @@ function createCurrentProjectGroup(
         isFocused: isActiveProject && session.isFocused,
         isVisible: isActiveProject && session.isVisible,
         sessionId: createCombinedProjectSessionId(project.projectId, session.sessionId),
-      })),
+      }))
     ),
-    title: project.name ?? "Project",
-    viewMode: activeGroup?.viewMode ?? "grid",
+    title: project.name ?? 'Project',
+    viewMode: activeGroup?.viewMode ?? 'grid',
     visibleCount: activeGroup?.visibleCount ?? 1,
   };
 }
 
 function createProjectedGroupsForProject(
   project: NativeProjectWithId,
-  activeProjectId: string | undefined,
+  activeProjectId: string | undefined
 ): SidebarSessionGroup[] {
   const workspace = project.workspace;
-  const groups = workspace?.groups?.length ? workspace.groups : [{ groupId: "group-1" }];
+  const groups = workspace?.groups?.length ? workspace.groups : [{ groupId: 'group-1' }];
 
   return groups.map((group, index) => {
     const snapshot = normalizeNativeSessionGridSnapshot(group.snapshot);
-    const sessions = createSidebarSessionItems(snapshot, "mac").map((session) =>
-      projectNativeSession(project, group, session),
+    const sessions = createSidebarSessionItems(snapshot, 'mac').map((session) =>
+      projectNativeSession(project, group, session)
     );
     const visibleCount = clampVisibleSessionCount(snapshot.visibleCount);
 
@@ -295,7 +284,7 @@ function createProjectedGroupsForProject(
       groupId: group.groupId ?? `group-${index + 1}`,
       isActive: project.projectId === activeProjectId && group.groupId === workspace?.activeGroupId,
       isFocusModeActive: visibleCount === 1,
-      kind: "workspace",
+      kind: 'workspace',
       layoutVisibleCount: visibleCount,
       sessions,
       title: group.title ?? `Group ${index + 1}`,
@@ -308,22 +297,16 @@ function createProjectedGroupsForProject(
 function projectNativeSession(
   project: NativeProjectWithId,
   group: NativeWorkspaceGroup,
-  session: SidebarSessionItem,
+  session: SidebarSessionItem
 ): SidebarSessionItem {
-  const nativeSession = group.snapshot?.sessions?.find(
-    (candidate) => candidate.sessionId === session.sessionId,
-  );
-  const title = typeof nativeSession?.title === "string" ? nativeSession.title : undefined;
-  const createdAt =
-    typeof nativeSession?.createdAt === "string" ? nativeSession.createdAt : undefined;
+  const nativeSession = group.snapshot?.sessions?.find((candidate) => candidate.sessionId === session.sessionId);
+  const title = typeof nativeSession?.title === 'string' ? nativeSession.title : undefined;
+  const createdAt = typeof nativeSession?.createdAt === 'string' ? nativeSession.createdAt : undefined;
   const lastActivityAt =
-    nativeSession &&
-    "lastActivityAt" in nativeSession &&
-    typeof nativeSession.lastActivityAt === "string"
+    nativeSession && 'lastActivityAt' in nativeSession && typeof nativeSession.lastActivityAt === 'string'
       ? nativeSession.lastActivityAt
       : undefined;
-  const agentName =
-    nativeSession && "agentName" in nativeSession ? nativeSession.agentName : undefined;
+  const agentName = nativeSession && 'agentName' in nativeSession ? nativeSession.agentName : undefined;
 
   return {
     ...session,
@@ -336,9 +319,7 @@ function projectNativeSession(
   };
 }
 
-function normalizeNativeSessionGridSnapshot(
-  snapshot: Partial<SessionGridSnapshot> | undefined,
-): SessionGridSnapshot {
+function normalizeNativeSessionGridSnapshot(snapshot: Partial<SessionGridSnapshot> | undefined): SessionGridSnapshot {
   const sessions = Array.isArray(snapshot?.sessions) ? snapshot.sessions : [];
   const firstSessionId = sessions[0]?.sessionId;
   const visibleSessionIds = Array.isArray(snapshot?.visibleSessionIds)
@@ -348,8 +329,7 @@ function normalizeNativeSessionGridSnapshot(
       : [];
 
   return {
-    focusedSessionId:
-      typeof snapshot?.focusedSessionId === "string" ? snapshot.focusedSessionId : firstSessionId,
+    focusedSessionId: typeof snapshot?.focusedSessionId === 'string' ? snapshot.focusedSessionId : firstSessionId,
     sessions,
     viewMode: normalizeViewMode(snapshot?.viewMode),
     visibleCount: clampVisibleSessionCount(snapshot?.visibleCount ?? 1),
@@ -357,20 +337,18 @@ function normalizeNativeSessionGridSnapshot(
   };
 }
 
-function createCurrentRecentProjects(
-  projects: readonly NativeProjectWithId[],
-): SidebarRecentProject[] {
+function createCurrentRecentProjects(projects: readonly NativeProjectWithId[]): SidebarRecentProject[] {
   return projects
     .filter((project) => project.isChat !== true && project.isRecentProject === true)
     .sort(compareRecentProjectsByClosedAt)
     .map((project) => ({
-      path: project.path ?? "",
+      path: project.path ?? '',
       projectId: project.projectId,
       recentClosedAt: project.recentClosedAt,
       sessionCount: countProjectSessions(project),
       theme: project.theme,
       themeColor: project.themeColor,
-      title: project.name ?? "Project",
+      title: project.name ?? 'Project',
     }));
 }
 
@@ -381,19 +359,17 @@ function createEmptyCurrentProjectsGroups(): SidebarSessionGroup[] {
       isActive: false,
       isChatCollection: true,
       isFocusModeActive: false,
-      kind: "workspace",
+      kind: 'workspace',
       layoutVisibleCount: 1,
       sessions: [],
-      title: "Chats",
-      viewMode: "grid",
+      title: 'Chats',
+      viewMode: 'grid',
       visibleCount: 1,
     },
   ];
 }
 
-function orderNativeProjectsForSidebar(
-  projects: readonly NativeProjectWithId[],
-): NativeProjectWithId[] {
+function orderNativeProjectsForSidebar(projects: readonly NativeProjectWithId[]): NativeProjectWithId[] {
   return [
     ...projects.filter((project) => project.isChat === true),
     ...projects.filter((project) => project.isChat !== true),
@@ -401,9 +377,7 @@ function orderNativeProjectsForSidebar(
 }
 
 function getFocusedSessionTitle(groups: readonly SidebarSessionGroup[]): string | undefined {
-  const focusedSession = groups
-    .flatMap((group) => group.sessions)
-    .find((session) => session.isFocused);
+  const focusedSession = groups.flatMap((group) => group.sessions).find((session) => session.isFocused);
   return focusedSession?.primaryTitle ?? focusedSession?.terminalTitle ?? focusedSession?.alias;
 }
 
@@ -416,7 +390,7 @@ function getVisibleSlotLabels(groups: readonly SidebarSessionGroup[]): string[] 
 
 function getActiveProject(
   projects: readonly NativeProjectWithId[],
-  activeProjectId: string | undefined,
+  activeProjectId: string | undefined
 ): NativeProjectWithId | undefined {
   return (
     projects.find((project) => project.projectId === activeProjectId) ??
@@ -426,18 +400,10 @@ function getActiveProject(
 }
 
 function countProjectSessions(project: NativeProjectWithId): number {
-  return (
-    project.workspace?.groups?.reduce(
-      (total, group) => total + (group.snapshot?.sessions?.length ?? 0),
-      0,
-    ) ?? 0
-  );
+  return project.workspace?.groups?.reduce((total, group) => total + (group.snapshot?.sessions?.length ?? 0), 0) ?? 0;
 }
 
-function compareRecentProjectsByClosedAt(
-  left: NativeProjectWithId,
-  right: NativeProjectWithId,
-): number {
+function compareRecentProjectsByClosedAt(left: NativeProjectWithId, right: NativeProjectWithId): number {
   return recentProjectClosedAtTime(right) - recentProjectClosedAtTime(left);
 }
 
@@ -454,37 +420,37 @@ function createCombinedProjectSessionId(projectId: string, sessionId: string): s
   return `combined-session:${encodeURIComponent(projectId)}:${encodeURIComponent(sessionId)}`;
 }
 
-function normalizeAgentIcon(agentName: unknown): SidebarSessionItem["agentIcon"] {
-  const normalizedAgentName = typeof agentName === "string" ? agentName.trim().toLowerCase() : "";
+function normalizeAgentIcon(agentName: unknown): SidebarSessionItem['agentIcon'] {
+  const normalizedAgentName = typeof agentName === 'string' ? agentName.trim().toLowerCase() : '';
   switch (normalizedAgentName) {
-    case "antigravity":
-      return "antigravity-cli";
-    case "cursor":
-      return "cursor-cli";
-    case "droid":
-      return "factory-droid";
-    case "grok":
-      return "grok-build";
-    case "amp":
-      return "amp-cli";
-    case "codebuddy":
-      return "codebuddy";
-    case "hermes":
-    case "hermes-agent":
-      return "hermes-agent";
-    case "qoder":
-    case "qodercli":
-      return "qoder";
-    case "rovo":
-    case "rovodev":
-      return "rovo-dev";
-    case "browser":
-    case "claude":
-    case "codex":
-    case "copilot":
-    case "gemini":
-    case "opencode":
-    case "pi":
+    case 'antigravity':
+      return 'antigravity-cli';
+    case 'cursor':
+      return 'cursor-cli';
+    case 'droid':
+      return 'factory-droid';
+    case 'grok':
+      return 'grok-build';
+    case 'amp':
+      return 'amp-cli';
+    case 'codebuddy':
+      return 'codebuddy';
+    case 'hermes':
+    case 'hermes-agent':
+      return 'hermes-agent';
+    case 'qoder':
+    case 'qodercli':
+      return 'qoder';
+    case 'rovo':
+    case 'rovodev':
+      return 'rovo-dev';
+    case 'browser':
+    case 'claude':
+    case 'codex':
+    case 'copilot':
+    case 'gemini':
+    case 'opencode':
+    case 'pi':
       return normalizedAgentName;
     default:
       return undefined;
@@ -492,24 +458,22 @@ function normalizeAgentIcon(agentName: unknown): SidebarSessionItem["agentIcon"]
 }
 
 function normalizeViewMode(viewMode: unknown): TerminalViewMode {
-  return viewMode === "horizontal" || viewMode === "vertical" || viewMode === "grid"
-    ? viewMode
-    : "grid";
+  return viewMode === 'horizontal' || viewMode === 'vertical' || viewMode === 'grid' ? viewMode : 'grid';
 }
 
 function resolveSettingsSidebarTheme(sidebarTheme: unknown): SidebarTheme {
-  if (sidebarTheme === "plain") {
-    return "dark-2";
+  if (sidebarTheme === 'plain') {
+    return 'dark-2';
   }
-  return sidebarTheme === "dark-1" || sidebarTheme === "dark-2" || sidebarTheme === "plain-light"
+  return sidebarTheme === 'dark-1' || sidebarTheme === 'dark-2' || sidebarTheme === 'plain-light'
     ? sidebarTheme
-    : "dark-1";
+    : 'dark-1';
 }
 
 function isNativeProjectsSnapshot(payload: unknown): payload is NativeProjectsSnapshot {
-  return Boolean(payload && typeof payload === "object" && !Array.isArray(payload));
+  return Boolean(payload && typeof payload === 'object' && !Array.isArray(payload));
 }
 
 function isNativeProjectWithId(project: NativeProject): project is NativeProjectWithId {
-  return typeof project.projectId === "string" && project.projectId.length > 0;
+  return typeof project.projectId === 'string' && project.projectId.length > 0;
 }

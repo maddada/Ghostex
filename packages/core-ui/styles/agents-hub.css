@@ -20,7 +20,7 @@
   --agents-hub-radius-row: 6px;
 }
 
-.agents-hub-dialog[data-slot="dialog-content"] {
+.agents-hub-dialog[data-slot='dialog-content'] {
   /*
    * CDXC:AgentsHub 2026-06-12-03:25:
    * The Agents Hub native window should feel like one dense tool surface, not
@@ -107,7 +107,7 @@
   overflow: hidden;
 }
 
-.agents-hub-dialog .agents-hub-tabs-list[data-slot="tabs-list"] {
+.agents-hub-dialog .agents-hub-tabs-list[data-slot='tabs-list'] {
   /*
    * CDXC:AgentsHubRedesign 2026-08-24:
    * The Hub keeps the shared .app-modal-tab-rail class for the modal tab
@@ -126,22 +126,24 @@
   width: 100% !important;
 }
 
-.agents-hub-dialog .agents-hub-tabs-list [data-slot="tabs-trigger"] {
+.agents-hub-dialog .agents-hub-tabs-list [data-slot='tabs-trigger'] {
   border: 1px solid transparent !important;
   border-radius: var(--agents-hub-radius-control) !important;
   color: var(--muted-foreground) !important;
   font-size: 0.8125rem;
   font-weight: 400 !important;
   height: 2rem;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
-.agents-hub-dialog .agents-hub-tabs-list [data-slot="tabs-trigger"]:hover {
+.agents-hub-dialog .agents-hub-tabs-list [data-slot='tabs-trigger']:hover {
   background: var(--agents-hub-raised) !important;
   color: var(--foreground) !important;
 }
 
-.agents-hub-dialog .agents-hub-tabs-list [data-slot="tabs-trigger"][data-active] {
+.agents-hub-dialog .agents-hub-tabs-list [data-slot='tabs-trigger'][data-active] {
   background: var(--agents-hub-raised) !important;
   border-color: var(--agents-hub-line) !important;
   color: var(--agents-hub-accent) !important;
@@ -213,13 +215,13 @@
   overflow: hidden;
 }
 
-.agents-hub-scroll [data-slot="scroll-area-viewport"] {
+.agents-hub-scroll [data-slot='scroll-area-viewport'] {
   height: 100%;
   min-height: 0;
   min-width: 0;
 }
 
-.agents-hub-scroll [data-slot="scroll-area-viewport"] > div {
+.agents-hub-scroll [data-slot='scroll-area-viewport'] > div {
   /*
    * CDXC:AgentsHub 2026-05-13-08:08
    * Radix ScrollArea wraps content in a display:table sizing div. In the Hub
@@ -251,7 +253,9 @@
   min-width: 0;
   overflow: hidden;
   padding: 0.625rem;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
   width: 100%;
 }
 
@@ -401,7 +405,7 @@
   width: 0.75rem;
 }
 
-.agents-hub-dialog [data-slot="tooltip-content"] {
+.agents-hub-dialog [data-slot='tooltip-content'] {
   white-space: pre-line;
 }
 
@@ -427,8 +431,7 @@
 
 .agents-hub-profile-tooltip-path {
   color: color-mix(in srgb, #ffffff 76%, transparent);
-  font-family:
-    ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 0.6875rem;
   font-weight: 400;
   line-height: 1.4;
@@ -446,8 +449,7 @@
 
 .agents-hub-profile-tooltip-arrow {
   color: color-mix(in srgb, #ffffff 55%, transparent);
-  font-family:
-    ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 0.6875rem;
   font-weight: 400;
   line-height: 1.4;
@@ -492,7 +494,9 @@
   max-width: 100%;
   min-width: 0;
   padding: 0.3125rem 0.5rem;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
   width: 100%;
 }
 
@@ -534,7 +538,7 @@
   min-width: 0;
 }
 
-.agents-hub-editor-frame [data-slot="separator"] {
+.agents-hub-editor-frame [data-slot='separator'] {
   background: var(--agents-hub-line);
 }
 
@@ -618,7 +622,7 @@
 }
 
 @media (max-width: 760px) {
-  .agents-hub-dialog[data-slot="dialog-content"] {
+  .agents-hub-dialog[data-slot='dialog-content'] {
     border-radius: 0;
     height: 100vh !important;
     max-height: 100vh !important;

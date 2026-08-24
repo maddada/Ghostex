@@ -1,11 +1,8 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 
-const firstLaunchSetupModalSource = readFileSync(
-  new URL("./first-launch-setup-modal.tsx", import.meta.url),
-  "utf8",
-);
-const sidebarStylesSource = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+const firstLaunchSetupModalSource = readFileSync(new URL('./first-launch-setup-modal.tsx', import.meta.url), 'utf8');
+const sidebarStylesSource = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -15,8 +12,8 @@ function sourceBetween(source: string, start: string, end: string): string {
   return source.slice(startIndex, endIndex);
 }
 
-describe("first launch setup modal source", () => {
-  test("limits the visible first-launch sequence to welcome, hooks, and bundled skills", () => {
+describe('first launch setup modal source', () => {
+  test('limits the visible first-launch sequence to welcome, hooks, and bundled skills', () => {
     /*
     CDXC:FirstLaunchSetup 2026-06-18-02:29:
     The first-time launch modal should only show Welcome, Agent Hooks, and
@@ -25,8 +22,8 @@ describe("first launch setup modal source", () => {
     */
     const visiblePages = sourceBetween(
       firstLaunchSetupModalSource,
-      "const FIRST_LAUNCH_SETUP_PAGES",
-      "const FIRST_LAUNCH_GUIDE_PAGES",
+      'const FIRST_LAUNCH_SETUP_PAGES',
+      'const FIRST_LAUNCH_GUIDE_PAGES'
     );
 
     expect(visiblePages).toMatch(/"welcome",\s*"hooks",\s*"skills"/u);
@@ -36,20 +33,18 @@ describe("first launch setup modal source", () => {
     expect(visiblePages).not.toContain('"desktopCua"');
     expect(visiblePages).not.toContain('"agentsSessions"');
     expect(visiblePages).not.toContain('"remoteAccess"');
-    expect(firstLaunchSetupModalSource).toContain("function getVisibleFirstLaunchSetupPage");
+    expect(firstLaunchSetupModalSource).toContain('function getVisibleFirstLaunchSetupPage');
     expect(firstLaunchSetupModalSource).toContain(
-      "return FIRST_LAUNCH_SETUP_PAGES.includes(page) ? page : FIRST_LAUNCH_SETUP_PAGES[0];",
+      'return FIRST_LAUNCH_SETUP_PAGES.includes(page) ? page : FIRST_LAUNCH_SETUP_PAGES[0];'
     );
-    expect(firstLaunchSetupModalSource).toContain(
-      "const FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS = DEFAULT_SIDEBAR_AGENTS;",
-    );
-    expect(firstLaunchSetupModalSource).not.toContain("const FIRST_LAUNCH_HOOK_AGENT_IDS");
-    expect(firstLaunchSetupModalSource).toContain("function FirstLaunchPreferencesPage");
-    expect(firstLaunchSetupModalSource).toContain("function FirstLaunchCliPage");
-    expect(firstLaunchSetupModalSource).toContain("function FirstLaunchGuidePageView");
+    expect(firstLaunchSetupModalSource).toContain('const FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS = DEFAULT_SIDEBAR_AGENTS;');
+    expect(firstLaunchSetupModalSource).not.toContain('const FIRST_LAUNCH_HOOK_AGENT_IDS');
+    expect(firstLaunchSetupModalSource).toContain('function FirstLaunchPreferencesPage');
+    expect(firstLaunchSetupModalSource).toContain('function FirstLaunchCliPage');
+    expect(firstLaunchSetupModalSource).toContain('function FirstLaunchGuidePageView');
   });
 
-  test("warns before skipping first-launch hooks or bundled skills", () => {
+  test('warns before skipping first-launch hooks or bundled skills', () => {
     /*
     CDXC:FirstLaunchSetup 2026-06-18-02:38:
     Continuing from the first-launch Hook or Bundled Agent Skills steps without
@@ -58,20 +53,20 @@ describe("first launch setup modal source", () => {
     expose manual refresh buttons.
     */
     expect(firstLaunchSetupModalSource).toContain('type FirstLaunchContinueWarning = "hooks" | "skills"');
-    expect(firstLaunchSetupModalSource).toContain("areFirstLaunchAgentHooksReady(agentHookStatus)");
-    expect(firstLaunchSetupModalSource).toContain("isAnyFirstLaunchBundledSkillInstalled(ghostexCliStatus)");
-    expect(firstLaunchSetupModalSource).toContain("ghostexCliStatus?.embeddedBrowserSkillInstalled === true");
+    expect(firstLaunchSetupModalSource).toContain('areFirstLaunchAgentHooksReady(agentHookStatus)');
+    expect(firstLaunchSetupModalSource).toContain('isAnyFirstLaunchBundledSkillInstalled(ghostexCliStatus)');
+    expect(firstLaunchSetupModalSource).toContain('ghostexCliStatus?.embeddedBrowserSkillInstalled === true');
     expect(firstLaunchSetupModalSource).toContain('title: "Continue without bundled agent skills?"');
     expect(firstLaunchSetupModalSource).toContain('className="first-launch-setup-warning-backdrop"');
     expect(firstLaunchSetupModalSource).toContain('role="alertdialog"');
-    expect(firstLaunchSetupModalSource).toContain("onInstallMissingSkills={installMissingBundledSkills}");
+    expect(firstLaunchSetupModalSource).toContain('onInstallMissingSkills={installMissingBundledSkills}');
     expect(firstLaunchSetupModalSource).not.toContain('title="Refresh agent hook status"');
-    expect(firstLaunchSetupModalSource).not.toContain("onRefreshStatus={onRequestGhostexCliStatus}");
-    expect(sidebarStylesSource).toContain(".ghostex-settings-shadcn .first-launch-setup-warning-backdrop");
-    expect(sidebarStylesSource).toContain("justify-content: flex-end;");
+    expect(firstLaunchSetupModalSource).not.toContain('onRefreshStatus={onRequestGhostexCliStatus}');
+    expect(sidebarStylesSource).toContain('.ghostex-settings-shadcn .first-launch-setup-warning-backdrop');
+    expect(sidebarStylesSource).toContain('justify-content: flex-end;');
   });
 
-  test("skips the hook warning when a primary hook provider is ready", () => {
+  test('skips the hook warning when a primary hook provider is ready', () => {
     /*
     CDXC:FirstLaunchSetup 2026-06-19-08:42:
     The Hook step should not show the continue-warning overlay when Claude,
@@ -80,37 +75,37 @@ describe("first launch setup modal source", () => {
     Continue.
     */
     expect(firstLaunchSetupModalSource).toContain(
-      'const FIRST_LAUNCH_HOOK_SKIP_WARNING_AGENT_IDS = ["claude", "codex", "opencode", "pi"] as const;',
+      'const FIRST_LAUNCH_HOOK_SKIP_WARNING_AGENT_IDS = ["claude", "codex", "opencode", "pi"] as const;'
     );
     const hookReadiness = sourceBetween(
       firstLaunchSetupModalSource,
-      "function areFirstLaunchAgentHooksReady",
-      "function isAnyFirstLaunchBundledSkillInstalled",
+      'function areFirstLaunchAgentHooksReady',
+      'function isAnyFirstLaunchBundledSkillInstalled'
     );
 
-    expect(hookReadiness).toContain("FIRST_LAUNCH_HOOK_SKIP_WARNING_AGENT_IDS.some");
-    expect(hookReadiness).toContain("isFirstLaunchAgentHookReadyStatus");
-    expect(hookReadiness).not.toContain("FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS.every");
+    expect(hookReadiness).toContain('FIRST_LAUNCH_HOOK_SKIP_WARNING_AGENT_IDS.some');
+    expect(hookReadiness).toContain('isFirstLaunchAgentHookReadyStatus');
+    expect(hookReadiness).not.toContain('FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS.every');
 
     const warningStyles = sourceBetween(
       sidebarStylesSource,
-      ".ghostex-settings-shadcn .first-launch-setup-warning-backdrop {",
-      ".ghostex-settings-shadcn .first-launch-setup-warning-actions {",
+      '.ghostex-settings-shadcn .first-launch-setup-warning-backdrop {',
+      '.ghostex-settings-shadcn .first-launch-setup-warning-actions {'
     );
     /*
     CDXC:ModalRedesign 2026-08-24:
     The alert now uses the shared Codex surface tokens — raised card tone, one
     hairline, section radius — instead of the primary-tinted gradient panel.
     */
-    expect(warningStyles).toContain("background: var(--settings-raised);");
-    expect(warningStyles).toContain("border: 1px solid var(--settings-hairline);");
-    expect(warningStyles).toContain("border-radius: var(--settings-radius-section);");
-    expect(warningStyles).not.toContain("var(--popover) 96%");
-    expect(warningStyles).not.toContain("#f59e0b");
-    expect(warningStyles).not.toContain("#fcd34d");
+    expect(warningStyles).toContain('background: var(--settings-raised);');
+    expect(warningStyles).toContain('border: 1px solid var(--settings-hairline);');
+    expect(warningStyles).toContain('border-radius: var(--settings-radius-section);');
+    expect(warningStyles).not.toContain('var(--popover) 96%');
+    expect(warningStyles).not.toContain('#f59e0b');
+    expect(warningStyles).not.toContain('#fcd34d');
   });
 
-  test("shows Recommended as the leftmost default sidebar-style preset", () => {
+  test('shows Recommended as the leftmost default sidebar-style preset', () => {
     /*
     CDXC:FirstLaunchPreferences 2026-06-13-03:28:
     The first-launch defaults page must add Recommended to the left of Minimal,
@@ -119,21 +114,21 @@ describe("first launch setup modal source", () => {
     */
     const presetOrder = sourceBetween(
       firstLaunchSetupModalSource,
-      "const FIRST_LAUNCH_SIDEBAR_PRESET_ORDER",
-      "const FIRST_LAUNCH_SIDEBAR_PRESETS",
+      'const FIRST_LAUNCH_SIDEBAR_PRESET_ORDER',
+      'const FIRST_LAUNCH_SIDEBAR_PRESETS'
     );
 
     expect(presetOrder).toMatch(/"recommended",\s*"minimal",\s*"codex",\s*"detailed"/u);
 
     const presetOptionsStyles = sourceBetween(
       sidebarStylesSource,
-      ".ghostex-settings-shadcn .first-launch-setup-preset-options {",
-      ".ghostex-settings-shadcn .first-launch-setup-preset-button {",
+      '.ghostex-settings-shadcn .first-launch-setup-preset-options {',
+      '.ghostex-settings-shadcn .first-launch-setup-preset-button {'
     );
-    expect(presetOptionsStyles).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));");
+    expect(presetOptionsStyles).toContain('grid-template-columns: repeat(4, minmax(0, 1fr));');
   });
 
-  test("keeps defaults-page checkbox controls square", () => {
+  test('keeps defaults-page checkbox controls square', () => {
     /*
     CDXC:FirstLaunchPreferences 2026-06-13-05:27:
     The first-time defaults modal should show square checkbox controls instead
@@ -147,18 +142,16 @@ describe("first launch setup modal source", () => {
     */
     const checkboxStyles = sourceBetween(
       sidebarStylesSource,
-      ".ghostex-settings-shadcn .first-launch-setup-checkbox {",
-      ".ghostex-settings-shadcn .first-launch-setup-benefit + .first-launch-setup-benefit {",
+      '.ghostex-settings-shadcn .first-launch-setup-checkbox {',
+      '.ghostex-settings-shadcn .first-launch-setup-benefit + .first-launch-setup-benefit {'
     );
 
-    expect(checkboxStyles).toContain("appearance: none;");
-    expect(checkboxStyles).toContain("border-radius: var(--settings-radius-adaptive);");
-    expect(checkboxStyles).toContain(
-      ".ghostex-settings-shadcn .first-launch-setup-checkbox:checked::after",
-    );
+    expect(checkboxStyles).toContain('appearance: none;');
+    expect(checkboxStyles).toContain('border-radius: var(--settings-radius-adaptive);');
+    expect(checkboxStyles).toContain('.ghostex-settings-shadcn .first-launch-setup-checkbox:checked::after');
   });
 
-  test("uses the latest-release redirect for Android APK downloads", () => {
+  test('uses the latest-release redirect for Android APK downloads', () => {
     /*
     CDXC:FirstLaunchSetup 2026-06-16-01:04:
     First-launch Android APK buttons must use a latest-release redirect instead
@@ -167,17 +160,17 @@ describe("first launch setup modal source", () => {
     */
     const androidDownloadUrlDefinition = sourceBetween(
       firstLaunchSetupModalSource,
-      "const FIRST_LAUNCH_ANDROID_APK_URL",
-      "const FIRST_LAUNCH_DISCORD_URL",
+      'const FIRST_LAUNCH_ANDROID_APK_URL',
+      'const FIRST_LAUNCH_DISCORD_URL'
     );
 
     expect(androidDownloadUrlDefinition).toContain(
-      "https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk",
+      'https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk'
     );
     expect(androidDownloadUrlDefinition).not.toMatch(/releases\/download\/v\d/u);
   });
 
-  test("preserves unavailable gxserver-owned default prompt agents on the preferences page", () => {
+  test('preserves unavailable gxserver-owned default prompt agents on the preferences page', () => {
     /*
     CDXC:GxserverAgentSettings 2026-06-19-08:58:
     First-launch preferences can save unrelated defaults, so the default-agent
@@ -186,12 +179,12 @@ describe("first launch setup modal source", () => {
     */
     const preferencesPage = sourceBetween(
       firstLaunchSetupModalSource,
-      "function FirstLaunchPreferencesPage",
-      "function FirstLaunchHooksPage",
+      'function FirstLaunchPreferencesPage',
+      'function FirstLaunchHooksPage'
     );
 
-    expect(preferencesPage).toContain("const firstLaunchPromptAgentOptions = firstLaunchPromptAgentHasSavedDefault");
-    expect(preferencesPage).toContain("Unavailable (${normalizedDefaultPromptAgentId})");
-    expect(preferencesPage).toContain("const selectedDefaultPromptAgentId = normalizedDefaultPromptAgentId;");
+    expect(preferencesPage).toContain('const firstLaunchPromptAgentOptions = firstLaunchPromptAgentHasSavedDefault');
+    expect(preferencesPage).toContain('Unavailable (${normalizedDefaultPromptAgentId})');
+    expect(preferencesPage).toContain('const selectedDefaultPromptAgentId = normalizedDefaultPromptAgentId;');
   });
 });

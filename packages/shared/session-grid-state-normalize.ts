@@ -4,16 +4,14 @@ import {
   clampVisibleSessionCount,
   createDefaultSessionGridSnapshot,
   getOrderedSessions,
-} from "./session-grid-contract";
+} from './session-grid-contract';
 import {
   normalizeFullscreenRestoreVisibleCount,
   normalizeSessionRecord,
   normalizeVisibleSessionIds,
-} from "./session-grid-state-helpers";
+} from './session-grid-state-helpers';
 
-export function normalizeSessionGridSnapshot(
-  snapshot: SessionGridSnapshot | undefined,
-): SessionGridSnapshot {
+export function normalizeSessionGridSnapshot(snapshot: SessionGridSnapshot | undefined): SessionGridSnapshot {
   const normalizedSnapshot = snapshot ?? createDefaultSessionGridSnapshot();
   const orderedSessions = getOrderedSessions({
     ...normalizedSnapshot,
@@ -31,14 +29,14 @@ export function normalizeSessionGridSnapshot(
     orderedSessions,
     normalizedSnapshot.visibleSessionIds,
     Math.min(visibleCount, orderedSessions.length),
-    focusedSessionId,
+    focusedSessionId
   );
 
   return {
     focusedSessionId,
     fullscreenRestoreVisibleCount: normalizeFullscreenRestoreVisibleCount(
       normalizedSnapshot.fullscreenRestoreVisibleCount,
-      visibleCount,
+      visibleCount
     ),
     /**
      * CDXC:PaneFocus 2026-05-15-13:31:

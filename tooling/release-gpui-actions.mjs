@@ -1,19 +1,19 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
-import { resolvePublishRecoveryInputs } from "./release-gpui/publish-provenance.mjs";
-import { isAllowedReleaseWorkflowName } from "./release-gpui/provenance.mjs";
+import { resolvePublishRecoveryInputs } from './release-gpui/publish-provenance.mjs';
+import { isAllowedReleaseWorkflowName } from './release-gpui/provenance.mjs';
 
-const repo = "maddada/Ghostex";
+const repo = 'maddada/Ghostex';
 
 function run(command, args, options = {}) {
   const output = execFileSync(command, args, {
-    cwd: new URL("..", import.meta.url),
-    encoding: "utf8",
-    stdio: options.capture === false ? "inherit" : "pipe",
+    cwd: new URL('..', import.meta.url),
+    encoding: 'utf8',
+    stdio: options.capture === false ? 'inherit' : 'pipe',
   });
-  return typeof output === "string" ? output.trim() : "";
+  return typeof output === 'string' ? output.trim() : '';
 }
 
 function sleep(milliseconds) {
@@ -59,21 +59,21 @@ Planning options (scope flags express intent; the plan decides build/reuse/skip)
 }
 
 function parseArgs(argv) {
-  if (argv.includes("--help") || argv.includes("-h")) {
+  if (argv.includes('--help') || argv.includes('-h')) {
     console.log(usage());
     process.exit(0);
   }
-  const [command = "start", version, ...rest] = argv;
-  if (!["start", "publish", "amend"].includes(command)) throw new Error(`Unknown command: ${command}`);
-  if (!/^\d+\.\d+\.\d+$/u.test(version ?? "")) throw new Error("Pass a MAJOR.MINOR.PATCH version");
-  const amendDefaults = command === "amend";
+  const [command = 'start', version, ...rest] = argv;
+  if (!['start', 'publish', 'amend'].includes(command)) throw new Error(`Unknown command: ${command}`);
+  if (!/^\d+\.\d+\.\d+$/u.test(version ?? '')) throw new Error('Pass a MAJOR.MINOR.PATCH version');
+  const amendDefaults = command === 'amend';
   const options = {
     android: !amendDefaults,
     dryRun: false,
     forceAll: false,
-    forceProducts: "",
+    forceProducts: '',
     skipLocalTests: false,
-    reuseFromRunId: "",
+    reuseFromRunId: '',
     gxserverLinuxArm64: !amendDefaults,
     gxserverLinuxX64: !amendDefaults,
     gxserverWslWindowsArm64: !amendDefaults,
@@ -83,20 +83,20 @@ function parseArgs(argv) {
     linuxTar: !amendDefaults,
     macos: !amendDefaults,
     prerelease: false,
-    sourceRunId: "",
+    sourceRunId: '',
     updateSparkle: true,
     windowsArm64: !amendDefaults,
-    windowsSigning: "auto",
+    windowsSigning: 'auto',
     windowsX64: !amendDefaults,
   };
   const rejectSkipOnAmend = (flag) => {
-    if (command === "amend") {
+    if (command === 'amend') {
       throw new Error(`amend is opt-in; use the matching --windows/--macos/--gxserver flag instead of ${flag}`);
     }
   };
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index];
-    if (arg === "--only-macos") {
+    if (arg === '--only-macos') {
       rejectSkipOnAmend(arg);
       Object.assign(options, {
         android: false,
@@ -111,97 +111,97 @@ function parseArgs(argv) {
         windowsArm64: false,
         windowsX64: false,
       });
-    } else if (arg === "--skip-macos") {
+    } else if (arg === '--skip-macos') {
       rejectSkipOnAmend(arg);
       options.macos = false;
-    } else if (arg === "--macos") options.macos = true;
-    else if (arg === "--linux") options.linuxDeb = options.linuxRpm = options.linuxTar = true;
-    else if (arg === "--linux-deb") options.linuxDeb = true;
-    else if (arg === "--linux-rpm") options.linuxRpm = true;
-    else if (arg === "--linux-tar") options.linuxTar = true;
-    else if (arg === "--windows") options.windowsX64 = options.windowsArm64 = true;
-    else if (arg === "--windows-x64") options.windowsX64 = true;
-    else if (arg === "--windows-arm64") options.windowsArm64 = true;
-    else if (arg === "--android") options.android = true;
-    else if (arg === "--gxserver") options.gxserverLinuxX64 = options.gxserverLinuxArm64 = true;
-    else if (arg === "--gxserver-linux-x64") options.gxserverLinuxX64 = true;
-    else if (arg === "--gxserver-linux-arm64") options.gxserverLinuxArm64 = true;
-    else if (arg === "--wsl" || arg === "--gxserver-wsl") {
+    } else if (arg === '--macos') options.macos = true;
+    else if (arg === '--linux') options.linuxDeb = options.linuxRpm = options.linuxTar = true;
+    else if (arg === '--linux-deb') options.linuxDeb = true;
+    else if (arg === '--linux-rpm') options.linuxRpm = true;
+    else if (arg === '--linux-tar') options.linuxTar = true;
+    else if (arg === '--windows') options.windowsX64 = options.windowsArm64 = true;
+    else if (arg === '--windows-x64') options.windowsX64 = true;
+    else if (arg === '--windows-arm64') options.windowsArm64 = true;
+    else if (arg === '--android') options.android = true;
+    else if (arg === '--gxserver') options.gxserverLinuxX64 = options.gxserverLinuxArm64 = true;
+    else if (arg === '--gxserver-linux-x64') options.gxserverLinuxX64 = true;
+    else if (arg === '--gxserver-linux-arm64') options.gxserverLinuxArm64 = true;
+    else if (arg === '--wsl' || arg === '--gxserver-wsl') {
       options.gxserverWslWindowsX64 = options.gxserverWslWindowsArm64 = true;
-    } else if (arg === "--gxserver-wsl-x64") options.gxserverWslWindowsX64 = true;
-    else if (arg === "--gxserver-wsl-arm64") options.gxserverWslWindowsArm64 = true;
-    else if (arg === "--skip-linux") {
+    } else if (arg === '--gxserver-wsl-x64') options.gxserverWslWindowsX64 = true;
+    else if (arg === '--gxserver-wsl-arm64') options.gxserverWslWindowsArm64 = true;
+    else if (arg === '--skip-linux') {
       rejectSkipOnAmend(arg);
       options.linuxDeb = options.linuxRpm = options.linuxTar = false;
-    } else if (arg === "--skip-linux-deb") {
+    } else if (arg === '--skip-linux-deb') {
       rejectSkipOnAmend(arg);
       options.linuxDeb = false;
-    } else if (arg === "--skip-linux-rpm") {
+    } else if (arg === '--skip-linux-rpm') {
       rejectSkipOnAmend(arg);
       options.linuxRpm = false;
-    } else if (arg === "--skip-linux-tar") {
+    } else if (arg === '--skip-linux-tar') {
       rejectSkipOnAmend(arg);
       options.linuxTar = false;
-    } else if (arg === "--skip-windows") {
+    } else if (arg === '--skip-windows') {
       rejectSkipOnAmend(arg);
       options.windowsX64 = options.windowsArm64 = false;
-    } else if (arg === "--skip-windows-x64") {
+    } else if (arg === '--skip-windows-x64') {
       rejectSkipOnAmend(arg);
       options.windowsX64 = false;
-    } else if (arg === "--skip-windows-arm64") {
+    } else if (arg === '--skip-windows-arm64') {
       rejectSkipOnAmend(arg);
       options.windowsArm64 = false;
-    } else if (arg === "--skip-android") {
+    } else if (arg === '--skip-android') {
       rejectSkipOnAmend(arg);
       options.android = false;
-    } else if (arg === "--skip-gxserver-linux-x64") {
+    } else if (arg === '--skip-gxserver-linux-x64') {
       rejectSkipOnAmend(arg);
       options.gxserverLinuxX64 = false;
-    } else if (arg === "--skip-gxserver-linux-arm64") {
+    } else if (arg === '--skip-gxserver-linux-arm64') {
       rejectSkipOnAmend(arg);
       options.gxserverLinuxArm64 = false;
-    } else if (arg === "--skip-gxserver-wsl") {
+    } else if (arg === '--skip-gxserver-wsl') {
       rejectSkipOnAmend(arg);
       options.gxserverWslWindowsX64 = false;
       options.gxserverWslWindowsArm64 = false;
-    } else if (arg === "--skip-gxserver-wsl-x64") {
+    } else if (arg === '--skip-gxserver-wsl-x64') {
       rejectSkipOnAmend(arg);
       options.gxserverWslWindowsX64 = false;
-    } else if (arg === "--skip-gxserver-wsl-arm64") {
+    } else if (arg === '--skip-gxserver-wsl-arm64') {
       rejectSkipOnAmend(arg);
       options.gxserverWslWindowsArm64 = false;
-    } else if (arg === "--skip-sparkle") options.updateSparkle = false;
-    else if (arg === "--prerelease") options.prerelease = true;
-    else if (arg === "--dry-run") options.dryRun = true;
-    else if (arg === "--skip-local-tests") options.skipLocalTests = true;
-    else if (arg === "--force-all") options.forceAll = true;
-    else if (arg === "--force") {
-      options.forceProducts = rest[index + 1] ?? "";
+    } else if (arg === '--skip-sparkle') options.updateSparkle = false;
+    else if (arg === '--prerelease') options.prerelease = true;
+    else if (arg === '--dry-run') options.dryRun = true;
+    else if (arg === '--skip-local-tests') options.skipLocalTests = true;
+    else if (arg === '--force-all') options.forceAll = true;
+    else if (arg === '--force') {
+      options.forceProducts = rest[index + 1] ?? '';
       index += 1;
-    } else if (arg === "--reuse-from-run") {
-      options.reuseFromRunId = rest[index + 1] ?? "";
+    } else if (arg === '--reuse-from-run') {
+      options.reuseFromRunId = rest[index + 1] ?? '';
       index += 1;
-    } else if (arg === "--windows-signing") {
-      options.windowsSigning = rest[index + 1] ?? "";
+    } else if (arg === '--windows-signing') {
+      options.windowsSigning = rest[index + 1] ?? '';
       index += 1;
-    } else if (arg === "--source-run-id") {
-      options.sourceRunId = rest[index + 1] ?? "";
+    } else if (arg === '--source-run-id') {
+      options.sourceRunId = rest[index + 1] ?? '';
       index += 1;
     } else {
       throw new Error(`Unknown option: ${arg}`);
     }
   }
-  if (!["auto", "required", "off"].includes(options.windowsSigning)) {
-    throw new Error("--windows-signing must be auto, required, or off");
+  if (!['auto', 'required', 'off'].includes(options.windowsSigning)) {
+    throw new Error('--windows-signing must be auto, required, or off');
   }
-  if (command === "publish" && !/^\d+$/u.test(options.sourceRunId)) {
-    throw new Error("publish requires --source-run-id <GitHub Actions run id>");
+  if (command === 'publish' && !/^\d+$/u.test(options.sourceRunId)) {
+    throw new Error('publish requires --source-run-id <GitHub Actions run id>');
   }
   if (options.forceAll && options.forceProducts) {
-    throw new Error("--force-all already rebuilds everything; drop --force");
+    throw new Error('--force-all already rebuilds everything; drop --force');
   }
   if (options.reuseFromRunId && !/^\d+$/u.test(options.reuseFromRunId)) {
-    throw new Error("--reuse-from-run must be a GitHub Actions run id");
+    throw new Error('--reuse-from-run must be a GitHub Actions run id');
   }
   return { command, options, version };
 }
@@ -220,33 +220,26 @@ function validateScope(options, command) {
     options.gxserverWslWindowsX64,
     options.gxserverWslWindowsArm64,
   ];
-  if (!enabled.some(Boolean)) throw new Error("At least one platform must be enabled");
+  if (!enabled.some(Boolean)) throw new Error('At least one platform must be enabled');
   if (options.prerelease && options.updateSparkle) {
-    throw new Error("A prerelease requires --skip-sparkle");
+    throw new Error('A prerelease requires --skip-sparkle');
   }
-  if (command === "amend") {
-    if (options.prerelease) throw new Error("amend requires an existing public stable release");
+  if (command === 'amend') {
+    if (options.prerelease) throw new Error('amend requires an existing public stable release');
     return;
   }
-  if (options.updateSparkle && !options.macos) throw new Error("--skip-macos requires --skip-sparkle");
+  if (options.updateSparkle && !options.macos) throw new Error('--skip-macos requires --skip-sparkle');
   if (options.macos && (!options.gxserverLinuxX64 || !options.gxserverLinuxArm64)) {
-    throw new Error("macOS requires both gxserver Linux runtimes");
+    throw new Error('macOS requires both gxserver Linux runtimes');
   }
   if (
-    (options.linuxDeb ||
-      options.linuxRpm ||
-      options.linuxTar ||
-      options.windowsX64 ||
-      options.gxserverWslWindowsX64) &&
+    (options.linuxDeb || options.linuxRpm || options.linuxTar || options.windowsX64 || options.gxserverWslWindowsX64) &&
     !options.gxserverLinuxX64
   ) {
-    throw new Error("Enabled x64 packages require gxserver Linux x64");
+    throw new Error('Enabled x64 packages require gxserver Linux x64');
   }
-  if (
-    (options.windowsArm64 || options.gxserverWslWindowsArm64) &&
-    !options.gxserverLinuxArm64
-  ) {
-    throw new Error("Enabled ARM64 packages require gxserver Linux ARM64");
+  if ((options.windowsArm64 || options.gxserverWslWindowsArm64) && !options.gxserverLinuxArm64) {
+    throw new Error('Enabled ARM64 packages require gxserver Linux ARM64');
   }
 }
 
@@ -263,35 +256,35 @@ function requiresGpuiReferenceContract(options) {
 
 function expectedPlatforms(options) {
   return [
-    options.macos && "macos-arm64",
-    options.linuxDeb && "linux-deb-x64",
-    options.linuxRpm && "linux-rpm-x64",
-    options.linuxTar && "linux-tar-x64",
-    options.windowsX64 && "windows-x64",
-    options.windowsArm64 && "windows-arm64",
-    options.android && "android",
-    options.gxserverLinuxX64 && "gxserver-linux-x64",
-    options.gxserverLinuxArm64 && "gxserver-linux-arm64",
-    options.gxserverWslWindowsX64 && "gxserver-wsl-windows-x64",
-    options.gxserverWslWindowsArm64 && "gxserver-wsl-windows-arm64",
+    options.macos && 'macos-arm64',
+    options.linuxDeb && 'linux-deb-x64',
+    options.linuxRpm && 'linux-rpm-x64',
+    options.linuxTar && 'linux-tar-x64',
+    options.windowsX64 && 'windows-x64',
+    options.windowsArm64 && 'windows-arm64',
+    options.android && 'android',
+    options.gxserverLinuxX64 && 'gxserver-linux-x64',
+    options.gxserverLinuxArm64 && 'gxserver-linux-arm64',
+    options.gxserverWslWindowsX64 && 'gxserver-wsl-windows-x64',
+    options.gxserverWslWindowsArm64 && 'gxserver-wsl-windows-arm64',
   ].filter(Boolean);
 }
 
 function validateLocalSource(version, { allowExistingTag, requireExistingTag = false }) {
-  run("gh", ["auth", "status"], { capture: false });
-  const branch = run("git", ["branch", "--show-current"]);
-  if (branch !== "main") throw new Error(`Release source must be main, got ${branch}`);
-  const status = run("git", ["status", "--porcelain", "--untracked-files=all"]);
+  run('gh', ['auth', 'status'], { capture: false });
+  const branch = run('git', ['branch', '--show-current']);
+  if (branch !== 'main') throw new Error(`Release source must be main, got ${branch}`);
+  const status = run('git', ['status', '--porcelain', '--untracked-files=all']);
   if (status) throw new Error(`Release source is dirty:\n${status}`);
-  run("git", ["fetch", "origin", "main", "--tags"], { capture: false });
-  const head = run("git", ["rev-parse", "HEAD"]);
-  const remoteMain = run("git", ["rev-parse", "origin/main"]);
+  run('git', ['fetch', 'origin', 'main', '--tags'], { capture: false });
+  const head = run('git', ['rev-parse', 'HEAD']);
+  const remoteMain = run('git', ['rev-parse', 'origin/main']);
   if (head !== remoteMain) throw new Error(`Local main ${head} differs from origin/main ${remoteMain}`);
-  const packageVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  const packageVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
   if (packageVersion !== version) throw new Error(`package.json is ${packageVersion}; expected ${version}`);
-  const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
+  const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
   if (!changelog.includes(`## ${version} -`)) throw new Error(`CHANGELOG.md has no ${version} section`);
-  const tag = run("git", ["ls-remote", "--tags", "origin", `refs/tags/v${version}`]);
+  const tag = run('git', ['ls-remote', '--tags', 'origin', `refs/tags/v${version}`]);
   if (tag && !allowExistingTag) throw new Error(`v${version} already exists`);
   if (requireExistingTag && !tag) throw new Error(`v${version} does not exist; amend requires a public tag`);
   return head;
@@ -301,7 +294,7 @@ function configuredSecrets() {
   const attempts = 3;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const json = run("gh", ["secret", "list", "--repo", repo, "--json", "name"]);
+      const json = run('gh', ['secret', 'list', '--repo', repo, '--json', 'name']);
       return new Set(json ? JSON.parse(json).map(({ name }) => name) : []);
     } catch (error) {
       if (attempt === attempts) throw error;
@@ -309,46 +302,46 @@ function configuredSecrets() {
       sleep(attempt * 1500);
     }
   }
-  throw new Error("Unable to read GitHub repository secrets");
+  throw new Error('Unable to read GitHub repository secrets');
 }
 
 function requireSecrets(secrets, label, names) {
   const missing = names.filter((name) => !secrets.has(name));
-  if (missing.length > 0) throw new Error(`${label} requires repository secrets: ${missing.join(", ")}`);
+  if (missing.length > 0) throw new Error(`${label} requires repository secrets: ${missing.join(', ')}`);
 }
 
 function resolveWindowsSigning(options, secrets) {
   if (!options.windowsX64 && !options.windowsArm64) return false;
-  const names = ["WINDOWS_CODE_SIGN_PFX_BASE64", "WINDOWS_CODE_SIGN_PFX_PASSWORD"];
+  const names = ['WINDOWS_CODE_SIGN_PFX_BASE64', 'WINDOWS_CODE_SIGN_PFX_PASSWORD'];
   const available = names.every((name) => secrets.has(name));
-  if (options.windowsSigning === "required" && !available) {
-    requireSecrets(secrets, "Windows signing", names);
+  if (options.windowsSigning === 'required' && !available) {
+    requireSecrets(secrets, 'Windows signing', names);
   }
-  if (options.windowsSigning === "off") return false;
+  if (options.windowsSigning === 'off') return false;
   return available;
 }
 
 function validateRequiredSecrets(options, secrets) {
   if (options.macos) {
-    requireSecrets(secrets, "macOS signing", [
-      "APPLE_DEVELOPER_ID_P12_BASE64",
-      "APPLE_DEVELOPER_ID_P12_PASSWORD",
-      "APPLE_KEYCHAIN_PASSWORD",
+    requireSecrets(secrets, 'macOS signing', [
+      'APPLE_DEVELOPER_ID_P12_BASE64',
+      'APPLE_DEVELOPER_ID_P12_PASSWORD',
+      'APPLE_KEYCHAIN_PASSWORD',
     ]);
-    const notaryKey = ["APPLE_NOTARY_KEY_BASE64", "APPLE_NOTARY_KEY_ID", "APPLE_NOTARY_ISSUER_ID"];
-    const notaryAppleId = ["APPLE_NOTARY_APPLE_ID", "APPLE_NOTARY_TEAM_ID", "APPLE_NOTARY_APP_PASSWORD"];
+    const notaryKey = ['APPLE_NOTARY_KEY_BASE64', 'APPLE_NOTARY_KEY_ID', 'APPLE_NOTARY_ISSUER_ID'];
+    const notaryAppleId = ['APPLE_NOTARY_APPLE_ID', 'APPLE_NOTARY_TEAM_ID', 'APPLE_NOTARY_APP_PASSWORD'];
     if (!notaryKey.every((name) => secrets.has(name)) && !notaryAppleId.every((name) => secrets.has(name))) {
-      throw new Error("macOS notarization secrets are incomplete");
+      throw new Error('macOS notarization secrets are incomplete');
     }
   }
-  if (options.updateSparkle) requireSecrets(secrets, "Sparkle", ["SPARKLE_PRIVATE_KEY"]);
+  if (options.updateSparkle) requireSecrets(secrets, 'Sparkle', ['SPARKLE_PRIVATE_KEY']);
   if (options.android) {
-    requireSecrets(secrets, "Android signing", [
-      "ANDROID_RELEASE_KEYSTORE_BASE64",
-      "ANDROID_RELEASE_STORE_PASSWORD",
-      "ANDROID_RELEASE_KEY_ALIAS",
-      "ANDROID_RELEASE_KEY_PASSWORD",
-      "GHOSTEX_MOBILE_DEPLOY_KEY",
+    requireSecrets(secrets, 'Android signing', [
+      'ANDROID_RELEASE_KEYSTORE_BASE64',
+      'ANDROID_RELEASE_STORE_PASSWORD',
+      'ANDROID_RELEASE_KEY_ALIAS',
+      'ANDROID_RELEASE_KEY_PASSWORD',
+      'GHOSTEX_MOBILE_DEPLOY_KEY',
     ]);
   }
 }
@@ -377,17 +370,17 @@ function previewPlan(version, options, windowsSigned, { required }) {
     windowsArm64: options.windowsArm64,
     windowsX64: options.windowsX64,
   };
-  const args = ["tooling/release-gpui/plan-cli.mjs", version, "--scope-json", JSON.stringify(scope)];
-  if (options.forceAll) args.push("--force-all");
-  else if (options.forceProducts) args.push("--force", options.forceProducts);
-  if (options.reuseFromRunId) args.push("--reuse-from-run", options.reuseFromRunId);
+  const args = ['tooling/release-gpui/plan-cli.mjs', version, '--scope-json', JSON.stringify(scope)];
+  if (options.forceAll) args.push('--force-all');
+  else if (options.forceProducts) args.push('--force', options.forceProducts);
+  if (options.reuseFromRunId) args.push('--reuse-from-run', options.reuseFromRunId);
   try {
-    run("node", args, { capture: false });
+    run('node', args, { capture: false });
   } catch (error) {
     if (required) throw error;
     console.warn(
       `Could not compute the local plan preview (${error instanceof Error ? error.message : String(error)}). ` +
-        "The prepare job computes the authoritative plan on the runner.",
+        'The prepare job computes the authoritative plan on the runner.'
     );
   }
 }
@@ -395,9 +388,9 @@ function previewPlan(version, options, windowsSigned, { required }) {
 /* The publish path keys off the source run's recorded plan, never re-typed flags. */
 function recordedPlanFor(sourceRunId) {
   const destination = `build/release-gpui/source-run-${sourceRunId}`;
-  run("gh", ["run", "download", sourceRunId, "--repo", repo, "--name", "release-plan", "--dir", destination]);
+  run('gh', ['run', 'download', sourceRunId, '--repo', repo, '--name', 'release-plan', '--dir', destination]);
   const planPath = new URL(`../${destination}/release-plan.json`, import.meta.url);
-  const plan = JSON.parse(readFileSync(planPath, "utf8"));
+  const plan = JSON.parse(readFileSync(planPath, 'utf8'));
   if (plan.schemaVersion !== 1 || !Array.isArray(plan.expectedPlatforms) || plan.expectedPlatforms.length === 0) {
     throw new Error(`Source run ${sourceRunId} has an unreadable release plan; refusing publish-only recovery`);
   }
@@ -405,13 +398,13 @@ function recordedPlanFor(sourceRunId) {
 }
 
 function dispatch(workflow, fields, dryRun) {
-  const args = ["workflow", "run", workflow, "--repo", repo, "--ref", "main"];
-  for (const [name, value] of Object.entries(fields)) args.push("-f", `${name}=${value}`);
+  const args = ['workflow', 'run', workflow, '--repo', repo, '--ref', 'main'];
+  for (const [name, value] of Object.entries(fields)) args.push('-f', `${name}=${value}`);
   if (dryRun) {
     console.log(JSON.stringify({ fields, workflow }, null, 2));
     return;
   }
-  const output = run("gh", args);
+  const output = run('gh', args);
   const url = output.split(/\r?\n/u).find((line) => /\/actions\/runs\/\d+$/u.test(line.trim()));
   console.log(url ?? output);
 }
@@ -419,13 +412,13 @@ function dispatch(workflow, fields, dryRun) {
 const { command, options, version } = parseArgs(process.argv.slice(2));
 validateScope(options, command);
 const head = validateLocalSource(version, {
-  allowExistingTag: command === "publish" || command === "amend",
-  requireExistingTag: command === "amend",
+  allowExistingTag: command === 'publish' || command === 'amend',
+  requireExistingTag: command === 'amend',
 });
-if ((command === "start" || command === "amend") && requiresGpuiReferenceContract(options)) {
-  run("node", ["tooling/release-gpui/verify-reference-contract.mjs"], { capture: false });
+if ((command === 'start' || command === 'amend') && requiresGpuiReferenceContract(options)) {
+  run('node', ['tooling/release-gpui/verify-reference-contract.mjs'], { capture: false });
   /* Costs milliseconds here; discovering it on a runner cost 7.8.0 a 14-minute round. */
-  run("node", ["tooling/release-gpui/check-ghostty-zig-pin.mjs"], { capture: false });
+  run('node', ['tooling/release-gpui/check-ghostty-zig-pin.mjs'], { capture: false });
 }
 /*
  * CDXC:ReleaseLocalTestGate 2026-08-19:
@@ -444,21 +437,21 @@ if ((command === "start" || command === "amend") && requiresGpuiReferenceContrac
  * remote-only on purpose: those are the expensive gates, and prepare still runs
  * each of them exactly once.
  */
-if ((command === "start" || command === "amend") && !options.skipLocalTests) {
-  run("bun", ["run", "release:test"], { capture: false });
+if ((command === 'start' || command === 'amend') && !options.skipLocalTests) {
+  run('bun', ['run', 'release:test'], { capture: false });
 }
 const secrets = configuredSecrets();
 validateRequiredSecrets(options, secrets);
 const windowsSigned = resolveWindowsSigning(options, secrets);
 const platforms = expectedPlatforms(options);
 console.log(`Source: ${head}`);
-console.log(`Platforms: ${platforms.join(", ")}`);
-console.log(`Windows signing: ${windowsSigned ? "enabled" : "disabled"}`);
+console.log(`Platforms: ${platforms.join(', ')}`);
+console.log(`Windows signing: ${windowsSigned ? 'enabled' : 'disabled'}`);
 
-if (command === "start") {
+if (command === 'start') {
   previewPlan(version, options, windowsSigned, { required: options.dryRun });
   dispatch(
-    "release-gpui.yml",
+    'release-gpui.yml',
     {
       android: options.android,
       force_all: options.forceAll,
@@ -479,12 +472,12 @@ if (command === "start") {
       windows_arm64: options.windowsArm64,
       windows_x64: options.windowsX64,
     },
-    options.dryRun,
+    options.dryRun
   );
-} else if (command === "amend") {
-  console.log("Amend is opt-in; the runner expands pack/companion dependencies against the live provenance.");
+} else if (command === 'amend') {
+  console.log('Amend is opt-in; the runner expands pack/companion dependencies against the live provenance.');
   dispatch(
-    "release-amend-existing.yml",
+    'release-amend-existing.yml',
     {
       android: options.android,
       gxserver_linux_arm64: options.gxserverLinuxArm64,
@@ -501,25 +494,17 @@ if (command === "start") {
       windows_arm64: options.windowsArm64,
       windows_x64: options.windowsX64,
     },
-    options.dryRun,
+    options.dryRun
   );
 } else {
   const sourceRun = JSON.parse(
-    run("gh", [
-      "run",
-      "view",
-      options.sourceRunId,
-      "--repo",
-      repo,
-      "--json",
-      "event,headSha,status,url,workflowName",
-    ]),
+    run('gh', ['run', 'view', options.sourceRunId, '--repo', repo, '--json', 'event,headSha,status,url,workflowName'])
   );
-  if (sourceRun.status !== "completed") throw new Error(`Source run is ${sourceRun.status}: ${sourceRun.url}`);
-  if (!isAllowedReleaseWorkflowName(sourceRun.workflowName) || sourceRun.event !== "workflow_dispatch") {
+  if (sourceRun.status !== 'completed') throw new Error(`Source run is ${sourceRun.status}: ${sourceRun.url}`);
+  if (!isAllowedReleaseWorkflowName(sourceRun.workflowName) || sourceRun.event !== 'workflow_dispatch') {
     throw new Error(`Source run is not a dispatched Ghostex release workflow: ${sourceRun.url}`);
   }
-  run("git", ["merge-base", "--is-ancestor", sourceRun.headSha, head]);
+  run('git', ['merge-base', '--is-ancestor', sourceRun.headSha, head]);
   /*
    * Publish-only recovery reuses exactly what the source run resolved. Re-typing
    * the scope flags could silently publish a different artifact set than the one
@@ -535,26 +520,23 @@ if (command === "start") {
   const flagDrift = platforms.filter((platform) => !recordedPlatforms.includes(platform));
   if (scopeDrift.length > 0 || flagDrift.length > 0) {
     console.warn(
-      `Scope flags describe ${platforms.join(", ")}, but the source run's plan resolved ` +
-        `${recordedPlatforms.join(", ")}. Publishing the recorded plan.`,
+      `Scope flags describe ${platforms.join(', ')}, but the source run's plan resolved ` +
+        `${recordedPlatforms.join(', ')}. Publishing the recorded plan.`
     );
   }
-  const sourceArtifacts = JSON.parse(
-    run("gh", [
-      "api",
-      `repos/${repo}/actions/runs/${options.sourceRunId}/artifacts?per_page=100`,
-    ]),
-  ).artifacts ?? [];
+  const sourceArtifacts =
+    JSON.parse(run('gh', ['api', `repos/${repo}/actions/runs/${options.sourceRunId}/artifacts?per_page=100`]))
+      .artifacts ?? [];
   const availableArtifacts = new Set(
-    sourceArtifacts.filter((artifact) => !artifact.expired).map((artifact) => artifact.name),
+    sourceArtifacts.filter((artifact) => !artifact.expired).map((artifact) => artifact.name)
   );
   const missingArtifacts = recordedPlatforms
     .map((platform) => `release-${platform}`)
     .filter((name) => !availableArtifacts.has(name));
   if (missingArtifacts.length > 0) {
-    throw new Error(`Source run is missing non-expired artifacts: ${missingArtifacts.join(", ")}`);
+    throw new Error(`Source run is missing non-expired artifacts: ${missingArtifacts.join(', ')}`);
   }
-  console.log(`Recorded plan: ${recordedPlatforms.join(", ")}`);
+  console.log(`Recorded plan: ${recordedPlatforms.join(', ')}`);
   /*
    * Not only the platform list: prerelease, Sparkle, and Windows signing also
    * come from the recorded plan. Re-typed flags describe what the operator
@@ -573,7 +555,7 @@ if (command === "start") {
   }
   console.log(
     `Recorded switches: prerelease=${recovery.prerelease}, sparkle=${recovery.updateSparkle}, ` +
-      `windows-signed=${recovery.windowsSigned}`,
+      `windows-signed=${recovery.windowsSigned}`
   );
   /*
    * The plan itself is deliberately not re-uploaded as a dispatch input: the
@@ -583,15 +565,15 @@ if (command === "start") {
    * different artifact set than the one being published.
    */
   dispatch(
-    "release-gpui-publish.yml",
+    'release-gpui-publish.yml',
     {
-      expected_platforms: recordedPlatforms.join(","),
+      expected_platforms: recordedPlatforms.join(','),
       prerelease: recovery.prerelease,
       source_run_id: options.sourceRunId,
       update_sparkle: recovery.updateSparkle,
       version,
       windows_signed: recovery.windowsSigned,
     },
-    options.dryRun,
+    options.dryRun
   );
 }

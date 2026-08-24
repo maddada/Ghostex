@@ -424,7 +424,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    pub(crate) fn render_workspace_tab_sleep_icon(&self, session_id: TerminalSessionId) -> AnyElement {
+    pub(crate) fn render_workspace_tab_sleep_icon(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> AnyElement {
         div()
             .id(format!(
                 "ghostex-gpui-workspace-tab-sleep-icon-{}",
@@ -727,7 +730,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    pub(crate) fn render_workspace_tab_action_icon(&self, icon: WorkspaceTabActionIcon) -> AnyElement {
+    pub(crate) fn render_workspace_tab_action_icon(
+        &self,
+        icon: WorkspaceTabActionIcon,
+    ) -> AnyElement {
         let path = match icon {
             WorkspaceTabActionIcon::NewTerminal => COMMAND_ICON_PLUS,
             WorkspaceTabActionIcon::NewBrowser => BROWSER_ICON_WORLD,
@@ -740,5 +746,4 @@ impl GhostexGpuiApp {
         )
         .into_any_element()
     }
-
 }

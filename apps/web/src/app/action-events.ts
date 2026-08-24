@@ -1,15 +1,15 @@
 import type {
   GxserverExportSessionTranscriptResult,
   GxserverSidebarHudCommandButton,
-} from "@/packages/shared/gxserver-protocol";
-import type { OpenAppModalMessage } from "@/packages/core-ui/app-modal-host-bridge";
+} from '@/packages/shared/gxserver-protocol';
+import type { OpenAppModalMessage } from '@/packages/core-ui/app-modal-host-bridge';
 
 export type OpenRecentProjectsModalDetail = Pick<
-  Extract<OpenAppModalMessage, { modal: "recentProjects" }>,
-  "machineId" | "machineName"
+  Extract<OpenAppModalMessage, { modal: 'recentProjects' }>,
+  'machineId' | 'machineName'
 >;
 
-export type OpenDelayedActionsModalDetail = Extract<OpenAppModalMessage, { modal: "delayedSend" }>;
+export type OpenDelayedActionsModalDetail = Extract<OpenAppModalMessage, { modal: 'delayedSend' }>;
 
 /*
  * CDXC:AddProject 2026-07-30:
@@ -47,11 +47,12 @@ export interface ExportTranscriptSessionRef {
   agentId?: string;
 }
 
-export type ExportTranscriptStatusDetail = ExportTranscriptSessionRef & (
-  | { status: "exporting" }
-  | { status: "exported"; result: GxserverExportSessionTranscriptResult }
-  | { status: "failed"; message: string }
-);
+export type ExportTranscriptStatusDetail = ExportTranscriptSessionRef &
+  (
+    | { status: 'exporting' }
+    | { status: 'exported'; result: GxserverExportSessionTranscriptResult }
+    | { status: 'failed'; message: string }
+  );
 
 export interface RunTitlebarActionDetail {
   action: GxserverSidebarHudCommandButton;
@@ -61,13 +62,13 @@ export interface RunTitlebarActionDetail {
 
 declare global {
   interface WindowEventMap {
-    "ghostex-web:closeAppModal": CustomEvent;
-    "ghostex-web:exportTranscriptStatus": CustomEvent<ExportTranscriptStatusDetail>;
-    "ghostex-web:openSettingsModal": CustomEvent;
-    "ghostex-web:openAddProjectModal": CustomEvent<OpenAddProjectModalDetail>;
-    "ghostex-web:openCommandPane": CustomEvent;
-    "ghostex-web:openDelayedActionsModal": CustomEvent<OpenDelayedActionsModalDetail>;
-    "ghostex-web:openRecentProjectsModal": CustomEvent<OpenRecentProjectsModalDetail>;
-    "ghostex-web:runTitlebarAction": CustomEvent<RunTitlebarActionDetail>;
+    'ghostex-web:closeAppModal': CustomEvent;
+    'ghostex-web:exportTranscriptStatus': CustomEvent<ExportTranscriptStatusDetail>;
+    'ghostex-web:openSettingsModal': CustomEvent;
+    'ghostex-web:openAddProjectModal': CustomEvent<OpenAddProjectModalDetail>;
+    'ghostex-web:openCommandPane': CustomEvent;
+    'ghostex-web:openDelayedActionsModal': CustomEvent<OpenDelayedActionsModalDetail>;
+    'ghostex-web:openRecentProjectsModal': CustomEvent<OpenRecentProjectsModalDetail>;
+    'ghostex-web:runTitlebarAction': CustomEvent<RunTitlebarActionDetail>;
   }
 }

@@ -42,7 +42,7 @@ function isEscaped(text: string, index: number): boolean {
   for (let i = index - 1; i >= 0 && text[i] === '\\'; i -= 1) {
     slashCount += 1;
   }
-  return (slashCount % 2) === 1;
+  return slashCount % 2 === 1;
 }
 
 function isWhitespace(char: string | undefined): boolean {
@@ -65,7 +65,7 @@ export function resolveFencedDisplayMathInnerLineRange(
 
   return {
     innerStartLine,
-    innerEndLine
+    innerEndLine,
   };
 }
 
@@ -205,9 +205,10 @@ function findRangeContaining(
   while (rangeIndex < ranges.length && index >= ranges[rangeIndex].to) {
     rangeIndex += 1;
   }
-  const range = rangeIndex < ranges.length && index >= ranges[rangeIndex].from && index < ranges[rangeIndex].to
-    ? ranges[rangeIndex]
-    : null;
+  const range =
+    rangeIndex < ranges.length && index >= ranges[rangeIndex].from && index < ranges[rangeIndex].to
+      ? ranges[rangeIndex]
+      : null;
   return { rangeIndex, range };
 }
 
@@ -274,12 +275,7 @@ function findDisplayMathClose(
     }
 
     const character = text[index];
-    if (
-      character === '$' &&
-      text[index + 1] === '$' &&
-      !isEscaped(text, index) &&
-      braceLevel <= 0
-    ) {
+    if (character === '$' && text[index + 1] === '$' && !isEscaped(text, index) && braceLevel <= 0) {
       return { close: index, rangeIndex };
     }
 
@@ -330,7 +326,7 @@ export function parseLatexMathAt(
           mode: 'display',
           content,
           raw: text.slice(index, closeResult.close + 2),
-          fencedDisplay
+          fencedDisplay,
         };
       }
     }
@@ -356,7 +352,7 @@ export function parseLatexMathAt(
     to: closeResult.close + 1,
     mode: 'inline',
     content,
-    raw: text.slice(index, closeResult.close + 1)
+    raw: text.slice(index, closeResult.close + 1),
   };
 }
 
@@ -404,7 +400,7 @@ export function collectLatexMathRanges(
             mode: 'display',
             content,
             raw: text.slice(index, closeResult.close + 2),
-            fencedDisplay
+            fencedDisplay,
           });
         }
         index = closeResult.close + 2;
@@ -438,7 +434,7 @@ export function collectLatexMathRanges(
       to: baseOffset + closeResult.close + 1,
       mode: 'inline',
       content,
-      raw: text.slice(index, closeResult.close + 1)
+      raw: text.slice(index, closeResult.close + 1),
     });
     index = closeResult.close + 1;
   }
@@ -487,7 +483,7 @@ export function renderLatexMathToHtml(content: string, mode: LatexMathMode): str
       displayMode: mode === 'display',
       throwOnError: true,
       strict: 'ignore',
-      output: 'html'
+      output: 'html',
     });
     pushMathRenderCache(cacheKey, html);
     return html;
@@ -499,7 +495,7 @@ export function renderLatexMathToHtml(content: string, mode: LatexMathMode): str
       console.warn('[MEO math] KaTeX render failed', {
         mode,
         message,
-        expression: normalized.slice(0, 160)
+        expression: normalized.slice(0, 160),
       });
     }
     pushMathRenderCache(cacheKey, null);

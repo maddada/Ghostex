@@ -2,11 +2,11 @@ import type {
   GxserverAttachSessionMetadataResult,
   GxserverSessionLifecycleResult,
   GxserverStartupTextDisposition,
-} from "@/packages/shared/gxserver-protocol";
-import { rpcForMachine } from "../connections/connection-registry";
-import type { SessionReference } from "./session-mapping";
+} from '@/packages/shared/gxserver-protocol';
+import { rpcForMachine } from '../connections/connection-registry';
+import type { SessionReference } from './session-mapping';
 
-export type AttachIntent = "attach" | "wake";
+export type AttachIntent = 'attach' | 'wake';
 
 export interface PreparedSessionAttach {
   attach: GxserverAttachSessionMetadataResult;
@@ -18,18 +18,18 @@ export interface PreparedSessionAttach {
 export class RestoreBlockedError extends Error {
   constructor(readonly reason: string) {
     super(
-      reason === "missingCwd"
-        ? "Session restore is blocked because its working directory is unavailable."
-        : `Session restore is blocked: ${reason}.`,
+      reason === 'missingCwd'
+        ? 'Session restore is blocked because its working directory is unavailable.'
+        : `Session restore is blocked: ${reason}.`
     );
-    this.name = "RestoreBlockedError";
+    this.name = 'RestoreBlockedError';
   }
 }
 
 export async function prepareSessionAttach(
   reference: SessionReference,
   intent: AttachIntent,
-  startupText?: string,
+  startupText?: string
 ): Promise<PreparedSessionAttach> {
   const params = lifecycleParams(reference, startupText);
   let attach = await requestAttach(reference.machineId, intent, params);
@@ -37,28 +37,25 @@ export async function prepareSessionAttach(
   const firstStartupText = trimmed(attach.startupText);
   const firstDisposition = attach.startupTextDisposition;
 
-  if (attach.providerState.lifecycleState === "missing") {
-    await rpcForMachine(reference.machineId, "/api/startSessionProvider", lifecycleParams(
-      reference,
-      firstStartupText,
-    ));
-    attach = await requestAttach(reference.machineId, "attach", params);
+  if (attach.providerState.lifecycleState === 'missing') {
+    await rpcForMachine(reference.machineId, '/api/startSessionProvider', lifecycleParams(reference, firstStartupText));
+    attach = await requestAttach(reference.machineId, 'attach', params);
     validateNotRestoreBlocked(attach);
   }
 
-  if (attach.providerState.lifecycleState !== "exists" || !trimmed(attach.attachCommand)) {
-    throw new Error("Session provider did not become ready for terminal attach.");
+  if (attach.providerState.lifecycleState !== 'exists' || !trimmed(attach.attachCommand)) {
+    throw new Error('Session provider did not become ready for terminal attach.');
   }
 
   const resolvedStartupText = firstStartupText ?? trimmed(attach.startupText);
   const startupTextDisposition = firstDisposition ?? attach.startupTextDisposition;
   const persistenceSessionCreated = attach.persistenceSessionCreated;
   if (
-    startupTextDisposition === "queueAfterTerminalReady"
-    && resolvedStartupText
-    && persistenceSessionCreated === false
+    startupTextDisposition === 'queueAfterTerminalReady' &&
+    resolvedStartupText &&
+    persistenceSessionCreated === false
   ) {
-    throw new Error("gxserver did not confirm the session provider started before terminal attach.");
+    throw new Error('gxserver did not confirm the session provider started before terminal attach.');
   }
 
   return {
@@ -72,17 +69,15 @@ export async function prepareSessionAttach(
 async function requestAttach(
   machineId: string,
   intent: AttachIntent,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): Promise<GxserverAttachSessionMetadataResult> {
-  const result = await rpcForMachine<
-    { attach?: GxserverAttachSessionMetadataResult } | GxserverSessionLifecycleResult
-  >(
+  const result = await rpcForMachine<{ attach?: GxserverAttachSessionMetadataResult } | GxserverSessionLifecycleResult>(
     machineId,
-    intent === "wake" ? "/api/wakeSession" : "/api/attachSessionMetadata",
-    params,
+    intent === 'wake' ? '/api/wakeSession' : '/api/attachSessionMetadata',
+    params
   );
   if (!result.attach) {
-    throw new Error("gxserver did not return session attach metadata.");
+    throw new Error('gxserver did not return session attach metadata.');
   }
   return result.attach;
 }
@@ -93,13 +88,10 @@ function validateNotRestoreBlocked(attach: GxserverAttachSessionMetadataResult):
   }
 }
 
-function lifecycleParams(
-  reference: SessionReference,
-  startupText?: string,
-): Record<string, unknown> {
+function lifecycleParams(reference: SessionReference, startupText?: string): Record<string, unknown> {
   return {
     projectId: reference.projectId,
-    reason: "ghostex-web-workspace",
+    reason: 'ghostex-web-workspace',
     sessionId: reference.sessionId,
     ...(startupText ? { startupText } : {}),
   };

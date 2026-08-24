@@ -1,7 +1,7 @@
-import type { GxserverRpcEndpointPath } from "@/packages/shared/gxserver-protocol";
-import type { SessionChatEventHandler } from "./gxserver-client";
-import { GxserverConnection } from "./gxserver-connection";
-import type { GhostexWebMachine, MachineConnectionState } from "./types";
+import type { GxserverRpcEndpointPath } from '@/packages/shared/gxserver-protocol';
+import type { SessionChatEventHandler } from './gxserver-client';
+import { GxserverConnection } from './gxserver-connection';
+import type { GhostexWebMachine, MachineConnectionState } from './types';
 
 const connections = new Map<string, GxserverConnection>();
 const connectionUnsubscribers = new Map<string, () => void>();
@@ -27,12 +27,7 @@ const sessionChatEntries = new Set<RegistrySessionChatEntry>();
 function attachSessionChatEntry(entry: RegistrySessionChatEntry): void {
   const connection = connections.get(entry.machineId);
   entry.detach = connection
-    ? connection.subscribeSessionChat(
-        entry.projectId,
-        entry.sessionId,
-        entry.onEvent,
-        entry.currentLimit,
-      )
+    ? connection.subscribeSessionChat(entry.projectId, entry.sessionId, entry.onEvent, entry.currentLimit)
     : undefined;
 }
 
@@ -58,7 +53,7 @@ export function subscribeSessionChatForMachine(
   projectId: string,
   sessionId: string,
   onEvent: SessionChatEventHandler,
-  currentLimit?: () => number,
+  currentLimit?: () => number
 ): () => void {
   const entry: RegistrySessionChatEntry = {
     machineId,
@@ -109,7 +104,7 @@ export function getMachineConnection(machineId: string): GxserverConnection | un
 export function rpcForMachine<TResult>(
   machineId: string,
   path: GxserverRpcEndpointPath,
-  params?: Record<string, unknown>,
+  params?: Record<string, unknown>
 ): Promise<TResult> {
   const connection = connections.get(machineId);
   if (!connection) {
@@ -135,9 +130,10 @@ function publish(): void {
 }
 
 function machinesEqual(left: GhostexWebMachine, right: GhostexWebMachine): boolean {
-  return left.machineId === right.machineId
-    && left.label === right.label
-    && left.baseUrl === right.baseUrl
-    && left.authToken === right.authToken;
+  return (
+    left.machineId === right.machineId &&
+    left.label === right.label &&
+    left.baseUrl === right.baseUrl &&
+    left.authToken === right.authToken
+  );
 }
-

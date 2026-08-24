@@ -7,11 +7,8 @@
 // CLI's own internal queue and renders inside the transcript. Nothing here
 // touches it. These rows are prompts the agent has never seen.
 
-import type {
-  SessionChatDraft,
-  SessionChatQueuedPrompt,
-} from "../../shared/session-chat";
-import { PointerActivationConstraints } from "@dnd-kit/dom";
+import type { SessionChatDraft, SessionChatQueuedPrompt } from '../../shared/session-chat';
+import { PointerActivationConstraints } from '@dnd-kit/dom';
 
 /**
  * How many rows the strip shows before it scrolls. The composer must stay the
@@ -29,9 +26,9 @@ export const SESSION_CHAT_QUEUE_LONG_PRESS_MS = 500;
  * an empty row and look broken.
  */
 export function sessionChatQueueRowPreview(text: string): string {
-  for (const line of text.split("\n")) {
+  for (const line of text.split('\n')) {
     const trimmed = line.trim();
-    if (trimmed !== "") {
+    if (trimmed !== '') {
       return trimmed;
     }
   }
@@ -39,9 +36,7 @@ export function sessionChatQueueRowPreview(text: string): string {
 }
 
 /** Row ids, head first — the exact shape /api/reorderSessionChatQueue wants. */
-export function sessionChatQueuePromptIds(
-  queue: readonly SessionChatQueuedPrompt[],
-): string[] {
+export function sessionChatQueuePromptIds(queue: readonly SessionChatQueuedPrompt[]): string[] {
   return queue.map((prompt) => prompt.id);
 }
 
@@ -54,16 +49,10 @@ export function sessionChatQueuePromptIds(
 export function moveSessionChatQueueRow(
   queue: readonly SessionChatQueuedPrompt[],
   fromIndex: number,
-  toIndex: number,
+  toIndex: number
 ): SessionChatQueuedPrompt[] {
   const next = [...queue];
-  if (
-    fromIndex === toIndex ||
-    fromIndex < 0 ||
-    fromIndex >= next.length ||
-    toIndex < 0 ||
-    toIndex >= next.length
-  ) {
+  if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= next.length || toIndex < 0 || toIndex >= next.length) {
     return next;
   }
   const [moved] = next.splice(fromIndex, 1);
@@ -80,7 +69,7 @@ export function moveSessionChatQueueRow(
  * refused on it (see SessionChatQueuedPromptState).
  */
 export function isSessionChatQueueRowBusy(prompt: SessionChatQueuedPrompt): boolean {
-  return prompt.state === "sending";
+  return prompt.state === 'sending';
 }
 
 /**
@@ -114,8 +103,7 @@ export function sessionChatQueueCapabilities(params: {
   };
 }): SessionChatQueueCapabilities {
   const { daemonSupportsQueue, transport } = params;
-  const gate = (method: unknown): boolean =>
-    daemonSupportsQueue && typeof method === "function";
+  const gate = (method: unknown): boolean => daemonSupportsQueue && typeof method === 'function';
   return {
     // Editing a row is a remove + a re-queue, so it needs both endpoints.
     canEdit: gate(transport.removeQueuedPrompt) && gate(transport.queuePrompt),
@@ -126,7 +114,7 @@ export function sessionChatQueueCapabilities(params: {
     canSendNow: gate(transport.sendQueuedPrompt),
     // Draft sync is independent of the queue: a daemon can carry drafts while
     // this host has no queue endpoints, and neither hides anything.
-    canSyncDraft: typeof transport.setDraft === "function",
+    canSyncDraft: typeof transport.setDraft === 'function',
     supported: daemonSupportsQueue,
   };
 }
@@ -135,7 +123,7 @@ export function sessionChatQueueCapabilities(params: {
 // Draft sync
 // ---------------------------------------------------------------------------
 
-const SESSION_CHAT_CLIENT_ID_STORAGE_KEY = "ghostex.sessionChat.clientId";
+const SESSION_CHAT_CLIENT_ID_STORAGE_KEY = 'ghostex.sessionChat.clientId';
 
 function draftClientIdStorage(): Storage | null {
   try {
@@ -166,10 +154,7 @@ export function sessionChatDraftClientId(): string {
 }
 
 /** ISO-8601 millis ordering. Unparseable input never counts as newer. */
-export function isNewerSessionChatDraftStamp(
-  candidate: string,
-  reference: string | null,
-): boolean {
+export function isNewerSessionChatDraftStamp(candidate: string, reference: string | null): boolean {
   const at = Date.parse(candidate);
   if (Number.isNaN(at)) {
     return false;
@@ -206,7 +191,7 @@ export function shouldOfferSessionChatDraft(params: {
   if (!incoming || incoming.originClientId === clientId) {
     return false;
   }
-  if (incoming.content === composerText || incoming.content.trim() === "") {
+  if (incoming.content === composerText || incoming.content.trim() === '') {
     return false;
   }
   return isNewerSessionChatDraftStamp(incoming.updatedAt, lastHandledUpdatedAt);

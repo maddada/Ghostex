@@ -5,7 +5,6 @@
 
 use crate::*;
 
-
 pub(crate) fn workspace_tab_insertion_index(
     bounds: Bounds<Pixels>,
     position: gpui::Point<Pixels>,
@@ -20,7 +19,6 @@ pub(crate) fn workspace_tab_insertion_index(
         tab_index
     }
 }
-
 
 pub(crate) fn workspace_pane_body_drop_zone(
     bounds: Bounds<Pixels>,
@@ -53,7 +51,6 @@ pub(crate) fn workspace_pane_body_drop_zone(
     WorkspaceDropZone::Center
 }
 
-
 pub(crate) fn command_pane_body_drop_zone(
     bounds: Bounds<Pixels>,
     position: gpui::Point<Pixels>,
@@ -80,7 +77,6 @@ pub(crate) fn command_pane_body_drop_zone(
     WorkspaceDropZone::Center
 }
 
-
 pub(crate) fn transfer_command_placeholder_to_workspace(
     agents_workspace: &mut WorkspaceModel,
     command_pane: &mut CommandPaneModel,
@@ -99,7 +95,6 @@ pub(crate) fn transfer_command_placeholder_to_workspace(
         |command_pane, group_id, session_id| command_pane.close_session(group_id, session_id),
     )
 }
-
 
 pub(crate) fn transfer_command_placeholder_to_workspace_with_source_close(
     agents_workspace: &mut WorkspaceModel,
@@ -149,7 +144,6 @@ pub(crate) fn transfer_command_placeholder_to_workspace_with_source_close(
     }
 }
 
-
 pub(crate) fn transfer_command_placeholder_to_workspace_tab_strip(
     agents_workspace: &mut WorkspaceModel,
     command_pane: &mut CommandPaneModel,
@@ -168,7 +162,6 @@ pub(crate) fn transfer_command_placeholder_to_workspace_tab_strip(
         |command_pane, group_id, session_id| command_pane.close_session(group_id, session_id),
     )
 }
-
 
 pub(crate) fn transfer_command_placeholder_to_workspace_tab_strip_with_source_close(
     agents_workspace: &mut WorkspaceModel,
@@ -221,7 +214,6 @@ pub(crate) fn transfer_command_placeholder_to_workspace_tab_strip_with_source_cl
     }
 }
 
-
 pub(crate) fn rollback_command_to_workspace_insert(
     agents_workspace: &mut WorkspaceModel,
     inserted_pane_id: WorkspacePaneId,
@@ -263,7 +255,6 @@ pub(crate) fn rollback_command_to_workspace_insert(
     agents_workspace.normalize_workspace_tree();
 }
 
-
 pub(crate) struct CommandPaneTransferRollbackSnapshot {
     pub(crate) mode: CommandPaneMode,
     pub(crate) last_expanded_mode: CommandPaneMode,
@@ -271,7 +262,6 @@ pub(crate) struct CommandPaneTransferRollbackSnapshot {
     pub(crate) focus_mode_group: Option<CommandPaneGroupId>,
     pub(crate) active_sessions: Vec<(CommandPaneGroupId, CommandSessionId)>,
 }
-
 
 pub(crate) fn command_pane_transfer_rollback_snapshot(
     command_pane: &CommandPaneModel,
@@ -293,7 +283,6 @@ pub(crate) fn command_pane_transfer_rollback_snapshot(
             .collect(),
     }
 }
-
 
 pub(crate) fn rollback_workspace_to_command_insert(
     command_pane: &mut CommandPaneModel,
@@ -327,7 +316,6 @@ pub(crate) fn rollback_workspace_to_command_insert(
     command_pane.clear_focus_mode_if_invalid();
 }
 
-
 pub(crate) fn transfer_workspace_placeholder_to_command_pane(
     agents_workspace: &mut WorkspaceModel,
     command_pane: &mut CommandPaneModel,
@@ -346,7 +334,6 @@ pub(crate) fn transfer_workspace_placeholder_to_command_pane(
         |workspace, pane_id, session_id| workspace.close_tab(pane_id, session_id),
     )
 }
-
 
 pub(crate) fn transfer_workspace_placeholder_to_command_pane_with_source_close(
     agents_workspace: &mut WorkspaceModel,
@@ -383,7 +370,6 @@ pub(crate) fn transfer_workspace_placeholder_to_command_pane_with_source_close(
     }
 }
 
-
 pub(crate) fn transfer_workspace_placeholder_to_command_tab_strip(
     agents_workspace: &mut WorkspaceModel,
     command_pane: &mut CommandPaneModel,
@@ -402,7 +388,6 @@ pub(crate) fn transfer_workspace_placeholder_to_command_tab_strip(
         |workspace, pane_id, session_id| workspace.close_tab(pane_id, session_id),
     )
 }
-
 
 pub(crate) fn transfer_workspace_placeholder_to_command_tab_strip_with_source_close(
     agents_workspace: &mut WorkspaceModel,

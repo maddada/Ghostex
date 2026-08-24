@@ -8,17 +8,11 @@ import {
   type ClipboardEvent as ReactClipboardEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
-import { IconFolderOpen, IconGitBranch, IconPhotoPlus, IconSearch } from "@tabler/icons-react";
-import { Button } from "@/packages/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/packages/components/ui/dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/packages/components/ui/field";
+} from 'react';
+import { IconFolderOpen, IconGitBranch, IconPhotoPlus, IconSearch } from '@tabler/icons-react';
+import { Button } from '@/packages/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -26,15 +20,12 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/packages/components/ui/select";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/packages/components/ui/input-group";
-import { Textarea } from "@/packages/components/ui/textarea";
-import { trimPromptEditorTrailingSpaces } from "../shared/prompt-editor-text";
-import {
-  createSidebarAgentSelectItems,
-  type SidebarAgentButton,
-} from "../shared/sidebar-agents";
-import { postAppModalHostMessage } from "./app-modal-host-bridge";
+} from '@/packages/components/ui/select';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/packages/components/ui/input-group';
+import { Textarea } from '@/packages/components/ui/textarea';
+import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
+import { createSidebarAgentSelectItems, type SidebarAgentButton } from '../shared/sidebar-agents';
+import { postAppModalHostMessage } from './app-modal-host-bridge';
 
 export type ExistingWorktreeOption = {
   branch: string;
@@ -52,12 +43,12 @@ export type WorktreeBaseBranchOption = {
 };
 
 export type WorktreeCreateModalDraft =
-  | { agentId: string; baseBranch: string; mode: "create"; prompt: string }
+  | { agentId: string; baseBranch: string; mode: 'create'; prompt: string }
   | {
       agentId?: string;
       existingWorktreeKey?: string;
       existingWorktreePath: string;
-      mode: "openExisting";
+      mode: 'openExisting';
       prompt?: string;
     };
 
@@ -71,14 +62,14 @@ export type WorktreeCreateModalProps = {
   projectName?: string;
 };
 
-type WorktreeCreateMode = WorktreeCreateModalDraft["mode"];
+type WorktreeCreateMode = WorktreeCreateModalDraft['mode'];
 
 type ProjectWorktreesResultMessage = {
   branches?: unknown;
   error?: unknown;
   ok: boolean;
   requestId: string;
-  type: "projectWorktreesResult";
+  type: 'projectWorktreesResult';
   worktrees?: unknown;
 };
 
@@ -97,23 +88,17 @@ export function WorktreeCreateModal({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const userInteractedAfterOpenRef = useRef(false);
   const worktreeListRequestIdRef = useRef<string | undefined>(undefined);
-  const commandAgents = useMemo(
-    () => agents.filter((agent) => agent.command?.trim()),
-    [agents],
-  );
-  const agentSelectItems = useMemo(
-    () => createSidebarAgentSelectItems(commandAgents),
-    [commandAgents],
-  );
-  const [prompt, setPrompt] = useState("");
-  const [selectedAgentId, setSelectedAgentId] = useState(commandAgents[0]?.agentId ?? "");
-  const [mode, setMode] = useState<WorktreeCreateMode>("create");
+  const commandAgents = useMemo(() => agents.filter((agent) => agent.command?.trim()), [agents]);
+  const agentSelectItems = useMemo(() => createSidebarAgentSelectItems(commandAgents), [commandAgents]);
+  const [prompt, setPrompt] = useState('');
+  const [selectedAgentId, setSelectedAgentId] = useState(commandAgents[0]?.agentId ?? '');
+  const [mode, setMode] = useState<WorktreeCreateMode>('create');
   const [baseBranches, setBaseBranches] = useState<WorktreeBaseBranchOption[]>([]);
-  const [selectedBaseBranch, setSelectedBaseBranch] = useState("");
-  const [baseBranchFilter, setBaseBranchFilter] = useState("");
+  const [selectedBaseBranch, setSelectedBaseBranch] = useState('');
+  const [baseBranchFilter, setBaseBranchFilter] = useState('');
   const [existingWorktrees, setExistingWorktrees] = useState<ExistingWorktreeOption[]>([]);
-  const [selectedExistingWorktreeValue, setSelectedExistingWorktreeValue] = useState("");
-  const [existingWorktreeFilter, setExistingWorktreeFilter] = useState("");
+  const [selectedExistingWorktreeValue, setSelectedExistingWorktreeValue] = useState('');
+  const [existingWorktreeFilter, setExistingWorktreeFilter] = useState('');
   const [worktreeListError, setWorktreeListError] = useState<string | undefined>(undefined);
   const [isLoadingWorktrees, setIsLoadingWorktrees] = useState(false);
   const [imageCount, setImageCount] = useState(0);
@@ -196,15 +181,15 @@ export function WorktreeCreateModal({
     hasInitializedOpenDraftRef.current = true;
     userInteractedAfterOpenRef.current = false;
 
-    setPrompt("");
+    setPrompt('');
     setImageCount(0);
-    setMode("create");
+    setMode('create');
     setBaseBranches([]);
-    setSelectedBaseBranch("");
-    setBaseBranchFilter("");
+    setSelectedBaseBranch('');
+    setBaseBranchFilter('');
     setExistingWorktrees([]);
-    setSelectedExistingWorktreeValue("");
-    setExistingWorktreeFilter("");
+    setSelectedExistingWorktreeValue('');
+    setExistingWorktreeFilter('');
     setWorktreeListError(undefined);
     setSelectedAgentId(resolveInitialWorktreeAgentId(commandAgents, defaultAgentId));
     if (onRequestExistingWorktrees) {
@@ -223,7 +208,7 @@ export function WorktreeCreateModal({
     setSelectedAgentId((currentAgentId) =>
       commandAgents.some((agent) => agent.agentId === currentAgentId)
         ? currentAgentId
-        : resolveInitialWorktreeAgentId(commandAgents, defaultAgentId),
+        : resolveInitialWorktreeAgentId(commandAgents, defaultAgentId)
     );
   }, [commandAgents, defaultAgentId, isOpen]);
 
@@ -253,9 +238,7 @@ export function WorktreeCreateModal({
       focusInput();
     };
     const retryDelaysMs = [0, 16, 50, 100, 250, 500, 1000, 1600, 2400];
-    const timeoutIds = retryDelaysMs.map((delayMs) =>
-      window.setTimeout(focusUnlessUserInteracted, delayMs),
-    );
+    const timeoutIds = retryDelaysMs.map((delayMs) => window.setTimeout(focusUnlessUserInteracted, delayMs));
     const animationFrame = window.requestAnimationFrame(focusUnlessUserInteracted);
     const windowFocusTimeoutIds: number[] = [];
     const windowFocusAnimationFrames: number[] = [];
@@ -264,37 +247,37 @@ export function WorktreeCreateModal({
       windowFocusAnimationFrames.push(window.requestAnimationFrame(focusUnlessUserInteracted));
     };
 
-    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener('focus', handleWindowFocus);
     return () => {
       window.cancelAnimationFrame(animationFrame);
       timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
       windowFocusTimeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
       windowFocusAnimationFrames.forEach((frameId) => window.cancelAnimationFrame(frameId));
-      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener('focus', handleWindowFocus);
     };
   }, [focusInput, isOpen]);
 
   const normalizedPrompt = trimPromptEditorTrailingSpaces(prompt);
   const trimmedPrompt = normalizedPrompt.trim();
   const canCreate = Boolean(
-    mode === "openExisting"
+    mode === 'openExisting'
       ? selectedExistingWorktreeValue && (!trimmedPrompt || selectedAgentId)
-      : trimmedPrompt && selectedAgentId && selectedBaseBranch,
+      : trimmedPrompt && selectedAgentId && selectedBaseBranch
   );
   const existingWorktreeStatusDescription =
     worktreeListError ??
     (isLoadingWorktrees
-      ? "Loading existing worktrees."
+      ? 'Loading existing worktrees.'
       : existingWorktrees.length === 0
-        ? "No existing worktrees found."
+        ? 'No existing worktrees found.'
         : undefined);
   const filteredBaseBranches = useMemo(
     () => filterWorktreeBaseBranchOptions(baseBranches, baseBranchFilter),
-    [baseBranches, baseBranchFilter],
+    [baseBranches, baseBranchFilter]
   );
   const filteredExistingWorktrees = useMemo(
     () => filterExistingWorktreeOptions(existingWorktrees, existingWorktreeFilter),
-    [existingWorktrees, existingWorktreeFilter],
+    [existingWorktrees, existingWorktreeFilter]
   );
 
   const insertImageLinks = (files: readonly File[]) => {
@@ -303,16 +286,11 @@ export function WorktreeCreateModal({
     }
 
     const links = files.map((file, index) => {
-      const path =
-        (file as File & { path?: string }).path?.trim() ||
-        file.webkitRelativePath?.trim() ||
-        file.name;
+      const path = (file as File & { path?: string }).path?.trim() || file.webkitRelativePath?.trim() || file.name;
       return `[Image #${imageCount + index + 1}](${path})`;
     });
     setImageCount((count) => count + files.length);
-    insertPromptText(
-      `${prompt.endsWith("\n") || prompt.length === 0 ? "" : "\n"}${links.join("\n")}\n`,
-    );
+    insertPromptText(`${prompt.endsWith('\n') || prompt.length === 0 ? '' : '\n'}${links.join('\n')}\n`);
   };
 
   const insertImagePaths = (paths: readonly string[]) => {
@@ -321,9 +299,7 @@ export function WorktreeCreateModal({
     }
     const links = paths.map((path, index) => `[Image #${imageCount + index + 1}](${path})`);
     setImageCount((count) => count + paths.length);
-    insertPromptText(
-      `${prompt.endsWith("\n") || prompt.length === 0 ? "" : "\n"}${links.join("\n")}\n`,
-    );
+    insertPromptText(`${prompt.endsWith('\n') || prompt.length === 0 ? '' : '\n'}${links.join('\n')}\n`);
   };
 
   const insertPromptText = (text: string) => {
@@ -356,13 +332,13 @@ export function WorktreeCreateModal({
         selectedBaseBranch,
         trimmedPrompt,
         selectedExistingWorktreeValue,
-        existingWorktrees,
-      ),
+        existingWorktrees
+      )
     );
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
       return;
     }
     event.preventDefault();
@@ -375,15 +351,15 @@ export function WorktreeCreateModal({
           selectedBaseBranch,
           trimmedPrompt,
           selectedExistingWorktreeValue,
-          existingWorktrees,
-        ),
+          existingWorktrees
+        )
       );
     }
   };
 
   const handlePaste = (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
     const imageFiles = Array.from(event.clipboardData.files).filter((file): file is File =>
-      file.type.startsWith("image/"),
+      file.type.startsWith('image/')
     );
     if (imageFiles.length > 0) {
       event.preventDefault();
@@ -391,7 +367,7 @@ export function WorktreeCreateModal({
       return;
     }
 
-    const pastedText = event.clipboardData.getData("text/plain");
+    const pastedText = event.clipboardData.getData('text/plain');
     const trimmedText = trimPromptEditorTrailingSpaces(pastedText);
     if (!pastedText || trimmedText === pastedText) {
       return;
@@ -407,11 +383,11 @@ export function WorktreeCreateModal({
 
     const handlePickedImages = (event: Event) => {
       const message = (event as CustomEvent<unknown>).detail;
-      if (!message || typeof message !== "object" || !("type" in message)) {
+      if (!message || typeof message !== 'object' || !('type' in message)) {
         return;
       }
-      if (message.type !== "worktreeImageFilesPicked") {
-        if (message.type === "projectWorktreesResult") {
+      if (message.type !== 'worktreeImageFilesPicked') {
+        if (message.type === 'projectWorktreesResult') {
           const result = message as ProjectWorktreesResultMessage;
           if (result.requestId !== worktreeListRequestIdRef.current) {
             return;
@@ -419,10 +395,10 @@ export function WorktreeCreateModal({
           setIsLoadingWorktrees(false);
           if (!result.ok) {
             setWorktreeListError(
-              typeof result.error === "string" ? result.error : "Could not load existing worktrees.",
+              typeof result.error === 'string' ? result.error : 'Could not load existing worktrees.'
             );
             setBaseBranches([]);
-            setSelectedBaseBranch("");
+            setSelectedBaseBranch('');
             setExistingWorktrees([]);
             return;
           }
@@ -431,14 +407,14 @@ export function WorktreeCreateModal({
           setSelectedBaseBranch((current) =>
             branches.some((branch) => branch.name === current)
               ? current
-              : branches.find((branch) => branch.current)?.name ?? branches[0]?.name ?? "",
+              : (branches.find((branch) => branch.current)?.name ?? branches[0]?.name ?? '')
           );
           const worktrees = normalizeExistingWorktreeOptions(result.worktrees);
           setExistingWorktrees(worktrees);
           setSelectedExistingWorktreeValue((current) =>
             worktrees.some((worktree) => existingWorktreeOptionValue(worktree) === current)
               ? current
-              : existingWorktreeOptionValue(worktrees.find((worktree) => !worktree.isRegistered) ?? worktrees[0]),
+              : existingWorktreeOptionValue(worktrees.find((worktree) => !worktree.isRegistered) ?? worktrees[0])
           );
           return;
         }
@@ -446,16 +422,14 @@ export function WorktreeCreateModal({
       }
       const candidate = message as { paths?: unknown };
       const paths = Array.isArray(candidate.paths)
-        ? candidate.paths.filter(
-            (path): path is string => typeof path === "string" && path.trim().length > 0,
-          )
+        ? candidate.paths.filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
         : [];
       insertImagePaths(paths);
     };
 
-    window.addEventListener("ghostex-app-modal-host-message", handlePickedImages);
+    window.addEventListener('ghostex-app-modal-host-message', handlePickedImages);
     return () => {
-      window.removeEventListener("ghostex-app-modal-host-message", handlePickedImages);
+      window.removeEventListener('ghostex-app-modal-host-message', handlePickedImages);
     };
   });
 
@@ -473,60 +447,57 @@ export function WorktreeCreateModal({
       open={isOpen}
     >
       <DialogContent
-        className="command-config-modal-shadcn worktree-create-modal-shadcn font-sans"
+        className='command-config-modal-shadcn worktree-create-modal-shadcn font-sans'
         initialFocus={focusInput}
       >
         <form
-          className="session-rename-form worktree-create-form"
+          className='session-rename-form worktree-create-form'
           onKeyDownCapture={markUserInteractedAfterOpen}
           onPointerDownCapture={markUserInteractedAfterOpen}
           onSubmit={submit}
         >
           <DialogHeader>
-            <DialogTitle className="text-xl">Add Worktree</DialogTitle>
+            <DialogTitle className='text-xl'>Add Worktree</DialogTitle>
           </DialogHeader>
-          <FieldGroup className="session-rename-field-group">
+          <FieldGroup className='session-rename-field-group'>
             <Field>
               <FieldLabel>Mode</FieldLabel>
-              <div className="worktree-create-mode-toggle" role="group" aria-label="Worktree mode">
+              <div className='worktree-create-mode-toggle' role='group' aria-label='Worktree mode'>
                 <Button
-                  onClick={() => setMode("create")}
-                  type="button"
-                  variant={mode === "create" ? "default" : "outline"}
+                  onClick={() => setMode('create')}
+                  type='button'
+                  variant={mode === 'create' ? 'default' : 'outline'}
                 >
-                  <IconGitBranch aria-hidden="true" data-icon="inline-start" />
+                  <IconGitBranch aria-hidden='true' data-icon='inline-start' />
                   Create New
                 </Button>
                 <Button
-                  onClick={() => setMode("openExisting")}
-                  type="button"
-                  variant={mode === "openExisting" ? "default" : "outline"}
+                  onClick={() => setMode('openExisting')}
+                  type='button'
+                  variant={mode === 'openExisting' ? 'default' : 'outline'}
                 >
-                  <IconFolderOpen aria-hidden="true" data-icon="inline-start" />
+                  <IconFolderOpen aria-hidden='true' data-icon='inline-start' />
                   Open Existing
                 </Button>
               </div>
             </Field>
-            {mode === "openExisting" ? (
+            {mode === 'openExisting' ? (
               <Field>
                 <FieldLabel htmlFor={existingWorktreeId}>Existing worktree</FieldLabel>
-                <Select
-                  onValueChange={setSelectedExistingWorktreeValue}
-                  value={selectedExistingWorktreeValue}
-                >
+                <Select onValueChange={setSelectedExistingWorktreeValue} value={selectedExistingWorktreeValue}>
                   <SelectTrigger
-                    aria-label="Existing worktree"
-                    className="worktree-create-existing-select"
+                    aria-label='Existing worktree'
+                    className='worktree-create-existing-select'
                     id={existingWorktreeId}
                   >
-                    <SelectValue placeholder={isLoadingWorktrees ? "Loading worktrees" : "Select worktree"} />
+                    <SelectValue placeholder={isLoadingWorktrees ? 'Loading worktrees' : 'Select worktree'} />
                   </SelectTrigger>
                   <SelectContent
                     header={
                       <WorktreeSelectFilterInput
-                        ariaLabel="Filter existing worktrees"
+                        ariaLabel='Filter existing worktrees'
                         onValueChange={setExistingWorktreeFilter}
-                        placeholder="Filter worktrees"
+                        placeholder='Filter worktrees'
                         value={existingWorktreeFilter}
                       />
                     }
@@ -538,11 +509,11 @@ export function WorktreeCreateModal({
                             key={existingWorktreeOptionValue(worktree)}
                             value={existingWorktreeOptionValue(worktree)}
                           >
-                            {worktree.name} {worktree.branch ? `(${worktree.branch})` : ""}
+                            {worktree.name} {worktree.branch ? `(${worktree.branch})` : ''}
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem disabled value="__ghostex-no-existing-worktrees-match">
+                        <SelectItem disabled value='__ghostex-no-existing-worktrees-match'>
                           No worktrees match
                         </SelectItem>
                       )}
@@ -554,26 +525,23 @@ export function WorktreeCreateModal({
                 ) : null}
               </Field>
             ) : null}
-            {mode === "create" ? (
+            {mode === 'create' ? (
               <Field>
                 <FieldLabel htmlFor={baseBranchId}>Base branch</FieldLabel>
-                <Select
-                  onValueChange={setSelectedBaseBranch}
-                  value={selectedBaseBranch}
-                >
+                <Select onValueChange={setSelectedBaseBranch} value={selectedBaseBranch}>
                   <SelectTrigger
-                    aria-label="Base branch"
-                    className="worktree-create-base-branch-select"
+                    aria-label='Base branch'
+                    className='worktree-create-base-branch-select'
                     id={baseBranchId}
                   >
-                    <SelectValue placeholder={isLoadingWorktrees ? "Loading branches" : "Select branch"} />
+                    <SelectValue placeholder={isLoadingWorktrees ? 'Loading branches' : 'Select branch'} />
                   </SelectTrigger>
                   <SelectContent
                     header={
                       <WorktreeSelectFilterInput
-                        ariaLabel="Filter base branches"
+                        ariaLabel='Filter base branches'
                         onValueChange={setBaseBranchFilter}
-                        placeholder="Filter branches"
+                        placeholder='Filter branches'
                         value={baseBranchFilter}
                       />
                     }
@@ -583,11 +551,11 @@ export function WorktreeCreateModal({
                         filteredBaseBranches.map((branch) => (
                           <SelectItem key={branch.name} value={branch.name}>
                             {branch.name}
-                            {branch.current ? " (current)" : branch.remote ? " (remote)" : ""}
+                            {branch.current ? ' (current)' : branch.remote ? ' (remote)' : ''}
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem disabled value="__ghostex-no-base-branches-match">
+                        <SelectItem disabled value='__ghostex-no-base-branches-match'>
                           No branches match
                         </SelectItem>
                       )}
@@ -595,25 +563,15 @@ export function WorktreeCreateModal({
                   </SelectContent>
                 </Select>
                 {!selectedBaseBranch ? (
-                  <FieldDescription>
-                    {isLoadingWorktrees ? "Loading branches." : "No branches found."}
-                  </FieldDescription>
+                  <FieldDescription>{isLoadingWorktrees ? 'Loading branches.' : 'No branches found.'}</FieldDescription>
                 ) : null}
               </Field>
             ) : null}
             <Field>
               <FieldLabel htmlFor={agentId}>Agent</FieldLabel>
-              <Select
-                items={agentSelectItems}
-                onValueChange={setSelectedAgentId}
-                value={selectedAgentId}
-              >
-                <SelectTrigger
-                  aria-label="Agent"
-                  className="worktree-create-agent-select"
-                  id={agentId}
-                >
-                  <SelectValue placeholder="Select agent" />
+              <Select items={agentSelectItems} onValueChange={setSelectedAgentId} value={selectedAgentId}>
+                <SelectTrigger aria-label='Agent' className='worktree-create-agent-select' id={agentId}>
+                  <SelectValue placeholder='Select agent' />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -628,44 +586,33 @@ export function WorktreeCreateModal({
             </Field>
             <Field>
               <FieldLabel htmlFor={promptId}>
-                {mode === "openExisting" ? "First prompt (optional)" : "First prompt"}
+                {mode === 'openExisting' ? 'First prompt (optional)' : 'First prompt'}
               </FieldLabel>
               <Textarea
-                aria-label="First prompt"
+                aria-label='First prompt'
                 autoFocus
                 id={promptId}
                 onChange={(event) => setPrompt(event.currentTarget.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder={
-                  mode === "openExisting"
-                    ? "Optional prompt after opening"
-                    : "Describe the worktree task"
-                }
+                placeholder={mode === 'openExisting' ? 'Optional prompt after opening' : 'Describe the worktree task'}
                 ref={inputRef}
                 value={prompt}
               />
-              <FieldDescription>
-                Paste images or pick files to insert image links into the prompt.
-              </FieldDescription>
+              <FieldDescription>Paste images or pick files to insert image links into the prompt.</FieldDescription>
             </Field>
           </FieldGroup>
           <DialogFooter>
             <Button
-              onClick={() =>
-                postAppModalHostMessage(
-                  { type: "pickWorktreeImages" },
-                  "AppModals:pickWorktreeImages",
-                )
-              }
-              type="button"
-              variant="secondary"
+              onClick={() => postAppModalHostMessage({ type: 'pickWorktreeImages' }, 'AppModals:pickWorktreeImages')}
+              type='button'
+              variant='secondary'
             >
-              <IconPhotoPlus aria-hidden="true" data-icon="inline-start" />
+              <IconPhotoPlus aria-hidden='true' data-icon='inline-start' />
               Add Images
             </Button>
-            <Button disabled={!canCreate} type="submit">
-              {mode === "openExisting" ? "Open Worktree" : "New Worktree"}
+            <Button disabled={!canCreate} type='submit'>
+              {mode === 'openExisting' ? 'Open Worktree' : 'New Worktree'}
             </Button>
           </DialogFooter>
         </form>
@@ -686,21 +633,18 @@ function WorktreeSelectFilterInput({
   value: string;
 }) {
   return (
-    <div
-      className="worktree-select-filter"
-      onPointerDownCapture={(event) => event.stopPropagation()}
-    >
-      <InputGroup className="worktree-select-filter-input-group">
+    <div className='worktree-select-filter' onPointerDownCapture={(event) => event.stopPropagation()}>
+      <InputGroup className='worktree-select-filter-input-group'>
         <InputGroupInput
           aria-label={ariaLabel}
-          autoComplete="off"
-          className="worktree-select-filter-input"
+          autoComplete='off'
+          className='worktree-select-filter-input'
           onChange={(event) => onValueChange(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.key === "Escape" && value) {
+            if (event.key === 'Escape' && value) {
               event.preventDefault();
               event.stopPropagation();
-              onValueChange("");
+              onValueChange('');
               return;
             }
             if (isWorktreeSelectFilterTextEditingKey(event.key)) {
@@ -710,23 +654,16 @@ function WorktreeSelectFilterInput({
           placeholder={placeholder}
           value={value}
         />
-        <InputGroupAddon align="inline-end">
-          <IconSearch aria-hidden="true" />
+        <InputGroupAddon align='inline-end'>
+          <IconSearch aria-hidden='true' />
         </InputGroupAddon>
       </InputGroup>
     </div>
   );
 }
 
-function resolveInitialWorktreeAgentId(
-  commandAgents: SidebarAgentButton[],
-  defaultAgentId?: string,
-): string {
-  return (
-    commandAgents.find((agent) => agent.agentId === defaultAgentId)?.agentId ??
-    commandAgents[0]?.agentId ??
-    ""
-  );
+function resolveInitialWorktreeAgentId(commandAgents: SidebarAgentButton[], defaultAgentId?: string): string {
+  return commandAgents.find((agent) => agent.agentId === defaultAgentId)?.agentId ?? commandAgents[0]?.agentId ?? '';
 }
 
 function createDraft(
@@ -735,12 +672,12 @@ function createDraft(
   baseBranch: string,
   prompt: string,
   existingWorktreeValue: string,
-  existingWorktrees: readonly ExistingWorktreeOption[],
+  existingWorktrees: readonly ExistingWorktreeOption[]
 ): WorktreeCreateModalDraft {
-  if (mode === "openExisting") {
+  if (mode === 'openExisting') {
     const openExistingPrompt = prompt.trim();
     const selectedWorktree = existingWorktrees.find(
-      (worktree) => existingWorktreeOptionValue(worktree) === existingWorktreeValue,
+      (worktree) => existingWorktreeOptionValue(worktree) === existingWorktreeValue
     );
     return {
       ...(openExistingPrompt ? { agentId, prompt: openExistingPrompt } : {}),
@@ -753,12 +690,12 @@ function createDraft(
 }
 
 function existingWorktreeOptionValue(worktree: ExistingWorktreeOption | undefined): string {
-  return worktree?.worktreeKey?.trim() || worktree?.path?.trim() || "";
+  return worktree?.worktreeKey?.trim() || worktree?.path?.trim() || '';
 }
 
 function filterWorktreeBaseBranchOptions(
   branches: readonly WorktreeBaseBranchOption[],
-  filter: string,
+  filter: string
 ): WorktreeBaseBranchOption[] {
   const query = normalizeWorktreeSelectFilter(filter);
   if (!query) {
@@ -769,7 +706,7 @@ function filterWorktreeBaseBranchOptions(
 
 function filterExistingWorktreeOptions(
   worktrees: readonly ExistingWorktreeOption[],
-  filter: string,
+  filter: string
 ): ExistingWorktreeOption[] {
   const query = normalizeWorktreeSelectFilter(filter);
   if (!query) {
@@ -777,8 +714,8 @@ function filterExistingWorktreeOptions(
   }
   return worktrees.filter((worktree) =>
     [worktree.name, worktree.branch, worktree.path].some((value) =>
-      normalizeWorktreeSelectFilter(value).includes(query),
-    ),
+      normalizeWorktreeSelectFilter(value).includes(query)
+    )
   );
 }
 
@@ -789,12 +726,12 @@ function normalizeWorktreeSelectFilter(value: string): string {
 function isWorktreeSelectFilterTextEditingKey(key: string): boolean {
   return (
     key.length === 1 ||
-    key === "Backspace" ||
-    key === "Delete" ||
-    key === "End" ||
-    key === "Home" ||
-    key === "ArrowLeft" ||
-    key === "ArrowRight"
+    key === 'Backspace' ||
+    key === 'Delete' ||
+    key === 'End' ||
+    key === 'Home' ||
+    key === 'ArrowLeft' ||
+    key === 'ArrowRight'
   );
 }
 
@@ -804,7 +741,7 @@ function normalizeWorktreeBaseBranchOptions(candidate: unknown): WorktreeBaseBra
   }
   const seenBranches = new Set<string>();
   return candidate.flatMap((entry): WorktreeBaseBranchOption[] => {
-    if (!entry || typeof entry !== "object") {
+    if (!entry || typeof entry !== 'object') {
       return [];
     }
     const branch = entry as Partial<WorktreeBaseBranchOption>;
@@ -828,7 +765,7 @@ function normalizeExistingWorktreeOptions(candidate: unknown): ExistingWorktreeO
     return [];
   }
   return candidate.flatMap((entry): ExistingWorktreeOption[] => {
-    if (!entry || typeof entry !== "object") {
+    if (!entry || typeof entry !== 'object') {
       return [];
     }
     const worktree = entry as Partial<ExistingWorktreeOption>;
@@ -839,7 +776,7 @@ function normalizeExistingWorktreeOptions(candidate: unknown): ExistingWorktreeO
     }
     return [
       {
-        branch: worktree.branch?.trim() ?? "",
+        branch: worktree.branch?.trim() ?? '',
         isCurrentProject: worktree.isCurrentProject === true,
         isRegistered: worktree.isRegistered === true,
         name,

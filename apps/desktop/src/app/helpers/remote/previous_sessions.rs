@@ -186,7 +186,9 @@ pub(crate) fn gpui_list_previous_sessions_from_remote_gxserver(
     })
 }
 
-pub(crate) fn gpui_previous_sessions_list_params(request: &GpuiPreviousSessionsRequest) -> serde_json::Value {
+pub(crate) fn gpui_previous_sessions_list_params(
+    request: &GpuiPreviousSessionsRequest,
+) -> serde_json::Value {
     let mut params = serde_json::Map::new();
     params.insert("includeActive".to_string(), serde_json::Value::Bool(false));
     params.insert("includePrevious".to_string(), serde_json::Value::Bool(true));
@@ -220,7 +222,9 @@ pub(crate) fn gpui_previous_sessions_list_params(request: &GpuiPreviousSessionsR
     serde_json::Value::Object(params)
 }
 
-pub(crate) fn gpui_sort_previous_session_items_by_closed_time(previous_sessions: &mut [serde_json::Value]) {
+pub(crate) fn gpui_sort_previous_session_items_by_closed_time(
+    previous_sessions: &mut [serde_json::Value],
+) {
     previous_sessions.sort_by(|left, right| {
         gpui_previous_session_item_closed_time(right)
             .cmp(gpui_previous_session_item_closed_time(left))
@@ -1000,4 +1004,3 @@ pub(crate) fn gpui_daemon_sessions_state_payload(
     );
     serde_json::Value::Object(payload)
 }
-

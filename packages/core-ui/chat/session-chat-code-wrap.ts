@@ -13,7 +13,7 @@
  * reaches gxserver or the Ghostex settings.
  */
 
-const STORAGE_KEY = "ghostex.sessionChat.codeWrap";
+const STORAGE_KEY = 'ghostex.sessionChat.codeWrap';
 
 function storage(): Storage | null {
   try {
@@ -26,7 +26,7 @@ function storage(): Storage | null {
 
 export function readSessionChatCodeWrapDefault(): boolean {
   try {
-    return storage()?.getItem(STORAGE_KEY) === "1";
+    return storage()?.getItem(STORAGE_KEY) === '1';
   } catch {
     return false;
   }
@@ -34,7 +34,7 @@ export function readSessionChatCodeWrapDefault(): boolean {
 
 export function writeSessionChatCodeWrapDefault(wrapped: boolean): void {
   try {
-    storage()?.setItem(STORAGE_KEY, wrapped ? "1" : "0");
+    storage()?.setItem(STORAGE_KEY, wrapped ? '1' : '0');
   } catch {
     // Quota/private-mode failures must not break the toggle.
   }

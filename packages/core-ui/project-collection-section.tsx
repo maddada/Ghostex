@@ -14,43 +14,30 @@ import {
   IconTag,
   IconTrash,
   IconX,
-} from "@tabler/icons-react";
-import { PointerSensor } from "@dnd-kit/dom";
-import { useSortable } from "@dnd-kit/react/sortable";
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
-import type { SidebarSessionItem } from "../shared/session-grid-contract";
-import {
-  getSidebarSessionTagLabel,
-  type SidebarSessionTagListItem,
-} from "../shared/session-tags";
-import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
-import { createProjectCollectionDragData } from "./sidebar-dnd";
-import { SidebarFixedTooltipButton } from "./sidebar-fixed-tooltip-button";
-import { getSidebarReorderActivationConstraints } from "./sidebar-reorder-activation";
-import { useSidebarCollapsiblePresence } from "./sidebar-collapse-animation";
-import {
-  getAwakeTerminalAndBrowserCount,
-  getGroupSessionSummary,
-} from "./group-session-summary";
-import { useSidebarStore } from "./sidebar-store";
+} from '@tabler/icons-react';
+import { PointerSensor } from '@dnd-kit/dom';
+import { useSortable } from '@dnd-kit/react/sortable';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import type { SidebarSessionItem } from '../shared/session-grid-contract';
+import { getSidebarSessionTagLabel, type SidebarSessionTagListItem } from '../shared/session-tags';
+import { SidebarContextMenuPortal } from './sidebar-context-menu-portal';
+import { createProjectCollectionDragData } from './sidebar-dnd';
+import { SidebarFixedTooltipButton } from './sidebar-fixed-tooltip-button';
+import { getSidebarReorderActivationConstraints } from './sidebar-reorder-activation';
+import { useSidebarCollapsiblePresence } from './sidebar-collapse-animation';
+import { getAwakeTerminalAndBrowserCount, getGroupSessionSummary } from './group-session-summary';
+import { useSidebarStore } from './sidebar-store';
 import {
   canSleepSidebarSession,
   canWakeSidebarSession,
   runSidebarBulkContextMenuActionInBackground,
-} from "./sortable-session-card";
-import type { WebviewApi } from "./webview-api";
+} from './sortable-session-card';
+import type { WebviewApi } from './webview-api';
 import {
   SIDEBAR_PROJECT_COLLECTION_COLOR_LABELS,
   SIDEBAR_PROJECT_COLLECTION_COLORS,
   type SidebarProjectCollection,
-} from "./project-collections";
+} from './project-collections';
 
 type ProjectCollectionSectionProps = {
   autoEdit: boolean;
@@ -63,7 +50,7 @@ type ProjectCollectionSectionProps = {
    * Pointer-resolved insertion boundary while another collection is being
    * dragged; renders the drop line above/below this panel.
    */
-  dropIndicatorPosition?: "before" | "after";
+  dropIndicatorPosition?: 'before' | 'after';
   index: number;
   containsActiveSession?: boolean;
   /*
@@ -84,7 +71,7 @@ type ProjectCollectionSectionProps = {
   sessionIds: readonly string[];
   sessionTagListItems: readonly SidebarSessionTagListItem[];
   sessionsById: Record<string, SidebarSessionItem | undefined>;
-  bulkProjectActionLabel: "Collapse All" | "Expand Previous";
+  bulkProjectActionLabel: 'Collapse All' | 'Expand Previous';
   /*
    * CDXC:RemoteProjectCollections 2026-07-21:
    * The same collection can render once in the local Projects section and once
@@ -95,7 +82,7 @@ type ProjectCollectionSectionProps = {
   vscode: WebviewApi;
 };
 
-type MenuView = "actions" | "colors" | "tags";
+type MenuView = 'actions' | 'colors' | 'tags';
 
 type ContextMenuPosition = {
   x: number;
@@ -155,14 +142,14 @@ export function ProjectCollectionSection({
    * nested project rows keep their existing independent drag ownership.
    */
   const sortable = useSortable({
-    accept: "project-collection",
+    accept: 'project-collection',
     data: createProjectCollectionDragData(collection.collectionId),
     disabled: draggingDisabled || isEditing,
-    feedback: "none",
+    feedback: 'none',
     id: sortableId ?? `project-collection:${collection.collectionId}`,
     index,
     sensors: projectCollectionSensors,
-    type: "project-collection",
+    type: 'project-collection',
   });
   const uniqueSessionIds = [...new Set(sessionIds)].filter((sessionId) => sessionsById[sessionId]);
   const collectionSessions = uniqueSessionIds.flatMap((sessionId) => {
@@ -172,36 +159,22 @@ export function ProjectCollectionSection({
   const sessionSummary = getGroupSessionSummary(collectionSessions);
   const awakeCount = getAwakeTerminalAndBrowserCount(collectionSessions);
   const hasActionStatus = sessionSummary.workingCount > 0 || sessionSummary.attentionCount > 0;
-  const shouldShowCollapsedStatus =
-    collapsed && (hasActionStatus || awakeCount > 0);
-  const sleepableSessionIds = uniqueSessionIds.filter((sessionId) =>
-    canSleepSidebarSession(sessionsById[sessionId]),
-  );
-  const wakeableSessionIds = uniqueSessionIds.filter((sessionId) =>
-    canWakeSidebarSession(sessionsById[sessionId]),
-  );
-  const pinnableSessionIds = uniqueSessionIds.filter(
-    (sessionId) => sessionsById[sessionId]?.isPinned !== true,
-  );
-  const unpinnableSessionIds = uniqueSessionIds.filter(
-    (sessionId) => sessionsById[sessionId]?.isPinned === true,
-  );
+  const shouldShowCollapsedStatus = collapsed && (hasActionStatus || awakeCount > 0);
+  const sleepableSessionIds = uniqueSessionIds.filter((sessionId) => canSleepSidebarSession(sessionsById[sessionId]));
+  const wakeableSessionIds = uniqueSessionIds.filter((sessionId) => canWakeSidebarSession(sessionsById[sessionId]));
+  const pinnableSessionIds = uniqueSessionIds.filter((sessionId) => sessionsById[sessionId]?.isPinned !== true);
+  const unpinnableSessionIds = uniqueSessionIds.filter((sessionId) => sessionsById[sessionId]?.isPinned === true);
   const reloadableSessionIds = uniqueSessionIds.filter((sessionId) => {
     const session = sessionsById[sessionId];
-    return session?.kind !== "browser" && session?.sessionKind !== "browser";
+    return session?.kind !== 'browser' && session?.sessionKind !== 'browser';
   });
   const taggableSessionIds = uniqueSessionIds.filter((sessionId) => {
     const session = sessionsById[sessionId];
-    return session?.kind !== "browser" && session?.sessionKind !== "browser";
+    return session?.kind !== 'browser' && session?.sessionKind !== 'browser';
   });
-  const availableTags = sessionTagListItems.filter(
-    (item) => item.type === "tag" && item.enabled && item.visible,
-  );
-  const style = { "--project-collection-color": collection.color } as CSSProperties;
-  const BulkProjectIcon =
-    bulkProjectActionLabel === "Collapse All"
-      ? IconArrowsDiagonalMinimize
-      : IconArrowsDiagonal2;
+  const availableTags = sessionTagListItems.filter((item) => item.type === 'tag' && item.enabled && item.visible);
+  const style = { '--project-collection-color': collection.color } as CSSProperties;
+  const BulkProjectIcon = bulkProjectActionLabel === 'Collapse All' ? IconArrowsDiagonalMinimize : IconArrowsDiagonal2;
   const {
     isPresent: shouldRenderProjects,
     isVisuallyCollapsed: areProjectsVisuallyCollapsed,
@@ -251,10 +224,7 @@ export function ProjectCollectionSection({
     setMenuView(undefined);
     setMenuPosition(undefined);
   };
-  const runForSessions = (
-    targetSessionIds: readonly string[],
-    run: (sessionId: string) => void,
-  ) => {
+  const runForSessions = (targetSessionIds: readonly string[], run: (sessionId: string) => void) => {
     dismissMenu();
     onSelectSessions([]);
     runSidebarBulkContextMenuActionInBackground(targetSessionIds, run);
@@ -273,7 +243,7 @@ export function ProjectCollectionSection({
     vscode.postMessage({
       sessionIds: [...targetSessionIds],
       sleeping,
-      type: "setSessionsSleeping",
+      type: 'setSessionsSleeping',
     });
   };
   const closeSessions = () => {
@@ -284,19 +254,19 @@ export function ProjectCollectionSection({
     onSelectSessions([]);
     useSidebarStore.getState().hideSessionsLocally(uniqueSessionIds);
     runSidebarBulkContextMenuActionInBackground(uniqueSessionIds, (sessionId) => {
-      vscode.postMessage({ sessionId, type: "closeSession" });
+      vscode.postMessage({ sessionId, type: 'closeSession' });
     });
   };
 
   const menuStyle = {
     left: `${menuPosition?.x ?? 12}px`,
     top: `${menuPosition?.y ?? 12}px`,
-    width: "218px",
+    width: '218px',
   };
 
   return (
     <section
-      className="project-collection"
+      className='project-collection'
       data-collapsed={String(collapsed)}
       data-collection-drop-position={dropIndicatorPosition}
       data-contains-active-session={String(containsActiveSession)}
@@ -312,7 +282,7 @@ export function ProjectCollectionSection({
       style={style}
     >
       <div
-        className="project-collection-header"
+        className='project-collection-header'
         onClick={(event) => {
           event.preventDefault();
           toggleCollapsed();
@@ -321,35 +291,35 @@ export function ProjectCollectionSection({
           event.preventDefault();
           event.stopPropagation();
           setMenuPosition({ x: event.clientX, y: event.clientY });
-          setMenuView("actions");
+          setMenuView('actions');
         }}
         ref={sortable.handleRef}
       >
         <button
           aria-expanded={!collapsed}
-          aria-label={`${collapsed ? "Expand" : "Collapse"} ${collection.title}`}
-          className="project-collection-collapse"
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${collection.title}`}
+          className='project-collection-collapse'
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
             toggleCollapsed();
           }}
-          type="button"
+          type='button'
         >
-          <IconCaretRightFilled aria-hidden="true" size={14} />
+          <IconCaretRightFilled aria-hidden='true' size={14} />
         </button>
         {isEditing ? (
           <input
-            className="project-collection-title-input"
+            className='project-collection-title-input'
             onBlur={submitRename}
             onChange={(event) => setDraftTitle(event.currentTarget.value)}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (event.key === 'Enter') {
                 event.preventDefault();
                 submitRename();
-              } else if (event.key === "Escape") {
+              } else if (event.key === 'Escape') {
                 event.preventDefault();
                 setDraftTitle(collection.title);
                 setIsEditing(false);
@@ -360,49 +330,41 @@ export function ProjectCollectionSection({
           />
         ) : (
           <button
-            className="project-collection-title"
+            className='project-collection-title'
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
               toggleCollapsed();
             }}
-            type="button"
+            type='button'
           >
             {collection.title}
-            {isHidden ? (
-              <IconEyeOff aria-label="Hidden" className="sidebar-hidden-item-icon" size={13} />
-            ) : null}
+            {isHidden ? <IconEyeOff aria-label='Hidden' className='sidebar-hidden-item-icon' size={13} /> : null}
           </button>
         )}
         {shouldShowCollapsedStatus ? (
           <div
             aria-label={[
-              sessionSummary.workingCount > 0
-                ? `${sessionSummary.workingCount} working`
-                : "",
-              sessionSummary.attentionCount > 0
-                ? `${sessionSummary.attentionCount} done`
-                : "",
-              !hasActionStatus && awakeCount > 0
-                ? `${awakeCount} awake terminals and browsers`
-                : "",
+              sessionSummary.workingCount > 0 ? `${sessionSummary.workingCount} working` : '',
+              sessionSummary.attentionCount > 0 ? `${sessionSummary.attentionCount} done` : '',
+              !hasActionStatus && awakeCount > 0 ? `${awakeCount} awake terminals and browsers` : '',
             ]
               .filter(Boolean)
-              .join(", ")}
-            className="group-collapsed-status-counts project-collection-status-counts"
+              .join(', ')}
+            className='group-collapsed-status-counts project-collection-status-counts'
           >
             {sessionSummary.workingCount > 0 ? (
-              <span className="group-collapsed-status-count" data-activity="working">
+              <span className='group-collapsed-status-count' data-activity='working'>
                 {sessionSummary.workingCount}
               </span>
             ) : null}
             {sessionSummary.attentionCount > 0 ? (
-              <span className="group-collapsed-status-count" data-activity="attention">
+              <span className='group-collapsed-status-count' data-activity='attention'>
                 {sessionSummary.attentionCount}
               </span>
             ) : null}
             {!hasActionStatus && awakeCount > 0 ? (
-              <span className="group-collapsed-status-count" data-activity="awake">
+              <span className='group-collapsed-status-count' data-activity='awake'>
                 {awakeCount}
               </span>
             ) : null}
@@ -411,7 +373,7 @@ export function ProjectCollectionSection({
         {!collapsed ? (
           <SidebarFixedTooltipButton
             aria-label={bulkProjectActionLabel}
-            className="project-collection-bulk-project-action"
+            className='project-collection-bulk-project-action'
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -419,18 +381,18 @@ export function ProjectCollectionSection({
             }}
             onPointerDown={(event) => event.stopPropagation()}
             tooltip={bulkProjectActionLabel}
-            tooltipAlign="end"
-            tooltipSide="left"
-            type="button"
+            tooltipAlign='end'
+            tooltipSide='left'
+            type='button'
           >
-            <BulkProjectIcon aria-hidden="true" size={14} stroke={1.9} />
+            <BulkProjectIcon aria-hidden='true' size={14} stroke={1.9} />
           </SidebarFixedTooltipButton>
         ) : null}
       </div>
       {shouldRenderProjects ? (
         <div
           aria-hidden={areProjectsVisuallyCollapsed}
-          className="project-collection-projects sidebar-animated-collapse-body"
+          className='project-collection-projects sidebar-animated-collapse-body'
           data-collapsed={String(areProjectsVisuallyCollapsed)}
           inert={areProjectsVisuallyCollapsed ? true : undefined}
           ref={setProjectsElement}
@@ -439,242 +401,231 @@ export function ProjectCollectionSection({
         </div>
       ) : null}
       {menuView ? (
-        <SidebarContextMenuPortal
-          menuRef={menuRef}
-          menuStyle={menuStyle}
-          onDismiss={dismissMenu}
-          vscode={vscode}
-        >
-          {menuView === "colors" ? (
+        <SidebarContextMenuPortal menuRef={menuRef} menuStyle={menuStyle} onDismiss={dismissMenu} vscode={vscode}>
+          {menuView === 'colors' ? (
             <>
               <button
-                className="session-context-menu-item"
-                onClick={() => setMenuView("actions")}
-                role="menuitem"
-                type="button"
+                className='session-context-menu-item'
+                onClick={() => setMenuView('actions')}
+                role='menuitem'
+                type='button'
               >
-                <IconCaretRightFilled
-                  className="session-context-menu-icon project-collection-menu-back"
-                  size={14}
-                />
+                <IconCaretRightFilled className='session-context-menu-icon project-collection-menu-back' size={14} />
                 Back
               </button>
-              <div className="session-context-menu-divider" role="separator" />
+              <div className='session-context-menu-divider' role='separator' />
               {SIDEBAR_PROJECT_COLLECTION_COLORS.map((color) => (
                 <button
                   aria-label={`Use ${SIDEBAR_PROJECT_COLLECTION_COLOR_LABELS[color]} for ${collection.title}`}
-                  className="session-context-menu-item"
+                  className='session-context-menu-item'
                   key={color}
                   onClick={() => {
                     onChange({ ...collection, color });
                     dismissMenu();
                   }}
-                  role="menuitemradio"
-                  type="button"
+                  role='menuitemradio'
+                  type='button'
                 >
-                  <span className="project-collection-menu-swatch" style={{ background: color }} />
+                  <span className='project-collection-menu-swatch' style={{ background: color }} />
                   <span>{SIDEBAR_PROJECT_COLLECTION_COLOR_LABELS[color]}</span>
                   {color === collection.color ? <IconCheck size={14} /> : null}
                 </button>
               ))}
             </>
-          ) : menuView === "tags" ? (
+          ) : menuView === 'tags' ? (
             <>
               <button
-                className="session-context-menu-item"
-                onClick={() => setMenuView("actions")}
-                role="menuitem"
-                type="button"
+                className='session-context-menu-item'
+                onClick={() => setMenuView('actions')}
+                role='menuitem'
+                type='button'
               >
-                <IconCaretRightFilled
-                  className="session-context-menu-icon project-collection-menu-back"
-                  size={14}
-                />
+                <IconCaretRightFilled className='session-context-menu-icon project-collection-menu-back' size={14} />
                 Back
               </button>
-              <div className="session-context-menu-divider" role="separator" />
+              <div className='session-context-menu-divider' role='separator' />
               <button
-                className="session-context-menu-item"
+                className='session-context-menu-item'
                 onClick={() =>
                   runForSessions(taggableSessionIds, (sessionId) =>
-                    vscode.postMessage({ sessionId, sessionTag: null, type: "setSessionTag" }),
+                    vscode.postMessage({ sessionId, sessionTag: null, type: 'setSessionTag' })
                   )
                 }
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
                 Clear tag
               </button>
               {availableTags.map((item) =>
-                item.type === "tag" ? (
+                item.type === 'tag' ? (
                   <button
-                    className="session-context-menu-item"
+                    className='session-context-menu-item'
                     key={item.id}
                     onClick={() =>
                       runForSessions(taggableSessionIds, (sessionId) =>
                         vscode.postMessage({
                           sessionId,
                           sessionTag: item.tag,
-                          type: "setSessionTag",
-                        }),
+                          type: 'setSessionTag',
+                        })
                       )
                     }
-                    role="menuitem"
-                    type="button"
+                    role='menuitem'
+                    type='button'
                   >
                     {getSidebarSessionTagLabel(item.tag) ?? item.tag}
                   </button>
-                ) : null,
+                ) : null
               )}
             </>
           ) : (
             <>
               <button
-                className="session-context-menu-item"
+                className='session-context-menu-item'
                 disabled={uniqueSessionIds.length === 0}
                 onClick={() => {
                   onSelectSessions(uniqueSessionIds);
                   dismissMenu();
                 }}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconCheck className="session-context-menu-icon" size={14} />
+                <IconCheck className='session-context-menu-icon' size={14} />
                 Select all sessions
               </button>
               {sleepableSessionIds.length > 0 ? (
                 <button
-                  className="session-context-menu-item"
+                  className='session-context-menu-item'
                   onClick={() => setSleeping(sleepableSessionIds, true)}
-                  role="menuitem"
-                  type="button"
+                  role='menuitem'
+                  type='button'
                 >
-                  <IconMoon className="session-context-menu-icon" size={14} />
+                  <IconMoon className='session-context-menu-icon' size={14} />
                   Sleep sessions
                 </button>
               ) : null}
               {wakeableSessionIds.length > 0 ? (
                 <button
-                  className="session-context-menu-item"
+                  className='session-context-menu-item'
                   onClick={() => setSleeping(wakeableSessionIds, false)}
-                  role="menuitem"
-                  type="button"
+                  role='menuitem'
+                  type='button'
                 >
-                  <IconPlayerPlay className="session-context-menu-icon" size={14} />
+                  <IconPlayerPlay className='session-context-menu-icon' size={14} />
                   Wake sessions
                 </button>
               ) : null}
               {taggableSessionIds.length > 0 && availableTags.length > 0 ? (
                 <button
-                  className="session-context-menu-item"
-                  onClick={() => setMenuView("tags")}
-                  role="menuitem"
-                  type="button"
+                  className='session-context-menu-item'
+                  onClick={() => setMenuView('tags')}
+                  role='menuitem'
+                  type='button'
                 >
-                  <IconTag className="session-context-menu-icon" size={14} />
+                  <IconTag className='session-context-menu-icon' size={14} />
                   Tag sessions
                 </button>
               ) : null}
               {pinnableSessionIds.length > 0 ? (
                 <button
-                  className="session-context-menu-item"
+                  className='session-context-menu-item'
                   onClick={() =>
                     runForSessions(pinnableSessionIds, (sessionId) =>
-                      vscode.postMessage({ pinned: true, sessionId, type: "setSessionPinned" }),
+                      vscode.postMessage({ pinned: true, sessionId, type: 'setSessionPinned' })
                     )
                   }
-                  role="menuitem"
-                  type="button"
+                  role='menuitem'
+                  type='button'
                 >
-                  <IconPinned className="session-context-menu-icon" size={14} />
+                  <IconPinned className='session-context-menu-icon' size={14} />
                   Pin sessions
                 </button>
               ) : null}
               {unpinnableSessionIds.length > 0 ? (
                 <button
-                  className="session-context-menu-item"
+                  className='session-context-menu-item'
                   onClick={() =>
                     runForSessions(unpinnableSessionIds, (sessionId) =>
-                      vscode.postMessage({ pinned: false, sessionId, type: "setSessionPinned" }),
+                      vscode.postMessage({ pinned: false, sessionId, type: 'setSessionPinned' })
                     )
                   }
-                  role="menuitem"
-                  type="button"
+                  role='menuitem'
+                  type='button'
                 >
-                  <IconPinnedOff className="session-context-menu-icon" size={14} />
+                  <IconPinnedOff className='session-context-menu-icon' size={14} />
                   Unpin sessions
                 </button>
               ) : null}
               {reloadableSessionIds.length > 0 ? (
                 <button
-                  className="session-context-menu-item"
+                  className='session-context-menu-item'
                   onClick={() =>
                     runForSessions(reloadableSessionIds, (sessionId) =>
-                      vscode.postMessage({ sessionId, type: "fullReloadSession" }),
+                      vscode.postMessage({ sessionId, type: 'fullReloadSession' })
                     )
                   }
-                  role="menuitem"
-                  type="button"
+                  role='menuitem'
+                  type='button'
                 >
-                  <IconRefresh className="session-context-menu-icon" size={14} />
+                  <IconRefresh className='session-context-menu-icon' size={14} />
                   Full reload sessions
                 </button>
               ) : null}
-              <div className="session-context-menu-divider" role="separator" />
+              <div className='session-context-menu-divider' role='separator' />
               <button
-                className="session-context-menu-item"
+                className='session-context-menu-item'
                 onClick={() => {
                   dismissMenu();
                   setDraftTitle(collection.title);
                   setIsEditing(true);
                 }}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconPencil className="session-context-menu-icon" size={14} />
+                <IconPencil className='session-context-menu-icon' size={14} />
                 Rename group
               </button>
               <button
-                className="session-context-menu-item"
-                onClick={() => setMenuView("colors")}
-                role="menuitem"
-                type="button"
+                className='session-context-menu-item'
+                onClick={() => setMenuView('colors')}
+                role='menuitem'
+                type='button'
               >
-                <IconPalette className="session-context-menu-icon" size={14} />
+                <IconPalette className='session-context-menu-icon' size={14} />
                 Group color
               </button>
               <button
-                className="session-context-menu-item"
+                className='session-context-menu-item'
                 onClick={() => {
                   dismissMenu();
                   onHide();
                 }}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconEyeOff className="session-context-menu-icon" size={14} />
-                {isHidden ? "Unhide group" : "Hide group"}
+                <IconEyeOff className='session-context-menu-icon' size={14} />
+                {isHidden ? 'Unhide group' : 'Hide group'}
               </button>
               <button
-                className="session-context-menu-item session-context-menu-item-danger"
+                className='session-context-menu-item session-context-menu-item-danger'
                 onClick={() => {
                   dismissMenu();
                   onDelete();
                 }}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconTrash className="session-context-menu-icon" size={14} />
+                <IconTrash className='session-context-menu-icon' size={14} />
                 Delete group
               </button>
               <button
-                className="session-context-menu-item session-context-menu-item-danger"
+                className='session-context-menu-item session-context-menu-item-danger'
                 disabled={uniqueSessionIds.length === 0}
                 onClick={closeSessions}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconX className="session-context-menu-icon" size={14} />
+                <IconX className='session-context-menu-icon' size={14} />
                 Close all sessions
               </button>
             </>

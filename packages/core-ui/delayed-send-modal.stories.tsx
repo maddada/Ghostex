@@ -1,5 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import { DelayedSendModal, type DelayedSendModalProps } from "./delayed-send-modal";
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { DelayedSendModal, type DelayedSendModalProps } from './delayed-send-modal';
 
 /**
  * CDXC:CodexModalRestyle 2026-08-24:
@@ -10,14 +10,14 @@ import { DelayedSendModal, type DelayedSendModalProps } from "./delayed-send-mod
  * status text can be reviewed without launching the app.
  */
 const baseProps: DelayedSendModalProps = {
-  agentIcon: "codex",
+  agentIcon: 'codex',
   closeAfterDoneActive: false,
   isOpen: true,
   onCancel: () => undefined,
   onCancelTimer: () => undefined,
   onConfirm: () => undefined,
   onToggleCloseAfterDone: () => undefined,
-  sessionTitle: "Restyle Session Automations",
+  sessionTitle: 'Restyle Session Automations',
   supportsSendWhenAgentStops: true,
   supportsSendWhenAllProjectSessionsStop: true,
 };
@@ -26,9 +26,9 @@ function DelayedSendModalStory(props: Partial<DelayedSendModalProps>) {
   return (
     <div
       style={{
-        background: "#0e0e0e",
-        height: "100vh",
-        width: "100vw",
+        background: '#0e0e0e',
+        height: '100vh',
+        width: '100vw',
       }}
     >
       <DelayedSendModal {...baseProps} {...props} />
@@ -37,9 +37,9 @@ function DelayedSendModalStory(props: Partial<DelayedSendModalProps>) {
 }
 
 const meta = {
-  title: "Sidebar/Delayed Send Modal",
+  title: 'Sidebar/Delayed Send Modal',
   parameters: {
-    layout: "fullscreen",
+    layout: 'fullscreen',
   },
   render: () => <DelayedSendModalStory />,
 } satisfies Meta;
@@ -59,7 +59,7 @@ export const ActiveTimer: Story = {
     <DelayedSendModalStory
       closeAfterDoneActive
       delayedSendDeadlineAt={new Date(Date.now() + 95 * 60 * 1000).toISOString()}
-      delayedSendRemainingLabel="1h 35m"
+      delayedSendRemainingLabel='1h 35m'
     />
   ),
 };
@@ -69,10 +69,5 @@ export const ActiveTimer: Story = {
  * is the other height the one-shot native window has to measure.
  */
 export const AgentFinishesTrigger: Story = {
-  render: () => (
-    <DelayedSendModalStory
-      delayedSendRemainingLabel={undefined}
-      sendWhenAgentStopsActive
-    />
-  ),
+  render: () => <DelayedSendModalStory delayedSendRemainingLabel={undefined} sendWhenAgentStopsActive />,
 };

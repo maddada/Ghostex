@@ -18,12 +18,12 @@ import {
   IconSparkles,
   IconTag,
   IconX,
-} from "@tabler/icons-react";
-import { Modifier, type DragOperation } from "@dnd-kit/abstract";
-import { KeyboardSensor, PointerSensor } from "@dnd-kit/dom";
-import { SortableKeyboardPlugin } from "@dnd-kit/dom/sortable";
-import { useDroppable } from "@dnd-kit/react";
-import { useSortable } from "@dnd-kit/react/sortable";
+} from '@tabler/icons-react';
+import { Modifier, type DragOperation } from '@dnd-kit/abstract';
+import { KeyboardSensor, PointerSensor } from '@dnd-kit/dom';
+import { SortableKeyboardPlugin } from '@dnd-kit/dom/sortable';
+import { useDroppable } from '@dnd-kit/react';
+import { useSortable } from '@dnd-kit/react/sortable';
 import {
   Fragment,
   useCallback,
@@ -36,43 +36,33 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
-} from "react";
-import {
-  getSidebarSessionLifecycleState,
-  type SidebarSessionItem,
-} from "../shared/session-grid-contract";
-import {
-  getEnabledVisibleSidebarSessionTagSections,
-  type SidebarSessionTagListItem,
-} from "../shared/session-tags";
-import { buildSidebarSessionDetailsClipboardText } from "../shared/session-details-copy";
+} from 'react';
+import { getSidebarSessionLifecycleState, type SidebarSessionItem } from '../shared/session-grid-contract';
+import { getEnabledVisibleSidebarSessionTagSections, type SidebarSessionTagListItem } from '../shared/session-tags';
+import { buildSidebarSessionDetailsClipboardText } from '../shared/session-details-copy';
 import {
   getSessionCardTitleTooltip,
   OverflowTooltipText,
   SessionCardContent,
   SessionFloatingAgentIcon,
   shouldShowTerminalSessionIcon,
-} from "./session-card-content";
-import { getSessionStatusAnchorName } from "./session-status-anchor";
-import {
-  createSessionDragData,
-  createSessionDropTargetData,
-  createSessionDropTargetId,
-} from "./sidebar-dnd";
-import { closeAppModal, openAppModal } from "./app-modal-host-bridge";
-import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
-import { postSidebarRefreshDebugLog } from "./sidebar-refresh-debug-log";
-import { getSidebarReorderActivationConstraints } from "./sidebar-reorder-activation";
-import { SIDEBAR_ITEM_TOOLTIP_DELAY_MS } from "./tooltip-delay";
-import { useSidebarStore, type SidebarGroupRecord } from "./sidebar-store";
+} from './session-card-content';
+import { getSessionStatusAnchorName } from './session-status-anchor';
+import { createSessionDragData, createSessionDropTargetData, createSessionDropTargetId } from './sidebar-dnd';
+import { closeAppModal, openAppModal } from './app-modal-host-bridge';
+import { SidebarContextMenuPortal } from './sidebar-context-menu-portal';
+import { postSidebarRefreshDebugLog } from './sidebar-refresh-debug-log';
+import { getSidebarReorderActivationConstraints } from './sidebar-reorder-activation';
+import { SIDEBAR_ITEM_TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { useSidebarStore, type SidebarGroupRecord } from './sidebar-store';
 import {
   getEffectiveSessionTag,
   getSidebarSessionTagLabel,
   SessionTagIcon,
   type SidebarSessionTag,
-} from "./session-tag-ui";
-import type { WebviewApi } from "./webview-api";
-import { createPortal, flushSync } from "react-dom";
+} from './session-tag-ui';
+import type { WebviewApi } from './webview-api';
+import { createPortal, flushSync } from 'react-dom';
 
 const CONTEXT_MENU_MARGIN_PX = 12;
 const CONTEXT_MENU_WIDTH_PX = 178;
@@ -82,39 +72,35 @@ const CONTEXT_MENU_VERTICAL_PADDING_PX = 12;
 const POINTER_ALIGNED_CONTEXT_MENU_MIN_SIDEBAR_WIDTH_PX = 235;
 const COMPLETION_FLASH_DURATION_MS = 3_000;
 const SESSION_CARD_IMMEDIATE_FOCUS_CLICK_SUPPRESSION_MS = 1_500;
-const SLEEP_BELOW_DEBUG_EVENT_PREFIX = "sleepBelow";
+const SLEEP_BELOW_DEBUG_EVENT_PREFIX = 'sleepBelow';
 const SESSION_CARD_POINTER_FOCUS_BLOCKING_SELECTOR = [
-  "button",
-  "input",
-  "select",
-  "textarea",
-  "a",
+  'button',
+  'input',
+  'select',
+  'textarea',
+  'a',
   "[role='button']",
   "[role='menu']",
   "[role='menuitem']",
   "[data-session-card-pointer-focus-blocking='true']",
-].join(", ");
+].join(', ');
 const SESSION_CARD_DND_INTERACTIVE_SELECTOR = [
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "button:not([disabled])",
-  "a[href]",
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'button:not([disabled])',
+  'a[href]',
   "[contenteditable]:not([contenteditable='false'])",
-].join(", ");
-const SESSION_CARD_PIN_DRAG_HANDLE_SELECTOR = ".session-pinned-floating-button";
+].join(', ');
+const SESSION_CARD_PIN_DRAG_HANDLE_SELECTOR = '.session-pinned-floating-button';
 const DND_SESSION_CARD_AX_ATTRIBUTES = [
-  "aria-describedby",
-  "aria-disabled",
-  "aria-grabbed",
-  "aria-pressed",
-  "aria-roledescription",
+  'aria-describedby',
+  'aria-disabled',
+  'aria-grabbed',
+  'aria-pressed',
+  'aria-roledescription',
 ] as const;
-const DND_SESSION_FRAME_AX_ATTRIBUTES = [
-  ...DND_SESSION_CARD_AX_ATTRIBUTES,
-  "role",
-  "tabindex",
-] as const;
+const DND_SESSION_FRAME_AX_ATTRIBUTES = [...DND_SESSION_CARD_AX_ATTRIBUTES, 'role', 'tabindex'] as const;
 const EMPTY_SESSION_IDS: readonly string[] = [];
 
 /*
@@ -151,12 +137,12 @@ type SessionContextMenuAction = {
   key: string;
   label: string;
   onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  submenu?: "session-tags";
+  submenu?: 'session-tags';
 };
 
 export type SidebarSessionSelectionChangeRequest = {
   groupId: string;
-  mode: "additive" | "clear" | "range";
+  mode: 'additive' | 'clear' | 'range';
   reason?: string;
   sessionId: string;
 };
@@ -177,7 +163,7 @@ export type SortableSessionCardProps = {
   completionFlashNonce?: number;
   dragDisabled?: boolean;
   dropDisabled?: boolean;
-  forcedDropPosition?: "before" | "after";
+  forcedDropPosition?: 'before' | 'after';
   groupId: string;
   index: number;
   isProjectSessionListOverflowRow?: boolean;
@@ -228,14 +214,8 @@ export function resolveSessionCardSessionIdsBelow({
   return sessionIdsBelowSource.slice(sessionIdsBelowStartIndex);
 }
 
-export function getSessionCardAccessibleLabel({
-  isFocused,
-  title,
-}: {
-  isFocused: boolean;
-  title: string;
-}): string {
-  const fallbackTitle = title.trim() || "Session";
+export function getSessionCardAccessibleLabel({ isFocused, title }: { isFocused: boolean; title: string }): string {
+  const fallbackTitle = title.trim() || 'Session';
   return isFocused ? `${fallbackTitle}, current session` : fallbackTitle;
 }
 
@@ -264,7 +244,7 @@ type SleepBelowDebugDetailsInput = {
   clickedSessionKind?: string;
   debugInstanceId: number | string;
   elapsedSinceRequestMs?: number;
-  event: "nextFrame" | "posted" | "requested" | "skipped";
+  event: 'nextFrame' | 'posted' | 'requested' | 'skipped';
   flushDurationMs?: number;
   frameDelayMs?: number;
   postMessageDurationMs?: number;
@@ -299,9 +279,7 @@ export type SidebarSessionPointerDownFocusInput = {
   shiftKey: boolean;
 };
 
-export function shouldFocusSidebarSessionOnPointerDown(
-  input: SidebarSessionPointerDownFocusInput,
-): boolean {
+export function shouldFocusSidebarSessionOnPointerDown(input: SidebarSessionPointerDownFocusInput): boolean {
   /*
    * CDXC:SidebarSessionFocus 2026-06-26-06:25:
    * When Double-click session cards to rename is off, normal sidebar session
@@ -335,7 +313,7 @@ function shouldPreventSessionCardDragActivation(
     shiftKey?: boolean;
     target: EventTarget | null;
   },
-  sourceElement: Element | undefined,
+  sourceElement: Element | undefined
 ): boolean {
   /*
    * CDXC:SidebarMultiSelect 2026-07-02-06:52:
@@ -372,8 +350,7 @@ function isSessionCardPointerFocusBlockedByDescendant({
   target: EventTarget | null;
 }): boolean {
   const targetNode = target instanceof Node ? target : undefined;
-  const targetElement =
-    targetNode instanceof Element ? targetNode : (targetNode?.parentElement ?? undefined);
+  const targetElement = targetNode instanceof Element ? targetNode : (targetNode?.parentElement ?? undefined);
   if (!targetElement || !currentTarget.contains(targetElement)) {
     return false;
   }
@@ -400,10 +377,7 @@ export function shouldRenameSidebarSessionOnDoubleClick({
    * context-menu command for users who want to zoom a pane tab group.
    */
   return (
-    renameSessionOnDoubleClick &&
-    !isBrowserSession &&
-    !isProjectSessionListOverflowRow &&
-    !isProjectSessionListMoreRow
+    renameSessionOnDoubleClick && !isBrowserSession && !isProjectSessionListOverflowRow && !isProjectSessionListMoreRow
   );
 }
 
@@ -450,9 +424,7 @@ export function getSidebarSessionContextMenuEligibility({
    */
   return {
     canCloseAfterDone:
-      canUseTerminalAgentMenuAction &&
-      hasSession &&
-      supportsCloseAfterDoneMenuAction(session, isRemoteSession),
+      canUseTerminalAgentMenuAction && hasSession && supportsCloseAfterDoneMenuAction(session, isRemoteSession),
     canCopyAttachCommand:
       showSessionCommandCopyActions &&
       canUseTerminalAgentMenuAction &&
@@ -464,14 +436,10 @@ export function getSidebarSessionContextMenuEligibility({
       supportsResumeCommandCopy(session),
     canCopySessionDetails: isConcreteSessionRow && showSessionDetailsCopyAction,
     canDelayedSend:
-      canUseTerminalAgentMenuAction &&
-      hasSession &&
-      supportsDelayedSendMenuAction(session, isRemoteSession),
+      canUseTerminalAgentMenuAction && hasSession && supportsDelayedSendMenuAction(session, isRemoteSession),
     canForkSession: canUseTerminalAgentMenuAction && hasSession && supportsFork(session),
     canFullReloadSession:
-      canUseTerminalAgentMenuAction &&
-      hasSession &&
-      supportsFullReloadMenuAction(session, isRemoteSession),
+      canUseTerminalAgentMenuAction && hasSession && supportsFullReloadMenuAction(session, isRemoteSession),
     canGenerateSessionTitle:
       canUseTerminalAgentMenuAction &&
       hasSession &&
@@ -493,12 +461,10 @@ export function getSidebarSessionContextMenuEligibility({
 }
 
 function isSidebarBrowserSession(session: SidebarSessionItem | undefined): boolean {
-  return session?.sessionKind === "browser" || session?.kind === "browser";
+  return session?.sessionKind === 'browser' || session?.kind === 'browser';
 }
 
-export function createSleepBelowDebugDetails(
-  input: SleepBelowDebugDetailsInput,
-): Record<string, unknown> {
+export function createSleepBelowDebugDetails(input: SleepBelowDebugDetailsInput): Record<string, unknown> {
   /*
    * CDXC:NativeSidebarBulkActions 2026-06-13-12:59:
    * Sleep below lag diagnostics must prove the click path timing without writing
@@ -507,8 +473,8 @@ export function createSleepBelowDebugDetails(
    * component debug instance id.
    */
   return {
-    action: "sleepBelow",
-    clickedSessionKind: input.clickedSessionKind ?? "unknown",
+    action: 'sleepBelow',
+    clickedSessionKind: input.clickedSessionKind ?? 'unknown',
     debugInstanceId: input.debugInstanceId,
     elapsedSinceRequestMs: roundSleepBelowDebugMs(input.elapsedSinceRequestMs),
     event: input.event,
@@ -524,9 +490,7 @@ export function createSleepBelowDebugDetails(
 }
 
 function roundSleepBelowDebugMs(value: number | undefined): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.round(value * 10) / 10
-    : undefined;
+  return typeof value === 'number' && Number.isFinite(value) ? Math.round(value * 10) / 10 : undefined;
 }
 
 /**
@@ -546,7 +510,7 @@ export function runSidebarBulkContextMenuActionInBackground(
   runForSessionId: (sessionId: string) => void,
   scheduler: SidebarBulkContextMenuScheduler = (operation) => {
     globalThis.setTimeout(operation, 0);
-  },
+  }
 ): void {
   const pendingSessionIds = [...sessionIds];
   const runNext = () => {
@@ -574,7 +538,7 @@ function postSidebarSessionCloseInBackground(vscode: WebviewApi, sessionId: stri
   globalThis.setTimeout(() => {
     vscode.postMessage({
       sessionId,
-      type: "closeSession",
+      type: 'closeSession',
     });
   }, 0);
 }
@@ -585,17 +549,14 @@ function suppressCloseDrivenFocusedSessionScroll(sessionIds: readonly string[]):
     return;
   }
 
-  store.suppressNextFocusedSessionScroll("sessionClose");
+  store.suppressNextFocusedSessionScroll('sessionClose');
 }
 
-function postSidebarSessionsCloseInBackground(
-  vscode: WebviewApi,
-  sessionIds: readonly string[],
-): void {
+function postSidebarSessionsCloseInBackground(vscode: WebviewApi, sessionIds: readonly string[]): void {
   globalThis.setTimeout(() => {
     vscode.postMessage({
       sessionIds: [...sessionIds],
-      type: "closeSessions",
+      type: 'closeSessions',
     });
   }, 0);
 }
@@ -604,7 +565,7 @@ function clampContextMenuPosition(
   clientX: number | undefined,
   clientY: number,
   itemCount: number,
-  dividerCount: number,
+  dividerCount: number
 ): ContextMenuPosition {
   const menuHeight =
     CONTEXT_MENU_VERTICAL_PADDING_PX +
@@ -620,20 +581,13 @@ function clampContextMenuPosition(
      * keep the centered placement because they have no usable pointer anchor.
      */
     x:
-      clientX !== undefined &&
-      window.innerWidth >= POINTER_ALIGNED_CONTEXT_MENU_MIN_SIDEBAR_WIDTH_PX
+      clientX !== undefined && window.innerWidth >= POINTER_ALIGNED_CONTEXT_MENU_MIN_SIDEBAR_WIDTH_PX
         ? Math.max(
             CONTEXT_MENU_MARGIN_PX,
-            Math.min(
-              clientX,
-              window.innerWidth - CONTEXT_MENU_WIDTH_PX - CONTEXT_MENU_MARGIN_PX,
-            ),
+            Math.min(clientX, window.innerWidth - CONTEXT_MENU_WIDTH_PX - CONTEXT_MENU_MARGIN_PX)
           )
         : getCenteredSidebarMenuX(CONTEXT_MENU_WIDTH_PX),
-    y: Math.max(
-      CONTEXT_MENU_MARGIN_PX,
-      Math.min(clientY, window.innerHeight - menuHeight - CONTEXT_MENU_MARGIN_PX),
-    ),
+    y: Math.max(CONTEXT_MENU_MARGIN_PX, Math.min(clientY, window.innerHeight - menuHeight - CONTEXT_MENU_MARGIN_PX)),
   };
 }
 
@@ -676,21 +630,14 @@ export function SortableSessionCard({
   vscode,
 }: SortableSessionCardProps) {
   const [contextMenuPosition, setContextMenuPosition] = useState<ContextMenuPosition>();
-  const [contextMenuSessionIdsBelow, setContextMenuSessionIdsBelow] =
-    useState<readonly string[]>(EMPTY_SESSION_IDS);
+  const [contextMenuSessionIdsBelow, setContextMenuSessionIdsBelow] = useState<readonly string[]>(EMPTY_SESSION_IDS);
   const [contextMenuSleepableSessionIdsBelow, setContextMenuSleepableSessionIdsBelow] =
     useState<readonly string[]>(EMPTY_SESSION_IDS);
   const [contextMenuSelectedSessionIds, setContextMenuSelectedSessionIds] =
     useState<readonly string[]>(EMPTY_SESSION_IDS);
-  const effectiveSessionIdsBelow = contextMenuPosition
-    ? contextMenuSessionIdsBelow
-    : EMPTY_SESSION_IDS;
-  const sleepableSessionIdsBelow = contextMenuPosition
-    ? contextMenuSleepableSessionIdsBelow
-    : EMPTY_SESSION_IDS;
-  const effectiveSelectedSessionIds = contextMenuPosition
-    ? contextMenuSelectedSessionIds
-    : EMPTY_SESSION_IDS;
+  const effectiveSessionIdsBelow = contextMenuPosition ? contextMenuSessionIdsBelow : EMPTY_SESSION_IDS;
+  const sleepableSessionIdsBelow = contextMenuPosition ? contextMenuSleepableSessionIdsBelow : EMPTY_SESSION_IDS;
+  const effectiveSelectedSessionIds = contextMenuPosition ? contextMenuSelectedSessionIds : EMPTY_SESSION_IDS;
   const isBulkContextMenu = effectiveSelectedSessionIds.length > 1;
   const storedSession = useSidebarStore((state) => state.sessionsById[sessionId]);
   const isProjectSessionListMoreRow = projectSessionListMoreRow !== undefined;
@@ -702,21 +649,21 @@ export function SortableSessionCard({
     storedSession ??
     (isProjectSessionListMoreRow
       ? {
-          activity: "idle",
-          alias: projectSessionListMoreLabel ?? "Show more",
+          activity: 'idle',
+          alias: projectSessionListMoreLabel ?? 'Show more',
           column: 0,
-          displayTitle: projectSessionListMoreLabel ?? "Show more",
+          displayTitle: projectSessionListMoreLabel ?? 'Show more',
           isFocused: false,
           isLive: false,
           isRunning: false,
           isVisible: false,
-          lifecycleState: "done",
-          nativePaneState: "unmounted",
-          providerSessionState: "missing",
+          lifecycleState: 'done',
+          nativePaneState: 'unmounted',
+          providerSessionState: 'missing',
           row: 0,
           sessionId,
-          sessionKind: "terminal",
-          shortcutLabel: "",
+          sessionKind: 'terminal',
+          shortcutLabel: '',
         }
       : undefined);
   const {
@@ -739,9 +686,7 @@ export function SortableSessionCard({
   const sessionCardRef = useRef<HTMLElement | null>(null);
   const debugInstanceIdRef = useRef(createSidebarDebugInstanceId());
   const lastAgentIconRenderDebugKeyRef = useRef<string | undefined>(undefined);
-  const immediateFocusClickSuppressionRef = useRef<
-    { sessionId: string; timeoutId: number } | undefined
-  >(undefined);
+  const immediateFocusClickSuppressionRef = useRef<{ sessionId: string; timeoutId: number } | undefined>(undefined);
   /*
   CDXC:RemotePresentation 2026-06-30-00:11:
   Remote session rows need visible lifecycle chrome and a non-debug state tooltip while keeping local session cards unchanged. Derive that from the owning group so the session model does not need a separate remote-only flag.
@@ -753,7 +698,7 @@ export function SortableSessionCard({
   Terminal/agent rows have no reachable backing session, so focus clicks are
   inert; browser rows stay clickable because their tabs are local CEF panes.
   */
-  const isStaleRemoteRow = sessionGroup?.isStale === true && session?.sessionKind !== "browser";
+  const isStaleRemoteRow = sessionGroup?.isStale === true && session?.sessionKind !== 'browser';
   const {
     canCloseAfterDone,
     canCopyAttachCommand,
@@ -776,52 +721,48 @@ export function SortableSessionCard({
     showSessionCommandCopyActions,
     showSessionDetailsCopyAction,
   });
-  const postSessionDragDebugLog = useEffectEvent(
-    (event: string, details: Record<string, unknown>) => {
-      if (!showDebugSessionNumbers || isProjectSessionListMoreRow) {
-        return;
-      }
+  const postSessionDragDebugLog = useEffectEvent((event: string, details: Record<string, unknown>) => {
+    if (!showDebugSessionNumbers || isProjectSessionListMoreRow) {
+      return;
+    }
 
-      vscode.postMessage({
-        details: {
-          debugInstanceId: debugInstanceIdRef.current,
-          groupId,
-          index,
-          sessionId,
-          ...details,
-        },
-        event,
-        scenarioId: "native.pane.reorder",
-        type: "sidebarDebugLog",
-      });
-    },
-  );
-  const postMultiSelectDebugLog = useEffectEvent(
-    (event: string, details: Record<string, unknown>) => {
-      /*
-       * CDXC:SidebarMultiSelect 2026-07-02-07:32:
-       * Shift/Cmd selection repros need per-gesture breadcrumbs that persist
-       * regardless of the sidebar Debugging Mode toggle. Post unconditionally;
-       * the native.sidebar.refresh diagnostic scenario (Settings > Diagnostic
-       * logging > "Sidebar refresh and hydration") is the single persist gate,
-       * and payloads stay limited to ids, indexes, counts, and booleans.
-       */
-      vscode.postMessage({
-        details: {
-          groupId,
-          index,
-          selectedCount: selectedSessionIds.length,
-          sessionId,
-          ...details,
-        },
-        event: `repro.sidebarMultiSelect.${event}`,
-        scenarioId: "native.sidebar.refresh",
-        type: "sidebarDebugLog",
-      });
-    },
-  );
+    vscode.postMessage({
+      details: {
+        debugInstanceId: debugInstanceIdRef.current,
+        groupId,
+        index,
+        sessionId,
+        ...details,
+      },
+      event,
+      scenarioId: 'native.pane.reorder',
+      type: 'sidebarDebugLog',
+    });
+  });
+  const postMultiSelectDebugLog = useEffectEvent((event: string, details: Record<string, unknown>) => {
+    /*
+     * CDXC:SidebarMultiSelect 2026-07-02-07:32:
+     * Shift/Cmd selection repros need per-gesture breadcrumbs that persist
+     * regardless of the sidebar Debugging Mode toggle. Post unconditionally;
+     * the native.sidebar.refresh diagnostic scenario (Settings > Diagnostic
+     * logging > "Sidebar refresh and hydration") is the single persist gate,
+     * and payloads stay limited to ids, indexes, counts, and booleans.
+     */
+    vscode.postMessage({
+      details: {
+        groupId,
+        index,
+        selectedCount: selectedSessionIds.length,
+        sessionId,
+        ...details,
+      },
+      event: `repro.sidebarMultiSelect.${event}`,
+      scenarioId: 'native.sidebar.refresh',
+      type: 'sidebarDebugLog',
+    });
+  });
   const sortable = useSortable({
-    accept: "session",
+    accept: 'session',
     data: createSessionDragData(groupId, session?.sessionId ?? sessionId),
     disabled:
       isProjectSessionListMoreRow ||
@@ -829,14 +770,14 @@ export function SortableSessionCard({
       dragDisabled ||
       isBrowserSession ||
       contextMenuPosition !== undefined,
-    feedback: "clone",
+    feedback: 'clone',
     group: groupId,
     id: sessionId,
     index,
     modifiers: sessionCardModifiers,
     plugins: [SortableKeyboardPlugin],
     sensors: sessionCardSensors,
-    type: "session",
+    type: 'session',
   });
   const isSessionReorderDisabled =
     isProjectSessionListMoreRow ||
@@ -845,34 +786,34 @@ export function SortableSessionCard({
     dropDisabled ||
     contextMenuPosition !== undefined;
   const beforeDropTarget = useDroppable({
-    accept: "session",
+    accept: 'session',
     data: createSessionDropTargetData({
       groupId,
-      kind: "session",
-      position: "before",
+      kind: 'session',
+      position: 'before',
       sessionId,
     }),
     disabled: isSessionReorderDisabled,
     id: createSessionDropTargetId({
       groupId,
-      kind: "session",
-      position: "before",
+      kind: 'session',
+      position: 'before',
       sessionId,
     }),
   });
   const afterDropTarget = useDroppable({
-    accept: "session",
+    accept: 'session',
     data: createSessionDropTargetData({
       groupId,
-      kind: "session",
-      position: "after",
+      kind: 'session',
+      position: 'after',
       sessionId,
     }),
     disabled: isSessionReorderDisabled,
     id: createSessionDropTargetId({
       groupId,
-      kind: "session",
-      position: "after",
+      kind: 'session',
+      position: 'after',
       sessionId,
     }),
   });
@@ -912,7 +853,7 @@ export function SortableSessionCard({
   });
   const sessionTagSubmenuItemCount = sessionTagSubmenuSections.reduce(
     (count, section) => count + section.options.length,
-    0,
+    0
   );
   const sessionTitleTooltip = getSessionCardTitleTooltip({
     alwaysShowStateTooltip: isRemoteSession,
@@ -930,7 +871,7 @@ export function SortableSessionCard({
     session.delayedSendDeadlineAt ||
     session.closeAfterDone ||
     session.closeAfterDoneRemainingLabel ||
-    session.closeAfterDoneDeadlineAt,
+    session.closeAfterDoneDeadlineAt
   );
   const hasSessionCardIcon =
     !isProjectSessionListMoreRow &&
@@ -956,14 +897,14 @@ export function SortableSessionCard({
       sessionFrameRef.current = element;
       sortable.ref(element);
     },
-    [sortable],
+    [sortable]
   );
   const setSessionCardElement = useCallback(
     (element: HTMLElement | null) => {
       sessionCardRef.current = element;
       sortable.sourceRef(element);
     },
-    [sortable],
+    [sortable]
   );
 
   useEffect(() => {
@@ -997,10 +938,7 @@ export function SortableSessionCard({
       return;
     }
 
-    const scrubDndAccessibilityAttributes = (target: {
-      attributes: readonly string[];
-      element: HTMLElement;
-    }) => {
+    const scrubDndAccessibilityAttributes = (target: { attributes: readonly string[]; element: HTMLElement }) => {
       for (const attribute of target.attributes) {
         target.element.removeAttribute(attribute);
       }
@@ -1015,9 +953,9 @@ export function SortableSessionCard({
         if (
           mutations.some(
             (mutation) =>
-              mutation.type === "attributes" &&
+              mutation.type === 'attributes' &&
               mutation.attributeName !== null &&
-              target.attributes.includes(mutation.attributeName),
+              target.attributes.includes(mutation.attributeName)
           )
         ) {
           window.queueMicrotask(() => scrubDndAccessibilityAttributes(target));
@@ -1062,13 +1000,13 @@ export function SortableSessionCard({
   }, [completionFlashRunId]);
 
   useEffect(() => {
-    postSessionDragDebugLog("session.cardMounted", {
+    postSessionDragDebugLog('session.cardMounted', {
       dropPosition,
       isBrowserSession,
     });
 
     return () => {
-      postSessionDragDebugLog("session.cardUnmounted", {
+      postSessionDragDebugLog('session.cardUnmounted', {
         dropPosition,
         isBrowserSession,
       });
@@ -1084,12 +1022,12 @@ export function SortableSessionCard({
        * the selection click never fires. Persist every drag start so a repro
        * log can prove whether a "lost" shift/cmd click was swallowed by drag.
        */
-      postMultiSelectDebugLog("dragStarted", {});
+      postMultiSelectDebugLog('dragStarted', {});
     }
   }, [postMultiSelectDebugLog, sortable.isDragging]);
 
   useEffect(() => {
-    postSessionDragDebugLog("session.dropPositionChanged", {
+    postSessionDragDebugLog('session.dropPositionChanged', {
       dropPosition,
       isDragging: sortable.isDragging,
       isDropTarget: sortable.isDropTarget,
@@ -1102,25 +1040,19 @@ export function SortableSessionCard({
     }
 
     const hasLastInteractionLabel = showLastActiveTime && Boolean(session.lastInteractionAt);
-    const showHeaderLoadingSpinner =
-      session.isReloading === true || session.isGeneratingFirstPromptTitle === true;
-    const hasHeaderAgentIcon =
-      Boolean(session.agentIcon) || showTerminalSessionIcon || showHeaderLoadingSpinner;
-    const defaultTrailingDisplay = hasHeaderAgentIcon
-      ? "icon"
-      : hasLastInteractionLabel
-        ? "time"
-        : "icon";
+    const showHeaderLoadingSpinner = session.isReloading === true || session.isGeneratingFirstPromptTitle === true;
+    const hasHeaderAgentIcon = Boolean(session.agentIcon) || showTerminalSessionIcon || showHeaderLoadingSpinner;
+    const defaultTrailingDisplay = hasHeaderAgentIcon ? 'icon' : hasLastInteractionLabel ? 'time' : 'icon';
     const shouldKeepLoadingIconVisible = showHeaderLoadingSpinner && hasHeaderAgentIcon;
     const hoverTrailingDisplay = shouldKeepLoadingIconVisible
-      ? "icon"
-      : defaultTrailingDisplay === "icon"
+      ? 'icon'
+      : defaultTrailingDisplay === 'icon'
         ? hasLastInteractionLabel
-          ? "time"
-          : "icon"
+          ? 'time'
+          : 'icon'
         : hasHeaderAgentIcon
-          ? "icon"
-          : "time";
+          ? 'icon'
+          : 'time';
     const debugKey = JSON.stringify({
       agentIcon: session.agentIcon,
       defaultTrailingDisplay,
@@ -1145,7 +1077,7 @@ export function SortableSessionCard({
      * the card render decision and actual DOM state so missing sidebar icons
      * can be traced without guessing at CSS or projection state.
      */
-    postSidebarAgentIconRenderDebugLog(vscode, "sidebar.agentIcon.cardRenderState", {
+    postSidebarAgentIconRenderDebugLog(vscode, 'sidebar.agentIcon.cardRenderState', {
       agentIcon: session.agentIcon,
       defaultTrailingDisplay,
       groupId,
@@ -1163,16 +1095,16 @@ export function SortableSessionCard({
 
     const animationFrame = window.requestAnimationFrame(() => {
       const card = findSessionCardElement(session.sessionId);
-      const frame = card?.closest<HTMLElement>(".session-frame");
-      const trailing = card?.querySelector<HTMLElement>(".session-head-trailing");
+      const frame = card?.closest<HTMLElement>('.session-frame');
+      const trailing = card?.querySelector<HTMLElement>('.session-head-trailing');
       const headerIcon = card?.querySelector<HTMLElement>(
-        ".session-header-agent-icon, .session-header-agent-tabler-icon, .session-header-reloading-icon",
+        '.session-header-agent-icon, .session-header-agent-tabler-icon, .session-header-reloading-icon'
       );
       const floatingIcon = frame?.querySelector<HTMLElement>(
-        ".session-floating-agent-icon, .session-floating-agent-tabler-icon, .session-floating-reloading-icon",
+        '.session-floating-agent-icon, .session-floating-agent-tabler-icon, .session-floating-reloading-icon'
       );
 
-      postSidebarAgentIconRenderDebugLog(vscode, "sidebar.agentIcon.cardDomState", {
+      postSidebarAgentIconRenderDebugLog(vscode, 'sidebar.agentIcon.cardDomState', {
         agentIcon: session.agentIcon,
         card: summarizeAgentIconElement(card),
         defaultTrailingDisplay,
@@ -1219,7 +1151,7 @@ export function SortableSessionCard({
 
   const getSleepableSessionIds = (candidateSessionIds: readonly string[]) =>
     candidateSessionIds.filter((candidateSessionId) =>
-      canSleepSidebarSession(useSidebarStore.getState().sessionsById[candidateSessionId]),
+      canSleepSidebarSession(useSidebarStore.getState().sessionsById[candidateSessionId])
     );
 
   const getContextMenuCountsForSessionIdsBelow = (nextSessionIdsBelow: readonly string[]) => {
@@ -1263,9 +1195,7 @@ export function SortableSessionCard({
      */
     const shouldOpenBulkContextMenu =
       nextSelectedSessionIds.length > 1 && nextSelectedSessionIds.includes(session.sessionId);
-    const nextSessionIdsBelow = shouldOpenBulkContextMenu
-      ? EMPTY_SESSION_IDS
-      : readLatestSessionIdsBelow();
+    const nextSessionIdsBelow = shouldOpenBulkContextMenu ? EMPTY_SESSION_IDS : readLatestSessionIdsBelow();
     let nextSleepableSessionIdsBelow: readonly string[] = EMPTY_SESSION_IDS;
     const nextMenuCounts = shouldOpenBulkContextMenu
       ? getSidebarBulkSessionContextMenuCounts({
@@ -1283,11 +1213,9 @@ export function SortableSessionCard({
     setTagSubmenuPosition(undefined);
     setContextMenuSessionIdsBelow(nextSessionIdsBelow);
     setContextMenuSleepableSessionIdsBelow(nextSleepableSessionIdsBelow);
-    setContextMenuSelectedSessionIds(
-      shouldOpenBulkContextMenu ? nextSelectedSessionIds : EMPTY_SESSION_IDS,
-    );
+    setContextMenuSelectedSessionIds(shouldOpenBulkContextMenu ? nextSelectedSessionIds : EMPTY_SESSION_IDS);
     if (selectedSessionIds.length > 0) {
-      postMultiSelectDebugLog("contextMenu", {
+      postMultiSelectDebugLog('contextMenu', {
         isBulk: shouldOpenBulkContextMenu,
         resolvedSelectedCount: nextSelectedSessionIds.length,
         willClearSelection: !shouldOpenBulkContextMenu,
@@ -1296,18 +1224,13 @@ export function SortableSessionCard({
     if (!shouldOpenBulkContextMenu && selectedSessionIds.length > 0) {
       onSessionSelectionChange?.({
         groupId,
-        mode: "clear",
-        reason: "contextMenuOutsideSelection",
+        mode: 'clear',
+        reason: 'contextMenuOutsideSelection',
         sessionId: session.sessionId,
       });
     }
     setContextMenuPosition(
-      clampContextMenuPosition(
-        clientX,
-        clientY,
-        nextMenuCounts.itemCount,
-        nextMenuCounts.dividerCount,
-      ),
+      clampContextMenuPosition(clientX, clientY, nextMenuCounts.itemCount, nextMenuCounts.dividerCount)
     );
   };
 
@@ -1326,17 +1249,17 @@ export function SortableSessionCard({
      * Opening Rename from a sidebar session row should replace any open
      * Settings workspace modal instead of stacking the rename flow behind it.
      */
-    closeAppModal("SettingsDismissal:sessionRowRename");
+    closeAppModal('SettingsDismissal:sessionRowRename');
     openAppModal({
       initialTitle: getSessionRenameInitialTitle(session),
-      modal: "renameSession",
+      modal: 'renameSession',
       sessionAgentIcon: session.agentIcon,
       sessionId: session.sessionId,
-      type: "open",
+      type: 'open',
     });
   };
 
-  const requestClose = (_source: "context-menu" | "middle-click" | "programmatic") => {
+  const requestClose = (_source: 'context-menu' | 'middle-click' | 'programmatic') => {
     flushSync(() => {
       setContextMenuPosition(undefined);
       if (shouldKeepLastProjectSessionVisibleOnClose) {
@@ -1357,7 +1280,7 @@ export function SortableSessionCard({
     setContextMenuPosition(undefined);
     vscode.postMessage({
       sessionId: session.sessionId,
-      type: "copyResumeCommand",
+      type: 'copyResumeCommand',
     });
   };
 
@@ -1371,7 +1294,7 @@ export function SortableSessionCard({
      */
     vscode.postMessage({
       sessionId: session.sessionId,
-      type: "copyAttachCommand",
+      type: 'copyAttachCommand',
     });
   };
 
@@ -1380,7 +1303,7 @@ export function SortableSessionCard({
     vscode.postMessage({
       detailsText: buildSidebarSessionDetailsClipboardText(session, sessionGroup),
       sessionId: session.sessionId,
-      type: "copySessionDetails",
+      type: 'copySessionDetails',
     });
   };
 
@@ -1388,7 +1311,7 @@ export function SortableSessionCard({
     setContextMenuPosition(undefined);
     vscode.postMessage({
       sessionId: session.sessionId,
-      type: "forkSession",
+      type: 'forkSession',
     });
   };
 
@@ -1407,7 +1330,7 @@ export function SortableSessionCard({
      */
     vscode.postMessage({
       sessionId: session.sessionId,
-      type: "focusSessionMode",
+      type: 'focusSessionMode',
     });
   };
 
@@ -1422,21 +1345,20 @@ export function SortableSessionCard({
      * Terminal session context menus mirror the native title-bar clock action:
      * open the full-window timer modal and let native press Enter later for
      * the command text already staged in that terminal.
-    */
+     */
     openAppModal({
       agentIcon: session.agentIcon,
       closeAfterDoneActive: session.closeAfterDone === true,
       delayedSendDeadlineAt: session.delayedSendDeadlineAt,
       delayedSendRemainingLabel: session.delayedSendRemainingLabel,
-      modal: "delayedSend",
-      sendWhenAllProjectSessionsStopActive:
-        session.sendWhenAllProjectSessionsStopActive === true,
+      modal: 'delayedSend',
+      sendWhenAllProjectSessionsStopActive: session.sendWhenAllProjectSessionsStopActive === true,
       sendWhenAgentStopsActive: session.sendWhenAgentStopsActive === true,
       sessionId: session.sessionId,
       supportsSendWhenAgentStops: true,
       supportsSendWhenAllProjectSessionsStop: true,
       title: getSessionRenameInitialTitle(session),
-      type: "open",
+      type: 'open',
     });
   };
 
@@ -1454,7 +1376,7 @@ export function SortableSessionCard({
      */
     vscode.postMessage({
       sessionId: session.sessionId,
-      type: "toggleCloseAfterDone",
+      type: 'toggleCloseAfterDone',
     });
   };
 
@@ -1482,15 +1404,15 @@ export function SortableSessionCard({
         sessionId: session.sessionId,
         terminalTitle: session.terminalTitle,
       },
-      event: "session.generateTitle.clicked",
-      scenarioId: "native.session.title",
-      type: "sidebarDebugLog",
+      event: 'session.generateTitle.clicked',
+      scenarioId: 'native.session.title',
+      type: 'sidebarDebugLog',
     });
     vscode.postMessage({
       sessionId: session.sessionId,
       shouldGenerateTitle: true,
       title: firstMessage,
-      type: "renameSession",
+      type: 'renameSession',
     });
   };
 
@@ -1498,7 +1420,7 @@ export function SortableSessionCard({
     setContextMenuPosition(undefined);
     vscode.postMessage({
       sessionId: session.sessionId,
-      type: "fullReloadSession",
+      type: 'fullReloadSession',
     });
   };
 
@@ -1508,7 +1430,7 @@ export function SortableSessionCard({
     setContextMenuPosition(undefined);
     vscode.postMessage({
       sessionId: session.sessionId,
-      type: "createGroupFromSession",
+      type: 'createGroupFromSession',
     });
   };
 
@@ -1526,7 +1448,7 @@ export function SortableSessionCard({
      */
     vscode.postMessage({
       sessionId: session.sessionId,
-      type: "popOutPane",
+      type: 'popOutPane',
     });
   };
 
@@ -1539,9 +1461,9 @@ export function SortableSessionCard({
     setContextMenuPosition(undefined);
     openAppModal({
       message,
-      modal: "firstUserMessage",
+      modal: 'firstUserMessage',
       title: getSessionRenameInitialTitle(session),
-      type: "open",
+      type: 'open',
     });
   };
 
@@ -1561,7 +1483,7 @@ export function SortableSessionCard({
     vscode.postMessage({
       sessionId: session.sessionId,
       sleeping,
-      type: "setSessionSleeping",
+      type: 'setSessionSleeping',
     });
   };
 
@@ -1587,8 +1509,8 @@ export function SortableSessionCard({
         createSleepBelowDebugDetails({
           ...baseDebugDetails,
           elapsedSinceRequestMs: performance.now() - requestStartedAtMs,
-          event: "skipped",
-        }),
+          event: 'skipped',
+        })
       );
       return;
     }
@@ -1600,8 +1522,8 @@ export function SortableSessionCard({
       createSleepBelowDebugDetails({
         ...baseDebugDetails,
         elapsedSinceRequestMs: performance.now() - requestStartedAtMs,
-        event: "requested",
-      }),
+        event: 'requested',
+      })
     );
     const flushStartedAtMs = performance.now();
     flushSync(() => {
@@ -1612,8 +1534,8 @@ export function SortableSessionCard({
     vscode.postMessage({
       sessionIds: targetSessionIds,
       sleeping: true,
-      source: "sleepBelow",
-      type: "setSessionsSleeping",
+      source: 'sleepBelow',
+      type: 'setSessionsSleeping',
     });
     const postMessageDurationMs = performance.now() - postMessageStartedAtMs;
     postSidebarRefreshDebugLog(
@@ -1623,10 +1545,10 @@ export function SortableSessionCard({
       createSleepBelowDebugDetails({
         ...baseDebugDetails,
         elapsedSinceRequestMs: performance.now() - requestStartedAtMs,
-        event: "posted",
+        event: 'posted',
         flushDurationMs,
         postMessageDurationMs,
-      }),
+      })
     );
     const frameProbeStartedAtMs = performance.now();
     window.requestAnimationFrame(() => {
@@ -1637,11 +1559,11 @@ export function SortableSessionCard({
         createSleepBelowDebugDetails({
           ...baseDebugDetails,
           elapsedSinceRequestMs: performance.now() - requestStartedAtMs,
-          event: "nextFrame",
+          event: 'nextFrame',
           flushDurationMs,
           frameDelayMs: performance.now() - frameProbeStartedAtMs,
           postMessageDurationMs,
-        }),
+        })
       );
     });
   };
@@ -1661,7 +1583,7 @@ export function SortableSessionCard({
   };
 
   const clearSessionSelection = (reason: string) => {
-    onSessionSelectionChange?.({ groupId, mode: "clear", reason, sessionId: session.sessionId });
+    onSessionSelectionChange?.({ groupId, mode: 'clear', reason, sessionId: session.sessionId });
   };
 
   const dismissBulkContextMenu = () => {
@@ -1686,11 +1608,11 @@ export function SortableSessionCard({
         }
       }
     });
-    clearSessionSelection("bulkSetSleeping");
+    clearSessionSelection('bulkSetSleeping');
     vscode.postMessage({
       sessionIds: [...targetSessionIds],
       sleeping,
-      type: "setSessionsSleeping",
+      type: 'setSessionsSleeping',
     });
   };
 
@@ -1703,12 +1625,12 @@ export function SortableSessionCard({
     }
 
     dismissBulkContextMenu();
-    clearSessionSelection("bulkSetPinned");
+    clearSessionSelection('bulkSetPinned');
     runSidebarBulkContextMenuActionInBackground(targetSessionIds, (targetSessionId) => {
       vscode.postMessage({
         pinned,
         sessionId: targetSessionId,
-        type: "setSessionPinned",
+        type: 'setSessionPinned',
       });
     });
   };
@@ -1720,12 +1642,12 @@ export function SortableSessionCard({
     }
 
     dismissBulkContextMenu();
-    clearSessionSelection("bulkSetTag");
+    clearSessionSelection('bulkSetTag');
     runSidebarBulkContextMenuActionInBackground(targetSessionIds, (targetSessionId) => {
       vscode.postMessage({
         sessionId: targetSessionId,
         sessionTag: tag ?? null,
-        type: "setSessionTag",
+        type: 'setSessionTag',
       });
     });
   };
@@ -1737,11 +1659,11 @@ export function SortableSessionCard({
     }
 
     dismissBulkContextMenu();
-    clearSessionSelection("bulkFullReload");
+    clearSessionSelection('bulkFullReload');
     runSidebarBulkContextMenuActionInBackground(targetSessionIds, (targetSessionId) => {
       vscode.postMessage({
         sessionId: targetSessionId,
-        type: "fullReloadSession",
+        type: 'fullReloadSession',
       });
     });
   };
@@ -1757,7 +1679,7 @@ export function SortableSessionCard({
       suppressCloseDrivenFocusedSessionScroll(targetSessionIds);
       useSidebarStore.getState().hideSessionsLocally(targetSessionIds);
     });
-    clearSessionSelection("bulkClose");
+    clearSessionSelection('bulkClose');
     postSidebarSessionsCloseInBackground(vscode, targetSessionIds);
   };
 
@@ -1767,7 +1689,7 @@ export function SortableSessionCard({
     vscode.postMessage({
       sessionId: session.sessionId,
       sessionTag: tag ?? null,
-      type: "setSessionTag",
+      type: 'setSessionTag',
     });
   };
 
@@ -1782,7 +1704,7 @@ export function SortableSessionCard({
       x: getCenteredSidebarMenuX(submenuWidth),
       y: Math.max(
         CONTEXT_MENU_MARGIN_PX,
-        Math.min(bounds.bottom + 4, window.innerHeight - submenuHeight - CONTEXT_MENU_MARGIN_PX),
+        Math.min(bounds.bottom + 4, window.innerHeight - submenuHeight - CONTEXT_MENU_MARGIN_PX)
       ),
     });
   };
@@ -1792,33 +1714,24 @@ export function SortableSessionCard({
     vscode.postMessage({
       pinned,
       sessionId: session.sessionId,
-      type: "setSessionPinned",
+      type: 'setSessionPinned',
     });
   };
 
   const bulkPrimaryActions: SessionContextMenuAction[] = [];
   if (bulkActionAvailability && bulkActionAvailability.sleepableSessionIds.length > 0) {
     bulkPrimaryActions.push({
-      icon: (
-        <IconMoon aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
-      key: "sleep-selected",
-      label: "Sleep selected",
+      icon: <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'sleep-selected',
+      label: 'Sleep selected',
       onClick: () => requestSetSelectedSessionsSleeping(true),
     });
   }
   if (bulkActionAvailability && bulkActionAvailability.wakeableSessionIds.length > 0) {
     bulkPrimaryActions.push({
-      icon: (
-        <IconPlayerPlay
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "wake-selected",
-      label: "Wake selected",
+      icon: <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'wake-selected',
+      label: 'Wake selected',
       onClick: () => requestSetSelectedSessionsSleeping(false),
     });
   }
@@ -1828,57 +1741,34 @@ export function SortableSessionCard({
     sessionTagSubmenuItemCount > 0
   ) {
     bulkPrimaryActions.push({
-      icon: (
-        <IconTag aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
-      key: "tag-selected-as",
-      label: "Tag selected as",
+      icon: <IconTag aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'tag-selected-as',
+      label: 'Tag selected as',
       onClick: openSessionTagSubmenu,
-      submenu: "session-tags",
+      submenu: 'session-tags',
     });
   }
   if (bulkActionAvailability && bulkActionAvailability.pinnableSessionIds.length > 0) {
     bulkPrimaryActions.push({
-      icon: (
-        <IconPinned
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "pin-selected",
-      label: "Pin selected",
+      icon: <IconPinned aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'pin-selected',
+      label: 'Pin selected',
       onClick: () => requestSetSelectedSessionsPinned(true),
     });
   }
   if (bulkActionAvailability && bulkActionAvailability.unpinnableSessionIds.length > 0) {
     bulkPrimaryActions.push({
-      icon: (
-        <IconPinnedOff
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "unpin-selected",
-      label: "Unpin selected",
+      icon: <IconPinnedOff aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'unpin-selected',
+      label: 'Unpin selected',
       onClick: () => requestSetSelectedSessionsPinned(false),
     });
   }
   if (bulkActionAvailability && bulkActionAvailability.fullReloadableSessionIds.length > 0) {
     bulkPrimaryActions.push({
-      icon: (
-        <IconRefresh
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "full-reload-selected",
-      label: "Full reload selected",
+      icon: <IconRefresh aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'full-reload-selected',
+      label: 'Full reload selected',
       onClick: requestFullReloadSelectedSessions,
     });
   }
@@ -1887,17 +1777,15 @@ export function SortableSessionCard({
   if (bulkActionAvailability && bulkActionAvailability.closableSessionIds.length > 0) {
     bulkDestructiveActions.push({
       danger: true,
-      icon: (
-        <IconX aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
+      icon: <IconX aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
       /*
        * CDXC:SidebarMultiSelect 2026-07-01-18:33:
        * Multi-selection is an explicit advanced selection state, so Close selected
        * belongs in the selected-row bulk menu even when the single-row Close item
        * stays behind the Session Cards setting.
        */
-      key: "close-selected",
-      label: "Close selected",
+      key: 'close-selected',
+      label: 'Close selected',
       onClick: requestCloseSelectedSessions,
     });
   }
@@ -1905,35 +1793,18 @@ export function SortableSessionCard({
   const primaryActions: SessionContextMenuAction[] = [];
   if (canRenameSession) {
     primaryActions.push({
-      icon: (
-        <IconPencil
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "rename",
-      label: "Rename",
+      icon: <IconPencil aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'rename',
+      label: 'Rename',
       onClick: requestRename,
     });
   }
   if (canPinSession) {
     primaryActions.push({
       icon: session.isPinned ? (
-        <IconPinnedOff
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
+        <IconPinnedOff aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ) : (
-        <IconPinned
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
+        <IconPinned aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ),
       /**
        * CDXC:PinnedSessions 2026-05-28-12:04:
@@ -1941,36 +1812,29 @@ export function SortableSessionCard({
        * own context-menu action so users can pin any project session without
        * changing previous-session favorites or auto-sleep favorite rules.
        */
-      key: "pin",
-      label: session.isPinned ? "Unpin" : "Pin",
+      key: 'pin',
+      label: session.isPinned ? 'Unpin' : 'Pin',
       onClick: () => requestSetPinned(!session.isPinned),
     });
   }
   if (canTagSession && sessionTagSubmenuItemCount > 0) {
     primaryActions.push({
-      icon: (
-        <IconTag aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
-      key: "tag-as",
-      label: "Tag as",
+      icon: <IconTag aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'tag-as',
+      label: 'Tag as',
       onClick: openSessionTagSubmenu,
-      submenu: "session-tags",
+      submenu: 'session-tags',
     });
   }
   if (canSleepSession) {
     primaryActions.push({
       icon: session.isSleeping ? (
-        <IconPlayerPlay
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
+        <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ) : (
-        <IconMoon aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
+        <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ),
-      key: "sleep",
-      label: session.isSleeping ? "Wake" : "Sleep",
+      key: 'sleep',
+      label: session.isSleeping ? 'Wake' : 'Sleep',
       onClick: () => requestSetSleeping(!session.isSleeping),
     });
   }
@@ -1992,26 +1856,17 @@ export function SortableSessionCard({
      */
     if (sleepableSessionIdsBelow.length > 0) {
       belowActions.push({
-        icon: (
-          <IconMoon
-            aria-hidden="true"
-            className="session-context-menu-icon"
-            size={16}
-            stroke={1.8}
-          />
-        ),
-        key: "sleep-below",
-        label: "Sleep below",
+        icon: <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+        key: 'sleep-below',
+        label: 'Sleep below',
         onClick: requestSleepBelow,
       });
     }
     belowActions.push({
       danger: true,
-      icon: (
-        <IconX aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
-      key: "close-below",
-      label: "Close below",
+      icon: <IconX aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'close-below',
+      label: 'Close below',
       onClick: requestCloseBelow,
     });
   }
@@ -2019,61 +1874,41 @@ export function SortableSessionCard({
   const sessionActions: SessionContextMenuAction[] = [];
   if (session.firstUserMessage?.trim()) {
     sessionActions.push({
-      icon: (
-        <IconMessageCircle
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "view-first-message",
-      label: "View 1st message",
+      icon: <IconMessageCircle aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'view-first-message',
+      label: 'View 1st message',
       onClick: requestViewFirstUserMessage,
     });
   }
   if (canCopyResumeCommand) {
     sessionActions.push({
-      icon: (
-        <IconCopy aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
-      key: "copy-resume",
-      label: "Copy resume",
+      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'copy-resume',
+      label: 'Copy resume',
       onClick: requestCopyResumeCommand,
     });
   }
   if (canCopyAttachCommand) {
     sessionActions.push({
-      icon: (
-        <IconCopy aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
-      key: "copy-attach",
-      label: "Copy attach command",
+      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'copy-attach',
+      label: 'Copy attach command',
       onClick: requestCopyAttachCommand,
     });
   }
   if (canCopySessionDetails) {
     sessionActions.push({
-      icon: (
-        <IconCopy aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
-      key: "copy-details",
-      label: "Copy details",
+      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'copy-details',
+      label: 'Copy details',
       onClick: requestCopySessionDetails,
     });
   }
   if (canDelayedSend) {
     sessionActions.push({
-      icon: (
-        <IconClock
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "delayed-send",
-      label: "Delayed Send",
+      icon: <IconClock aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'delayed-send',
+      label: 'Delayed Send',
       onClick: requestDelayedSend,
     });
   }
@@ -2085,31 +1920,17 @@ export function SortableSessionCard({
      * icon tint. Only the armed session-card status clock uses pastel red.
      */
     sessionActions.push({
-      icon: (
-        <IconClock
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "close-after-done",
-      label: "Close After Done",
+      icon: <IconClock aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'close-after-done',
+      label: 'Close After Done',
       onClick: requestToggleCloseAfterDone,
     });
   }
   if (canForkSession) {
     sessionActions.push({
-      icon: (
-        <IconGitFork
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "fork",
-      label: "Fork",
+      icon: <IconGitFork aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'fork',
+      label: 'Fork',
       onClick: requestForkSession,
     });
   }
@@ -2122,46 +1943,27 @@ export function SortableSessionCard({
      * generates from real user text rather than from title fallbacks.
      */
     sessionActions.push({
-      icon: (
-        <IconSparkles
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "generate-title",
-      label: "Generate Title",
+      icon: <IconSparkles aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'generate-title',
+      label: 'Generate Title',
       onClick: requestGenerateSessionTitle,
     });
   }
   if (canFullReloadSession) {
     sessionActions.push({
-      icon: (
-        <IconRefresh
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "full-reload",
-      label: "Full reload",
+      icon: <IconRefresh aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'full-reload',
+      label: 'Full reload',
       onClick: requestFullReloadSession,
     });
   }
   if (canCreateSessionGroupFromSession) {
     sessionActions.push({
       icon: (
-        <IconLayoutSidebarRightExpand
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
+        <IconLayoutSidebarRightExpand aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ),
-      key: "move-to-new-group",
-      label: "Move to New Group",
+      key: 'move-to-new-group',
+      label: 'Move to New Group',
       onClick: requestCreateSessionGroupFromSession,
     });
   }
@@ -2172,38 +1974,21 @@ export function SortableSessionCard({
      * A single pane with multiple tabs still uses normal tab selection, so hiding Focus here keeps the menu aligned with double-click behavior.
      */
     sessionActions.push({
-      icon: (
-        <IconFocus2
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "focus-mode",
-      label: "Focus",
+      icon: <IconFocus2 aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'focus-mode',
+      label: 'Focus',
       onClick: requestFocusMode,
     });
   }
   if (canPopOutPane) {
     sessionActions.push({
       icon: session.isPoppedOut ? (
-        <IconLayoutSidebarRightExpand
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
+        <IconLayoutSidebarRightExpand aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ) : (
-        <IconExternalLink
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
+        <IconExternalLink aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ),
-      key: "pop-out-pane",
-      label: session.isPoppedOut ? "Restore Pane" : "Pop Out Pane",
+      key: 'pop-out-pane',
+      label: session.isPoppedOut ? 'Restore Pane' : 'Pop Out Pane',
       onClick: requestPopOutPane,
     });
   }
@@ -2212,9 +1997,7 @@ export function SortableSessionCard({
   if (showSessionCloseContextMenuAction) {
     destructiveActions.push({
       danger: true,
-      icon: (
-        <IconX aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
+      icon: <IconX aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
       /**
        * CDXC:SessionClose 2026-05-11-00:45
        * User-facing session removal language is Close. Keep the
@@ -2225,9 +2008,9 @@ export function SortableSessionCard({
        * The Close menu item is hidden by default and appears only when the
        * Session Cards setting opts into destructive close actions in menus.
        */
-      key: "close",
-      label: "Close",
-      onClick: () => requestClose("context-menu"),
+      key: 'close',
+      label: 'Close',
+      onClick: () => requestClose('context-menu'),
     });
   }
   const contextMenuSections = (
@@ -2235,24 +2018,18 @@ export function SortableSessionCard({
       ? [bulkPrimaryActions, bulkDestructiveActions]
       : [primaryActions, sessionActions, belowActions, destructiveActions]
   ).filter((section) => section.length > 0);
-  const contextMenuItemCount = contextMenuSections.reduce(
-    (count, section) => count + section.length,
-    0,
-  );
+  const contextMenuItemCount = contextMenuSections.reduce((count, section) => count + section.length, 0);
   const contextMenuDividerCount = Math.max(0, contextMenuSections.length - 1);
 
   const requestFocusSession = (
-    event?:
-      | ReactKeyboardEvent<HTMLElement>
-      | ReactMouseEvent<HTMLElement>
-      | ReactPointerEvent<HTMLElement>,
+    event?: ReactKeyboardEvent<HTMLElement> | ReactMouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>
   ) => {
     if (isStaleRemoteRow) {
       return;
     }
-    const shouldAcknowledgeAttention = session.activity === "attention";
+    const shouldAcknowledgeAttention = session.activity === 'attention';
     if (event?.metaKey !== true && event?.shiftKey !== true) {
-      clearSessionSelection("focusRequest");
+      clearSessionSelection('focusRequest');
     }
     /**
      * CDXC:SidebarSessionFocus 2026-05-15-20:01:
@@ -2265,10 +2042,10 @@ export function SortableSessionCard({
     vscode.postMessage({
       details: {
         activity: session.activity,
-        button: event && "button" in event ? event.button : undefined,
-        clientX: event && "clientX" in event ? event.clientX : undefined,
-        clientY: event && "clientY" in event ? event.clientY : undefined,
-        clickDetail: event && "detail" in event ? event.detail : undefined,
+        button: event && 'button' in event ? event.button : undefined,
+        clientX: event && 'clientX' in event ? event.clientX : undefined,
+        clientY: event && 'clientY' in event ? event.clientY : undefined,
+        clickDetail: event && 'detail' in event ? event.detail : undefined,
         index,
         groupId,
         isFocused: session.isFocused,
@@ -2281,15 +2058,15 @@ export function SortableSessionCard({
         sessionKind: session.sessionKind,
         shiftKey: event?.shiftKey ?? false,
       },
-      event: "repro.sidebarSessionFocusRequested",
-      scenarioId: "gpui.sidebar.focus",
-      type: "sidebarDebugLog",
+      event: 'repro.sidebarSessionFocusRequested',
+      scenarioId: 'gpui.sidebar.focus',
+      type: 'sidebarDebugLog',
     });
     /*
      * CDXC:SidebarSessionFocus 2026-06-08-09:31:
      * Terminal switching should not wait behind local React focus rendering. Keep the forced focus breadcrumb first for native trace correlation, then send the authoritative focusSession command before applying the sidebar highlight locally; the following hydrate reconciles the UI after native focus/layout has started.
      */
-    vscode.postMessage({ sessionId: session.sessionId, type: "focusSession" });
+    vscode.postMessage({ sessionId: session.sessionId, type: 'focusSession' });
     if (!session.isFocused) {
       onFocusRequested?.(groupId, session.sessionId);
     }
@@ -2301,13 +2078,13 @@ export function SortableSessionCard({
     }
     vscode.postMessage({
       isSessionCard,
-      type: "setSidebarSessionFocusBorderHandoffHitTarget",
+      type: 'setSidebarSessionFocusBorderHandoffHitTarget',
     });
   };
 
   const cancelNativeSidebarSessionFocusBorderHandoff = () => {
     vscode.postMessage({
-      type: "cancelSidebarSessionFocusBorderHandoff",
+      type: 'cancelSidebarSessionFocusBorderHandoff',
     });
   };
 
@@ -2346,7 +2123,7 @@ export function SortableSessionCard({
     }
 
     if (isProjectSessionListMoreRow) {
-      if (event.key !== "Enter" && event.key !== " ") {
+      if (event.key !== 'Enter' && event.key !== ' ') {
         return;
       }
       event.preventDefault();
@@ -2355,7 +2132,7 @@ export function SortableSessionCard({
       return;
     }
 
-    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
       event.preventDefault();
       event.stopPropagation();
       const bounds = event.currentTarget.getBoundingClientRect();
@@ -2363,7 +2140,7 @@ export function SortableSessionCard({
       return;
     }
 
-    if (event.key !== "Enter" && event.key !== " ") {
+    if (event.key !== 'Enter' && event.key !== ' ') {
       return;
     }
 
@@ -2382,7 +2159,7 @@ export function SortableSessionCard({
         tooltipWhen={sessionTitleTooltip.tooltipWhen}
       >
         <div
-          className="session-frame"
+          className='session-frame'
           data-activity={session.activity}
           data-dragging={String(Boolean(sortable.isDragging))}
           data-drop-position={visibleDropPosition}
@@ -2392,43 +2169,39 @@ export function SortableSessionCard({
           data-has-agent-icon={String(hasSessionCardIcon)}
           data-agent-icon-hover-only={String(hideSessionAgentIconUntilHover)}
           data-browser-favicon-hover-only={String(
-            isBrowserSession && Boolean(session.faviconDataUrl) && hideBrowserFaviconUntilHover,
+            isBrowserSession && Boolean(session.faviconDataUrl) && hideBrowserFaviconUntilHover
           )}
           data-lifecycle-state={lifecycleState}
           data-multi-selected={String(isMultiSelected)}
           data-project-session-list-more-row={String(isProjectSessionListMoreRow)}
-          data-project-session-list-more-toggle={isProjectSessionListMoreRow ? "true" : undefined}
+          data-project-session-list-more-toggle={isProjectSessionListMoreRow ? 'true' : undefined}
           data-project-session-list-overflow={String(isProjectSessionListOverflowRow)}
           data-pinned={String(session.isPinned === true)}
           data-tagged={String(Boolean(currentSessionTag))}
           data-remote-session={String(isRemoteSession)}
-          data-running={String(lifecycleState === "running")}
+          data-running={String(lifecycleState === 'running')}
           data-sleeping={String(Boolean(session.isSleeping))}
           data-visible={String(session.isVisible)}
           ref={setSessionFrameElement}
         >
           <div
             aria-hidden
-            className="session-drop-target-surface session-drop-target-surface-before"
+            className='session-drop-target-surface session-drop-target-surface-before'
             ref={beforeDropTarget.ref}
           />
           <div
             aria-hidden
-            className="session-drop-target-surface session-drop-target-surface-after"
+            className='session-drop-target-surface session-drop-target-surface-after'
             ref={afterDropTarget.ref}
           />
           <article
-            aria-current={session.isFocused ? "page" : undefined}
+            aria-current={session.isFocused ? 'page' : undefined}
             aria-hidden={isProjectSessionListOverflowRow ? true : undefined}
             aria-label={sessionAccessibleLabel}
-            className="session"
+            className='session'
             data-activity={session.activity}
             data-completion-flash={
-              completionFlashRunId > 0
-                ? completionFlashRunId % 2 === 0
-                  ? "even"
-                  : "odd"
-                : undefined
+              completionFlashRunId > 0 ? (completionFlashRunId % 2 === 0 ? 'even' : 'odd') : undefined
             }
             data-has-agent-icon={String(hasSessionCardIcon)}
             data-dragging={String(Boolean(sortable.isDragging))}
@@ -2439,13 +2212,13 @@ export function SortableSessionCard({
             data-lifecycle-state={lifecycleState}
             data-multi-selected={String(isMultiSelected)}
             data-project-session-list-more-row={String(isProjectSessionListMoreRow)}
-            data-project-session-list-more-toggle={isProjectSessionListMoreRow ? "true" : undefined}
+            data-project-session-list-more-toggle={isProjectSessionListMoreRow ? 'true' : undefined}
             data-project-session-list-overflow={String(isProjectSessionListOverflowRow)}
             data-agent-icon-hover-only={String(hideSessionAgentIconUntilHover)}
             data-browser-favicon-hover-only={String(
-              isBrowserSession && Boolean(session.faviconDataUrl) && hideBrowserFaviconUntilHover,
+              isBrowserSession && Boolean(session.faviconDataUrl) && hideBrowserFaviconUntilHover
             )}
-            data-running={String(lifecycleState === "running")}
+            data-running={String(lifecycleState === 'running')}
             data-search-selected={String(isSearchSelected)}
             data-pinned={String(session.isPinned === true)}
             data-tagged={String(Boolean(currentSessionTag))}
@@ -2461,7 +2234,7 @@ export function SortableSessionCard({
               setNativeSidebarSessionFocusBorderHandoffHitTarget(false);
             }}
             onPointerCancel={(event) => {
-              postSessionDragDebugLog("session.pointerCancel", {
+              postSessionDragDebugLog('session.pointerCancel', {
                 button: event.button,
                 buttons: event.buttons,
                 clientX: event.clientX,
@@ -2487,7 +2260,7 @@ export function SortableSessionCard({
                 (event.isPrimary ?? true) &&
                 !isProjectSessionListMoreRow &&
                 !isProjectSessionListOverflowRow;
-              postSessionDragDebugLog("session.pointerDown", {
+              postSessionDragDebugLog('session.pointerDown', {
                 button: event.button,
                 buttons: event.buttons,
                 clientX: event.clientX,
@@ -2497,12 +2270,7 @@ export function SortableSessionCard({
                 pointerType: event.pointerType,
               });
 
-              if (
-                event.shiftKey ||
-                event.metaKey ||
-                event.ctrlKey ||
-                selectedSessionIds.length > 0
-              ) {
+              if (event.shiftKey || event.metaKey || event.ctrlKey || selectedSessionIds.length > 0) {
                 /*
                  * CDXC:SidebarMultiSelect 2026-07-02-07:32:
                  * The pointer-down breadcrumb pairs with the click breadcrumb:
@@ -2510,7 +2278,7 @@ export function SortableSessionCard({
                  * the drag sensor consumed the gesture before the row's
                  * selection handler could run.
                  */
-                postMultiSelectDebugLog("pointerDown", {
+                postMultiSelectDebugLog('pointerDown', {
                   altKey: event.altKey,
                   button: event.button,
                   ctrlKey: event.ctrlKey,
@@ -2562,7 +2330,7 @@ export function SortableSessionCard({
               }
             }}
             onPointerUp={(event) => {
-              postSessionDragDebugLog("session.pointerUp", {
+              postSessionDragDebugLog('session.pointerUp', {
                 button: event.button,
                 buttons: event.buttons,
                 clientX: event.clientX,
@@ -2584,7 +2352,7 @@ export function SortableSessionCard({
               }
 
               event.preventDefault();
-              requestClose("middle-click");
+              requestClose('middle-click');
             }}
             onClick={(event) => {
               event.stopPropagation();
@@ -2612,7 +2380,7 @@ export function SortableSessionCard({
                 if (!shouldLogSelectionClick) {
                   return;
                 }
-                postMultiSelectDebugLog("click", {
+                postMultiSelectDebugLog('click', {
                   branch,
                   ctrlKey: event.ctrlKey,
                   detail: event.detail,
@@ -2623,10 +2391,10 @@ export function SortableSessionCard({
 
               if (event.shiftKey) {
                 event.preventDefault();
-                logSelectionClick("range");
+                logSelectionClick('range');
                 onSessionSelectionChange?.({
                   groupId,
-                  mode: "range",
+                  mode: 'range',
                   sessionId: session.sessionId,
                 });
                 return;
@@ -2634,21 +2402,21 @@ export function SortableSessionCard({
 
               if (event.metaKey) {
                 event.preventDefault();
-                logSelectionClick("additive");
+                logSelectionClick('additive');
                 onSessionSelectionChange?.({
                   groupId,
-                  mode: "additive",
+                  mode: 'additive',
                   sessionId: session.sessionId,
                 });
                 return;
               }
 
               if (consumeImmediateFocusClickSuppression()) {
-                logSelectionClick("focusSuppressed");
+                logSelectionClick('focusSuppressed');
                 return;
               }
 
-              logSelectionClick("focus");
+              logSelectionClick('focus');
               requestFocusSession(event);
             }}
             onDoubleClick={(event) => {
@@ -2676,7 +2444,7 @@ export function SortableSessionCard({
             }}
             onKeyDown={handleKeyDown}
             ref={setSessionCardElement}
-            role="button"
+            role='button'
             style={sessionAnchorStyle}
             tabIndex={isProjectSessionListOverflowRow ? -1 : 0}
           >
@@ -2712,7 +2480,7 @@ export function SortableSessionCard({
             <SessionCardContent
               aliasHeadingRef={aliasHeadingRef}
               onDelayedSendClick={requestDelayedSend}
-              onClose={() => requestClose("programmatic")}
+              onClose={() => requestClose('programmatic')}
               session={session}
               showDebugSessionNumbers={showDebugSessionNumbers}
               showCloseButton={!isProjectSessionListMoreRow && showCloseButton}
@@ -2721,13 +2489,13 @@ export function SortableSessionCard({
             />
           </article>
           {isProjectSessionListMoreRow ? null : (
-            <div aria-hidden className="session-status-dot session-status-dot-inline" />
+            <div aria-hidden className='session-status-dot session-status-dot-inline' />
           )}
         </div>
       </OverflowTooltipText>
       {contextMenuPosition && !isProjectSessionListMoreRow ? (
         <SidebarContextMenuPortal
-          menuClassName="session-context-menu sidebar-session-context-menu"
+          menuClassName='session-context-menu sidebar-session-context-menu'
           menuRef={menuRef}
           menuStyle={{
             left: `${contextMenuPosition.x}px`,
@@ -2742,28 +2510,24 @@ export function SortableSessionCard({
         >
           {contextMenuSections.map((section, sectionIndex) => (
             <Fragment key={`section-${sectionIndex}`}>
-              {sectionIndex > 0 ? (
-                <div className="session-context-menu-divider" role="separator" />
-              ) : null}
-              <div className="session-context-menu-section">
+              {sectionIndex > 0 ? <div className='session-context-menu-divider' role='separator' /> : null}
+              <div className='session-context-menu-section'>
                 {section.map((action) => (
                   <button
                     key={action.key}
-                    className={`session-context-menu-item${action.danger ? " session-context-menu-item-danger" : ""}`}
+                    className={`session-context-menu-item${action.danger ? ' session-context-menu-item-danger' : ''}`}
                     onClick={(event) => action.onClick(event)}
-                    aria-expanded={
-                      action.submenu === "session-tags" ? Boolean(tagSubmenuPosition) : undefined
-                    }
-                    aria-haspopup={action.submenu === "session-tags" ? "menu" : undefined}
-                    role="menuitem"
-                    type="button"
+                    aria-expanded={action.submenu === 'session-tags' ? Boolean(tagSubmenuPosition) : undefined}
+                    aria-haspopup={action.submenu === 'session-tags' ? 'menu' : undefined}
+                    role='menuitem'
+                    type='button'
                   >
                     {action.icon}
                     {action.label}
-                    {action.submenu === "session-tags" ? (
+                    {action.submenu === 'session-tags' ? (
                       <IconChevronRight
-                        aria-hidden="true"
-                        className="session-context-menu-trailing-icon"
+                        aria-hidden='true'
+                        className='session-context-menu-trailing-icon'
                         size={14}
                         stroke={1.8}
                       />
@@ -2778,11 +2542,11 @@ export function SortableSessionCard({
       {contextMenuPosition && tagSubmenuPosition && !isProjectSessionListMoreRow
         ? createPortal(
             <div
-              aria-label="Tag as"
-              className="session-context-menu session-tag-submenu"
-              data-empty-space-blocking="true"
+              aria-label='Tag as'
+              className='session-context-menu session-tag-submenu'
+              data-empty-space-blocking='true'
               onClick={(event) => event.stopPropagation()}
-              role="menu"
+              role='menu'
               style={{
                 left: `${tagSubmenuPosition.x}px`,
                 top: `${tagSubmenuPosition.y}px`,
@@ -2792,7 +2556,7 @@ export function SortableSessionCard({
                  * stack so adjacent sidebar rows cannot cover the submenu while
                  * users are choosing a session marker.
                  */
-                zIndex: "var(--sidebar-context-menu-submenu-z-index, 301)",
+                zIndex: 'var(--sidebar-context-menu-submenu-z-index, 301)',
               }}
             >
               {/*
@@ -2807,7 +2571,7 @@ export function SortableSessionCard({
                * structure without spending vertical space on heading text.
                */}
               {sessionTagSubmenuSections.map((section) => (
-                <div className="session-tag-menu-section" key={section.label}>
+                <div className='session-tag-menu-section' key={section.label}>
                   {section.options.map((option) => {
                     const isSelected = contextMenuSessionTag === option.value;
                     const optionLabel = getSidebarSessionTagLabel(option.value);
@@ -2823,7 +2587,7 @@ export function SortableSessionCard({
                               ? `Tag selected sessions as ${optionLabel}`
                               : `Tag as ${optionLabel}`
                         }
-                        className="session-context-menu-item session-tag-menu-item"
+                        className='session-context-menu-item session-tag-menu-item'
                         data-selected={String(isSelected)}
                         key={option.value}
                         onClick={() => {
@@ -2834,20 +2598,20 @@ export function SortableSessionCard({
                           }
                           requestSetSessionTag(nextTag);
                         }}
-                        role="menuitemradio"
-                        type="button"
+                        role='menuitemradio'
+                        type='button'
                       >
                         <SessionTagIcon
-                          className="session-context-menu-icon session-tag-colored-icon"
+                          className='session-context-menu-icon session-tag-colored-icon'
                           fillFavorite
                           size={16}
                           stroke={1.8}
                           tag={option.value}
                         />
-                        <span className="session-tag-menu-item-label">{option.label}</span>
+                        <span className='session-tag-menu-item-label'>{option.label}</span>
                         <IconCheck
-                          aria-hidden="true"
-                          className="session-tag-menu-item-check"
+                          aria-hidden='true'
+                          className='session-tag-menu-item-check'
                           data-visible={String(isSelected)}
                           size={14}
                           stroke={2}
@@ -2858,7 +2622,7 @@ export function SortableSessionCard({
                 </div>
               ))}
             </div>,
-            document.body,
+            document.body
           )
         : null}
     </>
@@ -2876,7 +2640,7 @@ export function canSleepSidebarSession(session: SidebarSessionItem | undefined):
   Some snapshots mark an already parked row through lifecycleState before
   isSleeping is reconciled, so check both fields to avoid duplicate work.
   */
-  return Boolean(session) && session?.isSleeping !== true && session?.lifecycleState !== "sleeping";
+  return Boolean(session) && session?.isSleeping !== true && session?.lifecycleState !== 'sleeping';
 }
 
 export function canWakeSidebarSession(session: SidebarSessionItem | undefined): boolean {
@@ -2886,9 +2650,7 @@ export function canWakeSidebarSession(session: SidebarSessionItem | undefined): 
    * actually parked or sleeping, avoiding no-op wake messages for active
    * terminal, agent, and browser sessions.
    */
-  return (
-    Boolean(session) && (session?.isSleeping === true || session?.lifecycleState === "sleeping")
-  );
+  return Boolean(session) && (session?.isSleeping === true || session?.lifecycleState === 'sleeping');
 }
 
 function getSidebarBulkSessionContextMenuAvailability({
@@ -2918,23 +2680,13 @@ function getSidebarBulkSessionContextMenuAvailability({
   return {
     closableSessionIds: concreteSessionIds,
     fullReloadableSessionIds: concreteSessionIds.filter((sessionId) =>
-      supportsSelectedSessionFullReload(sessionForId(sessionId), sessionId),
+      supportsSelectedSessionFullReload(sessionForId(sessionId), sessionId)
     ),
-    pinnableSessionIds: concreteSessionIds.filter(
-      (sessionId) => sessionForId(sessionId)?.isPinned !== true,
-    ),
-    sleepableSessionIds: concreteSessionIds.filter((sessionId) =>
-      canSleepSidebarSession(sessionForId(sessionId)),
-    ),
-    taggableSessionIds: concreteSessionIds.filter((sessionId) =>
-      canTagSelectedSidebarSession(sessionForId(sessionId)),
-    ),
-    unpinnableSessionIds: concreteSessionIds.filter(
-      (sessionId) => sessionForId(sessionId)?.isPinned === true,
-    ),
-    wakeableSessionIds: concreteSessionIds.filter((sessionId) =>
-      canWakeSidebarSession(sessionForId(sessionId)),
-    ),
+    pinnableSessionIds: concreteSessionIds.filter((sessionId) => sessionForId(sessionId)?.isPinned !== true),
+    sleepableSessionIds: concreteSessionIds.filter((sessionId) => canSleepSidebarSession(sessionForId(sessionId))),
+    taggableSessionIds: concreteSessionIds.filter((sessionId) => canTagSelectedSidebarSession(sessionForId(sessionId))),
+    unpinnableSessionIds: concreteSessionIds.filter((sessionId) => sessionForId(sessionId)?.isPinned === true),
+    wakeableSessionIds: concreteSessionIds.filter((sessionId) => canWakeSidebarSession(sessionForId(sessionId))),
   };
 }
 
@@ -3000,16 +2752,13 @@ function getSharedSelectedSidebarSessionTag({
   return referenceTag;
 }
 
-function supportsSelectedSessionFullReload(
-  session: SidebarSessionItem | undefined,
-  sessionId: string,
-): boolean {
+function supportsSelectedSessionFullReload(session: SidebarSessionItem | undefined, sessionId: string): boolean {
   if (!session || isSidebarBrowserSession(session)) {
     return false;
   }
 
   if (isRemotePresentationSidebarSessionId(sessionId)) {
-    return session.sessionKind === "terminal";
+    return session.sessionKind === 'terminal';
   }
 
   return supportsFullReload(session);
@@ -3030,13 +2779,13 @@ function supportsResumeCommandCopy(session: SidebarSessionItem): boolean {
    * Cursor CLI cards expose the same copy-resume affordance as Codex and Pi.
    */
   return (
-    session.agentIcon === "codex" ||
-    session.agentIcon === "claude" ||
-    session.agentIcon === "copilot" ||
-    session.agentIcon === "gemini" ||
-    session.agentIcon === "opencode" ||
-    session.agentIcon === "pi" ||
-    session.agentIcon === "cursor-cli"
+    session.agentIcon === 'codex' ||
+    session.agentIcon === 'claude' ||
+    session.agentIcon === 'copilot' ||
+    session.agentIcon === 'gemini' ||
+    session.agentIcon === 'opencode' ||
+    session.agentIcon === 'pi' ||
+    session.agentIcon === 'cursor-cli'
   );
 }
 
@@ -3047,9 +2796,7 @@ function supportsFork(session: SidebarSessionItem): boolean {
    * Pi session id/path, so Pi cards should show the same one-click Fork action
    * as Codex in the session context menu.
    */
-  return (
-    session.agentIcon === "codex" || session.agentIcon === "claude" || session.agentIcon === "pi"
-  );
+  return session.agentIcon === 'codex' || session.agentIcon === 'claude' || session.agentIcon === 'pi';
 }
 
 function supportsGeneratedName(session: SidebarSessionItem): boolean {
@@ -3060,15 +2807,10 @@ function supportsGeneratedName(session: SidebarSessionItem): boolean {
    * already switches Pi to `/name <title>`, so the menu gate should include Pi
    * instead of creating a Pi-only title-generation command.
    */
-  return (
-    session.agentIcon === "codex" || session.agentIcon === "claude" || session.agentIcon === "pi"
-  );
+  return session.agentIcon === 'codex' || session.agentIcon === 'claude' || session.agentIcon === 'pi';
 }
 
-function supportsDelayedSendMenuAction(
-  session: SidebarSessionItem,
-  isRemoteSession: boolean,
-): boolean {
+function supportsDelayedSendMenuAction(session: SidebarSessionItem, isRemoteSession: boolean): boolean {
   if (isRemoteSession) {
     return session.canScheduleDelayedSend === true;
   }
@@ -3076,10 +2818,7 @@ function supportsDelayedSendMenuAction(
   return true;
 }
 
-function supportsCloseAfterDoneMenuAction(
-  session: SidebarSessionItem,
-  isRemoteSession: boolean,
-): boolean {
+function supportsCloseAfterDoneMenuAction(session: SidebarSessionItem, isRemoteSession: boolean): boolean {
   if (isRemoteSession) {
     return session.canToggleCloseAfterDone === true;
   }
@@ -3087,12 +2826,9 @@ function supportsCloseAfterDoneMenuAction(
   return true;
 }
 
-function supportsFullReloadMenuAction(
-  session: SidebarSessionItem,
-  isRemoteSession: boolean,
-): boolean {
+function supportsFullReloadMenuAction(session: SidebarSessionItem, isRemoteSession: boolean): boolean {
   if (isRemoteSession) {
-    return session.sessionKind === "terminal";
+    return session.sessionKind === 'terminal';
   }
 
   return supportsFullReload(session);
@@ -3106,23 +2842,16 @@ function supportsPopOutPaneMenuAction(
   }: {
     isBrowserSession: boolean;
     isRemoteSession: boolean;
-  },
+  }
 ): boolean {
   if (isRemoteSession) {
-    return (
-      session.canPopOutPane === true &&
-      session.isSleeping !== true &&
-      session.lifecycleState !== "sleeping"
-    );
+    return session.canPopOutPane === true && session.isSleeping !== true && session.lifecycleState !== 'sleeping';
   }
 
   return supportsPopOutPane(session, isBrowserSession);
 }
 
-function supportsPopOutPane(
-  session: SidebarSessionItem,
-  isBrowserSession: boolean,
-): boolean {
+function supportsPopOutPane(session: SidebarSessionItem, isBrowserSession: boolean): boolean {
   /**
    * CDXC:PanePopOut 2026-05-19-10:15:
    * Sidebar context menus expose pop-out for browser panes and agent terminal
@@ -3137,7 +2866,7 @@ function supportsPopOutPane(
     return true;
   }
 
-  return session.sessionKind === "terminal" && Boolean(session.agentIcon);
+  return session.sessionKind === 'terminal' && Boolean(session.agentIcon);
 }
 
 function supportsFullReload(session: SidebarSessionItem): boolean {
@@ -3155,30 +2884,26 @@ function supportsFullReload(session: SidebarSessionItem): boolean {
    * resolved from the local Cursor chat store for the active project.
    */
   return (
-    session.agentIcon === "codex" ||
-    session.agentIcon === "claude" ||
-    session.agentIcon === "opencode" ||
-    session.agentIcon === "pi" ||
-    session.agentIcon === "cursor-cli"
+    session.agentIcon === 'codex' ||
+    session.agentIcon === 'claude' ||
+    session.agentIcon === 'opencode' ||
+    session.agentIcon === 'pi' ||
+    session.agentIcon === 'cursor-cli'
   );
 }
 
-function postSidebarAgentIconRenderDebugLog(
-  vscode: WebviewApi,
-  event: string,
-  details: Record<string, unknown>,
-): void {
+function postSidebarAgentIconRenderDebugLog(vscode: WebviewApi, event: string, details: Record<string, unknown>): void {
   vscode.postMessage({
     details,
     event,
-    scenarioId: "native.agent.detection",
-    type: "sidebarDebugLog",
+    scenarioId: 'native.agent.detection',
+    type: 'sidebarDebugLog',
   });
 }
 
 function findSessionCardElement(sessionId: string): HTMLElement | undefined {
-  return Array.from(document.querySelectorAll<HTMLElement>("[data-sidebar-session-id]")).find(
-    (element) => element.dataset.sidebarSessionId === sessionId,
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-sidebar-session-id]')).find(
+    (element) => element.dataset.sidebarSessionId === sessionId
   );
 }
 
@@ -3190,10 +2915,7 @@ function summarizeAgentIconElement(element: HTMLElement | null | undefined) {
   const styles = window.getComputedStyle(element);
   const bounds = element.getBoundingClientRect();
   return {
-    className:
-      typeof element.className === "string"
-        ? element.className
-        : String(element.getAttribute("class") ?? ""),
+    className: typeof element.className === 'string' ? element.className : String(element.getAttribute('class') ?? ''),
     dataDefaultTrailingDisplay: element.dataset.defaultTrailingDisplay,
     dataHasAgentIcon: element.dataset.hasAgentIcon,
     dataHoverTrailingDisplay: element.dataset.hoverTrailingDisplay,

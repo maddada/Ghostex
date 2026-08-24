@@ -12,9 +12,9 @@
 // and sibling assets are unreachable from a base-URL-less html string), so
 // this component is never mounted there and the composer keeps its textarea.
 
-import { useEffect, useRef } from "react";
-import type { SessionChatTheme } from "../../shared/session-chat";
-import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from "./session-chat-composer";
+import { useEffect, useRef } from 'react';
+import type { SessionChatTheme } from '../../shared/session-chat';
+import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from './session-chat-composer';
 
 interface MonacoPositionLike {
   column: number;
@@ -64,10 +64,7 @@ interface MonacoEditorInstanceLike {
 
 interface MonacoNamespaceLike {
   editor: {
-    create(
-      container: HTMLElement,
-      options: Record<string, unknown>,
-    ): MonacoEditorInstanceLike;
+    create(container: HTMLElement, options: Record<string, unknown>): MonacoEditorInstanceLike;
     defineTheme(name: string, theme: Record<string, unknown>): void;
   };
 }
@@ -84,8 +81,8 @@ interface MonacoWindowLike {
 }
 
 const CHAT_MONACO_THEMES: Record<SessionChatTheme, string> = {
-  dark: "ghostex-session-chat-dark",
-  light: "ghostex-session-chat-light",
+  dark: 'ghostex-session-chat-dark',
+  light: 'ghostex-session-chat-light',
 };
 const MIN_INPUT_HEIGHT_PX = 24;
 const MAX_INPUT_HEIGHT_PX = 160;
@@ -107,15 +104,15 @@ const QUICK_INPUT_MIN_HEIGHT_PX = 280;
 function composerKeyForMonacoEvent(event: MonacoKeyboardEventLike): string {
   switch (event.keyCode) {
     case 2: // monaco.KeyCode.Tab
-      return "Tab";
+      return 'Tab';
     case 3: // monaco.KeyCode.Enter
-      return "Enter";
+      return 'Enter';
     case 9: // monaco.KeyCode.Escape
-      return "Escape";
+      return 'Escape';
     case 16: // monaco.KeyCode.UpArrow
-      return "ArrowUp";
+      return 'ArrowUp';
     case 18: // monaco.KeyCode.DownArrow
-      return "ArrowDown";
+      return 'ArrowDown';
     default:
       return event.browserEvent.key;
   }
@@ -144,29 +141,29 @@ function loadSessionChatMonaco(vsBaseUrl: string): Promise<MonacoNamespaceLike> 
     };
     const finish = (): void => {
       const amdRequire = target.require;
-      if (typeof amdRequire !== "function") {
-        reject(new Error("The Monaco AMD loader did not install."));
+      if (typeof amdRequire !== 'function') {
+        reject(new Error('The Monaco AMD loader did not install.'));
         return;
       }
       amdRequire.config?.({ paths: { vs: vsBaseUrl } });
       amdRequire(
-        ["vs/editor/editor.main"],
+        ['vs/editor/editor.main'],
         () => {
           if (target.monaco) {
             resolve(target.monaco);
           } else {
-            reject(new Error("Monaco loaded without installing window.monaco."));
+            reject(new Error('Monaco loaded without installing window.monaco.'));
           }
         },
-        (error) => reject(error instanceof Error ? error : new Error(String(error))),
+        (error) => reject(error instanceof Error ? error : new Error(String(error)))
       );
     };
     const existing = target.require;
-    if (typeof existing === "function" && existing.config) {
+    if (typeof existing === 'function' && existing.config) {
       finish();
       return;
     }
-    const script = document.createElement("script");
+    const script = document.createElement('script');
     script.src = `${vsBaseUrl}/loader.js`;
     script.onload = finish;
     script.onerror = () => reject(new Error(`Could not load ${vsBaseUrl}/loader.js.`));
@@ -184,21 +181,21 @@ function ensureChatThemes(monaco: MonacoNamespaceLike): void {
   themeDefined = true;
   // Transparent background so the composer's bg-card container shows through.
   monaco.editor.defineTheme(CHAT_MONACO_THEMES.dark, {
-    base: "vs-dark",
+    base: 'vs-dark',
     colors: {
-      "editor.background": "#00000000",
-      "editor.lineHighlightBackground": "#00000000",
-      "editorGutter.background": "#00000000",
+      'editor.background': '#00000000',
+      'editor.lineHighlightBackground': '#00000000',
+      'editorGutter.background': '#00000000',
     },
     inherit: true,
     rules: [],
   });
   monaco.editor.defineTheme(CHAT_MONACO_THEMES.light, {
-    base: "vs",
+    base: 'vs',
     colors: {
-      "editor.background": "#00000000",
-      "editor.lineHighlightBackground": "#00000000",
-      "editorGutter.background": "#00000000",
+      'editor.background': '#00000000',
+      'editor.lineHighlightBackground': '#00000000',
+      'editorGutter.background': '#00000000',
     },
     inherit: true,
     rules: [],
@@ -267,11 +264,11 @@ export function SessionChatMonacoInput({
         }
         ensureChatThemes(monaco);
         const editor = monaco.editor.create(container, {
-          acceptSuggestionOnEnter: "off",
-          autoClosingBrackets: "never",
-          autoClosingQuotes: "never",
+          acceptSuggestionOnEnter: 'off',
+          autoClosingBrackets: 'never',
+          autoClosingQuotes: 'never',
           automaticLayout: true,
-          autoSurround: "never",
+          autoSurround: 'never',
           bracketPairColorization: { enabled: false },
           codeLens: false,
           // A prompt that mentions #ff0000 should not sprout a color swatch and
@@ -298,23 +295,23 @@ export function SessionChatMonacoInput({
             indentation: false,
           },
           hover: { enabled: false },
-          inlayHints: { enabled: "off" },
+          inlayHints: { enabled: 'off' },
           inlineSuggest: { enabled: false },
           // Plain text on purpose: the draft is a prompt, so markdown *emphasis*
           // styling and syntax colorization inside the input read as noise.
-          language: "plaintext",
-          lightbulb: { enabled: "off" },
+          language: 'plaintext',
+          lightbulb: { enabled: 'off' },
           lineDecorationsWidth: 0,
           lineHeight: 24,
-          lineNumbers: "off",
+          lineNumbers: 'off',
           lineNumbersMinChars: 0,
           // URL detection turns pasted links into underlined, ctrl-clickable
           // spans with their own hover widget; the draft is text to send, not a
           // document to navigate.
           links: false,
-          matchBrackets: "never",
+          matchBrackets: 'never',
           minimap: { enabled: false },
-          occurrencesHighlight: "off",
+          occurrencesHighlight: 'off',
           overviewRulerBorder: false,
           overviewRulerLanes: 0,
           padding: { bottom: 0, top: 0 },
@@ -324,38 +321,35 @@ export function SessionChatMonacoInput({
           // Control characters and whitespace both render as boxes/dots inside
           // a selection; in prose that reads as corruption rather than detail.
           renderControlCharacters: false,
-          renderLineHighlight: "none",
-          renderWhitespace: "none",
+          renderLineHighlight: 'none',
+          renderWhitespace: 'none',
           scrollBeyondLastLine: false,
           scrollbar: {
             alwaysConsumeMouseWheel: false,
-            horizontal: "hidden",
+            horizontal: 'hidden',
             useShadows: false,
-            vertical: "auto",
+            vertical: 'auto',
             verticalScrollbarSize: 3,
           },
           selectionHighlight: false,
-          snippetSuggestions: "none",
+          snippetSuggestions: 'none',
           stickyScroll: { enabled: false },
           suggestOnTriggerCharacters: false,
           theme: CHAT_MONACO_THEMES[themeRef.current],
           unicodeHighlight: { ambiguousCharacters: false },
           value: initialValue,
-          wordBasedSuggestions: "off",
-          wordWrap: "on",
-          wrappingStrategy: "advanced",
+          wordBasedSuggestions: 'off',
+          wordWrap: 'on',
+          wrappingStrategy: 'advanced',
         });
         editorRef.current = editor;
         const applyHeight = (): void => {
           if (fillHeightRef.current) {
             // Clear the inline height so the stylesheet's stretched container
             // wins; monaco's automaticLayout then follows the flex row.
-            container.style.height = "";
+            container.style.height = '';
           } else {
-            const height = Math.min(
-              Math.max(editor.getContentHeight(), MIN_INPUT_HEIGHT_PX),
-              MAX_INPUT_HEIGHT_PX,
-            );
+            const height = Math.min(Math.max(editor.getContentHeight(), MIN_INPUT_HEIGHT_PX), MAX_INPUT_HEIGHT_PX);
             container.style.height = `${
               quickInputOpenRef.current ? Math.max(height, QUICK_INPUT_MIN_HEIGHT_PX) : height
             }px`;
@@ -369,7 +363,7 @@ export function SessionChatMonacoInput({
         // afterwards instead of keeping a subtree style observer alive.
         let quickInputWidgetObserver: MutationObserver | null = null;
         const syncQuickInputOpen = (widget: HTMLElement): void => {
-          const open = widget.style.display !== "none";
+          const open = widget.style.display !== 'none';
           if (open === quickInputOpenRef.current) {
             return;
           }
@@ -377,13 +371,13 @@ export function SessionChatMonacoInput({
           applyHeight();
         };
         const observeQuickInputWidget = (): void => {
-          const widget = container.querySelector<HTMLElement>(".quick-input-widget");
+          const widget = container.querySelector<HTMLElement>('.quick-input-widget');
           if (!widget || quickInputWidgetObserver) {
             return;
           }
           quickInputWidgetObserver = new MutationObserver(() => syncQuickInputOpen(widget));
           quickInputWidgetObserver.observe(widget, {
-            attributeFilter: ["style"],
+            attributeFilter: ['style'],
             attributes: true,
           });
           quickInputMountObserver.disconnect();
@@ -434,7 +428,7 @@ export function SessionChatMonacoInput({
               },
               shiftKey: event.browserEvent.shiftKey,
             });
-          }),
+          })
         );
         applyHeight();
         registerApi({
@@ -446,9 +440,7 @@ export function SessionChatMonacoInput({
             if (editor.getValue() !== next) {
               suppressChangeRef.current = true;
               try {
-                editor.executeEdits("ghostex-composer", [
-                  { range: model.getFullModelRange(), text: next },
-                ]);
+                editor.executeEdits('ghostex-composer', [{ range: model.getFullModelRange(), text: next }]);
               } finally {
                 suppressChangeRef.current = false;
               }
@@ -471,7 +463,7 @@ export function SessionChatMonacoInput({
           getValue: () => editor.getValue(),
           insertText: (text) => {
             editor.focus();
-            editor.trigger("keyboard", "type", { text });
+            editor.trigger('keyboard', 'type', { text });
             return true;
           },
           selectAll: () => {
@@ -530,9 +522,9 @@ export function SessionChatMonacoInput({
         });
       }
     };
-    window.addEventListener("ghostex-session-chat-font-family-changed", updateFontFamily);
+    window.addEventListener('ghostex-session-chat-font-family-changed', updateFontFamily);
     return () => {
-      window.removeEventListener("ghostex-session-chat-font-family-changed", updateFontFamily);
+      window.removeEventListener('ghostex-session-chat-font-family-changed', updateFontFamily);
     };
   }, []);
 
@@ -547,12 +539,7 @@ export function SessionChatMonacoInput({
     const handlePasteCapture = (event: globalThis.ClipboardEvent): void => {
       const container = containerRef.current;
       const target = event.target;
-      if (
-        !container ||
-        !event.clipboardData ||
-        !(target instanceof Node) ||
-        !container.contains(target)
-      ) {
+      if (!container || !event.clipboardData || !(target instanceof Node) || !container.contains(target)) {
         return;
       }
       if (callbacksRef.current.onPasteData(event.clipboardData)) {
@@ -560,16 +547,16 @@ export function SessionChatMonacoInput({
         event.stopPropagation();
       }
     };
-    window.addEventListener("paste", handlePasteCapture, true);
+    window.addEventListener('paste', handlePasteCapture, true);
     return () => {
-      window.removeEventListener("paste", handlePasteCapture, true);
+      window.removeEventListener('paste', handlePasteCapture, true);
     };
   }, []);
 
   return (
     <div
-      className="ghostex-chat-composer-monaco min-h-6 w-full min-w-0 flex-1 overflow-hidden"
-      data-session-chat-typing-redirect-ignore="true"
+      className='ghostex-chat-composer-monaco min-h-6 w-full min-w-0 flex-1 overflow-hidden'
+      data-session-chat-typing-redirect-ignore='true'
       ref={containerRef}
     />
   );

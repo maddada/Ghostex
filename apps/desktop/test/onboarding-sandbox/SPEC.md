@@ -6,7 +6,7 @@ between the build agents. Read it fully before writing code.
 ## Goal
 
 A standalone Vite React app (dev-server only, never shipped) that simulates the gpui
-macOS app's onboarding experience end-to-end so a human can finally *see and iterate on*
+macOS app's onboarding experience end-to-end so a human can finally _see and iterate on_
 the flow without restarting the real app:
 
 - A fake macOS desktop: wallpaper, menu bar, dock. Clicking the Ghostex dock icon
@@ -110,6 +110,7 @@ The marker matters: the modal host itself re-emits some transient results via
 `window.postMessage` internally; ignore anything without the marker.
 
 `bridge/modal-connections.ts` public API (already stubbed — keep signatures):
+
 - `sendToModalWindow(windowId, detail)` — deliver an inbound host message
 - `setModalOutboundHandler(handler)` — engine registers one global handler
   `(windowId, message) => void`
@@ -131,6 +132,7 @@ a `SimEvent` with `codeRef` pointing at the real symbol (e.g.
 doubles as documentation of today's flow.
 
 Launch sequence (macOS):
+
 1. `launchApp()` → phase `launching`; two detached tracks start in parallel, mirroring
    `cx.open_window`: **Track A** gxserver bootstrap (`start_gpui_local_gxserver_bootstrap`),
    **Track B** CEF init (`initialize_cef`). Delays from `env.timing`
@@ -157,10 +159,10 @@ Launch sequence (macOS):
      Reproduce exactly that.
    - Read the fake state file; in ONE pass compute and persist:
      `tipsAndTricksSeen → true` (silently), `highlightedFeaturesSeenRevision →
-     "2026-06-16-highlighted-features-launch"` (silently — DiscoverGhostex tour is
+"2026-06-16-highlighted-features-launch"` (silently — DiscoverGhostex tour is
      never auto-shown anymore), `openTutorialVideo = firstLaunchSetupSeenRevision !==
-     "2026-06-18-short-first-launch"` then mark seen, `showOsIntegrationToast =
-     !osIntegrationOnboardingSeen` then mark seen. Emit events for each burned flag —
+"2026-06-18-short-first-launch"` then mark seen, `showOsIntegrationToast =
+!osIntegrationOnboardingSeen` then mark seen. Emit events for each burned flag —
      including the "flag persisted BEFORE the modal opens" hazard.
    - Then foreground: OS-integration toast (auto-dismiss) if flagged, and at most
      ONE modal window (fixed 2026-08-19; was a Windows-only video->setup chain and
@@ -206,7 +208,7 @@ where the two differ, this section wins:
   whole run. Portless itself stays compile-time disabled, and that event stays.
 - **Tutorial video is a non-React-host window.** `watchGhostexVideo` is the one
   `GpuiAppModalKind` with `uses_react_modal_host() == false`: its child window
-  loads `GHOSTEX_TUTORIAL_VIDEO_URL` (the YouTube *watch page*, not the embed)
+  loads `GHOSTEX_TUTORIAL_VIDEO_URL` (the YouTube _watch page_, not the embed)
   as the top-level document, `is_ready` starts true, and no hydrate/open/
   presented handshake happens. The engine marks such windows `presented`
   immediately and skips message delivery; `modal-chrome.ts` carries their
@@ -219,6 +221,7 @@ where the two differ, this section wins:
   See README.md ("Tutorial video window") for the measured limitations.
 
 `sidebarCommand` handling (from any modal window):
+
 - `requestAgentHookStatus` → progressive per-agent emission mirroring
   `run_gpui_progressive_agent_hook_status_task`: priority order
   `codex, claude, opencode, pi`, then the rest; one merged `agentHookStatus`
@@ -233,6 +236,7 @@ where the two differ, this section wins:
 
 Status derivation rules (mirror `server/src/agent_hooks/api.rs read_hook_status` +
 `gpui_ghostex_cli_status_message` in `apps/desktop/src/app/helpers/os_cli/cli_status.rs`):
+
 - per-agent status: `cliMissing` if `!cliInstalled`; else `installed` if
   `hookState === "installed"`; `updateRequired` if `"outdated"`; else `missing`.
 - firstLaunchSetup "hooks ready" gate (real fn `areFirstLaunchAgentHooksReady`): ANY of
@@ -241,7 +245,7 @@ Status derivation rules (mirror `server/src/agent_hooks/api.rs read_hook_status`
   browser, embeddedBrowser, computerUse, agentOrchestration, fable56Orchestration,
   findPrevSession, generateTitle, moveCodexSession.
 - missing-hooks tips notice: agents with `cliInstalled && status ∉ {installed,
-  notRequired, cliMissing}`; `updateRequired` labeled "outdated", else "missing".
+notRequired, cliMissing}`; `updateRequired` labeled "outdated", else "missing".
 - cli notice: `!ghostexCli.installed || !ghostexCli.gxUsable`.
 
 Real message types: import from the shared contract (e.g.
@@ -301,6 +305,7 @@ file" = brand-new user.
 ## Control panel (bead .10)
 
 Right-side inspector drawer (collapsible), sections:
+
 1. **Scenario presets** — one click applies env + state file + optional auto-relaunch:
    "Brand-new user", "New user, gxserver needs upgrade" (buildMismatch +
    respawnFixesHealth), "Returning user, nothing installed", "Power user (all
@@ -322,7 +327,7 @@ Right-side inspector drawer (collapsible), sections:
    label, expandable detail, `codeRef` rendered as a dim mono suffix. Filter by kind;
    auto-scroll; clear button; a "restart-required" warning row style for the dropped-
    onboarding events.
-Plain CSS (`src/controls/*.css`), compact developer-tool aesthetic.
+   Plain CSS (`src/controls/*.css`), compact developer-tool aesthetic.
 
 ## Shared repo rules for ALL agents
 

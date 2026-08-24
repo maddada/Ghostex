@@ -109,7 +109,9 @@ pub(crate) fn gpui_agents_hub_open_path_in_finder(path: String) -> Result<(), St
     }
 }
 
-pub(crate) fn gpui_agents_hub_source_open_target(file_path: String) -> Result<PendingSourceFileOpen, String> {
+pub(crate) fn gpui_agents_hub_source_open_target(
+    file_path: String,
+) -> Result<PendingSourceFileOpen, String> {
     /*
     The app-modal renderer supplies only a catalog file candidate. Resolve it
     again against the current Rust-owned catalog and root Source at the file's
@@ -126,7 +128,9 @@ pub(crate) fn gpui_agents_hub_source_open_target(file_path: String) -> Result<Pe
     })
 }
 
-pub(crate) fn gpui_agents_hub_validate_catalog_file_path(file_path: &str) -> Result<PathBuf, String> {
+pub(crate) fn gpui_agents_hub_validate_catalog_file_path(
+    file_path: &str,
+) -> Result<PathBuf, String> {
     let normalized = file_path.trim();
     if normalized.is_empty() {
         return Err("Choose an Agents Hub file first.".to_string());
@@ -260,7 +264,11 @@ pub(crate) fn gpui_agents_hub_list_directories(root: &Path) -> Vec<PathBuf> {
     directories
 }
 
-pub(crate) fn gpui_agents_hub_walk_files<F>(root: &Path, max_depth: usize, predicate: F) -> Vec<PathBuf>
+pub(crate) fn gpui_agents_hub_walk_files<F>(
+    root: &Path,
+    max_depth: usize,
+    predicate: F,
+) -> Vec<PathBuf>
 where
     F: Fn(&Path) -> bool,
 {
@@ -462,4 +470,3 @@ pub(crate) fn gpui_relative_path_name(path: &Path, root: &Path) -> Option<String
 pub(crate) fn gpui_path_is_relative_to(candidate: &Path, root: &Path) -> bool {
     candidate == root || candidate.strip_prefix(root).is_ok()
 }
-

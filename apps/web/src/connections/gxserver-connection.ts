@@ -1,13 +1,9 @@
-import { reduceGxserverPresentationDelta } from "@/packages/shared/gxserver-presentation-cache";
-import {
-  createGxserverClient,
-  type PresentationSubscription,
-  type SessionChatEventHandler,
-} from "./gxserver-client";
-import type { GhostexWebMachine, MachineConnectionState } from "./types";
+import { reduceGxserverPresentationDelta } from '@/packages/shared/gxserver-presentation-cache';
+import { createGxserverClient, type PresentationSubscription, type SessionChatEventHandler } from './gxserver-client';
+import type { GhostexWebMachine, MachineConnectionState } from './types';
 
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
-const DEBUG_CONNECTIONS_STORAGE_KEY = "ghostexWeb.debugConnections";
+const DEBUG_CONNECTIONS_STORAGE_KEY = 'ghostexWeb.debugConnections';
 
 interface SessionChatSubscriptionEntry {
   projectId: string;
@@ -36,7 +32,7 @@ export class GxserverConnection {
   constructor(machine: GhostexWebMachine) {
     this.machine = machine;
     this.client = createGxserverClient(machine);
-    this.state = { machine, status: "disconnected" };
+    this.state = { machine, status: 'disconnected' };
   }
 
   getState = (): MachineConnectionState => this.state;
@@ -51,20 +47,20 @@ export class GxserverConnection {
       return;
     }
     this.running = true;
-    window.addEventListener("online", this.handleOnline);
-    window.addEventListener("offline", this.handleOffline);
+    window.addEventListener('online', this.handleOnline);
+    window.addEventListener('offline', this.handleOffline);
     if (navigator.onLine) {
       void this.connect();
     } else {
-      this.updateState({ error: "Browser is offline.", status: "disconnected" });
+      this.updateState({ error: 'Browser is offline.', status: 'disconnected' });
     }
   }
 
   stop(): void {
     this.running = false;
     this.generation += 1;
-    window.removeEventListener("online", this.handleOnline);
-    window.removeEventListener("offline", this.handleOffline);
+    window.removeEventListener('online', this.handleOnline);
+    window.removeEventListener('offline', this.handleOffline);
     this.clearReconnectTimer();
     this.closeSubscription();
   }
@@ -83,7 +79,7 @@ export class GxserverConnection {
     projectId: string,
     sessionId: string,
     onEvent: SessionChatEventHandler,
-    currentLimit?: () => number,
+    currentLimit?: () => number
   ): () => void {
     const entry: SessionChatSubscriptionEntry = {
       onEvent,
@@ -93,12 +89,7 @@ export class GxserverConnection {
     };
     this.chatSubscriptions.add(entry);
     if (this.subscription) {
-      entry.detach = this.subscription.subscribeSessionChat(
-        projectId,
-        sessionId,
-        onEvent,
-        currentLimit,
-      );
+      entry.detach = this.subscription.subscribeSessionChat(projectId, sessionId, onEvent, currentLimit);
     }
     return () => {
       if (!this.chatSubscriptions.delete(entry)) {
@@ -123,9 +114,9 @@ export class GxserverConnection {
     this.clearReconnectTimer();
     this.closeSubscription();
     this.updateState({
-      error: "Browser is offline.",
+      error: 'Browser is offline.',
       reconnectAt: undefined,
-      status: "disconnected",
+      status: 'disconnected',
     });
   };
 
@@ -136,7 +127,7 @@ export class GxserverConnection {
     const generation = ++this.generation;
     this.clearReconnectTimer();
     this.closeSubscription();
-    this.updateState({ error: undefined, reconnectAt: undefined, status: "connecting" });
+    this.updateState({ error: undefined, reconnectAt: undefined, status: 'connecting' });
 
     try {
       const presentation = await this.client.fetchPresentationSnapshot();
@@ -151,7 +142,7 @@ export class GxserverConnection {
         {
           onClose: () => {
             if (generation === this.generation) {
-              this.disconnectAndRetry("Presentation stream closed.");
+              this.disconnectAndRetry('Presentation stream closed.');
             }
           },
           onDelta: (delta, revision) => {
@@ -167,7 +158,7 @@ export class GxserverConnection {
           },
           onError: () => {
             if (generation === this.generation) {
-              this.disconnectAndRetry("Presentation stream connection failed.");
+              this.disconnectAndRetry('Presentation stream connection failed.');
             }
           },
           onOpen: () => {
@@ -175,7 +166,7 @@ export class GxserverConnection {
               return;
             }
             this.reconnectAttempt = 0;
-            this.updateState({ error: undefined, reconnectAt: undefined, status: "connected" });
+            this.updateState({ error: undefined, reconnectAt: undefined, status: 'connected' });
           },
           onSnapshot: (snapshot) => {
             if (generation !== this.generation) {
@@ -185,14 +176,14 @@ export class GxserverConnection {
             logPresentationSnapshot(this.machine, snapshot.revision, snapshot.projects.length);
           },
         },
-        presentation.revision,
+        presentation.revision
       );
       for (const entry of this.chatSubscriptions) {
         entry.detach = this.subscription.subscribeSessionChat(
           entry.projectId,
           entry.sessionId,
           entry.onEvent,
-          entry.currentLimit,
+          entry.currentLimit
         );
       }
     } catch (error) {
@@ -209,7 +200,7 @@ export class GxserverConnection {
     this.generation += 1;
     this.closeSubscription();
     if (!navigator.onLine) {
-      this.updateState({ error: "Browser is offline.", status: "disconnected" });
+      this.updateState({ error: 'Browser is offline.', status: 'disconnected' });
       return;
     }
     if (this.reconnectTimer !== undefined) {
@@ -218,7 +209,7 @@ export class GxserverConnection {
     const delay = RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
     this.reconnectAttempt += 1;
     const reconnectAt = Date.now() + delay;
-    this.updateState({ error, reconnectAt, status: "disconnected" });
+    this.updateState({ error, reconnectAt, status: 'disconnected' });
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = undefined;
       void this.connect();
@@ -255,14 +246,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function logPresentationSnapshot(
-  machine: GhostexWebMachine,
-  revision: number,
-  projectCount: number,
-): void {
-  if (window.localStorage.getItem(DEBUG_CONNECTIONS_STORAGE_KEY) === "1") {
+function logPresentationSnapshot(machine: GhostexWebMachine, revision: number, projectCount: number): void {
+  if (window.localStorage.getItem(DEBUG_CONNECTIONS_STORAGE_KEY) === '1') {
     console.info(
-      `[ghostex-web] presentation snapshot for ${machine.machineId}: revision=${revision}, projects=${projectCount}`,
+      `[ghostex-web] presentation snapshot for ${machine.machineId}: revision=${revision}, projects=${projectCount}`
     );
   }
 }

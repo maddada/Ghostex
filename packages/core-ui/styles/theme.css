@@ -68,7 +68,7 @@
   --ghostex-tooltip-border: rgba(255, 255, 255, 0.12);
   --ghostex-tooltip-radius: 5px;
   --ghostex-tooltip-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  --ghostex-tooltip-font: 500 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  --ghostex-tooltip-font: 500 12px/1.35 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
   --working-primary: color-mix(in srgb, #2f6feb 60%, #ffb454 40%);
   --working-secondary: color-mix(in srgb, #ffd27a 62%, #2f6feb 38%);
   --attention-primary: color-mix(in srgb, #5ea0ff 68%, #2f6feb 32%);
@@ -77,23 +77,19 @@
 }
 
 body:not([data-sidebar-theme]),
-body[data-sidebar-theme="dark-blue"],
-body[data-sidebar-theme="light-blue"],
-.ghostex-root[data-sidebar-theme="dark-blue"],
-.ghostex-root[data-sidebar-theme="light-blue"],
-.ghostex-settings-shadcn[data-sidebar-theme="dark-blue"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-blue"] {
+body[data-sidebar-theme='dark-blue'],
+body[data-sidebar-theme='light-blue'],
+.ghostex-root[data-sidebar-theme='dark-blue'],
+.ghostex-root[data-sidebar-theme='light-blue'],
+.ghostex-settings-shadcn[data-sidebar-theme='dark-blue'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-blue'] {
   --session-visible-surface: linear-gradient(
     160deg,
     color-mix(in srgb, var(--app-card-active) 92%, transparent),
     color-mix(in srgb, var(--app-card) 96%, transparent)
   );
   --session-visible-glow: color-mix(in srgb, var(--app-button-background) 4%, transparent);
-  --session-visible-hover-border: color-mix(
-    in srgb,
-    var(--app-button-background) 40%,
-    var(--app-border)
-  );
+  --session-visible-hover-border: color-mix(in srgb, var(--app-button-background) 40%, var(--app-border));
   --session-visible-hover-ring: color-mix(in srgb, var(--app-button-background) 6%, transparent);
   --session-visible-hover-shadow: color-mix(in srgb, var(--app-button-background) 4%, transparent);
   --session-visible-hover-overlay: linear-gradient(
@@ -104,16 +100,12 @@ body[data-sidebar-theme="light-blue"],
   --session-focused-border: color-mix(in srgb, var(--app-button-background) 48%, var(--app-border));
   --session-focused-outline: color-mix(in srgb, var(--app-button-background) 42%, #ffffff 10%);
   --session-focused-ring: color-mix(in srgb, var(--app-button-background) 20%, transparent);
-  --session-focus-visible-outline: color-mix(
-    in srgb,
-    var(--app-button-background) 48%,
-    #ffffff 18%
-  );
+  --session-focus-visible-outline: color-mix(in srgb, var(--app-button-background) 48%, #ffffff 18%);
 }
 
-body[data-sidebar-theme="dark-1"],
-.ghostex-root[data-sidebar-theme="dark-1"],
-.ghostex-settings-shadcn[data-sidebar-theme="dark-1"] {
+body[data-sidebar-theme='dark-1'],
+.ghostex-root[data-sidebar-theme='dark-1'],
+.ghostex-settings-shadcn[data-sidebar-theme='dark-1'] {
   color-scheme: dark;
   --app-background: #191919;
   --app-modal-background: #191919;
@@ -145,12 +137,12 @@ body[data-sidebar-theme="dark-1"],
   --attention-secondary: color-mix(in srgb, #c9d8ff 62%, #315a99 38%);
 }
 
-body[data-sidebar-theme="dark-2"],
-body[data-sidebar-theme="plain-dark"],
-.ghostex-root[data-sidebar-theme="dark-2"],
-.ghostex-root[data-sidebar-theme="plain-dark"],
-.ghostex-settings-shadcn[data-sidebar-theme="dark-2"],
-.ghostex-settings-shadcn[data-sidebar-theme="plain-dark"] {
+body[data-sidebar-theme='dark-2'],
+body[data-sidebar-theme='plain-dark'],
+.ghostex-root[data-sidebar-theme='dark-2'],
+.ghostex-root[data-sidebar-theme='plain-dark'],
+.ghostex-settings-shadcn[data-sidebar-theme='dark-2'],
+.ghostex-settings-shadcn[data-sidebar-theme='plain-dark'] {
   color-scheme: dark;
   --app-background: #0e0e0e;
   --app-modal-background: #0e0e0e;
@@ -182,9 +174,9 @@ body[data-sidebar-theme="plain-dark"],
   --attention-secondary: color-mix(in srgb, #c9d8ff 62%, #315a99 38%);
 }
 
-body[data-sidebar-theme="plain-light"],
-.ghostex-root[data-sidebar-theme="plain-light"],
-.ghostex-settings-shadcn[data-sidebar-theme="plain-light"] {
+body[data-sidebar-theme='plain-light'],
+.ghostex-root[data-sidebar-theme='plain-light'],
+.ghostex-settings-shadcn[data-sidebar-theme='plain-light'] {
   color-scheme: light;
   --app-background: #f3f3f3;
   --app-modal-background: #ffffff;
@@ -218,9 +210,9 @@ body[data-sidebar-theme="plain-light"],
   --attention-secondary: color-mix(in srgb, #cbcbcb 68%, #6f6f6f 32%);
 }
 
-body[data-sidebar-theme="dark-green"],
-.ghostex-root[data-sidebar-theme="dark-green"],
-.ghostex-settings-shadcn[data-sidebar-theme="dark-green"] {
+body[data-sidebar-theme='dark-green'],
+.ghostex-root[data-sidebar-theme='dark-green'],
+.ghostex-settings-shadcn[data-sidebar-theme='dark-green'] {
   color-scheme: dark;
   --app-background: #0b120d;
   --app-foreground: #d8e3db;
@@ -239,9 +231,9 @@ body[data-sidebar-theme="dark-green"],
   --attention-secondary: color-mix(in srgb, #86efac 58%, #123922 42%);
 }
 
-body[data-sidebar-theme="dark-blue"],
-.ghostex-root[data-sidebar-theme="dark-blue"],
-.ghostex-settings-shadcn[data-sidebar-theme="dark-blue"] {
+body[data-sidebar-theme='dark-blue'],
+.ghostex-root[data-sidebar-theme='dark-blue'],
+.ghostex-settings-shadcn[data-sidebar-theme='dark-blue'] {
   color-scheme: dark;
   --app-background: #0c1117;
   --app-foreground: #dce6f8;
@@ -260,9 +252,9 @@ body[data-sidebar-theme="dark-blue"],
   --attention-secondary: color-mix(in srgb, #9dcbff 62%, #184896 38%);
 }
 
-body[data-sidebar-theme="dark-red"],
-.ghostex-root[data-sidebar-theme="dark-red"],
-.ghostex-settings-shadcn[data-sidebar-theme="dark-red"] {
+body[data-sidebar-theme='dark-red'],
+.ghostex-root[data-sidebar-theme='dark-red'],
+.ghostex-settings-shadcn[data-sidebar-theme='dark-red'] {
   color-scheme: dark;
   --app-background: #140c0e;
   --app-foreground: #f1dde1;
@@ -281,9 +273,9 @@ body[data-sidebar-theme="dark-red"],
   --attention-secondary: color-mix(in srgb, #ffb2be 62%, #852f3d 38%);
 }
 
-body[data-sidebar-theme="dark-pink"],
-.ghostex-root[data-sidebar-theme="dark-pink"],
-.ghostex-settings-shadcn[data-sidebar-theme="dark-pink"] {
+body[data-sidebar-theme='dark-pink'],
+.ghostex-root[data-sidebar-theme='dark-pink'],
+.ghostex-settings-shadcn[data-sidebar-theme='dark-pink'] {
   color-scheme: dark;
   --app-background: #160d13;
   --app-foreground: #f4deeb;
@@ -302,9 +294,9 @@ body[data-sidebar-theme="dark-pink"],
   --attention-secondary: color-mix(in srgb, #ffc0db 62%, #8c3d60 38%);
 }
 
-body[data-sidebar-theme="dark-orange"],
-.ghostex-root[data-sidebar-theme="dark-orange"],
-.ghostex-settings-shadcn[data-sidebar-theme="dark-orange"] {
+body[data-sidebar-theme='dark-orange'],
+.ghostex-root[data-sidebar-theme='dark-orange'],
+.ghostex-settings-shadcn[data-sidebar-theme='dark-orange'] {
   color-scheme: dark;
   --app-background: #171008;
   --app-foreground: #f0dfcf;
@@ -323,9 +315,9 @@ body[data-sidebar-theme="dark-orange"],
   --attention-secondary: color-mix(in srgb, #ffd1a3 62%, #964f14 38%);
 }
 
-body[data-sidebar-theme="light-blue"],
-.ghostex-root[data-sidebar-theme="light-blue"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-blue"] {
+body[data-sidebar-theme='light-blue'],
+.ghostex-root[data-sidebar-theme='light-blue'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-blue'] {
   color-scheme: light;
   --app-background: #eef4fb;
   --app-foreground: #203042;
@@ -346,9 +338,9 @@ body[data-sidebar-theme="light-blue"],
   --attention-secondary: color-mix(in srgb, #99beff 68%, #2f6feb 32%);
 }
 
-body[data-sidebar-theme="light-green"],
-.ghostex-root[data-sidebar-theme="light-green"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-green"] {
+body[data-sidebar-theme='light-green'],
+.ghostex-root[data-sidebar-theme='light-green'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-green'] {
   color-scheme: light;
   --app-background: #eef7f0;
   --app-foreground: #203127;
@@ -369,9 +361,9 @@ body[data-sidebar-theme="light-green"],
   --attention-secondary: color-mix(in srgb, #99d7ac 68%, #3f8f57 32%);
 }
 
-body[data-sidebar-theme="light-pink"],
-.ghostex-root[data-sidebar-theme="light-pink"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-pink"] {
+body[data-sidebar-theme='light-pink'],
+.ghostex-root[data-sidebar-theme='light-pink'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-pink'] {
   color-scheme: light;
   --app-background: #fbf0f6;
   --app-foreground: #3a2431;
@@ -392,9 +384,9 @@ body[data-sidebar-theme="light-pink"],
   --attention-secondary: color-mix(in srgb, #f8bfd6 68%, #c65c8a 32%);
 }
 
-body[data-sidebar-theme="light-orange"],
-.ghostex-root[data-sidebar-theme="light-orange"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-orange"] {
+body[data-sidebar-theme='light-orange'],
+.ghostex-root[data-sidebar-theme='light-orange'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-orange'] {
   color-scheme: light;
   --app-background: #fbf3ea;
   --app-foreground: #402c1a;
@@ -422,109 +414,47 @@ body[data-sidebar-theme="light-orange"],
  * derive the app-level accent, surfaces, and activity colors from the active
  * project's validated custom color.
  */
-body[data-sidebar-custom-theme="true"],
-.ghostex-root[data-sidebar-custom-theme="true"],
-.stack[data-sidebar-custom-theme="true"] {
+body[data-sidebar-custom-theme='true'],
+.ghostex-root[data-sidebar-custom-theme='true'],
+.stack[data-sidebar-custom-theme='true'] {
   --app-button-background: var(--workspace-sidebar-theme-color);
   --app-button-foreground: var(--workspace-sidebar-theme-foreground);
-  --session-visible-glow: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 10%,
-    transparent
-  );
-  --session-visible-hover-border: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 52%,
-    var(--app-border)
-  );
-  --session-visible-hover-ring: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 9%,
-    transparent
-  );
-  --session-visible-hover-shadow: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 8%,
-    transparent
-  );
+  --session-visible-glow: color-mix(in srgb, var(--workspace-sidebar-theme-color) 10%, transparent);
+  --session-visible-hover-border: color-mix(in srgb, var(--workspace-sidebar-theme-color) 52%, var(--app-border));
+  --session-visible-hover-ring: color-mix(in srgb, var(--workspace-sidebar-theme-color) 9%, transparent);
+  --session-visible-hover-shadow: color-mix(in srgb, var(--workspace-sidebar-theme-color) 8%, transparent);
   --session-visible-hover-overlay: linear-gradient(
     135deg,
     color-mix(in srgb, var(--workspace-sidebar-theme-color) 10%, transparent),
     transparent 62%
   );
-  --session-focused-border: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 56%,
-    var(--app-border)
-  );
-  --session-focused-outline: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 46%,
-    #ffffff 12%
-  );
-  --session-focused-ring: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 24%,
-    transparent
-  );
-  --session-focus-visible-outline: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 52%,
-    #ffffff 18%
-  );
+  --session-focused-border: color-mix(in srgb, var(--workspace-sidebar-theme-color) 56%, var(--app-border));
+  --session-focused-outline: color-mix(in srgb, var(--workspace-sidebar-theme-color) 46%, #ffffff 12%);
+  --session-focused-ring: color-mix(in srgb, var(--workspace-sidebar-theme-color) 24%, transparent);
+  --session-focus-visible-outline: color-mix(in srgb, var(--workspace-sidebar-theme-color) 52%, #ffffff 18%);
   --working-primary: color-mix(in srgb, var(--workspace-sidebar-theme-color) 58%, #ffb454 42%);
   --working-secondary: color-mix(in srgb, #ffd27a 62%, var(--workspace-sidebar-theme-color) 38%);
   --attention-primary: color-mix(in srgb, var(--workspace-sidebar-theme-color) 72%, #5ea0ff 28%);
-  --attention-secondary: color-mix(
-    in srgb,
-    #9dcbff 58%,
-    var(--workspace-sidebar-theme-color) 42%
-  );
+  --attention-secondary: color-mix(in srgb, #9dcbff 58%, var(--workspace-sidebar-theme-color) 42%);
 }
 
-body[data-sidebar-custom-theme="true"]:is(
-    [data-sidebar-theme="plain-dark"],
-    [data-sidebar-theme^="dark-"]
-  ),
-.ghostex-root[data-sidebar-custom-theme="true"]:is(
-    [data-sidebar-theme="plain-dark"],
-    [data-sidebar-theme^="dark-"]
-  ),
-.stack[data-sidebar-custom-theme="true"]:is(
-    [data-sidebar-theme="plain-dark"],
-    [data-sidebar-theme^="dark-"]
-  ) {
+body[data-sidebar-custom-theme='true']:is([data-sidebar-theme='plain-dark'], [data-sidebar-theme^='dark-']),
+.ghostex-root[data-sidebar-custom-theme='true']:is([data-sidebar-theme='plain-dark'], [data-sidebar-theme^='dark-']),
+.stack[data-sidebar-custom-theme='true']:is([data-sidebar-theme='plain-dark'], [data-sidebar-theme^='dark-']) {
   color-scheme: dark;
   --app-background: color-mix(in srgb, var(--workspace-sidebar-theme-color) 12%, #0c1117 88%);
   --app-card: color-mix(in srgb, var(--workspace-sidebar-theme-color) 15%, #121924 85%);
   --app-card-active: color-mix(in srgb, var(--workspace-sidebar-theme-color) 22%, #182233 78%);
   --app-border: color-mix(in srgb, var(--workspace-sidebar-theme-color) 32%, #ffffff 10%);
-  --app-input-background: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 12%,
-    #0f151d 88%
-  );
+  --app-input-background: color-mix(in srgb, var(--workspace-sidebar-theme-color) 12%, #0f151d 88%);
   --app-muted: color-mix(in srgb, var(--workspace-sidebar-theme-color) 28%, #90a0b8 72%);
-  --app-tooltip-background: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 16%,
-    #151d29 84%
-  );
+  --app-tooltip-background: color-mix(in srgb, var(--workspace-sidebar-theme-color) 16%, #151d29 84%);
   --app-tooltip-foreground: #edf4ff;
 }
 
-body[data-sidebar-custom-theme="true"]:is(
-    [data-sidebar-theme="plain-light"],
-    [data-sidebar-theme^="light-"]
-  ),
-.ghostex-root[data-sidebar-custom-theme="true"]:is(
-    [data-sidebar-theme="plain-light"],
-    [data-sidebar-theme^="light-"]
-  ),
-.stack[data-sidebar-custom-theme="true"]:is(
-    [data-sidebar-theme="plain-light"],
-    [data-sidebar-theme^="light-"]
-  ) {
+body[data-sidebar-custom-theme='true']:is([data-sidebar-theme='plain-light'], [data-sidebar-theme^='light-']),
+.ghostex-root[data-sidebar-custom-theme='true']:is([data-sidebar-theme='plain-light'], [data-sidebar-theme^='light-']),
+.stack[data-sidebar-custom-theme='true']:is([data-sidebar-theme='plain-light'], [data-sidebar-theme^='light-']) {
   color-scheme: light;
   --app-background: color-mix(in srgb, var(--workspace-sidebar-theme-color) 8%, #f5f7fb 92%);
   --app-card: color-mix(in srgb, var(--workspace-sidebar-theme-color) 5%, #ffffff 95%);
@@ -532,11 +462,7 @@ body[data-sidebar-custom-theme="true"]:is(
   --app-border: color-mix(in srgb, var(--workspace-sidebar-theme-color) 30%, #000000 12%);
   --app-input-background: color-mix(in srgb, var(--workspace-sidebar-theme-color) 4%, #ffffff 96%);
   --app-muted: color-mix(in srgb, var(--workspace-sidebar-theme-color) 22%, #60748b 78%);
-  --app-tooltip-background: color-mix(
-    in srgb,
-    var(--workspace-sidebar-theme-color) 5%,
-    #ffffff 95%
-  );
+  --app-tooltip-background: color-mix(in srgb, var(--workspace-sidebar-theme-color) 5%, #ffffff 95%);
   --app-tooltip-foreground: #172334;
 }
 
@@ -562,14 +488,7 @@ body {
   overflow: hidden;
   padding: calc(12px * var(--sidebar-density-scale));
   zoom: var(--ghostex-agent-manager-zoom, 100%);
-  font-family: var(
-    --vscode-font-family,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe WPC",
-    "Segoe UI",
-    sans-serif
-  );
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', sans-serif);
   font-size: calc(var(--vscode-font-size, 13px) * var(--sidebar-density-scale));
   font-weight: var(--vscode-font-weight, 400);
   line-height: 1.4;
@@ -622,7 +541,7 @@ button:where(:not([data-slot])):disabled {
   position: relative;
 }
 
-.stack[data-dimmed="true"] {
+.stack[data-dimmed='true'] {
   filter: saturate(0.7);
   opacity: 0.4;
   pointer-events: none;
@@ -643,8 +562,8 @@ button:where(:not([data-slot])):disabled {
 
 .stack:hover .sidebar-titlebar-controls,
 .stack:has(:focus-visible) .sidebar-titlebar-controls,
-.sidebar-titlebar-controls[data-controls-visible="true"],
-.sidebar-titlebar-controls[data-menu-open="true"] {
+.sidebar-titlebar-controls[data-controls-visible='true'],
+.sidebar-titlebar-controls[data-menu-open='true'] {
   opacity: 1;
   pointer-events: auto;
   transition-delay: 0s;
@@ -678,7 +597,7 @@ button:where(:not([data-slot])):disabled {
 body:hover .sidebar-floating-overflow-trigger,
 body:has(:focus-visible) .sidebar-floating-overflow-trigger,
 body.storybook-force-sidebar-hover .sidebar-floating-overflow-trigger,
-.sidebar-floating-overflow-trigger[data-selected="true"] {
+.sidebar-floating-overflow-trigger[data-selected='true'] {
   /*
    * CDXC:StorybookInteractions 2026-05-08-18:05
    * Storybook play functions cannot reliably create CSS :hover on a trigger

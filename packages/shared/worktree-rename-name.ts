@@ -18,10 +18,9 @@ const WORKTREE_RENAME_NAME_MAX_CHARS = 200;
 const WORKTREE_RENAME_FOLDER_SLUG_MAX_CHARS = 48;
 
 export const WORKTREE_RENAME_NAME_CHARACTER_ERROR =
-  "Use letters, numbers, and . _ / - only, starting with a letter or number.";
-export const WORKTREE_RENAME_NAME_SEPARATOR_ERROR =
-  'Names cannot contain "..", "//", or end with "/".';
-export const WORKTREE_RENAME_NAME_TOO_LONG_ERROR = "Name is too long (200 characters max).";
+  'Use letters, numbers, and . _ / - only, starting with a letter or number.';
+export const WORKTREE_RENAME_NAME_SEPARATOR_ERROR = 'Names cannot contain "..", "//", or end with "/".';
+export const WORKTREE_RENAME_NAME_TOO_LONG_ERROR = 'Name is too long (200 characters max).';
 
 export function normalizeWorktreeRenameName(value: string): string {
   return value.trim();
@@ -43,14 +42,14 @@ export function worktreeRenameNameError(value: string): string | undefined {
   if (!/^[A-Za-z0-9._/-]*$/.test(name)) {
     return WORKTREE_RENAME_NAME_CHARACTER_ERROR;
   }
-  if (name.endsWith(".")) {
+  if (name.endsWith('.')) {
     return WORKTREE_RENAME_NAME_CHARACTER_ERROR;
   }
-  const components = name.split("/");
-  if (components.some((component) => component.startsWith(".") || component.endsWith(".lock"))) {
+  const components = name.split('/');
+  if (components.some((component) => component.startsWith('.') || component.endsWith('.lock'))) {
     return WORKTREE_RENAME_NAME_CHARACTER_ERROR;
   }
-  if (name.includes("..") || name.includes("//") || name.endsWith("/")) {
+  if (name.includes('..') || name.includes('//') || name.endsWith('/')) {
     return WORKTREE_RENAME_NAME_SEPARATOR_ERROR;
   }
   return undefined;
@@ -64,12 +63,12 @@ export function worktreeRenameNameError(value: string): string | undefined {
  */
 export function worktreeRenameFolderSlug(value: string): string {
   const collapsed = normalizeWorktreeRenameName(value)
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
   if (collapsed.length <= WORKTREE_RENAME_FOLDER_SLUG_MAX_CHARS) {
     return collapsed;
   }
   const cut = collapsed.slice(0, WORKTREE_RENAME_FOLDER_SLUG_MAX_CHARS);
-  const boundary = cut.lastIndexOf("-");
-  return (boundary > 0 ? cut.slice(0, boundary) : cut).replace(/-+$/, "");
+  const boundary = cut.lastIndexOf('-');
+  return (boundary > 0 ? cut.slice(0, boundary) : cut).replace(/-+$/, '');
 }

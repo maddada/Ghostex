@@ -48,7 +48,7 @@ ON_DEMAND_COMPONENTS="${GHOSTEX_ON_DEMAND_ASSETS:-0}"
 RELEASE_VERSION="${GHOSTEX_GPUI_MARKETING_VERSION:-$(node -p "require('$REPO_ROOT/package.json').version")}"
 CARGO_OUTPUT_ROOT="${CARGO_TARGET_DIR:-$GPUI_DIR/target}"
 if [[ "$CARGO_OUTPUT_ROOT" != /* ]]; then
-  CARGO_OUTPUT_ROOT="$GPUI_DIR/$CARGO_OUTPUT_ROOT"
+	CARGO_OUTPUT_ROOT="$GPUI_DIR/$CARGO_OUTPUT_ROOT"
 fi
 
 # Same CEF cache location contract as build-macos-app.sh / the Windows
@@ -59,17 +59,17 @@ export CEF_PATH="${CEF_PATH:-$GPUI_DIR/build/cef-cache}"
 
 # 1) Sidebar bundle (same steps as the macOS script).
 (
-  cd "$REPO_ROOT"
-  bun run build:sidebar-css
-  bunx vite build --config "$GPUI_DIR/vite.config.ts"
+	cd "$REPO_ROOT"
+	bun run build:sidebar-css
+	bunx vite build --config "$GPUI_DIR/vite.config.ts"
 )
 
 # 2) Rust binaries (main app + CEF helper). Requires cmake and ninja
 # (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.16.x for
 # libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
 (
-  cd "$GPUI_DIR"
-  cargo build --release --bins
+	cd "$GPUI_DIR"
+	cargo build --release --bins
 )
 
 # 3) Locate the extracted CEF distribution. Unlike the macOS bundle layout,
@@ -80,57 +80,57 @@ export CEF_PATH="${CEF_PATH:-$GPUI_DIR/build/cef-cache}"
 # (CMakeLists.txt, cmake/, include/, libcef_dll/, archive.json).
 CEF_PAYLOAD=""
 while IFS= read -r candidate; do
-  CEF_PAYLOAD="$(dirname "$candidate")"
-  break
+	CEF_PAYLOAD="$(dirname "$candidate")"
+	break
 done < <(find "$CEF_PATH" -type f -name libcef.so 2>/dev/null)
 if [[ -z "$CEF_PAYLOAD" ]]; then
-  echo "cef-rs did not produce libcef.so under $CEF_PATH" >&2
-  exit 1
+	echo "cef-rs did not produce libcef.so under $CEF_PATH" >&2
+	exit 1
 fi
 if [[ ! -f "$CEF_PAYLOAD/icudtl.dat" ]]; then
-  echo "CEF payload directory $CEF_PAYLOAD is missing icudtl.dat" >&2
-  exit 1
+	echo "CEF payload directory $CEF_PAYLOAD is missing icudtl.dat" >&2
+	exit 1
 fi
 
 CEF_COMPONENT_VERSION="$(sed -n 's/^#define CEF_VERSION "\([^"]*\)"$/\1/p' "$CEF_PAYLOAD/include/cef_version.h" | head -n 1 | sed 's/[^A-Za-z0-9._-]/-/g')"
 if [[ -z "$CEF_COMPONENT_VERSION" ]]; then
-  echo "Could not resolve the CEF component version from $CEF_PAYLOAD/include/cef_version.h" >&2
-  exit 1
+	echo "Could not resolve the CEF component version from $CEF_PAYLOAD/include/cef_version.h" >&2
+	exit 1
 fi
 CEF_COMPONENT_ARCH="x64"
 if [[ "$(uname -m)" == "aarch64" ]]; then
-  CEF_COMPONENT_ARCH="arm64"
+	CEF_COMPONENT_ARCH="arm64"
 fi
 
 prepare_cef_component() {
-  local component_root asset_dir component_manifest stage_root archive_path build_manifest
-  component_root="${GHOSTEX_ON_DEMAND_COMPONENT_ROOT:-$REPO_ROOT/build/on-demand-components}"
-  asset_dir="${GHOSTEX_ON_DEMAND_COMPONENT_ASSET_DIR:-$component_root/assets}"
-  component_manifest="${GHOSTEX_ON_DEMAND_COMPONENTS_MANIFEST:-$component_root/components.json}"
-  stage_root="$(mktemp -d "$GPUI_DIR/build/cef-linux-component-XXXXXX")"
-  archive_path="$asset_dir/cef-$CEF_COMPONENT_VERSION-linux-$CEF_COMPONENT_ARCH.tar.gz"
-  mkdir -p "$asset_dir"
-  cp -R "$CEF_PAYLOAD/." "$stage_root/"
-  rm -rf "$stage_root/CMakeLists.txt" "$stage_root/cmake" "$stage_root/include" \
-    "$stage_root/libcef_dll" "$stage_root/archive.json"
-  rm -f "$stage_root/chrome-sandbox"
-  "$REPO_ROOT/tooling/release-gpui/create-deterministic-tar.sh" "$stage_root" "$archive_path"
-  rm -rf "$stage_root"
-  node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
-    --metadata-only \
-    --component cef \
-    --version "$CEF_COMPONENT_VERSION" \
-    --asset-dir "$asset_dir" \
-    --output "$component_manifest"
-  build_manifest="$component_root/linux-$CEF_COMPONENT_ARCH-assets.json"
-  node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({assets:[],version:process.argv[2]},null,2)+"\n")' \
-    "$build_manifest" "$RELEASE_VERSION"
-  mkdir -p "$APP_DIR/resources"
-  node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" seal \
-    --build-manifest "$build_manifest" \
-    --component-manifest "$component_manifest" \
-    --output "$APP_DIR/resources/on-demand-resources.json" \
-    --repo maddada/Ghostex
+	local component_root asset_dir component_manifest stage_root archive_path build_manifest
+	component_root="${GHOSTEX_ON_DEMAND_COMPONENT_ROOT:-$REPO_ROOT/build/on-demand-components}"
+	asset_dir="${GHOSTEX_ON_DEMAND_COMPONENT_ASSET_DIR:-$component_root/assets}"
+	component_manifest="${GHOSTEX_ON_DEMAND_COMPONENTS_MANIFEST:-$component_root/components.json}"
+	stage_root="$(mktemp -d "$GPUI_DIR/build/cef-linux-component-XXXXXX")"
+	archive_path="$asset_dir/cef-$CEF_COMPONENT_VERSION-linux-$CEF_COMPONENT_ARCH.tar.gz"
+	mkdir -p "$asset_dir"
+	cp -R "$CEF_PAYLOAD/." "$stage_root/"
+	rm -rf "$stage_root/CMakeLists.txt" "$stage_root/cmake" "$stage_root/include" \
+		"$stage_root/libcef_dll" "$stage_root/archive.json"
+	rm -f "$stage_root/chrome-sandbox"
+	"$REPO_ROOT/tooling/release-gpui/create-deterministic-tar.sh" "$stage_root" "$archive_path"
+	rm -rf "$stage_root"
+	node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
+		--metadata-only \
+		--component cef \
+		--version "$CEF_COMPONENT_VERSION" \
+		--asset-dir "$asset_dir" \
+		--output "$component_manifest"
+	build_manifest="$component_root/linux-$CEF_COMPONENT_ARCH-assets.json"
+	node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({assets:[],version:process.argv[2]},null,2)+"\n")' \
+		"$build_manifest" "$RELEASE_VERSION"
+	mkdir -p "$APP_DIR/resources"
+	node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" seal \
+		--build-manifest "$build_manifest" \
+		--component-manifest "$component_manifest" \
+		--output "$APP_DIR/resources/on-demand-resources.json" \
+		--repo maddada/Ghostex
 }
 
 # 4) Stage the app directory.
@@ -138,21 +138,21 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 
 if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
-  cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui-cef-bootstrap" "$APP_DIR/Ghostex"
-  cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui" "$APP_DIR/ghostex-gpui-runtime"
+	cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui-cef-bootstrap" "$APP_DIR/Ghostex"
+	cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui" "$APP_DIR/ghostex-gpui-runtime"
 else
-  cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui" "$APP_DIR/Ghostex"
+	cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui" "$APP_DIR/Ghostex"
 fi
 cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui-cef-helper" "$APP_DIR/"
 if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
-  prepare_cef_component
+	prepare_cef_component
 else
-  cp -R "$CEF_PAYLOAD/." "$APP_DIR/"
-  # SDK build-support files are not runtime payload.
-  rm -rf "$APP_DIR/CMakeLists.txt" "$APP_DIR/cmake" "$APP_DIR/include" \
-    "$APP_DIR/libcef_dll" "$APP_DIR/archive.json"
-  # no_sandbox runtime: the SUID sandbox helper stays out of the layout.
-  rm -f "$APP_DIR/chrome-sandbox"
+	cp -R "$CEF_PAYLOAD/." "$APP_DIR/"
+	# SDK build-support files are not runtime payload.
+	rm -rf "$APP_DIR/CMakeLists.txt" "$APP_DIR/cmake" "$APP_DIR/include" \
+		"$APP_DIR/libcef_dll" "$APP_DIR/archive.json"
+	# no_sandbox runtime: the SUID sandbox helper stays out of the layout.
+	rm -f "$APP_DIR/chrome-sandbox"
 fi
 mkdir -p "$APP_DIR/dist"
 cp -R "$GPUI_DIR/dist/sidebar" "$APP_DIR/dist/sidebar"
@@ -164,13 +164,13 @@ cp -R "$GPUI_DIR/dist/sidebar" "$APP_DIR/dist/sidebar"
 # Contents/Resources/Web/gxserver.
 GXSERVER_ARCH="x64"
 if [[ "$(uname -m)" == "aarch64" ]]; then
-  GXSERVER_ARCH="arm64"
+	GXSERVER_ARCH="arm64"
 fi
 GXSERVER_PACKAGE="$REPO_ROOT/build/remote-gxserver-linux/$GXSERVER_ARCH/package"
 if [[ ! -x "$GXSERVER_PACKAGE/bin/gxserver" ]]; then
-  echo "gxserver package not found at $GXSERVER_PACKAGE." >&2
-  echo "Build it first: bun server/package-remote-linux.mjs --arch $GXSERVER_ARCH" >&2
-  exit 1
+	echo "gxserver package not found at $GXSERVER_PACKAGE." >&2
+	echo "Build it first: bun server/package-remote-linux.mjs --arch $GXSERVER_ARCH" >&2
+	exit 1
 fi
 cp -R "$GXSERVER_PACKAGE" "$APP_DIR/gxserver"
 

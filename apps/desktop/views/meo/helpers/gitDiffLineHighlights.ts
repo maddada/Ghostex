@@ -78,7 +78,7 @@ const gitDiffLineHighlightsField = StateField.define<DecorationSet>({
 
     return buildGitDiffLineHighlights(tr.state);
   },
-  provide: (f) => EditorView.decorations.from(f)
+  provide: (f) => EditorView.decorations.from(f),
 });
 
 function resolveEditorView(target: unknown): EditorView | null {
@@ -105,7 +105,7 @@ export function setGitDiffLineHighlightsEnabled(target: unknown, enabled: boolea
     return;
   }
   view.dispatch({
-    effects: setGitDiffHighlightsEnabled.of(enabled)
+    effects: setGitDiffHighlightsEnabled.of(enabled),
   });
 }
 

@@ -1,4 +1,4 @@
-@import "tailwindcss" source(none);
+@import 'tailwindcss' source(none);
 /*
  * Keep Tailwind's monorepo scan on Ghostex-owned browser UI. Automatic source
  * discovery from the repository root traverses imported Ghostty fuzz corpora
@@ -15,9 +15,9 @@
    Tailwind v4 scroll-mask edge fades from a local CSS utility module. Keeping
    the utilities local makes Storybook/sidebar CSS builds independent of an
    unresolved package import while preserving the scroll-mask class contract. */
-@import "./scroll-mask.css";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import './scroll-mask.css';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -27,12 +27,12 @@
    upstream tailwindcss utilities.ts; drop this block once tailwindcss is
    upgraded past a version that provides them natively. */
 @property --tw-scrollbar-thumb {
-  syntax: "<color>";
+  syntax: '<color>';
   inherits: false;
   initial-value: #0000;
 }
 @property --tw-scrollbar-track {
-  syntax: "<color>";
+  syntax: '<color>';
   inherits: false;
   initial-value: #0000;
 }
@@ -65,7 +65,7 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "Inter Variable", sans-serif;
+  --font-sans: 'Inter Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -178,11 +178,11 @@
   letter-spacing: 0;
 }
 
-.ghostex-settings-shadcn[data-sidebar-theme="plain-light"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-blue"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-green"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-pink"],
-.ghostex-settings-shadcn[data-sidebar-theme="light-orange"] {
+.ghostex-settings-shadcn[data-sidebar-theme='plain-light'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-blue'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-green'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-pink'],
+.ghostex-settings-shadcn[data-sidebar-theme='light-orange'] {
   color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -213,7 +213,7 @@
   }
 
   button:not(:disabled),
-  [role="button"]:not(:disabled) {
+  [role='button']:not(:disabled) {
     cursor: pointer;
   }
 

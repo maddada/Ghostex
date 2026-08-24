@@ -65,7 +65,6 @@ use anyhow::Result;
 use cef::CefBrowser;
 use futures::StreamExt as _;
 use futures::channel::mpsc;
-use gpui::Focusable as _;
 use gpui::Action;
 use gpui::AnyElement;
 use gpui::App;
@@ -79,6 +78,7 @@ use gpui::Element;
 use gpui::ElementId;
 use gpui::Entity;
 use gpui::FocusHandle;
+use gpui::Focusable as _;
 use gpui::FontWeight;
 use gpui::GlobalElementId;
 use gpui::Hitbox;
@@ -753,4 +753,3 @@ impl GpuiWindowCaptionControl {
         }
     }
 }
-

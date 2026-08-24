@@ -1,4 +1,4 @@
-import type { TerminalViewMode } from "./session-grid-contract";
+import type { TerminalViewMode } from './session-grid-contract';
 
 export type EditorLayoutOrientation = 0 | 1;
 
@@ -18,13 +18,10 @@ export type EditorLayoutPlan = {
   rowLengths: number[];
 };
 
-export function createEditorLayoutPlan(
-  visibleCount: number,
-  viewMode: TerminalViewMode,
-): EditorLayoutPlan {
+export function createEditorLayoutPlan(visibleCount: number, viewMode: TerminalViewMode): EditorLayoutPlan {
   const normalizedCount = clampVisibleCount(visibleCount);
 
-  if (viewMode === "horizontal") {
+  if (viewMode === 'horizontal') {
     return {
       layout: {
         groups: createLeafGroups(normalizedCount),
@@ -34,7 +31,7 @@ export function createEditorLayoutPlan(
     };
   }
 
-  if (viewMode === "vertical") {
+  if (viewMode === 'vertical') {
     return {
       layout: {
         groups: createLeafGroups(normalizedCount),

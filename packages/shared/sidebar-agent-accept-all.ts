@@ -3,7 +3,7 @@ import {
   getDefaultSidebarAgentById,
   type DefaultSidebarAgentId,
   type SidebarAgentIcon,
-} from "./sidebar-agents";
+} from './sidebar-agents';
 
 /**
  * CDXC:SidebarAgents 2026-06-02-22:23:
@@ -11,7 +11,7 @@ import {
  * for Settings UI. gxserver owns runtime flag insertion, stripping, and command
  * shaping so macOS, CLI, TUI, mobile, and remote clients cannot diverge.
  */
-export type AgentAcceptAllMode = "inherit" | "enabled" | "disabled";
+export type AgentAcceptAllMode = 'inherit' | 'enabled' | 'disabled';
 
 /**
  * CDXC:SidebarAgents 2026-06-11-17:08:
@@ -24,19 +24,19 @@ export const AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS: ReadonlyArray<{
   label: string;
   value: AgentAcceptAllMode;
 }> = [
-  { label: "Inherit global setting", value: "inherit" },
-  { label: "Accept All", value: "enabled" },
-  { label: "Ask for permission", value: "disabled" },
+  { label: 'Inherit global setting', value: 'inherit' },
+  { label: 'Accept All', value: 'enabled' },
+  { label: 'Ask for permission', value: 'disabled' },
 ];
 
 export type AgentAcceptAllFlagSpec = {
-  kind: "flag";
+  kind: 'flag';
   aliases: readonly string[];
   canonicalFlag: string;
 };
 
 export type AgentAcceptAllRuntimeConfigSpec = {
-  kind: "runtimeConfig";
+  kind: 'runtimeConfig';
 };
 
 export type AgentAcceptAllSpec = AgentAcceptAllFlagSpec | AgentAcceptAllRuntimeConfigSpec;
@@ -55,35 +55,35 @@ export type AgentAcceptAllSpec = AgentAcceptAllFlagSpec | AgentAcceptAllRuntimeC
  */
 export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, AgentAcceptAllSpec | null>> = {
   antigravity: {
-    kind: "flag",
-    aliases: ["--dangerously-skip-permissions"],
-    canonicalFlag: "--dangerously-skip-permissions",
+    kind: 'flag',
+    aliases: ['--dangerously-skip-permissions'],
+    canonicalFlag: '--dangerously-skip-permissions',
   },
   amp: {
-    kind: "flag",
-    aliases: ["--dangerously-allow-all"],
-    canonicalFlag: "--dangerously-allow-all",
+    kind: 'flag',
+    aliases: ['--dangerously-allow-all'],
+    canonicalFlag: '--dangerously-allow-all',
   },
   claude: {
-    kind: "flag",
-    aliases: ["--dangerously-skip-permissions"],
-    canonicalFlag: "--dangerously-skip-permissions",
+    kind: 'flag',
+    aliases: ['--dangerously-skip-permissions'],
+    canonicalFlag: '--dangerously-skip-permissions',
   },
   codex: {
-    kind: "flag",
-    aliases: ["--yolo"],
-    canonicalFlag: "--yolo",
+    kind: 'flag',
+    aliases: ['--yolo'],
+    canonicalFlag: '--yolo',
   },
   codebuddy: null,
   copilot: {
-    kind: "flag",
-    aliases: ["--allow-all", "--yolo"],
-    canonicalFlag: "--yolo",
+    kind: 'flag',
+    aliases: ['--allow-all', '--yolo'],
+    canonicalFlag: '--yolo',
   },
   cursor: {
-    kind: "flag",
-    aliases: ["--force", "--yolo"],
-    canonicalFlag: "--yolo",
+    kind: 'flag',
+    aliases: ['--force', '--yolo'],
+    canonicalFlag: '--yolo',
   },
   /**
    * CDXC:SidebarAgents 2026-05-19-10:05:
@@ -92,43 +92,36 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
    */
   droid: null,
   gemini: {
-    kind: "flag",
-    aliases: ["-y", "--yolo"],
-    canonicalFlag: "--yolo",
+    kind: 'flag',
+    aliases: ['-y', '--yolo'],
+    canonicalFlag: '--yolo',
   },
   grok: {
-    kind: "flag",
-    aliases: ["--always-approve"],
-    canonicalFlag: "--always-approve",
+    kind: 'flag',
+    aliases: ['--always-approve'],
+    canonicalFlag: '--always-approve',
   },
-  "hermes-agent": null,
+  'hermes-agent': null,
   kiro: null,
   omp: null,
-  opencode: { kind: "runtimeConfig" },
+  opencode: { kind: 'runtimeConfig' },
   pi: null,
   qoder: null,
   rovodev: null,
 };
 
 export function normalizeAgentAcceptAllMode(candidate: unknown): AgentAcceptAllMode | undefined {
-  return candidate === "inherit" || candidate === "enabled" || candidate === "disabled"
-    ? candidate
-    : undefined;
+  return candidate === 'inherit' || candidate === 'enabled' || candidate === 'disabled' ? candidate : undefined;
 }
 
-export function resolveAgentAcceptAllSpec(
-  agentId: string,
-  icon?: SidebarAgentIcon,
-): AgentAcceptAllSpec | undefined {
+export function resolveAgentAcceptAllSpec(agentId: string, icon?: SidebarAgentIcon): AgentAcceptAllSpec | undefined {
   const defaultAgent = getDefaultSidebarAgentById(agentId);
-  const specFromId = defaultAgent
-    ? AGENT_ACCEPT_ALL_SPECS[defaultAgent.agentId]
-    : undefined;
+  const specFromId = defaultAgent ? AGENT_ACCEPT_ALL_SPECS[defaultAgent.agentId] : undefined;
   if (specFromId) {
     return specFromId;
   }
 
-  if (!icon || icon === "browser") {
+  if (!icon || icon === 'browser') {
     return undefined;
   }
 
@@ -143,10 +136,10 @@ export function resolveAgentAcceptAllSpec(
 
 export function resolveAgentAcceptAllFlagSpec(
   agentId: string,
-  icon?: SidebarAgentIcon,
+  icon?: SidebarAgentIcon
 ): AgentAcceptAllFlagSpec | undefined {
   const spec = resolveAgentAcceptAllSpec(agentId, icon);
-  return spec?.kind === "flag" ? spec : undefined;
+  return spec?.kind === 'flag' ? spec : undefined;
 }
 
 export function supportsAgentAcceptAll(agentId: string, icon?: SidebarAgentIcon): boolean {

@@ -3,18 +3,15 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import {
-  GPUI_REMOTE_MACHINE_RECONNECT_DELAYS_MS,
-  GPUI_SIDEBAR_DEFAULT_CLIENT_ID,
-} from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
-import { createGpuiSidebarSettings } from "./helpers/bootstrap";
+import { GPUI_REMOTE_MACHINE_RECONNECT_DELAYS_MS, GPUI_SIDEBAR_DEFAULT_CLIENT_ID } from './constants';
+import type { GpuiSidebarRuntime } from './core';
+import { createGpuiSidebarSettings } from './helpers/bootstrap';
 import {
   countGpuiRemotePresentationProjectSessions,
   orderGpuiRecentProjects,
   writeStoredGpuiRemoteRecentProjects,
-} from "./helpers/recent-projects";
-import { normalizeNonEmptyString } from "./helpers/records";
+} from './helpers/recent-projects';
+import { normalizeNonEmptyString } from './helpers/records';
 import {
   compareGpuiRemoteAttachCandidateSessions,
   createGpuiRemotePresentationGroupId,
@@ -23,26 +20,26 @@ import {
   isPresentationSnapshot,
   parseGpuiRemotePresentationGroupId,
   parseGpuiRemotePresentationProjectId,
-} from "./helpers/remote-presentation";
-import { normalizeGpuiWorktreeParentProjectId } from "./helpers/worktrees";
+} from './helpers/remote-presentation';
+import { normalizeGpuiWorktreeParentProjectId } from './helpers/worktrees';
 import type {
   GpuiRemoteProjectReference,
   GpuiRemoteProjectScope,
   GpuiSidebarNativeProjectPathAction,
   GpuiSidebarRemoteGxserverResponseEvent,
-} from "./types-and-protocol";
-import { postAppModalHostMessage } from "@/packages/core-ui/app-modal-host-bridge";
-import type { AppToastLevel } from "@/packages/shared/app-toast-contract";
-import { createAppToastRequest } from "@/packages/shared/app-toast-contract";
-import type { PreferredAgentInterface } from "@/packages/shared/ghostex-settings";
+} from './types-and-protocol';
+import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
+import { createAppToastRequest } from '@/packages/shared/app-toast-contract';
+import type { PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import type {
   GxserverEndpointPath,
   GxserverPresentationProject,
   GxserverPresentationSession,
   GxserverProjectId,
   GxserverRecentProjectDomainState,
-} from "@/packages/shared/gxserver-protocol";
-import type { SidebarToExtensionMessage } from "@/packages/shared/session-grid-contract";
+} from '@/packages/shared/gxserver-protocol';
+import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -61,53 +58,81 @@ export interface GpuiSidebarRuntimeRemoteMachineMethods {
   clearRemoteReconnectTimeout(remoteMachineId: string): void;
   resetRemoteReconnect(remoteMachineId: string): void;
   startRemoteGxserverPresentationSubscription(remoteMachineId: string): void;
-  requestRemoteGxserver<TResult = unknown>(remoteMachineId: string, path: GxserverEndpointPath, params: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<TResult>;
+  requestRemoteGxserver<TResult = unknown>(
+    remoteMachineId: string,
+    path: GxserverEndpointPath,
+    params: Record<string, unknown>,
+    options?: { timeoutMs?: number }
+  ): Promise<TResult>;
   resolveRemoteGxserverRequest(event: GpuiSidebarRemoteGxserverResponseEvent): void;
-  postRemoteGxserverSidebarRequest(remoteMachineId: string, path: GxserverEndpointPath, params: Record<string, unknown>): void;
+  postRemoteGxserverSidebarRequest(
+    remoteMachineId: string,
+    path: GxserverEndpointPath,
+    params: Record<string, unknown>
+  ): void;
   findRemotePresentationSession(reference: {
     machineId: string;
     projectId: string;
     sessionId: string;
   }): GxserverPresentationSession | undefined;
   postRemoteToast(level: AppToastLevel, title: string, options?: { description?: string }): void;
-  resolveRemotePresentationProjectScope(input: | {
+  resolveRemotePresentationProjectScope(
+    input:
+      | {
           groupId?: string;
           projectId?: string;
           remoteMachineId?: string;
         }
-      | GpuiRemoteProjectReference): GpuiRemoteProjectScope | undefined;
+      | GpuiRemoteProjectReference
+  ): GpuiRemoteProjectScope | undefined;
   findRemotePresentationProject(reference: GpuiRemoteProjectReference): GxserverPresentationProject | undefined;
   upsertRemotePresentationProject(remoteMachineId: string, nextProject: GxserverPresentationProject): void;
   removeRemotePresentationProject(remoteMachineId: string, projectId: string): void;
   remoteMachineName(machineId: string): string | undefined;
-  resolveRemoteWorktreeFamilyParentProjectFromPresentation(sourceProject: GpuiRemoteProjectScope): GpuiRemoteProjectScope | undefined;
+  resolveRemoteWorktreeFamilyParentProjectFromPresentation(
+    sourceProject: GpuiRemoteProjectScope
+  ): GpuiRemoteProjectScope | undefined;
   isTrustedRemoteExistingWorktreeKey(worktreeKey: string, sourceProject: GpuiRemoteProjectScope): boolean;
-  resolveRemoteWorktreeMutationProject(remoteMachineId: string, project: GxserverPresentationProject | undefined): Promise<GxserverPresentationProject>;
+  resolveRemoteWorktreeMutationProject(
+    remoteMachineId: string,
+    project: GxserverPresentationProject | undefined
+  ): Promise<GxserverPresentationProject>;
   refreshRemotePresentationFromGxserver(remoteMachineId: string): Promise<void>;
   closeRemoteProjectForGroup(remoteScope: GpuiRemoteProjectScope, groupId: string): Promise<void>;
   restoreRemoteRecentProject(remoteReference: GpuiRemoteProjectReference): Promise<void>;
   removeRemoteRecentProject(remoteReference: GpuiRemoteProjectReference): Promise<void>;
   removeRemoteProject(remoteReference: GpuiRemoteProjectReference): Promise<void>;
-  selectRemoteGroupAttachTarget(reference: GpuiRemoteProjectReference): { machineId: string; projectId: string; sessionId: string } | undefined;
-  postRemoteSessionNativeAction(action: Extract<
+  selectRemoteGroupAttachTarget(
+    reference: GpuiRemoteProjectReference
+  ): { machineId: string; projectId: string; sessionId: string } | undefined;
+  postRemoteSessionNativeAction(
+    action: Extract<
       GpuiSidebarNativeProjectPathAction,
-      "openRemoteSessionTerminal" | "copyRemoteAttachCommand" | "copyRemoteResumeCommand"
-    >, reference: { machineId: string; projectId: string; sessionId: string }, originalMessage: SidebarToExtensionMessage, options?: { preferredInterface?: PreferredAgentInterface }): boolean;
-  postRemoteProjectNativeAction(action: Extract<
+      'openRemoteSessionTerminal' | 'copyRemoteAttachCommand' | 'copyRemoteResumeCommand'
+    >,
+    reference: { machineId: string; projectId: string; sessionId: string },
+    originalMessage: SidebarToExtensionMessage,
+    options?: { preferredInterface?: PreferredAgentInterface }
+  ): boolean;
+  postRemoteProjectNativeAction(
+    action: Extract<
       GpuiSidebarNativeProjectPathAction,
-      | "copyRemoteProjectPath"
-      | "openRemoteProjectTerminal"
-      | "openRemoteWorkspaceProjectInIde"
-      | "openRemoteWorkspaceProjectInVscode"
-      | "openRemoteWorkspaceProjectInZed"
-      | "openRemoteExistingPullRequestInBrowser"
-      | "openRemoteSidebarGitChangedFileInIde"
-      | "openRemoteProjectPortsBrowser"
-    >, reference: GpuiRemoteProjectReference, originalMessage: SidebarToExtensionMessage, options?: { filePath?: string }): boolean;
+      | 'copyRemoteProjectPath'
+      | 'openRemoteProjectTerminal'
+      | 'openRemoteWorkspaceProjectInIde'
+      | 'openRemoteWorkspaceProjectInVscode'
+      | 'openRemoteWorkspaceProjectInZed'
+      | 'openRemoteExistingPullRequestInBrowser'
+      | 'openRemoteSidebarGitChangedFileInIde'
+      | 'openRemoteProjectPortsBrowser'
+    >,
+    reference: GpuiRemoteProjectReference,
+    originalMessage: SidebarToExtensionMessage,
+    options?: { filePath?: string }
+  ): boolean;
 }
 
 export const gpuiSidebarRuntimeRemoteMachineMethods = {
-
   connectSavedRemoteMachinesOnStartup(this: GpuiSidebarRuntime): void {
     /*
     CDXC:GPUIRemoteStartupReconnect 2026-07-21:
@@ -120,10 +145,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     lifecycle reconnect manager used after sleep/wake, so retryable failures
     back off without exhausting a launch-only budget.
     */
-    if (
-      this.didConnectSavedRemoteMachinesOnStartup ||
-      this.runtimeSettings?.settings === undefined
-    ) {
+    if (this.didConnectSavedRemoteMachinesOnStartup || this.runtimeSettings?.settings === undefined) {
       return;
     }
     this.didConnectSavedRemoteMachinesOnStartup = true;
@@ -138,7 +160,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       return;
     }
     const savedRemoteMachineIds = new Set(
-      createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.map((machine) => machine.id),
+      createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.map((machine) => machine.id)
     );
     const retryMachineIds = new Set([
       ...this.remoteReconnectAttempts.keys(),
@@ -153,10 +175,11 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     }
   },
 
-  reconnectRemoteMachine(this: GpuiSidebarRuntime,
+  reconnectRemoteMachine(
+    this: GpuiSidebarRuntime,
     remoteMachineId: string,
     installApproved: boolean,
-    automatic = false,
+    automatic = false
   ): void {
     const normalizedMachineId = normalizeNonEmptyString(remoteMachineId);
     if (!normalizedMachineId) {
@@ -175,21 +198,21 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
           automatic,
           installApproved,
           remoteMachineId: normalizedMachineId,
-          type: "reconnectRemoteMachine",
+          type: 'reconnectRemoteMachine',
         },
-        "GPUISidebarRemoteMachines:reconnect",
+        'GPUISidebarRemoteMachines:reconnect'
       );
       this.messageSource.postMessage({
         machineId: normalizedMachineId,
-        state: "connecting",
-        type: "remoteMachineStatus",
+        state: 'connecting',
+        type: 'remoteMachineStatus',
       });
     } catch {
       this.remoteReconnectInFlight.delete(normalizedMachineId);
       this.scheduleRemoteReconnect(normalizedMachineId);
       if (!automatic) {
-        this.postRemoteToast("warning", "Remote connect unavailable", {
-          description: "GPUI could not reach the native remote-machine bridge.",
+        this.postRemoteToast('warning', 'Remote connect unavailable', {
+          description: 'GPUI could not reach the native remote-machine bridge.',
         });
       }
     }
@@ -205,7 +228,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       return;
     }
     const isStillSaved = createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.some(
-      (machine) => machine.id === normalizedMachineId,
+      (machine) => machine.id === normalizedMachineId
     );
     if (!isStillSaved) {
       this.resetRemoteReconnect(normalizedMachineId);
@@ -219,7 +242,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     const timeout = window.setTimeout(() => {
       this.remoteReconnectTimeouts.delete(normalizedMachineId);
       const remainsSaved = createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.some(
-        (machine) => machine.id === normalizedMachineId,
+        (machine) => machine.id === normalizedMachineId
       );
       if (!remainsSaved) {
         this.resetRemoteReconnect(normalizedMachineId);
@@ -260,29 +283,30 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
           ...(snapshot ? { lastRevision: snapshot.revision } : {}),
           remoteMachineId: normalizedMachineId,
           requestId,
-          type: "remoteGxserverSubscribePresentation",
+          type: 'remoteGxserverSubscribePresentation',
         },
-        "GPUISidebarRemoteMachines:subscribePresentation",
+        'GPUISidebarRemoteMachines:subscribePresentation'
       );
     } catch {
-      this.postRemoteToast("warning", "Remote sidebar stream unavailable", {
-        description: "GPUI could not reach the native remote presentation bridge.",
+      this.postRemoteToast('warning', 'Remote sidebar stream unavailable', {
+        description: 'GPUI could not reach the native remote presentation bridge.',
       });
     }
   },
 
-  requestRemoteGxserver<TResult = unknown>(this: GpuiSidebarRuntime,
+  requestRemoteGxserver<TResult = unknown>(
+    this: GpuiSidebarRuntime,
     remoteMachineId: string,
     path: GxserverEndpointPath,
     params: Record<string, unknown>,
-    options: { timeoutMs?: number } = {},
+    options: { timeoutMs?: number } = {}
   ): Promise<TResult> {
     const requestId = `remote-${Date.now().toString(36)}-${++this.remoteGxserverRequestSequence}`;
     const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 20_000, 1_000), 130_000);
     return new Promise<TResult>((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
         this.pendingRemoteGxserverRequests.delete(requestId);
-        reject(new Error("Remote gxserver request timed out."));
+        reject(new Error('Remote gxserver request timed out.'));
       }, timeoutMs + 2_000);
       this.pendingRemoteGxserverRequests.set(requestId, {
         reject,
@@ -301,14 +325,14 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
             remoteMachineId,
             requestId,
             timeoutMs,
-            type: "gpuiRemoteGxserverSidebarRequest",
+            type: 'gpuiRemoteGxserverSidebarRequest',
           },
-          "GPUISidebarRemoteMachines:request",
+          'GPUISidebarRemoteMachines:request'
         );
       } catch (error) {
         window.clearTimeout(timeoutId);
         this.pendingRemoteGxserverRequests.delete(requestId);
-        reject(error instanceof Error ? error : new Error("Remote gxserver bridge failed."));
+        reject(error instanceof Error ? error : new Error('Remote gxserver bridge failed.'));
       }
     });
   },
@@ -324,13 +348,14 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       pending.resolve(event.result);
       return;
     }
-    pending.reject(new Error(event.error || "Remote gxserver request failed."));
+    pending.reject(new Error(event.error || 'Remote gxserver request failed.'));
   },
 
-  postRemoteGxserverSidebarRequest(this: GpuiSidebarRuntime,
+  postRemoteGxserverSidebarRequest(
+    this: GpuiSidebarRuntime,
     remoteMachineId: string,
     path: GxserverEndpointPath,
-    params: Record<string, unknown>,
+    params: Record<string, unknown>
   ): void {
     try {
       postAppModalHostMessage(
@@ -338,39 +363,42 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
           params,
           path,
           remoteMachineId,
-          type: "gpuiRemoteGxserverSidebarRequest",
+          type: 'gpuiRemoteGxserverSidebarRequest',
         },
-        "GPUISidebarRemoteMachines:request",
+        'GPUISidebarRemoteMachines:request'
       );
     } catch {
-      this.postRemoteToast("warning", "Remote action unavailable", {
-        description: "GPUI could not reach the native remote gxserver bridge.",
+      this.postRemoteToast('warning', 'Remote action unavailable', {
+        description: 'GPUI could not reach the native remote gxserver bridge.',
       });
     }
   },
 
-  findRemotePresentationSession(this: GpuiSidebarRuntime, reference: {
-    machineId: string;
-    projectId: string;
-    sessionId: string;
-  }): GxserverPresentationSession | undefined {
+  findRemotePresentationSession(
+    this: GpuiSidebarRuntime,
+    reference: {
+      machineId: string;
+      projectId: string;
+      sessionId: string;
+    }
+  ): GxserverPresentationSession | undefined {
     return this.remotePresentations
       .get(reference.machineId)
       ?.sessions.find(
-        (session) =>
-          session.projectId === reference.projectId && session.sessionId === reference.sessionId,
+        (session) => session.projectId === reference.projectId && session.sessionId === reference.sessionId
       );
   },
 
-  postRemoteToast(this: GpuiSidebarRuntime,
+  postRemoteToast(
+    this: GpuiSidebarRuntime,
     level: AppToastLevel,
     title: string,
-    options: { description?: string } = {},
+    options: { description?: string } = {}
   ): void {
     try {
       postAppModalHostMessage(
         createAppToastRequest(level, title, options.description),
-        "GPUISidebarRemoteMachines:toast",
+        'GPUISidebarRemoteMachines:toast'
       );
     } catch {
       /*
@@ -380,32 +408,31 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     }
   },
 
-  resolveRemotePresentationProjectScope(this: GpuiSidebarRuntime,
+  resolveRemotePresentationProjectScope(
+    this: GpuiSidebarRuntime,
     input:
       | {
           groupId?: string;
           projectId?: string;
           remoteMachineId?: string;
         }
-      | GpuiRemoteProjectReference,
+      | GpuiRemoteProjectReference
   ): GpuiRemoteProjectScope | undefined {
     const groupReference =
-      "groupId" in input && input.groupId
-        ? parseGpuiRemotePresentationGroupId(input.groupId)
-        : undefined;
+      'groupId' in input && input.groupId ? parseGpuiRemotePresentationGroupId(input.groupId) : undefined;
     const projectReference =
-      !groupReference && "projectId" in input && input.projectId
+      !groupReference && 'projectId' in input && input.projectId
         ? parseGpuiRemotePresentationProjectId(input.projectId)
         : undefined;
     const machineId =
       groupReference?.machineId ??
       projectReference?.machineId ??
-      ("remoteMachineId" in input ? input.remoteMachineId?.trim() : undefined) ??
-      ("machineId" in input ? input.machineId : undefined);
+      ('remoteMachineId' in input ? input.remoteMachineId?.trim() : undefined) ??
+      ('machineId' in input ? input.machineId : undefined);
     const projectId =
       groupReference?.projectId ??
       projectReference?.projectId ??
-      ("projectId" in input ? input.projectId?.trim() : undefined);
+      ('projectId' in input ? input.projectId?.trim() : undefined);
     if (!machineId || !projectId) {
       return undefined;
     }
@@ -422,30 +449,28 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     };
   },
 
-  findRemotePresentationProject(this: GpuiSidebarRuntime,
-    reference: GpuiRemoteProjectReference,
+  findRemotePresentationProject(
+    this: GpuiSidebarRuntime,
+    reference: GpuiRemoteProjectReference
   ): GxserverPresentationProject | undefined {
     return this.remotePresentations
       .get(reference.machineId)
       ?.projects.find((project) => project.projectId === reference.projectId);
   },
 
-  upsertRemotePresentationProject(this: GpuiSidebarRuntime,
+  upsertRemotePresentationProject(
+    this: GpuiSidebarRuntime,
     remoteMachineId: string,
-    nextProject: GxserverPresentationProject,
+    nextProject: GxserverPresentationProject
   ): void {
     const presentation = this.remotePresentations.get(remoteMachineId);
     if (!presentation) {
       return;
     }
-    const existingIndex = presentation.projects.findIndex(
-      (project) => project.projectId === nextProject.projectId,
-    );
+    const existingIndex = presentation.projects.findIndex((project) => project.projectId === nextProject.projectId);
     const projects =
       existingIndex >= 0
-        ? presentation.projects.map((project, index) =>
-            index === existingIndex ? nextProject : project,
-          )
+        ? presentation.projects.map((project, index) => (index === existingIndex ? nextProject : project))
         : [...presentation.projects, nextProject];
     this.remotePresentations.set(remoteMachineId, {
       ...presentation,
@@ -467,13 +492,13 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
   },
 
   remoteMachineName(this: GpuiSidebarRuntime, machineId: string): string | undefined {
-    return createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.find(
-      (machine) => machine.id === machineId,
-    )?.name;
+    return createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.find((machine) => machine.id === machineId)
+      ?.name;
   },
 
-  resolveRemoteWorktreeFamilyParentProjectFromPresentation(this: GpuiSidebarRuntime,
-    sourceProject: GpuiRemoteProjectScope,
+  resolveRemoteWorktreeFamilyParentProjectFromPresentation(
+    this: GpuiSidebarRuntime,
+    sourceProject: GpuiRemoteProjectScope
   ): GpuiRemoteProjectScope | undefined {
     const parentProjectId = normalizeGpuiWorktreeParentProjectId(sourceProject.project.worktree);
     if (!parentProjectId) {
@@ -492,25 +517,27 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       : undefined;
   },
 
-  isTrustedRemoteExistingWorktreeKey(this: GpuiSidebarRuntime,
+  isTrustedRemoteExistingWorktreeKey(
+    this: GpuiSidebarRuntime,
     worktreeKey: string,
-    sourceProject: GpuiRemoteProjectScope,
+    sourceProject: GpuiRemoteProjectScope
   ): boolean {
     const trusted = this.trustedExistingWorktreeList;
     return Boolean(
       trusted &&
       trusted.remoteMachineId === sourceProject.machineId &&
       trusted.sourceProjectId === sourceProject.projectId &&
-      trusted.worktreeKeys?.has(worktreeKey.trim()),
+      trusted.worktreeKeys?.has(worktreeKey.trim())
     );
   },
 
-  async resolveRemoteWorktreeMutationProject(this: GpuiSidebarRuntime,
+  async resolveRemoteWorktreeMutationProject(
+    this: GpuiSidebarRuntime,
     remoteMachineId: string,
-    project: GxserverPresentationProject | undefined,
+    project: GxserverPresentationProject | undefined
   ): Promise<GxserverPresentationProject> {
     if (!project?.projectId) {
-      throw new Error("Remote gxserver did not return a worktree project.");
+      throw new Error('Remote gxserver did not return a worktree project.');
     }
     this.upsertRemotePresentationProject(remoteMachineId, project);
     this.publishRemotePresentationPatch();
@@ -526,33 +553,27 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
   async refreshRemotePresentationFromGxserver(this: GpuiSidebarRuntime, remoteMachineId: string): Promise<void> {
     const response = await this.requestRemoteGxserver<{ snapshot?: unknown }>(
       remoteMachineId,
-      "/api/readPresentationSnapshot",
-      {},
+      '/api/readPresentationSnapshot',
+      {}
     );
     if (isPresentationSnapshot(response.snapshot)) {
       const previous = this.remotePresentations.get(remoteMachineId);
       const previousSessions = previous?.sessions ?? [];
-      const snapshot = this.projectRemotePresentationAttentionAcknowledgementGuards(
-        remoteMachineId,
-        response.snapshot,
-      );
+      const snapshot = this.projectRemotePresentationAttentionAcknowledgementGuards(remoteMachineId, response.snapshot);
       if (previous && previous.revision > snapshot.revision) {
         return;
       }
       this.remotePresentations.set(remoteMachineId, snapshot);
       this.pruneRemoteWorkspaceGroupAssignments(remoteMachineId, snapshot);
-      this.syncRemotePresentationAttentionTracking(
-        remoteMachineId,
-        previousSessions,
-        snapshot.sessions,
-      );
+      this.syncRemotePresentationAttentionTracking(remoteMachineId, previousSessions, snapshot.sessions);
       this.publishRemotePresentationPatch();
     }
   },
 
-  async closeRemoteProjectForGroup(this: GpuiSidebarRuntime,
+  async closeRemoteProjectForGroup(
+    this: GpuiSidebarRuntime,
     remoteScope: GpuiRemoteProjectScope,
-    groupId: string,
+    groupId: string
   ): Promise<void> {
     /*
     CDXC:GPUIRemoteProjects 2026-06-27-19:37:
@@ -563,12 +584,10 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     */
     const presentation = this.remotePresentations.get(remoteScope.machineId);
     const recentProject: GxserverRecentProjectDomainState = {
-      path: remoteScope.project.path ?? "",
+      path: remoteScope.project.path ?? '',
       projectId: remoteScope.projectId as GxserverProjectId,
       recentClosedAt: new Date().toISOString(),
-      sessionCount: presentation
-        ? countGpuiRemotePresentationProjectSessions(presentation, remoteScope.projectId)
-        : 0,
+      sessionCount: presentation ? countGpuiRemotePresentationProjectSessions(presentation, remoteScope.projectId) : 0,
       title: remoteScope.project.title,
     };
     const previousProjects = this.remoteRecentProjectsByMachineId.get(remoteScope.machineId) ?? [];
@@ -577,7 +596,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       orderGpuiRecentProjects([
         recentProject,
         ...previousProjects.filter((project) => project.projectId !== remoteScope.projectId),
-      ]),
+      ])
     );
     writeStoredGpuiRemoteRecentProjects(this.remoteRecentProjectsByMachineId);
     if (this.activeGroupId === groupId) {
@@ -586,34 +605,33 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     this.publishRemotePresentationPatch();
   },
 
-  async restoreRemoteRecentProject(this: GpuiSidebarRuntime,
-    remoteReference: GpuiRemoteProjectReference,
+  async restoreRemoteRecentProject(
+    this: GpuiSidebarRuntime,
+    remoteReference: GpuiRemoteProjectReference
   ): Promise<void> {
     this.remoteRecentProjectsByMachineId.set(
       remoteReference.machineId,
       (this.remoteRecentProjectsByMachineId.get(remoteReference.machineId) ?? []).filter(
-        (project) => project.projectId !== remoteReference.projectId,
-      ),
+        (project) => project.projectId !== remoteReference.projectId
+      )
     );
     writeStoredGpuiRemoteRecentProjects(this.remoteRecentProjectsByMachineId);
-    this.activeGroupId = createGpuiRemotePresentationGroupId(
-      remoteReference.machineId,
-      remoteReference.projectId,
-    );
+    this.activeGroupId = createGpuiRemotePresentationGroupId(remoteReference.machineId, remoteReference.projectId);
     if (!this.remotePresentations.has(remoteReference.machineId)) {
       this.reconnectRemoteMachine(remoteReference.machineId, false);
     }
     this.publishRemotePresentationPatch();
   },
 
-  async removeRemoteRecentProject(this: GpuiSidebarRuntime,
-    remoteReference: GpuiRemoteProjectReference,
+  async removeRemoteRecentProject(
+    this: GpuiSidebarRuntime,
+    remoteReference: GpuiRemoteProjectReference
   ): Promise<void> {
     this.remoteRecentProjectsByMachineId.set(
       remoteReference.machineId,
       (this.remoteRecentProjectsByMachineId.get(remoteReference.machineId) ?? []).filter(
-        (project) => project.projectId !== remoteReference.projectId,
-      ),
+        (project) => project.projectId !== remoteReference.projectId
+      )
     );
     writeStoredGpuiRemoteRecentProjects(this.remoteRecentProjectsByMachineId);
     this.publishRemotePresentationPatch();
@@ -621,34 +639,34 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
 
   async removeRemoteProject(this: GpuiSidebarRuntime, remoteReference: GpuiRemoteProjectReference): Promise<void> {
     try {
-      await this.requestRemoteGxserver(remoteReference.machineId, "/api/removeProject", {
+      await this.requestRemoteGxserver(remoteReference.machineId, '/api/removeProject', {
         projectId: remoteReference.projectId,
       });
       this.removeRemotePresentationProject(remoteReference.machineId, remoteReference.projectId);
       this.remoteRecentProjectsByMachineId.set(
         remoteReference.machineId,
         (this.remoteRecentProjectsByMachineId.get(remoteReference.machineId) ?? []).filter(
-          (project) => project.projectId !== remoteReference.projectId,
-        ),
+          (project) => project.projectId !== remoteReference.projectId
+        )
       );
       writeStoredGpuiRemoteRecentProjects(this.remoteRecentProjectsByMachineId);
       this.publishRemotePresentationPatch();
     } catch {
-      this.postRemoteToast("warning", "Remote project removal failed", {
-        description: "The remote gxserver could not remove that project.",
+      this.postRemoteToast('warning', 'Remote project removal failed', {
+        description: 'The remote gxserver could not remove that project.',
       });
     }
   },
 
-  selectRemoteGroupAttachTarget(this: GpuiSidebarRuntime,
-    reference: GpuiRemoteProjectReference,
+  selectRemoteGroupAttachTarget(
+    this: GpuiSidebarRuntime,
+    reference: GpuiRemoteProjectReference
   ): { machineId: string; projectId: string; sessionId: string } | undefined {
     const presentation = this.remotePresentations.get(reference.machineId);
     const session = (presentation?.sessions ?? [])
       .filter(
         (candidate) =>
-          candidate.projectId === reference.projectId &&
-          (candidate.kind === "terminal" || candidate.kind === "agent"),
+          candidate.projectId === reference.projectId && (candidate.kind === 'terminal' || candidate.kind === 'agent')
       )
       .sort(compareGpuiRemoteAttachCandidateSessions)[0];
     return session
@@ -660,51 +678,50 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       : undefined;
   },
 
-  postRemoteSessionNativeAction(this: GpuiSidebarRuntime,
+  postRemoteSessionNativeAction(
+    this: GpuiSidebarRuntime,
     action: Extract<
       GpuiSidebarNativeProjectPathAction,
-      "openRemoteSessionTerminal" | "copyRemoteAttachCommand" | "copyRemoteResumeCommand"
+      'openRemoteSessionTerminal' | 'copyRemoteAttachCommand' | 'copyRemoteResumeCommand'
     >,
     reference: { machineId: string; projectId: string; sessionId: string },
     originalMessage: SidebarToExtensionMessage,
-    options: { preferredInterface?: PreferredAgentInterface } = {},
+    options: { preferredInterface?: PreferredAgentInterface } = {}
   ): boolean {
     return this.postNativeProjectPathAction(
       action,
-      createGpuiRemotePresentationSessionId(
-        reference.machineId,
-        reference.projectId,
-        reference.sessionId,
-      ),
+      createGpuiRemotePresentationSessionId(reference.machineId, reference.projectId, reference.sessionId),
       originalMessage,
-      options,
+      options
     );
   },
 
-  postRemoteProjectNativeAction(this: GpuiSidebarRuntime,
+  postRemoteProjectNativeAction(
+    this: GpuiSidebarRuntime,
     action: Extract<
       GpuiSidebarNativeProjectPathAction,
-      | "copyRemoteProjectPath"
-      | "openRemoteProjectTerminal"
-      | "openRemoteWorkspaceProjectInIde"
-      | "openRemoteWorkspaceProjectInVscode"
-      | "openRemoteWorkspaceProjectInZed"
-      | "openRemoteExistingPullRequestInBrowser"
-      | "openRemoteSidebarGitChangedFileInIde"
-      | "openRemoteProjectPortsBrowser"
+      | 'copyRemoteProjectPath'
+      | 'openRemoteProjectTerminal'
+      | 'openRemoteWorkspaceProjectInIde'
+      | 'openRemoteWorkspaceProjectInVscode'
+      | 'openRemoteWorkspaceProjectInZed'
+      | 'openRemoteExistingPullRequestInBrowser'
+      | 'openRemoteSidebarGitChangedFileInIde'
+      | 'openRemoteProjectPortsBrowser'
     >,
     reference: GpuiRemoteProjectReference,
     originalMessage: SidebarToExtensionMessage,
-    options: { filePath?: string } = {},
+    options: { filePath?: string } = {}
   ): boolean {
     return this.postNativeProjectPathAction(
       action,
       createGpuiRemotePresentationProjectId(reference.machineId, reference.projectId),
       originalMessage,
-      options,
+      options
     );
   },
 };
 
-const gpuiSidebarRuntimeRemoteMachineMethodsShapeCheck: GpuiSidebarRuntimeRemoteMachineMethods = gpuiSidebarRuntimeRemoteMachineMethods;
+const gpuiSidebarRuntimeRemoteMachineMethodsShapeCheck: GpuiSidebarRuntimeRemoteMachineMethods =
+  gpuiSidebarRuntimeRemoteMachineMethods;
 void gpuiSidebarRuntimeRemoteMachineMethodsShapeCheck;

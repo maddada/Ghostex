@@ -41,13 +41,17 @@ pub(crate) fn gpui_collect_native_resource_process_tree_bounded(
     collected.into_values().collect()
 }
 
-pub(crate) fn gpui_sum_native_resource_processes(processes: &[GpuiNativeResourceProcess]) -> (f64, f64) {
+pub(crate) fn gpui_sum_native_resource_processes(
+    processes: &[GpuiNativeResourceProcess],
+) -> (f64, f64) {
     processes.iter().fold((0.0, 0.0), |(cpu, memory), process| {
         (cpu + process.cpu, memory + process.memory_mb)
     })
 }
 
-pub(crate) fn gpui_native_resource_is_app_bundle_process(process: &GpuiNativeResourceProcess) -> bool {
+pub(crate) fn gpui_native_resource_is_app_bundle_process(
+    process: &GpuiNativeResourceProcess,
+) -> bool {
     let command = process.command.to_ascii_lowercase();
     command.contains("/ghostex.app/contents/")
         || command.contains("/ghostex-dev.app/contents/")
@@ -64,7 +68,9 @@ pub(crate) fn gpui_native_resource_is_app_bundle_process(process: &GpuiNativeRes
 /// True for the app's own executables: the Ghostex binary, its CEF helper
 /// processes, and the gxserver daemon. These are the app itself, never a
 /// user-owned server or runtime.
-pub(crate) fn gpui_native_resource_is_app_shell_process(process: &GpuiNativeResourceProcess) -> bool {
+pub(crate) fn gpui_native_resource_is_app_shell_process(
+    process: &GpuiNativeResourceProcess,
+) -> bool {
     let command = process.command.to_ascii_lowercase();
     [
         "/ghostex.app/contents/macos/",
@@ -95,7 +101,9 @@ never matched it and every launch grew a permanent `localhost:<random>` Dev
 Servers row. Identify it by executable name so the bundled runtime, a
 `~/.ghostex/` install, and a dev build are all recognised.
 */
-pub(crate) fn gpui_native_resource_is_gxserver_process(process: &GpuiNativeResourceProcess) -> bool {
+pub(crate) fn gpui_native_resource_is_gxserver_process(
+    process: &GpuiNativeResourceProcess,
+) -> bool {
     matches!(
         gpui_native_resource_process_name(process)
             .to_ascii_lowercase()
@@ -104,7 +112,9 @@ pub(crate) fn gpui_native_resource_is_gxserver_process(process: &GpuiNativeResou
     )
 }
 
-pub(crate) fn gpui_native_resource_is_ghostex_owned_process(process: &GpuiNativeResourceProcess) -> bool {
+pub(crate) fn gpui_native_resource_is_ghostex_owned_process(
+    process: &GpuiNativeResourceProcess,
+) -> bool {
     let command = process.command.to_ascii_lowercase();
     gpui_native_resource_is_app_bundle_process(process)
         || command.contains("/.ghostex/")
@@ -113,7 +123,9 @@ pub(crate) fn gpui_native_resource_is_ghostex_owned_process(process: &GpuiNative
         || command.contains("/resources/web/bin/zmx")
 }
 
-pub(crate) fn gpui_native_resource_is_user_runtime_process(process: &GpuiNativeResourceProcess) -> bool {
+pub(crate) fn gpui_native_resource_is_user_runtime_process(
+    process: &GpuiNativeResourceProcess,
+) -> bool {
     let command = process.command.to_ascii_lowercase();
     [
         "zmx",
@@ -127,7 +139,9 @@ pub(crate) fn gpui_native_resource_is_user_runtime_process(process: &GpuiNativeR
     .any(|needle| command.contains(needle))
 }
 
-pub(crate) fn gpui_native_resource_is_ghostex_browser_process(process: &GpuiNativeResourceProcess) -> bool {
+pub(crate) fn gpui_native_resource_is_ghostex_browser_process(
+    process: &GpuiNativeResourceProcess,
+) -> bool {
     let command = process.command.to_ascii_lowercase();
     (command.contains("--type=renderer")
         || command.contains("--type=gpu-process")
@@ -228,7 +242,8 @@ root and no read, save, rename, delete, move, or reveal can resolve out of the
 root it was addressed to.
 */
 pub(crate) const MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT: &str = ".ghostex-docs-root";
-pub(crate) const MANAGE_ANNOTATIONS_SIDECAR_RELATIVE_PATH: &str = ".ghostex/manage-annotations.json";
+pub(crate) const MANAGE_ANNOTATIONS_SIDECAR_RELATIVE_PATH: &str =
+    ".ghostex/manage-annotations.json";
 pub(crate) const MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS: &[&str] = &[
     "excalidraw",
     "htm",
@@ -271,7 +286,8 @@ pub(crate) const GPUI_REMOTE_GXSERVER_UPLOAD_TIMEOUT: Duration = Duration::from_
 pub(crate) const GPUI_REMOTE_GXSERVER_INSTALL_TIMEOUT: Duration = Duration::from_secs(45);
 // gxserver advertises this in /api/health/server once it accepts the
 // `code-server` prompt-editor selector on session create and attach operations.
-pub(crate) const GPUI_GXSERVER_CODE_SERVER_PROMPT_EDITOR_CAPABILITY: &str = "codeServerPromptEditor";
+pub(crate) const GPUI_GXSERVER_CODE_SERVER_PROMPT_EDITOR_CAPABILITY: &str =
+    "codeServerPromptEditor";
 pub(crate) const GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT: Duration = Duration::from_secs(1);
 pub(crate) const GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE: Duration = Duration::from_secs(7);
 pub(crate) const GPUI_REMOTE_GXSERVER_WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
@@ -286,9 +302,12 @@ pub(crate) const GPUI_REMOTE_GXSERVER_SIDEBAR_REQUEST_TIMEOUT_MIN_MS: u64 = 1_00
 pub(crate) const GPUI_REMOTE_GXSERVER_SIDEBAR_REQUEST_TIMEOUT_MAX_MS: u64 = 130_000;
 pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_ATTEMPTS: usize = 4;
 pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_FRAME_MAX_BYTES: usize = 4 * 1024 * 1024;
-pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(8);
-pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_READ_TIMEOUT: Duration = Duration::from_millis(900);
-pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_HEALTH_INTERVAL: Duration = Duration::from_secs(15);
+pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_HANDSHAKE_TIMEOUT: Duration =
+    Duration::from_secs(8);
+pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_READ_TIMEOUT: Duration =
+    Duration::from_millis(900);
+pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_HEALTH_INTERVAL: Duration =
+    Duration::from_secs(15);
 pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_RECONNECT_DELAY: Duration =
     Duration::from_millis(700);
 pub(crate) const GPUI_REMOTE_REPOSITORY_CLONE_POLL_INTERVAL: Duration = Duration::from_millis(700);
@@ -348,4 +367,3 @@ pub(crate) const GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
 ];
-

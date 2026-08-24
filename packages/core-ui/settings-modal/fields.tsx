@@ -1,36 +1,12 @@
-import {
-  DragDropProvider,
-  type DragDropEventHandlers,
-} from "@dnd-kit/react";
-import {
-  isSortableOperation,
-  useSortable,
-} from "@dnd-kit/react/sortable";
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type ComponentProps,
-  type ReactNode,
-  type RefObject,
-} from "react";
-import { flushSync } from "react-dom";
-import ColorPicker from "react-best-gradient-color-picker";
-import { cn } from "@/packages/components/utils";
-import { Button } from "@/packages/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardTitle,
-} from "@/packages/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/packages/components/ui/dialog";
+import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
+import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
+import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from 'react';
+import { flushSync } from 'react-dom';
+import ColorPicker from 'react-best-gradient-color-picker';
+import { cn } from '@/packages/components/utils';
+import { Button } from '@/packages/components/ui/button';
+import { Card, CardContent, CardTitle } from '@/packages/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
 import {
   Field,
   FieldContent,
@@ -38,8 +14,8 @@ import {
   FieldGroup,
   FieldLabel,
   FieldTitle,
-} from "@/packages/components/ui/field";
-import { Input as BaseInput } from "@/packages/components/ui/input";
+} from '@/packages/components/ui/field';
+import { Input as BaseInput } from '@/packages/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -47,21 +23,14 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/packages/components/ui/select";
-import { Slider } from "@/packages/components/ui/slider";
-import { Switch } from "@/packages/components/ui/switch";
-import { Textarea as BaseTextarea } from "@/packages/components/ui/textarea";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/packages/components/ui/toggle-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/packages/components/ui/tooltip";
-import { AppTooltip } from "../app-tooltip";
-import { DisabledSettingControlTooltip } from "../disabled-setting-control-tooltip";
+} from '@/packages/components/ui/select';
+import { Slider } from '@/packages/components/ui/slider';
+import { Switch } from '@/packages/components/ui/switch';
+import { Textarea as BaseTextarea } from '@/packages/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/packages/components/ui/toggle-group';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/packages/components/ui/tooltip';
+import { AppTooltip } from '../app-tooltip';
+import { DisabledSettingControlTooltip } from '../disabled-setting-control-tooltip';
 import {
   IconAsterisk,
   IconAlertTriangle,
@@ -80,15 +49,9 @@ import {
   IconPlus,
   IconTrash,
   IconX,
-} from "@tabler/icons-react";
-import {
-  COMPLETION_SOUND_OPTIONS,
-  type CompletionSoundSetting,
-} from "../../shared/completion-sound";
-import {
-  type SidebarAppIconInfo,
-  type SidebarAppIconStateMessage,
-} from "../../shared/session-grid-contract";
+} from '@tabler/icons-react';
+import { COMPLETION_SOUND_OPTIONS, type CompletionSoundSetting } from '../../shared/completion-sound';
+import { type SidebarAppIconInfo, type SidebarAppIconStateMessage } from '../../shared/session-grid-contract';
 import {
   DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
   DEFAULT_ghostex_SETTINGS,
@@ -106,45 +69,38 @@ import {
   type SidebarSettingsPresetId,
   type SidebarProjectGroupStyle,
   type SidebarVersion,
-} from "../../shared/ghostex-settings";
-import { type SessionChatTheme } from "../../shared/session-chat";
-import {
-  PET_OPTIONS,
-  type PetId,
-} from "../../shared/pets";
+} from '../../shared/ghostex-settings';
+import { type SessionChatTheme } from '../../shared/session-chat';
+import { PET_OPTIONS, type PetId } from '../../shared/pets';
 import {
   getSidebarSessionTagListItemLabel,
   normalizeSidebarSessionTagListItems,
   type SidebarSessionTagListItem,
-} from "../../shared/session-tags";
-import { PetAvatar } from "../pet-avatar";
-import { SessionTagIcon } from "../session-tag-ui";
-import {
-  createSettingsSidebarTagListItemDragData,
-  getSettingsSidebarTagListItemDragData,
-  moveId,
-} from "./drag-data";
+} from '../../shared/session-tags';
+import { PetAvatar } from '../pet-avatar';
+import { SessionTagIcon } from '../session-tag-ui';
+import { createSettingsSidebarTagListItemDragData, getSettingsSidebarTagListItemDragData, moveId } from './drag-data';
 import {
   DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION,
   DIAGNOSTIC_LOGGING_DURATION_OPTIONS,
   DIAGNOSTIC_LOGGING_GROUPS,
   DiagnosticLoggingDurationValue,
   SettingModificationProps,
-} from "./types";
+} from './types';
 
-export const MODIFIED_SETTING_TOOLTIP = "Modified Setting.\n \nClick to Reset to Default";
+export const MODIFIED_SETTING_TOOLTIP = 'Modified Setting.\n \nClick to Reset to Default';
 
 /*
  * CDXC:SettingsTextFields 2026-06-15-18:19:
  * Settings text fields hold explicit configuration values, including Remote SSH names, users, hosts, ports, identity files, commands, and prompts. Disable browser and macOS text assistance at the Settings modal field boundary so autocomplete, autocorrect, capitalization, and spellcheck cannot rewrite user-entered configuration.
  */
 export function SettingsInput({
-  autoCapitalize = "none",
-  autoComplete = "off",
-  autoCorrect = "off",
+  autoCapitalize = 'none',
+  autoComplete = 'off',
+  autoCorrect = 'off',
   spellCheck = false,
   ...props
-}: ComponentProps<"input">) {
+}: ComponentProps<'input'>) {
   return (
     <BaseInput
       autoCapitalize={autoCapitalize}
@@ -157,12 +113,12 @@ export function SettingsInput({
 }
 
 export function SettingsTextarea({
-  autoCapitalize = "none",
-  autoComplete = "off",
-  autoCorrect = "off",
+  autoCapitalize = 'none',
+  autoComplete = 'off',
+  autoCorrect = 'off',
   spellCheck = false,
   ...props
-}: ComponentProps<"textarea">) {
+}: ComponentProps<'textarea'>) {
   return (
     <BaseTextarea
       autoCapitalize={autoCapitalize}
@@ -244,11 +200,7 @@ export function SettingButton({
 }) {
   const disabled = props.disabled === true;
   return (
-    <DisabledSettingControlTooltip
-      className={disabledTooltipClassName}
-      disabled={disabled}
-      reason={disabledReason}
-    >
+    <DisabledSettingControlTooltip className={disabledTooltipClassName} disabled={disabled} reason={disabledReason}>
       <Button {...props} />
     </DisabledSettingControlTooltip>
   );
@@ -268,17 +220,14 @@ export function SettingSwitch({
   );
 }
 
-export function SettingsSelectContent({
-  className,
-  ...props
-}: ComponentProps<typeof SelectContent>) {
+export function SettingsSelectContent({ className, ...props }: ComponentProps<typeof SelectContent>) {
   /*
    * CDXC:SettingsDropdowns 2026-06-16-16:58:
    * Settings Select popups are portaled outside the Settings dialog subtree.
    * Carry a stable class on the popup so row hover, focus, and selected states
    * can stay neutral gray instead of inheriting saturated app accent styling.
    */
-  return <SelectContent className={cn("settings-select-content", className)} {...props} />;
+  return <SelectContent className={cn('settings-select-content', className)} {...props} />;
 }
 
 /*
@@ -287,8 +236,8 @@ export function SettingsSelectContent({
  * Keep the callback-ref mutation behind this helper so render code does not directly invoke ref-named mutators.
  */
 export function setSettingsSortableRowElement(
-  sortableRefs: Pick<ReturnType<typeof useSortable>, "ref" | "sourceRef">,
-  element: HTMLDivElement | null,
+  sortableRefs: Pick<ReturnType<typeof useSortable>, 'ref' | 'sourceRef'>,
+  element: HTMLDivElement | null
 ): void {
   sortableRefs.ref(element);
   sortableRefs.sourceRef(element);
@@ -300,11 +249,11 @@ export function SettingsNativeScrollArea({
   onScrollCapture,
   viewportClassName,
   ...props
-}: ComponentProps<"div"> & {
+}: ComponentProps<'div'> & {
   viewportClassName?: string;
 }) {
   return (
-    <div {...props} className={cn("relative", className)} data-slot="scroll-area">
+    <div {...props} className={cn('relative', className)} data-slot='scroll-area'>
       {/*
        * CDXC:SettingsPerformance 2026-06-29-00:40:
        * Settings pages must scroll with native overflow instead of Base UI
@@ -315,10 +264,10 @@ export function SettingsNativeScrollArea({
        */}
       <div
         className={cn(
-          "settings-native-scroll-viewport size-full overflow-x-hidden overflow-y-auto rounded-none outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1",
-          viewportClassName,
+          'settings-native-scroll-viewport size-full overflow-x-hidden overflow-y-auto rounded-none outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1',
+          viewportClassName
         )}
-        data-slot="scroll-area-viewport"
+        data-slot='scroll-area-viewport'
         onScrollCapture={onScrollCapture}
       >
         {children}
@@ -339,92 +288,90 @@ export function TerminalDevServerIgnoredPortsField({
   onChange: (ignoredPortRules: readonly string[]) => void;
 } & SettingModificationProps) {
   const id = useId();
-  const [inputValue, setInputValue] = useState("");
-  const [error, setError] = useState("");
+  const [inputValue, setInputValue] = useState('');
+  const [error, setError] = useState('');
   const addIgnoredPortRule = () => {
     const canonicalRule = normalizeTerminalDevServerIgnoredPortRuleInput(inputValue);
     if (!canonicalRule) {
-      setError("Enter a port (e.g. 9229) or a range (e.g. 24678-24680).");
+      setError('Enter a port (e.g. 9229) or a range (e.g. 24678-24680).');
       return;
     }
-    setError("");
-    setInputValue("");
+    setError('');
+    setInputValue('');
     onChange(normalizeTerminalDevServerIgnoredPortRules([...ignoredPortRules, canonicalRule]));
   };
   const removeIgnoredPortRule = (rule: string) => {
     onChange(
-      normalizeTerminalDevServerIgnoredPortRules(
-        ignoredPortRules.filter((ignoredPortRule) => ignoredPortRule !== rule),
-      ),
+      normalizeTerminalDevServerIgnoredPortRules(ignoredPortRules.filter((ignoredPortRule) => ignoredPortRule !== rule))
     );
   };
 
   return (
     <SettingRow
       advanced={advanced}
-      description="Servers on these ports are hidden from the server menu. Enter a port or an inclusive range."
+      description='Servers on these ports are hidden from the server menu. Enter a port or an inclusive range.'
       htmlFor={id}
       isModified={isModified}
-      label="Ignored ports"
+      label='Ignored ports'
       onResetToDefault={onResetToDefault}
     >
-      <div className="grid gap-3" id={id}>
-        <div className="grid gap-2">
+      <div className='grid gap-3' id={id}>
+        <div className='grid gap-2'>
           {ignoredPortRules.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No ignored ports.</div>
+            <div className='text-sm text-muted-foreground'>No ignored ports.</div>
           ) : (
             ignoredPortRules.map((rule) => (
               <div
-                className="flex min-h-9 items-center justify-between gap-3 rounded-none border border-border/70 bg-card/40 px-3 py-2"
+                className='flex min-h-9 items-center justify-between gap-3 rounded-none border border-border/70 bg-card/40 px-3 py-2'
                 key={rule}
               >
-                <span className="min-w-0 truncate font-mono text-sm">{rule}</span>
+                <span className='min-w-0 truncate font-mono text-sm'>{rule}</span>
                 <Button
                   aria-label={`Remove ignored port ${rule}`}
                   onClick={() => removeIgnoredPortRule(rule)}
-                  size="icon-xs"
-                  type="button"
-                  variant="ghost"
+                  size='icon-xs'
+                  type='button'
+                  variant='ghost'
                 >
-                  <IconTrash aria-hidden="true" size={14} />
+                  <IconTrash aria-hidden='true' size={14} />
                 </Button>
               </div>
             ))
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className='flex items-center gap-2'>
           <SettingsInput
             aria-invalid={Boolean(error)}
-            aria-label="Ignored port or range"
-            className="h-8 min-w-0 flex-1 px-3 text-[13px]"
+            aria-label='Ignored port or range'
+            className='h-8 min-w-0 flex-1 px-3 text-[13px]'
             onChange={(event) => {
               setInputValue(event.currentTarget.value);
               if (error) {
-                setError("");
+                setError('');
               }
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (event.key === 'Enter') {
                 event.preventDefault();
                 addIgnoredPortRule();
               }
             }}
-            placeholder="e.g. 9229 or 24678-24680"
+            placeholder='e.g. 9229 or 24678-24680'
             value={inputValue}
           />
           <SettingButton
             disabled={!inputValue.trim()}
-            disabledReason="Enter a port or port range first."
+            disabledReason='Enter a port or port range first.'
             onClick={addIgnoredPortRule}
-            type="button"
-            variant="outline"
+            type='button'
+            variant='outline'
           >
-            <IconPlus aria-hidden="true" data-icon="inline-start" />
+            <IconPlus aria-hidden='true' data-icon='inline-start' />
             Add
           </SettingButton>
         </div>
         {error ? (
-          <div className="text-sm text-destructive" role="alert">
+          <div className='text-sm text-destructive' role='alert'>
             {error}
           </div>
         ) : null}
@@ -449,54 +396,49 @@ export function SettingsSection({
   title: string;
 }) {
   return (
-    <div className="settings-section-anchor" ref={sectionRef}>
+    <div className='settings-section-anchor' ref={sectionRef}>
       <Card
         className={cn(
-          "settings-section-card relative mt-5 overflow-visible pb-[25px] pt-8",
-          actions && "settings-section-with-actions",
+          'settings-section-card relative mt-5 overflow-visible pb-[25px] pt-8',
+          actions && 'settings-section-with-actions'
         )}
-        size="sm"
+        size='sm'
       >
-      {/* CDXC:Settings 2026-04-26-12:31: The target settings examples stack the
+        {/* CDXC:Settings 2026-04-26-12:31: The target settings examples stack the
           text above controls. Keeping rows vertical avoids squeezing labels in
           the narrow ghostex sidebar modal. */}
-      {/* CDXC:Settings 2026-04-26-21:00: Settings sections need extra space
+        {/* CDXC:Settings 2026-04-26-21:00: Settings sections need extra space
           above each header, while adjacent settings should separate by rhythm
           instead of divider lines. */}
-      {/* CDXC:Settings 2026-04-26-21:03: Each settings category is a distinct
+        {/* CDXC:Settings 2026-04-26-21:03: Each settings category is a distinct
           shadcn card. The heading is larger and sits over the top border so
           the card reads as a labeled group without reintroducing row dividers. */}
-      {/* CDXC:Settings 2026-04-26-21:22: Section card labels must stay on one
+        {/* CDXC:Settings 2026-04-26-21:22: Section card labels must stay on one
           line and clear the card contents, including multi-word headings like
           Session Cards. */}
-      {/* CDXC:Settings 2026-04-27-01:01: The title pill cannot use shadcn
+        {/* CDXC:Settings 2026-04-27-01:01: The title pill cannot use shadcn
           CardHeader because its container-query size containment makes
           max-content resolve to the padding width instead of the text width. */}
-      {/* CDXC:Settings 2026-06-12-21:00: Settings section cards need exactly
+        {/* CDXC:Settings 2026-06-12-21:00: Settings section cards need exactly
           25px of total bottom space between their last row and the card border,
           matching the compact bordered card style used by Agent Hooks and
           adjacent grouped settings sections. */}
-      <div className="settings-section-title-pill">
-        <CardTitle className="settings-section-title-pill-text">{title}</CardTitle>
-      </div>
-      {/* CDXC:UnifiedSettings 2026-05-09-17:01: Agents and Actions management
+        <div className='settings-section-title-pill'>
+          <CardTitle className='settings-section-title-pill-text'>{title}</CardTitle>
+        </div>
+        {/* CDXC:UnifiedSettings 2026-05-09-17:01: Agents and Actions management
           controls belong in the section header row. Action creation labels omit
           "Add", while the agent creation CTA keeps "Add Agent" per product
           requirements. */}
-      {actions ? <div className="settings-section-header-actions">{actions}</div> : null}
-      <CardContent className="pt-2">
-        {description ? (
-          <p
-            className={cn(
-              "m-0 pb-5 text-sm leading-6 text-muted-foreground",
-              descriptionClassName,
-            )}
-          >
-            {description}
-          </p>
-        ) : null}
-        <FieldGroup className="gap-6">{children}</FieldGroup>
-      </CardContent>
+        {actions ? <div className='settings-section-header-actions'>{actions}</div> : null}
+        <CardContent className='pt-2'>
+          {description ? (
+            <p className={cn('m-0 pb-5 text-sm leading-6 text-muted-foreground', descriptionClassName)}>
+              {description}
+            </p>
+          ) : null}
+          <FieldGroup className='gap-6'>{children}</FieldGroup>
+        </CardContent>
       </Card>
     </div>
   );
@@ -556,12 +498,7 @@ export function SliderNumberField({
   const updateInputText = (nextText: string) => {
     setInputText(nextText);
     const nextValue = Number(nextText);
-    if (
-      nextText.trim() === "" ||
-      !Number.isFinite(nextValue) ||
-      nextValue < min ||
-      nextValue > max
-    ) {
+    if (nextText.trim() === '' || !Number.isFinite(nextValue) || nextValue < min || nextValue > max) {
       return;
     }
     onChange(clampNumber(snapNumberToStep(nextValue, min, step), min, max));
@@ -576,7 +513,7 @@ export function SliderNumberField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_4.75rem] items-center gap-3">
+      <div className='grid grid-cols-[minmax(0,1fr)_4.75rem] items-center gap-3'>
         <Slider
           aria-label={label}
           max={max}
@@ -588,7 +525,7 @@ export function SliderNumberField({
         />
         <SettingsInput
           id={id}
-          className="h-8 px-3 text-[13px] tabular-nums"
+          className='h-8 px-3 text-[13px] tabular-nums'
           onBlur={(event) => commitValue(Number(event.currentTarget.value))}
           onChange={(event) => updateInputText(event.currentTarget.value)}
           onFocus={(event) => event.currentTarget.select()}
@@ -596,7 +533,7 @@ export function SliderNumberField({
           min={min}
           ref={inputRef}
           step={step}
-          type="number"
+          type='number'
           value={inputText}
         />
       </div>
@@ -615,7 +552,7 @@ export function snapNumberToStep(value: number, min: number, step: number): numb
    * UI presents. This keeps Ghostty scroll multipliers on 0.25 increments even
    * when users type values into the adjacent number field.
    */
-  const decimals = Math.max(0, step.toString().split(".")[1]?.length ?? 0);
+  const decimals = Math.max(0, step.toString().split('.')[1]?.length ?? 0);
   const scaledValue = Math.round((value - min) / step) * step + min;
   return Number(scaledValue.toFixed(decimals));
 }
@@ -624,7 +561,7 @@ export function formatSliderNumber(value: number, step: number): string {
   if (Number.isInteger(step)) {
     return String(Math.round(value));
   }
-  const decimals = Math.max(0, step.toString().split(".")[1]?.length ?? 0);
+  const decimals = Math.max(0, step.toString().split('.')[1]?.length ?? 0);
   return value.toFixed(decimals);
 }
 
@@ -644,7 +581,7 @@ export function ActionButtonField({
   const id = useId();
   return (
     <SettingRow advanced={advanced} description={description} htmlFor={id} label={label}>
-      <Button className="h-8 w-full justify-start px-3 text-[13px]" id={id} onClick={onClick} type="button">
+      <Button className='h-8 w-full justify-start px-3 text-[13px]' id={id} onClick={onClick} type='button'>
         {children}
       </Button>
     </SettingRow>
@@ -665,15 +602,15 @@ export function ActionButtonPairField({
   const id = useId();
   return (
     <SettingRow advanced={advanced} description={description} htmlFor={id} label={label}>
-      <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className='grid w-full grid-cols-1 gap-2 sm:grid-cols-2'>
         {actions.map((action, index) => (
           <Button
-            className="h-8 w-full justify-center px-3 text-center text-[13px]"
+            className='h-8 w-full justify-center px-3 text-center text-[13px]'
             id={index === 0 ? id : undefined}
             key={action.label}
             onClick={action.onClick}
-            type="button"
-            variant="outline"
+            type='button'
+            variant='outline'
           >
             {action.label}
           </Button>
@@ -723,12 +660,12 @@ export function SelectField({
       <SettingsSelect
         disabled={disabled}
         disabledReason={disabledReason}
-        disabledTooltipClassName="w-full"
+        disabledTooltipClassName='w-full'
         items={options}
         onValueChange={onChange}
         value={value}
       >
-        <SelectTrigger className="h-8 w-full px-3 text-[13px]" disabled={disabled} id={id}>
+        <SelectTrigger className='h-8 w-full px-3 text-[13px]' disabled={disabled} id={id}>
           <SelectValue />
         </SelectTrigger>
         <SettingsSelectContent className={contentClassName} showScrollButtons={showScrollButtons}>
@@ -750,13 +687,13 @@ export function StaticNoteField({
   advanced,
   description,
   label,
-  surface = "boxed",
-  value = "Not available",
+  surface = 'boxed',
+  value = 'Not available',
 }: {
   advanced?: boolean;
   description?: string;
   label: string;
-  surface?: "boxed" | "plain";
+  surface?: 'boxed' | 'plain';
   value?: string;
 }) {
   const id = useId();
@@ -764,9 +701,9 @@ export function StaticNoteField({
     <SettingRow advanced={advanced} description={description} htmlFor={id} label={label}>
       <div
         className={
-          surface === "plain"
-            ? "text-sm text-muted-foreground"
-            : "rounded-none border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
+          surface === 'plain'
+            ? 'text-sm text-muted-foreground'
+            : 'rounded-none border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground'
         }
         id={id}
       >
@@ -792,22 +729,19 @@ export function PetPickerField({
   return (
     <SettingRow
       advanced={advanced}
-      description="Choose the pet sprite."
+      description='Choose the pet sprite.'
       htmlFor={id}
       isModified={isModified}
-      label="Pet"
+      label='Pet'
       onResetToDefault={onResetToDefault}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-none border border-border bg-muted/30">
-          <PetAvatar className="scale-[0.42]" petId={selectedPet.id} />
+      <div className='flex min-w-0 items-center gap-3'>
+        <div className='flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-none border border-border bg-muted/30'>
+          <PetAvatar className='scale-[0.42]' petId={selectedPet.id} />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <SettingsSelect
-            onValueChange={(nextValue) => onChange(nextValue as PetId)}
-            value={value}
-          >
-            <SelectTrigger className="h-8 w-full px-3 text-[13px]" id={id}>
+        <div className='flex min-w-0 flex-1 flex-col gap-2'>
+          <SettingsSelect onValueChange={(nextValue) => onChange(nextValue as PetId)} value={value}>
+            <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={id}>
               <SelectValue />
             </SelectTrigger>
             <SettingsSelectContent>
@@ -820,7 +754,7 @@ export function PetPickerField({
               </SelectGroup>
             </SettingsSelectContent>
           </SettingsSelect>
-          <div className="truncate text-xs text-muted-foreground">{selectedPet.description}</div>
+          <div className='truncate text-xs text-muted-foreground'>{selectedPet.description}</div>
         </div>
       </div>
     </SettingRow>
@@ -849,35 +783,29 @@ export function AppIconPickerField({
 }) {
   const id = useId();
   const allIcons: SidebarAppIconInfo[] = state?.icons ?? [];
-  const defaultIcon = allIcons.find((icon) => icon.id === "");
-  const icons = allIcons.filter((icon) => icon.id !== "");
-  const selectedId = state?.selectedId ?? "";
-  const isDefaultSelected = selectedId === "";
-  const selectedIcon = isDefaultSelected
-    ? defaultIcon
-    : icons.find((icon) => icon.id === selectedId);
+  const defaultIcon = allIcons.find((icon) => icon.id === '');
+  const icons = allIcons.filter((icon) => icon.id !== '');
+  const selectedId = state?.selectedId ?? '';
+  const isDefaultSelected = selectedId === '';
+  const selectedIcon = isDefaultSelected ? defaultIcon : icons.find((icon) => icon.id === selectedId);
 
   const previewIcon = selectedIcon ?? defaultIcon;
 
   return (
     <SettingRow
       advanced={advanced}
-      description="Choose a PNG for the macOS Dock and app-switcher icon."
+      description='Choose a PNG for the macOS Dock and app-switcher icon.'
       htmlFor={id}
-      label="Custom app icon"
+      label='Custom app icon'
     >
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="relative flex size-16 shrink-0 items-center justify-center overflow-visible">
-            <div className="flex size-16 items-center justify-center overflow-hidden rounded-none border border-border bg-muted/30">
+      <div className='flex min-w-0 flex-col gap-3'>
+        <div className='flex min-w-0 items-center gap-3'>
+          <div className='relative flex size-16 shrink-0 items-center justify-center overflow-visible'>
+            <div className='flex size-16 items-center justify-center overflow-hidden rounded-none border border-border bg-muted/30'>
               {previewIcon ? (
-                <img
-                  alt={previewIcon.name}
-                  className="size-full object-contain"
-                  src={previewIcon.thumbnailDataUrl}
-                />
+                <img alt={previewIcon.name} className='size-full object-contain' src={previewIcon.thumbnailDataUrl} />
               ) : (
-                <IconPhoto aria-hidden="true" className="size-7 text-muted-foreground" />
+                <IconPhoto aria-hidden='true' className='size-7 text-muted-foreground' />
               )}
             </div>
             {!isDefaultSelected ? (
@@ -885,12 +813,12 @@ export function AppIconPickerField({
                 <TooltipTrigger
                   render={
                     <button
-                      aria-label="Use default app icon"
-                      className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-none border border-border bg-background text-muted-foreground shadow-sm hover:text-foreground"
-                      onClick={() => onSelect("")}
-                      type="button"
+                      aria-label='Use default app icon'
+                      className='absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-none border border-border bg-background text-muted-foreground shadow-sm hover:text-foreground'
+                      onClick={() => onSelect('')}
+                      type='button'
                     >
-                      <IconX aria-hidden="true" className="size-3.5" />
+                      <IconX aria-hidden='true' className='size-3.5' />
                     </button>
                   }
                 />
@@ -898,27 +826,27 @@ export function AppIconPickerField({
               </Tooltip>
             ) : null}
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className='flex min-w-0 flex-1 flex-col gap-2'>
             <Button
-              className="h-9 w-fit rounded-none px-3 text-sm"
+              className='h-9 w-fit rounded-none px-3 text-sm'
               id={id}
               onClick={onChooseFile}
-              type="button"
-              variant="outline"
+              type='button'
+              variant='outline'
             >
-              <IconDownload aria-hidden="true" data-icon="inline-start" />
+              <IconDownload aria-hidden='true' data-icon='inline-start' />
               Select Image
             </Button>
-            <div className="truncate text-xs text-muted-foreground">
-              {isDefaultSelected ? "Using the bundled Ghostex icon." : selectedIcon?.name ?? selectedId}
+            <div className='truncate text-xs text-muted-foreground'>
+              {isDefaultSelected ? 'Using the bundled Ghostex icon.' : (selectedIcon?.name ?? selectedId)}
             </div>
           </div>
         </div>
 
         {error ? (
-          <div className="flex items-start gap-2 rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            <IconAlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            <span className="min-w-0">{error}</span>
+          <div className='flex items-start gap-2 rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive'>
+            <IconAlertTriangle aria-hidden='true' className='mt-0.5 size-4 shrink-0' />
+            <span className='min-w-0'>{error}</span>
           </div>
         ) : null}
       </div>
@@ -964,15 +892,12 @@ export function SoundField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2">
-        <SettingsSelect
-          onValueChange={(nextValue) => onChange(nextValue as CompletionSoundSetting)}
-          value={value}
-        >
-          <SelectTrigger className="h-8 w-full px-3 text-[13px]" id={id}>
+      <div className='grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2'>
+        <SettingsSelect onValueChange={(nextValue) => onChange(nextValue as CompletionSoundSetting)} value={value}>
+          <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={id}>
             <SelectValue />
           </SelectTrigger>
-          <SettingsSelectContent className="max-h-72" showScrollButtons={false}>
+          <SettingsSelectContent className='max-h-72' showScrollButtons={false}>
             <SelectGroup>
               {COMPLETION_SOUND_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
@@ -982,23 +907,20 @@ export function SoundField({
             </SelectGroup>
           </SettingsSelectContent>
         </SettingsSelect>
-        <DisabledSettingControlTooltip
-          disabled={!onPlay}
-          reason="Sound preview isn’t available here."
-        >
+        <DisabledSettingControlTooltip disabled={!onPlay} reason='Sound preview isn’t available here.'>
           <Tooltip>
             <TooltipTrigger
               render={
                 <Button
                   aria-label={`Play ${label}`}
-                  className="size-8 rounded-none"
+                  className='size-8 rounded-none'
                   disabled={!onPlay}
                   onClick={() => onPlay?.(value)}
-                  size="icon"
-                  type="button"
-                  variant="outline"
+                  size='icon'
+                  type='button'
+                  variant='outline'
                 >
-                  <IconPlayerPlay aria-hidden="true" className="size-4" />
+                  <IconPlayerPlay aria-hidden='true' className='size-4' />
                 </Button>
               }
             />
@@ -1065,10 +987,10 @@ export function TextField({
       onResetToDefault={onResetToDefault}
     >
       {onBrowse ? (
-        <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2">
+        <div className='grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2'>
           <SettingsInput
             id={id}
-            className="h-8 px-3 text-[13px]"
+            className='h-8 px-3 text-[13px]'
             onBlur={(event) => updateInputValue(event.currentTarget.value)}
             onChange={(event) => updateInputValue(event.currentTarget.value)}
             placeholder={placeholder}
@@ -1080,23 +1002,23 @@ export function TextField({
               render={
                 <Button
                   aria-label={browseLabel ?? `Browse for ${label}`}
-                  className="size-8 rounded-none"
+                  className='size-8 rounded-none'
                   onClick={onBrowse}
-                  size="icon"
-                  type="button"
-                  variant="outline"
+                  size='icon'
+                  type='button'
+                  variant='outline'
                 >
-                  <IconFolderOpen aria-hidden="true" className="size-4" />
+                  <IconFolderOpen aria-hidden='true' className='size-4' />
                 </Button>
               }
             />
-            <TooltipContent sideOffset={6}>{browseLabel ?? "Browse…"}</TooltipContent>
+            <TooltipContent sideOffset={6}>{browseLabel ?? 'Browse…'}</TooltipContent>
           </Tooltip>
         </div>
       ) : (
         <SettingsInput
           id={id}
-          className="h-8 px-3 text-[13px]"
+          className='h-8 px-3 text-[13px]'
           onBlur={(event) => updateInputValue(event.currentTarget.value)}
           onChange={(event) => updateInputValue(event.currentTarget.value)}
           placeholder={placeholder}
@@ -1123,7 +1045,7 @@ export function DisabledCommandPreviewField({
   return (
     <SettingRow advanced={advanced} description={description} htmlFor={id} label={label}>
       <SettingsTextarea
-        className="min-h-24 resize-none px-3 py-2 font-mono text-xs leading-5"
+        className='min-h-24 resize-none px-3 py-2 font-mono text-xs leading-5'
         disabled
         id={id}
         readOnly
@@ -1159,17 +1081,17 @@ export function ColorField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-3">
+      <div className='grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-3'>
         <SettingsInput
           aria-label={`${label} picker`}
-          className="h-8 cursor-pointer rounded-none p-1"
+          className='h-8 cursor-pointer rounded-none p-1'
           onChange={(event) => onChange(event.currentTarget.value)}
-          type="color"
+          type='color'
           value={colorValue}
         />
         <SettingsInput
           id={id}
-          className="h-8 px-3 text-[13px]"
+          className='h-8 px-3 text-[13px]'
           onChange={(event) => onChange(event.currentTarget.value)}
           value={value}
         />
@@ -1179,22 +1101,22 @@ export function ColorField({
 }
 
 export const SIDEBAR_TITLEBAR_TINT_SWATCHES: ReadonlyArray<{ label: string; value: string }> = [
-  { label: "White", value: "#ffffff" },
-  { label: "Neutral Gray", value: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR },
-  { label: "Black", value: "#000000" },
-  { label: "Steel", value: "#4f6672" },
-  { label: "Red", value: "#884444" },
-  { label: "Orange", value: "#8a5330" },
-  { label: "Amber", value: "#8a6a2f" },
-  { label: "Olive", value: "#657a3f" },
-  { label: "Green", value: "#3f7a5f" },
-  { label: "Teal", value: "#2f7d66" },
-  { label: "Cyan", value: "#287c7f" },
-  { label: "Blue", value: "#336699" },
-  { label: "Indigo", value: "#4f5f96" },
-  { label: "Violet", value: "#6c4f8f" },
-  { label: "Pink", value: "#854f7a" },
-  { label: "Rose", value: "#8a4f5f" },
+  { label: 'White', value: '#ffffff' },
+  { label: 'Neutral Gray', value: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR },
+  { label: 'Black', value: '#000000' },
+  { label: 'Steel', value: '#4f6672' },
+  { label: 'Red', value: '#884444' },
+  { label: 'Orange', value: '#8a5330' },
+  { label: 'Amber', value: '#8a6a2f' },
+  { label: 'Olive', value: '#657a3f' },
+  { label: 'Green', value: '#3f7a5f' },
+  { label: 'Teal', value: '#2f7d66' },
+  { label: 'Cyan', value: '#287c7f' },
+  { label: 'Blue', value: '#336699' },
+  { label: 'Indigo', value: '#4f5f96' },
+  { label: 'Violet', value: '#6c4f8f' },
+  { label: 'Pink', value: '#854f7a' },
+  { label: 'Rose', value: '#8a4f5f' },
 ];
 
 export function WebColorPickerField({
@@ -1215,10 +1137,7 @@ export function WebColorPickerField({
   value: string;
 } & SettingModificationProps) {
   const id = useId();
-  const savedColorValue = normalizeColorInputValue(
-    value,
-    DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
-  );
+  const savedColorValue = normalizeColorInputValue(value, DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR);
   const [colorText, setColorText] = useState(savedColorValue);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerValue, setPickerValue] = useState(savedColorValue);
@@ -1230,10 +1149,7 @@ export function WebColorPickerField({
   }, [savedColorValue]);
 
   const previewColor = (nextColor: string) => {
-    const normalizedColor = normalizePickerColorValue(
-      nextColor,
-      DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
-    );
+    const normalizedColor = normalizePickerColorValue(nextColor, DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR);
     setColorText(normalizedColor);
     setPickerValue(nextColor);
     onChange(normalizedColor);
@@ -1304,7 +1220,7 @@ export function WebColorPickerField({
         CDXC:SidebarTitlebarColors 2026-06-19-14:36:
         The hex field should use exactly the remaining first-row width after the swatches and custom picker. Use a zero-basis flexible input instead of a fixed character width so it fills the right-side remainder without wrapping to a second line.
       */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className='flex flex-wrap items-center gap-1.5'>
         {SIDEBAR_TITLEBAR_TINT_SWATCHES.map((swatch) => {
           const isSelected = colorValue === swatch.value;
           return (
@@ -1313,34 +1229,34 @@ export function WebColorPickerField({
                 aria-label={`Use ${swatch.label} tint`}
                 aria-pressed={isSelected}
                 className={cn(
-                  "size-7 min-w-0 shrink-0 border p-0",
-                  isSelected ? "border-ring ring-2 ring-ring/45" : "border-border/80",
+                  'size-7 min-w-0 shrink-0 border p-0',
+                  isSelected ? 'border-ring ring-2 ring-ring/45' : 'border-border/80'
                 )}
                 onClick={() => commitColor(swatch.value)}
                 style={{ backgroundColor: swatch.value }}
-                type="button"
-                variant="ghost"
+                type='button'
+                variant='ghost'
               />
             </AppTooltip>
           );
         })}
-        <AppTooltip content="Pick custom tint color">
+        <AppTooltip content='Pick custom tint color'>
           <Button
             aria-label={`${label} custom color picker`}
-            className="h-8 min-w-0 gap-2 px-2 text-xs"
+            className='h-8 min-w-0 gap-2 px-2 text-xs'
             onClick={() => {
               setPickerValue(colorValue);
               setPickerOpen(true);
             }}
-            type="button"
-            variant="outline"
+            type='button'
+            variant='outline'
           >
             <span
-              aria-hidden="true"
-              className="size-4 shrink-0 border border-border"
+              aria-hidden='true'
+              className='size-4 shrink-0 border border-border'
               style={{ backgroundColor: colorValue }}
             />
-            <IconPalette aria-hidden="true" data-icon="inline-end" />
+            <IconPalette aria-hidden='true' data-icon='inline-end' />
           </Button>
         </AppTooltip>
         <Dialog
@@ -1353,11 +1269,11 @@ export function WebColorPickerField({
             setPickerOpen(open);
           }}
         >
-          <DialogContent className="w-[22rem] gap-4 p-4" showCloseButton={false}>
+          <DialogContent className='w-[22rem] gap-4 p-4' showCloseButton={false}>
             <DialogHeader>
               <DialogTitle>Pick Color</DialogTitle>
             </DialogHeader>
-            <div className="mx-auto">
+            <div className='mx-auto'>
               <ColorPicker
                 hideAdvancedSliders
                 hideColorGuide
@@ -1370,7 +1286,7 @@ export function WebColorPickerField({
                 hideInputType
                 hideOpacity
                 hidePresets
-                idSuffix="sidebar-titlebar-tint"
+                idSuffix='sidebar-titlebar-tint'
                 onChange={previewColor}
                 value={pickerValue}
                 width={294}
@@ -1381,7 +1297,7 @@ export function WebColorPickerField({
                 onClick={() => {
                   commitColorAfterClosingPicker(colorValue);
                 }}
-                type="button"
+                type='button'
               >
                 Done
               </Button>
@@ -1390,9 +1306,9 @@ export function WebColorPickerField({
         </Dialog>
         <SettingsInput
           aria-label={`${label} hex color`}
-          className="h-8 min-w-0 flex-1 px-2 font-mono text-xs uppercase"
+          className='h-8 min-w-0 flex-1 px-2 font-mono text-xs uppercase'
           id={id}
-          inputMode="text"
+          inputMode='text'
           onBlur={() => commitColor(colorText)}
           onChange={(event) => {
             const nextValue = event.currentTarget.value;
@@ -1410,17 +1326,19 @@ export function WebColorPickerField({
   );
 }
 
-export function normalizeColorInputValue(value: string, fallback = "#121212"): string {
+export function normalizeColorInputValue(value: string, fallback = '#121212'): string {
   const normalized = value.trim().toLowerCase();
   return /^#[0-9a-f]{6}$/u.test(normalized) ? normalized : fallback;
 }
 
-export function normalizePickerColorValue(value: string, fallback = "#121212"): string {
+export function normalizePickerColorValue(value: string, fallback = '#121212'): string {
   const normalized = value.trim().toLowerCase();
   if (/^#[0-9a-f]{6}$/u.test(normalized)) {
     return normalized;
   }
-  const rgbMatch = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/u.exec(normalized);
+  const rgbMatch = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/u.exec(
+    normalized
+  );
   if (!rgbMatch) {
     return fallback;
   }
@@ -1432,8 +1350,7 @@ export function normalizePickerColorValue(value: string, fallback = "#121212"): 
 }
 
 export function rgbToHexColor(color: { blue: number; green: number; red: number }): string {
-  const toHexComponent = (component: number) =>
-    clampNumber(component, 0, 255).toString(16).padStart(2, "0");
+  const toHexComponent = (component: number) => clampNumber(component, 0, 255).toString(16).padStart(2, '0');
   return `#${toHexComponent(color.red)}${toHexComponent(color.green)}${toHexComponent(color.blue)}`;
 }
 
@@ -1462,10 +1379,10 @@ export function SidebarPresetField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className="flex flex-col gap-2">
+      <div className='flex flex-col gap-2'>
         <ToggleGroup
           aria-label={label}
-          className="w-full [&>[data-slot=toggle-group-item]]:flex-1"
+          className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
           onValueChange={(value) => {
             const [nextPresetId] = value as SidebarSettingsPresetId[];
             if (nextPresetId) {
@@ -1473,7 +1390,7 @@ export function SidebarPresetField({
             }
           }}
           value={activePresetId ? [activePresetId] : []}
-          variant="outline"
+          variant='outline'
         >
           {SIDEBAR_SETTINGS_PRESETS.map((preset, index) => (
             <ToggleGroupItem
@@ -1486,7 +1403,7 @@ export function SidebarPresetField({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        {activePresetId ? null : <span className="text-sm text-muted-foreground">Custom</span>}
+        {activePresetId ? null : <span className='text-sm text-muted-foreground'>Custom</span>}
       </div>
     </SettingRow>
   );
@@ -1519,7 +1436,7 @@ export function SidebarProjectGroupStyleField({
     >
       <ToggleGroup
         aria-label={label}
-        className="w-full [&>[data-slot=toggle-group-item]]:flex-1"
+        className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
         onValueChange={(nextValues) => {
           const [nextValue] = nextValues as SidebarProjectGroupStyle[];
           if (nextValue) {
@@ -1527,7 +1444,7 @@ export function SidebarProjectGroupStyleField({
           }
         }}
         value={[value]}
-        variant="outline"
+        variant='outline'
       >
         {SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS.map((option, index) => (
           <ToggleGroupItem
@@ -1580,15 +1497,15 @@ export function SidebarVersionField({
     >
       <ToggleGroup
         aria-label={label}
-        className="w-full [&>[data-slot=toggle-group-item]]:flex-1"
+        className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
         onValueChange={(nextValue) => {
-          const [ nextVersion ] = nextValue as SidebarVersion[];
+          const [nextVersion] = nextValue as SidebarVersion[];
           if (nextVersion) {
             onChange(nextVersion);
           }
         }}
-        value={[ value ]}
-        variant="outline"
+        value={[value]}
+        variant='outline'
       >
         {SIDEBAR_VERSION_OPTIONS.map((option, index) => (
           <ToggleGroupItem
@@ -1629,7 +1546,7 @@ export function PreferredAgentInterfaceField({
     >
       <ToggleGroup
         aria-label={label}
-        className="w-full [&>[data-slot=toggle-group-item]]:flex-1"
+        className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
         onValueChange={(nextValue) => {
           const [nextInterface] = nextValue as PreferredAgentInterface[];
           if (nextInterface) {
@@ -1637,7 +1554,7 @@ export function PreferredAgentInterfaceField({
           }
         }}
         value={[value]}
-        variant="outline"
+        variant='outline'
       >
         {PREFERRED_AGENT_INTERFACE_OPTIONS.map((option, index) => (
           <ToggleGroupItem
@@ -1678,7 +1595,7 @@ export function SessionChatThemeField({
     >
       <ToggleGroup
         aria-label={label}
-        className="w-full [&>[data-slot=toggle-group-item]]:flex-1"
+        className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
         onValueChange={(nextValues) => {
           const [nextValue] = nextValues as SessionChatTheme[];
           if (nextValue) {
@@ -1686,7 +1603,7 @@ export function SessionChatThemeField({
           }
         }}
         value={[value]}
-        variant="outline"
+        variant='outline'
       >
         {SESSION_CHAT_THEME_OPTIONS.map((option, index) => (
           <ToggleGroupItem
@@ -1736,13 +1653,7 @@ export function ToggleField({
       subtitle={subtitle}
     >
       {disabled && disabledReason ? (
-        <SettingSwitch
-          checked={checked}
-          disabled
-          disabledReason={disabledReason}
-          id={id}
-          onCheckedChange={onChange}
-        />
+        <SettingSwitch checked={checked} disabled disabledReason={disabledReason} id={id} onCheckedChange={onChange} />
       ) : (
         <Switch checked={checked} disabled={disabled} id={id} onCheckedChange={onChange} />
       )}
@@ -1757,60 +1668,50 @@ export function DiagnosticLoggingSettingsField({
   value,
 }: {
   isModified?: boolean;
-  onChange: (
-    scenarioId: DiagnosticLoggingScenarioId,
-    duration: DiagnosticLoggingDurationValue,
-  ) => void;
+  onChange: (scenarioId: DiagnosticLoggingScenarioId, duration: DiagnosticLoggingDurationValue) => void;
   onResetToDefault?: () => void;
   value: DiagnosticLoggingSettings;
 }) {
   const idBase = useId();
   return (
     <SettingRow
-      description="Routine logs are off by default and write only when Show debug UI controls and their scenario are enabled. Enable only the repro area you need; important warnings, errors, and crashes remain captured."
+      description='Routine logs are off by default and write only when Show debug UI controls and their scenario are enabled. Enable only the repro area you need; important warnings, errors, and crashes remain captured.'
       htmlFor={`${idBase}-native-terminal-focus`}
       isModified={isModified}
-      label="Diagnostic disk logging scenarios"
+      label='Diagnostic disk logging scenarios'
       onResetToDefault={onResetToDefault}
     >
-      <div className="grid gap-4">
+      <div className='grid gap-4'>
         {DIAGNOSTIC_LOGGING_GROUPS.map((group) => {
-          const scenarios = DIAGNOSTIC_LOGGING_SCENARIOS.filter(
-            (scenario) => scenario.group === group,
-          );
+          const scenarios = DIAGNOSTIC_LOGGING_SCENARIOS.filter((scenario) => scenario.group === group);
           return (
-            <div className="grid gap-2" key={group}>
-              <div className="text-xs font-medium uppercase tracking-normal text-muted-foreground">
-                {group}
-              </div>
-              <div className="grid gap-2">
+            <div className='grid gap-2' key={group}>
+              <div className='text-xs font-medium uppercase tracking-normal text-muted-foreground'>{group}</div>
+              <div className='grid gap-2'>
                 {scenarios.map((scenario) => {
                   const scenarioId = scenario.id as DiagnosticLoggingScenarioId;
                   const duration = getDiagnosticLoggingScenarioDuration(value, scenarioId);
-                  const checked = duration !== "off";
-                  const switchId = `${idBase}-${scenario.id.replaceAll(".", "-")}`;
+                  const checked = duration !== 'off';
+                  const switchId = `${idBase}-${scenario.id.replaceAll('.', '-')}`;
                   return (
                     <div
-                      className="grid gap-2 border-t border-border/70 pt-2 first:border-t-0 first:pt-0"
+                      className='grid gap-2 border-t border-border/70 pt-2 first:border-t-0 first:pt-0'
                       key={scenario.id}
                     >
-                      <div className="flex min-w-0 items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <FieldLabel className="text-sm" htmlFor={switchId}>
+                      <div className='flex min-w-0 items-start justify-between gap-3'>
+                        <div className='min-w-0'>
+                          <FieldLabel className='text-sm' htmlFor={switchId}>
                             {scenario.label}
                           </FieldLabel>
-                          <div className="mt-0.5 break-words text-xs text-muted-foreground">
-                            {scenario.logFiles.join(", ")}
+                          <div className='mt-0.5 break-words text-xs text-muted-foreground'>
+                            {scenario.logFiles.join(', ')}
                           </div>
                         </div>
                         <Switch
                           checked={checked}
                           id={switchId}
                           onCheckedChange={(nextChecked) =>
-                            onChange(
-                              scenarioId,
-                              nextChecked ? DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION : "off",
-                            )
+                            onChange(scenarioId, nextChecked ? DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION : 'off')
                           }
                         />
                       </div>
@@ -1821,17 +1722,17 @@ export function DiagnosticLoggingSettingsField({
                           }
                           value={duration}
                         >
-                          <SelectTrigger className="h-8 w-full sm:w-36">
+                          <SelectTrigger className='h-8 w-full sm:w-36'>
                             <SelectValue />
                           </SelectTrigger>
                           <SettingsSelectContent>
-                            {DIAGNOSTIC_LOGGING_DURATION_OPTIONS.filter(
-                              (option) => option.value !== "off",
-                            ).map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
+                            {DIAGNOSTIC_LOGGING_DURATION_OPTIONS.filter((option) => option.value !== 'off').map(
+                              (option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              )
+                            )}
                           </SettingsSelectContent>
                         </SettingsSelect>
                       ) : null}
@@ -1850,26 +1751,26 @@ export function DiagnosticLoggingSettingsField({
 export function getDiagnosticLoggingScenarioDuration(
   value: DiagnosticLoggingSettings,
   scenarioId: DiagnosticLoggingScenarioId,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): DiagnosticLoggingDurationValue {
   const scenario = value.scenarios[scenarioId];
   if (!scenario?.enabled) {
-    return "off";
+    return 'off';
   }
   if (!scenario.expiresAt) {
-    return "always";
+    return 'always';
   }
   const expiresAtMs = Date.parse(scenario.expiresAt);
   if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now.getTime()) {
-    return "off";
+    return 'off';
   }
   const remainingMs = expiresAtMs - now.getTime();
-  return remainingMs <= 30 * 60 * 1000 ? "15m" : "1h";
+  return remainingMs <= 30 * 60 * 1000 ? '15m' : '1h';
 }
 
 export function getDiagnosticLoggingScenarioStateForDuration(
   duration: DiagnosticLoggingDurationValue,
-  now: Date = new Date(),
+  now: Date = new Date()
 ) {
   /*
    * CDXC:ChromeResponsivenessDiagnostics 2026-06-30-23:52:
@@ -1878,19 +1779,19 @@ export function getDiagnosticLoggingScenarioStateForDuration(
    * instead of deleting the scenario so Settings can override those defaults.
    */
   switch (duration) {
-    case "15m":
+    case '15m':
       return {
         enabled: true,
         expiresAt: new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
       };
-    case "1h":
+    case '1h':
       return {
         enabled: true,
         expiresAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
       };
-    case "always":
+    case 'always':
       return { enabled: true };
-    case "off":
+    case 'off':
       return { enabled: false };
   }
 }
@@ -1918,28 +1819,22 @@ export function SidebarTagListSettingsField({
       return;
     }
 
-    const targetIndex =
-      "index" in source && typeof source.index === "number" ? source.index : target?.index;
+    const targetIndex = 'index' in source && typeof source.index === 'number' ? source.index : target?.index;
     if (targetIndex == null || source.initialIndex === targetIndex) {
       return;
     }
 
-    const itemsById = new Map<string, SidebarSessionTagListItem>(
-      normalizedItems.map((item) => [item.id, item]),
-    );
+    const itemsById = new Map<string, SidebarSessionTagListItem>(normalizedItems.map((item) => [item.id, item]));
     onChange(
       moveId(
         normalizedItems.map((item) => item.id),
         source.initialIndex,
-        targetIndex,
-      ).flatMap((itemId) => itemsById.get(itemId) ?? []),
+        targetIndex
+      ).flatMap((itemId) => itemsById.get(itemId) ?? [])
     );
-  }) satisfies DragDropEventHandlers["onDragEnd"];
+  }) satisfies DragDropEventHandlers['onDragEnd'];
 
-  const updateItem = (
-    itemId: string,
-    patch: Partial<Pick<SidebarSessionTagListItem, "enabled" | "visible">>,
-  ) => {
+  const updateItem = (itemId: string, patch: Partial<Pick<SidebarSessionTagListItem, 'enabled' | 'visible'>>) => {
     onChange(
       normalizedItems.map((item) =>
         item.id === itemId
@@ -1947,8 +1842,8 @@ export function SidebarTagListSettingsField({
               ...item,
               ...patch,
             } as SidebarSessionTagListItem)
-          : item,
-      ),
+          : item
+      )
     );
   };
   const updateItemEnabled = (itemId: string, enabled: boolean) => {
@@ -1973,7 +1868,7 @@ export function SidebarTagListSettingsField({
   };
 
   return (
-    <details className="group w-full">
+    <details className='group w-full'>
       {/*
        * CDXC:SessionTagFilters 2026-06-13-17:50:
        * The bottom main Settings area starts collapsed and mirrors the
@@ -1985,36 +1880,36 @@ export function SidebarTagListSettingsField({
        * The expanded Sidebar Tags list should attach directly to the disclosure
        * header; no vertical gutter belongs between the header and its rows.
        */}
-      <summary className="settings-management-row flex cursor-pointer list-none items-center justify-between gap-3 border border-border bg-muted/20 px-3 py-3 marker:hidden [&::-webkit-details-marker]:hidden">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      <summary className='settings-management-row flex cursor-pointer list-none items-center justify-between gap-3 border border-border bg-muted/20 px-3 py-3 marker:hidden [&::-webkit-details-marker]:hidden'>
+        <div className='flex min-w-0 flex-1 items-center gap-2.5'>
           <IconChevronRight
-            aria-hidden="true"
-            className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-90"
+            aria-hidden='true'
+            className='size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-90'
           />
-          <FieldContent className="min-w-0 gap-1">
-            <FieldLabel className="text-sm">Tag filter list</FieldLabel>
-            <FieldDescription className="text-xs text-muted-foreground">
+          <FieldContent className='min-w-0 gap-1'>
+            <FieldLabel className='text-sm'>Tag filter list</FieldLabel>
+            <FieldDescription className='text-xs text-muted-foreground'>
               Reorder, hide, or disable sidebar tag filters and separators.
             </FieldDescription>
           </FieldContent>
         </div>
         <SettingButton
           disabled={!isModified}
-          disabledReason="These tag settings already match the defaults."
+          disabledReason='These tag settings already match the defaults.'
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
             onResetToDefault();
           }}
-          type="button"
-          variant="outline"
+          type='button'
+          variant='outline'
         >
           Reset to Default
         </SettingButton>
       </summary>
-      <div className="border border-border/80 bg-muted/10 p-3">
+      <div className='border border-border/80 bg-muted/10 p-3'>
         <DragDropProvider onDragEnd={handleDragEnd}>
-          <div className="flex w-full flex-col gap-2">
+          <div className='flex w-full flex-col gap-2'>
             {normalizedItems.map((item, index) => (
               <SidebarTagListSettingsRow
                 index={index}
@@ -2043,12 +1938,12 @@ export function SidebarTagListSettingsRow({
   onVisibleChange: (visible: boolean) => void;
 }) {
   const sortable = useSortable({
-    accept: "settings-sidebar-tag-list-item",
+    accept: 'settings-sidebar-tag-list-item',
     data: createSettingsSidebarTagListItemDragData(item.id),
-    group: "settings-sidebar-tag-list-items",
+    group: 'settings-sidebar-tag-list-items',
     id: item.id,
     index,
-    type: "settings-sidebar-tag-list-item",
+    type: 'settings-sidebar-tag-list-item',
   });
   const { handleRef, isDragging } = sortable;
   const isDimmed = !item.enabled || !item.visible;
@@ -2061,45 +1956,39 @@ export function SidebarTagListSettingsRow({
   return (
     <div
       className={cn(
-        "settings-management-row flex w-full items-center gap-2 border border-border bg-muted/20 p-2",
-        isDimmed && "text-muted-foreground",
+        'settings-management-row flex w-full items-center gap-2 border border-border bg-muted/20 p-2',
+        isDimmed && 'text-muted-foreground'
       )}
       data-dragging={String(Boolean(isDragging))}
       data-enabled={String(item.enabled)}
       data-visible={String(item.visible)}
       ref={setRowRef}
     >
-      <Button
-        aria-label={`Reorder ${label}`}
-        ref={handleRef}
-        size="icon"
-        type="button"
-        variant="ghost"
-      >
-        <IconGripVertical aria-hidden="true" />
+      <Button aria-label={`Reorder ${label}`} ref={handleRef} size='icon' type='button' variant='ghost'>
+        <IconGripVertical aria-hidden='true' />
       </Button>
-      <div className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2">
+      <div className='flex min-w-0 flex-1 items-center gap-3 px-2 py-2'>
         <span
-          aria-hidden="true"
-          className="settings-management-icon flex size-8 shrink-0 items-center justify-center bg-muted"
+          aria-hidden='true'
+          className='settings-management-icon flex size-8 shrink-0 items-center justify-center bg-muted'
         >
-          {item.type === "separator" ? (
-            <IconMinus className="text-muted-foreground" size={16} stroke={2} />
+          {item.type === 'separator' ? (
+            <IconMinus className='text-muted-foreground' size={16} stroke={2} />
           ) : (
             <SessionTagIcon
-              className="session-tag-colored-icon"
+              className='session-tag-colored-icon'
               fillFavorite
               size={15}
               stroke={1.8}
-              tag={item.type === "untagged" ? "untagged" : item.tag}
+              tag={item.type === 'untagged' ? 'untagged' : item.tag}
             />
           )}
         </span>
-        <span className="min-w-0 flex-1">
+        <span className='min-w-0 flex-1'>
           <span
             className={cn(
-              "block truncate text-sm font-medium",
-              item.type === "separator" && "italic text-muted-foreground",
+              'block truncate text-sm font-medium',
+              item.type === 'separator' && 'italic text-muted-foreground'
             )}
           >
             {label}
@@ -2107,7 +1996,7 @@ export function SidebarTagListSettingsRow({
         </span>
       </div>
       <Switch
-        aria-label={`${item.enabled ? "Disable" : "Enable"} ${label}`}
+        aria-label={`${item.enabled ? 'Disable' : 'Enable'} ${label}`}
         checked={item.enabled}
         onCheckedChange={onEnabledChange}
       />
@@ -2115,22 +2004,22 @@ export function SidebarTagListSettingsRow({
         <TooltipTrigger
           render={
             <Button
-              aria-label={`${item.visible ? "Hide" : "Show"} ${label}`}
-              className="shrink-0"
+              aria-label={`${item.visible ? 'Hide' : 'Show'} ${label}`}
+              className='shrink-0'
               onClick={() => onVisibleChange(!item.visible)}
-              size="icon"
-              type="button"
-              variant="ghost"
+              size='icon'
+              type='button'
+              variant='ghost'
             >
               {item.visible ? (
-                <IconEye aria-hidden="true" size={16} stroke={1.9} />
+                <IconEye aria-hidden='true' size={16} stroke={1.9} />
               ) : (
-                <IconEyeOff aria-hidden="true" size={16} stroke={1.9} />
+                <IconEyeOff aria-hidden='true' size={16} stroke={1.9} />
               )}
             </Button>
           }
         />
-        <TooltipContent sideOffset={6}>{item.visible ? "Hide" : "Show"}</TooltipContent>
+        <TooltipContent sideOffset={6}>{item.visible ? 'Hide' : 'Show'}</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -2187,14 +2076,14 @@ export function SettingRow({
   subtitle?: string;
 }) {
   return (
-    <Field className="settings-row gap-2.5" orientation="vertical">
+    <Field className='settings-row gap-2.5' orientation='vertical'>
       <FieldContent>
-        <FieldTitle className="settings-row-title text-sm">
-          <span className="settings-row-label-line">
+        <FieldTitle className='settings-row-title text-sm'>
+          <span className='settings-row-label-line'>
             {isModified && onResetToDefault ? (
               <ModifiedSettingResetButton label={label} onResetToDefault={onResetToDefault} />
             ) : null}
-            <FieldLabel className="text-sm" htmlFor={htmlFor}>
+            <FieldLabel className='text-sm' htmlFor={htmlFor}>
               {label}
             </FieldLabel>
             {badge ? (
@@ -2208,22 +2097,16 @@ export function SettingRow({
                * Quiet chip: the accent label carries the emphasis, so the chip
                * itself drops to a hairline on the raised tone and normal weight.
                */
-              <span className="settings-row-badge inline-flex px-1.5 py-0.5 text-[11px] font-normal">
-                {badge}
-              </span>
+              <span className='settings-row-badge inline-flex px-1.5 py-0.5 text-[11px] font-normal'>{badge}</span>
             ) : null}
             {advanced ? <AdvancedSettingTooltip label={label} /> : null}
             {description ? <SettingDescriptionTooltip description={description} label={label} /> : null}
           </span>
         </FieldTitle>
-        {subtitle ? (
-          <FieldDescription className="settings-row-subtitle">{subtitle}</FieldDescription>
-        ) : null}
-        {description ? (
-          <FieldDescription className="sr-only">{description}</FieldDescription>
-        ) : null}
+        {subtitle ? <FieldDescription className='settings-row-subtitle'>{subtitle}</FieldDescription> : null}
+        {description ? <FieldDescription className='sr-only'>{description}</FieldDescription> : null}
       </FieldContent>
-      <div className="min-w-0">{children}</div>
+      <div className='min-w-0'>{children}</div>
     </Field>
   );
 }
@@ -2233,12 +2116,8 @@ export function AdvancedSettingTooltip({ label }: { label: string }) {
     <Tooltip>
       <TooltipTrigger
         render={
-          <button
-            aria-label={`${label} is an advanced setting`}
-            className="settings-row-advanced-button"
-            type="button"
-          >
-            <IconArrowBigUp aria-hidden="true" />
+          <button aria-label={`${label} is an advanced setting`} className='settings-row-advanced-button' type='button'>
+            <IconArrowBigUp aria-hidden='true' />
           </button>
         }
       />
@@ -2252,20 +2131,16 @@ export function SettingDescriptionTooltip({ description, label }: { description:
     <Tooltip>
       <TooltipTrigger
         render={
-          <button
-            aria-label={`${label} setting details`}
-            className="settings-row-info-button"
-            type="button"
-          >
-            <IconInfoCircle aria-hidden="true" />
+          <button aria-label={`${label} setting details`} className='settings-row-info-button' type='button'>
+            <IconInfoCircle aria-hidden='true' />
           </button>
         }
       />
       <TooltipContent
-        className="settings-row-info-tooltip"
-        side="right"
+        className='settings-row-info-tooltip'
+        side='right'
         sideOffset={8}
-        style={{ maxWidth: "min(350px, calc(100vw - 32px))" }}
+        style={{ maxWidth: 'min(350px, calc(100vw - 32px))' }}
       >
         {description}
       </TooltipContent>
@@ -2286,21 +2161,21 @@ export function ModifiedSettingResetButton({
         render={
           <Button
             aria-label={`Reset ${label} to default`}
-            className="settings-modified-reset-button"
+            className='settings-modified-reset-button'
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
               onResetToDefault();
             }}
-            size="icon-xs"
-            type="button"
-            variant="ghost"
+            size='icon-xs'
+            type='button'
+            variant='ghost'
           >
-            <IconAsterisk aria-hidden="true" />
+            <IconAsterisk aria-hidden='true' />
           </Button>
         }
       />
-      <TooltipContent className="whitespace-pre-line text-center" sideOffset={6}>
+      <TooltipContent className='whitespace-pre-line text-center' sideOffset={6}>
         {MODIFIED_SETTING_TOOLTIP}
       </TooltipContent>
     </Tooltip>

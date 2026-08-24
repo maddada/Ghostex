@@ -1,15 +1,10 @@
-import type { SessionSurfaceMode } from "@/packages/shared/session-chat";
+import type { SessionSurfaceMode } from '@/packages/shared/session-chat';
 
-export type WorkspaceSplitAxis = "horizontal" | "vertical";
+export type WorkspaceSplitAxis = 'horizontal' | 'vertical';
 
-export type WorkspacePresentationState =
-  | "running"
-  | "sleeping"
-  | "mounting"
-  | "startup-failed"
-  | "restored-unmounted";
+export type WorkspacePresentationState = 'running' | 'sleeping' | 'mounting' | 'startup-failed' | 'restored-unmounted';
 
-export type WorkspaceActivity = "idle" | "working" | "attention";
+export type WorkspaceActivity = 'idle' | 'working' | 'attention';
 
 export interface WorkspaceSession {
   machineId: string;
@@ -53,13 +48,13 @@ export interface WorkspaceTabGroup {
 }
 
 export interface WorkspaceLeaf {
-  type: "leaf";
+  type: 'leaf';
   paneId: string;
   tabGroup: WorkspaceTabGroup;
 }
 
 export interface WorkspaceSplit {
-  type: "split";
+  type: 'split';
   splitId: string;
   axis: WorkspaceSplitAxis;
   ratio: number;
@@ -80,15 +75,15 @@ export interface WorkspaceModel {
   nextSessionId: number;
 }
 
-export type WorkspacePlaceholderAction = "wake" | "retry" | "materialize";
+export type WorkspacePlaceholderAction = 'wake' | 'retry' | 'materialize';
 
-export const WORKSPACE_LAYOUT_STORAGE_KEY = "ghostexWeb.workspace.v1";
+export const WORKSPACE_LAYOUT_STORAGE_KEY = 'ghostexWeb.workspace.v1';
 
 const MIN_SPLIT_RATIO = 0.1;
 const MAX_SPLIT_RATIO = 0.9;
 
 function cloneNode(node: WorkspaceNode): WorkspaceNode {
-  if (node.type === "leaf") {
+  if (node.type === 'leaf') {
     return {
       ...node,
       tabGroup: {
@@ -114,21 +109,21 @@ function cloneModel(model: WorkspaceModel): WorkspaceModel {
 
 function emptyLeaf(paneId: string): WorkspaceLeaf {
   return {
-    type: "leaf",
+    type: 'leaf',
     paneId,
     tabGroup: { activeTab: null, tabs: [] },
   };
 }
 
 function findLeaf(node: WorkspaceNode, paneId: string): WorkspaceLeaf | undefined {
-  if (node.type === "leaf") {
+  if (node.type === 'leaf') {
     return node.paneId === paneId ? node : undefined;
   }
   return findLeaf(node.first, paneId) ?? findLeaf(node.second, paneId);
 }
 
 function findSplit(node: WorkspaceNode, splitId: string): WorkspaceSplit | undefined {
-  if (node.type === "leaf") {
+  if (node.type === 'leaf') {
     return undefined;
   }
   if (node.splitId === splitId) {
@@ -137,12 +132,8 @@ function findSplit(node: WorkspaceNode, splitId: string): WorkspaceSplit | undef
   return findSplit(node.first, splitId) ?? findSplit(node.second, splitId);
 }
 
-function replaceLeaf(
-  node: WorkspaceNode,
-  paneId: string,
-  replacement: WorkspaceNode,
-): WorkspaceNode {
-  if (node.type === "leaf") {
+function replaceLeaf(node: WorkspaceNode, paneId: string, replacement: WorkspaceNode): WorkspaceNode {
+  if (node.type === 'leaf') {
     return node.paneId === paneId ? replacement : node;
   }
   return {
@@ -153,7 +144,7 @@ function replaceLeaf(
 }
 
 function removeLeaf(node: WorkspaceNode, paneId: string): WorkspaceNode | null {
-  if (node.type === "leaf") {
+  if (node.type === 'leaf') {
     return node.paneId === paneId ? null : node;
   }
   const first = removeLeaf(node.first, paneId);
@@ -194,7 +185,7 @@ function insertTab(group: WorkspaceTabGroup, tab: WorkspaceTab, insertionIndex: 
 }
 
 function collectLeaves(node: WorkspaceNode, leaves: WorkspaceLeaf[]): void {
-  if (node.type === "leaf") {
+  if (node.type === 'leaf') {
     leaves.push(node);
     return;
   }
@@ -203,7 +194,7 @@ function collectLeaves(node: WorkspaceNode, leaves: WorkspaceLeaf[]): void {
 }
 
 function collectTabs(node: WorkspaceNode, tabs: WorkspaceTab[]): void {
-  if (node.type === "leaf") {
+  if (node.type === 'leaf') {
     tabs.push(...node.tabGroup.tabs.map((tab) => ({ ...tab })));
     return;
   }
@@ -212,28 +203,28 @@ function collectTabs(node: WorkspaceNode, tabs: WorkspaceTab[]): void {
 }
 
 function firstLeaf(node: WorkspaceNode): WorkspaceLeaf {
-  return node.type === "leaf" ? node : firstLeaf(node.first);
+  return node.type === 'leaf' ? node : firstLeaf(node.first);
 }
 
 function paneForSession(node: WorkspaceNode, sessionId: string): WorkspaceLeaf | undefined {
-  if (node.type === "leaf") {
+  if (node.type === 'leaf') {
     return node.tabGroup.tabs.some((tab) => tab.sessionId === sessionId) ? node : undefined;
   }
   return paneForSession(node.first, sessionId) ?? paneForSession(node.second, sessionId);
 }
 
 function rotateNodeClockwise(node: WorkspaceNode): WorkspaceNode {
-  if (node.type === "leaf") {
+  if (node.type === 'leaf') {
     return cloneNode(node);
   }
   const first = rotateNodeClockwise(node.first);
   const second = rotateNodeClockwise(node.second);
-  if (node.axis === "horizontal") {
-    return { ...node, axis: "vertical", first, second };
+  if (node.axis === 'horizontal') {
+    return { ...node, axis: 'vertical', first, second };
   }
   return {
     ...node,
-    axis: "horizontal",
+    axis: 'horizontal',
     ratio: clampSplitRatio(1 - node.ratio),
     defaultRatio: clampSplitRatio(1 - node.defaultRatio),
     first: second,
@@ -254,7 +245,7 @@ export function clampSplitRatio(ratio: number): number {
 }
 
 export function createWorkspaceModel(sessions: WorkspaceSession[] = []): WorkspaceModel {
-  const paneId = "pane-1";
+  const paneId = 'pane-1';
   return {
     sessions: sessions.map((session) => ({ ...session })),
     root: {
@@ -282,10 +273,7 @@ export function workspaceLeaf(model: WorkspaceModel, paneId: string): WorkspaceL
   return findLeaf(model.root, paneId);
 }
 
-export function workspaceSession(
-  model: WorkspaceModel,
-  sessionId: string,
-): WorkspaceSession | undefined {
+export function workspaceSession(model: WorkspaceModel, sessionId: string): WorkspaceSession | undefined {
   return model.sessions.find((session) => workspaceSessionId(session) === sessionId);
 }
 
@@ -293,18 +281,11 @@ export function workspaceSessionId(session: WorkspaceSession): string {
   return session.workspaceId ?? session.sessionId;
 }
 
-export function workspacePaneForSession(
-  model: WorkspaceModel,
-  sessionId: string,
-): WorkspaceLeaf | undefined {
+export function workspacePaneForSession(model: WorkspaceModel, sessionId: string): WorkspaceLeaf | undefined {
   return paneForSession(model.root, sessionId);
 }
 
-export function selectWorkspaceTab(
-  model: WorkspaceModel,
-  paneId: string,
-  sessionId: string,
-): WorkspaceModel {
+export function selectWorkspaceTab(model: WorkspaceModel, paneId: string, sessionId: string): WorkspaceModel {
   const next = cloneModel(model);
   const leaf = findLeaf(next.root, paneId);
   if (!leaf?.tabGroup.tabs.some((tab) => tab.sessionId === sessionId)) {
@@ -322,11 +303,7 @@ export function focusWorkspacePane(model: WorkspaceModel, paneId: string): Works
   return { ...cloneModel(model), focusedPane: paneId };
 }
 
-export function addWorkspaceSession(
-  model: WorkspaceModel,
-  paneId: string,
-  session: WorkspaceSession,
-): WorkspaceModel {
+export function addWorkspaceSession(model: WorkspaceModel, paneId: string, session: WorkspaceSession): WorkspaceModel {
   const next = cloneModel(model);
   const leaf = findLeaf(next.root, paneId) ?? findLeaf(next.root, next.focusedPane);
   const sessionId = workspaceSessionId(session);
@@ -334,9 +311,7 @@ export function addWorkspaceSession(
     return model;
   }
   next.sessions.push({ ...session });
-  const activeIndex = leaf.tabGroup.tabs.findIndex(
-    (tab) => tab.sessionId === leaf.tabGroup.activeTab,
-  );
+  const activeIndex = leaf.tabGroup.tabs.findIndex((tab) => tab.sessionId === leaf.tabGroup.activeTab);
   insertTab(leaf.tabGroup, { sessionId }, activeIndex + 1 || 0);
   leaf.tabGroup.activeTab = sessionId;
   next.focusedPane = leaf.paneId;
@@ -348,12 +323,12 @@ export function splitWorkspacePane(
   model: WorkspaceModel,
   paneId: string,
   axis: WorkspaceSplitAxis,
-  session: WorkspaceSession,
+  session: WorkspaceSession
 ): WorkspaceModel {
   const sessionId = workspaceSessionId(session);
   if (
-    !findLeaf(model.root, paneId)
-    || model.sessions.some((candidate) => workspaceSessionId(candidate) === sessionId)
+    !findLeaf(model.root, paneId) ||
+    model.sessions.some((candidate) => workspaceSessionId(candidate) === sessionId)
   ) {
     return model;
   }
@@ -365,12 +340,12 @@ export function splitWorkspacePane(
     return model;
   }
   const newLeaf: WorkspaceLeaf = {
-    type: "leaf",
+    type: 'leaf',
     paneId: newPaneId,
     tabGroup: { activeTab: sessionId, tabs: [{ sessionId }] },
   };
   const split: WorkspaceSplit = {
-    type: "split",
+    type: 'split',
     splitId,
     axis,
     ratio: 0.5,
@@ -388,11 +363,7 @@ export function splitWorkspacePane(
   return next;
 }
 
-export function setWorkspaceSplitRatio(
-  model: WorkspaceModel,
-  splitId: string,
-  ratio: number,
-): WorkspaceModel {
+export function setWorkspaceSplitRatio(model: WorkspaceModel, splitId: string, ratio: number): WorkspaceModel {
   const nextRatio = clampSplitRatio(ratio);
   const next = cloneModel(model);
   const split = findSplit(next.root, splitId);
@@ -403,19 +374,13 @@ export function setWorkspaceSplitRatio(
   return next;
 }
 
-export function closeWorkspaceTab(
-  model: WorkspaceModel,
-  paneId: string,
-  sessionId: string,
-): WorkspaceModel {
+export function closeWorkspaceTab(model: WorkspaceModel, paneId: string, sessionId: string): WorkspaceModel {
   const next = cloneModel(model);
   const leaf = findLeaf(next.root, paneId);
   if (!leaf || !removeTab(leaf.tabGroup, sessionId)) {
     return model;
   }
-  next.sessions = next.sessions.filter(
-    (session) => workspaceSessionId(session) !== sessionId,
-  );
+  next.sessions = next.sessions.filter((session) => workspaceSessionId(session) !== sessionId);
   if (next.sessions.length === 0) {
     next.root = emptyLeaf(paneId);
     next.focusedPane = paneId;
@@ -439,7 +404,7 @@ export function moveWorkspaceTab(
   sourcePaneId: string,
   targetPaneId: string,
   sessionId: string,
-  insertionIndex: number,
+  insertionIndex: number
 ): WorkspaceModel {
   const next = cloneModel(model);
   const source = findLeaf(next.root, sourcePaneId);
@@ -479,10 +444,7 @@ export function rotateWorkspacePanes(model: WorkspaceModel): WorkspaceModel {
   return { ...cloneModel(model), root: rotateNodeClockwise(model.root), focusModePane: null };
 }
 
-export function mergeAllWorkspaceTabs(
-  model: WorkspaceModel,
-  requestedPaneId = model.focusedPane,
-): WorkspaceModel {
+export function mergeAllWorkspaceTabs(model: WorkspaceModel, requestedPaneId = model.focusedPane): WorkspaceModel {
   if (workspaceLeaves(model).length <= 1) {
     return model;
   }
@@ -501,7 +463,7 @@ export function mergeAllWorkspaceTabs(
       : validTabs[0].sessionId;
   const next = cloneModel(model);
   next.root = {
-    type: "leaf",
+    type: 'leaf',
     paneId: target.paneId,
     tabGroup: { tabs: validTabs, activeTab },
   };
@@ -510,10 +472,7 @@ export function mergeAllWorkspaceTabs(
   return next;
 }
 
-export function toggleWorkspaceFocusMode(
-  model: WorkspaceModel,
-  paneId = model.focusedPane,
-): WorkspaceModel {
+export function toggleWorkspaceFocusMode(model: WorkspaceModel, paneId = model.focusedPane): WorkspaceModel {
   if (model.focusModePane) {
     return { ...cloneModel(model), focusModePane: null };
   }
@@ -521,8 +480,8 @@ export function toggleWorkspaceFocusMode(
   const visibleLeaves = workspaceLeaves(model).filter((candidate) =>
     candidate.tabGroup.tabs.some((tab) => {
       const session = workspaceSession(model, tab.sessionId);
-      return session && session.presentationState !== "sleeping";
-    }),
+      return session && session.presentationState !== 'sleeping';
+    })
   );
   if (!leaf || visibleLeaves.length <= 1 || !visibleLeaves.some(({ paneId: id }) => id === paneId)) {
     return model;
@@ -530,31 +489,27 @@ export function toggleWorkspaceFocusMode(
   return { ...cloneModel(model), focusedPane: paneId, focusModePane: paneId };
 }
 
-export function reconcileWorkspaceSessions(
-  model: WorkspaceModel,
-  sessions: WorkspaceSession[],
-): WorkspaceModel {
+export function reconcileWorkspaceSessions(model: WorkspaceModel, sessions: WorkspaceSession[]): WorkspaceModel {
   const byId = new Map(sessions.map((session) => [workspaceSessionId(session), session]));
   const next = cloneModel(model);
   const priorSurfaceModes = new Map(
     model.sessions.flatMap((session) =>
       session.sessionSurfaceMode !== undefined
         ? [[workspaceSessionId(session), session.sessionSurfaceMode] as const]
-        : [],
-    ),
+        : []
+    )
   );
   next.sessions = sessions.map((session) => ({
     ...session,
     // Incoming session lists (presentation feeds, loadWorkspaceLayout boot)
     // never carry the client-local surface mode; keep the persisted choice.
-    ...(session.sessionSurfaceMode === undefined
-      && priorSurfaceModes.has(workspaceSessionId(session))
+    ...(session.sessionSurfaceMode === undefined && priorSurfaceModes.has(workspaceSessionId(session))
       ? { sessionSurfaceMode: priorSurfaceModes.get(workspaceSessionId(session)) }
       : {}),
   }));
 
   const reconcileNode = (node: WorkspaceNode): WorkspaceNode | null => {
-    if (node.type === "leaf") {
+    if (node.type === 'leaf') {
       node.tabGroup.tabs = node.tabGroup.tabs.filter((tab) => byId.has(tab.sessionId));
       if (!node.tabGroup.tabs.some((tab) => tab.sessionId === node.tabGroup.activeTab)) {
         node.tabGroup.activeTab = node.tabGroup.tabs[0]?.sessionId ?? null;
@@ -588,14 +543,9 @@ export function reconcileWorkspaceSessions(
   return next;
 }
 
-export function updateWorkspaceSession(
-  model: WorkspaceModel,
-  session: WorkspaceSession,
-): WorkspaceModel {
+export function updateWorkspaceSession(model: WorkspaceModel, session: WorkspaceSession): WorkspaceModel {
   const sessionId = workspaceSessionId(session);
-  const index = model.sessions.findIndex(
-    (candidate) => workspaceSessionId(candidate) === sessionId,
-  );
+  const index = model.sessions.findIndex((candidate) => workspaceSessionId(candidate) === sessionId);
   if (index < 0) {
     return model;
   }
@@ -604,8 +554,7 @@ export function updateWorkspaceSession(
     ...session,
     // Incoming sessions from presentation/attach flows never carry the
     // client-local surface mode; keep the persisted choice intact.
-    ...(session.sessionSurfaceMode === undefined
-      && model.sessions[index].sessionSurfaceMode !== undefined
+    ...(session.sessionSurfaceMode === undefined && model.sessions[index].sessionSurfaceMode !== undefined
       ? { sessionSurfaceMode: model.sessions[index].sessionSurfaceMode }
       : {}),
   };
@@ -615,12 +564,10 @@ export function updateWorkspaceSession(
 export function setWorkspaceSessionSurfaceMode(
   model: WorkspaceModel,
   sessionId: string,
-  mode: SessionSurfaceMode,
+  mode: SessionSurfaceMode
 ): WorkspaceModel {
-  const index = model.sessions.findIndex(
-    (candidate) => workspaceSessionId(candidate) === sessionId,
-  );
-  if (index < 0 || (model.sessions[index].sessionSurfaceMode ?? "terminal") === mode) {
+  const index = model.sessions.findIndex((candidate) => workspaceSessionId(candidate) === sessionId);
+  if (index < 0 || (model.sessions[index].sessionSurfaceMode ?? 'terminal') === mode) {
     return model;
   }
   const next = cloneModel(model);
@@ -631,21 +578,19 @@ export function setWorkspaceSessionSurfaceMode(
 export function reconcileOpenWorkspaceSessions(
   model: WorkspaceModel,
   availableSessions: WorkspaceSession[],
-  authoritativeMachineIds: ReadonlySet<string>,
+  authoritativeMachineIds: ReadonlySet<string>
 ): WorkspaceModel {
-  const availableById = new Map(
-    availableSessions.map((session) => [workspaceSessionId(session), session]),
-  );
+  const availableById = new Map(availableSessions.map((session) => [workspaceSessionId(session), session]));
   const sessions = model.sessions.flatMap((session) => {
     const available = availableById.get(workspaceSessionId(session));
     if (available) {
-      return [{
-        ...available,
-        // Presentation feeds never carry the client-local surface mode.
-        ...(session.sessionSurfaceMode !== undefined
-          ? { sessionSurfaceMode: session.sessionSurfaceMode }
-          : {}),
-      }];
+      return [
+        {
+          ...available,
+          // Presentation feeds never carry the client-local surface mode.
+          ...(session.sessionSurfaceMode !== undefined ? { sessionSurfaceMode: session.sessionSurfaceMode } : {}),
+        },
+      ];
     }
     return authoritativeMachineIds.has(session.machineId) ? [] : [{ ...session }];
   });

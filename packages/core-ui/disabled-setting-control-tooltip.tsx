@@ -1,10 +1,6 @@
-import type { ReactNode } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/packages/components/ui/tooltip";
-import { cn } from "@/packages/components/utils";
+import type { ReactNode } from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/packages/components/ui/tooltip';
+import { cn } from '@/packages/components/utils';
 
 type DisabledSettingControlTooltipProps = {
   children: ReactNode;
@@ -34,18 +30,14 @@ export function DisabledSettingControlTooltip({
         render={
           <span
             aria-label={`Unavailable: ${reason}`}
-            className={cn("inline-flex max-w-full cursor-not-allowed", className)}
+            className={cn('inline-flex max-w-full cursor-not-allowed', className)}
             tabIndex={0}
           >
             {children}
           </span>
         }
       />
-      <TooltipContent
-        className="max-w-72 text-center"
-        side="top"
-        sideOffset={6}
-      >
+      <TooltipContent className='max-w-72 text-center' side='top' sideOffset={6}>
         {reason}
       </TooltipContent>
     </Tooltip>

@@ -26,11 +26,11 @@
   pointer-events: auto;
 }
 
-.sbx-toast[data-kind="warning"] {
+.sbx-toast[data-kind='warning'] {
   border-left-color: var(--sandbox-warning, #e5a53a);
 }
 
-.sbx-toast[data-kind="error"] {
+.sbx-toast[data-kind='error'] {
   border-left-color: #ff5f57;
 }
 
@@ -51,11 +51,11 @@
   padding-top: 1px;
 }
 
-.sbx-toast[data-kind="warning"] .sbx-toast-icon {
+.sbx-toast[data-kind='warning'] .sbx-toast-icon {
   color: var(--sandbox-warning, #e5a53a);
 }
 
-.sbx-toast[data-kind="error"] .sbx-toast-icon {
+.sbx-toast[data-kind='error'] .sbx-toast-icon {
   color: #ff6b62;
 }
 

@@ -672,9 +672,12 @@ impl EditorApp {
         let originating_session_id = originating_session_id_field(&request);
         let mut fronted_count = 0usize;
         for session in self.sessions.values() {
-            if originating_session_id.as_deref().is_some_and(|originating_session_id| {
-                session.originating_session_id.as_deref() != Some(originating_session_id)
-            }) {
+            if originating_session_id
+                .as_deref()
+                .is_some_and(|originating_session_id| {
+                    session.originating_session_id.as_deref() != Some(originating_session_id)
+                })
+            {
                 continue;
             }
             let Some(window) = self.windows.get(&session.window_id) else {
@@ -710,7 +713,9 @@ impl EditorApp {
         };
         session.title = title;
         if let Some(window) = self.windows.get(&session.window_id) {
-            window.window.set_title(&session_window_title(&session.title));
+            window
+                .window
+                .set_title(&session_window_title(&session.title));
         }
     }
 

@@ -1,15 +1,12 @@
-import type {
-  SidebarPreviousSessionItem,
-  SidebarSessionItem,
-} from "../shared/session-grid-contract";
-import { isDefaultSessionSearchTitle } from "../shared/session-grid-contract";
+import type { SidebarPreviousSessionItem, SidebarSessionItem } from '../shared/session-grid-contract';
+import { isDefaultSessionSearchTitle } from '../shared/session-grid-contract';
 import {
   getEffectiveSidebarSessionTag,
   getSidebarSessionTagLabel,
   sessionMatchesSidebarTagFilters,
   type SidebarSessionTagFilter,
-} from "../shared/session-tags";
-import { getSessionHistoryCardTitle } from "./session-history-card-title";
+} from '../shared/session-tags';
+import { getSessionHistoryCardTitle } from './session-history-card-title';
 
 export type PreviousSessionsModalDayGroup = {
   dayLabel: string;
@@ -22,7 +19,7 @@ export type FilterPreviousSessionsOptions = {
 
 type SidebarSearchableSession = Pick<
   SidebarSessionItem,
-  "alias" | "detail" | "displayTitle" | "isFavorite" | "primaryTitle" | "sessionNumber" | "sessionTag" | "terminalTitle"
+  'alias' | 'detail' | 'displayTitle' | 'isFavorite' | 'primaryTitle' | 'sessionNumber' | 'sessionTag' | 'terminalTitle'
 >;
 
 type SidebarSessionSearchRecord<T extends SidebarSearchableSession> = {
@@ -34,15 +31,13 @@ type SidebarSessionSearchRecord<T extends SidebarSearchableSession> = {
 export function filterPreviousSessions(
   previousSessions: readonly SidebarPreviousSessionItem[],
   query: string,
-  options: FilterPreviousSessionsOptions = {},
+  options: FilterPreviousSessionsOptions = {}
 ): SidebarPreviousSessionItem[] {
   const normalizedQuery = query.trim().toLowerCase();
   const selectedSessionTags = options.sessionTags ?? [];
   const filteredSessions =
     selectedSessionTags.length > 0
-      ? previousSessions.filter((session) =>
-          sessionMatchesSidebarTagFilters(session, selectedSessionTags),
-        )
+      ? previousSessions.filter((session) => sessionMatchesSidebarTagFilters(session, selectedSessionTags))
       : [...previousSessions];
   const dedupedSessions = dedupePreviousSessionsByProjectAndTitle(filteredSessions);
 
@@ -54,7 +49,7 @@ export function filterPreviousSessions(
 }
 
 export function filterPreviousSessionsModalItems(
-  previousSessions: readonly SidebarPreviousSessionItem[],
+  previousSessions: readonly SidebarPreviousSessionItem[]
 ): SidebarPreviousSessionItem[] {
   /**
    * CDXC:PreviousSessions 2026-05-15-09:57
@@ -67,7 +62,7 @@ export function filterPreviousSessionsModalItems(
 
 export function removePreviousSessionByHistoryId(
   previousSessions: readonly SidebarPreviousSessionItem[],
-  historyId: string,
+  historyId: string
 ): SidebarPreviousSessionItem[] {
   /*
   CDXC:PreviousSessions 2026-06-04-22:52:
@@ -94,9 +89,7 @@ export function getNextPreviousSessionsModalSelection({
   }
 
   const currentIndex =
-    currentHistoryId === undefined
-      ? -1
-      : sessions.findIndex((session) => session.historyId === currentHistoryId);
+    currentHistoryId === undefined ? -1 : sessions.findIndex((session) => session.historyId === currentHistoryId);
   if (currentIndex === -1) {
     return direction === 1 ? sessions[0]?.historyId : sessions[sessions.length - 1]?.historyId;
   }
@@ -105,24 +98,24 @@ export function getNextPreviousSessionsModalSelection({
 }
 
 export function groupPreviousSessionsByDay(
-  previousSessions: readonly SidebarPreviousSessionItem[],
+  previousSessions: readonly SidebarPreviousSessionItem[]
 ): PreviousSessionsModalDayGroup[] {
   /*
   CDXC:PreviousSessions 2026-06-17-17:06:
   The modal's date groups represent when sessions were closed, not when they were last active. Sort by closedAt before grouping so newly closed sessions appear first even when their lastInteractionAt is older than other history rows.
   */
   const formatter = new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "long",
-    weekday: "long",
-    year: "numeric",
+    day: 'numeric',
+    month: 'long',
+    weekday: 'long',
+    year: 'numeric',
   });
   const sessionsByDay = new Map<string, SidebarPreviousSessionItem[]>();
   const sortedSessions = sortPreviousSessionsByClosedAt(previousSessions);
 
   for (const session of sortedSessions) {
     const date = new Date(session.closedAt);
-    const key = Number.isNaN(date.getTime()) ? "Unknown day" : formatter.format(date);
+    const key = Number.isNaN(date.getTime()) ? 'Unknown day' : formatter.format(date);
     const grouped = sessionsByDay.get(key);
     if (grouped) {
       grouped.push(session);
@@ -139,14 +132,14 @@ export function groupPreviousSessionsByDay(
 }
 
 export function sortPreviousSessionsByClosedAt(
-  previousSessions: readonly SidebarPreviousSessionItem[],
+  previousSessions: readonly SidebarPreviousSessionItem[]
 ): SidebarPreviousSessionItem[] {
   return [...previousSessions].sort(comparePreviousSessionsByClosedAt);
 }
 
 export function filterSidebarSessionItems<T extends SidebarSearchableSession>(
   sessions: readonly T[],
-  query: string,
+  query: string
 ): T[] {
   const normalizedQuery = normalizeSessionSearchValue(query);
   const searchableSessions = filterDefaultNamedSessionSearchItems(sessions);
@@ -155,11 +148,10 @@ export function filterSidebarSessionItems<T extends SidebarSearchableSession>(
   }
 
   const searchRecords = searchableSessions.map((session, itemIndex) =>
-    createSidebarSessionSearchRecord(session, itemIndex),
+    createSidebarSessionSearchRecord(session, itemIndex)
   );
   const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
-  const shouldUseAbbreviationMatching =
-    queryTokens.length > 0 && queryTokens.every((token) => token.length <= 3);
+  const shouldUseAbbreviationMatching = queryTokens.length > 0 && queryTokens.every((token) => token.length <= 3);
 
   /*
    * CDXC:SidebarSearch 2026-06-28-06:29:
@@ -171,29 +163,24 @@ export function filterSidebarSessionItems<T extends SidebarSearchableSession>(
    */
   if (shouldUseAbbreviationMatching) {
     return searchableSessions.filter((_, itemIndex) =>
-      matchesNormalizedQueryTokens(searchRecords[itemIndex]?.searchText ?? "", queryTokens),
+      matchesNormalizedQueryTokens(searchRecords[itemIndex]?.searchText ?? '', queryTokens)
     );
   }
 
   const matchedItemIndexes = new Set(
     searchRecords
       .filter((record) => matchesNormalizedQueryTokens(record.searchText, queryTokens))
-      .map((record) => record.itemIndex),
+      .map((record) => record.itemIndex)
   );
 
   return searchableSessions.filter((_, itemIndex) => matchedItemIndexes.has(itemIndex));
 }
 
-export function matchesSidebarSessionSearchQuery(
-  session: SidebarSearchableSession,
-  query: string,
-): boolean {
+export function matchesSidebarSessionSearchQuery(session: SidebarSearchableSession, query: string): boolean {
   return filterSidebarSessionItems([session], query).length > 0;
 }
 
-export function filterDefaultNamedSessionSearchItems<T extends SidebarSearchableSession>(
-  sessions: readonly T[],
-): T[] {
+export function filterDefaultNamedSessionSearchItems<T extends SidebarSearchableSession>(sessions: readonly T[]): T[] {
   /*
    * CDXC:SessionSearch 2026-06-18-00:01:
    * Sidebar and command-palette session search should not surface placeholder
@@ -206,7 +193,7 @@ export function filterDefaultNamedSessionSearchItems<T extends SidebarSearchable
 
 function createSidebarSessionSearchRecord<T extends SidebarSearchableSession>(
   session: T,
-  itemIndex: number,
+  itemIndex: number
 ): SidebarSessionSearchRecord<T> {
   return {
     item: session,
@@ -222,26 +209,26 @@ function createSidebarSessionSearchRecord<T extends SidebarSearchableSession>(
     ]
       .map((part) => normalizeSessionSearchValue(part))
       .filter(Boolean)
-      .join(" "),
+      .join(' '),
   };
 }
 
 function normalizeSessionSearchValue(value: string | undefined): string {
   if (!value) {
-    return "";
+    return '';
   }
 
   return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[-_/\\.]+/g, " ")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_/\\.]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
 }
 
 function dedupePreviousSessionsByProjectAndTitle(
-  sessions: readonly SidebarPreviousSessionItem[],
+  sessions: readonly SidebarPreviousSessionItem[]
 ): SidebarPreviousSessionItem[] {
   /**
    * CDXC:PreviousSessions 2026-05-11-09:04
@@ -278,23 +265,17 @@ function dedupePreviousSessionsByProjectAndTitle(
     });
   });
 
-  return [...dedupedByKey.values()]
-    .sort((left, right) => left.itemIndex - right.itemIndex)
-    .map((entry) => entry.item);
+  return [...dedupedByKey.values()].sort((left, right) => left.itemIndex - right.itemIndex).map((entry) => entry.item);
 }
 
 function isPreviousSessionWebPage(session: SidebarPreviousSessionItem): boolean {
   return (
-    session.sessionKind === "browser" ||
-    session.sessionRecord?.kind === "browser" ||
-    session.agentIcon === "browser"
+    session.sessionKind === 'browser' || session.sessionRecord?.kind === 'browser' || session.agentIcon === 'browser'
   );
 }
 
 function createPreviousSessionDedupeKey(session: SidebarPreviousSessionItem): string {
-  const projectKey = normalizeSessionSearchValue(
-    session.projectPath || session.projectId || session.projectName || "",
-  );
+  const projectKey = normalizeSessionSearchValue(session.projectPath || session.projectId || session.projectName || '');
   const scopedProjectKey = projectKey || `history:${session.historyId}`;
   const titleKey = normalizeSessionSearchValue(getSessionHistoryCardTitle(session));
 
@@ -310,11 +291,10 @@ function getPreviousSessionDedupeTimestamp(session: SidebarPreviousSessionItem):
 
 function comparePreviousSessionsByClosedAt(
   left: SidebarPreviousSessionItem,
-  right: SidebarPreviousSessionItem,
+  right: SidebarPreviousSessionItem
 ): number {
   return (
-    parsePreviousSessionTimestamp(right.closedAt) -
-      parsePreviousSessionTimestamp(left.closedAt) ||
+    parsePreviousSessionTimestamp(right.closedAt) - parsePreviousSessionTimestamp(left.closedAt) ||
     left.historyId.localeCompare(right.historyId)
   );
 }
@@ -341,19 +321,13 @@ function matchesNormalizedQueryToken(searchText: string, query: string): boolean
     return true;
   }
 
-  const compactSearchText = searchText.replace(/\s+/g, "");
-  if (
-    (query.length >= 5 && compactSearchText.includes(query)) ||
-    hasSingleEditDistance(compactSearchText, query)
-  ) {
+  const compactSearchText = searchText.replace(/\s+/g, '');
+  if ((query.length >= 5 && compactSearchText.includes(query)) || hasSingleEditDistance(compactSearchText, query)) {
     return true;
   }
 
   const words = searchText.split(/\s+/).filter(Boolean);
-  return (
-    words.some((word) => isLongQueryTypoCandidate(word, query)) ||
-    hasAdjacentWordSingleEditDistance(words, query)
-  );
+  return words.some((word) => isLongQueryTypoCandidate(word, query)) || hasAdjacentWordSingleEditDistance(words, query);
 }
 
 function fuzzyIncludes(text: string, query: string): boolean {
@@ -413,7 +387,7 @@ function hasSingleEditDistance(candidate: string, query: string): boolean {
 
 function hasAdjacentWordSingleEditDistance(words: readonly string[], query: string): boolean {
   for (let startIndex = 0; startIndex < words.length; startIndex += 1) {
-    let joinedWords = "";
+    let joinedWords = '';
 
     for (let index = startIndex; index < words.length; index += 1) {
       joinedWords += words[index];

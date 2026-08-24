@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { getSidebarFixedTooltipPosition } from "./sidebar-fixed-tooltip-button";
+import { describe, expect, test } from 'vitest';
+import { getSidebarFixedTooltipPosition } from './sidebar-fixed-tooltip-button';
 
 const tooltipRect = {
   bottom: 0,
@@ -10,10 +10,10 @@ const tooltipRect = {
   width: 120,
 };
 
-describe("getSidebarFixedTooltipPosition", () => {
-  test("flips bottom tooltips above triggers near the lower sidebar boundary", () => {
+describe('getSidebarFixedTooltipPosition', () => {
+  test('flips bottom tooltips above triggers near the lower sidebar boundary', () => {
     const position = getSidebarFixedTooltipPosition({
-      align: "end",
+      align: 'end',
       tooltipRect,
       triggerRect: {
         bottom: 282,
@@ -27,14 +27,14 @@ describe("getSidebarFixedTooltipPosition", () => {
       viewportWidth: 500,
     });
 
-    expect(position.side).toBe("top");
+    expect(position.side).toBe('top');
     expect(position.top).toBe(222);
     expect(position.left).toBe(358);
   });
 
-  test("falls back from preferred left to a visible side in narrow viewports", () => {
+  test('falls back from preferred left to a visible side in narrow viewports', () => {
     const position = getSidebarFixedTooltipPosition({
-      preferredSide: "left",
+      preferredSide: 'left',
       tooltipRect,
       triggerRect: {
         bottom: 80,
@@ -48,7 +48,7 @@ describe("getSidebarFixedTooltipPosition", () => {
       viewportWidth: 150,
     });
 
-    expect(position.side).toBe("bottom");
+    expect(position.side).toBe('bottom');
     expect(position.left).toBe(8);
     expect(position.maxWidth).toBe(134);
   });

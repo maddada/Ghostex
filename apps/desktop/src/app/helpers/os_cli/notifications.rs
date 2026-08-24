@@ -217,26 +217,30 @@ pub(crate) fn gpui_play_completion_sound(sound: &str) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_request_macos_notification_permission() -> GpuiMacOSNotificationAuthorizationStatus {
+pub(crate) fn gpui_request_macos_notification_permission()
+-> GpuiMacOSNotificationAuthorizationStatus {
     GpuiMacOSNotificationAuthorizationStatus::from_native_code(unsafe {
         GhostexGpuiRequestNotificationAuthorization()
     })
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn gpui_request_macos_notification_permission() -> GpuiMacOSNotificationAuthorizationStatus {
+pub(crate) fn gpui_request_macos_notification_permission()
+-> GpuiMacOSNotificationAuthorizationStatus {
     GpuiMacOSNotificationAuthorizationStatus::Unsupported
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_deliver_macos_settings_test_notification() -> GpuiMacOSNotificationDeliveryResult {
+pub(crate) fn gpui_deliver_macos_settings_test_notification() -> GpuiMacOSNotificationDeliveryResult
+{
     GpuiMacOSNotificationDeliveryResult::from_native_code(unsafe {
         GhostexGpuiDeliverSettingsTestNotification()
     })
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn gpui_deliver_macos_settings_test_notification() -> GpuiMacOSNotificationDeliveryResult {
+pub(crate) fn gpui_deliver_macos_settings_test_notification() -> GpuiMacOSNotificationDeliveryResult
+{
     GpuiMacOSNotificationDeliveryResult::Unsupported
 }
 
@@ -510,7 +514,9 @@ pub(crate) fn register_gpui_first_responder_callback_target(
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn unregister_gpui_first_responder_callback_target(gpui_root_view: *mut std::ffi::c_void) {
+pub(crate) fn unregister_gpui_first_responder_callback_target(
+    gpui_root_view: *mut std::ffi::c_void,
+) {
     GPUI_FIRST_RESPONDER_CALLBACK_TARGETS.with(|targets| {
         targets.borrow_mut().remove(&(gpui_root_view as usize));
     });
@@ -523,4 +529,3 @@ pub(crate) fn gpui_first_responder_callback_target(
     GPUI_FIRST_RESPONDER_CALLBACK_TARGETS
         .with(|targets| targets.borrow().get(&(gpui_root_view as usize)).cloned())
 }
-

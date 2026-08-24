@@ -9,7 +9,7 @@ on:
       plan:
         description: Resolved release plan JSON from the prepare job
         required: false
-        default: ""
+        default: ''
         type: string
     secrets:
       ANDROID_RELEASE_KEYSTORE_BASE64:

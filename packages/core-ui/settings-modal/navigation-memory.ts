@@ -1,8 +1,8 @@
-import { type SettingsModalTab } from "../settings-modal-tabs";
+import { type SettingsModalTab } from '../settings-modal-tabs';
 import {
   normalizeSettingsModalNavigationState,
   type SettingsModalNavigationState,
-} from "../../shared/ghostex-settings";
+} from '../../shared/ghostex-settings';
 
 export let rememberedSettingsModalTab: SettingsModalTab | undefined;
 export const rememberedSettingsModalScrollTopByTab: Partial<Record<SettingsModalTab, number>> = {};
@@ -13,7 +13,7 @@ export const rememberedSettingsModalScrollTopByTab: Partial<Record<SettingsModal
  * Keep the mutable session memory behind helpers so SettingsModal does not directly reassign module variables and the compiler can memoize the large render tree.
  */
 export function getRememberedSettingsModalTab(
-  storedNavigation: SettingsModalNavigationState,
+  storedNavigation: SettingsModalNavigationState
 ): SettingsModalTab | undefined {
   return rememberedSettingsModalTab ?? storedNavigation.activeTab;
 }
@@ -24,7 +24,7 @@ export function rememberSettingsModalTab(tab: SettingsModalTab): void {
 
 export function getRememberedSettingsModalScrollTop(
   tab: SettingsModalTab,
-  storedNavigation: SettingsModalNavigationState,
+  storedNavigation: SettingsModalNavigationState
 ): number {
   return rememberedSettingsModalScrollTopByTab[tab] ?? storedNavigation.scrollTopByTab[tab] ?? 0;
 }
@@ -35,7 +35,7 @@ export function rememberSettingsModalScrollTop(tab: SettingsModalTab, scrollTop:
 
 export function getRememberedSettingsModalNavigationState(
   activeTab: SettingsModalTab,
-  storedNavigation: SettingsModalNavigationState,
+  storedNavigation: SettingsModalNavigationState
 ): SettingsModalNavigationState {
   return normalizeSettingsModalNavigationState({
     activeTab,
@@ -48,7 +48,7 @@ export function getRememberedSettingsModalNavigationState(
 
 export function areSettingsModalNavigationStatesEqual(
   left: SettingsModalNavigationState,
-  right: SettingsModalNavigationState,
+  right: SettingsModalNavigationState
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }

@@ -1,13 +1,4 @@
-export type PetId =
-  | "boo"
-  | "codex"
-  | "dewey"
-  | "fireball"
-  | "rocky"
-  | "seedy"
-  | "stacky"
-  | "bsod"
-  | "null-signal";
+export type PetId = 'boo' | 'codex' | 'dewey' | 'fireball' | 'rocky' | 'seedy' | 'stacky' | 'bsod' | 'null-signal';
 
 export type PetOption = {
   description: string;
@@ -28,53 +19,53 @@ Boo is bundled from the verified CodexPetHub pet asset and is the first-install
 default pet. Keep the pet metadata static in-app data; the package contributes
 only a spritesheet and descriptive fields, not executable behavior.
 */
-export const DEFAULT_PET_ID: PetId = "boo";
+export const DEFAULT_PET_ID: PetId = 'boo';
 
 export const PET_OPTIONS: ReadonlyArray<PetOption> = [
   {
-    description: "A friendly ghost for quiet workspace focus.",
-    displayName: "Boo",
-    id: "boo",
+    description: 'A friendly ghost for quiet workspace focus.',
+    displayName: 'Boo',
+    id: 'boo',
   },
   {
-    description: "The original Codex companion.",
-    displayName: "Codex",
-    id: "codex",
+    description: 'The original Codex companion.',
+    displayName: 'Codex',
+    id: 'codex',
   },
   {
-    description: "A tidy duck for calm workspace days.",
-    displayName: "Dewey",
-    id: "dewey",
+    description: 'A tidy duck for calm workspace days.',
+    displayName: 'Dewey',
+    id: 'dewey',
   },
   {
-    description: "Hot path energy for fast iteration.",
-    displayName: "Fireball",
-    id: "fireball",
+    description: 'Hot path energy for fast iteration.',
+    displayName: 'Fireball',
+    id: 'fireball',
   },
   {
-    description: "A steady rock when the diff gets large.",
-    displayName: "Rocky",
-    id: "rocky",
+    description: 'A steady rock when the diff gets large.',
+    displayName: 'Rocky',
+    id: 'rocky',
   },
   {
-    description: "Small green shoots for new ideas.",
-    displayName: "Seedy",
-    id: "seedy",
+    description: 'Small green shoots for new ideas.',
+    displayName: 'Seedy',
+    id: 'seedy',
   },
   {
-    description: "A balanced stack for deep work.",
-    displayName: "Stacky",
-    id: "stacky",
+    description: 'A balanced stack for deep work.',
+    displayName: 'Stacky',
+    id: 'stacky',
   },
   {
-    description: "A tiny blue-screen companion.",
-    displayName: "BSOD",
-    id: "bsod",
+    description: 'A tiny blue-screen companion.',
+    displayName: 'BSOD',
+    id: 'bsod',
   },
   {
-    description: "Quiet signal from the void.",
-    displayName: "Null Signal",
-    id: "null-signal",
+    description: 'Quiet signal from the void.',
+    displayName: 'Null Signal',
+    id: 'null-signal',
   },
 ];
 

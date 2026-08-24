@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::Path,
-    time::Duration,
-};
+use std::{collections::HashMap, path::Path, time::Duration};
 
 use anyhow::Result;
 
@@ -66,7 +62,10 @@ pub(crate) fn gpui_spawn_keep_awake_caffeinate(
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_spawn_open_target_app_name(app_name: &str, project_path: &Path) -> Result<(), String> {
+pub(crate) fn gpui_spawn_open_target_app_name(
+    app_name: &str,
+    project_path: &Path,
+) -> Result<(), String> {
     std::process::Command::new("/usr/bin/open")
         .arg("-a")
         .arg(app_name)
@@ -80,7 +79,10 @@ pub(crate) fn gpui_spawn_open_target_app_name(app_name: &str, project_path: &Pat
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn gpui_spawn_open_target_app_name(_app_name: &str, _project_path: &Path) -> Result<(), String> {
+pub(crate) fn gpui_spawn_open_target_app_name(
+    _app_name: &str,
+    _project_path: &Path,
+) -> Result<(), String> {
     Err("Could not launch the selected Open In target.".to_string())
 }
 
@@ -192,4 +194,3 @@ pub(crate) fn gpui_spawn_os_open(target: &std::ffi::OsStr) -> Result<(), String>
 }
 
 pub(crate) const GPUI_AGENTS_HUB_MAX_FILE_BYTES: u64 = 128 * 1024;
-

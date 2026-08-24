@@ -1,9 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useMemo } from 'react';
-import type {
-  GxserverStashedPrompt,
-  GxserverStashedPromptTag,
-} from '../shared/gxserver-protocol';
+import type { GxserverStashedPrompt, GxserverStashedPromptTag } from '../shared/gxserver-protocol';
 import { createDefaultSidebarCommandButtons } from '../shared/sidebar-commands';
 import type {
   SidebarPreviousSessionItem,
@@ -312,9 +309,7 @@ function RecentSessionsStory() {
 function RecentSessionsTagFilterStory() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      document
-        .querySelector<HTMLButtonElement>('.previous-sessions-tag-filter-toggle')
-        ?.click();
+      document.querySelector<HTMLButtonElement>('.previous-sessions-tag-filter-toggle')?.click();
     }, 120);
     return () => window.clearTimeout(timer);
   }, []);

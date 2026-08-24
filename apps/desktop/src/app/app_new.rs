@@ -13,6 +13,8 @@ use std::time::Instant;
 // just the macOS-only shims that first introduced the import.
 use std::cell::Cell;
 
+use crate::terminal_surface_host::NativeTerminalSurfaceHost;
+use crate::terminal_surface_lifecycle::NativeTerminalSurfaceLifecycleState;
 use anyhow::Context as _;
 use anyhow::Result;
 use gpui::App;
@@ -21,8 +23,6 @@ use gpui::Entity;
 use gpui::ScrollHandle;
 use gpui::Window;
 use gpui::px;
-use crate::terminal_surface_host::NativeTerminalSurfaceHost;
-use crate::terminal_surface_lifecycle::NativeTerminalSurfaceLifecycleState;
 
 use crate::app::consts::*;
 use crate::app::helpers::*;
@@ -139,8 +139,7 @@ impl GhostexGpuiApp {
                 pending_export_transcript_reveal_path: None,
                 sidebar_browser_tab_reveal_request_id: 0,
                 latest_sidebar_project_snapshot: None,
-                navigation_history_state:
-                    navigation_history::GpuiNavigationHistoryState::default(),
+                navigation_history_state: navigation_history::GpuiNavigationHistoryState::default(),
                 titlebar_git_menu_state: None,
                 titlebar_actions_snapshot: Vec::new(),
                 titlebar_actions_refresh_in_flight: false,

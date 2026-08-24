@@ -3,22 +3,19 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import type { GpuiSidebarRuntime } from "./core";
-import { createGpuiSidebarSettings } from "./helpers/bootstrap";
+import type { GpuiSidebarRuntime } from './core';
+import { createGpuiSidebarSettings } from './helpers/bootstrap';
 import {
   comparePreviousSessionItemsByClosedTime,
   gxserverSearchResultToPreviousSessionItem,
   parseGpuiGxserverPreviousSessionHistoryId,
   parseGpuiRemotePreviousSessionHistoryId,
   previousSessionTitle,
-} from "./helpers/previous-sessions";
-import { normalizeNonEmptyString } from "./helpers/records";
-import type { GpuiGxserverCreatedSessionResult } from "./types-and-protocol";
-import type { GxserverPresentationSearchResponse } from "@/packages/shared/gxserver-protocol";
-import type {
-  SidebarPreviousSessionItem,
-  SidebarToExtensionMessage,
-} from "@/packages/shared/session-grid-contract";
+} from './helpers/previous-sessions';
+import { normalizeNonEmptyString } from './helpers/records';
+import type { GpuiGxserverCreatedSessionResult } from './types-and-protocol';
+import type { GxserverPresentationSearchResponse } from '@/packages/shared/gxserver-protocol';
+import type { SidebarPreviousSessionItem, SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -30,22 +27,32 @@ reports as a circular base type. `gpuiSidebarRuntimePreviousSessionMethodsShapeC
 at the bottom of this file is what keeps the two in step.
 */
 export interface GpuiSidebarRuntimePreviousSessionMethods {
-  requestPreviousSessions(message: Extract<SidebarToExtensionMessage, { type: "requestPreviousSessions" }>): Promise<void>;
+  requestPreviousSessions(
+    message: Extract<SidebarToExtensionMessage, { type: 'requestPreviousSessions' }>
+  ): Promise<void>;
   restorePreviousSession(historyId: string): Promise<void>;
-  restoreRemotePreviousSession(reference: { machineId: string; projectId: string; sessionId: string }, historyId: string): Promise<void>;
+  restoreRemotePreviousSession(
+    reference: { machineId: string; projectId: string; sessionId: string },
+    historyId: string
+  ): Promise<void>;
   deletePreviousSession(historyId: string): Promise<void>;
   connectedRemotePreviousSessionMachines(): Array<{
     machineId: string;
     machineName: string;
   }>;
-  postPreviousSessionsResult(requestId: string, query: string | undefined, previousSessions: SidebarPreviousSessionItem[], cursor?: string): void;
+  postPreviousSessionsResult(
+    requestId: string,
+    query: string | undefined,
+    previousSessions: SidebarPreviousSessionItem[],
+    cursor?: string
+  ): void;
   removePreviousSessionFromCurrentResult(historyId: string): void;
 }
 
 export const gpuiSidebarRuntimePreviousSessionMethods = {
-
-  async requestPreviousSessions(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "requestPreviousSessions" }>,
+  async requestPreviousSessions(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'requestPreviousSessions' }>
   ): Promise<void> {
     const limit = message.limit ?? 80;
     const sessionTags = message.sessionTags;
@@ -54,7 +61,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       const [localResponse, ...remoteResponses] = await Promise.all([
         this.client
           ? this.client
-              .rpc<GxserverPresentationSearchResponse>("/api/listPreviousSessions", {
+              .rpc<GxserverPresentationSearchResponse>('/api/listPreviousSessions', {
                 cursor: message.cursor,
                 includeActive: false,
                 includePrevious: true,
@@ -67,7 +74,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
         ...remoteMachines.map((machine) =>
           this.requestRemoteGxserver<GxserverPresentationSearchResponse>(
             machine.machineId,
-            "/api/listPreviousSessions",
+            '/api/listPreviousSessions',
             {
               cursor: message.cursor,
               includeActive: false,
@@ -75,8 +82,8 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
               limit,
               query: message.query,
               sessionTags,
-            },
-          ).catch((): GxserverPresentationSearchResponse => ({ results: [] })),
+            }
+          ).catch((): GxserverPresentationSearchResponse => ({ results: [] }))
         ),
       ]);
       /*
@@ -86,22 +93,19 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       const remoteItems = remoteResponses.flatMap((response, index) =>
         response.results.map((result) =>
           gxserverSearchResultToPreviousSessionItem(result, {
-            historyIdPrefix: `remote-gxserver:${remoteMachines[index]?.machineId ?? ""}`,
+            historyIdPrefix: `remote-gxserver:${remoteMachines[index]?.machineId ?? ''}`,
             projectNamePrefix: remoteMachines[index]?.machineName,
-          }),
-        ),
+          })
+        )
       );
       this.postPreviousSessionsResult(
         message.requestId,
         message.query,
         [
-          ...localResponse.results.map((result) =>
-            gxserverSearchResultToPreviousSessionItem(result),
-          ),
+          ...localResponse.results.map((result) => gxserverSearchResultToPreviousSessionItem(result)),
           ...remoteItems,
-        ]
-          .sort(comparePreviousSessionItemsByClosedTime),
-        localResponse.cursor ?? remoteResponses.find((response) => response.cursor)?.cursor,
+        ].sort(comparePreviousSessionItemsByClosedTime),
+        localResponse.cursor ?? remoteResponses.find((response) => response.cursor)?.cursor
       );
     } catch {
       this.postPreviousSessionsResult(message.requestId, message.query, []);
@@ -123,46 +127,42 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       return;
     }
     try {
-      const response = await this.client.rpc<GpuiGxserverCreatedSessionResult>(
-        "/api/createSession",
-        {
-          kind: "terminal",
-          lifecycleState: "running",
-          projectId: reference.projectId,
-          restoredFromSessionId: reference.sessionId,
-          ...(previousSession?.sessionTag ? { sessionTag: previousSession.sessionTag } : {}),
-          ...(previousSession?.sidebarOrder !== undefined
-            ? { sidebarOrder: previousSession.sidebarOrder }
-            : {}),
-          surface: "workspace",
-          title: previousSessionTitle(previousSession),
-        },
-      );
+      const response = await this.client.rpc<GpuiGxserverCreatedSessionResult>('/api/createSession', {
+        kind: 'terminal',
+        lifecycleState: 'running',
+        projectId: reference.projectId,
+        restoredFromSessionId: reference.sessionId,
+        ...(previousSession?.sessionTag ? { sessionTag: previousSession.sessionTag } : {}),
+        ...(previousSession?.sidebarOrder !== undefined ? { sidebarOrder: previousSession.sidebarOrder } : {}),
+        surface: 'workspace',
+        title: previousSessionTitle(previousSession),
+      });
       const restoredSessionId = normalizeNonEmptyString(response.session?.sessionId);
       if (restoredSessionId) {
         this.focusLocalWorkspaceSession(
           normalizeNonEmptyString(response.session?.projectId) ?? reference.projectId,
-          restoredSessionId,
+          restoredSessionId
         );
       }
       await this.client
-        .rpc("/api/removeSession", {
+        .rpc('/api/removeSession', {
           projectId: reference.projectId,
-          reason: "restorePreviousSession",
+          reason: 'restorePreviousSession',
           sessionId: reference.sessionId,
         })
         .catch(() => undefined);
       this.removePreviousSessionFromCurrentResult(historyId);
     } catch {
-      this.postRemoteToast("warning", "Previous session restore failed", {
-        description: "gxserver could not restore that previous session.",
+      this.postRemoteToast('warning', 'Previous session restore failed', {
+        description: 'gxserver could not restore that previous session.',
       });
     }
   },
 
-  async restoreRemotePreviousSession(this: GpuiSidebarRuntime,
+  async restoreRemotePreviousSession(
+    this: GpuiSidebarRuntime,
     reference: { machineId: string; projectId: string; sessionId: string },
-    historyId: string,
+    historyId: string
   ): Promise<void> {
     const previousSession = this.previousSessionsByHistoryId.get(historyId);
     if (previousSession && previousSession.isRestorable !== true) {
@@ -178,21 +178,19 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
     try {
       const response = await this.requestRemoteGxserver<{
         session?: { projectId?: string; sessionId?: string };
-      }>(reference.machineId, "/api/createSession", {
-        kind: "terminal",
-        lifecycleState: "running",
+      }>(reference.machineId, '/api/createSession', {
+        kind: 'terminal',
+        lifecycleState: 'running',
         projectId: reference.projectId,
         restoredFromSessionId: reference.sessionId,
         ...(previousSession?.sessionTag ? { sessionTag: previousSession.sessionTag } : {}),
-        ...(previousSession?.sidebarOrder !== undefined
-          ? { sidebarOrder: previousSession.sidebarOrder }
-          : {}),
-        surface: "workspace",
+        ...(previousSession?.sidebarOrder !== undefined ? { sidebarOrder: previousSession.sidebarOrder } : {}),
+        surface: 'workspace',
         title: previousSessionTitle(previousSession),
       });
-      await this.requestRemoteGxserver(reference.machineId, "/api/removeSession", {
+      await this.requestRemoteGxserver(reference.machineId, '/api/removeSession', {
         projectId: reference.projectId,
-        reason: "restorePreviousSession",
+        reason: 'restorePreviousSession',
         sessionId: reference.sessionId,
       }).catch(() => undefined);
       this.removePreviousSessionFromCurrentResult(historyId);
@@ -204,14 +202,14 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
           sessionId: restoredSessionId,
         };
         this.setRemotePresentationSessionFocus(restoredReference);
-        this.postRemoteSessionNativeAction("openRemoteSessionTerminal", restoredReference, {
+        this.postRemoteSessionNativeAction('openRemoteSessionTerminal', restoredReference, {
           historyId,
-          type: "restorePreviousSession",
+          type: 'restorePreviousSession',
         });
       }
     } catch {
-      this.postRemoteToast("warning", "Remote restore failed", {
-        description: "The remote gxserver could not restore that previous session.",
+      this.postRemoteToast('warning', 'Remote restore failed', {
+        description: 'The remote gxserver could not restore that previous session.',
       });
     }
   },
@@ -219,9 +217,9 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
   async deletePreviousSession(this: GpuiSidebarRuntime, historyId: string): Promise<void> {
     const remoteReference = parseGpuiRemotePreviousSessionHistoryId(historyId);
     if (remoteReference) {
-      await this.requestRemoteGxserver(remoteReference.machineId, "/api/removeSession", {
+      await this.requestRemoteGxserver(remoteReference.machineId, '/api/removeSession', {
         projectId: remoteReference.projectId,
-        reason: "deletePreviousSession",
+        reason: 'deletePreviousSession',
         sessionId: remoteReference.sessionId,
       }).catch(() => undefined);
       this.removePreviousSessionFromCurrentResult(historyId);
@@ -232,9 +230,9 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       return;
     }
     await this.client
-      .rpc("/api/removeSession", {
+      .rpc('/api/removeSession', {
         projectId: reference.projectId,
-        reason: "deletePreviousSession",
+        reason: 'deletePreviousSession',
         sessionId: reference.sessionId,
       })
       .catch(() => undefined);
@@ -247,17 +245,16 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
   }> {
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
     return settings.remoteMachines.flatMap((machine) =>
-      this.remotePresentations.has(machine.id)
-        ? [{ machineId: machine.id, machineName: machine.name }]
-        : [],
+      this.remotePresentations.has(machine.id) ? [{ machineId: machine.id, machineName: machine.name }] : []
     );
   },
 
-  postPreviousSessionsResult(this: GpuiSidebarRuntime,
+  postPreviousSessionsResult(
+    this: GpuiSidebarRuntime,
     requestId: string,
     query: string | undefined,
     previousSessions: SidebarPreviousSessionItem[],
-    cursor?: string,
+    cursor?: string
   ): void {
     this.previousSessionsResult = {
       cursor,
@@ -273,7 +270,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       previousSessions,
       query,
       requestId,
-      type: "previousSessionsResult",
+      type: 'previousSessionsResult',
     });
   },
 
@@ -287,10 +284,11 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       previousResult.requestId,
       previousResult.query,
       previousResult.previousSessions.filter((session) => session.historyId !== historyId),
-      previousResult.cursor,
+      previousResult.cursor
     );
   },
 };
 
-const gpuiSidebarRuntimePreviousSessionMethodsShapeCheck: GpuiSidebarRuntimePreviousSessionMethods = gpuiSidebarRuntimePreviousSessionMethods;
+const gpuiSidebarRuntimePreviousSessionMethodsShapeCheck: GpuiSidebarRuntimePreviousSessionMethods =
+  gpuiSidebarRuntimePreviousSessionMethods;
 void gpuiSidebarRuntimePreviousSessionMethodsShapeCheck;

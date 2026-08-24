@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 /*
  * CDXC:SidebarV2 2026-07-29:

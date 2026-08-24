@@ -1,14 +1,14 @@
-import { IconAlertTriangle, IconChevronRight } from "@tabler/icons-react";
-import { CollisionPriority } from "@dnd-kit/abstract";
-import { useSortable } from "@dnd-kit/react/sortable";
-import { useCallback, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { createGroupDropData } from "../sidebar-dnd";
-import { groupSensors } from "../session-group-section";
-import { AppTooltip } from "../app-tooltip";
-import { SIDEBAR_ITEM_TOOLTIP_DELAY_MS } from "../tooltip-delay";
-import { SidebarV2ProjectIcon } from "./sidebar-v2-icons";
-import { useSidebarCollapsiblePresence } from "../sidebar-collapse-animation";
-import type { SidebarV2GroupModel } from "./sidebar-v2-view-model";
+import { IconAlertTriangle, IconChevronRight } from '@tabler/icons-react';
+import { CollisionPriority } from '@dnd-kit/abstract';
+import { useSortable } from '@dnd-kit/react/sortable';
+import { useCallback, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { createGroupDropData } from '../sidebar-dnd';
+import { groupSensors } from '../session-group-section';
+import { AppTooltip } from '../app-tooltip';
+import { SIDEBAR_ITEM_TOOLTIP_DELAY_MS } from '../tooltip-delay';
+import { SidebarV2ProjectIcon } from './sidebar-v2-icons';
+import { useSidebarCollapsiblePresence } from '../sidebar-collapse-animation';
+import type { SidebarV2GroupModel } from './sidebar-v2-view-model';
 
 /*
  * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
@@ -54,7 +54,7 @@ export type SidebarV2ProjectGroupSectionProps = {
   /** The group body (V2 session cards and the per-project shelves). */
   children?: ReactNode;
   /** Live drop-line position for this row, from SidebarApp's group indicator. */
-  dropPosition?: "after" | "before";
+  dropPosition?: 'after' | 'before';
   group: SidebarV2GroupModel;
   /** Trailing hover-revealed controls; V2 passes its per-project create "+". */
   headerActions?: ReactNode;
@@ -81,7 +81,7 @@ export type SidebarV2ProjectGroupSectionProps = {
   onResolveMissingProjectFolder?: () => void;
   onSetCollapsed: (collapsed: boolean) => void;
   projectPath?: string;
-  projectPathState?: "available" | "missing" | "notDirectory" | "unavailable";
+  projectPathState?: 'available' | 'missing' | 'notDirectory' | 'unavailable';
   showProjectIcons: boolean;
 };
 
@@ -111,17 +111,17 @@ export function SidebarV2ProjectGroupSection({
      * collision set identical so a session drag behaves the same in both
      * sidebars instead of finding a differently-shaped target list.
      */
-    accept: ["group", "session"],
+    accept: ['group', 'session'],
     collisionPriority: CollisionPriority.Low,
     data: createGroupDropData(group.groupId),
     disabled: isDragDisabled,
-    feedback: "none",
+    feedback: 'none',
     id: group.groupId,
     index,
     sensors: groupSensors,
-    type: "group",
+    type: 'group',
   });
-  const collapseLabel = `${isCollapsed ? "Expand" : "Collapse"} ${group.title}`;
+  const collapseLabel = `${isCollapsed ? 'Expand' : 'Collapse'} ${group.title}`;
   const {
     isPresent: shouldRenderBody,
     isVisuallyCollapsed: isBodyVisuallyCollapsed,
@@ -133,12 +133,12 @@ export function SidebarV2ProjectGroupSection({
       event.stopPropagation();
       onSetCollapsed(!isCollapsed);
     },
-    [isCollapsed, onSetCollapsed],
+    [isCollapsed, onSetCollapsed]
   );
 
   return (
     <section
-      className="group sidebar-v2-group"
+      className='group sidebar-v2-group'
       data-active={String(isActive)}
       data-collapsed={String(isCollapsed)}
       data-contains-active-session={String(containsActiveSession)}
@@ -152,7 +152,7 @@ export function SidebarV2ProjectGroupSection({
        * "not a project" through `isDragDisabled` plus its exclusion from
        * SidebarApp's drag candidate list, which is what actually matters.
        */
-      data-project-group="true"
+      data-project-group='true'
       data-project-path-state={projectPathState}
       data-sidebar-group-id={group.groupId}
       data-sidebar-v2-group-id={group.groupId}
@@ -160,16 +160,13 @@ export function SidebarV2ProjectGroupSection({
       ref={sortable.ref}
     >
       <div
-        className="group-head"
-        data-collapsible="true"
+        className='group-head'
+        data-collapsible='true'
         onContextMenu={onContextMenu}
         ref={isDragDisabled ? undefined : sortable.handleRef}
       >
-        <div className="group-title-wrap">
-          <div
-            className="group-title-row"
-            data-project-leading-icon={String(showProjectIcons)}
-          >
+        <div className='group-title-wrap'>
+          <div className='group-title-row' data-project-leading-icon={String(showProjectIcons)}>
             {/*
              * V1's collapse control, kept as a real button sibling of the title
              * button (a button inside a button is invalid markup). The chevron is
@@ -180,14 +177,14 @@ export function SidebarV2ProjectGroupSection({
             <button
               aria-expanded={!isCollapsed}
               aria-label={collapseLabel}
-              className="group-collapse-button section-titlebar-toggle sidebar-v2-group-collapse"
+              className='group-collapse-button section-titlebar-toggle sidebar-v2-group-collapse'
               data-collapsed={String(isCollapsed)}
               onClick={toggleCollapsed}
-              type="button"
+              type='button'
             >
               <IconChevronRight
-                aria-hidden="true"
-                className="group-collapse-icon sidebar-v2-group-chevron"
+                aria-hidden='true'
+                className='group-collapse-icon sidebar-v2-group-chevron'
                 data-expanded={String(!isCollapsed)}
                 size={14}
                 stroke={2}
@@ -196,47 +193,43 @@ export function SidebarV2ProjectGroupSection({
             {showProjectIcons ? (
               <SidebarV2ProjectIcon
                 discoveredIconDataUrl={group.discoveredIconDataUrl}
-                fallback={
-                  group.isWorktree ? "worktree" : isCollapsed ? "folder" : "folder-open"
-                }
+                fallback={group.isWorktree ? 'worktree' : isCollapsed ? 'folder' : 'folder-open'}
                 icon={group.icon}
                 iconDataUrl={group.iconDataUrl}
                 title={group.title}
                 tooltipDelay={SIDEBAR_ITEM_TOOLTIP_DELAY_MS}
               />
             ) : null}
-            {projectPathState !== undefined && projectPathState !== "available" ? (
-              <AppTooltip
-                content={projectPath ? `Folder not found: ${projectPath}` : "Project folder unavailable"}
-              >
+            {projectPathState !== undefined && projectPathState !== 'available' ? (
+              <AppTooltip content={projectPath ? `Folder not found: ${projectPath}` : 'Project folder unavailable'}>
                 <button
                   aria-label={`Resolve missing folder for ${group.title}`}
-                  className="group-project-path-warning"
+                  className='group-project-path-warning'
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     onResolveMissingProjectFolder?.();
                   }}
-                  type="button"
+                  type='button'
                 >
-                  <IconAlertTriangle aria-hidden="true" size={14} stroke={1.9} />
+                  <IconAlertTriangle aria-hidden='true' size={14} stroke={1.9} />
                 </button>
               </AppTooltip>
             ) : null}
-            <div className="group-title-handle" data-draggable="false">
+            <div className='group-title-handle' data-draggable='false'>
               <button
                 aria-expanded={!isCollapsed}
                 aria-label={collapseLabel}
-                className="group-title-button"
-                data-empty-project="false"
+                className='group-title-button'
+                data-empty-project='false'
                 onClick={toggleCollapsed}
-                type="button"
+                type='button'
               >
-                <span className="group-title section-titlebar-label">{group.title}</span>
+                <span className='group-title section-titlebar-label'>{group.title}</span>
               </button>
             </div>
-            <div className="group-title-spacer" />
-            <span className="sidebar-v2-group-count">{group.sessionCount}</span>
+            <div className='group-title-spacer' />
+            <span className='sidebar-v2-group-count'>{group.sessionCount}</span>
             {headerActions ? (
               /*
                * `.group-header-actions` is not decoration: V1's CSS reveals it on
@@ -244,7 +237,7 @@ export function SidebarV2ProjectGroupSection({
                * `shouldPreventGroupDragActivation` reads this exact classname to
                * keep clicks on these controls from starting a project drag.
                */
-              <div className="group-header-actions">{headerActions}</div>
+              <div className='group-header-actions'>{headerActions}</div>
             ) : null}
           </div>
         </div>
@@ -252,7 +245,7 @@ export function SidebarV2ProjectGroupSection({
       {shouldRenderBody ? (
         <div
           aria-hidden={isBodyVisuallyCollapsed}
-          className="sidebar-v2-group-body sidebar-animated-collapse-body"
+          className='sidebar-v2-group-body sidebar-animated-collapse-body'
           data-collapsed={String(isBodyVisuallyCollapsed)}
           inert={isBodyVisuallyCollapsed ? true : undefined}
           ref={setBodyElement}

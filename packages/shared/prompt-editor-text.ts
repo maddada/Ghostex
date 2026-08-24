@@ -10,5 +10,5 @@
  * preserving indentation, internal spaces, blank lines, and line endings.
  */
 export function trimPromptEditorTrailingSpaces(text: string): string {
-  return text.replace(/[ \t]+(?=\r\n|\n|\r|$)/g, "");
+  return text.replace(/[ \t]+(?=\r\n|\n|\r|$)/g, '');
 }

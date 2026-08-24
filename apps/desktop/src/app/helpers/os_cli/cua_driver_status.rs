@@ -26,7 +26,9 @@ pub(crate) struct GpuiCuaDriverUpdateStatus {
     pub(crate) update_available: Option<bool>,
 }
 
-pub(crate) fn gpui_cua_driver_update_status(cua_driver_path: Option<&Path>) -> GpuiCuaDriverUpdateStatus {
+pub(crate) fn gpui_cua_driver_update_status(
+    cua_driver_path: Option<&Path>,
+) -> GpuiCuaDriverUpdateStatus {
     let Some(cua_driver_path) = cua_driver_path else {
         return GpuiCuaDriverUpdateStatus::default();
     };
@@ -198,7 +200,10 @@ pub(crate) fn gpui_parse_cua_permission_payload(output: &str) -> Option<serde_js
     serde_json::from_str::<serde_json::Value>(&trimmed[start..=end]).ok()
 }
 
-pub(crate) fn gpui_parse_cua_permission(payload: Option<&serde_json::Value>, key: &str) -> Option<bool> {
+pub(crate) fn gpui_parse_cua_permission(
+    payload: Option<&serde_json::Value>,
+    key: &str,
+) -> Option<bool> {
     payload?.get(key)?.as_bool()
 }
 
@@ -222,4 +227,3 @@ pub(crate) fn gpui_cua_driver_permission_detail(
         _ => "Unable to check Cua Driver permissions without prompting.".to_string(),
     }
 }
-

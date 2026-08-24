@@ -3,7 +3,7 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import { parseGpuiWorkspaceSessionSubgroupId } from "../workspace-session-groups";
+import { parseGpuiWorkspaceSessionSubgroupId } from '../workspace-session-groups';
 import {
   APP_SHOT_PROMPT_INSERT_RESULT_TIMEOUT_MS,
   APP_SHOT_RECENT_TARGET_MS,
@@ -18,8 +18,8 @@ import {
   GPUI_SIDEBAR_OPEN_BROWSER_URL_MAX_CHARS,
   GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE,
   GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION,
-} from "./constants";
-import type { GpuiSidebarRuntime } from "./core";
+} from './constants';
+import type { GpuiSidebarRuntime } from './core';
 import {
   formatGpuiNativeAppShotPrompt,
   isNativeAppShotAgentSession,
@@ -28,60 +28,50 @@ import {
   nativeAppShotPromptSessionIdForSidebarSession,
   normalizeGpuiNativeAppShotCapture,
   normalizeGpuiNativeAppShotPromptResult,
-} from "./helpers/app-shot";
-import { createGpuiSidebarSettings } from "./helpers/bootstrap";
+} from './helpers/app-shot';
+import { createGpuiSidebarSettings } from './helpers/bootstrap';
 import {
   normalizeGpuiCommandPaletteRunSidebarCommand,
   normalizeGpuiCommandPaletteSessionFocus,
-} from "./helpers/command-palette";
-import { normalizeNonEmptyString, readGpuiRecordString } from "./helpers/records";
+} from './helpers/command-palette';
+import { normalizeNonEmptyString, readGpuiRecordString } from './helpers/records';
 import {
   createGpuiRemotePresentationGroupId,
   createGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationGroupId,
   parseGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationSessionId,
-} from "./helpers/remote-presentation";
+} from './helpers/remote-presentation';
 import {
   normalizeGpuiRendererCommandRenameTitle,
   parseGpuiRendererCommandGlobalSessionRef,
   readGpuiRendererCommandSessionTarget,
-} from "./helpers/renderer-commands";
+} from './helpers/renderer-commands';
 import {
   gpuiMenuBarStatusSessionFocusRoutingId,
   normalizeGpuiMenuBarProjectActivation,
   normalizeGpuiMenuBarSessionActivation,
   normalizeGpuiStatusPetActivation,
-} from "./helpers/status-indicators";
+} from './helpers/status-indicators';
 import type {
   GpuiPendingNativeAppShotPromptInsertion,
   GpuiRendererCommandResolvedSession,
   GpuiSidebarNativeProjectPathAction,
-} from "./types-and-protocol";
-import { openAppModal, postAppModalHostMessage } from "@/packages/core-ui/app-modal-host-bridge";
-import type { AppToastLevel } from "@/packages/shared/app-toast-contract";
-import { createAppToastRequest } from "@/packages/shared/app-toast-contract";
-import type { PreferredAgentInterface } from "@/packages/shared/ghostex-settings";
+} from './types-and-protocol';
+import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
+import { createAppToastRequest } from '@/packages/shared/app-toast-contract';
+import type { PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectSessionId,
-} from "@/packages/shared/gxserver-presentation-sidebar-projection";
-import type { GxserverRendererCommand } from "@/packages/shared/gxserver-protocol";
-import type {
-  NavigationHistoryEntry,
-} from "@/packages/shared/navigation-history/navigation-history-contract";
-import type {
-  NavigationHistoryRpc,
-} from "@/packages/shared/navigation-history/navigation-history-controller";
-import type {
-  SidebarSessionItem,
-  SidebarToExtensionMessage,
-} from "@/packages/shared/session-grid-contract";
-import type { SidebarCommandButton } from "@/packages/shared/sidebar-commands";
-import {
-  isSidebarCommandConfigured,
-  isSidebarCommandRunMode,
-} from "@/packages/shared/sidebar-commands";
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import type { GxserverRendererCommand } from '@/packages/shared/gxserver-protocol';
+import type { NavigationHistoryEntry } from '@/packages/shared/navigation-history/navigation-history-contract';
+import type { NavigationHistoryRpc } from '@/packages/shared/navigation-history/navigation-history-controller';
+import type { SidebarSessionItem, SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
+import type { SidebarCommandButton } from '@/packages/shared/sidebar-commands';
+import { isSidebarCommandConfigured, isSidebarCommandRunMode } from '@/packages/shared/sidebar-commands';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -110,7 +100,10 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
   resolvePendingNativeAppShotPromptInsertion(pending: GpuiPendingNativeAppShotPromptInsertion, ok: boolean): void;
   rememberNativeAppShotTargetSessionId(sessionId: string): void;
   handleGxserverRendererCommand(command: GxserverRendererCommand): Promise<Record<string, unknown>>;
-  runGxserverRendererCommandButton(rawCommandId: string | undefined, rendererCommand: GxserverRendererCommand): Record<string, unknown>;
+  runGxserverRendererCommandButton(
+    rawCommandId: string | undefined,
+    rendererCommand: GxserverRendererCommand
+  ): Record<string, unknown>;
   openEmbeddedBrowserFromRendererCommand(command: GxserverRendererCommand): Record<string, unknown>;
   resolveEmbeddedBrowserRendererCommandProjectId(scope: {
     groupId?: string;
@@ -118,43 +111,60 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
     projectPath?: string;
   }): string | undefined;
   resolveEmbeddedBrowserKnownProjectId(projectId: string): string | undefined;
-  resolveGxserverRendererCommandSession(payload: Record<string, unknown>): GpuiRendererCommandResolvedSession | undefined;
+  resolveGxserverRendererCommandSession(
+    payload: Record<string, unknown>
+  ): GpuiRendererCommandResolvedSession | undefined;
   hasGpuiRendererCommandLocalSession(projectId: string, sessionId: string): boolean;
   createNavigationHistoryEntry(): NavigationHistoryEntry | undefined;
   navigationHistoryRpc(): NavigationHistoryRpc | undefined;
   activateNavigationHistoryEntry(entry: NavigationHistoryEntry): boolean;
-  postNavigationHistoryState(state: {
-    canGoBack: boolean;
-    canGoForward: boolean;
-  }): void;
-  postAppShotToast(level: AppToastLevel, title: string, options?: {
+  postNavigationHistoryState(state: { canGoBack: boolean; canGoForward: boolean }): void;
+  postAppShotToast(
+    level: AppToastLevel,
+    title: string,
+    options?: {
       description?: string;
-    }): void;
+    }
+  ): void;
   postSidebarActionToast(level: AppToastLevel, title: string, options?: { description?: string }): void;
-  postProjectPathActionForGroup(action: Extract<
+  postProjectPathActionForGroup(
+    action: Extract<
       GpuiSidebarNativeProjectPathAction,
-      "copyWorkspaceProjectPath" | "openWorkspaceProjectInFinder" | "openWorkspaceProjectInIde"
-    >, groupId: string, originalMessage: SidebarToExtensionMessage): void;
-  postActiveProjectPathAction(action: Extract<
+      'copyWorkspaceProjectPath' | 'openWorkspaceProjectInFinder' | 'openWorkspaceProjectInIde'
+    >,
+    groupId: string,
+    originalMessage: SidebarToExtensionMessage
+  ): void;
+  postActiveProjectPathAction(
+    action: Extract<
       GpuiSidebarNativeProjectPathAction,
-      | "openActiveWorkspaceProjectInFinder"
-      | "openActiveWorkspaceProjectInVscode"
-      | "openActiveWorkspaceProjectInZed"
-    >, originalMessage: SidebarToExtensionMessage): void;
-  postNativeProjectPathAction(action: GpuiSidebarNativeProjectPathAction, projectId: string, originalMessage: SidebarToExtensionMessage, options?: { filePath?: string; preferredInterface?: PreferredAgentInterface }): boolean;
-  postSidebarCommandAction(command: SidebarCommandButton, selectionMessage: Extract<SidebarToExtensionMessage, { type: "runSidebarCommand" }>): boolean;
-  postGhostexHotkeyAction(originalMessage: Extract<SidebarToExtensionMessage, { type: "runGhostexHotkeyAction" }>): boolean;
+      'openActiveWorkspaceProjectInFinder' | 'openActiveWorkspaceProjectInVscode' | 'openActiveWorkspaceProjectInZed'
+    >,
+    originalMessage: SidebarToExtensionMessage
+  ): void;
+  postNativeProjectPathAction(
+    action: GpuiSidebarNativeProjectPathAction,
+    projectId: string,
+    originalMessage: SidebarToExtensionMessage,
+    options?: { filePath?: string; preferredInterface?: PreferredAgentInterface }
+  ): boolean;
+  postSidebarCommandAction(
+    command: SidebarCommandButton,
+    selectionMessage: Extract<SidebarToExtensionMessage, { type: 'runSidebarCommand' }>
+  ): boolean;
+  postGhostexHotkeyAction(
+    originalMessage: Extract<SidebarToExtensionMessage, { type: 'runGhostexHotkeyAction' }>
+  ): boolean;
   postSidebarCommandRunEnd(commandId: string, originalMessage: SidebarToExtensionMessage): boolean;
-  saveSidebarSettingsPatch(message: Extract<SidebarToExtensionMessage, { type: "updateSettingsPatch" }>): void;
-  openExternalUrl(message: Extract<SidebarToExtensionMessage, { type: "openExternalUrl" }>): void;
-  openAppModal(modal: "firstLaunchSetup" | "settings" | "watchGhostexVideo"): void;
+  saveSidebarSettingsPatch(message: Extract<SidebarToExtensionMessage, { type: 'updateSettingsPatch' }>): void;
+  openExternalUrl(message: Extract<SidebarToExtensionMessage, { type: 'openExternalUrl' }>): void;
+  openAppModal(modal: 'firstLaunchSetup' | 'settings' | 'watchGhostexVideo'): void;
   saveScratchPad(content: string): Promise<void>;
-  savePinnedPrompt(message: Extract<SidebarToExtensionMessage, { type: "savePinnedPrompt" }>): Promise<void>;
+  savePinnedPrompt(message: Extract<SidebarToExtensionMessage, { type: 'savePinnedPrompt' }>): Promise<void>;
   publishAppUserDataHydrate(): void;
 }
 
 export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
-
   handleGpuiStatusPetActivation(this: GpuiSidebarRuntime, payload: unknown): void {
     const activation = normalizeGpuiStatusPetActivation(payload);
     if (!activation) {
@@ -166,7 +176,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     */
     void this.focusSession(activation.sessionId, {
       sessionId: activation.sessionId,
-      type: "focusSession",
+      type: 'focusSession',
     });
   },
 
@@ -181,15 +191,12 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     */
     const remoteProject = parseGpuiRemotePresentationProjectId(activation.projectId);
     if (remoteProject) {
-      this.activeGroupId = createGpuiRemotePresentationGroupId(
-        remoteProject.machineId,
-        remoteProject.projectId,
-      );
+      this.activeGroupId = createGpuiRemotePresentationGroupId(remoteProject.machineId, remoteProject.projectId);
       this.publishRemotePresentationPatch();
       return;
     }
     this.focusProjectId(activation.projectId);
-    this.publishPresentation("patch");
+    this.publishPresentation('patch');
   },
 
   async handleGpuiMenuBarSessionActivation(this: GpuiSidebarRuntime, payload: unknown): Promise<void> {
@@ -201,13 +208,10 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
     Running Agents session rows should behave like sidebar session-card clicks. Normalize raw local gxserver ids into the existing project-scoped presentation id when needed, then reuse focusSession so local clicks update presentation focus and post WorkspaceTerminalFocus back to Rust for terminal selection/materialization.
     */
-    const sessionId = gpuiMenuBarStatusSessionFocusRoutingId(
-      activation.projectId,
-      activation.sessionId,
-    );
+    const sessionId = gpuiMenuBarStatusSessionFocusRoutingId(activation.projectId, activation.sessionId);
     await this.focusSession(sessionId, {
       sessionId,
-      type: "focusSession",
+      type: 'focusSession',
     });
   },
 
@@ -224,7 +228,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
     await this.focusSession(sessionId, {
       sessionId,
-      type: "focusSession",
+      type: 'focusSession',
     });
   },
 
@@ -246,31 +250,32 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
   async handleNativeAppShotCaptured(this: GpuiSidebarRuntime, payload: unknown): Promise<void> {
     const appShot = normalizeGpuiNativeAppShotCapture(payload);
     if (!appShot) {
-      this.postAppShotToast("warning", "App Shot Failed", {
-        description: "Could not read the native App Shot.",
+      this.postAppShotToast('warning', 'App Shot Failed', {
+        description: 'Could not read the native App Shot.',
       });
       return;
     }
 
     const prompt = formatGpuiNativeAppShotPrompt(
       appShot,
-      createGpuiSidebarSettings(this.runtimeSettings).appShotsMetadataEnabled,
+      createGpuiSidebarSettings(this.runtimeSettings).appShotsMetadataEnabled
     );
     const staged = await this.stageNativeAppShotInAgentSession(prompt);
     if (!staged.ok) {
-      this.postAppShotToast("warning", "App Shot Failed", {
+      this.postAppShotToast('warning', 'App Shot Failed', {
         description: staged.description,
       });
       return;
     }
 
-    this.postAppShotToast("success", "App Shot Added", {
+    this.postAppShotToast('success', 'App Shot Added', {
       description: appShot.appName,
     });
   },
 
-  async stageNativeAppShotInAgentSession(this: GpuiSidebarRuntime,
-    prompt: string,
+  async stageNativeAppShotInAgentSession(
+    this: GpuiSidebarRuntime,
+    prompt: string
   ): Promise<{ ok: true } | { description: string; ok: false }> {
     /*
     CDXC:GPUIAppShots 2026-06-25-23:28:
@@ -280,30 +285,27 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     Existing-session App Shot targeting now accepts live remote agent rows by their machine-scoped presentation session id, but only as an insertion request to Rust. React must not wake, materialize, or open remote attach tabs for App Shots; Rust may write only when that exact remote attach surface is already mounted.
     */
     const targetSession = this.resolveNativeAppShotTargetSession();
-    if (
-      targetSession &&
-      (await this.stageNativeAppShotInExistingAgentSession(targetSession, prompt))
-    ) {
+    if (targetSession && (await this.stageNativeAppShotInExistingAgentSession(targetSession, prompt))) {
       return { ok: true };
     }
 
     if (!this.client) {
       return {
-        description: "The local agent service is not ready.",
+        description: 'The local agent service is not ready.',
         ok: false,
       };
     }
     const project = this.activeDomainProject();
     if (!project) {
       return {
-        description: "Open a project before using App Shots.",
+        description: 'Open a project before using App Shots.',
         ok: false,
       };
     }
     const agent = this.resolveDefaultPromptAgent();
     if (!agent?.command?.trim()) {
       return {
-        description: "Choose a configured default prompt agent before using App Shots.",
+        description: 'Choose a configured default prompt agent before using App Shots.',
         ok: false,
       };
     }
@@ -314,15 +316,16 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       return { ok: true };
     } catch {
       return {
-        description: "Could not stage the App Shot in an agent session.",
+        description: 'Could not stage the App Shot in an agent session.',
         ok: false,
       };
     }
   },
 
-  async stageNativeAppShotInExistingAgentSession(this: GpuiSidebarRuntime,
+  async stageNativeAppShotInExistingAgentSession(
+    this: GpuiSidebarRuntime,
     session: SidebarSessionItem,
-    prompt: string,
+    prompt: string
   ): Promise<boolean> {
     const sessionId = nativeAppShotPromptSessionIdForSidebarSession(session);
     if (!sessionId) {
@@ -374,8 +377,9 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     return undefined;
   },
 
-  findNativeAppShotSessionByPresentationSessionId(this: GpuiSidebarRuntime,
-    sessionId: string,
+  findNativeAppShotSessionByPresentationSessionId(
+    this: GpuiSidebarRuntime,
+    sessionId: string
   ): SidebarSessionItem | undefined {
     const normalizedSessionId = normalizeNonEmptyString(sessionId);
     if (!normalizedSessionId) {
@@ -387,8 +391,9 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     return this.findNativeAppShotSessionByLocalGxserverSessionId(normalizedSessionId);
   },
 
-  findNativeAppShotSessionByLocalGxserverSessionId(this: GpuiSidebarRuntime,
-    sessionId: string,
+  findNativeAppShotSessionByLocalGxserverSessionId(
+    this: GpuiSidebarRuntime,
+    sessionId: string
   ): SidebarSessionItem | undefined {
     const normalizedSessionId = normalizeNonEmptyString(sessionId);
     if (!normalizedSessionId || parseGpuiRemotePresentationSessionId(normalizedSessionId)) {
@@ -399,7 +404,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
         continue;
       }
       const session = group.sessions.find(
-        (candidate) => localGxserverSessionIdForSidebarSession(candidate) === normalizedSessionId,
+        (candidate) => localGxserverSessionIdForSidebarSession(candidate) === normalizedSessionId
       );
       if (session) {
         return session;
@@ -408,8 +413,9 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     return undefined;
   },
 
-  findNativeAppShotSessionByRemotePresentationSessionId(this: GpuiSidebarRuntime,
-    sessionId: string,
+  findNativeAppShotSessionByRemotePresentationSessionId(
+    this: GpuiSidebarRuntime,
+    sessionId: string
   ): SidebarSessionItem | undefined {
     const normalizedSessionId = normalizeNonEmptyString(sessionId);
     if (!normalizedSessionId || !parseGpuiRemotePresentationSessionId(normalizedSessionId)) {
@@ -419,9 +425,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       if (!group.remoteMachineContext) {
         continue;
       }
-      const session = group.sessions.find(
-        (candidate) => candidate.sessionId === normalizedSessionId,
-      );
+      const session = group.sessions.find((candidate) => candidate.sessionId === normalizedSessionId);
       if (session) {
         return session;
       }
@@ -429,12 +433,13 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     return undefined;
   },
 
-  async postNativeAppShotPromptToSession(this: GpuiSidebarRuntime,
+  async postNativeAppShotPromptToSession(
+    this: GpuiSidebarRuntime,
     sessionId: string,
-    prompt: string,
+    prompt: string
   ): Promise<boolean> {
     const postPrompt = window.ghostexGpui?.postNativeAppShotPromptToSession;
-    if (typeof postPrompt !== "function") {
+    if (typeof postPrompt !== 'function') {
       return false;
     }
     const payload = JSON.stringify({
@@ -472,7 +477,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       return;
     }
     const pending = this.pendingNativeAppShotPromptInsertions.find(
-      (candidate) => candidate.sessionId === result.sessionId,
+      (candidate) => candidate.sessionId === result.sessionId
     );
     if (!pending) {
       return;
@@ -480,9 +485,10 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     this.resolvePendingNativeAppShotPromptInsertion(pending, result.ok);
   },
 
-  resolvePendingNativeAppShotPromptInsertion(this: GpuiSidebarRuntime,
+  resolvePendingNativeAppShotPromptInsertion(
+    this: GpuiSidebarRuntime,
     pending: GpuiPendingNativeAppShotPromptInsertion,
-    ok: boolean,
+    ok: boolean
   ): void {
     const index = this.pendingNativeAppShotPromptInsertions.indexOf(pending);
     if (index >= 0) {
@@ -501,18 +507,19 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     this.lastAppShotTargetAt = Date.now();
   },
 
-  async handleGxserverRendererCommand(this: GpuiSidebarRuntime,
-    command: GxserverRendererCommand,
+  async handleGxserverRendererCommand(
+    this: GpuiSidebarRuntime,
+    command: GxserverRendererCommand
   ): Promise<Record<string, unknown>> {
     switch (command.action) {
-      case "focusSession": {
+      case 'focusSession': {
         const resolvedSession = this.resolveGxserverRendererCommandSession(command.payload);
         if (!resolvedSession) {
-          throw new Error("No matching session was found.");
+          throw new Error('No matching session was found.');
         }
         await this.focusSession(resolvedSession.sidebarSessionId, {
           sessionId: resolvedSession.sidebarSessionId,
-          type: "focusSession",
+          type: 'focusSession',
         });
         return {
           ok: true,
@@ -523,23 +530,19 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
           },
         };
       }
-      case "renameCommand": {
+      case 'renameCommand': {
         const resolvedSession = this.resolveGxserverRendererCommandSession(command.payload);
         if (!resolvedSession) {
-          throw new Error("No matching session was found.");
+          throw new Error('No matching session was found.');
         }
         const title = normalizeGpuiRendererCommandRenameTitle(command.payload);
         if (!title) {
-          throw new Error("Invalid renderer command title.");
+          throw new Error('Invalid renderer command title.');
         }
-        this.postLocalWorkspaceTerminalRenameCommand(
-          resolvedSession.projectId,
-          resolvedSession.sessionId,
-          title,
-        );
+        this.postLocalWorkspaceTerminalRenameCommand(resolvedSession.projectId, resolvedSession.sessionId, title);
         return {
           accepted: true,
-          action: "renameCommand",
+          action: 'renameCommand',
           ok: true,
           session: {
             ghostexId: resolvedSession.sidebarSessionId,
@@ -548,32 +551,27 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
           },
         };
       }
-      case "runCommand":
-        return this.runGxserverRendererCommandButton(
-          readGpuiRecordString(command.payload, "commandId"),
-          command,
-        );
-      case "openBrowser":
-      case "openBrowserPane":
+      case 'runCommand':
+        return this.runGxserverRendererCommandButton(readGpuiRecordString(command.payload, 'commandId'), command);
+      case 'openBrowser':
+      case 'openBrowserPane':
         return this.openEmbeddedBrowserFromRendererCommand(command);
-      case "clickButton": {
-        const kind = readGpuiRecordString(command.payload, "kind")?.trim();
-        if (kind !== "command") {
-          throw new Error("Unsupported renderer command.");
+      case 'clickButton': {
+        const kind = readGpuiRecordString(command.payload, 'kind')?.trim();
+        if (kind !== 'command') {
+          throw new Error('Unsupported renderer command.');
         }
-        return this.runGxserverRendererCommandButton(
-          readGpuiRecordString(command.payload, "id"),
-          command,
-        );
+        return this.runGxserverRendererCommandButton(readGpuiRecordString(command.payload, 'id'), command);
       }
       default:
-        throw new Error("Unsupported renderer command.");
+        throw new Error('Unsupported renderer command.');
     }
   },
 
-  runGxserverRendererCommandButton(this: GpuiSidebarRuntime,
+  runGxserverRendererCommandButton(
+    this: GpuiSidebarRuntime,
     rawCommandId: string | undefined,
-    rendererCommand: GxserverRendererCommand,
+    rendererCommand: GxserverRendererCommand
   ): Record<string, unknown> {
     /*
     CDXC:GxserverRendererCommands 2026-06-27-05:51:
@@ -581,18 +579,18 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     */
     const commandId = normalizeNonEmptyString(rawCommandId)?.trim();
     if (!commandId) {
-      throw new Error("Unsupported renderer command.");
+      throw new Error('Unsupported renderer command.');
     }
     const command = this.resolveSidebarCommand(commandId);
     if (!command || !isSidebarCommandConfigured(command)) {
-      throw new Error("Unsupported renderer command.");
+      throw new Error('Unsupported renderer command.');
     }
-    const selectionMessage: Extract<SidebarToExtensionMessage, { type: "runSidebarCommand" }> = {
+    const selectionMessage: Extract<SidebarToExtensionMessage, { type: 'runSidebarCommand' }> = {
       commandId,
-      type: "runSidebarCommand",
+      type: 'runSidebarCommand',
     };
     if (!this.postSidebarCommandAction(command, selectionMessage)) {
-      throw new Error("Renderer command bridge unavailable.");
+      throw new Error('Renderer command bridge unavailable.');
     }
     return {
       accepted: true,
@@ -601,8 +599,9 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     };
   },
 
-  openEmbeddedBrowserFromRendererCommand(this: GpuiSidebarRuntime,
-    command: GxserverRendererCommand,
+  openEmbeddedBrowserFromRendererCommand(
+    this: GpuiSidebarRuntime,
+    command: GxserverRendererCommand
   ): Record<string, unknown> {
     /*
     macOS `openNativeBrowserPaneFromCli` parity for `ghostex browser open` /
@@ -612,25 +611,25 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     untargeted `--active-project` open keeps using the current Browser model.
     */
     const post = window.ghostexGpui?.postOpenBrowserUrl;
-    if (typeof post !== "function") {
-      throw new Error("Renderer command bridge unavailable.");
+    if (typeof post !== 'function') {
+      throw new Error('Renderer command bridge unavailable.');
     }
-    const url = readGpuiRecordString(command.payload, "url")?.trim() ?? "";
+    const url = readGpuiRecordString(command.payload, 'url')?.trim() ?? '';
     if (url.length > GPUI_SIDEBAR_OPEN_BROWSER_URL_MAX_CHARS) {
-      throw new Error("Invalid renderer command URL.");
+      throw new Error('Invalid renderer command URL.');
     }
-    const rawReuse = readGpuiRecordString(command.payload, "reuse")?.trim().toLowerCase();
-    const reuse = rawReuse === "exact" || rawReuse === "none" ? rawReuse : "similar";
-    const groupId = readGpuiRecordString(command.payload, "groupId")?.trim();
-    const requestedProjectId = readGpuiRecordString(command.payload, "projectId")?.trim();
-    const projectPath = readGpuiRecordString(command.payload, "projectPath")?.trim();
+    const rawReuse = readGpuiRecordString(command.payload, 'reuse')?.trim().toLowerCase();
+    const reuse = rawReuse === 'exact' || rawReuse === 'none' ? rawReuse : 'similar';
+    const groupId = readGpuiRecordString(command.payload, 'groupId')?.trim();
+    const requestedProjectId = readGpuiRecordString(command.payload, 'projectId')?.trim();
+    const projectPath = readGpuiRecordString(command.payload, 'projectPath')?.trim();
     const projectId = this.resolveEmbeddedBrowserRendererCommandProjectId({
       groupId,
       projectId: requestedProjectId,
       projectPath,
     });
     if ((groupId || requestedProjectId || projectPath) && !projectId) {
-      throw new Error("No matching project was found.");
+      throw new Error('No matching project was found.');
     }
     const payload = JSON.stringify({
       ...(projectId ? { projectId } : {}),
@@ -640,7 +639,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       version: GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION,
     });
     if (!post(payload)) {
-      throw new Error("Renderer command bridge unavailable.");
+      throw new Error('Renderer command bridge unavailable.');
     }
     return {
       accepted: true,
@@ -649,16 +648,17 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     };
   },
 
-  resolveEmbeddedBrowserRendererCommandProjectId(this: GpuiSidebarRuntime, scope: {
-    groupId?: string;
-    projectId?: string;
-    projectPath?: string;
-  }): string | undefined {
+  resolveEmbeddedBrowserRendererCommandProjectId(
+    this: GpuiSidebarRuntime,
+    scope: {
+      groupId?: string;
+      projectId?: string;
+      projectPath?: string;
+    }
+  ): string | undefined {
     if (scope.groupId) {
       const groupProjectId = this.resolveWorkspaceGroupProjectId(scope.groupId);
-      return groupProjectId
-        ? this.resolveEmbeddedBrowserKnownProjectId(groupProjectId)
-        : undefined;
+      return groupProjectId ? this.resolveEmbeddedBrowserKnownProjectId(groupProjectId) : undefined;
     }
     if (scope.projectId) {
       return this.resolveEmbeddedBrowserKnownProjectId(scope.projectId);
@@ -674,8 +674,9 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     return this.domainProjectById(projectId)?.projectId;
   },
 
-  resolveGxserverRendererCommandSession(this: GpuiSidebarRuntime,
-    payload: Record<string, unknown>,
+  resolveGxserverRendererCommandSession(
+    this: GpuiSidebarRuntime,
+    payload: Record<string, unknown>
   ): GpuiRendererCommandResolvedSession | undefined {
     /*
     CDXC:GxserverRendererCommands 2026-06-27-02:05:
@@ -683,15 +684,15 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     */
     const target = readGpuiRendererCommandSessionTarget(payload);
     const globalReference = parseGpuiRendererCommandGlobalSessionRef(
-      readGpuiRecordString(target, "globalRef") ?? readGpuiRecordString(payload, "globalRef"),
+      readGpuiRecordString(target, 'globalRef') ?? readGpuiRecordString(payload, 'globalRef')
     );
     const projectId =
-      readGpuiRecordString(target, "projectId")?.trim() ||
-      readGpuiRecordString(payload, "projectId")?.trim() ||
+      readGpuiRecordString(target, 'projectId')?.trim() ||
+      readGpuiRecordString(payload, 'projectId')?.trim() ||
       globalReference?.projectId;
     const sessionId =
-      readGpuiRecordString(target, "sessionId")?.trim() ||
-      readGpuiRecordString(payload, "sessionId")?.trim() ||
+      readGpuiRecordString(target, 'sessionId')?.trim() ||
+      readGpuiRecordString(payload, 'sessionId')?.trim() ||
       globalReference?.sessionId;
     if (!sessionId) {
       return undefined;
@@ -701,9 +702,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       if (projectId && scopedSession.projectId !== projectId) {
         return undefined;
       }
-      if (
-        !this.hasGpuiRendererCommandLocalSession(scopedSession.projectId, scopedSession.sessionId)
-      ) {
+      if (!this.hasGpuiRendererCommandLocalSession(scopedSession.projectId, scopedSession.sessionId)) {
         return undefined;
       }
       return {
@@ -727,9 +726,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
 
   hasGpuiRendererCommandLocalSession(this: GpuiSidebarRuntime, projectId: string, sessionId: string): boolean {
     if (
-      this.presentation?.sessions.some(
-        (session) => session.projectId === projectId && session.sessionId === sessionId,
-      )
+      this.presentation?.sessions.some((session) => session.projectId === projectId && session.sessionId === sessionId)
     ) {
       return true;
     }
@@ -737,7 +734,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       group.sessions.some((session) => {
         const reference = parseGxserverPresentationProjectSessionId(session.sessionId);
         return reference?.projectId === projectId && reference.sessionId === sessionId;
-      }),
+      })
     );
   },
 
@@ -761,7 +758,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
     const focusedSession = activeGroup.sessions.find((session) => session.isFocused);
     const sessionLabel = focusedSession
-      ? focusedSession.displayTitle ?? focusedSession.primaryTitle ?? focusedSession.alias
+      ? (focusedSession.displayTitle ?? focusedSession.primaryTitle ?? focusedSession.alias)
       : undefined;
     return {
       groupId: activeGroup.groupId,
@@ -788,14 +785,14 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
   activateNavigationHistoryEntry(this: GpuiSidebarRuntime, entry: NavigationHistoryEntry): boolean {
     if (entry.sessionId) {
       const exists = this.latestGroups.some((group) =>
-        group.sessions.some((session) => session.sessionId === entry.sessionId),
+        group.sessions.some((session) => session.sessionId === entry.sessionId)
       );
       if (!exists) {
         return false;
       }
       void this.focusSession(entry.sessionId, {
         sessionId: entry.sessionId,
-        type: "focusSession",
+        type: 'focusSession',
       });
       return true;
     }
@@ -803,7 +800,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     if (!groupId || !this.latestGroups.some((group) => group.groupId === groupId)) {
       return false;
     }
-    this.focusGroup(groupId, { groupId, type: "focusGroup" });
+    this.focusGroup(groupId, { groupId, type: 'focusGroup' });
     return true;
   },
 
@@ -812,10 +809,13 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
    * never issue an RPC of its own on a render pass. Deduplicated so a publish
    * storm cannot turn into a bridge-message storm.
    */
-  postNavigationHistoryState(this: GpuiSidebarRuntime, state: {
-    canGoBack: boolean;
-    canGoForward: boolean;
-  }): void {
+  postNavigationHistoryState(
+    this: GpuiSidebarRuntime,
+    state: {
+      canGoBack: boolean;
+      canGoForward: boolean;
+    }
+  ): void {
     /*
     CDXC:NavigationHistory 2026-08-19:
     Availability only. The native arrows have no hover tooltip, so sending the
@@ -826,7 +826,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     const message = {
       canGoBack: state.canGoBack,
       canGoForward: state.canGoForward,
-      type: "navigationHistoryState",
+      type: 'navigationHistoryState',
     };
     const payload = JSON.stringify(message);
     if (payload === this.lastNavigationHistoryStatePayload) {
@@ -836,18 +836,16 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     window.webkit?.messageHandlers?.ghostexNativeHost?.postMessage(message);
   },
 
-  postAppShotToast(this: GpuiSidebarRuntime,
+  postAppShotToast(
+    this: GpuiSidebarRuntime,
     level: AppToastLevel,
     title: string,
     options: {
       description?: string;
-    } = {},
+    } = {}
   ): void {
     try {
-      postAppModalHostMessage(
-        createAppToastRequest(level, title, options.description),
-        "AppModals:gpuiAppShotToast",
-      );
+      postAppModalHostMessage(createAppToastRequest(level, title, options.description), 'AppModals:gpuiAppShotToast');
     } catch {
       /*
       CDXC:GPUIAppShots 2026-06-25-23:07:
@@ -856,45 +854,40 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
   },
 
-  postSidebarActionToast(this: GpuiSidebarRuntime,
+  postSidebarActionToast(
+    this: GpuiSidebarRuntime,
     level: AppToastLevel,
     title: string,
-    options: { description?: string } = {},
+    options: { description?: string } = {}
   ): void {
     try {
-      postAppModalHostMessage(
-        createAppToastRequest(level, title, options.description),
-        "GPUISidebarActions:toast",
-      );
+      postAppModalHostMessage(createAppToastRequest(level, title, options.description), 'GPUISidebarActions:toast');
     } catch {
       // Toast-host availability must never gate the underlying action.
     }
   },
 
-  postProjectPathActionForGroup(this: GpuiSidebarRuntime,
+  postProjectPathActionForGroup(
+    this: GpuiSidebarRuntime,
     action: Extract<
       GpuiSidebarNativeProjectPathAction,
-      "copyWorkspaceProjectPath" | "openWorkspaceProjectInFinder" | "openWorkspaceProjectInIde"
+      'copyWorkspaceProjectPath' | 'openWorkspaceProjectInFinder' | 'openWorkspaceProjectInIde'
     >,
     groupId: string,
-    originalMessage: SidebarToExtensionMessage,
+    originalMessage: SidebarToExtensionMessage
   ): void {
     const remoteGroup = parseGpuiRemotePresentationGroupId(groupId);
     if (remoteGroup) {
-      if (action === "copyWorkspaceProjectPath") {
-        this.postRemoteProjectNativeAction("copyRemoteProjectPath", remoteGroup, originalMessage);
+      if (action === 'copyWorkspaceProjectPath') {
+        this.postRemoteProjectNativeAction('copyRemoteProjectPath', remoteGroup, originalMessage);
         return;
       }
-      if (action === "openWorkspaceProjectInIde") {
-        this.postRemoteProjectNativeAction(
-          "openRemoteWorkspaceProjectInIde",
-          remoteGroup,
-          originalMessage,
-        );
+      if (action === 'openWorkspaceProjectInIde') {
+        this.postRemoteProjectNativeAction('openRemoteWorkspaceProjectInIde', remoteGroup, originalMessage);
         return;
       }
-      this.postRemoteToast("warning", "Remote project open unavailable", {
-        description: "GPUI does not open remote project paths in local Finder.",
+      this.postRemoteToast('warning', 'Remote project open unavailable', {
+        description: 'GPUI does not open remote project paths in local Finder.',
       });
       return;
     }
@@ -906,40 +899,29 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     this.postNativeProjectPathAction(action, projectId, originalMessage);
   },
 
-  postActiveProjectPathAction(this: GpuiSidebarRuntime,
+  postActiveProjectPathAction(
+    this: GpuiSidebarRuntime,
     action: Extract<
       GpuiSidebarNativeProjectPathAction,
-      | "openActiveWorkspaceProjectInFinder"
-      | "openActiveWorkspaceProjectInVscode"
-      | "openActiveWorkspaceProjectInZed"
+      'openActiveWorkspaceProjectInFinder' | 'openActiveWorkspaceProjectInVscode' | 'openActiveWorkspaceProjectInZed'
     >,
-    originalMessage: SidebarToExtensionMessage,
+    originalMessage: SidebarToExtensionMessage
   ): void {
-    const remoteGroup = this.activeGroupId
-      ? parseGpuiRemotePresentationGroupId(this.activeGroupId)
-      : undefined;
+    const remoteGroup = this.activeGroupId ? parseGpuiRemotePresentationGroupId(this.activeGroupId) : undefined;
     if (remoteGroup) {
-      if (action === "openActiveWorkspaceProjectInVscode") {
-        this.postRemoteProjectNativeAction(
-          "openRemoteWorkspaceProjectInVscode",
-          remoteGroup,
-          originalMessage,
-        );
+      if (action === 'openActiveWorkspaceProjectInVscode') {
+        this.postRemoteProjectNativeAction('openRemoteWorkspaceProjectInVscode', remoteGroup, originalMessage);
         return;
       }
-      if (action === "openActiveWorkspaceProjectInZed") {
-        this.postRemoteProjectNativeAction(
-          "openRemoteWorkspaceProjectInZed",
-          remoteGroup,
-          originalMessage,
-        );
+      if (action === 'openActiveWorkspaceProjectInZed') {
+        this.postRemoteProjectNativeAction('openRemoteWorkspaceProjectInZed', remoteGroup, originalMessage);
         return;
       }
-      this.postRemoteToast("warning", "Remote project open unavailable", {
+      this.postRemoteToast('warning', 'Remote project open unavailable', {
         description:
-          action === "openActiveWorkspaceProjectInFinder"
-            ? "GPUI does not open remote project paths in local Finder."
-            : "That editor is not supported for GPUI remote project opens.",
+          action === 'openActiveWorkspaceProjectInFinder'
+            ? 'GPUI does not open remote project paths in local Finder.'
+            : 'That editor is not supported for GPUI remote project opens.',
       });
       return;
     }
@@ -951,11 +933,12 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     this.postNativeProjectPathAction(action, projectId, originalMessage);
   },
 
-  postNativeProjectPathAction(this: GpuiSidebarRuntime,
+  postNativeProjectPathAction(
+    this: GpuiSidebarRuntime,
     action: GpuiSidebarNativeProjectPathAction,
     projectId: string,
     originalMessage: SidebarToExtensionMessage,
-    options: { filePath?: string; preferredInterface?: PreferredAgentInterface } = {},
+    options: { filePath?: string; preferredInterface?: PreferredAgentInterface } = {}
   ): boolean {
     const normalizedProjectId = projectId.trim();
     if (!normalizedProjectId) {
@@ -970,9 +953,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     const payload = JSON.stringify({
       action,
       ...(options.filePath ? { filePath: options.filePath } : {}),
-      ...(options.preferredInterface
-        ? { preferredInterface: options.preferredInterface }
-        : {}),
+      ...(options.preferredInterface ? { preferredInterface: options.preferredInterface } : {}),
       projectId: normalizedProjectId,
       type: GPUI_SIDEBAR_NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE,
       version: GPUI_SIDEBAR_NATIVE_PROJECT_PATH_ACTION_MESSAGE_VERSION,
@@ -989,9 +970,10 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
   },
 
-  postSidebarCommandAction(this: GpuiSidebarRuntime,
+  postSidebarCommandAction(
+    this: GpuiSidebarRuntime,
     command: SidebarCommandButton,
-    selectionMessage: Extract<SidebarToExtensionMessage, { type: "runSidebarCommand" }>,
+    selectionMessage: Extract<SidebarToExtensionMessage, { type: 'runSidebarCommand' }>
   ): boolean {
     const bridge = window.ghostexGpui?.postSidebarCommandAction;
     if (!bridge) {
@@ -1006,12 +988,12 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       CDXC:GPUICommandPane 2026-06-27-07:54:
       `runSidebarCommand` reaches the launch bridge only after GPUI rebuilds it as a selector-shaped object. Forward an own, validated runMode only for terminal Actions so Rust can create the visible debug workspace terminal like macOS while all other launch metadata stays resolved from the trusted HUD command.
       */
-      ...(command.actionType === "terminal" &&
+      ...(command.actionType === 'terminal' &&
       selectionMessage.runMode &&
       isSidebarCommandRunMode(selectionMessage.runMode)
         ? { runMode: selectionMessage.runMode }
         : {}),
-      ...(command.actionType === "terminal"
+      ...(command.actionType === 'terminal'
         ? {
             /*
             CDXC:GPUICommandPane 2026-06-27-07:54:
@@ -1021,11 +1003,11 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
             playCompletionSound: command.playCompletionSound,
           }
         : {}),
-      ...(command.actionType === "terminal" && command.command ? { command: command.command } : {}),
-      ...(command.actionType === "terminal" && command.links && command.links.length > 0
+      ...(command.actionType === 'terminal' && command.command ? { command: command.command } : {}),
+      ...(command.actionType === 'terminal' && command.links && command.links.length > 0
         ? { links: command.links.map((link) => ({ target: link.target, url: link.url })) }
         : {}),
-      ...(command.actionType === "browser" && command.url ? { url: command.url } : {}),
+      ...(command.actionType === 'browser' && command.url ? { url: command.url } : {}),
       type: GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_TYPE,
       version: GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_VERSION,
     });
@@ -1041,8 +1023,9 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
   },
 
-  postGhostexHotkeyAction(this: GpuiSidebarRuntime,
-    originalMessage: Extract<SidebarToExtensionMessage, { type: "runGhostexHotkeyAction" }>,
+  postGhostexHotkeyAction(
+    this: GpuiSidebarRuntime,
+    originalMessage: Extract<SidebarToExtensionMessage, { type: 'runGhostexHotkeyAction' }>
   ): boolean {
     const bridge = window.ghostexGpui?.postGhostexHotkeyAction;
     if (!bridge) {
@@ -1054,16 +1037,16 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     Shared SidebarApp and Command Palette hotkey rows emit `runGhostexHotkeyAction` through the reused GPUI runtime, not directly to Rust. Forward only the fixed action-id selector so Open Commands Panel, focused-pane routes, Settings, and modal hotkeys share Rust's native dispatcher without renderer-owned session ids, paths, command text, URLs, or launch metadata.
     */
     if (
-      Object.keys(originalMessage).some((key) => key !== "type" && key !== "actionId") ||
-      typeof originalMessage.actionId !== "string" ||
-      originalMessage.actionId.trim() === ""
+      Object.keys(originalMessage).some((key) => key !== 'type' && key !== 'actionId') ||
+      typeof originalMessage.actionId !== 'string' ||
+      originalMessage.actionId.trim() === ''
     ) {
       this.handleUnsupportedSidebarMessage(originalMessage);
       return false;
     }
     const payload = JSON.stringify({
       actionId: originalMessage.actionId,
-      type: "runGhostexHotkeyAction",
+      type: 'runGhostexHotkeyAction',
     });
     try {
       if (!bridge(payload)) {
@@ -1077,9 +1060,10 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
   },
 
-  postSidebarCommandRunEnd(this: GpuiSidebarRuntime,
+  postSidebarCommandRunEnd(
+    this: GpuiSidebarRuntime,
     commandId: string,
-    originalMessage: SidebarToExtensionMessage,
+    originalMessage: SidebarToExtensionMessage
   ): boolean {
     const bridge = window.ghostexGpui?.postSidebarCommandRunEnd;
     if (!bridge) {
@@ -1111,8 +1095,9 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
   },
 
-  saveSidebarSettingsPatch(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "updateSettingsPatch" }>,
+  saveSidebarSettingsPatch(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'updateSettingsPatch' }>
   ): void {
     /*
     CDXC:SidebarV2 2026-07-29:
@@ -1123,17 +1108,15 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     every surface back. Do not persist settings inside this adapter.
     */
     try {
-      postAppModalHostMessage(
-        { message, type: "sidebarCommand" },
-        "GPUISidebarActions:updateSettingsPatch",
-      );
+      postAppModalHostMessage({ message, type: 'sidebarCommand' }, 'GPUISidebarActions:updateSettingsPatch');
     } catch {
       this.handleUnsupportedSidebarMessage(message);
     }
   },
 
-  openExternalUrl(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "openExternalUrl" }>,
+  openExternalUrl(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'openExternalUrl' }>
   ): void {
     /*
     CDXC:SidebarDiscord 2026-08-07:
@@ -1145,24 +1128,21 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     validating and opening the http/https URL.
     */
     try {
-      postAppModalHostMessage(
-        { message, type: "sidebarCommand" },
-        "GPUISidebarActions:openExternalUrl",
-      );
+      postAppModalHostMessage({ message, type: 'sidebarCommand' }, 'GPUISidebarActions:openExternalUrl');
     } catch {
       this.handleUnsupportedSidebarMessage(message);
     }
   },
 
-  openAppModal(this: GpuiSidebarRuntime, modal: "firstLaunchSetup" | "settings" | "watchGhostexVideo"): void {
+  openAppModal(this: GpuiSidebarRuntime, modal: 'firstLaunchSetup' | 'settings' | 'watchGhostexVideo'): void {
     /*
     CDXC:GPUISidebarAppModalBridge 2026-06-24-11:40:
     Sidebar-origin Settings, first-launch welcome, and tutorial-video requests in GPUI must use the shared app-modal host bridge installed by the CEF sidebar surface. Do not fork Settings React UI, duplicate modal state, or route these first-party modals through fixture/sidebar-only alternate paths.
     */
     try {
-      openAppModal({ modal, type: "open" });
+      openAppModal({ modal, type: 'open' });
     } catch {
-      this.handleUnsupportedSidebarMessage({ type: "openSettings" });
+      this.handleUnsupportedSidebarMessage({ type: 'openSettings' });
     }
   },
 
@@ -1175,8 +1155,9 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     this.publishAppUserDataHydrate();
   },
 
-  async savePinnedPrompt(this: GpuiSidebarRuntime,
-    message: Extract<SidebarToExtensionMessage, { type: "savePinnedPrompt" }>,
+  async savePinnedPrompt(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'savePinnedPrompt' }>
   ): Promise<void> {
     const client = this.client;
     if (!client) {
@@ -1198,5 +1179,6 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
   },
 };
 
-const gpuiSidebarRuntimeAppShotAndMiscMethodsShapeCheck: GpuiSidebarRuntimeAppShotAndMiscMethods = gpuiSidebarRuntimeAppShotAndMiscMethods;
+const gpuiSidebarRuntimeAppShotAndMiscMethodsShapeCheck: GpuiSidebarRuntimeAppShotAndMiscMethods =
+  gpuiSidebarRuntimeAppShotAndMiscMethods;
 void gpuiSidebarRuntimeAppShotAndMiscMethodsShapeCheck;

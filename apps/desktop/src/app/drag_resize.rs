@@ -1416,7 +1416,10 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn prepare_hidden_command_pane_open_height_from_shared_settings(&mut self, window: &Window) {
+    pub(crate) fn prepare_hidden_command_pane_open_height_from_shared_settings(
+        &mut self,
+        window: &Window,
+    ) {
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
         self.command_pane
             .prepare_hidden_open_with_default_height_px(
@@ -1790,7 +1793,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn prune_command_gxserver_sessions_for_command_model(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn prune_command_gxserver_sessions_for_command_model(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let live_session_ids = self
             .command_pane
             .terminal_sessions
@@ -2219,7 +2225,11 @@ impl GhostexGpuiApp {
         );
     }
 
-    pub(crate) fn open_command_pane_from_keyboard(&mut self, window: &Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn open_command_pane_from_keyboard(
+        &mut self,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUICommandPanePerProject 2026-07-10:
         F12 and the Recent Projects header button are the same open command.
@@ -2272,7 +2282,10 @@ impl GhostexGpuiApp {
             .insert(split_id, SplitResizeMetrics { content_span });
     }
 
-    pub(crate) fn record_project_editor_companion_layout_metrics(&mut self, child_bounds: &[Bounds<Pixels>]) {
+    pub(crate) fn record_project_editor_companion_layout_metrics(
+        &mut self,
+        child_bounds: &[Bounds<Pixels>],
+    ) {
         let Some(content_span) =
             split_resize_content_span(child_bounds, WorkspaceSplitAxis::Horizontal)
         else {
@@ -2758,7 +2771,10 @@ impl GhostexGpuiApp {
         self.finish_project_editor_companion_resize_drag(cx);
     }
 
-    pub(crate) fn finish_project_editor_companion_resize_drag(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn finish_project_editor_companion_resize_drag(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.project_editor_companion_drag.take().is_some() {
             self.clear_project_editor_companion_divider_hover_state();
             self.persist_shell_layout_state();
@@ -2852,7 +2868,10 @@ impl GhostexGpuiApp {
         self.finish_project_editor_companion_split_resize_drag(cx);
     }
 
-    pub(crate) fn finish_project_editor_companion_split_resize_drag(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn finish_project_editor_companion_split_resize_drag(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.project_editor_companion_split_drag.take().is_some() {
             self.clear_project_editor_companion_split_divider_hover_state();
             self.persist_shell_layout_state();

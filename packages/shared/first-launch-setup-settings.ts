@@ -1,11 +1,11 @@
-import type { ghostexSettings } from "./ghostex-settings";
+import type { ghostexSettings } from './ghostex-settings';
 
-export const FIRST_LAUNCH_SETUP_SEEN_STORAGE_KEY = "ghostex-native-first-launch-setup-seen";
-export const FIRST_LAUNCH_SETUP_CURRENT_REVISION = "2026-06-18-short-first-launch";
-export const HIGHLIGHTED_FEATURES_SEEN_STORAGE_KEY = "ghostex-native-highlighted-features-seen";
-export const HIGHLIGHTED_FEATURES_CURRENT_REVISION = "2026-06-16-highlighted-features-launch";
+export const FIRST_LAUNCH_SETUP_SEEN_STORAGE_KEY = 'ghostex-native-first-launch-setup-seen';
+export const FIRST_LAUNCH_SETUP_CURRENT_REVISION = '2026-06-18-short-first-launch';
+export const HIGHLIGHTED_FEATURES_SEEN_STORAGE_KEY = 'ghostex-native-highlighted-features-seen';
+export const HIGHLIGHTED_FEATURES_CURRENT_REVISION = '2026-06-16-highlighted-features-launch';
 
-type FirstLaunchSetupSeenStorage = Pick<Storage, "getItem" | "setItem">;
+type FirstLaunchSetupSeenStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 /**
  * CDXC:FirstLaunchSetup 2026-05-19-11:20:
@@ -43,58 +43,58 @@ type FirstLaunchSetupSeenStorage = Pick<Storage, "getItem" | "setItem">;
  */
 export type FirstLaunchSetupMainSettingKey =
   | keyof ghostexSettings
-  | "accessibilityPermission"
-  | "attentionNotificationActions"
-  | "ghostexFolderStats"
-  | "ghosttySettingsActions"
-  | "sidebarSettingsPreset";
+  | 'accessibilityPermission'
+  | 'attentionNotificationActions'
+  | 'ghostexFolderStats'
+  | 'ghosttySettingsActions'
+  | 'sidebarSettingsPreset';
 
 export const FIRST_LAUNCH_PREFERENCES_MAIN_SETTING_KEYS = [
-  "sidebarSettingsPreset",
-  "defaultPromptAgentId",
-  "sessionTitleGenerationAgent",
-  "customSessionTitleGenerationCommand",
-  "keepAwakePreventLidSleep",
-  "agentAcceptAllEnabled",
-  "showMacOSAttentionNotifications",
-  "completionBellEnabled",
+  'sidebarSettingsPreset',
+  'defaultPromptAgentId',
+  'sessionTitleGenerationAgent',
+  'customSessionTitleGenerationCommand',
+  'keepAwakePreventLidSleep',
+  'agentAcceptAllEnabled',
+  'showMacOSAttentionNotifications',
+  'completionBellEnabled',
 ] as const satisfies readonly FirstLaunchSetupMainSettingKey[];
 
 export const FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS = new Set<FirstLaunchSetupMainSettingKey>(
-  FIRST_LAUNCH_PREFERENCES_MAIN_SETTING_KEYS,
+  FIRST_LAUNCH_PREFERENCES_MAIN_SETTING_KEYS
 );
 
 export function isFirstLaunchSetupMainSettingVisible(
   settingKey: FirstLaunchSetupMainSettingKey,
-  visibleSettings: ReadonlySet<FirstLaunchSetupMainSettingKey> = FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS,
+  visibleSettings: ReadonlySet<FirstLaunchSetupMainSettingKey> = FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS
 ): boolean {
   return visibleSettings.has(settingKey);
 }
 
 export function hasSeenCurrentFirstLaunchSetup(
   storage: FirstLaunchSetupSeenStorage,
-  revision = FIRST_LAUNCH_SETUP_CURRENT_REVISION,
+  revision = FIRST_LAUNCH_SETUP_CURRENT_REVISION
 ): boolean {
   return storage.getItem(FIRST_LAUNCH_SETUP_SEEN_STORAGE_KEY) === revision;
 }
 
 export function markCurrentFirstLaunchSetupSeen(
   storage: FirstLaunchSetupSeenStorage,
-  revision = FIRST_LAUNCH_SETUP_CURRENT_REVISION,
+  revision = FIRST_LAUNCH_SETUP_CURRENT_REVISION
 ): void {
   storage.setItem(FIRST_LAUNCH_SETUP_SEEN_STORAGE_KEY, revision);
 }
 
 export function hasSeenCurrentHighlightedFeatures(
   storage: FirstLaunchSetupSeenStorage,
-  revision = HIGHLIGHTED_FEATURES_CURRENT_REVISION,
+  revision = HIGHLIGHTED_FEATURES_CURRENT_REVISION
 ): boolean {
   return storage.getItem(HIGHLIGHTED_FEATURES_SEEN_STORAGE_KEY) === revision;
 }
 
 export function markCurrentHighlightedFeaturesSeen(
   storage: FirstLaunchSetupSeenStorage,
-  revision = HIGHLIGHTED_FEATURES_CURRENT_REVISION,
+  revision = HIGHLIGHTED_FEATURES_CURRENT_REVISION
 ): void {
   storage.setItem(HIGHLIGHTED_FEATURES_SEEN_STORAGE_KEY, revision);
 }

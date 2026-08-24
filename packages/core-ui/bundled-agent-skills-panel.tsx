@@ -10,33 +10,24 @@ import {
   IconRefresh,
   IconSitemap,
   IconTrash,
-} from "@tabler/icons-react";
-import { Button } from "@/packages/components/ui/button";
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldTitle,
-} from "@/packages/components/ui/field";
-import { cn } from "@/packages/components/utils";
-import { AppTooltip } from "./app-tooltip";
-import { DisabledSettingControlTooltip } from "./disabled-setting-control-tooltip";
+} from '@tabler/icons-react';
+import { Button } from '@/packages/components/ui/button';
+import { Field, FieldContent, FieldDescription, FieldTitle } from '@/packages/components/ui/field';
+import { cn } from '@/packages/components/utils';
+import { AppTooltip } from './app-tooltip';
+import { DisabledSettingControlTooltip } from './disabled-setting-control-tooltip';
 import {
   BUNDLED_GHOSTEX_AGENT_SKILLS,
   GHOSTEX_CUA_PROJECT_URL,
   type BundledGhostexAgentSkill,
   type BundledGhostexAgentSkillId,
   type BundledGhostexAgentSkillTier,
-} from "../shared/ghostex-agent-skills";
-import type { SidebarGhostexCliStatusMessage } from "../shared/session-grid-contract";
+} from '../shared/ghostex-agent-skills';
+import type { SidebarGhostexCliStatusMessage } from '../shared/session-grid-contract';
 
-export type BundledAgentSkillInstallHandlers = Partial<
-  Record<BundledGhostexAgentSkillId, () => void>
->;
+export type BundledAgentSkillInstallHandlers = Partial<Record<BundledGhostexAgentSkillId, () => void>>;
 
-export type BundledAgentSkillUninstallHandler = (
-  skillId: BundledGhostexAgentSkillId,
-) => void;
+export type BundledAgentSkillUninstallHandler = (skillId: BundledGhostexAgentSkillId) => void;
 
 type BundledAgentSkillsPanelProps = {
   className?: string;
@@ -64,21 +55,18 @@ const BUNDLED_AGENT_SKILL_TIER_SECTIONS: readonly {
   title: string;
 }[] = [
   {
-    description: "What most people want on day one — agents that can drive your Mac and your browser.",
-    tier: "recommended",
-    title: "Recommended",
+    description: 'What most people want on day one — agents that can drive your Mac and your browser.',
+    tier: 'recommended',
+    title: 'Recommended',
   },
   {
-    description: "Handy extras. Install them whenever you need them.",
-    tier: "optional",
-    title: "Optional",
+    description: 'Handy extras. Install them whenever you need them.',
+    tier: 'optional',
+    title: 'Optional',
   },
 ];
 
-const BUNDLED_AGENT_SKILL_ICONS: Record<
-  BundledGhostexAgentSkillId,
-  typeof IconBrowser
-> = {
+const BUNDLED_AGENT_SKILL_ICONS: Record<BundledGhostexAgentSkillId, typeof IconBrowser> = {
   agentOrchestration: IconGitPullRequest,
   browserUse: IconBrowser,
   computerUse: IconDeviceDesktop,
@@ -111,50 +99,44 @@ export function BundledAgentSkillsPanel({
   const cliReady = ghostexCliStatus?.installed === true;
   const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
   const anySkillInstalled = BUNDLED_GHOSTEX_AGENT_SKILLS.some((skill) =>
-    isBundledGhostexAgentSkillInstalled(skill.id, ghostexCliStatus),
+    isBundledGhostexAgentSkillInstalled(skill.id, ghostexCliStatus)
   );
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
+    <div className={cn('flex flex-col gap-3', className)}>
       {showHeader ? (
-        <div className="flex flex-col gap-1">
-          <h3 className="text-sm font-semibold">Bundled Agent Skills</h3>
-          <p className="text-xs text-muted-foreground">
-            Install the Ghostex skills you want agents to discover. Each skill is copied to
-            ~/.agents/skills and can be updated independently.
+        <div className='flex flex-col gap-1'>
+          <h3 className='text-sm font-semibold'>Bundled Agent Skills</h3>
+          <p className='text-xs text-muted-foreground'>
+            Install the Ghostex skills you want agents to discover. Each skill is copied to ~/.agents/skills and can be
+            updated independently.
           </p>
         </div>
       ) : null}
       {BUNDLED_AGENT_SKILL_TIER_SECTIONS.map((section) => (
-        <div className="flex flex-col gap-3" key={section.tier}>
-          <div className="flex flex-col gap-0.5">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {section.title}
-            </h4>
-            <p className="text-xs text-muted-foreground">{section.description}</p>
+        <div className='flex flex-col gap-3' key={section.tier}>
+          <div className='flex flex-col gap-0.5'>
+            <h4 className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'>{section.title}</h4>
+            <p className='text-xs text-muted-foreground'>{section.description}</p>
           </div>
-          {BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === section.tier).map(
-            (skill) => (
-              <BundledAgentSkillRow
-                cliReady={cliReady}
-                cuaDriverInstalled={cuaDriverInstalled}
-                ghostexCliStatus={ghostexCliStatus}
-                ghostexCliStatusLoading={ghostexCliStatusLoading}
-                key={skill.id}
-                onInstall={onInstallSkill?.[skill.id]}
-                onInstallCuaDriver={onInstallCuaDriver}
-                onOpenExternalUrl={onOpenExternalUrl}
-                onUninstall={
-                  onUninstallSkill ? () => onUninstallSkill(skill.id) : undefined
-                }
-                skill={skill}
-              />
-            ),
-          )}
+          {BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === section.tier).map((skill) => (
+            <BundledAgentSkillRow
+              cliReady={cliReady}
+              cuaDriverInstalled={cuaDriverInstalled}
+              ghostexCliStatus={ghostexCliStatus}
+              ghostexCliStatusLoading={ghostexCliStatusLoading}
+              key={skill.id}
+              onInstall={onInstallSkill?.[skill.id]}
+              onInstallCuaDriver={onInstallCuaDriver}
+              onOpenExternalUrl={onOpenExternalUrl}
+              onUninstall={onUninstallSkill ? () => onUninstallSkill(skill.id) : undefined}
+              skill={skill}
+            />
+          ))}
         </div>
       ))}
       {onRefreshStatus || onUninstallAllSkills ? (
-        <div className="flex flex-wrap justify-end gap-1.5">
+        <div className='flex flex-wrap justify-end gap-1.5'>
           {/*
            * CDXC:AgentSkills 2026-08-19-11:20:
            * Skill removal lives beside the install controls it undoes: an icon-only
@@ -166,34 +148,24 @@ export function BundledAgentSkillsPanel({
             <DisabledSettingControlTooltip
               disabled={ghostexCliStatusLoading || !anySkillInstalled}
               reason={
-                ghostexCliStatusLoading
-                  ? "Skill status is being checked."
-                  : "No bundled Ghostex skills are installed."
+                ghostexCliStatusLoading ? 'Skill status is being checked.' : 'No bundled Ghostex skills are installed.'
               }
             >
               <Button
                 disabled={ghostexCliStatusLoading || !anySkillInstalled}
                 onClick={onUninstallAllSkills}
-                type="button"
-                variant="outline"
+                type='button'
+                variant='outline'
               >
-                <IconTrash aria-hidden="true" data-icon="inline-start" />
+                <IconTrash aria-hidden='true' data-icon='inline-start' />
                 Uninstall All
               </Button>
             </DisabledSettingControlTooltip>
           ) : null}
           {onRefreshStatus ? (
-            <DisabledSettingControlTooltip
-              disabled={ghostexCliStatusLoading}
-              reason="Skill status is being checked."
-            >
-              <Button
-                disabled={ghostexCliStatusLoading}
-                onClick={onRefreshStatus}
-                type="button"
-                variant="ghost"
-              >
-                <IconRefresh aria-hidden="true" data-icon="inline-start" />
+            <DisabledSettingControlTooltip disabled={ghostexCliStatusLoading} reason='Skill status is being checked.'>
+              <Button disabled={ghostexCliStatusLoading} onClick={onRefreshStatus} type='button' variant='ghost'>
+                <IconRefresh aria-hidden='true' data-icon='inline-start' />
                 Refresh Skill Status
               </Button>
             </DisabledSettingControlTooltip>
@@ -227,33 +199,30 @@ function BundledAgentSkillRow({
 }) {
   const installed = isBundledGhostexAgentSkillInstalled(skill.id, ghostexCliStatus);
   const Icon = BUNDLED_AGENT_SKILL_ICONS[skill.id];
-  const installDisabled =
-    ghostexCliStatusLoading || !cliReady || !onInstall;
+  const installDisabled = ghostexCliStatusLoading || !cliReady || !onInstall;
   const installDisabledReason = ghostexCliStatusLoading
-    ? "Skill status is being checked."
+    ? 'Skill status is being checked.'
     : !cliReady
-      ? "Install or repair the Ghostex CLI first."
-      : "Skill installation isn’t available here.";
+      ? 'Install or repair the Ghostex CLI first.'
+      : 'Skill installation isn’t available here.';
   const uninstallDisabled = ghostexCliStatusLoading || !onUninstall;
   const uninstallDisabledReason = ghostexCliStatusLoading
-    ? "Skill status is being checked."
-    : "Skill removal isn’t available here.";
+    ? 'Skill status is being checked.'
+    : 'Skill removal isn’t available here.';
 
   return (
-    <Field className="rounded-none border border-border bg-muted/20 px-4 py-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-none bg-muted text-muted-foreground">
-            <Icon aria-hidden="true" size={17} />
+    <Field className='rounded-none border border-border bg-muted/20 px-4 py-3'>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+        <div className='flex min-w-0 gap-3'>
+          <span className='mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-none bg-muted text-muted-foreground'>
+            <Icon aria-hidden='true' size={17} />
           </span>
           <FieldContent>
-            <div className="mb-1.5 flex flex-wrap items-center gap-2">
-              <FieldTitle className="text-sm">{skill.name}</FieldTitle>
+            <div className='mb-1.5 flex flex-wrap items-center gap-2'>
+              <FieldTitle className='text-sm'>{skill.name}</FieldTitle>
             </div>
-            <FieldDescription className="text-xs text-muted-foreground">
-              {skill.description}
-            </FieldDescription>
-            <code className="mt-2 block select-text rounded-none border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+            <FieldDescription className='text-xs text-muted-foreground'>{skill.description}</FieldDescription>
+            <code className='mt-2 block select-text rounded-none border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground'>
               {skill.command}
             </code>
             {skill.requiresCuaDriver ? (
@@ -266,43 +235,37 @@ function BundledAgentSkillRow({
             ) : null}
           </FieldContent>
         </div>
-        <div className="flex w-[110px] shrink-0 flex-wrap gap-1 sm:justify-end">
-          <DisabledSettingControlTooltip
-            disabled={installDisabled}
-            reason={installDisabledReason}
-          >
+        <div className='flex w-[110px] shrink-0 flex-wrap gap-1 sm:justify-end'>
+          <DisabledSettingControlTooltip disabled={installDisabled} reason={installDisabledReason}>
             <Button
-              className={cn("w-[110px]", installed && "w-[74px] px-2.5")}
+              className={cn('w-[110px]', installed && 'w-[74px] px-2.5')}
               disabled={installDisabled}
               onClick={onInstall}
-              type="button"
-              variant="default"
+              type='button'
+              variant='default'
             >
               {installed ? (
-                "Reinstall"
+                'Reinstall'
               ) : (
                 <>
-                  <IconDownload aria-hidden="true" data-icon="inline-start" />
+                  <IconDownload aria-hidden='true' data-icon='inline-start' />
                   Install Skill
                 </>
               )}
             </Button>
           </DisabledSettingControlTooltip>
           {installed ? (
-            <DisabledSettingControlTooltip
-              disabled={uninstallDisabled}
-              reason={uninstallDisabledReason}
-            >
+            <DisabledSettingControlTooltip disabled={uninstallDisabled} reason={uninstallDisabledReason}>
               <AppTooltip content={`Uninstall ${skill.name}`}>
                 <Button
                   aria-label={`Uninstall ${skill.name}`}
                   disabled={uninstallDisabled}
                   onClick={onUninstall}
-                  size="icon"
-                  type="button"
-                  variant="destructive"
+                  size='icon'
+                  type='button'
+                  variant='destructive'
                 >
-                  <IconTrash aria-hidden="true" />
+                  <IconTrash aria-hidden='true' />
                 </Button>
               </AppTooltip>
             </DisabledSettingControlTooltip>
@@ -332,44 +295,44 @@ function CuaDriverNote({
   onOpenExternalUrl?: (url: string) => void;
 }) {
   return (
-    <div className="mt-2 flex flex-col gap-2 border border-border bg-muted/30 px-2.5 py-2">
-      <p className="text-xs text-muted-foreground">
+    <div className='mt-2 flex flex-col gap-2 border border-border bg-muted/30 px-2.5 py-2'>
+      <p className='text-xs text-muted-foreground'>
         {cuaDriverInstalled ? (
           <>
-            <strong className="font-semibold text-foreground">Cua Driver is ready.</strong> This
-            skill uses it to click, type, and see what is on screen.
+            <strong className='font-semibold text-foreground'>Cua Driver is ready.</strong> This skill uses it to click,
+            type, and see what is on screen.
           </>
         ) : (
           <>
-            <strong className="font-semibold text-foreground">
+            <strong className='font-semibold text-foreground'>
               Want agents to really control your Mac and browser?
-            </strong>{" "}
-            This skill needs Cua Driver, the open-source helper from the Cua project. It is a
-            one-time setup — install it once and every Ghostex agent can use it.
+            </strong>{' '}
+            This skill needs Cua Driver, the open-source helper from the Cua project. It is a one-time setup — install
+            it once and every Ghostex agent can use it.
           </>
         )}
       </p>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className='flex flex-wrap items-center gap-1.5'>
         <Button
           disabled={ghostexCliStatusLoading || cuaDriverInstalled || !onInstallCuaDriver}
           onClick={onInstallCuaDriver}
-          type="button"
-          variant={cuaDriverInstalled ? "outline" : "default"}
+          type='button'
+          variant={cuaDriverInstalled ? 'outline' : 'default'}
         >
           {cuaDriverInstalled ? (
-            <IconCircleCheckFilled aria-hidden="true" data-icon="inline-start" />
+            <IconCircleCheckFilled aria-hidden='true' data-icon='inline-start' />
           ) : (
-            <IconDownload aria-hidden="true" data-icon="inline-start" />
+            <IconDownload aria-hidden='true' data-icon='inline-start' />
           )}
-          {cuaDriverInstalled ? "Cua Driver Installed" : "Install Cua Driver"}
+          {cuaDriverInstalled ? 'Cua Driver Installed' : 'Install Cua Driver'}
         </Button>
         <Button
           disabled={!onOpenExternalUrl}
           onClick={() => onOpenExternalUrl?.(GHOSTEX_CUA_PROJECT_URL)}
-          type="button"
-          variant="ghost"
+          type='button'
+          variant='ghost'
         >
-          <IconExternalLink aria-hidden="true" data-icon="inline-start" />
+          <IconExternalLink aria-hidden='true' data-icon='inline-start' />
           trycua/cua
         </Button>
       </div>
@@ -379,24 +342,24 @@ function CuaDriverNote({
 
 function isBundledGhostexAgentSkillInstalled(
   skillId: BundledGhostexAgentSkillId,
-  status?: SidebarGhostexCliStatusMessage,
+  status?: SidebarGhostexCliStatusMessage
 ): boolean {
   switch (skillId) {
-    case "browserUse":
+    case 'browserUse':
       return status?.browserSkillInstalled === true;
-    case "embeddedBrowserUse":
+    case 'embeddedBrowserUse':
       return status?.embeddedBrowserSkillInstalled === true;
-    case "computerUse":
+    case 'computerUse':
       return status?.computerUseSkillInstalled === true;
-    case "agentOrchestration":
+    case 'agentOrchestration':
       return status?.agentOrchestrationSkillInstalled === true;
-    case "fable56Orchestration":
+    case 'fable56Orchestration':
       return status?.fable56OrchestrationSkillInstalled === true;
-    case "findPrevSession":
+    case 'findPrevSession':
       return status?.findPrevSessionSkillInstalled === true;
-    case "generateTitle":
+    case 'generateTitle':
       return status?.generateTitleSkillInstalled === true;
-    case "moveCodexSession":
+    case 'moveCodexSession':
       return status?.moveCodexSessionSkillInstalled === true;
   }
 }

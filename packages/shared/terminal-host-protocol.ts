@@ -5,11 +5,11 @@
  */
 export const TERMINAL_HOST_PROTOCOL_VERSION = 29;
 
-export type TerminalSessionStatus = "starting" | "running" | "exited" | "error" | "disconnected";
+export type TerminalSessionStatus = 'starting' | 'running' | 'exited' | 'error' | 'disconnected';
 
-export type TerminalSessionRestoreState = "live" | "replayed";
+export type TerminalSessionRestoreState = 'live' | 'replayed';
 
-export type TerminalAgentStatus = "idle" | "working" | "attention";
+export type TerminalAgentStatus = 'idle' | 'working' | 'attention';
 
 export type TerminalSessionSnapshot = {
   agentName?: string;
@@ -36,13 +36,13 @@ export type TerminalSessionSnapshot = {
 export type TerminalSessionsBySessionId = Record<string, TerminalSessionSnapshot>;
 
 export type TerminalHostAuthenticateRequest = {
-  type: "authenticate";
+  type: 'authenticate';
   token: string;
   version: typeof TERMINAL_HOST_PROTOCOL_VERSION;
 };
 
 export type TerminalHostCreateOrAttachRequest = {
-  type: "createOrAttach";
+  type: 'createOrAttach';
   requestId: string;
   sessionId: string;
   workspaceId: string;
@@ -58,14 +58,14 @@ export type TerminalHostCreateOrAttachRequest = {
 };
 
 export type TerminalHostWriteRequest = {
-  type: "write";
+  type: 'write';
   workspaceId: string;
   sessionId: string;
   data: string;
 };
 
 export type TerminalHostResizeRequest = {
-  type: "resize";
+  type: 'resize';
   workspaceId: string;
   sessionId: string;
   cols: number;
@@ -73,31 +73,31 @@ export type TerminalHostResizeRequest = {
 };
 
 export type TerminalHostKillRequest = {
-  type: "kill";
+  type: 'kill';
   workspaceId: string;
   sessionId: string;
 };
 
 export type TerminalHostAcknowledgeAttentionRequest = {
-  type: "acknowledgeAttention";
+  type: 'acknowledgeAttention';
   workspaceId: string;
   sessionId: string;
 };
 
 export type TerminalHostListSessionsRequest = {
-  type: "listSessions";
+  type: 'listSessions';
   requestId: string;
   workspaceId?: string;
 };
 
 export type TerminalHostConfigureRequest = {
-  type: "configure";
+  type: 'configure';
   requestId: string;
   idleShutdownTimeoutMs: number | null;
 };
 
 export type TerminalHostSyncSessionLeasesRequest = {
-  type: "syncSessionLeases";
+  type: 'syncSessionLeases';
   requestId: string;
   workspaceId: string;
   sessionIds: string[];
@@ -105,14 +105,14 @@ export type TerminalHostSyncSessionLeasesRequest = {
 };
 
 export type TerminalHostSyncResizeEligibleSessionsRequest = {
-  type: "syncResizeEligibleSessions";
+  type: 'syncResizeEligibleSessions';
   requestId: string;
   workspaceId: string;
   sessionIds: string[];
 };
 
 export type TerminalHostHeartbeatOwnerRequest = {
-  type: "heartbeatOwner";
+  type: 'heartbeatOwner';
   requestId: string;
   workspaceId: string;
   ownerId: string;
@@ -133,43 +133,43 @@ export type TerminalHostRequest =
   | TerminalHostHeartbeatOwnerRequest;
 
 export type TerminalHostAuthenticatedEvent = {
-  type: "authenticated";
+  type: 'authenticated';
 };
 
 export type TerminalHostResponse =
   | {
-      type: "response";
+      type: 'response';
       requestId: string;
       ok: true;
     }
   | {
-      type: "response";
+      type: 'response';
       requestId: string;
       ok: true;
       session: TerminalSessionSnapshot;
       didCreateSession: boolean;
     }
   | {
-      type: "response";
+      type: 'response';
       requestId: string;
       ok: true;
       sessions: TerminalSessionSnapshot[];
     }
   | {
-      type: "response";
+      type: 'response';
       requestId: string;
       ok: false;
       error: string;
     };
 
 export type TerminalHostSessionOutputEvent = {
-  type: "sessionOutput";
+  type: 'sessionOutput';
   sessionId: string;
   data: string;
 };
 
 export type TerminalHostSessionStateEvent = {
-  type: "sessionState";
+  type: 'sessionState';
   session: TerminalSessionSnapshot;
 };
 
@@ -180,32 +180,32 @@ export type TerminalHostEvent =
   | TerminalHostSessionStateEvent;
 
 export type TerminalInputMessage = {
-  type: "terminalInput";
+  type: 'terminalInput';
   sessionId: string;
   data: string;
 };
 
 export type TerminalResizeMessage = {
-  type: "terminalResize";
+  type: 'terminalResize';
   sessionId: string;
   cols: number;
   rows: number;
 };
 
 export type TerminalReadyMessage = {
-  type: "terminalReady";
+  type: 'terminalReady';
   sessionId: string;
   cols: number;
   rows: number;
 };
 
 export type TerminalStateMessage = {
-  type: "terminalSessionState";
+  type: 'terminalSessionState';
   session: TerminalSessionSnapshot;
 };
 
 export type TerminalOutputMessage = {
-  type: "terminalOutput";
+  type: 'terminalOutput';
   sessionId: string;
   data: string;
 };

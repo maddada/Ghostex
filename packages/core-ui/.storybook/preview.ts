@@ -1,11 +1,11 @@
-import type { Preview } from "@storybook/react-vite";
-import "../styles.css";
+import type { Preview } from '@storybook/react-vite';
+import '../styles.css';
 
 const preview: Preview = {
   parameters: {
     backgrounds: {
-      default: "ghostex dark",
-      values: [{ name: "ghostex dark", value: "#050505" }],
+      default: 'ghostex dark',
+      values: [{ name: 'ghostex dark', value: '#050505' }],
     },
     controls: {
       matchers: {
@@ -13,7 +13,7 @@ const preview: Preview = {
         date: /Date$/i,
       },
     },
-    layout: "fullscreen",
+    layout: 'fullscreen',
   },
 };
 

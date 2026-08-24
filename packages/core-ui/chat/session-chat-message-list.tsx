@@ -20,34 +20,24 @@ import {
   IconCopy,
   IconInfoCircle,
   IconPhoto,
-} from "@tabler/icons-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  SessionChatMessage,
-  SessionChatTerminalActivity,
-} from "../../shared/session-chat";
-import { cn } from "@/packages/components/utils";
-import { Button } from "../../components/ui/button";
-import { Separator } from "../../components/ui/separator";
+} from '@tabler/icons-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { SessionChatMessage, SessionChatTerminalActivity } from '../../shared/session-chat';
+import { cn } from '@/packages/components/utils';
+import { Button } from '../../components/ui/button';
+import { Separator } from '../../components/ui/separator';
 import {
   Attachment,
   AttachmentContent,
   AttachmentMedia,
   AttachmentTitle,
   AttachmentTrigger,
-} from "../../components/ui/attachment";
-import {
-  SessionChatInlineImage,
-  useSessionChatImageViewer,
-} from "./session-chat-image-viewer";
-import { normalizeSessionChatImageTranscriptMessages } from "./session-chat-image-transcript-markers";
-import { Bubble, BubbleContent } from "../../components/ui/bubble";
-import { Marker, MarkerContent } from "../../components/ui/marker";
-import {
-  Message,
-  MessageContent,
-  MessageFooter,
-} from "../../components/ui/message";
+} from '../../components/ui/attachment';
+import { SessionChatInlineImage, useSessionChatImageViewer } from './session-chat-image-viewer';
+import { normalizeSessionChatImageTranscriptMessages } from './session-chat-image-transcript-markers';
+import { Bubble, BubbleContent } from '../../components/ui/bubble';
+import { Marker, MarkerContent } from '../../components/ui/marker';
+import { Message, MessageContent, MessageFooter } from '../../components/ui/message';
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -56,40 +46,34 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
   useMessageScroller,
-} from "../../components/ui/message-scroller";
-import { SessionChatActivityRow } from "./session-chat-activity-row";
-import { orderSessionChatMessages } from "./session-chat-assembler";
-import {
-  centerSessionChatExpansion,
-  SessionChatExpansion,
-} from "./session-chat-expansion";
-import { SessionChatMarkdown } from "./session-chat-markdown";
-import { SessionChatScrollCap } from "./session-chat-scroll-cap";
-import { isSessionChatPendingMessageId } from "./session-chat-pending";
+} from '../../components/ui/message-scroller';
+import { SessionChatActivityRow } from './session-chat-activity-row';
+import { orderSessionChatMessages } from './session-chat-assembler';
+import { centerSessionChatExpansion, SessionChatExpansion } from './session-chat-expansion';
+import { SessionChatMarkdown } from './session-chat-markdown';
+import { SessionChatScrollCap } from './session-chat-scroll-cap';
+import { isSessionChatPendingMessageId } from './session-chat-pending';
 import {
   dropSessionChatHiddenMessages,
   sessionChatSuppressedTurnLabel,
   sessionChatSuppressedTurnPresentation,
   type SessionChatStatusRow,
   type SessionChatStatusTone,
-} from "./session-chat-noise";
-import { SESSION_CHAT_STREAMING_ID } from "./session-chat-streaming";
+} from './session-chat-noise';
+import { SESSION_CHAT_STREAMING_ID } from './session-chat-streaming';
 import {
   answeredSessionChatQuestionExchange,
   isSessionChatQuestionToolName,
   SessionChatQuestionExchangeCard,
   type SessionChatQuestionExchange,
-} from "./session-chat-question-exchange";
+} from './session-chat-question-exchange';
 import {
   foldSessionChatToolMessages,
   pairSessionChatToolBlocks,
   splitSessionChatBlocks,
-} from "./session-chat-tool-fold";
-import { SessionChatToolRun } from "./session-chat-tool-run";
-import {
-  countSessionChatToolCalls,
-  summarizeSessionChatToolRun,
-} from "./session-chat-tool-summary";
+} from './session-chat-tool-fold';
+import { SessionChatToolRun } from './session-chat-tool-run';
+import { countSessionChatToolCalls, summarizeSessionChatToolRun } from './session-chat-tool-summary';
 
 const LOAD_EARLIER_SCROLL_TOP_PX = 80;
 const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
@@ -117,22 +101,18 @@ function isPastedImagePath(path: string | undefined): boolean {
   if (!path) {
     return false;
   }
-  const segment = path.split(/[\\/]/).at(-1) ?? "";
+  const segment = path.split(/[\\/]/).at(-1) ?? '';
   return PASTED_IMAGE_NAME.test(segment);
 }
 
-function imageChipLabel(block: {
-  alt?: string;
-  path?: string;
-  url?: string;
-}): string {
+function imageChipLabel(block: { alt?: string; path?: string; url?: string }): string {
   if (isPastedImagePath(block.path)) {
-    return "Pasted image";
+    return 'Pasted image';
   }
   if (block.path) {
     return block.path.split(/[\\/]/).at(-1) ?? block.path;
   }
-  return block.alt ?? block.url ?? "Image";
+  return block.alt ?? block.url ?? 'Image';
 }
 
 function ImageAttachments({
@@ -153,7 +133,7 @@ function ImageAttachments({
   a broken image well.
   */
   return (
-    <div className={cn("flex min-w-0 flex-wrap gap-2 py-1", className)}>
+    <div className={cn('flex min-w-0 flex-wrap gap-2 py-1', className)}>
       {blocks.map((block, index) => {
         const target = {
           ...(block.path !== undefined ? { path: block.path } : {}),
@@ -162,9 +142,9 @@ function ImageAttachments({
         };
         const label = imageChipLabel(block);
         const chip = (
-          <Attachment size="xs">
+          <Attachment size='xs'>
             <AttachmentMedia>
-              <IconPhoto aria-hidden="true" stroke={1.8} />
+              <IconPhoto aria-hidden='true' stroke={1.8} />
             </AttachmentMedia>
             <AttachmentContent>
               <AttachmentTitle>{label}</AttachmentTitle>
@@ -172,19 +152,13 @@ function ImageAttachments({
             {viewer?.canOpen(target) === true ? (
               <AttachmentTrigger
                 aria-label={`View ${label}`}
-                className="cursor-zoom-in"
+                className='cursor-zoom-in'
                 onClick={() => viewer?.open(target)}
               />
             ) : null}
           </Attachment>
         );
-        return (
-          <SessionChatInlineImage
-            fallback={chip}
-            key={index}
-            target={{ ...target, alt: target.alt ?? label }}
-          />
-        );
+        return <SessionChatInlineImage fallback={chip} key={index} target={{ ...target, alt: target.alt ?? label }} />;
       })}
     </div>
   );
@@ -192,16 +166,16 @@ function ImageAttachments({
 
 function CopyFooter({ markdown }: { markdown: string }) {
   return (
-    <MessageFooter className="px-0 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100">
+    <MessageFooter className='px-0 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100'>
       <Button
-        aria-label="Copy message"
+        aria-label='Copy message'
         onClick={() => {
           void navigator.clipboard.writeText(markdown);
         }}
-        size="icon-xs"
-        variant="ghost"
+        size='icon-xs'
+        variant='ghost'
       >
-        <IconCopy aria-hidden="true" stroke={1.9} />
+        <IconCopy aria-hidden='true' stroke={1.9} />
       </Button>
     </MessageFooter>
   );
@@ -210,7 +184,7 @@ function CopyFooter({ markdown }: { markdown: string }) {
 /** Marks a prompt the agent has accepted but not started on yet. */
 function QueuedLabel() {
   return (
-    <div className="ghostex-chat-queued-label self-end" data-queued="true">
+    <div className='ghostex-chat-queued-label self-end' data-queued='true'>
       Queued
     </div>
   );
@@ -225,13 +199,13 @@ function SuppressedTurn({ label, text }: { label: string; text: string }) {
   const [expanded, setExpanded] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   return (
-    <div className="flex w-full min-w-0 flex-col gap-1.5 pb-2">
+    <div className='flex w-full min-w-0 flex-col gap-1.5 pb-2'>
       <button
         aria-expanded={expanded}
-        className="ghostex-chat-suppressed-trigger self-start"
+        className='ghostex-chat-suppressed-trigger self-start'
         // Opts out of the sidebar's legacy `button:where(:not([data-slot]))`
         // base, which otherwise paints a 1px app border around the marker.
-        data-slot="session-chat-suppressed-trigger"
+        data-slot='session-chat-suppressed-trigger'
         onClick={() => {
           if (!expanded) {
             centerSessionChatExpansion(triggerRef.current);
@@ -239,23 +213,20 @@ function SuppressedTurn({ label, text }: { label: string; text: string }) {
           setExpanded((value) => !value);
         }}
         ref={triggerRef}
-        type="button"
+        type='button'
       >
-        <span className="ghostex-chat-marker-slot">
+        <span className='ghostex-chat-marker-slot'>
           <IconChevronRight
-            aria-hidden="true"
-            className={cn("ghostex-chat-disclosure-chevron", expanded && "is-open")}
+            aria-hidden='true'
+            className={cn('ghostex-chat-disclosure-chevron', expanded && 'is-open')}
             stroke={2}
           />
         </span>
-        <span className="truncate">{label}</span>
+        <span className='truncate'>{label}</span>
       </button>
       {expanded ? (
-        <SessionChatExpansion
-          label={`Collapse ${label}`}
-          onCollapse={() => setExpanded(false)}
-        >
-          <div className="min-w-0 whitespace-pre-wrap break-words rounded-md border border-border/60 bg-muted/30 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+        <SessionChatExpansion label={`Collapse ${label}`} onCollapse={() => setExpanded(false)}>
+          <div className='min-w-0 whitespace-pre-wrap break-words rounded-md border border-border/60 bg-muted/30 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground'>
             {text}
           </div>
         </SessionChatExpansion>
@@ -271,25 +242,22 @@ function SuppressedTurn({ label, text }: { label: string; text: string }) {
  */
 function InlineSuppressedTurn({ label, text }: { label: string; text: string }) {
   return (
-    <div className="ghostex-chat-suppressed-inline">
+    <div className='ghostex-chat-suppressed-inline'>
       <div>
-        <span className="ghostex-chat-suppressed-inline-label">{label}</span>
+        <span className='ghostex-chat-suppressed-inline-label'>{label}</span>
         {text}
       </div>
     </div>
   );
 }
 
-const STATUS_TONE_ICON: Record<
-  SessionChatStatusTone,
-  { Icon: typeof IconCheck; className: string }
-> = {
-  ok: { Icon: IconCheck, className: "bg-emerald-500/15 text-emerald-400" },
+const STATUS_TONE_ICON: Record<SessionChatStatusTone, { Icon: typeof IconCheck; className: string }> = {
+  ok: { Icon: IconCheck, className: 'bg-emerald-500/15 text-emerald-400' },
   error: {
     Icon: IconAlertTriangle,
-    className: "bg-destructive/15 text-destructive",
+    className: 'bg-destructive/15 text-destructive',
   },
-  neutral: { Icon: IconInfoCircle, className: "bg-muted text-muted-foreground" },
+  neutral: { Icon: IconInfoCircle, className: 'bg-muted text-muted-foreground' },
 };
 
 /**
@@ -297,28 +265,17 @@ const STATUS_TONE_ICON: Record<
  * compaction, a background task reporting back. Non-expandable on purpose:
  * the label already says everything the row is for.
  */
-function StatusRow({
-  label,
-  tone = "ok",
-}: {
-  label: string;
-  tone?: SessionChatStatusTone;
-}) {
+function StatusRow({ label, tone = 'ok' }: { label: string; tone?: SessionChatStatusTone }) {
   const { Icon, className } = STATUS_TONE_ICON[tone];
   return (
-    <div className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+    <div className='inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground'>
       {/* Tone badge: a badge-tier glyph in a tinted round. This round is off
           the marker axis, so it takes the ramp's smallest tier — the semantic
           size only made the pill taller without aligning it to anything. */}
-      <span
-        className={cn(
-          "flex size-4 shrink-0 items-center justify-center rounded-full",
-          className,
-        )}
-      >
-        <Icon aria-hidden="true" className="ghostex-chat-glyph-badge" />
+      <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full', className)}>
+        <Icon aria-hidden='true' className='ghostex-chat-glyph-badge' />
       </span>
-      <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
+      <span className='min-w-0 [overflow-wrap:anywhere]'>{label}</span>
     </div>
   );
 }
@@ -326,7 +283,7 @@ function StatusRow({
 /** One row per status; a turn carrying several reports each of them. */
 function StatusRows({ statuses }: { statuses: readonly SessionChatStatusRow[] }) {
   return (
-    <div className="flex w-full min-w-0 flex-col items-start gap-1.5 pb-3">
+    <div className='flex w-full min-w-0 flex-col items-start gap-1.5 pb-3'>
       {statuses.map((status, index) => (
         <StatusRow key={index} label={status.label} tone={status.tone} />
       ))}
@@ -346,19 +303,19 @@ function StatusRows({ statuses }: { statuses: readonly SessionChatStatusRow[] })
  */
 function plainReasoningTeaser(markdown: string): string {
   const text = markdown
-    .replace(/```(?:[^\n]*)\n?([\s\S]*?)```/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s+/gm, "")
-    .replace(/(?:\*\*|__|\*|_|~~)/g, "")
-    .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, "$1")
+    .replace(/```(?:[^\n]*)\n?([\s\S]*?)```/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s+/gm, '')
+    .replace(/(?:\*\*|__|\*|_|~~)/g, '')
+    .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, '$1')
     .trim();
   return (
     text
       .split(/\n+/)
       .map((line) => line.trim())
-      .find(Boolean) ?? ""
+      .find(Boolean) ?? ''
   );
 }
 
@@ -394,9 +351,9 @@ function splitReasoningHeadline(markdown: string): {
   const first = lines.findIndex((line) => line.trim().length > 0);
   const hoistable =
     first >= 0 &&
-    (lines[first + 1] ?? "").trim().length === 0 &&
-    !NON_HOISTABLE_REASONING_LINE.test(lines[first] ?? "");
-  const headline = hoistable ? plainReasoningTeaser(lines[first] ?? "") : "";
+    (lines[first + 1] ?? '').trim().length === 0 &&
+    !NON_HOISTABLE_REASONING_LINE.test(lines[first] ?? '');
+  const headline = hoistable ? plainReasoningTeaser(lines[first] ?? '') : '';
   if (headline.length === 0) {
     return { headline: plainReasoningTeaser(markdown), body: markdown };
   }
@@ -404,7 +361,7 @@ function splitReasoningHeadline(markdown: string): {
     headline,
     body: lines
       .slice(first + 1)
-      .join("\n")
+      .join('\n')
       .trim(),
   };
 }
@@ -417,7 +374,7 @@ function splitReasoningHeadline(markdown: string): {
  * plain row there. Empty when the parent already hoists them.
  */
 function questionExchangesFromTools(
-  tools: ReturnType<typeof splitSessionChatBlocks>["tools"],
+  tools: ReturnType<typeof splitSessionChatBlocks>['tools']
 ): SessionChatQuestionExchange[] {
   const out: SessionChatQuestionExchange[] = [];
   for (const pair of pairSessionChatToolBlocks(tools)) {
@@ -429,16 +386,12 @@ function questionExchangesFromTools(
   return out;
 }
 
-function QuestionExchangeCards({
-  exchanges,
-}: {
-  exchanges: readonly SessionChatQuestionExchange[];
-}) {
+function QuestionExchangeCards({ exchanges }: { exchanges: readonly SessionChatQuestionExchange[] }) {
   if (exchanges.length === 0) {
     return null;
   }
   return (
-    <div className="grid min-w-0 gap-3 py-1.5">
+    <div className='grid min-w-0 gap-3 py-1.5'>
       {exchanges.map((exchange, index) => (
         <SessionChatQuestionExchangeCard exchange={exchange} key={index} />
       ))}
@@ -457,7 +410,7 @@ function AgentToolsDisclosure({
   verboseMode,
 }: {
   questionPairsAsRows: boolean;
-  tools: ReturnType<typeof splitSessionChatBlocks>["tools"];
+  tools: ReturnType<typeof splitSessionChatBlocks>['tools'];
   verboseMode: boolean;
 }) {
   const [open, setOpen] = useState(verboseMode);
@@ -466,23 +419,18 @@ function AgentToolsDisclosure({
 
   const exchanges = questionPairsAsRows ? [] : questionExchangesFromTools(tools);
   const count = countSessionChatToolCalls(tools);
-  const label =
-    count === 0 ? "Tool output" : count === 1 ? "1 tool call" : `${count} tool calls`;
+  const label = count === 0 ? 'Tool output' : count === 1 ? '1 tool call' : `${count} tool calls`;
   // A question's JSON input is noise in the preview: its card carries it.
   const summary = summarizeSessionChatToolRun(
-    tools.filter(
-      (block) =>
-        block.type !== "tool-call" ||
-        !isSessionChatQuestionToolName(block.name),
-    ),
+    tools.filter((block) => block.type !== 'tool-call' || !isSessionChatQuestionToolName(block.name))
   );
 
   return (
     <>
-      <div className="ghostex-chat-tool-run">
+      <div className='ghostex-chat-tool-run'>
         <button
           aria-expanded={open}
-          className="ghostex-chat-tool-run-toggle"
+          className='ghostex-chat-tool-run-toggle'
           onClick={() => {
             if (!open) {
               centerSessionChatExpansion(triggerRef.current);
@@ -490,23 +438,18 @@ function AgentToolsDisclosure({
             setOpen((value) => !value);
           }}
           ref={triggerRef}
-          type="button"
+          type='button'
         >
-          <span className="ghostex-chat-work-icon">
-            <IconChevronRight
-              aria-hidden="true"
-              className={cn("ghostex-chat-disclosure-chevron", open && "is-open")}
-            />
+          <span className='ghostex-chat-work-icon'>
+            <IconChevronRight aria-hidden='true' className={cn('ghostex-chat-disclosure-chevron', open && 'is-open')} />
           </span>
-          <span className="shrink-0">{label}</span>
-          {!open && summary ? (
-            <span className="ghostex-chat-work-preview">{summary}</span>
-          ) : null}
+          <span className='shrink-0'>{label}</span>
+          {!open && summary ? <span className='ghostex-chat-work-preview'>{summary}</span> : null}
         </button>
         {open ? (
           <SessionChatExpansion
-            bodyClassName="ghostex-chat-tool-run-expanded"
-            label="Collapse tool calls"
+            bodyClassName='ghostex-chat-tool-run-expanded'
+            label='Collapse tool calls'
             onCollapse={() => setOpen(false)}
           >
             <SessionChatToolRun blocks={tools} questionPairsAsRows showAllRows />
@@ -528,7 +471,7 @@ function ReasoningRow({
   isStreaming: boolean;
   markdown: string;
   questionPairsAsRows: boolean;
-  tools: ReturnType<typeof splitSessionChatBlocks>["tools"];
+  tools: ReturnType<typeof splitSessionChatBlocks>['tools'];
   verboseMode: boolean;
 }) {
   const [open, setOpen] = useState(verboseMode);
@@ -536,7 +479,7 @@ function ReasoningRow({
   useEffect(() => setOpen(verboseMode), [verboseMode]);
 
   const renderBody = (value: string) => (
-    <SessionChatScrollCap className="ghostex-chat-thinking-body">
+    <SessionChatScrollCap className='ghostex-chat-thinking-body'>
       <SessionChatMarkdown isStreaming={isStreaming} markdown={value} />
     </SessionChatScrollCap>
   );
@@ -548,59 +491,57 @@ function ReasoningRow({
   // cards escape the collapse — they are conversation, not work.
   if (tools.length > 0) {
     const { headline, body: detail } = splitReasoningHeadline(markdown);
-    const exchanges = questionPairsAsRows
-      ? []
-      : questionExchangesFromTools(tools);
+    const exchanges = questionPairsAsRows ? [] : questionExchangesFromTools(tools);
     return (
       <>
-      <div className="ghostex-chat-thinking-row is-disclosure">
-        <button
-          aria-expanded={open}
-          className="ghostex-chat-thinking-trigger"
-          onClick={() => {
-            if (!open) {
-              centerSessionChatExpansion(triggerRef.current);
-            }
-            setOpen((value) => !value);
-          }}
-          ref={triggerRef}
-          type="button"
-        >
-          {/* The reasoning disclosure used to draw a filled clip-path triangle
+        <div className='ghostex-chat-thinking-row is-disclosure'>
+          <button
+            aria-expanded={open}
+            className='ghostex-chat-thinking-trigger'
+            onClick={() => {
+              if (!open) {
+                centerSessionChatExpansion(triggerRef.current);
+              }
+              setOpen((value) => !value);
+            }}
+            ref={triggerRef}
+            type='button'
+          >
+            {/* The reasoning disclosure used to draw a filled clip-path triangle
               here while the tool rows below it drew a stroke chevron: two
               disclosure metaphors on one column, which read as two STATES
               rather than two rows. One glyph now, on the control tier. */}
-          <span className="ghostex-chat-thinking-icon">
-            <IconChevronRight
-              aria-hidden="true"
-              className={cn("ghostex-chat-disclosure-chevron", open && "is-open")}
-            />
-          </span>
-          <span className="ghostex-chat-thinking-text">
-            {/* The reasoning's first line, open or collapsed: expanding a turn
+            <span className='ghostex-chat-thinking-icon'>
+              <IconChevronRight
+                aria-hidden='true'
+                className={cn('ghostex-chat-disclosure-chevron', open && 'is-open')}
+              />
+            </span>
+            <span className='ghostex-chat-thinking-text'>
+              {/* The reasoning's first line, open or collapsed: expanding a turn
                 reveals what follows it, it does not relabel it. */}
-            <span data-ghostex-thinking-text>{headline}</span>
-          </span>
-        </button>
-        {open ? (
-          <SessionChatExpansion
-            className="ghostex-chat-thinking-detail"
-            label="Collapse thinking"
-            onCollapse={() => setOpen(false)}
-          >
-            {detail.length > 0 ? renderBody(detail) : null}
-            <SessionChatToolRun blocks={tools} questionPairsAsRows showAllRows />
-          </SessionChatExpansion>
-        ) : null}
-      </div>
-      <QuestionExchangeCards exchanges={exchanges} />
+              <span data-ghostex-thinking-text>{headline}</span>
+            </span>
+          </button>
+          {open ? (
+            <SessionChatExpansion
+              className='ghostex-chat-thinking-detail'
+              label='Collapse thinking'
+              onCollapse={() => setOpen(false)}
+            >
+              {detail.length > 0 ? renderBody(detail) : null}
+              <SessionChatToolRun blocks={tools} questionPairsAsRows showAllRows />
+            </SessionChatExpansion>
+          ) : null}
+        </div>
+        <QuestionExchangeCards exchanges={exchanges} />
       </>
     );
   }
 
   return (
-    <div className="ghostex-chat-thinking-row">
-      <div className="ghostex-chat-thinking-line">
+    <div className='ghostex-chat-thinking-row'>
+      <div className='ghostex-chat-thinking-line'>
         <div data-ghostex-thinking-text>{renderBody(markdown)}</div>
       </div>
     </div>
@@ -628,19 +569,16 @@ function normalizeUserMessageMarkdown(markdown: string): string {
     if (!part) {
       continue;
     }
-    const containingIndex = visible.findIndex((candidate) =>
-      candidate.startsWith(part),
-    );
+    const containingIndex = visible.findIndex((candidate) => candidate.startsWith(part));
     if (containingIndex < 0) {
       visible.push(part);
       continue;
     }
 
-    const remainder =
-      visible[containingIndex]?.slice(part.length).trimStart() ?? "";
+    const remainder = visible[containingIndex]?.slice(part.length).trimStart() ?? '';
     visible[containingIndex] = remainder ? `${part}\n\n${remainder}` : part;
   }
-  return visible.join("\n\n");
+  return visible.join('\n\n');
 }
 
 /*
@@ -650,19 +588,14 @@ function normalizeUserMessageMarkdown(markdown: string): string {
  * references included — or the reader loses the one thing that names the file
  * they attached, and pasting the copy into another composer attaches nothing.
  */
-function userTurnCopyMarkdown(
-  markdown: string,
-  images: readonly { path?: string; url?: string }[],
-): string {
+function userTurnCopyMarkdown(markdown: string, images: readonly { path?: string; url?: string }[]): string {
   const references = images
     .map((block, index) => {
       const href = block.path ?? block.url;
-      return href === undefined ? "" : `[Image #${index + 1}](${href})`;
+      return href === undefined ? '' : `[Image #${index + 1}](${href})`;
     })
-    .filter((reference) => reference !== "");
-  return [references.join(" "), markdown]
-    .filter((part) => part !== "")
-    .join("\n\n");
+    .filter((reference) => reference !== '');
+  return [references.join(' '), markdown].filter((part) => part !== '').join('\n\n');
 }
 
 function MessageRow({
@@ -687,10 +620,10 @@ function MessageRow({
 }) {
   const { prose, tools } = splitSessionChatBlocks(message.blocks);
   const markdown = prose
-    .filter((block) => block.type === "text")
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .join("\n\n");
-  const images = prose.filter((block) => block.type === "image-ref");
+    .filter((block) => block.type === 'text')
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('\n\n');
+  const images = prose.filter((block) => block.type === 'image-ref');
 
   // No ghost bubbles: skip entirely when there is nothing to show.
   if (markdown.length === 0 && images.length === 0 && tools.length === 0) {
@@ -699,49 +632,31 @@ function MessageRow({
 
   const suppressedTurn = sessionChatSuppressedTurnPresentation(message);
   if (suppressedTurn !== null) {
-    if (suppressedTurn.kind === "status") {
+    if (suppressedTurn.kind === 'status') {
       return (
         <StatusRows
-          statuses={
-            suppressedTurn.statuses ?? [
-              { label: suppressedTurn.label, tone: suppressedTurn.tone ?? "ok" },
-            ]
-          }
+          statuses={suppressedTurn.statuses ?? [{ label: suppressedTurn.label, tone: suppressedTurn.tone ?? 'ok' }]}
         />
       );
     }
-    if (suppressedTurn.kind === "inline") {
-      return (
-        <InlineSuppressedTurn
-          label={suppressedTurn.label}
-          text={suppressedTurn.text}
-        />
-      );
+    if (suppressedTurn.kind === 'inline') {
+      return <InlineSuppressedTurn label={suppressedTurn.label} text={suppressedTurn.text} />;
     }
-    return (
-      <SuppressedTurn
-        label={suppressedTurn.label}
-        text={suppressedTurn.text}
-      />
-    );
+    return <SuppressedTurn label={suppressedTurn.label} text={suppressedTurn.text} />;
   }
 
-  const isUser = message.role === "user";
-  const isReasoning = message.role === "reasoning";
-  const isSystem = message.role === "system";
-  const userMarkdown = isUser ? normalizeUserMessageMarkdown(markdown) : "";
-  const userCopyMarkdown = isUser
-    ? userTurnCopyMarkdown(userMarkdown, images)
-    : "";
+  const isUser = message.role === 'user';
+  const isReasoning = message.role === 'reasoning';
+  const isSystem = message.role === 'system';
+  const userMarkdown = isUser ? normalizeUserMessageMarkdown(markdown) : '';
+  const userCopyMarkdown = isUser ? userTurnCopyMarkdown(userMarkdown, images) : '';
   const showCopy = isUser
     ? userCopyMarkdown.length > 0
-    : markdown.length > 0 &&
-      message.role === "assistant" &&
-      showAssistantCopy;
+    : markdown.length > 0 && message.role === 'assistant' && showAssistantCopy;
 
   if (isSystem) {
     return (
-      <Marker className="pb-2">
+      <Marker className='pb-2'>
         <MarkerContent>{markdown}</MarkerContent>
       </Marker>
     );
@@ -777,17 +692,13 @@ function MessageRow({
      * moment the queue releases it, so the label cannot outlive the wait.
      */
     return (
-      <Message align="end" className="pb-4" data-role="user">
+      <Message align='end' className='pb-4' data-role='user'>
         <MessageContent>
           {message.queued === true ? <QueuedLabel /> : null}
           {/* justify-end keeps wrapped rows against the user's side. */}
-          <ImageAttachments blocks={images} className="self-end justify-end" />
+          <ImageAttachments blocks={images} className='self-end justify-end' />
           {userMarkdown.length > 0 ? (
-            <Bubble
-              align="end"
-              className="ghostex-chat-user-bubble"
-              variant="default"
-            >
+            <Bubble align='end' className='ghostex-chat-user-bubble' variant='default'>
               <BubbleContent>
                 <SessionChatMarkdown chatText markdown={userMarkdown} />
               </BubbleContent>
@@ -800,11 +711,11 @@ function MessageRow({
   }
 
   return (
-    <Message align="start" className="pb-4" data-role={message.role}>
+    <Message align='start' className='pb-4' data-role={message.role}>
       <MessageContent>
         <ImageAttachments blocks={images} />
         {markdown.length > 0 ? (
-          <div className="ghostex-chat-agent-message">
+          <div className='ghostex-chat-agent-message'>
             <SessionChatMarkdown isStreaming={isStreaming} markdown={markdown} />
           </div>
         ) : null}
@@ -816,16 +727,9 @@ function MessageRow({
          */}
         {tools.length > 0 ? (
           markdown.length > 0 ? (
-            <AgentToolsDisclosure
-              questionPairsAsRows={questionPairsAsRows}
-              tools={tools}
-              verboseMode={verboseMode}
-            />
+            <AgentToolsDisclosure questionPairsAsRows={questionPairsAsRows} tools={tools} verboseMode={verboseMode} />
           ) : (
-            <SessionChatToolRun
-              blocks={tools}
-              questionPairsAsRows={questionPairsAsRows}
-            />
+            <SessionChatToolRun blocks={tools} questionPairsAsRows={questionPairsAsRows} />
           )
         ) : null}
         {showCopy ? <CopyFooter markdown={markdown} /> : null}
@@ -841,26 +745,20 @@ interface CompletedWorkTurn {
 }
 
 type SessionChatRenderItem =
-  | { kind: "message"; message: SessionChatMessage }
-  | { kind: "completed-work"; turn: CompletedWorkTurn };
+  { kind: 'message'; message: SessionChatMessage } | { kind: 'completed-work'; turn: CompletedWorkTurn };
 
 function hasAgentResponseContent(message: SessionChatMessage): boolean {
   return (
-    message.role === "assistant" &&
+    message.role === 'assistant' &&
     message.id !== SESSION_CHAT_STREAMING_ID &&
     message.blocks.some(
-      (block) =>
-        block.type === "image-ref" ||
-        (block.type === "text" && block.text.trim().length > 0),
+      (block) => block.type === 'image-ref' || (block.type === 'text' && block.text.trim().length > 0)
     )
   );
 }
 
 /** One copy affordance per response: the last assistant text before the next user turn. */
-function finalAssistantMessageIds(
-  messages: readonly SessionChatMessage[],
-  isWorking: boolean,
-): ReadonlySet<string> {
+function finalAssistantMessageIds(messages: readonly SessionChatMessage[], isWorking: boolean): ReadonlySet<string> {
   const ids = new Set<string>();
   let finalAssistantId: string | null = null;
 
@@ -880,15 +778,13 @@ function finalAssistantMessageIds(
     if (sessionChatSuppressedTurnLabel(message) !== null) {
       continue;
     }
-    if (message.role === "user") {
+    if (message.role === 'user') {
       commitTurn();
       continue;
     }
     if (
-      message.role === "assistant" &&
-      message.blocks.some(
-        (block) => block.type === "text" && block.text.trim().length > 0,
-      )
+      message.role === 'assistant' &&
+      message.blocks.some((block) => block.type === 'text' && block.text.trim().length > 0)
     ) {
       finalAssistantId = message.id;
     }
@@ -910,25 +806,22 @@ function finalAssistantMessageIds(
  */
 function completedWorkRenderItems(
   messages: readonly SessionChatMessage[],
-  isWorking: boolean,
+  isWorking: boolean
 ): SessionChatRenderItem[] {
   const items: SessionChatRenderItem[] = [];
   let index = 0;
   while (index < messages.length) {
     const message = messages[index];
-    if (!message || message.role !== "user") {
+    if (!message || message.role !== 'user') {
       if (message) {
-        items.push({ kind: "message", message });
+        items.push({ kind: 'message', message });
       }
       index += 1;
       continue;
     }
 
     let nextUserIndex = index + 1;
-    while (
-      nextUserIndex < messages.length &&
-      messages[nextUserIndex]?.role !== "user"
-    ) {
+    while (nextUserIndex < messages.length && messages[nextUserIndex]?.role !== 'user') {
       nextUserIndex += 1;
     }
     const turnMessages = messages.slice(index + 1, nextUserIndex);
@@ -942,9 +835,9 @@ function completedWorkRenderItems(
     }
     const isNewestTurn = nextUserIndex === messages.length;
     if (finalIndex < 0 || (isNewestTurn && isWorking)) {
-      items.push({ kind: "message", message });
+      items.push({ kind: 'message', message });
       for (const turnMessage of turnMessages) {
-        items.push({ kind: "message", message: turnMessage });
+        items.push({ kind: 'message', message: turnMessage });
       }
       index = nextUserIndex;
       continue;
@@ -952,13 +845,13 @@ function completedWorkRenderItems(
 
     const final = turnMessages[finalIndex];
     if (!final) {
-      items.push({ kind: "message", message });
+      items.push({ kind: 'message', message });
       index += 1;
       continue;
     }
-    items.push({ kind: "message", message });
+    items.push({ kind: 'message', message });
     items.push({
-      kind: "completed-work",
+      kind: 'completed-work',
       turn: {
         final,
         user: message,
@@ -970,12 +863,9 @@ function completedWorkRenderItems(
   return items;
 }
 
-function workedDurationLabel(
-  startedAt: number | null,
-  completedAt: number | null,
-): string {
+function workedDurationLabel(startedAt: number | null, completedAt: number | null): string {
   if (startedAt === null || completedAt === null || completedAt < startedAt) {
-    return "Worked";
+    return 'Worked';
   }
   const seconds = Math.max(1, Math.round((completedAt - startedAt) / 1000));
   if (seconds < 60) {
@@ -983,7 +873,7 @@ function workedDurationLabel(
   }
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
-  return `Worked for ${minutes}m${remainder > 0 ? ` ${remainder}s` : ""}`;
+  return `Worked for ${minutes}m${remainder > 0 ? ` ${remainder}s` : ''}`;
 }
 
 /**
@@ -995,7 +885,7 @@ function workedDurationLabel(
  * twice.
  */
 function hoistedQuestionExchanges(
-  work: readonly SessionChatMessage[],
+  work: readonly SessionChatMessage[]
 ): { exchange: SessionChatQuestionExchange; key: string }[] {
   const out: { exchange: SessionChatQuestionExchange; key: string }[] = [];
   for (const message of work) {
@@ -1029,17 +919,14 @@ function CompletedWork({
   const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => setOpen(verboseMode), [verboseMode]);
   const hasWork = turn.work.length > 0;
-  const questionExchanges = useMemo(
-    () => hoistedQuestionExchanges(turn.work),
-    [turn.work],
-  );
+  const questionExchanges = useMemo(() => hoistedQuestionExchanges(turn.work), [turn.work]);
 
   return (
-    <div className="ghostex-chat-completed-turn">
-      <div className="ghostex-chat-completed-work">
+    <div className='ghostex-chat-completed-turn'>
+      <div className='ghostex-chat-completed-work'>
         <Button
           aria-expanded={hasWork ? open : undefined}
-          className="ghostex-chat-completed-work-trigger"
+          className='ghostex-chat-completed-work-trigger'
           disabled={!hasWork}
           onClick={() => {
             if (hasWork) {
@@ -1050,20 +937,20 @@ function CompletedWork({
             }
           }}
           ref={triggerRef}
-          size="xs"
-          type="button"
-          variant="ghost"
+          size='xs'
+          type='button'
+          variant='ghost'
         >
           {/* The chevron LEADS, in the transcript's marker slot, like every
               other disclosure. It used to trail the label, which left this row
               as the only expander on the surface whose glyph was not on the
               column. The slot stays even with no work to disclose, so a turn
               with nothing behind it does not shift its label left. */}
-          <span className="ghostex-chat-marker-slot">
+          <span className='ghostex-chat-marker-slot'>
             {hasWork ? (
               <IconChevronRight
-                aria-hidden="true"
-                className={cn("ghostex-chat-disclosure-chevron", open && "is-open")}
+                aria-hidden='true'
+                className={cn('ghostex-chat-disclosure-chevron', open && 'is-open')}
               />
             ) : null}
           </span>
@@ -1072,8 +959,8 @@ function CompletedWork({
         <Separator />
         {hasWork && open ? (
           <SessionChatExpansion
-            bodyClassName="ghostex-chat-completed-work-content"
-            label="Collapse completed work"
+            bodyClassName='ghostex-chat-completed-work-content'
+            label='Collapse completed work'
             onCollapse={() => setOpen(false)}
           >
             {turn.work.map((message) => (
@@ -1089,7 +976,7 @@ function CompletedWork({
         ) : null}
       </div>
       {questionExchanges.length > 0 ? (
-        <Message align="start" className="pb-4" data-role="question-exchange">
+        <Message align='start' className='pb-4' data-role='question-exchange'>
           <MessageContent>
             {questionExchanges.map(({ exchange, key }) => (
               <SessionChatQuestionExchangeCard exchange={exchange} key={key} />
@@ -1097,11 +984,7 @@ function CompletedWork({
           </MessageContent>
         </Message>
       ) : null}
-      <MessageRow
-        message={turn.final}
-        showAssistantCopy={showAssistantCopy}
-        verboseMode={verboseMode}
-      />
+      <MessageRow message={turn.final} showAssistantCopy={showAssistantCopy} verboseMode={verboseMode} />
     </div>
   );
 }
@@ -1112,11 +995,7 @@ function CompletedWork({
  * top of the viewport (top anchoring pads the transcript with a spacer and
  * leaves a scrollable empty gap above the composer).
  */
-function ScrollToLatestSend({
-  pendingMessageId,
-}: {
-  pendingMessageId: string | null;
-}): null {
+function ScrollToLatestSend({ pendingMessageId }: { pendingMessageId: string | null }): null {
   const { scrollToEnd } = useMessageScroller();
   const handledRef = useRef<string | null>(null);
 
@@ -1125,7 +1004,7 @@ function ScrollToLatestSend({
       return;
     }
     handledRef.current = pendingMessageId;
-    scrollToEnd({ behavior: "auto" });
+    scrollToEnd({ behavior: 'auto' });
   }, [pendingMessageId, scrollToEnd]);
 
   return null;
@@ -1152,7 +1031,7 @@ export function SessionChatMessageList({
         window.clearTimeout(scrollbarFadeTimeoutRef.current);
       }
     },
-    [],
+    []
   );
 
   // Auto-load older history when the reader scrolls near the top; the
@@ -1162,50 +1041,37 @@ export function SessionChatMessageList({
   const handleScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>): void => {
       const viewport = event.currentTarget;
-      viewport.setAttribute("data-user-scrolling", "true");
+      viewport.setAttribute('data-user-scrolling', 'true');
       if (scrollbarFadeTimeoutRef.current !== undefined) {
         window.clearTimeout(scrollbarFadeTimeoutRef.current);
       }
       scrollbarFadeTimeoutRef.current = window.setTimeout(() => {
-        viewport.removeAttribute("data-user-scrolling");
+        viewport.removeAttribute('data-user-scrolling');
       }, SCROLLBAR_FADE_MS);
-      if (
-        viewport.scrollTop < LOAD_EARLIER_SCROLL_TOP_PX &&
-        hasMoreRef.current &&
-        !loadingEarlierRef.current
-      ) {
+      if (viewport.scrollTop < LOAD_EARLIER_SCROLL_TOP_PX && hasMoreRef.current && !loadingEarlierRef.current) {
         onLoadEarlier();
       }
     },
-    [onLoadEarlier],
+    [onLoadEarlier]
   );
 
   const rendered = useMemo(
     () =>
       foldSessionChatToolMessages(
-        dropSessionChatHiddenMessages(
-          normalizeSessionChatImageTranscriptMessages(
-            orderSessionChatMessages(messages),
-          ),
-        ),
+        dropSessionChatHiddenMessages(normalizeSessionChatImageTranscriptMessages(orderSessionChatMessages(messages))),
         // Collapsed markers must not break a tool-fold run.
-        (message) => sessionChatSuppressedTurnLabel(message) !== null,
+        (message) => sessionChatSuppressedTurnLabel(message) !== null
       ),
-    [messages],
+    [messages]
   );
 
   const showActivity = terminalActivity != null;
   const showTypingIndicator =
-    !showActivity &&
-    isWorking &&
-    !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
-  const renderItems = useMemo(
-    () => completedWorkRenderItems(rendered, isWorking),
-    [isWorking, rendered],
-  );
+    !showActivity && isWorking && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
+  const renderItems = useMemo(() => completedWorkRenderItems(rendered, isWorking), [isWorking, rendered]);
   const copyableAssistantMessageIds = useMemo(
     () => finalAssistantMessageIds(rendered, isWorking),
-    [isWorking, rendered],
+    [isWorking, rendered]
   );
 
   const pendingMessageId = useMemo(() => {
@@ -1219,40 +1085,27 @@ export function SessionChatMessageList({
   }, [rendered]);
 
   return (
-    <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+    <MessageScrollerProvider autoScroll defaultScrollPosition='end'>
       <ScrollToLatestSend pendingMessageId={pendingMessageId} />
-      <MessageScroller className="flex-1">
+      <MessageScroller className='flex-1'>
         {/* RTL viewport + LTR content puts the scrollbar on the left edge. */}
-        <MessageScrollerViewport
-          className="[direction:rtl]"
-          onScroll={handleScroll}
-          preserveScrollOnPrepend
-        >
+        <MessageScrollerViewport className='[direction:rtl]' onScroll={handleScroll} preserveScrollOnPrepend>
           {hasMore ? (
-            <div className="flex justify-center px-4 pt-2 [direction:ltr]">
-              <Button
-                disabled={loadingEarlier}
-                onClick={onLoadEarlier}
-                size="sm"
-                variant="ghost"
-              >
-                {loadingEarlier ? "Loading…" : "Load earlier messages"}
+            <div className='flex justify-center px-4 pt-2 [direction:ltr]'>
+              <Button disabled={loadingEarlier} onClick={onLoadEarlier} size='sm' variant='ghost'>
+                {loadingEarlier ? 'Loading…' : 'Load earlier messages'}
               </Button>
             </div>
           ) : null}
-          <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]">
+          <MessageScrollerContent className='mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]'>
             {renderItems.map((item, index) => (
               <MessageScrollerItem
                 key={
-                  item.kind === "message"
+                  item.kind === 'message'
                     ? item.message.id
                     : `completed-work:${item.turn.user.id}:${item.turn.final.id}`
                 }
-                messageId={
-                  item.kind === "message"
-                    ? item.message.id
-                    : item.turn.final.id
-                }
+                messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
                 // No row is a scroll anchor: anchoring a message to the top of
                 // the viewport makes message-scroller pad the transcript with a
                 // spacer so that message can reach the top, which leaves a
@@ -1260,7 +1113,7 @@ export function SessionChatMessageList({
                 // composer until the reply grows tall enough to fill it.
                 // Following the bottom keeps the newest row above the composer.
               >
-                {item.kind === "message" ? (
+                {item.kind === 'message' ? (
                   <MessageRow
                     /*
                      * Only the newest row can still be growing, and only while
@@ -1274,35 +1127,29 @@ export function SessionChatMessageList({
                      */
                     isStreaming={isWorking && index === renderItems.length - 1}
                     message={item.message}
-                    showAssistantCopy={copyableAssistantMessageIds.has(
-                      item.message.id,
-                    )}
+                    showAssistantCopy={copyableAssistantMessageIds.has(item.message.id)}
                     verboseMode={verboseMode}
                   />
                 ) : (
                   <CompletedWork
-                    showAssistantCopy={copyableAssistantMessageIds.has(
-                      item.turn.final.id,
-                    )}
+                    showAssistantCopy={copyableAssistantMessageIds.has(item.turn.final.id)}
                     turn={item.turn}
                     verboseMode={verboseMode}
                   />
                 )}
               </MessageScrollerItem>
             ))}
-            {showActivity && terminalActivity ? (
-              <SessionChatActivityRow activity={terminalActivity} />
-            ) : null}
+            {showActivity && terminalActivity ? <SessionChatActivityRow activity={terminalActivity} /> : null}
             {showTypingIndicator ? (
               <div
-                aria-label="Agent is responding"
-                aria-live="polite"
-                className="flex h-8 items-center gap-1.5 text-muted-foreground"
-                role="status"
+                aria-label='Agent is responding'
+                aria-live='polite'
+                className='flex h-8 items-center gap-1.5 text-muted-foreground'
+                role='status'
               >
                 {[0, 1, 2].map((index) => (
                   <span
-                    className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70"
+                    className='size-1.5 animate-bounce rounded-full bg-muted-foreground/70'
                     key={index}
                     style={{ animationDelay: `${index * 160}ms` }}
                   />
@@ -1311,7 +1158,7 @@ export function SessionChatMessageList({
             ) : null}
           </MessageScrollerContent>
         </MessageScrollerViewport>
-        <MessageScrollerButton className="ghostex-chat-scroll-bottom-button" />
+        <MessageScrollerButton className='ghostex-chat-scroll-bottom-button' />
       </MessageScroller>
     </MessageScrollerProvider>
   );

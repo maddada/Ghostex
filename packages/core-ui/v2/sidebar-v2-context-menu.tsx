@@ -20,37 +20,21 @@ import {
   IconSparkles,
   IconTag,
   IconX,
-} from "@tabler/icons-react";
-import {
-  Fragment,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
-import type { SidebarProjectGroupingMode } from "../../shared/ghostex-settings";
-import type {
-  SidebarSessionItem,
-  SidebarSessionTag,
-} from "../../shared/session-grid-contract";
-import {
-  getEnabledVisibleSidebarSessionTagSections,
-  type SidebarSessionTagListItem,
-} from "../../shared/session-tags";
-import {
-  resolveSidebarV2SnoozePresets,
-  type SidebarV2SnoozePreset,
-} from "../../shared/sidebar-v2-snooze";
+} from '@tabler/icons-react';
+import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import type { SidebarProjectGroupingMode } from '../../shared/ghostex-settings';
+import type { SidebarSessionItem, SidebarSessionTag } from '../../shared/session-grid-contract';
+import { getEnabledVisibleSidebarSessionTagSections, type SidebarSessionTagListItem } from '../../shared/session-tags';
+import { resolveSidebarV2SnoozePresets, type SidebarV2SnoozePreset } from '../../shared/sidebar-v2-snooze';
 import {
   SIDEBAR_CONTEXT_MENU_VIEWPORT_MARGIN_PX,
   SidebarContextMenuPortal,
   getClampedSidebarContextMenuCoordinate,
-} from "../sidebar-context-menu-portal";
-import { SessionTagIcon, getEffectiveSessionTag } from "../session-tag-ui";
-import type { SidebarSessionContextMenuEligibility } from "../sortable-session-card";
-import type { WebviewApi } from "../webview-api";
+} from '../sidebar-context-menu-portal';
+import { SessionTagIcon, getEffectiveSessionTag } from '../session-tag-ui';
+import type { SidebarSessionContextMenuEligibility } from '../sortable-session-card';
+import type { WebviewApi } from '../webview-api';
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -208,14 +192,14 @@ export type SidebarV2ContextMenuOptions = {
   worktreeBranch?: string;
 };
 
-const CONTEXT_MENU_ICON_CLASS = "session-context-menu-icon";
+const CONTEXT_MENU_ICON_CLASS = 'session-context-menu-icon';
 
 export function createSidebarV2ContextMenuSections(
   session: SidebarSessionItem,
   handlers: SidebarV2ContextMenuHandlers,
-  options: SidebarV2ContextMenuOptions = {},
+  options: SidebarV2ContextMenuOptions = {}
 ): SidebarV2ContextMenuAction[][] {
-  const isBrowser = session.kind === "browser" || session.sessionKind === "browser";
+  const isBrowser = session.kind === 'browser' || session.sessionKind === 'browser';
   const isSleeping = session.isSleeping === true;
   const isPinned = session.isPinned === true;
   /*
@@ -228,45 +212,42 @@ export function createSidebarV2ContextMenuSections(
    */
   const lifecycle = options.lifecycle;
   const eligibility = options.eligibility;
-  const isBlockedOnUser = session.activity === "attention";
-  const isWorking = session.activity === "working";
-  const canSettle =
-    !isBrowser && lifecycle?.supportsSettle === true && !isBlockedOnUser && !isWorking;
+  const isBlockedOnUser = session.activity === 'attention';
+  const isWorking = session.activity === 'working';
+  const canSettle = !isBrowser && lifecycle?.supportsSettle === true && !isBlockedOnUser && !isWorking;
   const canSnooze = !isBrowser && lifecycle?.supportsSnooze === true && !isBlockedOnUser;
 
   const lifecycleActions: SidebarV2ContextMenuAction[] = [];
   if (canSettle && handlers.onSettle && !lifecycle?.isSettled) {
     lifecycleActions.push({
-      icon: <IconCheck aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={2} />,
-      key: "settle",
-      label: "Settle",
+      icon: <IconCheck aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={2} />,
+      key: 'settle',
+      label: 'Settle',
       onClick: handlers.onSettle,
     });
   }
   if (!isBrowser && lifecycle?.supportsSettle === true && lifecycle.isSettled && handlers.onUnsettle) {
     lifecycleActions.push({
-      icon: (
-        <IconArrowBackUp aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />
-      ),
-      key: "unsettle",
-      label: "Un-settle",
+      icon: <IconArrowBackUp aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'unsettle',
+      label: 'Un-settle',
       onClick: handlers.onUnsettle,
     });
   }
   if (!isBrowser && lifecycle?.supportsSnooze === true && lifecycle.isSnoozed && handlers.onWake) {
     lifecycleActions.push({
-      icon: <IconAlarmOff aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "wake",
-      label: "Wake now",
+      icon: <IconAlarmOff aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'wake',
+      label: 'Wake now',
       onClick: handlers.onWake,
     });
   }
   if (canSnooze && handlers.onSnooze && !lifecycle?.isSnoozed) {
     const onSnooze = handlers.onSnooze;
     lifecycleActions.push({
-      icon: <IconClock aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "snooze",
-      label: "Snooze",
+      icon: <IconClock aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'snooze',
+      label: 'Snooze',
       // Opening the parent only reveals the presets; the snooze itself is
       // always an explicit preset choice, never a default guess.
       onClick: () => undefined,
@@ -288,9 +269,9 @@ export function createSidebarV2ContextMenuSections(
    */
   if (eligibility?.canCloseAfterDone === true && handlers.onCloseAfterDone) {
     lifecycleActions.push({
-      icon: <IconClock aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "closeAfterDone",
-      label: "Close After Done",
+      icon: <IconClock aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'closeAfterDone',
+      label: 'Close After Done',
       onClick: handlers.onCloseAfterDone,
     });
   }
@@ -298,9 +279,9 @@ export function createSidebarV2ContextMenuSections(
   const primary: SidebarV2ContextMenuAction[] = [];
   if (!isBrowser) {
     primary.push({
-      icon: <IconPencil aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />,
-      key: "rename",
-      label: "Rename",
+      icon: <IconPencil aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'rename',
+      label: 'Rename',
       onClick: handlers.onRename,
     });
   }
@@ -312,18 +293,16 @@ export function createSidebarV2ContextMenuSections(
    */
   if (options.canFocusMode === true) {
     primary.push({
-      icon: <IconMaximize aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />,
-      key: "focus",
-      label: "Focus",
+      icon: <IconMaximize aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'focus',
+      label: 'Focus',
       onClick: handlers.onFocusMode,
     });
   }
   if (!isBrowser && options.worktreeBranch && handlers.onNewSessionOnBranch) {
     primary.push({
-      icon: (
-        <IconGitBranch aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />
-      ),
-      key: "newSessionOnBranch",
+      icon: <IconGitBranch aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'newSessionOnBranch',
       label: `New session on ${options.worktreeBranch}`,
       onClick: handlers.onNewSessionOnBranch,
     });
@@ -339,67 +318,65 @@ export function createSidebarV2ContextMenuSections(
   const sessionActions: SidebarV2ContextMenuAction[] = [];
   if (session.firstUserMessage?.trim() && handlers.onViewFirstMessage) {
     sessionActions.push({
-      icon: (
-        <IconMessageCircle aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />
-      ),
-      key: "viewFirstMessage",
-      label: "View 1st message",
+      icon: <IconMessageCircle aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'viewFirstMessage',
+      label: 'View 1st message',
       onClick: handlers.onViewFirstMessage,
     });
   }
   if (eligibility?.canCopyResumeCommand === true && handlers.onCopyResumeCommand) {
     sessionActions.push({
-      icon: <IconCopy aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "copyResume",
-      label: "Copy resume",
+      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'copyResume',
+      label: 'Copy resume',
       onClick: handlers.onCopyResumeCommand,
     });
   }
   if (eligibility?.canCopyAttachCommand === true && handlers.onCopyAttachCommand) {
     sessionActions.push({
-      icon: <IconCopy aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "copyAttach",
-      label: "Copy attach command",
+      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'copyAttach',
+      label: 'Copy attach command',
       onClick: handlers.onCopyAttachCommand,
     });
   }
   if (eligibility?.canCopySessionDetails === true && handlers.onCopyDetails) {
     sessionActions.push({
-      icon: <IconCopy aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "copyDetails",
-      label: "Copy details",
+      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'copyDetails',
+      label: 'Copy details',
       onClick: handlers.onCopyDetails,
     });
   }
   if (eligibility?.canDelayedSend === true && handlers.onDelayedSend) {
     sessionActions.push({
-      icon: <IconClock aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "delayedSend",
-      label: "Delayed Send",
+      icon: <IconClock aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'delayedSend',
+      label: 'Delayed Send',
       onClick: handlers.onDelayedSend,
     });
   }
   if (eligibility?.canForkSession === true && handlers.onFork) {
     sessionActions.push({
-      icon: <IconGitFork aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "fork",
-      label: "Fork",
+      icon: <IconGitFork aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'fork',
+      label: 'Fork',
       onClick: handlers.onFork,
     });
   }
   if (eligibility?.canGenerateSessionTitle === true && handlers.onGenerateTitle) {
     sessionActions.push({
-      icon: <IconSparkles aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "generateTitle",
-      label: "Generate Title",
+      icon: <IconSparkles aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'generateTitle',
+      label: 'Generate Title',
       onClick: handlers.onGenerateTitle,
     });
   }
   if (eligibility?.canFullReloadSession === true && handlers.onFullReload) {
     sessionActions.push({
-      icon: <IconRefresh aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "fullReload",
-      label: "Full reload",
+      icon: <IconRefresh aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'fullReload',
+      label: 'Full reload',
       onClick: handlers.onFullReload,
     });
   }
@@ -415,43 +392,42 @@ export function createSidebarV2ContextMenuSections(
    * tag a row already carries IS the clear, one click deep.
    */
   const currentSessionTag = getEffectiveSessionTag(session);
-  const tagSubmenuItems = getEnabledVisibleSidebarSessionTagSections(
-    options.sessionTagListItems,
-    { includeTags: currentSessionTag ? [currentSessionTag] : [] },
-  ).flatMap((section) =>
+  const tagSubmenuItems = getEnabledVisibleSidebarSessionTagSections(options.sessionTagListItems, {
+    includeTags: currentSessionTag ? [currentSessionTag] : [],
+  }).flatMap((section) =>
     /*
      * CDXC:SidebarV2ContextMenuLook 2026-07-30:
      * The resolver's own sections are carried through as `sectionKey` so the
      * panel can draw V1's dividers between Priority / Progress / Type instead of
      * one flat run of markers. The ORDER and the SET are untouched.
      */
-    section.options.map((option) => ({ ...option, sectionKey: section.label })),
+    section.options.map((option) => ({ ...option, sectionKey: section.label }))
   );
 
   const stateActions: SidebarV2ContextMenuAction[] = [
     {
       icon: isPinned ? (
-        <IconPinnedOff aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
+        <IconPinnedOff aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ) : (
-        <IconPinned aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
+        <IconPinned aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ),
-      key: "pin",
-      label: isPinned ? "Unpin" : "Pin",
+      key: 'pin',
+      label: isPinned ? 'Unpin' : 'Pin',
       onClick: () => handlers.onSetPinned(!isPinned),
     },
   ];
   const onSetSessionTag = handlers.onSetSessionTag;
   if (eligibility?.canTagSession === true && onSetSessionTag && tagSubmenuItems.length > 0) {
     stateActions.push({
-      icon: <IconTag aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: "tagAs",
-      label: "Tag as",
+      icon: <IconTag aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'tagAs',
+      label: 'Tag as',
       // The parent only reveals the markers; assigning one is always explicit.
       onClick: () => undefined,
       submenu: tagSubmenuItems.map((option) => ({
         icon: (
           <SessionTagIcon
-            className="session-context-menu-icon session-tag-colored-icon"
+            className='session-context-menu-icon session-tag-colored-icon'
             fillFavorite
             size={16}
             stroke={1.8}
@@ -461,24 +437,21 @@ export function createSidebarV2ContextMenuSections(
         isChecked: currentSessionTag === option.value,
         key: option.value,
         label: option.label,
-        onClick: () =>
-          onSetSessionTag(currentSessionTag === option.value ? undefined : option.value),
+        onClick: () => onSetSessionTag(currentSessionTag === option.value ? undefined : option.value),
         sectionKey: option.sectionKey,
       })),
     });
   }
-  stateActions.push(
-    {
-      icon: isSleeping ? (
-        <IconPlayerPlay aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ) : (
-        <IconMoon aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />
-      ),
-      key: "sleep",
-      label: isSleeping ? "Wake" : "Sleep",
-      onClick: () => handlers.onSetSleeping(!isSleeping),
-    },
-  );
+  stateActions.push({
+    icon: isSleeping ? (
+      <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+    ) : (
+      <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+    ),
+    key: 'sleep',
+    label: isSleeping ? 'Wake' : 'Sleep',
+    onClick: () => handlers.onSetSleeping(!isSleeping),
+  });
 
   const destructive: SidebarV2ContextMenuAction[] = [
     {
@@ -493,16 +466,14 @@ export function createSidebarV2ContextMenuSections(
        * incomplete. Close therefore stays unconditional here, and the setting is
        * intentionally NOT consulted.
        */
-      icon: <IconX aria-hidden="true" className="session-context-menu-icon" size={16} stroke={1.8} />,
-      key: "close",
-      label: "Close",
+      icon: <IconX aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'close',
+      label: 'Close',
       onClick: handlers.onClose,
     },
   ];
 
-  return [primary, sessionActions, lifecycleActions, stateActions, destructive].filter(
-    (section) => section.length > 0,
-  );
+  return [primary, sessionActions, lifecycleActions, stateActions, destructive].filter((section) => section.length > 0);
 }
 
 /*
@@ -523,9 +494,9 @@ export const SIDEBAR_V2_PROJECT_GROUPING_MENU_OPTIONS: readonly {
   label: string;
   mode: SidebarProjectGroupingMode;
 }[] = [
-  { label: "Repository", mode: "repository" },
-  { label: "Repository + path", mode: "repositoryPath" },
-  { label: "Keep separate", mode: "separate" },
+  { label: 'Repository', mode: 'repository' },
+  { label: 'Repository + path', mode: 'repositoryPath' },
+  { label: 'Keep separate', mode: 'separate' },
 ];
 
 export type SidebarV2ProjectGroupMenuState = {
@@ -547,16 +518,14 @@ export function createSidebarV2ProjectGroupMenuSections(
      */
     onCloseProject?: () => void;
     onSetGroupingMode: (mode: SidebarProjectGroupingMode) => void;
-  },
+  }
 ): SidebarV2ContextMenuAction[][] {
   const grouping: SidebarV2ContextMenuAction[] = group.canGroupAcrossMachines
     ? [
         {
-          icon: (
-            <IconServer aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />
-          ),
-          key: "groupAcrossMachines",
-          label: "Group across machines",
+          icon: <IconServer aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+          key: 'groupAcrossMachines',
+          label: 'Group across machines',
           // The parent only reveals the choices; picking one is always explicit.
           onClick: () => undefined,
           submenu: SIDEBAR_V2_PROJECT_GROUPING_MENU_OPTIONS.map((option) => ({
@@ -583,9 +552,9 @@ export function createSidebarV2ProjectGroupMenuSections(
     ? [
         {
           danger: true,
-          icon: <IconX aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-          key: "closeProject",
-          label: "Close Project",
+          icon: <IconX aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+          key: 'closeProject',
+          label: 'Close Project',
           onClick: handlers.onCloseProject,
         },
       ]
@@ -605,7 +574,7 @@ export type SidebarV2ContextMenuProps = {
    * on the project portal), because project labels are longer. Defaulting to
    * `session` keeps every existing row-menu mount unchanged.
    */
-  variant?: "projectGroup" | "session";
+  variant?: 'projectGroup' | 'session';
   vscode: WebviewApi;
 };
 
@@ -634,11 +603,11 @@ type SidebarV2OpenSubmenu = SidebarV2ContextSubmenuAnchor & {
  * submenus keep exactly the shape they had before sections existed.
  */
 function groupSidebarV2SubmenuItems(
-  items: readonly SidebarV2ContextMenuSubmenuItem[],
+  items: readonly SidebarV2ContextMenuSubmenuItem[]
 ): { items: SidebarV2ContextMenuSubmenuItem[]; key: string }[] {
   const groups: { items: SidebarV2ContextMenuSubmenuItem[]; key: string }[] = [];
   for (const item of items) {
-    const key = item.sectionKey ?? "";
+    const key = item.sectionKey ?? '';
     const currentGroup = groups[groups.length - 1];
     if (currentGroup && currentGroup.key === key) {
       currentGroup.items.push(item);
@@ -649,10 +618,7 @@ function groupSidebarV2SubmenuItems(
   return groups;
 }
 
-function areSubmenuStylesEqual(
-  previousStyle: CSSProperties | undefined,
-  nextStyle: CSSProperties,
-): boolean {
+function areSubmenuStylesEqual(previousStyle: CSSProperties | undefined, nextStyle: CSSProperties): boolean {
   return (
     previousStyle?.left === nextStyle.left &&
     previousStyle?.top === nextStyle.top &&
@@ -698,35 +664,25 @@ function SidebarV2ContextSubmenuPanel({
 
     const clampPanel = () => {
       const bounds = panel.getBoundingClientRect();
-      const maxPanelHeight = Math.max(
-        0,
-        window.innerHeight - SIDEBAR_CONTEXT_MENU_VIEWPORT_MARGIN_PX * 2,
-      );
+      const maxPanelHeight = Math.max(0, window.innerHeight - SIDEBAR_CONTEXT_MENU_VIEWPORT_MARGIN_PX * 2);
       const nextStyle: CSSProperties = {
-        left: `${getClampedSidebarContextMenuCoordinate(
-          anchor.left,
-          bounds.width,
-          window.innerWidth,
-        )}px`,
+        left: `${getClampedSidebarContextMenuCoordinate(anchor.left, bounds.width, window.innerWidth)}px`,
         maxHeight: `calc(100vh - ${SIDEBAR_CONTEXT_MENU_VIEWPORT_MARGIN_PX * 2}px)`,
         top: `${getClampedSidebarContextMenuCoordinate(
           anchor.top,
           Math.min(bounds.height, maxPanelHeight),
-          window.innerHeight,
+          window.innerHeight
         )}px`,
       };
-      setPanelStyle((previousStyle) =>
-        areSubmenuStylesEqual(previousStyle, nextStyle) ? previousStyle : nextStyle,
-      );
+      setPanelStyle((previousStyle) => (areSubmenuStylesEqual(previousStyle, nextStyle) ? previousStyle : nextStyle));
     };
 
     clampPanel();
-    window.addEventListener("resize", clampPanel);
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(clampPanel);
+    window.addEventListener('resize', clampPanel);
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(clampPanel);
     resizeObserver?.observe(panel);
     return () => {
-      window.removeEventListener("resize", clampPanel);
+      window.removeEventListener('resize', clampPanel);
       resizeObserver?.disconnect();
     };
   }, [anchor.left, anchor.top]);
@@ -734,8 +690,8 @@ function SidebarV2ContextSubmenuPanel({
   return createPortal(
     <div
       aria-label={label}
-      className="session-context-menu sidebar-v2-context-submenu"
-      data-empty-space-blocking="true"
+      className='session-context-menu sidebar-v2-context-submenu'
+      data-empty-space-blocking='true'
       onClick={(event) => {
         event.stopPropagation();
       }}
@@ -744,48 +700,43 @@ function SidebarV2ContextSubmenuPanel({
         event.stopPropagation();
       }}
       ref={panelRef}
-      role="menu"
+      role='menu'
       style={panelStyle}
     >
       {groupSidebarV2SubmenuItems(items).map((group) => (
         /* V1's own submenu section class: it owns the 2px item grid and the
            divider that separates one block from the next. */
         <div
-          className="session-tag-menu-section sidebar-v2-context-submenu-section"
+          className='session-tag-menu-section sidebar-v2-context-submenu-section'
           key={`sidebar-v2-submenu-section-${group.key}`}
         >
           {group.items.map((item) => (
             <button
               aria-checked={item.isChecked === undefined ? undefined : item.isChecked}
-              className="session-context-menu-item sidebar-v2-context-submenu-item"
+              className='session-context-menu-item sidebar-v2-context-submenu-item'
               data-checked={item.isChecked === undefined ? undefined : String(item.isChecked)}
               key={item.key}
               onClick={() => {
                 onDismiss();
                 item.onClick();
               }}
-              role={item.isChecked === undefined ? "menuitem" : "menuitemradio"}
-              type="button"
+              role={item.isChecked === undefined ? 'menuitem' : 'menuitemradio'}
+              type='button'
             >
               {item.icon}
-              <span className="sidebar-v2-context-submenu-label">{item.label}</span>
+              <span className='sidebar-v2-context-submenu-label'>{item.label}</span>
               {item.isChecked ? (
-                <IconCheck
-                  aria-hidden="true"
-                  className="sidebar-v2-context-submenu-check"
-                  size={14}
-                  stroke={2}
-                />
+                <IconCheck aria-hidden='true' className='sidebar-v2-context-submenu-check' size={14} stroke={2} />
               ) : null}
               {item.trailingLabel ? (
-                <span className="sidebar-v2-context-submenu-when">{item.trailingLabel}</span>
+                <span className='sidebar-v2-context-submenu-when'>{item.trailingLabel}</span>
               ) : null}
             </button>
           ))}
         </div>
       ))}
     </div>,
-    document.body,
+    document.body
   );
 }
 
@@ -809,16 +760,16 @@ export function SidebarV2ContextMenu({
   onDismiss,
   position,
   sections,
-  variant = "session",
+  variant = 'session',
   vscode,
 }: SidebarV2ContextMenuProps) {
   const [openSubmenu, setOpenSubmenu] = useState<SidebarV2OpenSubmenu>();
-  const isProjectGroupMenu = variant === "projectGroup";
+  const isProjectGroupMenu = variant === 'projectGroup';
   return (
     <>
       <SidebarContextMenuPortal
         menuClassName={`session-context-menu${
-          isProjectGroupMenu ? "" : " sidebar-session-context-menu"
+          isProjectGroupMenu ? '' : ' sidebar-session-context-menu'
         } sidebar-v2-session-context-menu`}
         menuStyle={{
           left: `${position.clientX}px`,
@@ -833,19 +784,15 @@ export function SidebarV2ContextMenu({
         {sections.map((section, sectionIndex) => (
           // Sections are positional, not identified: the index IS the identity.
           <Fragment key={`sidebar-v2-menu-section-${sectionIndex}`}>
-            {sectionIndex > 0 ? (
-              <div className="session-context-menu-divider" role="separator" />
-            ) : null}
-            <div className="session-context-menu-section">
+            {sectionIndex > 0 ? <div className='session-context-menu-divider' role='separator' /> : null}
+            <div className='session-context-menu-section'>
               {section.map((action) => {
                 const isExpanded = openSubmenu?.key === action.key;
                 return (
                   <button
                     aria-expanded={action.submenu ? isExpanded : undefined}
-                    aria-haspopup={action.submenu ? "menu" : undefined}
-                    className={`session-context-menu-item${
-                      action.danger ? " session-context-menu-item-danger" : ""
-                    }`}
+                    aria-haspopup={action.submenu ? 'menu' : undefined}
+                    className={`session-context-menu-item${action.danger ? ' session-context-menu-item-danger' : ''}`}
                     key={action.key}
                     onClick={(event) => {
                       /*
@@ -865,15 +812,15 @@ export function SidebarV2ContextMenu({
                                 label: action.label,
                                 left: bounds.left,
                                 top: bounds.bottom + 4,
-                              },
+                              }
                         );
                         return;
                       }
                       onDismiss();
                       action.onClick();
                     }}
-                    role="menuitem"
-                    type="button"
+                    role='menuitem'
+                    type='button'
                   >
                     {action.icon}
                     {/*
@@ -885,11 +832,11 @@ export function SidebarV2ContextMenu({
                      * menu box, turning the menu into a horizontal scroller and
                      * hiding the one glyph that says an item opens a panel.
                      */}
-                    <span className="sidebar-v2-context-menu-label">{action.label}</span>
+                    <span className='sidebar-v2-context-menu-label'>{action.label}</span>
                     {action.submenu ? (
                       <IconChevronRight
-                        aria-hidden="true"
-                        className="session-context-menu-trailing-icon"
+                        aria-hidden='true'
+                        className='session-context-menu-trailing-icon'
                         size={14}
                         stroke={1.8}
                       />

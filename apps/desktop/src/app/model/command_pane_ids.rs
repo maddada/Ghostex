@@ -5,10 +5,8 @@
 
 use crate::*;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CommandSessionId(pub(crate) u64);
-
 
 pub(crate) fn gpui_command_session_external_id(session_id: CommandSessionId) -> String {
     /*
@@ -17,7 +15,6 @@ pub(crate) fn gpui_command_session_external_id(session_id: CommandSessionId) -> 
     */
     format!("G{}", session_id.0)
 }
-
 
 pub(crate) fn gpui_command_session_id_from_external_id(value: &str) -> Option<CommandSessionId> {
     /*
@@ -32,14 +29,12 @@ pub(crate) fn gpui_command_session_id_from_external_id(value: &str) -> Option<Co
     (id > 0).then_some(CommandSessionId(id))
 }
 
-
 /// Agents workspace sessions cross the app-modal bridge as `GW{u64}` ids so
 /// Delayed Send payloads cannot collide with `G{u64}` command-pane ids or
 /// gxserver session ids.
 pub(crate) fn gpui_agents_session_external_id(session_id: TerminalSessionId) -> String {
     format!("GW{}", session_id.0)
 }
-
 
 pub(crate) fn gpui_agents_session_id_from_external_id(value: &str) -> Option<TerminalSessionId> {
     let numeric = value.strip_prefix("GW")?;
@@ -50,10 +45,8 @@ pub(crate) fn gpui_agents_session_id_from_external_id(value: &str) -> Option<Ter
     (id > 0).then_some(TerminalSessionId(id))
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CommandPaneGroupId(pub(crate) u64);
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct CommandPaneHoverTab {
@@ -61,20 +54,17 @@ pub(crate) struct CommandPaneHoverTab {
     pub(crate) session_id: CommandSessionId,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct WorkspaceHoverTab {
     pub(crate) pane_id: WorkspacePaneId,
     pub(crate) session_id: TerminalSessionId,
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BrowserHoverTab {
     pub(crate) pane_id: BrowserPaneId,
     pub(crate) tab_id: BrowserTabId,
 }
-
 
 /*
 CDXC:GPUICommandPaneResize 2026-06-25-13:19:
@@ -85,7 +75,6 @@ pub(crate) enum CommandPaneResizeHoverTarget {
     PanelRail,
     Split(CommandPaneSplitId),
 }
-
 
 pub(crate) fn clear_command_resize_hover_state_fields(
     hovering: &mut Option<CommandPaneResizeHoverTarget>,
@@ -105,7 +94,6 @@ pub(crate) fn clear_command_resize_hover_state_fields(
     *epoch = epoch.wrapping_add(1);
     true
 }
-
 
 pub(crate) fn clear_command_resize_hover_state_fields_if_command_pane_hidden(
     command_pane_has_sessions: bool,
@@ -127,7 +115,6 @@ pub(crate) fn clear_command_resize_hover_state_fields_if_command_pane_hidden(
     clear_command_resize_hover_state_fields(hovering, visible, epoch)
 }
 
-
 /*
 CDXC:GPUICommandTabOverflow 2026-06-25-13:34:
 The command sticky active-tab proxy is runtime-only tab-strip navigation chrome. It appears at the edge where the selected command tab is clipped and never enters command-pane persistence or tab identity state.
@@ -138,7 +125,6 @@ pub(crate) enum CommandPaneStickyActiveTabEdge {
     Trailing,
 }
 
-
 impl CommandPaneStickyActiveTabEdge {
     pub(crate) fn element_slug(self) -> &'static str {
         match self {
@@ -147,7 +133,6 @@ impl CommandPaneStickyActiveTabEdge {
         }
     }
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CommandPaneSplitId(pub(crate) u64);

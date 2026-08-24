@@ -11,4 +11,3 @@ protocol GhostexLidSleepHelperProtocol {
 
   func status(withReply reply: @escaping (Bool, Bool, String?) -> Void)
 }
-

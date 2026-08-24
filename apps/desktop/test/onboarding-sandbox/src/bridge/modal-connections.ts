@@ -15,17 +15,14 @@
  * anything sent between "window opened" and "modal host mounted" is buffered
  * and flushed on that `ready`.
  */
-import type { ModalHostInboundMessage, ModalHostOutboundMessage } from "../state/types";
+import type { ModalHostInboundMessage, ModalHostOutboundMessage } from '../state/types';
 
-export type ModalOutboundHandler = (
-  windowId: string,
-  message: ModalHostOutboundMessage,
-) => void;
+export type ModalOutboundHandler = (windowId: string, message: ModalHostOutboundMessage) => void;
 
 /** Per-window outbound observer (used by ModalWindowFrame for fit-height). */
 export type ModalWindowOutboundListener = (message: ModalHostOutboundMessage) => void;
 
-const SANDBOX_MARKER = "__onboardingSandbox";
+const SANDBOX_MARKER = '__onboardingSandbox';
 
 interface ModalWindowConnection {
   iframe: HTMLIFrameElement | null;
@@ -51,7 +48,7 @@ function connectionFor(windowId: string): ModalWindowConnection {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function deliverNow(connection: ModalWindowConnection, windowId: string, detail: ModalHostInboundMessage): boolean {
@@ -59,7 +56,7 @@ function deliverNow(connection: ModalWindowConnection, windowId: string, detail:
   if (!target) {
     return false;
   }
-  target.postMessage({ [SANDBOX_MARKER]: "deliver", detail, windowId }, window.location.origin);
+  target.postMessage({ [SANDBOX_MARKER]: 'deliver', detail, windowId }, window.location.origin);
   return true;
 }
 
@@ -100,16 +97,16 @@ function handleTransportMessage(event: MessageEvent): void {
     return;
   }
   const marker = envelope[SANDBOX_MARKER];
-  if (marker !== "outbound" && marker !== "iframeReady") {
+  if (marker !== 'outbound' && marker !== 'iframeReady') {
     return;
   }
   const windowId = envelope.windowId;
-  if (typeof windowId !== "string") {
+  if (typeof windowId !== 'string') {
     return;
   }
   const connection = connectionFor(windowId);
 
-  if (marker === "iframeReady") {
+  if (marker === 'iframeReady') {
     // Fresh document (first load or vite reload): the previous host listener is
     // gone, so hold delivery until the remounted host says `ready` again.
     connection.hostReady = false;
@@ -117,10 +114,10 @@ function handleTransportMessage(event: MessageEvent): void {
   }
 
   const message = envelope.message;
-  if (!isRecord(message) || typeof message.type !== "string") {
+  if (!isRecord(message) || typeof message.type !== 'string') {
     return;
   }
-  if (message.type === "ready") {
+  if (message.type === 'ready') {
     connection.hostReady = true;
     flushInbound(windowId, connection);
   }
@@ -132,7 +129,7 @@ function ensureTransportInstalled(): void {
     return;
   }
   transportInstalled = true;
-  window.addEventListener("message", handleTransportMessage);
+  window.addEventListener('message', handleTransportMessage);
 }
 
 ensureTransportInstalled();
@@ -142,9 +139,7 @@ export function sendToModalWindow(windowId: string, detail: ModalHostInboundMess
   ensureTransportInstalled();
   const connection = connectionFor(windowId);
   const mustQueue =
-    !connection.hostReady ||
-    connection.pendingInbound.length > 0 ||
-    !deliverNow(connection, windowId, detail);
+    !connection.hostReady || connection.pendingInbound.length > 0 || !deliverNow(connection, windowId, detail);
   if (mustQueue) {
     connection.pendingInbound.push(detail);
   }
@@ -189,10 +184,7 @@ export function unregisterModalIframe(windowId: string): void {
  * handler. `ModalWindowFrame` uses this for the one-shot
  * `{type:"contentHeightMeasured"}` resize.
  */
-export function subscribeModalWindowOutbound(
-  windowId: string,
-  listener: ModalWindowOutboundListener,
-): () => void {
+export function subscribeModalWindowOutbound(windowId: string, listener: ModalWindowOutboundListener): () => void {
   ensureTransportInstalled();
   const connection = connectionFor(windowId);
   connection.listeners.add(listener);

@@ -249,7 +249,9 @@ pub(crate) fn gpui_visible_open_targets_from_settings(
     targets
 }
 
-pub(crate) fn gpui_open_target_hidden_ids(candidate: Option<&serde_json::Value>) -> HashSet<String> {
+pub(crate) fn gpui_open_target_hidden_ids(
+    candidate: Option<&serde_json::Value>,
+) -> HashSet<String> {
     let built_in_ids = gpui_built_in_open_target_ids();
     candidate
         .and_then(serde_json::Value::as_array)
@@ -312,7 +314,9 @@ pub(crate) fn gpui_open_target_resolution_map(
         .collect()
 }
 
-pub(crate) fn gpui_custom_open_targets(candidate: Option<&serde_json::Value>) -> Vec<GpuiOpenTarget> {
+pub(crate) fn gpui_custom_open_targets(
+    candidate: Option<&serde_json::Value>,
+) -> Vec<GpuiOpenTarget> {
     let mut seen_ids = HashSet::new();
     let mut targets = Vec::new();
     let Some(entries) = candidate.and_then(serde_json::Value::as_array) else {
@@ -406,7 +410,10 @@ pub(crate) fn gpui_open_target_slug(label: &str) -> String {
     }
 }
 
-pub(crate) fn gpui_launch_open_target(target: &GpuiOpenTarget, project_path: &Path) -> Result<(), String> {
+pub(crate) fn gpui_launch_open_target(
+    target: &GpuiOpenTarget,
+    project_path: &Path,
+) -> Result<(), String> {
     /*
     CDXC:GPUITitlebarOpenIn 2026-06-24-12:50:
     Open In launch is bounded native process behavior: Finder/Open Folder uses the fixed OS opener, command targets use `/usr/bin/env` argv without shell splitting, macOS app-name launches use `/usr/bin/open -a`, child stdio is suppressed, and user paths/commands/errors are not copied into notifications or logs.
@@ -442,4 +449,3 @@ pub(crate) fn gpui_launch_open_target(target: &GpuiOpenTarget, project_path: &Pa
         }
     }
 }
-

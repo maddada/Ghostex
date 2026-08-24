@@ -82,7 +82,7 @@ pub(crate) const CEF_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF0E0E0E;
 pub(crate) const CEF_SESSION_CHAT_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF0A0A0A;
 
 /* Find keeps the older near-black its own page paints; only the chat surface
-   moved. */
+moved. */
 pub(crate) const CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF111111;
 
 pub(crate) const CEF_LIGHT_PREPAINT_BACKGROUND_COLOR: u32 = 0xFFFDFDFD;
@@ -116,9 +116,11 @@ pub(crate) const GHOSTTY_TERMINAL_OBSERVED_SHORTCUT_MODS: ghostty_kit::ffi::ghos
 
 pub(crate) const GPUI_TERMINAL_ESCAPE_KEYCODE: u32 = 53;
 
-pub(crate) const GPUI_TERMINAL_GHOSTTY_KEY_ACTION_PRESS: ghostty_kit::ffi::ghostty_input_action_e = 1;
+pub(crate) const GPUI_TERMINAL_GHOSTTY_KEY_ACTION_PRESS: ghostty_kit::ffi::ghostty_input_action_e =
+    1;
 
-pub(crate) const GPUI_TERMINAL_GHOSTTY_KEY_ACTION_REPEAT: ghostty_kit::ffi::ghostty_input_action_e = 2;
+pub(crate) const GPUI_TERMINAL_GHOSTTY_KEY_ACTION_REPEAT: ghostty_kit::ffi::ghostty_input_action_e =
+    2;
 
 pub(crate) const GHOSTTY_SCROLL_PRECISION_MOD: ghostty_kit::ffi::ghostty_input_scroll_mods_t = 1;
 
@@ -127,7 +129,6 @@ pub(crate) const GHOSTTY_MOUSE_PRESSURE_STAGE_NONE: u32 = 0;
 pub(crate) const GHOSTTY_MOUSE_PRESSURE_STAGE_NORMAL: u32 = 1;
 
 pub(crate) const GHOSTTY_MOUSE_PRESSURE_STAGE_DEEP: u32 = 2;
-
 
 pub(crate) const TITLEBAR_HEIGHT: f32 = 28.0;
 
@@ -139,7 +140,8 @@ pub(crate) const TITLEBAR_PROJECT_LEFT: f32 = 88.0;
 #[cfg(not(target_os = "macos"))]
 pub(crate) const TITLEBAR_PROJECT_LEFT: f32 = 9.0;
 
-pub(crate) const TITLEBAR_PROJECT_CONTEXT_DISABLED_REASON: &str = "Switch to a project to access this view";
+pub(crate) const TITLEBAR_PROJECT_CONTEXT_DISABLED_REASON: &str =
+    "Switch to a project to access this view";
 
 /*
 CDXC:GPUTitlebarAvailability 2026-08-20:
@@ -181,7 +183,8 @@ pub(crate) const GPUI_PROJECT_IS_QUICK_ENV: &str = "GHOSTEX_GPUI_PROJECT_IS_QUIC
 
 pub(crate) const GPUI_SIDEBAR_PROJECT_CONTEXT_MESSAGE_VERSION: u64 = 1;
 
-pub(crate) const GPUI_SIDEBAR_PROJECT_CONTEXT_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.activeProjectContext";
+pub(crate) const GPUI_SIDEBAR_PROJECT_CONTEXT_MESSAGE_TYPE: &str =
+    "ghostex.gpui.sidebar.activeProjectContext";
 
 pub(crate) const GPUI_SIDEBAR_NATIVE_PROJECT_PATH_ACTION_MESSAGE_VERSION: u64 = 1;
 
@@ -208,11 +211,13 @@ pub(crate) const GPUI_TITLEBAR_GIT_ACTION_REFRESH_SELECTOR: &str = "refresh";
 
 pub(crate) const GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_VERSION: u64 = 1;
 
-pub(crate) const GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.commandAction";
+pub(crate) const GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_TYPE: &str =
+    "ghostex.gpui.sidebar.commandAction";
 
 pub(crate) const GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_VERSION: u64 = 1;
 
-pub(crate) const GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.commandRunEnd";
+pub(crate) const GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_TYPE: &str =
+    "ghostex.gpui.sidebar.commandRunEnd";
 
 pub(crate) const GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_VERSION: u64 = 1;
 
@@ -256,7 +261,8 @@ pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_MESSAGE_VERSIO
 pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.workspaceTerminalLifecycleResult";
 
-pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_ID_MAX: u64 = 9_007_199_254_740_991;
+pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_ID_MAX: u64 =
+    9_007_199_254_740_991;
 
 pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_BELL_MESSAGE_VERSION: u64 = 1;
 
@@ -302,9 +308,11 @@ pub(crate) const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MAX_CHARS: usize = 64;
 
 pub(crate) const GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION: u64 = 1;
 
-pub(crate) const GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.openBrowserUrl";
+pub(crate) const GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE: &str =
+    "ghostex.gpui.sidebar.openBrowserUrl";
 
-pub(crate) const GPUI_SIDEBAR_BROWSER_TAB_FOCUS_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.browserTabFocus";
+pub(crate) const GPUI_SIDEBAR_BROWSER_TAB_FOCUS_MESSAGE_TYPE: &str =
+    "ghostex.gpui.sidebar.browserTabFocus";
 
 pub(crate) const GPUI_SIDEBAR_OPEN_BROWSER_URL_MAX_CHARS: usize = 16 * 1024;
 
@@ -332,9 +340,11 @@ pub(crate) const GPUI_PROJECT_BOARD_INSTALL_OR_UPDATE_BEADS_COMMAND_ID: &str =
 
 pub(crate) const GPUI_PROJECT_BOARD_RUN_BEADS_MIGRATION_ACTION: &str = "runBeadsMigration";
 
-pub(crate) const GPUI_PROJECT_BOARD_MIGRATE_BEADS_COMMAND_ID: &str = "ghostex.gpui.projectBoard.migrateBeads";
+pub(crate) const GPUI_PROJECT_BOARD_MIGRATE_BEADS_COMMAND_ID: &str =
+    "ghostex.gpui.projectBoard.migrateBeads";
 
-pub(crate) const GPUI_PROJECT_BOARD_ADOPT_BEADS_COMMAND_ID: &str = "ghostex.gpui.projectBoard.adoptBeads";
+pub(crate) const GPUI_PROJECT_BOARD_ADOPT_BEADS_COMMAND_ID: &str =
+    "ghostex.gpui.projectBoard.adoptBeads";
 
 pub(crate) const GPUI_PROJECT_BOARD_ADOPT_BEADS_FAST_FORWARD_COMMAND_ID: &str =
     "ghostex.gpui.projectBoard.adoptBeadsFastForward";
@@ -342,7 +352,8 @@ pub(crate) const GPUI_PROJECT_BOARD_ADOPT_BEADS_FAST_FORWARD_COMMAND_ID: &str =
 pub(crate) const GPUI_PROJECT_BOARD_RECONCILE_BEADS_FORK_COMMAND_ID: &str =
     "ghostex.gpui.projectBoard.reconcileBeadsFork";
 
-pub(crate) const GPUI_PROJECT_BOARD_COMMAND_COMPLETED_EVENT: &str = "ghostex-project-board-command-completed";
+pub(crate) const GPUI_PROJECT_BOARD_COMMAND_COMPLETED_EVENT: &str =
+    "ghostex-project-board-command-completed";
 
 pub(crate) const GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_VERSION: u64 = 1;
 
@@ -351,11 +362,13 @@ pub(crate) const GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_TYPE: &str =
 
 pub(crate) const GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_VERSION: u64 = 1;
 
-pub(crate) const GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.petOverlayState";
+pub(crate) const GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_TYPE: &str =
+    "ghostex.gpui.sidebar.petOverlayState";
 
 pub(crate) const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_VERSION: u64 = 1;
 
-pub(crate) const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.globalActions";
+pub(crate) const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE: &str =
+    "ghostex.gpui.sidebar.globalActions";
 
 /*
 CDXC:GlobalActions 2026-08-01-16:00:
@@ -419,9 +432,11 @@ pub(crate) const GPUI_PROJECT_CONTRACT_PATH_MAX_CHARS: usize = 4096;
 
 pub(crate) const GPUI_TITLEBAR_SELECTION_PROJECT_LIMIT: usize = 256;
 
-pub(crate) const GPUI_TITLEBAR_OPEN_TARGET_SELECTIONS_SETTINGS_KEY: &str = "gpuiTitlebarOpenTargetByProject";
+pub(crate) const GPUI_TITLEBAR_OPEN_TARGET_SELECTIONS_SETTINGS_KEY: &str =
+    "gpuiTitlebarOpenTargetByProject";
 
-pub(crate) const GPUI_TITLEBAR_ACTION_SELECTIONS_SETTINGS_KEY: &str = "gpuiTitlebarActionCommandByProject";
+pub(crate) const GPUI_TITLEBAR_ACTION_SELECTIONS_SETTINGS_KEY: &str =
+    "gpuiTitlebarActionCommandByProject";
 
 pub(crate) const GPUI_NATIVE_APP_SHOT_PROMPT_MAX_CHARS: usize = 24 * 1024;
 
@@ -439,9 +454,11 @@ pub(crate) const GPUI_STATUS_INDICATOR_TITLE_MAX_CHARS: usize = 120;
 
 pub(crate) const GPUI_STATUS_INDICATOR_ICON_DATA_URL_MAX_CHARS: usize = 700_000;
 
-pub(crate) const GPUI_SESSION_ATTENTION_NOTIFICATION_SESSION_COOLDOWN: Duration = Duration::from_secs(20);
+pub(crate) const GPUI_SESSION_ATTENTION_NOTIFICATION_SESSION_COOLDOWN: Duration =
+    Duration::from_secs(20);
 
-pub(crate) const GPUI_SESSION_ATTENTION_NOTIFICATION_GLOBAL_WINDOW: Duration = Duration::from_secs(60);
+pub(crate) const GPUI_SESSION_ATTENTION_NOTIFICATION_GLOBAL_WINDOW: Duration =
+    Duration::from_secs(60);
 
 pub(crate) const GPUI_SESSION_ATTENTION_NOTIFICATION_GLOBAL_LIMIT: usize = 8;
 
@@ -494,7 +511,8 @@ pub(crate) const TITLEBAR_ICON_LAYOUT_SIDEBAR: &str = "titlebar/layout-sidebar.s
 pub(crate) const TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_COLLAPSE: &str =
     "titlebar/layout-sidebar-left-collapse.svg";
 
-pub(crate) const TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_EXPAND: &str = "titlebar/layout-sidebar-left-expand.svg";
+pub(crate) const TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_EXPAND: &str =
+    "titlebar/layout-sidebar-left-expand.svg";
 
 pub(crate) const TITLEBAR_ICON_LAYOUT_BOARD_SPLIT: &str = "titlebar/layout-board-split.svg";
 
@@ -676,7 +694,8 @@ plays; file:// -> YouTube embed does not.
 pub(crate) const GHOSTEX_TUTORIAL_VIDEO_EMBED_URL: &str =
     "https://www.youtube.com/embed/APdP-j5n4Mw?rel=0&modestbranding=1";
 
-pub(crate) const GPUI_TUTORIAL_VIDEO_PLAYER_RESOURCE_PATH: &str = "ghostex-tutorial-video-player.html";
+pub(crate) const GPUI_TUTORIAL_VIDEO_PLAYER_RESOURCE_PATH: &str =
+    "ghostex-tutorial-video-player.html";
 
 /// CDXC:GPUITutorialVideoFullscreen 2026-08-18: the watch page reports
 /// main-frame load-end before its player has installed keyboard shortcuts, so
@@ -897,7 +916,8 @@ pub(crate) const TITLEBAR_GIT_TOOLTIP: &str = "Git actions";
 
 pub(crate) const TITLEBAR_ACTIONS_TOOLTIP: &str = "Quick Actions. Right click for more options";
 
-pub(crate) const TITLEBAR_OPEN_TARGETS_TOOLTIP: &str = "Open in an app. Right click for more options";
+pub(crate) const TITLEBAR_OPEN_TARGETS_TOOLTIP: &str =
+    "Open in an app. Right click for more options";
 
 pub(crate) const TITLEBAR_UPDATE_AVAILABLE_TOOLTIP: &str =
     "Update Ghostex! All your sessions will continue running.";
@@ -968,7 +988,8 @@ pub(crate) const BROWSER_MEDIA_PERMISSION_BAR_HEIGHT: f32 = 36.0;
 
 pub(crate) const BROWSER_FEEDBACK_TOOL_AGENTATION_LABEL: &str = "Agentation";
 
-pub(crate) const BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP: &str = "This site disallows using this tool";
+pub(crate) const BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP: &str =
+    "This site disallows using this tool";
 
 pub(crate) const BROWSER_FEEDBACK_AGENTATION_PACKAGE_MODULE_URL: &str =
     "https://esm.sh/agentation@3.0.2?bundle&deps=react@18.2.0,react-dom@18.2.0";
@@ -1076,9 +1097,10 @@ pub(crate) const WORKSPACE_TAB_SLEEP_ICON_TRAILING_PADDING: f32 = 11.0;
 
 pub(crate) const WORKSPACE_TAB_STATUS_TITLE_GAP: f32 = 4.0;
 
-pub(crate) const WORKSPACE_TAB_STATUS_TITLE_RESERVED_WIDTH: f32 = WORKSPACE_TAB_STATUS_INDICATOR_SIZE
-    + WORKSPACE_TAB_STATUS_INDICATOR_TRAILING_PADDING
-    + WORKSPACE_TAB_STATUS_TITLE_GAP;
+pub(crate) const WORKSPACE_TAB_STATUS_TITLE_RESERVED_WIDTH: f32 =
+    WORKSPACE_TAB_STATUS_INDICATOR_SIZE
+        + WORKSPACE_TAB_STATUS_INDICATOR_TRAILING_PADDING
+        + WORKSPACE_TAB_STATUS_TITLE_GAP;
 
 pub(crate) const WORKSPACE_TAB_SLEEP_TITLE_RESERVED_WIDTH: f32 = WORKSPACE_TAB_SLEEP_ICON_SIZE
     + WORKSPACE_TAB_SLEEP_ICON_TRAILING_PADDING
@@ -1167,7 +1189,8 @@ pub(crate) const COMMAND_PANE_EMPTY_TITLEBAR_DOUBLE_CLICK_TARGET_WIDTH: f32 = 34
 CDXC:GPUICommandPaneControls 2026-06-25-18:46:
 Native command titlebars hide the inline New Terminal button when it would squeeze the tab viewport below the compact double-click target. Preserve at least the 56px native empty-titlebar viewport before spending 26px on the command add button.
 */
-pub(crate) const COMMAND_PANE_MINIMUM_VISIBLE_TAB_VIEWPORT_WIDTH_WITH_DOUBLE_CLICK_TARGET: f32 = 56.0;
+pub(crate) const COMMAND_PANE_MINIMUM_VISIBLE_TAB_VIEWPORT_WIDTH_WITH_DOUBLE_CLICK_TARGET: f32 =
+    56.0;
 
 pub(crate) const COMMAND_PANE_TAB_ADD_BUTTON_GAP: f32 = 0.0;
 
@@ -1244,9 +1267,10 @@ pub(crate) const COMMAND_PANE_TAB_STATUS_INDICATOR_TRAILING_PADDING: f32 = 9.0;
 
 pub(crate) const COMMAND_PANE_TAB_STATUS_TITLE_GAP: f32 = 4.0;
 
-pub(crate) const COMMAND_PANE_TAB_STATUS_TITLE_RESERVED_WIDTH: f32 = COMMAND_PANE_TAB_STATUS_INDICATOR_SIZE
-    + COMMAND_PANE_TAB_STATUS_INDICATOR_TRAILING_PADDING
-    + COMMAND_PANE_TAB_STATUS_TITLE_GAP;
+pub(crate) const COMMAND_PANE_TAB_STATUS_TITLE_RESERVED_WIDTH: f32 =
+    COMMAND_PANE_TAB_STATUS_INDICATOR_SIZE
+        + COMMAND_PANE_TAB_STATUS_INDICATOR_TRAILING_PADDING
+        + COMMAND_PANE_TAB_STATUS_TITLE_GAP;
 
 pub(crate) const COMMAND_PANE_TAB_STATUS_INDICATOR_TOP_OFFSET: f32 =
     (COMMAND_PANE_TAB_BAR_HEIGHT - COMMAND_PANE_TAB_STATUS_INDICATOR_SIZE) / 2.0;
@@ -1380,7 +1404,8 @@ pub(crate) const COMMAND_PANE_DELAYED_SEND_RESTORE_FIRE_GRACE_MS: u64 = 2_000;
 
 pub(crate) const COMMAND_PANE_DELAYED_SEND_PERSIST_INTERVAL: Duration = Duration::from_secs(60);
 
-pub(crate) const GPUI_AGENTS_SEND_WHEN_STOPPED_STABILITY_DURATION: Duration = Duration::from_secs(10);
+pub(crate) const GPUI_AGENTS_SEND_WHEN_STOPPED_STABILITY_DURATION: Duration =
+    Duration::from_secs(10);
 
 pub(crate) const GPUI_AGENTS_SEND_WHEN_STOPPED_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -1403,7 +1428,8 @@ pub(crate) const COMMAND_PANE_DELAYED_SEND_RETURN_TEXT: &str = GPUI_TERMINAL_RET
 pub(crate) const COMMAND_PANE_DELAYED_SEND_RETURN_UNSHIFTED_CODEPOINT: u32 =
     GPUI_TERMINAL_RETURN_UNSHIFTED_CODEPOINT;
 
-pub(crate) const COMMAND_PANE_GHOSTTY_KEY_ACTION_PRESS: ghostty_kit::ffi::ghostty_input_action_e = 1;
+pub(crate) const COMMAND_PANE_GHOSTTY_KEY_ACTION_PRESS: ghostty_kit::ffi::ghostty_input_action_e =
+    1;
 
 pub(crate) const COMMAND_PANE_CLOSE_AFTER_DONE_DELAY: Duration = Duration::from_secs(3 * 60);
 
@@ -1424,7 +1450,6 @@ pub(crate) const PROJECT_EDITOR_COMPANION_RESTORE_RAIL_WIDTH: f32 = 32.0;
 pub(crate) const PROJECT_EDITOR_AWAKE_MODE_CAP: usize = 3;
 
 pub(crate) const PROJECT_EDITOR_AUTO_SLEEP_POLICY_POLL_INTERVAL: Duration = Duration::from_secs(2);
-
 
 pub(crate) const GPUI_NATIVE_TITLEBAR_TIPS: &[GpuiNativeTitlebarTip] = &[
     GpuiNativeTitlebarTip {
@@ -1501,7 +1526,6 @@ pub(crate) const GPUI_NATIVE_TITLEBAR_TIPS: &[GpuiNativeTitlebarTip] = &[
     },
 ];
 
-
 /*
 CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
 Rapid sidebar clicking across projects used to stack one complete project
@@ -1518,16 +1542,16 @@ changes and stay instant.
 */
 pub(crate) const GPUI_PROJECT_SWITCH_SETTLE_WINDOW: Duration = Duration::from_millis(350);
 
-
 pub(crate) const WORKSPACE_RENAME_COMMAND_MOUNT_RETRY_LIMIT: usize = 80;
 
-pub(crate) const WORKSPACE_RENAME_COMMAND_MOUNT_RETRY_INTERVAL: Duration = Duration::from_millis(100);
+pub(crate) const WORKSPACE_RENAME_COMMAND_MOUNT_RETRY_INTERVAL: Duration =
+    Duration::from_millis(100);
 
 // macOS AUTO_SUBMIT_STAGED_RENAME_DELAY_MS parity (native/sidebar/native-sidebar.tsx).
 pub(crate) const WORKSPACE_RENAME_COMMAND_SUBMIT_DELAY: Duration = Duration::from_millis(1_000);
 
-pub(crate) const WORKSPACE_RENAME_COMMAND_RESTORE_DRAFT_DELAY: Duration = Duration::from_millis(500);
-
+pub(crate) const WORKSPACE_RENAME_COMMAND_RESTORE_DRAFT_DELAY: Duration =
+    Duration::from_millis(500);
 
 /*
 CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
@@ -1561,13 +1585,17 @@ pub(crate) const AUTOMATE_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "automateViewTabH
 
 pub(crate) const DOCS_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "docsViewTabHidden";
 
-pub(crate) const TIPS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str = "tipsAndTricksTitlebarButtonHidden";
+pub(crate) const TIPS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
+    "tipsAndTricksTitlebarButtonHidden";
 
-pub(crate) const RESOURCES_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str = "resourcesTitlebarButtonHidden";
+pub(crate) const RESOURCES_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
+    "resourcesTitlebarButtonHidden";
 
-pub(crate) const GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str = "gitActionsTitlebarButtonHidden";
+pub(crate) const GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
+    "gitActionsTitlebarButtonHidden";
 
-pub(crate) const QUICK_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str = "quickActionsTitlebarButtonHidden";
+pub(crate) const QUICK_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
+    "quickActionsTitlebarButtonHidden";
 
 pub(crate) const OPEN_IN_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str = "openInTitlebarButtonHidden";
 
@@ -1593,8 +1621,6 @@ pub(crate) const SOURCE_CODE_SERVER_TUNNEL_PORT_MAX: u16 = 43_999;
 
 pub(crate) const SOURCE_CODE_SERVER_TUNNEL_ATTEMPTS: usize = 24;
 
-
 pub(crate) const COMMAND_PANE_GROUP_FOCUSED_BORDER_WIDTH: u8 = 1;
 
 pub(crate) const COMMAND_PANE_GROUP_INACTIVE_BORDER_WIDTH: u8 = 2;
-

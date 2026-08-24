@@ -42,17 +42,16 @@ CODE_SERVER_APP_NODE_MAJOR="${CODE_SERVER_APP_NODE_VERSION%%.*}"
 CODE_SERVER_NODE_DOWNLOAD_BASE_URL="https://nodejs.org/dist/v$CODE_SERVER_APP_NODE_VERSION"
 GHOSTEX_APP_VARIANT="${GHOSTEX_APP_VARIANT:-prod}"
 case "$GHOSTEX_APP_VARIANT" in
-	prod)
-		;;
-	dev)
-		# CDXC:LocalStartSingleApp 2026-06-09-09:27: Ghostex-dev builds were removed because agents were invoking the dev app path by mistake. Fail before toolchain checks or Xcode generation so direct build commands cannot create Ghostex-dev outside `bun run start`.
-		echo "Ghostex-dev builds were removed. Use GHOSTEX_APP_VARIANT=prod or unset it." >&2
-		exit 1
-		;;
-	*)
-		echo "Unsupported GHOSTEX_APP_VARIANT: $GHOSTEX_APP_VARIANT" >&2
-		exit 1
-		;;
+prod) ;;
+dev)
+	# CDXC:LocalStartSingleApp 2026-06-09-09:27: Ghostex-dev builds were removed because agents were invoking the dev app path by mistake. Fail before toolchain checks or Xcode generation so direct build commands cannot create Ghostex-dev outside `bun run start`.
+	echo "Ghostex-dev builds were removed. Use GHOSTEX_APP_VARIANT=prod or unset it." >&2
+	exit 1
+	;;
+*)
+	echo "Unsupported GHOSTEX_APP_VARIANT: $GHOSTEX_APP_VARIANT" >&2
+	exit 1
+	;;
 esac
 
 # CDXC:LocalStartArchitecture 2026-06-08-08:42: Apple Silicon local builds must produce Apple-native app resources even when the caller's shell is translated by Rosetta and `uname -m` reports x86_64. Use the physical arm64 capability as the default and keep GHOSTEX_MACOS_ARCH=x86_64 as the explicit Intel build path.
@@ -66,16 +65,16 @@ default_macos_arch() {
 
 GHOSTEX_MACOS_ARCH="${GHOSTEX_MACOS_ARCH:-$(default_macos_arch)}"
 case "$GHOSTEX_MACOS_ARCH" in
-	arm64 | aarch64)
-		GHOSTEX_MACOS_ARCH="arm64"
-		;;
-	x86_64 | x64 | amd64)
-		GHOSTEX_MACOS_ARCH="x86_64"
-		;;
-	*)
-		echo "Unsupported GHOSTEX_MACOS_ARCH: $GHOSTEX_MACOS_ARCH" >&2
-		exit 1
-		;;
+arm64 | aarch64)
+	GHOSTEX_MACOS_ARCH="arm64"
+	;;
+x86_64 | x64 | amd64)
+	GHOSTEX_MACOS_ARCH="x86_64"
+	;;
+*)
+	echo "Unsupported GHOSTEX_MACOS_ARCH: $GHOSTEX_MACOS_ARCH" >&2
+	exit 1
+	;;
 esac
 BUILD_CACHE_DIR="${GHOSTEX_BUILD_CACHE_DIR:-$REPO_ROOT/build/$GHOSTEX_MACOS_ARCH/build-cache}"
 GHOSTEX_REMOTE_GXSERVER_LINUX_X64_DEFAULT_PACKAGE="$REPO_ROOT/build/remote-gxserver-linux/x64/package"
@@ -83,44 +82,44 @@ GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_DEFAULT_PACKAGE="$REPO_ROOT/build/remote-gxs
 # CDXC:RemoteMachines 2026-06-23-23:16: Remote Linux gxserver package staging is optional for normal Rust local starts, but the staging probe still runs in every gxserver package mode. Define the deterministic default package paths before the package-mode switch so `set -u` can safely skip absent Linux packages instead of treating the defaults as mode-specific required variables.
 GHOSTEX_GXSERVER_PACKAGE_MODE="${GHOSTEX_GXSERVER_PACKAGE_MODE:-rust}"
 case "$GHOSTEX_GXSERVER_PACKAGE_MODE" in
-	rust | rs)
-		GHOSTEX_GXSERVER_PACKAGE_MODE="rust"
-		;;
-	*)
-		echo "GPUI supports only the Rust gxserver runtime; remove GHOSTEX_GXSERVER_PACKAGE_MODE or set it to rust." >&2
-		exit 1
-		;;
+rust | rs)
+	GHOSTEX_GXSERVER_PACKAGE_MODE="rust"
+	;;
+*)
+	echo "GPUI supports only the Rust gxserver runtime; remove GHOSTEX_GXSERVER_PACKAGE_MODE or set it to rust." >&2
+	exit 1
+	;;
 esac
 GHOSTEX_REMOTE_GXSERVER_LINUX_X64_PACKAGE="${GHOSTEX_REMOTE_GXSERVER_LINUX_X64_PACKAGE:-}"
 GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_PACKAGE="${GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_PACKAGE:-}"
 GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES="${GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES:-0}"
 case "$(printf '%s' "$GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES" | tr '[:upper:]' '[:lower:]')" in
-	1 | true | yes | on)
-		GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1
-		;;
-	*)
-		GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=0
-		;;
+1 | true | yes | on)
+	GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1
+	;;
+*)
+	GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=0
+	;;
 esac
 # CDXC:OnDemandAssets 2026-07-02-14:10: Release app bundles stop embedding the Ubuntu remote gxserver payloads and the macOS Beads binary. In this mode the build tars those payloads into build/on-demand-assets/<version>/, seals their checksums into Web/on-demand-resources.json inside the signed app, and ships Web/bin/bd as a download-on-first-use launcher. Dev builds keep bundling everything locally, so this stays a release-only mode.
 GHOSTEX_ON_DEMAND_ASSETS="${GHOSTEX_ON_DEMAND_ASSETS:-0}"
 case "$(printf '%s' "$GHOSTEX_ON_DEMAND_ASSETS" | tr '[:upper:]' '[:lower:]')" in
-	1 | true | yes | on)
-		GHOSTEX_ON_DEMAND_ASSETS=1
-		;;
-	*)
-		GHOSTEX_ON_DEMAND_ASSETS=0
-		;;
+1 | true | yes | on)
+	GHOSTEX_ON_DEMAND_ASSETS=1
+	;;
+*)
+	GHOSTEX_ON_DEMAND_ASSETS=0
+	;;
 esac
 # CDXC:ContributorStart 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source resources are absent. Beads is a checksum-pinned release artifact rather than a source submodule input.
 GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES="${GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES:-${GHOSTEX_LOCAL_START:-0}}"
 case "$(printf '%s' "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" | tr '[:upper:]' '[:lower:]')" in
-	1 | true | yes | on)
-		GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES=1
-		;;
-	*)
-		GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES=0
-		;;
+1 | true | yes | on)
+	GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES=1
+	;;
+*)
+	GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES=0
+	;;
 esac
 
 APP_CAPABILITY_SHARED_NODE_RUNTIME=false
@@ -200,12 +199,12 @@ binary_supports_macos_arch() {
 
 node_pty_prebuild_platform_dir() {
 	case "$GHOSTEX_MACOS_ARCH" in
-		arm64)
-			printf 'darwin-arm64\n'
-			;;
-		x86_64)
-			printf 'darwin-x64\n'
-			;;
+	arm64)
+		printf 'darwin-arm64\n'
+		;;
+	x86_64)
+		printf 'darwin-x64\n'
+		;;
 	esac
 }
 
@@ -297,12 +296,12 @@ path_identity() {
 
 code_server_node_distribution_arch() {
 	case "$GHOSTEX_MACOS_ARCH" in
-		arm64)
-			printf 'arm64\n'
-			;;
-		x86_64)
-			printf 'x64\n'
-			;;
+	arm64)
+		printf 'arm64\n'
+		;;
+	x86_64)
+		printf 'x64\n'
+		;;
 	esac
 }
 
@@ -310,14 +309,14 @@ code_server_node_distribution_sha256() {
 	local distribution_arch="$1"
 	if [[ "$CODE_SERVER_APP_NODE_VERSION" == "22.22.1" ]]; then
 		case "$distribution_arch" in
-			arm64)
-				printf '261da057fb25ff2912dd6abb7842fc915ddf7947a2cb3c8cce90875d2b9bb667\n'
-				return 0
-				;;
-			x64)
-				printf '91227fa5a3bfd988be1953c0384ceb98bd69a6a377a7416c40eb39779d6ab17f\n'
-				return 0
-				;;
+		arm64)
+			printf '261da057fb25ff2912dd6abb7842fc915ddf7947a2cb3c8cce90875d2b9bb667\n'
+			return 0
+			;;
+		x64)
+			printf '91227fa5a3bfd988be1953c0384ceb98bd69a6a377a7416c40eb39779d6ab17f\n'
+			return 0
+			;;
 		esac
 	fi
 	echo "Unsupported code-server Node distribution: v$CODE_SERVER_APP_NODE_VERSION darwin-$distribution_arch" >&2
@@ -392,23 +391,23 @@ resolve_code_server_root() {
 
 code_server_ci_arch() {
 	case "$GHOSTEX_MACOS_ARCH" in
-		arm64)
-			printf 'arm64\n'
-			;;
-		x86_64)
-			printf 'amd64\n'
-			;;
+	arm64)
+		printf 'arm64\n'
+		;;
+	x86_64)
+		printf 'amd64\n'
+		;;
 	esac
 }
 
 code_server_vscode_target() {
 	case "$GHOSTEX_MACOS_ARCH" in
-		arm64)
-			printf 'darwin-arm64\n'
-			;;
-		x86_64)
-			printf 'darwin-x64\n'
-			;;
+	arm64)
+		printf 'darwin-arm64\n'
+		;;
+	x86_64)
+		printf 'darwin-x64\n'
+		;;
 	esac
 }
 
@@ -811,8 +810,8 @@ package_portless_if_needed() {
 macos_sdk_needs_infinity_fix() {
 	local sdk="$1"
 	[[ -f "$sdk/usr/include/math.h" ]] || return 1
-	grep -q '__need_infinity_nan' "$sdk/usr/include/math.h" \
-		&& ! grep -q 'Ghostex INFINITY fallback' "$sdk/usr/include/math.h"
+	grep -q '__need_infinity_nan' "$sdk/usr/include/math.h" &&
+		! grep -q 'Ghostex INFINITY fallback' "$sdk/usr/include/math.h"
 }
 
 synthesize_macos_sdk_overlay() {
@@ -850,7 +849,7 @@ synthesize_macos_sdk_overlay() {
 #define NAN         __builtin_nanf("0x7fc00000")
 #endif
 MATH_EOF
-	} > "$overlay_sdk/usr/include/math.h"
+	} >"$overlay_sdk/usr/include/math.h"
 }
 
 build_zmx_if_needed() {
@@ -876,8 +875,8 @@ build_zmx_if_needed() {
 		cd "$ZMX_ROOT"
 		# CDXC:ZmxPersistence 2026-05-20-10:23: Zig resolves the native build runner through the selected macOS Xcode SDK, which can fail before zmx compilation starts. Scope the Command Line Tools developer dir to the zmx submodule build only; the zmx artifact itself is still built for the explicit deployment target above. This is not version-specific: it applied to Zig 0.15 and still applies to the 0.16 toolchain zmx builds with today.
 		ZMX_BUILD_ENV=(env -u LDFLAGS ZIG="$ZIG_BIN")
-		if [[ -z "${ZMX_BUILD_DEVELOPER_DIR:-}" ]] \
-			&& DEVELOPER_DIR=/Library/Developer/CommandLineTools /usr/bin/xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1; then
+		if [[ -z "${ZMX_BUILD_DEVELOPER_DIR:-}" ]] &&
+			DEVELOPER_DIR=/Library/Developer/CommandLineTools /usr/bin/xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1; then
 			ZMX_BUILD_DEVELOPER_DIR=/Library/Developer/CommandLineTools
 		fi
 		if [[ -n "${ZMX_BUILD_DEVELOPER_DIR:-}" ]]; then
@@ -890,13 +889,13 @@ build_zmx_if_needed() {
 		fi
 		if [[ -n "$zmx_sdk" ]] && macos_sdk_needs_infinity_fix "$zmx_sdk"; then
 			overlay_sdk="$ZMX_ROOT/.zig-cache/ghostex-sdk-overlay/$(basename "$zmx_sdk")"
-			if [[ ! -f "$overlay_sdk/usr/include/math.h" ]] \
-				|| [[ "$zmx_sdk/usr/include/math.h" -nt "$overlay_sdk/usr/include/math.h" ]]; then
+			if [[ ! -f "$overlay_sdk/usr/include/math.h" ]] ||
+				[[ "$zmx_sdk/usr/include/math.h" -nt "$overlay_sdk/usr/include/math.h" ]]; then
 				synthesize_macos_sdk_overlay "$zmx_sdk" "$overlay_sdk"
 			fi
 			shim_dir="$(mktemp -d "${TMPDIR:-/tmp}/ghostex-zmx-xcrun.XXXXXX")"
 			trap 'rm -rf "$shim_dir"' EXIT
-			cat > "$shim_dir/xcrun" <<XCRUN_EOF
+			cat >"$shim_dir/xcrun" <<XCRUN_EOF
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "\${1:-}" == "--sdk" && "\${2:-}" == "macosx" && "\${3:-}" == "--show-sdk-path" ]]; then
@@ -920,12 +919,12 @@ XCRUN_EOF
 
 gxserver_rust_cargo_target() {
 	case "$GHOSTEX_MACOS_ARCH" in
-		arm64)
-			printf 'aarch64-apple-darwin\n'
-			;;
-		x86_64)
-			printf 'x86_64-apple-darwin\n'
-			;;
+	arm64)
+		printf 'aarch64-apple-darwin\n'
+		;;
+	x86_64)
+		printf 'x86_64-apple-darwin\n'
+		;;
 	esac
 }
 
@@ -996,13 +995,13 @@ stage_beads_release_if_needed() {
 	local output_path="$REPO_ROOT/build/$GHOSTEX_MACOS_ARCH/beads/bd"
 	local release_arch build_digest
 	case "$GHOSTEX_MACOS_ARCH" in
-		arm64)
-			release_arch="arm64"
-			;;
-		x86_64)
-			echo "The pinned schema-v54 Beads artifact is published for macOS arm64 only; x86_64 packaging is unsupported." >&2
-			exit 1
-			;;
+	arm64)
+		release_arch="arm64"
+		;;
+	x86_64)
+		echo "The pinned schema-v54 Beads artifact is published for macOS arm64 only; x86_64 packaging is unsupported." >&2
+		exit 1
+		;;
 	esac
 	if [[ -n "${GHOSTEX_BEADS_PREBUILT_BINARY:-}" ]]; then
 		if [[ ! -x "$GHOSTEX_BEADS_PREBUILT_BINARY" ]]; then
@@ -1024,7 +1023,7 @@ stage_beads_release_if_needed() {
 		--path "$REPO_ROOT/tooling/beads-release.mjs" \
 		--path "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs")"
 	if cache_matches "beads-$GHOSTEX_MACOS_ARCH" "$build_digest" "$output_path"; then
-		if binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH" && \
+		if binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH" &&
 			"$output_path" version 2>/dev/null | grep -Eq '^bd version 1\.1\.0 .*672d942'; then
 			echo "Pinned schema-v54 Beads artifact is current; skipping download."
 			return 0
@@ -1334,18 +1333,18 @@ validate_remote_gxserver_linux_package() {
 			return 1
 		fi
 		case "$package_label" in
-			LINUX_X64)
-				if [[ "$file_output" != *"x86-64"* && "$file_output" != *"x86_64"* ]]; then
-					echo "Remote gxserver $package_label package has the wrong Linux ELF architecture at $required_path: $file_output" >&2
-					return 1
-				fi
-				;;
-			LINUX_ARM64)
-				if [[ "$file_output" != *"aarch64"* && "$file_output" != *"AArch64"* ]]; then
-					echo "Remote gxserver $package_label package has the wrong Linux ELF architecture at $required_path: $file_output" >&2
-					return 1
-				fi
-				;;
+		LINUX_X64)
+			if [[ "$file_output" != *"x86-64"* && "$file_output" != *"x86_64"* ]]; then
+				echo "Remote gxserver $package_label package has the wrong Linux ELF architecture at $required_path: $file_output" >&2
+				return 1
+			fi
+			;;
+		LINUX_ARM64)
+			if [[ "$file_output" != *"aarch64"* && "$file_output" != *"AArch64"* ]]; then
+				echo "Remote gxserver $package_label package has the wrong Linux ELF architecture at $required_path: $file_output" >&2
+				return 1
+			fi
+			;;
 		esac
 	done
 }
@@ -1539,8 +1538,14 @@ stage_on_demand_release_assets() {
 	mkdir -p "$asset_dir"
 
 	if [[ -n "${GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE:-}" || -n "${GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE:-}" ]]; then
-		[[ -f "${GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE:-}" ]] || { echo "GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE is missing." >&2; exit 1; }
-		[[ -f "${GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE:-}" ]] || { echo "GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE is missing." >&2; exit 1; }
+		[[ -f "${GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE:-}" ]] || {
+			echo "GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE is missing." >&2
+			exit 1
+		}
+		[[ -f "${GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE:-}" ]] || {
+			echo "GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE is missing." >&2
+			exit 1
+		}
 		cp "$GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE" "$asset_dir/gxserver-linux-x64.tar.gz"
 		cp "$GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE" "$asset_dir/gxserver-linux-arm64.tar.gz"
 	else
@@ -1627,26 +1632,26 @@ package_gxserver_if_needed() {
 	# CDXC:ProjectBoardBeads 2026-06-08-10:46: Package the full checksum-verified schema-v54 Beads CLI with gxserver so Project/Kanban opens without PATH setup. The active macOS release target is arm64 and receives its matching signed binary.
 	# Rust packaging preserves generated TypeScript protocol exports for web
 	# consumers, but the daemon and public CLI are native executables.
-		package_dir="$BUILD_CACHE_DIR/gxserver-rs/server-package"
-		build_gxserver_rust_if_needed
-		rust_bin="$GXSERVER_RUST_BIN"
-		if [[ -z "$rust_bin" || ! -x "$rust_bin" ]]; then
-			echo "Rust gxserver build did not produce an executable daemon path." >&2
-			exit 1
-		fi
-		package_version="$(gxserver_rust_package_version)"
-		package_digest="$(fingerprint_inputs \
-			--value "gxserver-package-v9-rust-only" \
-			--value "arch=$GHOSTEX_MACOS_ARCH" \
-			--value "version=$package_version" \
-			--value "rust=$(path_identity "$rust_bin")" \
-			--path "$SCRIPT_DIR/prepare-macos-runtime.sh" \
-			--path "$REPO_ROOT/packages/shared/gxserver-protocol.ts" \
-			--path "$GXSERVER_RS_ROOT/src" \
-			--path "$GXSERVER_RS_ROOT/Cargo.toml" \
-			--path "$GXSERVER_RS_ROOT/Cargo.lock" \
-			--path "$WEB_DIR/bin/zmx" \
-			--path "$WEB_DIR/bin/bd")"
+	package_dir="$BUILD_CACHE_DIR/gxserver-rs/server-package"
+	build_gxserver_rust_if_needed
+	rust_bin="$GXSERVER_RUST_BIN"
+	if [[ -z "$rust_bin" || ! -x "$rust_bin" ]]; then
+		echo "Rust gxserver build did not produce an executable daemon path." >&2
+		exit 1
+	fi
+	package_version="$(gxserver_rust_package_version)"
+	package_digest="$(fingerprint_inputs \
+		--value "gxserver-package-v9-rust-only" \
+		--value "arch=$GHOSTEX_MACOS_ARCH" \
+		--value "version=$package_version" \
+		--value "rust=$(path_identity "$rust_bin")" \
+		--path "$SCRIPT_DIR/prepare-macos-runtime.sh" \
+		--path "$REPO_ROOT/packages/shared/gxserver-protocol.ts" \
+		--path "$GXSERVER_RS_ROOT/src" \
+		--path "$GXSERVER_RS_ROOT/Cargo.toml" \
+		--path "$GXSERVER_RS_ROOT/Cargo.lock" \
+		--path "$WEB_DIR/bin/zmx" \
+		--path "$WEB_DIR/bin/bd")"
 	local cache_outputs=("$target_dir/build-identity.json" "$target_dir/bin/gxserver" "$target_dir/dist/protocol/index.js" "$target_dir/dist/protocol/index.d.ts")
 	cache_outputs+=("$target_dir/bin/ghostex")
 	if cache_matches "gxserver-package-$GHOSTEX_MACOS_ARCH" "$package_digest" "${cache_outputs[@]}" &&
@@ -1672,7 +1677,7 @@ write_build_capabilities_manifest() {
 	local notes_payload=""
 	local note
 	# CDXC:ContributorStart 2026-06-23-04:03: Local starts may have no skipped optional resources. macOS /bin/bash 3.2 treats an empty array expansion as unbound under `set -u`, so emit an empty notes payload without expanding the array when it has no entries.
-	if (( ${#APP_OPTIONAL_RESOURCE_NOTES[@]} > 0 )); then
+	if ((${#APP_OPTIONAL_RESOURCE_NOTES[@]} > 0)); then
 		for note in "${APP_OPTIONAL_RESOURCE_NOTES[@]}"; do
 			notes_payload+="$note"$'\n'
 		done
@@ -1823,12 +1828,12 @@ if [[ ! -f "$ZMX_ROOT/build.zig" ]]; then
 	exit 1
 fi
 case "$GHOSTEX_MACOS_ARCH" in
-	arm64)
-		ZMX_TARGET="aarch64-macos.15.0"
-		;;
-	x86_64)
-		ZMX_TARGET="x86_64-macos.13.0"
-		;;
+arm64)
+	ZMX_TARGET="aarch64-macos.15.0"
+	;;
+x86_64)
+	ZMX_TARGET="x86_64-macos.13.0"
+	;;
 esac
 build_zmx_if_needed
 rm -rf "$WEB_DIR/bin"

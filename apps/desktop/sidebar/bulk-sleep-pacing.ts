@@ -11,10 +11,7 @@ export type GpuiSidebarBulkSleepPacingOptions = {
   wait?: (intervalMs: number) => Promise<void>;
 };
 
-type GpuiSidebarBulkSleepOperation<Target> = (
-  target: Target,
-  index: number,
-) => Promise<void> | void;
+type GpuiSidebarBulkSleepOperation<Target> = (target: Target, index: number) => Promise<void> | void;
 
 /*
 CDXC:GPUIBulkSleep 2026-06-27-02:05:
@@ -23,7 +20,7 @@ GPUI bulk sleep must mirror native sidebar pacing by sleeping one target at a ti
 export async function runGpuiSidebarBulkSleepPaced<Target>(
   targets: readonly Target[],
   sleepTarget: GpuiSidebarBulkSleepOperation<Target>,
-  options: GpuiSidebarBulkSleepPacingOptions = {},
+  options: GpuiSidebarBulkSleepPacingOptions = {}
 ): Promise<GpuiSidebarBulkSleepCounts> {
   const counts: GpuiSidebarBulkSleepCounts = {
     attempted: 0,

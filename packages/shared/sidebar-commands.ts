@@ -1,52 +1,47 @@
-import {
-  isSidebarCommandIcon,
-  type SidebarCommandIcon,
-} from "./sidebar-command-icons";
+import { isSidebarCommandIcon, type SidebarCommandIcon } from './sidebar-command-icons';
 
 export const DEFAULT_SIDEBAR_COMMANDS = [
   {
-    commandId: "dev",
-    name: "Dev",
+    commandId: 'dev',
+    name: 'Dev',
   },
   {
-    commandId: "build",
-    name: "Build",
+    commandId: 'build',
+    name: 'Build',
   },
   {
-    commandId: "test",
-    name: "Test",
+    commandId: 'test',
+    name: 'Test',
   },
   {
-    commandId: "setup",
-    name: "Setup",
+    commandId: 'setup',
+    name: 'Setup',
   },
 ] as const;
 
-export const DEFAULT_BROWSER_ACTION_URL = "http://localhost:5173";
-export const DEFAULT_BROWSER_LAUNCH_URL = "https://www.google.com";
+export const DEFAULT_BROWSER_ACTION_URL = 'http://localhost:5173';
+export const DEFAULT_BROWSER_LAUNCH_URL = 'https://www.google.com';
 
 /**
  * CDXC:ProjectActions 2026-05-19-17:10:
  * Default terminal actions ship without a configured command. Surfaces that show
  * the runnable target use this label until the user saves a command.
  */
-export const SIDEBAR_UNCONFIGURED_TERMINAL_COMMAND_LABEL = "Set the command";
+export const SIDEBAR_UNCONFIGURED_TERMINAL_COMMAND_LABEL = 'Set the command';
 
 export function isSidebarCommandConfigured(command: SidebarCommandButton): boolean {
-  return command.actionType === "browser"
-    ? Boolean(command.url?.trim())
-    : Boolean(command.command?.trim());
+  return command.actionType === 'browser' ? Boolean(command.url?.trim()) : Boolean(command.command?.trim());
 }
 
 export function getSidebarCommandPreviewLabel(command: SidebarCommandButton): string {
-  if (command.actionType === "browser") {
-    return command.url?.trim() ?? "";
+  if (command.actionType === 'browser') {
+    return command.url?.trim() ?? '';
   }
   return command.command?.trim() || SIDEBAR_UNCONFIGURED_TERMINAL_COMMAND_LABEL;
 }
 
-export type DefaultSidebarCommandId = (typeof DEFAULT_SIDEBAR_COMMANDS)[number]["commandId"];
-export type SidebarActionType = "browser" | "terminal";
+export type DefaultSidebarCommandId = (typeof DEFAULT_SIDEBAR_COMMANDS)[number]['commandId'];
+export type SidebarActionType = 'browser' | 'terminal';
 /**
  * CDXC:GlobalActions 2026-08-07:
  * Which Actions list a run-by-id selector names. Global and project Actions are
@@ -54,9 +49,9 @@ export type SidebarActionType = "browser" | "terminal";
  * surface can run either. Absent means project, which keeps every sender that
  * predates Global Actions unchanged.
  */
-export type SidebarCommandScope = "global" | "project";
-export type SidebarCommandRunMode = "default" | "debug";
-export type SidebarCommandLinkTarget = "integrated" | "external";
+export type SidebarCommandScope = 'global' | 'project';
+export type SidebarCommandRunMode = 'default' | 'debug';
+export type SidebarCommandLinkTarget = 'integrated' | 'external';
 
 /**
  * CDXC:ProjectActions 2026-07-31-12:00:
@@ -118,16 +113,16 @@ export function normalizeSidebarCommandLinks(candidate: unknown): SidebarCommand
 
   const normalizedLinks: SidebarCommandLink[] = [];
   for (const item of candidate) {
-    if (!item || typeof item !== "object") {
+    if (!item || typeof item !== 'object') {
       continue;
     }
     const partialLink = item as Partial<SidebarCommandLink> & { target?: string; url?: unknown };
-    const url = typeof partialLink.url === "string" ? partialLink.url.trim() : "";
+    const url = typeof partialLink.url === 'string' ? partialLink.url.trim() : '';
     if (!url) {
       continue;
     }
     normalizedLinks.push({
-      target: partialLink.target === "external" ? "external" : "integrated",
+      target: partialLink.target === 'external' ? 'external' : 'integrated',
       url,
     });
   }
@@ -135,22 +130,20 @@ export function normalizeSidebarCommandLinks(candidate: unknown): SidebarCommand
 }
 
 export function isSidebarCommandRunMode(value: unknown): value is SidebarCommandRunMode {
-  return value === "default" || value === "debug";
+  return value === 'default' || value === 'debug';
 }
 
 export function isSidebarCommandScope(value: unknown): value is SidebarCommandScope {
-  return value === "global" || value === "project";
+  return value === 'global' || value === 'project';
 }
 
-export function getFirstBrowserSidebarCommandUrl(
-  commands: readonly SidebarCommandButton[],
-): string | undefined {
-  return commands.find((command) => command.actionType === "browser")?.url;
+export function getFirstBrowserSidebarCommandUrl(commands: readonly SidebarCommandButton[]): string | undefined {
+  return commands.find((command) => command.actionType === 'browser')?.url;
 }
 
 export function createDefaultSidebarCommandButtons(): SidebarCommandButton[] {
   return DEFAULT_SIDEBAR_COMMANDS.map((command) => ({
-    actionType: "terminal",
+    actionType: 'terminal',
     closeTerminalOnExit: false,
     command: undefined,
     commandId: command.commandId,
@@ -165,26 +158,19 @@ export function createDefaultSidebarCommandButtons(): SidebarCommandButton[] {
 export function createSidebarCommandButtons(
   storedCommands: readonly StoredSidebarCommand[],
   storedOrder: readonly string[] = [],
-  deletedDefaultCommandIds: readonly string[] = [],
+  deletedDefaultCommandIds: readonly string[] = []
 ): SidebarCommandButton[] {
   const storedCommandById = new Map(storedCommands.map((command) => [command.commandId, command]));
-  const deletedDefaultCommandIdSet = new Set(
-    normalizeStoredSidebarCommandOrder(deletedDefaultCommandIds),
-  );
-  const defaultButtons = DEFAULT_SIDEBAR_COMMANDS.reduce<SidebarCommandButton[]>(
-    (buttons, command) => {
-      if (deletedDefaultCommandIdSet.has(command.commandId)) {
-        return buttons;
-      }
-
-      const storedCommand = storedCommandById.get(command.commandId);
-      buttons.push(
-        storedCommand ? normalizeStoredCommandButton(storedCommand) : defaultAction(command),
-      );
+  const deletedDefaultCommandIdSet = new Set(normalizeStoredSidebarCommandOrder(deletedDefaultCommandIds));
+  const defaultButtons = DEFAULT_SIDEBAR_COMMANDS.reduce<SidebarCommandButton[]>((buttons, command) => {
+    if (deletedDefaultCommandIdSet.has(command.commandId)) {
       return buttons;
-    },
-    [],
-  );
+    }
+
+    const storedCommand = storedCommandById.get(command.commandId);
+    buttons.push(storedCommand ? normalizeStoredCommandButton(storedCommand) : defaultAction(command));
+    return buttons;
+  }, []);
 
   const customButtons = storedCommands
     .filter((command) => !isDefaultSidebarCommandId(command.commandId))
@@ -203,11 +189,11 @@ export function createSidebarCommandButtons(
  */
 export function createGlobalSidebarCommandButtons(
   storedCommands: readonly StoredSidebarCommand[],
-  storedOrder: readonly string[] = [],
+  storedOrder: readonly string[] = []
 ): SidebarCommandButton[] {
   return orderSidebarCommandButtons(
     storedCommands.map((command) => normalizeStoredCommandButton(command)),
-    storedOrder,
+    storedOrder
   );
 }
 
@@ -232,7 +218,7 @@ export function normalizeStoredSidebarCommands(candidate: unknown): StoredSideba
   const seenCommandIds = new Set<string>();
 
   for (const item of candidate) {
-    if (!item || typeof item !== "object") {
+    if (!item || typeof item !== 'object') {
       continue;
     }
 
@@ -245,16 +231,15 @@ export function normalizeStoredSidebarCommands(candidate: unknown): StoredSideba
       url?: string;
     };
     const commandId = partialItem.commandId?.trim();
-    const name = partialItem.name?.trim() ?? "";
+    const name = partialItem.name?.trim() ?? '';
     const actionType = normalizeActionType(partialItem.actionType, partialItem.url);
     const icon = isSidebarCommandIcon(partialItem.icon) ? partialItem.icon : undefined;
-    const isDefault =
-      partialItem.isDefault === true || (commandId ? isDefaultSidebarCommandId(commandId) : false);
+    const isDefault = partialItem.isDefault === true || (commandId ? isDefaultSidebarCommandId(commandId) : false);
     if (!commandId || seenCommandIds.has(commandId)) {
       continue;
     }
 
-    if (actionType === "browser") {
+    if (actionType === 'browser') {
       const url = partialItem.url?.trim();
       if (!url) {
         continue;
@@ -284,17 +269,13 @@ export function normalizeStoredSidebarCommands(candidate: unknown): StoredSideba
     normalizedCommands.push({
       actionType,
       closeTerminalOnExit:
-        typeof partialItem.closeTerminalOnExit === "boolean"
-          ? partialItem.closeTerminalOnExit
-          : false,
+        typeof partialItem.closeTerminalOnExit === 'boolean' ? partialItem.closeTerminalOnExit : false,
       command,
       commandId,
       isDefault,
       name,
       playCompletionSound:
-        typeof partialItem.playCompletionSound === "boolean"
-          ? partialItem.playCompletionSound
-          : true,
+        typeof partialItem.playCompletionSound === 'boolean' ? partialItem.playCompletionSound : true,
       showOnProjectRow: partialItem.showOnProjectRow === true,
       ...(icon ? { icon } : {}),
       ...(links.length > 0 ? { links } : {}),
@@ -314,7 +295,7 @@ export function normalizeStoredSidebarCommandOrder(candidate: unknown): string[]
   const seenCommandIds = new Set<string>();
 
   for (const item of candidate) {
-    if (typeof item !== "string") {
+    if (typeof item !== 'string') {
       continue;
     }
 
@@ -332,7 +313,7 @@ export function normalizeStoredSidebarCommandOrder(candidate: unknown): string[]
 
 function defaultAction(command: (typeof DEFAULT_SIDEBAR_COMMANDS)[number]): SidebarCommandButton {
   return {
-    actionType: "terminal",
+    actionType: 'terminal',
     closeTerminalOnExit: false,
     command: undefined,
     commandId: command.commandId,
@@ -345,9 +326,9 @@ function defaultAction(command: (typeof DEFAULT_SIDEBAR_COMMANDS)[number]): Side
 }
 
 function normalizeStoredCommandButton(command: StoredSidebarCommand): SidebarCommandButton {
-  return command.actionType === "browser"
+  return command.actionType === 'browser'
     ? {
-        actionType: "browser",
+        actionType: 'browser',
         closeTerminalOnExit: false,
         command: undefined,
         commandId: command.commandId,
@@ -359,7 +340,7 @@ function normalizeStoredCommandButton(command: StoredSidebarCommand): SidebarCom
         url: command.url,
       }
     : {
-        actionType: "terminal",
+        actionType: 'terminal',
         closeTerminalOnExit: command.closeTerminalOnExit,
         command: command.command,
         commandId: command.commandId,
@@ -374,18 +355,18 @@ function normalizeStoredCommandButton(command: StoredSidebarCommand): SidebarCom
 }
 
 function normalizeActionType(value: string | undefined, url: string | undefined): SidebarActionType {
-  if (value === "browser") {
-    return "browser";
+  if (value === 'browser') {
+    return 'browser';
   }
-  if (value === "terminal") {
-    return "terminal";
+  if (value === 'terminal') {
+    return 'terminal';
   }
-  return url?.trim() ? "browser" : "terminal";
+  return url?.trim() ? 'browser' : 'terminal';
 }
 
 function orderSidebarCommandButtons(
   buttons: readonly SidebarCommandButton[],
-  storedOrder: readonly string[],
+  storedOrder: readonly string[]
 ): SidebarCommandButton[] {
   const buttonById = new Map(buttons.map((button) => [button.commandId, button] as const));
   const orderedButtons: SidebarCommandButton[] = [];

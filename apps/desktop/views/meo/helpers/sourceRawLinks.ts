@@ -17,7 +17,7 @@ const blockedAncestorNames = new Set([
   'CodeBlock',
   'HTMLTag',
   'HTMLBlock',
-  'Table'
+  'Table',
 ]);
 
 function addRange(builder: RangeSetBuilder<any>, from: number, to: number): void {
@@ -89,5 +89,5 @@ export const sourceFileLinkField = StateField.define<any>({
       return markers;
     }
   },
-  provide: (field: any) => EditorView.decorations.from(field)
+  provide: (field: any) => EditorView.decorations.from(field),
 });
