@@ -32,6 +32,30 @@ const MARKUP_TAG = /<\/?[a-z][a-z0-9-]*(?:\s[^>]*)?>/gi;
 const ANSI_STYLE_SEQUENCE = /(?:\u001b|\u009b)?\[[0-9;]{1,8}m/g;
 const COMPACTION_OUTPUT =
   /^compact(?:ed|ing|ion)\b(?:\s+(?:is\s+)?(?:complete[d]?|done|finished|successful(?:ly)?))?(?:\s*\([^)]*\))?\s*[.!…]*$/i;
+
+/** Claude: the row derived from `/compact`'s local-command output. */
+const COMPACTION_COMPLETED_LABEL = "Compaction completed";
+/*
+ * Codex: the row gxserver decodes from the rollout's `ContextCompaction` thread
+ * item (`CONTEXT_COMPACTED_STATUS_TEXT` in server/src/session_chat.rs — keep the
+ * two spellings in step). Codex has no compaction output line to parse and no
+ * progress screen, so that transcript item is the ONLY evidence a compaction
+ * happened. Matched exactly, and only on a transcript-decoded system turn, so a
+ * user typing the same words still reads as their own message.
+ */
+const CONTEXT_COMPACTED_LABEL = "Context compacted";
+
+function isContextCompactionRecord(
+  message: SessionChatMessage,
+  text: string,
+): boolean {
+  return (
+    message.role === "system" &&
+    message.source === "transcript" &&
+    text.trim() === CONTEXT_COMPACTED_LABEL
+  );
+}
+
 /*
  * Claude Code appends a second line when a `.claude/settings.json` model pin
  * disagrees with the picked model, so this cannot be end-anchored: the trailing
@@ -276,6 +300,11 @@ export function classifySessionChatSuppressedTurn(
     // The authoritative completion row below is the one visible record.
     return { kind: "hidden" };
   }
+  if (isContextCompactionRecord(message, text)) {
+    // Same completed-action pill Claude's compaction gets, so the seam reads
+    // identically whichever CLI drew it.
+    return { kind: "status", label: CONTEXT_COMPACTED_LABEL };
+  }
   const label = harnessInjectedTurnLabel(text);
   if (label === null) {
     return null;
@@ -285,7 +314,7 @@ export function classifySessionChatSuppressedTurn(
     return { kind: "hidden" };
   }
   if (label === "Local command output" && isCompactionCommandOutput(text)) {
-    return { kind: "status", label: "Compaction completed" };
+    return { kind: "status", label: COMPACTION_COMPLETED_LABEL };
   }
   const command = parseSessionChatCommandEnvelope(text);
   if (
@@ -319,6 +348,31 @@ export function classifySessionChatSuppressedTurn(
 
 export function isSessionChatNoiseMessage(message: SessionChatMessage): boolean {
   return classifySessionChatSuppressedTurn(message) !== null;
+}
+
+/**
+ * The agent's own record that a compaction FINISHED, in either lane Ghostex
+ * can see it: Claude's `/compact` output row, and Codex's `ContextCompaction`
+ * thread item. The optimistic "Ran /compact" row retires against this — once
+ * the agent has said the compaction happened, a client-side "we sent it" row
+ * would sit BELOW the result it announced.
+ */
+export function isSessionChatCompactionRecord(
+  message: SessionChatMessage,
+): boolean {
+  const suppressed = classifySessionChatSuppressedTurn(message);
+  return (
+    suppressed?.kind === "status" &&
+    (suppressed.label === CONTEXT_COMPACTED_LABEL ||
+      suppressed.label === COMPACTION_COMPLETED_LABEL)
+  );
+}
+
+/** How many compactions the transcript has recorded so far. */
+export function countSessionChatCompactionRecords(
+  messages: readonly SessionChatMessage[],
+): number {
+  return messages.filter(isSessionChatCompactionRecord).length;
 }
 
 /** True only for turns that must not reach the list at all. */

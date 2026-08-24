@@ -147,13 +147,26 @@ describe("content keys", () => {
 
 describe("/clear boundary (§10.3)", () => {
   test("model configuration commands rely on one authoritative transcript status", () => {
+    const markers = [
+      { command: "/model sonnet", id: "model", sentAt: 100 },
+      { command: "/effort xhigh", id: "effort", sentAt: 200 },
+      { command: "/compact", compactionRecordsBefore: 0, id: "compact", sentAt: 300 },
+      { command: "/clear", id: "clear", sentAt: 400 },
+    ];
+    // Pill-dispatched commands never get a row; /compact holds one until the
+    // agent's own compaction record arrives.
     expect(
-      sessionChatCommandMarkersAsMessages([
-        { command: "/model sonnet", id: "model", sentAt: 100 },
-        { command: "/effort xhigh", id: "effort", sentAt: 200 },
-        { command: "/compact", id: "compact", sentAt: 300 },
-        { command: "/clear", id: "clear", sentAt: 400 },
-      ]).map((message) => message.blocks),
+      sessionChatCommandMarkersAsMessages(markers, 0).map(
+        (message) => message.blocks,
+      ),
+    ).toEqual([
+      [{ text: "Ran /compact", type: "text" }],
+      [{ text: "Ran /clear", type: "text" }],
+    ]);
+    expect(
+      sessionChatCommandMarkersAsMessages(markers, 1).map(
+        (message) => message.blocks,
+      ),
     ).toEqual([[{ text: "Ran /clear", type: "text" }]]);
   });
 

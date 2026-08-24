@@ -79,9 +79,31 @@ export type {
   SessionChatHostSearchBridge,
 };
 
+/** Where a stash left the durable copy of the text it was given. */
+export interface SessionChatStashedPrompt {
+  /**
+   * The Saved Prompts row this stash created, and therefore the only row the
+   * caller is allowed to delete again. Absent when the save matched a prompt
+   * the user had already saved by hand: that one stays in Saved Prompts.
+   */
+  promptId?: string;
+}
+
+/** The draft that left the composer, and the durable copy that outlives it. */
+export interface SessionChatComposerHandoff {
+  /** Exact text the terminal must receive. Empty means nothing moved. */
+  content: string;
+  /**
+   * Saved Prompts row holding `content` until the host confirms a terminal
+   * actually took it. The host deletes this row only on that confirmation;
+   * on every other outcome the row stays, so the text is never only in RAM.
+   */
+  stashedPromptId?: string;
+}
+
 export interface SessionChatHostComposerActions {
   focus: () => void;
-  handoffToTerminal: () => Promise<string>;
+  handoffToTerminal: () => Promise<SessionChatComposerHandoff>;
   insertPrompt: (content: string) => boolean;
   requestStash: () => void;
 }
@@ -96,7 +118,10 @@ export interface SessionChatHostComposerBridge {
    * work would be worse than not offering one. Absent it, the composer's stash
    * control is not rendered and the chat → terminal handoff is unavailable.
    */
-  stashPrompt?: (content: string, options?: { transient?: boolean }) => Promise<void>;
+  stashPrompt?: (
+    content: string,
+    options?: { transient?: boolean },
+  ) => Promise<SessionChatStashedPrompt | undefined>;
 }
 
 export interface SessionChatViewProps {
@@ -471,24 +496,37 @@ export function SessionChatView({
         // Keep the draft intact so a failed stash can be retried.
       });
   }, [hostComposerBridge]);
-  const handoffComposerDraft = useCallback(async (): Promise<string> => {
+  const handoffComposerDraft = useCallback(async (): Promise<SessionChatComposerHandoff> => {
     const composer = composerRef.current;
     const draft = composer?.getDraft() ?? "";
-    const stashPrompt = hostComposerBridge?.stashPrompt;
-    if (!stashPrompt || !draft.trim()) {
+    if (!draft.trim()) {
       if (draft.length > 0) {
         composer?.clearDraft(draft);
       }
-      return "";
+      return { content: "" };
     }
-    await stashPrompt(draft, { transient: true });
+    const stashPrompt = hostComposerBridge?.stashPrompt;
+    if (!stashPrompt) {
+      /*
+      Clearing the composer here would make the host's in-memory copy the only
+      copy of the text. A host that cannot stash simply cannot move a draft, so
+      say so and stay in chat with every character intact.
+      */
+      throw new Error("This host cannot move the draft out of chat.");
+    }
+    const stashed = await stashPrompt(draft, { transient: true });
     // The exact snapshot that became durable must still own the composer.
     // If more text arrived during the save, remain in chat with all text
-    // intact instead of switching with a partial draft.
+    // intact instead of switching with a partial draft. The stash row created
+    // above stays in Saved Prompts: a visible duplicate is the correct price
+    // for never being able to lose the text.
     if (composerRef.current?.clearDraft(draft) !== true) {
       throw new Error("The draft changed while it was being moved.");
     }
-    return draft;
+    return {
+      content: draft,
+      ...(stashed?.promptId ? { stashedPromptId: stashed.promptId } : {}),
+    };
   }, [hostComposerBridge]);
   useEffect(() => {
     if (!hostComposerBridge || initialTranscriptLoading) {

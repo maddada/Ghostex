@@ -326,6 +326,34 @@ export interface SessionChatTerminalActivity {
 }
 
 /*
+CDXC:SessionChatAppCommands 2026-08-23:
+Slash commands GHOSTEX typed into the agent without the composer: the
+first-prompt auto-title job and the rename modal stage `/rename <title>` (Pi
+`/name`, Hermes Agent `/title`), and a new fork submits a provisional
+`Fork: <old title>`.
+
+Claude Code records everything it intercepts, so its transcript already carries
+those sends. Codex records NOTHING, and a session that renamed itself mid-thread
+left no trace in chat at all — the reader saw the title change with no
+explanation. These rows are the app saying what it did.
+
+They are an ACKNOWLEDGEMENT with a short server-side TTL, never history: a
+client drops one as soon as it finds the agent's own record of the same command,
+so the two never both render, and nothing is persisted. Unlike `prompt` /
+`terminalNotice`, an omitted field does NOT mean cleared — the rows retire on
+their own schedule, so a frame with nothing to add stays silent instead of
+racing the client into dropping one it should still show.
+*/
+export interface SessionChatAppCommand {
+  /** Stable within a session; two sends can carry identical text. */
+  id: string;
+  /** Verbatim command as written to the terminal, e.g. `/rename Fix parser`. */
+  command: string;
+  /** ISO-8601 millis. */
+  sentAt: string;
+}
+
+/*
 CDXC:SessionChatAgentFleet 2026-08-23:
 Sub-agents Claude Code is running, which exist ONLY on its terminal
 screen — nothing about them reaches transcript JSONL:
@@ -429,6 +457,11 @@ export interface GxserverReadSessionChatResult {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * Commands Ghostex itself typed into this session. NOT prompt semantics:
+   * an omitted field leaves whatever the client already has.
+   */
+  appCommands?: SessionChatAppCommand[];
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
   /**
@@ -688,6 +721,11 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * Commands Ghostex itself typed into this session. NOT prompt semantics:
+   * an omitted field leaves whatever the client already has.
+   */
+  appCommands?: SessionChatAppCommand[];
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
   /**
@@ -745,6 +783,11 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * Commands Ghostex itself typed into this session. NOT prompt semantics:
+   * an omitted field leaves whatever the client already has.
+   */
+  appCommands?: SessionChatAppCommand[];
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
   /**
@@ -785,6 +828,11 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * Commands Ghostex itself typed into this session. NOT prompt semantics:
+   * an omitted field leaves whatever the client already has.
+   */
+  appCommands?: SessionChatAppCommand[];
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
   /**

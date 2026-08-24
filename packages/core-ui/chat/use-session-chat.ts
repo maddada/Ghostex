@@ -14,6 +14,7 @@ import type {
   GxserverReadSessionChatResult,
   GxserverSessionChatEvent,
   SessionChatAgentFleet,
+  SessionChatAppCommand,
   SessionChatDetectedOptions,
   SessionChatDraft,
   SessionChatInteractivePrompt,
@@ -40,6 +41,7 @@ import {
   replaceSessionChatMergerList,
   type SessionChatMerger,
 } from "./session-chat-merge";
+import { countSessionChatCompactionRecords } from "./session-chat-noise";
 import {
   appendSessionChatCommandMarker,
   applySessionChatCommandMarkerBoundaries,
@@ -47,6 +49,7 @@ import {
   nextSessionChatPendingSendId,
   pruneSessionChatPendingSends,
   SESSION_CHAT_PENDING_SEND_LIMIT,
+  sessionChatAppCommandsAsMessages,
   sessionChatCommandMarkersAsMessages,
   sessionChatPendingSendsAsMessages,
   visibleSessionChatPendingSends,
@@ -91,6 +94,25 @@ const NOTFOUND_RETRY_WINDOW_MS = 60_000;
 // continuously streaming turn from turning follow-ups into a read loop.
 const RESYNC_FOLLOW_UP_DELAY_MS = 250;
 const MAX_RESYNC_FOLLOW_UPS = 4;
+
+// Hook-level read deadline. The transport exposes no abort handle, so this
+// does not cancel the underlying request — it settles the STATE MACHINE. A
+// read that never resolves would otherwise pin `resyncInFlightRef` true, and
+// every later gap verdict would early-return out of requestResync: the frozen
+// chat view.
+const READ_TIMEOUT_MS = 30_000;
+
+// A resync read that fails (including by timeout) must keep retrying, because
+// nothing else re-reads: the gap that asked for it has already been consumed.
+const RESYNC_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
+const RESYNC_RETRY_MAX_DELAY_MS = 15_000;
+
+// Liveness floor. A silently dead follower or WebSocket delivers no frames at
+// all, so no gap is ever observed and the fold rules never fire. While the
+// view expects frames, this long without one means re-read rather than wait.
+const STALL_THRESHOLD_MS = 20_000;
+const STALL_CHECK_INTERVAL_MS = 5_000;
+
 const CLAUDE_TERMINAL_STATUS_KIND = "claude-status";
 
 interface SessionChatStreamPosition {
@@ -110,6 +132,28 @@ function isAheadOf(
 
 function notFoundRetryDelayMs(attempt: number): number {
   return NOTFOUND_RETRY_DELAYS_MS[attempt] ?? NOTFOUND_RETRY_FIXED_DELAY_MS;
+}
+
+function resyncRetryDelayMs(attempt: number): number {
+  return RESYNC_RETRY_DELAYS_MS[attempt] ?? RESYNC_RETRY_MAX_DELAY_MS;
+}
+
+function withReadTimeout<T>(read: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("Session chat read timed out."));
+    }, READ_TIMEOUT_MS);
+    read.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (readError: unknown) => {
+        clearTimeout(timer);
+        reject(readError instanceof Error ? readError : new Error(String(readError)));
+      },
+    );
+  });
 }
 
 function normalizedSessionChatText(message: SessionChatMessage): string {
@@ -303,6 +347,15 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // CDXC:SessionChatAgentFleet 2026-08-23: carried and cleared exactly like the
   // activity row above; the strip's clocks tick locally off `detectedAt`.
   const [agentFleet, setAgentFleet] = useState<SessionChatAgentFleet | null>(null);
+  /*
+  CDXC:SessionChatAppCommands 2026-08-23: commands Ghostex typed into the agent
+  itself. NOT prompt semantics — a frame that omits them leaves what we have,
+  because the server retires them on its own TTL and an omission is far more
+  often "this frame had nothing to add" than "that rename never happened".
+  */
+  const [appCommands, setAppCommands] = useState<readonly SessionChatAppCommand[]>(
+    [],
+  );
   // Claude replaces its current `⏺ …` terminal line in place. Keep each
   // DISTINCT value only for this mounted chat; matching transcript text removes
   // it from composition as soon as JSONL catches up. Distinct rather than
@@ -354,10 +407,25 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const resyncSeenInFlightRef = useRef<SessionChatStreamPosition | null>(null);
   const resyncFollowUpsRef = useRef(0);
   const resyncFollowUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Failure retry, kept strictly apart from the follow-up above: a follow-up
+   * chases bytes a SUCCESSFUL read outran, this one re-attempts a read that
+   * never landed. Sharing a counter would let one exhaust the other's budget.
+   */
+  const resyncFailuresRef = useRef(0);
+  const resyncRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadEarlierEpochRef = useRef<number | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const workingRef = useRef(false);
   const workingStartedAtRef = useRef<number | null>(null);
+  /** Last moment this session got a frame, or a read result that stood in for one. */
+  const lastFrameAtRef = useRef(Date.now());
+  const lastWatchdogResyncAtRef = useRef(0);
+  /**
+   * The watchdog's "frames are expected" input. A ref because the subscribe
+   * effect must not tear the subscription down every time work starts or ends.
+   */
+  const workingSignalRef = useRef(false);
 
   const applyTerminalActivity = useCallback(
     (activity: SessionChatTerminalActivity | undefined): void => {
@@ -417,6 +485,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       terminalActivity?: SessionChatTerminalActivity;
       /** Sub-agents on screen; omitted ⇒ cleared. */
       agentFleet?: SessionChatAgentFleet;
+      /** Commands Ghostex sent; omitted ⇒ unchanged, never cleared. */
+      appCommands?: SessionChatAppCommand[];
       /** gxserver has read the screen; latched, never cleared by omission. */
       screenProbed?: boolean;
       /** Ghostex prompt queue; PRESENT (even empty) is the capability probe. */
@@ -442,6 +512,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setTerminalNotice(result.terminalNotice ?? null);
       applyTerminalActivity(result.terminalActivity);
       setAgentFleet(result.agentFleet ?? null);
+      if (result.appCommands) {
+        setAppCommands(result.appCommands);
+      }
       if (result.screenProbed) {
         setScreenProbed(true);
       }
@@ -463,11 +536,18 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     resyncInFlightRef.current = true;
     resyncSeenInFlightRef.current = null;
     const generation = generationRef.current;
-    void transport
-      .read({ limit: limitRef.current })
+    void withReadTimeout(transport.read({ limit: limitRef.current }))
       .then((result) => {
         if (closedRef.current || generationRef.current !== generation) {
           return;
+        }
+        // The read landed, so the stream is answering again: drop the failure
+        // backoff and count this as liveness for the watchdog.
+        resyncFailuresRef.current = 0;
+        lastFrameAtRef.current = Date.now();
+        if (resyncRetryTimerRef.current !== null) {
+          clearTimeout(resyncRetryTimerRef.current);
+          resyncRetryTimerRef.current = null;
         }
         const observed = resyncSeenInFlightRef.current;
         const readPosition: SessionChatStreamPosition = {
@@ -498,6 +578,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         if (!closedRef.current && generationRef.current === generation) {
           setError("Conversation could not be loaded.");
           setServerStatus("error");
+          scheduleResyncRetry();
         }
       })
       .finally(() => {
@@ -505,6 +586,24 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           resyncInFlightRef.current = false;
         }
       });
+
+    // Backoff, never giving up while mounted: the next read is the only thing
+    // that can clear the error state (applyAuthoritative does it on success).
+    function scheduleResyncRetry(): void {
+      if (
+        closedRef.current ||
+        generationRef.current !== generation ||
+        resyncRetryTimerRef.current !== null
+      ) {
+        return;
+      }
+      const delay = resyncRetryDelayMs(resyncFailuresRef.current);
+      resyncFailuresRef.current += 1;
+      resyncRetryTimerRef.current = setTimeout(() => {
+        resyncRetryTimerRef.current = null;
+        requestResync();
+      }, delay);
+    }
 
     function scheduleResyncFollowUp(): void {
       if (
@@ -537,6 +636,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     resyncInFlightRef.current = false;
     resyncSeenInFlightRef.current = null;
     resyncFollowUpsRef.current = 0;
+    resyncFailuresRef.current = 0;
+    lastFrameAtRef.current = Date.now();
+    lastWatchdogResyncAtRef.current = 0;
     workingStartedAtRef.current = null;
     setServerWorking(false);
     setTranscript([]);
@@ -553,6 +655,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     setTerminalNotice(null);
     setTerminalActivity(null);
     setTerminalStatusMessages([]);
+    setAppCommands([]);
     // A different session's detection must never leak into this one.
     setSelectedOptions(null);
     // Its "we have looked" latch is per-session too: a new session has not
@@ -583,6 +686,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       if (closedRef.current) {
         return;
       }
+      // Liveness is "a frame reached us", not "a frame changed something": a
+      // dropped or duplicate frame still proves the stream is alive.
+      lastFrameAtRef.current = Date.now();
       if (resyncInFlightRef.current) {
         // Remember how far the live stream ran while the read was in flight;
         // the read answers from a position captured before it.
@@ -647,6 +753,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setTerminalNotice(event.terminalNotice ?? null);
       applyTerminalActivity(event.terminalActivity);
       setAgentFleet(event.agentFleet ?? null);
+      if (event.appCommands) {
+        setAppCommands(event.appCommands);
+      }
       if (event.screenProbed) {
         setScreenProbed(true);
       }
@@ -673,8 +782,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       attempt += 1;
     };
     const seedRead = (): void => {
-      void transport
-        .read({ limit: limitRef.current })
+      void withReadTimeout(transport.read({ limit: limitRef.current }))
         .then((result: GxserverReadSessionChatResult) => {
           if (
             closedRef.current ||
@@ -683,6 +791,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           ) {
             return;
           }
+          lastFrameAtRef.current = Date.now();
           frameState.epoch = result.epoch;
           frameState.seq = result.seq;
           applyAuthoritative(result);
@@ -711,8 +820,30 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     };
     seedRead();
 
+    // Stall watchdog. Nothing below the hook reports a follower or socket that
+    // stopped delivering: without a frame there is no gap, and without a gap
+    // the fold rules never ask for a resync. Re-reading is the only recovery.
+    const stallTimer = setInterval(() => {
+      if (closedRef.current || !workingSignalRef.current) {
+        return;
+      }
+      const now = Date.now();
+      if (
+        now - lastFrameAtRef.current <= STALL_THRESHOLD_MS ||
+        now - lastWatchdogResyncAtRef.current <= STALL_THRESHOLD_MS
+      ) {
+        return;
+      }
+      // Stamped before the call: a read that succeeds but answers with the same
+      // stale tail leaves lastFrameAtRef fresh, but one that is dropped by the
+      // in-flight guard must not let the watchdog fire again on the next tick.
+      lastWatchdogResyncAtRef.current = now;
+      requestResync();
+    }, STALL_CHECK_INTERVAL_MS);
+
     return () => {
       closedRef.current = true;
+      clearInterval(stallTimer);
       if (retryTimerRef.current !== null) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
@@ -720,6 +851,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       if (resyncFollowUpTimerRef.current !== null) {
         clearTimeout(resyncFollowUpTimerRef.current);
         resyncFollowUpTimerRef.current = null;
+      }
+      if (resyncRetryTimerRef.current !== null) {
+        clearTimeout(resyncRetryTimerRef.current);
+        resyncRetryTimerRef.current = null;
       }
       unsubscribe();
     };
@@ -763,6 +898,17 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     [markers, surfaced],
   );
 
+  /*
+   * Counted off the RAW authoritative list, the same one `send` snapshots
+   * from: assembly folds turns together and a `/clear` boundary hides them
+   * outright, so counting the two ends of the comparison on different lists
+   * could leave a `/compact` marker either retired on sight or stranded.
+   */
+  const compactionRecords = useMemo(
+    () => countSessionChatCompactionRecords(transcript),
+    [transcript],
+  );
+
   // --- Pending prune against the authoritative list --------------------------
   useEffect(() => {
     setPending((current) => {
@@ -785,6 +931,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     serverWorking ||
     serverStatus === "working" ||
     externalWorking === true;
+  workingSignalRef.current = workingSignal;
   if (workingSignal) {
     workingStartedAtRef.current ??= Date.now();
   } else {
@@ -826,7 +973,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
 
   // --- Composition (§11.1 order: markers → streaming → pending) --------------
   const messages = useMemo(() => {
-    const markerMessages = sessionChatCommandMarkersAsMessages(markers);
+    const markerMessages = sessionChatCommandMarkersAsMessages(
+      markers,
+      compactionRecords,
+    );
     const pendingMessages = sessionChatPendingSendsAsMessages(
       visibleSessionChatPendingSends(pending, boundaried),
     );
@@ -841,6 +991,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     );
     const tail: SessionChatMessage[] = [
       ...visibleTerminalStatuses,
+      ...sessionChatAppCommandsAsMessages(appCommands, boundaried),
       ...markerMessages,
     ];
     const streamingText = deriveSessionChatStreamingText({
@@ -853,7 +1004,16 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     }
     tail.push(...pendingMessages);
     return [...boundaried, ...tail];
-  }, [boundaried, markers, pending, previewText, terminalStatusMessages, working]);
+  }, [
+    appCommands,
+    boundaried,
+    compactionRecords,
+    markers,
+    pending,
+    previewText,
+    terminalStatusMessages,
+    working,
+  ]);
 
   const view = selectSessionChatViewState({
     error,
@@ -870,8 +1030,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     setLoadingEarlier(true);
     const requestEpoch = frameStateRef.current.epoch;
     loadEarlierEpochRef.current = requestEpoch;
-    void transport
-      .read({ beforeOffset: beforeOffsetRef.current, limit: SESSION_CHAT_PAGE })
+    void withReadTimeout(
+      transport.read({ beforeOffset: beforeOffsetRef.current, limit: SESSION_CHAT_PAGE }),
+    )
       .then((result) => {
         if (closedRef.current || loadEarlierEpochRef.current !== requestEpoch) {
           return;
@@ -902,6 +1063,11 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setHasMore(result.hasMore);
         beforeOffsetRef.current = result.beforeOffset;
         // Older pages never rewind the live lifecycle or status.
+      })
+      .catch(() => {
+        // A failed page must not become the view's error state: the live tail
+        // is still valid. `hasMore` stays set, so the control comes back and
+        // the user can ask for the same page again.
       })
       .finally(() => {
         if (!closedRef.current && loadEarlierEpochRef.current === requestEpoch) {
@@ -938,7 +1104,20 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
             : next;
         });
       } else if (classification === "command") {
-        setMarkers((current) => appendSessionChatCommandMarker(current, text.trim()));
+        // Snapshot the compactions already on record, so a `/compact` marker
+        // retires against ITS OWN compaction rather than an earlier one.
+        const compactionRecordsBefore = countSessionChatCompactionRecords(
+          mergerRef.current.list,
+        );
+        setMarkers((current) =>
+          appendSessionChatCommandMarker(
+            current,
+            text.trim(),
+            Date.now(),
+            undefined,
+            compactionRecordsBefore,
+          ),
+        );
       }
       try {
         await transport.send(text, imagePaths);

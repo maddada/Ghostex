@@ -2,7 +2,11 @@
 // (upstream chat spec §10.3 port). Pending echoes render identically to real user turns so
 // replacement by the real transcript turn causes no visible state change.
 
-import type { SessionChatMessage } from "../../shared/session-chat";
+import type {
+  SessionChatAppCommand,
+  SessionChatMessage,
+} from "../../shared/session-chat";
+import { parseSessionChatCommandEnvelope } from "./session-chat-command-envelope";
 
 export const SESSION_CHAT_PENDING_SEND_LIMIT = 8;
 export const SESSION_CHAT_COMMAND_MARKER_LIMIT = 8;
@@ -75,6 +79,14 @@ export interface SessionChatCommandMarker {
    * are not slash commands, so "Ran /x" would read wrong.
    */
   label?: string;
+  /**
+   * Compaction records the transcript already held when this marker was
+   * created. A `/compact` marker retires once that count grows, which is a
+   * COUNT and not a timestamp comparison on purpose: a remote session's
+   * transcript timestamps come off the remote host's clock, so any skew there
+   * would either retire the marker on sight or strand it forever.
+   */
+  compactionRecordsBefore?: number;
 }
 
 let pendingSendCounter = 0;
@@ -453,29 +465,56 @@ export function appendSessionChatCommandMarker(
   command: string,
   sentAt: number = Date.now(),
   label?: string,
+  compactionRecordsBefore?: number,
 ): readonly SessionChatCommandMarker[] {
   const next = [
     ...markers,
-    { command, id: nextSessionChatPendingSendId(sentAt), sentAt, ...(label ? { label } : {}) },
+    {
+      command,
+      id: nextSessionChatPendingSendId(sentAt),
+      sentAt,
+      ...(label ? { label } : {}),
+      ...(compactionRecordsBefore === undefined ? {} : { compactionRecordsBefore }),
+    },
   ];
   return next.length > SESSION_CHAT_COMMAND_MARKER_LIMIT
     ? next.slice(next.length - SESSION_CHAT_COMMAND_MARKER_LIMIT)
     : next;
 }
 
+function commandMarkerName(command: string): string {
+  return command.trim().toLowerCase().split(/\s+/, 1)[0] ?? "";
+}
+
 export function sessionChatCommandMarkersAsMessages(
   markers: readonly SessionChatCommandMarker[],
+  /**
+   * Compactions the authoritative transcript records NOW, so a `/compact`
+   * marker can retire the moment its own compaction lands.
+   */
+  compactionRecords = 0,
 ): SessionChatMessage[] {
   return markers.flatMap((marker) => {
-    const commandName = marker.command.trim().toLowerCase().split(/\s+/, 1)[0];
+    const commandName = commandMarkerName(marker.command);
+    if (commandName === "/model" || commandName === "/effort") {
+      // Not typed: these are what the model and effort pills dispatch. The
+      // configuration they produce gets one authoritative status row, and a
+      // "Ran /model" above it would narrate the implementation of a click.
+      return [];
+    }
+    /*
+     * `/compact` IS typed, and until it finishes there is nothing else to see:
+     * Claude hides its command record and Codex writes none at all, so
+     * dropping this row left a minutes-long compaction looking like the chat
+     * had ignored the send. It retires against the agent's own completion row
+     * (`isSessionChatCompactionRecord`) rather than living forever, because
+     * markers render after the transcript — an un-retired one would end up
+     * below the "Compaction completed" / "Context compacted" row it precedes.
+     */
     if (
-      commandName === "/model" ||
-      commandName === "/effort" ||
-      commandName === "/compact"
+      commandName === "/compact" &&
+      compactionRecords > (marker.compactionRecordsBefore ?? 0)
     ) {
-      // Claude records authoritative command/output turns for these actions.
-      // Rendering an optimistic marker too produces the duplicate "Ran /…"
-      // rows that the completed-action status presentation consolidates.
       return [];
     }
     return [
@@ -487,6 +526,52 @@ export function sessionChatCommandMarkersAsMessages(
         role: "system" as const,
         source: "client" as const,
         timestamp: marker.sentAt,
+      },
+    ];
+  });
+}
+
+/*
+CDXC:SessionChatAppCommands 2026-08-23:
+Commands GHOSTEX typed into the agent (auto-title `/rename`, a fork's
+provisional title). They reuse the marker lane rather than getting a surface of
+their own — it is the same fact, "a command went to the terminal", and only the
+sender differs — but they say so, because "Ran /rename Fix parser" reads as
+something the user did and would be the second most confusing thing on screen
+after no row at all.
+
+Retired against the agent's OWN record of the same command: Claude Code writes a
+`<command-name>` envelope for everything it intercepts, so rendering both would
+double the row. Codex writes nothing, which is the whole reason these exist.
+*/
+export function sessionChatAppCommandsAsMessages(
+  commands: readonly SessionChatAppCommand[],
+  transcript: readonly SessionChatMessage[],
+): SessionChatMessage[] {
+  const recorded = new Set(
+    transcript.flatMap((message) => {
+      const envelope = parseSessionChatCommandEnvelope(
+        message.blocks
+          .map((block) => (block.type === "text" ? block.text : ""))
+          .join("\n"),
+      );
+      if (!envelope) {
+        return [];
+      }
+      return [normalizeSessionChatPendingText(`${envelope.name} ${envelope.args}`)];
+    }),
+  );
+  return commands.flatMap((entry) => {
+    if (recorded.has(normalizeSessionChatPendingText(entry.command))) {
+      return [];
+    }
+    return [
+      {
+        blocks: [{ text: `Ghostex sent ${entry.command}`, type: "text" as const }],
+        id: `app-command:${entry.id}`,
+        role: "system" as const,
+        source: "client" as const,
+        timestamp: Date.parse(entry.sentAt) || null,
       },
     ];
   });

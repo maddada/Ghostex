@@ -334,6 +334,21 @@ function writeStoredSessionChatDraft(
   }
 }
 
+/*
+Drops the persisted draft only while it still holds the exact text that left
+the composer. A send resolves asynchronously, and by then the field may already
+hold the next message, which must survive the acknowledgement of the previous
+one.
+*/
+function clearStoredSessionChatDraftIfUnchanged(
+  sessionKey: string | undefined,
+  text: string,
+): void {
+  if (readStoredSessionChatDraft(sessionKey) === text) {
+    writeStoredSessionChatDraft(sessionKey, "");
+  }
+}
+
 function linkedImageReferenceHrefs(text: string): string[] {
   return [...text.matchAll(LINKED_IMAGE_REFERENCE_PATTERN)]
     .map((match) => match[1]?.trim() ?? "")
@@ -738,9 +753,18 @@ export const SessionChatComposer = forwardRef<
    * Empties the field and every picker's dismissal state. Shared by send and
    * by queueing (Tab / long-press), because both hand the text off somewhere
    * else and both must leave a clean composer behind.
+   *
+   * `retainStoredDraft` keeps the persisted copy while the text is still only
+   * in flight. The visual clear is optimistic; the durable copy must not be,
+   * because this component can unmount before the request settles (a mode
+   * switch, or an interactive question card replacing the composer) and take
+   * the only remaining copy of the message with it. The caller drops the
+   * stored copy once the send is acknowledged.
    */
-  const vacateComposer = (): void => {
-    writeStoredSessionChatDraft(sessionKey, "");
+  const vacateComposer = (options?: { retainStoredDraft?: boolean }): void => {
+    if (options?.retainStoredDraft !== true) {
+      writeStoredSessionChatDraft(sessionKey, "");
+    }
     draftRef.current = "";
     setDraft("");
     setHistory((value) => resetSessionChatComposerHistoryIndex(value));
@@ -776,8 +800,10 @@ export const SessionChatComposer = forwardRef<
 
     // The optimistic transcript echo is created synchronously by onSend.
     // Vacate the composer first so the submit gesture feels immediate and
-    // any typing that follows belongs to the next draft.
-    vacateComposer();
+    // any typing that follows belongs to the next draft. The stored draft
+    // stays until the send is acknowledged: it is the copy a remount reads,
+    // and the only one left if this composer is gone when the send fails.
+    vacateComposer({ retainStoredDraft: true });
 
     const sendRequest = (() => {
       try {
@@ -788,6 +814,7 @@ export const SessionChatComposer = forwardRef<
     })();
     void sendRequest
       .then(() => {
+        clearStoredSessionChatDraftIfUnchanged(sessionKey, text);
         setHistory((value) => pushSessionChatComposerHistory(value, text));
       })
       .catch(() => {
@@ -825,18 +852,26 @@ export const SessionChatComposer = forwardRef<
     if (!controller?.capabilities.canQueue || disabled) {
       return;
     }
-    const text = (getInputApi()?.getValue() ?? draftRef.current).trim();
+    const stored = getInputApi()?.getValue() ?? draftRef.current;
+    const text = stored.trim();
     if (text === "") {
       return;
     }
     setSendError(null);
     // Vacate first: the queued row becomes the only copy of the text, exactly
-    // as a send does, so the gesture reads as "this left the composer".
-    vacateComposer();
-    void controller.queuePrompt(text).catch(() => {
-      restoreComposerText(text);
-      setSendError("The prompt could not be queued. Your draft was restored.");
-    });
+    // as a send does, so the gesture reads as "this left the composer". The
+    // stored copy is kept until the row exists, for the same reason a send
+    // keeps it: this composer may be gone by the time the queueing fails.
+    vacateComposer({ retainStoredDraft: true });
+    void controller
+      .queuePrompt(text)
+      .then(() => {
+        clearStoredSessionChatDraftIfUnchanged(sessionKey, stored);
+      })
+      .catch(() => {
+        restoreComposerText(text);
+        setSendError("The prompt could not be queued. Your draft was restored.");
+      });
   };
 
   /*

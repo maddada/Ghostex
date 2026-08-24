@@ -29,7 +29,7 @@ import type { SessionChatTransport } from "@/packages/core-ui/chat/session-chat-
 /*
 CDXC:SessionChatMobileWebview 2026-07-31:
 Session Chat page for the React Native app, bundled by
-scripts/build-mobile-chat.mjs into one self-contained HTML string the app
+tooling/build-mobile-chat.mjs into one self-contained HTML string the app
 loads in a react-native-webview. It mounts the same shared SessionChatView as
 gpui's chat.html and the web app; only the transport differs. The phone has
 no HTTP path to gxserver (SSH only), so every transport call crosses a
@@ -467,6 +467,12 @@ function snapshotEventFromRead(
     poll wakes when an agent starts, finishes, or changes task.
     */
     ...(result.agentFleet !== undefined ? { agentFleet: result.agentFleet } : {}),
+    /*
+    CDXC:SessionChatAppCommands 2026-08-23: commands Ghostex typed into the
+    agent. Same pass-through, and the phone needs it most — it is the client
+    least likely to be watching the terminal when the session renames itself.
+    */
+    ...(result.appCommands !== undefined ? { appCommands: result.appCommands } : {}),
     /*
     CDXC:SessionChatPromptQueue 2026-08-21: the queue and the synced draft.
     Both keep the READ's semantics here, and both matter: an absent queue is
