@@ -13,7 +13,6 @@ import {
 } from './constants';
 import type { GpuiSidebarRuntime } from './core';
 import {
-  gpuiProjectBoardPreviousSessionRowTitle,
   normalizeGpuiProjectBoardConversationRequest,
   normalizeGpuiProjectBoardToastLevel,
 } from './helpers/project-board';
@@ -47,7 +46,6 @@ import {
 } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverAgentResumePlan,
-  GxserverForkSessionResult,
   GxserverPresentationSearchResponse,
   GxserverPresentationSearchResult,
   GxserverProjectDomainState,
@@ -156,13 +154,6 @@ export interface GpuiSidebarRuntimeProjectBoardMethods {
     projectId?: string;
     projectPath?: string;
     sessionId?: string;
-  }): Promise<void>;
-  resumeGpuiProjectBoardConversation(args: {
-    beadId?: string;
-    boardProject: GxserverProjectDomainState;
-    linkStoreProjects: readonly GxserverProjectDomainState[];
-    oldGhostexSessionId: string;
-    reference: { projectId: string; sessionId: string };
   }): Promise<void>;
   replaceGpuiProjectBoardConversationLinkSession(
     boardProject: GxserverProjectDomainState,
@@ -921,109 +912,25 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
       projectId: boardProject.projectId,
       sessionId,
     };
-    const live = this.presentation?.sessions.some(
-      (session) => session.projectId === reference.projectId && session.sessionId === reference.sessionId
-    );
-    if (live) {
-      await this.focusSession(createGxserverPresentationProjectSessionId(reference.projectId, reference.sessionId));
-      return;
-    }
     /*
-    macOS restores dead links through the previous-sessions owner and rewrites
-    the link to the restored session; GPUI uses the same daemon restore
-    contract as the Previous Sessions modal (`createSession` with
-    `restoredFromSessionId`, then remove the stopped history row).
+    CDXC:StashedPromptSessionAssociation 2026-08-24:
+    The present → restore → resume routing that used to live inline here is now
+    `openGpuiConversationSessionReference` in `session-conversation-jump.ts`,
+    shared with the Saved Prompts jump. The board keeps the two pieces only it
+    owns: the daemon `reason` strings it stamps, and rewriting the bead link
+    onto whichever session ends up hosting the conversation.
     */
-    const row = await this.findGpuiProjectBoardPreviousSessionRow(reference);
-    if (!row) {
-      await this.resumeGpuiProjectBoardConversation({
-        beadId: request.beadId?.trim() || undefined,
-        boardProject,
-        linkStoreProjects,
-        oldGhostexSessionId: sessionId,
-        reference,
-      });
-      return;
-    }
-    if (!this.client) {
-      throw new Error('The linked Ghostex session is no longer available.');
-    }
-    const created = await this.client.rpc<{
-      session?: { projectId?: string; sessionId?: string; zmxName?: string };
-    }>('/api/createSession', {
-      kind: 'terminal',
-      lifecycleState: 'running',
-      projectId: reference.projectId,
-      restoredFromSessionId: reference.sessionId,
-      ...(row.sessionTag ? { sessionTag: row.sessionTag } : {}),
-      ...(row.sidebarOrder !== undefined ? { sidebarOrder: row.sidebarOrder } : {}),
-      surface: 'workspace',
-      title: gpuiProjectBoardPreviousSessionRowTitle(row),
+    await this.openGpuiConversationSessionReference(reference, {
+      onSessionReplaced: async (replacement) => {
+        await this.replaceGpuiProjectBoardConversationLinkSession(boardProject, linkStoreProjects, {
+          beadId: request.beadId?.trim() || undefined,
+          oldGhostexSessionId: sessionId,
+          ...replacement,
+        });
+      },
+      restoreReason: 'projectBoardJumpToConversationRestore',
+      resumeReason: 'projectBoardResumeConversation',
     });
-    const restoredSessionId = normalizeNonEmptyString(created.session?.sessionId);
-    if (!restoredSessionId) {
-      throw new Error('The linked Ghostex session could not be restored.');
-    }
-    const restoredProjectId = normalizeNonEmptyString(created.session?.projectId) ?? reference.projectId;
-    await this.client
-      .rpc('/api/removeSession', {
-        projectId: reference.projectId,
-        reason: 'projectBoardJumpToConversationRestore',
-        sessionId: reference.sessionId,
-      })
-      .catch(() => undefined);
-    this.projectBoardRestorableLinkChecks.delete(`${reference.projectId}:${reference.sessionId}`);
-    await this.replaceGpuiProjectBoardConversationLinkSession(boardProject, linkStoreProjects, {
-      beadId: request.beadId?.trim() || undefined,
-      oldGhostexSessionId: sessionId,
-      restoredProjectId,
-      restoredSessionId,
-      restoredSessionPersistenceName: normalizeNonEmptyString(created.session?.zmxName),
-    });
-    this.focusLocalWorkspaceSession(restoredProjectId, restoredSessionId);
-  },
-
-  async resumeGpuiProjectBoardConversation(
-    this: GpuiSidebarRuntime,
-    args: {
-      beadId?: string;
-      boardProject: GxserverProjectDomainState;
-      linkStoreProjects: readonly GxserverProjectDomainState[];
-      oldGhostexSessionId: string;
-      reference: { projectId: string; sessionId: string };
-    }
-  ): Promise<void> {
-    /*
-    CDXC:ProjectBoardBeads 2026-08-07:
-    A bead's session usually closes without leaving a restorable history row,
-    but the agent conversation it worked is still resumable from the session
-    row's agent identity. `/api/forkSession` is the daemon-owned path for that:
-    it plans the resume command in gxserver, starts the provider, and hands
-    back a live session, which the bead then follows through the same link
-    replacement the restore path uses.
-    */
-    if (!this.client) {
-      throw new Error('The linked Ghostex session is no longer available.');
-    }
-    const { fork } = await this.client.rpc<{ fork?: GxserverForkSessionResult }>('/api/forkSession', {
-      projectId: args.reference.projectId,
-      reason: 'projectBoardResumeConversation',
-      sessionId: args.reference.sessionId,
-    });
-    const resumedSessionId = normalizeNonEmptyString(fork?.session.sessionId);
-    if (!resumedSessionId) {
-      throw new Error('The linked conversation could not be resumed.');
-    }
-    const resumedProjectId = normalizeNonEmptyString(fork?.session.projectId) ?? args.reference.projectId;
-    this.projectBoardRestorableLinkChecks.delete(`${args.reference.projectId}:${args.reference.sessionId}`);
-    await this.replaceGpuiProjectBoardConversationLinkSession(args.boardProject, args.linkStoreProjects, {
-      beadId: args.beadId,
-      oldGhostexSessionId: args.oldGhostexSessionId,
-      restoredProjectId: resumedProjectId,
-      restoredSessionId: resumedSessionId,
-      restoredSessionPersistenceName: normalizeNonEmptyString(fork?.session.zmxName),
-    });
-    this.focusLocalWorkspaceSession(resumedProjectId, resumedSessionId);
   },
 
   async replaceGpuiProjectBoardConversationLinkSession(

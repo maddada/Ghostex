@@ -67,7 +67,7 @@ describe('Project Board form event handling', () => {
      * lane its own rounded panel, replacing the old zero-gap shared-border
      * strip. Layout lives in Tailwind on the components, not styles.ts.
      */
-    const lanesSource = sourceBetweenIn(projectBoardAppSource, 'aria-label="Project issue board"', '</section>');
+    const lanesSource = sourceBetweenIn(projectBoardAppSource, "aria-label='Project issue board'", '</section>');
     const laneSource = sourceBetweenIn(boardLaneCardSource, 'function BoardLane({', 'function TicketCard(');
 
     expect(projectBoardAppSource).toContain('gap-2.5 overflow-x-auto');
@@ -153,13 +153,13 @@ describe('Project Board form event handling', () => {
     expect(projectBoardSource).toContain(
       'const [hasCompletedInitialBoardLoad, setHasCompletedInitialBoardLoad] = useState(false);'
     );
-    expect(projectBoardSource).toContain('if (mode === "initial") {');
+    expect(projectBoardSource).toContain("if (mode === 'initial') {");
     expect(projectBoardSource).toContain('setHasCompletedInitialBoardLoad(true);');
     expect(projectBoardSource).toContain(
-      'activeSurfaceTab === "board" && loadState === "loading" && !hasCompletedInitialBoardLoad'
+      "activeSurfaceTab === 'board' && loadState === 'loading' && !hasCompletedInitialBoardLoad"
     );
-    expect(projectBoardSource).toContain('className="project-board-loading-overlay"');
-    expect(projectBoardSource).toContain('role="status"');
+    expect(projectBoardSource).toContain("className='project-board-loading-overlay'");
+    expect(projectBoardSource).toContain("role='status'");
     expect(projectBoardSource).toContain('IconLoader2');
     expect(overlayStyleSource).toContain('position: relative;');
     expect(overlayStyleSource).toContain('.project-board-loading-overlay');
@@ -195,13 +195,13 @@ describe('Project Board form event handling', () => {
     expect(dialogControlSource).toContain('font-weight: 400;');
     expect(stylesSource).not.toContain('.project-ticket-dialog-footer [data-slot="button"],');
     expect(stylesSource).not.toContain('.project-ticket-title-input,\n  .project-ticket-label-editor input {');
-    expect(ticketDialogsSource).not.toContain('size="sm"');
-    expect(ticketDetailSource).not.toContain('size="sm"');
-    expect(boardColumnsDialogSource).not.toContain('size="sm"');
+    expect(ticketDialogsSource).not.toContain("size='sm'");
+    expect(ticketDetailSource).not.toContain("size='sm'");
+    expect(boardColumnsDialogSource).not.toContain("size='sm'");
     // The automation dialog keeps one size="sm", on its pill Switch, which is
     // not a form-row control.
-    expect(automationDialogSource).not.toContain('<SelectTrigger size="sm"');
-    expect(automationDialogSource).not.toContain('<Button size="sm"');
+    expect(automationDialogSource).not.toContain("<SelectTrigger size='sm'");
+    expect(automationDialogSource).not.toContain("<Button size='sm'");
   });
 
   test('keeps the Kanban dialogs on the raised panel surface without bold chrome', () => {
@@ -222,9 +222,9 @@ describe('Project Board form event handling', () => {
     expect(dialogSurfaceSource).not.toContain('--app-modal-background');
     expect(stylesSource).not.toContain('font-weight: 650;');
     expect(stylesSource).not.toContain('font-weight: 700;');
-    expect(ticketDialogsSource).toContain('<DialogTitle className="text-[15px] font-normal">');
-    expect(automationDialogSource).toContain('<DialogTitle className="text-[15px] font-normal">');
-    expect(boardColumnsDialogSource).toContain('<DialogTitle className="text-[15px] font-normal">');
+    expect(ticketDialogsSource).toContain("<DialogTitle className='text-[15px] font-normal'>");
+    expect(automationDialogSource).toContain("<DialogTitle className='text-[15px] font-normal'>");
+    expect(boardColumnsDialogSource).toContain("<DialogTitle className='text-[15px] font-normal'>");
   });
 
   test('uses brighter Kanban bead card surfaces than lane panels', () => {
@@ -270,8 +270,8 @@ describe('Project Board form event handling', () => {
     expect(ticketCardSource).toContain('onOpenContextMenu(ticket');
     expect(projectBoardSource).toContain('void startTicketWork(contextMenuTicket)');
     expect(projectBoardSource).toContain('void deleteTicket(contextMenuTicket)');
-    expect(projectBoardSource).toContain('"Start work"');
-    expect(contextMenuSource).toContain('"Delete"');
+    expect(projectBoardSource).toContain("'Start work'");
+    expect(contextMenuSource).toContain("'Delete'");
   });
 
   test('shows the Beads creator distinctly from the assignee', () => {
@@ -298,7 +298,7 @@ describe('Project Board form event handling', () => {
     expect(metaFieldsSource).toContain('ticketCreatorName(createdBy, assignee)');
     expect(metaFieldsSource).toContain('{creator ? (');
     expect(metaFieldsSource).toContain('<span>Created by</span>');
-    expect(metaFieldsSource).toContain('className="project-ticket-creator-value"');
+    expect(metaFieldsSource).toContain("className='project-ticket-creator-value'");
     expect(ticketDialogsSource).toContain('createdBy={detail.ticket?.created_by}');
   });
 
@@ -318,18 +318,18 @@ describe('Project Board form event handling', () => {
       '  const openNewTicket = useCallback'
     );
 
-    expect(focusOwnerSource).toContain('action: "projectEditorFocusOwnerChanged"');
+    expect(focusOwnerSource).toContain("action: 'projectEditorFocusOwnerChanged'");
     expect(focusOwnerSource).toContain('event,');
     expect(focusOwnerSource).toContain('projectEditorId,');
     expect(focusOwnerSource).toContain('projectId,');
     expect(focusOwnerSource).not.toContain('projectPath');
     expect(focusOwnerSource).not.toContain('details');
     expect(focusOwnerSource).not.toContain('ticketTitle');
-    expect(focusEffectSource).toContain('window.addEventListener("pointerdown", handlePointerDown, true)');
-    expect(focusEffectSource).toContain('window.addEventListener("focusin", handleFocusIn, true)');
-    expect(focusEffectSource).toContain('window.addEventListener("keydown", handleKeyDown, true)');
-    expect(focusEffectSource).toContain('postFocusOwnerChanged("keydown", event.target)');
-    expect(focusEffectSource).toContain('event !== "pointerdown" && !isProjectBoardEditableFocusTarget(target)');
+    expect(focusEffectSource).toContain("window.addEventListener('pointerdown', handlePointerDown, true)");
+    expect(focusEffectSource).toContain("window.addEventListener('focusin', handleFocusIn, true)");
+    expect(focusEffectSource).toContain("window.addEventListener('keydown', handleKeyDown, true)");
+    expect(focusEffectSource).toContain("postFocusOwnerChanged('keydown', event.target)");
+    expect(focusEffectSource).toContain("event !== 'pointerdown' && !isProjectBoardEditableFocusTarget(target)");
   });
 
   test('logs Kanban title-generation diagnostics without raw prompt-agent output', () => {
@@ -384,7 +384,7 @@ describe('Project Board form event handling', () => {
     expect(projectBoardAppSource).not.toContain('PROJECT_BOARD_GENERATING_TITLE');
     expect(boardStateSource).not.toContain('PROJECT_BOARD_GENERATING_TITLE');
     expect(draftTitleSource).toContain('PROJECT_BOARD_DRAFT_TITLE_MAX_LENGTH');
-    expect(draftTitleSource).toContain('return "New ticket";');
+    expect(draftTitleSource).toContain("return 'New ticket';");
     expect(createTicketSource).toContain(
       'const title = shouldGenerateTitle ? createProjectBoardDraftTitle(prompt) : requestedTitle;'
     );
@@ -392,7 +392,7 @@ describe('Project Board form event handling', () => {
     expect(createTicketSource).toContain('scheduleProjectBoardGeneratedTitle(() =>');
     expect(createTicketSource).not.toContain('void reconcileCreatedTicket().then');
     expect(titleGenerationSource).toContain('setLocalTicketTitle(issueId, generatedTitle);');
-    expect(titleGenerationSource).not.toContain('loadTickets({ mode: "background" })');
+    expect(titleGenerationSource).not.toContain("loadTickets({ mode: 'background' })");
     expect(titleGenerationSource).not.toContain('setErrorMessage(');
   });
 
@@ -412,17 +412,17 @@ describe('Project Board form event handling', () => {
       'const setLocalTicketStatus'
     );
 
-    expect(toastSource).toContain('action: "showToast"');
+    expect(toastSource).toContain("action: 'showToast'");
     expect(saveSource).toContain('setDetail(createEmptyDetailDraft());');
     expect(saveSource).toContain('upsertLocalIssue(optimisticIssue);');
     expect(saveSource).toContain('void persistTicketDetail(draft).catch');
-    expect(saveSource).toContain('showProjectBoardToast("error", "Ticket save failed", message);');
+    expect(saveSource).toContain("showProjectBoardToast('error', 'Ticket save failed', message);");
     expect(saveSource).toContain('detailSaveSerialRef.current === saveToken');
     expect(saveSource).toContain(
       'setDetail({\n          ...draft,\n          isDeleting: false,\n          isSaving: false,'
     );
     expect(saveSource).not.toContain('setDetail((current) => ({ ...current, isSaving: true }))');
-    expect(saveSource).not.toContain('await loadTickets({ mode: "mutation" })');
+    expect(saveSource).not.toContain("await loadTickets({ mode: 'mutation' })");
   });
 
   test('starts ticket work with the agent the bead is assigned to', () => {
@@ -462,8 +462,8 @@ describe('Project Board form event handling', () => {
     const projectBoardSource = sourceFrom(projectBoardAppSource, 'function ProjectBoardApp()');
     const filtersSource = sourceBetweenIn(
       projectBoardAppSource,
-      'aria-label="Ticket filters"',
-      '{activeSurfaceTab === "triage" ? ('
+      "aria-label='Ticket filters'",
+      "{activeSurfaceTab === 'triage' ? ("
     );
     const laneSource = sourceBetweenIn(boardLaneCardSource, 'function BoardLane({', 'function TicketCard(');
 
@@ -471,8 +471,8 @@ describe('Project Board form event handling', () => {
       'const [sortOption, setSortOption] = useState<BoardSortOption>(storedViewPreferences.sortOption);'
     );
     expect(projectBoardSource).toContain('result[column.key] = sortBoardTickets(');
-    expect(projectBoardSource).toContain('sortOption,\n          column.key,');
-    expect(filtersSource).toContain('aria-label="Sort tickets"');
+    expect(projectBoardSource).toContain('sortOption,\n        column.key');
+    expect(filtersSource).toContain("aria-label='Sort tickets'");
     expect(filtersSource).toContain('PROJECT_BOARD_SORT_SELECT_ITEMS');
     expect(filtersSource).toContain('setSortOption(value as BoardSortOption)');
     expect(laneSource).toContain(
@@ -492,26 +492,26 @@ describe('Project Board form event handling', () => {
 
     expect(constantsSource).toContain('function readProjectBoardViewPreferences(): ProjectBoardViewPreferences {');
     expect(constantsSource).toContain(
-      'JSON.parse(window.localStorage.getItem(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY) || "null"),'
+      "JSON.parse(window.localStorage.getItem(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY) || 'null')"
     );
     expect(constantsSource).toContain('return DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES;');
     expect(projectBoardSource).toContain(
       'const storedViewPreferences = useMemo(() => readProjectBoardViewPreferences(), []);'
     );
     expect(projectBoardSource).toContain(
-      'useState<BoardPriorityFilter>(\n    storedViewPreferences.priorityFilter,\n  );'
+      'useState<BoardPriorityFilter>(storedViewPreferences.priorityFilter);'
     );
     expect(projectBoardSource).toContain(
-      'useState<BoardEstimateFilter>(\n    storedViewPreferences.estimateFilter,\n  );'
+      'useState<BoardEstimateFilter>(storedViewPreferences.estimateFilter);'
     );
     expect(projectBoardSource).toContain('useState<BoardSortOption>(storedViewPreferences.sortOption);');
     expect(projectBoardSource).toContain('useState<BoardTagFilter>(storedViewPreferences.tagFilter);');
     expect(projectBoardSource).toContain(
-      'try {\n      window.localStorage.setItem(\n        PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,\n        JSON.stringify({ estimateFilter, priorityFilter, sortOption, tagFilter }),\n      );\n    } catch {'
+      'try {\n      window.localStorage.setItem(\n        PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,\n        JSON.stringify({ estimateFilter, priorityFilter, sortOption, tagFilter })\n      );\n    } catch {'
     );
     expect(projectBoardSource).toContain('}, [estimateFilter, priorityFilter, sortOption, tagFilter]);');
     expect(projectBoardSource).not.toContain('JSON.stringify({ estimateFilter, priorityFilter, searchQuery');
-    expect(projectBoardSource).toContain('const [searchQuery, setSearchQuery] = useState("");');
+    expect(projectBoardSource).toContain("const [searchQuery, setSearchQuery] = useState('');");
   });
 
   test('snapshots form values before functional state updaters', () => {

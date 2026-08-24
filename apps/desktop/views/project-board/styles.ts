@@ -93,9 +93,13 @@ export const PROJECT_BOARD_STYLES = `
     font-weight: 400;
   }
 
-  [data-slot="switch"],
-  [data-slot="switch"] * {
-    border-radius: 999px;
+  /* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
+  [data-slot="switch"] {
+    border-radius: 6px;
+  }
+
+  [data-slot="switch"] [data-slot="switch-thumb"] {
+    border-radius: 4px;
   }
 
   [data-slot="select-content"],
@@ -385,44 +389,50 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardDialogRedesign 2026-08-24:
-   * The segmented control keeps its rules here rather than on Tailwind classes:
-   * the buttons carry no data-slot, and unlayered bare-button rules from the
-   * app themes beat Tailwind's utilities layer, which left the segment states
-   * unstyled wherever such a sheet is present.
+   * CDXC:SegmentedControl 2026-08-24:
+   * The Automate dialog's schedule/execution pickers are the shared
+   * SegmentedControl now, so they render the same shadcn ButtonGroup strip as
+   * Settings and the modals: one bordered container, flat segments sharing a
+   * hairline, only the outer corners rounded, highlighted selected segment.
+   *
+   * The rules are restated here because this page loads only the generated
+   * Tailwind sheet, and unlayered bare-button rules from the app themes beat
+   * Tailwind's utilities layer wherever such a sheet is present.
    */
-  .project-automation-segmented {
-    background: rgba(255, 255, 255, 0.03);
+  [data-slot="segmented-control"] {
     border: 1px solid var(--border);
     border-radius: var(--project-board-radius-control);
-    display: grid;
-    gap: 2px;
-    grid-template-columns: repeat(3, 1fr);
-    padding: 2px;
+    gap: 0;
+    overflow: hidden;
   }
 
-  .project-automation-segmented button {
+  [data-slot="segmented-control-item"] {
     background: transparent;
     border: 0;
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--muted-foreground);
     font: inherit;
     font-size: 13px;
     font-weight: 400;
-    height: 28px;
+    height: 32px;
     transition: background-color 120ms ease, color 120ms ease;
   }
 
-  .project-automation-segmented button:hover:not(:disabled) {
+  [data-slot="segmented-control-item"] + [data-slot="segmented-control-item"] {
+    border-left: 1px solid var(--border);
+  }
+
+  [data-slot="segmented-control-item"]:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.04);
     color: var(--foreground);
   }
 
-  .project-automation-segmented button[data-active="true"] {
+  [data-slot="segmented-control-item"][aria-pressed="true"] {
     background: rgba(255, 255, 255, 0.09);
     color: var(--foreground);
   }
 
-  .project-automation-segmented button:disabled {
+  [data-slot="segmented-control-item"]:disabled {
     color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
     cursor: not-allowed;
   }
@@ -998,9 +1008,12 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   .project-ticket-conversations {
+    /* Same sectioned rhythm as .project-ticket-section (round 2 redesign). */
+    border-top: 1px solid var(--project-board-hairline, rgba(255, 255, 255, 0.07));
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
+    padding-top: 14px;
   }
 
   .project-ticket-conversation-controls {
@@ -1073,6 +1086,20 @@ export const PROJECT_BOARD_STYLES = `
     color: var(--muted-foreground);
     font-size: 12px;
     font-weight: 500;
+  }
+
+  /*
+   * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+   * Titled field groups in the ticket dialogs (Properties, Comments) share the
+   * Automate dialog's section rhythm: a quiet 12px/500 header above a 10px
+   * grid, separated from the previous block by a hairline so the form reads as
+   * organized sections rather than a flat run of fields.
+   */
+  .project-ticket-section {
+    border-top: 1px solid var(--project-board-hairline, rgba(255, 255, 255, 0.07));
+    display: grid;
+    gap: 10px;
+    padding-top: 14px;
   }
 
   .project-ticket-comment-list {

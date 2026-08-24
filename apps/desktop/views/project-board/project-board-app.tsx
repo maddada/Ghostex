@@ -1,5 +1,6 @@
 import {
   IconAdjustmentsHorizontal,
+  IconFilter,
   IconLayoutColumns,
   IconLoader2,
   IconPlus,
@@ -21,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/packages/components/ui/dropdown-menu';
 import { Input } from '@/packages/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/packages/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import {
   PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
@@ -1054,6 +1056,21 @@ export function ProjectBoardApp() {
     () => filterBoardTickets(tickets, searchQuery, priorityFilter, estimateFilter, activeTagFilter),
     [activeTagFilter, estimateFilter, priorityFilter, searchQuery, tickets]
   );
+  /*
+   * CDXC:ProjectBoardFiltersPopover 2026-08-24:
+   * The toolbar shows one Filters button with an active-count badge; the
+   * priority/estimate/tag/sort selects live inside its popover so the bar
+   * stays one row at any window width.
+   */
+  const activeBoardFilterCount =
+    (priorityFilter !== 'all' ? 1 : 0) +
+    (estimateFilter !== 'all' ? 1 : 0) +
+    (activeTagFilter !== 'all' ? 1 : 0) +
+    (sortOption !== 'default' ? 1 : 0);
+  /* Controlled open state: the uncontrolled Base UI popover does not toggle
+   * from its trigger in this build (the icon-picker popover is controlled for
+   * the same reason). */
+  const [filtersPopoverOpen, setFiltersPopoverOpen] = useState(false);
 
   const ticketsByColumn = useMemo(() => {
     return boardColumns.reduce<Record<string, BoardTicket[]>>((result, column) => {
@@ -2530,76 +2547,122 @@ export function ProjectBoardApp() {
                   />
                 )}
               </div>
-              <Select
-                items={PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS}
-                onValueChange={(value) => setPriorityFilter(value as BoardPriorityFilter)}
-                value={priorityFilter}
-              >
-                <SelectTrigger aria-label='Filter by priority'>
-                  <SelectValue placeholder='All priorities' />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                items={PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS}
-                onValueChange={(value) => setEstimateFilter(value as BoardEstimateFilter)}
-                value={estimateFilter}
-              >
-                <SelectTrigger aria-label='Filter by estimate'>
-                  <SelectValue placeholder='All estimates' />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               {/*
-               * CDXC:ProjectBoardRedesign 2026-08-23:
-               * Tag and sort move from native <select>s onto the shared shadcn
-               * Select so every control on this row has the same 32px height,
-               * font, and popup styling.
+               * CDXC:ProjectBoardFiltersPopover 2026-08-24:
+               * Priority, Estimate, Tags, and Sort live in one Filters popover
+               * so the toolbar stays a single row at any width; the badge on
+               * the trigger counts the non-default choices.
                */}
-              <Select
-                items={tagFilterSelectItems}
-                onValueChange={(value) => setTagFilter(value as BoardTagFilter)}
-                value={activeTagFilter}
-              >
-                <SelectTrigger aria-label='Filter by tag'>
-                  <SelectValue placeholder='All tags' />
-                </SelectTrigger>
-                <SelectContent>
-                  {tagFilterSelectItems.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                items={PROJECT_BOARD_SORT_SELECT_ITEMS}
-                onValueChange={(value) => setSortOption(value as BoardSortOption)}
-                value={sortOption}
-              >
-                <SelectTrigger aria-label='Sort tickets'>
-                  <SelectValue placeholder='Sort' />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROJECT_BOARD_SORT_SELECT_ITEMS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover onOpenChange={setFiltersPopoverOpen} open={filtersPopoverOpen}>
+                <PopoverTrigger
+                  render={
+                    <Button aria-label='Filters' variant='outline'>
+                      <IconFilter data-icon='inline-start' />
+                      Filters
+                      {activeBoardFilterCount > 0 ? (
+                        <span className='inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ghostex-accent,#38bdf8)_22%,transparent)] px-1 text-[11px] leading-none text-[var(--ghostex-accent,#38bdf8)]'>
+                          {activeBoardFilterCount}
+                        </span>
+                      ) : null}
+                    </Button>
+                  }
+                />
+                <PopoverContent align='start' className='w-60 gap-3 p-3'>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-xs font-medium text-muted-foreground'>Filters</span>
+                    {activeBoardFilterCount > 0 ? (
+                      <button
+                        className='cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground'
+                        onClick={() => {
+                          setPriorityFilter('all');
+                          setEstimateFilter('all');
+                          setTagFilter('all');
+                          setSortOption('default');
+                        }}
+                        type='button'
+                      >
+                        Reset
+                      </button>
+                    ) : null}
+                  </div>
+                  <label className='flex flex-col gap-1.5 text-xs text-muted-foreground'>
+                    Priority
+                    <Select
+                      items={PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS}
+                      onValueChange={(value) => setPriorityFilter(value as BoardPriorityFilter)}
+                      value={priorityFilter}
+                    >
+                      <SelectTrigger aria-label='Filter by priority' className='w-full'>
+                        <SelectValue placeholder='All priorities' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className='flex flex-col gap-1.5 text-xs text-muted-foreground'>
+                    Estimate
+                    <Select
+                      items={PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS}
+                      onValueChange={(value) => setEstimateFilter(value as BoardEstimateFilter)}
+                      value={estimateFilter}
+                    >
+                      <SelectTrigger aria-label='Filter by estimate' className='w-full'>
+                        <SelectValue placeholder='All estimates' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className='flex flex-col gap-1.5 text-xs text-muted-foreground'>
+                    Tags
+                    <Select
+                      items={tagFilterSelectItems}
+                      onValueChange={(value) => setTagFilter(value as BoardTagFilter)}
+                      value={activeTagFilter}
+                    >
+                      <SelectTrigger aria-label='Filter by tag' className='w-full'>
+                        <SelectValue placeholder='All tags' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tagFilterSelectItems.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className='flex flex-col gap-1.5 text-xs text-muted-foreground'>
+                    Sort
+                    <Select
+                      items={PROJECT_BOARD_SORT_SELECT_ITEMS}
+                      onValueChange={(value) => setSortOption(value as BoardSortOption)}
+                      value={sortOption}
+                    >
+                      <SelectTrigger aria-label='Sort tickets' className='w-full'>
+                        <SelectValue placeholder='Sort' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROJECT_BOARD_SORT_SELECT_ITEMS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                </PopoverContent>
+              </Popover>
               {/*
                * CDXC:ProjectBoardColumnManagement 2026-08-21:
                * Columns sits with the filters because it changes what the board shows, and it is the only

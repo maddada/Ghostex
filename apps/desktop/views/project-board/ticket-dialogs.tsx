@@ -6,7 +6,7 @@
  * callbacks: no bd calls, no bridge state, and no form logic moved with them.
  */
 import { IconExternalLink, IconLink, IconPlayerPlay, IconTrash } from '@tabler/icons-react';
-import type { ClipboardEvent, ComponentProps, KeyboardEvent, RefObject } from 'react';
+import type { ClipboardEvent, ComponentProps, KeyboardEvent, ReactNode, RefObject } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import {
   Dialog,
@@ -55,6 +55,21 @@ export function handleCmdEnter(event: KeyboardEvent, action: () => void) {
     event.preventDefault();
     action();
   }
+}
+
+/*
+ * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+ * The ticket dialogs group their fields under the same quiet section headers
+ * the Automate dialog uses (see AutomationSection), so the form reads as
+ * titled blocks instead of a flat run of unrelated fields.
+ */
+function TicketSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <section className='project-ticket-section' aria-label={title}>
+      <div className='project-ticket-section-title'>{title}</div>
+      {children}
+    </section>
+  );
 }
 
 function pasteImageIntoDescription(
@@ -161,25 +176,13 @@ export function EditTicketDialog({
           className='project-ticket-dialog-body vertical-scroll-fade-mask'
           onKeyDown={(event) => handleCmdEnter(event, () => onSaveTicketDetail())}
         >
-          <TicketMetaFields
-            assignee={detail.ticket?.assignee}
-            blockedByIds={detail.blockedByIds}
-            blockingIds={detail.blockingIds}
-            boardColumns={boardColumns}
-            createdBy={detail.ticket?.created_by}
-            knownLabels={knownLabels}
-            labels={detail.labels}
-            onBlockedByChange={(blockedByIds) => setDetail((current) => ({ ...current, blockedByIds }))}
-            onBlockingChange={(blockingIds) => setDetail((current) => ({ ...current, blockingIds }))}
-            onLabelsChange={(labels) => setDetail((current) => ({ ...current, labels }))}
-            onPriorityChange={(priority) => setDetail((current) => ({ ...current, priority }))}
-            onStatusChange={(status: BoardStatusKey) => setDetail((current) => ({ ...current, status }))}
-            onTshirtChange={(tshirt: TshirtSize | undefined) => setDetail((current) => ({ ...current, tshirt }))}
-            priority={detail.priority}
-            status={detail.status}
-            ticketOptions={ticketOptions.filter((option) => option.id !== detail.ticket?.id)}
-            tshirt={detail.tshirt}
-          />
+          {/*
+           * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+           * The main content (title + prompt) leads like the Automate dialog's
+           * name-first layout; the metadata selectors follow as one titled
+           * Properties section instead of opening the dialog with a wall of
+           * dropdowns.
+           */}
           <label className='project-ticket-field'>
             <span>Title</span>
             <Input
@@ -227,7 +230,28 @@ export function EditTicketDialog({
               }))
             }
           />
-          <DependencySummary blockedByIds={detail.blockedByIds} blockingIds={detail.blockingIds} tickets={tickets} />
+          <TicketSection title='Properties'>
+            <TicketMetaFields
+              assignee={detail.ticket?.assignee}
+              blockedByIds={detail.blockedByIds}
+              blockingIds={detail.blockingIds}
+              boardColumns={boardColumns}
+              createdBy={detail.ticket?.created_by}
+              knownLabels={knownLabels}
+              labels={detail.labels}
+              onBlockedByChange={(blockedByIds) => setDetail((current) => ({ ...current, blockedByIds }))}
+              onBlockingChange={(blockingIds) => setDetail((current) => ({ ...current, blockingIds }))}
+              onLabelsChange={(labels) => setDetail((current) => ({ ...current, labels }))}
+              onPriorityChange={(priority) => setDetail((current) => ({ ...current, priority }))}
+              onStatusChange={(status: BoardStatusKey) => setDetail((current) => ({ ...current, status }))}
+              onTshirtChange={(tshirt: TshirtSize | undefined) => setDetail((current) => ({ ...current, tshirt }))}
+              priority={detail.priority}
+              status={detail.status}
+              ticketOptions={ticketOptions.filter((option) => option.id !== detail.ticket?.id)}
+              tshirt={detail.tshirt}
+            />
+            <DependencySummary blockedByIds={detail.blockedByIds} blockingIds={detail.blockingIds} tickets={tickets} />
+          </TicketSection>
           {detail.ticket ? (
             <ConversationSection
               agents={conversationState.agents}
@@ -241,7 +265,7 @@ export function EditTicketDialog({
               selectedAgentId={selectedAgentId}
             />
           ) : null}
-          <section className='flex flex-col gap-2' aria-label='Comments'>
+          <section className='project-ticket-section' aria-label='Comments'>
             <div className='project-ticket-section-title'>Comments</div>
             <ScrollArea className='project-ticket-comment-list'>
               {detail.ticket?.comments?.length ? (
@@ -283,18 +307,20 @@ export function EditTicketDialog({
                 <p className='project-ticket-empty'>No comments yet.</p>
               )}
             </ScrollArea>
+            {/* Add comment lives inside the Comments section so writing and
+                reading comments are one block rather than two strays. */}
+            <label className='project-ticket-field'>
+              <span>Add comment</span>
+              <Textarea
+                onChange={(event) => {
+                  const comment = event.currentTarget.value;
+                  setDetail((current) => ({ ...current, comment }));
+                }}
+                placeholder='Add a note for the team.'
+                value={detail.comment}
+              />
+            </label>
           </section>
-          <label className='project-ticket-field'>
-            <span>Add comment</span>
-            <Textarea
-              onChange={(event) => {
-                const comment = event.currentTarget.value;
-                setDetail((current) => ({ ...current, comment }));
-              }}
-              placeholder='Add a note for the team.'
-              value={detail.comment}
-            />
-          </label>
         </div>
         <DialogFooter className='project-ticket-dialog-footer'>
           <Button
@@ -313,7 +339,14 @@ export function EditTicketDialog({
             {isConfirmingDelete ? (detail.isDeleting ? 'Deleting' : 'Confirm delete') : 'Delete'}
           </Button>
           <div className='ml-auto flex flex-wrap items-center justify-end gap-2'>
+            {/*
+             * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+             * Secondary actions are raised #1f1f1f cards with a hairline, not
+             * outline buttons — outline paints --background (#0e0e0e), which
+             * read as black holes on the #161616 dialog.
+             */}
             <Button
+              className='border-border/80'
               disabled={detailPrimaryActionDisabled}
               onClick={() => {
                 if (detailPrimaryConversationLink) {
@@ -323,7 +356,7 @@ export function EditTicketDialog({
                 onStartTicketWork();
               }}
               type='button'
-              variant='outline'
+              variant='secondary'
             >
               {detailPrimaryConversationLink ? (
                 detailPrimaryActionKind === 'resume' ? (
@@ -399,24 +432,12 @@ export function NewTicketDialog({
           className='project-ticket-dialog-body vertical-scroll-fade-mask'
           onKeyDown={(event) => handleCmdEnter(event, () => onCreateTicket())}
         >
-          <TicketMetaFields
-            blockedByIds={newTicket.blockedByIds}
-            blockingIds={newTicket.blockingIds}
-            boardColumns={boardColumns}
-            knownLabels={knownLabels}
-            labels={newTicket.labels}
-            onBlockedByChange={(blockedByIds) => setNewTicket((current) => ({ ...current, blockedByIds }))}
-            onBlockingChange={(blockingIds) => setNewTicket((current) => ({ ...current, blockingIds }))}
-            onLabelsChange={(labels) => setNewTicket((current) => ({ ...current, labels }))}
-            onPriorityChange={(priority) => setNewTicket((current) => ({ ...current, priority }))}
-            onStatusChange={() => undefined}
-            onTshirtChange={(tshirt: TshirtSize | undefined) => setNewTicket((current) => ({ ...current, tshirt }))}
-            priority={newTicket.priority}
-            status='todo'
-            showStatus={false}
-            ticketOptions={ticketOptions}
-            tshirt={newTicket.tshirt}
-          />
+          {/*
+           * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+           * Same order as Edit ticket: the prompt is the point of this dialog,
+           * so it leads; the metadata dropdowns follow under one Properties
+           * section header.
+           */}
           <label className='project-ticket-field'>
             <span>Title</span>
             <Input
@@ -466,6 +487,26 @@ export function NewTicketDialog({
               }))
             }
           />
+          <TicketSection title='Properties'>
+            <TicketMetaFields
+              blockedByIds={newTicket.blockedByIds}
+              blockingIds={newTicket.blockingIds}
+              boardColumns={boardColumns}
+              knownLabels={knownLabels}
+              labels={newTicket.labels}
+              onBlockedByChange={(blockedByIds) => setNewTicket((current) => ({ ...current, blockedByIds }))}
+              onBlockingChange={(blockingIds) => setNewTicket((current) => ({ ...current, blockingIds }))}
+              onLabelsChange={(labels) => setNewTicket((current) => ({ ...current, labels }))}
+              onPriorityChange={(priority) => setNewTicket((current) => ({ ...current, priority }))}
+              onStatusChange={() => undefined}
+              onTshirtChange={(tshirt: TshirtSize | undefined) => setNewTicket((current) => ({ ...current, tshirt }))}
+              priority={newTicket.priority}
+              status='todo'
+              showStatus={false}
+              ticketOptions={ticketOptions}
+              tshirt={newTicket.tshirt}
+            />
+          </TicketSection>
         </div>
         <DialogFooter className='project-ticket-create-footer'>
           <section className='flex min-w-0 flex-col gap-2' aria-label='Create and start options'>
@@ -508,10 +549,11 @@ export function NewTicketDialog({
           </section>
           <div className='project-ticket-create-actions'>
             <Button
+              className='border-border/80'
               disabled={!newTicket.description.trim()}
               onClick={() => onCreateTicket()}
               type='button'
-              variant='outline'
+              variant='secondary'
             >
               Create
             </Button>

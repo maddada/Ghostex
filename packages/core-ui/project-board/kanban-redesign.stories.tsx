@@ -8,7 +8,14 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DragDropProvider } from '@dnd-kit/react';
-import { IconAdjustmentsHorizontal, IconLayoutColumns, IconPlus, IconRefresh, IconSearch } from '@tabler/icons-react';
+import {
+  IconAdjustmentsHorizontal,
+  IconFilter,
+  IconLayoutColumns,
+  IconPlus,
+  IconRefresh,
+  IconSearch,
+} from '@tabler/icons-react';
 import { Button } from '@/packages/components/ui/button';
 import {
   DropdownMenu,
@@ -19,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/packages/components/ui/dropdown-menu';
 import { Input } from '@/packages/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/packages/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import { BoardLane } from '@/apps/desktop/views/project-board/board-lane-card';
 import { PROJECT_BOARD_STYLES } from '@/apps/desktop/views/project-board/styles';
@@ -177,6 +185,8 @@ function KanbanPage() {
   };
   const linksByBeadKey = new Map<string, ProjectBoardConversationLinkView[]>();
   const noop = () => {};
+  const activeFilterCount = (priority !== 'all' ? 1 : 0) + (sort !== 'manual' ? 1 : 0);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const visibleTickets = tickets.filter(
     (candidate) =>
       (search.length === 0 || candidate.title.toLowerCase().includes(search.toLowerCase())) &&
@@ -214,30 +224,73 @@ function KanbanPage() {
             value={search}
           />
         </div>
-        <Select items={PRIORITY_ITEMS} onValueChange={setPriority} value={priority}>
-          <SelectTrigger aria-label='Filter by priority'>
-            <SelectValue placeholder='All priorities' />
-          </SelectTrigger>
-          <SelectContent>
-            {PRIORITY_ITEMS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select items={SORT_ITEMS} onValueChange={setSort} value={sort}>
-          <SelectTrigger aria-label='Sort tickets'>
-            <SelectValue placeholder='Manual order' />
-          </SelectTrigger>
-          <SelectContent>
-            {SORT_ITEMS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/*
+         * CDXC:ProjectBoardFiltersPopover 2026-08-24:
+         * Mirrors the real toolbar: one Filters button with an active-count
+         * badge, selects inside its popover.
+         */}
+        <Popover onOpenChange={setFiltersOpen} open={filtersOpen}>
+          <PopoverTrigger
+            render={
+              <Button aria-label='Filters' variant='outline'>
+                <IconFilter data-icon='inline-start' />
+                Filters
+                {activeFilterCount > 0 ? (
+                  <span className='inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ghostex-accent,#38bdf8)_22%,transparent)] px-1 text-[11px] leading-none text-[var(--ghostex-accent,#38bdf8)]'>
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </Button>
+            }
+          />
+          <PopoverContent align='start' className='w-60 gap-3 p-3'>
+            <div className='flex items-center justify-between'>
+              <span className='text-xs font-medium text-muted-foreground'>Filters</span>
+              {activeFilterCount > 0 ? (
+                <button
+                  className='cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground'
+                  onClick={() => {
+                    setPriority('all');
+                    setSort('manual');
+                  }}
+                  type='button'
+                >
+                  Reset
+                </button>
+              ) : null}
+            </div>
+            <label className='flex flex-col gap-1.5 text-xs text-muted-foreground'>
+              Priority
+              <Select items={PRIORITY_ITEMS} onValueChange={setPriority} value={priority}>
+                <SelectTrigger aria-label='Filter by priority' className='w-full'>
+                  <SelectValue placeholder='All priorities' />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORITY_ITEMS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className='flex flex-col gap-1.5 text-xs text-muted-foreground'>
+              Sort
+              <Select items={SORT_ITEMS} onValueChange={setSort} value={sort}>
+                <SelectTrigger aria-label='Sort tickets' className='w-full'>
+                  <SelectValue placeholder='Manual order' />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_ITEMS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          </PopoverContent>
+        </Popover>
         <Button aria-label='Board columns' size='icon' title='Columns' variant='outline'>
           <IconLayoutColumns />
         </Button>

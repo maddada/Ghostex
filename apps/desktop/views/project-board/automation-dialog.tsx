@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from '@/packages/components/ui/dialog';
 import { Input } from '@/packages/components/ui/input';
+import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import { Switch } from '@/packages/components/ui/switch';
 import { Textarea } from '@/packages/components/ui/textarea';
@@ -159,27 +160,28 @@ export function AutomationDialog({
             </label>
           </div>
           <AutomationSection title='Timing'>
-            <div className='project-automation-segmented' role='group' aria-label='Schedule type'>
+            <SegmentedControl
+              aria-label='Schedule type'
+              className='project-automation-segmented'
+              onValueChange={(value) =>
+                setAutomationDraft((current) => ({
+                  ...current,
+                  scheduleMode: value as AutomationScheduleMode,
+                }))
+              }
+              stretch
+              value={automationDraft.scheduleMode}
+            >
               {[
                 ['repeat', 'Repeat'],
                 ['timer', 'Timer'],
                 ['date', 'Date'],
               ].map(([value, label]) => (
-                <button
-                  data-active={automationDraft.scheduleMode === value}
-                  key={value}
-                  onClick={() =>
-                    setAutomationDraft((current) => ({
-                      ...current,
-                      scheduleMode: value as AutomationScheduleMode,
-                    }))
-                  }
-                  type='button'
-                >
+                <SegmentedControlItem key={value} value={value}>
                   {label}
-                </button>
+                </SegmentedControlItem>
               ))}
-            </div>
+            </SegmentedControl>
             {automationDraft.scheduleMode === 'repeat' ? (
               <div className='project-automation-form-grid'>
                 <label>
@@ -325,31 +327,32 @@ export function AutomationDialog({
             ) : null}
           </AutomationSection>
           <AutomationSection title='Execution'>
-            <div className='project-automation-segmented' role='group' aria-label='Execution mode'>
+            <SegmentedControl
+              aria-label='Execution mode'
+              className='project-automation-segmented'
+              onValueChange={(value) =>
+                setAutomationDraft((current) => ({
+                  ...current,
+                  executionKind: value as AutomationExecutionMode['kind'],
+                }))
+              }
+              stretch
+              value={automationDraft.executionKind}
+            >
               {[
                 ['worktree', 'Worktree'],
                 ['local', 'Local'],
                 ['thread', 'Thread'],
-              ].map(([value, label]) => {
-                const disabled = value === 'worktree' && !automationDraftCanUseWorktrees;
-                return (
-                  <button
-                    data-active={automationDraft.executionKind === value}
-                    disabled={disabled}
-                    key={value}
-                    onClick={() =>
-                      setAutomationDraft((current) => ({
-                        ...current,
-                        executionKind: value as AutomationExecutionMode['kind'],
-                      }))
-                    }
-                    type='button'
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+              ].map(([value, label]) => (
+                <SegmentedControlItem
+                  disabled={value === 'worktree' && !automationDraftCanUseWorktrees}
+                  key={value}
+                  value={value}
+                >
+                  {label}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
             {!automationDraftCanUseWorktrees && automationDraftWorktreeUnavailableReason ? (
               <p className='m-0 -mt-1 text-xs font-normal leading-relaxed text-muted-foreground'>
                 {automationDraftWorktreeUnavailableReason}

@@ -184,6 +184,7 @@ export function TicketMetaFields({
             ))}
           </datalist>
           <Button
+            className='border-border/80'
             onClick={() => {
               const next = labelDraft.trim();
               if (next && !labels.includes(next)) {
@@ -192,7 +193,7 @@ export function TicketMetaFields({
               setLabelDraft('');
             }}
             type='button'
-            variant='outline'
+            variant='secondary'
           >
             Add
           </Button>
@@ -464,11 +465,15 @@ export function ConversationSection({
             ))}
           </SelectContent>
         </Select>
+        {/* CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2): raised secondary,
+            not outline — outline paints the #0e0e0e window tone on the #161616
+            dialog and reads as a black hole. */}
         <Button
+          className='border-border/80'
           disabled={!focusedSessionId || hasActiveConversationAction}
           onClick={onAssociateFocusedSession}
           type='button'
-          variant='outline'
+          variant='secondary'
         >
           <IconLink data-icon='inline-start' />
           {isAssociating ? 'Associating' : 'Associate focused'}
