@@ -214,6 +214,17 @@ wrap_life_span_handler! {
             is fully owned by `CefBrowser::drop`, and the host GPUI window
             must never receive a close from CEF.
 
+            CDXC:GPUICefCloseContract 2026-08-24:
+            Returning handled here does NOT end the close on its own — per
+            cef_life_span_handler.h the app must still complete it by
+            proceeding with window/view-hierarchy tear-down, or the browser is
+            left partially closed and its renderer process never exits. That
+            step is `CefBrowser::drop` calling `platform::release_native_view`,
+            which removes the CEF child view from its superview (macOS) or
+            destroys the embed-host window (Linux). Drop is only "fully owning"
+            teardown because it performs that removal; do not turn
+            release_native_view back into a no-op.
+
             CDXC:GPUIBrowserAgentClose 2026-08-21:
             DevTools Target.closeTarget and /json/close enter through this
             same CEF close request. Browser panes must hand that request back
@@ -893,6 +904,19 @@ impl CefBrowser {
         if self.last_visible.get() == Some(visible) {
             return;
         }
+        // CDXC:SessionChatFocusDiagnostics 2026-08-24: hiding a CEF surface
+        // blurs its document (relatedTarget null in the page) without any
+        // first-responder transition, so this is the only place a
+        // visibility-driven focus loss can be observed. Real transitions
+        // only — the unchanged case returned above.
+        crate::support_logs::append(
+            crate::support_logs::GpuiSupportLog::TerminalFocus,
+            "gpui.cef.surfaceVisibilityChanged",
+            serde_json::json!({
+                "browserId": self.identifier(),
+                "visible": visible,
+            }),
+        );
         if !visible {
             self.blur();
         }
@@ -1220,6 +1244,15 @@ impl Drop for CefBrowser {
             message pump (the same scheduling entry
             BrowserProcessHandler::on_schedule_message_pump_work uses) to
             run soon and let CEF process the close on later runloop turns.
+
+            CDXC:GPUICefCloseContract 2026-08-24:
+            release_native_view above destroys the CEF child view/window
+            (removeFromSuperview on macOS, DestroyWindow on Windows, embed-host
+            destroy on Linux), which can complete the whole browser close
+            synchronously before close_browser(1) even runs — in that case CEF
+            skips DoClose and close_browser is a no-op backstop. Callbacks that
+            can fire synchronously in that window (on_before_close) touch only
+            thread-local registries, never the gpui App.
             */
             platform::schedule_message_pump_work(0);
         }

@@ -803,6 +803,19 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        // CDXC:SessionChatFocusDiagnostics 2026-08-24: this is the primitive
+        // that yanks AppKit first responder off any CEF surface (the chat
+        // composer included) onto the GPUI root, so record every execution
+        // with the responder it is about to displace.
+        support_logs::append(
+            support_logs::GpuiSupportLog::TerminalFocus,
+            "gpui.terminalFocus.engineTerminalViewFocused",
+            serde_json::json!({
+                "target": format!("{target:?}"),
+                "shellFocus": format!("{:?}", self.shell_focus),
+                "firstResponderTarget": format!("{:?}", self.first_responder_target),
+            }),
+        );
         #[cfg(target_os = "macos")]
         self.begin_programmatic_focus();
         #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -904,6 +917,20 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        // CDXC:SessionChatComposerFocusInvariant 2026-08-24: a slot armed
+        // before its session entered chat mode must not execute as a focus
+        // grab against the chat composer — the terminal it targets is no
+        // longer the pane's keyboard owner. Drop it instead of waiting.
+        if let Some(slot_id) = self.pending_agents_terminal_text_focus_slot
+            && self.agents_chat_mode_sessions.contains(&slot_id.session_id)
+        {
+            self.pending_agents_terminal_text_focus_slot = None;
+        }
+        if let Some(slot_id) = self.pending_project_editor_companion_terminal_text_focus_slot
+            && self.agents_chat_mode_sessions.contains(&slot_id.session_id)
+        {
+            self.pending_project_editor_companion_terminal_text_focus_slot = None;
+        }
         // A pending slot whose engine record does not exist yet (spawn still
         // in flight, or a native-surface slot) must WAIT without blocking the
         // other two families: an early return here previously starved the
@@ -1016,10 +1043,57 @@ impl GhostexGpuiApp {
         }
     }
 
+    /*
+    CDXC:SessionChatFocusDiagnostics 2026-08-24:
+    Arming a terminal text-focus slot is what the render drain later executes
+    as a first-responder grab. When it happens while the same session is in
+    chat mode it steals keyboard focus from the chat composer, so each arm
+    leaves a breadcrumb naming the family and whether chat mode was active.
+    */
+    fn log_terminal_text_focus_armed(
+        &self,
+        family: &str,
+        session_label: String,
+        in_chat_mode: bool,
+    ) {
+        support_logs::append(
+            support_logs::GpuiSupportLog::TerminalFocus,
+            "gpui.terminalFocus.terminalTextFocusArmed",
+            serde_json::json!({
+                "family": family,
+                "sessionId": session_label,
+                "sessionInChatMode": in_chat_mode,
+                "armed": !in_chat_mode,
+                "shellFocus": format!("{:?}", self.shell_focus),
+                "firstResponderTarget": format!("{:?}", self.first_responder_target),
+            }),
+        );
+    }
+
+    /*
+    CDXC:SessionChatComposerFocusInvariant 2026-08-24:
+    A session whose pane shows the chat surface has no mounted terminal, so a
+    terminal text-focus handoff for it can only execute later as a bare
+    first-responder grab that yanks the keyboard out of the chat composer
+    mid-typing. The chat-aware wrappers in workspace_events.rs already re-route
+    such requests to the composer; enforce the same rule here so no direct
+    caller can arm a steal for a chat-mode session. Chat → terminal toggles
+    remove the session from agents_chat_mode_sessions before requesting their
+    handoff, so the legitimate remount path is unaffected.
+    */
     pub(crate) fn request_agents_terminal_text_focus_handoff(
         &mut self,
         slot_id: AgentsTerminalBodyMountSlotId,
     ) {
+        let in_chat_mode = self.agents_chat_mode_sessions.contains(&slot_id.session_id);
+        self.log_terminal_text_focus_armed(
+            "agents",
+            format!("{:?}", slot_id.session_id),
+            in_chat_mode,
+        );
+        if in_chat_mode {
+            return;
+        }
         self.pending_agents_terminal_text_focus_slot = Some(slot_id);
     }
 
@@ -1027,6 +1101,7 @@ impl GhostexGpuiApp {
         &mut self,
         slot_id: CommandTerminalBodyMountSlotId,
     ) {
+        self.log_terminal_text_focus_armed("command", format!("{:?}", slot_id.session_id), false);
         self.pending_command_terminal_text_focus_slot = Some(slot_id);
     }
 
@@ -1034,6 +1109,15 @@ impl GhostexGpuiApp {
         &mut self,
         slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
     ) {
+        let in_chat_mode = self.agents_chat_mode_sessions.contains(&slot_id.session_id);
+        self.log_terminal_text_focus_armed(
+            "projectEditorCompanion",
+            format!("{:?}", slot_id.session_id),
+            in_chat_mode,
+        );
+        if in_chat_mode {
+            return;
+        }
         self.pending_project_editor_companion_terminal_text_focus_slot = Some(slot_id);
     }
 
