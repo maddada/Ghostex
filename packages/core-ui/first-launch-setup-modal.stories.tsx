@@ -30,8 +30,8 @@ const initialHookStatus: SidebarAgentHookStatusMessage = {
 };
 
 const installedCliStatus: SidebarGhostexCliStatusMessage = {
-  agentOrchestrationSkillInstalled: true,
-  agentOrchestrationSkillPath: '/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md',
+  cliSkillInstalled: true,
+  cliSkillPath: '/Users/madda/agents/skills/ghostex-cli/SKILL.md',
   browserSkillInstalled: true,
   browserSkillPath: '/Users/madda/agents/skills/ghostex-browser-use/SKILL.md',
   computerUseSkillInstalled: true,
@@ -56,11 +56,12 @@ const installedCliStatus: SidebarGhostexCliStatusMessage = {
 };
 
 const missingCliStatus: SidebarGhostexCliStatusMessage = {
-  agentOrchestrationSkillInstalled: false,
+  cliSkillInstalled: false,
   browserSkillInstalled: false,
   computerUseSkillInstalled: false,
   embeddedBrowserSkillInstalled: false,
   cuaAppInstalled: false,
+  cuaDriverInstallCommand: '/bin/bash -c "$(curl -fsSL https://cua.ai/driver/install.sh)"',
   cuaDriverInstalled: false,
   detail:
     'Ghostex CLI auto-install did not find a usable ghostex command on PATH. Ghostex Browser Use and Ghostex Computer Use are not installed yet.',
@@ -159,13 +160,13 @@ function FirstLaunchSetupModalStory({
             setGhostexCliStatusLoading(false);
           }, 500);
         }}
-        onInstallAgentOrchestrationSkill={() => {
+        onInstallCliSkill={() => {
           setGhostexCliStatusLoading(true);
           window.setTimeout(() => {
             setGhostexCliStatus({
               ...ghostexCliStatus,
-              agentOrchestrationSkillInstalled: true,
-              agentOrchestrationSkillPath: '/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md',
+              cliSkillInstalled: true,
+              cliSkillPath: '/Users/madda/agents/skills/ghostex-cli/SKILL.md',
               detail: 'Ghostex Agent Orchestration skill is installed for agents.',
             });
             setGhostexCliStatusLoading(false);
@@ -203,7 +204,7 @@ function FirstLaunchSetupModalStory({
           window.setTimeout(() => {
             setGhostexCliStatus({
               ...installedCliStatus,
-              agentOrchestrationSkillInstalled: ghostexCliStatus.agentOrchestrationSkillInstalled,
+              cliSkillInstalled: ghostexCliStatus.cliSkillInstalled,
               browserSkillInstalled: ghostexCliStatus.browserSkillInstalled,
               computerUseSkillInstalled: ghostexCliStatus.computerUseSkillInstalled,
               embeddedBrowserSkillInstalled: ghostexCliStatus.embeddedBrowserSkillInstalled,

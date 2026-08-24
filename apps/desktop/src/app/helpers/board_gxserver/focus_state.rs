@@ -406,6 +406,12 @@ pub(crate) fn load_gpui_gxserver_presentation_focus_state() -> GpuiGxserverPrese
 // (FIRST_LAUNCH_SETUP_CURRENT_REVISION / HIGHLIGHTED_FEATURES_CURRENT_REVISION);
 // keep them in sync when the shared revisions bump so both apps replay the
 // refreshed onboarding exactly once.
-pub(crate) const GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION: &str = "2026-06-18-short-first-launch";
+/*
+CDXC:FirstLaunchSetup 2026-08-24:
+The onboarding flow was rebuilt (Welcome/Plugins/Agents/Connect/Skills/Get
+started). Bumping the revision shows the new tour once to installs that saw an
+older first-launch setup.
+*/
+pub(crate) const GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION: &str = "2026-08-24-onboarding-redesign";
 pub(crate) const GPUI_HIGHLIGHTED_FEATURES_SEEN_REVISION: &str =
     "2026-06-16-highlighted-features-launch";

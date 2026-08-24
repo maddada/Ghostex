@@ -99,7 +99,7 @@ const CHROME: Record<SandboxModalKind, ChromeSpec> = {
   delayedSend: { title: 'Ghostex Session Automations', width: 470, height: 'fit', initialHeight: 565 },
   deleteWorktree: { title: 'Ghostex Delete Worktree', width: COMPACT_WIDTH, height: 'fit', initialHeight: 600 },
   discoverGhostex: { title: 'Discover Ghostex', width: 1120, height: 850 },
-  firstLaunchSetup: { title: 'Ghostex Tips', width: 1120, height: 850 },
+  firstLaunchSetup: { title: 'Welcome to Ghostex', width: 1120, height: 850 },
   firstUserMessage: { title: 'Ghostex First Message', width: COMPACT_WIDTH, height: 'fit', initialHeight: 520 },
   gitCommit: { title: 'Ghostex Commit Changes', width: 1078, height: 758 },
   gitFileDiff: { title: 'Ghostex File Diff', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
@@ -143,7 +143,7 @@ const CHROME: Record<SandboxModalKind, ChromeSpec> = {
     width: QUICK_ACCESS_WIDTH,
     height: QUICK_ACCESS_HEIGHT,
   },
-  tipsAndTricks: { title: 'Ghostex Tips', width: 1120, height: 850 },
+  tipsAndTricks: { title: 'Welcome to Ghostex', width: 1120, height: 850 },
   updateAvailable: { title: 'Ghostex Update', width: 640, height: 'fit', initialHeight: 560 },
   watchGhostexVideo: {
     title: 'Ghostex Tutorial Video',

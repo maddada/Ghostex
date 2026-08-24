@@ -13,104 +13,70 @@ function sourceBetween(source: string, start: string, end: string): string {
 }
 
 describe('first launch setup modal source', () => {
-  test('limits the visible first-launch sequence to welcome, hooks, and bundled skills', () => {
+  test('shows the redesigned six-step sequence and keeps dormant pages out of it', () => {
     /*
-    CDXC:FirstLaunchSetup 2026-06-18-02:29:
-    The first-time launch modal should only show Welcome, Agent Hooks, and
-    Bundled Agent Skills while retaining the older page components in source for
-    future reuse.
+    CDXC:FirstLaunchSetup 2026-08-24:
+    The onboarding redesign flow is Welcome -> Plugins -> Agents -> Connect
+    (hooks) -> Skills -> Get started (project). Older page components stay in
+    source for future reuse but never enter the visible sequence.
     */
     const visiblePages = sourceBetween(
       firstLaunchSetupModalSource,
       'const FIRST_LAUNCH_SETUP_PAGES',
-      'const FIRST_LAUNCH_GUIDE_PAGES'
+      'const FIRST_LAUNCH_STEP_LABELS'
     );
 
-    expect(visiblePages).toMatch(/"welcome",\s*"hooks",\s*"skills"/u);
-    expect(visiblePages).not.toContain('"preferences"');
-    expect(visiblePages).not.toContain('"cli"');
-    expect(visiblePages).not.toContain('"browserControl"');
-    expect(visiblePages).not.toContain('"desktopCua"');
-    expect(visiblePages).not.toContain('"agentsSessions"');
-    expect(visiblePages).not.toContain('"remoteAccess"');
+    expect(visiblePages).toMatch(/'welcome',\s*'plugins',\s*'agents',\s*'hooks',\s*'skills',\s*'project',/u);
+    expect(visiblePages).not.toContain("'preferences'");
+    expect(visiblePages).not.toContain("'cli'");
+    expect(visiblePages).not.toContain("'video'");
+    expect(visiblePages).not.toContain("'ready'");
+    expect(visiblePages).not.toContain("'browserControl'");
+    expect(visiblePages).not.toContain("'desktopCua'");
+    expect(visiblePages).not.toContain("'agentsSessions'");
+    expect(visiblePages).not.toContain("'remoteAccess'");
     expect(firstLaunchSetupModalSource).toContain('function getVisibleFirstLaunchSetupPage');
-    expect(firstLaunchSetupModalSource).toContain(
-      'return FIRST_LAUNCH_SETUP_PAGES.includes(page) ? page : FIRST_LAUNCH_SETUP_PAGES[0];'
-    );
     expect(firstLaunchSetupModalSource).toContain('const FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS = DEFAULT_SIDEBAR_AGENTS;');
-    expect(firstLaunchSetupModalSource).not.toContain('const FIRST_LAUNCH_HOOK_AGENT_IDS');
     expect(firstLaunchSetupModalSource).toContain('function FirstLaunchPreferencesPage');
     expect(firstLaunchSetupModalSource).toContain('function FirstLaunchCliPage');
     expect(firstLaunchSetupModalSource).toContain('function FirstLaunchGuidePageView');
   });
 
-  test('warns before skipping first-launch hooks or bundled skills', () => {
+  test('skips the Connect step entirely when no agent CLI is installed', () => {
     /*
-    CDXC:FirstLaunchSetup 2026-06-18-02:38:
-    Continuing from the first-launch Hook or Bundled Agent Skills steps without
-    installing should open a warning overlay. Install actions should live in the
-    overlay's bottom-right action row, and first-launch setup pages should not
-    expose manual refresh buttons.
+    CDXC:FirstLaunchSetup 2026-08-24:
+    The Connect (hooks) step can only connect agents that exist on the machine,
+    so with zero installed agent CLIs the step disappears from the sequence
+    instead of nagging with a skip warning. The old continue-warning overlay is
+    gone with it.
     */
-    expect(firstLaunchSetupModalSource).toContain('type FirstLaunchContinueWarning = "hooks" | "skills"');
-    expect(firstLaunchSetupModalSource).toContain('areFirstLaunchAgentHooksReady(agentHookStatus)');
-    expect(firstLaunchSetupModalSource).toContain('isAnyFirstLaunchBundledSkillInstalled(ghostexCliStatus)');
-    expect(firstLaunchSetupModalSource).toContain('ghostexCliStatus?.embeddedBrowserSkillInstalled === true');
-    expect(firstLaunchSetupModalSource).toContain('title: "Continue without bundled agent skills?"');
-    expect(firstLaunchSetupModalSource).toContain('className="first-launch-setup-warning-backdrop"');
-    expect(firstLaunchSetupModalSource).toContain('role="alertdialog"');
-    expect(firstLaunchSetupModalSource).toContain('onInstallMissingSkills={installMissingBundledSkills}');
-    expect(firstLaunchSetupModalSource).not.toContain('title="Refresh agent hook status"');
-    expect(firstLaunchSetupModalSource).not.toContain('onRefreshStatus={onRequestGhostexCliStatus}');
-    expect(sidebarStylesSource).toContain('.ghostex-settings-shadcn .first-launch-setup-warning-backdrop');
-    expect(sidebarStylesSource).toContain('justify-content: flex-end;');
+    const pagesHelper = sourceBetween(
+      firstLaunchSetupModalSource,
+      'function getFirstLaunchSetupPages',
+      'type FirstLaunchUseCase'
+    );
+    expect(pagesHelper).toContain("FIRST_LAUNCH_SETUP_PAGES.filter((page) => page !== 'hooks')");
+    expect(firstLaunchSetupModalSource).not.toContain('FirstLaunchContinueWarning');
+    expect(firstLaunchSetupModalSource).not.toContain('first-launch-setup-warning-backdrop');
   });
 
-  test('skips the hook warning when a primary hook provider is ready', () => {
+  test('only offers visible bundled skills, recommended checked by default', () => {
     /*
-    CDXC:FirstLaunchSetup 2026-06-19-08:42:
-    The Hook step should not show the continue-warning overlay when Claude,
-    Codex, OpenCode, or Pi already has a current Ghostex hook. Missing secondary
-    providers should remain visible in the status list without blocking
-    Continue.
+    CDXC:AgentSkills 2026-08-24:
+    The skills step renders the shared visible catalog (hiddenFromUi filtered
+    out) with the recommended tier preselected, and installs the Trycua driver
+    once when a selected skill needs it.
     */
-    expect(firstLaunchSetupModalSource).toContain(
-      'const FIRST_LAUNCH_HOOK_SKIP_WARNING_AGENT_IDS = ["claude", "codex", "opencode", "pi"] as const;'
-    );
-    const hookReadiness = sourceBetween(
-      firstLaunchSetupModalSource,
-      'function areFirstLaunchAgentHooksReady',
-      'function isAnyFirstLaunchBundledSkillInstalled'
-    );
-
-    expect(hookReadiness).toContain('FIRST_LAUNCH_HOOK_SKIP_WARNING_AGENT_IDS.some');
-    expect(hookReadiness).toContain('isFirstLaunchAgentHookReadyStatus');
-    expect(hookReadiness).not.toContain('FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS.every');
-
-    const warningStyles = sourceBetween(
-      sidebarStylesSource,
-      '.ghostex-settings-shadcn .first-launch-setup-warning-backdrop {',
-      '.ghostex-settings-shadcn .first-launch-setup-warning-actions {'
-    );
-    /*
-    CDXC:ModalRedesign 2026-08-24:
-    The alert now uses the shared Codex surface tokens — raised card tone, one
-    hairline, section radius — instead of the primary-tinted gradient panel.
-    */
-    expect(warningStyles).toContain('background: var(--settings-raised);');
-    expect(warningStyles).toContain('border: 1px solid var(--settings-hairline);');
-    expect(warningStyles).toContain('border-radius: var(--settings-radius-section);');
-    expect(warningStyles).not.toContain('var(--popover) 96%');
-    expect(warningStyles).not.toContain('#f59e0b');
-    expect(warningStyles).not.toContain('#fcd34d');
+    expect(firstLaunchSetupModalSource).toContain('VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS');
+    expect(firstLaunchSetupModalSource).toContain('FIRST_LAUNCH_RECOMMENDED_SKILL_IDS');
+    expect(firstLaunchSetupModalSource).toContain('requiresCuaDriver === true');
   });
 
   test('shows Recommended as the leftmost default sidebar-style preset', () => {
     /*
     CDXC:FirstLaunchPreferences 2026-06-13-03:28:
-    The first-launch defaults page must add Recommended to the left of Minimal,
-    Codex, and Detailed, and the shared default settings should keep that
-    preset selected on new installs.
+    The (currently dormant) defaults page keeps Recommended to the left of
+    Minimal, Codex, and Detailed.
     */
     const presetOrder = sourceBetween(
       firstLaunchSetupModalSource,
@@ -118,27 +84,14 @@ describe('first launch setup modal source', () => {
       'const FIRST_LAUNCH_SIDEBAR_PRESETS'
     );
 
-    expect(presetOrder).toMatch(/"recommended",\s*"minimal",\s*"codex",\s*"detailed"/u);
-
-    const presetOptionsStyles = sourceBetween(
-      sidebarStylesSource,
-      '.ghostex-settings-shadcn .first-launch-setup-preset-options {',
-      '.ghostex-settings-shadcn .first-launch-setup-preset-button {'
-    );
-    expect(presetOptionsStyles).toContain('grid-template-columns: repeat(4, minmax(0, 1fr));');
+    expect(presetOrder).toMatch(/'recommended',\s*'minimal',\s*'codex',\s*'detailed',/u);
   });
 
   test('keeps defaults-page checkbox controls square', () => {
     /*
     CDXC:FirstLaunchPreferences 2026-06-13-05:27:
-    The first-time defaults modal should show square checkbox controls instead
-    of native macOS rounded checkboxes while keeping the shape scoped to the
-    onboarding preference tiles.
-
-    CDXC:ModalRedesign 2026-08-24:
-    The control stays a small square affordance rather than the native rounded
-    checkbox, but takes the redesign's adaptive corner so it belongs to the same
-    family as the 8px controls beside it.
+    The dormant defaults page should keep square checkbox controls scoped to
+    the onboarding preference tiles.
     */
     const checkboxStyles = sourceBetween(
       sidebarStylesSource,
@@ -180,7 +133,7 @@ describe('first launch setup modal source', () => {
     const preferencesPage = sourceBetween(
       firstLaunchSetupModalSource,
       'function FirstLaunchPreferencesPage',
-      'function FirstLaunchHooksPage'
+      'function FirstLaunchCheckboxSetting'
     );
 
     expect(preferencesPage).toContain('const firstLaunchPromptAgentOptions = firstLaunchPromptAgentHasSavedDefault');

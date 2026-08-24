@@ -1,7 +1,7 @@
 import type { ghostexSettings } from './ghostex-settings';
 
 export const FIRST_LAUNCH_SETUP_SEEN_STORAGE_KEY = 'ghostex-native-first-launch-setup-seen';
-export const FIRST_LAUNCH_SETUP_CURRENT_REVISION = '2026-06-18-short-first-launch';
+export const FIRST_LAUNCH_SETUP_CURRENT_REVISION = '2026-08-24-onboarding-redesign';
 export const HIGHLIGHTED_FEATURES_SEEN_STORAGE_KEY = 'ghostex-native-highlighted-features-seen';
 export const HIGHLIGHTED_FEATURES_CURRENT_REVISION = '2026-06-16-highlighted-features-launch';
 

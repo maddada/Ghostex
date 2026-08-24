@@ -15,7 +15,10 @@ import {
 import { gpuiProjectNameFromPath, normalizeGpuiProjectPath } from './helpers/worktrees';
 import type { GpuiSidebarRuntimeSnapshotKind } from './types-and-protocol';
 import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
-import { parseGxserverPresentationProjectGroupId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import {
+  createGxserverPresentationProjectGroupId,
+  parseGxserverPresentationProjectGroupId,
+} from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverProjectDomainState,
   GxserverRecentProjectDomainState,
@@ -433,6 +436,20 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       await this.refreshDomainPresentationSnapshotFromClient('patch').catch(() => {
         this.publishHudPatch();
       });
+      if (pick.firstLaunchAgentId) {
+        /*
+        CDXC:FirstLaunchSetup 2026-08-24:
+        Onboarding Finish lands the user in a working workspace: the project it
+        just registered gets its first session immediately, using the default
+        agent chosen on the Get Started page ('terminal' means a plain shell).
+        */
+        const groupId = createGxserverPresentationProjectGroupId(project.projectId);
+        if (pick.firstLaunchAgentId === 'terminal') {
+          await this.createSession(groupId);
+        } else {
+          await this.createAgentSession(pick.firstLaunchAgentId, groupId);
+        }
+      }
     } catch {
       this.postSidebarActionToast('error', 'Add Project failed', {
         description: 'Ghostex could not add the selected folder.',

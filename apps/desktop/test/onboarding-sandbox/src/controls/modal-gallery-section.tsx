@@ -32,7 +32,7 @@ const MODAL_GALLERY_GROUPS = [
   {
     title: 'Onboarding',
     entries: [
-      entry({ kind: 'firstLaunchSetup', label: 'firstLaunchSetup', note: '1120×850 · “Ghostex Tips”' }),
+      entry({ kind: 'firstLaunchSetup', label: 'firstLaunchSetup', note: '1120×850 · “Welcome to Ghostex”' }),
       entry({ kind: 'discoverGhostex', label: 'discoverGhostex', note: 'tour only' }),
       entry({
         kind: 'discoverGhostex',

@@ -5,11 +5,13 @@ changed. See `core.ts` for how the runtime's methods are re-attached.
 */
 import { normalizeNonEmptyString } from './records';
 
-export function normalizeGpuiWorkspaceFolderPick(payload: unknown): { name?: string; path: string } | undefined {
+export function normalizeGpuiWorkspaceFolderPick(
+  payload: unknown
+): { firstLaunchAgentId?: string; name?: string; path: string } | undefined {
   if (typeof payload !== 'object' || payload === null) {
     return undefined;
   }
-  const record = payload as { name?: unknown; path?: unknown; type?: unknown };
+  const record = payload as { firstLaunchAgentId?: unknown; name?: unknown; path?: unknown; type?: unknown };
   if (record.type !== 'workspaceFolderPicked') {
     return undefined;
   }
@@ -17,7 +19,17 @@ export function normalizeGpuiWorkspaceFolderPick(payload: unknown): { name?: str
   if (!path) {
     return undefined;
   }
-  return { name: normalizeNonEmptyString(record.name), path };
+  /*
+  CDXC:FirstLaunchSetup 2026-08-24:
+  The onboarding Finish step rides this same message: `firstLaunchAgentId` is a
+  sidebar agent id (or 'terminal') asking the runtime to start the first
+  session in the freshly registered project.
+  */
+  return {
+    firstLaunchAgentId: normalizeNonEmptyString(record.firstLaunchAgentId),
+    name: normalizeNonEmptyString(record.name),
+    path,
+  };
 }
 
 export function normalizeGpuiReplacementProjectFolderPick(
