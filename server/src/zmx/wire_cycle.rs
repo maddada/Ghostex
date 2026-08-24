@@ -30,11 +30,22 @@ on a remote) makes this the normal upgrade path, not an edge case.
 
 The only deterministic signal for "which code is this daemon running" is the
 identity of the binary that spawned it, so every provider start stamps the
-sha256 of the zmx executable into the session's persisted providerState, and
+zmx executable's identity into the session's persisted providerState, and
 startup cycles every live daemon whose stamp is not the current binary's. A
 live daemon with NO stamp predates this feature and is by definition
 pre-wire-break, so it is cycled too — that one-time migration is the reason
 this ships.
+
+The stamp must identify the CODE, not the signing event. The macOS build
+Developer-ID re-signs the bundled zmx on every `bun run start`, and a CMS
+signature embeds the signing time plus a secure timestamp, so a whole-file
+hash differs on every rebuild even when zmx itself is byte-identical — which
+made this pass kill every live session on every dev restart. On macOS the
+stamp is therefore the Mach-O CodeDirectory hash (cdhash), which covers the
+code pages, identifier, entitlements, and team but not the CMS blob, so
+re-signing unchanged code yields the same stamp. Unsigned and non-Mach-O
+binaries (the Linux remote package) fall back to the whole-file sha256, which
+is stable there because nothing rewrites them after the build.
 
 Detection never probes: a busy daemon that misses an IPC timeout must not be
 mistaken for an incompatible one. Comparing stamps also handles the reverse
@@ -82,10 +93,7 @@ pub(crate) fn current_zmx_binary_stamp(zmx_executable_path: &str) -> Option<Stri
             return Some(cached.stamp.clone());
         }
     }
-    let mut file = fs::File::open(zmx_executable_path).ok()?;
-    let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher).ok()?;
-    let stamp = format!("sha256:{:x}", hasher.finalize());
+    let stamp = compute_zmx_binary_stamp(zmx_executable_path)?;
     *cache = Some(ZmxBinaryStamp {
         executable_path: zmx_executable_path.to_string(),
         length,
@@ -93,6 +101,44 @@ pub(crate) fn current_zmx_binary_stamp(zmx_executable_path: &str) -> Option<Stri
         stamp: stamp.clone(),
     });
     Some(stamp)
+}
+
+/// Signature-invariant identity of the binary: the cdhash where the file
+/// carries a code signature, the whole-file sha256 otherwise.
+fn compute_zmx_binary_stamp(zmx_executable_path: &str) -> Option<String> {
+    if let Some(code_directory_hash) = macos_code_directory_hash(zmx_executable_path) {
+        return Some(format!("cdhash:{code_directory_hash}"));
+    }
+    let mut file = fs::File::open(zmx_executable_path).ok()?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher).ok()?;
+    Some(format!("sha256:{:x}", hasher.finalize()))
+}
+
+/// CodeDirectory hash of a signed Mach-O, from `codesign --display`. `None`
+/// for unsigned or non-Mach-O files, and everywhere but macOS.
+#[cfg(target_os = "macos")]
+fn macos_code_directory_hash(zmx_executable_path: &str) -> Option<String> {
+    let output = Command::new("/usr/bin/codesign")
+        .args(["--display", "--verbose=3", zmx_executable_path])
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    // codesign prints the display details on stderr.
+    let details = String::from_utf8_lossy(&output.stderr);
+    details.lines().find_map(|line| {
+        let value = line.trim().strip_prefix("CDHash=")?.trim();
+        (!value.is_empty() && value.chars().all(|character| character.is_ascii_hexdigit()))
+            .then(|| value.to_ascii_lowercase())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn macos_code_directory_hash(_zmx_executable_path: &str) -> Option<String> {
+    None
 }
 
 /// Provider state for a session whose daemon this gxserver just started, with
