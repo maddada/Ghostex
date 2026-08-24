@@ -6,6 +6,10 @@ works:
 
     ⏺ Removing temporary examples
 
+It also reports a small set of meaningful states under other markers:
+
+    ✻ Waiting for 1 dynamic workflow to finish
+
 The client keeps each changed value as a transient reasoning row, then lets the
 authoritative transcript replace it when JSONL catches up. Claude's compaction
 is the structured-progress variant:
@@ -26,9 +30,10 @@ This is deliberately NOT a terminal notice: nothing is wrong, nothing is
 blocked, and there is nothing to answer. Both variants render in the transcript
 where the work is.
 
-Parsing is narrow and evidence-only. A transient line must own a line beginning
-with Claude's `⏺` marker. The percentage and elapsed clock are read off the
-screen or omitted; neither is ever estimated.
+Parsing is narrow and evidence-only. `⏺` owns Claude's general status rows;
+other star markers are accepted only for explicitly understood states. The
+percentage and elapsed clock are read off the screen or omitted; neither is
+ever estimated.
 */
 
 use crate::session_chat_options::{session_chat_option_agent, SessionChatOptionAgent};
@@ -49,6 +54,11 @@ pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
 
 /// Claude Code's current assistant status, not yet flushed to transcript JSONL.
 pub const SESSION_CHAT_ACTIVITY_CLAUDE_STATUS: &str = "claude-status";
+
+/// Star frames Claude may use for allowlisted non-general status rows. Merely
+/// having one of these markers is not sufficient evidence: custom working
+/// spinner text uses the same frames and must never become chat history.
+const CLAUDE_SPECIAL_STATUS_MARKERS: &str = "✳✶✻✽✸✹✺✷✴";
 
 /// The phrase Claude paints while compacting. Matched case-sensitively on the
 /// space-collapsed line, so prose that merely mentions compaction cannot hit
@@ -180,6 +190,56 @@ fn trailing_elapsed_status(label: &str) -> (&str, Option<u64>) {
     (stable_label.trim_end(), Some(elapsed_seconds))
 }
 
+/// Claude's animated working line can repaint the same wording as:
+///
+///     label… (1m 5s · thinking with medium effort)
+///     label… (1m 11s · ↓ 4.5k tokens)
+///
+/// The parenthetical is sample metadata, not a new status. Separating its
+/// clock keeps one stable label, which lets the client's exact-text
+/// deduplication retain one row instead of one row per screen probe.
+fn trailing_parenthetical_status(label: &str) -> (&str, Option<u64>) {
+    let Some(without_close) = label.strip_suffix(')') else {
+        return (label, None);
+    };
+    let Some(open) = without_close.rfind(" (") else {
+        return (label, None);
+    };
+    let metadata = &without_close[open + 2..];
+    let elapsed = metadata
+        .split_once(" · ")
+        .map_or(metadata, |(elapsed, _)| elapsed);
+    let Some(elapsed_seconds) = parse_elapsed_seconds(elapsed.trim()) else {
+        return (label, None);
+    };
+    (without_close[..open].trim_end(), Some(elapsed_seconds))
+}
+
+fn stable_status_label(label: &str) -> (&str, Option<u64>) {
+    let (stable, elapsed_seconds) = trailing_elapsed_status(label);
+    if elapsed_seconds.is_some() {
+        return (stable, elapsed_seconds);
+    }
+    trailing_parenthetical_status(label)
+}
+
+/// The one currently understood status that Claude paints with a non-`⏺`
+/// marker. Match the whole grammar so arbitrary/custom spinner text cannot be
+/// admitted merely because it happens to use the same animated glyph.
+fn is_dynamic_workflow_wait_label(label: &str) -> bool {
+    let Some(rest) = label.strip_prefix("Waiting for ") else {
+        return false;
+    };
+    let Some((count, suffix)) = rest.split_once(' ') else {
+        return false;
+    };
+    let Ok(count) = count.parse::<u64>() else {
+        return false;
+    };
+    (count == 1 && suffix == "dynamic workflow to finish")
+        || (count > 1 && suffix == "dynamic workflows to finish")
+}
+
 /// `49%` anywhere on the line (the bar glyphs around it are ignored).
 fn parse_percent(line: &str) -> Option<u8> {
     for token in line.split_whitespace() {
@@ -200,9 +260,10 @@ fn parse_percent(line: &str) -> Option<u8> {
 
 /*
 A label only counts when the line is the CLI's own status row rather than prose
-that mentions it. The test is positional: everything before the phrase must be
-spinner decoration (no letters and no digits), which an assistant sentence or a
-tip line can never satisfy.
+that mentions it. Compaction requires decoration-only text before its phrase;
+general status requires `⏺`, and another star marker requires an allowlisted
+whole label. An assistant sentence, a tip, and custom spinner wording cannot
+satisfy those shapes.
 */
 fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
     if let Some(at) = line.find(COMPACTING_LABEL) {
@@ -219,12 +280,20 @@ fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
         }
     }
 
-    let rest = line.trim_start().strip_prefix('⏺')?;
+    let trimmed = line.trim_start();
+    let marker = trimmed.chars().next()?;
+    if marker != '⏺' && !CLAUDE_SPECIAL_STATUS_MARKERS.contains(marker) {
+        return None;
+    }
+    let rest = &trimmed[marker.len_utf8()..];
     if !rest.chars().next().is_some_and(char::is_whitespace) {
         return None;
     }
-    let (label, elapsed_seconds) = trailing_elapsed_status(rest.trim());
+    let (label, elapsed_seconds) = stable_status_label(rest.trim());
     if label.is_empty() {
+        return None;
+    }
+    if marker != '⏺' && !is_dynamic_workflow_wait_label(label) {
         return None;
     }
     let mut activity = SessionChatTerminalActivity::new(SESSION_CHAT_ACTIVITY_CLAUDE_STATUS, label);
