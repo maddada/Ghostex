@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import { Switch } from '@/packages/components/ui/switch';
-import { ToggleGroup, ToggleGroupItem } from '@/packages/components/ui/toggle-group';
+import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
 import { IconCircleX, IconDownload, IconInfoCircle, IconRefresh, IconTools, IconTrash } from '@tabler/icons-react';
 import { type SidebarPortlessState, type SidebarProjectSettingsItem } from '../../../shared/session-grid-contract';
 import { type PortlessProtocol, type ghostexSettings } from '../../../shared/ghostex-settings';
@@ -110,24 +110,20 @@ export function PortlessGlobalSettingsPanel({
               Choose the standard local web port the background proxy should use.
             </span>
           </div>
-          <ToggleGroup
+          <SegmentedControl
             aria-labelledby={portlessProtocolLabelId}
             className='settings-portless-protocol-toggle'
-            onValueChange={(value) => {
-              const [protocol] = value as PortlessProtocol[];
-              if (protocol) {
-                onProtocolChange(protocol);
-              }
+            onValueChange={(protocol) => {
+              onProtocolChange(protocol as PortlessProtocol);
             }}
-            value={[settings.portlessProtocol]}
-            variant='outline'
+            value={settings.portlessProtocol}
           >
             {PORTLESS_PROTOCOL_OPTIONS.map((option) => (
-              <ToggleGroupItem key={option.value} value={option.value}>
+              <SegmentedControlItem key={option.value} value={option.value}>
                 {option.label}
-              </ToggleGroupItem>
+              </SegmentedControlItem>
             ))}
-          </ToggleGroup>
+          </SegmentedControl>
         </div>
         <div className='settings-portless-status-row'>
           <IconInfoCircle aria-hidden='true' />

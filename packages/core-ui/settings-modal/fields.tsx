@@ -24,10 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/packages/components/ui/select';
+import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
 import { Slider } from '@/packages/components/ui/slider';
 import { Switch } from '@/packages/components/ui/switch';
 import { Textarea as BaseTextarea } from '@/packages/components/ui/textarea';
-import { ToggleGroup, ToggleGroupItem } from '@/packages/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/packages/components/ui/tooltip';
 import { AppTooltip } from '../app-tooltip';
 import { DisabledSettingControlTooltip } from '../disabled-setting-control-tooltip';
@@ -264,7 +264,7 @@ export function SettingsNativeScrollArea({
        */}
       <div
         className={cn(
-          'settings-native-scroll-viewport size-full overflow-x-hidden overflow-y-auto rounded-none outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1',
+          'settings-native-scroll-viewport size-full overflow-x-hidden overflow-y-auto rounded-none outline-none focus-visible:ring-[3px] focus-visible:ring-ring/20 focus-visible:outline-1',
           viewportClassName
         )}
         data-slot='scroll-area-viewport'
@@ -1380,29 +1380,25 @@ export function SidebarPresetField({
       onResetToDefault={onResetToDefault}
     >
       <div className='flex flex-col gap-2'>
-        <ToggleGroup
+        <SegmentedControl
           aria-label={label}
-          className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
-          onValueChange={(value) => {
-            const [nextPresetId] = value as SidebarSettingsPresetId[];
-            if (nextPresetId) {
-              onChange(nextPresetId);
-            }
+          onValueChange={(nextPresetId) => {
+            onChange(nextPresetId as SidebarSettingsPresetId);
           }}
-          value={activePresetId ? [activePresetId] : []}
-          variant='outline'
+          stretch
+          value={activePresetId ?? ''}
         >
           {SIDEBAR_SETTINGS_PRESETS.map((preset, index) => (
-            <ToggleGroupItem
+            <SegmentedControlItem
               aria-label={preset.label}
               id={index === 0 ? id : undefined}
               key={preset.id}
               value={preset.id}
             >
               {preset.label}
-            </ToggleGroupItem>
+            </SegmentedControlItem>
           ))}
-        </ToggleGroup>
+        </SegmentedControl>
         {activePresetId ? null : <span className='text-sm text-muted-foreground'>Custom</span>}
       </div>
     </SettingRow>
@@ -1434,29 +1430,25 @@ export function SidebarProjectGroupStyleField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <ToggleGroup
+      <SegmentedControl
         aria-label={label}
-        className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
-        onValueChange={(nextValues) => {
-          const [nextValue] = nextValues as SidebarProjectGroupStyle[];
-          if (nextValue) {
-            onChange(nextValue);
-          }
+        onValueChange={(nextValue) => {
+          onChange(nextValue as SidebarProjectGroupStyle);
         }}
-        value={[value]}
-        variant='outline'
+        stretch
+        value={value}
       >
         {SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS.map((option, index) => (
-          <ToggleGroupItem
+          <SegmentedControlItem
             aria-label={option.label}
             id={index === 0 ? id : undefined}
             key={option.value}
             value={option.value}
           >
             {option.label}
-          </ToggleGroupItem>
+          </SegmentedControlItem>
         ))}
-      </ToggleGroup>
+      </SegmentedControl>
     </SettingRow>
   );
 }
@@ -1464,8 +1456,7 @@ export function SidebarProjectGroupStyleField({
 /*
  * CDXC:SidebarV2 2026-07-29:
  * The sidebar version selector reuses the Preset toggle-group shape so the
- * sidebar version setting reads as one two-option switch, with a New badge on
- * the row label while the Inbox sidebar is still rolling out.
+ * sidebar version setting reads as one two-option switch.
  */
 export function SidebarVersionField({
   advanced,
@@ -1495,29 +1486,25 @@ export function SidebarVersionField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <ToggleGroup
+      <SegmentedControl
         aria-label={label}
-        className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
-        onValueChange={(nextValue) => {
-          const [nextVersion] = nextValue as SidebarVersion[];
-          if (nextVersion) {
-            onChange(nextVersion);
-          }
+        onValueChange={(nextVersion) => {
+          onChange(nextVersion as SidebarVersion);
         }}
-        value={[value]}
-        variant='outline'
+        stretch
+        value={value}
       >
         {SIDEBAR_VERSION_OPTIONS.map((option, index) => (
-          <ToggleGroupItem
+          <SegmentedControlItem
             aria-label={option.label}
             id={index === 0 ? id : undefined}
             key={option.value}
             value={option.value}
           >
             {option.label}
-          </ToggleGroupItem>
+          </SegmentedControlItem>
         ))}
-      </ToggleGroup>
+      </SegmentedControl>
     </SettingRow>
   );
 }
@@ -1544,29 +1531,25 @@ export function PreferredAgentInterfaceField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <ToggleGroup
+      <SegmentedControl
         aria-label={label}
-        className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
-        onValueChange={(nextValue) => {
-          const [nextInterface] = nextValue as PreferredAgentInterface[];
-          if (nextInterface) {
-            onChange(nextInterface);
-          }
+        onValueChange={(nextInterface) => {
+          onChange(nextInterface as PreferredAgentInterface);
         }}
-        value={[value]}
-        variant='outline'
+        stretch
+        value={value}
       >
         {PREFERRED_AGENT_INTERFACE_OPTIONS.map((option, index) => (
-          <ToggleGroupItem
+          <SegmentedControlItem
             aria-label={option.label}
             id={index === 0 ? id : undefined}
             key={option.value}
             value={option.value}
           >
             {option.label}
-          </ToggleGroupItem>
+          </SegmentedControlItem>
         ))}
-      </ToggleGroup>
+      </SegmentedControl>
     </SettingRow>
   );
 }
@@ -1593,29 +1576,25 @@ export function SessionChatThemeField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <ToggleGroup
+      <SegmentedControl
         aria-label={label}
-        className='w-full [&>[data-slot=toggle-group-item]]:flex-1'
-        onValueChange={(nextValues) => {
-          const [nextValue] = nextValues as SessionChatTheme[];
-          if (nextValue) {
-            onChange(nextValue);
-          }
+        onValueChange={(nextValue) => {
+          onChange(nextValue as SessionChatTheme);
         }}
-        value={[value]}
-        variant='outline'
+        stretch
+        value={value}
       >
         {SESSION_CHAT_THEME_OPTIONS.map((option, index) => (
-          <ToggleGroupItem
+          <SegmentedControlItem
             aria-label={option.label}
             id={index === 0 ? id : undefined}
             key={option.value}
             value={option.value}
           >
             {option.label}
-          </ToggleGroupItem>
+          </SegmentedControlItem>
         ))}
-      </ToggleGroup>
+      </SegmentedControl>
     </SettingRow>
   );
 }

@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/packages/components/ui/select';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/packages/components/ui/input-group';
+import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
 import { Textarea } from '@/packages/components/ui/textarea';
 import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
 import { createSidebarAgentSelectItems, type SidebarAgentButton } from '../shared/sidebar-agents';
@@ -462,24 +463,28 @@ export function WorktreeCreateModal({
           <FieldGroup className='session-rename-field-group'>
             <Field>
               <FieldLabel>Mode</FieldLabel>
-              <div className='worktree-create-mode-toggle' role='group' aria-label='Worktree mode'>
-                <Button
-                  onClick={() => setMode('create')}
-                  type='button'
-                  variant={mode === 'create' ? 'default' : 'outline'}
-                >
+              {/*
+               * CDXC:SegmentedControl 2026-08-24:
+               * The mode picker is a single-select strip, so it uses the shared
+               * SegmentedControl instead of two outline buttons that read as
+               * unrelated controls.
+               */}
+              <SegmentedControl
+                aria-label='Worktree mode'
+                className='worktree-create-mode-toggle'
+                onValueChange={(nextMode) => setMode(nextMode as WorktreeCreateMode)}
+                stretch
+                value={mode}
+              >
+                <SegmentedControlItem value='create'>
                   <IconGitBranch aria-hidden='true' data-icon='inline-start' />
                   Create New
-                </Button>
-                <Button
-                  onClick={() => setMode('openExisting')}
-                  type='button'
-                  variant={mode === 'openExisting' ? 'default' : 'outline'}
-                >
+                </SegmentedControlItem>
+                <SegmentedControlItem value='openExisting'>
                   <IconFolderOpen aria-hidden='true' data-icon='inline-start' />
                   Open Existing
-                </Button>
-              </div>
+                </SegmentedControlItem>
+              </SegmentedControl>
             </Field>
             {mode === 'openExisting' ? (
               <Field>
