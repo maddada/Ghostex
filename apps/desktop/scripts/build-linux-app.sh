@@ -114,9 +114,9 @@ prepare_cef_component() {
   rm -rf "$stage_root/CMakeLists.txt" "$stage_root/cmake" "$stage_root/include" \
     "$stage_root/libcef_dll" "$stage_root/archive.json"
   rm -f "$stage_root/chrome-sandbox"
-  "$REPO_ROOT/scripts/release-gpui/create-deterministic-tar.sh" "$stage_root" "$archive_path"
+  "$REPO_ROOT/tooling/release-gpui/create-deterministic-tar.sh" "$stage_root" "$archive_path"
   rm -rf "$stage_root"
-  node "$REPO_ROOT/scripts/release-gpui/publish-component.mjs" \
+  node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
     --metadata-only \
     --component cef \
     --version "$CEF_COMPONENT_VERSION" \
@@ -126,7 +126,7 @@ prepare_cef_component() {
   node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({assets:[],version:process.argv[2]},null,2)+"\n")' \
     "$build_manifest" "$RELEASE_VERSION"
   mkdir -p "$APP_DIR/resources"
-  node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" seal \
+  node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" seal \
     --build-manifest "$build_manifest" \
     --component-manifest "$component_manifest" \
     --output "$APP_DIR/resources/on-demand-resources.json" \

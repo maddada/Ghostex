@@ -29,7 +29,7 @@ jobs:
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
         run: |
-          node .release-automation/scripts/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
+          node .release-automation/tooling/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
           echo "GHOSTEX_RELEASE_WORKFLOW_SHA=$(git -C .release-automation rev-parse HEAD)" >> "$GITHUB_ENV"
           printf '/.release-automation/\n' >> .git/info/exclude
       - name: Install pinned Ghostty toolchain
@@ -46,7 +46,7 @@ jobs:
         env:
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
-        run: .release-automation/scripts/release-gpui/macos-prerequisite.sh ghosttykit "build/macos-prerequisites/ghosttykit-${{ inputs.version }}-${{ inputs.source_sha }}.tar"
+        run: .release-automation/tooling/release-gpui/macos-prerequisite.sh ghosttykit "build/macos-prerequisites/ghosttykit-${{ inputs.version }}-${{ inputs.source_sha }}.tar"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-macos-ghosttykit
@@ -66,16 +66,16 @@ jobs:
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
         run: |
-          node .release-automation/scripts/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
+          node .release-automation/tooling/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
           echo "GHOSTEX_RELEASE_WORKFLOW_SHA=$(git -C .release-automation rev-parse HEAD)" >> "$GITHUB_ENV"
           printf '/.release-automation/\n' >> .git/info/exclude
       - name: Prepare pinned runtime references and submodules
         env:
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
-        run: .release-automation/scripts/release-gpui/prepare-references.sh
+        run: .release-automation/tooling/release-gpui/prepare-references.sh
       - name: Resolve immutable code-server component identity
         id: code_server_identity
-        run: node .release-automation/scripts/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
+        run: node .release-automation/tooling/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with: { bun-version: 1.4.0 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -89,7 +89,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           node --input-type=module - <<'JS'
-          import { validateStagedRelease } from "./.release-automation/scripts/release-state-lib.mjs";
+          import { validateStagedRelease } from "./.release-automation/tooling/release-state-lib.mjs";
           const result = validateStagedRelease(process.env.VERSION, { sourceSha: process.env.SOURCE_SHA });
           for (const [name, runId] of [
             ["gxserver-linux-x64", process.env.GXSERVER_X64_RUN_ID],
@@ -126,7 +126,7 @@ jobs:
             set -- $tuple
             archive="$2"
             [[ -f "$archive" ]] || { echo "Missing required Linux $1 code-server archive: $archive" >&2; exit 1; }
-            node .release-automation/scripts/release-gpui/verify-code-server-archive.mjs \
+            node .release-automation/tooling/release-gpui/verify-code-server-archive.mjs \
               --archive "$archive" \
               --version "${{ steps.code_server_identity.outputs.component_version }}" \
               --platform "linux-$1"
@@ -209,7 +209,7 @@ jobs:
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
           GHOSTEX_RELEASE_VERSION: ${{ inputs.version }}
           RUSTUP_TOOLCHAIN: 1.95.0
-        run: .release-automation/scripts/release-gpui/macos-prerequisite.sh runtime "build/macos-prerequisites/runtime-${{ inputs.version }}-${{ inputs.source_sha }}.tar"
+        run: .release-automation/tooling/release-gpui/macos-prerequisite.sh runtime "build/macos-prerequisites/runtime-${{ inputs.version }}-${{ inputs.source_sha }}.tar"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-macos-runtime
@@ -230,7 +230,7 @@ jobs:
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
         run: |
-          node .release-automation/scripts/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
+          node .release-automation/tooling/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
           echo "GHOSTEX_RELEASE_WORKFLOW_SHA=$(git -C .release-automation rev-parse HEAD)" >> "$GITHUB_ENV"
           printf '/.release-automation/\n' >> .git/info/exclude
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -243,7 +243,7 @@ jobs:
           GHOSTEX_RELEASE_SKIP_SUBMODULES: 1
         run: |
           tar -xf "build/macos-prerequisites/ghosttykit-${{ inputs.version }}-${{ inputs.source_sha }}.tar" -C "$GITHUB_WORKSPACE"
-          .release-automation/scripts/release-gpui/prepare-references.sh
+          .release-automation/tooling/release-gpui/prepare-references.sh
       - name: Install pinned Rust build toolchains
         run: |
           rustup toolchain install 1.95.0 --profile minimal
@@ -260,7 +260,7 @@ jobs:
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
           RUSTUP_TOOLCHAIN: 1.95.0
-        run: .release-automation/scripts/release-gpui/macos-prerequisite.sh rust "build/macos-prerequisites/rust-${{ inputs.version }}-${{ inputs.source_sha }}.tar"
+        run: .release-automation/tooling/release-gpui/macos-prerequisite.sh rust "build/macos-prerequisites/rust-${{ inputs.version }}-${{ inputs.source_sha }}.tar"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-macos-rust
@@ -281,7 +281,7 @@ jobs:
         with: { ref: main, path: .release-automation, fetch-depth: 1, submodules: false }
       - name: Verify immutable source
         run: |
-          node .release-automation/scripts/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
+          node .release-automation/tooling/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
           echo "GHOSTEX_RELEASE_WORKFLOW_SHA=$(git -C .release-automation rev-parse HEAD)" >> "$GITHUB_ENV"
           printf '/.release-automation/\n' >> .git/info/exclude
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -341,7 +341,7 @@ jobs:
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
           RUSTUP_TOOLCHAIN: 1.95.0
-        run: .release-automation/scripts/release-gpui/macos.sh "${{ inputs.version }}" "${{ github.workspace }}/build/release-gpui/${{ inputs.version }}/macos-signed"
+        run: .release-automation/tooling/release-gpui/macos.sh "${{ inputs.version }}" "${{ github.workspace }}/build/release-gpui/${{ inputs.version }}/macos-signed"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-macos-signed
@@ -365,7 +365,7 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           dmg_sha="$(shasum -a 256 "build/macos-signed/ghostex-${{ inputs.version }}-arm64.dmg" | awk '{print $1}')"
-          node scripts/release-resumable.mjs record-macos-signed \
+          node tooling/release-resumable.mjs record-macos-signed \
             "${{ inputs.version }}" \
             "${{ inputs.source_sha }}" \
             "$dmg_sha" \
@@ -413,12 +413,12 @@ jobs:
           SIGNED_DMG_RUN_ID: ${{ inputs.macos_stage == 'all' && github.run_id || inputs.prerequisite_run_id }}
         run: |
           mkdir -p build/notary-submission
-          expected_sha="$(node scripts/release-resumable.mjs show-state "${{ inputs.version }}" | jq -r .macos_notarization.dmg_sha256)"
+          expected_sha="$(node tooling/release-resumable.mjs show-state "${{ inputs.version }}" | jq -r .macos_notarization.dmg_sha256)"
           actual_sha="$(shasum -a 256 "build/macos-signed/ghostex-${{ inputs.version }}-arm64.dmg" | awk '{print $1}')"
           [[ "$actual_sha" == "$expected_sha" ]] || { echo "Preserved signed DMG checksum does not match release state" >&2; exit 1; }
-          submission_id="$(scripts/release-gpui/macos-notary.sh submit "${{ inputs.version }}" "build/macos-signed/ghostex-${{ inputs.version }}-arm64.dmg" build/notary-submission/submission.json | tail -n 1)"
+          submission_id="$(tooling/release-gpui/macos-notary.sh submit "${{ inputs.version }}" "build/macos-signed/ghostex-${{ inputs.version }}-arm64.dmg" build/notary-submission/submission.json | tail -n 1)"
           echo "submission_id=$submission_id" >> "$GITHUB_OUTPUT"
-          node scripts/release-resumable.mjs record-macos-submission "${{ inputs.version }}" "${{ inputs.source_sha }}" "$submission_id" "$actual_sha" "$SIGNED_DMG_RUN_ID"
+          node tooling/release-resumable.mjs record-macos-submission "${{ inputs.version }}" "${{ inputs.source_sha }}" "$submission_id" "$actual_sha" "$SIGNED_DMG_RUN_ID"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-macos-notary-submission
@@ -467,11 +467,11 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           SUBMISSION_ID: ${{ inputs.macos_stage == 'all' && needs.submit.outputs.submission_id || inputs.submission_id }}
         run: |
-          expected_sha="$(node .release-automation/scripts/release-resumable.mjs show-state "${{ inputs.version }}" | jq -r .macos_notarization.dmg_sha256)"
+          expected_sha="$(node .release-automation/tooling/release-resumable.mjs show-state "${{ inputs.version }}" | jq -r .macos_notarization.dmg_sha256)"
           actual_sha="$(shasum -a 256 "build/macos-signed/ghostex-${{ inputs.version }}-arm64.dmg" | awk '{print $1}')"
           [[ "$actual_sha" == "$expected_sha" ]] || { echo "Preserved signed DMG checksum does not match Apple submission state" >&2; exit 1; }
-          .release-automation/scripts/release-gpui/macos-notary.sh poll "${{ inputs.version }}" "build/macos-signed/ghostex-${{ inputs.version }}-arm64.dmg" "$SUBMISSION_ID"
-          .release-automation/scripts/release-gpui/macos-finalize.sh "${{ inputs.version }}" build/macos-signed "${{ github.workspace }}/build/release-gpui/${{ inputs.version }}/macos-arm64"
+          .release-automation/tooling/release-gpui/macos-notary.sh poll "${{ inputs.version }}" "build/macos-signed/ghostex-${{ inputs.version }}-arm64.dmg" "$SUBMISSION_ID"
+          .release-automation/tooling/release-gpui/macos-finalize.sh "${{ inputs.version }}" build/macos-signed "${{ github.workspace }}/build/release-gpui/${{ inputs.version }}/macos-arm64"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-macos-final
@@ -495,4 +495,4 @@ jobs:
           path: build/macos-final
       - name: Stage final notarized assets and metadata
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: node scripts/release-resumable.mjs stage-package-and-advance "${{ inputs.version }}" "${{ inputs.source_sha }}" macos-arm64 build/macos-final "$(git rev-parse HEAD)" "${{ inputs.channel }}" "${{ inputs.update_sparkle }}"
+        run: node tooling/release-resumable.mjs stage-package-and-advance "${{ inputs.version }}" "${{ inputs.source_sha }}" macos-arm64 build/macos-final "$(git rev-parse HEAD)" "${{ inputs.channel }}" "${{ inputs.update_sparkle }}"

@@ -33,7 +33,7 @@ jobs:
           submodules: false
       - name: Verify source and workflow revisions
         run: |
-          node .release-automation/scripts/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
+          node .release-automation/tooling/release-resumable.mjs validate-source "${{ inputs.version }}" "${{ inputs.source_sha }}"
           echo "GHOSTEX_RELEASE_WORKFLOW_SHA=$(git -C .release-automation rev-parse HEAD)" >> "$GITHUB_ENV"
           printf '/.release-automation/\n' >> .git/info/exclude
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -89,7 +89,7 @@ jobs:
           GHOSTEX_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
-        run: .release-automation/scripts/release-mobile/android.sh "${{ inputs.version }}"
+        run: .release-automation/tooling/release-mobile/android.sh "${{ inputs.version }}"
       - name: Preserve package across runs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -115,4 +115,4 @@ jobs:
           path: build/stage/android
       - name: Stage immutable package and metadata
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: node scripts/release-resumable.mjs stage-package-and-advance "${{ inputs.version }}" "${{ inputs.source_sha }}" android build/stage/android "$(git rev-parse HEAD)" "${{ inputs.channel }}" "${{ inputs.update_sparkle }}"
+        run: node tooling/release-resumable.mjs stage-package-and-advance "${{ inputs.version }}" "${{ inputs.source_sha }}" android build/stage/android "$(git rev-parse HEAD)" "${{ inputs.channel }}" "${{ inputs.update_sparkle }}"

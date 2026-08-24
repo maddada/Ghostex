@@ -89,7 +89,7 @@ jobs:
       - name: Resolve immutable code-server component identity
         id: code_server_identity
         shell: bash
-        run: node scripts/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
+        run: node tooling/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
       - name: Resolve dependency cache keys
         id: cache_keys
         shell: bash
@@ -122,16 +122,16 @@ jobs:
           restore-keys: zig-windows-${{ inputs.arch }}-
       - name: Install pinned Zig
         shell: pwsh
-        run: scripts/release-gpui/prepare-zig.ps1 -Arch "${{ inputs.arch }}"
+        run: tooling/release-gpui/prepare-zig.ps1 -Arch "${{ inputs.arch }}"
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
       - name: Install pinned Velopack CLI
         shell: bash
-        run: scripts/release-gpui/retry.sh 3 5 -- dotnet tool install --global vpk --version 1.2.0
+        run: tooling/release-gpui/retry.sh 3 5 -- dotnet tool install --global vpk --version 1.2.0
       - name: Install JavaScript dependencies
         shell: bash
-        run: scripts/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
       - name: Restore Windows code-signing certificate
         if: ${{ inputs.sign }}
         shell: pwsh
@@ -145,7 +145,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/release-gpui/await-run-artifacts.mjs \
+          node tooling/release-gpui/await-run-artifacts.mjs \
             --names "release-gxserver-linux-${{ inputs.arch }},${{ steps.code_server_identity.outputs.artifact_name }}" \
             --producer-pattern '^(gxserver_${{ inputs.arch }}|code_server_${{ inputs.arch }}|reuse)' \
             --timeout-minutes 45
@@ -171,13 +171,13 @@ jobs:
           GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\gxserver-linux-${{ inputs.arch }}.tar.gz
           GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
           GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\${{ steps.code_server_identity.outputs.archive_name }}
-        run: scripts/release-gpui/windows.ps1 -Version "${{ inputs.version }}" -Arch "${{ inputs.arch }}"
+        run: tooling/release-gpui/windows.ps1 -Version "${{ inputs.version }}" -Arch "${{ inputs.arch }}"
       - name: Write release provenance
         if: ${{ inputs.plan != '' }}
         shell: bash
         env:
           GHOSTEX_RELEASE_PLAN: ${{ inputs.plan }}
-        run: node scripts/release-gpui/write-provenance.mjs --dir "$OUTPUT_DIR"
+        run: node tooling/release-gpui/write-provenance.mjs --dir "$OUTPUT_DIR"
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:

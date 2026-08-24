@@ -123,19 +123,19 @@ jobs:
           restore-keys: zig-linux-x64-
       - name: Install native packaging dependencies
         run: |
-          scripts/release-gpui/retry.sh 3 5 -- sudo apt-get update
-          scripts/release-gpui/retry.sh 3 5 -- sudo apt-get install -y cmake ninja-build pkg-config rpm zstd libasound2-dev libfontconfig1-dev libfreetype-dev libx11-dev libxcb1-dev libxkbcommon-x11-dev
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y cmake ninja-build pkg-config rpm zstd libasound2-dev libfontconfig1-dev libfreetype-dev libx11-dev libxcb1-dev libxkbcommon-x11-dev
       - name: Install pinned Zig toolchain
         run: |
-          scripts/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          scripts/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
           ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
           [[ "$($ZIG_BIN version)" == "0.16.0" ]]
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       - name: Install JavaScript dependencies
-        run: scripts/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
       - name: Pre-fetch Zig package dependencies
-        run: scripts/release-gpui/fetch-zig-deps.sh ghostty
+        run: tooling/release-gpui/fetch-zig-deps.sh ghostty
       # Known tradeoff, deliberately not restructured.
       #
       # Unlike macOS and Windows, this job awaits gxserver *before* its cargo
@@ -157,7 +157,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/release-gpui/await-run-artifacts.mjs \
+          node tooling/release-gpui/await-run-artifacts.mjs \
             --names release-gxserver-linux-x64 \
             --producer-pattern '^(gxserver_x64|reuse)' \
             --timeout-minutes 45
@@ -174,7 +174,7 @@ jobs:
       - name: Stage the Linux desktop payload once
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/release-gpui/linux-stage.sh "${{ inputs.version }}" "$GHOSTEX_LINUX_PACKAGE_ROOT"
+        run: tooling/release-gpui/linux-stage.sh "${{ inputs.version }}" "$GHOSTEX_LINUX_PACKAGE_ROOT"
       # RPM and the portable tarball first: both archive the whole staged root,
       # and linux-deb.sh creates DEBIAN/ inside it.
       - name: Build the RPM package
@@ -182,7 +182,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          scripts/release-gpui/linux-rpm.sh "${{ inputs.version }}"
+          tooling/release-gpui/linux-rpm.sh "${{ inputs.version }}"
           # Risk R8: the shared package root is reused by the DEB step, so prove
           # the RPM payload never contains Debian control metadata.
           RPM_PATH="$(realpath "build/release-gpui/${{ inputs.version }}/linux-rpm-x64/ghostex-${{ inputs.version }}-1.x86_64.rpm")"
@@ -206,7 +206,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          scripts/release-gpui/linux-tar.sh "${{ inputs.version }}"
+          tooling/release-gpui/linux-tar.sh "${{ inputs.version }}"
           # Prove the published archive really installs onto a filesystem root
           # with its prefix intact: /usr/bin/ghostex wraps hardcoded
           # /opt/ghostex paths, and gx must arrive as a symlink, not a copy.
@@ -223,7 +223,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          scripts/release-gpui/linux-deb.sh "${{ inputs.version }}"
+          tooling/release-gpui/linux-deb.sh "${{ inputs.version }}"
           # Resolve the built package against this Ubuntu runner's real package
           # database, then install the same downloaded DEB again through dpkg.
           # This catches renamed distro dependencies as well as package-owned

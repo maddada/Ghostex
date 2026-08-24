@@ -105,19 +105,19 @@ jobs:
           bun-version: 1.4.0
       - name: Install pinned Zig
         shell: pwsh
-        run: scripts/release-gpui/prepare-zig.ps1 -Arch x64
+        run: tooling/release-gpui/prepare-zig.ps1 -Arch x64
       - name: Install the ARM64 Rust target
         if: ${{ inputs.arm64_target }}
         shell: bash
-        run: scripts/release-gpui/retry.sh 3 5 -- rustup target add aarch64-pc-windows-msvc
+        run: tooling/release-gpui/retry.sh 3 5 -- rustup target add aarch64-pc-windows-msvc
       - name: Install JavaScript dependencies
         shell: bash
-        run: scripts/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
       - name: Prepare pinned reference checkouts
         shell: bash
         env:
           GHOSTEX_RELEASE_SKIP_SUBMODULES: '1'
-        run: scripts/release-gpui/prepare-references.sh
+        run: tooling/release-gpui/prepare-references.sh
       # No fetch-zig-deps.sh here: ZIG_GLOBAL_CACHE_DIR must stay a native
       # Windows path, which the bash prefetch helper cannot produce. The
       # restored Zig package cache serves the same purpose on this runner.

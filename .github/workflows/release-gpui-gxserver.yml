@@ -96,26 +96,26 @@ jobs:
           cache-dependency-path: build/pinned-beads-source/go.sum
       - name: Install native build dependencies
         run: |
-          scripts/release-gpui/retry.sh 3 5 -- sudo apt-get update
-          scripts/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
       - name: Install pinned Zig toolchain
         run: |
-          scripts/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          scripts/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
             "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" \
             "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" >> "$GITHUB_ENV"
       - name: Install Rust musl targets
-        run: scripts/release-gpui/retry.sh 3 5 -- rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+        run: tooling/release-gpui/retry.sh 3 5 -- rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
       - name: Install JavaScript dependencies
-        run: scripts/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
       - name: Prepare source dependencies
-        run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 scripts/release-gpui/prepare-references.sh
+        run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 tooling/release-gpui/prepare-references.sh
       - name: Pre-fetch Zig package dependencies
-        run: scripts/release-gpui/fetch-zig-deps.sh zmx
+        run: tooling/release-gpui/fetch-zig-deps.sh zmx
       - name: Build pinned embedded-Dolt Beads
         run: |
-          node scripts/build-pinned-beads-release.mjs \
+          node tooling/build-pinned-beads-release.mjs \
             --source-root build/pinned-beads-source \
             --platform linux \
             --arch "${{ inputs.arch }}" \
@@ -125,13 +125,13 @@ jobs:
           GHOSTEX_BEADS_PREBUILT_BINARY: ${{ runner.temp }}/ghostex-pinned-beads/bd
           GHOSTEX_REQUIRE_BEADS_SMOKE: '1'
         run: |
-          scripts/build-remote-gxserver-linux-release.sh --arch "${{ inputs.arch }}"
+          tooling/build-remote-gxserver-linux-release.sh --arch "${{ inputs.arch }}"
           OUTPUT="build/release-gpui/${{ inputs.version }}/gxserver-linux-${{ inputs.arch }}"
           mkdir -p "$OUTPUT"
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
             -C "build/remote-gxserver-linux/${{ inputs.arch }}/package" \
             -czf "$OUTPUT/gxserver-linux-${{ inputs.arch }}.tar.gz" .
-          source scripts/release-gpui/common.sh
+          source tooling/release-gpui/common.sh
           release_gpui_write_manifest \
             "$OUTPUT" \
             "gxserver-linux-${{ inputs.arch }}" \

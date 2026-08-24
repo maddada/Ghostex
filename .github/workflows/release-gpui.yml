@@ -182,13 +182,13 @@ jobs:
           GHOSTEX_MOBILE_DEPLOY_KEY: ${{ secrets.GHOSTEX_MOBILE_DEPLOY_KEY }}
           WINDOWS_CODE_SIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGN_PFX_BASE64 }}
           WINDOWS_CODE_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGN_PFX_PASSWORD }}
-        run: node scripts/release-gpui/preflight.mjs "${{ inputs.version }}"
+        run: node tooling/release-gpui/preflight.mjs "${{ inputs.version }}"
       - name: Verify clean GPUI release reference contract
         if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.windows_x64 || inputs.windows_arm64 }}
-        run: node scripts/release-gpui/verify-reference-contract.mjs --clean
+        run: node tooling/release-gpui/verify-reference-contract.mjs --clean
       - name: Check the Ghostty Zig toolchain pin against the vendored source
         if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.windows_x64 || inputs.windows_arm64 }}
-        run: node scripts/release-gpui/check-ghostty-zig-pin.mjs
+        run: node tooling/release-gpui/check-ghostty-zig-pin.mjs
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
@@ -218,14 +218,14 @@ jobs:
           if [[ -n "$RELEASE_REUSE_FROM_RUN_ID" ]]; then
             ARGS+=(--reuse-from-run "$RELEASE_REUSE_FROM_RUN_ID")
           fi
-          node scripts/release-gpui/plan-cli.mjs "$RELEASE_VERSION" \
+          node tooling/release-gpui/plan-cli.mjs "$RELEASE_VERSION" \
             --source-sha "${{ github.sha }}" \
             --output build/release-gpui/release-plan.json \
             --emit-github-output \
             --emit-step-summary \
             "${ARGS[@]}"
       - name: Validate the plan against the requested scope
-        run: node scripts/release-gpui/preflight.mjs "${{ inputs.version }}" --only-plan --plan build/release-gpui/release-plan.json
+        run: node tooling/release-gpui/preflight.mjs "${{ inputs.version }}" --only-plan --plan build/release-gpui/release-plan.json
       - uses: actions/upload-artifact@v7
         with:
           name: release-plan

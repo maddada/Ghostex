@@ -99,7 +99,7 @@ jobs:
           GHOSTEX_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
           GHOSTEX_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
-        run: scripts/release-gpui/android.sh "${{ inputs.version }}"
+        run: tooling/release-gpui/android.sh "${{ inputs.version }}"
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:

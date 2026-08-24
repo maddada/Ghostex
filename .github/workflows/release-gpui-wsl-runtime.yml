@@ -63,7 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/release-gpui/await-run-artifacts.mjs \
+          node tooling/release-gpui/await-run-artifacts.mjs \
             --names release-gxserver-linux-${{ inputs.arch }} \
             --producer-pattern '^(gxserver_${{ inputs.arch }}|reuse)' \
             --timeout-minutes 45
@@ -81,7 +81,7 @@ jobs:
           github-token: ${{ github.token }}
       - name: Package truthful WSL bootstrap
         run: >-
-          scripts/release-gpui/wsl-runtime.sh
+          tooling/release-gpui/wsl-runtime.sh
           "${{ inputs.version }}"
           "${{ inputs.arch }}"
           "build/runtime-artifacts/${{ inputs.arch }}/gxserver-linux-${{ inputs.arch }}.tar.gz"

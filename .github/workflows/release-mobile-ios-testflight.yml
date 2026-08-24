@@ -59,7 +59,7 @@ jobs:
           echo "GHOSTEX_ASC_KEY_ID=$ASC_KEY_ID" >> "$GITHUB_ENV"
           echo "GHOSTEX_ASC_ISSUER_ID=$ASC_ISSUER_ID" >> "$GITHUB_ENV"
       - name: Build and upload TestFlight release
-        run: scripts/release-mobile/ios-testflight.sh "${{ inputs.version }}"
+        run: tooling/release-mobile/ios-testflight.sh "${{ inputs.version }}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ghostex-mobile-${{ inputs.version }}-ios-testflight

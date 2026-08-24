@@ -48,7 +48,7 @@ const FILENAME_ATTRIBUTE_FENCE = fence("md filename=README.md", [
 ]);
 
 /** ```sh path/to/file.ext — the bare token form, no attribute at all. */
-const BARE_TOKEN_FENCE = fence("bash scripts/build-mobile-find.mjs", [
+const BARE_TOKEN_FENCE = fence("bash tooling/build-mobile-find.mjs", [
   "set -euo pipefail",
   "bun build apps/mobile/views/find/index.tsx",
 ]);

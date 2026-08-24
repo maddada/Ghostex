@@ -46,7 +46,7 @@ Ghostex/
 │   ├── components/    # shadcn primitives (ui/) + utils.ts
 │   ├── find/          # Rust prompt-history search (crate ghostex-find)
 │   └── paths/         # Rust path resolution (crate ghostex-paths)
-├── scripts/  media/  skills/  docs/
+├── tooling/  media/  skills/  docs/
 └── package.json  tsconfig.json  AGENTS.md  CHANGELOG.md  appcast*.xml  bun.lock …
 ```
 
@@ -120,15 +120,15 @@ Default search posture:
 
 Search these app-owned areas first by task:
 
-- Desktop app shell, window lifecycle, app startup, terminals/panes, titlebar, session restore/fork launch plans, terminal host integration: `apps/desktop/src/`, `apps/desktop/sidebar/`, `apps/desktop/native/macos/`, `apps/desktop/scripts/`, `packages/core-ui/`, `packages/shared/`, and `scripts/`.
+- Desktop app shell, window lifecycle, app startup, terminals/panes, titlebar, session restore/fork launch plans, terminal host integration: `apps/desktop/src/`, `apps/desktop/sidebar/`, `apps/desktop/native/macos/`, `apps/desktop/scripts/`, `packages/core-ui/`, `packages/shared/`, and `tooling/`.
 - Frontend UI, React components, settings, project/sidebar interactions, Storybook stories: `packages/core-ui/`, `packages/components/`, `packages/components/ui/`, `packages/shared/`, `apps/desktop/sidebar/`, `apps/desktop/views/` (for the modal host, titlebar host, Docs/manage, Kanban, and `meo` pages listed above).
 - Web app: `apps/web/src/`, then the shared `packages/core-ui/` and `packages/shared/` code it builds on.
 - Session grid, prompts, agent metadata, workspace/project state, contracts, shared tests: `packages/shared/`, then the consuming surface in `packages/core-ui/`, `apps/desktop/sidebar/`, `apps/desktop/views/`, `apps/mobile/views/`, or `server/src/`.
-- Server, remote protocol, hooks, authentication, remote setup: `server/src/`, `packages/shared/`, `scripts/`. The server crate is heavily modularized: `server/src/server/` (HTTP/WS core in `mod.rs` plus per-concern submodules), `server/src/agents/`, the flat `server/src/session_chat_*.rs` family, `server/src/domain/`, `server/src/zmx/`, `server/src/typed_operations/`, `server/src/portless/`, and `server/src/agent_hooks/`. Crate name is `gxserver`; it builds the `gxserver` and `ghostex` binaries.
+- Server, remote protocol, hooks, authentication, remote setup: `server/src/`, `packages/shared/`, `tooling/`. The server crate is heavily modularized: `server/src/server/` (HTTP/WS core in `mod.rs` plus per-concern submodules), `server/src/agents/`, the flat `server/src/session_chat_*.rs` family, `server/src/domain/`, `server/src/zmx/`, `server/src/typed_operations/`, `server/src/portless/`, and `server/src/agent_hooks/`. Crate name is `gxserver`; it builds the `gxserver` and `ghostex` binaries.
 - zmx behavior: `.dependencies/zmx/src/` + `.dependencies/zmx/test/`. This is the deliberate exception to the `.dependencies/**` exclusion — Ghostex edits it.
 - Prompt-history search (`gx f`, the Find surface): `packages/find/` for the engine, `server/src/agent_prompt_search.rs` for the API, `packages/core-ui/find/` for the shared UI.
 - Mobile app work: `apps/mobile/` is the only active mobile app and releases Android through the React Native/Expo project in `apps/mobile/app` (a git submodule). Its embedded chat and find pages are `apps/mobile/views/chat/` and `apps/mobile/views/find/`, bundled by `bun run build:mobile-chat` / `bun run build:mobile-find`. The retired native iOS and Termux-fork Android repositories live under `/Users/madda/dev/_active/ghostex-deprecated/` and must not be restored as active release inputs.
-- Assets, sounds, icons, and release tooling: `media/`, `apps/desktop/assets/`, `packages/core-ui/assets/`, `scripts/`, and `scripts/release-gpui/`.
+- Assets, sounds, icons, and release tooling: `media/`, `apps/desktop/assets/`, `packages/core-ui/assets/`, `tooling/`, and `tooling/release-gpui/`.
 
 Search external Ghostty code only when the task is explicitly about upstream
 Ghostty behavior, the embedded Ghostty source, Zig terminal internals, Ghostty
@@ -139,13 +139,13 @@ macOS internals, or a build/test failure whose failing file is already under
 excluding `.dependencies/ghostty/.zig-cache/**` and
 `.dependencies/ghostty/zig-out/**`. Ghostex's own patch series on top of
 upstream is `.dependencies/ghostty-patches/`, re-applied by
-`scripts/sync-ghostty.sh`.
+`tooling/sync-ghostty.sh`.
 
 Preferred `rg` shape for first-pass searches:
 
 ```bash
 rg -n "pattern" apps/desktop/src apps/desktop/sidebar packages/core-ui packages/shared \
-  server/src apps/web/src scripts \
+  server/src apps/web/src tooling \
   -g '!.dependencies/**' -g '!node_modules/**' -g '!storybook-static/**' -g '!tmp/**' \
   -g '!dist/**' -g '!build/**' -g '!out/**' -g '!target/**' -g '!artifacts/**' -g '!.git/**'
 ```

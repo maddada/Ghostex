@@ -16,7 +16,7 @@ import type { FindPromptsTransport } from "@/packages/core-ui/find/find-prompts-
 /*
 CDXC:AgentHistorySearch 2026-08-20:
 Find page for the React Native app — the GUI for `gx f` — bundled by
-scripts/build-mobile-find.mjs into one self-contained HTML string the app loads
+tooling/build-mobile-find.mjs into one self-contained HTML string the app loads
 in a react-native-webview. It mounts the same shared FindPromptsView as gpui's
 find.html and the web app; only the transport differs. The phone has no HTTP
 path to gxserver (SSH only), so every transport call crosses a postMessage

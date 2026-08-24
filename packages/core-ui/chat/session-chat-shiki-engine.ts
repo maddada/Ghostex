@@ -10,7 +10,7 @@
 // chunks. Keep the public surface to exactly these two exports so that swap
 // stays a one-liner.
 //
-// The mobile webview (scripts/build-mobile-chat.mjs) has no origin at all — the
+// The mobile webview (tooling/build-mobile-chat.mjs) has no origin at all — the
 // React Native host feeds it one HTML string with no base URL — so it can
 // neither import module chunks nor load classic scripts. There, both this
 // module and the grammar loader are stubbed and the flag below is built as

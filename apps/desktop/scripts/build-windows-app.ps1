@@ -164,10 +164,10 @@ if ($OnDemandComponents) {
     }
     if ($SwiftshaderIcd) { Copy-Item -LiteralPath $SwiftshaderIcd $CefComponentStage }
     Copy-Item -Recurse -LiteralPath $Locales -Destination (Join-Path $CefComponentStage "locales")
-    & bash (Join-Path $RepoRoot "scripts/release-gpui/create-deterministic-tar.sh") $CefComponentStage $CefComponentAsset --windows-component
+    & bash (Join-Path $RepoRoot "tooling/release-gpui/create-deterministic-tar.sh") $CefComponentStage $CefComponentAsset --windows-component
     if ($LASTEXITCODE -ne 0) { throw "Could not create the deterministic Windows CEF component asset" }
     Remove-Item -Recurse -Force $CefComponentStage
-    & node (Join-Path $RepoRoot "scripts/release-gpui/publish-component.mjs") `
+    & node (Join-Path $RepoRoot "tooling/release-gpui/publish-component.mjs") `
         --metadata-only `
         --reuse-published `
         --component cef `
@@ -212,7 +212,7 @@ elseif ($RequireWslArchive) {
 if ($WslCodeServerArchive -and (Test-Path $WslCodeServerArchive)) {
     $ComponentVersion = $env:GHOSTEX_CODE_SERVER_COMPONENT_VERSION
     if (-not $ComponentVersion) {
-        $ComponentVersion = (& node (Join-Path $RepoRoot "scripts/release-gpui/code-server-component-identity.mjs") --root (Join-Path $RepoRoot ".dependencies/code-server")).Trim()
+        $ComponentVersion = (& node (Join-Path $RepoRoot "tooling/release-gpui/code-server-component-identity.mjs") --root (Join-Path $RepoRoot ".dependencies/code-server")).Trim()
         if ($LASTEXITCODE -ne 0 -or -not $ComponentVersion) {
             throw "Could not resolve the code-server component payload identity"
         }
@@ -221,7 +221,7 @@ if ($WslCodeServerArchive -and (Test-Path $WslCodeServerArchive)) {
     if ((Split-Path -Leaf $WslCodeServerArchive) -ne $ExpectedArchiveName) {
         throw "WSL code-server archive identity mismatch: expected $ExpectedArchiveName"
     }
-    & node (Join-Path $RepoRoot "scripts/release-gpui/verify-code-server-archive.mjs") `
+    & node (Join-Path $RepoRoot "tooling/release-gpui/verify-code-server-archive.mjs") `
         --archive $WslCodeServerArchive `
         --version $ComponentVersion `
         --platform "linux-$ReleaseArch"
@@ -236,7 +236,7 @@ if ($WslCodeServerArchive -and (Test-Path $WslCodeServerArchive)) {
     New-Item -ItemType Directory -Force -Path $ComponentStage | Out-Null
     Copy-Item $WslCodeServerArchive (Join-Path $ComponentStage $InnerArchiveName)
     Copy-Item "$WslCodeServerArchive.sha256" (Join-Path $ComponentStage "$InnerArchiveName.sha256")
-    & bash (Join-Path $RepoRoot "scripts/release-gpui/create-deterministic-tar.sh") $ComponentStage $ComponentAsset --windows-component
+    & bash (Join-Path $RepoRoot "tooling/release-gpui/create-deterministic-tar.sh") $ComponentStage $ComponentAsset --windows-component
     if ($LASTEXITCODE -ne 0) { throw "Could not create the deterministic Windows code-server component asset" }
     Remove-Item -Recurse -Force $ComponentStage
     $ComponentAssetSha = (Get-FileHash -Algorithm SHA256 $ComponentAsset).Hash.ToLowerInvariant()
@@ -245,7 +245,7 @@ if ($WslCodeServerArchive -and (Test-Path $WslCodeServerArchive)) {
         "$ComponentAssetSha  $(Split-Path -Leaf $ComponentAsset)`n",
         [Text.UTF8Encoding]::new($false)
     )
-    & node (Join-Path $RepoRoot "scripts/release-gpui/publish-component.mjs") `
+    & node (Join-Path $RepoRoot "tooling/release-gpui/publish-component.mjs") `
         --metadata-only `
         --reuse-published `
         --component code-server `
@@ -272,7 +272,7 @@ if ($OnDemandComponents -or ($WslCodeServerArchive -and (Test-Path $WslCodeServe
     )
     $ResourcesDir = Join-Path $AppDir "resources"
     New-Item -ItemType Directory -Force -Path $ResourcesDir | Out-Null
-    & node (Join-Path $RepoRoot "scripts/release-gpui/on-demand-manifest.mjs") seal `
+    & node (Join-Path $RepoRoot "tooling/release-gpui/on-demand-manifest.mjs") seal `
         --build-manifest $OnDemandBuildManifest `
         --component-manifest $ComponentManifest `
         --output (Join-Path $ResourcesDir "on-demand-resources.json") `

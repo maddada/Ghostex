@@ -7,7 +7,7 @@ import {
   SHIKI_ASSET_DIR_NAME,
   shikiClassicScriptEsbuildPlugin,
   writeShikiClassicAssets,
-} from "../../scripts/shiki-classic-assets.mjs";
+} from "../../tooling/shiki-classic-assets.mjs";
 
 const gpuiRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = path.resolve(gpuiRoot, "..", "..");
@@ -135,7 +135,7 @@ function stageMonacoVs(): Plugin {
  *
  * So the highlighter ships the way Monaco does: prebuilt classic scripts staged
  * beside the bundle, pulled in by <script src> only when a fence needs them.
- * scripts/shiki-classic-assets.mjs owns both the staged files and the loader
+ * tooling/shiki-classic-assets.mjs owns both the staged files and the loader
  * shim, and the mobile chat build uses the same module so the two hosts cannot
  * drift apart.
  */

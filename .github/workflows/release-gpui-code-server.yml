@@ -77,7 +77,7 @@ jobs:
         run: git submodule update --init --depth=1 -- .dependencies/code-server
       - name: Resolve immutable code-server component identity
         id: code_server_identity
-        run: node scripts/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
+        run: node tooling/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
       - name: Probe the published component tag
         id: probe
         env:
@@ -132,7 +132,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          scripts/release-gpui/retry.sh 4 2 -- node scripts/release-gpui/publish-component.mjs \
+          tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
             --reuse-published \
             --metadata-only \
             --require-sha256-sidecars \
@@ -141,7 +141,7 @@ jobs:
             --platform "linux-${{ inputs.arch }}" \
             --asset-dir "$OUTPUT_DIR" \
             --output build/on-demand-components/components.json
-          node scripts/release-gpui/verify-code-server-archive.mjs \
+          node tooling/release-gpui/verify-code-server-archive.mjs \
             --archive "$OUTPUT_DIR/${{ steps.code_server_identity.outputs.archive_name }}" \
             --version '${{ steps.code_server_identity.outputs.component_version }}' \
             --platform "linux-${{ inputs.arch }}"
@@ -151,12 +151,12 @@ jobs:
       - name: Install WSL Source build dependencies
         if: ${{ steps.probe.outputs.action == 'build' }}
         run: |
-          scripts/release-gpui/retry.sh 3 5 -- sudo apt-get update
-          scripts/release-gpui/retry.sh 3 5 -- sudo apt-get install -y binutils build-essential jq libkrb5-dev libx11-dev libxkbfile-dev python3 rsync
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y binutils build-essential jq libkrb5-dev libx11-dev libxkbfile-dev python3 rsync
       - name: Apply Ghostex code-server build patches
         if: ${{ steps.probe.outputs.action == 'build' }}
         run: |
-          PATCH="$PWD/scripts/release-gpui/patches/code-server-ripgrep-target-validation.patch"
+          PATCH="$PWD/tooling/release-gpui/patches/code-server-ripgrep-target-validation.patch"
           git -C .dependencies/code-server apply --check "$PATCH"
           git -C .dependencies/code-server apply "$PATCH"
       - uses: actions/setup-node@v4
@@ -170,7 +170,7 @@ jobs:
       - name: Build the code-server runtime
         if: ${{ steps.probe.outputs.action == 'build' }}
         run: |
-          scripts/release-gpui/retry.sh 3 5 -- npm --prefix .dependencies/code-server ci
+          tooling/release-gpui/retry.sh 3 5 -- npm --prefix .dependencies/code-server ci
           (
             cd .dependencies/code-server
             npm run build
@@ -218,11 +218,11 @@ jobs:
             -czf "$ARCHIVE" .
           archive_sha256="$(sha256sum "$ARCHIVE" | awk '{ print $1 }')"
           printf '%s  %s\n' "$archive_sha256" "$(basename "$ARCHIVE")" >"$ARCHIVE.sha256"
-          node scripts/release-gpui/verify-code-server-archive.mjs \
+          node tooling/release-gpui/verify-code-server-archive.mjs \
             --archive "$ARCHIVE" \
             --version '${{ steps.code_server_identity.outputs.component_version }}' \
             --platform "linux-${{ inputs.arch }}"
-          scripts/release-gpui/retry.sh 4 2 -- node scripts/release-gpui/publish-component.mjs \
+          tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
             --require-sha256-sidecars \
             --component code-server \
             --version '${{ steps.code_server_identity.outputs.component_version }}' \

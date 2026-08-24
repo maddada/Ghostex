@@ -124,7 +124,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          node scripts/release-gpui/resolve-amend-scope.mjs
+          node tooling/release-gpui/resolve-amend-scope.mjs
           --version "${{ inputs.version }}"
           --macos "${{ inputs.macos }}"
           --linux-deb "${{ inputs.linux_deb }}"
@@ -173,10 +173,10 @@ jobs:
           GHOSTEX_MOBILE_DEPLOY_KEY: ${{ secrets.GHOSTEX_MOBILE_DEPLOY_KEY }}
           WINDOWS_CODE_SIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGN_PFX_BASE64 }}
           WINDOWS_CODE_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGN_PFX_PASSWORD }}
-        run: node scripts/release-gpui/preflight.mjs "${{ inputs.version }}"
+        run: node tooling/release-gpui/preflight.mjs "${{ inputs.version }}"
       - name: Verify clean GPUI release reference contract
         if: ${{ steps.scope.outputs.GHOSTEX_RELEASE_MACOS == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_DEB == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_RPM == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_TAR == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_X64 == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_ARM64 == 'true' }}
-        run: node scripts/release-gpui/verify-reference-contract.mjs --clean
+        run: node tooling/release-gpui/verify-reference-contract.mjs --clean
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
@@ -213,7 +213,7 @@ jobs:
           if [[ -n "$RELEASE_FORCE_PRODUCTS" ]]; then
             ARGS+=(--force "$RELEASE_FORCE_PRODUCTS")
           fi
-          node scripts/release-gpui/plan-cli.mjs "$RELEASE_VERSION" \
+          node tooling/release-gpui/plan-cli.mjs "$RELEASE_VERSION" \
             --source-sha "${{ github.sha }}" \
             --output build/release-gpui/release-plan.json \
             --emit-github-output \
@@ -234,7 +234,7 @@ jobs:
           GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64 }}
           GHOSTEX_RELEASE_UPDATE_SPARKLE: ${{ steps.scope.outputs.update_sparkle }}
           GHOSTEX_RELEASE_PRERELEASE: "false"
-        run: node scripts/release-gpui/preflight.mjs "${{ inputs.version }}" --only-plan --plan build/release-gpui/release-plan.json
+        run: node tooling/release-gpui/preflight.mjs "${{ inputs.version }}" --only-plan --plan build/release-gpui/release-plan.json
       - uses: actions/upload-artifact@v7
         with:
           name: release-plan

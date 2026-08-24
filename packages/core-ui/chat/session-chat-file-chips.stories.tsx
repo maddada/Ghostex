@@ -28,7 +28,7 @@ const PATH_SHAPES = [
   "- Deeply nested: `server/src/ghostex_cli/actions.rs:117`",
   "- Absolute: `/Users/madda/dev/_active/Ghostex/AGENTS.md`",
   "- Home-relative: `~/.claude/settings.json`",
-  "- Explicitly relative: `./scripts/build-mobile-find.mjs`",
+  "- Explicitly relative: `./tooling/build-mobile-find.mjs`",
   "- A parent hop: `../../shared/session-chat.ts:88`",
   "- A dotfile in a folder: `apps/desktop/.cargo/config.toml`",
   "- Conventional extensionless names, but only with a line: `Makefile:12`",

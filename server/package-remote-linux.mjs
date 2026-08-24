@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { BEADS_PACKAGE_ID, stageBeadsRelease } from '../scripts/beads-release.mjs';
-import { smokeTestPackagedBeads } from '../scripts/smoke-test-packaged-beads.mjs';
+import { BEADS_PACKAGE_ID, stageBeadsRelease } from '../tooling/beads-release.mjs';
+import { smokeTestPackagedBeads } from '../tooling/smoke-test-packaged-beads.mjs';
 import { execFile, spawn } from 'node:child_process';
 
 const execFileAsync = promisify(execFile);

@@ -723,8 +723,8 @@ stage_on_demand_remote_gxserver_manifest() {
 	if [[ -f "$component_manifest" ]]; then
 		manifest_args+=(--component-manifest "$component_manifest")
 	fi
-	node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" "${manifest_args[@]}"
-	node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" validate-macos \
+	node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" "${manifest_args[@]}"
+	node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" validate-macos \
 		--manifest "$WEB_DIR/on-demand-resources.json"
 	rm -rf "$WEB_DIR/gxserver-linux-x64" "$WEB_DIR/gxserver-linux-arm64" "$WEB_DIR/gxserver-linux-amd64" "$WEB_DIR/gxserver-linux-aarch64"
 }
@@ -922,7 +922,7 @@ prepare_cef_component_asset() {
 		GHOSTEX_GPUI_SIGN_IDENTITY="${GHOSTEX_GPUI_SIGN_IDENTITY:--}" \
 		GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG="${GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG:---timestamp}" \
 			"$SCRIPT_DIR/codesign-gpui-app.sh" --cef-framework "$staged_framework"
-		"$REPO_ROOT/scripts/release-gpui/create-deterministic-tar.sh" "$stage_root" "$asset_path"
+		"$REPO_ROOT/tooling/release-gpui/create-deterministic-tar.sh" "$stage_root" "$asset_path"
 	fi
 	signing_identity="${GHOSTEX_GPUI_SIGN_IDENTITY:--}"
 	if [[ "$signing_identity" != "-" ]]; then
@@ -934,7 +934,7 @@ prepare_cef_component_asset() {
 		fi
 	fi
 	rm -rf "$stage_root"
-	node "$REPO_ROOT/scripts/release-gpui/publish-component.mjs" \
+	node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
 		--metadata-only \
 		--component cef \
 		--version "$component_version" \

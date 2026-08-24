@@ -459,9 +459,9 @@ if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
     fi
   done
   cp -R "$LOCALES_DIR" "$CEF_STAGE/locales"
-  "$REPO_ROOT/scripts/release-gpui/create-deterministic-tar.sh" "$CEF_STAGE" "$CEF_ASSET" --windows-component
+  "$REPO_ROOT/tooling/release-gpui/create-deterministic-tar.sh" "$CEF_STAGE" "$CEF_ASSET" --windows-component
   rm -rf "$CEF_STAGE"
-  node "$REPO_ROOT/scripts/release-gpui/publish-component.mjs" \
+  node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
     --metadata-only \
     --reuse-published \
     --component cef \
@@ -539,7 +539,7 @@ stage_current_wsl_runtime_archive() {
     echo "The base WSL runtime archive does not contain executable bin/bd." >&2
     exit 1
   fi
-  node "$REPO_ROOT/scripts/smoke-test-packaged-beads.mjs" "$package_dir/bin/bd"
+  node "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs" "$package_dir/bin/bd"
   cp "$WSL_GXSERVER_CURRENT_BIN" "$package_dir/bin/gxserver"
   cp "$WSL_ZMX_CURRENT_BIN" "$package_dir/bin/zmx"
   chmod 755 "$package_dir/bin/gxserver"
@@ -582,7 +582,7 @@ stage_current_wsl_runtime_archive() {
 
 WSL_GXSERVER_ARCHIVE="${GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE:-}"
 WSL_CODE_SERVER_ARCHIVE="${GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE:-}"
-CODE_SERVER_VERSION="$(node "$REPO_ROOT/scripts/release-gpui/code-server-component-identity.mjs" --root "$REPO_ROOT/.dependencies/code-server")"
+CODE_SERVER_VERSION="$(node "$REPO_ROOT/tooling/release-gpui/code-server-component-identity.mjs" --root "$REPO_ROOT/.dependencies/code-server")"
 if [[ -z "$CODE_SERVER_VERSION" ]]; then
   echo "Could not resolve the code-server component payload identity." >&2
   exit 1
@@ -598,7 +598,7 @@ if [[ -n "$WSL_CODE_SERVER_ARCHIVE" && -f "$WSL_CODE_SERVER_ARCHIVE" ]]; then
     echo "WSL code-server archive identity mismatch: expected $CODE_SERVER_ARCHIVE_NAME." >&2
     exit 1
   fi
-  node "$REPO_ROOT/scripts/release-gpui/verify-code-server-archive.mjs" \
+  node "$REPO_ROOT/tooling/release-gpui/verify-code-server-archive.mjs" \
     --archive "$WSL_CODE_SERVER_ARCHIVE" \
     --version "$CODE_SERVER_VERSION" \
     --platform "$CODE_SERVER_PLATFORM"
@@ -613,11 +613,11 @@ if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
   CODE_SERVER_ASSET="$COMPONENT_ASSET_DIR/code-server-$CODE_SERVER_VERSION-windows-$RELEASE_ARCH.tar.gz"
   cp "$WSL_CODE_SERVER_ARCHIVE" "$CODE_SERVER_STAGE/$CODE_SERVER_ARCHIVE_NAME"
   cp "$WSL_CODE_SERVER_ARCHIVE.sha256" "$CODE_SERVER_STAGE/$CODE_SERVER_ARCHIVE_NAME.sha256"
-  "$REPO_ROOT/scripts/release-gpui/create-deterministic-tar.sh" "$CODE_SERVER_STAGE" "$CODE_SERVER_ASSET" --windows-component
+  "$REPO_ROOT/tooling/release-gpui/create-deterministic-tar.sh" "$CODE_SERVER_STAGE" "$CODE_SERVER_ASSET" --windows-component
   rm -rf "$CODE_SERVER_STAGE"
   CODE_SERVER_ASSET_SHA256="$(sha256sum "$CODE_SERVER_ASSET" | awk '{print $1}')"
   printf '%s  %s\n' "$CODE_SERVER_ASSET_SHA256" "$(basename "$CODE_SERVER_ASSET")" >"$CODE_SERVER_ASSET.sha256"
-  node "$REPO_ROOT/scripts/release-gpui/publish-component.mjs" \
+  node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
     --metadata-only \
     --reuse-published \
     --component code-server \
@@ -630,7 +630,7 @@ if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
   node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({assets:[],version:process.argv[2]},null,2)+"\n")' \
     "$ON_DEMAND_BUILD_MANIFEST" "$RELEASE_VERSION"
   mkdir -p "$APP_DIR/resources"
-  node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" seal \
+  node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" seal \
     --build-manifest "$ON_DEMAND_BUILD_MANIFEST" \
     --component-manifest "$COMPONENT_MANIFEST" \
     --output "$APP_DIR/resources/on-demand-resources.json" \

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
-const releaseGhostexSource = readFileSync(new URL("../../../scripts/release-ghostex.mjs", import.meta.url), "utf8");
+const releaseGhostexSource = readFileSync(new URL("../../../tooling/release-ghostex.mjs", import.meta.url), "utf8");
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);

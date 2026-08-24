@@ -150,7 +150,7 @@ acquire_local_start_lock_if_needed "$@"
 
 # CDXC:LocalStartFast 2026-06-07-16:23: Local starts should rebuild expensive bundled resources only when their runtime inputs change. Store content-hash stamps under build/<arch> so repeated `bun run start` calls do not churn source files or rely on generated folders that may be deleted by other build steps.
 fingerprint_inputs() {
-	"${GXSERVER_NODE_BIN:-node}" "$REPO_ROOT/scripts/fingerprint-build-inputs.mjs" "$@"
+	"${GXSERVER_NODE_BIN:-node}" "$REPO_ROOT/tooling/fingerprint-build-inputs.mjs" "$@"
 }
 
 cache_stamp_path() {
@@ -628,7 +628,7 @@ stage_shared_code_server_node_runtime() {
 
 code_server_component_version() {
 	local resolved_version
-	resolved_version="$(node "$REPO_ROOT/scripts/release-gpui/code-server-component-identity.mjs" --root "$CODE_SERVER_ROOT")"
+	resolved_version="$(node "$REPO_ROOT/tooling/release-gpui/code-server-component-identity.mjs" --root "$CODE_SERVER_ROOT")"
 	if [[ -n "${GHOSTEX_CODE_SERVER_COMPONENT_VERSION:-}" && "$GHOSTEX_CODE_SERVER_COMPONENT_VERSION" != "$resolved_version" ]]; then
 		echo "Configured code-server component version does not match its Node payload identity: $GHOSTEX_CODE_SERVER_COMPONENT_VERSION != $resolved_version" >&2
 		exit 1
@@ -684,7 +684,7 @@ stage_code_server_component_asset() {
 			echo "Linux code-server component archive identity mismatch: expected $expected_linux_asset_name, got $(basename "$linux_archive")" >&2
 			exit 1
 		}
-		node "$REPO_ROOT/scripts/release-gpui/verify-code-server-archive.mjs" \
+		node "$REPO_ROOT/tooling/release-gpui/verify-code-server-archive.mjs" \
 			--archive "$linux_archive" \
 			--version "$component_version" \
 			--platform "linux-$linux_arch"
@@ -717,19 +717,19 @@ stage_code_server_component_asset() {
 		}
 		stage_root="$(mktemp -d "$BUILD_CACHE_DIR/code-server-component-XXXXXX")"
 		rsync -a --delete "$WEB_DIR/code-server/" "$stage_root/"
-		"$REPO_ROOT/scripts/release-gpui/create-deterministic-tar.sh" "$stage_root" "$asset_path"
+		"$REPO_ROOT/tooling/release-gpui/create-deterministic-tar.sh" "$stage_root" "$asset_path"
 		rm -rf "$stage_root"
 		asset_sha256="$(shasum -a 256 "$asset_path" | awk '{print $1}')"
 		printf '%s  %s\n' "$asset_sha256" "$(basename "$asset_path")" >"$asset_sidecar"
 	fi
-	node "$REPO_ROOT/scripts/release-gpui/verify-code-server-archive.mjs" \
+	node "$REPO_ROOT/tooling/release-gpui/verify-code-server-archive.mjs" \
 		--archive "$asset_path" \
 		--version "$component_version" \
 		--platform darwin-arm64
 	if [[ "$reused_published_component" == "1" ]]; then
 		echo "Reused verified published code-server component $component_tag."
 	fi
-	node "$REPO_ROOT/scripts/release-gpui/publish-component.mjs" \
+	node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
 		--metadata-only \
 		--component code-server \
 		--version "$component_version" \
@@ -1021,8 +1021,8 @@ stage_beads_release_if_needed() {
 	build_digest="$(fingerprint_inputs \
 		--value "beads-schema54-672d942083a1-v1" \
 		--value "target=darwin/$release_arch" \
-		--path "$REPO_ROOT/scripts/beads-release.mjs" \
-		--path "$REPO_ROOT/scripts/smoke-test-packaged-beads.mjs")"
+		--path "$REPO_ROOT/tooling/beads-release.mjs" \
+		--path "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs")"
 	if cache_matches "beads-$GHOSTEX_MACOS_ARCH" "$build_digest" "$output_path"; then
 		if binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH" && \
 			"$output_path" version 2>/dev/null | grep -Eq '^bd version 1\.1\.0 .*672d942'; then
@@ -1033,7 +1033,7 @@ stage_beads_release_if_needed() {
 	fi
 
 	mkdir -p "$(dirname "$output_path")"
-	node "$REPO_ROOT/scripts/beads-release.mjs" \
+	node "$REPO_ROOT/tooling/beads-release.mjs" \
 		--platform darwin \
 		--arch "$release_arch" \
 		--output "$output_path"
@@ -1049,7 +1049,7 @@ smoke_test_staged_beads() {
 	local host_arch
 	host_arch="$(uname -m)"
 	if [[ "$host_arch" == "$GHOSTEX_MACOS_ARCH" ]]; then
-		node "$REPO_ROOT/scripts/smoke-test-packaged-beads.mjs" "$binary_path"
+		node "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs" "$binary_path"
 	elif [[ "${GHOSTEX_REQUIRE_BEADS_SMOKE:-0}" == "1" ]]; then
 		echo "GHOSTEX_REQUIRE_BEADS_SMOKE=1 requires a native $GHOSTEX_MACOS_ARCH macOS runner; current host is $host_arch." >&2
 		exit 1
@@ -1412,7 +1412,7 @@ resolve_on_demand_linux_package_source() {
 	fi
 	if [[ ! -d "$source_dir" ]]; then
 		echo "Missing $package_label remote gxserver package for on-demand release assets: $source_dir" >&2
-		echo "Build it with: scripts/build-remote-gxserver-linux-release.sh" >&2
+		echo "Build it with: tooling/build-remote-gxserver-linux-release.sh" >&2
 		exit 1
 	fi
 	if ! validate_remote_gxserver_linux_package "$source_dir" "$package_label"; then
@@ -1607,8 +1607,8 @@ stage_on_demand_release_assets() {
 	if [[ -f "$component_manifest" ]]; then
 		manifest_args+=(--component-manifest "$component_manifest")
 	fi
-	node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" "${manifest_args[@]}"
-	node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" validate-macos \
+	node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" "${manifest_args[@]}"
+	node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" validate-macos \
 		--manifest "$WEB_DIR/on-demand-resources.json"
 
 	write_on_demand_bd_launcher "$WEB_DIR/bin/bd" "$version" "bd-darwin-arm64.tar.gz" "$bd_sha"

@@ -34,7 +34,7 @@ jobs:
           ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
           ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
           GHOSTEX_MOBILE_DEPLOY_KEY: ${{ secrets.GHOSTEX_MOBILE_DEPLOY_KEY }}
-        run: node scripts/release-gpui/preflight.mjs "${{ inputs.version }}"
+        run: node tooling/release-gpui/preflight.mjs "${{ inputs.version }}"
 
   build:
     needs: validate
@@ -59,6 +59,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          node scripts/release-gpui/replace-android.mjs
+          node tooling/release-gpui/replace-android.mjs
           "${{ inputs.version }}"
           build/release-gpui/android-replacement

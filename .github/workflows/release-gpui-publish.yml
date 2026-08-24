@@ -123,13 +123,13 @@ jobs:
           GHOSTEX_RELEASE_WINDOWS_SIGNED: ${{ inputs.windows_signed && '1' || '0' }}
           GHOSTEX_RELEASE_AMEND_PRODUCTS: ${{ inputs.amend_products }}
         run: >-
-          node scripts/release-gpui/${{ inputs.amend && 'amend-existing.mjs' || 'assemble.mjs' }}
+          node tooling/release-gpui/${{ inputs.amend && 'amend-existing.mjs' || 'assemble.mjs' }}
           "${{ inputs.version }}"
           build/release-gpui/workflow-artifacts
       # The vendor-maintained `ghostex-bin` AUR package tracks the portable
       # Linux tarball of the release that was just published. Its template,
       # scriptlet, and the one-time AUR account setup live in
-      # packaging/aur/ghostex-bin/. This never runs for a prerelease: Arch users
+      # tooling/packaging/aur/ghostex-bin/. This never runs for a prerelease: Arch users
       # follow stable releases only.
       - name: Decide whether the ghostex-bin AUR package can be updated
         id: aur_gate
@@ -143,7 +143,7 @@ jobs:
         run: |
           if [ -z "${AUR_SSH_PRIVATE_KEY}" ]; then
             echo "AUR_SSH_PRIVATE_KEY is not configured; skipping the ghostex-bin AUR update."
-            echo "See packaging/aur/ghostex-bin/README.md for the one-time setup."
+            echo "See tooling/packaging/aur/ghostex-bin/README.md for the one-time setup."
             echo 'publish=false' >>"$GITHUB_OUTPUT"
             exit 0
           fi
@@ -195,5 +195,5 @@ jobs:
           manifest="build/release-gpui/workflow-artifacts/release-linux-tar-x64/manifest.json"
           manifest_argument=()
           if [ -f "${manifest}" ]; then manifest_argument=(--manifest "${manifest}"); fi
-          node scripts/release-gpui/publish-aur.mjs \
+          node tooling/release-gpui/publish-aur.mjs \
             --version "${VERSION}" "${manifest_argument[@]}" --publish
