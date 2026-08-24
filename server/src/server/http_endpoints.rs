@@ -256,6 +256,7 @@ pub(crate) async fn handle_board_associate_session_http(
     };
     let paths = state.paths.clone();
     let server_id = state.metadata.server_id.clone();
+    let presentation_state = state.clone();
     let gate = Arc::clone(&state.board_start_work_gate);
     let bd_executable_path = bd.executable_path;
     let outcome = tokio::task::spawn_blocking(move || {
@@ -265,7 +266,20 @@ pub(crate) async fn handle_board_associate_session_http(
             message: format!("SQLite gxserver state error: {error}"),
         })?;
         let repository = DomainRepository::new(&db, &server_id);
-        crate::board_start_work::associate_board_session(&repository, &params, &bd_executable_path)
+        let result = crate::board_start_work::associate_board_session(
+            &repository,
+            &params,
+            &bd_executable_path,
+        )?;
+        let project_id = value_text(&result, "projectId")?;
+        schedule_presentation_project_delta(
+            &presentation_state,
+            &db,
+            &repository,
+            &project_id,
+            "projectUpdated",
+        )?;
+        Ok(result)
     })
     .await;
     let result = match outcome {
@@ -282,29 +296,6 @@ pub(crate) async fn handle_board_associate_session_http(
             )
         }
     };
-    let project_id = match value_text(&result, "projectId") {
-        Ok(project_id) => project_id,
-        Err(error) => return domain_error_response(endpoint_path, request_id, error),
-    };
-    let db = match open_gxserver_database(&state.paths) {
-        Ok(db) => db,
-        Err(error) => {
-            return domain_error_response(
-                endpoint_path,
-                request_id,
-                DomainStateError {
-                    code: "internalError",
-                    message: format!("SQLite gxserver state error: {error}"),
-                },
-            )
-        }
-    };
-    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    if let Err(error) =
-        schedule_presentation_project_delta(state, &db, &repository, &project_id, "projectUpdated")
-    {
-        return domain_error_response(endpoint_path, request_id, error);
-    }
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
