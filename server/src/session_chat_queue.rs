@@ -732,6 +732,33 @@ fn set_draft(
     Ok(draft)
 }
 
+/// Text an armed Delayed Send must deliver instead of a bare Enter: the
+/// session's synced chat composer draft, when one is non-empty. Chat clients
+/// hand the terminal composer's text off into this draft, so an Enter fired
+/// into the pty would land on an empty input line and silently drop the
+/// message the user staged.
+pub fn armed_delayed_send_draft_text(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Result<Option<String>, DomainStateError> {
+    Ok(read_snapshot(db, project_id, session_id)?
+        .draft
+        .map(|draft| draft.content)
+        .filter(|content| !content.trim().is_empty()))
+}
+
+/// Clears the synced composer draft after a Delayed Send delivered it. The
+/// server origin id makes every client apply the empty draft instead of
+/// treating the frame as an echo of its own edit.
+pub fn clear_session_chat_draft_after_delivery(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Result<(), DomainStateError> {
+    set_draft(db, project_id, session_id, "", "gxserver-delayed-send").map(|_| ())
+}
+
 /// Guarded claim: only a `queued` or `failed` row can move to `sending`, so two
 /// scheduler ticks (or a tick racing a "Send now") cannot both deliver it.
 fn claim_prompt(

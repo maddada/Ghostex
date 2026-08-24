@@ -18,6 +18,11 @@ export interface WorkspaceSession {
   agentId?: string;
   /** Stable provider session id required to resolve the transcript. */
   agentSessionId?: string;
+  /** Live daemon-owned delayed action state shown when editing the schedule. */
+  delayedSendDeadlineAt?: string;
+  delayedSendRemainingLabel?: string;
+  sendWhenAllProjectSessionsStopActive?: boolean;
+  sendWhenAgentStopsActive?: boolean;
   presentationState: WorkspacePresentationState;
   activity: WorkspaceActivity;
   statusMessage?: string;

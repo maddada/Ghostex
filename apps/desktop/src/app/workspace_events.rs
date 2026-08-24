@@ -1659,6 +1659,19 @@ impl GhostexGpuiApp {
         }
         self.agents_chat_mode_sessions.insert(session_id);
         self.pending_session_chat_composer_focus = Some(session_id);
+        /*
+        CDXC:SessionChatDraftHandoff 2026-08-24:
+        A handed-off draft that never reached the terminal follows the user
+        back into chat instead of leaving them an alarmingly empty composer
+        while it waits, invisible, for another terminal switch. The Saved
+        Prompts row stays — only a confirmed terminal paste may delete it.
+        */
+        if let Some(handoff) = self
+            .pending_session_terminal_composer_insert
+            .remove(&session_id)
+        {
+            self.deliver_session_chat_composer_insert(session_id, handoff.content, cx);
+        }
         self.reconcile_agents_pane_surfaces(cx);
         self.persist_shell_layout_state();
         cx.notify();
@@ -2056,6 +2069,8 @@ impl GhostexGpuiApp {
         for session_id in stale_surface_ids {
             self.session_chat_composer_ready_sessions
                 .remove(&session_id);
+            self.session_chat_composer_empty_reports.remove(&session_id);
+            self.agents_chat_surface_hidden_since.remove(&session_id);
             if let Some(surface) = self.agents_chat_surfaces.remove(&session_id) {
                 surface.update(cx, |surface, _| surface.set_visible(false));
             }
@@ -2092,7 +2107,143 @@ impl GhostexGpuiApp {
         for (session_id, surface) in &self.agents_chat_surfaces {
             let visible = visible_session_ids.contains(session_id);
             surface.update(cx, |surface, _| surface.set_visible(visible));
+            /*
+            CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+            The hidden clock the RAM eviction pass reads. `or_insert_with` is
+            load-bearing: a surface that is already aging must keep its original
+            stamp across every later hidden pass, and only a pass that actually
+            showed it clears the clock. Reconcile runs on drags, mode switches,
+            and pane edits, so overwriting here would keep resetting the timer
+            and nothing would ever expire.
+            */
+            if visible {
+                self.agents_chat_surface_hidden_since.remove(session_id);
+            } else {
+                self.agents_chat_surface_hidden_since
+                    .entry(*session_id)
+                    .or_insert_with(Instant::now);
+            }
         }
+    }
+
+    /*
+    CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+    Destroy the Chromium page behind a chat surface nobody has looked at for
+    `GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER`. Chat-mode membership
+    (`agents_chat_mode_sessions`) is deliberately untouched: it is the persisted
+    "this session shows chat, not a terminal" preference, and dropping it would
+    flip the session back to the terminal view. Only the runtime surface goes,
+    and the next reconcile that makes the session visible rebuilds it through
+    the idempotent `ensure_agents_chat_surface`.
+
+    Every gate below protects state that lives ONLY in the page, and each one is
+    conservative: unknown means "do not evict".
+    */
+    pub(crate) fn evict_expired_hidden_agents_chat_surfaces(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let expired_session_ids = self
+            .agents_chat_surface_hidden_since
+            .iter()
+            .filter(|(session_id, hidden_since)| {
+                hidden_since.elapsed() >= GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER
+                    && self.agents_chat_surfaces.contains_key(session_id)
+                    && self.agents_chat_surface_evictable(**session_id)
+            })
+            .map(|(session_id, _)| *session_id)
+            .collect::<Vec<_>>();
+        let evicted_any = !expired_session_ids.is_empty();
+        for session_id in expired_session_ids {
+            let Some(surface) = self.agents_chat_surfaces.remove(&session_id) else {
+                continue;
+            };
+            surface.update(cx, |surface, _| surface.set_visible(false));
+            drop(surface);
+            self.session_chat_composer_ready_sessions
+                .remove(&session_id);
+            self.session_chat_composer_empty_reports.remove(&session_id);
+            self.agents_chat_surface_hidden_since.remove(&session_id);
+        }
+        if evicted_any {
+            // A frame could still be rendering the surface if the render tree
+            // and the reconcile visibility set ever disagree; request a redraw
+            // so no stale frame outlives its browser.
+            cx.notify();
+        }
+    }
+
+    /// Whether a hidden chat surface holds nothing that would be destroyed with
+    /// its page. See `evict_expired_hidden_agents_chat_surfaces`.
+    fn agents_chat_surface_evictable(&self, session_id: TerminalSessionId) -> bool {
+        // Only an idle agent is evictable. A working or attention session is
+        // producing output the user is coming back to, and a session the shell
+        // no longer knows about has an unknown status rather than an idle one.
+        let Some(session) = self.agents_workspace.session(session_id) else {
+            return false;
+        };
+        if session.activity != AgentTerminalActivity::Idle {
+            return false;
+        }
+        // A composer with typed text or attached images is unsent user content
+        // that lives in the page. The page reports its emptiness on mount, on
+        // every empty↔non-empty transition, and again on composer blur (the
+        // moment the surface is hidden). Eviction requires an explicit "empty"
+        // report: a missing entry means the report was lost or the page never
+        // finished loading, and unknown must never read as "empty" to a pass
+        // that destroys pages. The ready check keeps the page's bridge
+        // registration as a second precondition.
+        if !self
+            .session_chat_composer_ready_sessions
+            .contains(&session_id)
+            || self.session_chat_composer_empty_reports.get(&session_id) != Some(&true)
+        {
+            return false;
+        }
+        // An armed delayed send is a promise to type into this session later.
+        if self.agents_delayed_send_timers.contains_key(&session_id)
+            || self
+                .agents_send_when_stopped_watchers
+                .contains_key(&session_id)
+        {
+            return false;
+        }
+        // In-flight handoffs and one-shot composer messages all terminate at a
+        // page that has to still be there to receive them.
+        if self
+            .pending_session_chat_draft_handoffs
+            .contains(&session_id)
+            || self.pending_session_chat_composer_focus == Some(session_id)
+            || self
+                .pending_session_chat_composer_insert
+                .contains_key(&session_id)
+        {
+            return false;
+        }
+        true
+    }
+
+    pub(crate) fn start_agents_chat_surface_eviction_polling(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(GPUI_AGENTS_CHAT_SURFACE_EVICT_POLL_INTERVAL)
+                    .await;
+
+                if this
+                    .update(cx, |this, cx| {
+                        this.evict_expired_hidden_agents_chat_surfaces(cx);
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     pub(crate) fn remove_agents_chat_surface_for_session(
@@ -2103,6 +2254,8 @@ impl GhostexGpuiApp {
         self.agents_chat_mode_sessions.remove(&session_id);
         self.session_chat_composer_ready_sessions
             .remove(&session_id);
+        self.session_chat_composer_empty_reports.remove(&session_id);
+        self.agents_chat_surface_hidden_since.remove(&session_id);
         if self.pending_session_chat_composer_focus == Some(session_id) {
             self.pending_session_chat_composer_focus = None;
         }
@@ -2130,6 +2283,8 @@ impl GhostexGpuiApp {
         self.agents_chat_auto_switch_observed_sessions.clear();
         self.pending_agents_chat_launch_intents.clear();
         self.session_chat_composer_ready_sessions.clear();
+        self.session_chat_composer_empty_reports.clear();
+        self.agents_chat_surface_hidden_since.clear();
         self.pending_session_chat_composer_focus = None;
         self.pending_session_chat_composer_insert.clear();
         // Same contract as the per-session teardown above: every dropped

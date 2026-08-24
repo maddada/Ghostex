@@ -9,22 +9,28 @@
 // (/api/requestSessionRename via an inline input), Sleep, Fork (focuses the
 // created session like the sidebar fork), Full Reload (sleep→wake, the same
 // composition gpui uses), and Export Transcript (the daemon writes the
-// markdown and ExportTranscriptModalHost shows the result). Delayed Actions,
-// Prompt Editor, Stash Prompt,
-// the Prompts modal, and Attach File or Folder need native pickers, terminal
-// buffer access, or modal hosts the web app does not have.
+// markdown and ExportTranscriptModalHost shows the result). Delayed Actions
+// is also exposed beside the chat composer through the web modal host. Prompt
+// Editor, Stash Prompt, the Prompts modal, and Attach File or Folder need
+// native pickers, terminal buffer access, or modal hosts the web app does not
+// have.
 
 import { useEffect, useMemo, useState } from 'react';
 import type {
-  GxserverExportSessionTranscriptResult,
   GxserverForkSessionResult,
   GxserverSessionRenameRequestResult,
 } from '@/packages/shared/gxserver-protocol';
-import { resolveSessionChatTranscriptAgent } from '@/packages/shared/session-chat';
+import {
+  resolveSessionChatDisplayAgent,
+  resolveSessionChatTranscriptAgent,
+} from '@/packages/shared/session-chat';
+import { getSidebarAgentIconById } from '@/packages/shared/sidebar-agents';
+import { openAppModal } from '@/packages/core-ui/app-modal-host-bridge';
 import { SessionChatView, type SessionChatHostActions } from '@/packages/core-ui/chat/session-chat-view';
 import '@/packages/core-ui/styles.css';
 import { rpcForMachine } from '../connections/connection-registry';
 import type { GhostexWebFocusSessionDetail } from '../sidebar-runtime/sidebar-runtime';
+import { createSidebarSessionId } from '../sidebar-runtime/sidebar-ids';
 import type { WorkspaceSession } from '../workspace/workspace-model';
 import { createSessionChatTransport } from '../chat/session-chat-transport';
 import type { ExportTranscriptSessionRef } from './action-events';
@@ -32,6 +38,25 @@ import { publishExportTranscriptStatus } from './export-transcript-modal-host';
 import { readWebSettings, WEB_SETTINGS_CHANGED_EVENT } from './web-settings';
 
 const CHAT_ACTION_REASON = 'ghostex-web-chat';
+
+function openSessionDelayedActions(session: WorkspaceSession): void {
+  const agentIcon = getSidebarAgentIconById(
+    resolveSessionChatTranscriptAgent(session.agentId, session.agentIcon) ?? undefined
+  );
+  openAppModal({
+    ...(agentIcon ? { agentIcon } : {}),
+    ...(session.delayedSendDeadlineAt ? { delayedSendDeadlineAt: session.delayedSendDeadlineAt } : {}),
+    ...(session.delayedSendRemainingLabel ? { delayedSendRemainingLabel: session.delayedSendRemainingLabel } : {}),
+    modal: 'delayedSend',
+    sendWhenAllProjectSessionsStopActive: session.sendWhenAllProjectSessionsStopActive === true,
+    sendWhenAgentStopsActive: session.sendWhenAgentStopsActive === true,
+    sessionId: createSidebarSessionId(session.machineId, session.projectId, session.sessionId),
+    supportsSendWhenAgentStops: true,
+    supportsSendWhenAllProjectSessionsStop: true,
+    title: session.title,
+    type: 'open',
+  });
+}
 
 async function runChatAgentAction(session: WorkspaceSession, actionId: string, value?: string): Promise<void> {
   const lifecycleParams = {
@@ -98,6 +123,12 @@ async function runChatAgentAction(session: WorkspaceSession, actionId: string, v
       await rpcForMachine(session.machineId, '/api/wakeSession', lifecycleParams);
       return;
     case 'exportTranscript': {
+      /*
+      CDXC:ExportTranscriptOptions 2026-08-24:
+      The action only opens the Export Transcript dialog on its include-toggle
+      options stage; ExportTranscriptModalHost runs the daemon call once the
+      user confirms and renders the structured result or failure.
+      */
       const target: ExportTranscriptSessionRef = {
         ...(session.agentId ? { agentId: session.agentId } : {}),
         machineId: session.machineId,
@@ -105,26 +136,7 @@ async function runChatAgentAction(session: WorkspaceSession, actionId: string, v
         sessionId: session.sessionId,
         sessionTitle: session.title,
       };
-      publishExportTranscriptStatus({ ...target, status: 'exporting' });
-      /*
-      The export can fail for reasons the user has to read (unsupported agent,
-      transcript not found yet), so the structured gxserver message goes to the
-      result dialog instead of the console-only path the other actions take.
-      */
-      try {
-        const result = await rpcForMachine<GxserverExportSessionTranscriptResult>(
-          session.machineId,
-          '/api/exportSessionTranscript',
-          { projectId: session.projectId, sessionId: session.sessionId }
-        );
-        publishExportTranscriptStatus({ ...target, result, status: 'exported' });
-      } catch (error: unknown) {
-        publishExportTranscriptStatus({
-          ...target,
-          message: error instanceof Error ? error.message : String(error),
-          status: 'failed',
-        });
-      }
+      publishExportTranscriptStatus({ ...target, status: 'requested' });
       return;
     }
     default:
@@ -182,7 +194,7 @@ export function SessionChatHost({
     () => createSessionChatTransport(session.machineId, session.projectId, session.sessionId),
     [session.machineId, session.projectId, session.sessionId]
   );
-  const agentLabel = resolveSessionChatTranscriptAgent(session.agentId, session.agentIcon) ?? session.agentId ?? null;
+  const agentLabel = resolveSessionChatDisplayAgent(session.agentId, session.agentIcon) ?? session.agentId ?? null;
   const hostActions = useMemo<SessionChatHostActions | undefined>(
     () => (onSwitchToTerminal ? createWebSessionHostActions(session, onSwitchToTerminal) : undefined),
     [onSwitchToTerminal, session]
@@ -196,6 +208,7 @@ export function SessionChatHost({
       // Served from node_modules in dev and copied into dist by the vite
       // config's monaco plugin.
       monacoVsBaseUrl='/monaco/vs'
+      onDelayedActions={() => openSessionDelayedActions(session)}
       sessionKey={`${session.machineId}:${session.projectId}:${session.sessionId}`}
       theme={chatSettings.sessionChatTheme}
       transport={transport}

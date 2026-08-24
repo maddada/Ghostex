@@ -15,8 +15,10 @@ use crate::{
     events::GxserverEventHub,
     paths::GxserverPaths,
     presentation::{
-        build_presentation_session_delta, increment_presentation_revision, presentation_activity,
+        build_presentation_session_delta, effective_lifecycle_state,
+        increment_presentation_revision, presentation_activity,
     },
+    session_chat_queue::{SessionChatQueuePublisherFactory, SessionChatQueueSenderFactory},
     storage::open_gxserver_database,
 };
 
@@ -57,7 +59,12 @@ impl DelayedSendRuntime {
         }
     }
 
-    pub fn start(&self, mut shutdown_rx: broadcast::Receiver<()>) {
+    pub fn start(
+        &self,
+        mut shutdown_rx: broadcast::Receiver<()>,
+        chat_sender_factory: SessionChatQueueSenderFactory,
+        chat_publisher_factory: SessionChatQueuePublisherFactory,
+    ) {
         /*
         CDXC:GxserverDelayedSends 2026-08-17:
         The session-hosting daemon owns the clock and activity watcher. On a
@@ -75,7 +82,8 @@ impl DelayedSendRuntime {
                 tokio::select! {
                     _ = shutdown_rx.recv() => break,
                     _ = interval.tick() => {
-                        let _ = runtime.run_scheduler_tick();
+                        let _ = runtime
+                            .run_scheduler_tick(&chat_sender_factory, &chat_publisher_factory);
                     }
                 }
             }
@@ -247,10 +255,14 @@ impl DelayedSendRuntime {
         Ok(())
     }
 
-    fn run_scheduler_tick(&self) -> Result<(), DomainStateError> {
+    fn run_scheduler_tick(
+        &self,
+        chat_sender_factory: &SessionChatQueueSenderFactory,
+        chat_publisher_factory: &SessionChatQueuePublisherFactory,
+    ) -> Result<(), DomainStateError> {
         let db = open_gxserver_database(&self.paths).map_err(internal_error)?;
         for record in read_armed_records(&db)? {
-            self.refresh_record(&db, record)?;
+            self.refresh_record(&db, record, chat_sender_factory, chat_publisher_factory)?;
         }
         Ok(())
     }
@@ -259,6 +271,8 @@ impl DelayedSendRuntime {
         &self,
         db: &Connection,
         record: DelayedSendRecord,
+        chat_sender_factory: &SessionChatQueueSenderFactory,
+        chat_publisher_factory: &SessionChatQueuePublisherFactory,
     ) -> Result<(), DomainStateError> {
         let repository = DomainRepository::new(db, self.server_id.as_str());
         let Some(target) = repository.get_session(&record.project_id, &record.session_id)? else {
@@ -273,8 +287,16 @@ impl DelayedSendRuntime {
                 .and_then(parse_timestamp)
                 .is_some_and(|deadline| now >= deadline),
             "agentStops" | "allAgentsStop" => {
+                // A session counts as working only while it is effectively
+                // running: stopped rows keep their last agentActivity payload
+                // forever, so a stale 'working' on a dead session must never
+                // hold the ten-second stability window open.
+                let session_is_working = |session: &Value| {
+                    effective_lifecycle_state(session) == "running"
+                        && presentation_activity(session, &now_iso()) == "working"
+                };
                 let working = if record.trigger == "agentStops" {
-                    presentation_activity(&target, &now_iso()) == "working"
+                    session_is_working(&target)
                 } else {
                     repository
                         .list_sessions(Some(&record.project_id))?
@@ -285,7 +307,7 @@ impl DelayedSendRuntime {
                                 Some("terminal" | "agent")
                             )
                         })
-                        .any(|session| presentation_activity(session, &now_iso()) == "working")
+                        .any(session_is_working)
                 };
                 if working {
                     if record.non_working_since_at.is_some() {
@@ -297,7 +319,16 @@ impl DelayedSendRuntime {
                     .as_deref()
                     .and_then(parse_timestamp)
                 {
-                    now.signed_duration_since(since).num_milliseconds() >= DELAYED_SEND_STABILITY_MS
+                    let due = now.signed_duration_since(since).num_milliseconds()
+                        >= DELAYED_SEND_STABILITY_MS;
+                    if !due {
+                        // The projected remaining label is computed from `now`,
+                        // so the ten-second countdown only moves on clients if
+                        // every tick republishes the session while the
+                        // stability window is running.
+                        self.publish_session_change(db, &record.project_id, &record.session_id)?;
+                    }
+                    due
                 } else {
                     self.update_non_working_since(db, &record, Some(now_iso()))?;
                     false
@@ -306,7 +337,7 @@ impl DelayedSendRuntime {
             _ => false,
         };
         if due {
-            self.fire_record(db, &record)?;
+            self.fire_record(db, &record, chat_sender_factory, chat_publisher_factory)?;
         }
         Ok(())
     }
@@ -338,6 +369,8 @@ impl DelayedSendRuntime {
         &self,
         db: &Connection,
         record: &DelayedSendRecord,
+        chat_sender_factory: &SessionChatQueueSenderFactory,
+        chat_publisher_factory: &SessionChatQueuePublisherFactory,
     ) -> Result<(), DomainStateError> {
         let claimed = db
             .execute(
@@ -363,6 +396,49 @@ impl DelayedSendRuntime {
                 Some("The target session no longer exists."),
             );
         };
+        /*
+        CDXC:GxserverDelayedSends 2026-08-24:
+        Chat clients hand the terminal composer's text off into the synced chat
+        draft, so by the time a Delayed Send fires the message the user staged
+        often no longer sits on the input line — a bare Enter would submit an
+        empty prompt and silently drop it. When a non-empty draft exists, the
+        fire delivers it through the full internal chat send (paste + submit +
+        delivery watchdog) and clears the draft on success; only a draftless
+        session gets the historical bare Enter into whatever is on its input
+        line.
+        */
+        let draft_text = crate::session_chat_queue::armed_delayed_send_draft_text(
+            db,
+            &record.project_id,
+            &record.session_id,
+        )?;
+        if let Some(text) = draft_text {
+            let sender = chat_sender_factory(&record.project_id, &record.session_id);
+            let publisher = chat_publisher_factory(&record.project_id, &record.session_id);
+            let runtime = self.clone();
+            let record = record.clone();
+            tokio::spawn(async move {
+                let outcome = sender(text).await;
+                let Ok(db) = open_gxserver_database(&runtime.paths) else {
+                    return;
+                };
+                let _ = match outcome {
+                    Ok(()) => {
+                        let _ = crate::session_chat_queue::clear_session_chat_draft_after_delivery(
+                            &db,
+                            &record.project_id,
+                            &record.session_id,
+                        );
+                        publisher();
+                        runtime.finish_record(&db, &record, "completed", None)
+                    }
+                    Err(message) => {
+                        runtime.finish_record(&db, &record, "failed", Some(message.as_str()))
+                    }
+                };
+            });
+            return Ok(());
+        }
         let zmx_name = match crate::zmx::provider_zmx_session_name(&session) {
             Ok(zmx_name) => zmx_name,
             Err(error) => {

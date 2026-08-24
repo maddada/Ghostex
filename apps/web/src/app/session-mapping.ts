@@ -27,6 +27,10 @@ export function presentationSessionToWorkspaceSession(
       : {}),
     ...(session.agentId ? { agentId: session.agentId } : {}),
     ...(session.agentSessionId ? { agentSessionId: session.agentSessionId } : {}),
+    ...(session.delayedSendDeadlineAt ? { delayedSendDeadlineAt: session.delayedSendDeadlineAt } : {}),
+    ...(session.delayedSendRemainingLabel ? { delayedSendRemainingLabel: session.delayedSendRemainingLabel } : {}),
+    ...(session.sendWhenAllProjectSessionsStopActive === true ? { sendWhenAllProjectSessionsStopActive: true } : {}),
+    ...(session.sendWhenAgentStopsActive === true ? { sendWhenAgentStopsActive: true } : {}),
     ...(typeof session.queuedPromptCount === 'number' && session.queuedPromptCount > 0
       ? { queuedPromptCount: session.queuedPromptCount }
       : {}),
