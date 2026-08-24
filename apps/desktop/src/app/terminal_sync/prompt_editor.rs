@@ -532,9 +532,9 @@ impl GhostexGpuiApp {
             the same interaction.
             */
             if !self.titlebar_mode_available(TitlebarMode::Browser) {
-                self.copy_target_for_disabled_project_workarea(
+                self.copy_path_for_disabled_project_workarea(
                     open_value,
-                    TitlebarMode::Browser,
+                    "Browser",
                     cx,
                 );
                 return;

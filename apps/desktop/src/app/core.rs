@@ -369,7 +369,11 @@ pub struct GhostexGpuiApp {
     pub(crate) pending_session_chat_composer_focus: Option<TerminalSessionId>,
     pub(crate) pending_session_chat_composer_insert: HashMap<TerminalSessionId, String>,
     /// Chat-to-terminal drafts waiting for the exact terminal owner to remount.
-    pub(crate) pending_session_terminal_composer_insert: HashMap<TerminalSessionId, String>,
+    /// Each entry names the Saved Prompts row that holds the same text, so
+    /// dropping the entry (teardown, a session that never comes back) leaves a
+    /// recoverable copy behind instead of destroying the draft.
+    pub(crate) pending_session_terminal_composer_insert:
+        HashMap<TerminalSessionId, crate::app::session_chat::GpuiSessionChatDraftHandoff>,
     pub(crate) pending_session_chat_draft_handoffs: HashSet<TerminalSessionId>,
     /// Queued Ghostex prompts per on-screen terminal-view session, the input to
     /// the pane's "Queued: N" chrome row. Absent means zero.

@@ -1495,8 +1495,11 @@ impl TerminalView {
     }
 
     /// Host-initiated paste (app-level Cmd+V routing): honors bracketed
-    /// paste mode like the element's own clipboard shortcut.
-    pub fn paste_text(&mut self, text: &str, cx: &mut Context<Self>) {
+    /// paste mode like the element's own clipboard shortcut. Returns whether
+    /// the bytes actually reached the pty, so a caller that is holding the
+    /// only in-memory copy of the text (the chat → terminal draft handoff)
+    /// can keep it until the write is confirmed instead of before it.
+    pub fn paste_text(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
         crate::support_logs::append_temporary(
             crate::support_logs::GpuiSupportLog::TerminalFocus,
             "TEMP.gpui.fluidVoice.compositedPaste",
@@ -1507,10 +1510,11 @@ impl TerminalView {
             }),
         );
         if text.is_empty() {
-            return;
+            return false;
         }
-        let _ = self.model.send_paste(text);
+        let written = self.model.send_paste(text).is_ok();
         self.after_send_input(cx);
+        written
     }
 
     /// Host-initiated Return (delayed send, rename submission), encoded

@@ -922,11 +922,19 @@ impl GhostexGpuiApp {
                         window,
                         cx,
                     );
-                    if let Some(content) = self
+                    // Remove-after-success: the pending record is the app's
+                    // only pointer at the draft's durable Saved Prompts row,
+                    // so a paste the terminal did not take must leave it in
+                    // place for the next focus handoff to retry.
+                    if let Some(handoff) = self
                         .pending_session_terminal_composer_insert
-                        .remove(&slot_id.session_id)
+                        .get(&slot_id.session_id)
+                        .cloned()
+                        && view.update(cx, |view, cx| view.paste_text(&handoff.content, cx))
                     {
-                        view.update(cx, |view, cx| view.paste_text(&content, cx));
+                        self.pending_session_terminal_composer_insert
+                            .remove(&slot_id.session_id);
+                        self.release_session_chat_draft_handoff_stash(handoff, cx);
                     }
                     return;
                 }
@@ -988,11 +996,15 @@ impl GhostexGpuiApp {
             window,
             cx,
         );
-        if let Some(content) = self
+        if let Some(handoff) = self
             .pending_session_terminal_composer_insert
-            .remove(&slot_id.session_id)
+            .get(&slot_id.session_id)
+            .cloned()
+            && view.update(cx, |view, cx| view.paste_text(&handoff.content, cx))
         {
-            view.update(cx, |view, cx| view.paste_text(&content, cx));
+            self.pending_session_terminal_composer_insert
+                .remove(&slot_id.session_id);
+            self.release_session_chat_draft_handoff_stash(handoff, cx);
         }
     }
 
@@ -1082,7 +1094,7 @@ impl GhostexGpuiApp {
         &mut self,
         slot_id: AgentsTerminalBodyMountSlotId,
         _window: &mut Window,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) {
         if self.pending_agents_terminal_text_focus_slot != Some(slot_id) {
             return;
@@ -1105,14 +1117,31 @@ impl GhostexGpuiApp {
         }
         self.pending_agents_terminal_text_focus_slot = None;
         self.sync_agents_terminal_ghostty_surface_focus_with_appkit_handoff(true);
-        if let Some(content) = self
+        /*
+        CDXC:SessionChatDraftHandoff 2026-08-24:
+        A multi-line draft must reach the agent's composer as ONE paste, not as
+        N submitted lines, and it already does: these bytes go to
+        `ghostty_surface_text`, whose callback is Ghostty's own paste completion
+        (`Surface.completeClipboardPaste`). That encoder reads the live terminal
+        state and adds the `ESC[200~`/`ESC[201~` fenceposts itself when
+        bracketed-paste mode is on (and rewrites newlines to CR when it is not),
+        exactly like the gpui-engine pipeline's `send_paste`. Do NOT pre-frame
+        the draft here: the same encoder replaces raw `ESC` bytes with spaces
+        before wrapping, so a hand-written fencepost would arrive as literal
+        "[200~" text inside the agent's prompt.
+        */
+        if let Some(handoff) = self
             .pending_session_terminal_composer_insert
             .get(&slot_id.session_id)
             .cloned()
-            && self.send_text_bytes_to_mounted_agents_terminal_surface(slot_id, content.as_bytes())
+            && self.send_text_bytes_to_mounted_agents_terminal_surface(
+                slot_id,
+                handoff.content.as_bytes(),
+            )
         {
             self.pending_session_terminal_composer_insert
                 .remove(&slot_id.session_id);
+            self.release_session_chat_draft_handoff_stash(handoff, cx);
         }
     }
 
@@ -1175,7 +1204,7 @@ impl GhostexGpuiApp {
         &mut self,
         slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
         _window: &mut Window,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) {
         if self.pending_project_editor_companion_terminal_text_focus_slot != Some(slot_id) {
             return;
@@ -1197,16 +1226,17 @@ impl GhostexGpuiApp {
         }
         self.pending_project_editor_companion_terminal_text_focus_slot = None;
         self.sync_project_editor_companion_terminal_ghostty_surface_focus_with_appkit_handoff(true);
-        if let Some(content) = self
+        if let Some(handoff) = self
             .pending_session_terminal_composer_insert
             .get(&slot_id.session_id)
             .cloned()
             && self.send_text_bytes_to_focused_project_editor_companion_terminal_surface(
-                content.as_bytes(),
+                handoff.content.as_bytes(),
             )
         {
             self.pending_session_terminal_composer_insert
                 .remove(&slot_id.session_id);
+            self.release_session_chat_draft_handoff_stash(handoff, cx);
         }
     }
 

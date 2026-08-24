@@ -78,7 +78,7 @@ impl GhostexGpuiApp {
         instead of an Action that appears to do nothing.
         */
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
-            self.copy_target_for_disabled_project_workarea(&url, TitlebarMode::Browser, cx);
+            self.copy_path_for_disabled_project_workarea(&url, "Browser", cx);
             return;
         }
         self.active_mode = TitlebarMode::Browser;

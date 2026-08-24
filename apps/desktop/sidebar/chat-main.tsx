@@ -482,9 +482,10 @@ function createGpuiSessionChatComposerBridge(
       const requestHandoffToTerminal = (): void => {
         void actions
           .handoffToTerminal()
-          .then((content) => {
+          .then((handoff) => {
             postSessionChatHostAction("draftHandoffToTerminalComplete", {
-              content,
+              content: handoff.content,
+              stashedPromptId: handoff.stashedPromptId ?? "",
             });
           })
           .catch(() => {
@@ -512,6 +513,16 @@ function createGpuiSessionChatComposerBridge(
         }
       };
     },
+    /*
+    CDXC:SessionChatDraftHandoff 2026-08-24:
+    A transient stash is the durable copy of a draft that is about to leave the
+    composer for the terminal, so it must OUTLIVE the move. Deleting it here
+    (which this used to do, immediately) left the text owned by nothing but a
+    Rust HashMap, and every failure after that point — a torn-down chat
+    surface, a paste the terminal refused, a session that never remounted —
+    destroyed it. The row id rides back to Rust instead, and Rust deletes the
+    row only once a terminal confirms it took the text.
+    */
     async stashPrompt(content, options) {
       const result = await rpc<{
         created?: boolean;
@@ -522,14 +533,11 @@ function createGpuiSessionChatComposerBridge(
         sessionId,
       });
       const promptId = result.prompt?.promptId;
-      if (options?.transient && result.created === true && promptId) {
-        try {
-          await rpc(bootstrap, "/api/deleteStashedPrompt", { promptId });
-        } catch {
-          // The draft is already durable. Cleanup can be retried from Prompts
-          // without turning a successful handoff into lost composer text.
-        }
-      }
+      // Only a row this save created may ever be deleted again: `created:
+      // false` means the text matched a prompt the user saved by hand.
+      return options?.transient && result.created === true && promptId
+        ? { promptId }
+        : {};
     },
   };
 }

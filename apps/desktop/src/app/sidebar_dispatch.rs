@@ -708,9 +708,9 @@ impl GhostexGpuiApp {
                 back the path instead of switching to a disabled workarea.
                 */
                 if !this.titlebar_mode_available(TitlebarMode::Source) {
-                    this.copy_target_for_disabled_project_workarea(
+                    this.copy_path_for_disabled_project_workarea(
                         &requested_path_text,
-                        TitlebarMode::Source,
+                        "Code",
                         cx,
                     );
                     return;

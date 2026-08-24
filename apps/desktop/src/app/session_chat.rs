@@ -22,6 +22,27 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::app::window::*;
 use crate::*;
+
+/*
+CDXC:SessionChatDraftHandoff 2026-08-24:
+A draft moving from the chat composer to the terminal is never held in memory
+alone. The page saves it to Saved Prompts BEFORE it clears the composer, and
+this record carries that row's id next to the text, so the row is deleted only
+after a terminal confirms the paste. Every other outcome — a failed paste, a
+chat surface torn down mid-move, a session that never remounts — drops this
+record and leaves the row standing in Saved Prompts, where the user can get the
+text back by hand. Losing the text is the one outcome this shape forbids.
+*/
+#[derive(Clone, Debug)]
+pub(crate) struct GpuiSessionChatDraftHandoff {
+    /// Exact composer text the terminal must receive.
+    pub(crate) content: String,
+    /// The Saved Prompts row holding the durable copy, when this handoff
+    /// created it. `None` means the save matched a prompt the user had already
+    /// saved by hand, which must stay in Saved Prompts.
+    pub(crate) stashed_prompt_id: Option<String>,
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn sidebar_bridge_event_handler(
         &self,
@@ -194,14 +215,25 @@ impl GhostexGpuiApp {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default()
                 .to_string();
+            let stashed_prompt_id = message
+                .get("stashedPromptId")
+                .and_then(serde_json::Value::as_str)
+                .filter(|prompt_id| !prompt_id.is_empty())
+                .map(str::to_string);
             if !content.is_empty() {
                 // The terminal view already owns the pane while this
                 // asynchronous copy finishes. Keep the cleared composer
                 // snapshot until the exact terminal owner has remounted and
                 // completed its focus handoff; inserting synchronously here
-                // still races that remount.
-                self.pending_session_terminal_composer_insert
-                    .insert(session_id, content);
+                // still races that remount. The Saved Prompts row named above
+                // holds the same text for the whole of that wait.
+                self.pending_session_terminal_composer_insert.insert(
+                    session_id,
+                    GpuiSessionChatDraftHandoff {
+                        content,
+                        stashed_prompt_id,
+                    },
+                );
             }
             self.reconcile_agents_chat_surfaces(cx);
             return;
@@ -620,6 +652,33 @@ impl GhostexGpuiApp {
         self.toggle_agents_session_chat_mode(session_id, cx);
     }
 
+    /*
+    CDXC:SessionChatDraftHandoff 2026-08-24:
+    The single point where a handed-off draft stops being recoverable, reached
+    only from a terminal drain that has confirmed the text reached the pty.
+    Nothing else may delete the row: an unconfirmed paste keeps the pending
+    record so the next focus handoff retries it, and a dropped record leaves
+    the row in Saved Prompts on purpose.
+    */
+    pub(crate) fn release_session_chat_draft_handoff_stash(
+        &self,
+        handoff: GpuiSessionChatDraftHandoff,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(prompt_id) = handoff.stashed_prompt_id else {
+            return;
+        };
+        cx.background_executor()
+            .spawn(async move {
+                let _ = gpui_gxserver_rpc_result(
+                    "/api/deleteStashedPrompt",
+                    &serde_json::json!({ "promptId": prompt_id }),
+                    std::time::Duration::from_secs(5),
+                );
+            })
+            .detach();
+    }
+
     pub(crate) fn insert_prompt_into_session_chat(
         &mut self,
         session_id: TerminalSessionId,
@@ -672,17 +731,6 @@ impl GhostexGpuiApp {
             if let Some(url) = normalize_address(url) {
                 let _ = gpui_open_external_http_url(&url);
             }
-            return;
-        }
-        /*
-        CDXC:DisabledPluginRouting 2026-08-23:
-        With Browser turned off in Settings → Customize there is no embedded
-        workarea to send this link to, and silently redirecting it to the OS
-        browser would contradict the reader's own "open links in embedded
-        browser" choice. Copy it and say so instead.
-        */
-        if !self.titlebar_mode_available(TitlebarMode::Browser) {
-            self.copy_target_for_disabled_project_workarea(url, TitlebarMode::Browser, cx);
             return;
         }
         self.open_browser_url_from_renderer_command(
@@ -754,8 +802,8 @@ impl GhostexGpuiApp {
                 session_chat_file_opens_in_docs(relative, &docs_folders)
             });
         if let Some(relative_path) = docs_relative_path {
-            if !self.titlebar_mode_available(TitlebarMode::Manage) {
-                self.copy_target_for_disabled_project_workarea(trimmed, TitlebarMode::Manage, cx);
+            if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Manage) {
+                self.copy_path_for_disabled_project_workarea(trimmed, "Docs", cx);
                 return;
             }
             self.report_session_chat_file_opening("Docs view", &file_path, cx);
@@ -768,7 +816,9 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        if !self.titlebar_mode_available(TitlebarMode::Source) {
+        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
+            || !self.titlebar_mode_available(TitlebarMode::Source)
+        {
             /*
             CDXC:GPUTitlebarAvailability 2026-08-20:
             Source is also unavailable for remote projects, where switching
@@ -776,7 +826,7 @@ impl GhostexGpuiApp {
             dead. Fall back to the same copy-the-path affordance the hidden-tab
             case uses instead of parking on an unreachable workarea.
             */
-            self.copy_target_for_disabled_project_workarea(trimmed, TitlebarMode::Source, cx);
+            self.copy_path_for_disabled_project_workarea(trimmed, "Code", cx);
             return;
         }
         /*
@@ -799,51 +849,22 @@ impl GhostexGpuiApp {
         self.focus_project_editor_surface(TitlebarMode::Source, window, cx);
     }
 
-    /**
-    CDXC:DisabledPluginRouting 2026-08-23:
-    The single answer every clicked link, file path, or doc gets when the view
-    that would show it is turned off in Settings → Customize. Refusing the
-    click silently reads as a broken link, and opening the view anyway defeats
-    the setting, so the reader keeps what they clicked on the clipboard and the
-    toast names the view and where the switch lives. Every route that would
-    have switched workareas for a clicked target ends here instead.
-    */
-    pub(crate) fn copy_target_for_disabled_project_workarea(
+    pub(crate) fn copy_path_for_disabled_project_workarea(
         &mut self,
-        target: &str,
-        mode: TitlebarMode,
+        path: &str,
+        plugin_name: &str,
         cx: &mut gpui::Context<Self>,
     ) {
-        let view_name = gpui_titlebar_mode_plugin_display_name(mode);
-        let noun = gpui_disabled_project_workarea_copy_noun(mode);
-        let lowercase_noun = noun.to_ascii_lowercase();
-        /*
-        The same copy affordance covers a workarea the user switched off and a
-        workarea this project cannot host (Source on a machine-scoped remote,
-        every project-scoped view in Quick context). Only the first one is a
-        setting, so only the first one points at Settings; claiming the reader
-        disabled something they did not would send them hunting for a toggle
-        that is already on.
-        */
-        let description = if gpui_titlebar_mode_hidden_from_settings(mode) {
-            format!(
-                "The {view_name} view is disabled under Settings → Customize, so we copied the {lowercase_noun} instead."
-            )
-        } else {
-            format!(
-                "The {view_name} view is not available here, so we copied the {lowercase_noun} instead."
-            )
-        };
-        cx.write_to_clipboard(ClipboardItem::new_string(target.to_string()));
+        cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
         self.upsert_gpui_app_toast(
             GpuiAppToast {
                 id: format!(
-                    "gpui-disabled-{}-target-copied",
-                    view_name.to_ascii_lowercase()
+                    "gpui-disabled-{}-file-path-copied",
+                    plugin_name.to_ascii_lowercase()
                 ),
                 level: GpuiAppToastLevel::from_raw(Some("success")),
-                title: format!("Copied {noun} to Clipboard"),
-                description: Some(description),
+                title: "Copied to Clipboard!".to_string(),
+                description: Some(format!("({plugin_name} plugin is disabled)")),
                 loading: false,
                 persistent: false,
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
@@ -870,8 +891,10 @@ impl GhostexGpuiApp {
         path: &str,
         cx: &mut gpui::Context<Self>,
     ) {
-        if !self.titlebar_mode_available(TitlebarMode::Source) {
-            self.copy_target_for_disabled_project_workarea(path, TitlebarMode::Source, cx);
+        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
+            || !self.titlebar_mode_available(TitlebarMode::Source)
+        {
+            self.copy_path_for_disabled_project_workarea(path, "Code", cx);
             return;
         }
         // Naming Code view is only useful advice when Code view can actually

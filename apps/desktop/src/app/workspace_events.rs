@@ -691,9 +691,9 @@ impl GhostexGpuiApp {
         first and answers with the copied link rather than a dead click.
         */
         if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Browser) {
-            self.copy_target_for_disabled_project_workarea(
+            self.copy_path_for_disabled_project_workarea(
                 &message.url,
-                TitlebarMode::Browser,
+                "Browser",
                 cx,
             );
             return;
@@ -2107,6 +2107,15 @@ impl GhostexGpuiApp {
         }
         self.pending_session_chat_composer_insert
             .remove(&session_id);
+        /*
+        CDXC:SessionChatDraftHandoff 2026-08-24:
+        A handed-off draft that never reached its terminal is dropped here with
+        no way to hand it anywhere else — the chat surface that owned it is
+        going away in the same call. That is survivable only because the record
+        is not the text's only home: the transient Saved Prompts row created
+        before the composer was cleared is deleted solely on a confirmed paste,
+        so this drop leaves the draft recoverable from Prompts.
+        */
         self.pending_session_terminal_composer_insert
             .remove(&session_id);
         self.pending_session_chat_draft_handoffs.remove(&session_id);
@@ -2122,6 +2131,9 @@ impl GhostexGpuiApp {
         self.session_chat_composer_ready_sessions.clear();
         self.pending_session_chat_composer_focus = None;
         self.pending_session_chat_composer_insert.clear();
+        // Same contract as the per-session teardown above: every dropped
+        // handoff still has its Saved Prompts row, which only a confirmed
+        // terminal paste deletes.
         self.pending_session_terminal_composer_insert.clear();
         self.pending_session_chat_draft_handoffs.clear();
         for surface in self.agents_chat_surfaces.values() {
