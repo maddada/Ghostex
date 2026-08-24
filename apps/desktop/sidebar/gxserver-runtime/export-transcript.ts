@@ -1,14 +1,14 @@
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
-Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
-changed. See `core.ts` for how the runtime's methods are re-attached.
+Split out of the single 21,861-line `gxserver-runtime.ts`. See `core.ts` for
+how the runtime's methods are re-attached.
 */
 import type { GpuiSidebarRuntime } from './core';
 import { normalizeNonEmptyString } from './helpers/records';
 import { parseGpuiRemotePresentationSessionId } from './helpers/remote-presentation';
 import { createExportedTranscriptMentionDraft } from './helpers/terminal-lifecycle';
-import type { GpuiExportedTranscriptResult } from './types-and-protocol';
-import { openAppModal } from '@/packages/core-ui/app-modal-host-bridge';
+import type { GpuiExportTranscriptRequestContext } from './types-and-protocol';
+import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import { parseGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type { GxserverExportSessionTranscriptResult } from '@/packages/shared/gxserver-protocol';
 import { createAgentSessionDefaultTitle } from '@/packages/shared/session-grid-contract';
@@ -25,55 +25,42 @@ at the bottom of this file is what keeps the two in step.
 */
 export interface GpuiSidebarRuntimeExportTranscriptMethods {
   exportSessionTranscript(sessionId: string): Promise<void>;
+  runExportSessionTranscriptForDialog(options: {
+    includeCommands: boolean;
+    includePatches: boolean;
+    includeReasoning: boolean;
+  }): Promise<void>;
   resolveExportTranscriptAgentId(agent: string | undefined): string | undefined;
-  openExportedTranscriptResultModal(result: GpuiExportedTranscriptResult): void;
   handleGpuiExportTranscriptModalCommand(payload: unknown): Promise<void>;
 }
 
 export const gpuiSidebarRuntimeExportTranscriptMethods = {
   /*
-  CDXC:ExportTranscript 2026-08-20:
-  Export Transcript is a daemon operation, not a local file read: the agent's
-  raw transcript only exists on the machine that runs it, so the export lands
-  next to the transcript and the returned path is absolute on THAT machine.
-  Local sessions go through the local gxserver client and remote sessions
-  through the machine-scoped tunnel, exactly like Fork. Failures surface the
-  daemon's own message (including `unsupportedAgent`) instead of degrading into
-  a partial export.
+  CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
+  Export Transcript opens its dialog on the include-toggle options stage; the
+  daemon call only runs when the user confirms it there
+  (`runExportSessionTranscriptForDialog`). This method resolves which session
+  the dialog is about — local or remote, exactly like Fork — and parks that
+  context here, because the dialog is a separate child window with no gxserver
+  client of its own.
   */
   async exportSessionTranscript(this: GpuiSidebarRuntime, sessionId: string): Promise<void> {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
-      let exported: GpuiExportedTranscriptResult;
-      try {
-        const result = await this.requestRemoteGxserver<GxserverExportSessionTranscriptResult>(
-          remoteSession.machineId,
-          '/api/exportSessionTranscript',
-          {
-            projectId: remoteSession.projectId,
-            sessionId: remoteSession.sessionId,
-          },
-          { timeoutMs: 60_000 }
-        );
-        const path = normalizeNonEmptyString(result?.path);
-        if (!path) {
-          throw new Error('The remote gxserver did not return the exported file.');
-        }
-        exported = {
-          agentId: this.resolveExportTranscriptAgentId(result?.agent),
-          machineId: remoteSession.machineId,
-          path,
-          projectId: remoteSession.projectId,
-        };
-      } catch (error) {
-        this.postRemoteToast('error', 'Could not export transcript', {
-          description: error instanceof Error ? error.message : String(error),
-        });
-        return;
-      }
-      // Outside the catch: the file is already written, so a failure to present
-      // the result dialog must not be reported as a failed export.
-      this.openExportedTranscriptResultModal(exported);
+      this.pendingExportedTranscript = undefined;
+      this.pendingExportTranscriptRequest = {
+        machineId: remoteSession.machineId,
+        projectId: remoteSession.projectId,
+        sessionId: remoteSession.sessionId,
+      };
+      openAppModal({
+        // A remote export lives on the remote machine's disk, so this host has
+        // nothing to reveal and the dialog hides the button instead of
+        // offering a path the local file manager cannot open.
+        canReveal: false,
+        modal: 'exportTranscriptResult',
+        type: 'open',
+      });
       return;
     }
     const reference = parseGxserverPresentationProjectSessionId(sessionId);
@@ -86,28 +73,93 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
     if (!sourceSession) {
       return;
     }
-    let exported: GpuiExportedTranscriptResult;
+    const agentId = normalizeNonEmptyString(sourceSession.agentId);
+    this.pendingExportedTranscript = undefined;
+    this.pendingExportTranscriptRequest = {
+      ...(agentId ? { agentId } : {}),
+      projectId: reference.projectId,
+      sessionId: reference.sessionId,
+    };
+    openAppModal({
+      ...(agentId ? { agentId } : {}),
+      canReveal: true,
+      modal: 'exportTranscriptResult',
+      type: 'open',
+    });
+  },
+
+  /*
+  CDXC:ExportTranscriptOptions 2026-08-24:
+  The dialog's Export button. The export is a daemon operation, not a local
+  file read: the agent's raw transcript only exists on the machine that runs
+  it, so the export lands next to the transcript and the returned path is
+  absolute on THAT machine. Local sessions go through the local gxserver
+  client and remote sessions through the machine-scoped tunnel. Failures
+  surface the daemon's own message (including `unsupportedAgent`) inside the
+  dialog instead of degrading into a partial export.
+  */
+  async runExportSessionTranscriptForDialog(
+    this: GpuiSidebarRuntime,
+    options: { includeCommands: boolean; includePatches: boolean; includeReasoning: boolean }
+  ): Promise<void> {
+    const request = this.pendingExportTranscriptRequest;
+    if (!request) {
+      return;
+    }
+    // Plain record: the runtime's ids are unbranded strings, matching how the
+    // other daemon RPCs in this runtime build their params.
+    const params: Record<string, unknown> = {
+      includeCommands: options.includeCommands,
+      includePatches: options.includePatches,
+      includeReasoning: options.includeReasoning,
+      projectId: request.projectId,
+      sessionId: request.sessionId,
+    };
     try {
-      const result = await this.client.rpc<GxserverExportSessionTranscriptResult>('/api/exportSessionTranscript', {
-        projectId: reference.projectId,
-        sessionId: reference.sessionId,
-      });
+      const result = request.machineId
+        ? await this.requestRemoteGxserver<GxserverExportSessionTranscriptResult>(
+            request.machineId,
+            '/api/exportSessionTranscript',
+            params,
+            { timeoutMs: 60_000 }
+          )
+        : await (() => {
+            if (!this.client) {
+              throw new Error('The local gxserver connection is not available.');
+            }
+            return this.client.rpc<GxserverExportSessionTranscriptResult>('/api/exportSessionTranscript', params);
+          })();
       const path = normalizeNonEmptyString(result?.path);
       if (!path) {
         throw new Error('gxserver did not return the exported file.');
       }
-      exported = {
-        agentId: normalizeNonEmptyString(sourceSession.agentId) ?? this.resolveExportTranscriptAgentId(result?.agent),
+      const agentId = request.agentId ?? this.resolveExportTranscriptAgentId(result?.agent);
+      this.pendingExportedTranscript = {
+        ...(agentId ? { agentId } : {}),
+        ...(request.machineId ? { machineId: request.machineId } : {}),
         path,
-        projectId: reference.projectId,
+        projectId: request.projectId,
       };
+      postAppModalHostMessage(
+        {
+          ...(agentId ? { agentId } : {}),
+          canReveal: request.machineId === undefined,
+          ok: true,
+          path,
+          type: 'exportSessionTranscriptResult',
+        },
+        'AppModals:exportTranscriptResult'
+      );
     } catch (error) {
-      this.postSidebarActionToast('error', 'Could not export transcript', {
-        description: error instanceof Error ? error.message : String(error),
-      });
-      return;
+      postAppModalHostMessage(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          ok: false,
+          type: 'exportSessionTranscriptResult',
+        },
+        'AppModals:exportTranscriptResult'
+      );
     }
-    this.openExportedTranscriptResultModal(exported);
   },
 
   /**
@@ -127,34 +179,31 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
     );
   },
 
-  openExportedTranscriptResultModal(this: GpuiSidebarRuntime, result: GpuiExportedTranscriptResult): void {
-    this.pendingExportedTranscript = result;
-    openAppModal({
-      ...(result.agentId ? { agentId: result.agentId } : {}),
-      // A remote export lives on the remote machine's disk, so this host has
-      // nothing to reveal and the dialog hides the button instead of offering
-      // a path the local file manager cannot open.
-      canReveal: result.machineId === undefined,
-      modal: 'exportTranscriptResult',
-      path: result.path,
-      type: 'open',
-    });
-  },
-
   /**
-   * "Start new conversation" in the export result dialog. The dialog owns only
-   * the agent choice; the exported path and its project stay in this runtime.
+   * The export dialog's host side effects: run the export with the chosen
+   * include-toggles, or start the follow-up conversation. The dialog owns only
+   * the toggle and agent choices; the exported path and its project stay in
+   * this runtime.
    */
   async handleGpuiExportTranscriptModalCommand(this: GpuiSidebarRuntime, payload: unknown): Promise<void> {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return;
     }
     const record = payload as Record<string, unknown>;
+    if (record.type === 'runExportSessionTranscript') {
+      await this.runExportSessionTranscriptForDialog({
+        includeCommands: record.includeCommands !== false,
+        includePatches: record.includePatches !== false,
+        includeReasoning: record.includeReasoning === true,
+      });
+      return;
+    }
     if (record.type !== 'startExportedTranscriptConversation') {
       return;
     }
     const exported = this.pendingExportedTranscript;
     this.pendingExportedTranscript = undefined;
+    this.pendingExportTranscriptRequest = undefined;
     if (!exported) {
       return;
     }

@@ -1,14 +1,21 @@
-// Result dialog for the Export Transcript agent action. The action itself
-// lives in session-chat-host.tsx (it runs from both the chat surface and the
-// terminal overlay); it reports "exporting" / "exported" / "failed" on one
-// window event and this host — mounted once in the app shell next to the other
-// web modal hosts — renders the outcome.
+// The Export Transcript dialog for the web app. The Agent Actions row only
+// publishes which session to export (`ghostex-web:exportTranscriptStatus`);
+// this host — mounted once in the app shell next to the other web modal hosts
+// — owns the whole flow through the shared ExportTranscriptModal: the
+// include-toggle options stage, the daemon call, and the result stage.
 //
 // The exported markdown sits on the DAEMON's filesystem, so the browser can
 // only offer the path itself (copy) or hand it to a new agent session on that
-// same machine; there is no Reveal in Finder on web.
+// same machine; there is no Reveal in Finder on web (`canReveal` stays false).
 
-import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ExportTranscriptModal,
+  type ExportTranscriptIncludeOptions,
+  type ExportTranscriptModalStage,
+} from '@/packages/core-ui/export-transcript-result-modal';
+import { useSidebarStore } from '@/packages/core-ui/sidebar-store';
+import type { GxserverExportSessionTranscriptResult } from '@/packages/shared/gxserver-protocol';
 import { rpcForMachine } from '../connections/connection-registry';
 import type { GhostexWebFocusSessionDetail } from '../sidebar-runtime/sidebar-runtime';
 import type { ExportTranscriptStatusDetail } from './action-events';
@@ -31,15 +38,18 @@ function transcriptMentionDraft(path: string): string {
 
 export function ExportTranscriptModalHost() {
   const [detail, setDetail] = useState<ExportTranscriptStatusDetail>();
-  const [copied, setCopied] = useState(false);
+  const [stage, setStage] = useState<ExportTranscriptModalStage>({ stage: 'options' });
   const [starting, setStarting] = useState(false);
   const [actionError, setActionError] = useState<string>();
+  // Hydrated by the web sidebar runtime's hydrate/sessionState messages, the
+  // same store the shared sidebar UI reads. Used for the Continue-with picker.
+  const agents = useSidebarStore((state) => state.hud.agents);
 
   const close = useCallback(() => setDetail(undefined), []);
 
   useEffect(() => {
     const onStatus = (event: WindowEventMap['ghostex-web:exportTranscriptStatus']) => {
-      setCopied(false);
+      setStage({ stage: 'options' });
       setStarting(false);
       setActionError(undefined);
       setDetail(event.detail);
@@ -52,40 +62,46 @@ export function ExportTranscriptModalHost() {
     };
   }, [close]);
 
-  useEffect(() => {
-    if (!detail) {
-      return;
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        close();
-      }
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [close, detail]);
-
   if (!detail) {
     return null;
   }
 
-  const copyPath = (path: string) => {
-    void navigator.clipboard.writeText(path).then(
-      () => {
-        setActionError(undefined);
-        setCopied(true);
-      },
-      (error: unknown) => {
-        setCopied(false);
-        setActionError(error instanceof Error ? error.message : String(error));
-      }
-    );
+  const runExport = async (options: ExportTranscriptIncludeOptions) => {
+    setActionError(undefined);
+    setStage({ stage: 'exporting' });
+    /*
+    The export can fail for reasons the user has to read (unsupported agent,
+    transcript not found yet), so the structured gxserver message lands on the
+    dialog's failed stage instead of the console-only path other actions take.
+    */
+    try {
+      const result = await rpcForMachine<GxserverExportSessionTranscriptResult>(
+        detail.machineId,
+        '/api/exportSessionTranscript',
+        {
+          includeCommands: options.includeCommands,
+          includePatches: options.includePatches,
+          includeReasoning: options.includeReasoning,
+          projectId: detail.projectId,
+          sessionId: detail.sessionId,
+        }
+      );
+      setStage({
+        ...(detail.agentId ? { agentId: detail.agentId } : {}),
+        canReveal: false,
+        path: result.path,
+        stage: 'done',
+      });
+    } catch (error: unknown) {
+      setStage({ message: error instanceof Error ? error.message : String(error), stage: 'failed' });
+    }
   };
 
   const startNewConversation = async (path: string, agentId: string) => {
     setActionError(undefined);
     setStarting(true);
     try {
+      const agentName = agents.find((agent) => agent.agentId === agentId)?.name ?? agentId;
       const { session } = await rpcForMachine<{
         session?: { projectId?: string; sessionId?: string };
       }>(detail.machineId, '/api/createAgentSession', {
@@ -94,7 +110,7 @@ export function ExportTranscriptModalHost() {
         requireLaunchCommand: true,
         runtimeSettings: { firstUserInputDraft: transcriptMentionDraft(path) },
         surface: 'workspace',
-        title: `${agentId} Session`,
+        title: `${agentName} Session`,
       });
       const sessionId = session?.sessionId;
       if (!sessionId) {
@@ -116,98 +132,23 @@ export function ExportTranscriptModalHost() {
     }
   };
 
-  const stopPropagation = (event: MouseEvent) => event.stopPropagation();
-
   return (
-    <div className='export-transcript-backdrop' onMouseDown={close} role='presentation'>
-      <section
-        aria-labelledby='export-transcript-title'
-        aria-modal='true'
-        className='export-transcript-modal'
-        onMouseDown={stopPropagation}
-        role='dialog'
-      >
-        <header className='export-transcript-modal__header'>
-          <div>
-            <h2 id='export-transcript-title'>Export Transcript</h2>
-            <p>{detail.sessionTitle}</p>
-          </div>
-          <button
-            aria-label='Close export transcript'
-            className='export-transcript-modal__close'
-            onClick={close}
-            type='button'
-          >
-            ×
-          </button>
-        </header>
-
-        <div className='export-transcript-modal__body'>
-          {detail.status === 'exporting' && (
-            <p className='export-transcript-modal__status' role='status'>
-              Exporting the conversation to markdown…
-            </p>
-          )}
-
-          {detail.status === 'failed' && (
-            <p className='export-transcript-modal__error' role='alert'>
-              {detail.message}
-            </p>
-          )}
-
-          {detail.status === 'exported' && (
-            <>
-              <p className='export-transcript-modal__status'>
-                Saved on the machine running this session, not in this browser.
-              </p>
-              <code className='export-transcript-modal__path'>{detail.result.path}</code>
-              <p className='export-transcript-modal__meta'>
-                {[
-                  ...(detail.result.agent ? [detail.result.agent] : []),
-                  `${detail.result.renderedEntries} of ${detail.result.parsedEntries} entries`,
-                  `${detail.result.bytes.toLocaleString()} bytes`,
-                ].join(' · ')}
-              </p>
-              {actionError && (
-                <p className='export-transcript-modal__error' role='alert'>
-                  {actionError}
-                </p>
-              )}
-              {detail.agentId ? (
-                <p className='export-transcript-modal__meta'>
-                  Starting a new conversation waits with a mention of this file in its input. Nothing is sent until you
-                  write your prompt and send it.
-                </p>
-              ) : (
-                <p className='export-transcript-modal__meta'>
-                  This session reports no agent, so a follow-up conversation cannot be started.
-                </p>
-              )}
-              <div className='export-transcript-modal__actions'>
-                <button
-                  className='export-transcript-modal__button'
-                  onClick={() => copyPath(detail.result.path)}
-                  type='button'
-                >
-                  {copied ? 'Copied' : 'Copy path'}
-                </button>
-                <button
-                  className='export-transcript-modal__button export-transcript-modal__button--primary'
-                  disabled={starting || !detail.agentId}
-                  onClick={() => {
-                    if (detail.agentId) {
-                      void startNewConversation(detail.result.path, detail.agentId);
-                    }
-                  }}
-                  type='button'
-                >
-                  {starting ? 'Starting…' : 'Start new conversation'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </section>
-    </div>
+    <ExportTranscriptModal
+      actionErrorMessage={actionError}
+      agents={agents}
+      defaultAgentId={detail.agentId}
+      isOpen
+      onClose={close}
+      onExport={(options) => {
+        void runExport(options);
+      }}
+      onStartNewConversation={(agentId) => {
+        if (stage.stage === 'done') {
+          void startNewConversation(stage.path, agentId);
+        }
+      }}
+      stage={stage}
+      startBusy={starting}
+    />
   );
 }

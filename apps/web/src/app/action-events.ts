@@ -1,7 +1,4 @@
-import type {
-  GxserverExportSessionTranscriptResult,
-  GxserverSidebarHudCommandButton,
-} from '@/packages/shared/gxserver-protocol';
+import type { GxserverSidebarHudCommandButton } from '@/packages/shared/gxserver-protocol';
 import type { OpenAppModalMessage } from '@/packages/core-ui/app-modal-host-bridge';
 
 export type OpenRecentProjectsModalDetail = Pick<
@@ -10,6 +7,14 @@ export type OpenRecentProjectsModalDetail = Pick<
 >;
 
 export type OpenDelayedActionsModalDetail = Extract<OpenAppModalMessage, { modal: 'delayedSend' }>;
+
+/*
+ * CDXC:SessionAgentNotes 2026-08-24:
+ * The session-note editor's open payload, forwarded verbatim from the shared
+ * sidebar's `openAppModal` call so the web dialog opens on exactly the note the
+ * row was rendering.
+ */
+export type OpenSessionNoteModalDetail = Extract<OpenAppModalMessage, { modal: 'sessionNote' }>;
 
 /*
  * CDXC:AddProject 2026-07-30:
@@ -28,15 +33,15 @@ export interface OpenAddProjectModalDetail {
 }
 
 /*
- * CDXC:ExportTranscript 2026-08-20:
+ * CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
  * The Export Transcript action runs from two mounts of the same host-action
  * cluster (the chat surface and the terminal surface's floating overlay), so
- * its result dialog cannot live inside either one. The action reports every
- * phase on one window event and the single modal host mounted in the app shell
- * renders it — the same split the other web modal hosts use.
+ * its dialog cannot live inside either one. The action only names the session
+ * on one window event; the single modal host mounted in the app shell owns
+ * the whole flow (include-toggle options, the daemon call, the result).
  *
- * `path` in the result is absolute ON THE DAEMON'S MACHINE, never the
- * browser's, which is why the dialog offers Copy path instead of a reveal.
+ * The exported path is absolute ON THE DAEMON'S MACHINE, never the browser's,
+ * which is why the dialog offers Copy path instead of a reveal.
  */
 export interface ExportTranscriptSessionRef {
   machineId: string;
@@ -47,12 +52,7 @@ export interface ExportTranscriptSessionRef {
   agentId?: string;
 }
 
-export type ExportTranscriptStatusDetail = ExportTranscriptSessionRef &
-  (
-    | { status: 'exporting' }
-    | { status: 'exported'; result: GxserverExportSessionTranscriptResult }
-    | { status: 'failed'; message: string }
-  );
+export type ExportTranscriptStatusDetail = ExportTranscriptSessionRef & { status: 'requested' };
 
 export interface RunTitlebarActionDetail {
   action: GxserverSidebarHudCommandButton;
@@ -69,6 +69,7 @@ declare global {
     'ghostex-web:openCommandPane': CustomEvent;
     'ghostex-web:openDelayedActionsModal': CustomEvent<OpenDelayedActionsModalDetail>;
     'ghostex-web:openRecentProjectsModal': CustomEvent<OpenRecentProjectsModalDetail>;
+    'ghostex-web:openSessionNoteModal': CustomEvent<OpenSessionNoteModalDetail>;
     'ghostex-web:runTitlebarAction': CustomEvent<RunTitlebarActionDetail>;
   }
 }

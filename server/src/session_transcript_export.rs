@@ -156,6 +156,36 @@ impl SessionTranscriptExportSelection {
     pub fn includes(&self, section: TranscriptExportSection) -> bool {
         self.sections.contains(&section)
     }
+
+    /// Builds the selection the export dialog's include-toggles describe. The
+    /// conversation itself (session meta, user and agent messages) is never
+    /// optional; the toggles only govern the three record families users
+    /// actually ask to drop or add.
+    pub fn from_include_toggles(
+        include_commands: bool,
+        include_patches: bool,
+        include_reasoning: bool,
+    ) -> Self {
+        let mut sections = vec![
+            TranscriptExportSection::SessionMeta,
+            TranscriptExportSection::UserMessage,
+            TranscriptExportSection::AgentMessage,
+        ];
+        if include_commands {
+            sections.push(TranscriptExportSection::TerminalCmd);
+            sections.push(TranscriptExportSection::TerminalOutput);
+        }
+        if include_patches {
+            sections.push(TranscriptExportSection::Patch);
+        }
+        if include_reasoning {
+            sections.push(TranscriptExportSection::AgentReasoning);
+        }
+        Self {
+            sections,
+            terminal_output_tail_lines: DEFAULT_TERMINAL_OUTPUT_TAIL_LINES,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2560,6 +2590,26 @@ pub(crate) async fn handle_export_session_transcript_http(
         );
     }
 
+    /*
+    CDXC:ExportTranscriptOptions 2026-08-24:
+    The export dialog's include-toggles arrive as three optional booleans.
+    Absent params keep the historical default selection (commands and patches
+    in, reasoning out), so older clients and the CLI export exactly what they
+    always did.
+    */
+    let include_commands = params
+        .get("includeCommands")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let include_patches = params
+        .get("includePatches")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let include_reasoning = params
+        .get("includeReasoning")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
     let resolved = (|| {
         let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
             code: "internalError",
@@ -2589,6 +2639,12 @@ pub(crate) async fn handle_export_session_transcript_http(
     let response_agent = agent.clone();
     let exports_dir = state.paths.app_data_dir.join("exports");
     let export_session_id = session_id.clone();
+    let selection =
+        crate::session_transcript_export::SessionTranscriptExportSelection::from_include_toggles(
+            include_commands,
+            include_patches,
+            include_reasoning,
+        );
     let exported = match tokio::task::spawn_blocking(move || {
         crate::session_transcript_export::export_session_transcript(
             &crate::session_transcript_export::SessionTranscriptExportRequest {
@@ -2598,7 +2654,7 @@ pub(crate) async fn handle_export_session_transcript_http(
                 session_id: &export_session_id,
                 session_title: title.as_deref(),
                 exports_dir: &exports_dir,
-                selection: None,
+                selection: Some(&selection),
             },
         )
     })
