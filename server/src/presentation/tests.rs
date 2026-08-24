@@ -285,9 +285,7 @@ fn snapshot_publishes_the_cached_origin_remote_for_a_project_and_its_worktree_fa
     let published = |project_id: &str, key: &str| -> Option<Value> {
         projects
             .iter()
-            .find(|project| {
-                project.get("projectId").and_then(Value::as_str) == Some(project_id)
-            })
+            .find(|project| project.get("projectId").and_then(Value::as_str) == Some(project_id))
             .expect("published project")
             .get(key)
             .cloned()
@@ -509,8 +507,7 @@ fn snapshot_sorts_sessions_with_sidebar_order_before_absent_order() {
         .expect("session object")
         .remove("sidebarOrder");
 
-    let snapshot =
-        project_snapshot(projects, vec![ordered_later, absent, ordered_new], 7, true);
+    let snapshot = project_snapshot(projects, vec![ordered_later, absent, ordered_new], 7, true);
     let groups = snapshot
         .get("groups")
         .and_then(Value::as_array)

@@ -656,7 +656,10 @@ Best-effort compensation for a session row whose identity pass failed: without
 ids there is nothing to delete, and a delete that fails leaves the same orphan
 the caller is already reporting, so neither case replaces the real error.
 */
-pub(crate) fn remove_created_worktree_session_row(repository: &DomainRepository<'_>, created: &Value) {
+pub(crate) fn remove_created_worktree_session_row(
+    repository: &DomainRepository<'_>,
+    created: &Value,
+) {
     let (Ok(project_id), Ok(session_id)) = (
         value_text(created, "projectId"),
         value_text(created, "sessionId"),

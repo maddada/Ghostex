@@ -6,16 +6,16 @@
  * polluting comments/labels with app-routing metadata.
  */
 
-import type { AppToastLevel } from "./app-toast-contract";
+import type { AppToastLevel } from './app-toast-contract';
 import {
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectSessionId,
-} from "./gxserver-presentation-sidebar-projection";
-import type { SidebarAgentIcon } from "./sidebar-agents";
+} from './gxserver-presentation-sidebar-projection';
+import type { SidebarAgentIcon } from './sidebar-agents';
 
-import type { DiagnosticLoggingSettings } from "./ghostex-settings";
+import type { DiagnosticLoggingSettings } from './ghostex-settings';
 
-export type BeadConversationLinkStatus = "active" | "archived";
+export type BeadConversationLinkStatus = 'active' | 'archived';
 
 export type BeadConversationLink = {
   agentId?: string;
@@ -29,7 +29,7 @@ export type BeadConversationLink = {
   id: string;
   projectId: string;
   sessionPersistenceName?: string;
-  sessionPersistenceProvider?: "tmux" | "zmx" | "zellij";
+  sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
   /**
    * CDXC:ProjectBoardBeads 2026-08-07:
    * The project the Ghostex session belongs to, which is not always the
@@ -83,6 +83,7 @@ export type ProjectBoardConversationLinkView = BeadConversationLink & {
 
 export type ProjectBoardSessionOption = {
   agentId?: string;
+  agentSessionId?: string;
   isFocused?: boolean;
   isSleeping?: boolean;
   label: string;
@@ -101,30 +102,30 @@ export type ProjectBoardConversationState = {
   sessions: ProjectBoardSessionOption[];
 };
 
-export type ProjectBoardStartLocation = "currentProject" | "newWorktree";
+export type ProjectBoardStartLocation = 'currentProject' | 'newWorktree';
 
 export type ProjectBoardBridgeAction =
-  | "appendDebugLog"
-  | "associateFocusedSession"
-  | "automationArchiveRun"
-  | "automationDelete"
-  | "automationGetAllState"
-  | "automationGetState"
-  | "automationOpenRunSession"
-  | "automationOpenWorktree"
-  | "automationMarkRunRead"
-  | "automationRunNow"
-  | "automationSave"
-  | "automationSetEnabled"
-  | "getState"
-  | "initializeBeads"
-  | "installOrUpdateBeads"
-  | "jumpToConversation"
-  | "projectEditorFocusOwnerChanged"
-  | "showToast"
-  | "startWork"
-  | "runBeadsMigration"
-  | "unlinkConversation";
+  | 'appendDebugLog'
+  | 'associateFocusedSession'
+  | 'automationArchiveRun'
+  | 'automationDelete'
+  | 'automationGetAllState'
+  | 'automationGetState'
+  | 'automationOpenRunSession'
+  | 'automationOpenWorktree'
+  | 'automationMarkRunRead'
+  | 'automationRunNow'
+  | 'automationSave'
+  | 'automationSetEnabled'
+  | 'getState'
+  | 'initializeBeads'
+  | 'installOrUpdateBeads'
+  | 'jumpToConversation'
+  | 'projectEditorFocusOwnerChanged'
+  | 'showToast'
+  | 'startWork'
+  | 'runBeadsMigration'
+  | 'unlinkConversation';
 
 export type ProjectBoardBridgeRequest = {
   action: ProjectBoardBridgeAction;
@@ -156,21 +157,15 @@ export type ProjectBoardBridgeResponse<TPayload = ProjectBoardConversationState>
   requestId: string;
 };
 
-export function normalizeBeadConversationLinks(
-  candidate: unknown,
-  projectId: string,
-): BeadConversationLink[] {
+export function normalizeBeadConversationLinks(candidate: unknown, projectId: string): BeadConversationLink[] {
   if (!Array.isArray(candidate)) {
     return [];
   }
   return candidate.flatMap((entry) => normalizeBeadConversationLink(entry, projectId));
 }
 
-export function normalizeBeadConversationLink(
-  candidate: unknown,
-  fallbackProjectId: string,
-): BeadConversationLink[] {
-  if (!candidate || typeof candidate !== "object") {
+export function normalizeBeadConversationLink(candidate: unknown, fallbackProjectId: string): BeadConversationLink[] {
+  if (!candidate || typeof candidate !== 'object') {
     return [];
   }
   const record = candidate as Partial<BeadConversationLink>;
@@ -181,8 +176,7 @@ export function normalizeBeadConversationLink(
   }
   const now = new Date().toISOString();
   const id =
-    normalizeNonEmptyString(record.id) ??
-    createBeadConversationLinkId(fallbackProjectId, beadId, ghostexSessionId);
+    normalizeNonEmptyString(record.id) ?? createBeadConversationLinkId(fallbackProjectId, beadId, ghostexSessionId);
   return [
     {
       agentId: normalizeNonEmptyString(record.agentId),
@@ -198,21 +192,22 @@ export function normalizeBeadConversationLink(
       sessionPersistenceName: normalizeNonEmptyString(record.sessionPersistenceName),
       sessionPersistenceProvider: normalizePersistenceProvider(record.sessionPersistenceProvider),
       sessionProjectId: normalizeNonEmptyString(record.sessionProjectId),
-      status: record.status === "archived" ? "archived" : "active",
+      status: record.status === 'archived' ? 'archived' : 'active',
       updatedAt: normalizeDateString(record.updatedAt) ?? now,
     },
   ];
 }
 
-export function createBeadConversationLinkId(
-  projectId: string,
-  beadId: string,
-  ghostexSessionId: string,
-): string {
+export function createBeadConversationLinkId(projectId: string, beadId: string, ghostexSessionId: string): string {
   return [projectId, beadId, ghostexSessionId]
-    .map((part) => part.trim().replace(/[^a-z0-9_-]+/giu, "-").replace(/^-+|-+$/gu, ""))
+    .map((part) =>
+      part
+        .trim()
+        .replace(/[^a-z0-9_-]+/giu, '-')
+        .replace(/^-+|-+$/gu, '')
+    )
     .filter(Boolean)
-    .join(":");
+    .join(':');
 }
 
 /*
@@ -226,15 +221,15 @@ export function createBeadConversationLinkId(
  */
 export function beadConversationLinkMatchKey(beadId: string): string {
   const normalized = beadId.trim().toLowerCase();
-  const separatorIndex = normalized.lastIndexOf("-");
+  const separatorIndex = normalized.lastIndexOf('-');
   if (separatorIndex <= 0) {
     return normalized;
   }
   return normalized.slice(separatorIndex + 1) || normalized;
 }
 
-export function indexBeadConversationLinksByBead<TLink extends Pick<BeadConversationLink, "beadId">>(
-  links: readonly TLink[],
+export function indexBeadConversationLinksByBead<TLink extends Pick<BeadConversationLink, 'beadId'>>(
+  links: readonly TLink[]
 ): Map<string, TLink[]> {
   const result = new Map<string, TLink[]>();
   for (const link of links) {
@@ -249,10 +244,7 @@ export function indexBeadConversationLinksByBead<TLink extends Pick<BeadConversa
   return result;
 }
 
-export function selectBeadConversationLinks<TLink>(
-  index: ReadonlyMap<string, TLink[]>,
-  beadId: string,
-): TLink[] {
+export function selectBeadConversationLinks<TLink>(index: ReadonlyMap<string, TLink[]>, beadId: string): TLink[] {
   return index.get(beadConversationLinkMatchKey(beadId)) ?? [];
 }
 
@@ -266,23 +258,21 @@ export function selectBeadConversationLinks<TLink>(
  */
 export function beadConversationLinkStoreKey(project: BeadConversationLinkStoreProject): string {
   const configured = project.projectBoardConfig?.beadsDirectory;
-  const directory = typeof configured === "string" && configured.trim() ? configured : project.path;
-  return typeof directory === "string" ? directory.trim().replace(/\/+$/u, "") : "";
+  const directory = typeof configured === 'string' && configured.trim() ? configured : project.path;
+  return typeof directory === 'string' ? directory.trim().replace(/\/+$/u, '') : '';
 }
 
-export function selectBeadConversationLinkStoreProjects<
-  TProject extends BeadConversationLinkStoreProject,
->(boardProject: TProject, projects: readonly TProject[]): TProject[] {
+export function selectBeadConversationLinkStoreProjects<TProject extends BeadConversationLinkStoreProject>(
+  boardProject: TProject,
+  projects: readonly TProject[]
+): TProject[] {
   const boardStoreKey = beadConversationLinkStoreKey(boardProject);
   const storeProjects = [boardProject];
   if (!boardStoreKey) {
     return storeProjects;
   }
   for (const candidate of projects) {
-    if (
-      candidate.projectId !== boardProject.projectId &&
-      beadConversationLinkStoreKey(candidate) === boardStoreKey
-    ) {
+    if (candidate.projectId !== boardProject.projectId && beadConversationLinkStoreKey(candidate) === boardStoreKey) {
       storeProjects.push(candidate);
     }
   }
@@ -297,34 +287,28 @@ export function selectBeadConversationLinkStoreProjects<
  * the ones written before that readable.
  */
 export function parseBeadConversationLinkSessionPersistenceName(
-  sessionPersistenceName: string | undefined,
+  sessionPersistenceName: string | undefined
 ): { projectId: string; sessionId: string } | undefined {
-  const parts = (sessionPersistenceName ?? "").trim().split("-");
+  const parts = (sessionPersistenceName ?? '').trim().split('-');
   if (parts.length !== 3) {
     return undefined;
   }
   const [serverId, projectId, sessionId] = parts;
-  if (!serverId?.startsWith("S") || !projectId?.startsWith("P") || !sessionId?.startsWith("G")) {
+  if (!serverId?.startsWith('S') || !projectId?.startsWith('P') || !sessionId?.startsWith('G')) {
     return undefined;
   }
   return { projectId, sessionId };
 }
 
 export function resolveBeadConversationLinkSessionReference(
-  link: Pick<
-    BeadConversationLink,
-    "ghostexSessionId" | "projectId" | "sessionPersistenceName" | "sessionProjectId"
-  >,
+  link: Pick<BeadConversationLink, 'ghostexSessionId' | 'projectId' | 'sessionPersistenceName' | 'sessionProjectId'>
 ): { projectId: string; sessionId: string } {
   const { projectId, sessionId } = resolveBeadConversationLinkSessionOwner(link);
   return { projectId, sessionId };
 }
 
 function resolveBeadConversationLinkSessionOwner(
-  link: Pick<
-    BeadConversationLink,
-    "ghostexSessionId" | "projectId" | "sessionPersistenceName" | "sessionProjectId"
-  >,
+  link: Pick<BeadConversationLink, 'ghostexSessionId' | 'projectId' | 'sessionPersistenceName' | 'sessionProjectId'>
 ): { isKnown: boolean; projectId: string; sessionId: string } {
   /*
    * A bead's session does not have to live in the project row that stores the
@@ -351,21 +335,13 @@ function resolveBeadConversationLinkSessionOwner(
 export function resolveBeadConversationLinkBoardSessionId(
   link: Pick<
     BeadConversationLink,
-    | "beadId"
-    | "ghostexSessionId"
-    | "projectId"
-    | "sessionPersistenceName"
-    | "sessionProjectId"
+    'beadId' | 'ghostexSessionId' | 'projectId' | 'sessionPersistenceName' | 'sessionProjectId'
   >,
   boardProjectId: string,
   relatedLinks: readonly Pick<
     BeadConversationLink,
-    | "beadId"
-    | "ghostexSessionId"
-    | "projectId"
-    | "sessionPersistenceName"
-    | "sessionProjectId"
-  >[] = [],
+    'beadId' | 'ghostexSessionId' | 'projectId' | 'sessionPersistenceName' | 'sessionProjectId'
+  >[] = []
 ): string {
   const reference = resolveBeadConversationLinkReconciledSessionOwner(link, relatedLinks);
   return reference.projectId === boardProjectId
@@ -376,11 +352,7 @@ export function resolveBeadConversationLinkBoardSessionId(
 function resolveBeadConversationLinkReconciledSessionOwner<
   TLink extends Pick<
     BeadConversationLink,
-    | "beadId"
-    | "ghostexSessionId"
-    | "projectId"
-    | "sessionPersistenceName"
-    | "sessionProjectId"
+    'beadId' | 'ghostexSessionId' | 'projectId' | 'sessionPersistenceName' | 'sessionProjectId'
   >,
 >(link: TLink, relatedLinks: readonly TLink[]): { projectId: string; sessionId: string } {
   const owner = resolveBeadConversationLinkSessionOwner(link);
@@ -398,20 +370,13 @@ function resolveBeadConversationLinkReconciledSessionOwner<
       knownProjectIds.add(candidateOwner.projectId);
     }
   }
-  return knownProjectIds.size === 1
-    ? { projectId: [...knownProjectIds][0]!, sessionId: owner.sessionId }
-    : owner;
+  return knownProjectIds.size === 1 ? { projectId: [...knownProjectIds][0]!, sessionId: owner.sessionId } : owner;
 }
 
 export function canonicalizeBeadConversationLinksForBoard<
   TLink extends Pick<
     BeadConversationLink,
-    | "beadId"
-    | "ghostexSessionId"
-    | "projectId"
-    | "sessionPersistenceName"
-    | "sessionProjectId"
-    | "updatedAt"
+    'beadId' | 'ghostexSessionId' | 'projectId' | 'sessionPersistenceName' | 'sessionProjectId' | 'updatedAt'
   >,
 >(links: readonly TLink[], boardProjectId: string): TLink[] {
   /*
@@ -454,18 +419,16 @@ function beadConversationSessionKey(beadId: string, sessionId: string): string {
 }
 
 function normalizeNonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function normalizeDateString(value: unknown): string | undefined {
-  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+  if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) {
     return undefined;
   }
   return value;
 }
 
-function normalizePersistenceProvider(
-  value: unknown,
-): BeadConversationLink["sessionPersistenceProvider"] {
-  return value === "tmux" || value === "zmx" || value === "zellij" ? value : undefined;
+function normalizePersistenceProvider(value: unknown): BeadConversationLink['sessionPersistenceProvider'] {
+  return value === 'tmux' || value === 'zmx' || value === 'zellij' ? value : undefined;
 }

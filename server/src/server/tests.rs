@@ -37,9 +37,7 @@ fn title_signaled_process_identity_sync_only_targets_incomplete_live_zmx_identit
         "surface": "terminal",
         "zmxName": "S9-P9-G9mmz",
     });
-    assert!(should_probe_title_signaled_zmx_process_identity(
-        &candidate
-    ));
+    assert!(should_probe_title_signaled_zmx_process_identity(&candidate));
 
     let mut promoted_agent = candidate.clone();
     promoted_agent["kind"] = json!("agent");
@@ -702,8 +700,7 @@ async fn protocol_contract_gate_edges_match_typescript() {
             .header(GXSERVER_PROTOCOL_HEADER, "999")
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
-                json!({ "params": {}, "protocolVersion": GXSERVER_PROTOCOL_VERSION })
-                    .to_string(),
+                json!({ "params": {}, "protocolVersion": GXSERVER_PROTOCOL_VERSION }).to_string(),
             ))
             .expect("request"),
         "request-protocol".to_string(),
@@ -1625,8 +1622,14 @@ async fn renaming_a_worktree_updates_the_project_path_and_every_session_cwd() {
         .join("rename-worktree-parent-feat-kanban-assignee");
 
     assert_eq!(body["result"]["movedFolder"], json!(true));
-    assert_eq!(body["result"]["renamedBranch"], json!("feat/kanban-assignee"));
-    assert_eq!(body["result"]["project"]["path"], json!(path_to_string(&renamed)));
+    assert_eq!(
+        body["result"]["renamedBranch"],
+        json!("feat/kanban-assignee")
+    );
+    assert_eq!(
+        body["result"]["project"]["path"],
+        json!(path_to_string(&renamed))
+    );
     assert_eq!(
         body["result"]["project"]["name"],
         json!("Parent-feat-kanban-assignee")
@@ -1674,8 +1677,7 @@ async fn renaming_a_worktree_updates_the_project_path_and_every_session_cwd() {
         json!(path_to_string(&renamed.join("packages/app"))),
         "a cwd inside the moved folder follows it"
     );
-    let moved_marker =
-        &moved["runtimeSettings"][worktree_sessions::WORKTREE_SESSION_RUNTIME_KEY];
+    let moved_marker = &moved["runtimeSettings"][worktree_sessions::WORKTREE_SESSION_RUNTIME_KEY];
     assert_eq!(moved_marker["path"], json!(path_to_string(&renamed)));
     assert_eq!(moved_marker["branch"], json!("feat/kanban-assignee"));
     assert_eq!(moved_marker["initialTitle"], json!("Codex Session"));
@@ -1921,8 +1923,7 @@ async fn renaming_explains_a_worktree_registered_through_a_different_path_form()
     std::os::unix::fs::symlink(&real_root, &alias_root).expect("symlink");
     let aliased_parent = alias_root.join("rt");
 
-    add_project_path_for_server_test(state.clone(), &token, &aliased_parent, Some("Parent"))
-        .await;
+    add_project_path_for_server_test(state.clone(), &token, &aliased_parent, Some("Parent")).await;
     let worktree_project =
         add_project_path_for_server_test(state.clone(), &token, &worktree, None).await;
 
@@ -2210,8 +2211,7 @@ async fn worktree_session_checkout_creates_a_temp_branch_and_runs_the_setup_comm
         "the project's worktree setup command runs inside the new checkout"
     );
     assert_eq!(
-        run_git_for_server_test(Path::new(&prepared.path), &["branch", "--show-current"])
-            .trim(),
+        run_git_for_server_test(Path::new(&prepared.path), &["branch", "--show-current"]).trim(),
         prepared.branch
     );
     assert_eq!(
@@ -2245,8 +2245,7 @@ async fn worktree_session_checkout_creates_a_temp_branch_and_runs_the_setup_comm
     run_git_for_server_test(&parent, &["checkout", "--quiet", "-"]);
     let mut base_params = Map::new();
     base_params.insert("baseBranch".to_string(), json!("seed-branch"));
-    let base_request =
-        normalize_worktree_session_create_request(&base_params).expect("request");
+    let base_request = normalize_worktree_session_create_request(&base_params).expect("request");
     let based = match prepare_worktree_session_checkout(&state, &context, &base_request).await {
         Ok(prepared) => prepared,
         Err(_) => panic!("prepare worktree checkout from base branch"),
@@ -2628,8 +2627,7 @@ async fn remove_session_worktree_route_refuses_a_registered_worktree_project() {
     let project =
         add_project_path_for_server_test(state.clone(), &token, &parent, Some("Parent")).await;
     // The V1 flow's registration: the worktree is a project in its own right.
-    add_project_path_for_server_test(state.clone(), &token, &registered, Some("Worktree"))
-        .await;
+    add_project_path_for_server_test(state.clone(), &token, &registered, Some("Worktree")).await;
 
     let refused = route_http(
         state,

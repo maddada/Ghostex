@@ -195,7 +195,10 @@ field, sidechain files are rejected outright, and rows flagged `isSidechain` do
 not count.
 */
 /// Bounded head read that never hands back a torn final line.
-pub(crate) fn read_transcript_head_complete_lines(path: &Path, head_limit_bytes: u64) -> Option<String> {
+pub(crate) fn read_transcript_head_complete_lines(
+    path: &Path,
+    head_limit_bytes: u64,
+) -> Option<String> {
     let file = File::open(path).ok()?;
     let head_length = file
         .metadata()
@@ -319,4 +322,3 @@ stores (the "first-session_meta-wins" rule in the decoders), so a Codex session
 never silently outlives its transcript the way a Claude compaction does. Grok
 writes one directory per session id with no continuation mechanism at all.
 */
-

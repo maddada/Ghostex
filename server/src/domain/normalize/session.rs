@@ -3,9 +3,9 @@ use std::collections::HashSet;
 use serde_json::{json, Map, Value};
 
 use crate::domain::normalize::fields::{
-    has_string_field, insert_optional_object, insert_optional_string, normalize_domain_lifecycle_state,
-    normalize_object, read_optional_text, set_optional_string, update_object_field,
-    update_optional_object_field, update_optional_text_field,
+    has_string_field, insert_optional_object, insert_optional_string,
+    normalize_domain_lifecycle_state, normalize_object, read_optional_text, set_optional_string,
+    update_object_field, update_optional_object_field, update_optional_text_field,
 };
 use crate::domain::{js_string, DomainResult, DomainStateError};
 use crate::ids::{create_global_session_ref, create_zmx_session_name, is_gxserver_session_id};
@@ -344,7 +344,9 @@ pub(crate) fn merge_session_update(
     Ok(Value::Object(next))
 }
 
-pub(crate) fn normalize_create_agent_session_params(input: &Map<String, Value>) -> Map<String, Value> {
+pub(crate) fn normalize_create_agent_session_params(
+    input: &Map<String, Value>,
+) -> Map<String, Value> {
     let mut params = input.clone();
     let agent_id = read_optional_text(input.get("agentId")).unwrap_or_else(|| "codex".to_string());
     let mut launch_settings = normalize_object(input.get("launchSettings"));
@@ -539,7 +541,9 @@ fn normalize_optional_sidebar_order(value: Option<&Value>) -> Option<i64> {
     }
 }
 
-pub(crate) fn normalize_optional_session_tag(value: Option<&Value>) -> DomainResult<Option<String>> {
+pub(crate) fn normalize_optional_session_tag(
+    value: Option<&Value>,
+) -> DomainResult<Option<String>> {
     let Some(value) = value else {
         return Ok(None);
     };

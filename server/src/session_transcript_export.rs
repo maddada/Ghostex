@@ -26,26 +26,22 @@ use std::{
 use chrono::Local;
 use serde_json::{Map, Value};
 
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::protocol::rpc_success;
 use crate::resume_lookup::{parse_json_line, read_lines_lossy};
+use crate::server::{
+    domain_error_response, read_runtime_text, read_session_text, routed_json, AppState,
+    RoutedResponse,
+};
 use crate::session_chat::{
     find_claude_successor_transcript, last_substantive_transcript_timestamp_ms,
     resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
     SessionChatSuccessorOutcome, SessionChatTranscriptAgent,
 };
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
-use crate::protocol::rpc_success;
-use crate::server::{
-    AppState,
-    RoutedResponse,
-    domain_error_response,
-    read_runtime_text,
-    read_session_text,
-    routed_json,
-};
 use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::storage::open_gxserver_database;
-use serde_json::json;
 use axum::http::StatusCode;
+use serde_json::json;
 
 // ---------------------------------------------------------------------------
 // Section taxonomy

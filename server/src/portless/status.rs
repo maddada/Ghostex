@@ -408,5 +408,3 @@ fn default_portless_state() -> PortlessState {
         runtime_status: PortlessRuntimeStatus::Inactive,
     }
 }
-
-

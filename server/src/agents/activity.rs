@@ -3,13 +3,13 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
+use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::project_session_title_projection;
 use crate::session_status::{
-    compute_activity_update, is_stale_activity_event, normalize_agent_activity_value,
-    parse_iso_ms, ActivityUpdate,
+    compute_activity_update, is_stale_activity_event, normalize_agent_activity_value, parse_iso_ms,
+    ActivityUpdate,
 };
-use super::*;
 
 pub(crate) const FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY: &str =
     "gxserverFirstPromptAutoTitleAttemptId";
@@ -608,7 +608,10 @@ pub(crate) fn normalize_first_prompt_claim_agent_name(value: Option<&str>) -> Op
     }
 }
 
-pub(crate) fn is_first_prompt_claim_generic_title(agent_name: Option<&str>, title: Option<&str>) -> bool {
+pub(crate) fn is_first_prompt_claim_generic_title(
+    agent_name: Option<&str>,
+    title: Option<&str>,
+) -> bool {
     let normalized_title = title
         .map(|value| {
             value
@@ -720,7 +723,10 @@ pub(crate) fn is_first_prompt_claim_meta_prompt(prompt: &str) -> bool {
         .any(|prefix| prompt.starts_with(prefix))
 }
 
-pub(crate) fn is_first_prompt_claim_slash_command(raw_prompt: Option<&str>, normalized_prompt: &str) -> bool {
+pub(crate) fn is_first_prompt_claim_slash_command(
+    raw_prompt: Option<&str>,
+    normalized_prompt: &str,
+) -> bool {
     if normalized_prompt.encode_utf16().count() > 50 {
         return false;
     }
@@ -992,7 +998,11 @@ pub(crate) fn normalize_agent_hook_activity(
     None
 }
 
-pub(crate) fn agent_hook_event_matches(event: &str, lower_event: &str, candidates: &[&str]) -> bool {
+pub(crate) fn agent_hook_event_matches(
+    event: &str,
+    lower_event: &str,
+    candidates: &[&str],
+) -> bool {
     candidates
         .iter()
         .any(|candidate| event == *candidate || lower_event == *candidate)
@@ -1017,4 +1027,3 @@ pub(crate) fn default_activity(agent_id: Option<&str>, override_activity: Option
     activity.insert("suppressedUntil".to_string(), Value::String(timestamp));
     Value::Object(activity)
 }
-

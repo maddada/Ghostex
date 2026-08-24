@@ -2,10 +2,10 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
+use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::project_session_title_projection;
 use crate::session_status::compute_activity_update;
-use super::*;
 
 pub(crate) fn ingest_session_state_event(
     repository: &DomainRepository<'_>,
@@ -536,7 +536,10 @@ pub(crate) fn terminal_title_sync_reason(
     None
 }
 
-pub(crate) fn session_title_source(session: &Value, runtime_settings: &Map<String, Value>) -> String {
+pub(crate) fn session_title_source(
+    session: &Value,
+    runtime_settings: &Map<String, Value>,
+) -> String {
     normalize_title_source(
         read_text_from_map(runtime_settings, "titleSource")
             .or_else(|| read_text_from_map(runtime_settings, "restoreTitleSource"))
@@ -620,4 +623,3 @@ pub(crate) fn supports_terminal_title_session_sync(agent_name: Option<&str>) -> 
             | "\u{03c0}"
     )
 }
-

@@ -6,7 +6,12 @@ const JSON_LIMIT_CHARS: usize = 1_000_000;
 
 const JSON_MAX_DEPTH: usize = 10;
 
-pub(crate) fn parse_object(value: &str, column: &str, row_kind: &str, row_id: &str) -> DomainResult<Value> {
+pub(crate) fn parse_object(
+    value: &str,
+    column: &str,
+    row_kind: &str,
+    row_id: &str,
+) -> DomainResult<Value> {
     Ok(Value::Object(parse_object_map(
         value, column, row_kind, row_id,
     )?))

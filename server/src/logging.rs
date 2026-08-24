@@ -1538,40 +1538,49 @@ mod tests {
         let disabled_paths = get_gxserver_paths(Some(disabled_temp.path().to_path_buf()));
         let disabled_logger = test_logger(disabled_paths.clone());
         disabled_logger
-            .log_routine(DiagnosticLogScenario::ServerLifecycle, GxserverLogInput {
-                level: LogLevel::Info,
-                event: "routine.info".to_string(),
-                server_id: None,
-                request_id: None,
-                client: None,
-                duration_ms: None,
-                error: None,
-                details: None,
-            })
+            .log_routine(
+                DiagnosticLogScenario::ServerLifecycle,
+                GxserverLogInput {
+                    level: LogLevel::Info,
+                    event: "routine.info".to_string(),
+                    server_id: None,
+                    request_id: None,
+                    client: None,
+                    duration_ms: None,
+                    error: None,
+                    details: None,
+                },
+            )
             .expect("info log");
         disabled_logger
-            .log_routine(DiagnosticLogScenario::ServerLifecycle, GxserverLogInput {
-                level: LogLevel::Debug,
-                event: "routine.debug".to_string(),
-                server_id: None,
-                request_id: None,
-                client: None,
-                duration_ms: None,
-                error: None,
-                details: None,
-            })
+            .log_routine(
+                DiagnosticLogScenario::ServerLifecycle,
+                GxserverLogInput {
+                    level: LogLevel::Debug,
+                    event: "routine.debug".to_string(),
+                    server_id: None,
+                    request_id: None,
+                    client: None,
+                    duration_ms: None,
+                    error: None,
+                    details: None,
+                },
+            )
             .expect("debug log");
         disabled_logger
-            .log_routine(DiagnosticLogScenario::ServerLifecycle, GxserverLogInput {
-                level: LogLevel::Info,
-                event: "routine.health".to_string(),
-                server_id: None,
-                request_id: None,
-                client: None,
-                duration_ms: None,
-                error: None,
-                details: Some(json!({ "errorCount": 0, "status": "ok" })),
-            })
+            .log_routine(
+                DiagnosticLogScenario::ServerLifecycle,
+                GxserverLogInput {
+                    level: LogLevel::Info,
+                    event: "routine.health".to_string(),
+                    server_id: None,
+                    request_id: None,
+                    client: None,
+                    duration_ms: None,
+                    error: None,
+                    details: Some(json!({ "errorCount": 0, "status": "ok" })),
+                },
+            )
             .expect("zero-error routine log");
         assert!(!disabled_paths.log_file.exists());
         disabled_logger
@@ -1594,28 +1603,34 @@ mod tests {
         let enabled_paths = get_gxserver_paths(Some(enabled_temp.path().to_path_buf()));
         let enabled_logger = test_logger_with_debugging_mode(enabled_paths.clone(), true);
         enabled_logger
-            .log_routine(DiagnosticLogScenario::ServerLifecycle, GxserverLogInput {
-                level: LogLevel::Info,
-                event: "routine.info".to_string(),
-                server_id: None,
-                request_id: None,
-                client: None,
-                duration_ms: None,
-                error: None,
-                details: None,
-            })
+            .log_routine(
+                DiagnosticLogScenario::ServerLifecycle,
+                GxserverLogInput {
+                    level: LogLevel::Info,
+                    event: "routine.info".to_string(),
+                    server_id: None,
+                    request_id: None,
+                    client: None,
+                    duration_ms: None,
+                    error: None,
+                    details: None,
+                },
+            )
             .expect("info log enabled");
         enabled_logger
-            .log_routine(DiagnosticLogScenario::ServerLifecycle, GxserverLogInput {
-                level: LogLevel::Debug,
-                event: "routine.debug".to_string(),
-                server_id: None,
-                request_id: None,
-                client: None,
-                duration_ms: None,
-                error: None,
-                details: None,
-            })
+            .log_routine(
+                DiagnosticLogScenario::ServerLifecycle,
+                GxserverLogInput {
+                    level: LogLevel::Debug,
+                    event: "routine.debug".to_string(),
+                    server_id: None,
+                    request_id: None,
+                    client: None,
+                    duration_ms: None,
+                    error: None,
+                    details: None,
+                },
+            )
             .expect("debug log enabled");
         enabled_logger
             .log(GxserverLogInput {

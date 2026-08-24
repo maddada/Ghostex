@@ -578,7 +578,6 @@ pub(crate) fn normalize_path_for_comparison(path: &Path) -> String {
     normalized.to_string_lossy().to_string()
 }
 
-
 #[derive(Clone, Debug)]
 pub(crate) struct PortlessServiceExpectation {
     pub(crate) home_dir: PathBuf,
@@ -597,4 +596,3 @@ struct PortlessLaunchdPlist {
     standard_out_path: Option<String>,
     standard_error_path: Option<String>,
 }
-

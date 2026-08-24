@@ -704,7 +704,10 @@ mod tests {
             worktree_rename_folder_slug("feat/kanban-assignee"),
             "feat-kanban-assignee"
         );
-        assert_eq!(worktree_rename_folder_slug("feat/UI-Polish"), "feat-UI-Polish");
+        assert_eq!(
+            worktree_rename_folder_slug("feat/UI-Polish"),
+            "feat-UI-Polish"
+        );
         assert_eq!(worktree_rename_folder_slug("a-b_c.d"), "a-b_c.d");
         assert_eq!(worktree_rename_folder_slug("  feat/x  "), "feat-x");
         // The empty result is load-bearing: `worktree_rename_destination_path`

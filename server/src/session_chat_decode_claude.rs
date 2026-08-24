@@ -94,7 +94,10 @@ pub(crate) fn claude_content_block(record: &Map<String, Value>) -> Option<Sessio
 /// Claude stamps `uuid`/`parentUuid` on every non-sidechain row, including the
 /// `system` and `attachment` rows a prompt can hang off, so the whole tree is
 /// readable from the same scan the decoder already runs.
-pub(crate) fn claude_transcript_lineage(line: &str, fallback_id: &str) -> Option<TranscriptLineage> {
+pub(crate) fn claude_transcript_lineage(
+    line: &str,
+    fallback_id: &str,
+) -> Option<TranscriptLineage> {
     let record = parse_json_object(line)?;
     if record.get("isSidechain") == Some(&Value::Bool(true)) {
         return None;
@@ -512,4 +515,3 @@ pub fn decode_claude_turn_lifecycle(
 // ---------------------------------------------------------------------------
 // Reverse tail reader (upstream chat spec §4)
 // ---------------------------------------------------------------------------
-

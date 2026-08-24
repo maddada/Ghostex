@@ -1,13 +1,3 @@
-use std::{
-    collections::{HashMap, HashSet},
-    convert::Infallible,
-    fs,
-    net::SocketAddr,
-    path::{Path, PathBuf},
-    process::Command as StdCommand,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
 use anyhow::{anyhow, Context, Result};
 use axum::{
     body::{to_bytes, Body},
@@ -26,6 +16,16 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::Infallible,
+    fs,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    process::Command as StdCommand,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     net::TcpListener,
@@ -42,8 +42,8 @@ use crate::{
     },
     agent_skills::{install_agent_skills, read_agent_skill_status},
     agents::{
-        apply_created_session_identity, apply_live_process_session_identity,
-        agent_metadata_title_revision, create_agent_session_params_for_project,
+        agent_metadata_title_revision, apply_created_session_identity,
+        apply_live_process_session_identity, create_agent_session_params_for_project,
         default_agent_command, dispatch_agent_endpoint, get_visible_terminal_title,
         normalize_agent_hook_activity, read_agent_settings, read_first_user_input_draft,
         read_text_from_map, reconcile_agent_metadata_title_for_session,
@@ -74,6 +74,7 @@ use crate::{
         log_level_from_status, query_gxserver_logs, DiagnosticLogScenario, GxserverLogInput,
         GxserverLogger, LogLevel, LogQueryError,
     },
+    navigation_history::{navigate_history, read_navigation_history, record_navigation_visit},
     paths::{get_gxserver_paths, GxserverPaths},
     platform::shell::command_shell,
     portless::{
@@ -102,30 +103,22 @@ use crate::{
         create_source_build_identity, is_build_identity_reusable, remove_runtime_metadata,
         write_runtime_metadata,
     },
-    navigation_history::{navigate_history, read_navigation_history, record_navigation_visit},
     session_chat_files::{
-        handle_read_session_chat_files_http,
-        handle_read_session_chat_image_http,
-        handle_save_session_chat_attachment_http,
-        handle_save_session_chat_image_http,
+        handle_read_session_chat_files_http, handle_read_session_chat_image_http,
+        handle_save_session_chat_attachment_http, handle_save_session_chat_image_http,
     },
     session_chat_follower::{
-        stop_all_session_chat_followers,
-        sync_session_chat_followers_for_all_sessions,
+        stop_all_session_chat_followers, sync_session_chat_followers_for_all_sessions,
     },
     session_chat_options::SessionChatOptionCacheEntry,
     session_chat_queue_runtime::{
-        handle_session_chat_queue_http,
-        session_chat_queue_notice_reader,
-        session_chat_queue_publisher_factory,
-        session_chat_queue_sender_factory,
+        handle_session_chat_queue_http, session_chat_queue_notice_reader,
+        session_chat_queue_publisher_factory, session_chat_queue_sender_factory,
     },
     session_chat_read::handle_read_session_chat_http,
     session_chat_send::{
-        handle_answer_session_chat_prompt_http,
-        handle_handoff_session_chat_draft_http,
-        handle_interrupt_session_chat_http,
-        handle_send_session_chat_message_http,
+        handle_answer_session_chat_prompt_http, handle_handoff_session_chat_draft_http,
+        handle_interrupt_session_chat_http, handle_send_session_chat_message_http,
     },
     session_chat_skills::handle_read_session_chat_skills_http,
     session_git_status, session_keep_awake, session_lifecycle,
@@ -173,14 +166,14 @@ pub mod http_infra;
 pub mod presentation_delta;
 pub mod project_paths;
 pub mod session_state_sync;
+#[cfg(test)]
+mod tests;
 pub mod title_generation;
 pub mod typed_operation_http;
 pub mod web_static;
 pub mod worktree_ops;
 pub mod ws;
 pub mod zmx_http;
-#[cfg(test)]
-mod tests;
 
 pub(crate) use agent_http::*;
 pub(crate) use agent_prompt_search_http::*;
@@ -632,9 +625,9 @@ async fn handle_http_request(
         apply_cors_headers(&headers, &mut routed.response, &state.config);
     }
     let status = routed.response.status().as_u16();
-    let _ = state
-        .logger
-        .log_routine(DiagnosticLogScenario::ApiRequests, GxserverLogInput {
+    let _ = state.logger.log_routine(
+        DiagnosticLogScenario::ApiRequests,
+        GxserverLogInput {
             level: log_level_from_status(status),
             event: "apiRequest".to_string(),
             server_id: Some(state.metadata.server_id.clone()),
@@ -647,7 +640,8 @@ async fn handle_http_request(
                 "path": routed.endpoint_path,
                 "statusCode": status,
             })),
-        });
+        },
+    );
     if let Some(endpoint_path) = routed.endpoint_path.clone() {
         state.event_hub.broadcast(json!({
             "path": endpoint_path,

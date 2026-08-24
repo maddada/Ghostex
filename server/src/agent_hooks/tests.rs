@@ -7,15 +7,15 @@ use crate::paths::get_gxserver_paths;
 
 use super::api::{install_agent_hooks, read_agent_hook_status, uninstall_agent_hooks};
 use super::config::{
-    AMP_PLUGIN_MARKER, HookDefinition, HookPaths, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
+    HookDefinition, HookPaths, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
     OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
 };
 use super::event_mapping::activity_for_hook_event;
 use super::install::{
     inspect_agent_hook_installation, install_notify_hook, is_notify_hook_current,
-    json_contains_hook_command, migrate_hook_session_sidecars, read_json_object,
-    remove_json_hook, set_executable_permissions, uninstall_marked_yaml_hook,
-    uninstall_opencode_hook_paths, uninstall_plugin_file_hook,
+    json_contains_hook_command, migrate_hook_session_sidecars, read_json_object, remove_json_hook,
+    set_executable_permissions, uninstall_marked_yaml_hook, uninstall_opencode_hook_paths,
+    uninstall_plugin_file_hook,
 };
 use super::notify_runtime::{read_hook_state, read_state_string, run_notify_hook};
 use super::plugin_sources::{command_for_agent, shell_quote};
@@ -619,8 +619,7 @@ fn uninstall_removes_plugin_yaml_and_opencode_ghostex_content_only() {
     };
     let pi_path = temp.path().join("user-owned-ghostex-session.ts");
     write_test_file(&pi_path, "export default function userPlugin() {}\n");
-    let removed_pi =
-        uninstall_plugin_file_hook(&pi, vec![pi_path.clone()]).expect("pi uninstall");
+    let removed_pi = uninstall_plugin_file_hook(&pi, vec![pi_path.clone()]).expect("pi uninstall");
     assert!(removed_pi.is_empty());
     assert!(pi_path.exists());
 

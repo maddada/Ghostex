@@ -1,5 +1,7 @@
 use super::*;
-use crate::session_chat_follower::{subscribe_session_chat_follower, unsubscribe_session_chat_follower};
+use crate::session_chat_follower::{
+    subscribe_session_chat_follower, unsubscribe_session_chat_follower,
+};
 
 pub(crate) async fn handle_events(
     State(state): State<Arc<AppState>>,

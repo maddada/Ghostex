@@ -6,10 +6,10 @@ pub mod beads;
 pub mod git;
 pub mod github;
 pub mod project_setup;
-pub mod values;
-pub mod worktree;
 #[cfg(test)]
 mod tests;
+pub mod values;
+pub mod worktree;
 
 pub use values::TypedOperationError;
 

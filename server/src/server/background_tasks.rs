@@ -8,7 +8,9 @@ revision for each live, identified Codex session on gxserver's clock and only
 reconcile when that file changes. The sidebar then receives the ordinary
 authoritative presentation delta without client-local title state.
 */
-pub(crate) fn spawn_agent_metadata_title_sync_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
+pub(crate) fn spawn_agent_metadata_title_sync_task(
+    state: &Arc<AppState>,
+) -> tokio::task::JoinHandle<()> {
     let sync_state = state.clone();
     let revisions = Arc::new(Mutex::new(HashMap::<String, String>::new()));
     let mut shutdown_rx = state.shutdown_tx.subscribe();
@@ -84,7 +86,9 @@ pub(crate) fn run_agent_metadata_title_sync_once(
     Ok(())
 }
 
-pub(crate) fn spawn_portless_background_sync_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
+pub(crate) fn spawn_portless_background_sync_task(
+    state: &Arc<AppState>,
+) -> tokio::task::JoinHandle<()> {
     /*
     CDXC:PortlessBackgroundSync 2026-06-22-23:40:
     Phase 9 route sync must run inside server without depending on Resources/sidebar polling, while staying lightweight for startup and shutdown. Run each sync pass off the async worker, retry on a conservative interval, and listen to gxserver's existing shutdown broadcast instead of adding a separate lifecycle channel.
@@ -144,7 +148,9 @@ Cost: `sync_session_chat_followers_for_all_sessions` returns before touching the
 database whenever no follower entry has subscribers, so on an idle daemon this
 is a map lock every ten seconds.
 */
-pub(crate) fn spawn_session_chat_follower_sync_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
+pub(crate) fn spawn_session_chat_follower_sync_task(
+    state: &Arc<AppState>,
+) -> tokio::task::JoinHandle<()> {
     let sync_state = state.clone();
     let mut shutdown_rx = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
@@ -182,7 +188,9 @@ which is also the default). Spent-snooze collection and the activity reset run
 for everyone, so a user who flips back to V1 with snoozed rows still gets that
 state groomed.
 */
-pub(crate) fn spawn_session_lifecycle_sweep_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
+pub(crate) fn spawn_session_lifecycle_sweep_task(
+    state: &Arc<AppState>,
+) -> tokio::task::JoinHandle<()> {
     let sweep_state = state.clone();
     let mut shutdown_rx = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
@@ -277,7 +285,9 @@ pass only emits deltas for cwds whose status MEANINGFULLY changed — a re-probe
 that finds the same branch and the same counts is silent, so a quiet machine
 produces no event traffic at all.
 */
-pub(crate) fn spawn_session_git_status_refresh_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
+pub(crate) fn spawn_session_git_status_refresh_task(
+    state: &Arc<AppState>,
+) -> tokio::task::JoinHandle<()> {
     let refresh_state = state.clone();
     let mut shutdown_rx = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
@@ -695,7 +705,9 @@ actually due, and the pass touches at most
 the title, and the branch label on the card refreshes with it because the git
 status cache is re-probed for that cwd before the delta goes out.
 */
-pub(crate) fn spawn_worktree_branch_rename_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
+pub(crate) fn spawn_worktree_branch_rename_task(
+    state: &Arc<AppState>,
+) -> tokio::task::JoinHandle<()> {
     let sweep_state = state.clone();
     let mut shutdown_rx = state.shutdown_tx.subscribe();
     tokio::spawn(async move {

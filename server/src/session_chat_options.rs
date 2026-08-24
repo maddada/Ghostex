@@ -32,11 +32,11 @@ use std::{
 
 use serde_json::{json, Map, Value};
 
-use crate::domain::DomainRepository;
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
+use crate::domain::DomainRepository;
 use crate::events::GxserverEventHub;
 use crate::paths::GxserverPaths;
-use crate::server::{AppState, SessionChatFollowerEntry, read_runtime_text, session_observer_key};
+use crate::server::{read_runtime_text, session_observer_key, AppState, SessionChatFollowerEntry};
 use crate::session_chat_follower::{is_session_chat_followable_session, session_chat_hook_working};
 use crate::storage::open_gxserver_database;
 use std::collections::HashMap;
@@ -192,8 +192,7 @@ pub struct SessionChatTerminalDetection {
     compaction). Third reading of the same capture, for the same reason the
     notice is the second one: it must never cost a spawn.
     */
-    pub activity:
-        Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+    pub activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     /*
     CDXC:SessionChatAgentFleet 2026-08-23: the sub-agents the screen is
     painting. Fourth reading of the same capture, same reason as the second and
@@ -538,15 +537,17 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
     }
     let effort = match effort {
         None => None,
-        Some(effort) => Some(
-            GROK_EFFORTS
-                .contains(&effort)
-                .then(|| SessionChatDetectedChoice {
-                    value: effort.to_string(),
-                    label: effort.to_string(),
-                    source: SessionChatOptionEvidence::Terminal,
-                })?,
-        ),
+        Some(effort) => {
+            Some(
+                GROK_EFFORTS
+                    .contains(&effort)
+                    .then(|| SessionChatDetectedChoice {
+                        value: effort.to_string(),
+                        label: effort.to_string(),
+                        source: SessionChatOptionEvidence::Terminal,
+                    })?,
+            )
+        }
     };
     Some(SessionChatDetectedSelection {
         model: Some(SessionChatDetectedChoice {
@@ -1525,14 +1526,16 @@ pub(crate) fn cached_session_chat_screen_state(
         .lock()
         .ok()
         .and_then(|cache| {
-            cache.get(&session_observer_key(project_id, session_id)).map(|entry| {
-                (
-                    entry.value.notice.clone(),
-                    entry.value.activity.clone(),
-                    entry.value.fleet.clone(),
-                    entry.value.attempted,
-                )
-            })
+            cache
+                .get(&session_observer_key(project_id, session_id))
+                .map(|entry| {
+                    (
+                        entry.value.notice.clone(),
+                        entry.value.activity.clone(),
+                        entry.value.fleet.clone(),
+                        entry.value.attempted,
+                    )
+                })
         })
         .unwrap_or_default();
     CachedSessionChatScreenState {

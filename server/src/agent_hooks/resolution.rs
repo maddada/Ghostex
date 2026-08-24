@@ -5,9 +5,9 @@ use serde_json::Value;
 use crate::paths::GxserverPaths;
 
 use super::config::{
-    AMP_PLUGIN_MARKER, HOOK_DEFINITIONS, HookPaths, OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER,
-    OPENCODE_PLUGIN_SPEC, PI_EXTENSION_MARKER, pi_extension_paths, resolve_config_directory,
-    resolve_omp_agent_directory,
+    pi_extension_paths, resolve_config_directory, resolve_omp_agent_directory, HookPaths,
+    AMP_PLUGIN_MARKER, HOOK_DEFINITIONS, OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER,
+    OPENCODE_PLUGIN_SPEC, PI_EXTENSION_MARKER,
 };
 use super::install::read_json_object;
 use super::probing::{list_profile_hook_paths, read_file_text};

@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use super::config::{
-    AMP_PLUGIN_MARKER, HookDefinition, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
-    OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER, command_agent,
+    command_agent, HookDefinition, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
+    OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
 };
 use super::probing::path_string;
 

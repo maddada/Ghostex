@@ -1,6 +1,10 @@
 use super::*;
 
-pub(crate) fn schedule_agent_title_metadata_check(state: AppState, project_id: String, session_id: String) {
+pub(crate) fn schedule_agent_title_metadata_check(
+    state: AppState,
+    project_id: String,
+    session_id: String,
+) {
     /*
     CDXC:GxserverAgentTitles 2026-06-21-15:35:
     Agent CLI renames are accepted asynchronously after Ghostex submits `/rename`. Match TypeScript gxserver's three-second trailing metadata check so Rust promotes the agent's own session-metadata title (Codex `thread_name`, Claude `custom-title`) and broadcasts a presentation delta after the CLI writes it.
@@ -10,10 +14,9 @@ pub(crate) fn schedule_agent_title_metadata_check(state: AppState, project_id: S
             GXSERVER_AGENT_TITLE_METADATA_DEBOUNCE_MS,
         ))
         .await;
-        let Ok(db) = open_gxserver_database_with_busy_timeout(
-            &state.paths,
-            Duration::from_secs(10),
-        ) else {
+        let Ok(db) =
+            open_gxserver_database_with_busy_timeout(&state.paths, Duration::from_secs(10))
+        else {
             return;
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
@@ -38,7 +41,10 @@ pub(crate) fn schedule_agent_title_metadata_check(state: AppState, project_id: S
     });
 }
 
-pub(crate) fn schedule_agent_title_metadata_checks_for_sessions(state: &AppState, sessions: &[Value]) {
+pub(crate) fn schedule_agent_title_metadata_checks_for_sessions(
+    state: &AppState,
+    sessions: &[Value],
+) {
     for session in sessions {
         if !should_check_agent_metadata_title_for_project_status(session) {
             continue;
@@ -88,7 +94,10 @@ pub(crate) fn trusted_resume_title_for_project_status(session: &Value) -> Option
     (!is_rejected_project_status_resume_title(&visible)).then_some(visible)
 }
 
-pub(crate) fn normalize_project_status_title_source(value: Option<&str>, title: &str) -> &'static str {
+pub(crate) fn normalize_project_status_title_source(
+    value: Option<&str>,
+    title: &str,
+) -> &'static str {
     match value {
         Some("browser-auto") => "browser-auto",
         Some("generated") => "generated",
@@ -266,7 +275,8 @@ pub(crate) fn claim_first_user_input_draft(
         return None;
     }
     let session = repository.get_session(project_id, session_id).ok()??;
-    if read_runtime_text(&session, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref() != Some("pending") {
+    if read_runtime_text(&session, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref() != Some("pending")
+    {
         return None;
     }
     let draft = read_first_user_input_draft(&session)?;
@@ -638,7 +648,10 @@ pub(crate) fn mark_first_prompt_auto_title_skipped(
     }
 }
 
-pub(crate) fn is_current_first_prompt_auto_title_attempt(session: &Value, attempt_id: &str) -> bool {
+pub(crate) fn is_current_first_prompt_auto_title_attempt(
+    session: &Value,
+    attempt_id: &str,
+) -> bool {
     read_runtime_text(session, "gxserverFirstPromptAutoTitleStatus").as_deref() == Some("running")
         && read_runtime_text(session, FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY).as_deref()
             == Some(attempt_id)
@@ -1243,7 +1256,10 @@ pub(crate) fn requested_agent_title_command_submission(
     Some((project_id, session_id, command))
 }
 
-pub(crate) fn is_generic_agent_session_title(agent_name: Option<&str>, title: Option<&str>) -> bool {
+pub(crate) fn is_generic_agent_session_title(
+    agent_name: Option<&str>,
+    title: Option<&str>,
+) -> bool {
     let normalized_title = title
         .map(|value| {
             value
@@ -1338,7 +1354,10 @@ pub(crate) fn strip_first_prompt_title_prefixes(value: &str) -> &str {
     }
 }
 
-pub(crate) fn is_first_prompt_slash_command(raw_prompt: Option<&str>, normalized_prompt: &str) -> bool {
+pub(crate) fn is_first_prompt_slash_command(
+    raw_prompt: Option<&str>,
+    normalized_prompt: &str,
+) -> bool {
     if js_string_length(normalized_prompt) > 50 {
         return false;
     }
@@ -1491,7 +1510,10 @@ pub(crate) fn normalize_title_generation_agent(value: Option<&str>) -> String {
     }
 }
 
-pub(crate) fn read_title_generation_command(session: &Value, agent: &str) -> Result<String, String> {
+pub(crate) fn read_title_generation_command(
+    session: &Value,
+    agent: &str,
+) -> Result<String, String> {
     if let Some(command) = read_runtime_text(session, "firstPromptTitleGenerationCommand") {
         return Ok(command);
     }
@@ -1656,7 +1678,9 @@ pub(crate) fn js_string_slice_prefix(text: &str, max_code_units: usize) -> Strin
     output
 }
 
-pub(crate) fn internal_prompt_generation_environment(home_dir: &std::path::Path) -> Vec<(String, String)> {
+pub(crate) fn internal_prompt_generation_environment(
+    home_dir: &std::path::Path,
+) -> Vec<(String, String)> {
     /*
     CDXC:GxserverPromptGeneration 2026-06-24-16:11:
     Background title and commit-message generation must not inherit active

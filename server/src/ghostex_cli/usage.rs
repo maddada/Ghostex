@@ -521,7 +521,13 @@ One-time schedules:
 Execution modes:
   local     {{"kind":"local"}}
   worktree  {{"kind":"worktree","setupCommand":"optional command"}}
-  thread    {{"kind":"thread","sessionId":"exact-session-id"}}
+  thread    {{"kind":"thread","agentSessionId":"durable-agent-conversation-id","sessionId":"optional-live-pane-hint"}}
+
+Thread execution:
+  Prefer agentSessionId for Codex and other resumable agents. Ghostex sends the prompt to the
+  existing pane when it still owns that conversation; if the pane has been closed, Ghostex
+  creates a new pane, resumes the exact agent conversation, and then sends the prompt.
+  sessionId-only definitions remain supported but require that Ghostex pane to still exist.
 
 Updates:
   Start from the definition returned by automation-state. Preserve its id,

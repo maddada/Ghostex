@@ -48,9 +48,8 @@ pub fn start_board_work(
     params: &Map<String, Value>,
     bd_executable_path: &str,
 ) -> Result<StartBoardWorkOutcome, DomainStateError> {
-    let bead_id = read_trimmed(params, "beadId").ok_or_else(|| {
-        DomainStateError::bad_request("startBoardWork requires a bead id.")
-    })?;
+    let bead_id = read_trimmed(params, "beadId")
+        .ok_or_else(|| DomainStateError::bad_request("startBoardWork requires a bead id."))?;
     let projects = repository.list_projects()?;
     let (board_project, bead) =
         resolve_board_project_and_bead(&projects, params, &bead_id, bd_executable_path)?;
@@ -92,9 +91,9 @@ pub fn start_board_work(
             "No agent was resolved for this bead. Pass --agent or set a default prompt agent.",
         ));
     }
-    let agent_button = agent_buttons.iter().find(|button| {
-        button.get("agentId").and_then(Value::as_str) == Some(agent_id.as_str())
-    });
+    let agent_button = agent_buttons
+        .iter()
+        .find(|button| button.get("agentId").and_then(Value::as_str) == Some(agent_id.as_str()));
 
     let canonical_bead_id = read_trimmed_value(&bead, "id").unwrap_or_else(|| bead_id.clone());
     let prompt = build_board_bead_work_prompt(
@@ -113,7 +112,10 @@ pub fn start_board_work(
         "projectId".to_string(),
         Value::String(board_project_id.clone()),
     );
-    create_params.insert("surface".to_string(), Value::String("workspace".to_string()));
+    create_params.insert(
+        "surface".to_string(),
+        Value::String("workspace".to_string()),
+    );
     create_params.insert("requireLaunchCommand".to_string(), Value::Bool(true));
     let mut launch_settings = Map::new();
     if let Some(command) = agent_button.and_then(|button| button.get("command")) {
@@ -122,10 +124,7 @@ pub fn start_board_work(
     if let Some(icon) = agent_button.and_then(|button| button.get("icon")) {
         launch_settings.insert("icon".to_string(), icon.clone());
     }
-    create_params.insert(
-        "launchSettings".to_string(),
-        Value::Object(launch_settings),
-    );
+    create_params.insert("launchSettings".to_string(), Value::Object(launch_settings));
     create_params.insert(
         "runtimeSettings".to_string(),
         json!({ "firstUserMessage": prompt }),
@@ -498,11 +497,8 @@ fn read_active_bead_links(store_projects: &[Value], bead_id: &str) -> Vec<Linked
             {
                 continue;
             }
-            let (project_id, session_id) = resolve_link_session_reference(
-                &link,
-                ghostex_session_id,
-                store_project_id,
-            );
+            let (project_id, session_id) =
+                resolve_link_session_reference(&link, ghostex_session_id, store_project_id);
             references.push(LinkedSessionReference {
                 project_id,
                 session_id,
@@ -545,8 +541,8 @@ fn resolve_link_session_reference(
             return (parts[1].to_string(), parts[2].to_string());
         }
     }
-    let link_project_id = read_trimmed_value(link, "projectId")
-        .unwrap_or_else(|| store_project_id.to_string());
+    let link_project_id =
+        read_trimmed_value(link, "projectId").unwrap_or_else(|| store_project_id.to_string());
     (link_project_id, ghostex_session_id.to_string())
 }
 
@@ -662,7 +658,10 @@ fn write_bead_conversation_link(
         link.insert("agentName".to_string(), name);
     }
     if let Some(agent_session_id) = read_trimmed_value(session, "agentSessionId") {
-        link.insert("agentSessionId".to_string(), Value::String(agent_session_id));
+        link.insert(
+            "agentSessionId".to_string(),
+            Value::String(agent_session_id),
+        );
     }
     if let Some(agent_session_path) = read_trimmed_value(session, "agentSessionPath") {
         link.insert(
@@ -670,7 +669,10 @@ fn write_bead_conversation_link(
             Value::String(agent_session_path),
         );
     }
-    link.insert("beadDisplayId".to_string(), Value::String(bead_id.to_string()));
+    link.insert(
+        "beadDisplayId".to_string(),
+        Value::String(bead_id.to_string()),
+    );
     link.insert("beadId".to_string(), Value::String(bead_id.to_string()));
     link.insert("createdAt".to_string(), Value::String(now.clone()));
     link.insert(
@@ -683,7 +685,10 @@ fn write_bead_conversation_link(
         Value::String(board_project_id.to_string()),
     );
     if let Some(zmx_name) = read_trimmed_value(session, "zmxName") {
-        link.insert("sessionPersistenceName".to_string(), Value::String(zmx_name));
+        link.insert(
+            "sessionPersistenceName".to_string(),
+            Value::String(zmx_name),
+        );
     }
     link.insert(
         "sessionPersistenceProvider".to_string(),
@@ -706,9 +711,10 @@ fn write_bead_conversation_link(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    if let Some(existing) = links.iter_mut().find(|existing| {
-        existing.get("id").and_then(Value::as_str) == Some(link_id.as_str())
-    }) {
+    if let Some(existing) = links
+        .iter_mut()
+        .find(|existing| existing.get("id").and_then(Value::as_str) == Some(link_id.as_str()))
+    {
         let created_at = existing.get("createdAt").cloned();
         let mut merged = existing.as_object().cloned().unwrap_or_default();
         for (key, value) in &link {
@@ -906,8 +912,7 @@ mod tests {
         projects
             .iter()
             .find(|project| {
-                project.get("projectId").and_then(Value::as_str)
-                    == Some(board.project_id.as_str())
+                project.get("projectId").and_then(Value::as_str) == Some(board.project_id.as_str())
             })
             .and_then(|project| project.get("projectBoardConfig"))
             .and_then(|config| config.get("beadConversationLinks"))
@@ -945,8 +950,9 @@ mod tests {
             .and_then(|settings| settings.get("firstUserMessage"))
             .and_then(Value::as_str)
             .expect("staged prompt");
-        assert!(first_user_message
-            .starts_with(&format!("Work on bead {TEST_BEAD_ID} ({TEST_BEAD_ID}): Fix the flux capacitor")));
+        assert!(first_user_message.starts_with(&format!(
+            "Work on bead {TEST_BEAD_ID} ({TEST_BEAD_ID}): Fix the flux capacitor"
+        )));
         assert!(first_user_message.contains("Reverse the polarity."));
         assert!(first_user_message.contains(&format!("`bd close {TEST_BEAD_ID}`")));
 
@@ -1027,7 +1033,10 @@ mod tests {
 
         let outcome = run_start_board_work(&board, &params).expect("explicit board start");
 
-        assert_eq!(outcome.result.get("projectId"), Some(&json!(second_project_id)));
+        assert_eq!(
+            outcome.result.get("projectId"),
+            Some(&json!(second_project_id))
+        );
     }
 
     #[test]
@@ -1135,7 +1144,10 @@ mod tests {
             resolve_start_work_agent(None, Some("Researcher"), &agents, "codex"),
             "codex"
         );
-        assert_eq!(resolve_start_work_agent(None, None, &agents, "codex"), "codex");
+        assert_eq!(
+            resolve_start_work_agent(None, None, &agents, "codex"),
+            "codex"
+        );
     }
 
     #[test]

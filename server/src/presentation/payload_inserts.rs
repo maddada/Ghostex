@@ -101,7 +101,10 @@ pub(crate) fn read_session_chat_queue_counts(
         .collect()
 }
 
-pub(crate) fn insert_session_chat_queue_presentation_payload(snapshot: &mut Value, db: &Connection) {
+pub(crate) fn insert_session_chat_queue_presentation_payload(
+    snapshot: &mut Value,
+    db: &Connection,
+) {
     let counts = read_session_chat_queue_counts(db);
     if counts.is_empty() {
         return;
@@ -203,4 +206,3 @@ pub(crate) fn insert_portless_presentation_payload(snapshot: &mut Value, db: &Co
         );
     }
 }
-

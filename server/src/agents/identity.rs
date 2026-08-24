@@ -1,9 +1,9 @@
 use serde_json::{json, Map, Value};
 
+use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::project_session_title_projection;
 use crate::session_status::parse_iso_ms;
-use super::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SessionIdentityUpdateSource {
@@ -959,4 +959,3 @@ pub(crate) fn is_agent_associated(session: &Value, identity: &ResolvedIdentity) 
         || identity.agent_session_path.is_some()
         || read_text_from_map(&object_field(session, "runtimeSettings"), "agentName").is_some()
 }
-

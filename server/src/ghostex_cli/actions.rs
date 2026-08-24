@@ -286,9 +286,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             rpc::call_gxserver_rpc("/api/readSessionText", &params, flags)
         }
         "searchAgentPrompts" => rpc::call_gxserver_rpc("/api/searchAgentPrompts", payload, flags),
-        "readAgentPromptText" => {
-            rpc::call_gxserver_rpc("/api/readAgentPromptText", payload, flags)
-        }
+        "readAgentPromptText" => rpc::call_gxserver_rpc("/api/readAgentPromptText", payload, flags),
         "toggleAgentPromptFavorite" => {
             rpc::call_gxserver_rpc("/api/toggleAgentPromptFavorite", payload, flags)
         }
@@ -1131,7 +1129,10 @@ fn parse_agent_prompt_search(flags: &Flags) -> CliResult<Value> {
         }
     }
     if flags.contains("groupByDay") {
-        map.insert("groupByDay".to_string(), Value::Bool(flags.truthy("groupByDay")));
+        map.insert(
+            "groupByDay".to_string(),
+            Value::Bool(flags.truthy("groupByDay")),
+        );
     }
     if flags.contains("includeFacets") {
         map.insert(
@@ -1165,7 +1166,10 @@ fn parse_agent_prompt_ref(flags: &Flags) -> CliResult<Value> {
     let mut map = Map::new();
     map.insert("key".to_string(), Value::String(agent_prompt_key(flags)?));
     if flags.contains("favorite") {
-        map.insert("favorite".to_string(), Value::Bool(flags.truthy("favorite")));
+        map.insert(
+            "favorite".to_string(),
+            Value::Bool(flags.truthy("favorite")),
+        );
     }
     Ok(Value::Object(map))
 }
@@ -1186,7 +1190,10 @@ fn parse_agent_prompt_launch(flags: &Flags) -> CliResult<Value> {
     // Omitted means "use the daemon's Accept All setting", the same policy
     // `gx f` reads; passing it is an explicit override.
     if flags.contains("acceptAll") {
-        map.insert("acceptAll".to_string(), Value::Bool(flags.truthy("acceptAll")));
+        map.insert(
+            "acceptAll".to_string(),
+            Value::Bool(flags.truthy("acceptAll")),
+        );
     }
     Ok(Value::Object(map))
 }
@@ -1235,7 +1242,10 @@ fn parse_session_chat_answer(rest: &[String], flags: &Flags) -> CliResult<Value>
 
 fn parse_session_chat_queued_prompt(rest: &[String], flags: &Flags) -> CliResult<Value> {
     let mut map = parse_session_selector(rest, flags);
-    let Some(prompt_id) = flags.text("promptId").filter(|value| !value.trim().is_empty()) else {
+    let Some(prompt_id) = flags
+        .text("promptId")
+        .filter(|value| !value.trim().is_empty())
+    else {
         return Err(CliError::Other(
             "This verb requires --prompt-id <id> from read-session-chat-queue.".to_string(),
         ));
@@ -1281,7 +1291,10 @@ fn parse_session_chat_draft(rest: &[String], flags: &Flags) -> CliResult<Value> 
                 .to_string(),
         ));
     };
-    let Some(client_id) = flags.text("clientId").filter(|value| !value.trim().is_empty()) else {
+    let Some(client_id) = flags
+        .text("clientId")
+        .filter(|value| !value.trim().is_empty())
+    else {
         return Err(CliError::Other(
             "set-session-chat-draft requires --client-id <id> so this device ignores its own echo."
                 .to_string(),

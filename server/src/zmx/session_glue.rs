@@ -10,7 +10,9 @@ use crate::{
 
 use super::*;
 
-pub(crate) fn read_lifecycle_params(params: &Map<String, Value>) -> Result<LifecycleParams, DomainStateError> {
+pub(crate) fn read_lifecycle_params(
+    params: &Map<String, Value>,
+) -> Result<LifecycleParams, DomainStateError> {
     Ok(LifecycleParams {
         project_id: read_project_id(params)?,
         session_id: read_session_id(params)?,
@@ -204,7 +206,10 @@ pub(crate) fn kill_to_value(kill: &ProviderKill) -> Value {
     Value::Object(value)
 }
 
-pub(crate) fn decide_startup_text_disposition(provider_state: &str, startup_text: Option<&str>) -> String {
+pub(crate) fn decide_startup_text_disposition(
+    provider_state: &str,
+    startup_text: Option<&str>,
+) -> String {
     if startup_text
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -383,4 +388,3 @@ pub(crate) fn cwd_exists(cwd: &str) -> bool {
 pub(crate) fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
-

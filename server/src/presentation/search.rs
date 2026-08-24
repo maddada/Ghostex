@@ -312,7 +312,11 @@ pub(crate) fn search_result(project: Option<&Value>, session: &Value, matched: V
     Value::Object(output)
 }
 
-pub(crate) fn match_session(project: Option<&Value>, session: &Value, query: &str) -> Option<Value> {
+pub(crate) fn match_session(
+    project: Option<&Value>,
+    session: &Value,
+    query: &str,
+) -> Option<Value> {
     if query.is_empty() {
         return Some(json!({ "field": "title" }));
     }
@@ -364,7 +368,11 @@ pub(crate) fn match_session(project: Option<&Value>, session: &Value, query: &st
     None
 }
 
-pub(crate) fn push_field(fields: &mut Vec<(&'static str, String)>, field: &'static str, value: Option<&str>) {
+pub(crate) fn push_field(
+    fields: &mut Vec<(&'static str, String)>,
+    field: &'static str,
+    value: Option<&str>,
+) {
     if let Some(value) = value {
         fields.push((field, value.to_string()));
     }
@@ -379,4 +387,3 @@ pub(crate) fn push_owned_field(
         fields.push((field, value));
     }
 }
-

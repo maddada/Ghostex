@@ -5,25 +5,20 @@ use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
+use crate::constants::GXSERVER_PROTOCOL_VERSION;
+use crate::domain::DomainRepository;
+use crate::logging::{GxserverLogInput, LogLevel};
+use crate::server::{
+    first_prompt_agent_name, normalize_agent_name, read_runtime_text, read_session_text,
+    session_observer_key, AppState, SessionChatFollowerEntry,
+};
 use crate::session_chat::*;
+use crate::session_chat_options::{forget_session_chat_options, SessionChatOptionDetector};
 use crate::session_chat_paths::resolve_session_chat_transcript_path;
 use crate::session_chat_successor::{
     find_claude_successor_transcript, is_uuid_transcript_stem,
     last_substantive_transcript_timestamp_ms, SessionChatSuccessorOutcome,
 };
-use crate::constants::GXSERVER_PROTOCOL_VERSION;
-use crate::domain::DomainRepository;
-use crate::logging::{GxserverLogInput, LogLevel};
-use crate::server::{
-    AppState,
-    SessionChatFollowerEntry,
-    first_prompt_agent_name,
-    normalize_agent_name,
-    read_runtime_text,
-    read_session_text,
-    session_observer_key,
-};
-use crate::session_chat_options::{SessionChatOptionDetector, forget_session_chat_options};
 use crate::storage::open_gxserver_database;
 
 pub(crate) struct FollowerFileState {
@@ -323,8 +318,7 @@ CLEARS it, so every producer restates the CURRENT value.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SessionChatScreenState<'a> {
     pub notice: Option<&'a crate::session_chat_notice::SessionChatTerminalNotice>,
-    pub activity:
-        Option<&'a crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+    pub activity: Option<&'a crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     /*
     CDXC:SessionChatAgentFleet 2026-08-23: the sub-agents the screen is
     painting right now. Rides here for the same reason the activity row does —
@@ -349,7 +343,10 @@ pub struct SessionChatScreenState<'a> {
     pub probed: bool,
 }
 
-pub(crate) fn insert_screen_state(frame: &mut Map<String, Value>, screen: SessionChatScreenState<'_>) {
+pub(crate) fn insert_screen_state(
+    frame: &mut Map<String, Value>,
+    screen: SessionChatScreenState<'_>,
+) {
     insert_optional_terminal_notice(frame, screen.notice);
     if let Some(activity) = screen.activity {
         frame.insert("terminalActivity".to_string(), activity.to_value());
@@ -1341,7 +1338,6 @@ impl SessionChatFollowerIdentity {
 // Interactive prompts (upstream chat spec §8.1-§8.3): question/approval cards
 // ---------------------------------------------------------------------------
 
-
 /*
 CDXC:SessionChatCore 2026-07-31:
 Session Chat follower registry. Lifecycle mirrors zmx_title_observers (synced
@@ -1404,7 +1400,11 @@ pub(crate) fn session_chat_hook_working(session: &Value) -> bool {
     session_agent_activity(session) == Some("working")
 }
 
-pub(crate) fn sync_session_chat_follower_for_session(state: &AppState, session: &Value, _reason: &str) {
+pub(crate) fn sync_session_chat_follower_for_session(
+    state: &AppState,
+    session: &Value,
+    _reason: &str,
+) {
     let Some(project_id) = read_session_text(session, "projectId") else {
         return;
     };
@@ -1758,7 +1758,12 @@ pub(crate) fn sync_session_chat_followers_for_all_sessions(state: &AppState, rea
     }
 }
 
-pub(crate) fn stop_session_chat_follower(state: &AppState, project_id: &str, session_id: &str, _reason: &str) {
+pub(crate) fn stop_session_chat_follower(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    _reason: &str,
+) {
     if let Ok(mut followers) = state.session_chat_followers.lock() {
         if let Some(entry) = followers.get_mut(&session_observer_key(project_id, session_id)) {
             if let Some(task) = entry.task.take() {
@@ -1840,7 +1845,11 @@ pub(crate) fn subscribe_session_chat_follower(
     }
 }
 
-pub(crate) fn unsubscribe_session_chat_follower(state: &AppState, project_id: &str, session_id: &str) {
+pub(crate) fn unsubscribe_session_chat_follower(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
     let Ok(mut followers) = state.session_chat_followers.lock() else {
         return;
     };

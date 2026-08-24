@@ -105,7 +105,8 @@ impl SessionChatFollowerHeartbeat {
 
     /// The task reached a new reconcile iteration / returned from an await.
     pub fn stamp(&self) {
-        self.last_progress_ms.store(now_epoch_ms(), Ordering::SeqCst);
+        self.last_progress_ms
+            .store(now_epoch_ms(), Ordering::SeqCst);
     }
 
     /// Entering a deliberate long wait: no stamp is expected until it returns.
@@ -280,4 +281,3 @@ impl Default for SessionChatFollowerTuning {
 }
 
 pub type SessionChatFrameEmitter = Arc<dyn Fn(Value) + Send + Sync>;
-

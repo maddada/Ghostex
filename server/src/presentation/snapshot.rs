@@ -292,4 +292,3 @@ pub fn should_include_presentation_project(project: &Value) -> bool {
         && string_field(project, "visibility").as_deref() != Some("hidden")
         && string_field(project, "systemKind").as_deref() != Some("remoteAttachCarrier")
 }
-

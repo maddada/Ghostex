@@ -104,7 +104,11 @@ pub(crate) fn accept_all_spec(agent_id: &str) -> Option<AcceptAllSpec> {
     })
 }
 
-pub(crate) fn strip_accept_all_markers(command: &str, assignments: &[String], aliases: &[String]) -> String {
+pub(crate) fn strip_accept_all_markers(
+    command: &str,
+    assignments: &[String],
+    aliases: &[String],
+) -> String {
     command
         .split_whitespace()
         .filter(|token| !assignments.iter().any(|assignment| assignment == token))
@@ -221,4 +225,3 @@ pub(crate) fn is_grok_bypass_value_or_assignment_token(token: &str) -> bool {
             .strip_prefix(GROK_BYPASS_PERMISSIONS_VALUE)
             .is_some_and(|rest| rest.starts_with('='))
 }
-

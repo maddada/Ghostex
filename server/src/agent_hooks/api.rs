@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 
 use crate::{domain::DomainStateError, paths::GxserverPaths};
 
-use super::config::{HOOK_DEFINITIONS, HookDefinition, HookFormat, HookPaths, hook_format};
+use super::config::{hook_format, HookDefinition, HookFormat, HookPaths, HOOK_DEFINITIONS};
 use super::install::{
     inspect_agent_hook_installation, install_agent_hook, install_notify_hook,
     is_notify_hook_current, migrate_hook_session_sidecars, notify_hook_state_directory,

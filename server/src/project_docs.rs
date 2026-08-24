@@ -125,9 +125,7 @@ pub fn resolve_project_docs_root(project: &Value, project_path: &str) -> Project
     );
     ProjectDocsRoot {
         project_path: PathBuf::from(project_path),
-        extra: configured
-            .as_deref()
-            .map(resolve_project_docs_extra_root),
+        extra: configured.as_deref().map(resolve_project_docs_extra_root),
     }
 }
 
@@ -143,9 +141,10 @@ fn resolve_project_docs_extra_root(configured: &str) -> ProjectDocsExtraRoot {
     } else {
         match fs::metadata(&path) {
             Err(_) => Some(format!("Docs directory does not exist: {}", path.display())),
-            Ok(metadata) if !metadata.is_dir() => {
-                Some(format!("Docs directory is not a folder: {}", path.display()))
-            }
+            Ok(metadata) if !metadata.is_dir() => Some(format!(
+                "Docs directory is not a folder: {}",
+                path.display()
+            )),
             Ok(_) => None,
         }
     };
@@ -668,10 +667,7 @@ fn project_file_entries(context: DocsContext<'_>) -> Result<Vec<Value>, String> 
     Ok(entries)
 }
 
-fn project_root_file_entries(
-    root: &Path,
-    context: DocsContext<'_>,
-) -> Result<Vec<Value>, String> {
+fn project_root_file_entries(root: &Path, context: DocsContext<'_>) -> Result<Vec<Value>, String> {
     let mut entries = Vec::new();
     let mut scanned_directory_entries = 0;
     let roots = scan_roots(context.additional_docs_folders);

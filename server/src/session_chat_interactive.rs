@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
+use crate::constants::GXSERVER_PROTOCOL_VERSION;
+use crate::server::{read_runtime_text, read_session_text, session_observer_key, AppState};
 use crate::session_chat::*;
 use crate::session_chat_follower::{insert_optional_selected_options, insert_screen_state};
-use crate::constants::GXSERVER_PROTOCOL_VERSION;
-use crate::server::{AppState, read_runtime_text, read_session_text, session_observer_key};
 use crate::session_chat_options::cached_session_chat_screen_state;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -418,7 +418,6 @@ pub fn build_session_chat_prompt_state_frame(
 // ---------------------------------------------------------------------------
 // Inline sanity tests (real transcript files are skipped when absent)
 // ---------------------------------------------------------------------------
-
 
 /*
 CDXC:SessionChatSend 2026-07-31:

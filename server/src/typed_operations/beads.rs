@@ -8,8 +8,8 @@ use serde_json::{json, Map, Value};
 use crate::toolchain::require_system_bd;
 
 use super::values::{
-    chmod_executable_if_supported, command_summary_json, display_unknown_value, nullish_value_to_string,
-    normalize_issue_id, normalize_nullish_required_text, normalize_required_text,
+    chmod_executable_if_supported, command_summary_json, display_unknown_value, normalize_issue_id,
+    normalize_nullish_required_text, normalize_required_text, nullish_value_to_string,
     resolve_path_against, run_process_command, typed_result, value_to_string, ProcessCommand,
     StringOrElse, TypedOperationContext, TypedOperationError,
 };
@@ -451,7 +451,11 @@ pub(crate) fn normalize_beads_where_directory(stdout: &str) -> Result<String, Ty
     Ok(beads_path.to_string())
 }
 
-pub(crate) fn build_ghostex_beads_git_hook_script(hook_name: &str, bd: &str, beads_path: &str) -> String {
+pub(crate) fn build_ghostex_beads_git_hook_script(
+    hook_name: &str,
+    bd: &str,
+    beads_path: &str,
+) -> String {
     format!(
         "#!/usr/bin/env sh\n\
 # Ghostex-managed Beads hook. This local file is generated under the common Git directory.\n\
@@ -758,7 +762,9 @@ pub(crate) fn parse_beads_board_output(
     parse_beads_board_output_with_limits(stdout, default_beads_board_limits())
 }
 
-pub(crate) fn parse_beads_show_output(stdout: &str) -> Result<(Value, String), TypedOperationError> {
+pub(crate) fn parse_beads_show_output(
+    stdout: &str,
+) -> Result<(Value, String), TypedOperationError> {
     let parsed: Value = serde_json::from_str(stdout.trim()).map_err(|_| {
         TypedOperationError::bad_request("Beads issue detail output was not valid JSON.")
     })?;

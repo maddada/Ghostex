@@ -149,7 +149,12 @@ impl SessionChatAgentFleet {
         let mut map = Map::new();
         map.insert(
             "agents".to_string(),
-            Value::Array(self.agents.iter().map(SessionChatSubAgent::to_value).collect()),
+            Value::Array(
+                self.agents
+                    .iter()
+                    .map(SessionChatSubAgent::to_value)
+                    .collect(),
+            ),
         );
         map.insert("detectedAt".to_string(), json!(self.detected_at));
         Value::Object(map)

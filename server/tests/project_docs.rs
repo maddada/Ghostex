@@ -97,7 +97,9 @@ fn entry_paths(response: &Value) -> Vec<String> {
 }
 
 fn entry_depth(response: &Value, path: &str) -> u64 {
-    entry(response, path)["depth"].as_u64().expect("entry depth")
+    entry(response, path)["depth"]
+        .as_u64()
+        .expect("entry depth")
 }
 
 fn entry<'a>(response: &'a Value, path: &str) -> &'a Value {
@@ -314,10 +316,7 @@ fn a_docs_directory_mounts_its_whole_tree_under_one_top_level_node() {
 
     // Nested three deep inside it, listed and readable.
     let nested = mounted("notes/deep/deeper/note.md");
-    assert!(
-        paths.contains(&nested),
-        "nested note is missing: {paths:?}"
-    );
+    assert!(paths.contains(&nested), "nested note is missing: {paths:?}");
     assert_eq!(entry_depth(&listed, &nested), 4);
     assert!(paths.contains(&mounted("Personal/journal.md")));
     assert!(paths.contains(&mounted("root.md")));
@@ -354,7 +353,10 @@ fn mounted_entries_carry_the_mount_name_as_their_display_path() {
         .into_owned();
 
     // The mount node itself, and a note nested three folders inside it.
-    assert_eq!(entry(&listed, MOUNT)["displayPath"], Value::String(vault_name.clone()));
+    assert_eq!(
+        entry(&listed, MOUNT)["displayPath"],
+        Value::String(vault_name.clone())
+    );
     assert_eq!(
         entry(&listed, &mounted("notes/deep/deeper/note.md"))["displayPath"],
         Value::String(format!("{vault_name}/notes/deep/deeper/note.md"))

@@ -1,5 +1,7 @@
 use super::*;
-use crate::session_chat_follower::{stop_session_chat_follower, sync_session_chat_follower_for_session};
+use crate::session_chat_follower::{
+    stop_session_chat_follower, sync_session_chat_follower_for_session,
+};
 
 pub(crate) fn schedule_presentation_project_delta(
     state: &AppState,
@@ -130,7 +132,11 @@ pub(crate) fn read_presentation_snapshot_in_sequence(
     read_presentation_snapshot(db, server_id, auto_settle_after_days, sidebar_v2_selected)
 }
 
-pub(crate) fn schedule_stale_activity_presentation_refresh(state: &AppState, session: &Value, _reason: &str) {
+pub(crate) fn schedule_stale_activity_presentation_refresh(
+    state: &AppState,
+    session: &Value,
+    _reason: &str,
+) {
     let Some(project_id) = read_session_text(session, "projectId") else {
         return;
     };
@@ -253,7 +259,12 @@ pub(crate) fn sync_zmx_title_observer_for_session(state: &AppState, session: &Va
     observers.insert(key, ZmxTitleObserverTask { handle, zmx_name });
 }
 
-pub(crate) fn stop_zmx_title_observer(state: &AppState, project_id: &str, session_id: &str, reason: &str) {
+pub(crate) fn stop_zmx_title_observer(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    reason: &str,
+) {
     stop_zmx_title_observer_by_key(state, &session_observer_key(project_id, session_id), reason);
 }
 

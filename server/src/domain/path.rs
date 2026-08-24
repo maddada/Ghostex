@@ -35,7 +35,10 @@ CDXC:GxserverProjectPaths 2026-06-22-06:07:
 Add Project and session cwd/projectPath resolution must match TypeScript's `normalizeExistingDirectoryPath`: accept absolute paths plus `~` shortcuts, reject non-string/blank/relative inputs with path-specific messages, and store the `path.resolve`-style normalized string so duplicate adds with `..`, `.`, or trailing separators return the existing project.
 JSON `null` follows the TypeScript nullish fallback contract (`path ?? projectPath`, `projectPath ?? cwd`); blank strings and non-strings stay selected and fail validation instead of falling through.
 */
-pub(crate) fn normalize_existing_directory_path(value: Option<&Value>, field: &str) -> DomainResult<String> {
+pub(crate) fn normalize_existing_directory_path(
+    value: Option<&Value>,
+    field: &str,
+) -> DomainResult<String> {
     normalize_project_root_path(value, field, false)
 }
 

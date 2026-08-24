@@ -369,7 +369,10 @@ pub(crate) fn cleanup_macos_zmx_launchd_job(session_name: &str) {
     }
 }
 
-pub(crate) fn run_zsh_script(script: String, options: ZmxCommandOptions) -> Result<ZmxCommandResult, String> {
+pub(crate) fn run_zsh_script(
+    script: String,
+    options: ZmxCommandOptions,
+) -> Result<ZmxCommandResult, String> {
     run_zsh_script_blocking(&script, options)
 }
 

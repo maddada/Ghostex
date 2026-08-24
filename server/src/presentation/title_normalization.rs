@@ -658,4 +658,3 @@ pub(crate) fn agent_default_title(agent_id: Option<&str>) -> String {
         .join(" ");
     format!("{title} Session")
 }
-

@@ -1,17 +1,22 @@
-import { CronExpressionParser } from "cron-parser";
-import type { SidebarAgentIcon } from "./sidebar-agents";
+import { CronExpressionParser } from 'cron-parser';
+import type { SidebarAgentIcon } from './sidebar-agents';
 
 export type AutomationSchedule =
-  | { kind: "once"; runAt: string }
-  | { kind: "interval"; everyMs: number }
-  | { kind: "daily"; time: string; timezone: string }
-  | { kind: "weekly"; days: number[]; time: string; timezone: string }
-  | { kind: "cron"; expression: string; timezone: string };
+  | { kind: 'once'; runAt: string }
+  | { kind: 'interval'; everyMs: number }
+  | { kind: 'daily'; time: string; timezone: string }
+  | { kind: 'weekly'; days: number[]; time: string; timezone: string }
+  | { kind: 'cron'; expression: string; timezone: string };
 
 export type AutomationExecutionMode =
-  | { kind: "local" }
-  | { kind: "worktree"; setupCommand?: string }
-  | { kind: "thread"; sessionId: string; expiresAt?: string };
+  | { kind: 'local' }
+  | { kind: 'worktree'; setupCommand?: string }
+  | {
+      agentSessionId?: string;
+      expiresAt?: string;
+      kind: 'thread';
+      sessionId?: string;
+    };
 
 export type AutomationDefinition = {
   agentId: string;
@@ -28,14 +33,7 @@ export type AutomationDefinition = {
 };
 
 export type AutomationRunStatus =
-  | "queued"
-  | "running"
-  | "findings"
-  | "no_findings"
-  | "failed"
-  | "needs_attention"
-  | "cancelled"
-  | "skipped";
+  'queued' | 'running' | 'findings' | 'no_findings' | 'failed' | 'needs_attention' | 'cancelled' | 'skipped';
 
 export type AutomationRun = {
   automationId: string;
@@ -87,10 +85,7 @@ export type ProjectAutomationsBridgeState = AutomationState & {
   worktreeUnavailableReason?: string;
 };
 
-export type AutomationResultKind = Extract<
-  AutomationRunStatus,
-  "findings" | "no_findings" | "needs_attention"
->;
+export type AutomationResultKind = Extract<AutomationRunStatus, 'findings' | 'no_findings' | 'needs_attention'>;
 
 const DEFAULT_INTERVAL_MS = 60 * 60 * 1000;
 const MIN_INTERVAL_MS = 60 * 1000;
@@ -98,8 +93,7 @@ const MAX_INTERVAL_MS = 365 * 24 * 60 * 60 * 1000;
 const MAX_AUTOMATION_COUNT = 500;
 const MAX_AUTOMATION_RUN_COUNT = 5_000;
 const TIME_PATTERN = /^(?<hour>[01]\d|2[0-3]):(?<minute>[0-5]\d)$/u;
-const AUTOMATION_RESULT_PATTERN =
-  /AUTOMATION_RESULT:\s*(findings|no_findings|needs_attention)\b/iu;
+const AUTOMATION_RESULT_PATTERN = /AUTOMATION_RESULT:\s*(findings|no_findings|needs_attention)\b/iu;
 
 export function createDefaultAutomationState(): AutomationState {
   return { automations: [], runs: [] };
@@ -172,63 +166,63 @@ export function normalizeAutomationSchedule(candidate: unknown): AutomationSched
     return undefined;
   }
   switch (candidate.kind) {
-    case "once": {
+    case 'once': {
       const runAt = normalizeDateString(candidate.runAt);
-      return runAt ? { kind: "once", runAt } : undefined;
+      return runAt ? { kind: 'once', runAt } : undefined;
     }
-    case "interval": {
+    case 'interval': {
       const everyMs = normalizeIntervalMs(candidate.everyMs);
-      return everyMs ? { kind: "interval", everyMs } : undefined;
+      return everyMs ? { kind: 'interval', everyMs } : undefined;
     }
-    case "daily": {
+    case 'daily': {
       const time = normalizeTime(candidate.time);
       if (!time) {
         return undefined;
       }
-      return { kind: "daily", time, timezone: normalizeTimezone(candidate.timezone) };
+      return { kind: 'daily', time, timezone: normalizeTimezone(candidate.timezone) };
     }
-    case "weekly": {
+    case 'weekly': {
       const time = normalizeTime(candidate.time);
       const days = normalizeWeekdays(candidate.days);
       if (!time || days.length === 0) {
         return undefined;
       }
-      return { kind: "weekly", days, time, timezone: normalizeTimezone(candidate.timezone) };
+      return { kind: 'weekly', days, time, timezone: normalizeTimezone(candidate.timezone) };
     }
-    case "cron": {
+    case 'cron': {
       const expression = normalizeCronExpression(candidate.expression);
       if (!expression) {
         return undefined;
       }
-      return { kind: "cron", expression, timezone: normalizeTimezone(candidate.timezone) };
+      return { kind: 'cron', expression, timezone: normalizeTimezone(candidate.timezone) };
     }
     default:
       return undefined;
   }
 }
 
-export function normalizeAutomationExecutionMode(
-  candidate: unknown,
-): AutomationExecutionMode | undefined {
+export function normalizeAutomationExecutionMode(candidate: unknown): AutomationExecutionMode | undefined {
   if (!isRecord(candidate)) {
     return undefined;
   }
   switch (candidate.kind) {
-    case "local":
-      return { kind: "local" };
-    case "worktree":
+    case 'local':
+      return { kind: 'local' };
+    case 'worktree':
       return {
-        kind: "worktree",
+        kind: 'worktree',
         setupCommand: normalizeNonEmptyString(candidate.setupCommand),
       };
-    case "thread": {
+    case 'thread': {
+      const agentSessionId = normalizeNonEmptyString(candidate.agentSessionId);
       const sessionId = normalizeNonEmptyString(candidate.sessionId);
-      if (!sessionId) {
+      if (!agentSessionId && !sessionId) {
         return undefined;
       }
       return {
+        agentSessionId,
         expiresAt: normalizeDateString(candidate.expiresAt),
-        kind: "thread",
+        kind: 'thread',
         sessionId,
       };
     }
@@ -286,14 +280,14 @@ export function normalizeAutomationRun(candidate: unknown): AutomationRun | unde
 
 export function normalizeAutomationRunStatus(candidate: unknown): AutomationRunStatus | undefined {
   switch (candidate) {
-    case "queued":
-    case "running":
-    case "findings":
-    case "no_findings":
-    case "failed":
-    case "needs_attention":
-    case "cancelled":
-    case "skipped":
+    case 'queued':
+    case 'running':
+    case 'findings':
+    case 'no_findings':
+    case 'failed':
+    case 'needs_attention':
+    case 'cancelled':
+    case 'skipped':
       return candidate;
     default:
       return undefined;
@@ -302,7 +296,7 @@ export function normalizeAutomationRunStatus(candidate: unknown): AutomationRunS
 
 export function computeNextRunAt(
   schedule: AutomationSchedule,
-  options: { from?: Date; after?: Date } = {},
+  options: { from?: Date; after?: Date } = {}
 ): string | undefined {
   const from = options.from ?? new Date();
   const after = options.after ?? from;
@@ -311,19 +305,17 @@ export function computeNextRunAt(
     return undefined;
   }
   switch (schedule.kind) {
-    case "once": {
+    case 'once': {
       const runAtMs = Date.parse(schedule.runAt);
-      return Number.isFinite(runAtMs) && runAtMs > afterMs
-        ? new Date(runAtMs).toISOString()
-        : undefined;
+      return Number.isFinite(runAtMs) && runAtMs > afterMs ? new Date(runAtMs).toISOString() : undefined;
     }
-    case "interval":
+    case 'interval':
       return new Date(afterMs + schedule.everyMs).toISOString();
-    case "daily":
+    case 'daily':
       return computeNextDailyRunAt(schedule.time, from, schedule.timezone);
-    case "weekly":
+    case 'weekly':
       return computeNextWeeklyRunAt(schedule.days, schedule.time, from, schedule.timezone);
-    case "cron":
+    case 'cron':
       return computeNextCronRunAt(schedule.expression, from, schedule.timezone);
     default:
       return undefined;
@@ -349,7 +341,7 @@ export function parseAutomationResult(text: string): {
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 6)
-    .join("\n");
+    .join('\n');
   return { result, summary: summary || undefined };
 }
 
@@ -359,11 +351,7 @@ export function compareAutomationRunsNewestFirst(left: AutomationRun, right: Aut
   return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
 }
 
-function computeNextDailyRunAt(
-  time: string,
-  from: Date,
-  timezone: string,
-): string | undefined {
+function computeNextDailyRunAt(time: string, from: Date, timezone: string): string | undefined {
   const parsed = parseTime(time);
   if (!parsed) {
     return undefined;
@@ -375,25 +363,21 @@ function computeNextWeeklyRunAt(
   days: readonly number[],
   time: string,
   from: Date,
-  timezone: string,
+  timezone: string
 ): string | undefined {
   const parsed = parseTime(time);
   if (!parsed || days.length === 0) {
     return undefined;
   }
-  const weekdayPart = [...new Set(days)].sort((left, right) => left - right).join(",");
+  const weekdayPart = [...new Set(days)].sort((left, right) => left - right).join(',');
   return computeNextCronRunAt(`${parsed.minute} ${parsed.hour} * * ${weekdayPart}`, from, timezone);
 }
 
-function computeNextCronRunAt(
-  expression: string,
-  from: Date,
-  timezone: string,
-): string | undefined {
+function computeNextCronRunAt(expression: string, from: Date, timezone: string): string | undefined {
   try {
     const interval = CronExpressionParser.parse(expression, {
       currentDate: from,
-      tz: timezone === "local" ? undefined : timezone,
+      tz: timezone === 'local' ? undefined : timezone,
     });
     return interval.next().toDate().toISOString();
   } catch {
@@ -401,7 +385,7 @@ function computeNextCronRunAt(
   }
 }
 
-function normalizeAutomationRunWorktree(candidate: unknown): AutomationRun["worktree"] {
+function normalizeAutomationRunWorktree(candidate: unknown): AutomationRun['worktree'] {
   if (!isRecord(candidate)) {
     return undefined;
   }
@@ -412,18 +396,16 @@ function normalizeAutomationRunWorktree(candidate: unknown): AutomationRun["work
 }
 
 function normalizeIntervalMs(value: unknown): number | undefined {
-  const numericValue = typeof value === "number" ? value : Number(value);
+  const numericValue = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(numericValue)) {
     return DEFAULT_INTERVAL_MS;
   }
   const roundedValue = Math.round(numericValue);
-  return roundedValue >= MIN_INTERVAL_MS && roundedValue <= MAX_INTERVAL_MS
-    ? roundedValue
-    : undefined;
+  return roundedValue >= MIN_INTERVAL_MS && roundedValue <= MAX_INTERVAL_MS ? roundedValue : undefined;
 }
 
 function normalizeTime(value: unknown): string | undefined {
-  return typeof value === "string" && TIME_PATTERN.test(value) ? value : undefined;
+  return typeof value === 'string' && TIME_PATTERN.test(value) ? value : undefined;
 }
 
 function parseTime(value: string): { hour: number; minute: number } | undefined {
@@ -438,22 +420,23 @@ function parseTime(value: string): { hour: number; minute: number } | undefined 
 }
 
 function normalizeTimezone(value: unknown): string {
-  return typeof value === "string" && value.trim() ? value.trim() : "local";
+  return typeof value === 'string' && value.trim() ? value.trim() : 'local';
 }
 
 function normalizeWeekdays(value: unknown): number[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  return [...new Set(value.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))]
-    .sort((left, right) => left - right);
+  return [...new Set(value.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort(
+    (left, right) => left - right
+  );
 }
 
 function normalizeCronExpression(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
-  const expression = value.trim().replace(/\s+/gu, " ");
+  const expression = value.trim().replace(/\s+/gu, ' ');
   try {
     CronExpressionParser.parse(expression);
   } catch {
@@ -466,18 +449,22 @@ function normalizeStringList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  return [...new Set(value.flatMap((entry) => {
-    const normalized = normalizeNonEmptyString(entry);
-    return normalized ? [normalized] : [];
-  }))];
+  return [
+    ...new Set(
+      value.flatMap((entry) => {
+        const normalized = normalizeNonEmptyString(entry);
+        return normalized ? [normalized] : [];
+      })
+    ),
+  ];
 }
 
 function normalizeNonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function normalizeDateString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return undefined;
   }
   const parsedMs = Date.parse(value);
@@ -485,5 +472,5 @@ function normalizeDateString(value: unknown): string | undefined {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

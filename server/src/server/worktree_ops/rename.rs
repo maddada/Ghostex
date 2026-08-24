@@ -237,10 +237,10 @@ pub(crate) fn prepare_rename_worktree_project_plan(
     }
     if moves_folder {
         if destination_path == parent_path {
-            return Err(
-                DomainStateError::bad_request("That name would collide with the main checkout.")
-                    .into(),
-            );
+            return Err(DomainStateError::bad_request(
+                "That name would collide with the main checkout.",
+            )
+            .into());
         }
         if Path::new(&destination_path).exists() {
             return Err(DomainStateError::bad_request(format!(
@@ -420,8 +420,9 @@ pub(crate) async fn resolve_renamed_worktree_branch_name(
         "projectPath".to_string(),
         Value::String(plan.worktree_path.clone()),
     );
-    let branch = dispatch_typed_operation_endpoint("/api/runGitAction", &extra, plan.projects.clone())
-        .await?;
+    let branch =
+        dispatch_typed_operation_endpoint("/api/runGitAction", &extra, plan.projects.clone())
+            .await?;
     if exit_code(&branch) == 0 {
         if let Some(branch_name) = branch
             .get("stdout")
@@ -682,7 +683,9 @@ pub(crate) fn write_renamed_worktree_project_state(
         */
         if let Some(created_at) = projects
             .iter()
-            .find(|candidate| candidate.get("projectId").and_then(Value::as_str) == Some(project_id))
+            .find(|candidate| {
+                candidate.get("projectId").and_then(Value::as_str) == Some(project_id)
+            })
             .and_then(|candidate| candidate.get("worktree"))
             .and_then(Value::as_object)
             .and_then(|current| current.get("createdAt"))
@@ -693,7 +696,10 @@ pub(crate) fn write_renamed_worktree_project_state(
         update.insert("worktree".to_string(), Value::Object(worktree));
     }
     if let Some(board_config) = renamed_worktree_board_config(&projects, plan) {
-        update.insert("projectBoardConfig".to_string(), Value::Object(board_config));
+        update.insert(
+            "projectBoardConfig".to_string(),
+            Value::Object(board_config),
+        );
     }
     let project = repository.update_project(&update)?;
 
@@ -734,11 +740,13 @@ pub(crate) fn write_renamed_worktree_project_state(
             let Some(session_id) = session.get("sessionId").and_then(Value::as_str) else {
                 continue;
             };
-            let Some(runtime_settings) = worktree_sessions::runtime_settings_with_moved_worktree_path(
-                &session,
-                &plan.worktree_path,
-                Some(branch),
-            ) else {
+            let Some(runtime_settings) =
+                worktree_sessions::runtime_settings_with_moved_worktree_path(
+                    &session,
+                    &plan.worktree_path,
+                    Some(branch),
+                )
+            else {
                 continue;
             };
             let mut session_update = Map::new();
@@ -794,7 +802,10 @@ pub(crate) fn renamed_worktree_board_config(
 /// `<old worktree>/x` becomes `<new worktree>/x`; anything outside the moved
 /// folder is left exactly as it is. The old folder is recognised through either
 /// spelling it had before the move — see `worktree_path_resolved`.
-pub(crate) fn rebase_renamed_worktree_path(path: &str, plan: &RenameWorktreeProjectPlan) -> Option<String> {
+pub(crate) fn rebase_renamed_worktree_path(
+    path: &str,
+    plan: &RenameWorktreeProjectPlan,
+) -> Option<String> {
     let normalized = path_to_string(&resolve_path_syntax(PathBuf::from(path)));
     let roots =
         std::iter::once(plan.worktree_path.as_str()).chain(plan.worktree_path_resolved.as_deref());

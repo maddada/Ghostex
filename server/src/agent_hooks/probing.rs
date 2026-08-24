@@ -103,7 +103,11 @@ pub(crate) fn normalize_environment_path(value: Option<&str>, home_dir: &Path) -
     }
 }
 
-pub(crate) fn list_profile_hook_paths(home_dir: &Path, profile_dir: &str, file_name: &str) -> Vec<PathBuf> {
+pub(crate) fn list_profile_hook_paths(
+    home_dir: &Path,
+    profile_dir: &str,
+    file_name: &str,
+) -> Vec<PathBuf> {
     let profiles_path = home_dir.join(profile_dir);
     let Ok(entries) = fs::read_dir(&profiles_path) else {
         return Vec::new();

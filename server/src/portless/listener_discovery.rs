@@ -172,7 +172,9 @@ fi
     .to_string()
 }
 
-pub(crate) fn parse_portless_listener_snapshot_sections(stdout: &str) -> PortlessListenerSnapshotSections {
+pub(crate) fn parse_portless_listener_snapshot_sections(
+    stdout: &str,
+) -> PortlessListenerSnapshotSections {
     let zmx_marker = "__GHOSTEX_ZMX_LIST__";
     let ps_marker = "__GHOSTEX_PS__";
     let listener_marker = "__GHOSTEX_LSOF_LISTEN__";
@@ -201,7 +203,9 @@ pub(crate) fn parse_portless_listener_snapshot_sections(stdout: &str) -> Portles
     }
 }
 
-pub(crate) fn run_portless_listener_snapshot_command(script: &str) -> Result<PortlessSnapshotCommandOutput> {
+pub(crate) fn run_portless_listener_snapshot_command(
+    script: &str,
+) -> Result<PortlessSnapshotCommandOutput> {
     let shell = command_shell();
     let mut child = Command::new(&shell.executable)
         .args(shell.script_args(script))
@@ -421,7 +425,9 @@ fn collect_portless_process_tree_pids(
     collected
 }
 
-pub(crate) fn parse_portless_tcp_listener_rows(listener_output: &str) -> Vec<PortlessTcpListenerRow> {
+pub(crate) fn parse_portless_tcp_listener_rows(
+    listener_output: &str,
+) -> Vec<PortlessTcpListenerRow> {
     let mut listeners = Vec::new();
     let mut current_pid: Option<u32> = None;
     for raw_line in listener_output.lines() {
@@ -627,4 +633,3 @@ pub(crate) struct PortlessTcpListenerRow {
     pub(crate) pid: u32,
     pub(crate) port: u16,
 }
-

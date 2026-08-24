@@ -56,7 +56,9 @@ pub(crate) struct LifecycleParams {
     pub(crate) session_id: String,
 }
 
-pub(crate) fn read_lifecycle(params: &Map<String, Value>) -> Result<LifecycleParams, DomainStateError> {
+pub(crate) fn read_lifecycle(
+    params: &Map<String, Value>,
+) -> Result<LifecycleParams, DomainStateError> {
     Ok(LifecycleParams {
         project_id: read_project_id(params)?,
         session_id: read_session_id(params)?,
@@ -93,7 +95,10 @@ pub(crate) fn require_session(
         })
 }
 
-pub(crate) fn read_required_text(value: Option<&Value>, field: &str) -> Result<String, DomainStateError> {
+pub(crate) fn read_required_text(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<String, DomainStateError> {
     value
         .and_then(Value::as_str)
         .map(str::trim)
@@ -153,7 +158,11 @@ pub(crate) fn object_from_value(value: Value) -> Map<String, Value> {
     value.as_object().cloned().unwrap_or_default()
 }
 
-pub(crate) fn insert_optional_string(map: &mut Map<String, Value>, key: &str, value: Option<String>) {
+pub(crate) fn insert_optional_string(
+    map: &mut Map<String, Value>,
+    key: &str,
+    value: Option<String>,
+) {
     if let Some(value) = value {
         map.insert(key.to_string(), Value::String(value));
     }
@@ -273,4 +282,3 @@ pub(crate) fn sql_error(error: rusqlite::Error) -> DomainStateError {
         message: format!("SQLite agent-state error: {error}"),
     }
 }
-

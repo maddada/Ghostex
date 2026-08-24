@@ -1184,7 +1184,6 @@ mod tests {
         assert_eq!(launch.command, bundled.to_string_lossy());
     }
 
-
     #[test]
     fn desktop_launch_opens_the_bundle_that_owns_the_cli() {
         let executable = Path::new("/Applications/Ghostex Dev.app/Contents/Resources/CLI/ghostex");

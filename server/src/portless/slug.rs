@@ -52,7 +52,10 @@ pub(crate) fn project_base_slug(row: &PortlessProjectBackfillRow) -> String {
         .unwrap_or_else(|| deterministic_fallback_slug("project", &row.project_id))
 }
 
-pub(crate) fn worktree_base_slug(worktree: &PortlessWorktreeBackfillMetadata, worktree_key: &str) -> String {
+pub(crate) fn worktree_base_slug(
+    worktree: &PortlessWorktreeBackfillMetadata,
+    worktree_key: &str,
+) -> String {
     worktree
         .name
         .as_deref()
@@ -177,4 +180,3 @@ fn branch_last_segment(branch: &str) -> Option<&str> {
         .rsplit('/')
         .find(|segment| !segment.trim().is_empty())
 }
-

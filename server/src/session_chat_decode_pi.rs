@@ -196,4 +196,3 @@ pub fn decode_pi_transcript_line(line: &str, fallback_id: &str) -> Option<Sessio
 // ---------------------------------------------------------------------------
 // Noise filter (upstream chat spec §9.1) — needed by the Claude lifecycle decoder.
 // ---------------------------------------------------------------------------
-

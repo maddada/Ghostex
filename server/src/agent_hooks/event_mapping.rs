@@ -87,7 +87,11 @@ pub(crate) fn normalized_hook_agent_key(value: &str) -> String {
     }
 }
 
-pub(crate) fn activity_for_hook_event(agent_key: &str, event_name: &str, payload: &Value) -> Option<String> {
+pub(crate) fn activity_for_hook_event(
+    agent_key: &str,
+    event_name: &str,
+    payload: &Value,
+) -> Option<String> {
     let normalized_event_name = normalize_prompt_text(event_name);
     let lower = normalized_event_name.to_ascii_lowercase();
     if agent_key == "codex" {

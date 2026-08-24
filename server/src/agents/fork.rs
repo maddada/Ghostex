@@ -3,11 +3,11 @@ use std::path::Path;
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
-use crate::domain::{DomainRepository, DomainStateError};
-use crate::zmx::dispatch_zmx_lifecycle_endpoint;
-use crate::presentation::project_session_title_projection;
-use crate::zmx::ZmxServerContext;
 use super::*;
+use crate::domain::{DomainRepository, DomainStateError};
+use crate::presentation::project_session_title_projection;
+use crate::zmx::dispatch_zmx_lifecycle_endpoint;
+use crate::zmx::ZmxServerContext;
 
 pub(crate) fn fork_session(
     repository: &DomainRepository<'_>,
@@ -76,7 +76,11 @@ pub(crate) fn fork_session(
     })
 }
 
-pub(crate) fn build_agent_fork_plan(project: &Value, session: &Value, settings: &Map<String, Value>) -> Value {
+pub(crate) fn build_agent_fork_plan(
+    project: &Value,
+    session: &Value,
+    settings: &Map<String, Value>,
+) -> Value {
     let resume_plan = build_agent_resume_plan(project, session, settings);
     let agent_id = resume_plan.get("agentId").and_then(Value::as_str);
     let runtime_command = resume_plan.get("runtimeCommand").and_then(Value::as_str);
@@ -348,4 +352,3 @@ pub(crate) fn request_session_rename(
         "shouldSendAgentRenameCommand": false,
     }))
 }
-

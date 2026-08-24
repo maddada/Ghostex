@@ -1,8 +1,8 @@
 use std::{fs, path::Path, time::Duration};
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Value};
 
 use crate::{
     config::write_default_config_if_missing,

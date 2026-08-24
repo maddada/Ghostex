@@ -162,7 +162,6 @@ pub(crate) fn is_portless_disabled_state(state: Option<&PortlessState>) -> bool 
         .unwrap_or(false)
 }
 
-
 pub(crate) fn probe_portless_proxy_reachable(port: u16) -> bool {
     let addr = ([127, 0, 0, 1], port).into();
     TcpStream::connect_timeout(&addr, PORTLESS_SERVICE_REACHABILITY_TIMEOUT).is_ok()
@@ -241,7 +240,9 @@ pub(crate) fn portless_base_domain_for_listener(
     Ok(format!("{}.localhost", project.slug))
 }
 
-pub(crate) fn primary_portless_route_target_index(targets: &[PortlessRouteTarget]) -> Option<usize> {
+pub(crate) fn primary_portless_route_target_index(
+    targets: &[PortlessRouteTarget],
+) -> Option<usize> {
     for preferred_port in PORTLESS_PRIMARY_ROUTE_PORT_PREFERENCE {
         if let Some(index) = targets
             .iter()
@@ -442,5 +443,3 @@ fn ensure_current_user_owns_path(path: &Path) -> Result<()> {
 fn ensure_current_user_owns_path(_path: &Path) -> Result<()> {
     Ok(())
 }
-
-

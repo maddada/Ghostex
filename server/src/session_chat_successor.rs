@@ -444,4 +444,3 @@ pub fn find_claude_successor_transcript(
 // ---------------------------------------------------------------------------
 // Stream position (epoch/seq shared by the follower and /api/readSessionChat)
 // ---------------------------------------------------------------------------
-

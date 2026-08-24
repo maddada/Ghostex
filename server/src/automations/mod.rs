@@ -13,8 +13,8 @@ use tokio::sync::broadcast;
 
 use crate::{
     agents::{
-        apply_created_session_identity, create_agent_session_params_for_project,
-        read_agent_settings,
+        apply_created_session_identity, build_agent_resume_plan,
+        create_agent_session_params_for_project, read_agent_settings,
     },
     domain::{read_domain_rpc_params, DomainRepository, DomainStateError},
     paths::GxserverPaths,
@@ -436,7 +436,7 @@ fn launch_automation(
         .unwrap_or("local");
     let prompt = build_automation_prompt(&automation.prompt);
     match execution_kind {
-        "thread" => launch_thread_automation(repository, automation, &prompt, run),
+        "thread" => launch_thread_automation(runtime, repository, db, automation, &prompt, run),
         "worktree" => launch_worktree_automation(runtime, repository, db, automation, &prompt, run),
         _ => launch_local_automation(runtime, repository, db, automation, &prompt),
     }
@@ -450,8 +450,9 @@ fn launch_local_automation(
     prompt: &str,
 ) -> Result<AutomationLaunch, DomainStateError> {
     let project = resolve_project_by_id(repository, &automation.project_id)?;
-    let session =
-        create_and_start_agent_session(runtime, repository, db, &project, automation, prompt)?;
+    let session = create_and_start_agent_session(
+        runtime, repository, db, &project, automation, prompt, None,
+    )?;
     Ok(AutomationLaunch {
         pending_prompt: Some(prompt.to_string()),
         session_id: required_value_text(&session, "sessionId")?,
@@ -499,6 +500,7 @@ fn launch_worktree_automation(
         &worktree_project,
         automation,
         prompt,
+        None,
     )?;
     Ok(AutomationLaunch {
         pending_prompt: Some(prompt.to_string()),
@@ -513,7 +515,9 @@ fn launch_worktree_automation(
 }
 
 fn launch_thread_automation(
+    runtime: &AutomationRuntime,
     repository: &DomainRepository<'_>,
+    db: &Connection,
     automation: &AutomationDefinitionRecord,
     prompt: &str,
     run: &AutomationRunRecord,
@@ -534,15 +538,59 @@ fn launch_thread_automation(
             });
         }
     }
-    let session_id = automation
+    let session_id_hint = automation
         .execution_mode
         .get("sessionId")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| DomainStateError::bad_request("Thread automation requires sessionId."))?;
+        .filter(|value| !value.is_empty());
+    let agent_session_id = automation
+        .execution_mode
+        .get("agentSessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    if let Some(agent_session_id) = agent_session_id {
+        if let Some((session_project_id, session_id)) = resolve_agent_thread_session(
+            repository,
+            &automation.project_id,
+            session_id_hint,
+            &automation.agent_id,
+            agent_session_id,
+        )? {
+            send_automation_prompt(repository, &session_project_id, &session_id, prompt)?;
+            return Ok(AutomationLaunch {
+                pending_prompt: None,
+                session_id,
+                session_project_id,
+                worktree: Some(json!({ "sourceRunId": run.id })),
+            });
+        }
+
+        let project = resolve_project_by_id(repository, &automation.project_id)?;
+        let session = create_and_start_agent_session(
+            runtime,
+            repository,
+            db,
+            &project,
+            automation,
+            prompt,
+            Some(agent_session_id),
+        )?;
+        return Ok(AutomationLaunch {
+            pending_prompt: Some(prompt.to_string()),
+            session_id: required_value_text(&session, "sessionId")?,
+            session_project_id: project.project_id,
+            worktree: Some(json!({ "sourceRunId": run.id })),
+        });
+    }
+
+    let session_id_hint = session_id_hint.ok_or_else(|| {
+        DomainStateError::bad_request("Thread automation requires sessionId or agentSessionId.")
+    })?;
     let (session_project_id, session_id) =
-        resolve_thread_session(repository, &automation.project_id, session_id)?;
+        resolve_thread_session(repository, &automation.project_id, session_id_hint)?;
     /*
     Thread automations reuse a session whose agent is already running, so the
     prompt goes in immediately and needs no readiness wait. Report it as already
@@ -564,6 +612,7 @@ fn create_and_start_agent_session(
     project: &ProjectRecord,
     automation: &AutomationDefinitionRecord,
     prompt: &str,
+    resume_agent_session_id: Option<&str>,
 ) -> Result<Value, DomainStateError> {
     let mut params = Map::new();
     params.insert(
@@ -582,15 +631,20 @@ fn create_and_start_agent_session(
         "title".to_string(),
         Value::String(format!("Automation: {}", automation.name)),
     );
-    params.insert(
-        "runtimeSettings".to_string(),
-        json!({ "firstUserMessage": prompt }),
-    );
+    let mut runtime_settings = json!({ "firstUserMessage": prompt });
+    if let Some(agent_session_id) = resume_agent_session_id {
+        runtime_settings["agentSessionId"] = Value::String(agent_session_id.to_string());
+    }
+    params.insert("runtimeSettings".to_string(), runtime_settings);
     params.insert("requireLaunchCommand".to_string(), Value::Bool(true));
     let project_value = repository
         .get_project(&project.project_id)?
         .ok_or_else(|| DomainStateError::not_found("Automation project not found."))?;
-    let create_params = create_agent_session_params_for_project(db, &project_value, &params)?;
+    let agent_settings = read_agent_settings(db)?;
+    let mut create_params = create_agent_session_params_for_project(db, &project_value, &params)?;
+    if resume_agent_session_id.is_some() {
+        apply_resume_launch_plan(&project_value, &mut create_params, &agent_settings)?;
+    }
     let created = repository.create_session(&create_params, false)?;
     let session = apply_created_session_identity(repository, &created, &create_params)?;
     let project_id = required_value_text(&session, "projectId")?;
@@ -602,7 +656,6 @@ fn create_and_start_agent_session(
         auth_token_file: runtime.auth_token_file.clone(),
         base_url: runtime.base_url.clone(),
     };
-    let agent_settings = read_agent_settings(db)?;
     dispatch_zmx_lifecycle_endpoint(
         repository,
         "/api/startSessionProvider",
@@ -612,6 +665,89 @@ fn create_and_start_agent_session(
     )
     .map_err(zmx_error)?;
     Ok(session)
+}
+
+fn apply_resume_launch_plan(
+    project: &Value,
+    create_params: &mut Map<String, Value>,
+    agent_settings: &Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let resume_plan = build_agent_resume_plan(
+        project,
+        &Value::Object(create_params.clone()),
+        agent_settings,
+    );
+    let startup_text = resume_plan
+        .get("startupText")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            DomainStateError::bad_request(
+                "The selected agent conversation does not support exact resume.",
+            )
+        })?
+        .to_string();
+    let primary_command = resume_plan
+        .get("primaryCommand")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            DomainStateError::bad_request(
+                "The selected agent conversation does not have a resume command.",
+            )
+        })?
+        .to_string();
+
+    let mut launch_settings = create_params
+        .get("launchSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let mut agent_launch_plan = launch_settings
+        .get("agentLaunchPlan")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    agent_launch_plan.insert(
+        "agentCommand".to_string(),
+        resume_plan
+            .get("baseCommand")
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    agent_launch_plan.insert("command".to_string(), Value::String(primary_command));
+    agent_launch_plan.insert(
+        "startupText".to_string(),
+        Value::String(startup_text.clone()),
+    );
+    agent_launch_plan.insert(
+        "startupTextDisposition".to_string(),
+        Value::String("queueAfterTerminalReady".to_string()),
+    );
+    launch_settings.insert(
+        "agentLaunchPlan".to_string(),
+        Value::Object(agent_launch_plan),
+    );
+    let mut runtime_relevant = launch_settings
+        .get("runtimeRelevant")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    runtime_relevant.insert("queueProviderStartupText".to_string(), Value::Bool(true));
+    launch_settings.insert(
+        "runtimeRelevant".to_string(),
+        Value::Object(runtime_relevant),
+    );
+    create_params.insert("launchSettings".to_string(), Value::Object(launch_settings));
+    if let Some(runtime_settings) = create_params
+        .get_mut("runtimeSettings")
+        .and_then(Value::as_object_mut)
+    {
+        runtime_settings.insert("startupText".to_string(), Value::String(startup_text));
+    }
+    Ok(())
 }
 
 struct WorktreeTarget {
@@ -864,8 +1000,7 @@ fn normalize_definition_payload(
         let next_run_at = if is_one_shot_schedule(&schedule) {
             compute_next_run_at(&schedule, None)
         } else {
-            read_value_text(object, "nextRunAt")
-                .or_else(|| compute_next_run_at(&schedule, None))
+            read_value_text(object, "nextRunAt").or_else(|| compute_next_run_at(&schedule, None))
         };
         Some(next_run_at.ok_or_else(|| {
             DomainStateError::bad_request(
@@ -983,10 +1118,15 @@ fn normalize_execution_mode(value: Option<&Value>) -> Result<Value, DomainStateE
             "setupCommand": read_value_text(mode, "setupCommand"),
         })),
         "thread" => {
-            let session_id = read_value_text(mode, "sessionId").ok_or_else(|| {
-                DomainStateError::bad_request("Thread executionMode requires sessionId.")
-            })?;
+            let session_id = read_value_text(mode, "sessionId");
+            let agent_session_id = read_value_text(mode, "agentSessionId");
+            if session_id.is_none() && agent_session_id.is_none() {
+                return Err(DomainStateError::bad_request(
+                    "Thread executionMode requires sessionId or agentSessionId.",
+                ));
+            }
             Ok(json!({
+                "agentSessionId": agent_session_id,
                 "expiresAt": read_value_text(mode, "expiresAt"),
                 "kind": "thread",
                 "sessionId": session_id,
@@ -1627,6 +1767,72 @@ fn resolve_thread_session(
     Err(DomainStateError::not_found(
         "Thread session is no longer available.",
     ))
+}
+
+fn resolve_agent_thread_session(
+    repository: &DomainRepository<'_>,
+    default_project_id: &str,
+    session_id_hint: Option<&str>,
+    agent_id: &str,
+    agent_session_id: &str,
+) -> Result<Option<(String, String)>, DomainStateError> {
+    if let Some(session_id_hint) = session_id_hint {
+        if let Ok((project_id, session_id)) =
+            resolve_thread_session(repository, default_project_id, session_id_hint)
+        {
+            if let Some(session) = repository.get_session(&project_id, &session_id)? {
+                if session_owns_agent_conversation(&session, agent_id, agent_session_id) {
+                    return Ok(Some((project_id, session_id)));
+                }
+            }
+        }
+    }
+
+    let matches = repository
+        .list_sessions(None)?
+        .into_iter()
+        .filter(|session| session_owns_agent_conversation(session, agent_id, agent_session_id))
+        .filter_map(|session| {
+            Some((
+                required_value_text(&session, "projectId").ok()?,
+                required_value_text(&session, "sessionId").ok()?,
+            ))
+        })
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => Ok(None),
+        [target] => Ok(Some(target.clone())),
+        _ => Err(DomainStateError {
+            code: "needsAttention",
+            message: format!(
+                "Multiple Ghostex sessions own agent conversation {agent_session_id}. Close the duplicate panes before running this automation."
+            ),
+        }),
+    }
+}
+
+fn session_owns_agent_conversation(
+    session: &Value,
+    agent_id: &str,
+    agent_session_id: &str,
+) -> bool {
+    let runtime_settings = session.get("runtimeSettings").and_then(Value::as_object);
+    let stored_agent_session_id = runtime_settings
+        .and_then(|settings| settings.get("agentSessionId"))
+        .and_then(Value::as_str)
+        .map(str::trim);
+    if stored_agent_session_id != Some(agent_session_id) {
+        return false;
+    }
+    session
+        .get("agentId")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            runtime_settings
+                .and_then(|settings| settings.get("launchAgentId"))
+                .and_then(Value::as_str)
+        })
+        .is_some_and(|stored_agent_id| stored_agent_id.eq_ignore_ascii_case(agent_id))
 }
 
 fn find_run_session_project_id(

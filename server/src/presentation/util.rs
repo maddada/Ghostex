@@ -85,7 +85,11 @@ pub(crate) fn value_field(value: &Value, key: &str) -> Value {
     value.get(key).cloned().unwrap_or(Value::Null)
 }
 
-pub(crate) fn insert_optional_string(map: &mut Map<String, Value>, key: &str, value: Option<String>) {
+pub(crate) fn insert_optional_string(
+    map: &mut Map<String, Value>,
+    key: &str,
+    value: Option<String>,
+) {
     if let Some(value) = value {
         map.insert(key.to_string(), Value::String(value));
     }
@@ -120,4 +124,3 @@ pub(crate) fn parse_iso_ms(value: &str) -> Option<i64> {
         .ok()
         .map(|date| date.timestamp_millis())
 }
-

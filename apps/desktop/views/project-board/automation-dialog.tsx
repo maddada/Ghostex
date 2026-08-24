@@ -4,8 +4,8 @@
  * Codex-style redesign can be rendered from Storybook with mock props. It is
  * pure presentation over the automation draft state and its save callback.
  */
-import type { ComponentProps, ReactNode } from "react";
-import { Button } from "@/packages/components/ui/button";
+import type { ComponentProps, ReactNode } from 'react';
+import { Button } from '@/packages/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -13,23 +13,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/packages/components/ui/dialog";
-import { Input } from "@/packages/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/packages/components/ui/select";
-import { Switch } from "@/packages/components/ui/switch";
-import { Textarea } from "@/packages/components/ui/textarea";
-import type {
-  AutomationExecutionMode,
-  ProjectAutomationsBridgeState,
-} from "@/packages/shared/automations";
-import type { ProjectBoardConversationState } from "@/packages/shared/bead-conversation-links";
-import { AutomationAgentOptionLabel } from "./agent-labels";
+} from '@/packages/components/ui/dialog';
+import { Input } from '@/packages/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
+import { Switch } from '@/packages/components/ui/switch';
+import { Textarea } from '@/packages/components/ui/textarea';
+import type { AutomationExecutionMode, ProjectAutomationsBridgeState } from '@/packages/shared/automations';
+import type { ProjectBoardConversationState } from '@/packages/shared/bead-conversation-links';
+import { AutomationAgentOptionLabel } from './agent-labels';
 import {
   AUTOMATION_SCHEDULE_PRESETS,
   AUTOMATION_TIMER_UNIT_OPTIONS,
@@ -37,20 +28,14 @@ import {
   type AutomationDraft,
   type AutomationScheduleMode,
   type AutomationTimerUnit,
-} from "./automations-drafts";
+} from './automations-drafts';
 
-type SelectItems = ComponentProps<typeof Select>["items"];
+type SelectItems = ComponentProps<typeof Select>['items'];
 
-function AutomationSection({
-  children,
-  title,
-}: {
-  children: ReactNode;
-  title: string;
-}) {
+function AutomationSection({ children, title }: { children: ReactNode; title: string }) {
   return (
-    <div className="grid gap-2.5">
-      <div className="project-automation-form-section-title">{title}</div>
+    <div className='grid gap-2.5'>
+      <div className='project-automation-form-section-title'>{title}</div>
       {children}
     </div>
   );
@@ -99,18 +84,18 @@ export function AutomationDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="project-ticket-dialog project-automation-dialog gap-4 p-5">
-        <DialogHeader className="gap-1">
-          <DialogTitle className="text-[15px] font-normal">
-            {automationDraft.id ? "Edit automation" : "Create automation"}
+      <DialogContent className='project-ticket-dialog project-automation-dialog gap-4 p-5'>
+        <DialogHeader className='gap-1'>
+          <DialogTitle className='text-[15px] font-normal'>
+            {automationDraft.id ? 'Edit automation' : 'Create automation'}
           </DialogTitle>
-          <DialogDescription className="text-xs font-normal text-muted-foreground">
+          <DialogDescription className='text-xs font-normal text-muted-foreground'>
             {isAutomationGlobalScope
-              ? "Schedule agent work once or repeatedly for a selected project."
+              ? 'Schedule agent work once or repeatedly for a selected project.'
               : `Schedule agent work once or repeatedly for ${projectName}.`}
           </DialogDescription>
         </DialogHeader>
-        <div className="project-ticket-dialog-body project-automation-form vertical-scroll-fade-mask">
+        <div className='project-ticket-dialog-body project-automation-form vertical-scroll-fade-mask'>
           {/*
            * CDXC:ProjectAutomations 2026-06-09-10:30:
            * Automation setup is scoped to the Project board's current project, so the create/edit dialog drops project switching and keeps dropdown widths aligned at 250px for agent, schedule, weekday, and thread-session fields.
@@ -118,7 +103,7 @@ export function AutomationDialog({
            * CDXC:Automations 2026-06-30-11:05:
            * The Quick-level global Automations page shows all projects, so its create/edit dialog restores a Project selector. Project-scoped Automate pages keep the original no-project-switch form.
            */}
-          <label className="project-automation-field-full">
+          <label className='project-automation-field-full'>
             <span>Name</span>
             <Input
               onChange={(event) => {
@@ -128,7 +113,7 @@ export function AutomationDialog({
               value={automationDraft.name}
             />
           </label>
-          <div className="project-automation-form-grid">
+          <div className='project-automation-form-grid'>
             {isAutomationGlobalScope ? (
               <label>
                 <span>Project</span>
@@ -137,8 +122,8 @@ export function AutomationDialog({
                   onValueChange={onProjectChange}
                   value={automationDraft.projectId}
                 >
-                  <SelectTrigger className="project-automation-select">
-                    <SelectValue placeholder="Choose project" />
+                  <SelectTrigger className='project-automation-select'>
+                    <SelectValue placeholder='Choose project' />
                   </SelectTrigger>
                   <SelectContent>
                     {automationState.projects.map((project) => (
@@ -155,16 +140,12 @@ export function AutomationDialog({
               <Select
                 disabled={automationState.agents.length === 0}
                 items={automationAgentSelectItems}
-                onValueChange={(value) =>
-                  setAutomationDraft((current) => ({ ...current, agentId: value }))
-                }
+                onValueChange={(value) => setAutomationDraft((current) => ({ ...current, agentId: value }))}
                 value={automationDraft.agentId}
               >
-                <SelectTrigger className="project-automation-select">
+                <SelectTrigger className='project-automation-select'>
                   <SelectValue
-                    placeholder={
-                      automationState.agents.length === 0 ? "No agents configured" : "Choose agent"
-                    }
+                    placeholder={automationState.agents.length === 0 ? 'No agents configured' : 'Choose agent'}
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -177,12 +158,12 @@ export function AutomationDialog({
               </Select>
             </label>
           </div>
-          <AutomationSection title="Timing">
-            <div className="project-automation-segmented" role="group" aria-label="Schedule type">
+          <AutomationSection title='Timing'>
+            <div className='project-automation-segmented' role='group' aria-label='Schedule type'>
               {[
-                ["repeat", "Repeat"],
-                ["timer", "Timer"],
-                ["date", "Date"],
+                ['repeat', 'Repeat'],
+                ['timer', 'Timer'],
+                ['date', 'Date'],
               ].map(([value, label]) => (
                 <button
                   data-active={automationDraft.scheduleMode === value}
@@ -193,14 +174,14 @@ export function AutomationDialog({
                       scheduleMode: value as AutomationScheduleMode,
                     }))
                   }
-                  type="button"
+                  type='button'
                 >
                   {label}
                 </button>
               ))}
             </div>
-            {automationDraft.scheduleMode === "repeat" ? (
-              <div className="project-automation-form-grid">
+            {automationDraft.scheduleMode === 'repeat' ? (
+              <div className='project-automation-form-grid'>
                 <label>
                   <span>Repeat</span>
                   <Select
@@ -208,12 +189,12 @@ export function AutomationDialog({
                     onValueChange={(value) =>
                       setAutomationDraft((current) => ({
                         ...current,
-                        schedulePreset: value as AutomationDraft["schedulePreset"],
+                        schedulePreset: value as AutomationDraft['schedulePreset'],
                       }))
                     }
                     value={automationDraft.schedulePreset}
                   >
-                    <SelectTrigger className="project-automation-select">
+                    <SelectTrigger className='project-automation-select'>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -225,17 +206,15 @@ export function AutomationDialog({
                     </SelectContent>
                   </Select>
                 </label>
-                {automationDraft.schedulePreset === "weekly" ? (
+                {automationDraft.schedulePreset === 'weekly' ? (
                   <label>
                     <span>Day</span>
                     <Select
                       items={automationWeekdaySelectItems}
-                      onValueChange={(value) =>
-                        setAutomationDraft((current) => ({ ...current, weeklyDay: value }))
-                      }
+                      onValueChange={(value) => setAutomationDraft((current) => ({ ...current, weeklyDay: value }))}
                       value={automationDraft.weeklyDay}
                     >
-                      <SelectTrigger className="project-automation-select">
+                      <SelectTrigger className='project-automation-select'>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -248,13 +227,13 @@ export function AutomationDialog({
                     </Select>
                   </label>
                 ) : null}
-                {automationDraft.schedulePreset === "daily" ||
-                automationDraft.schedulePreset === "weekly" ||
-                automationDraft.schedulePreset === "weekdays" ? (
+                {automationDraft.schedulePreset === 'daily' ||
+                automationDraft.schedulePreset === 'weekly' ||
+                automationDraft.schedulePreset === 'weekdays' ? (
                   <label>
                     <span>Time</span>
                     <Input
-                      className="project-automation-select"
+                      className='project-automation-select'
                       onChange={(event) => {
                         const scheduleTime = event.currentTarget.value;
                         setAutomationDraft((current) => ({
@@ -262,19 +241,19 @@ export function AutomationDialog({
                           scheduleTime,
                         }));
                       }}
-                      type="time"
+                      type='time'
                       value={automationDraft.scheduleTime}
                     />
                   </label>
                 ) : null}
               </div>
-            ) : automationDraft.scheduleMode === "timer" ? (
-              <div className="project-automation-form-grid">
+            ) : automationDraft.scheduleMode === 'timer' ? (
+              <div className='project-automation-form-grid'>
                 <label>
                   <span>Run in</span>
                   <Input
-                    className="project-automation-select"
-                    min="1"
+                    className='project-automation-select'
+                    min='1'
                     onChange={(event) => {
                       const timerAmount = event.currentTarget.value;
                       setAutomationDraft((current) => ({
@@ -282,8 +261,8 @@ export function AutomationDialog({
                         timerAmount,
                       }));
                     }}
-                    step="1"
-                    type="number"
+                    step='1'
+                    type='number'
                     value={automationDraft.timerAmount}
                   />
                 </label>
@@ -299,7 +278,7 @@ export function AutomationDialog({
                     }
                     value={automationDraft.timerUnit}
                   >
-                    <SelectTrigger className="project-automation-select">
+                    <SelectTrigger className='project-automation-select'>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -313,7 +292,7 @@ export function AutomationDialog({
                 </label>
               </div>
             ) : (
-              <label className="project-automation-field-full">
+              <label className='project-automation-field-full'>
                 <span>Run on</span>
                 <Input
                   onChange={(event) => {
@@ -323,14 +302,13 @@ export function AutomationDialog({
                       runAt,
                     }));
                   }}
-                  type="datetime-local"
+                  type='datetime-local'
                   value={automationDraft.runAt}
                 />
               </label>
             )}
-            {automationDraft.scheduleMode === "repeat" &&
-            automationDraft.schedulePreset === "cron" ? (
-              <label className="project-automation-field-full">
+            {automationDraft.scheduleMode === 'repeat' && automationDraft.schedulePreset === 'cron' ? (
+              <label className='project-automation-field-full'>
                 <span>Cron</span>
                 <Input
                   onChange={(event) => {
@@ -340,20 +318,20 @@ export function AutomationDialog({
                       cronExpression,
                     }));
                   }}
-                  placeholder="*/15 * * * *"
+                  placeholder='*/15 * * * *'
                   value={automationDraft.cronExpression}
                 />
               </label>
             ) : null}
           </AutomationSection>
-          <AutomationSection title="Execution">
-            <div className="project-automation-segmented" role="group" aria-label="Execution mode">
+          <AutomationSection title='Execution'>
+            <div className='project-automation-segmented' role='group' aria-label='Execution mode'>
               {[
-                ["worktree", "Worktree"],
-                ["local", "Local"],
-                ["thread", "Thread"],
+                ['worktree', 'Worktree'],
+                ['local', 'Local'],
+                ['thread', 'Thread'],
               ].map(([value, label]) => {
-                const disabled = value === "worktree" && !automationDraftCanUseWorktrees;
+                const disabled = value === 'worktree' && !automationDraftCanUseWorktrees;
                 return (
                   <button
                     data-active={automationDraft.executionKind === value}
@@ -362,10 +340,10 @@ export function AutomationDialog({
                     onClick={() =>
                       setAutomationDraft((current) => ({
                         ...current,
-                        executionKind: value as AutomationExecutionMode["kind"],
+                        executionKind: value as AutomationExecutionMode['kind'],
                       }))
                     }
-                    type="button"
+                    type='button'
                   >
                     {label}
                   </button>
@@ -373,11 +351,11 @@ export function AutomationDialog({
               })}
             </div>
             {!automationDraftCanUseWorktrees && automationDraftWorktreeUnavailableReason ? (
-              <p className="m-0 -mt-1 text-xs font-normal leading-relaxed text-muted-foreground">
+              <p className='m-0 -mt-1 text-xs font-normal leading-relaxed text-muted-foreground'>
                 {automationDraftWorktreeUnavailableReason}
               </p>
             ) : null}
-            {automationDraft.executionKind === "worktree" ? (
+            {automationDraft.executionKind === 'worktree' ? (
               <label>
                 <span>Setup command</span>
                 <Input
@@ -388,24 +366,32 @@ export function AutomationDialog({
                       setupCommand,
                     }));
                   }}
-                  placeholder="Use project worktree command"
+                  placeholder='Use project worktree command'
                   value={automationDraft.setupCommand}
                 />
               </label>
             ) : null}
-            {automationDraft.executionKind === "thread" ? (
-              <div className="project-automation-form-grid">
+            {automationDraft.executionKind === 'thread' ? (
+              <div className='project-automation-form-grid'>
                 <label>
                   <span>Session</span>
                   <Select
                     items={automationSessionSelectItems}
-                    onValueChange={(value) =>
-                      setAutomationDraft((current) => ({ ...current, threadSessionId: value }))
-                    }
+                    onValueChange={(value) => {
+                      const session = automationConversationState.sessions.find(
+                        (candidate) => candidate.sessionId === value
+                      );
+                      setAutomationDraft((current) => ({
+                        ...current,
+                        agentId: session?.agentId ?? current.agentId,
+                        threadAgentSessionId: session?.agentSessionId ?? '',
+                        threadSessionId: value,
+                      }));
+                    }}
                     value={automationDraft.threadSessionId}
                   >
-                    <SelectTrigger className="project-automation-select">
-                      <SelectValue placeholder="Choose session" />
+                    <SelectTrigger className='project-automation-select'>
+                      <SelectValue placeholder='Choose session' />
                     </SelectTrigger>
                     <SelectContent>
                       {automationConversationState.sessions.map((session) => (
@@ -416,10 +402,16 @@ export function AutomationDialog({
                     </SelectContent>
                   </Select>
                 </label>
+                {automationDraft.threadAgentSessionId ? (
+                  <p className='col-span-full m-0 text-xs font-normal leading-relaxed text-muted-foreground'>
+                    This automation will resume agent conversation {automationDraft.threadAgentSessionId} if its Ghostex
+                    pane is closed.
+                  </p>
+                ) : null}
                 <label>
                   <span>Expires</span>
                   <Input
-                    className="project-automation-select"
+                    className='project-automation-select'
                     onChange={(event) => {
                       const expiresAt = event.currentTarget.value;
                       setAutomationDraft((current) => ({
@@ -427,14 +419,14 @@ export function AutomationDialog({
                         expiresAt,
                       }));
                     }}
-                    type="datetime-local"
+                    type='datetime-local'
                     value={automationDraft.expiresAt}
                   />
                 </label>
               </div>
             ) : null}
           </AutomationSection>
-          <label className="project-automation-prompt-field">
+          <label className='project-automation-prompt-field'>
             <span>Prompt</span>
             <Textarea
               onChange={(event) => {
@@ -444,27 +436,22 @@ export function AutomationDialog({
               value={automationDraft.prompt}
             />
           </label>
-          <div className="flex flex-row items-center gap-2 text-[13px] font-normal text-foreground/85">
+          <div className='flex flex-row items-center gap-2 text-[13px] font-normal text-foreground/85'>
             <Switch
               checked={automationDraft.enabled}
               onCheckedChange={(enabled: boolean) => {
                 setAutomationDraft((current) => ({ ...current, enabled }));
               }}
-              size="sm"
+              size='sm'
             />
             <span>Enabled</span>
           </div>
         </div>
-        <DialogFooter className="project-ticket-dialog-footer">
-          <Button
-            className="ml-auto"
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="ghost"
-          >
+        <DialogFooter className='project-ticket-dialog-footer'>
+          <Button className='ml-auto' onClick={() => onOpenChange(false)} type='button' variant='ghost'>
             Cancel
           </Button>
-          <Button disabled={Boolean(automationActionId)} onClick={onSave} type="button">
+          <Button disabled={Boolean(automationActionId)} onClick={onSave} type='button'>
             Save
           </Button>
         </DialogFooter>

@@ -447,7 +447,10 @@ pub(crate) fn restorable_agent_id(value: Option<&str>) -> Option<&str> {
     }
 }
 
-pub(crate) fn get_exact_agent_session_reference(agent_id: &str, input: &AgentResumeInput) -> Option<String> {
+pub(crate) fn get_exact_agent_session_reference(
+    agent_id: &str,
+    input: &AgentResumeInput,
+) -> Option<String> {
     match agent_id {
         "codex" => get_codex_session_reference(input),
         "cursor" => get_cursor_session_reference(input),
@@ -507,7 +510,9 @@ pub(crate) fn get_cursor_chat_session_id(value: Option<&str>) -> Option<String> 
     is_uuid(segment).then(|| segment.to_ascii_lowercase())
 }
 
-pub(crate) fn get_cursor_chat_session_id_from_stored_commands(candidates: &[String]) -> Option<String> {
+pub(crate) fn get_cursor_chat_session_id_from_stored_commands(
+    candidates: &[String],
+) -> Option<String> {
     candidates
         .iter()
         .filter_map(|candidate| get_resume_flag_value_from_stored_command(candidate, "--resume"))
@@ -549,7 +554,10 @@ pub(crate) fn is_claude_ses_id(value: &str) -> bool {
     })
 }
 
-pub(crate) fn get_resume_flag_value_from_stored_command(command: &str, flag: &str) -> Option<String> {
+pub(crate) fn get_resume_flag_value_from_stored_command(
+    command: &str,
+    flag: &str,
+) -> Option<String> {
     let bytes = command.as_bytes();
     let flag_bytes = flag.as_bytes();
     let mut index = 0;
@@ -737,7 +745,10 @@ pub(crate) fn build_opencode_resume_command(
     )
 }
 
-pub(crate) fn build_codex_validated_resume_command(agent_command: &str, session_reference: &str) -> String {
+pub(crate) fn build_codex_validated_resume_command(
+    agent_command: &str,
+    session_reference: &str,
+) -> String {
     [
         "CODEX_RESUME_SESSION_ID=\"$(".to_string(),
         format!(
@@ -813,4 +824,3 @@ pub(crate) fn get_uuid_from_text(value: &str) -> Option<String> {
     }
     None
 }
-

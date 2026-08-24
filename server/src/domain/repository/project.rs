@@ -7,10 +7,10 @@ use crate::domain::{
     are_project_worktree_metadata_equal, detect_registered_git_worktree_metadata,
     find_project_by_path_in, merge_project_update, normalize_existing_directory_path,
     normalize_project_input, normalize_project_root_path, normalize_project_system_kind,
-    normalize_project_visibility, now_iso, path_basename, project_from_row,
-    project_insert_params, project_row_from_sql, read_optional_text, read_project_id,
-    read_string_field, read_unvalidated_project_lookup_id, recent_project_from_project,
-    sql_error, DomainRepository, DomainResult, DomainStateError,
+    normalize_project_visibility, now_iso, path_basename, project_from_row, project_insert_params,
+    project_row_from_sql, read_optional_text, read_project_id, read_string_field,
+    read_unvalidated_project_lookup_id, recent_project_from_project, sql_error, DomainRepository,
+    DomainResult, DomainStateError,
 };
 use crate::ids::create_project_id;
 
@@ -341,7 +341,10 @@ impl<'a> DomainRepository<'a> {
         }))
     }
 
-    pub(crate) fn find_project_by_path(&self, normalized_path: &str) -> DomainResult<Option<Value>> {
+    pub(crate) fn find_project_by_path(
+        &self,
+        normalized_path: &str,
+    ) -> DomainResult<Option<Value>> {
         Ok(find_project_by_path_in(
             &self.list_projects()?,
             normalized_path,

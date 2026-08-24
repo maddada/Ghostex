@@ -494,12 +494,9 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         mirroring the Session Chat pattern above. Rows are addressed by their
         stable `--key`, so a phone can act on a result it listed minutes ago.
         */
-        "search-agent-prompts" => run_bridge_action(
-            "searchAgentPrompts",
-            Parser::AgentPromptSearch,
-            plain,
-            args,
-        ),
+        "search-agent-prompts" => {
+            run_bridge_action("searchAgentPrompts", Parser::AgentPromptSearch, plain, args)
+        }
         "read-agent-prompt-text" => run_bridge_action(
             "readAgentPromptText",
             Parser::AgentPromptRef,
@@ -559,12 +556,9 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         handed out, never by a list position, so a phone acting on a row minutes
         later still lands on the prompt it displayed.
         */
-        "read-session-chat-queue" => run_bridge_action(
-            "readSessionChatQueue",
-            Parser::SessionSelector,
-            plain,
-            args,
-        ),
+        "read-session-chat-queue" => {
+            run_bridge_action("readSessionChatQueue", Parser::SessionSelector, plain, args)
+        }
         "queue-session-chat-prompt" => run_bridge_action(
             "queueSessionChatPrompt",
             Parser::SendText,

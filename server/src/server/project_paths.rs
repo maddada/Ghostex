@@ -83,7 +83,8 @@ pub(crate) fn create_project_directory(
     params: &Map<String, Value>,
     home_dir: &Path,
 ) -> std::result::Result<Value, ProjectPathHttpError> {
-    let parent_path = normalize_existing_directory_path(params.get("parentPath"), "parentPath", home_dir)?;
+    let parent_path =
+        normalize_existing_directory_path(params.get("parentPath"), "parentPath", home_dir)?;
     let name = normalize_new_directory_name(params.get("name"))?;
     let path = PathBuf::from(&parent_path).join(&name);
     if path.exists() {

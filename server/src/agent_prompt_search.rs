@@ -64,7 +64,10 @@ pub struct PromptSearchError {
 
 impl PromptSearchError {
     fn invalid(message: impl Into<String>) -> Self {
-        Self { code: "invalidParams", message: message.into() }
+        Self {
+            code: "invalidParams",
+            message: message.into(),
+        }
     }
 
     fn unknown_prompt() -> Self {
@@ -148,17 +151,25 @@ pub fn invalidate_index() {
 }
 
 fn read_agents(params: &Map<String, Value>) -> Result<Vec<Agent>, PromptSearchError> {
-    let Some(value) = params.get("agents") else { return Ok(Vec::new()) };
+    let Some(value) = params.get("agents") else {
+        return Ok(Vec::new());
+    };
     let Some(items) = value.as_array() else {
-        return Err(PromptSearchError::invalid("agents must be an array of agent names."));
+        return Err(PromptSearchError::invalid(
+            "agents must be an array of agent names.",
+        ));
     };
     let mut agents = Vec::new();
     for item in items {
         let Some(name) = item.as_str() else {
-            return Err(PromptSearchError::invalid("agents must be an array of agent names."));
+            return Err(PromptSearchError::invalid(
+                "agents must be an array of agent names.",
+            ));
         };
         let Some(agent) = Agent::parse(name.trim()) else {
-            return Err(PromptSearchError::invalid(format!("Unknown agent \"{name}\".")));
+            return Err(PromptSearchError::invalid(format!(
+                "Unknown agent \"{name}\"."
+            )));
         };
         agents.push(agent);
     }
@@ -190,7 +201,11 @@ pub fn search_agent_prompts(
     paths: &crate::paths::GxserverPaths,
     params: &Map<String, Value>,
 ) -> Result<Value, PromptSearchError> {
-    let query = params.get("query").and_then(Value::as_str).unwrap_or("").to_string();
+    let query = params
+        .get("query")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     let agents = read_agents(params)?;
     let project = params
         .get("project")
@@ -198,12 +213,21 @@ pub fn search_agent_prompts(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string);
-    let group_by_day = params.get("groupByDay").and_then(Value::as_bool).unwrap_or(false);
+    let group_by_day = params
+        .get("groupByDay")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let offset = read_usize(params, "offset", 0, usize::MAX);
     let limit = read_usize(params, "limit", DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT);
     let text_limit = read_usize(params, "textLimit", DEFAULT_TEXT_LIMIT, MAX_TEXT_LIMIT);
-    let include_facets = params.get("includeFacets").and_then(Value::as_bool).unwrap_or(true);
-    let refresh = params.get("refresh").and_then(Value::as_bool).unwrap_or(false);
+    let include_facets = params
+        .get("includeFacets")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let refresh = params
+        .get("refresh")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
 
     with_index(paths, refresh, |cached| {
         let options = QueryOptions {
@@ -351,9 +375,18 @@ pub fn toggle_agent_prompt_favorite(
 #[derive(Debug, Clone, PartialEq)]
 pub enum PromptLaunchPlan {
     /// A live Ghostex session already owns this agent conversation.
-    Focus { project_id: String, session_id: String },
+    Focus {
+        project_id: String,
+        session_id: String,
+    },
     /// Nothing owns it; run `command` in `cwd` as a new agent session.
-    Launch { agent: Agent, command: Vec<String>, cwd: String, cwd_exists: bool, title: String },
+    Launch {
+        agent: Agent,
+        command: Vec<String>,
+        cwd: String,
+        cwd_exists: bool,
+        title: String,
+    },
 }
 
 /// True when a session row is a live owner of `agent_session_id`.
@@ -368,7 +401,10 @@ fn session_owns_agent_conversation(session: &Value, agent_session_id: &str, agen
     if stored != agent_session_id {
         return false;
     }
-    let lifecycle = session.get("lifecycleState").and_then(Value::as_str).unwrap_or_default();
+    let lifecycle = session
+        .get("lifecycleState")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let provider_state = session
         .get("providerState")
         .and_then(|state| state.get("lifecycleState"))
@@ -377,7 +413,10 @@ fn session_owns_agent_conversation(session: &Value, agent_session_id: &str, agen
     if lifecycle != "running" && provider_state != "exists" {
         return false;
     }
-    let session_agent = session.get("agentId").and_then(Value::as_str).unwrap_or_default();
+    let session_agent = session
+        .get("agentId")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     session_agent.is_empty() || session_agent.eq_ignore_ascii_case(agent.label())
 }
 
@@ -392,7 +431,10 @@ pub fn resolve_agent_prompt_launch(
     live_sessions: &[Value],
     accept_all_default: bool,
 ) -> Result<Value, PromptSearchError> {
-    let action = params.get("action").and_then(Value::as_str).unwrap_or("resume");
+    let action = params
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or("resume");
     /*
     CDXC:AgentHistorySearch 2026-08-20:
     Accept All is a daemon-owned setting, exactly as it is for `gx f` (which
@@ -423,9 +465,9 @@ pub fn resolve_agent_prompt_launch(
                         rec.agent.label()
                     )));
                 }
-                let owner = live_sessions
-                    .iter()
-                    .find(|session| session_owns_agent_conversation(session, &rec.session, rec.agent));
+                let owner = live_sessions.iter().find(|session| {
+                    session_owns_agent_conversation(session, &rec.session, rec.agent)
+                });
                 match owner {
                     Some(session) => PromptLaunchPlan::Focus {
                         project_id: session
@@ -466,19 +508,31 @@ pub fn resolve_agent_prompt_launch(
                 )))
             }
         };
-        Ok(launch_plan_payload(&format!("{:016x}", zehn_index::record_key(&rec)), &plan))
+        Ok(launch_plan_payload(
+            &format!("{:016x}", zehn_index::record_key(&rec)),
+            &plan,
+        ))
     })
 }
 
 fn launch_plan_payload(key: &str, plan: &PromptLaunchPlan) -> Value {
     match plan {
-        PromptLaunchPlan::Focus { project_id, session_id } => json!({
+        PromptLaunchPlan::Focus {
+            project_id,
+            session_id,
+        } => json!({
             "key": key,
             "mode": "focus",
             "projectId": project_id,
             "sessionId": session_id,
         }),
-        PromptLaunchPlan::Launch { agent, command, cwd, cwd_exists, title } => json!({
+        PromptLaunchPlan::Launch {
+            agent,
+            command,
+            cwd,
+            cwd_exists,
+            title,
+        } => json!({
             "key": key,
             "mode": "launch",
             "agent": agent.label(),
@@ -494,14 +548,21 @@ fn launch_plan_payload(key: &str, plan: &PromptLaunchPlan) -> Value {
 /// Quote an argv into a single POSIX shell command line, so a host that can only
 /// type text into a terminal still runs exactly the argv resolved here.
 pub fn shell_command_line(argv: &[String]) -> String {
-    argv.iter().map(|arg| shell_quote(arg)).collect::<Vec<_>>().join(" ")
+    argv.iter()
+        .map(|arg| shell_quote(arg))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn shell_quote(arg: &str) -> String {
     if !arg.is_empty()
-        && arg
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'/' | b':' | b'=' | b'@' | b'+' | b','))
+        && arg.bytes().all(|b| {
+            b.is_ascii_alphanumeric()
+                || matches!(
+                    b,
+                    b'_' | b'-' | b'.' | b'/' | b':' | b'=' | b'@' | b'+' | b','
+                )
+        })
     {
         return arg.to_string();
     }
@@ -570,7 +631,11 @@ mod tests {
     fn an_existing_provider_counts_as_live_even_when_the_lifecycle_lags() {
         let mut value = session("abc", "stopped", "claude");
         value["providerState"] = json!({ "lifecycleState": "exists" });
-        assert!(session_owns_agent_conversation(&value, "abc", Agent::Claude));
+        assert!(session_owns_agent_conversation(
+            &value,
+            "abc",
+            Agent::Claude
+        ));
     }
 
     #[test]
@@ -605,8 +670,14 @@ mod tests {
         paths.isolated_agent_home_dir = Some(PathBuf::from("/tmp/gx-isolated"));
         let (home, cache_root, favorites_path) = resolve_search_paths(&paths);
         assert_eq!(home, "/tmp/gx-isolated");
-        assert_eq!(cache_root, PathBuf::from("/tmp/gx-isolated/.cache/ghostex/zehn"));
-        assert_eq!(favorites_path, PathBuf::from("/tmp/gx-isolated/.config/zehn/favorites"));
+        assert_eq!(
+            cache_root,
+            PathBuf::from("/tmp/gx-isolated/.cache/ghostex/zehn")
+        );
+        assert_eq!(
+            favorites_path,
+            PathBuf::from("/tmp/gx-isolated/.config/zehn/favorites")
+        );
     }
 
     #[test]
@@ -628,7 +699,10 @@ mod tests {
     fn launch_plans_serialize_the_fields_hosts_need() {
         let focus = launch_plan_payload(
             "00000000000000ab",
-            &PromptLaunchPlan::Focus { project_id: "p".into(), session_id: "s".into() },
+            &PromptLaunchPlan::Focus {
+                project_id: "p".into(),
+                session_id: "s".into(),
+            },
         );
         assert_eq!(focus["mode"], "focus");
         assert_eq!(focus["projectId"], "p");

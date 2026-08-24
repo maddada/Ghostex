@@ -33,7 +33,10 @@ pub(crate) fn agent_prompt_search_response(
         Err(error) => domain_error_response(
             endpoint_path,
             request_id,
-            DomainStateError { code: error.code, message: error.message },
+            DomainStateError {
+                code: error.code,
+                message: error.message,
+            },
         ),
     }
 }
@@ -44,9 +47,8 @@ pub(crate) fn handle_search_agent_prompts_http(
     request_id: String,
     body: &Value,
 ) -> RoutedResponse {
-    let outcome = agent_prompt_search_params(body).and_then(|params| {
-        crate::agent_prompt_search::search_agent_prompts(&state.paths, &params)
-    });
+    let outcome = agent_prompt_search_params(body)
+        .and_then(|params| crate::agent_prompt_search::search_agent_prompts(&state.paths, &params));
     agent_prompt_search_response(endpoint_path, request_id, outcome)
 }
 
@@ -122,10 +124,10 @@ pub(crate) fn read_all_sessions_for_prompt_launch(
         }
     })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    repository.list_sessions(None).map_err(|error| {
-        crate::agent_prompt_search::PromptSearchError {
+    repository
+        .list_sessions(None)
+        .map_err(|error| crate::agent_prompt_search::PromptSearchError {
             code: error.code,
             message: error.message,
-        }
-    })
+        })
 }

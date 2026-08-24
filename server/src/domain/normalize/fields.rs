@@ -63,13 +63,21 @@ pub(crate) fn has_string_field(map: &Map<String, Value>, key: &str) -> bool {
     matches!(map.get(key), Some(Value::String(_)))
 }
 
-pub(crate) fn insert_optional_string(map: &mut Map<String, Value>, key: &str, value: Option<String>) {
+pub(crate) fn insert_optional_string(
+    map: &mut Map<String, Value>,
+    key: &str,
+    value: Option<String>,
+) {
     if let Some(value) = value {
         map.insert(key.to_string(), Value::String(value));
     }
 }
 
-pub(crate) fn insert_optional_trimmed_string(map: &mut Map<String, Value>, key: &str, value: Option<String>) {
+pub(crate) fn insert_optional_trimmed_string(
+    map: &mut Map<String, Value>,
+    key: &str,
+    value: Option<String>,
+) {
     let trimmed = value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -107,7 +115,11 @@ pub(crate) fn set_optional_string(map: &mut Map<String, Value>, key: &str, value
     }
 }
 
-pub(crate) fn insert_optional_object(map: &mut Map<String, Value>, key: &str, value: Map<String, Value>) {
+pub(crate) fn insert_optional_object(
+    map: &mut Map<String, Value>,
+    key: &str,
+    value: Map<String, Value>,
+) {
     if !value.is_empty() {
         map.insert(key.to_string(), Value::Object(value));
     }
@@ -128,7 +140,11 @@ pub(crate) fn insert_parsed_optional_object(
     Ok(())
 }
 
-pub(crate) fn update_object_field(next: &mut Map<String, Value>, input: &Map<String, Value>, key: &str) {
+pub(crate) fn update_object_field(
+    next: &mut Map<String, Value>,
+    input: &Map<String, Value>,
+    key: &str,
+) {
     if input.contains_key(key) {
         next.insert(
             key.to_string(),
@@ -152,7 +168,11 @@ pub(crate) fn update_optional_object_field(
     }
 }
 
-pub(crate) fn update_object_array_field(next: &mut Map<String, Value>, input: &Map<String, Value>, key: &str) {
+pub(crate) fn update_object_array_field(
+    next: &mut Map<String, Value>,
+    input: &Map<String, Value>,
+    key: &str,
+) {
     if input.contains_key(key) {
         next.insert(
             key.to_string(),
@@ -161,7 +181,11 @@ pub(crate) fn update_object_array_field(next: &mut Map<String, Value>, input: &M
     }
 }
 
-pub(crate) fn update_string_array_field(next: &mut Map<String, Value>, input: &Map<String, Value>, key: &str) {
+pub(crate) fn update_string_array_field(
+    next: &mut Map<String, Value>,
+    input: &Map<String, Value>,
+    key: &str,
+) {
     if input.contains_key(key) {
         next.insert(
             key.to_string(),

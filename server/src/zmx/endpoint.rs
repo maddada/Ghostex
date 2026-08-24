@@ -1,8 +1,4 @@
-use std::{
-    sync::OnceLock,
-    thread,
-    time::Duration,
-};
+use std::{sync::OnceLock, thread, time::Duration};
 
 use serde_json::{json, Map, Value};
 
@@ -863,4 +859,3 @@ pub(crate) fn session_chat_zmx_write(zmx_name: &str, payload: &str) -> Result<i3
     })?;
     Ok(result.exit_code)
 }
-

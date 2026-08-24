@@ -142,7 +142,10 @@ impl ScopeHistory {
             self.entries.truncate(self.cursor + 1);
         }
         self.entries.push(entry);
-        let overflow = self.entries.len().saturating_sub(MAX_NAVIGATION_HISTORY_ENTRIES);
+        let overflow = self
+            .entries
+            .len()
+            .saturating_sub(MAX_NAVIGATION_HISTORY_ENTRIES);
         if overflow > 0 {
             self.entries.drain(0..overflow);
         }
@@ -218,8 +221,8 @@ fn read_entry(params: &Map<String, Value>) -> Result<NavigationHistoryEntry, Dom
         })?;
     let project_id = bounded_string(entry.get("projectId").and_then(Value::as_str), MAX_ID_CHARS)
         .ok_or_else(|| {
-            DomainStateError::bad_request("A navigation visit requires a non-empty projectId.")
-        })?;
+        DomainStateError::bad_request("A navigation visit requires a non-empty projectId.")
+    })?;
     Ok(NavigationHistoryEntry {
         project_id,
         session_id: bounded_string(entry.get("sessionId").and_then(Value::as_str), MAX_ID_CHARS),

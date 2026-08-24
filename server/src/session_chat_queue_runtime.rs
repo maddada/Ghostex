@@ -43,6 +43,20 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::Value;
 use tokio::sync::broadcast;
 
+use crate::domain::{read_domain_rpc_params, DomainStateError};
+use crate::protocol::rpc_success;
+use crate::server::{
+    domain_error_response, read_runtime_text, routed_json, schedule_presentation_session_delta,
+    session_observer_key, AppState, RoutedResponse,
+};
+use crate::session_chat_follower::{session_chat_agent_for_session, session_chat_hook_working};
+use crate::session_chat_options::{
+    cached_session_chat_screen_state, cached_session_chat_terminal_notice,
+    emit_session_chat_options_state_frame, schedule_session_chat_option_redetect,
+    session_chat_terminal_notice_publisher, session_chat_watchdog_state_reader,
+    SessionChatOptionDetector,
+};
+use crate::session_chat_send::resolve_session_chat_send_target;
 use crate::{
     domain::DomainRepository,
     paths::GxserverPaths,
@@ -59,30 +73,8 @@ use crate::{
     },
     storage::open_gxserver_database,
 };
-use crate::domain::{DomainStateError, read_domain_rpc_params};
-use crate::protocol::rpc_success;
-use crate::server::{
-    AppState,
-    RoutedResponse,
-    domain_error_response,
-    read_runtime_text,
-    routed_json,
-    schedule_presentation_session_delta,
-    session_observer_key,
-};
-use crate::session_chat_follower::{session_chat_agent_for_session, session_chat_hook_working};
-use crate::session_chat_options::{
-    SessionChatOptionDetector,
-    cached_session_chat_screen_state,
-    cached_session_chat_terminal_notice,
-    emit_session_chat_options_state_frame,
-    schedule_session_chat_option_redetect,
-    session_chat_terminal_notice_publisher,
-    session_chat_watchdog_state_reader,
-};
-use crate::session_chat_send::resolve_session_chat_send_target;
-use serde_json::{Map, json};
 use axum::http::StatusCode;
+use serde_json::{json, Map};
 
 const SESSION_CHAT_QUEUE_TICK_SECONDS: u64 = 1;
 
@@ -272,7 +264,12 @@ impl SessionChatQueueRuntime {
             */
             if let Some(notice) = (self.notice_reader)(&project_id, &session_id) {
                 if notice.blocks_input() {
-                    blocked.push((project_id, session_id, head.id.clone(), notice.title.clone()));
+                    blocked.push((
+                        project_id,
+                        session_id,
+                        head.id.clone(),
+                        notice.title.clone(),
+                    ));
                     continue;
                 }
             }
@@ -535,7 +532,12 @@ pub(crate) async fn send_session_chat_message_internal(
     them.
     */
     if let Some(blocking) = SessionChatOptionDetector::new(state)
-        .detect(&target.project_id, &target.session_id, agent.as_deref(), true)
+        .detect(
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+            true,
+        )
         .await
         .notice
         .filter(crate::session_chat_notice::SessionChatTerminalNotice::is_answerable)
@@ -771,7 +773,11 @@ of them, which is exactly what emit_session_chat_options_state_frame builds.
 No live follower ⇒ nothing is emitted and clients pick the change up from their
 next readSessionChat (or, on mobile, from the long-poll fingerprint).
 */
-pub(crate) fn broadcast_session_chat_queue_state(state: &AppState, project_id: &str, session_id: &str) {
+pub(crate) fn broadcast_session_chat_queue_state(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
     let key = session_observer_key(project_id, session_id);
     let options = state
         .session_chat_option_cache

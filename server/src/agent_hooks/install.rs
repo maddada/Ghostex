@@ -8,15 +8,17 @@ use serde_json::{json, Map, Value};
 use crate::domain::DomainStateError;
 
 use super::config::{
-    HookDefinition, HookFormat, HookPaths, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
-    OPENCODE_PLUGIN_MARKER, OPENCODE_PLUGIN_SPEC, all_hook_events, command_agent, hook_format,
-    hook_marker, nested_timeout,
+    all_hook_events, command_agent, hook_format, hook_marker, nested_timeout, HookDefinition,
+    HookFormat, HookPaths, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION, OPENCODE_PLUGIN_MARKER,
+    OPENCODE_PLUGIN_SPEC,
 };
 use super::plugin_sources::{
     build_notify_hook_script, build_opencode_plugin_source, build_plugin_file_source,
     command_for_agent, current_plugin_marker, shell_quote, yaml_double_quote,
 };
-use super::probing::{io_error, json_error, path_string, push_unique_path, read_file_text, temp_path_for};
+use super::probing::{
+    io_error, json_error, path_string, push_unique_path, read_file_text, temp_path_for,
+};
 use super::resolution::{
     is_ghostex_owned_hook_command, is_opencode_session_plugin_registration, provider_hook_paths,
     text_contains_ghostex_owned_hook_command,

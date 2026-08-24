@@ -1,8 +1,8 @@
 use serde_json::{json, Map, Value};
 
 use crate::domain::{
-    bool_field, insert_optional_string, insert_optional_trimmed_string,
-    insert_optional_value, insert_parsed_optional_object, normalize_domain_lifecycle_state,
+    bool_field, insert_optional_string, insert_optional_trimmed_string, insert_optional_value,
+    insert_parsed_optional_object, normalize_domain_lifecycle_state,
     normalize_optional_session_tag, normalize_session_kind, normalize_settled_override,
     normalize_zmx_provider_state, optional_string, parse_object, parse_object_array,
     parse_object_map, parse_string_array, required_string, resolve_surface,
@@ -229,7 +229,10 @@ pub(crate) fn project_from_row(row: ProjectRow) -> DomainResult<Value> {
     Ok(Value::Object(project))
 }
 
-pub(crate) fn recent_project_from_project(project: &Value, session_count: usize) -> DomainResult<Value> {
+pub(crate) fn recent_project_from_project(
+    project: &Value,
+    session_count: usize,
+) -> DomainResult<Value> {
     let object = project.as_object().ok_or_else(|| {
         DomainStateError::corrupt_state("Project row did not decode as an object.")
     })?;

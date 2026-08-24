@@ -122,7 +122,10 @@ pub(crate) fn local_machine_label() -> std::result::Result<String, String> {
     Ok(hostname)
 }
 
-pub(crate) async fn serve_web_static(config: &GxserverConfig, request_path: &str) -> RoutedResponse {
+pub(crate) async fn serve_web_static(
+    config: &GxserverConfig,
+    request_path: &str,
+) -> RoutedResponse {
     let config = config.clone();
     let request_path = request_path.to_string();
     match tokio::task::spawn_blocking(move || serve_web_static_sync(&config, &request_path)).await {

@@ -172,12 +172,9 @@ pub(crate) fn hold_sessions_awake(
     repository: &DomainRepository<'_>,
     params: &Map<String, Value>,
 ) -> std::result::Result<Value, DomainStateError> {
-    let holder_id = session_keep_awake::normalize_holder_id(
-        params.get("holderId").and_then(Value::as_str),
-    );
-    let ttl_ms = session_keep_awake::normalize_ttl_ms(
-        params.get("ttlMs").and_then(Value::as_i64),
-    );
+    let holder_id =
+        session_keep_awake::normalize_holder_id(params.get("holderId").and_then(Value::as_str));
+    let ttl_ms = session_keep_awake::normalize_ttl_ms(params.get("ttlMs").and_then(Value::as_i64));
     let release = params.get("release").and_then(Value::as_bool) == Some(true);
     let requested = params
         .get("sessions")
@@ -210,8 +207,7 @@ pub(crate) fn hold_sessions_awake(
             }));
             continue;
         }
-        let expires_at =
-            session_keep_awake::hold(&project_id, &session_id, &holder_id, ttl_ms);
+        let expires_at = session_keep_awake::hold(&project_id, &session_id, &holder_id, ttl_ms);
         held.push(json!({
             "projectId": project_id,
             "sessionId": session_id,

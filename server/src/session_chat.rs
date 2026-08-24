@@ -871,7 +871,6 @@ pub fn boundary_fingerprint(file_path: &Path, offset: u64) -> std::io::Result<St
 // Transcript path resolution
 // ---------------------------------------------------------------------------
 
-
 // ---------------------------------------------------------------------------
 // Re-exports (Phase C2b split): external callers reached these items via
 // `crate::session_chat::X` before the split into the flat session_chat_*
@@ -881,9 +880,9 @@ pub use crate::session_chat_decode_claude::*;
 pub use crate::session_chat_decode_codex::*;
 pub use crate::session_chat_decode_grok::*;
 pub use crate::session_chat_decode_pi::*;
-pub use crate::session_chat_tail::*;
-pub use crate::session_chat_paths::*;
-pub use crate::session_chat_successor::*;
-pub use crate::session_chat_stream::*;
 pub use crate::session_chat_follower::*;
 pub use crate::session_chat_interactive::*;
+pub use crate::session_chat_paths::*;
+pub use crate::session_chat_stream::*;
+pub use crate::session_chat_successor::*;
+pub use crate::session_chat_tail::*;

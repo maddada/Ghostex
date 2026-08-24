@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::domain::{DomainRepository, DomainStateError};
 use crate::agent_transcripts::resolve_session_transcript_path;
+use crate::domain::{DomainRepository, DomainStateError};
 
 use super::*;
 
@@ -183,7 +183,10 @@ impl AgentMetadataTitleSource {
     }
 }
 
-pub(crate) fn read_agent_metadata_title(home_dir: &Path, session: &Value) -> Option<AgentMetadataTitle> {
+pub(crate) fn read_agent_metadata_title(
+    home_dir: &Path,
+    session: &Value,
+) -> Option<AgentMetadataTitle> {
     match agent_metadata_title_source(home_dir, session)? {
         AgentMetadataTitleSource::ClaudeTranscript { transcript_path } => {
             read_claude_transcript_title(&transcript_path)
@@ -462,7 +465,9 @@ pub(crate) fn get_codex_session_index_candidate_paths(
         .collect()
 }
 
-pub(crate) fn get_codex_root_from_session_path(agent_session_path: Option<&str>) -> Option<PathBuf> {
+pub(crate) fn get_codex_root_from_session_path(
+    agent_session_path: Option<&str>,
+) -> Option<PathBuf> {
     let normalized_path = agent_session_path?.trim().replace('\\', "/");
     if normalized_path.is_empty() {
         return None;
@@ -482,4 +487,3 @@ pub(crate) fn titles_match(left: &str, right: &str) -> bool {
     left.split_whitespace().collect::<Vec<_>>().join(" ")
         == right.split_whitespace().collect::<Vec<_>>().join(" ")
 }
-

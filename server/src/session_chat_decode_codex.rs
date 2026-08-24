@@ -363,4 +363,3 @@ pub fn decode_codex_turn_lifecycle(
         timestamp: parse_timestamp(record.get("timestamp")),
     })
 }
-

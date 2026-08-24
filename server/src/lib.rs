@@ -48,14 +48,14 @@ pub mod session_chat_queue;
 pub mod session_chat_queue_runtime;
 pub mod session_chat_read;
 pub mod session_chat_resume_prompt;
+pub mod session_chat_send;
+pub mod session_chat_skills;
 pub mod session_chat_stream;
 pub mod session_chat_successor;
 pub mod session_chat_tail;
 pub mod session_chat_terminal_activity;
 #[cfg(test)]
 mod session_chat_tests;
-pub mod session_chat_send;
-pub mod session_chat_skills;
 pub mod session_chat_watchdog;
 pub mod session_git_status;
 pub mod session_keep_awake;

@@ -181,7 +181,9 @@ pub(crate) fn normalize_delete_worktree_project_params(
     })
 }
 
-pub(crate) fn normalize_worktree_metadata(candidate: Option<&Value>) -> Option<NormalizedWorktreeMetadata> {
+pub(crate) fn normalize_worktree_metadata(
+    candidate: Option<&Value>,
+) -> Option<NormalizedWorktreeMetadata> {
     let worktree = candidate.and_then(Value::as_object)?;
     let parent_project_id = worktree.get("parentProjectId").and_then(Value::as_str)?;
     if !is_gxserver_project_id(parent_project_id) {

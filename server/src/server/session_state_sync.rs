@@ -177,8 +177,7 @@ pub(crate) fn sync_live_zmx_process_identities(
             None => true,
             Some(target_session_id) => {
                 should_probe_title_signaled_zmx_process_identity(session)
-                    && read_session_text(session, "sessionId").as_deref()
-                        == Some(target_session_id)
+                    && read_session_text(session, "sessionId").as_deref() == Some(target_session_id)
             }
         })
         .filter_map(|session| {
@@ -574,7 +573,11 @@ pub(crate) fn apply_session_state_sidecar(
     Ok(changed)
 }
 
-pub(crate) fn insert_optional_json_string(map: &mut Map<String, Value>, key: &str, value: Option<&str>) {
+pub(crate) fn insert_optional_json_string(
+    map: &mut Map<String, Value>,
+    key: &str,
+    value: Option<&str>,
+) {
     if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
         map.insert(key.to_string(), Value::String(value.to_string()));
     }

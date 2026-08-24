@@ -6,10 +6,10 @@ use std::{
 
 use serde_json::{json, Value};
 
-use crate::session_git_status::run_git_probe_command;
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::protocol::rpc_success;
-use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::session_git_status::run_git_probe_command;
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
 
@@ -256,7 +256,10 @@ segments touch the filesystem.
 */
 pub(crate) const SESSION_CHAT_IMAGE_MAX_BYTES: usize = 12 * 1024 * 1024;
 
-pub(crate) fn session_chat_image_extension(base64_bytes: &[u8], suggested_name: Option<&str>) -> String {
+pub(crate) fn session_chat_image_extension(
+    base64_bytes: &[u8],
+    suggested_name: Option<&str>,
+) -> String {
     const KNOWN_EXTENSIONS: &[&str] = &[
         "avif", "bmp", "gif", "heic", "heif", "ico", "jpeg", "jpg", "png", "svg", "tif", "tiff",
         "webp",
@@ -413,7 +416,9 @@ touch the filesystem.
 */
 pub(crate) const SESSION_CHAT_ATTACHMENT_MAX_BYTES: usize = 32 * 1024 * 1024;
 
-pub(crate) fn sanitized_session_chat_attachment_name(suggested_name: Option<&str>) -> Option<String> {
+pub(crate) fn sanitized_session_chat_attachment_name(
+    suggested_name: Option<&str>,
+) -> Option<String> {
     let base = suggested_name?
         .rsplit(['/', '\\'])
         .next()
@@ -561,7 +566,10 @@ bytes or extension identify an image are returned.
 */
 pub(crate) const SESSION_CHAT_IMAGE_READ_MAX_BYTES: u64 = 20 * 1024 * 1024;
 
-pub(crate) fn session_chat_image_media_type(bytes: &[u8], path: &std::path::Path) -> Option<&'static str> {
+pub(crate) fn session_chat_image_media_type(
+    bytes: &[u8],
+    path: &std::path::Path,
+) -> Option<&'static str> {
     if bytes.starts_with(b"\x89PNG") {
         return Some("image/png");
     }

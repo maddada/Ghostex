@@ -1,8 +1,8 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 
-use crate::domain::DomainStateError;
 use super::*;
+use crate::domain::DomainStateError;
 
 pub(crate) const AGENT_SETTINGS_METADATA_KEY: &str = "agents.settings.v1";
 pub(crate) const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
@@ -22,7 +22,9 @@ pub(crate) const FIRST_USER_INPUT_DRAFT_STATUS_KEY: &str = "gxserverFirstUserInp
 pub(crate) const FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY: &str =
     "gxserverFirstUserInputDraftUpdatedAt";
 
-pub(crate) fn read_agent_settings_with_metadata(db: &Connection) -> Result<Value, DomainStateError> {
+pub(crate) fn read_agent_settings_with_metadata(
+    db: &Connection,
+) -> Result<Value, DomainStateError> {
     let row = read_agent_settings_metadata_value(db)?;
     let parsed = row.as_deref().map(parse_json_object);
     Ok(json!({
@@ -31,11 +33,16 @@ pub(crate) fn read_agent_settings_with_metadata(db: &Connection) -> Result<Value
     }))
 }
 
-pub(crate) fn read_agent_settings_metadata_value(db: &Connection) -> Result<Option<String>, DomainStateError> {
+pub(crate) fn read_agent_settings_metadata_value(
+    db: &Connection,
+) -> Result<Option<String>, DomainStateError> {
     read_metadata_value(db, AGENT_SETTINGS_METADATA_KEY)
 }
 
-pub(crate) fn read_metadata_value(db: &Connection, key: &str) -> Result<Option<String>, DomainStateError> {
+pub(crate) fn read_metadata_value(
+    db: &Connection,
+    key: &str,
+) -> Result<Option<String>, DomainStateError> {
     db.query_row("SELECT value FROM metadata WHERE key = ?1", [key], |row| {
         row.get::<_, String>(0)
     })
@@ -114,4 +121,3 @@ pub(crate) fn normalize_default_prompt_agent_id(value: Option<&str>) -> String {
         .take(MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH)
         .collect()
 }
-

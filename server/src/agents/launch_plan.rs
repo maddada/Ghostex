@@ -1,9 +1,9 @@
 use serde_json::{json, Map, Value};
 
+use super::*;
 use crate::domain::DomainStateError;
 use crate::session_status::normalize_agent_activity_value;
 use rusqlite::Connection;
-use super::*;
 
 pub(crate) fn build_project_agent_launch_plan(
     project: &Value,
@@ -203,7 +203,10 @@ pub(crate) fn create_agent_session_params_for_project(
     Ok(normalized)
 }
 
-pub(crate) fn create_agent_session_default_title(agent_name: Option<&str>, agent_id: Option<&str>) -> String {
+pub(crate) fn create_agent_session_default_title(
+    agent_name: Option<&str>,
+    agent_id: Option<&str>,
+) -> String {
     let title_name = normalize_agent_session_title_name(agent_name)
         .or_else(|| {
             default_agent_session_title_name(agent_id.unwrap_or_default()).map(str::to_string)
@@ -363,4 +366,3 @@ pub(crate) fn resolve_agent_launch_command(
         accept_all_mode == Some("disabled"),
     )
 }
-

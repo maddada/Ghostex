@@ -286,9 +286,9 @@ pub(crate) fn log_agent_hook_passive_identity_conflict(
     CDXC:AgentHooks 2026-06-22-08:31:
     Passive hook identity conflicts need the same support-bundle evidence as TypeScript without exposing thread ids, paths, titles, prompts, or hook payloads. Hash private agent-session ids at the writer boundary and log only enum fields, stable gxserver ids, and payload-shape booleans.
     */
-    let _ = state
-        .logger
-        .log_routine(DiagnosticLogScenario::AgentDetection, GxserverLogInput {
+    let _ = state.logger.log_routine(
+        DiagnosticLogScenario::AgentDetection,
+        GxserverLogInput {
             level: LogLevel::Debug,
             event: "sessionIdentity.updateBlocked".to_string(),
             server_id: Some(state.metadata.server_id.clone()),
@@ -309,7 +309,8 @@ pub(crate) fn log_agent_hook_passive_identity_conflict(
                 "sessionId": params.get("sessionId").and_then(Value::as_str),
                 "source": source,
             })),
-        });
+        },
+    );
     let hook_activity = normalize_agent_hook_activity(
         params.get("status"),
         params
@@ -372,7 +373,10 @@ pub(crate) fn hash_log_identity(value: Option<&str>) -> Option<String> {
     )
 }
 
-pub(crate) fn should_schedule_agent_title_metadata_check(endpoint_path: &str, result: &Value) -> bool {
+pub(crate) fn should_schedule_agent_title_metadata_check(
+    endpoint_path: &str,
+    result: &Value,
+) -> bool {
     match endpoint_path {
         "/api/requestSessionRename" => {
             result.get("pendingAgentMetadata").and_then(Value::as_bool) == Some(true)

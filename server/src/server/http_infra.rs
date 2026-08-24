@@ -16,7 +16,10 @@ pub(crate) fn broadcast_server_stopping(state: &AppState) {
     }));
 }
 
-pub(crate) fn value_text(value: &Value, key: &str) -> std::result::Result<String, DomainStateError> {
+pub(crate) fn value_text(
+    value: &Value,
+    key: &str,
+) -> std::result::Result<String, DomainStateError> {
     value
         .get(key)
         .and_then(Value::as_str)
@@ -102,7 +105,11 @@ pub(crate) fn content_length(headers: &HeaderMap) -> Option<u64> {
         .and_then(|value| value.parse::<u64>().ok())
 }
 
-pub(crate) fn read_protocol_version(headers: &HeaderMap, uri: &Uri, body: Option<&Value>) -> Option<Value> {
+pub(crate) fn read_protocol_version(
+    headers: &HeaderMap,
+    uri: &Uri,
+    body: Option<&Value>,
+) -> Option<Value> {
     if let Some(header) = headers
         .get(HeaderName::from_static(GXSERVER_PROTOCOL_HEADER))
         .and_then(|value| value.to_str().ok())

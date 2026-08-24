@@ -1,6 +1,6 @@
-use serde_json::Value;
 use crate::ids::is_gxserver_session_id;
 use crate::presentation::normalize_pi_terminal_title;
+use serde_json::Value;
 
 use super::*;
 
@@ -551,4 +551,3 @@ pub(crate) fn strip_specific_prefix_markers(title: &str, markers: &[char]) -> St
         .trim()
         .to_string()
 }
-

@@ -268,7 +268,11 @@ pub(crate) fn js_truthy(value: &Value) -> bool {
     }
 }
 
-pub(crate) fn insert_optional_js_truthy_value(map: &mut Map<String, Value>, key: &str, value: Option<Value>) {
+pub(crate) fn insert_optional_js_truthy_value(
+    map: &mut Map<String, Value>,
+    key: &str,
+    value: Option<Value>,
+) {
     if let Some(value) = value.filter(js_truthy) {
         map.insert(key.to_string(), value);
     }
@@ -347,4 +351,3 @@ pub(crate) fn last_active_at(session: &Value) -> String {
         .or_else(|| string_field(session, "createdAt"))
         .unwrap_or_default()
 }
-

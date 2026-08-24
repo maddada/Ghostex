@@ -12,23 +12,19 @@ use std::{
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState,
-    RoutedResponse,
-    domain_error_response,
-    read_runtime_text,
-    routed_json,
+    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
 };
+use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
 use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_chat_options::schedule_session_chat_option_redetect;
 use crate::session_chat_queue_runtime::send_session_chat_message_internal;
 use crate::storage::open_gxserver_database;
-use serde_json::{Map, Value, json};
 use axum::http::StatusCode;
+use serde_json::{json, Map, Value};
 
 /*
 CDXC:SessionChatSend 2026-07-31:
@@ -99,8 +95,7 @@ const SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE: &str = "Pastedtext";
 const SESSION_CHAT_PASTING_INDICATOR_NEEDLE: &str = "Pastingtext";
 /// Shown to the user when the composer never took the body. Deliberately
 /// describes the terminal, not the network: nothing was submitted.
-pub const SESSION_CHAT_PASTE_NOT_ACCEPTED: &str =
-    "The terminal did not accept the pasted message.";
+pub const SESSION_CHAT_PASTE_NOT_ACCEPTED: &str = "The terminal did not accept the pasted message.";
 /*
 Esc in the kitty CSI-u encoding (CSI 27 u). Ghostex agent sessions always run
 under zmx, whose VT layer answers the kitty keyboard-protocol query, so Claude
@@ -1035,12 +1030,11 @@ async fn write_session_chat_payload(
 /// takes exactly one of these per timeout event.
 pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
     let zmx_name = zmx_name.to_string();
-    let capture = tokio::task::spawn_blocking(move || {
-        crate::zmx::read_zmx_session_screen_capture(&zmx_name)
-    })
-    .await
-    .ok()?
-    .ok()?;
+    let capture =
+        tokio::task::spawn_blocking(move || crate::zmx::read_zmx_session_screen_capture(&zmx_name))
+            .await
+            .ok()?
+            .ok()?;
     (!capture.truncated).then_some(capture.text)
 }
 
@@ -1842,7 +1836,10 @@ pub(crate) async fn handle_send_session_chat_message_http(
         Ok(text_bytes) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
-            rpc_success(request_id, json!({ "queued": true, "textBytes": text_bytes })),
+            rpc_success(
+                request_id,
+                json!({ "queued": true, "textBytes": text_bytes }),
+            ),
         ),
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }
@@ -2005,8 +2002,9 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                     request_id,
                     DomainStateError {
                         code: "invalidParams",
-                        message: "answerSessionChatPrompt kind \"terminalChoice\" requires choiceIndex."
-                            .to_string(),
+                        message:
+                            "answerSessionChatPrompt kind \"terminalChoice\" requires choiceIndex."
+                                .to_string(),
                     },
                 );
             };

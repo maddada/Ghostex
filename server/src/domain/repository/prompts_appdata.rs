@@ -154,9 +154,7 @@ impl<'a> DomainRepository<'a> {
                 )
                 .map_err(sql_error)?;
             if updated == 0 {
-                return Err(DomainStateError::not_found(
-                    "Saved prompt does not exist.",
-                ));
+                return Err(DomainStateError::not_found("Saved prompt does not exist."));
             }
             let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
                 DomainStateError::corrupt_state("Saved prompt vanished during update.")
@@ -288,7 +286,10 @@ impl<'a> DomainRepository<'a> {
                 if let Some(object) = prompt.as_object_mut() {
                     object.insert(
                         "tagIds".to_string(),
-                        json!(tag_ids_by_prompt.get(&prompt_id).cloned().unwrap_or_default()),
+                        json!(tag_ids_by_prompt
+                            .get(&prompt_id)
+                            .cloned()
+                            .unwrap_or_default()),
                     );
                 }
                 prompt
@@ -372,9 +373,8 @@ impl<'a> DomainRepository<'a> {
             }
         };
 
-        let tag = read_stashed_prompt_tag_row(self.db, &tag_id)?.ok_or_else(|| {
-            DomainStateError::corrupt_state("Tag vanished during save.")
-        })?;
+        let tag = read_stashed_prompt_tag_row(self.db, &tag_id)?
+            .ok_or_else(|| DomainStateError::corrupt_state("Tag vanished during save."))?;
         Ok(json!({
             "tag": tag,
             "tags": read_stashed_prompt_tags(self.db)?,
@@ -926,7 +926,9 @@ fn normalize_stashed_prompt_tag_color(color: Option<&str>) -> DomainResult<Strin
     let normalized = color.trim().to_ascii_lowercase();
     let is_hex = normalized.len() == 7
         && normalized.starts_with('#')
-        && normalized[1..].chars().all(|character| character.is_ascii_hexdigit());
+        && normalized[1..]
+            .chars()
+            .all(|character| character.is_ascii_hexdigit());
     if !is_hex {
         return Err(DomainStateError::bad_request(
             "color must be a #rrggbb hex string.",

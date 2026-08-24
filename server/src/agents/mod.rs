@@ -9,9 +9,9 @@ pub mod resume_plan;
 pub mod session_state_ingest;
 pub mod settings;
 pub mod terminal_title;
-pub mod title_reconcile;
 #[cfg(test)]
 mod tests;
+pub mod title_reconcile;
 
 pub(crate) use accept_all::*;
 pub(crate) use activity::*;

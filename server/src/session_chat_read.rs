@@ -1,26 +1,19 @@
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState,
+    domain_error_response, read_runtime_text, routed_json, session_observer_key, AppState,
     RoutedResponse,
-    domain_error_response,
-    read_runtime_text,
-    routed_json,
-    session_observer_key,
 };
 use crate::session_chat_follower::{
-    is_session_chat_followable_session,
-    session_chat_agent_for_session,
-    session_chat_hook_working,
+    is_session_chat_followable_session, session_chat_agent_for_session, session_chat_hook_working,
 };
 use crate::session_chat_options::{
+    cached_session_chat_screen_state, cached_session_chat_terminal_notice,
     SessionChatOptionDetector,
-    cached_session_chat_screen_state,
-    cached_session_chat_terminal_notice,
 };
 use crate::storage::open_gxserver_database;
-use serde_json::{Map, Value, json};
 use axum::http::StatusCode;
+use serde_json::{json, Map, Value};
 
 /*
 CDXC:SessionChatMobileLongPoll 2026-07-31:

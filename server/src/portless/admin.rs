@@ -53,7 +53,9 @@ pub(crate) enum PortlessAdminActionKind {
     Retry,
 }
 
-pub(crate) fn recommended_portless_admin_action(state: &PortlessState) -> Option<PortlessAdminActionKind> {
+pub(crate) fn recommended_portless_admin_action(
+    state: &PortlessState,
+) -> Option<PortlessAdminActionKind> {
     if !state.enabled || state.setup_status == PortlessSetupStatus::Disabled {
         return None;
     }
@@ -205,5 +207,3 @@ pub fn compute_desired_portless_routes(
     validate_portless_routes(&routes)?;
     Ok(routes)
 }
-
-

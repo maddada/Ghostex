@@ -3,7 +3,10 @@ use serde_json::{Map, Value};
 use crate::domain::{DomainResult, DomainStateError};
 use crate::ids::{is_gxserver_project_id, is_gxserver_session_id};
 
-pub(crate) fn required_string_param<'a>(params: &'a Map<String, Value>, key: &str) -> DomainResult<&'a str> {
+pub(crate) fn required_string_param<'a>(
+    params: &'a Map<String, Value>,
+    key: &str,
+) -> DomainResult<&'a str> {
     params
         .get(key)
         .and_then(Value::as_str)

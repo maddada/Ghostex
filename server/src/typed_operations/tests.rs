@@ -42,8 +42,7 @@ async fn project_setup_action_errors_use_javascript_string_conversion() {
         ),
         (
             Some(json!(["worktreeSetupCommand", null, {"x": 1}])),
-            "Unsupported project setup action: worktreeSetupCommand,,[object Object]"
-                .to_string(),
+            "Unsupported project setup action: worktreeSetupCommand,,[object Object]".to_string(),
         ),
     ];
 
@@ -136,13 +135,10 @@ async fn project_setup_endpoint_scope_project_id_lookup_does_not_trim() {
     params.insert("action".to_string(), json!("worktreeSetupCommand"));
     params.insert("projectId".to_string(), json!(" P-test "));
 
-    let error = dispatch_typed_operation_endpoint(
-        "/api/runProjectSetupCommand",
-        &params,
-        vec![project],
-    )
-    .await
-    .unwrap_err();
+    let error =
+        dispatch_typed_operation_endpoint("/api/runProjectSetupCommand", &params, vec![project])
+            .await
+            .unwrap_err();
 
     assert_eq!(error.code, "notFound");
     assert_eq!(error.message, "Project  P-test  does not exist.");
@@ -172,13 +168,10 @@ async fn typed_operation_scope_matches_path_resolve_for_project_path_lookup() {
         json!(unresolved_intermediate_path.to_string_lossy()),
     );
 
-    let result = dispatch_typed_operation_endpoint(
-        "/api/runProjectSetupCommand",
-        &params,
-        vec![project],
-    )
-    .await
-    .unwrap();
+    let result =
+        dispatch_typed_operation_endpoint("/api/runProjectSetupCommand", &params, vec![project])
+            .await
+            .unwrap();
 
     assert_eq!(
         result.get("action").and_then(Value::as_str),
@@ -473,7 +466,10 @@ fn worktree_move_builds_a_git_worktree_move_command() {
     let destination = dir.path().join("repo-new");
     let ctx = context(&source);
     let mut params = Map::new();
-    params.insert("worktreePath".to_string(), json!(worktree.to_string_lossy()));
+    params.insert(
+        "worktreePath".to_string(),
+        json!(worktree.to_string_lossy()),
+    );
     params.insert(
         "destinationPath".to_string(),
         json!(destination.to_string_lossy()),
@@ -515,7 +511,10 @@ fn worktree_move_rejects_an_existing_destination() {
     fs::create_dir(&destination).unwrap();
     let ctx = context(&source);
     let mut params = Map::new();
-    params.insert("worktreePath".to_string(), json!(worktree.to_string_lossy()));
+    params.insert(
+        "worktreePath".to_string(),
+        json!(worktree.to_string_lossy()),
+    );
     params.insert(
         "destinationPath".to_string(),
         json!(destination.to_string_lossy()),
@@ -536,7 +535,10 @@ fn worktree_move_rejects_a_destination_outside_the_family_directory() {
     fs::create_dir(&worktree).unwrap();
     let ctx = context(&source);
     let mut params = Map::new();
-    params.insert("worktreePath".to_string(), json!(worktree.to_string_lossy()));
+    params.insert(
+        "worktreePath".to_string(),
+        json!(worktree.to_string_lossy()),
+    );
     params.insert(
         "destinationPath".to_string(),
         json!("/tmp/outside-worktree-family-rename"),
@@ -871,12 +873,9 @@ fn beads_board_scope_controls_command_cwd_only_for_board_calls() {
     .unwrap();
     assert_eq!(probe_context.beads_cwd, None);
 
-    let worktree_context = resolve_project_operation_context(
-        "/api/runWorktreeAction",
-        &board_params,
-        vec![project],
-    )
-    .unwrap();
+    let worktree_context =
+        resolve_project_operation_context("/api/runWorktreeAction", &board_params, vec![project])
+            .unwrap();
     assert_eq!(worktree_context.beads_cwd, None);
 }
 
@@ -889,8 +888,7 @@ fn beads_label_arguments_reject_non_arrays() {
     create_params.insert("title".to_string(), json!("Create from board"));
     create_params.insert("labels".to_string(), json!("ui"));
     let create_error =
-        build_beads_command_with_executable("create", &create_params, &ctx, "/tmp/bd")
-            .unwrap_err();
+        build_beads_command_with_executable("create", &create_params, &ctx, "/tmp/bd").unwrap_err();
     assert_eq!(create_error.code, "badRequest");
     assert!(create_error.message.contains("labels must be an array"));
 
@@ -898,8 +896,7 @@ fn beads_label_arguments_reject_non_arrays() {
     set_params.insert("issueId".to_string(), json!("gxserver-15"));
     set_params.insert("labels".to_string(), json!("ui"));
     let set_error =
-        build_beads_command_with_executable("setLabels", &set_params, &ctx, "/tmp/bd")
-            .unwrap_err();
+        build_beads_command_with_executable("setLabels", &set_params, &ctx, "/tmp/bd").unwrap_err();
     assert_eq!(set_error.code, "badRequest");
     assert!(set_error.message.contains("labels must be an array"));
 }
@@ -911,8 +908,7 @@ fn beads_show_requests_comment_bodies() {
     let mut params = Map::new();
     params.insert("issueId".to_string(), json!("gxserver-57"));
 
-    let command =
-        build_beads_command_with_executable("show", &params, &ctx, "/tmp/bd").unwrap();
+    let command = build_beads_command_with_executable("show", &params, &ctx, "/tmp/bd").unwrap();
 
     assert_eq!(
         command.args,
@@ -960,8 +956,7 @@ fn beads_list_all_labels_plans_board_list_command() {
     let dir = tempdir().unwrap();
     let ctx = context(dir.path());
     let command =
-        build_beads_command_with_executable("listAllLabels", &Map::new(), &ctx, "/tmp/bd")
-            .unwrap();
+        build_beads_command_with_executable("listAllLabels", &Map::new(), &ctx, "/tmp/bd").unwrap();
     assert_eq!(command.args, vec!["list", "--all", "--json"]);
 }
 

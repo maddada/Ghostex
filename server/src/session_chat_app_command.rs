@@ -110,10 +110,7 @@ pub fn record_session_chat_app_command(project_id: &str, session_id: &str, comma
 }
 
 /// Live rows for a session, oldest first. Sweeps expired entries on the way out.
-pub fn session_chat_app_commands(
-    project_id: &str,
-    session_id: &str,
-) -> Vec<SessionChatAppCommand> {
+pub fn session_chat_app_commands(project_id: &str, session_id: &str) -> Vec<SessionChatAppCommand> {
     let now = Instant::now();
     let Ok(mut guard) = store().lock() else {
         return Vec::new();

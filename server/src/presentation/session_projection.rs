@@ -398,4 +398,3 @@ pub(crate) fn select_presentation_sessions(sessions: Vec<Value>) -> Vec<Value> {
     );
     active
 }
-

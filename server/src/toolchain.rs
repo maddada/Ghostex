@@ -56,10 +56,7 @@ as a Rust crate, so there is no bundled `zehn` executable to resolve, report as
 missing, or install on a remote host.
 */
 pub fn get_gxserver_tool_statuses() -> Vec<ToolCapabilityStatus> {
-    vec![
-        resolve_bundled_tool_status("zmx"),
-        get_bd_tool_status(),
-    ]
+    vec![resolve_bundled_tool_status("zmx"), get_bd_tool_status()]
 }
 
 pub fn require_bundled_zmx() -> Result<GxserverResolvedTool, String> {

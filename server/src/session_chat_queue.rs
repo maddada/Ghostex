@@ -361,7 +361,13 @@ pub fn fail_session_chat_queued_prompt(
     reason: &str,
 ) -> Result<SessionChatQueueSnapshot, DomainStateError> {
     let db = open_gxserver_database(paths).map_err(internal_error)?;
-    fail_prompt(&db, project_id, session_id, prompt_id, &bounded_reason(reason))?;
+    fail_prompt(
+        &db,
+        project_id,
+        session_id,
+        prompt_id,
+        &bounded_reason(reason),
+    )?;
     read_snapshot(&db, project_id, session_id)
 }
 
@@ -407,7 +413,9 @@ pub fn list_sessions_with_pending_queue(
         )
         .map_err(sql_error)?;
     let rows = statement
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
         .map_err(sql_error)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql_error)?;

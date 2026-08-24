@@ -109,7 +109,9 @@ fn normalize_process_terminal_name(value: &str) -> Option<String> {
     Some(name.to_string())
 }
 
-pub(crate) fn group_processes_by_parent_pid(processes: &[ProcessRow]) -> HashMap<i64, Vec<ProcessRow>> {
+pub(crate) fn group_processes_by_parent_pid(
+    processes: &[ProcessRow],
+) -> HashMap<i64, Vec<ProcessRow>> {
     let mut grouped = HashMap::<i64, Vec<ProcessRow>>::new();
     for process_row in processes {
         grouped
@@ -261,7 +263,9 @@ fn resolve_agent_process_invocation(
     })
 }
 
-pub(crate) fn read_codex_process_session_identity(process_id: Option<i64>) -> Option<(String, String)> {
+pub(crate) fn read_codex_process_session_identity(
+    process_id: Option<i64>,
+) -> Option<(String, String)> {
     let process_id = process_id.filter(|process_id| *process_id > 0)?;
     let fd_dir = PathBuf::from(format!("/proc/{process_id}/fd"));
     let mut identities = HashMap::<String, PathBuf>::new();

@@ -356,7 +356,12 @@ impl DelayedSendRuntime {
         self.publish_session_change(db, &record.project_id, &record.session_id)?;
         let repository = DomainRepository::new(db, self.server_id.as_str());
         let Some(session) = repository.get_session(&record.project_id, &record.session_id)? else {
-            return self.finish_record(db, record, "failed", Some("The target session no longer exists."));
+            return self.finish_record(
+                db,
+                record,
+                "failed",
+                Some("The target session no longer exists."),
+            );
         };
         let zmx_name = match crate::zmx::provider_zmx_session_name(&session) {
             Ok(zmx_name) => zmx_name,

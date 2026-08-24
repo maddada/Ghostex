@@ -6,22 +6,12 @@ import {
   IconRefresh,
   IconSearch,
   IconX,
-} from "@tabler/icons-react";
-import { DragDropProvider } from "@dnd-kit/react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react";
-import {
-  Toaster,
-  toast,
-} from "sonner";
-import { Button } from "@/packages/components/ui/button";
-import { isDiagnosticLoggingScenarioEnabled } from "@/packages/shared/ghostex-settings";
+} from '@tabler/icons-react';
+import { DragDropProvider } from '@dnd-kit/react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { Toaster, toast } from 'sonner';
+import { Button } from '@/packages/components/ui/button';
+import { isDiagnosticLoggingScenarioEnabled } from '@/packages/shared/ghostex-settings';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -29,15 +19,9 @@ import {
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@/packages/components/ui/dropdown-menu";
-import { Input } from "@/packages/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/packages/components/ui/select";
+} from '@/packages/components/ui/dropdown-menu';
+import { Input } from '@/packages/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import {
   PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
   addBoardColumn,
@@ -82,21 +66,21 @@ import {
   type BeadsIssue,
   type BoardStatusKey,
   type BoardTicket,
-} from "../project-board-shared";
+} from '../project-board-shared';
 import {
   indexBeadConversationLinksByBead,
   selectBeadConversationLinks,
   type ProjectBoardConversationLinkView,
   type ProjectBoardConversationState,
   type ProjectBoardStartLocation,
-} from "@/packages/shared/bead-conversation-links";
-import type { AppToastLevel } from "@/packages/shared/app-toast-contract";
+} from '@/packages/shared/bead-conversation-links';
+import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
 import {
   type AutomationDefinition,
   type AutomationRun,
   type ProjectAutomationsBridgeState,
-} from "@/packages/shared/automations";
-import { createSidebarAgentSelectItems } from "@/packages/shared/sidebar-agents";
+} from '@/packages/shared/automations';
+import { createSidebarAgentSelectItems } from '@/packages/shared/sidebar-agents';
 import {
   type ConversationActionState,
   type DetailDraft,
@@ -110,7 +94,7 @@ import {
   projectBoardCommandRunKey,
   type ProjectSurfaceTab,
   type TicketContextMenuState,
-} from "./types";
+} from './types';
 import {
   PROJECT_BOARD_COMMAND_COMPLETED_EVENT,
   PROJECT_BOARD_AUTO_REFRESH_INTERVAL_MS,
@@ -121,12 +105,8 @@ import {
   PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS,
   PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS,
   PROJECT_BOARD_SORT_SELECT_ITEMS,
-} from "./constants";
-import {
-  sendBeadsRequest,
-  sendProjectBoardRequest,
-  sendProjectBoardImageRequest,
-} from "./bridge";
+} from './constants';
+import { sendBeadsRequest, sendProjectBoardRequest, sendProjectBoardImageRequest } from './bridge';
 import {
   isProjectBoardEditableFocusTarget,
   postProjectBoardFocusOwnerChanged,
@@ -148,16 +128,13 @@ import {
   mergeKnownLabels,
   deriveKnownLabelsFromIssues,
   prioritizeDependencyTickets,
-} from "./board-state";
+} from './board-state';
 import {
   getPrimaryUsableConversationLink,
   projectBoardCommentMetadataFromLink,
   compareConversationLinksNewestFirst,
-} from "./ticket-detail";
-import {
-  BoardLane,
-  ProjectBoardTicketContextMenu,
-} from "./board-lane-card";
+} from './ticket-detail';
+import { BoardLane, ProjectBoardTicketContextMenu } from './board-lane-card';
 import {
   selectAutomationRunsForTriage,
   AutomationComingSoonOverlay,
@@ -165,7 +142,7 @@ import {
   AutomationRunList,
   AutomationDefinitionDetail,
   AutomationRunDetail,
-} from "./automations";
+} from './automations';
 import {
   AUTOMATION_SCHEDULE_PRESETS,
   AUTOMATION_WEEKDAY_OPTIONS,
@@ -176,26 +153,22 @@ import {
   resolveAutomationDraftProjectId,
   createAutomationDraftFromDefinition,
   createAutomationDefinitionFromDraft,
-} from "./automations-drafts";
-import {
-  beadsRejectionToastId,
-  formatIssueIdList,
-  ProjectBoardNotice,
-} from "./remote-migrate-gate";
-import { BoardColumnsDialog } from "./board-columns-dialog";
-import { AutomationDialog } from "./automation-dialog";
-import { EditTicketDialog, NewTicketDialog } from "./ticket-dialogs";
+} from './automations-drafts';
+import { beadsRejectionToastId, formatIssueIdList, ProjectBoardNotice } from './remote-migrate-gate';
+import { BoardColumnsDialog } from './board-columns-dialog';
+import { AutomationDialog } from './automation-dialog';
+import { EditTicketDialog, NewTicketDialog } from './ticket-dialogs';
 import {
   BOARD_CARD_VIEW_FIELDS,
   BOARD_CARD_VIEW_STORAGE_KEY,
   loadBoardCardViewOptions,
   saveBoardCardViewOptions,
   type BoardCardViewOptions,
-} from "./card-view-options";
+} from './card-view-options';
 
-export type LoadState = "idle" | "loading" | "ready" | "error";
+export type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
-export type TicketDetailSaveDraft = Omit<DetailDraft, "isDeleting" | "isSaving" | "ticket"> & {
+export type TicketDetailSaveDraft = Omit<DetailDraft, 'isDeleting' | 'isSaving' | 'ticket'> & {
   commentMetadata: ProjectBoardCommentMetadata;
   ticket: BoardTicket;
 };
@@ -204,28 +177,23 @@ export const PROJECT_BOARD_FOCUS_OWNER_MIN_INTERVAL_MS = 250;
 
 export function ProjectBoardApp() {
   const urlSearchParams = new URLSearchParams(window.location.search);
-  const projectName = urlSearchParams.get("projectName") || "Project";
-  const projectPath = urlSearchParams.get("projectPath") || "";
-  const projectIdParam = urlSearchParams.get("projectId") || "";
+  const projectName = urlSearchParams.get('projectName') || 'Project';
+  const projectPath = urlSearchParams.get('projectPath') || '';
+  const projectIdParam = urlSearchParams.get('projectId') || '';
   const projectId = projectBoardRawProjectIdFromUrlParam(projectIdParam);
-  const projectEditorId = urlSearchParams.get("projectEditorId") || projectIdParam;
-  const remoteMachineId = urlSearchParams.get("remoteMachineId") || "";
-  const automationScope = urlSearchParams.get("scope") === "all" ? "all" : "project";
-  const isAutomationGlobalScope = automationScope === "all";
+  const projectEditorId = urlSearchParams.get('projectEditorId') || projectIdParam;
+  const remoteMachineId = urlSearchParams.get('remoteMachineId') || '';
+  const automationScope = urlSearchParams.get('scope') === 'all' ? 'all' : 'project';
+  const isAutomationGlobalScope = automationScope === 'all';
   const initialSurfaceTab: ProjectSurfaceTab =
-    urlSearchParams.get("surface") === "automations" ? "automations" : "board";
-  const automationIsExperimental =
-    urlSearchParams.get("automationExperimental") !== "false";
+    urlSearchParams.get('surface') === 'automations' ? 'automations' : 'board';
+  const automationIsExperimental = urlSearchParams.get('automationExperimental') !== 'false';
   const [experimentalFeaturesEnabled, setExperimentalFeaturesEnabled] = useState(() =>
-    readExperimentalFeaturesEnabled(urlSearchParams),
+    readExperimentalFeaturesEnabled(urlSearchParams)
   );
-  const automationSurfaceName = isAutomationGlobalScope ? "Automations Overview" : "Automate";
-  const displayKey = normalizeDisplayIssueKey(
-    urlSearchParams.get("beadsDisplayKey") ?? projectName,
-  );
-  const issuePrefix = normalizeIssuePrefix(
-    projectName || projectPath.split("/").filter(Boolean).at(-1) || displayKey,
-  );
+  const automationSurfaceName = isAutomationGlobalScope ? 'Automations Overview' : 'Automate';
+  const displayKey = normalizeDisplayIssueKey(urlSearchParams.get('beadsDisplayKey') ?? projectName);
+  const issuePrefix = normalizeIssuePrefix(projectName || projectPath.split('/').filter(Boolean).at(-1) || displayKey);
   /*
    * CDXC:ProjectBoardCustomColumns 2026-08-21:
    * Lanes are the board's own bd statuses, which are only known once ensureWorkflowStatuses has read
@@ -234,7 +202,7 @@ export function ProjectBoardApp() {
    * reading them from state instead would rebuild loadTickets, and with it restart the auto-refresh
    * interval, every time a refresh produced a fresh columns array.
    */
-  const boardColumnsRef = useRef<BoardColumn[]>(buildBoardColumns(""));
+  const boardColumnsRef = useRef<BoardColumn[]>(buildBoardColumns(''));
   const [boardColumns, setBoardColumns] = useState<BoardColumn[]>(boardColumnsRef.current);
   /*
    * CDXC:ProjectBoardColumnManagement 2026-08-21:
@@ -242,8 +210,8 @@ export function ProjectBoardApp() {
    * rebuilt from the derived columns: the derived list has already dropped each entry's bd category
    * suffix, and regenerating the config from it would silently strip categories the board relies on.
    */
-  const boardColumnConfigRef = useRef("");
-  const [boardColumnConfig, setBoardColumnConfig] = useState("");
+  const boardColumnConfigRef = useRef('');
+  const [boardColumnConfig, setBoardColumnConfig] = useState('');
   const [columnsDialogOpen, setColumnsDialogOpen] = useState(false);
   /*
    * CDXC:ProjectBoardRedesign 2026-08-24:
@@ -258,8 +226,8 @@ export function ProjectBoardApp() {
         setCardView(loadBoardCardViewOptions());
       }
     };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
   const toggleCardViewField = useCallback((key: keyof BoardCardViewOptions, value: boolean) => {
     setCardView((current) => {
@@ -277,34 +245,29 @@ export function ProjectBoardApp() {
     links: [],
     sessions: [],
   });
-  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState('');
   const pickedAgentIdByBeadIdRef = useRef(new Map<string, string>());
-  const [loadState, setLoadState] = useState<LoadState>("idle");
+  const [loadState, setLoadState] = useState<LoadState>('idle');
   const [hasCompletedInitialBoardLoad, setHasCompletedInitialBoardLoad] = useState(false);
-  const [runningProjectBoardCommand, setRunningProjectBoardCommand] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [runningProjectBoardCommand, setRunningProjectBoardCommand] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const storedViewPreferences = useMemo(() => readProjectBoardViewPreferences(), []);
-  const [priorityFilter, setPriorityFilter] = useState<BoardPriorityFilter>(
-    storedViewPreferences.priorityFilter,
-  );
-  const [estimateFilter, setEstimateFilter] = useState<BoardEstimateFilter>(
-    storedViewPreferences.estimateFilter,
-  );
+  const [priorityFilter, setPriorityFilter] = useState<BoardPriorityFilter>(storedViewPreferences.priorityFilter);
+  const [estimateFilter, setEstimateFilter] = useState<BoardEstimateFilter>(storedViewPreferences.estimateFilter);
   const [tagFilter, setTagFilter] = useState<BoardTagFilter>(storedViewPreferences.tagFilter);
   const [sortOption, setSortOption] = useState<BoardSortOption>(storedViewPreferences.sortOption);
   const [detail, setDetail] = useState<DetailDraft>(createEmptyDetailDraft);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [newTicket, setNewTicket] = useState<TicketFormDraft>(createEmptyTicketFormDraft);
-  const [newTicketStartLocation, setNewTicketStartLocation] =
-    useState<ProjectBoardStartLocation>("currentProject");
+  const [newTicketStartLocation, setNewTicketStartLocation] = useState<ProjectBoardStartLocation>('currentProject');
   const createInFlightRef = useRef(false);
   const pendingStatusMovesRef = useRef(new Map<string, PendingBoardStatusMove>());
   const pendingStatusMoveSerialRef = useRef(0);
-  const [deleteConfirmingTicketId, setDeleteConfirmingTicketId] = useState("");
+  const [deleteConfirmingTicketId, setDeleteConfirmingTicketId] = useState('');
   const [ticketContextMenu, setTicketContextMenu] = useState<TicketContextMenuState>();
-  const [contextMenuDeletingTicketId, setContextMenuDeletingTicketId] = useState("");
+  const [contextMenuDeletingTicketId, setContextMenuDeletingTicketId] = useState('');
   const [imagePreviewDataUrls, setImagePreviewDataUrls] = useState<Record<string, string>>({});
   const pendingImagePreviewPathsRef = useRef(new Set<string>());
   const failedImagePreviewPathsRef = useRef(new Set<string>());
@@ -314,7 +277,7 @@ export function ProjectBoardApp() {
         label: agent.label,
         value: agent.agentId,
       })),
-    [conversationState.agents],
+    [conversationState.agents]
   );
   /*
    * CDXC:ProjectBoard 2026-05-26-05:38:
@@ -422,11 +385,11 @@ export function ProjectBoardApp() {
    * Optimistically patch the local card, show an error toast, and reopen the same draft only if persistence fails so slow storage does not hold the modal open or lose the user's edits.
    */
   const isRefreshingRef = useRef(false);
-  const issuesSignatureRef = useRef("");
-  const labelsSignatureRef = useRef("");
+  const issuesSignatureRef = useRef('');
+  const labelsSignatureRef = useRef('');
   const newPromptRef = useRef<HTMLTextAreaElement>(null);
   const detailSaveSerialRef = useRef(0);
-  const automationProjectsRef = useRef<ProjectAutomationsBridgeState["projects"]>([]);
+  const automationProjectsRef = useRef<ProjectAutomationsBridgeState['projects']>([]);
   const [conversationAction, setConversationAction] = useState<ConversationActionState>();
   /*
    * CDXC:ProjectBoard 2026-06-09-19:25:
@@ -442,7 +405,7 @@ export function ProjectBoardApp() {
    */
   const [activeSurfaceTab, setActiveSurfaceTab] = useState<ProjectSurfaceTab>(initialSurfaceTab);
   const showAutomationComingSoonOverlay =
-    activeSurfaceTab !== "board" && automationIsExperimental && !experimentalFeaturesEnabled;
+    activeSurfaceTab !== 'board' && automationIsExperimental && !experimentalFeaturesEnabled;
   const [automationState, setAutomationState] = useState<ProjectAutomationsBridgeState>({
     agents: [],
     automations: [],
@@ -453,29 +416,23 @@ export function ProjectBoardApp() {
     projects: [],
     runs: [],
   });
-  const [automationConversationState, setAutomationConversationState] =
-    useState<ProjectBoardConversationState>({
-      agents: [],
-      debuggingMode: false,
-      links: [],
-      sessions: [],
-    });
+  const [automationConversationState, setAutomationConversationState] = useState<ProjectBoardConversationState>({
+    agents: [],
+    debuggingMode: false,
+    links: [],
+    sessions: [],
+  });
   const [automationDialogOpen, setAutomationDialogOpen] = useState(false);
-  const [automationDraft, setAutomationDraft] = useState<AutomationDraft>(() =>
-    createAutomationDraft(),
-  );
-  const [automationActionId, setAutomationActionId] = useState("");
+  const [automationDraft, setAutomationDraft] = useState<AutomationDraft>(() => createAutomationDraft());
+  const [automationActionId, setAutomationActionId] = useState('');
   const [automationTargetProjectId, setAutomationTargetProjectId] = useState(projectId);
-  const [selectedAutomationId, setSelectedAutomationId] = useState("");
-  const [selectedAutomationRunId, setSelectedAutomationRunId] = useState("");
+  const [selectedAutomationId, setSelectedAutomationId] = useState('');
+  const [selectedAutomationRunId, setSelectedAutomationRunId] = useState('');
 
   useEffect(() => {
     let lastPostedAt = 0;
-    const postFocusOwnerChanged = (
-      event: ProjectBoardFocusOwnerEvent,
-      target: EventTarget | null,
-    ) => {
-      if (event !== "pointerdown" && !isProjectBoardEditableFocusTarget(target)) {
+    const postFocusOwnerChanged = (event: ProjectBoardFocusOwnerEvent, target: EventTarget | null) => {
+      if (event !== 'pointerdown' && !isProjectBoardEditableFocusTarget(target)) {
         return;
       }
       const now = performance.now();
@@ -496,29 +453,27 @@ export function ProjectBoardApp() {
      * Report only sanitized focus-owner events from the Project WKWebView so native can protect active board input without logging field text, ticket titles, paths, URLs, or command content.
      */
     const handlePointerDown = (event: globalThis.PointerEvent) => {
-      postFocusOwnerChanged("pointerdown", event.target);
+      postFocusOwnerChanged('pointerdown', event.target);
     };
     const handleFocusIn = (event: globalThis.FocusEvent) => {
-      postFocusOwnerChanged("focusin", event.target);
+      postFocusOwnerChanged('focusin', event.target);
     };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      postFocusOwnerChanged("keydown", event.target);
+      postFocusOwnerChanged('keydown', event.target);
     };
-    window.addEventListener("pointerdown", handlePointerDown, true);
-    window.addEventListener("focusin", handleFocusIn, true);
-    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('focusin', handleFocusIn, true);
+    window.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      window.removeEventListener("pointerdown", handlePointerDown, true);
-      window.removeEventListener("focusin", handleFocusIn, true);
-      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('focusin', handleFocusIn, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [projectEditorId, projectId, remoteMachineId]);
 
   useEffect(() => {
     const syncExperimentalFeaturesEnabled = () => {
-      setExperimentalFeaturesEnabled(
-        readExperimentalFeaturesEnabled(new URLSearchParams(window.location.search)),
-      );
+      setExperimentalFeaturesEnabled(readExperimentalFeaturesEnabled(new URLSearchParams(window.location.search)));
     };
     const handleStorage = (event: StorageEvent) => {
       if (event.key === null || event.key === NATIVE_SETTINGS_STORAGE_KEY) {
@@ -526,17 +481,17 @@ export function ProjectBoardApp() {
       }
     };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === 'visible') {
         syncExperimentalFeaturesEnabled();
       }
     };
-    window.addEventListener("storage", handleStorage);
-    window.addEventListener("focus", syncExperimentalFeaturesEnabled);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('focus', syncExperimentalFeaturesEnabled);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("focus", syncExperimentalFeaturesEnabled);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', syncExperimentalFeaturesEnabled);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -544,22 +499,22 @@ export function ProjectBoardApp() {
     try {
       window.localStorage.setItem(
         PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
-        JSON.stringify({ estimateFilter, priorityFilter, sortOption, tagFilter }),
+        JSON.stringify({ estimateFilter, priorityFilter, sortOption, tagFilter })
       );
     } catch {
       // Keep the current in-memory preferences when localStorage is unavailable.
     }
   }, [estimateFilter, priorityFilter, sortOption, tagFilter]);
 
-  const openNewTicket = useCallback((status: BoardStatusKey = "todo") => {
+  const openNewTicket = useCallback((status: BoardStatusKey = 'todo') => {
     setNewTicket((current) => ({ ...current, status }));
     setNewTicketOpen(true);
   }, []);
 
   const runBeads = useCallback(
-    async (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => {
+    async (request: Omit<BeadsBridgeRequest, 'cwd' | 'requestId'>) => {
       if (!projectPath) {
-        throw new Error("No active project path is available.");
+        throw new Error('No active project path is available.');
       }
       /*
        * CDXC:ProjectBoardRouting 2026-06-04-23:51:
@@ -576,132 +531,153 @@ export function ProjectBoardApp() {
       }
       return parseBeadsJson(response.stdout);
     },
-    [projectId, projectPath, remoteMachineId],
+    [projectId, projectPath, remoteMachineId]
   );
 
   const loadConversationState = useCallback(async () => {
     try {
       const response = await sendProjectBoardRequest({
-        action: "getState",
+        action: 'getState',
         projectId,
         projectEditorId,
         projectPath,
         ...(remoteMachineId ? { remoteMachineId } : {}),
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not load linked conversations.");
+        throw new Error(response.error || 'Could not load linked conversations.');
       }
       const payload = response.payload ?? { agents: [], links: [], sessions: [] };
       setConversationState(payload);
-      setAutomationConversationState((current) =>
-        automationTargetProjectId === projectId ? payload : current,
-      );
-      setSelectedAgentId((current) => current || payload.defaultAgentId || payload.agents[0]?.agentId || "");
+      setAutomationConversationState((current) => (automationTargetProjectId === projectId ? payload : current));
+      setSelectedAgentId((current) => current || payload.defaultAgentId || payload.agents[0]?.agentId || '');
     } catch (error) {
-      console.warn("Project board conversation state unavailable.", error);
+      console.warn('Project board conversation state unavailable.', error);
     }
   }, [automationTargetProjectId, projectEditorId, projectId, projectPath, remoteMachineId]);
 
-  const applyAutomationState = useCallback((payload: ProjectAutomationsBridgeState) => {
-    automationProjectsRef.current = payload.projects;
-    setAutomationState(payload);
-    setAutomationTargetProjectId(
-      isAutomationGlobalScope ? payload.projects[0]?.projectId ?? payload.projectId : payload.projectId,
-    );
-  }, [isAutomationGlobalScope]);
+  const applyAutomationState = useCallback(
+    (payload: ProjectAutomationsBridgeState) => {
+      automationProjectsRef.current = payload.projects;
+      setAutomationState(payload);
+      setAutomationTargetProjectId(
+        isAutomationGlobalScope ? (payload.projects[0]?.projectId ?? payload.projectId) : payload.projectId
+      );
+    },
+    [isAutomationGlobalScope]
+  );
 
-  const loadAutomationState = useCallback(async (targetProjectId?: string) => {
-    if (!experimentalFeaturesEnabled) {
-      return;
-    }
-    const requestedProjectId = targetProjectId?.trim() || automationTargetProjectId || projectId;
-    const targetProject = automationProjectsRef.current.find(
-      (candidate) => candidate.projectId === requestedProjectId,
-    );
-    try {
-      const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: isAutomationGlobalScope ? "automationGetAllState" : "automationGetState",
-        projectEditorId,
-        projectId: isAutomationGlobalScope ? projectId : requestedProjectId,
-        projectPath: isAutomationGlobalScope
-          ? undefined
-          : targetProject?.path ?? (requestedProjectId === projectId ? projectPath : undefined),
-        ...(remoteMachineId ? { remoteMachineId } : {}),
-      });
-      if (!response.ok) {
-        throw new Error(response.error || "Could not load automations.");
+  const loadAutomationState = useCallback(
+    async (targetProjectId?: string) => {
+      if (!experimentalFeaturesEnabled) {
+        return;
       }
-      if (response.payload) {
-        applyAutomationState(response.payload);
-        setAutomationDraft((current) =>
-          current.agentId
-            ? current
-            : {
-                ...current,
-                agentId: resolveAutomationDraftAgentId(
-                  response.payload?.agents ?? [],
-                  response.payload?.defaultAgentId,
-                ),
-                projectId:
-                  isAutomationGlobalScope
+      const requestedProjectId = targetProjectId?.trim() || automationTargetProjectId || projectId;
+      const targetProject = automationProjectsRef.current.find(
+        (candidate) => candidate.projectId === requestedProjectId
+      );
+      try {
+        const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
+          action: isAutomationGlobalScope ? 'automationGetAllState' : 'automationGetState',
+          projectEditorId,
+          projectId: isAutomationGlobalScope ? projectId : requestedProjectId,
+          projectPath: isAutomationGlobalScope
+            ? undefined
+            : (targetProject?.path ?? (requestedProjectId === projectId ? projectPath : undefined)),
+          ...(remoteMachineId ? { remoteMachineId } : {}),
+        });
+        if (!response.ok) {
+          throw new Error(response.error || 'Could not load automations.');
+        }
+        if (response.payload) {
+          applyAutomationState(response.payload);
+          setAutomationDraft((current) =>
+            current.agentId
+              ? current
+              : {
+                  ...current,
+                  agentId: resolveAutomationDraftAgentId(
+                    response.payload?.agents ?? [],
+                    response.payload?.defaultAgentId
+                  ),
+                  projectId: isAutomationGlobalScope
                     ? resolveAutomationDraftProjectId(
                         response.payload?.projects ?? [],
                         current.projectId,
-                        response.payload?.projectId || projectId,
+                        response.payload?.projectId || projectId
                       )
                     : current.projectId || response.payload?.projectId || projectId,
-                executionKind: response.payload?.projectCanUseWorktrees === false ? "local" : current.executionKind,
-              },
-        );
+                  executionKind: response.payload?.projectCanUseWorktrees === false ? 'local' : current.executionKind,
+                }
+          );
+        }
+      } catch (error) {
+        console.warn('Project automations state unavailable.', error);
       }
-    } catch (error) {
-      console.warn("Project automations state unavailable.", error);
-    }
-  }, [applyAutomationState, automationTargetProjectId, experimentalFeaturesEnabled, isAutomationGlobalScope, projectEditorId, projectId, projectPath, remoteMachineId]);
+    },
+    [
+      applyAutomationState,
+      automationTargetProjectId,
+      experimentalFeaturesEnabled,
+      isAutomationGlobalScope,
+      projectEditorId,
+      projectId,
+      projectPath,
+      remoteMachineId,
+    ]
+  );
 
-  const loadAutomationConversationState = useCallback(async (targetProjectId?: string) => {
-    if (!experimentalFeaturesEnabled) {
-      setAutomationConversationState({ agents: [], debuggingMode: false, links: [], sessions: [] });
-      return;
-    }
-    const requestedProjectId = targetProjectId?.trim() || automationTargetProjectId || projectId;
-    if (isAutomationGlobalScope && !automationProjectsRef.current.some((candidate) => candidate.projectId === requestedProjectId)) {
-      setAutomationConversationState({ agents: [], debuggingMode: false, links: [], sessions: [] });
-      return;
-    }
-    const targetProject = automationProjectsRef.current.find(
-      (candidate) => candidate.projectId === requestedProjectId,
-    );
-    try {
-      const response = await sendProjectBoardRequest({
-        action: "getState",
-        projectEditorId,
-        projectId: requestedProjectId,
-        projectPath: targetProject?.path ?? (requestedProjectId === projectId ? projectPath : undefined),
-        ...(remoteMachineId ? { remoteMachineId } : {}),
-      });
-      if (!response.ok) {
-        throw new Error(response.error || "Could not load automation sessions.");
+  const loadAutomationConversationState = useCallback(
+    async (targetProjectId?: string) => {
+      if (!experimentalFeaturesEnabled) {
+        setAutomationConversationState({ agents: [], debuggingMode: false, links: [], sessions: [] });
+        return;
       }
-      setAutomationConversationState(response.payload ?? { agents: [], links: [], sessions: [] });
-    } catch (error) {
-      console.warn("Project automation sessions unavailable.", error);
-      setAutomationConversationState({ agents: [], debuggingMode: false, links: [], sessions: [] });
-    }
-  }, [automationTargetProjectId, experimentalFeaturesEnabled, isAutomationGlobalScope, projectEditorId, projectId, projectPath, remoteMachineId]);
+      const requestedProjectId = targetProjectId?.trim() || automationTargetProjectId || projectId;
+      if (
+        isAutomationGlobalScope &&
+        !automationProjectsRef.current.some((candidate) => candidate.projectId === requestedProjectId)
+      ) {
+        setAutomationConversationState({ agents: [], debuggingMode: false, links: [], sessions: [] });
+        return;
+      }
+      const targetProject = automationProjectsRef.current.find(
+        (candidate) => candidate.projectId === requestedProjectId
+      );
+      try {
+        const response = await sendProjectBoardRequest({
+          action: 'getState',
+          projectEditorId,
+          projectId: requestedProjectId,
+          projectPath: targetProject?.path ?? (requestedProjectId === projectId ? projectPath : undefined),
+          ...(remoteMachineId ? { remoteMachineId } : {}),
+        });
+        if (!response.ok) {
+          throw new Error(response.error || 'Could not load automation sessions.');
+        }
+        setAutomationConversationState(response.payload ?? { agents: [], links: [], sessions: [] });
+      } catch (error) {
+        console.warn('Project automation sessions unavailable.', error);
+        setAutomationConversationState({ agents: [], debuggingMode: false, links: [], sessions: [] });
+      }
+    },
+    [
+      automationTargetProjectId,
+      experimentalFeaturesEnabled,
+      isAutomationGlobalScope,
+      projectEditorId,
+      projectId,
+      projectPath,
+      remoteMachineId,
+    ]
+  );
 
   const logProjectBoardDebug = useCallback(
     (event: string, details?: Record<string, unknown>) => {
-      if (
-        !isDiagnosticLoggingScenarioEnabled(
-          conversationState.diagnosticLogging,
-          "native.project.board",
-        )
-      ) {
+      if (!isDiagnosticLoggingScenarioEnabled(conversationState.diagnosticLogging, 'native.project.board')) {
         return;
       }
       void sendProjectBoardRequest({
-        action: "appendDebugLog",
+        action: 'appendDebugLog',
         details: stringifyProjectBoardDebugDetails(details),
         event,
         projectId,
@@ -709,22 +685,16 @@ export function ProjectBoardApp() {
         projectPath,
         ...(remoteMachineId ? { remoteMachineId } : {}),
       }).catch((error) => {
-        console.warn("Project board debug log unavailable.", error);
+        console.warn('Project board debug log unavailable.', error);
       });
     },
-    [
-      conversationState.diagnosticLogging,
-      projectEditorId,
-      projectId,
-      projectPath,
-      remoteMachineId,
-    ],
+    [conversationState.diagnosticLogging, projectEditorId, projectId, projectPath, remoteMachineId]
   );
 
   const showProjectBoardToast = useCallback(
     (level: AppToastLevel, title: string, description?: string) => {
       void sendProjectBoardRequest({
-        action: "showToast",
+        action: 'showToast',
         projectEditorId,
         projectId,
         projectPath,
@@ -733,38 +703,31 @@ export function ProjectBoardApp() {
         toastLevel: level,
         toastTitle: title,
       }).catch((error) => {
-        console.warn("Project board toast unavailable.", error);
+        console.warn('Project board toast unavailable.', error);
       });
     },
-    [projectEditorId, projectId, projectPath, remoteMachineId],
+    [projectEditorId, projectId, projectPath, remoteMachineId]
   );
 
-  const setLocalTicketStatus = useCallback(
-    (ticketId: string, statusKey: BoardStatusKey, beadsStatus: string) => {
-      setAllIssues((current) =>
-        current.map((candidate) =>
-          candidate.id === ticketId ? { ...candidate, status: beadsStatus } : candidate,
-        ),
-      );
-      setTickets((current) =>
-        current.map((candidate) =>
-          candidate.id === ticketId
-            ? { ...candidate, boardStatus: statusKey, status: beadsStatus }
-            : candidate,
-        ),
-      );
-      setDetail((current) =>
-        current.ticket?.id === ticketId
-          ? {
-              ...current,
-              status: statusKey,
-              ticket: { ...current.ticket, boardStatus: statusKey, status: beadsStatus },
-            }
-          : current,
-      );
-    },
-    [],
-  );
+  const setLocalTicketStatus = useCallback((ticketId: string, statusKey: BoardStatusKey, beadsStatus: string) => {
+    setAllIssues((current) =>
+      current.map((candidate) => (candidate.id === ticketId ? { ...candidate, status: beadsStatus } : candidate))
+    );
+    setTickets((current) =>
+      current.map((candidate) =>
+        candidate.id === ticketId ? { ...candidate, boardStatus: statusKey, status: beadsStatus } : candidate
+      )
+    );
+    setDetail((current) =>
+      current.ticket?.id === ticketId
+        ? {
+            ...current,
+            status: statusKey,
+            ticket: { ...current.ticket, boardStatus: statusKey, status: beadsStatus },
+          }
+        : current
+    );
+  }, []);
 
   const upsertLocalIssue = useCallback(
     (issue: BeadsIssue) => {
@@ -779,8 +742,7 @@ export function ProjectBoardApp() {
               ...current,
               description: issue.description ?? current.description,
               labels: issue.labels ?? current.labels,
-              priority:
-                issue.priority === undefined ? current.priority : prioritySelectValue(issue.priority),
+              priority: issue.priority === undefined ? current.priority : prioritySelectValue(issue.priority),
               status: beadsStatusToBoardStatus(issue.status, boardColumns),
               title: issue.title,
               tshirt: estimateToTshirt(issue.estimate),
@@ -791,151 +753,155 @@ export function ProjectBoardApp() {
                 displayId: current.ticket.displayId,
               },
             }
-          : current,
+          : current
       );
     },
-    [boardColumns, displayKey],
+    [boardColumns, displayKey]
   );
 
   const setLocalTicketTitle = useCallback((ticketId: string, title: string) => {
     setAllIssues((current) =>
-      current.map((candidate) => (candidate.id === ticketId ? { ...candidate, title } : candidate)),
+      current.map((candidate) => (candidate.id === ticketId ? { ...candidate, title } : candidate))
     );
     setTickets((current) =>
-      current.map((candidate) => (candidate.id === ticketId ? { ...candidate, title } : candidate)),
+      current.map((candidate) => (candidate.id === ticketId ? { ...candidate, title } : candidate))
     );
     setDetail((current) =>
-      current.ticket?.id === ticketId
-        ? { ...current, title, ticket: { ...current.ticket, title } }
-        : current,
+      current.ticket?.id === ticketId ? { ...current, title, ticket: { ...current.ticket, title } } : current
     );
   }, []);
 
-  const loadTickets = useCallback(async (options: BoardRefreshOptions = {}) => {
-    const mode = options.mode ?? "manual";
-    if (isRefreshingRef.current) {
-      if (mode === "background") {
+  const loadTickets = useCallback(
+    async (options: BoardRefreshOptions = {}) => {
+      const mode = options.mode ?? 'manual';
+      if (isRefreshingRef.current) {
+        if (mode === 'background') {
+          return;
+        }
+        await waitForProjectBoardRefreshIdle(() => isRefreshingRef.current);
+      }
+      isRefreshingRef.current = true;
+      if (mode !== 'background') {
+        setLoadState('loading');
+        setErrorMessage('');
+      }
+      try {
+        let customStatusConfig: string;
+        if (mode === 'initial' || mode === 'manual') {
+          await ensureIssuePrefix(runBeads, issuePrefix);
+          customStatusConfig = await ensureWorkflowStatuses(runBeads);
+        } else {
+          customStatusConfig = await readWorkflowStatuses(runBeads);
+        }
+        if (customStatusConfig !== boardColumnConfigRef.current) {
+          boardColumnConfigRef.current = customStatusConfig;
+          setBoardColumnConfig(customStatusConfig);
+        }
+        const nextColumns = buildBoardColumns(customStatusConfig);
+        if (boardColumnsSignature(nextColumns) !== boardColumnsSignature(boardColumnsRef.current)) {
+          boardColumnsRef.current = nextColumns;
+          setBoardColumns(nextColumns);
+        }
+        const payload = await runBeads({ action: 'listIssues' });
+        const rawIssues = normalizeBeadsPayload<BeadsIssue[]>(payload, Array.isArray(payload) ? payload : []);
+        const issues = applyPendingBoardStatusMoves(rawIssues, pendingStatusMovesRef.current);
+        /*
+         * CDXC:ProjectBoardCustomColumns 2026-08-21:
+         * The lane a bead belongs to is resolved against the column list, so the signature carries the
+         * columns too. A status added to the board config while beads already sit in it changes no
+         * issue, and remapping only on an issue change would leave the new lane empty and those beads
+         * drawn in Todo until something unrelated moved.
+         */
+        const issuesSignature = `${displayKey}:${boardColumnsSignature(boardColumnsRef.current)}:${createIssuesSignature(issues)}`;
+        if (issuesSignature !== issuesSignatureRef.current) {
+          issuesSignatureRef.current = issuesSignature;
+          setAllIssues(issues);
+          setTickets(toBoardTickets(issues, displayKey, boardColumnsRef.current));
+        }
+        const labels = deriveKnownLabelsFromIssues(issues);
+        const labelsSignature = labels.join('\u001f');
+        if (labelsSignature !== labelsSignatureRef.current) {
+          labelsSignatureRef.current = labelsSignature;
+          setKnownLabels(labels);
+        }
+        if (mode !== 'background') {
+          setLoadState('ready');
+        } else {
+          setErrorMessage('');
+          setLoadState((current) => (current === 'loading' ? current : 'ready'));
+        }
+      } catch (error) {
+        if (mode !== 'background') {
+          setLoadState('error');
+          setErrorMessage(error instanceof Error ? error.message : 'Could not load Beads issues.');
+        } else {
+          console.warn('Project board auto refresh failed.', error);
+        }
+      } finally {
+        isRefreshingRef.current = false;
+        if (mode === 'initial') {
+          setHasCompletedInitialBoardLoad(true);
+        }
+      }
+    },
+    [displayKey, issuePrefix, runBeads]
+  );
+
+  const runProjectBoardCommand = useCallback(
+    async (action: ProjectBoardRunnableCommandAction, migrationOption?: RunnableBeadsMigrationOption) => {
+      if (runningProjectBoardCommand) {
         return;
       }
-      await waitForProjectBoardRefreshIdle(() => isRefreshingRef.current);
-    }
-    isRefreshingRef.current = true;
-    if (mode !== "background") {
-      setLoadState("loading");
-      setErrorMessage("");
-    }
-    try {
-      let customStatusConfig: string;
-      if (mode === "initial" || mode === "manual") {
-        await ensureIssuePrefix(runBeads, issuePrefix);
-        customStatusConfig = await ensureWorkflowStatuses(runBeads);
-      } else {
-        customStatusConfig = await readWorkflowStatuses(runBeads);
+      const runKey = projectBoardCommandRunKey(action, migrationOption);
+      setRunningProjectBoardCommand(runKey);
+      try {
+        const response = await sendProjectBoardRequest({
+          action,
+          ...(migrationOption ? { migrationOption } : {}),
+          projectId,
+        });
+        if (!response.ok) {
+          throw new Error(response.error || 'Could not start the Beads command.');
+        }
+      } catch (error) {
+        setRunningProjectBoardCommand('');
+        showProjectBoardToast(
+          'error',
+          'Could not run Beads command',
+          error instanceof Error ? error.message : 'Could not start the Beads command.'
+        );
       }
-      if (customStatusConfig !== boardColumnConfigRef.current) {
-        boardColumnConfigRef.current = customStatusConfig;
-        setBoardColumnConfig(customStatusConfig);
-      }
-      const nextColumns = buildBoardColumns(customStatusConfig);
-      if (boardColumnsSignature(nextColumns) !== boardColumnsSignature(boardColumnsRef.current)) {
-        boardColumnsRef.current = nextColumns;
-        setBoardColumns(nextColumns);
-      }
-      const payload = await runBeads({ action: "listIssues" });
-      const rawIssues = normalizeBeadsPayload<BeadsIssue[]>(payload, Array.isArray(payload) ? payload : []);
-      const issues = applyPendingBoardStatusMoves(rawIssues, pendingStatusMovesRef.current);
-      /*
-       * CDXC:ProjectBoardCustomColumns 2026-08-21:
-       * The lane a bead belongs to is resolved against the column list, so the signature carries the
-       * columns too. A status added to the board config while beads already sit in it changes no
-       * issue, and remapping only on an issue change would leave the new lane empty and those beads
-       * drawn in Todo until something unrelated moved.
-       */
-      const issuesSignature = `${displayKey}:${boardColumnsSignature(boardColumnsRef.current)}:${createIssuesSignature(issues)}`;
-      if (issuesSignature !== issuesSignatureRef.current) {
-        issuesSignatureRef.current = issuesSignature;
-        setAllIssues(issues);
-        setTickets(toBoardTickets(issues, displayKey, boardColumnsRef.current));
-      }
-      const labels = deriveKnownLabelsFromIssues(issues);
-      const labelsSignature = labels.join("\u001f");
-      if (labelsSignature !== labelsSignatureRef.current) {
-        labelsSignatureRef.current = labelsSignature;
-        setKnownLabels(labels);
-      }
-      if (mode !== "background") {
-        setLoadState("ready");
-      } else {
-        setErrorMessage("");
-        setLoadState((current) => (current === "loading" ? current : "ready"));
-      }
-    } catch (error) {
-      if (mode !== "background") {
-        setLoadState("error");
-        setErrorMessage(error instanceof Error ? error.message : "Could not load Beads issues.");
-      } else {
-        console.warn("Project board auto refresh failed.", error);
-      }
-    } finally {
-      isRefreshingRef.current = false;
-      if (mode === "initial") {
-        setHasCompletedInitialBoardLoad(true);
-      }
-    }
-  }, [displayKey, issuePrefix, runBeads]);
-
-  const runProjectBoardCommand = useCallback(async (
-    action: ProjectBoardRunnableCommandAction,
-    migrationOption?: RunnableBeadsMigrationOption,
-  ) => {
-    if (runningProjectBoardCommand) {
-      return;
-    }
-    const runKey = projectBoardCommandRunKey(action, migrationOption);
-    setRunningProjectBoardCommand(runKey);
-    try {
-      const response = await sendProjectBoardRequest({
-        action,
-        ...(migrationOption ? { migrationOption } : {}),
-        projectId,
-      });
-      if (!response.ok) {
-        throw new Error(response.error || "Could not start the Beads command.");
-      }
-    } catch (error) {
-      setRunningProjectBoardCommand("");
-      showProjectBoardToast(
-        "error",
-        "Could not run Beads command",
-        error instanceof Error ? error.message : "Could not start the Beads command.",
-      );
-    }
-  }, [projectId, runningProjectBoardCommand, showProjectBoardToast]);
+    },
+    [projectId, runningProjectBoardCommand, showProjectBoardToast]
+  );
 
   const initializeBeads = useCallback(() => {
-    void runProjectBoardCommand("initializeBeads");
+    void runProjectBoardCommand('initializeBeads');
   }, [runProjectBoardCommand]);
 
   const installOrUpdateBeads = useCallback(() => {
-    void runProjectBoardCommand("installOrUpdateBeads");
+    void runProjectBoardCommand('installOrUpdateBeads');
   }, [runProjectBoardCommand]);
 
-  const runBeadsMigration = useCallback((migrationOption: RunnableBeadsMigrationOption) => {
-    void runProjectBoardCommand("runBeadsMigration", migrationOption);
-  }, [runProjectBoardCommand]);
+  const runBeadsMigration = useCallback(
+    (migrationOption: RunnableBeadsMigrationOption) => {
+      void runProjectBoardCommand('runBeadsMigration', migrationOption);
+    },
+    [runProjectBoardCommand]
+  );
 
   useEffect(() => {
     const handleCommandCompleted = (event: Event) => {
       const detail = (event as CustomEvent<ProjectBoardCommandCompletedEventDetail>).detail;
       if (
-        detail?.action !== "initializeBeads" &&
-        detail?.action !== "installOrUpdateBeads" &&
-        detail?.action !== "runBeadsMigration"
+        detail?.action !== 'initializeBeads' &&
+        detail?.action !== 'installOrUpdateBeads' &&
+        detail?.action !== 'runBeadsMigration'
       ) {
         return;
       }
-      setRunningProjectBoardCommand("");
-      void loadTickets({ mode: "manual" });
+      setRunningProjectBoardCommand('');
+      void loadTickets({ mode: 'manual' });
     };
     window.addEventListener(PROJECT_BOARD_COMMAND_COMPLETED_EVENT, handleCommandCompleted);
     return () => {
@@ -944,7 +910,7 @@ export function ProjectBoardApp() {
   }, [loadTickets]);
 
   useEffect(() => {
-    if (activeSurfaceTab === "board" || (experimentalFeaturesEnabled && !isAutomationGlobalScope)) {
+    if (activeSurfaceTab === 'board' || (experimentalFeaturesEnabled && !isAutomationGlobalScope)) {
       void loadConversationState();
     }
     if (experimentalFeaturesEnabled) {
@@ -996,10 +962,10 @@ export function ProjectBoardApp() {
   }, [ticketContextMenu, tickets]);
 
   useEffect(() => {
-    if (activeSurfaceTab !== "board") {
+    if (activeSurfaceTab !== 'board') {
       return;
     }
-    void loadTickets({ mode: "initial" });
+    void loadTickets({ mode: 'initial' });
   }, [activeSurfaceTab, loadTickets]);
 
   useEffect(() => {
@@ -1008,9 +974,9 @@ export function ProjectBoardApp() {
       ...extractPreviewableDescriptionImageReferences(newTicket.description),
     ].map((image) => image.src);
     for (const imageSource of imageSources) {
-      if (imageSource.startsWith("data:image/")) {
+      if (imageSource.startsWith('data:image/')) {
         setImagePreviewDataUrls((current) =>
-          current[imageSource] ? current : { ...current, [imageSource]: imageSource },
+          current[imageSource] ? current : { ...current, [imageSource]: imageSource }
         );
         continue;
       }
@@ -1022,12 +988,12 @@ export function ProjectBoardApp() {
         continue;
       }
       pendingImagePreviewPathsRef.current.add(imageSource);
-      void sendProjectBoardImageRequest({ action: "loadPreview", path: imageSource })
+      void sendProjectBoardImageRequest({ action: 'loadPreview', path: imageSource })
         .then((response) => {
-          if (response.dataUrl?.startsWith("data:image/")) {
+          if (response.dataUrl?.startsWith('data:image/')) {
             setImagePreviewDataUrls((current) => ({
               ...current,
-              [imageSource]: response.dataUrl ?? "",
+              [imageSource]: response.dataUrl ?? '',
             }));
             return;
           }
@@ -1046,74 +1012,65 @@ export function ProjectBoardApp() {
 
   useEffect(() => {
     const refreshIfVisible = () => {
-      if (document.visibilityState !== "visible") {
+      if (document.visibilityState !== 'visible') {
         return;
       }
-      if (activeSurfaceTab === "board") {
-        void loadTickets({ mode: "background" });
+      if (activeSurfaceTab === 'board') {
+        void loadTickets({ mode: 'background' });
         void loadConversationState();
       }
       if (experimentalFeaturesEnabled) {
         void loadAutomationState();
       }
     };
-    const intervalId = window.setInterval(
-      () => refreshIfVisible(),
-      PROJECT_BOARD_AUTO_REFRESH_INTERVAL_MS,
-    );
+    const intervalId = window.setInterval(() => refreshIfVisible(), PROJECT_BOARD_AUTO_REFRESH_INTERVAL_MS);
     const handleVisible = () => refreshIfVisible();
-    document.addEventListener("visibilitychange", handleVisible);
-    window.addEventListener("focus", handleVisible);
+    document.addEventListener('visibilitychange', handleVisible);
+    window.addEventListener('focus', handleVisible);
     return () => {
       window.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", handleVisible);
-      window.removeEventListener("focus", handleVisible);
+      document.removeEventListener('visibilitychange', handleVisible);
+      window.removeEventListener('focus', handleVisible);
     };
   }, [activeSurfaceTab, experimentalFeaturesEnabled, loadAutomationState, loadConversationState, loadTickets]);
 
   const tagFilterSelectItems = useMemo(
     () =>
       boardTagFilterOptions(tickets).map((tag) => ({
-        label: tag === "all" ? "All tags" : tag,
+        label: tag === 'all' ? 'All tags' : tag,
         value: tag,
       })),
-    [tickets],
+    [tickets]
   );
   const activeTagFilter = useMemo(
     () =>
       resolveBoardTagFilter(
         tagFilter,
-        tagFilterSelectItems.map((item) => item.value),
+        tagFilterSelectItems.map((item) => item.value)
       ),
-    [tagFilter, tagFilterSelectItems],
+    [tagFilter, tagFilterSelectItems]
   );
   const filteredTickets = useMemo(
     () => filterBoardTickets(tickets, searchQuery, priorityFilter, estimateFilter, activeTagFilter),
-    [activeTagFilter, estimateFilter, priorityFilter, searchQuery, tickets],
+    [activeTagFilter, estimateFilter, priorityFilter, searchQuery, tickets]
   );
 
   const ticketsByColumn = useMemo(() => {
-    return boardColumns.reduce<Record<string, BoardTicket[]>>(
-      (result, column) => {
-        result[column.key] = sortBoardTickets(
-          filteredTickets.filter((ticket) => ticket.boardStatus === column.key),
-          sortOption,
-          column.key,
-        );
-        return result;
-      },
-      {},
-    );
+    return boardColumns.reduce<Record<string, BoardTicket[]>>((result, column) => {
+      result[column.key] = sortBoardTickets(
+        filteredTickets.filter((ticket) => ticket.boardStatus === column.key),
+        sortOption,
+        column.key
+      );
+      return result;
+    }, {});
   }, [boardColumns, filteredTickets, sortOption]);
   const showInitialBoardLoadingOverlay =
-    activeSurfaceTab === "board" && loadState === "loading" && !hasCompletedInitialBoardLoad;
+    activeSurfaceTab === 'board' && loadState === 'loading' && !hasCompletedInitialBoardLoad;
 
   const linksByBeadKey = useMemo(
-    () =>
-      indexBeadConversationLinksByBead(
-        [...conversationState.links].sort(compareConversationLinksNewestFirst),
-      ),
-    [conversationState.links],
+    () => indexBeadConversationLinksByBead([...conversationState.links].sort(compareConversationLinksNewestFirst)),
+    [conversationState.links]
   );
 
   const ticketOptions = useMemo(
@@ -1124,16 +1081,16 @@ export function ProjectBoardApp() {
           id: ticket.id,
           label: `${ticket.displayId} · ${ticket.title}`,
         })),
-    [tickets],
+    [tickets]
   );
 
   const openTicket = async (ticket: BoardTicket) => {
-    setDeleteConfirmingTicketId("");
+    setDeleteConfirmingTicketId('');
     setDetail({
       blockedByIds: getBlockedByIds(ticket),
       blockingIds: getBlockingIds(ticket.id, allIssues),
-      comment: "",
-      description: ticket.description ?? "",
+      comment: '',
+      description: ticket.description ?? '',
       isDeleting: false,
       isSaving: false,
       labels: ticket.labels ?? [],
@@ -1144,7 +1101,7 @@ export function ProjectBoardApp() {
       ticket,
     });
     try {
-      const payload = await runBeads({ action: "show", issueId: ticket.id });
+      const payload = await runBeads({ action: 'show', issueId: ticket.id });
       const issue = normalizeBeadsPayload<BeadsIssue>(payload, ticket);
       const mergedIssue = allIssues.find((candidate) => candidate.id === ticket.id) ?? issue;
       const nextTicket: BoardTicket = {
@@ -1157,8 +1114,8 @@ export function ProjectBoardApp() {
       setDetail({
         blockedByIds: getBlockedByIds(mergedIssue),
         blockingIds: getBlockingIds(ticket.id, allIssues),
-        comment: "",
-        description: nextTicket.description ?? "",
+        comment: '',
+        description: nextTicket.description ?? '',
         isDeleting: false,
         isSaving: false,
         labels: nextTicket.labels ?? [],
@@ -1169,7 +1126,7 @@ export function ProjectBoardApp() {
         ticket: nextTicket,
       });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not load the ticket.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not load the ticket.');
     }
   };
 
@@ -1189,7 +1146,7 @@ export function ProjectBoardApp() {
     setLocalTicketStatus(ticketId, statusKey, column.beadsStatus);
     try {
       await runBeads({
-        action: "updateStatus",
+        action: 'updateStatus',
         issueId: ticketId,
         status: column.beadsStatus,
       });
@@ -1197,7 +1154,7 @@ export function ProjectBoardApp() {
         return;
       }
       pendingStatusMovesRef.current.delete(ticketId);
-      void loadTickets({ mode: "background" });
+      void loadTickets({ mode: 'background' });
     } catch (error) {
       if (pendingStatusMovesRef.current.get(ticketId)?.token !== token) {
         return;
@@ -1207,7 +1164,7 @@ export function ProjectBoardApp() {
       if (reportBeadsRejection(error, ticketId, statusKey)) {
         return;
       }
-      setErrorMessage(error instanceof Error ? error.message : "Could not move the ticket.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not move the ticket.');
     }
   };
 
@@ -1222,18 +1179,18 @@ export function ProjectBoardApp() {
    * and, where one exists, carry the actual remedy as an action.
    */
   function reportBeadsRejection(error: unknown, ticketId: string, statusKey: BoardStatusKey): boolean {
-    const rejection = parseBeadsRejection(error instanceof Error ? error.message : "");
+    const rejection = parseBeadsRejection(error instanceof Error ? error.message : '');
     if (!rejection) {
       return false;
     }
     const toastId = beadsRejectionToastId(ticketId);
     switch (rejection.kind) {
-      case "close-blocked": {
+      case 'close-blocked': {
         const blockerList = formatIssueIdList(rejection.blockerIds);
         const isSingle = rejection.blockerIds.length === 1;
         toast.error(`${rejection.issueId} is blocked`, {
           action: {
-            label: isSingle ? `Move ${rejection.blockerIds[0]} to Done` : "Move blockers to Done",
+            label: isSingle ? `Move ${rejection.blockerIds[0]} to Done` : 'Move blockers to Done',
             onClick: () => {
               void closeIssuesThenRetry(rejection.blockerIds, rejection.issueId, ticketId, statusKey);
             },
@@ -1246,7 +1203,7 @@ export function ProjectBoardApp() {
         });
         return true;
       }
-      case "close-open-children": {
+      case 'close-open-children': {
         /*
          * CDXC:ProjectBoardBeadsRejection 2026-08-20:
          * Beads reports only the open-child COUNT, so resolve the ids from the
@@ -1259,32 +1216,32 @@ export function ProjectBoardApp() {
           ...(childIds.length > 0
             ? {
                 action: {
-                  label: childIds.length === 1 ? `Move ${childIds[0]} to Done` : "Move children to Done",
+                  label: childIds.length === 1 ? `Move ${childIds[0]} to Done` : 'Move children to Done',
                   onClick: () => {
                     void closeIssuesThenRetry(childIds, rejection.issueId, ticketId, statusKey);
                   },
                 },
               }
             : {}),
-          description: `Beads will not close it while ${rejection.openChildren} child issue${isSingle ? "" : "s"} ${isSingle ? "is" : "are"} still open${childIds.length > 0 ? `: ${formatIssueIdList(childIds)}` : ""}. Move ${isSingle ? "it" : "them"} to Done first.`,
+          description: `Beads will not close it while ${rejection.openChildren} child issue${isSingle ? '' : 's'} ${isSingle ? 'is' : 'are'} still open${childIds.length > 0 ? `: ${formatIssueIdList(childIds)}` : ''}. Move ${isSingle ? 'it' : 'them'} to Done first.`,
           duration: Infinity,
           id: toastId,
         });
         return true;
       }
-      case "dependency-cycle": {
-        toast.error("That dependency would create a cycle", {
+      case 'dependency-cycle': {
+        toast.error('That dependency would create a cycle', {
           description:
-            "The two tickets would end up waiting on each other, so neither could ever close. Remove the opposite dependency first if this is the direction you want.",
+            'The two tickets would end up waiting on each other, so neither could ever close. Remove the opposite dependency first if this is the direction you want.',
           duration: Infinity,
           id: toastId,
         });
         return true;
       }
-      case "dependency-hierarchy": {
+      case 'dependency-hierarchy': {
         toast.error(`${rejection.issueId} cannot be blocked by ${rejection.blockerId}`, {
           description:
-            rejection.relation === "ancestor"
+            rejection.relation === 'ancestor'
               ? `${rejection.blockerId} is its parent, and a parent cannot close until its children finish, so the block would never clear.`
               : `${rejection.blockerId} is its child, and a block cascades down to children, so ${rejection.blockerId} would inherit it and never close.`,
           duration: Infinity,
@@ -1292,17 +1249,17 @@ export function ProjectBoardApp() {
         });
         return true;
       }
-      case "dependency-self": {
-        toast.error("A ticket cannot depend on itself", {
+      case 'dependency-self': {
+        toast.error('A ticket cannot depend on itself', {
           description: rejection.issueId
             ? `${rejection.issueId} was listed as its own blocker. Remove it from that field and save again.`
-            : "Remove the ticket from its own blocked-by or blocking field and save again.",
+            : 'Remove the ticket from its own blocked-by or blocking field and save again.',
           duration: Infinity,
           id: toastId,
         });
         return true;
       }
-      case "dependency-type-conflict": {
+      case 'dependency-type-conflict': {
         toast.error(`${rejection.issueId} already depends on ${rejection.dependsOnId}`, {
           description: `That link is a "${rejection.existingType}" dependency, not "${rejection.requestedType}". Remove the existing one before adding it as a blocker: bd dep remove ${rejection.issueId} ${rejection.dependsOnId}`,
           duration: Infinity,
@@ -1310,16 +1267,16 @@ export function ProjectBoardApp() {
         });
         return true;
       }
-      case "issue-missing": {
-        toast.error(rejection.issueId ? `${rejection.issueId} no longer exists` : "That ticket no longer exists", {
+      case 'issue-missing': {
+        toast.error(rejection.issueId ? `${rejection.issueId} no longer exists` : 'That ticket no longer exists', {
           action: {
-            label: "Refresh board",
+            label: 'Refresh board',
             onClick: () => {
               toast.dismiss(toastId);
-              void loadTickets({ mode: "manual" });
+              void loadTickets({ mode: 'manual' });
             },
           },
-          description: "It was deleted or renamed outside this board. Refresh to pick up the current tickets.",
+          description: 'It was deleted or renamed outside this board. Refresh to pick up the current tickets.',
           duration: Infinity,
           id: toastId,
         });
@@ -1332,7 +1289,7 @@ export function ProjectBoardApp() {
     issueIds: string[],
     refusedIssueId: string,
     ticketId: string,
-    statusKey: BoardStatusKey,
+    statusKey: BoardStatusKey
   ) {
     const toastId = beadsRejectionToastId(ticketId);
     toast.loading(`Moving ${formatIssueIdList(issueIds)} to Done…`, {
@@ -1341,7 +1298,7 @@ export function ProjectBoardApp() {
     });
     for (const issueId of issueIds) {
       try {
-        await runBeads({ action: "updateStatus", issueId, status: "closed" });
+        await runBeads({ action: 'updateStatus', issueId, status: 'closed' });
       } catch (error) {
         toast.dismiss(toastId);
         /*
@@ -1350,13 +1307,13 @@ export function ProjectBoardApp() {
          * against the issue that raised it so the operator walks the chain one
          * toast at a time instead of hitting a dead end.
          */
-        if (!reportBeadsRejection(error, issueId, "done")) {
+        if (!reportBeadsRejection(error, issueId, 'done')) {
           toast.error(`Could not move ${issueId} to Done`, {
-            description: error instanceof Error ? error.message : "The Beads command failed.",
+            description: error instanceof Error ? error.message : 'The Beads command failed.',
             id: beadsRejectionToastId(issueId),
           });
         }
-        void loadTickets({ mode: "background" });
+        void loadTickets({ mode: 'background' });
         return;
       }
     }
@@ -1364,7 +1321,7 @@ export function ProjectBoardApp() {
       description: `Retrying the move for ${refusedIssueId}.`,
       id: toastId,
     });
-    await loadTickets({ mode: "background" });
+    await loadTickets({ mode: 'background' });
     await moveTicket(ticketId, statusKey);
   }
 
@@ -1372,19 +1329,18 @@ export function ProjectBoardApp() {
     return allIssues
       .filter((issue) =>
         (issue.dependencies ?? []).some(
-          (dependency) =>
-            dependency.depends_on_id === parentId && dependency.type === "parent-child",
-        ),
+          (dependency) => dependency.depends_on_id === parentId && dependency.type === 'parent-child'
+        )
       )
-      .filter((issue) => beadsStatusToBoardStatus(issue.status, boardColumns) !== "done")
+      .filter((issue) => beadsStatusToBoardStatus(issue.status, boardColumns) !== 'done')
       .map((issue) => issue.id);
   }
 
-  const handleDragEnd: ComponentProps<typeof DragDropProvider>["onDragEnd"] = (event) => {
+  const handleDragEnd: ComponentProps<typeof DragDropProvider>['onDragEnd'] = (event) => {
     if (event.canceled) {
       return;
     }
-    const ticketId = String(event.operation.source?.id ?? "");
+    const ticketId = String(event.operation.source?.id ?? '');
     const statusKey = event.operation.target?.id as BoardStatusKey | undefined;
     if (ticketId && statusKey) {
       void moveTicket(ticketId, statusKey);
@@ -1398,10 +1354,10 @@ export function ProjectBoardApp() {
    * and cheap, and guessing at the result would drift from whatever bd actually stored.
    */
   const writeBoardColumnConfig = async (value: string) => {
-    await runBeads({ action: "configSet", value });
+    await runBeads({ action: 'configSet', value });
     boardColumnConfigRef.current = value;
     setBoardColumnConfig(value);
-    await loadTickets({ mode: "manual" });
+    await loadTickets({ mode: 'manual' });
   };
 
   const createBoardColumn = async (name: string) => {
@@ -1435,19 +1391,19 @@ export function ProjectBoardApp() {
   const applyBoardColumnRename = async (from: string, to: string) => {
     const nextName = to.trim();
     const bothConfig = beginBoardColumnRename(boardColumnConfigRef.current, from, nextName);
-    await runBeads({ action: "configSet", value: bothConfig });
+    await runBeads({ action: 'configSet', value: bothConfig });
     boardColumnConfigRef.current = bothConfig;
     setBoardColumnConfig(bothConfig);
     const ticketsToMove = tickets.filter((candidate) => candidate.boardStatus === from);
     for (const [index, ticket] of ticketsToMove.entries()) {
       try {
-        await runBeads({ action: "updateStatus", issueId: ticket.id, status: nextName });
+        await runBeads({ action: 'updateStatus', issueId: ticket.id, status: nextName });
       } catch (error) {
         const unmovedIds = ticketsToMove.slice(index).map((ticket) => ticket.id);
-        await loadTickets({ mode: "manual" });
-        const failure = beadsErrorMessage(error instanceof Error ? error.message : "");
+        await loadTickets({ mode: 'manual' });
+        const failure = beadsErrorMessage(error instanceof Error ? error.message : '');
         throw new Error(
-          `Could not finish renaming ${from} to ${nextName}. ${unmovedIds.length === 1 ? "Ticket" : "Tickets"} ${unmovedIds.join(", ")} did not move. ${failure}`,
+          `Could not finish renaming ${from} to ${nextName}. ${unmovedIds.length === 1 ? 'Ticket' : 'Tickets'} ${unmovedIds.join(', ')} did not move. ${failure}`
         );
       }
     }
@@ -1459,47 +1415,47 @@ export function ProjectBoardApp() {
     const currentBlockedBy = issue ? getBlockedByIds(issue) : [];
     const currentBlocking = issue ? getBlockingIds(issueId, allIssues) : [];
     for (const dependencyId of currentBlockedBy.filter((id) => !blockedByIds.includes(id))) {
-      await runBeads({ action: "depRemove", dependsOnId: dependencyId, issueId });
+      await runBeads({ action: 'depRemove', dependsOnId: dependencyId, issueId });
     }
     for (const dependencyId of blockedByIds.filter((id) => !currentBlockedBy.includes(id))) {
-      await runBeads({ action: "depAdd", dependsOnId: dependencyId, issueId, depType: "blocks" });
+      await runBeads({ action: 'depAdd', dependsOnId: dependencyId, issueId, depType: 'blocks' });
     }
     for (const dependentId of currentBlocking.filter((id) => !blockingIds.includes(id))) {
-      await runBeads({ action: "depRemove", dependsOnId: issueId, issueId: dependentId });
+      await runBeads({ action: 'depRemove', dependsOnId: issueId, issueId: dependentId });
     }
     for (const dependentId of blockingIds.filter((id) => !currentBlocking.includes(id))) {
-      await runBeads({ action: "depAdd", dependsOnId: issueId, issueId: dependentId, depType: "blocks" });
+      await runBeads({ action: 'depAdd', dependsOnId: issueId, issueId: dependentId, depType: 'blocks' });
     }
   };
 
   const persistTicketDetail = async (draft: TicketDetailSaveDraft) => {
     const trimmedComment = draft.comment.trim();
     await runBeads({
-      action: "updateTitle",
+      action: 'updateTitle',
       issueId: draft.ticket.id,
       title: draft.title.trim(),
     });
     await runBeads({
-      action: "updateDescription",
+      action: 'updateDescription',
       description: draft.description,
       issueId: draft.ticket.id,
     });
     await runBeads({
-      action: "updatePriority",
+      action: 'updatePriority',
       issueId: draft.ticket.id,
       priority: draft.priority,
     });
     const estimate = tshirtToEstimate(draft.tshirt);
     if (estimate !== undefined) {
       await runBeads({
-        action: "updateEstimate",
+        action: 'updateEstimate',
         estimate,
         issueId: draft.ticket.id,
       });
     }
     if (draft.labels.length > 0) {
       await runBeads({
-        action: "setLabels",
+        action: 'setLabels',
         issueId: draft.ticket.id,
         labels: draft.labels,
       });
@@ -1507,19 +1463,19 @@ export function ProjectBoardApp() {
     await syncDependencies(draft.ticket.id, draft.blockedByIds, draft.blockingIds);
     if (draft.status !== draft.ticket.boardStatus) {
       await runBeads({
-        action: "updateStatus",
+        action: 'updateStatus',
         issueId: draft.ticket.id,
         status: boardStatusBeadsValue(draft.status, boardColumns),
       });
     }
     if (trimmedComment) {
       await runBeads({
-        action: "addComment",
+        action: 'addComment',
         comment: formatProjectBoardCommentText(trimmedComment, draft.commentMetadata),
         issueId: draft.ticket.id,
       });
     }
-    await loadTickets({ mode: "background" });
+    await loadTickets({ mode: 'background' });
   };
 
   const saveTicketDetail = () => {
@@ -1552,16 +1508,16 @@ export function ProjectBoardApp() {
       status: boardStatusBeadsValue(draft.status, boardColumns),
       title: draft.title.trim(),
     };
-    setDeleteConfirmingTicketId("");
+    setDeleteConfirmingTicketId('');
     setDetail(createEmptyDetailDraft());
-    setErrorMessage("");
+    setErrorMessage('');
     upsertLocalIssue(optimisticIssue);
     setKnownLabels((current) => mergeKnownLabels(current, draft.labels));
     void persistTicketDetail(draft).catch((error) => {
-      const message = error instanceof Error ? error.message : "Could not save the ticket.";
+      const message = error instanceof Error ? error.message : 'Could not save the ticket.';
       if (!reportBeadsRejection(error, draft.ticket.id, draft.status)) {
         setErrorMessage(message);
-        showProjectBoardToast("error", "Ticket save failed", message);
+        showProjectBoardToast('error', 'Ticket save failed', message);
       }
       if (detailSaveSerialRef.current === saveToken) {
         setDetail({
@@ -1570,7 +1526,7 @@ export function ProjectBoardApp() {
           isSaving: false,
         });
       }
-      void loadTickets({ mode: "background" });
+      void loadTickets({ mode: 'background' });
     });
   };
 
@@ -1595,9 +1551,9 @@ export function ProjectBoardApp() {
     }
     createInFlightRef.current = true;
     setNewTicket(createEmptyTicketFormDraft());
-    setNewTicketStartLocation("currentProject");
+    setNewTicketStartLocation('currentProject');
     setNewTicketOpen(false);
-    logProjectBoardDebug("projectBoard.createTicket.started", {
+    logProjectBoardDebug('projectBoard.createTicket.started', {
       blockedByCount: draft.blockedByIds.length,
       blockingCount: draft.blockingIds.length,
       hasRequestedTitle: Boolean(draft.title.trim()),
@@ -1615,7 +1571,7 @@ export function ProjectBoardApp() {
       const estimate = tshirtToEstimate(draft.tshirt);
       const issueIdsBeforeCreate = new Set(allIssues.map((issue) => issue.id));
       const createdPayload = await runBeads({
-        action: "create",
+        action: 'create',
         description: prompt,
         dependsOnId: draft.blockedByIds[0],
         estimate,
@@ -1626,17 +1582,17 @@ export function ProjectBoardApp() {
       const created = normalizeBeadsPayload<BeadsIssue | BeadsIssue[]>(createdPayload, []);
       let createdIssue: BeadsIssue | undefined = Array.isArray(created) ? created[0] : created;
       let didStartCreatedTicket = false;
-      logProjectBoardDebug("projectBoard.createTicket.beadCreated", {
-        beadId: createdIssue?.id ?? "",
+      logProjectBoardDebug('projectBoard.createTicket.beadCreated', {
+        beadId: createdIssue?.id ?? '',
         shouldGenerateTitle,
         startAfterCreate,
         targetStatus: draft.status,
       });
       if (!createdIssue?.id) {
-        const createdIssueLookupPayload = await runBeads({ action: "listIssues" });
+        const createdIssueLookupPayload = await runBeads({ action: 'listIssues' });
         const createdIssueLookupIssues = normalizeBeadsPayload<BeadsIssue[]>(
           createdIssueLookupPayload,
-          Array.isArray(createdIssueLookupPayload) ? createdIssueLookupPayload : [],
+          Array.isArray(createdIssueLookupPayload) ? createdIssueLookupPayload : []
         );
         createdIssue = resolveCreatedIssueFromRefresh(createdIssueLookupIssues, issueIdsBeforeCreate, {
           description: prompt,
@@ -1654,12 +1610,12 @@ export function ProjectBoardApp() {
          * persisting prompt text, command text, paths, custom agent ids, stdout,
          * stderr, or raw error output.
          */
-        const promptAgentId = selectedAgentId || conversationState.defaultAgentId || "";
+        const promptAgentId = selectedAgentId || conversationState.defaultAgentId || '';
         const promptAgent = conversationState.agents.find((agent) => agent.agentId === promptAgentId);
         const titleGenerationDebugDetails = {
           agentCount: conversationState.agents.length,
           beadId: issueId,
-          defaultAgentKind: projectBoardPromptAgentKind(conversationState.defaultAgentId || ""),
+          defaultAgentKind: projectBoardPromptAgentKind(conversationState.defaultAgentId || ''),
           hasDefaultAgentId: Boolean(conversationState.defaultAgentId),
           hasPromptAgent: Boolean(promptAgent),
           hasPromptAgentCommand: Boolean(promptAgent?.command?.trim()),
@@ -1667,34 +1623,34 @@ export function ProjectBoardApp() {
           promptAgentCommandLength: promptAgent?.command?.length ?? 0,
           promptLength: prompt.length,
           resolvedAgentKind: projectBoardPromptAgentKind(promptAgentId),
-          selectedAgentKind: projectBoardPromptAgentKind(selectedAgentId || ""),
+          selectedAgentKind: projectBoardPromptAgentKind(selectedAgentId || ''),
           startAfterCreate,
         };
         try {
-          logProjectBoardDebug("projectBoard.createTicket.titleGeneration.started", {
+          logProjectBoardDebug('projectBoard.createTicket.titleGeneration.started', {
             ...titleGenerationDebugDetails,
           });
           const generated = normalizeBeadsPayload<{ title?: string }>(
             await runBeads({
-              action: "generateTitle",
+              action: 'generateTitle',
               agentCommand: promptAgent?.command,
               agentId: promptAgentId,
               issueId,
               prompt,
             }),
-            {},
+            {}
           );
           const generatedTitle = generated.title?.trim();
-          logProjectBoardDebug("projectBoard.createTicket.titleGeneration.bridgeResponse", {
+          logProjectBoardDebug('projectBoard.createTicket.titleGeneration.bridgeResponse', {
             ...titleGenerationDebugDetails,
             generatedTitleLength: generatedTitle?.length ?? 0,
             hasGeneratedTitle: Boolean(generatedTitle),
           });
           if (!generatedTitle) {
-            throw new Error("Prompt-agent title generation returned an empty title.");
+            throw new Error('Prompt-agent title generation returned an empty title.');
           }
           await runBeads({
-            action: "updateTitle",
+            action: 'updateTitle',
             issueId,
             title: generatedTitle,
           });
@@ -1704,13 +1660,13 @@ export function ProjectBoardApp() {
            * Patch the local ticket title after the durable Beads update and do not reload the full board, so a slow prompt-agent title cannot hitch Kanban scrolling, drag/drop, or follow-up ticket creation.
            */
           setLocalTicketTitle(issueId, generatedTitle);
-          logProjectBoardDebug("projectBoard.createTicket.titleGeneration.completed", {
+          logProjectBoardDebug('projectBoard.createTicket.titleGeneration.completed', {
             beadId: issueId,
             generatedTitleLength: generatedTitle.length,
             startAfterCreate,
           });
         } catch (error) {
-          logProjectBoardDebug("projectBoard.createTicket.titleGeneration.failed", {
+          logProjectBoardDebug('projectBoard.createTicket.titleGeneration.failed', {
             ...titleGenerationDebugDetails,
             ...projectBoardTitleGenerationFailureDetails(error),
           });
@@ -1718,13 +1674,13 @@ export function ProjectBoardApp() {
       };
 
       if (!createdIssue?.id) {
-        throw new Error("Created ticket was not found after create.");
+        throw new Error('Created ticket was not found after create.');
       }
 
       const targetBeadsStatus = boardStatusBeadsValue(draft.status, boardColumns);
       const parsedPriority = Number.parseInt(draft.priority, 10);
       let pendingCreateStatusToken: number | undefined;
-      if (!startAfterCreate && draft.status !== "todo") {
+      if (!startAfterCreate && draft.status !== 'todo') {
         pendingCreateStatusToken = pendingStatusMoveSerialRef.current + 1;
         pendingStatusMoveSerialRef.current = pendingCreateStatusToken;
         pendingStatusMovesRef.current.set(createdIssue.id, {
@@ -1748,9 +1704,9 @@ export function ProjectBoardApp() {
       if (startAfterCreate) {
         const createdTicket = toCreatedBoardTicket(createdIssue, allIssues, displayKey, boardColumns);
         if (!createdTicket) {
-          throw new Error("Created ticket was not available for start.");
+          throw new Error('Created ticket was not available for start.');
         }
-        logProjectBoardDebug("projectBoard.createTicket.startAfterCreate.requested", {
+        logProjectBoardDebug('projectBoard.createTicket.startAfterCreate.requested', {
           beadId: createdTicket.id,
           displayId: createdTicket.displayId,
           startLocation,
@@ -1765,9 +1721,9 @@ export function ProjectBoardApp() {
       const reconcileCreatedTicket = async () => {
         try {
           await syncDependencies(createdIssueId, draft.blockedByIds, draft.blockingIds);
-          if (draft.status !== "todo" && !didStartCreatedTicket) {
+          if (draft.status !== 'todo' && !didStartCreatedTicket) {
             await runBeads({
-              action: "updateStatus",
+              action: 'updateStatus',
               issueId: createdIssueId,
               status: targetBeadsStatus,
             });
@@ -1780,13 +1736,13 @@ export function ProjectBoardApp() {
           }
           if (draft.labels.length > 0) {
             await runBeads({
-              action: "setLabels",
+              action: 'setLabels',
               issueId: createdIssueId,
               labels: draft.labels,
             });
             setKnownLabels((current) => mergeKnownLabels(current, draft.labels));
           }
-          await loadTickets({ mode: "background" });
+          await loadTickets({ mode: 'background' });
         } catch (error) {
           if (
             pendingCreateStatusToken !== undefined &&
@@ -1794,10 +1750,10 @@ export function ProjectBoardApp() {
           ) {
             pendingStatusMovesRef.current.delete(createdIssueId);
           }
-          const message = error instanceof Error ? error.message : "Could not finish creating the ticket.";
+          const message = error instanceof Error ? error.message : 'Could not finish creating the ticket.';
           setErrorMessage(message);
-          showProjectBoardToast("error", "Ticket update failed", message);
-          void loadTickets({ mode: "background" });
+          showProjectBoardToast('error', 'Ticket update failed', message);
+          void loadTickets({ mode: 'background' });
         }
       };
 
@@ -1812,20 +1768,20 @@ export function ProjectBoardApp() {
           void generateCreatedTicketTitle(createdIssueId);
         });
       }
-      logProjectBoardDebug("projectBoard.createTicket.completed", {
+      logProjectBoardDebug('projectBoard.createTicket.completed', {
         beadId: createdIssueId,
         startAfterCreate,
         startLocation,
       });
     } catch (error) {
-      logProjectBoardDebug("projectBoard.createTicket.failed", {
+      logProjectBoardDebug('projectBoard.createTicket.failed', {
         error: error instanceof Error ? error.message : String(error),
         startAfterCreate,
         startLocation,
       });
-      const message = error instanceof Error ? error.message : "Could not create the ticket.";
+      const message = error instanceof Error ? error.message : 'Could not create the ticket.';
       setErrorMessage(message);
-      showProjectBoardToast("error", "Ticket creation failed", message);
+      showProjectBoardToast('error', 'Ticket creation failed', message);
     } finally {
       createInFlightRef.current = false;
     }
@@ -1847,41 +1803,40 @@ export function ProjectBoardApp() {
     }
     setTickets((current) => current.filter((candidate) => candidate.id !== ticket.id));
     try {
-      await runBeads({ action: "delete", issueId: ticket.id });
-      setDeleteConfirmingTicketId("");
+      await runBeads({ action: 'delete', issueId: ticket.id });
+      setDeleteConfirmingTicketId('');
       setTicketContextMenu(undefined);
       if (deletingFromDialog) {
         setDetail(createEmptyDetailDraft());
       }
-      await loadTickets({ mode: "mutation" });
+      await loadTickets({ mode: 'mutation' });
     } catch (error) {
       setTickets((current) =>
-        current.some((candidate) => candidate.id === ticket.id) ? current : [...current, ticket],
+        current.some((candidate) => candidate.id === ticket.id) ? current : [...current, ticket]
       );
-      setErrorMessage(error instanceof Error ? error.message : "Could not delete the ticket.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not delete the ticket.');
       if (deletingFromDialog) {
         setDetail((current) => ({ ...current, isDeleting: false }));
       }
     } finally {
       if (!deletingFromDialog) {
-        setContextMenuDeletingTicketId((current) => (current === ticket.id ? "" : current));
+        setContextMenuDeletingTicketId((current) => (current === ticket.id ? '' : current));
       }
     }
   };
 
   const startTicketWork = async (
     ticket: BoardTicket | undefined = detail.ticket,
-    options: { startLocation?: ProjectBoardStartLocation } = {},
+    options: { startLocation?: ProjectBoardStartLocation } = {}
   ) => {
     if (!ticket) {
       return false;
     }
-    const startLocation = options.startLocation ?? "currentProject";
-    const startAgentId =
-      assignedAgentIdForTicket(ticket) || selectedAgentId || conversationState.defaultAgentId;
-    setConversationAction({ beadId: ticket.id, kind: "start" });
-    logProjectBoardDebug("projectBoard.createStart.startWork.requested", {
-      agentId: startAgentId || "",
+    const startLocation = options.startLocation ?? 'currentProject';
+    const startAgentId = assignedAgentIdForTicket(ticket) || selectedAgentId || conversationState.defaultAgentId;
+    setConversationAction({ beadId: ticket.id, kind: 'start' });
+    logProjectBoardDebug('projectBoard.createStart.startWork.requested', {
+      agentId: startAgentId || '',
       beadId: ticket.id,
       displayId: ticket.displayId,
       startLocation,
@@ -1889,7 +1844,7 @@ export function ProjectBoardApp() {
     try {
       const prompt = buildAgentWorkPrompt(ticket);
       const response = await sendProjectBoardRequest({
-        action: "startWork",
+        action: 'startWork',
         agentId: startAgentId,
         beadDisplayId: ticket.displayId,
         beadId: ticket.id,
@@ -1901,7 +1856,7 @@ export function ProjectBoardApp() {
         ticketTitle: ticket.title,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not start ticket work.");
+        throw new Error(response.error || 'Could not start ticket work.');
       }
       if (response.payload) {
         setConversationState(response.payload);
@@ -1909,48 +1864,48 @@ export function ProjectBoardApp() {
       const token = pendingStatusMoveSerialRef.current + 1;
       pendingStatusMoveSerialRef.current = token;
       pendingStatusMovesRef.current.set(ticket.id, {
-        beadsStatus: "in_progress",
-        statusKey: "in_progress",
+        beadsStatus: 'in_progress',
+        statusKey: 'in_progress',
         token,
       });
-      setLocalTicketStatus(ticket.id, "in_progress", "in_progress");
+      setLocalTicketStatus(ticket.id, 'in_progress', 'in_progress');
       void runBeads({
-        action: "updateStatus",
+        action: 'updateStatus',
         issueId: ticket.id,
-        status: "in_progress",
+        status: 'in_progress',
       })
         .then(() => {
           if (pendingStatusMovesRef.current.get(ticket.id)?.token !== token) {
             return;
           }
           pendingStatusMovesRef.current.delete(ticket.id);
-          void loadTickets({ mode: "background" });
+          void loadTickets({ mode: 'background' });
         })
         .catch((error) => {
           if (pendingStatusMovesRef.current.get(ticket.id)?.token !== token) {
             return;
           }
           pendingStatusMovesRef.current.delete(ticket.id);
-          setErrorMessage(error instanceof Error ? error.message : "Could not move the ticket.");
-          void loadTickets({ mode: "background" });
+          setErrorMessage(error instanceof Error ? error.message : 'Could not move the ticket.');
+          void loadTickets({ mode: 'background' });
         });
-      setErrorMessage("");
-      logProjectBoardDebug("projectBoard.createStart.startWork.completed", {
+      setErrorMessage('');
+      logProjectBoardDebug('projectBoard.createStart.startWork.completed', {
         beadId: ticket.id,
         startLocation,
       });
       return true;
     } catch (error) {
-      logProjectBoardDebug("projectBoard.createStart.startWork.failed", {
+      logProjectBoardDebug('projectBoard.createStart.startWork.failed', {
         beadId: ticket.id,
         error: error instanceof Error ? error.message : String(error),
         startLocation,
       });
-      setErrorMessage(error instanceof Error ? error.message : "Could not start ticket work.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not start ticket work.');
       return false;
     } finally {
       setConversationAction((current) =>
-        current?.kind === "start" && current.beadId === ticket.id ? undefined : current,
+        current?.kind === 'start' && current.beadId === ticket.id ? undefined : current
       );
     }
   };
@@ -1967,10 +1922,10 @@ export function ProjectBoardApp() {
       return;
     }
     const ticket = detail.ticket;
-    setConversationAction({ beadId: ticket.id, kind: "associate" });
+    setConversationAction({ beadId: ticket.id, kind: 'associate' });
     try {
       const response = await sendProjectBoardRequest({
-        action: "associateFocusedSession",
+        action: 'associateFocusedSession',
         beadDisplayId: ticket.displayId,
         beadId: ticket.id,
         projectId,
@@ -1979,26 +1934,26 @@ export function ProjectBoardApp() {
         ticketTitle: ticket.title,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not associate the focused session.");
+        throw new Error(response.error || 'Could not associate the focused session.');
       }
       if (response.payload) {
         setConversationState(response.payload);
       }
-      setErrorMessage("");
+      setErrorMessage('');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not associate the focused session.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not associate the focused session.');
     } finally {
       setConversationAction((current) =>
-        current?.kind === "associate" && current.beadId === ticket.id ? undefined : current,
+        current?.kind === 'associate' && current.beadId === ticket.id ? undefined : current
       );
     }
   };
 
   const jumpToConversation = async (link: ProjectBoardConversationLinkView) => {
-    setConversationAction({ kind: "jump", linkId: link.id });
+    setConversationAction({ kind: 'jump', linkId: link.id });
     try {
       const response = await sendProjectBoardRequest({
-        action: "jumpToConversation",
+        action: 'jumpToConversation',
         beadId: link.beadId,
         projectId,
         projectPath,
@@ -2006,26 +1961,26 @@ export function ProjectBoardApp() {
         sessionId: link.ghostexSessionId,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not jump to the linked conversation.");
+        throw new Error(response.error || 'Could not jump to the linked conversation.');
       }
       if (response.payload) {
         setConversationState(response.payload);
       }
-      setErrorMessage("");
+      setErrorMessage('');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not jump to the linked conversation.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not jump to the linked conversation.');
     } finally {
       setConversationAction((current) =>
-        current?.kind === "jump" && current.linkId === link.id ? undefined : current,
+        current?.kind === 'jump' && current.linkId === link.id ? undefined : current
       );
     }
   };
 
   const unlinkConversation = async (link: ProjectBoardConversationLinkView) => {
-    setConversationAction({ kind: "unlink", linkId: link.id });
+    setConversationAction({ kind: 'unlink', linkId: link.id });
     try {
       const response = await sendProjectBoardRequest({
-        action: "unlinkConversation",
+        action: 'unlinkConversation',
         beadId: link.beadId,
         projectId,
         projectPath,
@@ -2033,17 +1988,17 @@ export function ProjectBoardApp() {
         sessionId: link.ghostexSessionId,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not unlink the conversation.");
+        throw new Error(response.error || 'Could not unlink the conversation.');
       }
       if (response.payload) {
         setConversationState(response.payload);
       }
-      setErrorMessage("");
+      setErrorMessage('');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not unlink the conversation.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not unlink the conversation.');
     } finally {
       setConversationAction((current) =>
-        current?.kind === "unlink" && current.linkId === link.id ? undefined : current,
+        current?.kind === 'unlink' && current.linkId === link.id ? undefined : current
       );
     }
   };
@@ -2053,19 +2008,21 @@ export function ProjectBoardApp() {
       ? resolveAutomationDraftProjectId(
           automationState.projects,
           automationTargetProjectId,
-          automationState.projectId || projectId,
-      )
+          automationState.projectId || projectId
+        )
       : automationState.projectId;
     const targetProject = automationProjectsById.get(targetProjectId);
     void loadAutomationConversationState(targetProjectId);
     setAutomationDraft(
       createAutomationDraft({
         agentId: resolveAutomationDraftAgentId(automationState.agents, automationState.defaultAgentId),
-        executionKind: (isAutomationGlobalScope ? targetProject?.canUseWorktrees : automationState.projectCanUseWorktrees)
-          ? "worktree"
-          : "local",
+        executionKind: (
+          isAutomationGlobalScope ? targetProject?.canUseWorktrees : automationState.projectCanUseWorktrees
+        )
+          ? 'worktree'
+          : 'local',
         projectId: targetProjectId,
-      }),
+      })
     );
     setAutomationDialogOpen(true);
   };
@@ -2073,9 +2030,7 @@ export function ProjectBoardApp() {
   const openEditAutomationDialog = (automation: AutomationDefinition) => {
     const targetProjectId = automation.projectIds[0] || automationState.projectId || projectId;
     void loadAutomationConversationState(targetProjectId);
-    setAutomationDraft(
-      createAutomationDraftFromDefinition(automation, targetProjectId),
-    );
+    setAutomationDraft(createAutomationDraftFromDefinition(automation, targetProjectId));
     setAutomationDialogOpen(true);
   };
 
@@ -2096,10 +2051,10 @@ export function ProjectBoardApp() {
 
   const saveAutomation = async () => {
     const targetProjectId = isAutomationGlobalScope
-      ? resolveAutomationDraftProjectId(automationState.projects, automationDraft.projectId, "")
+      ? resolveAutomationDraftProjectId(automationState.projects, automationDraft.projectId, '')
       : automationDraft.projectId || automationState.projectId || projectId;
     if (!targetProjectId) {
-      setErrorMessage("Choose a project before saving automation.");
+      setErrorMessage('Choose a project before saving automation.');
       return;
     }
     const definition = createAutomationDefinitionFromDraft(automationDraft, {
@@ -2107,17 +2062,17 @@ export function ProjectBoardApp() {
       projectId: targetProjectId,
     });
     if (!definition) {
-      setErrorMessage("Name, agent, prompt, and schedule are required.");
+      setErrorMessage('Name, agent, prompt, and schedule are required.');
       return;
     }
-    if (definition.executionMode.kind === "worktree" && !automationDraftCanUseWorktrees) {
-      setErrorMessage(automationDraftWorktreeUnavailableReason || "Worktree mode is unavailable for this project.");
+    if (definition.executionMode.kind === 'worktree' && !automationDraftCanUseWorktrees) {
+      setErrorMessage(automationDraftWorktreeUnavailableReason || 'Worktree mode is unavailable for this project.');
       return;
     }
     setAutomationActionId(definition.id);
     try {
       const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: "automationSave",
+        action: 'automationSave',
         payloadJson: JSON.stringify(definition),
         projectEditorId,
         projectId: definition.projectIds[0] ?? projectId,
@@ -2125,17 +2080,17 @@ export function ProjectBoardApp() {
         ...(remoteMachineId ? { remoteMachineId } : {}),
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not save automation.");
+        throw new Error(response.error || 'Could not save automation.');
       }
       if (response.payload) {
         await applyAutomationMutationState(response.payload);
       }
       setAutomationDialogOpen(false);
-      setErrorMessage("");
+      setErrorMessage('');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not save automation.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not save automation.');
     } finally {
-      setAutomationActionId("");
+      setAutomationActionId('');
     }
   };
 
@@ -2144,7 +2099,7 @@ export function ProjectBoardApp() {
     setAutomationActionId(automation.id);
     try {
       const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: "automationDelete",
+        action: 'automationDelete',
         projectEditorId,
         projectId: targetProjectId,
         projectPath: automationProjectPathForId(targetProjectId),
@@ -2152,15 +2107,15 @@ export function ProjectBoardApp() {
         sessionId: automation.id,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not delete automation.");
+        throw new Error(response.error || 'Could not delete automation.');
       }
       if (response.payload) {
         await applyAutomationMutationState(response.payload);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not delete automation.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not delete automation.');
     } finally {
-      setAutomationActionId("");
+      setAutomationActionId('');
     }
   };
 
@@ -2169,7 +2124,7 @@ export function ProjectBoardApp() {
     setAutomationActionId(automation.id);
     try {
       const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: "automationSetEnabled",
+        action: 'automationSetEnabled',
         payloadJson: JSON.stringify({ enabled }),
         projectEditorId,
         projectId: targetProjectId,
@@ -2178,16 +2133,16 @@ export function ProjectBoardApp() {
         sessionId: automation.id,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not update automation.");
+        throw new Error(response.error || 'Could not update automation.');
       }
       if (response.payload) {
-      await applyAutomationMutationState(response.payload);
+        await applyAutomationMutationState(response.payload);
       }
-      setErrorMessage("");
+      setErrorMessage('');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not update automation.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not update automation.');
     } finally {
-      setAutomationActionId("");
+      setAutomationActionId('');
     }
   };
 
@@ -2196,7 +2151,7 @@ export function ProjectBoardApp() {
     setAutomationActionId(automation.id);
     try {
       const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: "automationRunNow",
+        action: 'automationRunNow',
         projectEditorId,
         projectId: targetProjectId,
         projectPath: automationProjectPathForId(targetProjectId),
@@ -2204,17 +2159,17 @@ export function ProjectBoardApp() {
         sessionId: automation.id,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not run automation.");
+        throw new Error(response.error || 'Could not run automation.');
       }
       if (response.payload) {
-      await applyAutomationMutationState(response.payload);
+        await applyAutomationMutationState(response.payload);
       }
-      setActiveSurfaceTab("runs");
-      setErrorMessage("");
+      setActiveSurfaceTab('runs');
+      setErrorMessage('');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not run automation.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not run automation.');
     } finally {
-      setAutomationActionId("");
+      setAutomationActionId('');
     }
   };
 
@@ -2225,19 +2180,17 @@ export function ProjectBoardApp() {
       const removeWorktree =
         Boolean(run.worktree) &&
         window.confirm(
-          `Archive this run and remove its worktree?\n\nPath: ${run.worktree?.path ?? ""}\nBranch: ${run.worktree?.branch ?? ""}`,
+          `Archive this run and remove its worktree?\n\nPath: ${run.worktree?.path ?? ''}\nBranch: ${run.worktree?.branch ?? ''}`
         );
       if (removeWorktree) {
-        const confirmation = window.prompt(
-          `Type the exact worktree path to remove it:\n\n${run.worktree?.path ?? ""}`,
-        );
+        const confirmation = window.prompt(`Type the exact worktree path to remove it:\n\n${run.worktree?.path ?? ''}`);
         if (confirmation !== run.worktree?.path) {
-          setErrorMessage("Worktree removal was not confirmed. The run was not archived.");
+          setErrorMessage('Worktree removal was not confirmed. The run was not archived.');
           return;
         }
       }
       const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: "automationArchiveRun",
+        action: 'automationArchiveRun',
         payloadJson: JSON.stringify({ removeWorktree }),
         projectEditorId,
         projectId: targetProjectId,
@@ -2246,15 +2199,15 @@ export function ProjectBoardApp() {
         sessionId: run.id,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not archive automation run.");
+        throw new Error(response.error || 'Could not archive automation run.');
       }
       if (response.payload) {
-      await applyAutomationMutationState(response.payload);
+        await applyAutomationMutationState(response.payload);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not archive automation run.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not archive automation run.');
     } finally {
-      setAutomationActionId("");
+      setAutomationActionId('');
     }
   };
 
@@ -2263,7 +2216,7 @@ export function ProjectBoardApp() {
     setAutomationActionId(run.id);
     try {
       const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: "automationMarkRunRead",
+        action: 'automationMarkRunRead',
         projectEditorId,
         projectId: targetProjectId,
         projectPath: automationProjectPathForId(targetProjectId),
@@ -2271,15 +2224,15 @@ export function ProjectBoardApp() {
         sessionId: run.id,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not mark automation run read.");
+        throw new Error(response.error || 'Could not mark automation run read.');
       }
       if (response.payload) {
-      await applyAutomationMutationState(response.payload);
+        await applyAutomationMutationState(response.payload);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not mark automation run read.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not mark automation run read.');
     } finally {
-      setAutomationActionId("");
+      setAutomationActionId('');
     }
   };
 
@@ -2288,7 +2241,7 @@ export function ProjectBoardApp() {
     setAutomationActionId(run.id);
     try {
       const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: "automationOpenRunSession",
+        action: 'automationOpenRunSession',
         projectEditorId,
         projectId: targetProjectId,
         projectPath: automationProjectPathForId(targetProjectId),
@@ -2296,15 +2249,15 @@ export function ProjectBoardApp() {
         sessionId: run.id,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not open automation session.");
+        throw new Error(response.error || 'Could not open automation session.');
       }
       if (response.payload) {
-      await applyAutomationMutationState(response.payload);
+        await applyAutomationMutationState(response.payload);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not open automation session.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not open automation session.');
     } finally {
-      setAutomationActionId("");
+      setAutomationActionId('');
     }
   };
 
@@ -2313,7 +2266,7 @@ export function ProjectBoardApp() {
     setAutomationActionId(run.id);
     try {
       const response = await sendProjectBoardRequest<ProjectAutomationsBridgeState>({
-        action: "automationOpenWorktree",
+        action: 'automationOpenWorktree',
         projectEditorId,
         projectId: targetProjectId,
         projectPath: automationProjectPathForId(targetProjectId),
@@ -2321,36 +2274,34 @@ export function ProjectBoardApp() {
         sessionId: run.id,
       });
       if (!response.ok) {
-        throw new Error(response.error || "Could not open automation worktree.");
+        throw new Error(response.error || 'Could not open automation worktree.');
       }
       if (response.payload) {
-      await applyAutomationMutationState(response.payload);
+        await applyAutomationMutationState(response.payload);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not open automation worktree.");
+      setErrorMessage(error instanceof Error ? error.message : 'Could not open automation worktree.');
     } finally {
-      setAutomationActionId("");
+      setAutomationActionId('');
     }
   };
 
-  const detailConversationLinks = detail.ticket
-    ? selectBeadConversationLinks(linksByBeadKey, detail.ticket.id)
-    : [];
+  const detailConversationLinks = detail.ticket ? selectBeadConversationLinks(linksByBeadKey, detail.ticket.id) : [];
   const detailPrimaryConversationLink = getPrimaryUsableConversationLink(detailConversationLinks);
   const detailCommentMetadataLink = detailPrimaryConversationLink ?? detailConversationLinks[0];
   const detailPrimaryActionKind = conversationLinkActionKind(detailPrimaryConversationLink);
   const detailPrimaryActionLabel =
-    conversationAction?.kind === "jump" && conversationAction.linkId === detailPrimaryConversationLink?.id
-      ? detailPrimaryActionKind === "resume"
-        ? "Resuming"
-        : "Opening"
+    conversationAction?.kind === 'jump' && conversationAction.linkId === detailPrimaryConversationLink?.id
+      ? detailPrimaryActionKind === 'resume'
+        ? 'Resuming'
+        : 'Opening'
       : detailPrimaryConversationLink
-        ? detailPrimaryActionKind === "resume"
-          ? "Resume Session"
-          : "Go to Session"
-        : conversationAction?.kind === "start" && conversationAction.beadId === detail.ticket?.id
-          ? "Starting"
-          : "Start work";
+        ? detailPrimaryActionKind === 'resume'
+          ? 'Resume Session'
+          : 'Go to Session'
+        : conversationAction?.kind === 'start' && conversationAction.beadId === detail.ticket?.id
+          ? 'Starting'
+          : 'Start work';
   const detailPrimaryActionDisabled =
     detail.isDeleting ||
     detail.isSaving ||
@@ -2367,11 +2318,11 @@ export function ProjectBoardApp() {
     visibleAutomationRuns.find((run) => run.id === selectedAutomationRunId) ?? visibleAutomationRuns[0];
   const automationProjectsById = useMemo(
     () => new Map(automationState.projects.map((project) => [project.projectId, project])),
-    [automationState.projects],
+    [automationState.projects]
   );
   const automationProjectSelectItems = useMemo(
     () => automationState.projects.map((project) => ({ label: project.label, value: project.projectId })),
-    [automationState.projects],
+    [automationState.projects]
   );
   const selectedAutomationDraftProject = automationProjectsById.get(automationDraft.projectId);
   const automationDraftCanUseWorktrees = isAutomationGlobalScope
@@ -2382,7 +2333,7 @@ export function ProjectBoardApp() {
     : automationState.worktreeUnavailableReason;
   const automationProjectNameById = useMemo(
     () => new Map(automationState.projects.map((project) => [project.projectId, project.label])),
-    [automationState.projects],
+    [automationState.projects]
   );
   /*
    * CDXC:ProjectAutomations 2026-06-09-15:38:
@@ -2395,13 +2346,13 @@ export function ProjectBoardApp() {
         automationState.agents.map((agent) => ({
           agentId: agent.agentId,
           name: agent.label,
-        })),
+        }))
       ),
-    [automationState.agents],
+    [automationState.agents]
   );
   const automationScheduleSelectItems = useMemo(
     () => AUTOMATION_SCHEDULE_PRESETS.map((option) => ({ label: option.label, value: option.value })),
-    [],
+    []
   );
   const automationWeekdaySelectItems = useMemo(
     () =>
@@ -2409,19 +2360,16 @@ export function ProjectBoardApp() {
         label: day,
         value: String(index),
       })),
-    [],
+    []
   );
-  const automationTimerUnitSelectItems = useMemo(
-    () => AUTOMATION_TIMER_UNIT_OPTIONS,
-    [],
-  );
+  const automationTimerUnitSelectItems = useMemo(() => AUTOMATION_TIMER_UNIT_OPTIONS, []);
   const automationSessionSelectItems = useMemo(
     () =>
       automationConversationState.sessions.map((session) => ({
         label: session.label,
         value: session.sessionId,
       })),
-    [automationConversationState.sessions],
+    [automationConversationState.sessions]
   );
   const contextMenuTicket = ticketContextMenu
     ? tickets.find((ticket) => ticket.id === ticketContextMenu.ticketId)
@@ -2430,10 +2378,10 @@ export function ProjectBoardApp() {
     ? getPrimaryUsableConversationLink(selectBeadConversationLinks(linksByBeadKey, contextMenuTicket.id))
     : undefined;
   const contextMenuPrimaryActionLabel = contextMenuPrimaryLink
-    ? conversationLinkActionKind(contextMenuPrimaryLink) === "resume"
-      ? "Resume Session"
-      : "Go to Session"
-    : "Start work";
+    ? conversationLinkActionKind(contextMenuPrimaryLink) === 'resume'
+      ? 'Resume Session'
+      : 'Go to Session'
+    : 'Start work';
   const contextMenuPrimaryActionDisabled =
     Boolean(conversationAction) || (!contextMenuPrimaryLink && conversationState.agents.length === 0);
 
@@ -2448,7 +2396,7 @@ export function ProjectBoardApp() {
   }, [newTicketOpen]);
 
   return (
-    <main className="project-board-shell">
+    <main className='project-board-shell'>
       {/*
        * CDXC:ProjectBoard 2026-06-09-14:35:
        * The Project surface header is one row: project name, then refresh and create actions. Drop the eyebrow plus generic "Project" title so the board opens directly on the active project name.
@@ -2466,37 +2414,37 @@ export function ProjectBoardApp() {
        * centered (Automate only), default-size (h-8) actions on the right.
        */}
       <section
-        className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4"
-        data-surface={activeSurfaceTab === "board" ? "board" : "automations"}
+        className='grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4'
+        data-surface={activeSurfaceTab === 'board' ? 'board' : 'automations'}
       >
-        <div className="min-w-0 justify-self-start">
-          <div className="text-xs font-normal text-muted-foreground">
-            {activeSurfaceTab !== "board"
+        <div className='min-w-0 justify-self-start'>
+          <div className='text-xs font-normal text-muted-foreground'>
+            {activeSurfaceTab !== 'board'
               ? automationIsExperimental
                 ? isAutomationGlobalScope
-                  ? "Experimental"
-                  : "Automations (Experimental)"
-                : "Automations"
-              : "Project"}
+                  ? 'Experimental'
+                  : 'Automations (Experimental)'
+                : 'Automations'
+              : 'Project'}
           </div>
-          <h1 className="m-0 truncate text-[15px] font-normal text-foreground">{projectName}</h1>
+          <h1 className='m-0 truncate text-[15px] font-normal text-foreground'>{projectName}</h1>
         </div>
-        {activeSurfaceTab !== "board" && !showAutomationComingSoonOverlay ? (
-          <nav className="flex items-center gap-1 justify-self-center" aria-label="Automation sections">
-            {(["automations", "runs", "triage"] as const).map((tab) => (
+        {activeSurfaceTab !== 'board' && !showAutomationComingSoonOverlay ? (
+          <nav className='flex items-center gap-1 justify-self-center' aria-label='Automation sections'>
+            {(['automations', 'runs', 'triage'] as const).map((tab) => (
               <button
-                aria-current={activeSurfaceTab === tab ? "page" : undefined}
+                aria-current={activeSurfaceTab === tab ? 'page' : undefined}
                 className={`h-8 cursor-pointer rounded-lg border-0 px-3 text-sm font-normal transition-colors ${
                   activeSurfaceTab === tab
-                    ? "bg-white/[0.06] text-foreground"
-                    : "bg-transparent text-muted-foreground hover:text-foreground/80"
+                    ? 'bg-white/[0.06] text-foreground'
+                    : 'bg-transparent text-muted-foreground hover:text-foreground/80'
                 }`}
-                data-active={activeSurfaceTab === tab ? "true" : "false"}
+                data-active={activeSurfaceTab === tab ? 'true' : 'false'}
                 key={tab}
                 onClick={() => setActiveSurfaceTab(tab)}
-                type="button"
+                type='button'
               >
-                {tab === "automations" ? "Automations" : tab === "runs" ? "Runs" : "Triage"}
+                {tab === 'automations' ? 'Automations' : tab === 'runs' ? 'Runs' : 'Triage'}
               </button>
             ))}
           </nav>
@@ -2509,21 +2457,21 @@ export function ProjectBoardApp() {
          * right end of the filter row below, so the header is just the title.
          * The Automate surfaces keep their actions up here beside the tabs.
          */}
-        {activeSurfaceTab !== "board" && !showAutomationComingSoonOverlay ? (
-          <div className="flex items-center gap-1.5 justify-self-end">
+        {activeSurfaceTab !== 'board' && !showAutomationComingSoonOverlay ? (
+          <div className='flex items-center gap-1.5 justify-self-end'>
             <Button
-              aria-label="Refresh project"
-              disabled={loadState === "loading"}
+              aria-label='Refresh project'
+              disabled={loadState === 'loading'}
               onClick={() => {
                 void loadAutomationState();
               }}
-              size="icon"
-              variant="ghost"
+              size='icon'
+              variant='ghost'
             >
               <IconRefresh />
             </Button>
-            <Button onClick={openNewAutomationDialog} variant="secondary">
-              <IconPlus data-icon="inline-start" />
+            <Button onClick={openNewAutomationDialog} variant='secondary'>
+              <IconPlus data-icon='inline-start' />
               Automation
             </Button>
           </div>
@@ -2536,355 +2484,365 @@ export function ProjectBoardApp() {
         <AutomationComingSoonOverlay surfaceName={automationSurfaceName} />
       ) : (
         <>
-          {activeSurfaceTab === "board" ? (
-        <section className="flex shrink-0 flex-wrap items-center gap-2" aria-label="Ticket filters">
-          <div className="relative w-64">
-            {/*
-             * CDXC:SearchInputs 2026-06-04-03:11:
-             * Project Board ticket search is hosted by the native tasks bundle,
-             * so mirror the sidebar search affordance locally: keep the search
-             * icon on the right while empty, replace it with an X button after
-             * typing, and let Escape clear the focused non-empty field.
-             */}
-            <Input
-              aria-label="Search tickets"
-              className="h-8 border-border pr-8"
-              onChange={(event) => setSearchQuery(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape" || searchQuery.length === 0) {
-                  return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                setSearchQuery("");
-                searchInputRef.current?.focus();
-              }}
-              placeholder="Search tickets"
-              ref={searchInputRef}
-              value={searchQuery}
-            />
-            {searchQuery.length > 0 ? (
-              <button
-                aria-label="Clear ticket search"
-                className="absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground [&_svg]:size-4"
-                onClick={() => {
-                  setSearchQuery("");
-                  searchInputRef.current?.focus();
-                }}
-                type="button"
-              >
-                <IconX aria-hidden="true" />
-              </button>
-            ) : (
-              <IconSearch
-                aria-hidden="true"
-                className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-            )}
-          </div>
-          <Select
-            items={PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS}
-            onValueChange={(value) => setPriorityFilter(value as BoardPriorityFilter)}
-            value={priorityFilter}
-          >
-            <SelectTrigger aria-label="Filter by priority">
-              <SelectValue placeholder="All priorities" />
-            </SelectTrigger>
-            <SelectContent>
-              {PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            items={PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS}
-            onValueChange={(value) => setEstimateFilter(value as BoardEstimateFilter)}
-            value={estimateFilter}
-          >
-            <SelectTrigger aria-label="Filter by estimate">
-              <SelectValue placeholder="All estimates" />
-            </SelectTrigger>
-            <SelectContent>
-              {PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {/*
-           * CDXC:ProjectBoardRedesign 2026-08-23:
-           * Tag and sort move from native <select>s onto the shared shadcn
-           * Select so every control on this row has the same 32px height,
-           * font, and popup styling.
-           */}
-          <Select
-            items={tagFilterSelectItems}
-            onValueChange={(value) => setTagFilter(value as BoardTagFilter)}
-            value={activeTagFilter}
-          >
-            <SelectTrigger aria-label="Filter by tag">
-              <SelectValue placeholder="All tags" />
-            </SelectTrigger>
-            <SelectContent>
-              {tagFilterSelectItems.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            items={PROJECT_BOARD_SORT_SELECT_ITEMS}
-            onValueChange={(value) => setSortOption(value as BoardSortOption)}
-            value={sortOption}
-          >
-            <SelectTrigger aria-label="Sort tickets">
-              <SelectValue placeholder="Sort" />
-            </SelectTrigger>
-            <SelectContent>
-              {PROJECT_BOARD_SORT_SELECT_ITEMS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {/*
-           * CDXC:ProjectBoardColumnManagement 2026-08-21:
-           * Columns sits with the filters because it changes what the board shows, and it is the only
-           * control here that writes to the board rather than to this client's view preferences.
-           */}
-          <Button
-            aria-label="Board columns"
-            onClick={() => setColumnsDialogOpen(true)}
-            size="icon"
-            title="Columns"
-            variant="outline"
-          >
-            <IconLayoutColumns />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button aria-label="Card details" size="icon" title="View" variant="outline">
-                  <IconAdjustmentsHorizontal />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="start">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Card details</DropdownMenuLabel>
-                {BOARD_CARD_VIEW_FIELDS.map((field) => (
-                  <DropdownMenuCheckboxItem
-                    checked={cardView[field.key]}
-                    closeOnClick={false}
-                    key={field.key}
-                    onCheckedChange={(checked: boolean) => toggleCardViewField(field.key, checked)}
+          {activeSurfaceTab === 'board' ? (
+            <section className='flex shrink-0 flex-wrap items-center gap-2' aria-label='Ticket filters'>
+              <div className='relative w-64'>
+                {/*
+                 * CDXC:SearchInputs 2026-06-04-03:11:
+                 * Project Board ticket search is hosted by the native tasks bundle,
+                 * so mirror the sidebar search affordance locally: keep the search
+                 * icon on the right while empty, replace it with an X button after
+                 * typing, and let Escape clear the focused non-empty field.
+                 */}
+                <Input
+                  aria-label='Search tickets'
+                  className='h-8 border-border pr-8'
+                  onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Escape' || searchQuery.length === 0) {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setSearchQuery('');
+                    searchInputRef.current?.focus();
+                  }}
+                  placeholder='Search tickets'
+                  ref={searchInputRef}
+                  value={searchQuery}
+                />
+                {searchQuery.length > 0 ? (
+                  <button
+                    aria-label='Clear ticket search'
+                    className='absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground [&_svg]:size-4'
+                    onClick={() => {
+                      setSearchQuery('');
+                      searchInputRef.current?.focus();
+                    }}
+                    type='button'
                   >
-                    {field.label}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="ml-auto flex items-center gap-1.5">
-            <Button
-              aria-label="Refresh project"
-              disabled={loadState === "loading"}
-              onClick={() => {
-                void loadTickets({ mode: "manual" });
-                void loadConversationState();
-                void loadAutomationState();
-              }}
-              size="icon"
-              variant="ghost"
-            >
-              <IconRefresh />
-            </Button>
-            <Button onClick={() => openNewTicket()} variant="secondary">
-              <IconPlus data-icon="inline-start" />
-              Ticket
-            </Button>
-          </div>
-        </section>
-      ) : null}
-
-      {activeSurfaceTab === "triage" ? (
-        triageAutomationRuns.length === 0 ? (
-          /*
-           * CDXC:Automations 2026-06-30-15:35:
-           * Empty Runs and Triage tabs should show one centered empty state in a single panel, not the split view with a second "No run selected" placeholder on the right. Match the Automations tab pattern.
-           */
-          <section className="flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1">
-            <AutomationRunList
-              actionId={automationActionId}
-              agents={automationState.agents}
-              automations={automationState.automations}
-              emptyTitle="No automation results need triage"
-              onArchive={archiveAutomationRun}
-              onMarkRead={markAutomationRunRead}
-              onOpenSession={openAutomationRunSession}
-              onOpenWorktree={openAutomationRunWorktree}
-              onSelect={setSelectedAutomationRunId}
-              projectName={automationState.projectName}
-              runs={triageAutomationRuns}
-              selectedRunId={selectedTriageRun?.id ?? ""}
-            />
-          </section>
-        ) : (
-        <section className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60">
-          <AutomationRunList
-            actionId={automationActionId}
-            agents={automationState.agents}
-            automations={automationState.automations}
-            emptyTitle="No automation results need triage"
-            onArchive={archiveAutomationRun}
-            onMarkRead={markAutomationRunRead}
-            onOpenSession={openAutomationRunSession}
-            onOpenWorktree={openAutomationRunWorktree}
-            onSelect={setSelectedAutomationRunId}
-            projectName={automationState.projectName}
-            runs={triageAutomationRuns}
-            selectedRunId={selectedTriageRun?.id ?? ""}
-          />
-          <AutomationRunDetail
-            actionId={automationActionId}
-            agents={automationState.agents}
-            automation={selectedTriageRun ? automationState.automations.find((candidate) => candidate.id === selectedTriageRun.automationId) : undefined}
-            onArchive={archiveAutomationRun}
-            onMarkRead={markAutomationRunRead}
-            onOpenSession={openAutomationRunSession}
-            onOpenWorktree={openAutomationRunWorktree}
-            projectName={automationState.projectName}
-            run={selectedTriageRun}
-          />
-        </section>
-        )
-      ) : null}
-
-      {activeSurfaceTab === "automations" ? (
-        automationState.automations.length === 0 ? (
-          <section className="flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1">
-            {/*
-             * CDXC:Automations 2026-06-30-09:36:
-             * An empty Automation page should show one centered empty state, not the empty list plus the "No automation selected" detail placeholder. Only restore the split view after at least one automation exists.
-             */}
-            <AutomationDefinitionList
-              actionId={automationActionId}
-              agents={automationState.agents}
-              automations={automationState.automations}
-              onCreate={openNewAutomationDialog}
-              onDelete={deleteAutomation}
-              onEdit={openEditAutomationDialog}
-              onRunNow={runAutomationNow}
-              onSelect={setSelectedAutomationId}
-              onSetEnabled={setAutomationEnabled}
-              projectNameById={automationProjectNameById}
-              runs={automationState.runs}
-              selectedAutomationId={selectedAutomation?.id ?? ""}
-              showProjectLabels={isAutomationGlobalScope}
-            />
-          </section>
-        ) : (
-          <section className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60">
-          <AutomationDefinitionList
-            actionId={automationActionId}
-            agents={automationState.agents}
-            automations={automationState.automations}
-            onCreate={openNewAutomationDialog}
-            onDelete={deleteAutomation}
-            onEdit={openEditAutomationDialog}
-            onRunNow={runAutomationNow}
-            onSelect={setSelectedAutomationId}
-            onSetEnabled={setAutomationEnabled}
-            projectNameById={automationProjectNameById}
-            runs={automationState.runs}
-            selectedAutomationId={selectedAutomation?.id ?? ""}
-            showProjectLabels={isAutomationGlobalScope}
-          />
-          <AutomationDefinitionDetail
-            actionId={automationActionId}
-            agents={automationState.agents}
-            automation={selectedAutomation}
-            onDelete={deleteAutomation}
-            onEdit={openEditAutomationDialog}
-            onRunNow={runAutomationNow}
-            onSetEnabled={setAutomationEnabled}
-            projectNameById={automationProjectNameById}
-            runs={automationState.runs}
-            showProjectLabels={isAutomationGlobalScope}
-          />
-          </section>
-        )
-      ) : null}
-
-      {activeSurfaceTab === "runs" ? (
-        visibleAutomationRuns.length === 0 ? (
-          <section className="flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1">
-            <AutomationRunList
-              actionId={automationActionId}
-              agents={automationState.agents}
-              automations={automationState.automations}
-              emptyTitle="No automation runs yet"
-              onArchive={archiveAutomationRun}
-              onMarkRead={markAutomationRunRead}
-              onOpenSession={openAutomationRunSession}
-              onOpenWorktree={openAutomationRunWorktree}
-              onSelect={setSelectedAutomationRunId}
-              projectName={automationState.projectName}
-              runs={visibleAutomationRuns}
-              selectedRunId={selectedVisibleRun?.id ?? ""}
-            />
-          </section>
-        ) : (
-        <section className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60">
-          <AutomationRunList
-            actionId={automationActionId}
-            agents={automationState.agents}
-            automations={automationState.automations}
-            emptyTitle="No automation runs yet"
-            onArchive={archiveAutomationRun}
-            onMarkRead={markAutomationRunRead}
-            onOpenSession={openAutomationRunSession}
-            onOpenWorktree={openAutomationRunWorktree}
-            onSelect={setSelectedAutomationRunId}
-            projectName={automationState.projectName}
-            runs={visibleAutomationRuns}
-            selectedRunId={selectedVisibleRun?.id ?? ""}
-          />
-          <AutomationRunDetail
-            actionId={automationActionId}
-            agents={automationState.agents}
-            automation={selectedVisibleRun ? automationState.automations.find((candidate) => candidate.id === selectedVisibleRun.automationId) : undefined}
-            onArchive={archiveAutomationRun}
-            onMarkRead={markAutomationRunRead}
-            onOpenSession={openAutomationRunSession}
-            onOpenWorktree={openAutomationRunWorktree}
-            projectName={automationState.projectName}
-            run={selectedVisibleRun}
-          />
-        </section>
-        )
-      ) : null}
-
-      {activeSurfaceTab === "board" ? (
-        <>
-          {errorMessage ? (
-            <ProjectBoardNotice
-              canRunBeadsCommands={!remoteMachineId}
-              message={errorMessage}
-              onInstallOrUpdateBeads={installOrUpdateBeads}
-              onInitializeBeads={initializeBeads}
-              onRunBeadsMigration={runBeadsMigration}
-              runningCommand={runningProjectBoardCommand}
-            />
-          ) : null}
-          <div className="project-board-board-region">
-            <DragDropProvider onDragEnd={handleDragEnd}>
+                    <IconX aria-hidden='true' />
+                  </button>
+                ) : (
+                  <IconSearch
+                    aria-hidden='true'
+                    className='pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground'
+                  />
+                )}
+              </div>
+              <Select
+                items={PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS}
+                onValueChange={(value) => setPriorityFilter(value as BoardPriorityFilter)}
+                value={priorityFilter}
+              >
+                <SelectTrigger aria-label='Filter by priority'>
+                  <SelectValue placeholder='All priorities' />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                items={PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS}
+                onValueChange={(value) => setEstimateFilter(value as BoardEstimateFilter)}
+                value={estimateFilter}
+              >
+                <SelectTrigger aria-label='Filter by estimate'>
+                  <SelectValue placeholder='All estimates' />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {/*
+               * CDXC:ProjectBoardRedesign 2026-08-23:
+               * Tag and sort move from native <select>s onto the shared shadcn
+               * Select so every control on this row has the same 32px height,
+               * font, and popup styling.
+               */}
+              <Select
+                items={tagFilterSelectItems}
+                onValueChange={(value) => setTagFilter(value as BoardTagFilter)}
+                value={activeTagFilter}
+              >
+                <SelectTrigger aria-label='Filter by tag'>
+                  <SelectValue placeholder='All tags' />
+                </SelectTrigger>
+                <SelectContent>
+                  {tagFilterSelectItems.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                items={PROJECT_BOARD_SORT_SELECT_ITEMS}
+                onValueChange={(value) => setSortOption(value as BoardSortOption)}
+                value={sortOption}
+              >
+                <SelectTrigger aria-label='Sort tickets'>
+                  <SelectValue placeholder='Sort' />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROJECT_BOARD_SORT_SELECT_ITEMS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/*
+               * CDXC:ProjectBoardColumnManagement 2026-08-21:
+               * Columns sits with the filters because it changes what the board shows, and it is the only
+               * control here that writes to the board rather than to this client's view preferences.
+               */}
+              <Button
+                aria-label='Board columns'
+                onClick={() => setColumnsDialogOpen(true)}
+                size='icon'
+                title='Columns'
+                variant='outline'
+              >
+                <IconLayoutColumns />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button aria-label='Card details' size='icon' title='View' variant='outline'>
+                      <IconAdjustmentsHorizontal />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align='start'>
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Card details</DropdownMenuLabel>
+                    {BOARD_CARD_VIEW_FIELDS.map((field) => (
+                      <DropdownMenuCheckboxItem
+                        checked={cardView[field.key]}
+                        closeOnClick={false}
+                        key={field.key}
+                        onCheckedChange={(checked: boolean) => toggleCardViewField(field.key, checked)}
+                      >
+                        {field.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div className='ml-auto flex items-center gap-1.5'>
+                <Button
+                  aria-label='Refresh project'
+                  disabled={loadState === 'loading'}
+                  onClick={() => {
+                    void loadTickets({ mode: 'manual' });
+                    void loadConversationState();
+                    void loadAutomationState();
+                  }}
+                  size='icon'
+                  variant='ghost'
+                >
+                  <IconRefresh />
+                </Button>
+                <Button onClick={() => openNewTicket()} variant='secondary'>
+                  <IconPlus data-icon='inline-start' />
+                  Ticket
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
+          {activeSurfaceTab === 'triage' ? (
+            triageAutomationRuns.length === 0 ? (
+              /*
+               * CDXC:Automations 2026-06-30-15:35:
+               * Empty Runs and Triage tabs should show one centered empty state in a single panel, not the split view with a second "No run selected" placeholder on the right. Match the Automations tab pattern.
+               */
+              <section className='flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1'>
+                <AutomationRunList
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automations={automationState.automations}
+                  emptyTitle='No automation results need triage'
+                  onArchive={archiveAutomationRun}
+                  onMarkRead={markAutomationRunRead}
+                  onOpenSession={openAutomationRunSession}
+                  onOpenWorktree={openAutomationRunWorktree}
+                  onSelect={setSelectedAutomationRunId}
+                  projectName={automationState.projectName}
+                  runs={triageAutomationRuns}
+                  selectedRunId={selectedTriageRun?.id ?? ''}
+                />
+              </section>
+            ) : (
+              <section className='grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
+                <AutomationRunList
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automations={automationState.automations}
+                  emptyTitle='No automation results need triage'
+                  onArchive={archiveAutomationRun}
+                  onMarkRead={markAutomationRunRead}
+                  onOpenSession={openAutomationRunSession}
+                  onOpenWorktree={openAutomationRunWorktree}
+                  onSelect={setSelectedAutomationRunId}
+                  projectName={automationState.projectName}
+                  runs={triageAutomationRuns}
+                  selectedRunId={selectedTriageRun?.id ?? ''}
+                />
+                <AutomationRunDetail
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automation={
+                    selectedTriageRun
+                      ? automationState.automations.find((candidate) => candidate.id === selectedTriageRun.automationId)
+                      : undefined
+                  }
+                  onArchive={archiveAutomationRun}
+                  onMarkRead={markAutomationRunRead}
+                  onOpenSession={openAutomationRunSession}
+                  onOpenWorktree={openAutomationRunWorktree}
+                  projectName={automationState.projectName}
+                  run={selectedTriageRun}
+                />
+              </section>
+            )
+          ) : null}
+
+          {activeSurfaceTab === 'automations' ? (
+            automationState.automations.length === 0 ? (
+              <section className='flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1'>
+                {/*
+                 * CDXC:Automations 2026-06-30-09:36:
+                 * An empty Automation page should show one centered empty state, not the empty list plus the "No automation selected" detail placeholder. Only restore the split view after at least one automation exists.
+                 */}
+                <AutomationDefinitionList
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automations={automationState.automations}
+                  onCreate={openNewAutomationDialog}
+                  onDelete={deleteAutomation}
+                  onEdit={openEditAutomationDialog}
+                  onRunNow={runAutomationNow}
+                  onSelect={setSelectedAutomationId}
+                  onSetEnabled={setAutomationEnabled}
+                  projectNameById={automationProjectNameById}
+                  runs={automationState.runs}
+                  selectedAutomationId={selectedAutomation?.id ?? ''}
+                  showProjectLabels={isAutomationGlobalScope}
+                />
+              </section>
+            ) : (
+              <section className='grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
+                <AutomationDefinitionList
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automations={automationState.automations}
+                  onCreate={openNewAutomationDialog}
+                  onDelete={deleteAutomation}
+                  onEdit={openEditAutomationDialog}
+                  onRunNow={runAutomationNow}
+                  onSelect={setSelectedAutomationId}
+                  onSetEnabled={setAutomationEnabled}
+                  projectNameById={automationProjectNameById}
+                  runs={automationState.runs}
+                  selectedAutomationId={selectedAutomation?.id ?? ''}
+                  showProjectLabels={isAutomationGlobalScope}
+                />
+                <AutomationDefinitionDetail
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automation={selectedAutomation}
+                  onDelete={deleteAutomation}
+                  onEdit={openEditAutomationDialog}
+                  onRunNow={runAutomationNow}
+                  onSetEnabled={setAutomationEnabled}
+                  projectNameById={automationProjectNameById}
+                  runs={automationState.runs}
+                  showProjectLabels={isAutomationGlobalScope}
+                />
+              </section>
+            )
+          ) : null}
+
+          {activeSurfaceTab === 'runs' ? (
+            visibleAutomationRuns.length === 0 ? (
+              <section className='flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1'>
+                <AutomationRunList
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automations={automationState.automations}
+                  emptyTitle='No automation runs yet'
+                  onArchive={archiveAutomationRun}
+                  onMarkRead={markAutomationRunRead}
+                  onOpenSession={openAutomationRunSession}
+                  onOpenWorktree={openAutomationRunWorktree}
+                  onSelect={setSelectedAutomationRunId}
+                  projectName={automationState.projectName}
+                  runs={visibleAutomationRuns}
+                  selectedRunId={selectedVisibleRun?.id ?? ''}
+                />
+              </section>
+            ) : (
+              <section className='grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
+                <AutomationRunList
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automations={automationState.automations}
+                  emptyTitle='No automation runs yet'
+                  onArchive={archiveAutomationRun}
+                  onMarkRead={markAutomationRunRead}
+                  onOpenSession={openAutomationRunSession}
+                  onOpenWorktree={openAutomationRunWorktree}
+                  onSelect={setSelectedAutomationRunId}
+                  projectName={automationState.projectName}
+                  runs={visibleAutomationRuns}
+                  selectedRunId={selectedVisibleRun?.id ?? ''}
+                />
+                <AutomationRunDetail
+                  actionId={automationActionId}
+                  agents={automationState.agents}
+                  automation={
+                    selectedVisibleRun
+                      ? automationState.automations.find(
+                          (candidate) => candidate.id === selectedVisibleRun.automationId
+                        )
+                      : undefined
+                  }
+                  onArchive={archiveAutomationRun}
+                  onMarkRead={markAutomationRunRead}
+                  onOpenSession={openAutomationRunSession}
+                  onOpenWorktree={openAutomationRunWorktree}
+                  projectName={automationState.projectName}
+                  run={selectedVisibleRun}
+                />
+              </section>
+            )
+          ) : null}
+
+          {activeSurfaceTab === 'board' ? (
+            <>
+              {errorMessage ? (
+                <ProjectBoardNotice
+                  canRunBeadsCommands={!remoteMachineId}
+                  message={errorMessage}
+                  onInstallOrUpdateBeads={installOrUpdateBeads}
+                  onInitializeBeads={initializeBeads}
+                  onRunBeadsMigration={runBeadsMigration}
+                  runningCommand={runningProjectBoardCommand}
+                />
+              ) : null}
+              <div className='project-board-board-region'>
+                <DragDropProvider onDragEnd={handleDragEnd}>
+                  {/*
                 CDXC:ScrollFades 2026-06-19-14:16:
                 Kanban uses a horizontal board scroller plus vertical lane
                 scrollers. Apply the shared Codex-style masks to the scroll
@@ -2896,89 +2854,82 @@ export function ProjectBoardApp() {
                 masked scrollers, so their ends fade with the content instead of
                 staying crisp.
               */}
-              <section
-                className="project-board-lanes horizontal-scroll-fade-mask grid min-h-0 flex-1 auto-cols-[minmax(230px,1fr)] grid-flow-col items-stretch gap-2.5 overflow-x-auto overflow-y-hidden [--edge-fade-distance:18px]"
-                aria-label="Project issue board"
-              >
-                {boardColumns.map((column) => (
-                  <BoardLane
-                    cardView={cardView}
-                    column={column}
-                    conversationAction={conversationAction}
-                    key={column.key}
-                    linksByBeadKey={linksByBeadKey}
-                    onAddTicket={openNewTicket}
-                    onJumpToConversation={jumpToConversation}
-                    onOpenContextMenu={(ticket, point) =>
-                      setTicketContextMenu({
-                        confirmingDelete: false,
-                        ticketId: ticket.id,
-                        x: point.x,
-                        y: point.y,
-                      })
-                    }
-                    onOpenTicket={openTicket}
-                    tickets={ticketsByColumn[column.key]}
-                  />
-                ))}
-              </section>
-            </DragDropProvider>
-            {showInitialBoardLoadingOverlay ? (
-              <div
-                aria-label="Loading board"
-                aria-live="polite"
-                className="project-board-loading-overlay"
-                role="status"
-              >
-                <IconLoader2
-                  aria-hidden="true"
-                  className="project-board-loading-spinner"
-                  size={32}
-                  stroke={1.8}
-                />
+                  <section
+                    className='project-board-lanes horizontal-scroll-fade-mask grid min-h-0 flex-1 auto-cols-[minmax(230px,1fr)] grid-flow-col items-stretch gap-2.5 overflow-x-auto overflow-y-hidden [--edge-fade-distance:18px]'
+                    aria-label='Project issue board'
+                  >
+                    {boardColumns.map((column) => (
+                      <BoardLane
+                        cardView={cardView}
+                        column={column}
+                        conversationAction={conversationAction}
+                        key={column.key}
+                        linksByBeadKey={linksByBeadKey}
+                        onAddTicket={openNewTicket}
+                        onJumpToConversation={jumpToConversation}
+                        onOpenContextMenu={(ticket, point) =>
+                          setTicketContextMenu({
+                            confirmingDelete: false,
+                            ticketId: ticket.id,
+                            x: point.x,
+                            y: point.y,
+                          })
+                        }
+                        onOpenTicket={openTicket}
+                        tickets={ticketsByColumn[column.key]}
+                      />
+                    ))}
+                  </section>
+                </DragDropProvider>
+                {showInitialBoardLoadingOverlay ? (
+                  <div
+                    aria-label='Loading board'
+                    aria-live='polite'
+                    className='project-board-loading-overlay'
+                    role='status'
+                  >
+                    <IconLoader2 aria-hidden='true' className='project-board-loading-spinner' size={32} stroke={1.8} />
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-          {ticketContextMenu && contextMenuTicket ? (
-            <ProjectBoardTicketContextMenu
-              confirmingDelete={ticketContextMenu.confirmingDelete}
-              deleting={contextMenuDeletingTicketId === contextMenuTicket.id}
-              onDelete={() => {
-                if (!ticketContextMenu.confirmingDelete) {
-                  setTicketContextMenu((current) =>
-                    current?.ticketId === contextMenuTicket.id
-                      ? { ...current, confirmingDelete: true }
-                      : current,
-                  );
-                  return;
-                }
-                void deleteTicket(contextMenuTicket);
-              }}
-              onDismiss={() => setTicketContextMenu(undefined)}
-              onPrimaryAction={() => {
-                setTicketContextMenu(undefined);
-                if (contextMenuPrimaryLink) {
-                  void jumpToConversation(contextMenuPrimaryLink);
-                  return;
-                }
-                void startTicketWork(contextMenuTicket);
-              }}
-              position={ticketContextMenu}
-              primaryActionDisabled={contextMenuPrimaryActionDisabled}
-              primaryActionLabel={contextMenuPrimaryActionLabel}
+              {ticketContextMenu && contextMenuTicket ? (
+                <ProjectBoardTicketContextMenu
+                  confirmingDelete={ticketContextMenu.confirmingDelete}
+                  deleting={contextMenuDeletingTicketId === contextMenuTicket.id}
+                  onDelete={() => {
+                    if (!ticketContextMenu.confirmingDelete) {
+                      setTicketContextMenu((current) =>
+                        current?.ticketId === contextMenuTicket.id ? { ...current, confirmingDelete: true } : current
+                      );
+                      return;
+                    }
+                    void deleteTicket(contextMenuTicket);
+                  }}
+                  onDismiss={() => setTicketContextMenu(undefined)}
+                  onPrimaryAction={() => {
+                    setTicketContextMenu(undefined);
+                    if (contextMenuPrimaryLink) {
+                      void jumpToConversation(contextMenuPrimaryLink);
+                      return;
+                    }
+                    void startTicketWork(contextMenuTicket);
+                  }}
+                  position={ticketContextMenu}
+                  primaryActionDisabled={contextMenuPrimaryActionDisabled}
+                  primaryActionLabel={contextMenuPrimaryActionLabel}
+                />
+              ) : null}
+            </>
+          ) : errorMessage ? (
+            <ProjectBoardNotice
+              canRunBeadsCommands={!remoteMachineId}
+              message={errorMessage}
+              onInstallOrUpdateBeads={installOrUpdateBeads}
+              onInitializeBeads={initializeBeads}
+              onRunBeadsMigration={runBeadsMigration}
+              runningCommand={runningProjectBoardCommand}
             />
           ) : null}
-        </>
-      ) : errorMessage ? (
-        <ProjectBoardNotice
-          canRunBeadsCommands={!remoteMachineId}
-          message={errorMessage}
-          onInstallOrUpdateBeads={installOrUpdateBeads}
-          onInitializeBeads={initializeBeads}
-          onRunBeadsMigration={runBeadsMigration}
-          runningCommand={runningProjectBoardCommand}
-        />
-      ) : null}
         </>
       )}
 
@@ -3003,11 +2954,12 @@ export function ProjectBoardApp() {
             setAutomationDraft((current) => ({
               ...current,
               executionKind:
-                current.executionKind === "worktree" && selectedProject?.canUseWorktrees !== true
-                  ? "local"
+                current.executionKind === 'worktree' && selectedProject?.canUseWorktrees !== true
+                  ? 'local'
                   : current.executionKind,
               projectId: value,
-              threadSessionId: "",
+              threadSessionId: '',
+              threadAgentSessionId: '',
             }));
             void loadAutomationConversationState(value);
           }}
@@ -3045,7 +2997,7 @@ export function ProjectBoardApp() {
         knownLabels={knownLabels}
         onAssociateFocusedSession={() => void associateFocusedSession()}
         onClose={() => {
-          setDeleteConfirmingTicketId("");
+          setDeleteConfirmingTicketId('');
           setDetail(createEmptyDetailDraft());
         }}
         onDeleteTicket={() => void deleteTicket()}
@@ -3053,7 +3005,7 @@ export function ProjectBoardApp() {
         onSaveTicketDetail={() => void saveTicketDetail()}
         onSelectedAgentChange={selectTicketAgent}
         onStartTicketWork={() => {
-          setDeleteConfirmingTicketId("");
+          setDeleteConfirmingTicketId('');
           setDetail(createEmptyDetailDraft());
           void startTicketWork();
         }}
@@ -3080,7 +3032,7 @@ export function ProjectBoardApp() {
         onOpenChange={(open) => {
           setNewTicketOpen(open);
           if (!open) {
-            setNewTicketStartLocation("currentProject");
+            setNewTicketStartLocation('currentProject');
           }
         }}
         onSelectedAgentChange={setSelectedAgentId}
@@ -3100,14 +3052,14 @@ export function ProjectBoardApp() {
        */}
       <Toaster
         closeButton
-        position="bottom-center"
+        position='bottom-center'
         richColors
-        theme="dark"
+        theme='dark'
         toastOptions={{
           style: {
-            background: "var(--project-board-panel)",
-            border: "1px solid var(--project-board-border-strong)",
-            color: "#f4f4f5",
+            background: 'var(--project-board-panel)',
+            border: '1px solid var(--project-board-border-strong)',
+            color: '#f4f4f5',
           },
         }}
       />

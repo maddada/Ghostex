@@ -761,4 +761,3 @@ fn bool_to_sql(value: bool) -> i64 {
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
-
