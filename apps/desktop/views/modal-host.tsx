@@ -2078,6 +2078,10 @@ function AppModalHost() {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: 'installGenerateTitleSkill' });
         }}
+        onInstallManageBeadsSkill={() => {
+          setGhostexCliStatusLoading(true);
+          vscode.postMessage({ type: 'installManageBeadsSkill' });
+        }}
         onInstallMoveCodexSessionSkill={() => {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: 'installMoveCodexSessionSkill' });
@@ -2225,6 +2229,10 @@ function AppModalHost() {
         onInstallGenerateTitleSkill={() => {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: 'installGenerateTitleSkill' });
+        }}
+        onInstallManageBeadsSkill={() => {
+          setGhostexCliStatusLoading(true);
+          vscode.postMessage({ type: 'installManageBeadsSkill' });
         }}
         onInstallMoveCodexSessionSkill={() => {
           setGhostexCliStatusLoading(true);

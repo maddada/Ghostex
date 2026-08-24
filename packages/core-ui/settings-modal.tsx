@@ -258,6 +258,7 @@ export type SettingsModalProps = {
   onInstallFindPrevSessionSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
+  onInstallManageBeadsSkill?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
   onPlayCompletionSound?: (sound: CompletionSoundSetting) => void;
   onRequestMacOSNotificationPermission?: () => void;
@@ -320,6 +321,7 @@ export function SettingsModal({
   onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
+  onInstallManageBeadsSkill,
   onInstallMoveCodexSessionSkill,
   onPlayCompletionSound,
   onRequestMacOSNotificationPermission,
@@ -2766,6 +2768,7 @@ export function SettingsModal({
                       onInstallFindPrevSessionSkill={onInstallFindPrevSessionSkill}
                       onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
                       onInstallGhostexCli={onInstallGhostexCli}
+                      onInstallManageBeadsSkill={onInstallManageBeadsSkill}
                       onInstallMoveCodexSessionSkill={onInstallMoveCodexSessionSkill}
                       onOpenExternalUrl={(url) => vscode?.postMessage({ type: 'openExternalUrl', url })}
                       onUninstallBundledAgentSkill={onUninstallBundledAgentSkill}

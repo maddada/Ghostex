@@ -59,6 +59,7 @@ export const BUNDLED_SKILL_IDS = [
   'fable56Orchestration',
   'findPrevSession',
   'generateTitle',
+  'manageBeads',
   'moveCodexSession',
 ] as const;
 export type BundledSkillId = (typeof BUNDLED_SKILL_IDS)[number];

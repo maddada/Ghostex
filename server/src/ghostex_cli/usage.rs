@@ -130,6 +130,10 @@ pub fn usage() -> String {
             "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
             "Dispatch a Project Board bead: reuse its usable linked session or create the worker",
         ),
+        format_help_command(
+            "board associate <bead-id> [--session-id id]",
+            "Link a running session to a Project Board bead; defaults to the calling session",
+        ),
         format_help_command("run-agent <agentId>", "Run a configured agent button"),
         format_help_command(
             "run-command <commandId>",
@@ -615,10 +619,20 @@ Inspect:
 
 /// Render CLI help for Project Board worker dispatch.
 pub fn board_usage() -> String {
-    let commands = [format_help_command(
-        "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
-        "Dispatch a Project Board bead through gxserver",
-    )]
+    let commands = [
+        format_help_command(
+            "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
+            "Dispatch a Project Board bead through gxserver",
+        ),
+        format_help_command(
+            "board associate <bead-id> [--session-id id] [--project-id id] [--json]",
+            "Show this session on the bead's card; without --session-id it links the calling session",
+        ),
+        format_help_command(
+            "board install-skill [--agent id]",
+            "Install the bundled Project Board beads skill for agents",
+        ),
+    ]
     .join("\n");
 
     format!(
@@ -626,7 +640,9 @@ pub fn board_usage() -> String {
 
 Usage:
   ghostex board start-work <bead-id> [--agent <agentId>] [--project-id <id>] [--json]
+  ghostex board associate <bead-id> [--session-id <alias|id|title>] [--project-id <id>] [--json]
   gx board start-work <bead-id>
+  gx board associate <bead-id>
 
 Commands:
 {commands}
@@ -638,6 +654,13 @@ Behavior:
   is returned as {{ \"projectId\": ..., \"sessionId\": ..., \"created\": false }} instead of creating a second worker.
   Without --agent, the bead assignee is matched case-insensitively against configured agents,
   falling back to the default prompt agent.
+
+  associate is for an agent that was already asked to work a bead - by hand, or in a session
+  someone else started - rather than dispatched from the card. It creates no session: it links the
+  one it runs in, read from the Ghostex session environment, so the card shows who is working it.
+  Run it again after a fork or restore to move the card onto the session that is really working.
+  Pass --session-id to link another session by alias, id, provider session name, or title.
+
   Without --project-id, the bead is located across the registered project boards; pass --project-id
   when the same bead id exists on more than one board.
 "

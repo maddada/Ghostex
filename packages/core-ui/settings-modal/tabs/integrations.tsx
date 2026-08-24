@@ -109,6 +109,7 @@ export function IntegrationsSettingsTab({
   onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
+  onInstallManageBeadsSkill,
   onInstallMoveCodexSessionSkill,
   onOpenExternalUrl,
   onUninstallBundledAgentSkill,
@@ -136,6 +137,7 @@ export function IntegrationsSettingsTab({
   onInstallFindPrevSessionSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
+  onInstallManageBeadsSkill?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
   onOpenExternalUrl?: (url: string) => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
@@ -238,6 +240,7 @@ export function IntegrationsSettingsTab({
                   fable56Orchestration: onInstallFable56OrchestrationSkill,
                   findPrevSession: onInstallFindPrevSessionSkill,
                   generateTitle: onInstallGenerateTitleSkill,
+                  manageBeads: onInstallManageBeadsSkill,
                   moveCodexSession: onInstallMoveCodexSessionSkill,
                 }}
                 onRefreshStatus={onRequestGhostexCliStatus}

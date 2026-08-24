@@ -1,19 +1,19 @@
 ---
 name: ghostex-manage-beads
 description: >-
-  Use this skill when managing Ghostex project board beads with the normal
-  machine-installed `bd` CLI:
-  creating, updating, commenting on, reviewing, closing, or associating beads
-  with the current Ghostex or Codex session. It covers the project swimlane
-  workflow, session-link comments, external refs, and safe examples for making
-  review beads like the current session association workflow.
+  Use this skill whenever you are asked to work, tackle, pick up, or fix a
+  Ghostex project board bead or card by id, and when managing beads with the
+  normal machine-installed `bd` CLI: creating, updating, commenting on,
+  reviewing, closing, or linking the session you are working in to a card. It
+  covers linking this session to the bead, the project swimlane workflow,
+  external refs, and safe examples for making review beads.
 ---
 
 # ghostex-manage-beads
 
-Use this skill when a user asks to manage project board beads, create or update
-review tasks, move work through bead statuses, add bead comments, or associate a
-bead with the current Ghostex or Codex session.
+Use this skill when a user asks you to work a project board bead ("tackle bead
+12345"), to manage board beads, create or update review tasks, move work through
+bead statuses, add bead comments, or link a session to a card.
 
 ## Requirements
 
@@ -25,6 +25,32 @@ bead with the current Ghostex or Codex session.
   installed Beads version.
 - Inspect nearby beads before creating a new one so title, labels, status, and
   external-ref style match the project.
+
+## Working A Bead: Link This Session First
+
+The moment you are asked to work a bead, put the session you are running in on
+its card:
+
+```bash
+gx board associate <bead-id>
+```
+
+That is the whole command. It takes no session id: Ghostex reads the session you
+are running in from the environment it exports into every pane, and the card
+starts showing this conversation as the one working it — the same link the
+board's own "Start work" button writes.
+
+- **Do this even though nobody asked you to.** A card whose work is invisible is
+  the normal failure: only work dispatched from the card links itself, so an
+  agent asked by hand has to say so.
+- **It creates nothing.** No session, no worker, no duplicate. Running it twice
+  is safe; run it again after a fork or restore so the card follows the session
+  that is really working.
+- Pass `--session-id <alias|id|title>` to link a different session, and
+  `--project-id <id>` only when the same bead id exists on more than one board.
+- `gx board start-work <bead-id>` is a different command with a different job:
+  it *dispatches* a card to a fresh worker session. Never run it for a bead you
+  are working yourself — that puts a second agent on your card.
 
 ## Core Workflow
 
@@ -101,13 +127,13 @@ bd update <id> --status review
 If `CODEX_THREAD_ID` is missing, omit the external ref rather than inventing
 one.
 
-## Associate A Bead With The Current Session
+## Record Other Session Ids On A Bead
 
-Prefer a bead comment for full session association because `external-ref` holds
-one stable reference and comments can include both Ghostex and Codex ids:
+`gx board associate` owns the Ghostex link the board reads, so a comment only
+has to carry what the board does not know — a Codex thread, for instance:
 
 ```bash
-bd comment <id> "Associated session: Ghostex ${GHOSTEX_GLOBAL_SESSION_REF:-unknown} / ${GHOSTEX_NATIVE_SESSION_ID:-unknown}, Codex thread ${CODEX_THREAD_ID:-unknown}. <brief work summary and verification status>."
+bd comment <id> "Codex thread ${CODEX_THREAD_ID:-unknown}. <brief work summary and verification status>."
 ```
 
 Useful environment variables when present:
@@ -120,8 +146,8 @@ Useful environment variables when present:
 - `CODEX_THREAD_ID`: current Codex thread id.
 
 When creating a new bead for the current agent session, set
-`--external-ref "codex-thread:$CODEX_THREAD_ID"` and add the Ghostex session ids
-in a comment.
+`--external-ref "codex-thread:$CODEX_THREAD_ID"`, and run
+`gx board associate <new-id>` so the card carries the Ghostex session too.
 
 ## Example: Session-Associated Review Bead
 
@@ -134,7 +160,8 @@ bd create "Review companion CEF flicker layout-key fix" \
   --description "Review the geometry-only native layout-key extraction for companion terminal focus changes. Verify focused tests, typecheck, and any known unrelated blockers." \
   --json
 bd update <new-id> --status review
-bd comment <new-id> "Associated session: Ghostex ${GHOSTEX_GLOBAL_SESSION_REF:-unknown} / ${GHOSTEX_NATIVE_SESSION_ID:-unknown}, Codex thread ${CODEX_THREAD_ID:-unknown}. Implemented geometry-only native layout-key extraction so companion session clicks no longer classify active-tab focus changes as AppKit layout changes; focused tests and typecheck passed."
+gx board associate <new-id>
+bd comment <new-id> "Codex thread ${CODEX_THREAD_ID:-unknown}. Implemented geometry-only native layout-key extraction so companion session clicks no longer classify active-tab focus changes as AppKit layout changes; focused tests and typecheck passed."
 ```
 
 ## Safety

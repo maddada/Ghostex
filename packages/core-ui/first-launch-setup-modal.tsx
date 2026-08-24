@@ -95,6 +95,7 @@ export type FirstLaunchSetupModalProps = {
   onInstallFindPrevSessionSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
+  onInstallManageBeadsSkill?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onOpenAccessibilityPreferences?: () => void;
@@ -677,6 +678,7 @@ export function FirstLaunchSetupModal({
   onInstallFable56OrchestrationSkill,
   onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
+  onInstallManageBeadsSkill,
   onInstallMoveCodexSessionSkill,
   onUninstallBundledAgentSkill,
   onOpenAccessibilityPreferences,
@@ -738,6 +740,9 @@ export function FirstLaunchSetupModal({
           }
           if (ghostexCliStatus.generateTitleSkillInstalled !== true) {
             onInstallGenerateTitleSkill?.();
+          }
+          if (ghostexCliStatus.manageBeadsSkillInstalled !== true) {
+            onInstallManageBeadsSkill?.();
           }
           if (ghostexCliStatus.moveCodexSessionSkillInstalled !== true) {
             onInstallMoveCodexSessionSkill?.();
@@ -838,6 +843,7 @@ export function FirstLaunchSetupModal({
               onInstallFable56OrchestrationSkill={onInstallFable56OrchestrationSkill}
               onInstallFindPrevSessionSkill={onInstallFindPrevSessionSkill}
               onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
+              onInstallManageBeadsSkill={onInstallManageBeadsSkill}
               onInstallMoveCodexSessionSkill={onInstallMoveCodexSessionSkill}
               onUninstallBundledAgentSkill={onUninstallBundledAgentSkill}
             />
@@ -1508,6 +1514,7 @@ function FirstLaunchSkillsPage({
   onInstallFable56OrchestrationSkill,
   onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
+  onInstallManageBeadsSkill,
   onInstallMoveCodexSessionSkill,
   onOpenExternalUrl,
   onUninstallBundledAgentSkill,
@@ -1523,6 +1530,7 @@ function FirstLaunchSkillsPage({
   onInstallFable56OrchestrationSkill?: () => void;
   onInstallFindPrevSessionSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
+  onInstallManageBeadsSkill?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
 }) {
@@ -1556,6 +1564,7 @@ function FirstLaunchSkillsPage({
           fable56Orchestration: onInstallFable56OrchestrationSkill,
           findPrevSession: onInstallFindPrevSessionSkill,
           generateTitle: onInstallGenerateTitleSkill,
+          manageBeads: onInstallManageBeadsSkill,
           moveCodexSession: onInstallMoveCodexSessionSkill,
         }}
         onUninstallSkill={onUninstallBundledAgentSkill}
@@ -1922,6 +1931,7 @@ function isAnyFirstLaunchBundledSkillInstalled(ghostexCliStatus: SidebarGhostexC
     ghostexCliStatus?.fable56OrchestrationSkillInstalled === true ||
     ghostexCliStatus?.findPrevSessionSkillInstalled === true ||
     ghostexCliStatus?.generateTitleSkillInstalled === true ||
+    ghostexCliStatus?.manageBeadsSkillInstalled === true ||
     ghostexCliStatus?.moveCodexSessionSkillInstalled === true
   );
 }

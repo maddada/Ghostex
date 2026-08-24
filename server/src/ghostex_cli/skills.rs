@@ -21,6 +21,7 @@ const GHOSTEX_EMBEDDED_BROWSER_SKILL_NAME: &str = "ghostex-embedded-browser-use"
 const GHOSTEX_COMPUTER_USE_SKILL_NAME: &str = "ghostex-computer-use";
 const GHOSTEX_CLI_SKILL_NAME: &str = "ghostex-cli";
 const GHOSTEX_MANAGE_AUTOMATIONS_SKILL_NAME: &str = "ghostex-manage-automations";
+const GHOSTEX_MANAGE_BEADS_SKILL_NAME: &str = "ghostex-manage-beads";
 const GHOSTEX_AGENT_ORCHESTRATION_SKILL_NAME: &str = "ghostex-agent-orchestration";
 const GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_NAME: &str = "ghostex-fable-5.6-orchestration";
 const GHOSTEX_FIND_PREV_SESSION_SKILL_NAME: &str = "ghostex-find-prev-session";
@@ -353,6 +354,22 @@ pub fn install_manage_automations_skill_command(args: &[String]) -> CliResult<()
         "ghostex automations --help",
         &["GHOSTEX_MANAGE_AUTOMATIONS_SKILL_SOURCE"],
         GHOSTEX_MANAGE_AUTOMATIONS_SKILL_NAME,
+    )
+}
+
+/*
+CDXC:BoardAssociateSession 2026-08-24:
+The bundled Project Board beads skill teaches agents to link the session they
+are working in to the card (`ghostex board associate <bead-id>`), which only
+helps if the skill can actually be installed. It ships beside the other bundled
+skills, so it gets the same `install-skill` surface and the same catalog entry.
+*/
+pub fn install_manage_beads_skill_command(args: &[String]) -> CliResult<()> {
+    install_ghostex_agent_skill(
+        args,
+        "ghostex board --help",
+        &["GHOSTEX_MANAGE_BEADS_SKILL_SOURCE"],
+        GHOSTEX_MANAGE_BEADS_SKILL_NAME,
     )
 }
 

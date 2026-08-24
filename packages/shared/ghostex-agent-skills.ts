@@ -6,6 +6,7 @@ export type BundledGhostexAgentSkillId =
   | 'fable56Orchestration'
   | 'findPrevSession'
   | 'generateTitle'
+  | 'manageBeads'
   | 'moveCodexSession';
 
 export type BundledGhostexAgentSkillTier = 'recommended' | 'optional';
@@ -38,6 +39,11 @@ export const GHOSTEX_CUA_PROJECT_URL = 'https://github.com/trycua/cua';
  * CDXC:CodexSessionMove 2026-06-26-13:24:
  * Bundle the Codex session-move guidance as its own installable skill so first
  * launch and Settings can install it with the app's other agent-facing skills.
+ *
+ * CDXC:BoardAssociateSession 2026-08-24:
+ * The Project Board beads skill shipped in the bundle with no way to install it,
+ * so agents never learned to put the session they are working in on the card.
+ * It belongs in this catalog like every other bundled skill.
  */
 export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] = [
   {
@@ -104,6 +110,15 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     name: 'Ghostex Auto Rename Session',
     skillName: 'ghostex-auto-rename-session',
     tier: 'optional',
+  },
+  {
+    command: 'ghostex board install-skill',
+    description:
+      "Teaches agents to work a project board bead: move it through the board's statuses, comment progress on it, and link the session they are working in to the card so the board shows who has it.",
+    id: 'manageBeads',
+    name: 'Ghostex Project Board Beads',
+    skillName: 'ghostex-manage-beads',
+    tier: 'recommended',
   },
   {
     command: 'ghostex move-codex-session install-skill',
