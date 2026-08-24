@@ -16,3 +16,27 @@ export function nextSessionChatLimit(current: number): number {
 export function hasMoreSessionChatHistory(returnedCount: number, requestedLimit: number): boolean {
   return returnedCount >= requestedLimit;
 }
+
+interface SessionChatPageBoundary {
+  messages: readonly unknown[];
+  hasMore: boolean;
+  /** Capability probe added when gxserver began filtering before counting. */
+  hasMoreExact?: boolean;
+  beforeOffset: number;
+}
+
+/**
+ * Trust a current daemon's exact boundary. For an older daemon, keep one
+ * pagination probe available while its byte cursor is still moving backwards;
+ * the probe disappears as soon as a read makes no progress, so a bad legacy
+ * `hasMore: false` cannot strand history or cause an endless request loop.
+ */
+export function sessionChatPageHasMore(page: SessionChatPageBoundary, requestedBeforeOffset?: number): boolean {
+  if (page.hasMore || page.hasMoreExact === true) {
+    return page.hasMore;
+  }
+  if (page.messages.length === 0 || page.beforeOffset <= 0) {
+    return false;
+  }
+  return requestedBeforeOffset === undefined || page.beforeOffset < requestedBeforeOffset;
+}

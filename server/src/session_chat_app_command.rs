@@ -52,6 +52,9 @@ pub struct SessionChatAppCommand {
     pub id: String,
     /// Verbatim command text as written to the pty, e.g. `/rename Fix parser`.
     pub command: String,
+    /// Resolved session title. Bare `/rename` commands receive this once the
+    /// agent publishes the generated title in its own metadata.
+    pub title: Option<String>,
     /// RFC3339 millis, for display ordering only.
     pub sent_at: String,
     recorded: Instant,
@@ -62,6 +65,9 @@ impl SessionChatAppCommand {
         let mut map = Map::new();
         map.insert("id".to_string(), json!(self.id));
         map.insert("command".to_string(), json!(self.command));
+        if let Some(title) = self.title.as_deref() {
+            map.insert("title".to_string(), json!(title));
+        }
         map.insert("sentAt".to_string(), json!(self.sent_at));
         Value::Object(map)
     }
@@ -103,10 +109,50 @@ pub fn record_session_chat_app_command(project_id: &str, session_id: &str, comma
     rows.push(SessionChatAppCommand {
         id: format!("{sent_at}-{}", rows.len()),
         command: command.to_string(),
+        title: app_command_title(command),
         sent_at,
         recorded: now,
     });
     prune(rows, now);
+}
+
+fn app_command_title(command: &str) -> Option<String> {
+    let mut parts = command.trim().splitn(2, char::is_whitespace);
+    let command_name = parts.next()?.to_ascii_lowercase();
+    if !matches!(command_name.as_str(), "/rename" | "/name" | "/title") {
+        return None;
+    }
+    let title = parts.next()?.trim();
+    (!title.is_empty()).then(|| title.to_string())
+}
+
+/// Attach the title emitted by an agent after Ghostex sent a bare `/rename`.
+/// Explicit title commands are already complete and are never rewritten.
+pub fn resolve_latest_session_chat_app_command_title(
+    project_id: &str,
+    session_id: &str,
+    title: &str,
+) {
+    let title = title.trim();
+    if title.is_empty() {
+        return;
+    }
+    let Ok(mut guard) = store().lock() else {
+        return;
+    };
+    let Some(rows) = guard.get_mut(&(project_id.to_string(), session_id.to_string())) else {
+        return;
+    };
+    let Some(row) = rows.iter_mut().rev().find(|row| {
+        row.title.is_none()
+            && matches!(
+                row.command.split_whitespace().next(),
+                Some("/rename" | "/name" | "/title")
+            )
+    }) else {
+        return;
+    };
+    row.title = Some(title.to_string());
 }
 
 /// Live rows for a session, oldest first. Sweeps expired entries on the way out.
@@ -150,14 +196,20 @@ pub fn insert_session_chat_app_commands(
 }
 
 /*
-What the 500ms long-poll fingerprint hashes. Ids alone: the text cannot change
-under a fixed id, and this must stay allocation-cheap and I/O-free like every
-other term in that hash.
+What the 500ms long-poll fingerprint hashes. A bare rename's resolved title can
+arrive under an existing id, so the title participates in the identity. This
+must stay allocation-cheap and I/O-free like every other term in that hash.
 */
 pub fn session_chat_app_commands_identity(project_id: &str, session_id: &str) -> String {
     session_chat_app_commands(project_id, session_id)
         .into_iter()
-        .map(|row| row.id)
+        .map(|row| {
+            format!(
+                "{}\u{1e}{}",
+                row.id,
+                row.title.as_deref().unwrap_or_default()
+            )
+        })
         .collect::<Vec<_>>()
         .join("\u{1f}")
 }

@@ -230,6 +230,34 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
     if role == CLAUDE_QUEUE_RECORD_TYPE {
         return decode_claude_queued_prompt(&record, fallback_id);
     }
+    /*
+    Claude Code records composer rejections as top-level informational system
+    rows, not as assistant content. These are the only durable explanation for
+    a prompt that never reached the model (for example `Unknown command` and
+    `Args from unknown skill`), and the terminal prints them as ordinary
+    visible warning lines. Keep only warning/error informational rows: the
+    other system record families are lifecycle/config plumbing the terminal
+    does not present as conversation content.
+    */
+    if role == "system"
+        && record.get("subtype").and_then(Value::as_str) == Some("informational")
+        && matches!(
+            record.get("level").and_then(Value::as_str),
+            Some("warning" | "error")
+        )
+    {
+        let content = extract_string(record.get("content"))?;
+        return Some(SessionChatMessage {
+            id: extract_string(record.get("uuid")).unwrap_or_else(|| fallback_id.to_string()),
+            role: SessionChatRole::System,
+            blocks: vec![text_block(content)],
+            timestamp: parse_timestamp(record.get("timestamp")),
+            source: SessionChatSource::Transcript,
+            turn_id: None,
+            byte_offset: None,
+            queued: false,
+        });
+    }
     if role != "user" && role != "assistant" {
         return None;
     }

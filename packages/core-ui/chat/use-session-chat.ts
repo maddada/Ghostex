@@ -56,7 +56,12 @@ import {
   type SessionChatCommandMarker,
   type SessionChatPendingSend,
 } from './session-chat-pending';
-import { SESSION_CHAT_INITIAL_LIMIT, SESSION_CHAT_MAX_LIMIT, SESSION_CHAT_PAGE } from './session-chat-pagination';
+import {
+  sessionChatPageHasMore,
+  SESSION_CHAT_INITIAL_LIMIT,
+  SESSION_CHAT_MAX_LIMIT,
+  SESSION_CHAT_PAGE,
+} from './session-chat-pagination';
 import { classifySessionChatSend, SESSION_CHAT_DEFAULT_COMMAND_CATALOG } from './session-chat-send-classification';
 import { deriveSessionChatStreamingText, sessionChatStreamingMessage } from './session-chat-streaming';
 import { surfaceSkillInvocationUserTurns } from './session-chat-command-envelope';
@@ -99,6 +104,16 @@ const RESYNC_RETRY_MAX_DELAY_MS = 15_000;
 // view expects frames, this long without one means re-read rather than wait.
 const STALL_THRESHOLD_MS = 20_000;
 const STALL_CHECK_INTERVAL_MS = 5_000;
+
+// Initial-window liveness floor. Before the subscription has delivered its
+// first authoritative frame the pane is holding blank, and a resync read
+// cannot recover a socket whose subscribe snapshot was lost — only a fresh
+// socket can. Shorter than STALL_THRESHOLD_MS because nothing is on screen yet.
+const INITIAL_STALL_THRESHOLD_MS = 15_000;
+// Bound on automatic socket recycles per session mount. A transport that is
+// simply down would otherwise reconnect forever; past this the manual Retry
+// button (surfaced by the view's loading indicator) is the only recovery.
+const MAX_AUTOMATIC_RECONNECTS = 2;
 
 const CLAUDE_TERMINAL_STATUS_KIND = 'claude-status';
 
@@ -273,6 +288,12 @@ export interface UseSessionChatResult {
   sendKey?: (key: SessionChatSendKey, marker: string) => Promise<void>;
   answerPrompt: (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>) => Promise<void>;
   interrupt: () => Promise<void>;
+  /**
+   * Tear the subscription down and rebuild it: a fresh `transport.subscribe`
+   * plus a fresh seed read. The only recovery for a socket that came up but
+   * never delivered its subscribe snapshot, which no re-read can repair.
+   */
+  retry: () => void;
   /** Ghostex prompt queue: rows the agent has never seen (plan 016). */
   queue: SessionChatQueueController;
   /** Cross-client composer draft sync. */
@@ -354,6 +375,12 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   clear arrives as an explicit empty `content`.
   */
   const [syncedDraft, setSyncedDraft] = useState<SessionChatDraft | null>(null);
+  /*
+  Bumping this re-runs the subscribe effect, which is the full recycle: the old
+  socket is unsubscribed, a new one is opened, and a fresh seed read starts.
+  Both the initial-window watchdog and the view's Retry button drive it.
+  */
+  const [reconnectNonce, setReconnectNonce] = useState(0);
 
   const mergerRef = useRef<SessionChatMerger>(createSessionChatMerger());
   const assemblerRef = useRef(createIncrementalSessionChatAssembler());
@@ -392,6 +419,25 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
    * effect must not tear the subscription down every time work starts or ends.
    */
   const workingSignalRef = useRef(false);
+  /**
+   * The initial-window watchdog's "the pane is still holding blank" input. A
+   * ref for the same reason `workingSignalRef` is one.
+   */
+  const loadingHoldRef = useRef(true);
+  /** Automatic recycles spent on this session mount (reset per transport). */
+  const autoReconnectsRef = useRef(0);
+  /** Transport that last seeded the view state; gates the session-identity wipe. */
+  const seededTransportRef = useRef<SessionChatTransport | null>(null);
+
+  const reconnect = useCallback((): void => {
+    setReconnectNonce((nonce) => nonce + 1);
+  }, []);
+
+  // The recycle budget is per session, not per recycle: a new transport is a
+  // new conversation and gets its own two automatic attempts.
+  useEffect(() => {
+    autoReconnectsRef.current = 0;
+  }, [transport]);
 
   const applyTerminalActivity = useCallback((activity: SessionChatTerminalActivity | undefined): void => {
     const transient = activity ? terminalStatusMessage(activity) : null;
@@ -432,6 +478,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       messages: SessionChatMessage[];
       lifecycle?: SessionChatTurnLifecycle;
       hasMore: boolean;
+      hasMoreExact?: boolean;
       beforeOffset: number;
       status: SessionChatStatus;
       prompt?: SessionChatInteractivePrompt;
@@ -460,7 +507,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       replaceSessionChatMergerList(mergerRef.current, result.messages);
       setTranscript(mergerRef.current.list);
       setLifecycle(result.lifecycle ?? null);
-      setHasMore(result.hasMore);
+      setHasMore(sessionChatPageHasMore(result));
       beforeOffsetRef.current = result.beforeOffset;
       setServerStatus(result.status);
       setServerWorking(result.working === true || result.status === 'working');
@@ -590,7 +637,6 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     mergerRef.current = createSessionChatMerger();
     assemblerRef.current = createIncrementalSessionChatAssembler();
     appliedRef.current = [];
-    limitRef.current = initialLimit;
     beforeOffsetRef.current = 0;
     resyncInFlightRef.current = false;
     resyncSeenInFlightRef.current = null;
@@ -599,31 +645,48 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     lastFrameAtRef.current = Date.now();
     lastWatchdogResyncAtRef.current = 0;
     workingStartedAtRef.current = null;
-    setServerWorking(false);
-    setTranscript([]);
-    setServerStatus('loading');
-    setLifecycle(null);
-    setPrompt(null);
-    setAgentSessionId(null);
-    setError(null);
-    setHasMore(false);
     setLoadingEarlier(false);
-    setPending([]);
-    setMarkers([]);
-    setInterrupted(false);
-    setTerminalNotice(null);
-    setTerminalActivity(null);
-    setTerminalStatusMessages([]);
-    setAppCommands([]);
-    // A different session's detection must never leak into this one.
-    setSelectedOptions(null);
-    // Its "we have looked" latch is per-session too: a new session has not
-    // been probed yet, whatever the previous one had proven.
-    setScreenProbed(false);
-    // Nor its queue or its draft: both are per-session, and re-probing the
-    // capability from scratch is what keeps a mixed old/new daemon honest.
-    setQueuePrompts(null);
-    setSyncedDraft(null);
+    /*
+    The view-state wipe below is about SESSION IDENTITY, not connection
+    lifecycle: a different session's transcript, detection, queue, or draft
+    must never leak into this one. A same-transport rerun is a reconnect of
+    the SAME conversation (the stall watchdog or chat.retry recycling the
+    socket), and wiping there destroyed a perfectly good view: status fell
+    back to 'loading', whose early return unmounts the whole pane — composer
+    included — mid-typing. On reconnect the view keeps showing what it has;
+    the sequencing reset above already guarantees no stale frame can fold in
+    (nothing applies until a fresh authoritative snapshot re-seeds the epoch,
+    and snapshots replace the content wholesale).
+    */
+    const sessionChanged = seededTransportRef.current !== transport;
+    seededTransportRef.current = transport;
+    if (sessionChanged) {
+      limitRef.current = initialLimit;
+      setServerWorking(false);
+      setTranscript([]);
+      setServerStatus('loading');
+      setLifecycle(null);
+      setPrompt(null);
+      setAgentSessionId(null);
+      setError(null);
+      setHasMore(false);
+      setPending([]);
+      setMarkers([]);
+      setInterrupted(false);
+      setTerminalNotice(null);
+      setTerminalActivity(null);
+      setTerminalStatusMessages([]);
+      setAppCommands([]);
+      // A different session's detection must never leak into this one.
+      setSelectedOptions(null);
+      // Its "we have looked" latch is per-session too: a new session has not
+      // been probed yet, whatever the previous one had proven.
+      setScreenProbed(false);
+      // Nor its queue or its draft: both are per-session, and re-probing the
+      // capability from scratch is what keeps a mixed old/new daemon honest.
+      setQueuePrompts(null);
+      setSyncedDraft(null);
+    }
 
     const acceptSequencedFrame = (event: { epoch: number; seq: number }): 'apply' | 'drop' | 'resync' => {
       if (frameState.epoch !== null && event.epoch === frameState.epoch) {
@@ -766,10 +829,29 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     // stopped delivering: without a frame there is no gap, and without a gap
     // the fold rules never ask for a resync. Re-reading is the only recovery.
     const stallTimer = setInterval(() => {
-      if (closedRef.current || !workingSignalRef.current) {
+      if (closedRef.current) {
         return;
       }
       const now = Date.now();
+      // Initial window: the working gate below cannot protect it, because a
+      // session that never resolved its transcript may never report work. A
+      // silent socket here leaves the view in its blank loading hold forever,
+      // and only a new subscription can re-request the snapshot that was lost.
+      // Rebuilding restamps lastFrameAtRef, so the next tick starts a fresh
+      // window rather than firing again immediately.
+      if (
+        !frameState.frameArrived &&
+        loadingHoldRef.current &&
+        autoReconnectsRef.current < MAX_AUTOMATIC_RECONNECTS &&
+        now - lastFrameAtRef.current > INITIAL_STALL_THRESHOLD_MS
+      ) {
+        autoReconnectsRef.current += 1;
+        reconnect();
+        return;
+      }
+      if (!workingSignalRef.current) {
+        return;
+      }
       if (
         now - lastFrameAtRef.current <= STALL_THRESHOLD_MS ||
         now - lastWatchdogResyncAtRef.current <= STALL_THRESHOLD_MS
@@ -800,7 +882,16 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       unsubscribe();
     };
-  }, [applyAuthoritative, applyQueueCarriage, applyTerminalActivity, initialLimit, requestResync, transport]);
+  }, [
+    applyAuthoritative,
+    applyQueueCarriage,
+    applyTerminalActivity,
+    initialLimit,
+    reconnect,
+    reconnectNonce,
+    requestResync,
+    transport,
+  ]);
 
   // --- Assembly (suffix-extension fast path, §6.4) ---------------------------
   const assembled = useMemo(() => {
@@ -893,13 +984,15 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
 
   // --- Composition (§11.1 order: markers → streaming → pending) --------------
   const messages = useMemo(() => {
-    const markerMessages = sessionChatCommandMarkersAsMessages(markers, compactionRecords);
     const pendingMessages = sessionChatPendingSendsAsMessages(visibleSessionChatPendingSends(pending, boundaried));
     const authoritativeText = new Set(
       boundaried
         .filter((message) => message.source === 'transcript')
         .map(normalizedSessionChatText)
         .filter(Boolean)
+    );
+    const markerMessages = sessionChatCommandMarkersAsMessages(markers, compactionRecords).filter(
+      (message) => message.role !== 'user' || !authoritativeText.has(normalizedSessionChatText(message))
     );
     const visibleTerminalStatuses = terminalStatusMessages.filter(
       (message) => !authoritativeText.has(normalizedSessionChatText(message))
@@ -927,6 +1020,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     messageCount: messages.length,
     status,
   });
+  // Both of these render as "nothing to show yet": 'loading' is the blank hold
+  // (including the working-with-no-messages case), 'starting' the welcome.
+  loadingHoldRef.current = view.kind === 'loading' || view.kind === 'starting';
 
   // --- Actions ----------------------------------------------------------------
   const loadEarlier = useCallback((): void => {
@@ -935,8 +1031,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     }
     setLoadingEarlier(true);
     const requestEpoch = frameStateRef.current.epoch;
+    const requestedBeforeOffset = beforeOffsetRef.current;
     loadEarlierEpochRef.current = requestEpoch;
-    void withReadTimeout(transport.read({ beforeOffset: beforeOffsetRef.current, limit: SESSION_CHAT_PAGE }))
+    void withReadTimeout(transport.read({ beforeOffset: requestedBeforeOffset, limit: SESSION_CHAT_PAGE }))
       .then((result) => {
         if (closedRef.current || loadEarlierEpochRef.current !== requestEpoch) {
           return;
@@ -964,7 +1061,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           Math.max(limitRef.current + SESSION_CHAT_PAGE, merger.list.length)
         );
         setTranscript(merger.list);
-        setHasMore(result.hasMore);
+        setHasMore(sessionChatPageHasMore(result, requestedBeforeOffset));
         beforeOffsetRef.current = result.beforeOffset;
         // Older pages never rewind the live lifecycle or status.
       })
@@ -985,6 +1082,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     async (text: string, imagePaths?: string[]): Promise<void> => {
       const classification = classifySessionChatSend(text, commandCatalog);
       let pendingId: string | null = null;
+      let commandMarkerSentAt: number | null = null;
       if (classification === 'chat' && (text.trim().length > 0 || (imagePaths?.length ?? 0) > 0)) {
         const last = mergerRef.current.list.at(-1);
         const id = nextSessionChatPendingSendId();
@@ -1008,8 +1106,15 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         // Snapshot the compactions already on record, so a `/compact` marker
         // retires against ITS OWN compaction rather than an earlier one.
         const compactionRecordsBefore = countSessionChatCompactionRecords(mergerRef.current.list);
+        commandMarkerSentAt = Date.now();
         setMarkers((current) =>
-          appendSessionChatCommandMarker(current, text.trim(), Date.now(), undefined, compactionRecordsBefore)
+          appendSessionChatCommandMarker(
+            current,
+            text.trim(),
+            commandMarkerSentAt ?? Date.now(),
+            undefined,
+            compactionRecordsBefore
+          )
         );
       }
       try {
@@ -1018,6 +1123,13 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         if (pendingId !== null) {
           const dropId = pendingId;
           setPending((current) => current.filter((entry) => entry.id !== dropId));
+        }
+        if (commandMarkerSentAt !== null) {
+          const failedCommand = text.trim();
+          const failedSentAt = commandMarkerSentAt;
+          setMarkers((current) =>
+            current.filter((marker) => marker.sentAt !== failedSentAt || marker.command !== failedCommand)
+          );
         }
         throw sendError;
       }
@@ -1202,6 +1314,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     messages,
     prompt,
     queue,
+    retry: reconnect,
     selectedOptions,
     send,
     status,

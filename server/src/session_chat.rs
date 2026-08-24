@@ -50,7 +50,20 @@ pub(crate) fn read_exact_at(file: &File, buffer: &mut [u8], offset: u64) -> io::
     Ok(())
 }
 
-pub(crate) const MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES: usize = 2 * 1024 * 1024;
+/*
+CDXC:SessionChatCore 2026-08-24:
+The largest transcript line the reader will parse. This was 2 MiB, which real
+rollouts exceed routinely — one 106 MB Codex rollout on this machine holds 15
+lines above 2 MiB (up to 8.4 MB), all giant `custom_tool_call_output` /
+`function_call_output` records — and every one of those lines was dropped, so
+the matching tool-call/tool-result rows silently vanished from the middle of the
+chat. 16 MiB clears the observed ceiling with room to spare; the cost is
+transient (one line is held while it is parsed, and tail reads stay chunked at
+TAIL_CHUNK_BYTES). The cap now exists only to bound a pathological line, NOT to
+bound what reaches a client — DISPLAY size is bounded per block at decode time,
+see MAX_SESSION_CHAT_TOOL_PAYLOAD_CHARS.
+*/
+pub(crate) const MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const TAIL_CHUNK_BYTES: usize = 64 * 1024;
 const APPEND_BATCH_MESSAGE_LIMIT: usize = 40;
 const BOUNDARY_FINGERPRINT_BYTES: u64 = 64;
@@ -58,7 +71,9 @@ pub(crate) const RECONCILIATION_INTERVAL: Duration = Duration::from_millis(1_000
 pub(crate) const INITIAL_RESOLVE_POLL: Duration = Duration::from_millis(500);
 pub(crate) const MAX_RESOLVE_POLL: Duration = Duration::from_millis(5_000);
 /// How long a subscribe waits for its one model/effort probe before emitting
-/// the snapshot anyway. See `CDXC:SessionChatSeedDetection`.
+/// the snapshot anyway, and how long a read waits for the same probe before
+/// answering without the screen-derived fields. See
+/// `CDXC:SessionChatSeedDetection` and `CDXC:SessionChatReadDetectionDeadline`.
 pub(crate) const SEED_OPTION_DETECTION_DEADLINE: Duration = Duration::from_millis(500);
 /// How long the steady-state model/effort/notice probe may take before the
 /// reconcile pass abandons it. The probe runs on the blocking pool but is
@@ -456,7 +471,63 @@ pub(crate) fn text_block(text: impl Into<String>) -> SessionChatBlock {
     }
 }
 
+/*
+CDXC:SessionChatCore 2026-08-24:
+How much of a tool payload a client is shown. Tool outputs and raw tool-call
+inputs are the only blocks that reach megabyte size, and every decoded block
+crosses the events websocket into the page, so the DISPLAY copy is bounded here
+while the transcript file keeps the record whole. This bounds a viewer; it hides
+nothing — the truncation says so on its own line, and the full text is still one
+`open the transcript` away.
+
+Only tool payloads are bounded. User and assistant TEXT must never be, because
+the chat's optimistic echo is de-duplicated by matching the decoded user text
+against what the composer sent: a shortened user turn would never match and the
+sent message would stay duplicated in the view.
+*/
+pub(crate) const MAX_SESSION_CHAT_TOOL_PAYLOAD_CHARS: usize = 64 * 1024;
+
+/// Cuts `text` to `MAX_SESSION_CHAT_TOOL_PAYLOAD_CHARS` chars on a char
+/// boundary (never mid-UTF-8) and marks the cut. Untouched below the bound.
+pub(crate) fn bounded_tool_payload(text: String) -> String {
+    // A char is at least one byte, so a short byte length can't be over-length.
+    if text.len() <= MAX_SESSION_CHAT_TOOL_PAYLOAD_CHARS {
+        return text;
+    }
+    let total = text.chars().count();
+    if total <= MAX_SESSION_CHAT_TOOL_PAYLOAD_CHARS {
+        return text;
+    }
+    let cut = text
+        .char_indices()
+        .nth(MAX_SESSION_CHAT_TOOL_PAYLOAD_CHARS)
+        .map(|(index, _)| index)
+        .unwrap_or(text.len());
+    let mut bounded = text;
+    bounded.truncate(cut);
+    bounded.push_str(&format!(
+        "\n… [tool payload truncated for display: {MAX_SESSION_CHAT_TOOL_PAYLOAD_CHARS} of {total} characters shown]"
+    ));
+    bounded
+}
+
+/// Bounds a tool-call INPUT the way `tool_result_output` bounds an output.
+/// Only raw strings are measured: `custom_tool_call` carries its entire input as
+/// one string and is the only input shape observed in the megabyte range, while
+/// structured inputs are small and serializing every one of them just to size it
+/// would cost more than the bound saves.
+pub(crate) fn bounded_tool_call_input(value: Value) -> Value {
+    match value {
+        Value::String(text) => Value::String(bounded_tool_payload(text)),
+        other => other,
+    }
+}
+
 pub(crate) fn tool_result_output(value: Option<&Value>) -> String {
+    bounded_tool_payload(tool_result_output_raw(value))
+}
+
+fn tool_result_output_raw(value: Option<&Value>) -> String {
     let Some(value) = value else {
         return String::new();
     };

@@ -315,10 +315,15 @@ The detector therefore proves, per candidate, BOTH:
 Shared cwd is never a lineage signal: many concurrent sessions share one project
 directory.
 
-Codex is deliberately out of scope: a Codex rollout keeps ONE file per session
-(`rollout-<ts>-<uuid>.jsonl`) and its resume/fork path re-plays `session_meta`
-into a new rollout whose FIRST `session_meta` already carries the id the daemon
-stores (the "first-session_meta-wins" rule in the decoders), so a Codex session
-never silently outlives its transcript the way a Claude compaction does. Grok
-writes one directory per session id with no continuation mechanism at all.
+Codex RESUME stays out of scope: it re-plays `session_meta` into the new rollout
+with the id the daemon already stores (the "first-session_meta-wins" rule in the
+decoders), so the stored identity keeps resolving.
+
+Codex FORK is not (CDXC:SessionChatIdentity 2026-08-24). `codex fork` opens a new
+`rollout-<ts>-<uuid>.jsonl` under a NEW id, leaves the predecessor dead, and
+never tells the registry — so it froze chat exactly like a Claude compaction.
+`find_codex_successor_transcript` handles it, proving lineage from the opening
+`session_meta`'s `payload.forked_from_id`.
+
+Grok writes one directory per session id with no continuation mechanism at all.
 */

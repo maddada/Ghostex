@@ -316,6 +316,10 @@ pub(crate) async fn handle_read_session_chat_http(
     let mut result = Map::new();
     result.insert("fingerprint".to_string(), json!(fingerprint));
     result.insert("working".to_string(), json!(working));
+    // Capability probe for clients that must also speak to older daemons whose
+    // tail reader could compute `hasMore` before released queue rows were
+    // removed. Current readers guarantee the flag describes the filtered page.
+    result.insert("hasMoreExact".to_string(), json!(true));
     /*
     CDXC:SessionChatQueueCarriage 2026-08-21:
     `queue` is written on EVERY readSessionChat answer, including the early
@@ -339,9 +343,37 @@ pub(crate) async fn handle_read_session_chat_http(
     spawns anything and simply omits the field.
     */
     if lifecycle_running {
-        let detection = SessionChatOptionDetector::new(state)
-            .detect(&project_id, &session_id, agent.as_deref(), false)
-            .await;
+        /*
+        CDXC:SessionChatReadDetectionDeadline 2026-08-24:
+        Bounded exactly like the follower's seed probe
+        (CDXC:SessionChatSeedDetection), with the same value, for the same
+        reason: the capture's own socket read timeout is 5s, so a daemon that
+        accepts the connection and never answers would hold the transcript
+        answer hostage for it. The transcript is the product of this endpoint;
+        the screen-derived fields below are decoration, and the client contract
+        already treats every one of them as omissible.
+
+        Missing the deadline is not an error and nothing is cancelled or left
+        half-written: `detect` does its work in `spawn_blocking`, taking the
+        shared cache lock only inside that closure, so abandoning the join
+        handle simply lets the probe finish in the background and warm the 5s
+        cache for the next read. A timed-out detection reads as the empty one,
+        which omits `selectedOptions`, `terminalActivity`, `agentFleet` and
+        `screenProbed` alike — the last one deliberately, since detection did
+        not settle and "still pending" is the honest answer. The watchdog
+        notice merge below still runs on its own cached inputs.
+        */
+        let detection = tokio::time::timeout(
+            crate::session_chat::SEED_OPTION_DETECTION_DEADLINE,
+            SessionChatOptionDetector::new(state).detect(
+                &project_id,
+                &session_id,
+                agent.as_deref(),
+                false,
+            ),
+        )
+        .await
+        .unwrap_or_default();
         if let Some(detected) = detection.options {
             result.insert("selectedOptions".to_string(), detected.to_value());
         }

@@ -162,6 +162,12 @@ pub fn read_session_chat_transcript_tail_file(
 
     let mut accumulator = TailLineAccumulator::new();
     let mut newest_first: Vec<(SessionChatMessage, u64)> = Vec::new();
+    // Queue enqueue rows decode to temporary bubbles, but replay below removes
+    // them once the matching release is in the window. Do not let those
+    // provisional rows satisfy the page limit: doing so can stop the reverse
+    // scan early, prune the released bubbles, and then incorrectly report that
+    // the short page is the beginning of the transcript.
+    let mut stable_message_count = 0usize;
     let mut lifecycle: Option<SessionChatTurnLifecycle> = None;
     let mut malformed_record_count = 0usize;
     let mut oversized_record_count = 0usize;
@@ -179,7 +185,8 @@ pub fn read_session_chat_transcript_tail_file(
                        malformed_record_count: &mut usize,
                        parents_of_newer_messages: &mut HashSet<String>,
                        parents_of_newer_prompts: &mut HashSet<String>,
-                       queue_ops: &mut Vec<(u64, TranscriptQueueOp)>| {
+                       queue_ops: &mut Vec<(u64, TranscriptQueueOp)>,
+                       stable_message_count: &mut usize| {
         let Some(line) = accumulator.take_line() else {
             return;
         };
@@ -205,6 +212,9 @@ pub fn read_session_chat_transcript_tail_file(
                 queue_ops.push((line_offset, queue_op));
                 if let Some(mut message) = decoded {
                     message.byte_offset = Some(line_offset);
+                    if !message.queued {
+                        *stable_message_count += 1;
+                    }
                     newest_first.push((message, line_offset));
                 }
                 return;
@@ -230,18 +240,21 @@ pub fn read_session_chat_transcript_tail_file(
         }
         if let Some(mut message) = decoded {
             message.byte_offset = Some(line_offset);
+            if !message.queued {
+                *stable_message_count += 1;
+            }
             newest_first.push((message, line_offset));
         }
     };
 
     let mut buffer = vec![0u8; TAIL_CHUNK_BYTES];
-    while cursor > 0 && newest_first.len() <= limit {
+    while cursor > 0 && stable_message_count <= limit {
         let start = cursor.saturating_sub(TAIL_CHUNK_BYTES as u64);
         let length = (cursor - start) as usize;
         read_exact_at(&file, &mut buffer[..length], start)?;
         let mut segment_end = length;
         let mut index = length;
-        while index > 0 && newest_first.len() <= limit {
+        while index > 0 && stable_message_count <= limit {
             index -= 1;
             if buffer[index] != b'\n' {
                 continue;
@@ -260,6 +273,7 @@ pub fn read_session_chat_transcript_tail_file(
                     &mut parents_of_newer_messages,
                     &mut parents_of_newer_prompts,
                     &mut queue_ops,
+                    &mut stable_message_count,
                 );
             }
             segment_end = index;
@@ -269,7 +283,7 @@ pub fn read_session_chat_transcript_tail_file(
         }
         cursor = start;
     }
-    if cursor == 0 && !accumulator.parts.is_empty() && newest_first.len() <= limit {
+    if cursor == 0 && !accumulator.parts.is_empty() && stable_message_count <= limit {
         decode_line(
             &mut accumulator,
             0,
@@ -280,6 +294,7 @@ pub fn read_session_chat_transcript_tail_file(
             &mut parents_of_newer_messages,
             &mut parents_of_newer_prompts,
             &mut queue_ops,
+            &mut stable_message_count,
         );
     }
 

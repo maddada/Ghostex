@@ -186,6 +186,54 @@ fn codex_event_message(
             let item = as_record(payload.get("item"))?;
             let item_type = item.get("type").and_then(Value::as_str);
             /*
+            Codex's image generator is an Extension item rather than a tool
+            call or an AgentMessage. The TUI renders it as `Generated Image`
+            with the revised prompt and saved file; decoding the native event
+            preserves that same information and gives the shared image viewer
+            the local file path for its thumbnail. The multi-megabyte inline
+            `result` stays in the rollout and never crosses the websocket.
+            */
+            if item_type == Some("Extension")
+                && item.get("kind").and_then(Value::as_str) == Some("image_gen.generation")
+                && item.get("status").and_then(Value::as_str) == Some("completed")
+            {
+                let generation_id = extract_string(item.get("id"))?;
+                let path = extract_string(item.get("savedPath"))
+                    .map(std::path::PathBuf::from)
+                    .filter(|candidate| candidate.is_file());
+                let revised_prompt = extract_string(item.get("revisedPrompt"));
+                let mut detail = revised_prompt.unwrap_or_default();
+                if let Some(path) = path.as_ref() {
+                    if !detail.is_empty() {
+                        detail.push_str("\n\n");
+                    }
+                    detail.push_str("Saved to: file://");
+                    detail.push_str(&path.to_string_lossy());
+                }
+                let mut blocks = Vec::new();
+                if let Some(path) = path {
+                    blocks.push(SessionChatBlock::ImageRef {
+                        path: Some(path.to_string_lossy().into_owned()),
+                        url: None,
+                        alt: Some("Generated image".to_string()),
+                    });
+                }
+                blocks.push(SessionChatBlock::ToolCall {
+                    name: "Generated Image".to_string(),
+                    input: Value::String(detail),
+                });
+                return Some(SessionChatMessage {
+                    id: generation_id,
+                    role: SessionChatRole::Assistant,
+                    blocks,
+                    timestamp,
+                    source: SessionChatSource::Transcript,
+                    turn_id: None,
+                    byte_offset: None,
+                    queued: false,
+                });
+            }
+            /*
             CDXC:SessionChatCore 2026-08-23:
             Compaction is a thread item, not a message, and it carries no
             content of its own — the whole record is its type. Codex keeps the
@@ -263,16 +311,21 @@ fn codex_item_content_blocks(content: Option<&Value>) -> Vec<SessionChatBlock> {
         .collect()
 }
 
+/// `custom_tool_call` carries its whole input as a raw string, which reaches the
+/// same megabyte sizes tool OUTPUTS do, so the input takes the same display
+/// bound (`bounded_tool_call_input`). Structured inputs pass through untouched.
 fn codex_call_input(payload: &Map<String, Value>) -> Value {
-    if let Some(arguments) = payload.get("arguments") {
-        return arguments.clone();
-    }
-    payload
-        .get("input")
-        .filter(|value| !value.is_null())
-        .or_else(|| payload.get("action").filter(|value| !value.is_null()))
-        .cloned()
-        .unwrap_or(Value::Null)
+    let raw = if let Some(arguments) = payload.get("arguments") {
+        arguments.clone()
+    } else {
+        payload
+            .get("input")
+            .filter(|value| !value.is_null())
+            .or_else(|| payload.get("action").filter(|value| !value.is_null()))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    bounded_tool_call_input(raw)
 }
 
 fn codex_tool_result(output: Option<&Value>) -> SessionChatBlock {

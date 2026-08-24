@@ -16,7 +16,8 @@ use crate::session_chat::*;
 use crate::session_chat_options::{forget_session_chat_options, SessionChatOptionDetector};
 use crate::session_chat_paths::resolve_session_chat_transcript_path;
 use crate::session_chat_successor::{
-    find_claude_successor_transcript, is_uuid_transcript_stem,
+    codex_rollout_session_id, find_claude_successor_transcript, find_codex_successor_transcript,
+    is_uuid_transcript_stem, last_codex_record_timestamp_ms,
     last_substantive_transcript_timestamp_ms, SessionChatSuccessorOutcome,
 };
 use crate::storage::open_gxserver_database;
@@ -466,6 +467,7 @@ fn emit_snapshot_frame(
             );
             insert_optional_lifecycle(&mut frame, tail.lifecycle.as_ref());
             frame.insert("hasMore".to_string(), json!(tail.has_more));
+            frame.insert("hasMoreExact".to_string(), json!(true));
             frame.insert("beforeOffset".to_string(), json!(tail.before_offset));
             let status = if tail.messages.is_empty() {
                 SessionChatStatus::Empty
@@ -544,29 +546,58 @@ async fn detect_and_adopt_successor_transcript(
     stored_agent_session_id: Option<&str>,
     logged_notice: &mut Option<String>,
 ) -> Option<SessionChatIdentityAdoption> {
-    if transcript_agent != SessionChatTranscriptAgent::Claude {
-        return None;
-    }
     let hooks = config.successor_hooks.clone()?;
-    let stale_session_id = stale_path.file_stem()?.to_str()?.to_string();
-    if !is_uuid_transcript_stem(&stale_session_id) {
-        return None;
-    }
+    let stem = stale_path.file_stem()?.to_str()?;
+    /*
+    CDXC:SessionChatIdentity 2026-08-24:
+    Codex joined Claude here because `codex fork` DOES change the session id (a
+    new rollout whose opening `session_meta` carries `forked_from_id`). The two
+    agents differ only in how the tailed file names its session and in what
+    counts as the file's last record; the outcome handling below is shared.
+    */
+    let stale_session_id = match transcript_agent {
+        // Claude's filename stem IS the session id.
+        SessionChatTranscriptAgent::Claude => {
+            let stale_session_id = stem.to_string();
+            if !is_uuid_transcript_stem(&stale_session_id) {
+                return None;
+            }
+            stale_session_id
+        }
+        // Codex stems are `rollout-<ts>-<uuid>`; only the trailing uuid is it.
+        SessionChatTranscriptAgent::Codex => codex_rollout_session_id(stem)?,
+        SessionChatTranscriptAgent::Grok | SessionChatTranscriptAgent::Pi => return None,
+    };
+    // The agent is now narrowed to Claude or Codex; a bool keeps the blocking
+    // scan below free of arms that could silently absorb a future agent.
+    let tails_claude_transcript = transcript_agent == SessionChatTranscriptAgent::Claude;
     let now_ms = now_epoch_ms();
     let stale_substantive_idle_ms = config.tuning.successor_stale_substantive_idle_ms;
     let scan_path = stale_path.to_path_buf();
     let scan_stale_session_id = stale_session_id.clone();
     let bound_agent_session_ids = hooks.bound_agent_session_ids.clone();
     let outcome = tokio::task::spawn_blocking(move || {
-        let last_substantive_ms = last_substantive_transcript_timestamp_ms(&scan_path)?;
-        if now_ms.saturating_sub(last_substantive_ms) < stale_substantive_idle_ms {
+        // Claude keys staleness on the last SUBSTANTIVE row because its dead
+        // files keep taking null-timestamp housekeeping appends; Codex has no
+        // such split, so every timestamped rollout record counts.
+        let last_record_ms = if tails_claude_transcript {
+            last_substantive_transcript_timestamp_ms(&scan_path)
+        } else {
+            last_codex_record_timestamp_ms(&scan_path)
+        }?;
+        if now_ms.saturating_sub(last_record_ms) < stale_substantive_idle_ms {
             return None;
         }
         let owned = bound_agent_session_ids();
-        Some(find_claude_successor_transcript(
+        let find = if tails_claude_transcript {
+            find_claude_successor_transcript
+        } else {
+            find_codex_successor_transcript
+        };
+        Some(find(
             &scan_stale_session_id,
             &scan_path,
-            last_substantive_ms,
+            last_record_ms,
             &owned,
         ))
     })
@@ -1236,8 +1267,12 @@ pub async fn run_session_chat_follower(
         so `working` cannot gate it. It gets its own, slower cadence instead:
         every SUCCESSOR_SCAN_INTERVAL while the tailed file stays silent.
         */
-        let successor_scan_due = transcript_agent == SessionChatTranscriptAgent::Claude
-            && config.successor_hooks.is_some()
+        // Codex is in scope too: `codex fork` changes the session id
+        // (CDXC:SessionChatIdentity 2026-08-24).
+        let successor_scan_due = matches!(
+            transcript_agent,
+            SessionChatTranscriptAgent::Claude | SessionChatTranscriptAgent::Codex
+        ) && config.successor_hooks.is_some()
             && last_successor_scan.elapsed() >= config.tuning.successor_scan_interval;
         if last_transcript_change.elapsed() >= config.tuning.stale_transcript_idle
             && ((published_working

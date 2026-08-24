@@ -52,6 +52,20 @@ fn substantive_record_timestamp_ms(line: &str) -> Option<i64> {
 /// `SUBSTANTIVE_TAIL_SCAN_BYTES`. `None` means "no substantive record inside the
 /// window" — callers must treat that as unknown, never as "stale".
 pub fn last_substantive_transcript_timestamp_ms(file_path: &Path) -> Option<i64> {
+    last_matching_record_timestamp_ms(file_path, substantive_record_timestamp_ms)
+}
+
+/// Codex writes a top-level `timestamp` on EVERY rollout record and has no
+/// housekeeping/substantive split like Claude's null-timestamp `mode` rows, so
+/// "when did this rollout last move" is simply the newest timestamped record.
+pub fn last_codex_record_timestamp_ms(file_path: &Path) -> Option<i64> {
+    last_matching_record_timestamp_ms(file_path, codex_record_timestamp_ms)
+}
+
+fn last_matching_record_timestamp_ms(
+    file_path: &Path,
+    record_timestamp_ms: fn(&str) -> Option<i64>,
+) -> Option<i64> {
     let file = File::open(file_path).ok()?;
     let size = file.metadata().ok()?.len();
     if size == 0 {
@@ -83,7 +97,7 @@ pub fn last_substantive_transcript_timestamp_ms(file_path: &Path) -> Option<i64>
             if accumulator.oversized {
                 accumulator.reset();
             } else if let Some(line) = accumulator.take_line() {
-                if let Some(timestamp) = substantive_record_timestamp_ms(&line) {
+                if let Some(timestamp) = record_timestamp_ms(&line) {
                     return Some(timestamp);
                 }
             }
@@ -96,10 +110,14 @@ pub fn last_substantive_transcript_timestamp_ms(file_path: &Path) -> Option<i64>
     }
     if cursor == 0 {
         if let Some(line) = accumulator.take_line() {
-            return substantive_record_timestamp_ms(&line);
+            return record_timestamp_ms(&line);
         }
     }
     None
+}
+
+fn codex_record_timestamp_ms(line: &str) -> Option<i64> {
+    timestamp_ms(parse_json_object(line)?.get("timestamp"))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,6 +128,9 @@ pub enum SessionChatSuccessorLineage {
     /// Compact-continuation user record plus a `file-history-snapshot`
     /// inherited from the stale session.
     ContinuationSnapshot,
+    /// Codex fork: the rollout's opening `session_meta` names the predecessor
+    /// in `payload.forked_from_id`.
+    CodexForkedFrom,
 }
 
 impl SessionChatSuccessorLineage {
@@ -117,6 +138,7 @@ impl SessionChatSuccessorLineage {
         match self {
             SessionChatSuccessorLineage::PredecessorIdField => "predecessor-id-field",
             SessionChatSuccessorLineage::ContinuationSnapshot => "continuation-snapshot",
+            SessionChatSuccessorLineage::CodexForkedFrom => "codex-forked-from",
         }
     }
 }
@@ -250,6 +272,18 @@ pub(crate) fn is_uuid_transcript_stem(stem: &str) -> bool {
         }
     }
     parts.next().is_none()
+}
+
+const UUID_TEXT_LENGTH: usize = 36;
+
+/// A Codex rollout stem is `rollout-<ts>-<uuid>`, so — unlike Claude, whose
+/// stem IS the session id — only the trailing 36 characters name the session.
+pub(crate) fn codex_rollout_session_id(stem: &str) -> Option<String> {
+    let suffix = stem.get(stem.len().checked_sub(UUID_TEXT_LENGTH)?..)?;
+    if !is_uuid_transcript_stem(suffix) {
+        return None;
+    }
+    Some(suffix.to_string())
 }
 
 fn file_modified_ms(metadata: &fs::Metadata) -> i64 {
@@ -427,6 +461,306 @@ pub fn find_claude_successor_transcript(
         visited.insert(chosen.agent_session_id.clone());
         predecessor_session_id = chosen.agent_session_id.clone();
         predecessor_last_substantive_ms = chosen.last_substantive_ms;
+        found = Some(chosen);
+    }
+
+    match found {
+        Some(successor) => SessionChatSuccessorOutcome::Found(successor),
+        None if !owned_candidate_session_ids.is_empty() => {
+            SessionChatSuccessorOutcome::OwnedByAnotherSession {
+                candidate_session_ids: owned_candidate_session_ids,
+            }
+        }
+        None => SessionChatSuccessorOutcome::NotFound,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Codex fork successors
+// ---------------------------------------------------------------------------
+
+/*
+CDXC:SessionChatIdentity 2026-08-24:
+`codex fork` (codex-cli 0.149) does NOT keep one rollout per conversation. It
+opens a brand-new `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` whose
+FIRST line is a `session_meta` record carrying `payload.session_id` = the new
+uuid and `payload.forked_from_id` = the predecessor's uuid, then continues the
+`ordinal` sequence without replaying history. The predecessor file stops growing
+for good, while the registry keeps the pre-fork id — so chat froze at the fork
+point forever.
+
+The proof is structural, exactly like the Claude path, and for the same reason:
+rollouts quote each other (prompts, tool output, `/status` dumps), so "the file
+mentions the stale id" proves nothing. A candidate qualifies only when its
+opening `session_meta` declares its OWN filename uuid and names the predecessor
+in `forked_from_id`.
+
+Two shape differences from Claude:
+  * the id is the stem's trailing uuid, not the whole stem
+    (`codex_rollout_session_id`);
+  * rollouts are filed under date directories, so the scan walks
+    `<root>/YYYY/MM/DD` from the predecessor's own day forward — a fork is always
+    written after the predecessor's last record, and the directory names are
+    fixed-width, so comparing the `YYYY/MM/DD` strings is enough.
+Recency uses `last_codex_record_timestamp_ms` because Codex has no
+substantive/housekeeping split; mtime stays a cheap inclusion prefilter only,
+never a liveness signal.
+*/
+
+/// Head budget for the opening `session_meta`. That record embeds the full base
+/// instructions (~19KiB on the 2026-08-24 fork repro), so this clears it several
+/// times over while staying a bounded read.
+const CODEX_SESSION_META_HEAD_BYTES: u64 = 128 * 1024;
+
+struct CodexSessionMeta {
+    session_id: String,
+    forked_from_id: Option<String>,
+}
+
+/// The `session_meta` is written before any conversation record, so only the
+/// rollout's first line can carry it: nothing further in the file is trusted.
+fn read_codex_session_meta(path: &Path) -> Option<CodexSessionMeta> {
+    let head = read_transcript_head_complete_lines(path, CODEX_SESSION_META_HEAD_BYTES)?;
+    let record = parse_json_object(head.lines().next()?)?;
+    if record.get("type").and_then(Value::as_str) != Some("session_meta") {
+        return None;
+    }
+    let payload = as_record(record.get("payload"))?;
+    let session_id =
+        extract_string(payload.get("session_id")).or_else(|| extract_string(payload.get("id")))?;
+    Some(CodexSessionMeta {
+        session_id,
+        forked_from_id: extract_string(payload.get("forked_from_id")),
+    })
+}
+
+fn is_codex_date_component(text: &str, length: usize) -> bool {
+    text.len() == length && text.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// `YYYY/MM/DD` for the day directory a rollout lives in. `None` when the
+/// components are not the expected all-digit date parts.
+fn codex_day_directory_date_key(day_directory: &Path) -> Option<String> {
+    let day = day_directory.file_name()?.to_str()?;
+    let month_directory = day_directory.parent()?;
+    let month = month_directory.file_name()?.to_str()?;
+    let year = month_directory.parent()?.file_name()?.to_str()?;
+    if !is_codex_date_component(year, 4)
+        || !is_codex_date_component(month, 2)
+        || !is_codex_date_component(day, 2)
+    {
+        return None;
+    }
+    Some(format!("{year}/{month}/{day}"))
+}
+
+fn collect_codex_day_directories(sessions_root: &Path, from_date_key: &str) -> Vec<PathBuf> {
+    let mut day_directories: Vec<PathBuf> = Vec::new();
+    let Ok(year_entries) = fs::read_dir(sessions_root) else {
+        return day_directories;
+    };
+    for year_entry in year_entries.flatten() {
+        let year_path = year_entry.path();
+        let Some(year) = year_path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !is_codex_date_component(year, 4) || year < &from_date_key[..4] {
+            continue;
+        }
+        let Ok(month_entries) = fs::read_dir(&year_path) else {
+            continue;
+        };
+        for month_entry in month_entries.flatten() {
+            let month_path = month_entry.path();
+            let Some(month) = month_path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if !is_codex_date_component(month, 2) {
+                continue;
+            }
+            let month_key = format!("{year}/{month}");
+            if month_key.as_str() < &from_date_key[..7] {
+                continue;
+            }
+            let Ok(day_entries) = fs::read_dir(&month_path) else {
+                continue;
+            };
+            for day_entry in day_entries.flatten() {
+                let day_path = day_entry.path();
+                let Some(day) = day_path.file_name().and_then(|name| name.to_str()) else {
+                    continue;
+                };
+                if !is_codex_date_component(day, 2)
+                    || format!("{month_key}/{day}").as_str() < from_date_key
+                {
+                    continue;
+                }
+                day_directories.push(day_path.clone());
+            }
+        }
+    }
+    day_directories
+}
+
+fn collect_codex_successor_candidates(
+    day_directories: &[PathBuf],
+    stale_path: &Path,
+    predecessor_session_id: &str,
+    predecessor_last_record_ms: i64,
+    visited_session_ids: &HashSet<String>,
+) -> Vec<SessionChatSuccessorTranscript> {
+    let mut prefiltered: Vec<(PathBuf, String, i64)> = Vec::new();
+    for day_directory in day_directories {
+        let Ok(entries) = fs::read_dir(day_directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("jsonl") {
+                continue;
+            }
+            let Some(session_id) = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .filter(|stem| stem.starts_with("rollout-"))
+                .and_then(codex_rollout_session_id)
+            else {
+                continue;
+            };
+            if path == stale_path
+                || session_id == predecessor_session_id
+                || visited_session_ids.contains(&session_id)
+            {
+                continue;
+            }
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            if !metadata.is_file() {
+                continue;
+            }
+            // Inclusion prefilter only: a fork's own records land after the
+            // predecessor's last one, so its mtime must be newer.
+            let modified_ms = file_modified_ms(&metadata);
+            if modified_ms <= predecessor_last_record_ms {
+                continue;
+            }
+            prefiltered.push((path, session_id, modified_ms));
+        }
+    }
+    prefiltered.sort_by(|left, right| right.2.cmp(&left.2));
+    prefiltered.truncate(SUCCESSOR_CANDIDATE_LIMIT);
+
+    let mut qualified: Vec<SessionChatSuccessorTranscript> = Vec::new();
+    for (path, session_id, _) in prefiltered {
+        let Some(meta) = read_codex_session_meta(&path) else {
+            continue;
+        };
+        // Own identity, then lineage — both from the same record.
+        if meta.session_id != session_id
+            || meta.forked_from_id.as_deref() != Some(predecessor_session_id)
+        {
+            continue;
+        }
+        let Some(last_record_ms) = last_codex_record_timestamp_ms(&path) else {
+            continue;
+        };
+        if last_record_ms <= predecessor_last_record_ms {
+            continue;
+        }
+        qualified.push(SessionChatSuccessorTranscript {
+            agent_session_id: session_id,
+            path,
+            lineage: SessionChatSuccessorLineage::CodexForkedFrom,
+            last_substantive_ms: last_record_ms,
+            hops: 0,
+        });
+    }
+    qualified
+}
+
+/// Codex counterpart of `find_claude_successor_transcript`: same owned-ids,
+/// ambiguity and chain-hop semantics, different proof and different layout.
+pub fn find_codex_successor_transcript(
+    stale_session_id: &str,
+    stale_path: &Path,
+    stale_last_record_ms: i64,
+    owned_session_ids: &[String],
+) -> SessionChatSuccessorOutcome {
+    let Some(day_directory) = stale_path.parent() else {
+        return SessionChatSuccessorOutcome::NotFound;
+    };
+    let Some(sessions_root) = day_directory
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+    else {
+        return SessionChatSuccessorOutcome::NotFound;
+    };
+    let Some(from_date_key) = codex_day_directory_date_key(day_directory) else {
+        return SessionChatSuccessorOutcome::NotFound;
+    };
+    // Computed once: a fork of a fork is later still, so the day set only ever
+    // needs to start at the ORIGINAL predecessor's day.
+    let day_directories = collect_codex_day_directories(sessions_root, &from_date_key);
+    if day_directories.is_empty() {
+        return SessionChatSuccessorOutcome::NotFound;
+    }
+
+    let owned: HashSet<String> = owned_session_ids
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+    let mut visited: HashSet<String> = HashSet::new();
+    visited.insert(stale_session_id.to_string());
+
+    let mut predecessor_session_id = stale_session_id.to_string();
+    let mut predecessor_last_record_ms = stale_last_record_ms;
+    let mut found: Option<SessionChatSuccessorTranscript> = None;
+    let mut owned_candidate_session_ids: Vec<String> = Vec::new();
+
+    for hop in 1..=SUCCESSOR_CHAIN_LIMIT {
+        let mut candidates = collect_codex_successor_candidates(
+            &day_directories,
+            stale_path,
+            &predecessor_session_id,
+            predecessor_last_record_ms,
+            &visited,
+        );
+        candidates.retain(|candidate| {
+            if owned.contains(&candidate.agent_session_id) {
+                owned_candidate_session_ids.push(candidate.agent_session_id.clone());
+                return false;
+            }
+            true
+        });
+        if candidates.is_empty() {
+            break;
+        }
+        candidates.sort_by(|left, right| right.last_substantive_ms.cmp(&left.last_substantive_ms));
+        if candidates.len() > 1
+            && candidates[0].last_substantive_ms == candidates[1].last_substantive_ms
+        {
+            // One rollout forked twice, both stopped at the same instant:
+            // nothing on disk says which one the pane is running. Adopt none
+            // unless an earlier hop already proved a successor.
+            if found.is_none() {
+                return SessionChatSuccessorOutcome::Ambiguous {
+                    predecessor_session_id,
+                    candidate_session_ids: candidates
+                        .into_iter()
+                        .map(|candidate| candidate.agent_session_id)
+                        .collect(),
+                };
+            }
+            break;
+        }
+        let mut chosen = candidates.remove(0);
+        chosen.hops = hop;
+        visited.insert(chosen.agent_session_id.clone());
+        predecessor_session_id = chosen.agent_session_id.clone();
+        predecessor_last_record_ms = chosen.last_substantive_ms;
         found = Some(chosen);
     }
 

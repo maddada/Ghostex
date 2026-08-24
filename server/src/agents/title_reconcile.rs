@@ -91,6 +91,12 @@ pub(crate) fn reconcile_agent_metadata_title(
         });
     };
 
+    crate::session_chat_app_command::resolve_latest_session_chat_app_command_title(
+        &lifecycle.project_id,
+        &lifecycle.session_id,
+        &metadata_title.title,
+    );
+
     let pending_status = pending_title.as_deref().map(|pending_title| {
         if titles_match(pending_title, &metadata_title.title) {
             "confirmed"

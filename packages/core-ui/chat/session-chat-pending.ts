@@ -460,13 +460,15 @@ export function sessionChatCommandMarkersAsMessages(
     if (commandName === '/compact' && compactionRecords > (marker.compactionRecordsBefore ?? 0)) {
       return [];
     }
+    const userTyped = marker.label === undefined;
     return [
       {
-        // Text deliberately avoids harness noise prefixes so the noise filter
-        // keeps it.
-        blocks: [{ text: marker.label ?? `Ran ${marker.command}`, type: 'text' as const }],
+        // Composer commands are user turns, just like the line the terminal
+        // displays. Host-dispatched key markers keep their explicit system
+        // label because the user did not type those implementation keys.
+        blocks: [{ text: userTyped ? marker.command : (marker.label ?? marker.command), type: 'text' as const }],
         id: `command:${marker.id}`,
-        role: 'system' as const,
+        role: userTyped ? ('user' as const) : ('system' as const),
         source: 'client' as const,
         timestamp: marker.sentAt,
       },
@@ -505,6 +507,28 @@ export function sessionChatAppCommandsAsMessages(
   return commands.flatMap((entry) => {
     if (recorded.has(normalizeSessionChatPendingText(entry.command))) {
       return [];
+    }
+    const commandMatch = entry.command.trim().match(/^\/(?:rename|name|title)(?:\s+(.+))?$/is);
+    if (commandMatch) {
+      const title = entry.title?.trim() || commandMatch[1]?.trim();
+      if (!title) {
+        // A bare `/rename` is only meaningful once the agent publishes the
+        // name it selected. Wait for that metadata instead of showing an
+        // implementation command with no user-facing result.
+        return [];
+      }
+      return [
+        {
+          blocks: [
+            { text: 'Ghostex auto named this session', type: 'text' as const },
+            { text: title, type: 'text' as const },
+          ],
+          id: `app-command:${entry.id}`,
+          role: 'system' as const,
+          source: 'client' as const,
+          timestamp: Date.parse(entry.sentAt) || null,
+        },
+      ];
     }
     return [
       {

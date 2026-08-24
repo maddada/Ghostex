@@ -20,6 +20,7 @@ import {
   IconCopy,
   IconInfoCircle,
   IconPhoto,
+  IconSparkles,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionChatMessage, SessionChatTerminalActivity } from '../../shared/session-chat';
@@ -75,7 +76,8 @@ import {
 import { SessionChatToolRun } from './session-chat-tool-run';
 import { countSessionChatToolCalls, summarizeSessionChatToolRun } from './session-chat-tool-summary';
 
-const LOAD_EARLIER_SCROLL_TOP_PX = 80;
+const LOAD_EARLIER_SCROLL_TOP_PX = 320;
+const AUTO_SCROLL_EDGE_THRESHOLD_PX = 20;
 const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
 /** Terminal-pane parity: the conversation scrollbar fades out this long after
  * the last scroll (chat.css keys on the data-user-scrolling attribute). */
@@ -654,6 +656,29 @@ function MessageRow({
     ? userCopyMarkdown.length > 0
     : markdown.length > 0 && message.role === 'assistant' && showAssistantCopy;
 
+  const autoNamedTitle =
+    message.id.startsWith('app-command:') &&
+    message.blocks[0]?.type === 'text' &&
+    message.blocks[0].text === 'Ghostex auto named this session' &&
+    message.blocks[1]?.type === 'text'
+      ? message.blocks[1].text.trim()
+      : '';
+  if (isSystem && autoNamedTitle) {
+    return (
+      <Marker className='pb-3'>
+        <div className='inline-flex max-w-full items-start gap-2.5 rounded-2xl border border-border/70 bg-muted/40 px-3.5 py-2.5 shadow-sm'>
+          <IconSparkles aria-hidden='true' className='mt-0.5 size-4 shrink-0 text-muted-foreground' stroke={1.8} />
+          <span className='flex min-w-0 flex-col gap-0.5'>
+            <span className='text-sm font-medium leading-5 text-foreground'>Ghostex auto named this session</span>
+            <span className='wrap-break-word text-xs leading-4 text-muted-foreground'>
+              New name: <span className='text-foreground/85'>{autoNamedTitle}</span>
+            </span>
+          </span>
+        </div>
+      </Marker>
+    );
+  }
+
   if (isSystem) {
     return (
       <Marker className='pb-2'>
@@ -755,6 +780,10 @@ function hasAgentResponseContent(message: SessionChatMessage): boolean {
       (block) => block.type === 'image-ref' || (block.type === 'text' && block.text.trim().length > 0)
     )
   );
+}
+
+function isVisibleAssistantArtifact(message: SessionChatMessage): boolean {
+  return message.role === 'assistant' && message.blocks.some((block) => block.type === 'image-ref');
 }
 
 /** One copy affordance per response: the last assistant text before the next user turn. */
@@ -918,7 +947,9 @@ function CompletedWork({
   const [open, setOpen] = useState(verboseMode);
   const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => setOpen(verboseMode), [verboseMode]);
-  const hasWork = turn.work.length > 0;
+  const visibleArtifacts = turn.work.filter(isVisibleAssistantArtifact);
+  const collapsedWork = turn.work.filter((message) => !isVisibleAssistantArtifact(message));
+  const hasWork = collapsedWork.length > 0;
   const questionExchanges = useMemo(() => hoistedQuestionExchanges(turn.work), [turn.work]);
 
   return (
@@ -963,7 +994,7 @@ function CompletedWork({
             label='Collapse completed work'
             onCollapse={() => setOpen(false)}
           >
-            {turn.work.map((message) => (
+            {collapsedWork.map((message) => (
               <MessageRow
                 key={message.id}
                 message={message}
@@ -975,6 +1006,9 @@ function CompletedWork({
           </SessionChatExpansion>
         ) : null}
       </div>
+      {visibleArtifacts.map((message) => (
+        <MessageRow key={message.id} message={message} showAssistantCopy={false} verboseMode={verboseMode} />
+      ))}
       {questionExchanges.length > 0 ? (
         <Message align='start' className='pb-4' data-role='question-exchange'>
           <MessageContent>
@@ -1004,7 +1038,7 @@ function ScrollToLatestSend({ pendingMessageId }: { pendingMessageId: string | n
       return;
     }
     handledRef.current = pendingMessageId;
-    scrollToEnd({ behavior: 'auto' });
+    scrollToEnd({ behavior: 'smooth' });
   }, [pendingMessageId, scrollToEnd]);
 
   return null;
@@ -1023,6 +1057,7 @@ export function SessionChatMessageList({
   loadingEarlierRef.current = loadingEarlier;
   const hasMoreRef = useRef(hasMore);
   hasMoreRef.current = hasMore;
+  const viewportRef = useRef<HTMLDivElement>(null);
   const scrollbarFadeTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(
@@ -1034,10 +1069,33 @@ export function SessionChatMessageList({
     []
   );
 
-  // Auto-load older history when the reader scrolls near the top; the
-  // viewport's preserveScrollOnPrepend keeps the visible rows in place when
-  // the earlier page lands. Every scroll also stamps the viewport so the
-  // scrollbar shows while scrolling and fades out afterwards (chat.css).
+  const loadEarlierIfNearTop = useCallback(
+    (viewport: HTMLDivElement): void => {
+      if (viewport.scrollTop < LOAD_EARLIER_SCROLL_TOP_PX && hasMoreRef.current && !loadingEarlierRef.current) {
+        onLoadEarlier();
+      }
+    },
+    [onLoadEarlier]
+  );
+
+  /*
+   * A scroll that reaches the top while a page is already loading cannot start
+   * another request. Re-check after that page settles: prepend preservation may
+   * move the reader away from the boundary, but if it remains near the top the
+   * next page starts without requiring another wheel event or a manual button.
+   * This also fills a viewport whose initial transcript is too short to scroll.
+   */
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (viewport) {
+      loadEarlierIfNearTop(viewport);
+    }
+  }, [hasMore, loadingEarlier, loadEarlierIfNearTop, messages.length]);
+
+  // Auto-load older history before the reader reaches the top; the viewport's
+  // preserveScrollOnPrepend keeps the visible rows in place when the earlier
+  // page lands. Every scroll also stamps the viewport so the scrollbar shows
+  // while scrolling and fades out afterwards (chat.css).
   const handleScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>): void => {
       const viewport = event.currentTarget;
@@ -1048,11 +1106,9 @@ export function SessionChatMessageList({
       scrollbarFadeTimeoutRef.current = window.setTimeout(() => {
         viewport.removeAttribute('data-user-scrolling');
       }, SCROLLBAR_FADE_MS);
-      if (viewport.scrollTop < LOAD_EARLIER_SCROLL_TOP_PX && hasMoreRef.current && !loadingEarlierRef.current) {
-        onLoadEarlier();
-      }
+      loadEarlierIfNearTop(viewport);
     },
-    [onLoadEarlier]
+    [loadEarlierIfNearTop]
   );
 
   const rendered = useMemo(
@@ -1085,18 +1141,16 @@ export function SessionChatMessageList({
   }, [rendered]);
 
   return (
-    <MessageScrollerProvider autoScroll defaultScrollPosition='end'>
+    <MessageScrollerProvider autoScroll defaultScrollPosition='end' scrollEdgeThreshold={AUTO_SCROLL_EDGE_THRESHOLD_PX}>
       <ScrollToLatestSend pendingMessageId={pendingMessageId} />
       <MessageScroller className='flex-1'>
         {/* RTL viewport + LTR content puts the scrollbar on the left edge. */}
-        <MessageScrollerViewport className='[direction:rtl]' onScroll={handleScroll} preserveScrollOnPrepend>
-          {hasMore ? (
-            <div className='flex justify-center px-4 pt-2 [direction:ltr]'>
-              <Button disabled={loadingEarlier} onClick={onLoadEarlier} size='sm' variant='ghost'>
-                {loadingEarlier ? 'Loading…' : 'Load earlier messages'}
-              </Button>
-            </div>
-          ) : null}
+        <MessageScrollerViewport
+          className='[direction:rtl]'
+          onScroll={handleScroll}
+          preserveScrollOnPrepend
+          ref={viewportRef}
+        >
           <MessageScrollerContent className='mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]'>
             {renderItems.map((item, index) => (
               <MessageScrollerItem
