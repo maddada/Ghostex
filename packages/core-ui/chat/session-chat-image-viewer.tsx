@@ -5,13 +5,15 @@
 // fitted size, panning by scroll while zoomed; the zoom-in/zoom-out cursor is
 // the affordance for it, and an image with no detail beyond its fitted size
 // never offers the toggle. Right-clicking it offers Copy image (PNG, to the
-// system clipboard) and Save image (the host's native save panel where there
-// is one, a browser download otherwise).
+// system clipboard), Copy path (the machine path or URL behind the picture),
+// and Save image (the host's native save panel where there is one, a browser
+// download otherwise). The inline thumbnail carries a hover copy button for
+// the same path.
 // Machine paths load through the transport's readSessionChatImage RPC — the
 // paths inside "[Image #N](path)" references live on the session's machine, so
 // the page cannot open them directly. http(s)/data URLs render as-is.
 
-import { IconLoader2, IconPhotoX, IconX } from '@tabler/icons-react';
+import { IconCheck, IconCopy, IconLoader2, IconPhotoX, IconX } from '@tabler/icons-react';
 import {
   createContext,
   useCallback,
@@ -77,6 +79,21 @@ export function sessionChatImageTargetForHref(href: string): SessionChatImageTar
 }
 
 /**
+ * The copyable location behind an image: the machine path for a path-backed
+ * picture, the URL for a hosted one. A data: URL is bytes rather than a
+ * location, so it offers nothing to copy.
+ */
+function sessionChatImageCopyPath(target: SessionChatImageTarget): string | undefined {
+  if (target.path !== undefined) {
+    return target.path;
+  }
+  if (target.url !== undefined && !/^data:/i.test(target.url)) {
+    return target.url;
+  }
+  return undefined;
+}
+
+/**
  * Inline thumbnail for a picture shared in the conversation. Reading the bytes
  * is deferred until the row is near the viewport — on the phone every machine
  * path is a base64 round trip over SSH, so a long transcript must not fetch
@@ -99,7 +116,19 @@ export function SessionChatInlineImage({
   const [source, setSource] = useState<{ status: 'loading' } | { status: 'ready'; src: string } | { status: 'error' }>({
     status: 'loading',
   });
+  const [pathCopied, setPathCopied] = useState(false);
   const targetKey = target.url ?? target.path ?? '';
+  const copyPath = sessionChatImageCopyPath(target);
+
+  useEffect(() => {
+    if (!pathCopied) {
+      return;
+    }
+    const timer = window.setTimeout(() => setPathCopied(false), 1500);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [pathCopied]);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -158,14 +187,36 @@ export function SessionChatInlineImage({
   return (
     <div className={cn('ghostex-chat-inline-image-frame', className)} ref={containerRef}>
       {source.status === 'ready' ? (
-        <button
-          aria-label={target.alt ? `View ${target.alt}` : 'View image'}
-          className='ghostex-chat-inline-image-button'
-          onClick={() => viewer.open(target)}
-          type='button'
-        >
-          <img alt={target.alt ?? ''} className='ghostex-chat-inline-image' src={source.src} />
-        </button>
+        <>
+          <button
+            aria-label={target.alt ? `View ${target.alt}` : 'View image'}
+            className='ghostex-chat-inline-image-button'
+            onClick={() => viewer.open(target)}
+            type='button'
+          >
+            <img alt={target.alt ?? ''} className='ghostex-chat-inline-image' src={source.src} />
+          </button>
+          {copyPath !== undefined ? (
+            <button
+              aria-label='Copy image path'
+              className='ghostex-chat-inline-image-copy'
+              data-copied={pathCopied ? 'true' : undefined}
+              onClick={(event) => {
+                event.stopPropagation();
+                void navigator.clipboard
+                  .writeText(copyPath)
+                  .then(() => setPathCopied(true))
+                  .catch((error: unknown) => {
+                    console.error('[session-chat] Copying the image path failed.', error);
+                  });
+              }}
+              title='Copy image path'
+              type='button'
+            >
+              {pathCopied ? <IconCheck aria-hidden='true' stroke={2} /> : <IconCopy aria-hidden='true' stroke={2} />}
+            </button>
+          ) : null}
+        </>
       ) : (
         <span aria-label='Loading image' className='ghostex-chat-inline-image-pending' role='img'>
           <IconLoader2 aria-hidden='true' className='size-4 animate-spin' stroke={2} />
@@ -263,7 +314,7 @@ function base64FromBlob(blob: Blob): Promise<string> {
 type ViewerState =
   | { status: 'closed' }
   | { status: 'loading'; alt?: string }
-  | { status: 'ready'; src: string; alt?: string; name: string }
+  | { status: 'ready'; src: string; alt?: string; name: string; copyPath?: string }
   | { status: 'error'; alt?: string };
 
 export function SessionChatImageViewerProvider({
@@ -347,13 +398,20 @@ export function SessionChatImageViewerProvider({
           return;
         }
         const name = sessionChatImageFileName(target);
+        const copyPath = sessionChatImageCopyPath(target);
         openSequenceRef.current += 1;
         const sequence = openSequenceRef.current;
         setState({ status: 'loading', ...(alt !== undefined ? { alt } : {}) });
         source
           .then((src) => {
             if (openSequenceRef.current === sequence) {
-              setState({ name, src, status: 'ready', ...(alt !== undefined ? { alt } : {}) });
+              setState({
+                name,
+                src,
+                status: 'ready',
+                ...(alt !== undefined ? { alt } : {}),
+                ...(copyPath !== undefined ? { copyPath } : {}),
+              });
             }
           })
           .catch(() => {
@@ -497,6 +555,18 @@ export function SessionChatImageViewerProvider({
       });
   };
 
+  const copyPath = (): void => {
+    if (state.status !== 'ready' || state.copyPath === undefined) {
+      return;
+    }
+    const path = state.copyPath;
+    setMenuAt(null);
+    void navigator.clipboard.writeText(path).catch((error: unknown) => {
+      console.error('[session-chat] Copying the image path failed.', error);
+      setMenuError('The path could not be copied.');
+    });
+  };
+
   const saveImage = (): void => {
     if (state.status !== 'ready') {
       return;
@@ -638,6 +708,11 @@ export function SessionChatImageViewerProvider({
               <button className='ghostex-chat-image-menu-item' onClick={copyImage} role='menuitem' type='button'>
                 Copy image
               </button>
+              {state.status === 'ready' && state.copyPath !== undefined ? (
+                <button className='ghostex-chat-image-menu-item' onClick={copyPath} role='menuitem' type='button'>
+                  Copy path
+                </button>
+              ) : null}
               <button className='ghostex-chat-image-menu-item' onClick={saveImage} role='menuitem' type='button'>
                 Save image
               </button>

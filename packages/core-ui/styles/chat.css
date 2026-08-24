@@ -2046,7 +2046,47 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   flex: 0 0 3rem;
   height: 3rem;
   min-width: 0;
+  position: relative;
   width: 3rem;
+}
+
+/* Hovering a thumbnail reveals a corner button that copies the image's machine
+   path (its URL for a hosted picture) — the counterpart of the message row's
+   hover copy button. It stays visible while showing the "copied" check so the
+   feedback is not cut short by the pointer drifting off the picture. */
+.ghostex-chat-inline-image-copy {
+  align-items: center;
+  background: rgb(0 0 0 / 0.55);
+  border: none;
+  border-radius: 5px;
+  color: rgb(255 255 255 / 0.85);
+  display: flex;
+  height: 1.25rem;
+  justify-content: center;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  transition: opacity 120ms ease;
+  width: 1.25rem;
+  z-index: 1;
+}
+
+.ghostex-chat-inline-image-frame:hover .ghostex-chat-inline-image-copy,
+.ghostex-chat-inline-image-copy:focus-visible,
+.ghostex-chat-inline-image-copy[data-copied='true'] {
+  opacity: 1;
+}
+
+.ghostex-chat-inline-image-copy:hover {
+  background: rgb(0 0 0 / 0.75);
+  color: rgb(255 255 255 / 1);
+}
+
+.ghostex-chat-inline-image-copy svg {
+  height: 0.75rem;
+  width: 0.75rem;
 }
 
 .ghostex-chat-inline-image-button {
