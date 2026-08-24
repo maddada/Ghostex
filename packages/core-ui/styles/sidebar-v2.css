@@ -349,6 +349,8 @@ body[data-sidebar-theme^='light-'] [data-sidebar-version='v2'],
 [data-sidebar-version='v2'] .sidebar-v2-row-line[data-line='title'] {
   height: 20px;
   margin-top: 4px;
+  /* Containing block for the out-of-flow note dot (see below). */
+  position: relative;
 }
 
 /* Grouped mode: the title line IS line 1, so it must not carry line 2's gap. */
@@ -374,6 +376,42 @@ body[data-sidebar-theme^='light-'] [data-sidebar-version='v2'],
 
 [data-sidebar-version='v2'] .sidebar-v2-row[data-recede='true'] .sidebar-v2-row-project {
   font-weight: 400;
+}
+
+/*
+ * CDXC:SessionAgentNotes 2026-08-24:
+ * V2's "this session has a note" dot. It carries V1's layout-ownership rule:
+ * the dot is an OUT-OF-FLOW sibling of the session icon, never a flow item and
+ * never a wrapper. An in-flow dot adds its own box plus the line's 6px gap, so
+ * noted rows would push their icon, title, and every column right and stop
+ * lining up with note-less rows.
+ *
+ * V2 has no anchor scope, so the containing block is the nearest positioned
+ * ancestor the icon shares: the title line on cards, the row itself on slim
+ * rows. Both place the icon at their own content-box left edge, so the dot
+ * hangs a few px further left — into the row's 10px gutter — and is centered on
+ * the icon by the same cross-axis centering the icon gets. It is
+ * pointer-transparent: a signal, not a control.
+ */
+[data-sidebar-version='v2'] .sidebar-v2-row-note-dot {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+/* Card rows: the title line is the containing block and starts at the icon. */
+[data-sidebar-version='v2'] .sidebar-v2-row-line[data-line='title'] > .sidebar-v2-row-note-dot {
+  left: -7px;
+}
+
+/* Slim rows: the row is the containing block and pads the icon in by 10px. */
+[data-sidebar-version='v2'] .sidebar-v2-row[data-variant='slim'] > .sidebar-v2-row-note-dot {
+  left: 3px;
 }
 
 [data-sidebar-version='v2'] .sidebar-v2-row-title {
@@ -1069,12 +1107,15 @@ body[data-sidebar-theme^='light-'] [data-sidebar-version='v2'],
 
 [data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='settled'] .sidebar-v2-shelf-label,
 [data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='settled'] .sidebar-v2-shelf-chevron,
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='parked'] .sidebar-v2-shelf-label,
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='parked'] .sidebar-v2-shelf-chevron,
 [data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='browser'] .sidebar-v2-shelf-label,
 [data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='browser'] .sidebar-v2-shelf-chevron {
   color: color-mix(in srgb, var(--sv2-muted) 70%, transparent);
 }
 
 [data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='settled'] .sidebar-v2-shelf-rule,
+[data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='parked'] .sidebar-v2-shelf-rule,
 [data-sidebar-version='v2'] .sidebar-v2-shelf-header[data-tone='browser'] .sidebar-v2-shelf-rule {
   background: color-mix(in srgb, var(--sv2-border) 70%, transparent);
 }

@@ -3151,36 +3151,171 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:ExportTranscript 2026-08-20:
- * The Export Transcript result dialog shares the compact Rename Session frame:
- * a read-only path, one select, and an action row. The path is the one piece of
- * content that can be arbitrarily long, so it wraps at path separators instead
- * of widening the dialog or scrolling sideways.
+ * CDXC:ExportTranscriptOptions 2026-08-24:
+ * The Export Transcript dialog follows the Automate dialog language: a
+ * #161616-family popover surface, a 15px regular-weight title over a 12px
+ * muted description, quiet 12px/500 section labels, list rows in a bordered
+ * rounded container, and one 32px control scale for footer buttons and the
+ * agent select. The path is the one piece of content that can be arbitrarily
+ * long, so it wraps at path separators instead of widening the dialog.
  */
-.export-transcript-result-modal-shadcn {
-  max-width: min(540px, calc(100vw - 2rem));
-  padding-bottom: 8px;
-  padding-left: 9px;
-  padding-right: 9px;
-  padding-top: 8px;
-}
-
-.export-transcript-result-modal-shadcn .export-transcript-result-field-group {
+.export-transcript-modal-shadcn {
+  background: var(--popover, #161616);
+  background-color: var(--popover, #161616);
   gap: 16px;
+  max-width: min(540px, calc(100vw - 2rem));
+  padding: 20px;
 }
 
-.export-transcript-result-path {
-  display: block;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
-  color: var(--vscode-foreground);
+.export-transcript-modal-shadcn [data-slot='dialog-close'] {
+  right: 20px;
+  top: 20px;
+}
+
+.export-transcript-modal-title {
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.export-transcript-modal-description {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.export-transcript-modal-body {
+  display: grid;
+  gap: 10px;
+}
+
+.export-transcript-section-title {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.export-transcript-toggle-list {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.export-transcript-toggle-row {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+
+.export-transcript-toggle-row + .export-transcript-toggle-row {
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.export-transcript-toggle-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.export-transcript-toggle-label {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.export-transcript-toggle-description {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.export-transcript-path-row {
+  align-items: center;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  gap: 6px;
+  padding: 8px 8px 8px 12px;
+}
+
+.export-transcript-path {
+  color: var(--foreground);
+  flex: 1 1 auto;
   font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
   font-size: 12px;
   line-height: 1.45;
+  min-width: 0;
   overflow-wrap: anywhere;
   white-space: normal;
+}
+
+.export-transcript-copy-button {
+  flex: 0 0 auto;
+}
+
+.export-transcript-hint {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.export-transcript-error {
+  color: var(--destructive, #f87171);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.export-transcript-modal-shadcn [data-slot='select-trigger'] {
+  background: color-mix(in srgb, var(--input) 22%, transparent);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 400;
+  height: 32px;
+  min-height: 32px;
+  width: 100%;
+}
+
+.export-transcript-modal-shadcn [data-slot='dialog-footer'] [data-slot='button'] {
+  font-size: 14px;
+  font-weight: 400;
+  height: 32px;
+  min-height: 32px;
+}
+
+/*
+ * CDXC:ExportTranscriptOptions 2026-08-24:
+ * The native child window fits itself to the dialog once, at the options
+ * stage, and never resizes again. Reserve enough height there for the done
+ * stage (wrapped path, agent select, hint, footer) so the stage change cannot
+ * clip against the fitted window.
+ */
+.app-modal-host-native-window-body .export-transcript-modal-shadcn {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 384px;
+}
+
+/* Keep the action row pinned to the reserved window's bottom edge on both
+ * stages instead of letting the grid spread the reserved space between rows. */
+.app-modal-host-native-window-body .export-transcript-modal-shadcn > [data-slot='dialog-footer'] {
+  margin-top: auto;
+}
+
+.export-transcript-spinner {
+  animation: export-transcript-spin 0.9s linear infinite;
+}
+
+@keyframes export-transcript-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .session-rename-modal-shadcn [data-slot='dialog-close'] {
@@ -3471,9 +3606,13 @@ html:has(body.app-modal-host-native-window-body) {
   background: var(--delayed-send-raised-hover);
 }
 
-.delayed-send-modal-shadcn [data-slot='switch'],
+/* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
+.delayed-send-modal-shadcn [data-slot='switch'] {
+  border-radius: 6px !important;
+}
+
 .delayed-send-modal-shadcn [data-slot='switch-thumb'] {
-  border-radius: var(--delayed-send-radius-pill) !important;
+  border-radius: 4px !important;
 }
 
 .delayed-send-modal-shadcn [data-slot='dialog-title'] {
@@ -3771,6 +3910,17 @@ html:has(body.app-modal-host-native-window-body) {
   min-height: 150px;
 }
 
+/*
+ * CDXC:SessionAgentNotes 2026-08-24:
+ * The note dialog reuses Rename Session's chrome, but a note is a paragraph
+ * rather than a title, so its field opens taller. Everything else — the native
+ * child-window inset, the fit-height cap, the footer buttons — is inherited
+ * from `.session-rename-modal-shadcn` and deliberately not duplicated here.
+ */
+.session-note-modal-shadcn .session-note-textarea {
+  min-height: 140px;
+}
+
 .worktree-create-mode-toggle {
   /*
    * CDXC:WorktreeProjectRegistration 2026-06-01-20:59:
@@ -3783,12 +3933,17 @@ html:has(body.app-modal-host-native-window-body) {
    * GPUI reuses this modal for Open Existing agent starts, so the layout must
    * not depend on GPUI-only controls or hide the shared first-prompt draft.
    */
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /*
+   * CDXC:SegmentedControl 2026-08-24:
+   * The two modes are one shared SegmentedControl now, so the row is a single
+   * strip whose segments split the width instead of two gapped buttons.
+   */
+  display: flex;
+  width: 100%;
 }
 
-.worktree-create-mode-toggle [data-slot='button'] {
+.worktree-create-mode-toggle [data-slot='segmented-control-item'] {
+  flex: 1;
   min-width: 0;
 }
 
@@ -4039,7 +4194,7 @@ html:has(body.app-modal-host-native-window-body) {
   flex: 0 0 172px;
 }
 
-.settings-portless-protocol-toggle [data-slot='toggle-group-item'] {
+.settings-portless-protocol-toggle [data-slot='segmented-control-item'] {
   flex: 1;
 }
 
@@ -4823,4 +4978,119 @@ html:has(body.app-modal-host-native-window-body) {
   .session-rename-textarea::-webkit-scrollbar-thumb {
   background-clip: content-box;
   border-right: 2px solid transparent;
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24 — Add Project & Add Worktree
+ *
+ * Both dialogs join the shared modal language: #0e0e0e shell with a hairline
+ * border and 12px radius, #161616 raised fields with 8px corners, 6px list
+ * rows, 32px controls, and a quiet 400/500 type scale. These are appended
+ * overrides on top of the components' square-era utility classes — unlayered
+ * rules here outrank Tailwind's utilities layer, so the JSX keeps documenting
+ * its own layout while the surface tokens are corrected in one place.
+ */
+.add-project-modal,
+.worktree-create-modal-shadcn {
+  background: var(--app-modal-background, #0e0e0e) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+/* The native child window already draws the frame; don't double it. */
+.app-modal-host-native-window-body .add-project-modal,
+.app-modal-host-native-window-body .worktree-create-modal-shadcn {
+  border: 0 !important;
+}
+
+.add-project-modal [data-slot='input-group'] {
+  background: #161616 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px !important;
+}
+
+.add-project-modal [data-slot='input-group']:focus-within {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.add-project-modal [data-slot='input-group-control'] {
+  font-size: 13px;
+  height: 2rem;
+  min-height: 2rem;
+}
+
+.add-project-modal [role='option'] {
+  border-radius: 6px;
+}
+
+.add-project-modal [data-slot='button'] {
+  border-radius: 8px !important;
+  font-weight: 400;
+}
+
+.add-project-modal kbd {
+  border-radius: 5px !important;
+}
+
+.add-project-modal h2,
+.add-project-modal [class*='font-semibold'] {
+  font-weight: 500 !important;
+}
+
+/* Add Worktree ------------------------------------------------------------- */
+
+.worktree-create-modal-shadcn [data-slot='dialog-title'] {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.worktree-create-modal-shadcn [data-slot='field-label'] {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.worktree-create-modal-shadcn [data-slot='field-description'] {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.worktree-create-modal-shadcn :is([data-slot='button'], [data-slot='select-trigger']) {
+  border-radius: 8px !important;
+  font-size: 13px;
+  font-weight: 400;
+  height: 2rem;
+  min-height: 2rem;
+}
+
+.worktree-create-modal-shadcn :is([data-slot='select-trigger'], [data-slot='textarea']) {
+  background: #161616;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--foreground);
+}
+
+.worktree-create-modal-shadcn [data-slot='textarea'] {
+  border-radius: 8px !important;
+  font-size: 13px;
+}
+
+.worktree-create-modal-shadcn [data-slot='textarea']:is(:focus, :focus-visible),
+.worktree-create-modal-shadcn [data-slot='select-trigger']:is(:focus, :focus-visible) {
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: none;
+  outline: none;
+}
+
+/*
+ * CDXC:SegmentedControl 2026-08-24:
+ * The mode switch is the shared SegmentedControl, which carries its own
+ * container hairline, flat segments, and raised selected fill. Only the modal's
+ * selected fill is restated here so the strip reads on the #161616 sheet.
+ */
+.worktree-create-mode-toggle [data-slot='segmented-control-item'][aria-pressed='true'] {
+  background: #1d1d1d;
 }

@@ -899,6 +899,20 @@
   --session-queued-prompt-badge-size: calc(10px * var(--sidebar-density-scale));
   --session-queued-prompt-badge-font-size: calc(7px * var(--sidebar-density-scale));
   --session-queued-prompt-badge-overhang: calc(3px * var(--sidebar-density-scale));
+  /*
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * The "this session has a note" dot, parked just left of the leading icon.
+   *
+   * That resting spot is INSIDE the pin hitbox, which starts a full icon-width
+   * further left and paints above the dot, so a row that is pinned as well as
+   * noted has to move the dot clear of the pin instead: the pinned shift walks
+   * it one more icon-width left, landing it immediately left of the pin box at
+   * every sidebar density.
+   */
+  --session-note-dot-size: calc(4px * var(--sidebar-density-scale));
+  /* 5px, not 7px: at 7px the dot ran past the row's left edge and clipped. */
+  --session-note-dot-left-shift: calc(5px * var(--sidebar-density-scale));
+  --session-note-dot-pinned-left-shift: calc(var(--session-note-dot-left-shift) + var(--session-leading-icon-size));
   anchor-scope: --session-leading-icon;
 }
 
@@ -1002,6 +1016,65 @@
     left: calc(anchor(left) - var(--session-leading-icon-size) - var(--session-pinned-icon-left-shift));
     position-anchor: --session-leading-icon;
     top: anchor(top);
+  }
+}
+
+/*
+ * CDXC:SessionAgentNotes 2026-08-24:
+ * A session that carries a note shows a small white dot immediately left of the
+ * leading agent icon, vertically centered on it.
+ *
+ * Like the pin button and the queued-prompt badge, it is an absolutely
+ * positioned SIBLING of the icon — never a wrapper around it. A wrapper becomes
+ * a real flow box in the row and pushes the icon slot out of place, which is
+ * exactly what once happened to the Delayed Send clock. It is also
+ * pointer-transparent: the dot is a signal, not a control, and the row click
+ * must pass straight through it.
+ *
+ * Positioned from the session's own leading-icon custom properties, with the
+ * modern `position-anchor` branch expressing the identical box. Opposite-edge
+ * anchors and anchor-derived sizing are deliberately avoided — they let engines
+ * stretch the box (see the pin button's note above, and the source assertions in
+ * `session-card-icons-source.test.ts`).
+ *
+ * The resting spot is only free on UNPINNED rows. `.session-pinned-floating-button`
+ * owns a full icon-width box starting one icon-width plus 3px left of the icon,
+ * at a higher z-index, and the dot's 4px sits inside its right end — so a pinned
+ * row would show the pin glyph painted over the note. A pinned row therefore
+ * walks the dot one more icon-width left, to just outside the pin box, and both
+ * decorations stay readable at once.
+ */
+.session-note-dot {
+  background: #fff;
+  border-radius: 50%;
+  height: var(--session-note-dot-size);
+  left: calc(var(--session-leading-icon-left) - var(--session-note-dot-left-shift));
+  pointer-events: none;
+  position: absolute;
+  top: calc(var(--session-leading-icon-top) + (var(--session-leading-icon-size) - var(--session-note-dot-size)) / 2);
+  transition: opacity 120ms ease;
+  width: var(--session-note-dot-size);
+  z-index: 4;
+}
+
+.session[data-pinned='true'] .session-note-dot {
+  left: calc(var(--session-leading-icon-left) - var(--session-note-dot-pinned-left-shift));
+}
+
+/* Dragging a row fades every leading decoration; the note dot follows. */
+.session-frame[data-dragging='true'] .session-note-dot {
+  opacity: 0;
+}
+
+@supports (left: anchor(left)) {
+  .session-note-dot {
+    left: calc(anchor(left) - var(--session-note-dot-left-shift));
+    position-anchor: --session-leading-icon;
+    top: calc(anchor(top) + (var(--session-leading-icon-size) - var(--session-note-dot-size)) / 2);
+  }
+
+  .session[data-pinned='true'] .session-note-dot {
+    left: calc(anchor(left) - var(--session-note-dot-pinned-left-shift));
   }
 }
 
@@ -1321,71 +1394,6 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
-}
-
-.session-title-generation-overlay {
-  align-items: center;
-  background: color-mix(in srgb, var(--app-card-active) 88%, #000000 12%);
-  border: 0;
-  border-radius: 0;
-  color: var(--app-foreground);
-  display: flex;
-  font-size: calc(13px * var(--sidebar-density-scale));
-  font-weight: 600;
-  inset: calc(4px * var(--sidebar-density-scale));
-  letter-spacing: 0.02em;
-  /* CDXC:SessionTitleLoading 2026-04-27-09:44
-   * The first-prompt title generation state must read like the normal session
-   * title row: loading label stays left-aligned instead of centered.
-   *
-   * CDXC:SessionTitleLoading 2026-05-08-09:07
-   * The visible generating label inherits the normal session title typography,
-   * uses a slight blue tint, and replaces the extra left-side spinner with a
-   * one/two/three-dot loop that advances every 0.75s.
-   *
-   * CDXC:SessionTitleLoading 2026-06-04-23:48
-   * Automatic session rename loading chrome keeps only the horizontal top and
-   * bottom separators, because the macOS sidebar row should not show left or
-   * right borders while "Generating title..." is displayed.
-   *
-   * CDXC:SessionTitleLoading 2026-06-16-01:14
-   * The generating title label should use the same foreground as the active
-   * session button text and should not draw top or bottom separator borders.
-   */
-  justify-content: flex-start;
-  line-height: 1.3;
-  min-width: 0;
-  padding-inline: calc(10px * var(--sidebar-density-scale));
-  pointer-events: none;
-  position: absolute;
-  /*
-   * Keep first-prompt title generation above the normal title row but below
-   * the existing leading identity slot. Agent/tag/terminal icon visibility
-   * must continue to follow the user's at-rest versus hover-only setting while
-   * the generated title is pending instead of being painted over by this
-   * full-row surface.
-   */
-  z-index: 2;
-}
-
-.session-title-generation-overlay-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-title-generation-overlay-dots {
-  display: inline-flex;
-  min-width: 1.15em;
-}
-
-.session-title-generation-overlay-dots span:nth-child(2) {
-  animation: session-title-generation-dot-two 2.25s step-end infinite;
-}
-
-.session-title-generation-overlay-dots span:nth-child(3) {
-  animation: session-title-generation-dot-three 2.25s step-end infinite;
 }
 
 .session-floating-agent-icon[data-agent-icon='codex'],
@@ -1918,30 +1926,6 @@ body.native-sidebar-body[data-native-pointer-inside='false']
   }
 }
 
-@keyframes session-title-generation-dot-two {
-  0%,
-  33.333% {
-    opacity: 0;
-  }
-
-  33.334%,
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes session-title-generation-dot-three {
-  0%,
-  66.666% {
-    opacity: 0;
-  }
-
-  66.667%,
-  100% {
-    opacity: 1;
-  }
-}
-
 /* CDXC:SidebarReference 2026-05-08-01:10: The reference screenshots require
    flat rounded active rows, always-visible last-active times, a compact
    attention dot, and a ring spinner for working sessions.
@@ -2177,21 +2161,6 @@ body[data-custom-sidebar-titlebar-colors='true']
   line-height: 20px;
 }
 
-.sidebar-reference-layout[data-reference-sidebar='true'] .session-title-generation-overlay {
-  border-radius: 0;
-  color: #d8d8d8;
-  font-size: 15.55px;
-  font-weight: 300 !important;
-  inset: 0;
-  letter-spacing: 0;
-  line-height: 20px;
-  padding: 7px var(--reference-session-trailing-inset) 7px
-    calc(
-      var(--reference-session-title-inset) + var(--reference-sidebar-scroll-row-bleed-left, 7px) +
-        var(--reference-session-full-width-left-padding)
-    );
-}
-
 .sidebar-reference-layout[data-reference-sidebar='true'] .session[data-visible='true'] .session-alias-heading {
   color: #d8d8d8;
   font-weight: 300 !important;
@@ -2214,12 +2183,6 @@ body[data-custom-sidebar-titlebar-colors='true']
    */
   color: #5f646b;
   opacity: 0.42;
-}
-
-.sidebar-reference-layout[data-reference-sidebar='true']
-  .session[data-visible='true']
-  .session-title-generation-overlay {
-  font-weight: 300 !important;
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-last-interaction-time {
