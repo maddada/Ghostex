@@ -81,6 +81,7 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const selectedRef = useRef<HTMLDivElement | null>(null);
+  const userInteractedAfterMountRef = useRef(false);
   const [projectFilter, setProjectFilter] = useState('');
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
@@ -89,6 +90,41 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
     const timer = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
     return () => clearInterval(timer);
   }, []);
+
+  const focusQueryInput = useCallback(() => {
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const markUserInteractedAfterMount = useCallback(() => {
+    userInteractedAfterMountRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    userInteractedAfterMountRef.current = false;
+    const focusUnlessUserInteracted = () => {
+      if (!userInteractedAfterMountRef.current) {
+        focusQueryInput();
+      }
+    };
+    const retryDelaysMs = [0, 16, 50, 100, 250, 500, 1000, 1600, 2400];
+    const timeoutIds = retryDelaysMs.map((delayMs) => window.setTimeout(focusUnlessUserInteracted, delayMs));
+    const animationFrame = window.requestAnimationFrame(focusUnlessUserInteracted);
+    const windowFocusTimeoutIds: number[] = [];
+    const windowFocusAnimationFrames: number[] = [];
+    const handleWindowFocus = () => {
+      windowFocusTimeoutIds.push(window.setTimeout(focusUnlessUserInteracted, 0));
+      windowFocusAnimationFrames.push(window.requestAnimationFrame(focusUnlessUserInteracted));
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      windowFocusTimeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      windowFocusAnimationFrames.forEach((frameId) => window.cancelAnimationFrame(frameId));
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [focusQueryInput]);
 
   const agentColors = useMemo(() => {
     const colors: Record<string, string> = {};
@@ -312,6 +348,8 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
     <div
       className='ghostex-find-scope relative flex h-full min-h-0 flex-col bg-background text-foreground [--radius:0.625rem]'
       onKeyDown={handleKeyDown}
+      onKeyDownCapture={markUserInteractedAfterMount}
+      onPointerDownCapture={markUserInteractedAfterMount}
     >
       {/* Query row: input on the left, counter and hint keys on the right. */}
       <div className='flex shrink-0 items-center gap-3 border-b border-border/60 px-3 py-2'>
@@ -389,6 +427,7 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
               ref={viewRow.position === find.selection ? selectedRef : undefined}
             >
               <FindPromptResultRow
+                onActivate={() => void find.resumeSelected()}
                 onSelect={() => find.selectRow(viewRow.position)}
                 row={viewRow.row}
                 selected={viewRow.position === find.selection}

@@ -12,6 +12,7 @@ import { cn } from '@/packages/components/utils';
 import { flattenPromptLineWithOffsets, splitHighlightedSegments } from './find-prompt-highlight';
 
 export interface FindPromptRowProps {
+  onActivate: () => void;
   onSelect: () => void;
   row: FindPromptRow;
   selected: boolean;
@@ -37,6 +38,7 @@ function PromptLine({ row }: { row: FindPromptRow }) {
 }
 
 export const FindPromptResultRow = memo(function FindPromptResultRow({
+  onActivate,
   onSelect,
   row,
   selected,
@@ -54,6 +56,11 @@ export const FindPromptResultRow = memo(function FindPromptResultRow({
       )}
       data-find-row-index={row.index}
       data-selected={selected ? 'true' : undefined}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        onSelect();
+        onActivate();
+      }}
       onMouseDown={(event) => {
         // Selecting must never steal focus from the query input; the input keeps
         // every hotkey working while the pointer picks a row.

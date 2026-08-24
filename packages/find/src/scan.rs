@@ -272,6 +272,7 @@ impl Scanner {
 
     /// Parse `~/.claude/history.jsonl` content.
     pub fn parse_claude_history(&mut self, data: &[u8]) {
+        let paste_cache = self.path(".claude/paste-cache");
         for line in data.split(|&b| b == b'\n') {
             let Some(v) = parse_line(line) else { continue };
             let Some(disp) = string_field(&v, "display") else {
@@ -280,7 +281,20 @@ impl Scanner {
             if disp.is_empty() {
                 continue;
             }
-            let disp = disp.to_string();
+            /*
+            Claude collapses large prompt pastes in history.jsonl to markers
+            such as `[Pasted text #1 +69 lines]`. The original text remains in
+            `pastedContents`, either inline or by content hash in paste-cache.
+            Index the original prompt rather than the display-only marker so
+            terms that occur inside a paste remain searchable.
+            */
+            let disp = expand_claude_pasted_contents(&v, disp, &paste_cache);
+            if has_unresolved_claude_paste(&disp) {
+                continue;
+            }
+            let Some(disp) = visible_user_prompt(&disp) else {
+                continue;
+            };
             let project = string_field(&v, "project").unwrap_or("").to_string();
             let session = string_field(&v, "sessionId").unwrap_or("").to_string();
             let ts = match field(&v, "timestamp").and_then(Value::as_i64) {
@@ -604,10 +618,9 @@ impl Scanner {
             let Some(text) = string_field(&v, "text") else {
                 continue;
             };
-            if text.is_empty() {
+            let Some(text) = visible_user_prompt(text) else {
                 continue;
-            }
-            let text = text.to_string();
+            };
             let session = string_field(&v, "session").unwrap_or("").to_string();
             let title = self
                 .codex_title_for_session(&session)
@@ -798,9 +811,9 @@ impl Scanner {
         let Some(text) = content_text(content) else {
             return;
         };
-        if text.is_empty() || text.starts_with('<') {
+        let Some(text) = visible_user_prompt(&text) else {
             return;
-        }
+        };
         self.records.push(Record {
             agent: Agent::Codex,
             title: state.session_title.clone(),
@@ -965,9 +978,9 @@ impl Scanner {
             let Some(text) = content_text(content) else {
                 continue;
             };
-            if text.is_empty() {
+            let Some(text) = visible_user_prompt(&text) else {
                 continue;
-            }
+            };
             self.records.push(Record {
                 agent: Agent::Pi,
                 title: session_title.clone(),
@@ -1086,9 +1099,10 @@ impl Scanner {
             let Some(text) = content_text(content) else {
                 continue;
             };
-            if text.is_empty() {
+            let text = tagged_text(&text, "user_query").unwrap_or(&text);
+            let Some(text) = visible_user_prompt(text) else {
                 continue;
-            }
+            };
             self.records.push(Record {
                 agent: Agent::Cursor,
                 title: title.to_string(),
@@ -1148,9 +1162,10 @@ impl Scanner {
             let Some(text) = content_text(content) else {
                 continue;
             };
-            if text.is_empty() {
+            let text = tagged_text(&text, "user_query").unwrap_or(&text);
+            let Some(text) = visible_user_prompt(text) else {
                 continue;
-            }
+            };
             self.records.push(Record {
                 agent: Agent::Grok,
                 title: info.title.clone(),
@@ -1215,14 +1230,14 @@ impl Scanner {
         let Some(text) = string_field(&v, "text") else {
             return;
         };
-        if text.is_empty() {
+        let Some(text) = visible_user_prompt(text) else {
             return;
-        }
+        };
         let ts = timestamp_value(field(&v, "ts"));
         self.records.push(Record {
             agent: Agent::Opencode,
             title: title_from_object(&v).unwrap_or_default(),
-            text: text.to_string(),
+            text,
             project: string_field(&v, "project").unwrap_or("").to_string(),
             session: string_field(&v, "session").unwrap_or("").to_string(),
             ts: if ts > 0 { ts } else { fallback_ts },
@@ -1352,6 +1367,79 @@ fn read_dir_sorted(base: &Path) -> Vec<PathBuf> {
         .collect();
     out.sort();
     out
+}
+
+fn expand_claude_pasted_contents(v: &Value, display: &str, paste_cache: &Path) -> String {
+    let Some(Value::Object(pasted_contents)) = field(v, "pastedContents") else {
+        return display.to_string();
+    };
+    let mut expanded = display.to_string();
+    for (slot, item) in pasted_contents {
+        let content = string_field(item, "content")
+            .map(str::to_string)
+            .or_else(|| {
+                let hash = string_field(item, "contentHash")?;
+                if hash.is_empty() || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                    return None;
+                }
+                let bytes = read_all(&paste_cache.join(format!("{hash}.txt")))?;
+                String::from_utf8(bytes).ok()
+            });
+        let Some(content) = content else { continue };
+        let marker_start = format!("[Pasted text #{slot}");
+        let Some(start) = expanded.find(&marker_start) else {
+            continue;
+        };
+        let Some(relative_end) = expanded[start..].find(']') else {
+            continue;
+        };
+        expanded.replace_range(start..=start + relative_end, &content);
+    }
+    expanded
+}
+
+fn has_unresolved_claude_paste(text: &str) -> bool {
+    text.contains("[Pasted text #")
+}
+
+fn tagged_text<'a>(text: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = text.find(&open)? + open.len();
+    let rest = &text[start..];
+    let end = rest.find(&close)?;
+    Some(rest[..end].trim())
+}
+
+/*
+Agent transcripts frequently encode injected instructions as user-role records.
+This picker is specifically a history of prompts a person sent, so reject those
+provider envelopes at ingestion rather than making every UI hide them later.
+*/
+fn visible_user_prompt(text: &str) -> Option<String> {
+    let trimmed = text.trim_matches(|ch: char| ch.is_whitespace() || ch.is_control());
+    if trimmed.is_empty()
+        || trimmed.starts_with('<')
+        || trimmed.starts_with("# AGENTS.md instructions")
+        || trimmed.starts_with("[Image extracted from tool result above]")
+        || trimmed.starts_with("[Request interrupted")
+        || trimmed.starts_with("Caveat: The messages below")
+        || trimmed.starts_with("The user interrupted the previous turn:")
+    {
+        return None;
+    }
+    if let Some(first_token) = trimmed.split_whitespace().next() {
+        let is_slash_command = first_token.starts_with('/')
+            && first_token
+                .chars()
+                .skip(1)
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+            && !trimmed.contains('\n');
+        if is_slash_command {
+            return None;
+        }
+    }
+    Some(trimmed.to_string())
 }
 
 fn read_all(path: &Path) -> Option<Vec<u8>> {
