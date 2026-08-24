@@ -88,9 +88,16 @@ pub const SESSION_CHAT_VERIFY_BYTES_PER_MS: u64 = 2;
 /// deadline is worth extending — once, so a wedged indicator cannot stall the
 /// queue indefinitely.
 pub const SESSION_CHAT_VERIFY_PASTING_EXTENSION_MS: u64 = 4_000;
-/// Claude Code's collapsed large-paste placeholder, `[Pasted text #1 +69
-/// lines]`, as `normalize_session_chat_screen_text` renders it.
-const SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE: &str = "Pastedtext";
+/// The TUIs' collapsed large-paste placeholders. A body the composer collapsed
+/// never shows its own text, so the placeholder is the only proof of landing.
+/// Measured live 2026-08-24 with a 1KB / 28-line paste into every supported
+/// agent: Claude Code `[Pasted text #1 +69 lines]`, Codex
+/// `[Pasted Content 1037 chars]`, pi `[paste #1 +28 lines]`, Grok Build
+/// `[Pasted: 28 lines]`, omp `[Paste #1, +28 lines]`. Five agents, five
+/// spellings, one shared prefix — so the match is that prefix,
+/// case-insensitively, against the whitespace-stripped screen. (Matching only
+/// the Claude form aborted Codex sends that had in fact been delivered.)
+const SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE: &str = "[paste";
 /// Claude Code's still-ingesting indicator, `Pasting text…`, normalized.
 const SESSION_CHAT_PASTING_INDICATOR_NEEDLE: &str = "Pastingtext";
 /// Shown to the user when the composer never took the body. Deliberately
@@ -1042,9 +1049,10 @@ pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<Stri
 CDXC:SessionChatVerifyPaste 2026-08-24:
 The screen watch that stands between a paste body and its Enter. It settles
 once (so a paste the TUI already took costs nothing extra), then polls captures
-until one of three things is true: the body — or Claude Code's collapsed
-`[Pasted text …]` placeholder — is on screen, the deadline passed, or the send
-was superseded. "Pasting text…" is the TUI saying ingestion is still running,
+until one of three things is true: the body — or the TUI's collapsed paste
+placeholder (`[Pasted text …]`, `[Pasted Content …]`, `[paste …]`, … — every
+supported agent collapses large pastes, each with its own spelling) — is on
+screen, the deadline passed, or the send was superseded. "Pasting text…" is the TUI saying ingestion is still running,
 which buys one deadline extension rather than an abort.
 
 Absence is only ever reported from a screen that was actually readable. When
@@ -1072,7 +1080,9 @@ async fn verify_session_chat_paste_landed(
         if let Some(screen) = capture_session_terminal_text(zmx_name).await {
             readable = true;
             let normalized = normalize_session_chat_screen_text(&screen);
-            if normalized.contains(SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE)
+            if normalized
+                .to_lowercase()
+                .contains(SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE)
                 || needles.iter().any(|needle| normalized.contains(needle))
             {
                 return SessionChatPasteVerification::Landed;
