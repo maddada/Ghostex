@@ -155,6 +155,35 @@ modal host, titlebar host, Docs/manage, Kanban, or `meo` pages, or about the
 shared `apps/desktop/views/*.ts` logic. Add `packages/components` for shadcn
 primitives, and `apps/mobile/views` for the mobile embedded pages.
 
+### File size and module structure — do not regress
+
+A repo-wide split wave finished on 2026-08-24: every app-owned source file is
+now under ~2,000 lines except a handful of deliberate keeps, and the big Rust
+god-files (`render.rs`, `terminal_sync.rs`, `presentation.rs`, `os_cli.rs`,
+`remote_conn.rs`, the `helpers/*` monoliths, `gxserver-runtime/git.ts`, …) are
+per-concern module directories. Keep it that way:
+
+- **Add new code to the module that owns the concern, not to whichever file is
+  open.** When a split directory exists (e.g. `apps/desktop/src/app/render/`,
+  `helpers/os_cli/`, `server/src/presentation/`, `gxserver-runtime/git/`), new
+  functions go into the matching per-concern file, or a new sibling file —
+  never into `mod.rs`/`index.ts`, which stay as thin re-export barrels.
+- **Don't let files grow back.** If your change would push an app-owned source
+  file past ~1,500 lines, split it as part of the change (or immediately after)
+  using the established recipe: a directory with a `mod.rs` of flat
+  `pub(crate) mod x;` + `pub(crate) use x::*;` re-exports (Rust) or a barrel
+  `index.ts` (TS), moving code **verbatim** so no caller changes. For files
+  that are one big `impl GhostexGpuiApp`, split into sibling files each with
+  their own `impl` block. See `docs/2026-08-22/repo-restructure/SPLITS.md` for
+  the proven pattern.
+- **Splits must be motion, not rewrites.** A split carries a zero-logic-change
+  burden: bodies move byte-identically, item counts match, and any raw-source
+  test or comment citation pointing at the old path gets retargeted in the
+  same commit.
+- Deliberate exception: `apps/desktop/src/terminal_element.rs` (~4.6k
+  lines) stays whole for perf-critical locality. Don't split it, and don't
+  cite it as precedent for letting other files grow.
+
 ### Prompt-history search: it is Rust, and `.dependencies/zehn/` is dead
 
 `gx f` used to spawn a bundled Zig binary built from the `zehn` submodule. It
@@ -199,6 +228,30 @@ Use real, exact native views for interactive boundaries such as splitters and si
 Before adding any `hitTest` override, NSWindow pre-dispatch mouse routing, synthetic coordinate rerouting, invisible interactive overlay, or intentional overlap between interactive regions, the agent must stop and explain the proposed exception to the user, including why strict normal layout cannot solve it. The agent must get explicit user confirmation before implementing that exception.
 
 Native child windows are the accepted pattern for app modals, dropdowns, command palette, rename, Resources, Tips & Tricks, and similar overlay surfaces. Those windows own their own frames and input, so they should not be replaced with main-window transparent webview overlays or root-level hit-test shields.
+
+### Shared UI controls: one component per control kind
+
+Some controls are deliberately owned by a single shared component so every
+surface renders the same thing. Use them instead of hand-rolling a lookalike
+out of `Button`s or raw `ToggleGroup`s, and change the shared component (plus
+its story) when the look must change:
+
+- **Segmented single-select** ("pick exactly one of N", e.g. Sidebar version,
+  Preset, Add Worktree mode, Automate schedule/execution):
+  `packages/components/ui/segmented-control.tsx` — `SegmentedControl` /
+  `SegmentedControlItem`. It renders the stock shadcn ButtonGroup shape: one
+  bordered rounded container, flat segments sharing a hairline, only the outer
+  corners rounded, and a highlighted fill on the selected segment. Story:
+  `Components/Segmented Control`. Its canonical CSS lives unlayered in
+  `packages/core-ui/styles.css` and is mirrored in
+  `apps/desktop/views/project-board/styles.ts` because the Kanban/Automate page
+  loads only `shadcn.generated.css`.
+- **Toggle switch**: `packages/components/ui/switch.tsx` — one shape app-wide
+  (6px track, 4px thumb). Don't reintroduce per-surface pill overrides.
+- **Focus ring**: the chat composer's ring is the reference — 3px at
+  `ring-ring/20` plus `border-ring`. Every shared primitive uses that value;
+  never raise it back to `ring-ring/50` or `/30`. Surfaces that deliberately
+  have no ring (the modal tab rails) stay ringless.
 
 ### Project board beads workflow
 
@@ -249,6 +302,45 @@ Corollary: after you verify a surgical bug fix, tell the user it should be commi
 - Never run "bun run start" or any command that would restart the app unless I ask you to.
 - TypeScript is gated by three configs, not one: `bun run typecheck` (root — `packages/shared`, `packages/core-ui`, `packages/components`, `apps/desktop/views`, `apps/mobile/views`), `bun run web:typecheck` (`apps/web/tsconfig.json`), and `bun run desktop:typecheck` (`apps/desktop/tsconfig.json`, which covers `apps/desktop/sidebar/` and `apps/desktop/views/`). A change under `apps/desktop/sidebar/` is only checked by `desktop:typecheck`.
 - Run desktop-crate cargo commands **from inside `apps/desktop/`**, not with `--manifest-path` from the repo root. The crate pins its own toolchain in `apps/desktop/rust-toolchain.toml` (1.95.0), and `--manifest-path` from the root resolves the root toolchain instead and fails on dependency code that needs the pin.
+
+### Format before committing and pushing
+
+Before you commit and push, check whether other agents are currently working in
+this repo: run `ghostex sessions` (see `ghostex --help`) and look at the status
+column. Your own session counts as one `running` entry.
+
+- **If any _other_ session is `running`**: do NOT run a repo-wide formatting
+  pass — it would sweep their uncommitted work into your commit or create churn
+  under them. Format only the files you yourself changed, then commit
+  path-scoped as usual.
+- **If no other session is `running`** (everything else is `sleep` or the list
+  is empty): run the full-repo formatting pass, then commit your changes and
+  the formatting together (or as a separate `chore: Formatting` commit) and
+  push.
+
+The full-repo pass is:
+
+```bash
+# Rust — each crate separately; the desktop crate MUST run from inside its folder
+(cd apps/desktop && cargo fmt)
+(cd server && cargo fmt)
+(cd apps/history-cli && cargo fmt)
+(cd packages/find && cargo fmt)
+(cd packages/paths && cargo fmt)
+
+# TS/JS/JSON/MD/YAML — app-owned trees only, never .dependencies/ or generated output
+bunx prettier --write "apps/desktop/{sidebar,views,test,scripts}/**/*.{ts,tsx,mjs,md}" \
+  "apps/web/src/**/*.{ts,tsx}" "apps/mobile/views/**/*.{ts,tsx}" \
+  "packages/{shared,core-ui,components}/**/*.{ts,tsx,md}" \
+  "server/**/*.mjs" "tooling/**/*.{mjs,ts}" "*.{json,md,ts}" ".github/**/*.yml"
+```
+
+Never format `.dependencies/**`, `node_modules/**`, `apps/mobile/app/**` (the
+submodule), generated files (`*.generated.*`, `dist/`, `build/`, `target/`,
+`apps/desktop/runtime/`), or `bun.lock`. After a repo-wide pass, run the
+typecheck/test gates before pushing, and review `git status` so you only commit
+formatting deltas plus your own work — if the pass touched a file with foreign
+uncommitted hunks, leave that file out of your commit.
 
 ### Diagnostic logging workflow
 
