@@ -154,6 +154,7 @@ export type SidebarV2ViewModelInput = {
    * groups — this module never guesses which daemon owns a row.
    */
   autoSettleAfterDaysByGroupId?: Readonly<Record<string, number | null>>;
+  enableSessionParking?: boolean;
   /**
    * Settle/snooze capability PER GROUP, because capability is a per-daemon
    * fact and one inbox mixes the local daemon with several remote machines
@@ -279,6 +280,10 @@ function mergeSidebarV2Partitions(
       partitions.flatMap((partition) => partition.active),
       { creationRankById: options.creationRankById }
     ),
+    parked: sortSessionsForSidebarV2(
+      partitions.flatMap((partition) => partition.parked),
+      { creationRankById: options.creationRankById }
+    ),
     settled: sortSettledSessionsForSidebarV2(partitions.flatMap((partition) => partition.settled)),
     snoozed: sortSnoozedSessionsForSidebarV2(partitions.flatMap((partition) => partition.snoozed)),
   };
@@ -359,6 +364,7 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
         ...partitionOptions,
         autoSettleAfterDays: resolveAutoSettleAfterDays(groupId),
         capabilities,
+        enableSessionParking: input.enableSessionParking,
       })
     );
     browserSessionsByGroupId.set(groupId, browserSessions);

@@ -122,6 +122,7 @@ export function createSidebarSessionItems(
      */
     isFavorite: getEffectiveSidebarSessionTag(session) === 'favorite',
     sessionTag: getEffectiveSidebarSessionTag(session),
+    isParked: session.isParked === true,
     /**
      * CDXC:PinnedSessions 2026-05-28-12:04:
      * Project the canonical pinned flag into sidebar items separately from

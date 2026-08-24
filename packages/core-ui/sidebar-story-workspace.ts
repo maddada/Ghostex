@@ -98,6 +98,7 @@ type SidebarSessionDecoration = Pick<
    * only keeps fields named here.
    */
   | 'gitStatus'
+  | 'isParked'
   | 'isPinned'
   | 'lifecycleState'
   | 'isRunning'
@@ -215,6 +216,7 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
               detail: session.detail,
               firstUserMessage: session.firstUserMessage,
               gitStatus: session.gitStatus,
+              isParked: session.isParked,
               isPinned: session.isPinned,
               sessionPersistenceName: session.sessionPersistenceName,
               sessionPersistenceProvider: session.sessionPersistenceProvider,

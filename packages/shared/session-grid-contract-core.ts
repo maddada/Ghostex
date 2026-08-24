@@ -125,6 +125,8 @@ export type BaseSessionRecord = {
    * favorite auto-sleep policy.
    */
   isPinned?: boolean;
+  /** Durable sidebar organization state for sessions intentionally deferred. */
+  isParked?: boolean;
   /**
    * CDXC:PanePopOut 2026-05-11-09:35
    * Popped-out panes keep their terminal or browser runtime alive in a native

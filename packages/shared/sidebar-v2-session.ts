@@ -58,6 +58,7 @@ export type SidebarV2Session = {
    * first-seen ranking to the sort instead (see `sidebar-v2-sort`).
    */
   createdAt?: string;
+  isParked?: boolean;
   isPinned?: boolean;
   lastInteractionAt?: string;
   lifecycleState?: SidebarV2LifecycleState;
@@ -126,6 +127,7 @@ export function toSidebarV2Session(
     activityLabel: session.activityLabel,
     attentionKind: overrides.attentionKind ?? session.attentionKind,
     createdAt: overrides.createdAt ?? session.createdAt,
+    isParked: session.isParked,
     isPinned: session.isPinned,
     lastInteractionAt: session.lastInteractionAt,
     lifecycleState: getSidebarSessionLifecycleState(session),

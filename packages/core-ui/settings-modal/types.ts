@@ -237,6 +237,7 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'projectSessionListCollapsedCount',
     'agentManagerZoomPercent',
     'createSessionOnSidebarDoubleClick',
+    'enableSessionParking',
     'renameSessionOnDoubleClick',
     'useColoredSessionAgentIcons',
     'showSessionCloseContextMenuAction',
@@ -477,8 +478,8 @@ export const MAIN_SETTINGS_SUBSECTION_NAVIGATION: Partial<
   ],
   tools: [
     { id: 'browser', title: 'Browser' },
-    { id: 'editor', title: 'Editor' },
     { id: 'terminalDevServers', title: 'Dev Servers' },
+    { id: 'editor', title: 'Editor' },
   ],
 };
 
@@ -572,6 +573,7 @@ export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
   'sidebarDefaultWidthPx',
   'projectSessionListCollapsedCount',
   'createSessionOnSidebarDoubleClick',
+  'enableSessionParking',
   'showSessionCloseContextMenuAction',
   'workspaceActivePaneBorderColor',
   'workspaceBackgroundColor',

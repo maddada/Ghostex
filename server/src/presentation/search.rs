@@ -203,6 +203,7 @@ pub(crate) fn is_previous_session_history_candidate(session: &Value) -> bool {
         return false;
     }
     if session.get("isPinned").and_then(Value::as_bool) == Some(true)
+        || session.get("isParked").and_then(Value::as_bool) == Some(true)
         || is_favorite(session)
         || session_tag_is_truthy(session)
     {
@@ -261,6 +262,7 @@ pub(crate) fn search_result(project: Option<&Value>, session: &Value, matched: V
     insert_optional_js_truthy_value(&mut output, "cwd", session.get("cwd").cloned());
     merge_object(&mut output, project_session_title(session));
     output.insert("isFavorite".to_string(), Value::Bool(is_favorite(session)));
+    output.insert("isParked".to_string(), value_field(session, "isParked"));
     output.insert("isPinned".to_string(), value_field(session, "isPinned"));
     output.insert(
         "lastActiveAt".to_string(),

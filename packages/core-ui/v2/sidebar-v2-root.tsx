@@ -52,6 +52,7 @@ import {
 } from './sidebar-v2-context-menu';
 import { SidebarV2ProjectGroupSection } from './sidebar-v2-group-header';
 import {
+  openSidebarV2SessionNoteModal,
   postSidebarV2CloseSession,
   postSidebarV2CloseWorkspaceProjects,
   postSidebarV2CopyAttachCommand,
@@ -66,6 +67,7 @@ import {
   postSidebarV2RemoveSessionWorktree,
   postSidebarV2RenameSession,
   postSidebarV2RequestProjectWorktrees,
+  postSidebarV2SetSessionParked,
   postSidebarV2SetSessionPinned,
   postSidebarV2SetSessionSleeping,
   postSidebarV2SetSessionTag,
@@ -399,6 +401,7 @@ export function SidebarV2Root({
   const cleanupRequestIdRef = useRef<string | undefined>(undefined);
   const [isSettledExpanded, setIsSettledExpanded] = useState(true);
   const [isSnoozedExpanded, setIsSnoozedExpanded] = useState(false);
+  const [isParkedExpanded, setIsParkedExpanded] = useState(false);
   const [isBrowserExpanded, setIsBrowserExpanded] = useState(true);
   /*
    * Grouped mode gets one shelf state per project per tone. Stored as explicit
@@ -535,6 +538,7 @@ export function SidebarV2Root({
         autoSettleAfterDaysByGroupId,
         capabilitiesByGroupId,
         creationOrder,
+        enableSessionParking: settings.enableSessionParking,
         groupIds,
         groupsById,
         nowMs,
@@ -554,6 +558,7 @@ export function SidebarV2Root({
       scopeId,
       sessionIdsByGroup,
       settings.sidebarAutoSettleAfterDays,
+      settings.enableSessionParking,
       sessionsById,
     ]
   );
@@ -1142,6 +1147,7 @@ export function SidebarV2Root({
 
   const flatIsEmpty =
     viewModel.flat.active.length === 0 &&
+    viewModel.flat.parked.length === 0 &&
     viewModel.flat.settled.length === 0 &&
     viewModel.flat.snoozed.length === 0 &&
     viewModel.browserSessions.length === 0;
@@ -1281,9 +1287,9 @@ export function SidebarV2Root({
       )
     : [];
 
-  const isProjectShelfExpanded = (groupId: string, tone: 'settled' | 'snoozed') =>
+  const isProjectShelfExpanded = (groupId: string, tone: 'parked' | 'settled' | 'snoozed') =>
     projectShelfOverrides[`${groupId}:${tone}`] ?? (tone === 'settled' ? true : false);
-  const toggleProjectShelf = (groupId: string, tone: 'settled' | 'snoozed') => {
+  const toggleProjectShelf = (groupId: string, tone: 'parked' | 'settled' | 'snoozed') => {
     const key = `${groupId}:${tone}`;
     setProjectShelfOverrides((previous) => ({
       ...previous,
@@ -1319,6 +1325,15 @@ export function SidebarV2Root({
         tone='settled'
       >
         {group.partition.settled.map((session) => renderRow(session, { shelf: 'settled', variant: 'slim' }))}
+      </SidebarV2Shelf>
+      <SidebarV2Shelf
+        count={group.partition.parked.length}
+        isExpanded={isProjectShelfExpanded(group.groupId, 'parked')}
+        label='Parked'
+        onToggle={() => toggleProjectShelf(group.groupId, 'parked')}
+        tone='parked'
+      >
+        {group.partition.parked.map((session) => renderRow(session, { slimLabel: 'Parked', variant: 'slim' }))}
       </SidebarV2Shelf>
     </>
   );
@@ -1451,6 +1466,15 @@ export function SidebarV2Root({
             tone='settled'
           >
             {viewModel.flat.settled.map((session) => renderRow(session, { shelf: 'settled', variant: 'slim' }))}
+          </SidebarV2Shelf>
+          <SidebarV2Shelf
+            count={viewModel.flat.parked.length}
+            isExpanded={isParkedExpanded}
+            label='Parked'
+            onToggle={() => setIsParkedExpanded((previous) => !previous)}
+            tone='parked'
+          >
+            {viewModel.flat.parked.map((session) => renderRow(session, { slimLabel: 'Parked', variant: 'slim' }))}
           </SidebarV2Shelf>
         </ul>
       ) : (
@@ -1639,6 +1663,8 @@ export function SidebarV2Root({
                   }
                 : undefined,
               onRename: () => setRenamingSessionId(menuSession.sessionId),
+              onSessionNote: () => openSidebarV2SessionNoteModal(menuSession, sidebarV2SessionModalTitle(menuSession)),
+              onSetParked: (parked) => postSidebarV2SetSessionParked(vscode, menuSession.sessionId, parked),
               onSetPinned: (pinned) => postSidebarV2SetSessionPinned(vscode, menuSession.sessionId, pinned),
               onSetSessionTag: (tag) => postSidebarV2SetSessionTag(vscode, menuSession.sessionId, tag),
               onSetSleeping: (sleeping) => postSidebarV2SetSessionSleeping(vscode, menuSession.sessionId, sleeping),
@@ -1661,6 +1687,7 @@ export function SidebarV2Root({
             },
             {
               canFocusMode: menuGroup?.canFocusMode === true,
+              enableSessionParking: settings.enableSessionParking,
               eligibility: menuEligibility,
               lifecycle: menuV2Session
                 ? {

@@ -236,6 +236,7 @@ pub(crate) fn project_presentation_session(
         ),
     );
     output.insert("isPinned".to_string(), value_field(session, "isPinned"));
+    output.insert("isParked".to_string(), value_field(session, "isParked"));
     merge_object(&mut output, title);
     output.insert("kind".to_string(), value_field(session, "kind"));
     output.insert(

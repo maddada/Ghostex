@@ -301,6 +301,7 @@ pub(crate) struct SessionRow {
     created_at: String,
     cwd: Option<String>,
     is_favorite: i64,
+    is_parked: i64,
     is_pinned: i64,
     kind: String,
     last_active_at: Option<String>,
@@ -339,6 +340,7 @@ pub(crate) fn session_row_from_sql(row: &rusqlite::Row<'_>) -> rusqlite::Result<
         agent_id: row.get("agentId")?,
         command_id: row.get("commandId")?,
         is_pinned: row.get("isPinned")?,
+        is_parked: row.get("isParked")?,
         is_favorite: row.get("isFavorite")?,
         restored_from_session_id: row.get("restoredFromSessionId")?,
         restored_from_history_id: row.get("restoredFromHistoryId")?,
@@ -442,6 +444,7 @@ pub(crate) fn session_from_row(server_id: &str, row: SessionRow) -> DomainResult
         Value::Bool(tag.as_deref() == Some("favorite") || row.is_favorite == 1),
     );
     session.insert("isPinned".to_string(), Value::Bool(row.is_pinned == 1));
+    session.insert("isParked".to_string(), Value::Bool(row.is_parked == 1));
     session.insert(
         "kind".to_string(),
         Value::String(normalize_session_kind(Some(&Value::String(row.kind)))),
@@ -666,6 +669,7 @@ pub(crate) fn session_insert_params(
         sql_optional_text(optional_string(object, "settledOverrideAt")),
         sql_optional_text(optional_string(object, "snoozedAt")),
         sql_optional_text(optional_string(object, "snoozedUntil")),
+        sql_i64(bool_field(object, "isParked") as i64),
     ];
     Ok(rusqlite::params_from_iter(values))
 }

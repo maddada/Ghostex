@@ -14,7 +14,7 @@ import { useSidebarCollapsiblePresence } from '../sidebar-collapse-animation';
  *   paying their layout cost once the transition is complete.
  */
 
-export type SidebarV2ShelfTone = 'browser' | 'settled' | 'snoozed';
+export type SidebarV2ShelfTone = 'browser' | 'parked' | 'settled' | 'snoozed';
 
 export type SidebarV2ShelfProps = {
   children: ReactNode;

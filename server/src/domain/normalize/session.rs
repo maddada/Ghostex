@@ -87,7 +87,14 @@ pub(crate) fn normalize_session_input(
     );
     session.insert(
         "isPinned".to_string(),
-        Value::Bool(input.get("isPinned").and_then(Value::as_bool) == Some(true)),
+        Value::Bool(
+            input.get("isPinned").and_then(Value::as_bool) == Some(true)
+                && input.get("isParked").and_then(Value::as_bool) != Some(true),
+        ),
+    );
+    session.insert(
+        "isParked".to_string(),
+        Value::Bool(input.get("isParked").and_then(Value::as_bool) == Some(true)),
     );
     session.insert(
         "kind".to_string(),
@@ -215,10 +222,18 @@ pub(crate) fn merge_session_update(
     }
     next.insert("hiddenMetadata".to_string(), Value::Object(hidden));
     if input.contains_key("isPinned") {
-        next.insert(
-            "isPinned".to_string(),
-            Value::Bool(input.get("isPinned").and_then(Value::as_bool) == Some(true)),
-        );
+        let is_pinned = input.get("isPinned").and_then(Value::as_bool) == Some(true);
+        next.insert("isPinned".to_string(), Value::Bool(is_pinned));
+        if is_pinned {
+            next.insert("isParked".to_string(), Value::Bool(false));
+        }
+    }
+    if input.contains_key("isParked") {
+        let is_parked = input.get("isParked").and_then(Value::as_bool) == Some(true);
+        next.insert("isParked".to_string(), Value::Bool(is_parked));
+        if is_parked {
+            next.insert("isPinned".to_string(), Value::Bool(false));
+        }
     }
     if input.contains_key("kind") {
         next.insert(

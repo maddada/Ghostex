@@ -296,7 +296,13 @@ function createPresentationSessionSortKeyWithSidebarOrder(
   sidebarOrder: number
 ): string {
   const activeRank = session.lifecycleState === 'running' || session.lifecycleState === 'sleeping' ? '0' : '1';
-  const pinRank = session.isPinned ? '0' : session.sessionTag === 'favorite' || session.isFavorite ? '1' : '2';
+  const pinRank = session.isPinned
+    ? '0'
+    : session.isParked
+      ? '3'
+      : session.sessionTag === 'favorite' || session.isFavorite
+        ? '1'
+        : '2';
   const timestamp = session.lastActiveAt ?? session.updatedAt;
   /*
   CDXC:ManualSessionSorting 2026-06-05-12:30:

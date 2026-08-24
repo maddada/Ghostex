@@ -312,7 +312,7 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
       {
         key: 'sidebarVersion',
         options: SIDEBAR_VERSION_OPTIONS,
-        subtitle: 'Choose the classic sidebar or the new Inbox sidebar, a flat list of sessions across all projects.',
+        subtitle: 'Choose the classic sidebar or the Inbox sidebar, a flat list of sessions across all projects.',
         title: 'Sidebar version',
       },
       {
@@ -438,6 +438,11 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         key: 'createSessionOnSidebarDoubleClick',
         subtitle: 'Create a session from empty sidebar space.',
         title: 'Double-click empty sidebar space to create a session',
+      },
+      {
+        key: 'enableSessionParking',
+        subtitle: 'Move deferred sessions into a collapsible Parked section at the bottom of the sidebar.',
+        title: 'Enable session parking',
       },
       {
         key: 'renameSessionOnDoubleClick',
@@ -860,8 +865,8 @@ export function getMainSettingsGroupSearch(settingsSearchQuery: string, settings
     ]),
     tools: getGroupedSettingsSectionSearch(settingsSearchQuery, 'Tools', [
       settingsSearch.browser,
-      settingsSearch.editor,
       settingsSearch.terminalDevServers,
+      settingsSearch.editor,
     ]),
     statusIndicators: settingsSearch.statusIndicators,
     notifications: getGroupedSettingsSectionSearch(settingsSearchQuery, 'Notifications', [settingsSearch.sounds]),

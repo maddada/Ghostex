@@ -136,6 +136,7 @@ pub(crate) fn attention_state(session: &Value, generated_at: &str) -> Value {
 pub(crate) fn should_include_presentation_session(session: &Value) -> bool {
     is_active(session)
         || session.get("isPinned").and_then(Value::as_bool) == Some(true)
+        || session.get("isParked").and_then(Value::as_bool) == Some(true)
         || is_favorite(session)
         || session_tag_is_truthy(session)
 }
@@ -325,6 +326,8 @@ pub(crate) fn session_sort_key(session: &Value) -> String {
     let active_rank = if is_active(session) { "0" } else { "1" };
     let pin_rank = if session.get("isPinned").and_then(Value::as_bool) == Some(true) {
         "0"
+    } else if session.get("isParked").and_then(Value::as_bool) == Some(true) {
+        "3"
     } else if is_favorite(session) {
         "1"
     } else {

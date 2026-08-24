@@ -30,6 +30,7 @@ export function gxserverSearchResultToPreviousSessionItem(
     isFavorite: result.isFavorite,
     isFocused: false,
     isGeneratedName: false,
+    isParked: result.isParked,
     isPinned: result.isPinned,
     isPrimaryTitleTerminalTitle: result.isPrimaryTitleTerminalTitle,
     isRestorable: true,

@@ -1299,12 +1299,19 @@ export function SidebarApp({
   const { groupIds: effectiveGroupIds, sessionIdsByGroup: effectiveSessionIdsByGroup } = useMemo(
     () =>
       createDisplaySessionLayout({
+        enableSessionParking: effectiveSettings.enableSessionParking,
         sessionIdsByGroup: createWorkspaceSessionIdsByGroup(workspaceGroupIds, authoritativeSessionIdsByGroup),
         sessionsById,
         sortMode: activeSessionsSortMode,
         workspaceGroupIds,
       }),
-    [activeSessionsSortMode, authoritativeSessionIdsByGroup, sessionsById, workspaceGroupIds]
+    [
+      activeSessionsSortMode,
+      authoritativeSessionIdsByGroup,
+      effectiveSettings.enableSessionParking,
+      sessionsById,
+      workspaceGroupIds,
+    ]
   );
   const normalizedSessionSearchQuery = sessionSearchQuery.trim();
   const isSessionSearchFiltering =

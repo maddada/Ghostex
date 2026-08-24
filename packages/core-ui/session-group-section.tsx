@@ -507,17 +507,24 @@ export type SessionGroupSectionProps = {
   vscode: WebviewApi;
 };
 
-type ProjectSessionSection = 'browser' | 'pinned' | 'sessions';
+type ProjectSessionSection = 'browser' | 'pinned' | 'sessions' | 'parked';
 
 const EXPANDED_PROJECT_SESSION_SECTIONS: Readonly<Record<ProjectSessionSection, boolean>> = {
   browser: false,
   pinned: false,
   sessions: false,
+  parked: true,
 };
 
-function getProjectSessionSection(session: SidebarSessionItem | undefined): ProjectSessionSection {
+function getProjectSessionSection(
+  session: SidebarSessionItem | undefined,
+  enableSessionParking: boolean
+): ProjectSessionSection {
   if (session?.kind === 'browser' || session?.sessionKind === 'browser') {
     return 'browser';
+  }
+  if (enableSessionParking && session?.isParked === true) {
+    return 'parked';
   }
   return session?.isPinned === true ? 'pinned' : 'sessions';
 }
@@ -874,6 +881,9 @@ export function SessionGroupSection({
   const showProjectIcons = useSidebarStore(
     (state) => state.hud.settings?.showProjectIcons ?? DEFAULT_ghostex_SETTINGS.showProjectIcons
   );
+  const enableSessionParking = useSidebarStore(
+    (state) => state.hud.settings?.enableSessionParking ?? DEFAULT_ghostex_SETTINGS.enableSessionParking
+  );
   /*
    * CDXC:DisabledPluginRouting 2026-08-23:
    * Turning Browser off in Settings → Customize removes the Browser workarea,
@@ -915,6 +925,8 @@ export function SessionGroupSection({
         state.hud.settings?.renameSessionOnDoubleClick ?? state.hud.renameSessionOnDoubleClick,
       showCloseButton: state.hud.showCloseButtonOnSessionCards,
       showDebugSessionNumbers: state.hud.debuggingMode,
+      enableSessionParking:
+        state.hud.settings?.enableSessionParking ?? DEFAULT_ghostex_SETTINGS.enableSessionParking,
       showLastActiveTime: !(
         state.hud.settings?.hideLastActiveTimeOnSessionCards ??
         DEFAULT_ghostex_SETTINGS.hideLastActiveTimeOnSessionCards
@@ -959,19 +971,23 @@ export function SessionGroupSection({
   const renderedSessionIds =
     shouldShowProjectSessionListToggle && !isProjectSessionListCollapsed ? orderedSessionIds : visibleSessionIds;
   const renderedBrowserSessionIds = renderedSessionIds.filter((sessionId) => {
-    return getProjectSessionSection(sessionsById[sessionId]) === 'browser';
+    return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'browser';
   });
   const renderedPinnedSessionIds = renderedSessionIds.filter((sessionId) => {
-    return getProjectSessionSection(sessionsById[sessionId]) === 'pinned';
+    return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'pinned';
   });
   const renderedUnpinnedSessionIds = renderedSessionIds.filter((sessionId) => {
-    return getProjectSessionSection(sessionsById[sessionId]) === 'sessions';
+    return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'sessions';
+  });
+  const renderedParkedSessionIds = renderedSessionIds.filter((sessionId) => {
+    return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'parked';
   });
   const shouldRenderSessionKindLabels =
     renderedBrowserSessionIds.length > 0 && renderedBrowserSessionIds.length < renderedSessionIds.length;
   const firstBrowserSessionId = renderedBrowserSessionIds[0];
   const firstPinnedSessionId = renderedPinnedSessionIds[0];
   const firstUnpinnedSessionId = renderedUnpinnedSessionIds[0];
+  const firstParkedSessionId = renderedParkedSessionIds[0];
   const firstTerminalSessionId = renderedSessionIds.find((sessionId) => {
     const session = sessionsById[sessionId];
     return session?.kind !== 'browser' && session?.sessionKind !== 'browser';
@@ -997,14 +1013,15 @@ export function SessionGroupSection({
       return;
     }
     handledRevealSessionRequestIdRef.current = revealSessionRequest.requestId;
-    const revealedSection = getProjectSessionSection(revealedSession);
+    const revealedSection = getProjectSessionSection(revealedSession, enableSessionParking);
     setCollapsedProjectSessionSections((previous) =>
       previous[revealedSection] ? { ...previous, [revealedSection]: false } : previous
     );
-  }, [orderedSessionIds, revealSessionRequest, sessionsById]);
+  }, [enableSessionParking, orderedSessionIds, revealSessionRequest, sessionsById]);
   const expandedVisibleSessionIds = projectContext
     ? visibleSessionIds.filter(
-        (sessionId) => !collapsedProjectSessionSections[getProjectSessionSection(sessionsById[sessionId])]
+        (sessionId) =>
+          !collapsedProjectSessionSections[getProjectSessionSection(sessionsById[sessionId], enableSessionParking)]
       )
     : visibleSessionIds;
   const projectSessionListLastVisibleSessionId =
@@ -2511,9 +2528,10 @@ export function SessionGroupSection({
                 <>
                   {renderedSessionIds.map((sessionId, sessionIndex) => {
                     const session = sessionsById[sessionId];
-                    const projectSessionSection = getProjectSessionSection(session);
+                    const projectSessionSection = getProjectSessionSection(session, enableSessionParking);
                     const isProjectSessionSectionCollapsed =
-                      Boolean(projectContext) && collapsedProjectSessionSections[projectSessionSection];
+                      (Boolean(projectContext) || (isChatCollection && projectSessionSection === 'parked')) &&
+                      collapsedProjectSessionSections[projectSessionSection];
                     const isProjectSessionListOverflowRow =
                       shouldClipProjectSessionList && !visibleSessionIdSet.has(sessionId);
                     const sessionIdsBelowStartIndex = isProjectSessionListOverflowRow ? undefined : sessionIndex + 1;
@@ -2551,6 +2569,13 @@ export function SessionGroupSection({
                             isCollapsed={collapsedProjectSessionSections.sessions}
                             label='Sessions'
                             onToggle={() => toggleProjectSessionSection('sessions')}
+                          />
+                        ) : null}
+                        {(projectContext || isChatCollection) && sessionId === firstParkedSessionId ? (
+                          <ProjectSessionSectionToggle
+                            isCollapsed={collapsedProjectSessionSections.parked}
+                            label='Parked'
+                            onToggle={() => toggleProjectSessionSection('parked')}
                           />
                         ) : null}
                         {!projectContext && shouldRenderSessionKindLabels && sessionId === firstBrowserSessionId ? (

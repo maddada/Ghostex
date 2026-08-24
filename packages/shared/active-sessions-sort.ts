@@ -3,6 +3,7 @@ import type { SidebarActiveSessionsSortMode, SidebarSessionItem } from './sessio
 export type SessionIdsByGroup = Record<string, string[]>;
 
 export type CreateDisplaySessionLayoutOptions = {
+  enableSessionParking?: boolean;
   sessionIdsByGroup: SessionIdsByGroup;
   sessionsById: Record<string, SidebarSessionItem>;
   sortMode: SidebarActiveSessionsSortMode;
@@ -10,6 +11,7 @@ export type CreateDisplaySessionLayoutOptions = {
 };
 
 export function createDisplaySessionLayout({
+  enableSessionParking = false,
   sessionIdsByGroup,
   sessionsById,
   sortMode,
@@ -21,7 +23,9 @@ export function createDisplaySessionLayout({
   const manualSessionIdsByGroup = Object.fromEntries(
     workspaceGroupIds.map((groupId) => [
       groupId,
-      orderBrowserSessionsFirst(sessionIdsByGroup[groupId] ?? [], sessionsById),
+      orderProjectSessionsForDisplay(sessionIdsByGroup[groupId] ?? [], sessionsById, {
+        enableSessionParking,
+      }),
     ])
   );
   if (sortMode === 'manual') {
@@ -41,6 +45,7 @@ export function createDisplaySessionLayout({
     workspaceGroupIds.map((groupId) => [
       groupId,
       orderProjectSessionsForDisplay(sessionIdsByGroup[groupId] ?? [], sessionsById, {
+        enableSessionParking,
         sortUnpinnedByLastActivity: true,
       }),
     ])
@@ -60,7 +65,7 @@ export function getDisplaySessionIdsInOrder(options: CreateDisplaySessionLayoutO
 function orderProjectSessionsForDisplay(
   sessionIds: readonly string[],
   sessionsById: Record<string, SidebarSessionItem>,
-  options: { sortUnpinnedByLastActivity?: boolean } = {}
+  options: { enableSessionParking?: boolean; sortUnpinnedByLastActivity?: boolean } = {}
 ): string[] {
   /**
    * CDXC:PinnedSessions 2026-05-28-12:04:
@@ -89,12 +94,20 @@ function orderProjectSessionsForDisplay(
 function orderSessionKindForDisplay(
   sessionIds: readonly string[],
   sessionsById: Record<string, SidebarSessionItem>,
-  options: { sortUnpinnedByLastActivity?: boolean }
+  options: { enableSessionParking?: boolean; sortUnpinnedByLastActivity?: boolean }
 ): string[] {
   const pinnedSessionIds: string[] = [];
   const otherSessionIds: string[] = [];
+  const parkedSessionIds: string[] = [];
   for (const sessionId of sessionIds) {
-    (sessionsById[sessionId]?.isPinned === true ? pinnedSessionIds : otherSessionIds).push(sessionId);
+    const session = sessionsById[sessionId];
+    if (session?.isPinned === true) {
+      pinnedSessionIds.push(sessionId);
+    } else if (options.enableSessionParking && session?.isParked === true) {
+      parkedSessionIds.push(sessionId);
+    } else {
+      otherSessionIds.push(sessionId);
+    }
   }
 
   return [
@@ -102,6 +115,7 @@ function orderSessionKindForDisplay(
     ...(options.sortUnpinnedByLastActivity
       ? sortSessionIdsByLastActivity(otherSessionIds, sessionsById)
       : otherSessionIds),
+    ...parkedSessionIds,
   ];
 }
 
@@ -125,32 +139,6 @@ function sortSessionIdsByLastActivity(
 
     return sessionIds.indexOf(leftSessionId) - sessionIds.indexOf(rightSessionId);
   });
-}
-
-function orderBrowserSessionsFirst(
-  sessionIds: readonly string[],
-  sessionsById: Record<string, SidebarSessionItem>
-): string[] {
-  /**
-   * CDXC:ProjectBrowserTabs 2026-05-16-12:49:
-   * Browser pane sessions that belong to a project should render at the top of
-   * that project's sidebar session list, directly under the project header,
-   * while preserving the existing order within browser and non-browser
-   * sessions. Apply this in the shared display layout so search, drag, focus,
-   * and flattening code all use the same visible order.
-   */
-  const browserSessionIds: string[] = [];
-  const otherSessionIds: string[] = [];
-
-  for (const sessionId of sessionIds) {
-    if (isBrowserSession(sessionsById[sessionId])) {
-      browserSessionIds.push(sessionId);
-    } else {
-      otherSessionIds.push(sessionId);
-    }
-  }
-
-  return [...browserSessionIds, ...otherSessionIds];
 }
 
 function isBrowserSession(session: SidebarSessionItem | undefined): boolean {

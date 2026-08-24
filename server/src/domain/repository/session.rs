@@ -45,13 +45,13 @@ impl<'a> DomainRepository<'a> {
                   agentId, commandId, isPinned, isFavorite, sessionTag, restoredFromSessionId, restoredFromHistoryId,
                   launchSettingsJson, runtimeSettingsJson, completionRulesJson, attentionRulesJson,
                   notificationRulesJson, worktreeJson, createdAt, updatedAt, lastActiveAt, sidebarOrder,
-                  settledAt, settledOverride, settledOverrideAt, snoozedAt, snoozedUntil
+                  settledAt, settledOverride, settledOverrideAt, snoozedAt, snoozedUntil, isParked
                 ) VALUES (
                   ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
                   ?9, ?10, ?11, ?12, ?13, ?14, ?15,
                   ?16, ?17, ?18, ?19,
                   ?20, ?21, ?22, ?23, ?24, ?25,
-                  ?26, ?27, ?28, ?29, ?30
+                  ?26, ?27, ?28, ?29, ?30, ?31
                 )
                 "#,
                 session_insert_params(&session)?,
@@ -140,7 +140,8 @@ impl<'a> DomainRepository<'a> {
                   settledOverride = ?27,
                   settledOverrideAt = ?28,
                   snoozedAt = ?29,
-                  snoozedUntil = ?30
+                  snoozedUntil = ?30,
+                  isParked = ?31
                 WHERE projectId = ?1 AND sessionId = ?2
                 "#,
                 session_insert_params(&session)?,

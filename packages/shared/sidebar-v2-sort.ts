@@ -26,7 +26,7 @@ callers pass a first-seen ranking built with `reconcileSidebarV2CreationOrder`,
 which is position-stable by construction.
 */
 
-export type SidebarV2SortSession = Pick<SidebarV2Session, 'createdAt' | 'isPinned' | 'sessionId'>;
+export type SidebarV2SortSession = Pick<SidebarV2Session, 'createdAt' | 'isParked' | 'isPinned' | 'sessionId'>;
 
 export type SidebarV2SortOptions = {
   /**
@@ -149,6 +149,7 @@ export function sortSnoozedSessionsForSidebarV2<T extends SidebarV2SnoozedSortSe
 
 export type SidebarV2Partition<T> = {
   active: T[];
+  parked: T[];
   settled: T[];
   snoozed: T[];
 };
@@ -159,6 +160,7 @@ export type SidebarV2PartitionOptions = {
   /** P3 pull-request state per session id; a merged/closed request auto-settles. */
   changeRequestStateBySessionId?: ReadonlyMap<string, SidebarV2ChangeRequestState | null>;
   creationRankById?: ReadonlyMap<string, number>;
+  enableSessionParking?: boolean;
   nowMs: number;
 };
 
@@ -172,10 +174,15 @@ export function partitionSidebarV2Sessions<T extends SidebarV2Session>(
   options: SidebarV2PartitionOptions
 ): SidebarV2Partition<T> {
   const active: T[] = [];
+  const parked: T[] = [];
   const settled: T[] = [];
   const snoozed: T[] = [];
 
   for (const session of sessions) {
+    if (options.enableSessionParking && session.isParked === true) {
+      parked.push(session);
+      continue;
+    }
     if (
       effectiveSidebarV2Snoozed(session, {
         capabilities: options.capabilities,
@@ -196,6 +203,7 @@ export function partitionSidebarV2Sessions<T extends SidebarV2Session>(
 
   return {
     active: sortSessionsForSidebarV2(active, { creationRankById: options.creationRankById }),
+    parked: sortSessionsForSidebarV2(parked, { creationRankById: options.creationRankById }),
     settled: sortSettledSessionsForSidebarV2(settled),
     snoozed: sortSnoozedSessionsForSidebarV2(snoozed),
   };
