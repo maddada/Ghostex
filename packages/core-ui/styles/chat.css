@@ -2026,22 +2026,26 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 /* Image links render as inline buttons that open the centered overlay. */
 /* --- Inline images ---------------------------------------------------------- */
 
-/* Pictures shared in the conversation render at their own aspect ratio, capped
-   so a tall screenshot cannot push the rest of the turn off screen, and click
-   through to the full-size overlay. */
+/* Pictures shared in the conversation use the same compact 48px square as a
+   composer attachment. The full image remains available through the overlay;
+   the transcript itself stays a consistent list of thumbnails regardless of
+   each source image's dimensions or aspect ratio. */
 .ghostex-chat-inline-image-frame {
   display: inline-flex;
-  max-width: 100%;
+  flex: 0 0 3rem;
+  height: 3rem;
   min-width: 0;
+  width: 3rem;
 }
 
 .ghostex-chat-inline-image-button {
   background: none;
   border: none;
   display: block;
+  height: 3rem;
   line-height: 0;
-  max-width: 100%;
   padding: 0;
+  width: 3rem;
 }
 
 /* CDXC:SidebarCursor forces `cursor: default !important` on every button so app
@@ -2057,10 +2061,9 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   border: 1px solid var(--border);
   border-radius: 8px;
   display: block;
-  max-height: 260px;
-  max-width: 100%;
-  object-fit: contain;
-  width: auto;
+  height: 3rem;
+  object-fit: cover;
+  width: 3rem;
 }
 
 /* --- Image preview overlay ------------------------------------------------- */
@@ -2160,9 +2163,9 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   border-radius: 8px;
   color: var(--muted-foreground);
   display: inline-flex;
-  height: 72px;
+  height: 3rem;
   justify-content: center;
-  width: 112px;
+  width: 3rem;
 }
 
 /* Inside markdown prose an image sits on its own line rather than mid-sentence. */
