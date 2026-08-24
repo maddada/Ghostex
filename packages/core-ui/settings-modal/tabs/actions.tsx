@@ -103,10 +103,8 @@ export function useSettingsCommandOrder(commands: readonly SidebarCommandButton[
 export function ActionsSettingsTab({
   getSettingModificationProps,
   hideTabStripNewBrowserButton,
-  hideTabStripNewChatButton,
   hideTabStripNewTerminalButton,
   onHideTabStripNewBrowserButtonChange,
-  onHideTabStripNewChatButtonChange,
   onHideTabStripNewTerminalButtonChange,
   search,
   searchEmptyState,
@@ -114,10 +112,8 @@ export function ActionsSettingsTab({
 }: {
   getSettingModificationProps: <Key extends keyof ghostexSettings>(key: Key) => Required<SettingModificationProps>;
   hideTabStripNewBrowserButton: boolean;
-  hideTabStripNewChatButton: boolean;
   hideTabStripNewTerminalButton: boolean;
   onHideTabStripNewBrowserButtonChange: (checked: boolean) => void;
-  onHideTabStripNewChatButtonChange: (checked: boolean) => void;
   onHideTabStripNewTerminalButtonChange: (checked: boolean) => void;
   search: SettingsTabSearch;
   searchEmptyState?: ReactNode;

@@ -22,6 +22,7 @@ import {
   DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
+  DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
   DEFAULT_TERMINAL_PANE_PADDING_PX,
   type PromptEditorBackend,
   type WebLinkOpenTarget,
@@ -182,7 +183,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * show only added/removed line counts. Users can opt back into the file
    * number from Settings when they want the full diff summary.
    */
-  showProjectEditorDiffFileCount: SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.showProjectEditorDiffFileCount,
+  showProjectEditorDiffFileCount: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showProjectEditorDiffFileCount,
   /**
    * CDXC:ProjectDiffStats 2026-05-27-09:25:
    * Match Starship-style tracked line counts by default. Users can opt in to
@@ -206,6 +207,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   showNotificationOnTerminalBell: false,
   createSessionOnSidebarDoubleClick: false,
+  enableSessionParking: false,
   debuggingMode: false,
   diagnosticLogging: {
     scenarios: DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS,
@@ -228,15 +230,14 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   hideSessionAgentIconUntilHover: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideSessionAgentIconUntilHover,
   /**
    * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
-   * Preserve the existing monochrome sidebar until users opt into colored
-   * session agent logos from Session Cards settings.
+   * New installs use colored agent logos so session identity stays visually
+   * distinct without requiring a separate opt-in.
    *
    * CDXC:SidebarSessionAgentIcons 2026-06-30-22:40:
-   * The same opt-in colors the selected agent launcher icon in project and
-   * Quick headers, so the visible picker identity matches the session-card
-   * agent-logo mode.
+   * The same setting colors the selected agent launcher icon in project and
+   * Quick headers, so the visible picker identity matches session cards.
    */
-  useColoredSessionAgentIcons: false,
+  useColoredSessionAgentIcons: true,
   /**
    * CDXC:BrowserPanes 2026-05-28-07:38:
    * Browser page favicons are page identity, not agent chrome. Keep them
@@ -277,8 +278,9 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * CDXC:AutoSleep 2026-06-15-18:31:
    * Heavy editor, Project, Git/Browser, and browser-session surfaces should
    * retire quickly by default because many awake webviews and code-server
-   * processes make sidebar switching laggy. Use a five-minute idle window and
-   * enable browser-session Auto Sleep while keeping agent terminals opt-in.
+   * processes make sidebar switching laggy. Use ten-minute idle windows for
+   * browser and VS Code panes, retain five minutes for Git and Project panes,
+   * and enable browser-session Auto Sleep while keeping agent terminals opt-in.
    *
    * CDXC:AutoSleep 2026-06-07-00:53:
    * Agent auto-sleep keeps its opt-in policy, but the default idle threshold is
@@ -292,9 +294,9 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   autoSleepAgentSessionsEnabled: false,
   autoSleepAgentIdleMinutes: 15,
   autoSleepBrowserSessionsEnabled: true,
-  autoSleepBrowserIdleMinutes: 5,
+  autoSleepBrowserIdleMinutes: 10,
   autoSleepCodeEditorEnabled: true,
-  autoSleepCodeEditorIdleMinutes: 5,
+  autoSleepCodeEditorIdleMinutes: 10,
   autoSleepGitEditorEnabled: true,
   autoSleepGitEditorIdleMinutes: 5,
   autoSleepProjectEditorEnabled: true,
@@ -336,7 +338,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * adding Global Actions never silently removes a control someone relies on.
    */
   hideTabStripNewTerminalButton: false,
-  hideTabStripNewChatButton: false,
   hideTabStripNewBrowserButton: false,
   /**
    * CDXC:SessionAttentionNotifications 2026-05-10-16:46
@@ -410,7 +411,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * identifiers unless they explicitly enable the pane overlay.
    */
   showSessionIdInTerminalPanes: false,
-  preferredAgentInterface: 'terminal',
+  preferredAgentInterface: 'chat',
   /**
    * CDXC:SidebarV2 2026-07-29:
    * The classic sidebar stays the default for every user. Sidebar V2 must be
@@ -419,10 +420,10 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   sidebarVersion: 'v1',
   /**
    * CDXC:SidebarV2 2026-07-29:
-   * Sidebar V2 opens as one flat, position-stable inbox. Group by Project is
-   * the opt-in sub-mode.
+   * Sidebar V2 opens with sessions grouped into collapsible project groups.
+   * Users can switch back to the flat, position-stable inbox when preferred.
    */
-  sidebarV2Layout: 'flat',
+  sidebarV2Layout: 'byProject',
   /**
    * CDXC:SidebarV2Lifecycle 2026-07-29:
    * Three days is the agreed default window, and it matches
@@ -455,15 +456,13 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   sidebarCollapseAnimationDurationMs: DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   /**
    * CDXC:SidebarChrome 2026-06-05-04:40:
-   * First-run reset target remains 235px, but users can change this Settings
+   * First-run reset target is 275px, but users can change this Settings
    * value for explicit sidebar-handle double-click resets without changing the
    * last-width restore path used at app restart.
    */
   sidebarDefaultWidthPx: DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
   projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   sidebarProjectGroupStyle: 'branched',
-  sidebarGroupsOpacityPercent: 0,
-  sidebarProjectsOpacityPercent: 0,
   expandCollapsedProjectsOnJump: true,
   showLessForExpandedProjectJumps: false,
   /**
@@ -511,8 +510,8 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * native startup, and protocol snapshots agree.
    *
    * CDXC:SidebarTitlebarColors 2026-07-22:
-   * Default app chrome to neutral #808080 at 90 Background Contrast,
-   * resolving to #1c1c1c.
+   * Default app chrome to neutral #808080 at 93 Background Contrast,
+   * resolving to #141414.
    *
    * CDXC:SettingsTheming 2026-06-15-21:35:
    * Background Contrast and Background Tint are standard Theming controls.
@@ -549,7 +548,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   terminalBackgroundImageFit: 'cover',
   terminalLetterSpacing: 0,
   terminalLineHeight: 1.2,
-  terminalPaneHorizontalPaddingPx: DEFAULT_TERMINAL_PANE_PADDING_PX,
+  terminalPaneHorizontalPaddingPx: DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
   terminalPaneVerticalPaddingPx: DEFAULT_TERMINAL_PANE_PADDING_PX,
   terminalMouseScrollMultiplierDiscrete: 1,
   terminalMouseScrollMultiplierPrecision: 1,
@@ -563,7 +562,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   terminalScrollToBottomWhenTyping: true,
   terminalScrollbackLimitMb: 15,
   terminalCopyOnSelect: 'false',
-  terminalConfirmCloseSurface: 'false',
+  terminalConfirmCloseSurface: 'true',
   terminalClipboardTrimTrailingSpaces: true,
   terminalClipboardPasteProtection: true,
   terminalPastePreviewableImages: true,
@@ -611,9 +610,10 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   workspaceActivePaneBorderColor: '#3b82f6',
   /**
    * CDXC:WorkspaceLayout 2026-06-07-16:53:
-   * Black is the fallback workspace background when Ghostty has no readable terminal background. Native layout sync treats this default as automatic so the macOS workarea can use the loaded Ghostty `background` color instead of forcing a separate app gray.
+   * A near-black workspace background avoids platform compositor handling of
+   * literal transparent black while keeping pane chrome visually black.
    */
-  workspaceBackgroundColor: '#000000',
+  workspaceBackgroundColor: '#010101',
   clickToWakeSleepingSessions: true,
   /**
    * CDXC:TitlebarOpenIn 2026-05-11-00:22

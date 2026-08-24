@@ -1068,7 +1068,7 @@ export function SidebarReferenceSectionHeader({
                   size={14}
                   stroke={2}
                 />
-                Inbox sidebar (New)
+                Inbox sidebar
               </button>
               {sidebarVersion === 'v2' && onSetSidebarV2Layout ? (
                 <button

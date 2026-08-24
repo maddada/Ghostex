@@ -63,7 +63,8 @@ const DEFAULT_TERMINAL_MOUSE_SCROLL_MULTIPLIER_DISCRETE: f64 = 1.0;
 const DEFAULT_TERMINAL_MOUSE_SCROLL_MULTIPLIER_PRECISION: f64 = 1.0;
 const DEFAULT_TERMINAL_SCROLL_TO_BOTTOM_WHEN_TYPING: bool = true;
 const DEFAULT_WEB_LINKS_OPEN_IN_APP: bool = true;
-const DEFAULT_TERMINAL_PANE_PADDING_PX: f64 = 0.0;
+const DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX: f64 = 21.0;
+const DEFAULT_TERMINAL_PANE_VERTICAL_PADDING_PX: f64 = 0.0;
 const MIN_TERMINAL_PANE_PADDING_PX: f64 = 0.0;
 const MAX_TERMINAL_PANE_PADDING_PX: f64 = 64.0;
 const MIN_TERMINAL_FONT_WEIGHT: f64 = 100.0;
@@ -411,7 +412,6 @@ pub const KEEP_AWAKE_DURATION_OPTIONS: &[SharedKeepAwakeDurationMinutes] = &[
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SharedTabStripBuiltInButtons {
     pub show_new_browser: bool,
-    pub show_new_chat: bool,
     pub show_new_terminal: bool,
 }
 
@@ -578,8 +578,6 @@ impl SharedSidebarSettingsSnapshot {
             show_new_browser: strict_bool_field(&self.object, "hideTabStripNewBrowserButton")
                 != Some(true)
                 && strict_bool_field(&self.object, "browserViewTabHidden") != Some(true),
-            show_new_chat: strict_bool_field(&self.object, "hideTabStripNewChatButton")
-                != Some(true),
             show_new_terminal: strict_bool_field(&self.object, "hideTabStripNewTerminalButton")
                 != Some(true),
         }
@@ -899,14 +897,19 @@ impl SharedSidebarSettingsSnapshot {
     }
 
     pub fn terminal_pane_padding_px(&self) -> (f32, f32) {
-        let read_padding = |key| {
-            read_finite_number_field(&self.object, key, DEFAULT_TERMINAL_PANE_PADDING_PX)
-                .clamp(MIN_TERMINAL_PANE_PADDING_PX, MAX_TERMINAL_PANE_PADDING_PX)
-                as f32
-        };
         (
-            read_padding("terminalPaneHorizontalPaddingPx"),
-            read_padding("terminalPaneVerticalPaddingPx"),
+            read_finite_number_field(
+                &self.object,
+                "terminalPaneHorizontalPaddingPx",
+                DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
+            )
+            .clamp(MIN_TERMINAL_PANE_PADDING_PX, MAX_TERMINAL_PANE_PADDING_PX) as f32,
+            read_finite_number_field(
+                &self.object,
+                "terminalPaneVerticalPaddingPx",
+                DEFAULT_TERMINAL_PANE_VERTICAL_PADDING_PX,
+            )
+            .clamp(MIN_TERMINAL_PANE_PADDING_PX, MAX_TERMINAL_PANE_PADDING_PX) as f32,
         )
     }
 

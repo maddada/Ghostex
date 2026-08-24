@@ -346,6 +346,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'createSessionOnSidebarDoubleClick',
       DEFAULT_ghostex_SETTINGS.createSessionOnSidebarDoubleClick
     ),
+    enableSessionParking: readBoolean(
+      source,
+      'enableSessionParking',
+      DEFAULT_ghostex_SETTINGS.enableSessionParking
+    ),
     debuggingMode: readBoolean(source, 'debuggingMode', DEFAULT_ghostex_SETTINGS.debuggingMode),
     diagnosticLogging: normalizeDiagnosticLoggingSettings(source.diagnosticLogging),
     renameSessionOnDoubleClick: readBoolean(
@@ -545,11 +550,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'hideTabStripNewTerminalButton',
       DEFAULT_ghostex_SETTINGS.hideTabStripNewTerminalButton
     ),
-    hideTabStripNewChatButton: readBoolean(
-      source,
-      'hideTabStripNewChatButton',
-      DEFAULT_ghostex_SETTINGS.hideTabStripNewChatButton
-    ),
     hideTabStripNewBrowserButton: readBoolean(
       source,
       'hideTabStripNewBrowserButton',
@@ -658,24 +658,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     ),
     sidebarProjectGroupStyle: normalizeSidebarProjectGroupStyle(
       readString(source, 'sidebarProjectGroupStyle', DEFAULT_ghostex_SETTINGS.sidebarProjectGroupStyle)
-    ),
-    sidebarGroupsOpacityPercent: Math.min(
-      100,
-      Math.max(
-        0,
-        Math.round(
-          readNumber(source, 'sidebarGroupsOpacityPercent', DEFAULT_ghostex_SETTINGS.sidebarGroupsOpacityPercent)
-        )
-      )
-    ),
-    sidebarProjectsOpacityPercent: Math.min(
-      100,
-      Math.max(
-        0,
-        Math.round(
-          readNumber(source, 'sidebarProjectsOpacityPercent', DEFAULT_ghostex_SETTINGS.sidebarProjectsOpacityPercent)
-        )
-      )
     ),
     expandCollapsedProjectsOnJump: readBoolean(
       source,

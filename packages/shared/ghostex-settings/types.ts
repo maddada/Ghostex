@@ -37,7 +37,7 @@ export type SidebarProjectGroupStyle = 'quiet' | 'header' | 'branched';
 export const MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
 export const MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 1000;
 export const SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS = 100;
-export const DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
+export const DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 400;
 export const MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 50;
 export const MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 100;
 export const SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP = 5;
@@ -74,9 +74,9 @@ export type SidebarVersion = 'v1' | 'v2';
 export type PreferredAgentInterface = 'terminal' | 'chat';
 /**
  * CDXC:SidebarV2 2026-07-29:
- * Sidebar V2 renders one flat session inbox by default and can switch to
- * collapsible per-project groups. Keep the sub-mode as its own key so the
- * layout choice survives switching back and forth between V1 and V2.
+ * Sidebar V2 renders collapsible per-project groups by default and can switch
+ * to one flat session inbox. Keep the sub-mode as its own key so the layout
+ * choice survives switching back and forth between V1 and V2.
  */
 export type SidebarV2Layout = 'flat' | 'byProject';
 /**
@@ -108,12 +108,13 @@ export type AutoSleepIdleMinutes = 5 | 10 | 15 | 30 | 60 | 120 | 300;
  * The default is the sky tone those surfaces shipped hardcoded.
  */
 export const DEFAULT_ACCENT_COLOR = '#38bdf8';
+export const DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX = 21;
 export const DEFAULT_TERMINAL_PANE_PADDING_PX = 0;
 export const MIN_TERMINAL_PANE_PADDING_PX = 0;
 export const MAX_TERMINAL_PANE_PADDING_PX = 64;
 export const MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX = 40;
 export const MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX = 600;
-export const DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX = 235;
+export const DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX = 275;
 export const MIN_SIDEBAR_DEFAULT_WIDTH_PX = 150;
 export const MAX_SIDEBAR_DEFAULT_WIDTH_PX = 520;
 export const DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 10;
@@ -338,6 +339,13 @@ export type ghostexSettings = {
   completionSound: CompletionSoundSetting;
   showNotificationOnTerminalBell: boolean;
   createSessionOnSidebarDoubleClick: boolean;
+  /**
+   * Enables the Park session action and the collapsible Parked section at the
+   * bottom of each project's session list. Parking is durable session state;
+   * disabling this preference only hides the organization feature and renders
+   * parked sessions in the ordinary Sessions section again.
+   */
+  enableSessionParking: boolean;
   debuggingMode: boolean;
   /**
    * CDXC:DiagnosticsSettings 2026-06-27-22:07:
@@ -423,13 +431,12 @@ export type ghostexSettings = {
   hideKeepAwakeTitlebarControl: boolean;
   /**
    * CDXC:GlobalActions 2026-08-01:
-   * The Agents tab strip ships New Terminal, New Chat, and New Browser Tab
-   * buttons. Users who run those from Global Actions or hotkeys can hide each
-   * one to make room in the strip. The pane overflow button is deliberately not
-   * hideable — it is the only way to reach the rest of the pane actions.
+   * The Agents tab strip ships New Terminal and New Browser Tab buttons. Users
+   * who run those from Global Actions or hotkeys can hide either one to make
+   * room in the strip. The pane overflow button is deliberately not hideable —
+   * it is the only way to reach the rest of the pane actions.
    */
   hideTabStripNewTerminalButton: boolean;
-  hideTabStripNewChatButton: boolean;
   hideTabStripNewBrowserButton: boolean;
   showMacOSAttentionNotifications: boolean;
   hideFloatingSessionStatusIndicators: boolean;
@@ -520,10 +527,6 @@ export type ghostexSettings = {
   projectSessionListCollapsedCount: number;
   /** Visual treatment for user-created project groups in the shared sidebar. */
   sidebarProjectGroupStyle: SidebarProjectGroupStyle;
-  /** @deprecated Retained only so existing settings files remain readable. */
-  sidebarGroupsOpacityPercent: number;
-  /** @deprecated Retained only so existing settings files remain readable. */
-  sidebarProjectsOpacityPercent: number;
   /**
    * CDXC:ProjectHotkeys 2026-06-15-11:12:
    * Jump to Project shortcuts should reveal the target project row when it was collapsed, because the keyboard action is also a navigation intent in the visible Projects sidebar area.
