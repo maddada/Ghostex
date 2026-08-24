@@ -282,6 +282,29 @@ pub(crate) async fn handle_board_associate_session_http(
             )
         }
     };
+    let project_id = match value_text(&result, "projectId") {
+        Ok(project_id) => project_id,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let db = match open_gxserver_database(&state.paths) {
+        Ok(db) => db,
+        Err(error) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: format!("SQLite gxserver state error: {error}"),
+                },
+            )
+        }
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    if let Err(error) =
+        schedule_presentation_project_delta(state, &db, &repository, &project_id, "projectUpdated")
+    {
+        return domain_error_response(endpoint_path, request_id, error);
+    }
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
