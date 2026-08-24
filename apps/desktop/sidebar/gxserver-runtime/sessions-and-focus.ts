@@ -94,8 +94,9 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   renameSession(message: Extract<SidebarToExtensionMessage, { type: 'renameSession' }>): Promise<void>;
   updateSessionFlags(
     sessionId: string,
-    flags: { isFavorite?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
+    flags: { isFavorite?: boolean; isParked?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
   ): Promise<void>;
+  saveSessionNote(sessionId: string, note: string): Promise<void>;
   runSessionLifecycleCommand(
     sessionId: string,
     path: Extract<
@@ -830,7 +831,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
   async updateSessionFlags(
     this: GpuiSidebarRuntime,
     sessionId: string,
-    flags: { isFavorite?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
+    flags: { isFavorite?: boolean; isParked?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
   ): Promise<void> {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
@@ -861,6 +862,49 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       ...presentationFlags,
       ...(sessionTag === undefined ? {} : { sessionTag: sessionTag ?? undefined }),
     });
+  },
+
+  /*
+  CDXC:SessionAgentNotes 2026-08-24:
+  Save (or, with an empty note, clear) this session's free-text note.
+
+  - The note is filed against the session's PROVIDER conversation id, which only
+    the daemon can resolve, so the client sends the ghostex session reference and
+    nothing else. That is also why a note survives closing the row: resuming the
+    same conversation lands on the same note.
+  - No optimistic patch. gxserver schedules a presentation delta after a
+    successful save, and that delta is what puts the note on the row; guessing
+    here would paint a note the daemon may have refused (a session that never
+    captured a conversation id has nothing to file against).
+  - A remote row routes to ITS machine's daemon, exactly like every other
+    session mutation. A daemon that predates session notes rejects the call, so
+    the failure is surfaced as a toast instead of a silently lost note.
+  */
+  async saveSessionNote(this: GpuiSidebarRuntime, sessionId: string, note: string): Promise<void> {
+    const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
+    try {
+      if (remoteSession) {
+        await this.requestRemoteGxserver(remoteSession.machineId, '/api/saveSessionAgentNote', {
+          note,
+          projectId: remoteSession.projectId,
+          sessionId: remoteSession.sessionId,
+        });
+        return;
+      }
+      const reference = parseGxserverPresentationProjectSessionId(sessionId);
+      if (!reference || !this.client) {
+        return;
+      }
+      await this.client.rpc('/api/saveSessionAgentNote', {
+        note,
+        projectId: reference.projectId,
+        sessionId: reference.sessionId,
+      });
+    } catch {
+      this.postSidebarActionToast('warning', 'Could not save the session note', {
+        description: 'gxserver refused the note. This session may not have an agent conversation yet.',
+      });
+    }
   },
 
   /*

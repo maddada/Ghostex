@@ -159,6 +159,84 @@ pub(crate) fn insert_session_chat_queue_session_projection(
     }
 }
 
+/*
+CDXC:SessionAgentNotes 2026-08-24:
+`sessionNote` is the sidebar row's whole note input: the hover tooltip line and
+the note dot both read it, and the row must show it for SLEEPING sessions too,
+so it rides the presentation projection instead of a per-row round trip — same
+reasoning as `queuedPromptCount` above.
+
+The join key is the session's `agentSessionId`, not its ghostex id, because the
+note follows the provider conversation across close/resume. Notes are published
+as an ABSENT key when there is none, never `''`, so clearing a note clears the
+dot through the same whole-object session upsert every other field uses.
+
+Cost: one full read of a table with at most one row per noted conversation
+(empty on almost every daemon), mirroring the queue counts above. Never one
+query per session — presentation snapshots publish many times a second.
+*/
+fn read_session_agent_notes(db: &Connection) -> HashMap<String, String> {
+    let Ok(mut statement) =
+        db.prepare("SELECT agentSessionId, note FROM session_agent_notes WHERE note <> ''")
+    else {
+        return HashMap::new();
+    };
+    let Ok(rows) = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) else {
+        return HashMap::new();
+    };
+    rows.filter_map(Result::ok)
+        .filter_map(|(agent_session_id, note)| {
+            let note = note.trim().to_string();
+            (!agent_session_id.is_empty() && !note.is_empty()).then_some((agent_session_id, note))
+        })
+        .collect()
+}
+
+pub(crate) fn insert_session_agent_note_presentation_payload(
+    snapshot: &mut Value,
+    db: &Connection,
+) {
+    let notes = read_session_agent_notes(db);
+    if notes.is_empty() {
+        return;
+    }
+    let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for session in sessions {
+        let Some(object) = session.as_object_mut() else {
+            continue;
+        };
+        let Some(agent_session_id) = object.get("agentSessionId").and_then(Value::as_str) else {
+            continue;
+        };
+        if let Some(note) = notes.get(agent_session_id) {
+            object.insert("sessionNote".to_string(), json!(note));
+        }
+    }
+}
+
+pub(crate) fn insert_session_agent_note_session_projection(session: &mut Value, db: &Connection) {
+    let Some(agent_session_id) = session
+        .get("agentSessionId")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
+        return;
+    };
+    let Ok(Some(note)) = crate::domain::repository::session_notes::read_session_agent_note_text(
+        db,
+        &agent_session_id,
+    ) else {
+        return;
+    };
+    if let Some(object) = session.as_object_mut() {
+        object.insert("sessionNote".to_string(), json!(note));
+    }
+}
+
 pub(crate) fn insert_auto_settle_window_presentation_payload(
     snapshot: &mut Value,
     auto_settle_after_days: Option<f64>,

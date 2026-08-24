@@ -1,4 +1,5 @@
-import type { SidebarSessionTag } from '../../shared/session-grid-contract';
+import type { SidebarSessionItem, SidebarSessionTag } from '../../shared/session-grid-contract';
+import { openAppModal } from '../app-modal-host-bridge';
 import type { WebviewApi } from '../webview-api';
 
 /*
@@ -60,6 +61,10 @@ export function postSidebarV2SetSessionPinned(vscode: WebviewApi, sessionId: str
   vscode.postMessage({ pinned, sessionId, type: 'setSessionPinned' });
 }
 
+export function postSidebarV2SetSessionParked(vscode: WebviewApi, sessionId: string, parked: boolean): void {
+  vscode.postMessage({ parked, sessionId, type: 'setSessionParked' });
+}
+
 /*
  * CDXC:SidebarV2ContextMenuParity 2026-07-30:
  * The V1 session-menu commands the V2 row menu now also offers. Each one is the
@@ -92,6 +97,28 @@ export function postSidebarV2ForkSession(vscode: WebviewApi, sessionId: string):
 
 export function postSidebarV2FullReloadSession(vscode: WebviewApi, sessionId: string): void {
   vscode.postMessage({ sessionId, type: 'fullReloadSession' });
+}
+
+/*
+ * CDXC:SessionAgentNotes 2026-08-24:
+ * The note editor is a full-window app modal, not a host command, so this is
+ * the one V2 "message" helper that goes through the app-modal bridge instead of
+ * `vscode`. It exists here anyway for the same reason the rest of this file
+ * does: V1 builds this payload inline in `sortable-session-card`, and the two
+ * sidebars must open the SAME dialog with the SAME fields — the host cannot
+ * tell which one asked.
+ */
+export function openSidebarV2SessionNoteModal(
+  session: Pick<SidebarSessionItem, 'sessionId' | 'sessionNote'>,
+  sessionTitle: string
+): void {
+  openAppModal({
+    initialNote: session.sessionNote ?? '',
+    modal: 'sessionNote',
+    sessionId: session.sessionId,
+    sessionTitle,
+    type: 'open',
+  });
 }
 
 /** `undefined` is the CLEAR: the contract's explicit "no tag" value is `null`,

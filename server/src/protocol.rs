@@ -608,6 +608,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/deleteStashedPromptTag"
         | "/api/setStashedPromptTags"
         /*
+        CDXC:SessionAgentNotes 2026-08-24:
+        A session note is user-authored prose about a conversation, so it stays
+        in the same class as Pinned and Stashed prompts: local-only
+        authenticated endpoints, and the body is never logged.
+        */
+        | "/api/saveSessionAgentNote"
+        | "/api/readSessionAgentNote"
+        /*
         CDXC:GPUISidebarGit 2026-06-24-16:11:
         Commit-message generation carries staged diff content and generated
         commit text through the authenticated response. Keep this endpoint on

@@ -64,6 +64,13 @@ pub enum Parser {
     RenameRequest,
     SessionBoolean(&'static str),
     SessionTag,
+    /*
+    CDXC:SessionAgentNotes 2026-08-24:
+    Session selector plus `--note`. The note is a user-authored body, so it
+    travels as its own CLI argument (SSH quoting keeps it away from the
+    selector) and is never printed anywhere but the JSON result.
+    */
+    SessionNote,
     /// Parse a session selector plus one Delayed Send trigger.
     DelayedSend,
     SendText,
@@ -264,6 +271,21 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "requestSessionRename" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/requestSessionRename", &params, flags)
+        }
+        /*
+        CDXC:SessionAgentNotes 2026-08-24:
+        Ghostex mobile has no HTTP path to gxserver, so the session-note pair is
+        exposed as CLI verbs the phone SSH-execs, exactly like the Session Chat
+        endpoints below. The daemon resolves the note's agent session id itself,
+        so the phone only ever sends the session selector.
+        */
+        "readSessionAgentNote" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/readSessionAgentNote", &params, flags)
+        }
+        "saveSessionAgentNote" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/saveSessionAgentNote", &params, flags)
         }
         "pinSession" => {
             let mut object = payload.as_object().cloned().unwrap_or_default();
@@ -1069,6 +1091,7 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         Parser::RenameRequest => parse_rename_request(rest, flags),
         Parser::SessionBoolean(name) => parse_session_boolean(name, rest, flags),
         Parser::SessionTag => parse_session_tag(rest, flags)?,
+        Parser::SessionNote => parse_session_note(rest, flags),
         Parser::DelayedSend => parse_delayed_send(rest, flags)?,
         Parser::SendText => parse_send_text(rest, flags),
         Parser::SendKey => parse_send_key(rest, flags),
@@ -1786,6 +1809,26 @@ fn parse_session_tag(rest: &[String], flags: &Flags) -> CliResult<Value> {
         session_tag.map(Value::String).unwrap_or(Value::Null),
     );
     Ok(Value::Object(map))
+}
+
+/*
+CDXC:SessionAgentNotes 2026-08-24:
+`ghostex session-note save --session-id <id> --note <text> --json` keeps the
+stable session id and the user-entered note as separate CLI arguments, exactly
+like `rename-session` does with `--title`, so SSH quoting never has to reunite
+them. An omitted or empty note clears the note.
+*/
+fn parse_session_note(rest: &[String], flags: &Flags) -> Value {
+    let has_flag_selector =
+        flags.contains("sessionId") || flags.contains("index") || flags.contains("sessionNumber");
+    let mut map = parse_session_selector(rest, flags);
+    map.insert(
+        "note".to_string(),
+        flag_json(flags, "note").unwrap_or_else(|| {
+            Value::String(join_rest(rest, if has_flag_selector { 0 } else { 1 }))
+        }),
+    );
+    Value::Object(map)
 }
 
 fn parse_send_text(rest: &[String], flags: &Flags) -> Value {

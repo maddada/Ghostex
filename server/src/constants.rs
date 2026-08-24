@@ -71,6 +71,14 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     the prompt-editor selector this daemon accepts before sending the create.
     */
     "codeServerPromptEditor",
+    /*
+    CDXC:SessionAgentNotes 2026-08-24:
+    Session notes are keyed by the agent session id and published on the
+    presentation snapshot, so a client talking to an older remote daemon must
+    be able to tell "this daemon has no notes table" apart from "this session
+    has no note" before it offers the Session Note affordances.
+    */
+    "sessionAgentNotes",
 ];
 
 pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
@@ -96,4 +104,8 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0020_delayed_sends",
     "0021_session_chat_queue",
     "0022_stashed_prompt_tags",
+    "0023_session_parking",
+    "0024_stashed_prompt_tag",
+    "0025_session_agent_notes",
+    "0026_stashed_prompt_agent_session",
 ];

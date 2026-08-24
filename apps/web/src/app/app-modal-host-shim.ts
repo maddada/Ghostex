@@ -3,6 +3,7 @@ import type {
   OpenAddProjectModalDetail,
   OpenDelayedActionsModalDetail,
   OpenRecentProjectsModalDetail,
+  OpenSessionNoteModalDetail,
 } from './action-events';
 
 type OpenRecentProjectsModalMessage = Extract<OpenAppModalMessage, { modal: 'recentProjects' }>;
@@ -39,6 +40,21 @@ function handleAppModalHostMessage(message: unknown): void {
     window.dispatchEvent(
       new CustomEvent('ghostex-web:openDelayedActionsModal', {
         detail: message as OpenDelayedActionsModalDetail,
+      })
+    );
+    return;
+  }
+
+  /*
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * The session-note editor is opened by the SHARED sidebar (both versions),
+   * so the web shell has to answer the same `openAppModal` call gpui's native
+   * host does. The payload is forwarded unchanged to the one mounted note host.
+   */
+  if (message.type === 'open' && message.modal === 'sessionNote') {
+    window.dispatchEvent(
+      new CustomEvent('ghostex-web:openSessionNoteModal', {
+        detail: message as OpenSessionNoteModalDetail,
       })
     );
     return;

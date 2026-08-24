@@ -956,6 +956,7 @@ fn to_cli_session(
     map.insert("isFocused".to_string(), json!(false));
     insert_js(&mut map, "isFavorite", &[p("isFavorite"), s("isFavorite")]);
     map.insert("isLocalOnly".to_string(), json!(false));
+    insert_js(&mut map, "isParked", &[p("isParked"), s("isParked")]);
     insert_js(&mut map, "isPinned", &[p("isPinned"), s("isPinned")]);
     insert_js(&mut map, "sessionTag", &[p("sessionTag"), s("sessionTag")]);
     /*
@@ -1008,6 +1009,15 @@ fn to_cli_session(
         "queuedPromptFailedCount",
         &[p("queuedPromptFailedCount")],
     );
+    /*
+     * CDXC:SessionAgentNotes 2026-08-24:
+     * The phone's session row renders the note dot and the note text from this
+     * field, so the inventory forwards the presentation value verbatim.
+     * Presentation is the only source: a session row in state.db has no note of
+     * its own (notes are keyed by agent session id), and an older daemon simply
+     * omits the key.
+     */
+    insert_js(&mut map, "sessionNote", &[p("sessionNote")]);
     insert_js(
         &mut map,
         "sendWhenAllProjectSessionsStopActive",
@@ -1746,6 +1756,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     insert_js(&mut map, "isFavorite", &[s("isFavorite")]);
     insert_js(&mut map, "isFocused", &[s("isFocused")]);
     insert_js(&mut map, "isLive", &[s("isLive")]);
+    insert_js(&mut map, "isParked", &[s("isParked")]);
     insert_js(&mut map, "isPinned", &[s("isPinned")]);
     insert_js(&mut map, "isSleeping", &[s("isSleeping")]);
     insert_js(&mut map, "kind", &[s("kind")]);
@@ -1806,6 +1817,17 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         "queuedPromptFailedCount",
         &[s("queuedPromptFailedCount")],
     );
+    /*
+     * CDXC:SessionAgentNotes 2026-08-24:
+     * Same SECOND-whitelist trap as the queue counts above: forwarding these in
+     * `to_cli_session` only is not enough, because everything not named here is
+     * dropped again before the summary reaches the phone. `sessionNote` draws
+     * the row's note dot and its note text; `agentSessionId` gates the
+     * "Session note" long-press item, because a session with no provider
+     * conversation has nothing to attach a note to.
+     */
+    insert_js(&mut map, "sessionNote", &[s("sessionNote")]);
+    insert_js(&mut map, "agentSessionId", &[s("agentSessionId")]);
     insert_js(&mut map, "sortOrder", &[s("sortOrder")]);
     insert_js(&mut map, "status", &[s("status")]);
     insert_js(&mut map, "surface", &[s("surface")]);

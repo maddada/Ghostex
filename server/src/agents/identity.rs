@@ -190,6 +190,38 @@ pub(crate) fn apply_session_state_update(
     } else {
         current_with_identity
     };
+    /*
+    CDXC:SessionAgentNotes 2026-08-24:
+    Session notes are keyed by the agent session id, so whenever the stored id
+    transitions old→new the note must follow or it strands on the dead id and
+    silently disappears from every surface. EVERY identity source funnels
+    through this function — agent-hook ingest, the live-process scan, and the
+    transcript-successor repair — so this is the single choke point; re-keying
+    only in the successor path missed the common hooks-installed configuration
+    where the hook lands the new Claude conversation id first. The helper
+    no-ops on identical ids and never overwrites a note already written
+    against the new id. An agent change removes the stored id instead of
+    replacing it, so no re-key fires and the old conversation keeps its note.
+
+    CDXC:StashedPromptAgentSession 2026-08-24:
+    Stashed prompts are keyed by the same conversation id (0026) and ride the
+    same choke point for the same reason: a compaction would otherwise strand
+    every prompt stashed from this thread on the dead id, dropping them out of
+    the composer count and the "This session" scope.
+    */
+    if needs_update {
+        let previous_agent_session_id =
+            read_text_from_map(&object_field(&session, "runtimeSettings"), "agentSessionId");
+        let next_agent_session_id = runtime_settings
+            .get("agentSessionId")
+            .and_then(Value::as_str);
+        if let (Some(previous), Some(next)) =
+            (previous_agent_session_id.as_deref(), next_agent_session_id)
+        {
+            repository.rekey_session_agent_note(previous, next)?;
+            repository.rekey_stashed_prompt_agent_sessions(previous, next)?;
+        }
+    }
     let mut result = object_from_value(json!({
         "changed": needs_update,
         "projection": project_session_title_projection(&updated),

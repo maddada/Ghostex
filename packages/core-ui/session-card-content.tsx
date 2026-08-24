@@ -118,6 +118,7 @@ export function SessionCardContent({
     session,
     showDebugSessionNumbers,
   });
+  const displayedHeadingText = isGeneratingFirstPromptTitle ? 'Generating title...' : headingText;
   const timerTrailingLabel = getSessionCardTimerTrailingLabel(session);
   const hasLastInteractionTime =
     timerTrailingLabel === undefined && showLastActiveTime && Boolean(session.lastInteractionAt);
@@ -210,74 +211,53 @@ export function SessionCardContent({
     Boolean(trailingPrefix) || Boolean(trailingTimeLabel) || hasHeaderAgentIcon || canCloseFromCard;
 
   return (
-    <>
-      <div className='session-head' data-title-full-width={String(shouldAllowFullWidthTitle)}>
-        {/**
-         * CDXC:PreviousSessions 2026-05-09-17:44
-         * Previous Sessions rows use this shared sidebar title row but must not
-         * show the agent icon in the trailing slot. Their trailing slot is
-         * reserved for Last Active, matching the confirmed modal layout.
-         */}
-        <div className='session-alias-heading' ref={aliasHeadingRef}>
-          {headingText}
-        </div>
-        {hasSessionHeadTrailing ? (
-          <div
-            className='session-head-trailing'
-            data-default-trailing-display={defaultTrailingDisplay}
-            data-hover-trailing-display={hoverTrailingDisplay}
-            data-timer-trailing={String(timerTrailingLabel !== undefined)}
-          >
-            {trailingPrefix}
-            {trailingTimeLabel ? <div className='session-last-interaction-time'>{trailingTimeLabel}</div> : null}
-            {hasHeaderAgentIcon ? (
-              <SessionHeaderAgentIcon
-                agentIcon={session.agentIcon}
-                faviconDataUrl={session.faviconDataUrl}
-                isGeneratingFirstPromptTitle={session.isGeneratingFirstPromptTitle}
-                isReloading={session.isReloading}
-                sessionPersistenceName={session.sessionPersistenceName}
-                sessionPersistenceProvider={session.sessionPersistenceProvider}
-                showTerminalIcon={showTerminalSessionIcon}
-              />
-            ) : null}
-            {canCloseFromCard ? (
-              <button
-                aria-label='Close session'
-                className='session-card-close-button'
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onClose?.();
-                }}
-                type='button'
-              >
-                <IconX aria-hidden='true' size={14} stroke={1.8} />
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+    <div className='session-head' data-title-full-width={String(shouldAllowFullWidthTitle)}>
+      {/**
+       * CDXC:PreviousSessions 2026-05-09-17:44
+       * Previous Sessions rows use this shared sidebar title row but must not
+       * show the agent icon in the trailing slot. Their trailing slot is
+       * reserved for Last Active, matching the confirmed modal layout.
+       */}
+      <div className='session-alias-heading' ref={aliasHeadingRef}>
+        {displayedHeadingText}
       </div>
-      {isGeneratingFirstPromptTitle ? (
-        <div className='session-title-generation-overlay' role='status' aria-label='Generating title'>
-          {/**
-           * CDXC:SessionTitleLoading 2026-05-08-09:07
-           * First-prompt title generation should look like the real sidebar
-           * title text with a subtle blue state color. The label owns the
-           * progress cue through looping dots, so it must not render the extra
-           * left-side spinner that made the row typography feel mismatched.
-           */}
-          <span className='session-title-generation-overlay-label'>
-            Generating title
-            <span className='session-title-generation-overlay-dots' aria-hidden='true'>
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-            </span>
-          </span>
+      {hasSessionHeadTrailing ? (
+        <div
+          className='session-head-trailing'
+          data-default-trailing-display={defaultTrailingDisplay}
+          data-hover-trailing-display={hoverTrailingDisplay}
+          data-timer-trailing={String(timerTrailingLabel !== undefined)}
+        >
+          {trailingPrefix}
+          {trailingTimeLabel ? <div className='session-last-interaction-time'>{trailingTimeLabel}</div> : null}
+          {hasHeaderAgentIcon ? (
+            <SessionHeaderAgentIcon
+              agentIcon={session.agentIcon}
+              faviconDataUrl={session.faviconDataUrl}
+              isGeneratingFirstPromptTitle={session.isGeneratingFirstPromptTitle}
+              isReloading={session.isReloading}
+              sessionPersistenceName={session.sessionPersistenceName}
+              sessionPersistenceProvider={session.sessionPersistenceProvider}
+              showTerminalIcon={showTerminalSessionIcon}
+            />
+          ) : null}
+          {canCloseFromCard ? (
+            <button
+              aria-label='Close session'
+              className='session-card-close-button'
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose?.();
+              }}
+              type='button'
+            >
+              <IconX aria-hidden='true' size={14} stroke={1.8} />
+            </button>
+          ) : null}
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -374,6 +354,7 @@ export function getSessionCardTitleTooltip({
     | 'isPrimaryTitleTerminalTitle'
     | 'primaryTitle'
     | 'sessionKind'
+    | 'sessionNote'
     | 'sessionTag'
     | 'sessionRoutingId'
     | 'sessionPersistenceName'
@@ -470,6 +451,14 @@ export function getSessionCardTitleTooltip({
       : session.closeAfterDone
         ? 'Close After Done armed'
         : undefined,
+    /*
+     * CDXC:SessionAgentNotes 2026-08-24:
+     * The note is the reason the user left this session, so it reads directly
+     * under the title — above the state and provider lines. Any extra metadata
+     * makes the tooltip `always`, which is what puts it on sleeping rows too,
+     * the exact rows a "come back to this" note is written for.
+     */
+    getSessionNoteTooltipText(session),
     getSessionStateTooltipText(session, showDebugSessionNumbers || alwaysShowStateTooltip),
     getSessionTooltipSecondaryText(session),
     ...(showSessionDetails ? getSessionDetailsTooltipLines(session) : []),
@@ -493,6 +482,24 @@ export function getSessionCardTitleTooltip({
     headingText,
     ...titleTooltipOptions,
   };
+}
+
+/*
+ * CDXC:SessionAgentNotes 2026-08-24:
+ * A long note must not turn the row tooltip into a wall of text, so the
+ * displayed value is capped and ellipsized. The cap is display-only — the full
+ * note is still what the editor opens on and what the daemon stores.
+ */
+const SESSION_NOTE_TOOLTIP_MAX_LENGTH = 400;
+
+function getSessionNoteTooltipText(session: Pick<SidebarSessionItem, 'sessionNote'>): string | undefined {
+  const note = session.sessionNote?.trim();
+  if (!note) {
+    return undefined;
+  }
+  return `Note: ${
+    note.length > SESSION_NOTE_TOOLTIP_MAX_LENGTH ? `${note.slice(0, SESSION_NOTE_TOOLTIP_MAX_LENGTH)}…` : note
+  }`;
 }
 
 function getCapturedAgentSessionIdTooltipText(
@@ -813,6 +820,13 @@ type SessionAgentIconProps = {
   delayedSendDeadlineAt?: string;
   delayedSendRemainingLabel?: string;
   faviconDataUrl?: string;
+  /**
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * Whether this session carries a free-text note. Rendered as a small white
+   * dot beside the leading icon — a decoration on the slot, never in place of
+   * whatever owns it.
+   */
+  hasSessionNote?: boolean;
   isFavorite?: boolean;
   isPinned?: boolean;
   sessionTag?: SidebarSessionTag;
@@ -927,6 +941,7 @@ export function SessionFloatingAgentIcon({
   delayedSendDeadlineAt,
   delayedSendRemainingLabel,
   faviconDataUrl,
+  hasSessionNote = false,
   isFavorite = false,
   isPinned = false,
   onCloseAfterDoneClick,
@@ -957,6 +972,14 @@ export function SessionFloatingAgentIcon({
   const queuedPromptBadge = (
     <SessionQueuedPromptBadge count={queuedPromptCount} failedCount={queuedPromptFailedCount} />
   );
+  /*
+  CDXC:SessionAgentNotes 2026-08-24:
+  The note dot follows the queued-prompt badge's ownership rule exactly: an
+  absolutely positioned SIBLING of whatever owns the leading slot, rendered in
+  every branch so a session that is mid Delayed Send or Close After Done does
+  not appear to have lost its note.
+  */
+  const sessionNoteDot = hasSessionNote ? <span aria-hidden='true' className='session-note-dot' /> : null;
   const hasActiveDelayedSend = Boolean(delayedSendRemainingLabel || delayedSendDeadlineAt);
   const hasActiveCloseAfterDone = Boolean(closeAfterDone || closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt);
   const isCloseAfterDoneCountingDown = Boolean(closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt);
@@ -974,6 +997,7 @@ export function SessionFloatingAgentIcon({
           onClick={onDelayedSendClick}
           remainingLabel={delayedSendRemainingLabel}
         />
+        {sessionNoteDot}
         {queuedPromptBadge}
       </>
     );
@@ -997,6 +1021,7 @@ export function SessionFloatingAgentIcon({
           onClick={onCloseAfterDoneClick}
           remainingLabel={closeAfterDoneRemainingLabel}
         />
+        {sessionNoteDot}
         {queuedPromptBadge}
       </>
     );
@@ -1021,6 +1046,7 @@ export function SessionFloatingAgentIcon({
         sessionPersistenceProvider={sessionPersistenceProvider}
         slot='floating'
       />
+      {sessionNoteDot}
       {queuedPromptBadge}
     </>
   );

@@ -45,9 +45,10 @@ use crate::{
         agent_metadata_title_revision, apply_created_session_identity,
         apply_live_process_session_identity, create_agent_session_params_for_project,
         default_agent_command, dispatch_agent_endpoint, get_visible_terminal_title,
-        normalize_agent_hook_activity, read_agent_settings, read_first_user_input_draft,
-        read_text_from_map, reconcile_agent_metadata_title_for_session,
-        resolve_project_agent_config, terminal_title_indicates_agent_identity, AgentEndpointError,
+        is_terminal_auto_working_directory_title, normalize_agent_hook_activity,
+        read_agent_settings, read_first_user_input_draft, read_text_from_map,
+        reconcile_agent_metadata_title_for_session, resolve_project_agent_config,
+        terminal_title_indicates_agent_identity, AgentEndpointError,
         FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY, FIRST_USER_INPUT_DRAFT_STATUS_KEY,
         FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY,
     },
@@ -386,6 +387,25 @@ pub async fn run_gxserver_foreground(
     let identity = ensure_gxserver_identity(&paths)?;
     let auth = ensure_gxserver_auth_token(&paths)?;
     let logger = Arc::new(GxserverLogger::new(paths.clone()));
+    /*
+    CDXC:SkillConsolidation 2026-08-24:
+    Older Ghostex builds installed skills that are now folded into the CLI
+    help. Clean up unmodified shipped copies on every launch so user machines
+    converge on the consolidated skill set without manual steps.
+    */
+    let removed_retired_skills = crate::agent_skills::remove_retired_ghostex_agent_skills(&paths);
+    if !removed_retired_skills.is_empty() {
+        let _ = logger.log(GxserverLogInput {
+            level: crate::logging::LogLevel::Warn,
+            event: "retiredAgentSkillsRemoved".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(json!({ "removed": removed_retired_skills })),
+        });
+    }
     let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let metadata = RuntimeMetadata {
         build_identity: build_identity.clone(),
@@ -485,7 +505,11 @@ pub async fn run_gxserver_foreground(
         "type": "serverStarted",
     }));
     state.automation_runtime.start(shutdown_tx.subscribe());
-    state.delayed_send_runtime.start(shutdown_tx.subscribe());
+    state.delayed_send_runtime.start(
+        shutdown_tx.subscribe(),
+        session_chat_queue_sender_factory(&state),
+        session_chat_queue_publisher_factory(&state),
+    );
     /*
     CDXC:SessionChatPromptQueue 2026-08-21:
     A queued prompt left in `sending` is ambiguous after a restart — the bytes
@@ -1734,6 +1758,56 @@ async fn route_http(
             request_id,
             &body_json,
             |repository, _, params, _| repository.set_stashed_prompt_tags(params),
+        ),
+        /*
+        CDXC:SessionAgentNotes 2026-08-24:
+        A saved note changes what the sidebar row renders (the note dot and the
+        hover tooltip), so the save schedules the same presentation delta
+        `/api/updateSession` does instead of asking every client to refetch.
+        The read is a pure lookup and schedules nothing.
+        */
+        "/api/saveSessionAgentNote" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, db, params, _| {
+                let result = repository.save_session_agent_note(params)?;
+                /*
+                Delta targets come from the repository result (the canonical
+                session-row ids), not the raw request params: a coercible
+                non-string id in the body would otherwise schedule a bogus
+                ("", "") delta that broadcasts `sessionRemoved` to every
+                client. Same id source as the /api/createSession arm.
+                */
+                let project_id = result
+                    .get("projectId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let session_id = result
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                if !project_id.is_empty() && !session_id.is_empty() {
+                    schedule_presentation_session_delta(
+                        &state,
+                        db,
+                        repository,
+                        &project_id,
+                        &session_id,
+                    )?;
+                }
+                Ok(result)
+            },
+        ),
+        "/api/readSessionAgentNote" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, _, params, _| repository.read_session_agent_note(params),
         ),
         /*
         CDXC:MobileKeepAwake 2026-08-19:

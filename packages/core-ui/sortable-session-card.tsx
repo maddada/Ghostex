@@ -1,4 +1,5 @@
 import {
+  IconArchive,
   IconChevronRight,
   IconCheck,
   IconCopy,
@@ -10,6 +11,7 @@ import {
   IconLayoutSidebarRightExpand,
   IconMessageCircle,
   IconMoon,
+  IconNote,
   IconPencil,
   IconPinned,
   IconPinnedOff,
@@ -148,6 +150,7 @@ export type SidebarSessionSelectionChangeRequest = {
 };
 
 export type SortableSessionCardSharedSettings = {
+  enableSessionParking: boolean;
   hideBrowserFaviconUntilHover: boolean;
   hideSessionAgentIconUntilHover: boolean;
   renameSessionOnDoubleClick: boolean;
@@ -398,6 +401,12 @@ export type SidebarSessionContextMenuEligibility = {
   canForkSession: boolean;
   canFullReloadSession: boolean;
   canGenerateSessionTitle: boolean;
+  /**
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * Notes are keyed by the session's provider conversation id, so a row that
+   * has not captured one yet has nothing to file a note against.
+   */
+  canOpenSessionNote: boolean;
   canPinSession: boolean;
   canPopOutPane: boolean;
   canRenameSession: boolean;
@@ -445,6 +454,7 @@ export function getSidebarSessionContextMenuEligibility({
       hasSession &&
       supportsGeneratedName(session) &&
       Boolean(session.firstUserMessage?.trim()),
+    canOpenSessionNote: canUseTerminalAgentMenuAction && Boolean(session?.agentSessionId?.trim()),
     canPinSession: isConcreteSessionRow,
     canPopOutPane:
       isConcreteSessionRow &&
@@ -667,6 +677,7 @@ export function SortableSessionCard({
         }
       : undefined);
   const {
+    enableSessionParking,
     hideSessionAgentIconUntilHover,
     hideBrowserFaviconUntilHover,
     renameSessionOnDoubleClick,
@@ -708,6 +719,7 @@ export function SortableSessionCard({
     canForkSession,
     canFullReloadSession,
     canGenerateSessionTitle,
+    canOpenSessionNote,
     canPinSession,
     canPopOutPane,
     canRenameSession,
@@ -1259,6 +1271,30 @@ export function SortableSessionCard({
     });
   };
 
+  const requestOpenSessionNote = () => {
+    if (!canOpenSessionNote) {
+      return;
+    }
+
+    setContextMenuPosition(undefined);
+    /**
+     * CDXC:SessionAgentNotes 2026-08-24:
+     * Same modal-host contract as Rename: the note editor is a full-window app
+     * modal, and opening it from a row replaces any modal already open instead
+     * of stacking behind it. The row hands over the note it is currently
+     * rendering so the dialog opens filled in without a round trip; the host
+     * resolves which agent conversation the write is filed under.
+     */
+    closeAppModal('SettingsDismissal:sessionRowNote');
+    openAppModal({
+      initialNote: session.sessionNote ?? '',
+      modal: 'sessionNote',
+      sessionId: session.sessionId,
+      sessionTitle: getSessionRenameInitialTitle(session),
+      type: 'open',
+    });
+  };
+
   const requestClose = (_source: 'context-menu' | 'middle-click' | 'programmatic') => {
     flushSync(() => {
       setContextMenuPosition(undefined);
@@ -1718,6 +1754,15 @@ export function SortableSessionCard({
     });
   };
 
+  const requestSetParked = (parked: boolean) => {
+    setContextMenuPosition(undefined);
+    vscode.postMessage({
+      parked,
+      sessionId: session.sessionId,
+      type: 'setSessionParked',
+    });
+  };
+
   const bulkPrimaryActions: SessionContextMenuAction[] = [];
   if (bulkActionAvailability && bulkActionAvailability.sleepableSessionIds.length > 0) {
     bulkPrimaryActions.push({
@@ -1817,6 +1862,14 @@ export function SortableSessionCard({
       onClick: () => requestSetPinned(!session.isPinned),
     });
   }
+  if (enableSessionParking && canPinSession && !isBrowserSession) {
+    primaryActions.push({
+      icon: <IconArchive aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'park',
+      label: session.isParked ? 'Unpark' : 'Park',
+      onClick: () => requestSetParked(!session.isParked),
+    });
+  }
   if (canTagSession && sessionTagSubmenuItemCount > 0) {
     primaryActions.push({
       icon: <IconTag aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
@@ -1878,6 +1931,14 @@ export function SortableSessionCard({
       key: 'view-first-message',
       label: 'View 1st message',
       onClick: requestViewFirstUserMessage,
+    });
+  }
+  if (canOpenSessionNote) {
+    sessionActions.push({
+      icon: <IconNote aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'session-note',
+      label: 'Session Note',
+      onClick: requestOpenSessionNote,
     });
   }
   if (canCopyResumeCommand) {
@@ -2457,6 +2518,7 @@ export function SortableSessionCard({
                 delayedSendDeadlineAt={session.delayedSendDeadlineAt}
                 delayedSendRemainingLabel={session.delayedSendRemainingLabel}
                 faviconDataUrl={session.faviconDataUrl}
+                hasSessionNote={Boolean(session.sessionNote?.trim())}
                 isFavorite={session.isFavorite}
                 isPinned={session.isPinned}
                 isReloading={session.isReloading}

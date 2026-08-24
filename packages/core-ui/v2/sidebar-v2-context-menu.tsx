@@ -1,4 +1,5 @@
 import {
+  IconArchive,
   IconAlarmOff,
   IconArrowBackUp,
   IconCheck,
@@ -11,6 +12,7 @@ import {
   IconMaximize,
   IconMessageCircle,
   IconMoon,
+  IconNote,
   IconPencil,
   IconPinned,
   IconPinnedOff,
@@ -150,6 +152,13 @@ export type SidebarV2ContextMenuHandlers = {
    */
   onNewSessionOnBranch?: () => void;
   onRename: () => void;
+  /**
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * Opens the shared session-note editor. Like Delayed Send and the 1st-message
+   * viewer, its effect is a full-window app modal rather than a host command.
+   */
+  onSessionNote?: () => void;
+  onSetParked?: (parked: boolean) => void;
   onSetPinned: (pinned: boolean) => void;
   /** `undefined` clears the tag. Re-picking the tag a session already carries is
       what sends it, matching V1's one-click un-tag. */
@@ -163,6 +172,7 @@ export type SidebarV2ContextMenuHandlers = {
 };
 
 export type SidebarV2ContextMenuOptions = {
+  enableSessionParking?: boolean;
   /**
    * CDXC:SidebarV2ContextMenuParity 2026-07-30:
    * The group's zoomable-split capability. V1 hides Focus unless the clicked
@@ -201,6 +211,7 @@ export function createSidebarV2ContextMenuSections(
 ): SidebarV2ContextMenuAction[][] {
   const isBrowser = session.kind === 'browser' || session.sessionKind === 'browser';
   const isSleeping = session.isSleeping === true;
+  const isParked = session.isParked === true;
   const isPinned = session.isPinned === true;
   /*
    * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -324,6 +335,14 @@ export function createSidebarV2ContextMenuSections(
       onClick: handlers.onViewFirstMessage,
     });
   }
+  if (eligibility?.canOpenSessionNote === true && handlers.onSessionNote) {
+    sessionActions.push({
+      icon: <IconNote aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'sessionNote',
+      label: 'Session Note',
+      onClick: handlers.onSessionNote,
+    });
+  }
   if (eligibility?.canCopyResumeCommand === true && handlers.onCopyResumeCommand) {
     sessionActions.push({
       icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
@@ -416,6 +435,14 @@ export function createSidebarV2ContextMenuSections(
       onClick: () => handlers.onSetPinned(!isPinned),
     },
   ];
+  if (!isBrowser && options.enableSessionParking && handlers.onSetParked) {
+    stateActions.push({
+      icon: <IconArchive aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'park',
+      label: isParked ? 'Unpark' : 'Park',
+      onClick: () => handlers.onSetParked?.(!isParked),
+    });
+  }
   const onSetSessionTag = handlers.onSetSessionTag;
   if (eligibility?.canTagSession === true && onSetSessionTag && tagSubmenuItems.length > 0) {
     stateActions.push({

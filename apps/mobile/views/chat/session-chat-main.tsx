@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './session-chat.css';
 import {
   normalizeSessionChatTheme,
-  resolveSessionChatTranscriptAgent,
+  resolveSessionChatDisplayAgent,
   type GxserverQueueSessionChatPromptResult,
   type GxserverReadSessionChatFilesResult,
   type GxserverReadSessionChatImageResult,
@@ -46,7 +46,7 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
         | "saveImage" | "saveAttachment" | "loadImage"
         | "queuePrompt" | "updateQueuedPrompt"
         | "removeQueuedPrompt" | "reorderQueue" | "sendQueuedPrompt"
-        | "setDraft",
+        | "setDraft" | "sessionNoteRead" | "sessionNoteSave",
       params }))
 - page → RN notice (no id, no answer):
   { notice: "queueCount", count } — see reportQueueCount below
@@ -119,7 +119,9 @@ type BridgeOp =
   | 'removeQueuedPrompt'
   | 'reorderQueue'
   | 'sendQueuedPrompt'
-  | 'setDraft';
+  | 'setDraft'
+  | 'sessionNoteRead'
+  | 'sessionNoteSave';
 
 const CONFIG_RETRY_DELAY_MS = 100;
 const CONFIG_MAX_ATTEMPTS = 100;
@@ -552,6 +554,19 @@ function createMobileSessionChatTransport(): SessionChatTransport {
         promptId: params.promptId,
       }).then(withQueueReport);
     },
+    /*
+    CDXC:SessionAgentNotes 2026-08-24:
+    The session note is one more SSH-exec'd verb (`ghostex session-note
+    read|save`), so it reaches the same store the desktop and web hosts write.
+    The machine resolves the provider conversation id the note is filed under
+    from the session selector RN already passes; the page sends only the body.
+    */
+    readSessionNote() {
+      return bridgeCall<{ agentSessionId?: string; note?: string }>('sessionNoteRead');
+    },
+    async saveSessionNote(note) {
+      await bridgeCall('sessionNoteSave', { note });
+    },
     // The client id is minted and persisted by the shared hook; forwarding it
     // untouched is what keeps this device's own echo from reading as another
     // device and popping the conflict bar against itself.
@@ -699,7 +714,6 @@ function MobileSessionChat({
         showComposerAgentName={false}
         showNewSessionWelcomeTitle={false}
         searchLayout='overlay'
-        showVerbosePill={false}
         theme={theme}
         transport={transport}
         verboseMode={verboseMode}
@@ -712,7 +726,7 @@ function MobileSessionChat({
 const root = createRoot(rootElement);
 void waitForConfig().then((config) => {
   const agentId = config.agentId?.trim() ?? '';
-  const agentLabel = agentId ? (resolveSessionChatTranscriptAgent(agentId) ?? agentId) : null;
+  const agentLabel = agentId ? (resolveSessionChatDisplayAgent(agentId) ?? agentId) : null;
   const sessionKey = config.sessionKey?.trim() || undefined;
   window.ghostexMobileChatSetPresentation?.({
     fontFamily: config.fontFamily,

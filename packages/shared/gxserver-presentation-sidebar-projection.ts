@@ -447,6 +447,7 @@ export function createGxserverPresentationSidebarSession({
     isFocused: isActiveProject && focusedSessionId === presentation.sessionId,
     isGeneratingFirstPromptTitle: presentation.isGeneratingFirstPromptTitle,
     isLive,
+    isParked: presentation.isParked,
     isPinned: presentation.isPinned,
     isPrimaryTitleTerminalTitle: presentation.isPrimaryTitleTerminalTitle,
     isRunning: isLive,
@@ -461,6 +462,14 @@ export function createGxserverPresentationSidebarSession({
     sessionId: createProjectSessionId(projectId, presentation.sessionId),
     sessionKind: presentation.kind === 'agent' ? 'terminal' : presentation.kind,
     sessionTag: presentation.sessionTag,
+    /*
+    CDXC:SessionAgentNotes 2026-08-24:
+    The note is daemon-owned and keyed by the provider conversation id, so it is
+    copied straight through like `sessionTag`. A blank or whitespace-only value
+    collapses to `undefined` so a row can never carry an "empty note" that would
+    still paint the note dot and a blank tooltip line.
+    */
+    sessionNote: presentation.sessionNote?.trim() ? presentation.sessionNote : undefined,
     sessionNumber: String(index + 1),
     sessionPersistenceName: presentation.zmxName,
     sessionPersistenceProvider: presentation.sessionPersistenceProvider,

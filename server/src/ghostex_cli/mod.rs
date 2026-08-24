@@ -53,7 +53,6 @@ pub fn run() -> i32 {
 /// Commands whose own `-h/--help` handling must not be swallowed by the
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
-    "agent-orchestration",
     "automations",
     "bd",
     "beads",
@@ -66,8 +65,8 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "f",
     "fable-5.6-orchestration",
     "find",
-    "find-prev-session",
     "generate-title",
+    "manage-beads",
     "h",
     "history",
     "move-codex-session",
@@ -203,6 +202,7 @@ fn is_known_command(name: &str) -> bool {
         "request-session-rename",
         "sleep-session",
         "tag-session",
+        "session-note",
         "pin-session",
         "delayed-send",
         "close-after-done",
@@ -256,12 +256,11 @@ fn is_known_command(name: &str) -> bool {
         "cli",
         "automations",
         "install-computer-use-skill",
-        "agent-orchestration",
-        "install-agent-orchestration-skill",
+        "install-cli-skill",
         "fable-5.6-orchestration",
         "install-fable-5.6-orchestration-skill",
-        "find-prev-session",
-        "install-find-prev-session-skill",
+        "manage-beads",
+        "install-manage-beads-skill",
         "generate-title",
         "install-generate-title-skill",
         "move-codex-session",
@@ -457,6 +456,28 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             args,
         ),
         "tag-session" => run_bridge_action("tagSession", Parser::SessionTag, plain, args),
+        /*
+        CDXC:SessionAgentNotes 2026-08-24:
+        Clients that reach gxserver only through this CLI (Ghostex mobile over
+        SSH) read and write the per-conversation note here. `read` and `save`
+        are explicit subactions so the note text can never be mistaken for a
+        session selector; with neither, the presence of `--note` decides.
+        */
+        "session-note" => {
+            let (action, parser, rest): (&str, Parser, &[String]) =
+                match args.first().map(String::as_str) {
+                    Some("read") => ("readSessionAgentNote", Parser::SessionSelector, &args[1..]),
+                    Some("save") => ("saveSessionAgentNote", Parser::SessionNote, &args[1..]),
+                    _ if args
+                        .iter()
+                        .any(|arg| arg == "--note" || arg.starts_with("--note=")) =>
+                    {
+                        ("saveSessionAgentNote", Parser::SessionNote, args)
+                    }
+                    _ => ("readSessionAgentNote", Parser::SessionSelector, args),
+                };
+            run_bridge_action(action, parser, fail_on_not_ok, rest)
+        }
         "pin-session" => {
             run_bridge_action("pinSession", Parser::SessionBoolean("pinned"), plain, args)
         }
@@ -631,17 +652,14 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "computer-use" => skills::computer_use_command(args),
         "install-computer-use-skill" => skills::install_computer_use_skill_command(args),
         "cli" => skills::cli_command(args),
+        "install-cli-skill" => skills::install_cli_skill_command(args),
         "automations" => skills::automations_command(args),
-        "agent-orchestration" => skills::agent_orchestration_command(args),
-        "install-agent-orchestration-skill" => {
-            skills::install_agent_orchestration_skill_command(args)
-        }
         "fable-5.6-orchestration" => skills::fable56_orchestration_command(args),
         "install-fable-5.6-orchestration-skill" => {
             skills::install_fable56_orchestration_skill_command(args)
         }
-        "find-prev-session" => skills::find_prev_session_command(args),
-        "install-find-prev-session-skill" => skills::install_find_prev_session_skill_command(args),
+        "manage-beads" => skills::manage_beads_command(args),
+        "install-manage-beads-skill" => skills::install_manage_beads_skill_command(args),
         "generate-title" => skills::generate_title_command(args),
         "install-generate-title-skill" => skills::install_generate_title_skill_command(args),
         "move-codex-session" => skills::move_codex_session_command(args),

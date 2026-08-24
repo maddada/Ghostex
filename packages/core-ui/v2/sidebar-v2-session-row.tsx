@@ -170,6 +170,13 @@ type SidebarV2GitDisplay = {
   tooltip: string;
 };
 
+/*
+ * CDXC:SessionAgentNotes 2026-08-24:
+ * Same display cap V1's row tooltip uses, so one note reads identically in
+ * either sidebar. Display-only: the stored note is never truncated.
+ */
+const SIDEBAR_V2_NOTE_TOOLTIP_MAX_LENGTH = 400;
+
 const SIDEBAR_V2_PR_STATE_LABELS: Record<SidebarV2GitDisplay['prState'], string> = {
   closed: 'Closed',
   draft: 'Draft',
@@ -335,6 +342,28 @@ export function SidebarV2SessionRow({
     onRenameCancel();
   };
 
+  /*
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * V2 parity for the note affordances. The dot keeps V1's layout-ownership
+   * rule: it renders immediately before the leading icon but is taken out of
+   * flow by CSS (`position: absolute` against the title line on cards and the
+   * row on slim rows — see `.sidebar-v2-row-note-dot`), so a noted row cannot
+   * push its own icon, title, and columns right and fall out of alignment with
+   * note-less rows. The tooltip is the same capped `Note: …` line V1 appends to
+   * its row tooltip, and it disappears entirely (AppTooltip renders its child
+   * untouched for empty content) on rows with no note or mid-rename.
+   */
+  const sessionNote = session.sessionNote?.trim();
+  const sessionNoteDot = sessionNote ? <span aria-hidden='true' className='sidebar-v2-row-note-dot' /> : null;
+  const sessionNoteTooltip =
+    sessionNote && !isRenaming
+      ? `Note: ${
+          sessionNote.length > SIDEBAR_V2_NOTE_TOOLTIP_MAX_LENGTH
+            ? `${sessionNote.slice(0, SIDEBAR_V2_NOTE_TOOLTIP_MAX_LENGTH)}…`
+            : sessionNote
+        }`
+      : undefined;
+
   const title = isRenaming ? (
     <input
       className='sidebar-v2-row-rename-input'
@@ -358,7 +387,9 @@ export function SidebarV2SessionRow({
       value={renameDraft}
     />
   ) : (
-    <span className='sidebar-v2-row-title'>{headingText}</span>
+    <AppTooltip content={sessionNoteTooltip}>
+      <span className='sidebar-v2-row-title'>{headingText}</span>
+    </AppTooltip>
   );
 
   /*
@@ -677,6 +708,7 @@ export function SidebarV2SessionRow({
               </div>
             ) : null}
             <div className='sidebar-v2-row-line' data-line='title'>
+              {sessionNoteDot}
               <SidebarV2SessionIcon
                 agentIcon={session.agentIcon}
                 faviconDataUrl={session.faviconDataUrl}
@@ -728,6 +760,7 @@ export function SidebarV2SessionRow({
           </>
         ) : (
           <>
+            {sessionNoteDot}
             <SidebarV2SessionIcon
               agentIcon={session.agentIcon}
               faviconDataUrl={session.faviconDataUrl}

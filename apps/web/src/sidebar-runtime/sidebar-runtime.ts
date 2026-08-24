@@ -547,8 +547,30 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
           sessionTag: message.sessionTag ?? null,
         });
         return;
+      /*
+      CDXC:SessionAgentNotes 2026-08-24:
+      The note is keyed by the session's PROVIDER conversation id, which only
+      the daemon can resolve, so the client sends the session reference and the
+      text and nothing else. No optimistic patch: gxserver schedules a
+      presentation delta after a successful save, and that delta is what puts
+      the note on the row. An empty note is the explicit clear.
+      */
+      case 'setSessionNote': {
+        const target = parseSidebarSessionId(message.sessionId);
+        if (target) {
+          await rpcForMachine(target.machineId, '/api/saveSessionAgentNote', {
+            note: message.note,
+            projectId: target.projectId,
+            sessionId: target.sessionId,
+          });
+        }
+        return;
+      }
       case 'setSessionPinned':
         await updateSession(message.sessionId, { isPinned: message.pinned });
+        return;
+      case 'setSessionParked':
+        await updateSession(message.sessionId, { isParked: message.parked });
         return;
       case 'syncSessionOrder':
         await syncSessionOrder(message.groupId, message.sessionIds);

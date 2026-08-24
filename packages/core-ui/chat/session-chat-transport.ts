@@ -135,4 +135,17 @@ export interface SessionChatTransport {
    * cache and simply never sync — nothing in the UI is hidden.
    */
   setDraft?(params: { content: string; clientId: string }): Promise<void>;
+  /*
+  CDXC:SessionAgentNotes 2026-08-24:
+  The session's "what to do next here" note. gxserver files it under the
+  PROVIDER conversation id, so the transport passes only the note body and the
+  host's own (projectId, sessionId) resolve the rest. Both methods are optional
+  on the established gate of this interface: a host without a route to the two
+  endpoints omits them and the composer's note control is not rendered at all,
+  rather than opening a panel whose save would 404.
+  */
+  /** Reads this session's stored note; `note` is absent when none is stored. */
+  readSessionNote?(): Promise<{ agentSessionId?: string; note?: string }>;
+  /** Stores the note; an empty string clears it. */
+  saveSessionNote?(note: string): Promise<void>;
 }

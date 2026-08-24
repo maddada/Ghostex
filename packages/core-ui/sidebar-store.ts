@@ -1191,12 +1191,21 @@ function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSess
    * The hydrate path (`normalizeSidebarGroups`) has no revision escape hatch, so
    * leaving these out here reuses the pre-settle object and the V2 shelves never
    * move.
+   *
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * `sessionNote` and `agentSessionId` are two more lone-field changes of that
+   * same class: saving/clearing a note, or the provider minting/rewriting its
+   * conversation id (agent boot, Claude compaction), touches nothing else on
+   * the row. Omitting them here drops the delta — the note dot never appears
+   * and the Saved Prompts modal reads a stale conversation id from the store.
    */
   return (
     left.activity === right.activity &&
     left.activityLabel === right.activityLabel &&
     left.agentIcon === right.agentIcon &&
+    left.agentSessionId === right.agentSessionId &&
     left.alias === right.alias &&
+    left.sessionNote === right.sessionNote &&
     left.canPopOutPane === right.canPopOutPane &&
     left.canScheduleDelayedSend === right.canScheduleDelayedSend &&
     left.canToggleCloseAfterDone === right.canToggleCloseAfterDone &&
@@ -1220,6 +1229,7 @@ function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSess
     left.lifecycleState === right.lifecycleState &&
     left.isFocused === right.isFocused &&
     left.isFavorite === right.isFavorite &&
+    left.isParked === right.isParked &&
     left.isPinned === right.isPinned &&
     left.sessionTag === right.sessionTag &&
     left.isSleeping === right.isSleeping &&

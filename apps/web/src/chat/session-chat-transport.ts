@@ -15,6 +15,7 @@ import type {
   GxserverSessionChatQueueResult,
   GxserverSessionChatRemoveQueuedPromptResult,
 } from '@/packages/shared/session-chat';
+import type { GxserverReadSessionAgentNoteResult } from '@/packages/shared/gxserver-protocol';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 import { rpcForMachine, subscribeSessionChatForMachine } from '../connections/connection-registry';
 
@@ -142,6 +143,25 @@ export function createSessionChatTransport(
         projectId,
         sessionId,
         promptId: params.promptId,
+      });
+    },
+    /*
+    CDXC:SessionAgentNotes 2026-08-24:
+    The session note rides the session's own machine connection like every
+    other call here, and gxserver resolves the provider conversation id it is
+    filed under from (projectId, sessionId) — this host never sees that key.
+    */
+    readSessionNote() {
+      return rpcForMachine<GxserverReadSessionAgentNoteResult>(machineId, '/api/readSessionAgentNote', {
+        projectId,
+        sessionId,
+      });
+    },
+    async saveSessionNote(note) {
+      await rpcForMachine(machineId, '/api/saveSessionAgentNote', {
+        note,
+        projectId,
+        sessionId,
       });
     },
     // `clientId` is minted and persisted by the shared hook, never here: a
