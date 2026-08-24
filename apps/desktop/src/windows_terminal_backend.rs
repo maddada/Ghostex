@@ -529,6 +529,28 @@ printf '%s\n' \
         )
     }
 
+    pub(super) fn resource_process_cwd_snapshot(pids: &[u32]) -> Option<String> {
+        if pids.is_empty() {
+            return None;
+        }
+        let ResolvedWindowsTerminalBackend::Wsl { distribution } =
+            resolve(super::current_preference()).ok()?
+        else {
+            return None;
+        };
+        let pid_list = pids
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        run_wsl_capture(
+            &distribution,
+            &format!(
+                "test -x /usr/bin/lsof && exec /usr/bin/lsof -nP -a -d cwd -p {pid_list} -F pn"
+            ),
+        )
+    }
+
     pub(super) fn source_code_server_command(
         project_path: &Path,
         required_node_major: u64,
@@ -1584,6 +1606,11 @@ pub(crate) fn resource_process_snapshot() -> Option<String> {
 #[cfg(target_os = "windows")]
 pub(crate) fn resource_server_snapshot() -> Option<String> {
     platform::resource_server_snapshot()
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn resource_process_cwd_snapshot(pids: &[u32]) -> Option<String> {
+    platform::resource_process_cwd_snapshot(pids)
 }
 
 #[cfg(target_os = "windows")]

@@ -12,7 +12,7 @@
 //
 // Cluster: titlebar menus, popups, actions, and titlebar render_* builders
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
@@ -222,6 +222,52 @@ impl GhostexGpuiApp {
             .iter()
             .map(|server| server.pid)
             .collect::<HashSet<_>>();
+        /*
+        CDXC:GPUITitlebarResources 2026-08-24:
+        A dev server the user started for this project keeps listening after
+        the shell that launched it is gone — `bun run storybook &`, a bundler
+        that daemonises itself, a session that was slept or killed — so the
+        listener re-parents to init and no session process tree claims it.
+        Ownership by process tree alone therefore hid exactly the servers the
+        user wants to reach from here. Accept a listener whose working
+        directory is inside the active project root as well: Chrome, Discord,
+        postgres, the ssh carriers, and every other loopback listener on the
+        machine run from somewhere else, so they stay out of the section.
+        */
+        let active_project_label = self
+            .latest_sidebar_project_snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.display_name.clone())
+            .unwrap_or_else(|| "Ghostex".to_string());
+        let project_root = self
+            .latest_sidebar_project_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.in_memory_project_path.clone());
+        #[cfg(target_os = "windows")]
+        // Listeners are sampled inside the WSL distribution, so the project
+        // root has to be compared in that distribution's path space.
+        let project_root = project_root.and_then(|path| {
+            if path.starts_with("/") {
+                Some(path)
+            } else {
+                windows_terminal_backend::wsl_path_for_windows_path(&path)
+                    .ok()
+                    .map(std::path::PathBuf::from)
+            }
+        });
+        /*
+        The same working directory answers both questions a Dev Servers row
+        needs: whether an unclaimed listener belongs here at all, and which
+        project each row is serving. Sample every listener in one call rather
+        than only the unclaimed ones, so a server started inside a live agent
+        terminal is attributed to its project too.
+        */
+        let listener_cwds = match project_root.as_deref() {
+            Some(_) => gpui_read_native_resource_process_cwds(
+                &listener_pids.iter().copied().collect::<Vec<_>>(),
+            ),
+            None => HashMap::new(),
+        };
         let mut grouped_servers: Vec<(GpuiNativeResourceServer, Vec<u16>)> = Vec::new();
         for server in servers {
             let Some(process) = processes.iter().find(|process| process.pid == server.pid) else {
@@ -230,8 +276,14 @@ impl GhostexGpuiApp {
             if gpui_native_resource_is_app_shell_process(process) {
                 continue;
             }
+            let runs_in_active_project = project_root.as_deref().is_some_and(|root| {
+                listener_cwds
+                    .get(&server.pid)
+                    .is_some_and(|cwd| cwd.starts_with(root))
+            });
             if !claimed_pids.contains(&server.pid)
                 && !gpui_native_resource_is_ghostex_owned_process(process)
+                && !runs_in_active_project
             {
                 continue;
             }
@@ -273,11 +325,29 @@ impl GhostexGpuiApp {
             let (cpu, memory_mb) = gpui_sum_native_resource_processes(&tree);
             extra_ports.sort_unstable();
             extra_ports.dedup();
+            /*
+            A port number alone does not say what the server is for, and a
+            monorepo easily runs several at once. Name the project the listener
+            is serving, plus the directory inside it when the server was
+            started from a subfolder, so `localhost:6006` reads as the Ghostex
+            Storybook rather than an anonymous port.
+            */
+            let project_detail = project_root.as_deref().and_then(|root| {
+                let cwd = listener_cwds.get(&server.pid)?;
+                let relative = cwd.strip_prefix(root).ok()?;
+                Some(match relative.components().next() {
+                    Some(_) => format!("{active_project_label}/{}", relative.display()),
+                    None => active_project_label.clone(),
+                })
+            });
             let mut detail = format!(
                 "{} pid {}",
                 gpui_native_resource_process_name(process),
                 process.system_pid
             );
+            if let Some(project_detail) = project_detail {
+                detail = format!("{project_detail} • {detail}");
+            }
             if !extra_ports.is_empty() {
                 detail.push_str(&format!(
                     " • also :{}",
@@ -392,11 +462,7 @@ impl GhostexGpuiApp {
             persistent_session_mode: gpui_titlebar_session_persistence_provider_from_settings(
                 shared_settings::shared_sidebar_settings_snapshot().object(),
             ) != "off",
-            project_label: self
-                .latest_sidebar_project_snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.display_name.clone())
-                .unwrap_or_else(|| "Ghostex".to_string()),
+            project_label: active_project_label,
             server_rows,
             session_rows,
             sleep_all_session_count,

@@ -61,8 +61,9 @@ pub(crate) fn gpui_native_resource_is_app_bundle_process(process: &GpuiNativeRes
             .any(|executable| command.contains(executable)))
 }
 
-/// True for the app's own executables: the Ghostex binary and its CEF helper
-/// processes. These are the app itself, never a user-owned server or runtime.
+/// True for the app's own executables: the Ghostex binary, its CEF helper
+/// processes, and the gxserver daemon. These are the app itself, never a
+/// user-owned server or runtime.
 pub(crate) fn gpui_native_resource_is_app_shell_process(process: &GpuiNativeResourceProcess) -> bool {
     let command = process.command.to_ascii_lowercase();
     [
@@ -73,6 +74,7 @@ pub(crate) fn gpui_native_resource_is_app_shell_process(process: &GpuiNativeReso
     ]
     .iter()
     .any(|marker| command.contains(marker))
+        || gpui_native_resource_is_gxserver_process(process)
         || (cfg!(target_os = "windows")
             && [
                 "ghostex.exe",
@@ -81,6 +83,25 @@ pub(crate) fn gpui_native_resource_is_app_shell_process(process: &GpuiNativeReso
             ]
             .iter()
             .any(|executable| command.contains(executable)))
+}
+
+/*
+CDXC:GPUITitlebarResources 2026-08-24:
+gxserver is the app's own control plane, and it binds an ephemeral loopback
+port the user never types or opens. It lives in `Contents/Resources/`, so the
+bundle-path markers above (which deliberately stay narrow, because the same
+folder also holds zmx and the terminal runtimes that DO belong to session rows)
+never matched it and every launch grew a permanent `localhost:<random>` Dev
+Servers row. Identify it by executable name so the bundled runtime, a
+`~/.ghostex/` install, and a dev build are all recognised.
+*/
+pub(crate) fn gpui_native_resource_is_gxserver_process(process: &GpuiNativeResourceProcess) -> bool {
+    matches!(
+        gpui_native_resource_process_name(process)
+            .to_ascii_lowercase()
+            .as_str(),
+        "gxserver" | "gxserver.exe"
+    )
 }
 
 pub(crate) fn gpui_native_resource_is_ghostex_owned_process(process: &GpuiNativeResourceProcess) -> bool {

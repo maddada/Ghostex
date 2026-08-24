@@ -479,6 +479,69 @@ pub(crate) fn gpui_read_native_resource_servers() -> Vec<GpuiNativeResourceServe
         .unwrap_or_default()
 }
 
+pub(crate) fn gpui_parse_native_resource_process_cwds(
+    output: &str,
+) -> HashMap<u32, std::path::PathBuf> {
+    let mut pid = None;
+    let mut cwds = HashMap::new();
+    for line in output.lines() {
+        let line = line.trim_end_matches(['\r', '\n']);
+        if line.is_empty() {
+            continue;
+        }
+        let (field, value) = line.split_at(1);
+        match field {
+            "p" => pid = value.parse::<u32>().ok(),
+            "n" => {
+                let Some(pid) = pid else { continue };
+                if value.starts_with('/') {
+                    cwds.insert(pid, std::path::PathBuf::from(value));
+                }
+            }
+            _ => {}
+        }
+    }
+    cwds
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn gpui_read_native_resource_process_cwds(
+    pids: &[u32],
+) -> HashMap<u32, std::path::PathBuf> {
+    if pids.is_empty() {
+        return HashMap::new();
+    }
+    let pid_list = pids
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let Ok(output) = Command::new("/usr/sbin/lsof")
+        .args(["-nP", "-a", "-d", "cwd", "-p", &pid_list, "-F", "pn"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+    else {
+        return HashMap::new();
+    };
+    /*
+    lsof exits non-zero as soon as one of the listed pids has already gone,
+    which is routine when sampling a process list a moment after reading it.
+    The surviving pids are still printed on stdout, so parse the output on its
+    own terms instead of gating on the exit status.
+    */
+    gpui_parse_native_resource_process_cwds(&String::from_utf8_lossy(&output.stdout))
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn gpui_read_native_resource_process_cwds(
+    pids: &[u32],
+) -> HashMap<u32, std::path::PathBuf> {
+    windows_terminal_backend::resource_process_cwd_snapshot(pids)
+        .map(|output| gpui_parse_native_resource_process_cwds(&output))
+        .unwrap_or_default()
+}
+
 pub(crate) fn gpui_native_resource_children_by_parent(
     processes: &[GpuiNativeResourceProcess],
 ) -> HashMap<u32, Vec<GpuiNativeResourceProcess>> {
