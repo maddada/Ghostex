@@ -189,14 +189,6 @@ export type SidebarGhostexCliStatusMessage = {
   fable56OrchestrationSkillPath?: string;
   generateTitleSkillInstalled: boolean;
   generateTitleSkillPath?: string;
-  /**
-   * CDXC:BoardAssociateSession 2026-08-24:
-   * The Project Board beads skill became installable after existing hosts
-   * shipped, so its status fields stay optional like the Fable orchestration
-   * ones above: a missing value means not installed, not an outdated host.
-   */
-  manageBeadsSkillInstalled?: boolean;
-  manageBeadsSkillPath?: string;
   moveCodexSessionSkillInstalled: boolean;
   moveCodexSessionSkillPath?: string;
   cuaDriverAccessibilityPermissionGranted?: boolean;

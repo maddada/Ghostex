@@ -54,7 +54,6 @@ pub(crate) struct GpuiGhostexCliProbe {
     pub(crate) gx_blocked_by_existing_command: bool,
     pub(crate) gx_path: Option<String>,
     pub(crate) gx_usable: bool,
-    pub(crate) manage_beads_skill_path: Option<String>,
     pub(crate) move_codex_session_skill_path: Option<String>,
 }
 
@@ -74,7 +73,6 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         gx_blocked_by_existing_command: status.gx_blocked_by_existing_command,
         gx_path: status.gx_path,
         gx_usable: status.gx_usable,
-        manage_beads_skill_path: status.manage_beads_skill_path,
         move_codex_session_skill_path: status.move_codex_session_skill_path,
     })
 }
@@ -109,7 +107,6 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         gx_blocked_by_existing_command: gx_path.is_some() && !gx_usable,
         gx_path: gx_path.as_ref().map(|path| gpui_path_string(path)),
         gx_usable,
-        manage_beads_skill_path: skill_path("ghostex-manage-beads"),
         move_codex_session_skill_path: skill_path("ghostex-move-codex-session"),
     })
 }
@@ -133,7 +130,6 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
     let fable56_orchestration_skill_installed = probe.fable56_orchestration_skill_path.is_some();
     let manage_beads_skill_installed = probe.manage_beads_skill_path.is_some();
     let generate_title_skill_installed = probe.generate_title_skill_path.is_some();
-    let manage_beads_skill_installed = probe.manage_beads_skill_path.is_some();
     let move_codex_session_skill_installed = probe.move_codex_session_skill_path.is_some();
     let cua_driver_path = gpui_cua_driver_executable_path();
     let cua_app_installed = gpui_is_dir(Path::new("/Applications/CuaDriver.app"));
@@ -273,8 +269,6 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
         "gxPath": probe.gx_path,
         "gxUsable": gx_usable,
         "installed": ghostex_usable,
-        "manageBeadsSkillInstalled": manage_beads_skill_installed,
-        "manageBeadsSkillPath": probe.manage_beads_skill_path,
         "moveCodexSessionSkillInstalled": move_codex_session_skill_installed,
         "moveCodexSessionSkillPath": probe.move_codex_session_skill_path,
         "type": "ghostexCliStatus",

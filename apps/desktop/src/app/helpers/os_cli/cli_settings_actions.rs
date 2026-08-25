@@ -14,7 +14,6 @@ pub(crate) enum GpuiGhostexCliSettingsAction {
     InstallFable56OrchestrationSkill,
     InstallManageBeadsSkill,
     InstallGenerateTitleSkill,
-    InstallManageBeadsSkill,
     InstallMoveCodexSessionSkill,
     FinishDesktopControlSetup {
         driver_installed: bool,
@@ -35,7 +34,6 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallFable56OrchestrationSkill => "installFable56OrchestrationSkill",
             Self::InstallManageBeadsSkill => "installManageBeadsSkill",
             Self::InstallGenerateTitleSkill => "installGenerateTitleSkill",
-            Self::InstallManageBeadsSkill => "installManageBeadsSkill",
             Self::InstallMoveCodexSessionSkill => "installMoveCodexSessionSkill",
             Self::FinishDesktopControlSetup { .. } => "installCuaDriver",
             Self::UninstallBundledAgentSkill(_) => "uninstallBundledAgentSkill",
@@ -53,7 +51,6 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallFable56OrchestrationSkill => "Ghostex Fable 5.6 Orchestration installed",
             Self::InstallManageBeadsSkill => "Ghostex Manage Beads installed",
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session installed",
-            Self::InstallManageBeadsSkill => "Ghostex Project Board Beads installed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session installed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
@@ -76,7 +73,6 @@ impl GpuiGhostexCliSettingsAction {
             }
             Self::InstallManageBeadsSkill => "Ghostex Manage Beads install failed",
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session install failed",
-            Self::InstallManageBeadsSkill => "Ghostex Project Board Beads install failed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session install failed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
@@ -176,13 +172,6 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 action,
                 &["generate-title", "install-skill"],
                 "Ghostex Auto Rename Session",
-            )
-        }
-        GpuiGhostexCliSettingsAction::InstallManageBeadsSkill => {
-            gpui_install_bundled_ghostex_skill_action(
-                action,
-                &["board", "install-skill"],
-                "Ghostex Project Board Beads",
             )
         }
         GpuiGhostexCliSettingsAction::InstallMoveCodexSessionSkill => {
