@@ -2,14 +2,6 @@ import { IconPuzzle, IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/packages/components/ui/empty';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/packages/components/ui/tabs';
 import { cn } from '@/packages/components/utils';
 import type { SidebarTheme } from '@/packages/shared/session-grid-contract';
@@ -23,6 +15,7 @@ import { InstalledExtensionDetail, StoreExtensionDetail } from './extension-deta
 import { InstallConsentDialog } from './install-consent';
 import { InstalledTab } from './installed-tab';
 import { StoreTab } from './store-tab';
+import { ExtensionEmptyState } from './extension-surface';
 import { createExtensionsModalTransport, extensionStaticAssetUrl, type ExtensionsModalTransport } from './transport';
 
 export type ExtensionsModalTab = 'store' | 'installed';
@@ -212,47 +205,41 @@ export function ExtensionsModal({
     >
       <DialogContent
         className={cn(
-          'extensions-modal-dialog flex h-[min(850px,calc(100vh-2rem))] max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden bg-[#0e0e0e] p-0 font-sans sm:max-w-[1120px]',
+          'extensions-modal-dialog flex h-[min(850px,calc(100vh-2rem))] max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden rounded-xl border-border/80 bg-[#0e0e0e] p-0 font-sans sm:max-w-[1120px]',
           dark && 'dark'
         )}
         data-sidebar-theme={theme}
         showCloseButton
       >
-        <DialogHeader className='shrink-0 border-b border-border/60 px-6 py-5 pr-16'>
-          <DialogTitle className='text-xl font-normal'>Extensions</DialogTitle>
-          <DialogDescription>Browse audited extensions and manage what is installed.</DialogDescription>
+        <DialogHeader className='shrink-0 border-b border-border/60 px-5 py-4 pr-16'>
+          <DialogTitle className='text-lg font-normal'>Extensions</DialogTitle>
+          <DialogDescription className='text-[13px] font-normal'>
+            Browse audited extensions and manage what is installed.
+          </DialogDescription>
         </DialogHeader>
         {error ? (
-          <div className='shrink-0 border-b border-destructive/30 bg-destructive/10 px-6 py-2 text-sm text-destructive'>
+          <div className='shrink-0 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-[13px] font-normal text-destructive'>
             {error}
           </div>
         ) : null}
         {loading && !catalogSnapshot ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant='icon'>
-                <IconPuzzle />
-              </EmptyMedia>
-              <EmptyTitle>Loading extensions…</EmptyTitle>
-              <EmptyDescription>Reading the installed registry and extension catalog.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <ExtensionEmptyState
+            description='Reading the installed registry and extension catalog.'
+            icon={IconPuzzle}
+            title='Loading extensions…'
+          />
         ) : error && !catalogSnapshot ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant='icon'>
-                <IconPuzzle />
-              </EmptyMedia>
-              <EmptyTitle>Extensions unavailable</EmptyTitle>
-              <EmptyDescription>{error}</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button onClick={() => void load()} type='button' variant='outline'>
+          <ExtensionEmptyState
+            action={
+              <Button className='font-normal' onClick={() => void load()} size='sm' type='button' variant='secondary'>
                 <IconRefresh data-icon='inline-start' />
                 Try again
               </Button>
-            </EmptyContent>
-          </Empty>
+            }
+            description={error}
+            icon={IconPuzzle}
+            title='Extensions unavailable'
+          />
         ) : selectedInstalled ? (
           <InstalledExtensionDetail
             catalogEntry={catalogById.get(selectedInstalled.id)}
@@ -287,22 +274,26 @@ export function ExtensionsModal({
             onValueChange={(value) => setActiveTab(value as ExtensionsModalTab)}
             value={activeTab}
           >
-            <div className='flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-6'>
-              <TabsList variant='line'>
-                <TabsTrigger value='store'>Store</TabsTrigger>
-                <TabsTrigger value='installed'>Installed ({installed.length})</TabsTrigger>
+            <div className='flex h-11 shrink-0 items-center justify-between border-b border-border/60 px-5'>
+              <TabsList className='h-8 gap-4 p-0' variant='line'>
+                <TabsTrigger className='h-8 flex-none px-1.5 text-[13px] font-normal' value='store'>
+                  Store
+                </TabsTrigger>
+                <TabsTrigger className='h-8 flex-none px-1.5 text-[13px] font-normal' value='installed'>
+                  Installed ({installed.length})
+                </TabsTrigger>
               </TabsList>
               <Button
                 aria-label='Refresh extensions'
                 disabled={loading}
                 onClick={() => void load()}
-                size='icon'
+                size='icon-sm'
                 variant='ghost'
               >
                 <IconRefresh />
               </Button>
             </div>
-            <TabsContent className='min-h-0 overflow-y-auto p-6' value='store'>
+            <TabsContent className='min-h-0 overflow-hidden' value='store'>
               <StoreTab
                 catalog={catalog}
                 iconUrlFor={iconUrlForCatalogEntry}
@@ -310,7 +301,7 @@ export function ExtensionsModal({
                 onDetails={(entry) => setSelectedStoreId(entry.name)}
               />
             </TabsContent>
-            <TabsContent className='min-h-0 overflow-y-auto p-6' value='installed'>
+            <TabsContent className='min-h-0 overflow-hidden' value='installed'>
               <InstalledTab
                 extensions={installed}
                 iconUrlFor={iconUrlForInstalled}

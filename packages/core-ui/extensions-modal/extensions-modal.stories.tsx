@@ -9,6 +9,7 @@ import { InstalledExtensionCard } from './extension-card';
 import { StoreExtensionDetail } from './extension-detail';
 import { InstallConsentDialog } from './install-consent';
 import { InstalledTab } from './installed-tab';
+import { ExtensionGroup } from './extension-surface';
 
 const ICON =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='%23e5e5e5' stroke-width='2'%3E%3Crect x='8' y='8' width='32' height='32' rx='8'/%3E%3Cpath d='M16 24h16M24 16v16'/%3E%3C/svg%3E";
@@ -145,14 +146,16 @@ export const InstalledCard: Story = {
     return (
       <StoryFrame>
         <div className='max-w-xl'>
-          <InstalledExtensionCard
-            extension={extension}
-            iconUrl={ICON}
-            onDetails={() => undefined}
-            onRemove={() => undefined}
-            onSetChatBarAutoOpen={setChatBarAutoOpen}
-            onSetEnabled={setEnabled}
-          />
+          <ExtensionGroup>
+            <InstalledExtensionCard
+              extension={extension}
+              iconUrl={ICON}
+              onDetails={() => undefined}
+              onRemove={() => undefined}
+              onSetChatBarAutoOpen={setChatBarAutoOpen}
+              onSetEnabled={setEnabled}
+            />
+          </ExtensionGroup>
         </div>
       </StoryFrame>
     );

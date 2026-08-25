@@ -1,11 +1,32 @@
-import { IconArrowUpRight } from '@tabler/icons-react';
+import { IconArrowUpRight, IconPuzzle, IconTrash } from '@tabler/icons-react';
 import { Button } from '@/packages/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/packages/components/ui/card';
 import { Switch } from '@/packages/components/ui/switch';
+import { cn } from '@/packages/components/utils';
 import type { GhostexExtensionCatalogEntry, GhostexInstalledExtension } from '@/packages/shared/ghostex-extensions';
 
-export function ExtensionIcon({ src, title }: { src?: string; title: string }) {
-  return <img alt={`${title} icon`} className='size-12 shrink-0 object-contain' src={src} />;
+export function ExtensionIcon({ className, src, title }: { className?: string; src?: string; title: string }) {
+  const iconClassName = cn(
+    'flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-white/[0.04] p-1.5 text-muted-foreground',
+    className
+  );
+  return src ? (
+    <span className={iconClassName}>
+      <img alt={`${title} icon`} className='size-full object-contain' src={src} />
+    </span>
+  ) : (
+    <span aria-label={`${title} icon`} className={iconClassName} role='img'>
+      <IconPuzzle aria-hidden='true' className='size-4' />
+    </span>
+  );
+}
+
+function placementLabel(extension: GhostexInstalledExtension): string {
+  if (extension.manifest.kind === 'terminal-pane') {
+    return extension.state.terminalPlacement === 'tab' ? 'New terminal tab' : 'Terminal split';
+  }
+  const placement = extension.state.placement ?? extension.manifest.defaultPlacement;
+  if (placement === 'chat-bar') return 'Chat bar';
+  return placement[0].toUpperCase() + placement.slice(1);
 }
 
 export function InstalledExtensionCard({
@@ -27,45 +48,65 @@ export function InstalledExtensionCard({
 }) {
   const supportsChatBar = extension.manifest.placements?.includes('chat-bar') === true;
   return (
-    <Card className='min-h-52 bg-card/45 py-5 ring-border/70' data-extension-id={extension.id}>
-      <CardHeader className='grid grid-cols-[auto_minmax(0,1fr)] gap-4 px-5'>
-        <ExtensionIcon src={iconUrl} title={extension.manifest.title} />
-        <div className='min-w-0'>
-          <CardTitle className='truncate text-[15px] font-normal'>{extension.manifest.title}</CardTitle>
-          <CardDescription className='mt-1 line-clamp-3 leading-5'>{extension.manifest.description}</CardDescription>
+    <div
+      className='group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-white/[0.04] focus-within:bg-white/[0.04]'
+      data-extension-id={extension.id}
+    >
+      <span
+        aria-hidden='true'
+        className={cn('size-1.5 shrink-0 rounded-full', extension.state.enabled ? 'bg-emerald-400/80' : 'bg-white/20')}
+      />
+      <ExtensionIcon src={iconUrl} title={extension.manifest.title} />
+      <div className='min-w-0 flex-1'>
+        <div className='flex min-w-0 items-baseline gap-2'>
+          <span className='truncate text-sm font-normal text-foreground'>{extension.manifest.title}</span>
+          <span className='shrink-0 text-xs font-normal text-muted-foreground'>
+            {extension.state.enabled ? 'Enabled' : 'Disabled'}
+          </span>
         </div>
-      </CardHeader>
-      <CardContent className='mt-auto flex flex-col gap-3 px-5 text-xs text-muted-foreground'>
-        <span>Version {extension.state.version}</span>
+        <p className='mt-0.5 truncate text-[13px] font-normal text-foreground/75'>{extension.manifest.description}</p>
+        <p className='mt-0.5 truncate text-xs font-normal text-muted-foreground'>
+          {[
+            `Version ${extension.state.version}`,
+            placementLabel(extension),
+            supportsChatBar && extension.state.chatBarAutoOpen ? 'Opens automatically in sessions' : undefined,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      </div>
+      <div className='flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100'>
         {supportsChatBar ? (
-          <div className='flex items-center justify-between gap-4 border-t border-border/60 pt-3'>
-            <span className='text-sm text-foreground'>Open automatically in sessions</span>
+          <div className='mr-1 flex items-center gap-2 text-xs font-normal text-muted-foreground'>
+            Auto-open
             <Switch
               aria-label={`${extension.state.chatBarAutoOpen ? 'Disable' : 'Enable'} automatic opening for ${extension.manifest.title}`}
               checked={extension.state.chatBarAutoOpen}
               disabled={pending}
               onCheckedChange={onSetChatBarAutoOpen}
+              size='sm'
             />
           </div>
         ) : null}
-      </CardContent>
-      <CardFooter className='justify-between gap-4 px-5'>
-        <div className='flex items-center gap-2'>
-          <Button disabled={pending} onClick={onDetails} type='button' variant='outline'>
-            Details
-          </Button>
-          <Button disabled={pending} onClick={onRemove} type='button' variant='outline'>
-            Remove
-          </Button>
-        </div>
+        <Button className='font-normal' disabled={pending} onClick={onDetails} size='sm' type='button' variant='ghost'>
+          Details
+        </Button>
+        <Button disabled={pending} onClick={onRemove} size='icon-sm' type='button' variant='ghost'>
+          <IconTrash />
+          <span className='sr-only'>Remove</span>
+        </Button>
+      </div>
+      <div className='ml-1 flex shrink-0 items-center gap-2'>
+        <span className='text-xs font-normal text-muted-foreground'>{extension.state.enabled ? 'On' : 'Off'}</span>
         <Switch
           aria-label={`${extension.state.enabled ? 'Disable' : 'Enable'} ${extension.manifest.title}`}
           checked={extension.state.enabled}
           disabled={pending}
           onCheckedChange={onSetEnabled}
+          size='sm'
         />
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -80,31 +121,38 @@ export function StoreExtensionCard({
   installedVersion?: string;
   onDetails: () => void;
 }) {
+  const metadata = [entry.author, `Version ${entry.version}`, ...entry.categories.slice(0, 2)];
   return (
-    <Card className='min-h-52 bg-card/45 py-5 ring-border/70' data-extension-id={entry.name}>
-      <CardHeader className='grid grid-cols-[auto_minmax(0,1fr)] gap-4 px-5'>
-        <ExtensionIcon src={iconUrl} title={entry.title} />
-        <div className='min-w-0'>
-          <CardTitle className='truncate text-[15px] font-normal'>{entry.title}</CardTitle>
-          <CardDescription className='mt-1 line-clamp-3 leading-5'>{entry.description}</CardDescription>
+    <div
+      className='group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-white/[0.04] focus-within:bg-white/[0.04]'
+      data-extension-id={entry.name}
+    >
+      <span
+        aria-hidden='true'
+        className={cn('size-1.5 shrink-0 rounded-full', installedVersion ? 'bg-emerald-400/80' : 'bg-white/20')}
+      />
+      <ExtensionIcon src={iconUrl} title={entry.title} />
+      <div className='min-w-0 flex-1'>
+        <div className='flex min-w-0 items-baseline gap-2'>
+          <span className='truncate text-sm font-normal text-foreground'>{entry.title}</span>
+          {installedVersion ? (
+            <span className='shrink-0 text-xs font-normal text-muted-foreground'>Installed</span>
+          ) : null}
         </div>
-      </CardHeader>
-      <CardContent className='mt-auto flex flex-wrap gap-1.5 px-5 text-xs text-muted-foreground'>
-        {entry.categories.slice(0, 3).map((category) => (
-          <span className='border border-border/70 px-2 py-0.5' key={category}>
-            {category}
-          </span>
-        ))}
-      </CardContent>
-      <CardFooter className='justify-between gap-4 px-5'>
-        <span className='text-xs text-muted-foreground'>
-          {installedVersion ? `Installed ${installedVersion}` : `Version ${entry.version}`}
-        </span>
-        <Button onClick={onDetails} type='button' variant='outline'>
+        <p className='mt-0.5 truncate text-[13px] font-normal text-foreground/75'>{entry.description}</p>
+        <p className='mt-0.5 truncate text-xs font-normal text-muted-foreground'>{metadata.join(' · ')}</p>
+      </div>
+      <div className='flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100'>
+        <Button className='font-normal' onClick={onDetails} size='sm' type='button' variant='ghost'>
           Details
           <IconArrowUpRight data-icon='inline-end' />
         </Button>
-      </CardFooter>
-    </Card>
+      </div>
+      {installedVersion ? (
+        <span className='ml-1 shrink-0 text-xs font-normal text-muted-foreground'>
+          {installedVersion === entry.version ? 'Up to date' : `Installed ${installedVersion}`}
+        </span>
+      ) : null}
+    </div>
   );
 }

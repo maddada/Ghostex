@@ -1,7 +1,7 @@
 import { IconPuzzle } from '@tabler/icons-react';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/packages/components/ui/empty';
 import type { GhostexInstalledExtension } from '@/packages/shared/ghostex-extensions';
 import { InstalledExtensionCard } from './extension-card';
+import { ExtensionEmptyState, ExtensionGroup } from './extension-surface';
 
 export function InstalledTab({
   extensions,
@@ -22,31 +22,31 @@ export function InstalledTab({
 }) {
   if (!extensions.length) {
     return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant='icon'>
-            <IconPuzzle />
-          </EmptyMedia>
-          <EmptyTitle>No extensions installed</EmptyTitle>
-          <EmptyDescription>Browse the Store to add audited extensions to Ghostex.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <div className='flex h-full min-h-0'>
+        <ExtensionEmptyState
+          description='Browse the Store to add audited extensions to Ghostex.'
+          icon={IconPuzzle}
+          title='No extensions installed'
+        />
+      </div>
     );
   }
   return (
-    <div className='grid grid-cols-1 gap-4 min-[700px]:grid-cols-2'>
-      {extensions.map((extension) => (
-        <InstalledExtensionCard
-          extension={extension}
-          iconUrl={iconUrlFor(extension)}
-          key={extension.id}
-          onDetails={() => onDetails(extension)}
-          onRemove={() => onRemove(extension)}
-          onSetChatBarAutoOpen={(autoOpen) => onSetChatBarAutoOpen(extension, autoOpen)}
-          onSetEnabled={(enabled) => onSetEnabled(extension, enabled)}
-          pending={pendingIds?.has(extension.id)}
-        />
-      ))}
+    <div className='vertical-scroll-fade-mask h-full min-h-0 overflow-y-auto p-3 [--edge-fade-distance:16px]'>
+      <ExtensionGroup>
+        {extensions.map((extension) => (
+          <InstalledExtensionCard
+            extension={extension}
+            iconUrl={iconUrlFor(extension)}
+            key={extension.id}
+            onDetails={() => onDetails(extension)}
+            onRemove={() => onRemove(extension)}
+            onSetChatBarAutoOpen={(autoOpen) => onSetChatBarAutoOpen(extension, autoOpen)}
+            onSetEnabled={(enabled) => onSetEnabled(extension, enabled)}
+            pending={pendingIds?.has(extension.id)}
+          />
+        ))}
+      </ExtensionGroup>
     </div>
   );
 }

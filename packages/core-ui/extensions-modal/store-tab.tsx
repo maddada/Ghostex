@@ -1,15 +1,22 @@
 import { IconSearch } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/packages/components/ui/empty';
-import { Field, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
+import { Field, FieldLabel } from '@/packages/components/ui/field';
 import { Input } from '@/packages/components/ui/input';
-import { ToggleGroup, ToggleGroupItem } from '@/packages/components/ui/toggle-group';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/packages/components/ui/select';
 import type {
   GhostexExtensionCatalogEntry,
   GhostexExtensionPlacement,
   GhostexInstalledExtension,
 } from '@/packages/shared/ghostex-extensions';
 import { StoreExtensionCard } from './extension-card';
+import { ExtensionEmptyState, ExtensionGroup } from './extension-surface';
 
 type TypeFilter = 'all' | GhostexExtensionPlacement | 'terminal-pane';
 
@@ -20,8 +27,11 @@ function entrySupportsType(entry: GhostexExtensionCatalogEntry, type: TypeFilter
     : entry.placements.includes(type as GhostexExtensionPlacement);
 }
 
-function singleFilterValue(values: unknown, fallback: string): string {
-  return Array.isArray(values) && typeof values[0] === 'string' ? values[0] : fallback;
+function typeLabel(type: TypeFilter): string {
+  if (type === 'all') return 'All types';
+  if (type === 'chat-bar') return 'Chat bar';
+  if (type === 'terminal-pane') return 'Terminal pane';
+  return type[0].toUpperCase() + type.slice(1);
 }
 
 export function StoreTab({
@@ -59,85 +69,81 @@ export function StoreTab({
   });
 
   return (
-    <div className='flex flex-col gap-5'>
-      <FieldGroup className='gap-3'>
-        <Field>
+    <div className='flex h-full min-h-0 flex-col'>
+      <div className='flex shrink-0 items-center gap-2 border-b border-border/60 px-5 py-3'>
+        <Field className='relative min-w-48 flex-1'>
           <FieldLabel className='sr-only' htmlFor='extensions-store-search'>
             Search extensions
           </FieldLabel>
+          <IconSearch
+            aria-hidden='true'
+            className='pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground'
+          />
           <Input
+            className='h-8 bg-white/[0.03] pl-8 font-normal'
             id='extensions-store-search'
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder='Search extensions'
             value={query}
           />
         </Field>
-      </FieldGroup>
-      <div className='flex flex-col gap-3'>
-        <div className='overflow-x-auto pb-1'>
-          <ToggleGroup
-            aria-label='Filter extensions by type'
-            onValueChange={(values) => setType(singleFilterValue(values, 'all') as TypeFilter)}
-            spacing={2}
-            value={[type]}
-            variant='outline'
-          >
-            {(['all', 'view', 'chat-bar', 'popup', 'modal', 'terminal-pane'] as const).map((value) => (
-              <ToggleGroupItem key={value} size='sm' value={value}>
-                {value === 'all'
-                  ? 'All types'
-                  : value === 'chat-bar'
-                    ? 'Chat bar'
-                    : value === 'terminal-pane'
-                      ? 'Terminal pane'
-                      : value[0].toUpperCase() + value.slice(1)}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-        {categories.length ? (
-          <div className='overflow-x-auto pb-1'>
-            <ToggleGroup
-              aria-label='Filter extensions by category'
-              onValueChange={(values) => setCategory(singleFilterValue(values, 'all'))}
-              spacing={2}
-              value={[category]}
-              variant='outline'
-            >
-              <ToggleGroupItem size='sm' value='all'>
-                All categories
-              </ToggleGroupItem>
-              {categories.map((value) => (
-                <ToggleGroupItem key={value} size='sm' value={value}>
-                  {value}
-                </ToggleGroupItem>
+        <Select onValueChange={(value) => setType(value as TypeFilter)} value={type}>
+          <SelectTrigger aria-label='Filter extensions by type' className='w-36 bg-white/[0.03] font-normal' size='sm'>
+            <SelectValue>{typeLabel(type)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent align='end'>
+            <SelectGroup>
+              {(['all', 'view', 'chat-bar', 'popup', 'modal', 'terminal-pane'] as const).map((value) => (
+                <SelectItem key={value} value={value}>
+                  {typeLabel(value)}
+                </SelectItem>
               ))}
-            </ToggleGroup>
-          </div>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {categories.length ? (
+          <Select onValueChange={setCategory} value={category}>
+            <SelectTrigger
+              aria-label='Filter extensions by category'
+              className='w-40 bg-white/[0.03] font-normal'
+              size='sm'
+            >
+              <SelectValue>{category === 'all' ? 'All categories' : category}</SelectValue>
+            </SelectTrigger>
+            <SelectContent align='end'>
+              <SelectGroup>
+                <SelectItem value='all'>All categories</SelectItem>
+                {categories.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         ) : null}
+        <span className='shrink-0 text-xs font-normal text-muted-foreground'>{filtered.length} shown</span>
       </div>
       {filtered.length ? (
-        <div className='grid grid-cols-1 gap-4 min-[700px]:grid-cols-2'>
-          {filtered.map((entry) => (
-            <StoreExtensionCard
-              entry={entry}
-              iconUrl={iconUrlFor(entry)}
-              installedVersion={installedById.get(entry.name)?.state.version}
-              key={entry.name}
-              onDetails={() => onDetails(entry)}
-            />
-          ))}
+        <div className='vertical-scroll-fade-mask min-h-0 flex-1 overflow-y-auto p-3 [--edge-fade-distance:16px]'>
+          <ExtensionGroup>
+            {filtered.map((entry) => (
+              <StoreExtensionCard
+                entry={entry}
+                iconUrl={iconUrlFor(entry)}
+                installedVersion={installedById.get(entry.name)?.state.version}
+                key={entry.name}
+                onDetails={() => onDetails(entry)}
+              />
+            ))}
+          </ExtensionGroup>
         </div>
       ) : (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant='icon'>
-              <IconSearch />
-            </EmptyMedia>
-            <EmptyTitle>No matching extensions</EmptyTitle>
-            <EmptyDescription>Try a different search or clear one of the filters.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <ExtensionEmptyState
+          description='Try a different search or clear one of the filters.'
+          icon={IconSearch}
+          title='No matching extensions'
+        />
       )}
     </div>
   );

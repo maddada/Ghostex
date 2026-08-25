@@ -46,14 +46,14 @@ export function PreferencesForm({
   };
 
   return (
-    <FieldGroup className='gap-5'>
+    <FieldGroup className='gap-4'>
       {definitions.map((definition) => {
         const inputId = `extension-preference-${definition.name}`;
         const invalid = missing.has(definition.name);
         const value = values[definition.name] ?? definition.default ?? (definition.type === 'checkbox' ? false : '');
         return (
           <Field data-invalid={invalid || undefined} key={definition.name}>
-            <FieldLabel htmlFor={inputId}>
+            <FieldLabel className='text-[13px] font-normal text-muted-foreground' htmlFor={inputId}>
               {definition.title}
               {definition.required ? <span aria-hidden='true'>*</span> : null}
             </FieldLabel>

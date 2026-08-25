@@ -1,4 +1,5 @@
 import { IconArrowLeft, IconPin, IconTrash } from '@tabler/icons-react';
+import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
@@ -13,6 +14,7 @@ import type {
 } from '@/packages/shared/ghostex-extensions';
 import { SessionChatMarkdown } from '@/packages/core-ui/chat/session-chat-markdown';
 import { ExtensionIcon } from './extension-card';
+import { ExtensionGroup, ExtensionSectionLabel } from './extension-surface';
 import { missingRequiredPreferences, PreferencesForm } from './preferences-form';
 
 function permissionLabel(permission: GhostexExtensionPermission): string {
@@ -56,39 +58,48 @@ function DetailHeader({
   title: string;
 }) {
   return (
-    <header className='flex items-start gap-4 border-b border-border/60 pb-5'>
-      <Button aria-label='Back to extensions' onClick={onBack} size='icon' type='button' variant='ghost'>
+    <header className='flex items-start gap-3'>
+      <Button aria-label='Back to extensions' onClick={onBack} size='icon-sm' type='button' variant='ghost'>
         <IconArrowLeft />
       </Button>
-      <ExtensionIcon src={iconUrl} title={title} />
+      <ExtensionIcon className='size-11 rounded-xl p-2' src={iconUrl} title={title} />
       <div className='min-w-0 flex-1'>
-        <h2 className='truncate text-xl font-normal text-foreground'>{title}</h2>
-        <p className='mt-1 max-w-3xl text-sm leading-6 text-muted-foreground'>{description}</p>
+        <h2 className='truncate text-lg font-normal text-foreground'>{title}</h2>
+        <p className='mt-1 max-w-3xl text-[13px] font-normal leading-relaxed text-muted-foreground'>{description}</p>
       </div>
     </header>
   );
 }
 
+function DetailRow({ children, label }: { children: ReactNode; label: ReactNode }) {
+  return (
+    <div className='flex min-h-11 items-center justify-between gap-4 px-4 py-2.5'>
+      <span className='shrink-0 text-sm font-normal text-foreground/90'>{label}</span>
+      <div className='flex min-w-0 items-center gap-2 text-sm font-normal text-muted-foreground'>{children}</div>
+    </div>
+  );
+}
+
 function PermissionsList({ permissions }: { permissions: readonly GhostexExtensionPermission[] }) {
   return (
-    <section aria-labelledby='extension-permissions-heading' className='flex flex-col gap-3'>
-      <h3 className='text-sm font-medium text-foreground' id='extension-permissions-heading'>
-        Permissions
-      </h3>
-      {permissions.length ? (
-        <ul className='flex flex-wrap gap-2'>
-          {permissions.map((permission) => (
-            <li
-              className='border border-border/70 bg-card/40 px-2.5 py-1 text-xs text-muted-foreground'
-              key={permission}
-            >
-              {permissionLabel(permission)}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className='text-sm text-muted-foreground'>No additional permissions requested.</p>
-      )}
+    <section aria-labelledby='extension-permissions-heading' className='flex flex-col gap-2.5'>
+      <ExtensionSectionLabel id='extension-permissions-heading'>Permissions</ExtensionSectionLabel>
+      <ExtensionGroup>
+        {permissions.length ? (
+          <ul className='divide-y divide-border/60'>
+            {permissions.map((permission) => (
+              <li className='flex min-h-10 items-center gap-3 px-4 py-2.5' key={permission}>
+                <span aria-hidden='true' className='size-1.5 shrink-0 rounded-full bg-white/20' />
+                <span className='text-sm font-normal text-muted-foreground'>{permissionLabel(permission)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className='flex min-h-11 items-center px-4 py-2.5 text-sm font-normal text-muted-foreground'>
+            No additional permissions requested.
+          </div>
+        )}
+      </ExtensionGroup>
     </section>
   );
 }
@@ -125,121 +136,163 @@ export function InstalledExtensionDetail({
   const webManifest = extension.manifest.kind === 'terminal-pane' ? undefined : extension.manifest;
 
   return (
-    <div className='flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-6'>
-      <DetailHeader
-        description={extension.manifest.description}
-        iconUrl={iconUrl}
-        onBack={onBack}
-        title={extension.manifest.title}
-      />
-      <div className='grid gap-7 lg:grid-cols-[minmax(0,1fr)_280px]'>
-        <div className='flex min-w-0 flex-col gap-7'>
-          {webManifest ? (
-            <section aria-labelledby='extension-placement-heading' className='flex flex-col gap-3'>
-              <div>
-                <h3 className='text-sm font-medium text-foreground' id='extension-placement-heading'>
-                  Placement
-                </h3>
-                <p className='mt-1 text-xs text-muted-foreground'>Choose where this extension opens.</p>
-              </div>
-              <SegmentedControl
-                onValueChange={(placement) =>
-                  void onSetState({ placement: placement as (typeof webManifest.placements)[number] })
-                }
-                value={extension.state.placement ?? webManifest.defaultPlacement}
-              >
-                {webManifest.placements.map((placement) => (
-                  <SegmentedControlItem key={placement} value={placement}>
-                    {placement === 'chat-bar' ? 'Chat bar' : placement[0].toUpperCase() + placement.slice(1)}
-                  </SegmentedControlItem>
-                ))}
-              </SegmentedControl>
-            </section>
-          ) : (
-            <section aria-labelledby='extension-terminal-placement-heading' className='flex flex-col gap-3'>
-              <div>
-                <h3 className='text-sm font-medium text-foreground' id='extension-terminal-placement-heading'>
+    <div className='vertical-scroll-fade-mask min-h-0 flex-1 overflow-y-auto [--edge-fade-distance:16px]'>
+      <div className='mx-auto flex max-w-5xl flex-col gap-6 p-6'>
+        <DetailHeader
+          description={extension.manifest.description}
+          iconUrl={iconUrl}
+          onBack={onBack}
+          title={extension.manifest.title}
+        />
+        <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]'>
+          <div className='flex min-w-0 flex-col gap-6'>
+            {webManifest ? (
+              <section aria-labelledby='extension-placement-heading' className='flex flex-col gap-2.5'>
+                <ExtensionSectionLabel id='extension-placement-heading'>Placement</ExtensionSectionLabel>
+                <ExtensionGroup>
+                  <div className='flex min-h-14 items-center justify-between gap-4 px-4 py-3'>
+                    <div>
+                      <div className='text-sm font-normal text-foreground/90'>Open location</div>
+                      <p className='mt-0.5 text-xs font-normal text-muted-foreground'>
+                        Choose where this extension opens.
+                      </p>
+                    </div>
+                    <SegmentedControl
+                      onValueChange={(placement) =>
+                        void onSetState({ placement: placement as (typeof webManifest.placements)[number] })
+                      }
+                      value={extension.state.placement ?? webManifest.defaultPlacement}
+                    >
+                      {webManifest.placements.map((placement) => (
+                        <SegmentedControlItem key={placement} value={placement}>
+                          {placement === 'chat-bar' ? 'Chat bar' : placement[0].toUpperCase() + placement.slice(1)}
+                        </SegmentedControlItem>
+                      ))}
+                    </SegmentedControl>
+                  </div>
+                </ExtensionGroup>
+              </section>
+            ) : (
+              <section aria-labelledby='extension-terminal-placement-heading' className='flex flex-col gap-2.5'>
+                <ExtensionSectionLabel id='extension-terminal-placement-heading'>
                   Terminal placement
-                </h3>
-                <p className='mt-1 text-xs text-muted-foreground'>Choose how its terminal pane opens.</p>
-              </div>
-              <SegmentedControl
-                onValueChange={(terminalPlacement) =>
-                  void onSetState({ terminalPlacement: terminalPlacement as 'splitRight' | 'tab' })
-                }
-                value={extension.state.terminalPlacement}
-              >
-                <SegmentedControlItem value='splitRight'>Split right</SegmentedControlItem>
-                <SegmentedControlItem value='tab'>New tab</SegmentedControlItem>
-              </SegmentedControl>
-            </section>
-          )}
-          {definitions.length ? (
-            <section aria-labelledby='extension-preferences-heading' className='flex flex-col gap-4'>
-              <div>
-                <h3 className='text-sm font-medium text-foreground' id='extension-preferences-heading'>
-                  Preferences
-                </h3>
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  Required preferences must be completed before first use.
-                </p>
-              </div>
-              <PreferencesForm definitions={definitions} onChange={setPreferences} values={preferences} />
-              <div>
-                <Button
-                  disabled={pending || missing.length > 0}
-                  onClick={() => void onSetState({ preferences })}
-                  type='button'
-                >
-                  Save preferences
-                </Button>
-              </div>
-            </section>
-          ) : null}
-          <PermissionsList permissions={extension.state.grantedPermissions} />
-        </div>
-        <aside className='flex flex-col gap-5 border-l border-border/60 pl-6'>
-          <div className='flex items-center justify-between gap-4'>
-            <div>
-              <div className='text-sm text-foreground'>Enabled</div>
-              <div className='text-xs text-muted-foreground'>Available from its configured placement.</div>
-            </div>
-            <Switch
-              aria-label={`${extension.state.enabled ? 'Disable' : 'Enable'} ${extension.manifest.title}`}
-              checked={extension.state.enabled}
-              disabled={pending}
-              onCheckedChange={(enabled) => void onSetState({ enabled })}
-            />
-          </div>
-          <div className='flex items-center justify-between gap-4'>
-            <div>
-              <div className='flex items-center gap-1.5 text-sm text-foreground'>
-                <IconPin aria-hidden='true' />
-                Pinned
-              </div>
-              <div className='text-xs text-muted-foreground'>Show its icon in the titlebar.</div>
-            </div>
-            <Switch
-              aria-label={`${extension.state.pinned ? 'Unpin' : 'Pin'} ${extension.manifest.title}`}
-              checked={extension.state.pinned}
-              disabled={pending}
-              onCheckedChange={(pinned) => void onSetState({ pinned })}
-            />
-          </div>
-          <div className='border-t border-border/60 pt-5'>
-            <div className='text-xs text-muted-foreground'>Installed version</div>
-            <div className='mt-1 text-sm text-foreground'>{extension.state.version}</div>
-            {updateAvailable ? (
-              <Button className='mt-3 w-full' disabled={pending} onClick={() => void onUpdate()} type='button'>
-                Update to {catalogEntry?.version}
-              </Button>
+                </ExtensionSectionLabel>
+                <ExtensionGroup>
+                  <div className='flex min-h-14 items-center justify-between gap-4 px-4 py-3'>
+                    <div>
+                      <div className='text-sm font-normal text-foreground/90'>Open location</div>
+                      <p className='mt-0.5 text-xs font-normal text-muted-foreground'>
+                        Choose how its terminal pane opens.
+                      </p>
+                    </div>
+                    <SegmentedControl
+                      onValueChange={(terminalPlacement) =>
+                        void onSetState({ terminalPlacement: terminalPlacement as 'splitRight' | 'tab' })
+                      }
+                      value={extension.state.terminalPlacement}
+                    >
+                      <SegmentedControlItem value='splitRight'>Split right</SegmentedControlItem>
+                      <SegmentedControlItem value='tab'>New tab</SegmentedControlItem>
+                    </SegmentedControl>
+                  </div>
+                </ExtensionGroup>
+              </section>
+            )}
+            {definitions.length ? (
+              <section aria-labelledby='extension-preferences-heading' className='flex flex-col gap-2.5'>
+                <ExtensionSectionLabel id='extension-preferences-heading'>Preferences</ExtensionSectionLabel>
+                <ExtensionGroup className='divide-y-0 p-4'>
+                  <p className='mb-4 text-xs font-normal text-muted-foreground'>
+                    Required preferences must be completed before first use.
+                  </p>
+                  <PreferencesForm definitions={definitions} onChange={setPreferences} values={preferences} />
+                  <Button
+                    className='mt-4 font-normal'
+                    disabled={pending || missing.length > 0}
+                    onClick={() => void onSetState({ preferences })}
+                    size='sm'
+                    type='button'
+                    variant='secondary'
+                  >
+                    Save preferences
+                  </Button>
+                </ExtensionGroup>
+              </section>
             ) : null}
+            <PermissionsList permissions={extension.state.grantedPermissions} />
           </div>
-          <Button disabled={pending} onClick={() => void onUninstall()} type='button' variant='destructive'>
-            <IconTrash data-icon='inline-start' />
-            Uninstall
-          </Button>
-        </aside>
+          <aside className='flex flex-col gap-2.5'>
+            <ExtensionSectionLabel>Status</ExtensionSectionLabel>
+            <ExtensionGroup>
+              <div className='flex min-h-14 items-center justify-between gap-4 px-4 py-3'>
+                <div className='flex min-w-0 items-start gap-2.5'>
+                  <span
+                    aria-hidden='true'
+                    className={`mt-1.5 size-1.5 shrink-0 rounded-full ${extension.state.enabled ? 'bg-emerald-400/80' : 'bg-white/20'}`}
+                  />
+                  <div>
+                    <div className='text-sm font-normal text-foreground/90'>Enabled</div>
+                    <div className='mt-0.5 text-xs font-normal text-muted-foreground'>
+                      Available from its configured placement.
+                    </div>
+                  </div>
+                </div>
+                <Switch
+                  aria-label={`${extension.state.enabled ? 'Disable' : 'Enable'} ${extension.manifest.title}`}
+                  checked={extension.state.enabled}
+                  disabled={pending}
+                  onCheckedChange={(enabled) => void onSetState({ enabled })}
+                  size='sm'
+                />
+              </div>
+              <div className='flex min-h-14 items-center justify-between gap-4 px-4 py-3'>
+                <div className='flex min-w-0 items-start gap-2.5'>
+                  <IconPin aria-hidden='true' className='mt-0.5 size-4 shrink-0 text-muted-foreground' />
+                  <div>
+                    <div className='text-sm font-normal text-foreground/90'>Pinned</div>
+                    <div className='mt-0.5 text-xs font-normal text-muted-foreground'>
+                      Show its icon in the titlebar.
+                    </div>
+                  </div>
+                </div>
+                <Switch
+                  aria-label={`${extension.state.pinned ? 'Unpin' : 'Pin'} ${extension.manifest.title}`}
+                  checked={extension.state.pinned}
+                  disabled={pending}
+                  onCheckedChange={(pinned) => void onSetState({ pinned })}
+                  size='sm'
+                />
+              </div>
+              <DetailRow label='Installed version'>
+                <span>{extension.state.version}</span>
+              </DetailRow>
+              {updateAvailable ? (
+                <div className='p-3'>
+                  <Button
+                    className='w-full font-normal'
+                    disabled={pending}
+                    onClick={() => void onUpdate()}
+                    size='sm'
+                    type='button'
+                  >
+                    Update to {catalogEntry?.version}
+                  </Button>
+                </div>
+              ) : null}
+            </ExtensionGroup>
+            <Button
+              className='mt-2 self-start font-normal'
+              disabled={pending}
+              onClick={() => void onUninstall()}
+              size='sm'
+              type='button'
+              variant='destructive'
+            >
+              <IconTrash data-icon='inline-start' />
+              Uninstall
+            </Button>
+          </aside>
+        </div>
       </div>
     </div>
   );
@@ -269,57 +322,71 @@ export function StoreExtensionDetail({
   const updateAvailable = Boolean(installedVersion && isVersionNewer(entry.version, installedVersion));
   const actionLabel = updateAvailable ? `Update to ${entry.version}` : installedVersion ? 'Installed' : 'Install';
   return (
-    <div className='flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-6'>
-      <DetailHeader description={entry.description} iconUrl={iconUrl} onBack={onBack} title={entry.title} />
-      <div className='grid gap-7 lg:grid-cols-[minmax(0,1fr)_280px]'>
-        <div className='flex min-w-0 flex-col gap-7'>
-          {screenshotUrls.length ? (
-            <section aria-label={`${entry.title} screenshots`} className='flex gap-3 overflow-x-auto pb-2'>
-              {screenshotUrls.map((url, index) => (
-                <img
-                  alt={`${entry.title} screenshot ${index + 1}`}
-                  className='h-44 w-auto shrink-0 border border-border/70 object-contain'
-                  key={url}
-                  src={url}
-                />
-              ))}
+    <div className='vertical-scroll-fade-mask min-h-0 flex-1 overflow-y-auto [--edge-fade-distance:16px]'>
+      <div className='mx-auto flex max-w-5xl flex-col gap-6 p-6'>
+        <DetailHeader description={entry.description} iconUrl={iconUrl} onBack={onBack} title={entry.title} />
+        <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]'>
+          <div className='flex min-w-0 flex-col gap-6'>
+            {screenshotUrls.length ? (
+              <section
+                aria-label={`${entry.title} screenshots`}
+                className='flex gap-3 overflow-x-auto rounded-xl border border-border/80 bg-white/[0.03] p-3'
+              >
+                {screenshotUrls.map((url, index) => (
+                  <img
+                    alt={`${entry.title} screenshot ${index + 1}`}
+                    className='h-44 w-auto shrink-0 rounded-lg border border-border/70 object-contain'
+                    key={url}
+                    src={url}
+                  />
+                ))}
+              </section>
+            ) : null}
+            <section aria-labelledby='extension-readme-heading' className='flex flex-col gap-2.5'>
+              <ExtensionSectionLabel id='extension-readme-heading'>About {entry.title}</ExtensionSectionLabel>
+              <ExtensionGroup className='divide-y-0 p-5'>
+                {loadingContent ? (
+                  <p className='text-sm font-normal text-muted-foreground'>Loading extension details…</p>
+                ) : readmeMarkdown ? (
+                  <SessionChatMarkdown markdown={readmeMarkdown} />
+                ) : (
+                  <p className='text-sm font-normal text-muted-foreground'>Extension README could not be loaded.</p>
+                )}
+              </ExtensionGroup>
             </section>
-          ) : null}
-          <section aria-labelledby='extension-readme-heading' className='flex flex-col gap-3'>
-            <h3 className='sr-only' id='extension-readme-heading'>
-              About {entry.title}
-            </h3>
-            {loadingContent ? (
-              <p className='text-sm text-muted-foreground'>Loading extension details…</p>
-            ) : readmeMarkdown ? (
-              <SessionChatMarkdown markdown={readmeMarkdown} />
-            ) : (
-              <p className='text-sm text-muted-foreground'>Extension README could not be loaded.</p>
-            )}
-          </section>
-          {changelogMarkdown ? (
-            <section aria-labelledby='extension-changelog-heading' className='flex flex-col gap-3'>
-              <h3 className='text-sm font-medium text-foreground' id='extension-changelog-heading'>
-                Changelog
-              </h3>
-              <SessionChatMarkdown markdown={changelogMarkdown} />
+            {changelogMarkdown ? (
+              <section aria-labelledby='extension-changelog-heading' className='flex flex-col gap-2.5'>
+                <ExtensionSectionLabel id='extension-changelog-heading'>Changelog</ExtensionSectionLabel>
+                <ExtensionGroup className='divide-y-0 p-5'>
+                  <SessionChatMarkdown markdown={changelogMarkdown} />
+                </ExtensionGroup>
+              </section>
+            ) : null}
+          </div>
+          <aside className='flex flex-col gap-6'>
+            <section className='flex flex-col gap-2.5'>
+              <ExtensionSectionLabel>Details</ExtensionSectionLabel>
+              <ExtensionGroup>
+                <DetailRow label='Version'>
+                  <span>{entry.version}</span>
+                </DetailRow>
+                <DetailRow label='Author'>
+                  <span className='truncate'>{entry.author}</span>
+                </DetailRow>
+              </ExtensionGroup>
             </section>
-          ) : null}
+            <PermissionsList permissions={entry.permissions ?? []} />
+            <Button
+              className='self-start font-normal'
+              disabled={Boolean(installedVersion && !updateAvailable)}
+              onClick={onInstall}
+              size='sm'
+              type='button'
+            >
+              {actionLabel}
+            </Button>
+          </aside>
         </div>
-        <aside className='flex flex-col gap-5 border-l border-border/60 pl-6'>
-          <div>
-            <div className='text-xs text-muted-foreground'>Version</div>
-            <div className='mt-1 text-sm text-foreground'>{entry.version}</div>
-          </div>
-          <div>
-            <div className='text-xs text-muted-foreground'>Author</div>
-            <div className='mt-1 text-sm text-foreground'>{entry.author}</div>
-          </div>
-          <PermissionsList permissions={entry.permissions ?? []} />
-          <Button disabled={Boolean(installedVersion && !updateAvailable)} onClick={onInstall} type='button'>
-            {actionLabel}
-          </Button>
-        </aside>
       </div>
     </div>
   );
