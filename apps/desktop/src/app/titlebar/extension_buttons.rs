@@ -12,13 +12,12 @@ use gpui::div;
 use gpui::img;
 use gpui::prelude::FluentBuilder as _;
 use gpui::px;
+use gpui::rgb;
 use gpui_component::ElementExt;
 use gpui_component::Side;
-use gpui_component::h_flex;
 use gpui_component::menu::PopupMenu;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
-use gpui_component::v_flex;
 
 use crate::*;
 
@@ -137,32 +136,24 @@ impl GhostexGpuiApp {
             .read(cx)
             .trigger_bounds_captured
             .then_some(anchor_bounds);
-        let badge_lines = extension
+        let show_badge = extension
             .badge_lines
             .iter()
-            .filter(|line| !line.trim().is_empty())
-            .take(2)
-            .cloned()
-            .collect::<Vec<_>>();
-        let button_width = if badge_lines.is_empty() {
-            TITLEBAR_BUTTON_WIDTH
-        } else {
-            84.0
-        };
+            .any(|line| !line.trim().is_empty());
         let tooltip = extension.title.clone();
         let icon_image = extension.icon_image.clone();
 
-        h_flex()
+        div()
             .id(format!(
                 "ghostex-gpui-titlebar-pinned-extension-{}",
                 extension.id
             ))
             .relative()
+            .flex()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
-            .w(px(button_width))
+            .w(px(TITLEBAR_BUTTON_WIDTH))
             .items_center()
             .justify_center()
-            .gap(px(5.0))
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .border_l_1()
             .border_color(titlebar_button_border_color())
@@ -215,22 +206,17 @@ impl GhostexGpuiApp {
                 }
             })
             .child(img(icon_image).size(px(18.0)))
-            .when(!badge_lines.is_empty(), |this| {
+            .when(show_badge, |this| {
                 this.child(
-                    v_flex()
-                        .min_w_0()
-                        .max_w(px(48.0))
-                        .overflow_hidden()
-                        .text_size(px(9.0))
-                        .line_height(px(10.0))
-                        .text_color(titlebar_inactive_text_color())
-                        .children(badge_lines.into_iter().map(|line| {
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .child(line)
-                        })),
+                    div()
+                        .absolute()
+                        .right(px(5.0))
+                        .top(px(4.0))
+                        .size(px(7.5))
+                        .rounded_full()
+                        .border_1()
+                        .border_color(titlebar_background())
+                        .bg(rgb(0x95d7f6)),
                 )
             })
             .into_any_element()

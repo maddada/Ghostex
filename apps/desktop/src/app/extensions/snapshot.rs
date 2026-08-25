@@ -170,7 +170,34 @@ fn extension_icon_image(id: &str, icon: &str) -> Option<std::sync::Arc<Image>> {
     if bytes.is_empty() || bytes.len() > 256 * 1024 {
         return None;
     }
-    Some(std::sync::Arc::new(Image::from_bytes(ImageFormat::Svg, bytes)))
+    let bytes = normalize_extension_titlebar_svg(bytes)?;
+    Some(std::sync::Arc::new(Image::from_bytes(
+        ImageFormat::Svg,
+        bytes,
+    )))
+}
+
+fn normalize_extension_titlebar_svg(bytes: Vec<u8>) -> Option<Vec<u8>> {
+    const TITLEBAR_ICON_COLOR: &str = "#b9b9b9";
+
+    let mut svg = String::from_utf8(bytes)
+        .ok()?
+        .replace("currentColor", TITLEBAR_ICON_COLOR);
+    let svg_start = svg.find("<svg")?;
+    let tag_end = svg[svg_start..].find('>')? + svg_start;
+    if !svg_tag_has_attribute(&svg[svg_start..tag_end], "fill") {
+        svg.insert_str(tag_end, " fill=\"#b9b9b9\"");
+    }
+    Some(svg.into_bytes())
+}
+
+fn svg_tag_has_attribute(tag: &str, name: &str) -> bool {
+    tag.match_indices(name).any(|(start, _)| {
+        let before = tag[..start].chars().next_back();
+        let after = tag[start + name.len()..].trim_start();
+        before.is_none_or(|character| character.is_ascii_whitespace() || character == '<')
+            && after.starts_with('=')
+    })
 }
 
 fn parse_permissions(value: Option<&serde_json::Value>) -> HashSet<GpuiExtensionPermission> {

@@ -307,11 +307,9 @@ impl GhostexGpuiApp {
                 .as_ref()
                 .map(|presentation| presentation.title.clone())
                 .unwrap_or_else(|| item.mode.display_label().to_string());
-            let icon_data_url = presentation.map(|presentation| presentation.icon_data_url);
             switcher = switcher.child(self.render_mode_tab(
                 item.mode,
                 label,
-                icon_data_url,
                 index + 1 == mode_count,
                 item.is_available,
                 item.disabled_reason,
@@ -378,7 +376,6 @@ impl GhostexGpuiApp {
         &self,
         mode: TitlebarMode,
         label: String,
-        icon_data_url: Option<String>,
         is_last: bool,
         is_available: bool,
         disabled_reason: Option<&'static str>,
@@ -452,15 +449,6 @@ impl GhostexGpuiApp {
                 this.managed_tooltip_with_placement(
                     ManagedTooltipPlacement::Right,
                     move |window, cx| titlebar_tooltip(reason, window, cx),
-                )
-            })
-            .when_some(icon_data_url, |this, icon_data_url| {
-                this.child(
-                    img(icon_data_url)
-                        .size(px(16.0))
-                        .mr(px(6.0))
-                        .flex_shrink_0()
-                        .object_fit(ObjectFit::Contain),
                 )
             })
             .child(label)

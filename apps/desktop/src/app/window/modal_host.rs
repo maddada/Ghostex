@@ -109,9 +109,12 @@ impl GpuiAppModalHostWindow {
                 None,
                 None,
                 None,
-                is_find_prompts
-                    .then_some(sidebar_gxserver_bootstrap)
-                    .flatten(),
+                matches!(
+                    modal,
+                    GpuiAppModalKind::FindPrompts | GpuiAppModalKind::ExtensionsBrowser
+                )
+                .then_some(sidebar_gxserver_bootstrap)
+                .flatten(),
                 None,
                 None,
                 app_served_resource_scope,

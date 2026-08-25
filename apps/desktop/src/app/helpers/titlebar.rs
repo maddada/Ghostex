@@ -17,8 +17,6 @@ use windows_sys::Win32::Security::Cryptography::{
 };
 
 use anyhow::{Context as _, Result};
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use futures::StreamExt as _;
 use gpui::http_client::HttpRequestExt as _;
 use gpui::{
@@ -26,7 +24,12 @@ use gpui::{
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div,
     img, point, prelude::FluentBuilder as _, px, rgb, size, svg,
 };
-use gpui_component::{Theme, ThemeMode, h_flex, menu::PopupMenu, tooltip::Tooltip, v_flex};
+use gpui_component::{
+    Theme, ThemeMode, h_flex,
+    menu::PopupMenu,
+    tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement, Tooltip},
+    v_flex,
+};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
 use crate::app::helpers::*;
@@ -776,7 +779,7 @@ pub(crate) fn titlebar_popup_extension_menu_row(
         .gap(px(10.0))
         .text_color(titlebar_text_color())
         .child(
-            div()
+            h_flex()
                 .flex_shrink_0()
                 .size(px(20.0))
                 .items_center()
@@ -786,13 +789,13 @@ pub(crate) fn titlebar_popup_extension_menu_row(
         .child(
             div()
                 .min_w_0()
-                .flex_1()
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .text_size(px(TITLEBAR_POPUP_MENU_ROW_TEXT_SIZE))
                 .child(extension.title),
         )
+        .child(div().min_w_0().flex_1())
         .child(
             div()
                 .flex_shrink_0()
@@ -805,10 +808,10 @@ pub(crate) fn titlebar_popup_extension_menu_row(
                 .child(placement_label),
         )
         .child(
-            div()
+            h_flex()
                 .id(format!("ghostex-gpui-extension-pin-{}", extension.id))
                 .flex_shrink_0()
-                .size(px(26.0))
+                .size(px(28.0))
                 .items_center()
                 .justify_center()
                 .rounded(px(3.0))
@@ -818,8 +821,11 @@ pub(crate) fn titlebar_popup_extension_menu_row(
                     cx.stop_propagation();
                     window.dispatch_action(Box::new(pin_action.clone()), cx);
                 })
-                .child(titlebar_svg_icon(pin_icon, 14.0, titlebar_icon_color()))
-                .tooltip(move |window, cx| titlebar_tooltip(pin_tooltip, window, cx)),
+                .child(titlebar_svg_icon(pin_icon, 16.0, titlebar_icon_color()))
+                .managed_tooltip_with_placement(
+                    ManagedTooltipPlacement::BelowLeft,
+                    move |window, cx| titlebar_tooltip(pin_tooltip, window, cx),
+                ),
         )
 }
 
@@ -2586,7 +2592,6 @@ pub(crate) fn titlebar_mode_switcher_items(
 
 pub(crate) struct GpuiExtensionViewPresentation {
     pub(crate) title: String,
-    pub(crate) icon_data_url: String,
     pub(crate) server_is_static: bool,
 }
 
@@ -2609,24 +2614,8 @@ pub(crate) fn gpui_extension_view_presentation(
     if title.is_empty() {
         return None;
     }
-    let icon_path = std::path::Path::new(manifest.get("icon")?.as_str()?);
-    if icon_path.is_absolute()
-        || icon_path.components().any(|component| {
-            matches!(
-                component,
-                std::path::Component::ParentDir | std::path::Component::RootDir
-            )
-        })
-    {
-        return None;
-    }
-    let icon = std::fs::read(payload_dir.join(icon_path)).ok()?;
-    if icon.is_empty() || icon.len() > 256 * 1024 {
-        return None;
-    }
     Some(GpuiExtensionViewPresentation {
         title,
-        icon_data_url: format!("data:image/svg+xml;base64,{}", BASE64_STANDARD.encode(icon)),
         server_is_static: manifest
             .get("server")
             .and_then(serde_json::Value::as_object)

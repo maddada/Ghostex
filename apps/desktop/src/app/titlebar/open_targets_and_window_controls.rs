@@ -226,11 +226,6 @@ impl GhostexGpuiApp {
                 },
             )
             .when(
-                !button_hidden(EXTENSIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
-                |this| this.child(self.render_titlebar_extensions_button(window, cx)),
-            )
-            .children(self.render_titlebar_pinned_extension_buttons(window, cx))
-            .when(
                 !button_hidden(GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
                 |this| this.child(self.render_titlebar_git_button(window, cx)),
             )
@@ -244,6 +239,11 @@ impl GhostexGpuiApp {
             .when(
                 !button_hidden(OPEN_IN_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
                 |this| this.child(self.render_titlebar_open_targets_button(window, cx)),
+            )
+            .children(self.render_titlebar_pinned_extension_buttons(window, cx))
+            .when(
+                !button_hidden(EXTENSIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
+                |this| this.child(self.render_titlebar_extensions_button(window, cx)),
             )
             .child(self.render_titlebar_extension_popup_panel(window, cx));
         #[cfg(target_os = "windows")]
