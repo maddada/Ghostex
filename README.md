@@ -38,7 +38,29 @@ Starting with 7.0.0, Windows installations receive automatic updates from GitHub
 
 ### Linux
 
-Latest downloads: [Linux DEB](https://maddada.com/download/linux-deb-x64) · [Linux RPM](https://maddada.com/download/linux-rpm-x64).
+Latest downloads: [Linux DEB](https://maddada.com/download/linux-deb-x64) · [Linux RPM](https://maddada.com/download/linux-rpm-x64) · [Linux tarball](https://maddada.com/download/linux-tar-x64).
+
+#### Arch Linux and other distributions
+
+The portable `ghostex-<version>-linux-x64.tar.zst` on the
+[latest release](https://github.com/maddada/Ghostex/releases/latest) works on any x64
+distribution that ships the Chromium runtime libraries. It is a prefix-preserving tree, so
+extract it at the filesystem root — that installs `/opt/ghostex` and puts `ghostex` and `gx`
+on your `PATH`:
+
+```sh
+sudo tar -xpf ghostex-*-linux-x64.tar.zst -C /
+ghostex
+```
+
+On Arch the runtime dependencies are `gtk3`, `nss`, `nspr`, `mesa`, `libxkbcommon`,
+`alsa-lib`, `at-spi2-core`, `libcups`, `libdrm`, `libxcomposite`, `libxdamage`,
+`libxrandr`, `libxshmfence`, `pango`, `cairo`, `fontconfig` and `wmctrl` — most are already
+present on a desktop install. Ghostex does not bundle Chromium; the first GUI launch
+downloads the browser runtime into your cache directory.
+
+A vendor-maintained `ghostex-bin` AUR package is prepared and will be published once
+[AUR registration](https://aur.archlinux.org/register) reopens.
 
 ### Android
 
