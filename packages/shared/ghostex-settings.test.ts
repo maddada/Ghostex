@@ -49,6 +49,23 @@ import {
 } from './session-tags';
 
 describe('normalizeghostexSettings', () => {
+  test('normalizes extension titlebar visibility', () => {
+    expect(DEFAULT_ghostex_SETTINGS.extensionsTitlebarButtonHidden).toBe(false);
+    expect(normalizeghostexSettings({})).toMatchObject({
+      extensionsTitlebarButtonHidden: false,
+    });
+    expect(
+      normalizeghostexSettings({
+        extensionsTitlebarButtonHidden: true,
+      })
+    ).toMatchObject({ extensionsTitlebarButtonHidden: true });
+    expect(
+      normalizeghostexSettings({
+        extensionsTitlebarButtonHidden: 'hidden',
+      })
+    ).toMatchObject({ extensionsTitlebarButtonHidden: false });
+  });
+
   /*
    * CDXC:SidebarV2Lifecycle 2026-07-29:
    * `sidebarAutoSettleAfterDays` is read by BOTH the client predicate and

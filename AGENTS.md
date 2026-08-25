@@ -131,6 +131,22 @@ some of it is a pure build input (zed, cef-rs, gpui-component), and one entry
   re-add a `tui` CLI verb; the replacement is a herdr plugin, specified in
   `docs/2026-08-23/tui2-herdr-plugin/TUI2-AS-HERDR-PLUGIN.md`.
 
+### Extensions system
+
+Ghostex extensions are separately shipped, hash-verified packages that can add
+full views, chat-bar panels, terminal panes, titlebar popups, and app modals.
+The gxserver registry, store, catalog, static serving, command lifecycle, and
+CLI live in `server/src/extensions/`. Desktop hosting, bridge context, launch
+routing, and runtime snapshots live in `apps/desktop/src/app/extensions/`.
+The Store and Installed UI lives in `packages/core-ui/extensions-modal/`, and
+the shared wire contract is `packages/shared/ghostex-extensions.ts`.
+
+Extension source, manifests, schemas, publishing tools, and example extensions
+live in the separate sibling checkout at
+`/Users/madda/dev/_active/Ghostex-extensions`; do not add them to this repo or
+`.dependencies/`. Installed payloads are runtime data owned by gxserver, not
+source trees to edit in either checkout.
+
 ### `apps/desktop/views/` — the desktop app's embedded pages
 
 `apps/desktop/views/` holds the React pages the desktop app ships inside CEF.
@@ -173,6 +189,7 @@ Search these app-owned areas first by task:
 - Web app: `apps/web/src/`, then the shared `packages/core-ui/` and `packages/shared/` code it builds on.
 - Session grid, prompts, agent metadata, workspace/project state, contracts, shared tests: `packages/shared/`, then the consuming surface in `packages/core-ui/`, `apps/desktop/sidebar/`, `apps/desktop/views/`, `apps/mobile/views/`, or `server/src/`.
 - Server, remote protocol, hooks, authentication, remote setup: `server/src/`, `packages/shared/`, `tooling/`. The server crate is heavily modularized: `server/src/server/` (HTTP/WS core in `mod.rs` plus per-concern submodules), `server/src/agents/`, the flat `server/src/session_chat_*.rs` family, `server/src/domain/`, `server/src/zmx/`, `server/src/typed_operations/`, `server/src/portless/`, and `server/src/agent_hooks/`. Crate name is `gxserver`; it builds the `gxserver` and `ghostex` binaries.
+- Extensions: start with `server/src/extensions/` for registry, install, serving, lifecycle, API, and CLI behavior; `apps/desktop/src/app/extensions/` for desktop hosting, bridge context, and launch routing; `packages/core-ui/extensions-modal/` for Store and Installed UI; and `packages/shared/ghostex-extensions.ts` for the shared contract. Search `/Users/madda/dev/_active/Ghostex-extensions` only for extension manifests, authoring/publishing tooling, or example-extension code.
 - zmx behavior: `.dependencies/zmx/src/` + `.dependencies/zmx/test/`. This is the deliberate exception to the `.dependencies/**` exclusion — Ghostex edits it.
 - Prompt-history search (`gx f`, the Find surface): `packages/find/` for the engine, `server/src/agent_prompt_search.rs` for the API, `packages/core-ui/find/` for the shared UI.
 - Mobile app work: `apps/mobile/` is the only active mobile app and releases Android through the React Native/Expo project in `apps/mobile/app` (a git submodule). Its embedded chat and find pages are `apps/mobile/views/chat/` and `apps/mobile/views/find/`, bundled by `bun run build:mobile-chat` / `bun run build:mobile-find`. The retired native iOS and Termux-fork Android repositories live under `/Users/madda/dev/_active/ghostex-deprecated/` and must not be restored as active release inputs.

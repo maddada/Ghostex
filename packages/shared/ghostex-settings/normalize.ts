@@ -249,6 +249,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'resourcesTitlebarButtonHidden',
       DEFAULT_ghostex_SETTINGS.resourcesTitlebarButtonHidden
     ),
+    extensionsTitlebarButtonHidden: readBoolean(
+      source,
+      'extensionsTitlebarButtonHidden',
+      DEFAULT_ghostex_SETTINGS.extensionsTitlebarButtonHidden
+    ),
     gitActionsTitlebarButtonHidden: readBoolean(
       source,
       'gitActionsTitlebarButtonHidden',

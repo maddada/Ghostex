@@ -124,6 +124,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   docsViewTabHidden: false,
   tipsAndTricksTitlebarButtonHidden: false,
   resourcesTitlebarButtonHidden: false,
+  extensionsTitlebarButtonHidden: false,
   gitActionsTitlebarButtonHidden: false,
   quickActionsTitlebarButtonHidden: false,
   openInTitlebarButtonHidden: false,

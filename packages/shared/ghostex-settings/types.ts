@@ -285,6 +285,7 @@ export type ghostexSettings = {
    */
   tipsAndTricksTitlebarButtonHidden: boolean;
   resourcesTitlebarButtonHidden: boolean;
+  extensionsTitlebarButtonHidden: boolean;
   gitActionsTitlebarButtonHidden: boolean;
   quickActionsTitlebarButtonHidden: boolean;
   openInTitlebarButtonHidden: boolean;
