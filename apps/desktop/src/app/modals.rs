@@ -171,15 +171,115 @@ impl GhostexGpuiApp {
         );
     }
 
-    fn extension_modal_runtime_url(&self, id: ExtensionId) -> Option<String> {
-        self.extensions_snapshot
-            .installed
-            .get(id.as_str())
-            .filter(|extension| {
-                extension.enabled && extension.placement == Some(GpuiExtensionPlacement::Modal)
-            })?
-            .runtime_url
-            .clone()
+    fn extension_modal_runtime(
+        &self,
+        id: ExtensionId,
+    ) -> Option<(String, cef::ExtensionBridgeSurfaceSpec)> {
+        let extension =
+            self.extensions_snapshot
+                .installed
+                .get(id.as_str())
+                .filter(|extension| {
+                    extension.enabled && extension.placement == Some(GpuiExtensionPlacement::Modal)
+                })?;
+        let url = extension.runtime_url.clone()?;
+        let bridge_surface = extension.bridge_surface_spec_for_url(&url)?;
+        Some((url, bridge_surface))
+    }
+
+    fn extension_modal_bridge_event_handler(
+        &self,
+        open_attempt_id: u64,
+        id: ExtensionId,
+        cx: &mut gpui::Context<Self>,
+    ) -> cef::ExtensionBridgeEventHandler {
+        let app = cx.entity().downgrade();
+        let async_cx = cx.to_async();
+        let foreground = cx.foreground_executor().clone();
+        Rc::new(move |event: cef::ExtensionBridgeEvent| {
+            let app = app.clone();
+            let mut async_cx = async_cx.clone();
+            let foreground = foreground.clone();
+            foreground
+                .clone()
+                .spawn(async move {
+                    let _ = app.update_in(&mut async_cx, |this, _window, cx| {
+                        let response_app = cx.entity().downgrade();
+                        let response_async_cx = cx.to_async();
+                        let response_foreground = cx.foreground_executor().clone();
+                        let responder: GpuiExtensionBridgeResponder = Rc::new(move |payload| {
+                            let response_app = response_app.clone();
+                            let mut response_async_cx = response_async_cx.clone();
+                            response_foreground
+                                .spawn(async move {
+                                    let _ = response_app.update_in(
+                                        &mut response_async_cx,
+                                        |this, _window, cx| {
+                                            if this.app_modal_open_attempt_id != open_attempt_id {
+                                                return;
+                                            }
+                                            let Some(handle) = this.app_modal_window.clone() else {
+                                                return;
+                                            };
+                                            let _ = handle.update(cx, |host, _modal_window, cx| {
+                                                if host.current_modal
+                                                    == GpuiAppModalKind::Extension(id)
+                                                {
+                                                    host.dispatch_extension_bridge_message(
+                                                        &payload, cx,
+                                                    );
+                                                }
+                                            });
+                                        },
+                                    );
+                                })
+                                .detach();
+                        });
+                        let close_app = cx.entity().downgrade();
+                        let close_async_cx = cx.to_async();
+                        let close_foreground = cx.foreground_executor().clone();
+                        let close_handler: GpuiExtensionCloseHandler = Rc::new(move || {
+                            let close_app = close_app.clone();
+                            let mut close_async_cx = close_async_cx.clone();
+                            close_foreground
+                                .spawn(async move {
+                                    let _ = close_app.update_in(
+                                        &mut close_async_cx,
+                                        |this, _window, cx| {
+                                            if this.app_modal_open_attempt_id != open_attempt_id {
+                                                return;
+                                            }
+                                            let is_current_modal = this
+                                                .app_modal_window
+                                                .clone()
+                                                .and_then(|handle| {
+                                                    handle
+                                                        .update(cx, |host, _modal_window, _cx| {
+                                                            host.current_modal
+                                                                == GpuiAppModalKind::Extension(id)
+                                                        })
+                                                        .ok()
+                                                })
+                                                .unwrap_or(false);
+                                            if is_current_modal {
+                                                this.close_gpui_app_modal_window_and_restore_command_focus(cx);
+                                            }
+                                        },
+                                    );
+                                })
+                                .detach();
+                        });
+                        this.handle_extension_bridge_event(
+                            event,
+                            this.extension_surface_context(GpuiExtensionPlacement::Modal),
+                            responder,
+                            Some(close_handler),
+                            cx,
+                        );
+                    });
+                })
+                .detach();
+        })
     }
 
     fn gpui_app_modal_window_title(&self, modal: GpuiAppModalKind) -> String {
@@ -1270,6 +1370,7 @@ impl GhostexGpuiApp {
             }
         }
 
+        let mut extension_bridge_surface = None;
         let url = if modal.uses_react_modal_host() {
             let Some(url) = app_modal_host_url().ok() else {
                 if let Some(window) = source_window {
@@ -1293,7 +1394,7 @@ impl GhostexGpuiApp {
             };
             url
         } else if let GpuiAppModalKind::Extension(id) = modal {
-            let Some(url) = self.extension_modal_runtime_url(id) else {
+            let Some((url, bridge_surface)) = self.extension_modal_runtime(id) else {
                 if let Some(window) = source_window {
                     window.push_notification(
                         Notification::warning("The extension runtime is unavailable."),
@@ -1302,6 +1403,7 @@ impl GhostexGpuiApp {
                 }
                 return;
             };
+            extension_bridge_surface = Some(bridge_surface);
             url
         } else {
             GHOSTEX_TUTORIAL_VIDEO_URL.to_string()
@@ -1334,6 +1436,15 @@ impl GhostexGpuiApp {
             .then(|| self.tutorial_video_page_load_end_handler(cx));
         self.app_modal_open_attempt_id = self.app_modal_open_attempt_id.wrapping_add(1);
         let ready_timeout_attempt_id = self.app_modal_open_attempt_id;
+        let extension_bridge = match modal {
+            GpuiAppModalKind::Extension(id) => extension_bridge_surface.map(|bridge_surface| {
+                (
+                    bridge_surface,
+                    self.extension_modal_bridge_event_handler(ready_timeout_attempt_id, id, cx),
+                )
+            }),
+            _ => None,
+        };
         let ready_timeout_open_message = open_message.clone();
         let ready_timeout_sidebar_state_message = sidebar_state_message.clone();
         self.app_modal_window = cx
@@ -1347,6 +1458,7 @@ impl GhostexGpuiApp {
                     sidebar_state_message,
                     self.sidebar_gxserver_bootstrap.clone(),
                     event_handler,
+                    extension_bridge,
                     page_load_end_handler,
                     cx,
                 )

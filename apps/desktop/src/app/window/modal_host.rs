@@ -33,6 +33,10 @@ impl GpuiAppModalHostWindow {
         sidebar_state_message: serde_json::Value,
         sidebar_gxserver_bootstrap: Option<cef::SidebarGxserverBootstrap>,
         event_handler: cef::AppModalHostBridgeEventHandler,
+        extension_bridge: Option<(
+            cef::ExtensionBridgeSurfaceSpec,
+            cef::ExtensionBridgeEventHandler,
+        )>,
         page_load_end_handler: Option<cef::PageLoadEndHandler>,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -74,31 +78,49 @@ impl GpuiAppModalHostWindow {
             ),
             None => (CEF_DARK_PREPAINT_BACKGROUND_COLOR, titlebar_background()),
         };
-        let surface = CefSurface::try_new(
-            APP_MODAL_HOST_ID.to_string(),
-            parent_ns_view,
-            url,
-            APP_MODAL_HOST_CEF_PROFILE_ID.to_string(),
-            prepaint_background,
-            false,
-            background,
-            None,
-            true,
-            None,
-            None,
-            None,
-            None,
-            is_find_prompts
-                .then_some(sidebar_gxserver_bootstrap)
-                .flatten(),
-            None,
-            None,
-            app_served_resource_scope,
-            bridge_surface,
-            event_handler,
-            page_load_end_handler,
-            cx,
-        )
+        let surface = if let Some((extension_bridge_surface, extension_bridge_event_handler)) =
+            extension_bridge
+        {
+            CefSurface::try_new_extension(
+                APP_MODAL_HOST_ID.to_string(),
+                parent_ns_view,
+                url,
+                APP_MODAL_HOST_CEF_PROFILE_ID.to_string(),
+                prepaint_background,
+                false,
+                background,
+                true,
+                extension_bridge_surface,
+                extension_bridge_event_handler,
+                cx,
+            )
+        } else {
+            CefSurface::try_new(
+                APP_MODAL_HOST_ID.to_string(),
+                parent_ns_view,
+                url,
+                APP_MODAL_HOST_CEF_PROFILE_ID.to_string(),
+                prepaint_background,
+                false,
+                background,
+                None,
+                true,
+                None,
+                None,
+                None,
+                None,
+                is_find_prompts
+                    .then_some(sidebar_gxserver_bootstrap)
+                    .flatten(),
+                None,
+                None,
+                app_served_resource_scope,
+                bridge_surface,
+                event_handler,
+                page_load_end_handler,
+                cx,
+            )
+        }
         .map_err(|error| {
             support_logs::append(
                 support_logs::GpuiSupportLog::CrashReports,
@@ -297,6 +319,18 @@ impl GpuiAppModalHostWindow {
         }
         self.dispatch_message(message, cx);
         cx.notify();
+    }
+
+    pub(crate) fn dispatch_extension_bridge_message(
+        &mut self,
+        message: &serde_json::Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Some(surface) = &self.surface {
+            surface.update(cx, |surface, _| {
+                surface.dispatch_extension_bridge_message(message);
+            });
+        }
     }
 
     fn dispatch_message(&mut self, message: serde_json::Value, cx: &mut gpui::Context<Self>) {
