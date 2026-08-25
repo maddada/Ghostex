@@ -8,6 +8,7 @@ import {
   DEFAULT_EDITOR_COMMAND_OPTIONS,
   DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
+  DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
   DEFAULT_TERMINAL_PANE_PADDING_PX,
   GHOSTTY_THEME_SETTING_OPTIONS,
   KEEP_AWAKE_DURATION_OPTIONS,
@@ -807,7 +808,7 @@ describe('normalizeghostexSettings', () => {
      * sidebar density preset. Toggling color mode must not make the current
      * preset become Custom.
      */
-    expect(DEFAULT_ghostex_SETTINGS.useColoredSessionAgentIcons).toBe(false);
+    expect(DEFAULT_ghostex_SETTINGS.useColoredSessionAgentIcons).toBe(true);
     expect(normalizeghostexSettings({ useColoredSessionAgentIcons: true })).toMatchObject({
       useColoredSessionAgentIcons: true,
     });
@@ -972,10 +973,10 @@ describe('normalizeghostexSettings', () => {
     expect(normalizeghostexSettings({})).toMatchObject({
       autoSleepAgentIdleMinutes: 15,
       autoSleepAgentSessionsEnabled: false,
-      autoSleepBrowserIdleMinutes: 5,
+      autoSleepBrowserIdleMinutes: 10,
       autoSleepBrowserSessionsEnabled: true,
       autoSleepCodeEditorEnabled: true,
-      autoSleepCodeEditorIdleMinutes: 5,
+      autoSleepCodeEditorIdleMinutes: 10,
       autoSleepFavoriteAgentSessions: false,
       autoSleepGitEditorEnabled: true,
       autoSleepGitEditorIdleMinutes: 5,
@@ -999,7 +1000,7 @@ describe('normalizeghostexSettings', () => {
       autoSleepAgentSessionsEnabled: true,
       autoSleepBrowserIdleMinutes: 120,
       autoSleepBrowserSessionsEnabled: true,
-      autoSleepCodeEditorIdleMinutes: 5,
+      autoSleepCodeEditorIdleMinutes: 10,
       autoSleepGitEditorEnabled: false,
       autoSleepGitEditorIdleMinutes: 30,
       autoSleepProjectEditorIdleMinutes: 5,
@@ -1204,8 +1205,8 @@ describe('normalizeghostexSettings', () => {
      * background colors still seed the slider during migration.
      *
      * CDXC:SidebarTitlebarColors 2026-07-22:
-     * New app defaults use neutral #808080 at 90 Background Contrast,
-     * resolving to #1c1c1c.
+     * New app defaults use neutral #808080 at 93 Background Contrast,
+     * resolving to #141414.
      *
      * CDXC:SidebarTitlebarColors 2026-06-19-14:20:
      * Preset tint previews stay brighter than the applied chrome. The default
@@ -1216,8 +1217,8 @@ describe('normalizeghostexSettings', () => {
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarColorsEnabled).toBe(true);
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarForegroundColor).toBe('#d8d8d8');
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundTintColor).toBe('#808080');
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundDarknessPercent).toBe(90);
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundColor).toBe('#1c1c1c');
+    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundDarknessPercent).toBe(93);
+    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundColor).toBe('#141414');
     expect(getSidebarTitlebarBackgroundForDarkness(95, '#884444')).toBe('#0d0005');
     expect(getSidebarTitlebarBackgroundForDarkness(95, '#336699')).toBe('#0c0e11');
     expect(getSidebarTitlebarBackgroundForDarkness(95, '#000000')).toBe('#000000');
@@ -1225,8 +1226,8 @@ describe('normalizeghostexSettings', () => {
       customSidebarTitlebarColorsEnabled: true,
       customSidebarTitlebarForegroundColor: '#d8d8d8',
       customSidebarTitlebarBackgroundTintColor: '#808080',
-      customSidebarTitlebarBackgroundDarknessPercent: 90,
-      customSidebarTitlebarBackgroundColor: '#1c1c1c',
+      customSidebarTitlebarBackgroundDarknessPercent: 93,
+      customSidebarTitlebarBackgroundColor: '#141414',
     });
     expect(
       normalizeghostexSettings({
@@ -1273,8 +1274,8 @@ describe('normalizeghostexSettings', () => {
       })
     ).toMatchObject({
       customSidebarTitlebarForegroundColor: '#d8d8d8',
-      customSidebarTitlebarBackgroundDarknessPercent: 90,
-      customSidebarTitlebarBackgroundColor: '#1c1c1c',
+      customSidebarTitlebarBackgroundDarknessPercent: 93,
+      customSidebarTitlebarBackgroundColor: '#141414',
     });
   });
 
@@ -1311,10 +1312,10 @@ describe('normalizeghostexSettings', () => {
       titlebarRight: '#030d1b',
     });
     expect(getSidebarTitlebarGradientColors('invalid')).toEqual({
-      sidebarTop: '#1c1c1c',
-      sidebarBottom: '#1c1c1c',
-      titlebarLeft: '#1c1c1c',
-      titlebarRight: '#1c1c1c',
+      sidebarTop: '#141414',
+      sidebarBottom: '#141414',
+      titlebarLeft: '#141414',
+      titlebarRight: '#141414',
     });
   });
 
@@ -1427,7 +1428,7 @@ describe('normalizeghostexSettings', () => {
   });
 
   test('keeps the workspace background color setting', () => {
-    expect(DEFAULT_ghostex_SETTINGS.workspaceBackgroundColor).toBe('#000000');
+    expect(DEFAULT_ghostex_SETTINGS.workspaceBackgroundColor).toBe('#010101');
     expect(normalizeghostexSettings({ workspaceBackgroundColor: '#202020' })).toMatchObject({
       workspaceBackgroundColor: '#202020',
     });
@@ -1694,7 +1695,7 @@ describe('normalizeghostexSettings', () => {
       terminalFontWeight: 300,
       terminalLetterSpacing: 0,
       terminalLineHeight: 1.2,
-      terminalPaneHorizontalPaddingPx: DEFAULT_TERMINAL_PANE_PADDING_PX,
+      terminalPaneHorizontalPaddingPx: DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
       terminalPaneVerticalPaddingPx: DEFAULT_TERMINAL_PANE_PADDING_PX,
     });
     expect(

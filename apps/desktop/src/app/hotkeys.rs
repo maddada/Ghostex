@@ -57,6 +57,11 @@ pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
     if action_id == "openFindPrompts" && key.trim().eq_ignore_ascii_case("alt+f") {
         return default_key;
     }
+    // Retired Alt+Shift+S default for Saved Prompts, mirroring
+    // retiredDefaultKeys in packages/shared/ghostex-hotkeys.ts.
+    if action_id == "stashedPrompts" && key.trim().eq_ignore_ascii_case("alt+shift+s") {
+        return default_key;
+    }
     key
 }
 
@@ -235,8 +240,8 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("closeAfterDone", ""),
     ("promptEditor", "ctrl+g"),
     ("attachFileOrFolder", ""),
-    ("stashPrompt", ""),
-    ("stashedPrompts", "alt+shift+s"),
+    ("stashPrompt", "alt+s"),
+    ("stashedPrompts", "cmd+alt+s"),
     ("exportTranscript", ""),
     ("toggleAgentActions", ""),
     ("toggleChatView", "alt+g"),

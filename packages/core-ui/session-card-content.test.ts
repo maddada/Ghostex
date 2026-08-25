@@ -1167,9 +1167,8 @@ describe('SessionCardContent', () => {
 
     expect(markup).toContain('session-header-reloading-icon');
     expect(markup).not.toContain('session-header-agent-icon');
-    expect(markup).toContain('session-title-generation-overlay-label');
-    expect(markup).toContain('session-title-generation-overlay-dots');
-    expect(markup).not.toContain('session-title-generation-overlay-icon');
+    expect(markup).toContain('session-alias-heading');
+    expect(markup).toContain('Generating title...');
   });
 
   test('should render a hover-only close button when card closing is enabled', () => {

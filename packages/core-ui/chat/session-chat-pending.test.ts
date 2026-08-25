@@ -136,12 +136,14 @@ describe('/clear boundary (§10.3)', () => {
     ];
     // Pill-dispatched commands never get a row; /compact holds one until the
     // agent's own compaction record arrives.
+    // A command the user typed in the composer reads as their own turn, using
+    // the command line itself rather than a system "Ran …" label.
     expect(sessionChatCommandMarkersAsMessages(markers, 0).map((message) => message.blocks)).toEqual([
-      [{ text: 'Ran /compact', type: 'text' }],
-      [{ text: 'Ran /clear', type: 'text' }],
+      [{ text: '/compact', type: 'text' }],
+      [{ text: '/clear', type: 'text' }],
     ]);
     expect(sessionChatCommandMarkersAsMessages(markers, 1).map((message) => message.blocks)).toEqual([
-      [{ text: 'Ran /clear', type: 'text' }],
+      [{ text: '/clear', type: 'text' }],
     ]);
   });
 

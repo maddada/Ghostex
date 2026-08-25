@@ -269,9 +269,9 @@ describe('active WSL2 code-server consumer contract', () => {
   test('routes start-gpui through the WSL builder and downloads the canonical producer archive plus sidecar', () => {
     const launcher = repoFile('tooling/start-gpui.mjs');
 
-    expect(launcher).toContain('isWsl ? "build-windows-app-wsl.sh" : "build-windows-app.ps1"');
+    expect(launcher).toContain("isWsl\n        ? 'build-windows-app-wsl.sh'\n        : 'build-windows-app.ps1'");
     expect(launcher).toContain(
-      'codeServerComponentIdentity({ codeServerRoot: path.join(repoRoot, ".dependencies/code-server") })'
+      "codeServerComponentIdentity({ codeServerRoot: path.join(repoRoot, '.dependencies/code-server') })"
     );
     expect(launcher).toContain(
       'codeServerComponentNames(windowsCodeServerIdentity.componentVersion, `linux-${windowsArch}`)'

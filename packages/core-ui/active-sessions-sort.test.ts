@@ -46,9 +46,9 @@ describe('createDisplaySessionLayout', () => {
     expect(layout.sessionIdsByGroup['group-1']).toEqual([
       'session-2',
       'session-4',
+      'session-5',
       'session-1',
       'session-3',
-      'session-5',
     ]);
   });
 

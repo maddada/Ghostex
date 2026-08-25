@@ -58,7 +58,8 @@ describe('normalizeghostexHotkeySettings', () => {
     expect(DEFAULT_ghostex_HOTKEYS.rotatePanesClockwise).toBe('ctrl+shift+l');
     expect(DEFAULT_ghostex_HOTKEYS.mergeAllTabs).toBe('ctrl+shift+m');
     expect(DEFAULT_ghostex_HOTKEYS.delayedSend).toBe('ctrl+shift+s');
-    expect(DEFAULT_ghostex_HOTKEYS.stashedPrompts).toBe('alt+shift+s');
+    expect(DEFAULT_ghostex_HOTKEYS.stashedPrompts).toBe('cmd+alt+s');
+    expect(DEFAULT_ghostex_HOTKEYS.stashPrompt).toBe('alt+s');
     expect(DEFAULT_ghostex_HOTKEYS.sleepFocusedSession).toBe('');
     expect(DEFAULT_ghostex_HOTKEYS.wakeFocusedSession).toBe('');
     expect(DEFAULT_ghostex_HOTKEYS.closeAfterDone).toBe('');
@@ -112,8 +113,9 @@ describe('normalizeghostexHotkeySettings', () => {
   test('matches pane and prompt action hotkeys', () => {
     expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'cmd+n')).toBe('openBrowserPane');
     expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'ctrl+shift+o')).toBe('popOutPane');
-    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'option+shift+s')).toBe('stashedPrompts');
-    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+shift+s')).toBe('stashedPrompts');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'cmd+option+s')).toBe('stashedPrompts');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'cmd+alt+s')).toBe('stashedPrompts');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+s')).toBe('stashPrompt');
   });
 
   test('matches Cmd+B to the sidebar collapse toggle', () => {
