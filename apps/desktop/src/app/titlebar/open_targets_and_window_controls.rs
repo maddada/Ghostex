@@ -182,12 +182,28 @@ impl GhostexGpuiApp {
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false)
         };
+        let pinned_extension_buttons = self.render_titlebar_pinned_extension_buttons(window, cx);
+        let show_extensions_button = !button_hidden(EXTENSIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY);
+        let show_extension_cluster_gap =
+            !pinned_extension_buttons.is_empty() || show_extensions_button;
         let controls = h_flex()
             .absolute()
             .right_0()
             .top(px(1.0))
             .h(px(TITLEBAR_CONTROL_HEIGHT))
             .items_center()
+            .children(pinned_extension_buttons)
+            .when(show_extensions_button, |this| {
+                this.child(self.render_titlebar_extensions_button(window, cx))
+            })
+            .when(show_extension_cluster_gap, |this| {
+                this.child(
+                    div()
+                        .id("ghostex-gpui-titlebar-extension-cluster-gap")
+                        .h_full()
+                        .w(px(5.0)),
+                )
+            })
             .map(|this| {
                 // Prompt Editor and Exit Focus share the same titlebar slot;
                 // when both are eligible only Prompt Editor renders.
@@ -239,11 +255,6 @@ impl GhostexGpuiApp {
             .when(
                 !button_hidden(OPEN_IN_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
                 |this| this.child(self.render_titlebar_open_targets_button(window, cx)),
-            )
-            .children(self.render_titlebar_pinned_extension_buttons(window, cx))
-            .when(
-                !button_hidden(EXTENSIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
-                |this| this.child(self.render_titlebar_extensions_button(window, cx)),
             )
             .child(self.render_titlebar_extension_popup_panel(window, cx));
         #[cfg(target_os = "windows")]

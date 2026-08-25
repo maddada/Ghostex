@@ -41,6 +41,17 @@ function gxserverBootstrap(): GxserverBootstrap | undefined {
   return bootstrap as GxserverBootstrap;
 }
 
+export function extensionStaticAssetUrl(id: string, path: string): string | undefined {
+  const bootstrap = gxserverBootstrap();
+  if (!bootstrap) return undefined;
+  const encodedPath = path
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  return `${bootstrap.baseUrl}/ext/${encodeURIComponent(id)}/${encodedPath}`;
+}
+
 async function rpc<TResult>(path: string, params: Record<string, unknown>): Promise<TResult> {
   const bootstrap = gxserverBootstrap();
   if (!bootstrap) {

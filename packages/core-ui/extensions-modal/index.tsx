@@ -23,7 +23,7 @@ import { InstalledExtensionDetail, StoreExtensionDetail } from './extension-deta
 import { InstallConsentDialog } from './install-consent';
 import { InstalledTab } from './installed-tab';
 import { StoreTab } from './store-tab';
-import { createExtensionsModalTransport, type ExtensionsModalTransport } from './transport';
+import { createExtensionsModalTransport, extensionStaticAssetUrl, type ExtensionsModalTransport } from './transport';
 
 export type ExtensionsModalTab = 'store' | 'installed';
 
@@ -190,15 +190,15 @@ export function ExtensionsModal({
   );
 
   const iconUrlForCatalogEntry = useCallback(
-    (entry: GhostexExtensionCatalogEntry) => (catalogSnapshot ? assetUrl(catalogSnapshot.url, entry.icon) : undefined),
-    [catalogSnapshot]
+    (entry: GhostexExtensionCatalogEntry) =>
+      installed.some((extension) => extension.id === entry.name)
+        ? extensionStaticAssetUrl(entry.name, entry.icon)
+        : undefined,
+    [installed]
   );
   const iconUrlForInstalled = useCallback(
-    (extension: GhostexInstalledExtension) => {
-      const entry = catalogById.get(extension.id);
-      return entry ? iconUrlForCatalogEntry(entry) : undefined;
-    },
-    [catalogById, iconUrlForCatalogEntry]
+    (extension: GhostexInstalledExtension) => extensionStaticAssetUrl(extension.id, extension.manifest.icon),
+    []
   );
 
   const dark = !(theme.startsWith('light-') || theme === 'plain-light');

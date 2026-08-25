@@ -7,11 +7,11 @@ use std::{
 use crate::paths::GxserverPaths;
 
 use super::{
-    activate_staged_payload, apply_state_patch, catalog_zip_url, default_store_entry,
-    fetch_catalog, read_manifest, read_store, stage_local_payload, stage_zip_payload,
-    store_entry_for_install, validate_extension_id, write_store, ExtensionBadge,
-    ExtensionCatalogSnapshot, ExtensionError, ExtensionLaunchContext, ExtensionResult,
-    ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch, InstalledExtension,
+    ExtensionBadge, ExtensionCatalogSnapshot, ExtensionError, ExtensionLaunchContext,
+    ExtensionResult, ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch,
+    InstalledExtension, activate_staged_payload, apply_state_patch, catalog_zip_url,
+    default_store_entry, fetch_catalog, read_manifest, read_store, stage_local_payload,
+    stage_zip_payload, store_entry_for_install, validate_extension_id, write_store,
 };
 
 #[derive(Clone)]
@@ -290,6 +290,47 @@ impl ExtensionRegistry {
             )));
         }
         Ok(canonical_static)
+    }
+
+    pub(crate) fn static_icon_path(
+        &self,
+        id: &str,
+        requested_relative: &Path,
+    ) -> ExtensionResult<Option<PathBuf>> {
+        validate_extension_id(id)?;
+        let payload_dir = self.installed_dir().join(id);
+        let manifest = read_manifest(&payload_dir, Some(id)).map_err(|error| {
+            if payload_dir.exists() {
+                error
+            } else {
+                ExtensionError::not_found(format!("Extension {id:?} is not installed."))
+            }
+        })?;
+        let manifest_icon = PathBuf::from(manifest.icon);
+        if requested_relative != manifest_icon {
+            return Ok(None);
+        }
+        let canonical_payload = fs::canonicalize(&payload_dir).map_err(|error| {
+            ExtensionError::internal(format!(
+                "Could not resolve installed extension {id}: {error}"
+            ))
+        })?;
+        let canonical_icon =
+            fs::canonicalize(payload_dir.join(manifest_icon)).map_err(|error| {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    ExtensionError::not_found(format!("Extension {id:?} icon was not found."))
+                } else {
+                    ExtensionError::internal(format!(
+                        "Could not resolve installed extension {id} icon: {error}"
+                    ))
+                }
+            })?;
+        if !canonical_icon.starts_with(&canonical_payload) || !canonical_icon.is_file() {
+            return Err(ExtensionError::bad_request(format!(
+                "Icon for extension {id:?} must stay inside its installed payload."
+            )));
+        }
+        Ok(Some(canonical_icon))
     }
 
     pub(crate) fn start(
