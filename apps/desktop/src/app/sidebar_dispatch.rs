@@ -144,6 +144,7 @@ impl GhostexGpuiApp {
         }
 
         self.sidebar_gxserver_bootstrap = next_bootstrap.clone();
+        self.refresh_extensions_in_background(cx);
         if let Some(sidebar) = self.sidebar.clone() {
             sidebar.update(cx, |surface, _| {
                 surface.refresh_sidebar_gxserver_bootstrap(next_bootstrap.clone());

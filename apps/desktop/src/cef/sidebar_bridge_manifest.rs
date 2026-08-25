@@ -181,6 +181,11 @@ pub(crate) const PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD: &str =
 pub(crate) const APP_MODAL_HOST_BRIDGE_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.appModalHost.message";
 pub(crate) const APP_MODAL_HOST_BRIDGE_PAYLOAD_MAX_CHARS: usize = 1024 * 1024;
+pub(crate) const EXTENSION_BRIDGE_INSTALL_MESSAGE_NAME: &str =
+    "ghostex.gpui.extension.installBridge";
+pub(crate) const EXTENSION_BRIDGE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.extension.message";
+pub(crate) const EXTENSION_BRIDGE_PAYLOAD_MAX_CHARS: usize = 4 * 1024 * 1024;
+pub(crate) const WEBKIT_EXTENSION_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghostexExtensionHost";
 #[allow(dead_code)]
 pub(crate) const NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.nativeHost.message";
 #[allow(dead_code)]
@@ -203,6 +208,127 @@ pub(crate) const WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghoste
 #[allow(dead_code)]
 pub(crate) const WEBKIT_NATIVE_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghostexNativeHost";
 pub(crate) const WEBKIT_POST_MESSAGE_JS_FUNCTION: &str = "postMessage";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExtensionBridgeSurfaceSpec {
+    pub id: String,
+    pub origin: String,
+    pub path_prefix: String,
+}
+
+impl ExtensionBridgeSurfaceSpec {
+    pub fn new(id: String, origin: String, path_prefix: String) -> Result<Self, String> {
+        if id.is_empty()
+            || !id
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        {
+            return Err("extension bridge id must be kebab-case".to_string());
+        }
+        let origin = origin.trim_end_matches('/').to_string();
+        if !is_loopback_http_origin(&origin) {
+            return Err("extension bridge origin must be loopback HTTP".to_string());
+        }
+        if !path_prefix.starts_with('/')
+            || path_prefix.contains('?')
+            || path_prefix.contains('#')
+            || path_prefix.split('/').any(|segment| segment == "..")
+        {
+            return Err("extension bridge path prefix is invalid".to_string());
+        }
+        Ok(Self {
+            id,
+            origin,
+            path_prefix,
+        })
+    }
+
+    pub fn matches_url(&self, url: &str) -> bool {
+        let Some(base) = url.split(['?', '#']).next() else {
+            return false;
+        };
+        let Some(path) = base.strip_prefix(&self.origin) else {
+            return false;
+        };
+        path.starts_with(&self.path_prefix)
+            && (self.path_prefix.ends_with('/')
+                || path.len() == self.path_prefix.len()
+                || path.as_bytes().get(self.path_prefix.len()) == Some(&b'/'))
+    }
+}
+
+fn is_loopback_http_origin(origin: &str) -> bool {
+    let Some(port) = origin.strip_prefix("http://127.0.0.1:") else {
+        return false;
+    };
+    port.parse::<u16>().is_ok_and(|port| port != 0)
+}
+
+pub(crate) const EXTENSION_BRIDGE_RUNTIME_SHIM: &str = r#"
+(() => {
+  if (window.ghostex && window.ghostex.__bridgeVersion === 1) return;
+  const host = window.webkit?.messageHandlers?.ghostexExtensionHost;
+  if (!host || typeof host.postMessage !== 'function') return;
+  let sequence = 0;
+  const pending = new Map();
+  const contextListeners = new Set();
+  const call = (method, params = {}, onChunk) => new Promise((resolve, reject) => {
+    const requestId = `${Date.now().toString(36)}-${(++sequence).toString(36)}`;
+    pending.set(requestId, { resolve, reject, onChunk });
+    if (host.postMessage(JSON.stringify({ requestId, method, params })) === false) {
+      pending.delete(requestId);
+      reject(Object.assign(new Error('Ghostex rejected the extension call'), { code: 'operationFailed' }));
+    }
+  });
+  Object.defineProperty(window, '__ghostexExtensionBridgeReceive', {
+    configurable: false,
+    enumerable: false,
+    value(raw) {
+      const message = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (message?.event === 'contextChanged') {
+        for (const listener of contextListeners) listener(message.value);
+        return;
+      }
+      const request = pending.get(message?.requestId);
+      if (!request) return;
+      if (message.chunk !== undefined) {
+        request.onChunk?.(message.chunk);
+        return;
+      }
+      pending.delete(message.requestId);
+      if (message.ok) request.resolve(message.result);
+      else request.reject(Object.assign(new Error(message.error?.message || 'Ghostex extension call failed'), message.error));
+    },
+  });
+  const api = {
+    __bridgeVersion: 1,
+    context: () => call('context'),
+    onContextChange(callback) {
+      contextListeners.add(callback);
+      return () => contextListeners.delete(callback);
+    },
+    cli: (verb, args = []) => call('cli', { verb, args }),
+    exec(command, options = {}) {
+      const { stream, ...params } = options;
+      return call('exec', { command, ...params }, typeof stream === 'function' ? stream : undefined);
+    },
+    settings: {
+      get: () => call('settings.get'),
+      set: (values) => call('settings.set', { values }),
+    },
+    storage: {
+      get: (key) => call('storage.get', { key }),
+      set: (key, value) => call('storage.set', { key, value }),
+    },
+    ui: {
+      toast: (message) => call('ui.toast', { message }),
+      close: () => call('ui.close'),
+      setBadge: (lines) => call('ui.setBadge', { lines }),
+    },
+  };
+  Object.defineProperty(window, 'ghostex', { configurable: false, enumerable: true, value: Object.freeze(api) });
+})();
+"#;
 
 /*
 CDXC:GPUISidebarBridgeOwnership 2026-06-28-23:24:

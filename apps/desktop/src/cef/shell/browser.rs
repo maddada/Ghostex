@@ -32,6 +32,8 @@ pub(crate) fn show_browser_dev_tools(
         None,
         None,
         None,
+        None,
+        None,
         Some(GhostexGpuiCefFocusHandler::new()),
         None,
     ));
@@ -600,6 +602,8 @@ impl CefBrowser {
         manage_docs_resource_scope: Option<ManageDocsResourceScope>,
         app_modal_host_bridge_surface: Option<AppModalHostBridgeSurface>,
         app_modal_host_bridge_event_handler: Option<AppModalHostBridgeEventHandler>,
+        extension_bridge_surface: Option<ExtensionBridgeSurfaceSpec>,
+        extension_bridge_event_handler: Option<ExtensionBridgeEventHandler>,
         page_load_end_handler: Option<PageLoadEndHandler>,
     ) -> Result<Self, String> {
         let keyboard_zoom_enabled = page_metadata_handler.is_some()
@@ -647,6 +651,11 @@ impl CefBrowser {
             && app_modal_host_bridge_surface_for_frame_url(&requested_url) != Some(expected_surface)
         {
             return Err("app-modal CEF surface does not match its first-party entry URL".into());
+        }
+        if let Some(surface) = extension_bridge_surface.as_ref()
+            && (!surface.matches_url(&requested_url) || extension_bridge_event_handler.is_none())
+        {
+            return Err("extension CEF surface does not match its registered origin".into());
         }
         let creation_url = if uses_system_page_appearance {
             "about:blank"
@@ -704,7 +713,9 @@ impl CefBrowser {
                     .map(GhostexGpuiBrowserRequestHandler::new)
             });
         let browser_lifecycle_handler = page_metadata_handler.clone();
-        let load_handler = if let Some(page_load_end_handler) = page_load_end_handler {
+        let load_handler = if let Some(surface) = extension_bridge_surface.clone() {
+            Some(GhostexGpuiExtensionBridgeLoadHandler::new(surface))
+        } else if let Some(page_load_end_handler) = page_load_end_handler {
             /*
             CDXC:GPUITutorialVideoFullscreen 2026-08-18:
             Only bridge-less third-party surfaces (the tutorial video modal)
@@ -752,6 +763,8 @@ impl CefBrowser {
             sidebar_bridge_event_handler,
             project_workarea_bridge_event_handler,
             app_modal_host_bridge_event_handler,
+            extension_bridge_surface,
+            extension_bridge_event_handler,
             request_handler,
             permission_handler,
             Some(GhostexGpuiCefFocusHandler::new()),

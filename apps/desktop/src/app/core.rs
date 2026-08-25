@@ -303,6 +303,10 @@ pub struct GhostexGpuiApp {
     // 2s policy poll), never per frame on the main thread.
     pub(crate) titlebar_actions_snapshot: Vec<GpuiTitlebarAction>,
     pub(crate) titlebar_actions_refresh_in_flight: bool,
+    pub(crate) extensions_snapshot: GpuiExtensionsSnapshot,
+    pub(crate) extension_projects: HashMap<String, GpuiExtensionProjectMetadata>,
+    pub(crate) extension_session_details: HashMap<String, serde_json::Value>,
+    pub(crate) extensions_refresh_in_flight: bool,
     pub(crate) titlebar_tips_unread_count: u64,
     // Platform-neutral updater state drives the native titlebar. Sparkle owns
     // macOS delivery and Velopack owns Windows delivery; only the Windows

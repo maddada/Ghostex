@@ -2253,6 +2253,8 @@ impl GpuiTitlebarResourcesPanel {
             Some(cef::AppModalHostBridgeSurface::Titlebar),
             Some(event_handler),
             None,
+            None,
+            None,
         )?);
         browser.set_visible(false);
         Ok(browser)

@@ -74,6 +74,7 @@ pub(crate) fn default_store_entry(manifest: &ExtensionManifest) -> ExtensionStor
                     .map(|value| (preference.name.clone(), value))
             })
             .collect(),
+        storage: BTreeMap::new(),
         version: manifest.version.clone(),
         granted_permissions: manifest.permissions.clone(),
     }
@@ -90,6 +91,7 @@ pub(crate) fn store_entry_for_install(
     entry.enabled = previous.enabled;
     entry.pinned = previous.pinned;
     entry.terminal_placement = previous.terminal_placement;
+    entry.storage = previous.storage.clone();
     if previous
         .placement
         .is_some_and(|placement| manifest.placements.contains(&placement))
@@ -149,6 +151,17 @@ pub(crate) fn apply_state_patch(
             }
         }
         entry.preferences.extend(preferences);
+    }
+    if let Some(storage) = patch.storage {
+        if storage
+            .keys()
+            .any(|key| key.trim().is_empty() || key.len() > 128)
+        {
+            return Err(ExtensionError::bad_request(
+                "Extension storage keys must be 1-128 characters.",
+            ));
+        }
+        entry.storage.extend(storage);
     }
     if let Some(granted_permissions) = patch.granted_permissions {
         if granted_permissions

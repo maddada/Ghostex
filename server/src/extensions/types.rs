@@ -151,6 +151,8 @@ pub struct ExtensionStoreEntry {
     pub terminal_placement: ExtensionTerminalPlacement,
     #[serde(default)]
     pub preferences: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub storage: BTreeMap<String, Value>,
     pub version: String,
     #[serde(default)]
     pub granted_permissions: Vec<ExtensionPermission>,
@@ -171,6 +173,7 @@ pub struct ExtensionStatePatch {
     pub placement: Option<ExtensionPlacement>,
     pub terminal_placement: Option<ExtensionTerminalPlacement>,
     pub preferences: Option<BTreeMap<String, Value>>,
+    pub storage: Option<BTreeMap<String, Value>>,
     pub granted_permissions: Option<Vec<ExtensionPermission>>,
 }
 

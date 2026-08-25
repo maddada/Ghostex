@@ -13,6 +13,8 @@ wrap_client! {
         sidebar_bridge_event_handler: Option<SidebarBridgeEventHandler>,
         project_workarea_bridge_event_handler: Option<ProjectWorkareaBridgeEventHandler>,
         app_modal_host_bridge_event_handler: Option<AppModalHostBridgeEventHandler>,
+        extension_bridge_surface: Option<ExtensionBridgeSurfaceSpec>,
+        extension_bridge_event_handler: Option<ExtensionBridgeEventHandler>,
         request_handler: Option<RequestHandler>,
         permission_handler: Option<PermissionHandler>,
         focus_handler: Option<FocusHandler>,
@@ -101,15 +103,18 @@ wrap_client! {
             let is_app_modal_host_message =
                 message_name == APP_MODAL_HOST_BRIDGE_PROCESS_MESSAGE_NAME;
             let is_native_host_message = message_name == NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME;
+            let is_extension_bridge_message =
+                message_name == EXTENSION_BRIDGE_PROCESS_MESSAGE_NAME;
             if sidebar_event_kind.is_none()
                 && !is_sidebar_editable_focus_message
                 && project_workarea_event_kind.is_none()
                 && !is_app_modal_host_message
                 && !is_native_host_message
+                && !is_extension_bridge_message
             {
                 return 0;
             }
-            if frame.map(|frame| frame.is_main() == 0).unwrap_or(true) {
+            if frame.as_ref().map(|frame| frame.is_main() == 0).unwrap_or(true) {
                 return 1;
             }
 
@@ -160,6 +165,30 @@ wrap_client! {
                 }
 
                 handler(event_kind.with_payload(payload));
+                return 1;
+            }
+
+            if is_extension_bridge_message {
+                let Some(surface) = self.extension_bridge_surface.as_ref() else {
+                    return 0;
+                };
+                let frame_url = frame
+                    .as_ref()
+                    .map(|frame| CefString::from(&frame.url()).to_string())
+                    .unwrap_or_default();
+                if !surface.matches_url(&frame_url) {
+                    return 1;
+                }
+                let Some(handler) = self.extension_bridge_event_handler.clone() else {
+                    return 0;
+                };
+                if payload.chars().count() > EXTENSION_BRIDGE_PAYLOAD_MAX_CHARS {
+                    return 1;
+                }
+                handler(ExtensionBridgeEvent {
+                    extension_id: surface.id.clone(),
+                    payload,
+                });
                 return 1;
             }
 
@@ -218,6 +247,39 @@ wrap_load_handler! {
                 can_go_back: can_go_back != 0,
                 can_go_forward: can_go_forward != 0,
             });
+        }
+    }
+}
+
+wrap_load_handler! {
+    pub(crate) struct GhostexGpuiExtensionBridgeLoadHandler {
+        surface: ExtensionBridgeSurfaceSpec,
+    }
+
+    impl LoadHandler {
+        fn on_load_end(
+            &self,
+            _browser: Option<&mut cef::Browser>,
+            frame: Option<&mut Frame>,
+            _http_status_code: c_int,
+        ) {
+            let Some(frame) = frame else {
+                return;
+            };
+            if frame.is_main() == 0 {
+                return;
+            }
+            let frame_url = CefString::from(&frame.url()).to_string();
+            if !self.surface.matches_url(&frame_url) {
+                return;
+            }
+            let mut message = match cef::process_message_create(Some(&CefString::from(
+                EXTENSION_BRIDGE_INSTALL_MESSAGE_NAME,
+            ))) {
+                Some(message) => message,
+                None => return,
+            };
+            frame.send_process_message(ProcessId::RENDERER, Some(&mut message));
         }
     }
 }
@@ -422,11 +484,14 @@ wrap_render_process_handler! {
                 message_name == SESSION_CHAT_GXSERVER_BOOTSTRAP_MESSAGE_NAME;
             let is_project_workarea_install_message =
                 message_name == PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME;
+            let is_extension_bridge_install_message =
+                message_name == EXTENSION_BRIDGE_INSTALL_MESSAGE_NAME;
             if !is_install_message
                 && !is_runtime_settings_update
                 && !is_gxserver_bootstrap_update
                 && !is_session_chat_gxserver_bootstrap_message
                 && !is_project_workarea_install_message
+                && !is_extension_bridge_install_message
             {
                 return 0;
             }
@@ -442,7 +507,9 @@ wrap_render_process_handler! {
             if context.enter() == 0 {
                 return 1;
             }
-            if is_project_workarea_install_message {
+            if is_extension_bridge_install_message {
+                install_extension_v8_bridge(Some(&mut context));
+            } else if is_project_workarea_install_message {
                 let manage_docs_resource_base_url = message
                     .argument_list()
                     .filter(|arguments| {
@@ -490,6 +557,13 @@ wrap_render_process_handler! {
                 );
             }
             context.exit();
+            if is_extension_bridge_install_message {
+                frame.execute_java_script(
+                    Some(&CefString::from(EXTENSION_BRIDGE_RUNTIME_SHIM)),
+                    Some(&CefString::from("ghostex://gpui/extension-bridge")),
+                    1,
+                );
+            }
             1
         }
     }

@@ -105,6 +105,7 @@ export interface GhostexExtensionStoreEntry {
   placement?: GhostexExtensionPlacement;
   terminalPlacement: GhostexExtensionTerminalPlacement;
   preferences: Record<string, GhostexExtensionPreferenceValue>;
+  storage: Record<string, unknown>;
   version: string;
   grantedPermissions: GhostexExtensionPermission[];
 }
@@ -112,7 +113,7 @@ export interface GhostexExtensionStoreEntry {
 export type GhostexExtensionStatePatch = Partial<
   Pick<
     GhostexExtensionStoreEntry,
-    'enabled' | 'pinned' | 'placement' | 'terminalPlacement' | 'preferences' | 'grantedPermissions'
+    'enabled' | 'pinned' | 'placement' | 'terminalPlacement' | 'preferences' | 'storage' | 'grantedPermissions'
   >
 >;
 

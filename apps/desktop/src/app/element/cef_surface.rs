@@ -64,7 +64,47 @@ impl CefSurface {
             manage_docs_resource_scope,
             app_modal_host_bridge_surface,
             app_modal_host_bridge_event_handler,
+            None,
+            None,
             page_load_end_handler,
+        )?);
+        Ok(cx.new(|cx| Self::from_browser(id, background, visible, browser, cx)))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn try_new_extension(
+        id: String,
+        parent_ns_view: *mut std::ffi::c_void,
+        url: String,
+        profile: String,
+        prepaint_background_color: u32,
+        uses_system_page_appearance: bool,
+        background: Hsla,
+        visible: bool,
+        bridge_surface: cef::ExtensionBridgeSurfaceSpec,
+        bridge_event_handler: cef::ExtensionBridgeEventHandler,
+        cx: &mut gpui::App,
+    ) -> Result<gpui::Entity<Self>, String> {
+        let browser = Rc::new(CefBrowser::new(
+            parent_ns_view,
+            &url,
+            &profile,
+            prepaint_background_color,
+            uses_system_page_appearance,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(bridge_surface),
+            Some(bridge_event_handler),
+            None,
         )?);
         Ok(cx.new(|cx| Self::from_browser(id, background, visible, browser, cx)))
     }
@@ -237,6 +277,21 @@ impl CefSurface {
         GPUI remote-machine status, sanitized request responses, and presentation refreshes use the same first-party script boundary to dispatch sidebar-only CustomEvents. Callers must serialize only app-owned event payloads and never inject tokens, SSH details, command text, URLs, paths, daemon bodies, or renderer-provided scripts.
         */
         self.browser.execute_java_script_in_main_frame(script)
+    }
+
+    pub(crate) fn dispatch_extension_bridge_message(
+        &mut self,
+        message: &serde_json::Value,
+    ) -> bool {
+        let Ok(payload) = serde_json::to_string(message) else {
+            return false;
+        };
+        let Ok(serialized_payload) = serde_json::to_string(&payload) else {
+            return false;
+        };
+        self.browser.execute_java_script_in_main_frame(&format!(
+            "window.__ghostexExtensionBridgeReceive?.({serialized_payload});"
+        ))
     }
 
     pub(crate) fn set_visible(&mut self, visible: bool) {

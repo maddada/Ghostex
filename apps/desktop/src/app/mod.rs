@@ -15,6 +15,7 @@ pub(crate) mod actions;
 pub(crate) mod consts;
 pub(crate) mod core;
 pub(crate) mod element;
+pub(crate) mod extensions;
 pub(crate) mod ffi;
 pub(crate) mod helpers;
 pub(crate) mod hotkeys;

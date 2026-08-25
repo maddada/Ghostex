@@ -148,6 +148,7 @@ use crate::app::window::*;
 // private import for main.rs's own call sites.
 pub(crate) use crate::app::actions::*;
 pub(crate) use crate::app::consts::*;
+pub(crate) use crate::app::extensions::*;
 pub(crate) use crate::app::ffi::*;
 pub(crate) use crate::app::hotkeys::*;
 pub(crate) use crate::app::model::*;
