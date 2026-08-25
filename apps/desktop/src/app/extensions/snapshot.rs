@@ -53,7 +53,10 @@ pub(crate) fn read_gpui_extensions_snapshot() -> Result<
         .filter_map(|session| copy_details_from_presentation_session(session, &projects))
         .collect();
     Ok((
-        GpuiExtensionsSnapshot { installed },
+        GpuiExtensionsSnapshot {
+            installed,
+            ..Default::default()
+        },
         projects,
         presentation_sessions,
     ))
@@ -72,7 +75,9 @@ impl GhostexGpuiApp {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.extensions_refresh_in_flight = false;
-                if let Ok((snapshot, projects, session_details)) = result {
+                if let Ok((mut snapshot, projects, session_details)) = result {
+                    snapshot.pending_chat_bar_toggles =
+                        std::mem::take(&mut this.extensions_snapshot.pending_chat_bar_toggles);
                     this.extensions_snapshot = snapshot;
                     this.extension_projects = projects;
                     this.extension_session_details = session_details;

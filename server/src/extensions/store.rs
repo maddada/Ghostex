@@ -62,6 +62,7 @@ pub(crate) fn default_store_entry(manifest: &ExtensionManifest) -> ExtensionStor
     ExtensionStoreEntry {
         enabled: true,
         pinned: false,
+        chat_bar_auto_open: false,
         placement: manifest.default_placement,
         terminal_placement: ExtensionTerminalPlacement::SplitRight,
         preferences: manifest
@@ -90,6 +91,7 @@ pub(crate) fn store_entry_for_install(
     };
     entry.enabled = previous.enabled;
     entry.pinned = previous.pinned;
+    entry.chat_bar_auto_open = previous.chat_bar_auto_open;
     entry.terminal_placement = previous.terminal_placement;
     entry.storage = previous.storage.clone();
     if previous
@@ -118,6 +120,9 @@ pub(crate) fn apply_state_patch(
     }
     if let Some(pinned) = patch.pinned {
         entry.pinned = pinned;
+    }
+    if let Some(chat_bar_auto_open) = patch.chat_bar_auto_open {
+        entry.chat_bar_auto_open = chat_bar_auto_open;
     }
     if let Some(placement) = patch.placement {
         if !manifest.placements.contains(&placement) {

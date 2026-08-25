@@ -49,12 +49,27 @@ const TERMINAL_MANIFEST: GhostexExtensionManifest = {
   version: '1.0.0',
 };
 
+const CHAT_BAR_MANIFEST: GhostexExtensionManifest = {
+  author: 'Ghostex',
+  categories: ['Productivity'],
+  defaultPlacement: 'chat-bar',
+  description: 'Keeps session-specific notes beside the chat composer.',
+  icon: 'icon.svg',
+  name: 'session-scratchpad',
+  permissions: [],
+  placements: ['chat-bar'],
+  server: { static: 'dist' },
+  title: 'Session Scratchpad',
+  version: '1.0.0',
+};
+
 const INSTALLED: GhostexInstalledExtension[] = [
   {
     id: 'storybook',
     manifest: WEB_MANIFEST,
     runtime: { state: 'stopped' },
     state: {
+      chatBarAutoOpen: false,
       enabled: true,
       grantedPermissions: ['exec', 'network'],
       pinned: true,
@@ -70,9 +85,26 @@ const INSTALLED: GhostexInstalledExtension[] = [
     manifest: TERMINAL_MANIFEST,
     runtime: { state: 'stopped' },
     state: {
+      chatBarAutoOpen: false,
       enabled: false,
       grantedPermissions: ['exec'],
       pinned: false,
+      preferences: {},
+      storage: {},
+      terminalPlacement: 'splitRight',
+      version: '1.0.0',
+    },
+  },
+  {
+    id: 'session-scratchpad',
+    manifest: CHAT_BAR_MANIFEST,
+    runtime: { state: 'stopped' },
+    state: {
+      chatBarAutoOpen: false,
+      enabled: true,
+      grantedPermissions: [],
+      pinned: true,
+      placement: 'chat-bar',
       preferences: {},
       storage: {},
       terminalPlacement: 'splitRight',
@@ -105,7 +137,11 @@ function StoryFrame({ children }: { children: React.ReactNode }) {
 export const InstalledCard: Story = {
   render: () => {
     const [enabled, setEnabled] = useState(true);
-    const extension = useMemo(() => ({ ...INSTALLED[0], state: { ...INSTALLED[0].state, enabled } }), [enabled]);
+    const [chatBarAutoOpen, setChatBarAutoOpen] = useState(false);
+    const extension = useMemo(
+      () => ({ ...INSTALLED[2], state: { ...INSTALLED[2].state, chatBarAutoOpen, enabled } }),
+      [chatBarAutoOpen, enabled]
+    );
     return (
       <StoryFrame>
         <div className='max-w-xl'>
@@ -114,6 +150,7 @@ export const InstalledCard: Story = {
             iconUrl={ICON}
             onDetails={() => undefined}
             onRemove={() => undefined}
+            onSetChatBarAutoOpen={setChatBarAutoOpen}
             onSetEnabled={setEnabled}
           />
         </div>
@@ -130,6 +167,7 @@ export const InstalledGrid: Story = {
         iconUrlFor={() => ICON}
         onDetails={() => undefined}
         onRemove={() => undefined}
+        onSetChatBarAutoOpen={() => undefined}
         onSetEnabled={() => undefined}
       />
     </StoryFrame>

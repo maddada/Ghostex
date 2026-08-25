@@ -146,6 +146,8 @@ pub struct ExtensionSize {
 pub struct ExtensionStoreEntry {
     pub enabled: bool,
     pub pinned: bool,
+    #[serde(default)]
+    pub chat_bar_auto_open: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<ExtensionPlacement>,
     pub terminal_placement: ExtensionTerminalPlacement,
@@ -170,6 +172,7 @@ pub enum ExtensionTerminalPlacement {
 pub struct ExtensionStatePatch {
     pub enabled: Option<bool>,
     pub pinned: Option<bool>,
+    pub chat_bar_auto_open: Option<bool>,
     pub placement: Option<ExtensionPlacement>,
     pub terminal_placement: Option<ExtensionTerminalPlacement>,
     pub preferences: Option<BTreeMap<String, Value>>,

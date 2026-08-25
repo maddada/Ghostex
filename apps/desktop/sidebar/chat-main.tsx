@@ -37,7 +37,7 @@ import {
   type GhostexChatBarBridgeRequestMessage,
   type GhostexChatBarPanelSessionState,
   type GhostexChatBarPanelSessions,
-  type GhostexChatBarPanelShowMessage,
+  type GhostexChatBarPanelToggleMessage,
   type GhostexExtensionLaunchContext,
   type GhostexExtensionRuntimeResult,
   type GhostexInstalledExtension,
@@ -96,7 +96,7 @@ interface ChatBridgeNamespace {
   onSessionChatHandoffToTerminalRequested?: () => void;
   onSessionChatInsertPromptRequested?: (payload: { content?: unknown }) => void;
   onSessionChatStashPromptRequested?: () => void;
-  onSessionChatExtensionRequested?: (payload: GhostexChatBarPanelShowMessage) => void;
+  onSessionChatExtensionRequested?: (payload: GhostexChatBarPanelToggleMessage) => void;
   onSessionChatExtensionBridgeMessage?: (payload: unknown) => void;
   onSessionChatExtensionContextChanged?: (context: GhostexExtensionContext) => void;
 }
@@ -1089,14 +1089,15 @@ function GpuiSessionChatPage({
           .filter(isChatBarExtension)
           .sort((a, b) => a.id.localeCompare(b.id));
         const owner = chatBarExtensions[0];
+        const autoOpenExtension = chatBarExtensions.find((extension) => extension.state.chatBarAutoOpen);
         const storedSessions = readChatBarPanelSessions(owner?.state.storage[GHOSTEX_CHAT_BAR_PANEL_STORAGE_KEY]);
         const storedState = storedSessions[sessionKey];
         const requestedActiveId = storedState?.activeExtensionId;
         const activeExtensionId = chatBarExtensions.some((extension) => extension.id === requestedActiveId)
           ? requestedActiveId
-          : chatBarExtensions[0]?.id;
+          : (autoOpenExtension?.id ?? chatBarExtensions[0]?.id);
         const initialState: GhostexChatBarPanelSessionState = {
-          open: storedState?.open ?? chatBarExtensions.length > 0,
+          open: storedState?.open ?? Boolean(autoOpenExtension),
           minimized: storedState?.minimized ?? false,
           ...(activeExtensionId ? { activeExtensionId } : {}),
         };
@@ -1106,7 +1107,7 @@ function GpuiSessionChatPage({
         panelStateRef.current = initialState;
         publishExtensions(chatBarExtensions);
         setPanelState(initialState);
-        if (activeExtensionId) {
+        if (initialState.open && activeExtensionId) {
           void startExtension(activeExtensionId);
         }
       })
@@ -1155,7 +1156,7 @@ function GpuiSessionChatPage({
       panelStateRef.current = next;
       setPanelState(next);
       persistPanelState(next);
-      if (patch.activeExtensionId) {
+      if (next.open && patch.activeExtensionId) {
         void startExtension(patch.activeExtensionId);
       }
     },
@@ -1163,17 +1164,24 @@ function GpuiSessionChatPage({
   );
 
   useEffect(() => {
+    if (extensions.length === 0) {
+      return;
+    }
     const namespace = chatBridgeNamespace();
     const previous = namespace.onSessionChatExtensionRequested;
-    const handleExtensionRequest = (payload: GhostexChatBarPanelShowMessage): void => {
+    const handleExtensionRequest = (payload: GhostexChatBarPanelToggleMessage): void => {
       const extensionId =
-        payload?.type === 'ghostexChatBarPanelShow' && typeof payload.extensionId === 'string'
+        payload?.type === 'ghostexChatBarPanelToggle' && typeof payload.extensionId === 'string'
           ? payload.extensionId
           : '';
       if (!extensionsRef.current.some((extension) => extension.id === extensionId)) {
         return;
       }
-      updatePanelState({ activeExtensionId: extensionId, minimized: false, open: true });
+      updatePanelState({
+        activeExtensionId: extensionId,
+        minimized: false,
+        open: !panelStateRef.current.open,
+      });
     };
     namespace.onSessionChatExtensionRequested = handleExtensionRequest;
     return () => {
@@ -1181,7 +1189,7 @@ function GpuiSessionChatPage({
         namespace.onSessionChatExtensionRequested = previous;
       }
     };
-  }, [updatePanelState]);
+  }, [extensions.length, updatePanelState]);
 
   const handleBridgeRequest = useCallback(
     async (

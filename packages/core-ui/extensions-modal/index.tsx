@@ -316,6 +316,9 @@ export function ExtensionsModal({
                 iconUrlFor={iconUrlForInstalled}
                 onDetails={(extension) => setSelectedInstalledId(extension.id)}
                 onRemove={(extension) => void uninstallExtension(extension)}
+                onSetChatBarAutoOpen={(extension, chatBarAutoOpen) =>
+                  void setExtensionState(extension, { chatBarAutoOpen })
+                }
                 onSetEnabled={(extension, enabled) => void setExtensionState(extension, { enabled })}
                 pendingIds={pendingIds}
               />

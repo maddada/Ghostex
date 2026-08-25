@@ -223,6 +223,7 @@ impl GhostexGpuiApp {
                 && self.agents_chat_surfaces.contains_key(&session_id)
             {
                 self.session_chat_composer_ready_sessions.insert(session_id);
+                self.flush_pending_chat_bar_extension_toggles(session_id, cx);
             }
             self.complete_session_chat_composer_focus_handoff(session_id, window, cx);
             /*

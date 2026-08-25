@@ -102,6 +102,7 @@ export type GhostexExtensionManifest = GhostexWebExtensionManifest | GhostexTerm
 export interface GhostexExtensionStoreEntry {
   enabled: boolean;
   pinned: boolean;
+  chatBarAutoOpen: boolean;
   placement?: GhostexExtensionPlacement;
   terminalPlacement: GhostexExtensionTerminalPlacement;
   preferences: Record<string, GhostexExtensionPreferenceValue>;
@@ -113,7 +114,14 @@ export interface GhostexExtensionStoreEntry {
 export type GhostexExtensionStatePatch = Partial<
   Pick<
     GhostexExtensionStoreEntry,
-    'enabled' | 'pinned' | 'placement' | 'terminalPlacement' | 'preferences' | 'storage' | 'grantedPermissions'
+    | 'enabled'
+    | 'pinned'
+    | 'chatBarAutoOpen'
+    | 'placement'
+    | 'terminalPlacement'
+    | 'preferences'
+    | 'storage'
+    | 'grantedPermissions'
   >
 >;
 
@@ -264,8 +272,8 @@ export interface GhostexChatBarPanelSessionState {
 
 export type GhostexChatBarPanelSessions = Record<string, GhostexChatBarPanelSessionState>;
 
-export interface GhostexChatBarPanelShowMessage {
-  type: 'ghostexChatBarPanelShow';
+export interface GhostexChatBarPanelToggleMessage {
+  type: 'ghostexChatBarPanelToggle';
   extensionId: string;
 }
 

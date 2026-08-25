@@ -13,6 +13,7 @@ export function InstalledExtensionCard({
   iconUrl,
   onDetails,
   onRemove,
+  onSetChatBarAutoOpen,
   onSetEnabled,
   pending,
 }: {
@@ -20,9 +21,11 @@ export function InstalledExtensionCard({
   iconUrl?: string;
   onDetails: () => void;
   onRemove: () => void;
+  onSetChatBarAutoOpen: (autoOpen: boolean) => void;
   onSetEnabled: (enabled: boolean) => void;
   pending?: boolean;
 }) {
+  const supportsChatBar = extension.manifest.placements?.includes('chat-bar') === true;
   return (
     <Card className='min-h-52 bg-card/45 py-5 ring-border/70' data-extension-id={extension.id}>
       <CardHeader className='grid grid-cols-[auto_minmax(0,1fr)] gap-4 px-5'>
@@ -32,8 +35,19 @@ export function InstalledExtensionCard({
           <CardDescription className='mt-1 line-clamp-3 leading-5'>{extension.manifest.description}</CardDescription>
         </div>
       </CardHeader>
-      <CardContent className='mt-auto px-5 text-xs text-muted-foreground'>
-        Version {extension.state.version}
+      <CardContent className='mt-auto flex flex-col gap-3 px-5 text-xs text-muted-foreground'>
+        <span>Version {extension.state.version}</span>
+        {supportsChatBar ? (
+          <div className='flex items-center justify-between gap-4 border-t border-border/60 pt-3'>
+            <span className='text-sm text-foreground'>Open automatically in sessions</span>
+            <Switch
+              aria-label={`${extension.state.chatBarAutoOpen ? 'Disable' : 'Enable'} automatic opening for ${extension.manifest.title}`}
+              checked={extension.state.chatBarAutoOpen}
+              disabled={pending}
+              onCheckedChange={onSetChatBarAutoOpen}
+            />
+          </div>
+        ) : null}
       </CardContent>
       <CardFooter className='justify-between gap-4 px-5'>
         <div className='flex items-center gap-2'>

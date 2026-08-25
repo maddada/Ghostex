@@ -70,7 +70,7 @@ impl GhostexGpuiApp {
             }
             GpuiExtensionLaunch::ChatBar(id) => {
                 self.close_titlebar_extension_popup(window, cx);
-                self.launch_chat_bar_extension(id, window, cx)
+                self.toggle_chat_bar_extension(id, cx)
             }
             GpuiExtensionLaunch::Popup(id) => {
                 self.set_titlebar_extension_popup_open(id, trigger_bounds, window, cx)
@@ -86,26 +86,29 @@ impl GhostexGpuiApp {
         }
     }
 
-    fn launch_chat_bar_extension(
-        &mut self,
-        id: ExtensionId,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let Some(session_id) = self.focused_agents_or_companion_shell_session_id() else {
+    fn toggle_chat_bar_extension(&mut self, id: ExtensionId, cx: &mut gpui::Context<Self>) -> bool {
+        let Some(session_id) = self
+            .focused_agents_or_companion_shell_session_id()
+            .or_else(|| {
+                self.agents_workspace
+                    .active_session_in_pane(self.agents_workspace.focused_pane)
+            })
+        else {
             return false;
         };
-        let _ = self.set_active_mode(TitlebarMode::Agents, window, cx);
         if !self.show_agents_session_chat_mode(session_id, cx) {
             return false;
         }
-        if !self.deliver_chat_bar_extension_launch(session_id, id, cx) {
-            self.schedule_chat_bar_extension_launch(session_id, id, cx);
-        }
+        self.extensions_snapshot
+            .pending_chat_bar_toggles
+            .entry(session_id)
+            .or_default()
+            .push_back(id);
+        self.flush_pending_chat_bar_extension_toggles(session_id, cx);
         true
     }
 
-    fn deliver_chat_bar_extension_launch(
+    fn deliver_chat_bar_extension_toggle(
         &mut self,
         session_id: TerminalSessionId,
         id: ExtensionId,
@@ -115,7 +118,7 @@ impl GhostexGpuiApp {
             return false;
         };
         let payload = serde_json::json!({
-            "type": "ghostexChatBarPanelShow",
+            "type": "ghostexChatBarPanelToggle",
             "extensionId": id.as_str(),
         });
         let script = format!(
@@ -124,26 +127,27 @@ impl GhostexGpuiApp {
         surface.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
-    fn schedule_chat_bar_extension_launch(
+    pub(crate) fn flush_pending_chat_bar_extension_toggles(
         &mut self,
         session_id: TerminalSessionId,
-        id: ExtensionId,
         cx: &mut gpui::Context<Self>,
     ) {
-        cx.spawn(async move |this, cx| {
-            for _ in 0..100 {
-                cx.background_executor()
-                    .timer(Duration::from_millis(20))
-                    .await;
-                match this.update(cx, |this, cx| {
-                    this.deliver_chat_bar_extension_launch(session_id, id, cx)
-                }) {
-                    Ok(false) => {}
-                    _ => return,
-                }
+        let Some(mut pending) = self
+            .extensions_snapshot
+            .pending_chat_bar_toggles
+            .remove(&session_id)
+        else {
+            return;
+        };
+        while let Some(id) = pending.pop_front() {
+            if !self.deliver_chat_bar_extension_toggle(session_id, id, cx) {
+                pending.push_front(id);
+                self.extensions_snapshot
+                    .pending_chat_bar_toggles
+                    .insert(session_id, pending);
+                return;
             }
-        })
-        .detach();
+        }
     }
 
     pub(crate) fn update_extension_pin(

@@ -1,7 +1,9 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use gpui::Image;
+
+use crate::{ExtensionId, TerminalSessionId};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum GpuiExtensionPermission {
@@ -134,6 +136,7 @@ pub(crate) struct GpuiExtensionPopupSize {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiExtensionsSnapshot {
     pub(crate) installed: HashMap<String, GpuiInstalledExtension>,
+    pub(crate) pending_chat_bar_toggles: HashMap<TerminalSessionId, VecDeque<ExtensionId>>,
 }
 
 #[derive(Clone, Debug, Default)]

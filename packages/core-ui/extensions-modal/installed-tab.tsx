@@ -8,6 +8,7 @@ export function InstalledTab({
   iconUrlFor,
   onDetails,
   onRemove,
+  onSetChatBarAutoOpen,
   onSetEnabled,
   pendingIds,
 }: {
@@ -15,6 +16,7 @@ export function InstalledTab({
   iconUrlFor: (extension: GhostexInstalledExtension) => string | undefined;
   onDetails: (extension: GhostexInstalledExtension) => void;
   onRemove: (extension: GhostexInstalledExtension) => void;
+  onSetChatBarAutoOpen: (extension: GhostexInstalledExtension, autoOpen: boolean) => void;
   onSetEnabled: (extension: GhostexInstalledExtension, enabled: boolean) => void;
   pendingIds?: ReadonlySet<string>;
 }) {
@@ -40,6 +42,7 @@ export function InstalledTab({
           key={extension.id}
           onDetails={() => onDetails(extension)}
           onRemove={() => onRemove(extension)}
+          onSetChatBarAutoOpen={(autoOpen) => onSetChatBarAutoOpen(extension, autoOpen)}
           onSetEnabled={(enabled) => onSetEnabled(extension, enabled)}
           pending={pendingIds?.has(extension.id)}
         />
