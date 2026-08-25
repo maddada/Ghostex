@@ -19,6 +19,7 @@ import { CommandPalette } from '@/packages/core-ui/command-palette';
 import { DaemonSessionsModal } from '@/packages/core-ui/daemon-sessions-modal';
 import { DelayedSendModal } from '@/packages/core-ui/delayed-send-modal';
 import { DiscoverGhostexModal } from '@/packages/core-ui/discover-ghostex-modal';
+import { ExtensionsModal } from '@/packages/core-ui/extensions-modal';
 import { FirstUserMessageModal } from '@/packages/core-ui/first-user-message-modal';
 import { PinnedPromptsModal } from '@/packages/core-ui/pinned-prompts-modal';
 import { StashedPromptsModal, type StashedPromptsScope } from '@/packages/core-ui/stashed-prompts-modal';
@@ -94,6 +95,7 @@ type AppModalKind =
   | 'daemonSessions'
   | 'delayedSend'
   | 'discoverGhostex'
+  | 'extensionsBrowser'
   | 'exportTranscriptResult'
   | 'watchGhostexVideo'
   | 'hotkeys'
@@ -2227,6 +2229,7 @@ function AppModalHost() {
         appIconState={appIconState}
       />
       <DiscoverGhostexModal isOpen={activeModal === 'discoverGhostex'} onClose={closeModal} theme={theme} />
+      <ExtensionsModal isOpen={activeModal === 'extensionsBrowser'} onClose={closeModal} theme={theme} />
       <WatchGhostexVideoModal isOpen={activeModal === 'watchGhostexVideo'} onClose={closeModal} theme={theme} />
       <FirstLaunchSetupModal
         agentHookStatus={agentHookStatus}
@@ -3510,6 +3513,7 @@ function isModalRenderable({
     case 'previousSessions':
     case 'scratchPad':
     case 'discoverGhostex':
+    case 'extensionsBrowser':
     case 'watchGhostexVideo':
     case 'tipsAndTricks':
     case 'firstLaunchSetup':
