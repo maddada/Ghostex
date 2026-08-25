@@ -186,6 +186,11 @@ jobs:
       - name: Verify clean GPUI release reference contract
         if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.windows_x64 || inputs.windows_arm64 }}
         run: node tooling/release-gpui/verify-reference-contract.mjs --clean
+      # The pin check reads zmx's own build.zig.zon, and zmx is a submodule the
+      # prepare checkout deliberately skips, so init just that path first.
+      - name: Restore the zmx manifest for the Zig pin check
+        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.windows_x64 || inputs.windows_arm64 }}
+        run: git submodule update --init --depth 1 .dependencies/zmx
       - name: Check the Ghostty Zig toolchain pin against the vendored source
         if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.windows_x64 || inputs.windows_arm64 }}
         run: node tooling/release-gpui/check-ghostty-zig-pin.mjs
