@@ -16,15 +16,22 @@ use gpui_component::ElementExt;
 use gpui_component::Side;
 use gpui_component::h_flex;
 use gpui_component::menu::PopupMenu;
-use gpui_component::scroll::ScrollbarShow;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
 use gpui_component::v_flex;
 
 use crate::*;
 
+use super::popup_menu_builders::titlebar_popup_menu_with_scroll_behavior;
+
 impl GhostexGpuiApp {
-    pub(crate) fn build_gpui_titlebar_extensions_popup_menu(&self, menu: PopupMenu) -> PopupMenu {
+    pub(crate) fn build_gpui_titlebar_extensions_popup_menu(
+        &self,
+        menu: PopupMenu,
+        width: f32,
+        max_height: f32,
+        scrollable: bool,
+    ) -> PopupMenu {
         let mut extensions = self
             .extensions_snapshot
             .installed
@@ -38,17 +45,10 @@ impl GhostexGpuiApp {
                 .cmp(&right.title.to_ascii_lowercase())
                 .then_with(|| left.id.cmp(&right.id))
         });
-        let mut menu = menu
-            .min_w(px(TITLEBAR_POPUP_EXTENSIONS_WIDTH))
-            .max_w(px(TITLEBAR_POPUP_EXTENSIONS_WIDTH))
-            .max_h(px(
-                TITLEBAR_POPUP_MENU_MAX_HEIGHT - TITLEBAR_POPUP_MENU_BORDER_CHROME
-            ))
-            .items_padding_bottom(px(0.0))
-            .scrollable(true)
-            .scrollbar_thickness(px(TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH))
-            .scrollbar_show(ScrollbarShow::Scrolling)
-            .check_side(Side::Right);
+        let mut menu =
+            titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
+                .items_padding_bottom(px(0.0))
+                .check_side(Side::Right);
         if extensions.is_empty() {
             menu = menu.menu_element_with_disabled(
                 Box::new(BrowseGpuiExtensions),

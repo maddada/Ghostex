@@ -77,12 +77,39 @@ impl GhostexGpuiApp {
         };
 
         let main_app = cx.entity().downgrade();
-        let content = self.build_gpui_titlebar_popup_content(kind, main_app.clone(), window, cx);
+        let content_height = self.titlebar_popup_content_height(kind);
         let popup_bounds = titlebar_popup_window_bounds_for_trigger_bounds(
             kind,
             trigger_bounds,
-            self.titlebar_popup_content_height(kind),
+            content_height,
             window,
+        );
+        let popup_height = popup_bounds.size.height.as_f32();
+        // PopupMenu's bordered root owns this chrome outside its inner items column.
+        let menu_width =
+            (popup_bounds.size.width.as_f32() - TITLEBAR_POPUP_MENU_BORDER_CHROME).max(0.0);
+        let menu_max_height = (popup_height - TITLEBAR_POPUP_MENU_BORDER_CHROME).max(0.0);
+        /*
+        PopupMenu's scroll handle includes its inner chrome. Creating that
+        handle for a content-sized menu makes the trailing chrome a tiny,
+        blank scroll range on some display scales. Only clipped menus own a
+        scroll viewport; content-sized menus remain ordinary layout.
+        */
+        let menu_scrollable = matches!(
+            kind,
+            GpuiTitlebarPopupKind::Actions
+                | GpuiTitlebarPopupKind::Extensions
+                | GpuiTitlebarPopupKind::Git
+                | GpuiTitlebarPopupKind::OpenTargets
+        ) && content_height > popup_height;
+        let content = self.build_gpui_titlebar_popup_content(
+            kind,
+            main_app.clone(),
+            menu_width,
+            menu_max_height,
+            menu_scrollable,
+            window,
+            cx,
         );
         let display_id = window.display(cx).map(|display| display.id());
         /*
@@ -232,23 +259,41 @@ impl GhostexGpuiApp {
         &self,
         kind: GpuiTitlebarPopupKind,
         main_app: gpui::WeakEntity<GhostexGpuiApp>,
+        menu_width: f32,
+        menu_max_height: f32,
+        menu_scrollable: bool,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> GpuiTitlebarPopupContent {
         match kind {
             GpuiTitlebarPopupKind::Actions => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_titlebar_actions_popup_menu(menu)
+                    self.build_gpui_titlebar_actions_popup_menu(
+                        menu,
+                        menu_width,
+                        menu_max_height,
+                        menu_scrollable,
+                    )
                 }))
             }
             GpuiTitlebarPopupKind::Git => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_titlebar_git_popup_menu(menu)
+                    self.build_gpui_titlebar_git_popup_menu(
+                        menu,
+                        menu_width,
+                        menu_max_height,
+                        menu_scrollable,
+                    )
                 }))
             }
             GpuiTitlebarPopupKind::OpenTargets => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_open_targets_popup_menu(menu)
+                    self.build_gpui_open_targets_popup_menu(
+                        menu,
+                        menu_width,
+                        menu_max_height,
+                        menu_scrollable,
+                    )
                 }))
             }
             GpuiTitlebarPopupKind::Resources => {
@@ -278,7 +323,12 @@ impl GhostexGpuiApp {
             }
             GpuiTitlebarPopupKind::Extensions => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_titlebar_extensions_popup_menu(menu)
+                    self.build_gpui_titlebar_extensions_popup_menu(
+                        menu,
+                        menu_width,
+                        menu_max_height,
+                        menu_scrollable,
+                    )
                 }))
             }
         }

@@ -27,19 +27,39 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
+pub(crate) fn titlebar_popup_menu_with_scroll_behavior(
+    menu: PopupMenu,
+    width: f32,
+    max_height: f32,
+    scrollable: bool,
+) -> PopupMenu {
+    let menu = menu
+        .min_w(px(width))
+        .max_w(px(width))
+        .max_h(px(max_height))
+        .scrollable(scrollable);
+    if scrollable {
+        menu.scrollbar_thickness(px(TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH))
+            .scrollbar_show(ScrollbarShow::Scrolling)
+    } else {
+        menu
+    }
+}
+
 impl GhostexGpuiApp {
-    pub(crate) fn build_gpui_open_targets_popup_menu(&self, menu: PopupMenu) -> PopupMenu {
+    pub(crate) fn build_gpui_open_targets_popup_menu(
+        &self,
+        menu: PopupMenu,
+        width: f32,
+        max_height: f32,
+        scrollable: bool,
+    ) -> PopupMenu {
         let targets = gpui_visible_open_targets_from_current_settings();
         let active_target_index = self.active_open_target_index(&targets);
-        let mut menu = menu
-            .min_w(px(TITLEBAR_POPUP_COMPACT_WIDTH))
-            .max_w(px(TITLEBAR_POPUP_COMPACT_WIDTH))
-            .max_h(px(TITLEBAR_POPUP_MENU_INNER_MAX_HEIGHT))
-            .items_padding_bottom(px(0.0))
-            .scrollable(true)
-            .scrollbar_thickness(px(TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH))
-            .scrollbar_show(ScrollbarShow::Scrolling)
-            .check_side(Side::Right);
+        let mut menu =
+            titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
+                .items_padding_bottom(px(0.0))
+                .check_side(Side::Right);
         for (target_index, target) in targets.iter().enumerate() {
             let label = target.label.clone();
             let (icon_path, icon_size) = titlebar_open_target_icon_for_id(&target.id);
@@ -66,7 +86,13 @@ impl GhostexGpuiApp {
         })
     }
 
-    pub(crate) fn build_gpui_titlebar_actions_popup_menu(&self, menu: PopupMenu) -> PopupMenu {
+    pub(crate) fn build_gpui_titlebar_actions_popup_menu(
+        &self,
+        menu: PopupMenu,
+        width: f32,
+        max_height: f32,
+        scrollable: bool,
+    ) -> PopupMenu {
         let actions = self.visible_gpui_titlebar_actions();
         let active_command_id = self
             .active_action_command_id
@@ -78,15 +104,10 @@ impl GhostexGpuiApp {
             })
             .or_else(|| actions.iter().find(|action| action.is_configured()))
             .map(|action| action.command_id.clone());
-        let mut menu = menu
-            .min_w(px(TITLEBAR_POPUP_COMPACT_WIDTH))
-            .max_w(px(TITLEBAR_POPUP_COMPACT_WIDTH))
-            .max_h(px(TITLEBAR_POPUP_MENU_INNER_MAX_HEIGHT))
-            .items_padding_bottom(px(0.0))
-            .scrollable(true)
-            .scrollbar_thickness(px(TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH))
-            .scrollbar_show(ScrollbarShow::Scrolling)
-            .check_side(Side::Right);
+        let mut menu =
+            titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
+                .items_padding_bottom(px(0.0))
+                .check_side(Side::Right);
 
         if actions.is_empty() {
             menu = menu.menu_element_with_disabled(
@@ -119,15 +140,16 @@ impl GhostexGpuiApp {
             })
     }
 
-    pub(crate) fn build_gpui_titlebar_git_popup_menu(&self, menu: PopupMenu) -> PopupMenu {
-        let mut menu = menu
-            .min_w(px(TITLEBAR_POPUP_GIT_WIDTH))
-            .max_w(px(TITLEBAR_POPUP_GIT_WIDTH))
-            .max_h(px(TITLEBAR_POPUP_MENU_INNER_MAX_HEIGHT))
-            .scrollable(true)
-            .scrollbar_thickness(px(TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH))
-            .scrollbar_show(ScrollbarShow::Scrolling)
-            .check_side(Side::Right);
+    pub(crate) fn build_gpui_titlebar_git_popup_menu(
+        &self,
+        menu: PopupMenu,
+        width: f32,
+        max_height: f32,
+        scrollable: bool,
+    ) -> PopupMenu {
+        let mut menu =
+            titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
+                .check_side(Side::Right);
 
         let Some(state) = self.titlebar_git_menu_state.as_ref() else {
             return menu.menu_element_with_disabled(

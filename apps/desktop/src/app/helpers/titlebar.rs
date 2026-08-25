@@ -82,7 +82,7 @@ pub(crate) fn titlebar_popup_menu_height_for_rows_with_chrome(
 ) -> f32 {
     let rows: f32 = row_heights.iter().sum();
     let gaps = TITLEBAR_POPUP_MENU_ITEM_GAP * row_heights.len().saturating_sub(1) as f32;
-    (rows + gaps + vertical_chrome).min(TITLEBAR_POPUP_MENU_MAX_HEIGHT)
+    rows + gaps + vertical_chrome
 }
 
 pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
