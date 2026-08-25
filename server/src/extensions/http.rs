@@ -9,13 +9,14 @@ use crate::{
     server::{routed_json, AppState, RoutedResponse},
 };
 
-use super::{ExtensionError, ExtensionResult, ExtensionStatePatch};
+use super::{ExtensionError, ExtensionLaunchContext, ExtensionResult, ExtensionStatePatch};
 
 pub(crate) async fn handle_extensions_http(
     state: &AppState,
     endpoint_path: String,
     request_id: String,
     body: &Value,
+    token_extension_id: Option<String>,
 ) -> RoutedResponse {
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
@@ -33,7 +34,12 @@ pub(crate) async fn handle_extensions_http(
     let registry = state.extension_registry.clone();
     let operation_path = endpoint_path.clone();
     let outcome = tokio::task::spawn_blocking(move || {
-        dispatch_extension_operation(&registry, &operation_path, params)
+        dispatch_extension_operation(
+            &registry,
+            &operation_path,
+            params,
+            token_extension_id.as_deref(),
+        )
     })
     .await
     .unwrap_or_else(|error| {
@@ -55,9 +61,16 @@ fn dispatch_extension_operation(
     registry: &super::ExtensionRegistry,
     endpoint_path: &str,
     params: Map<String, Value>,
+    token_extension_id: Option<&str>,
 ) -> ExtensionResult<Value> {
     match endpoint_path {
-        "/api/listExtensions" => Ok(json!({ "extensions": registry.list()? })),
+        "/api/listExtensions" => {
+            let mut extensions = registry.list()?;
+            if let Some(id) = token_extension_id {
+                extensions.retain(|extension| extension.id == id);
+            }
+            Ok(json!({ "extensions": extensions }))
+        }
         "/api/extensionsCatalog" => serde_json::to_value(registry.catalog()?).map_err(|error| {
             ExtensionError::internal(format!("Could not encode catalog: {error}"))
         }),
@@ -79,9 +92,72 @@ fn dispatch_extension_operation(
                 })?;
             Ok(json!({ "extension": registry.update_state(&id, patch)? }))
         }
+        "/api/startExtension" => {
+            reject_extension_token(token_extension_id)?;
+            let id = required_text(&params, "id")?;
+            let context: ExtensionLaunchContext =
+                serde_json::from_value(params.get("context").cloned().unwrap_or_else(|| json!({})))
+                    .map_err(|error| {
+                        ExtensionError::bad_request(format!(
+                            "Invalid extension launch context: {error}"
+                        ))
+                    })?;
+            Ok(json!({ "status": registry.start(&id, context)? }))
+        }
+        "/api/stopExtension" => {
+            reject_extension_token(token_extension_id)?;
+            let id = required_text(&params, "id")?;
+            Ok(json!({ "status": registry.stop(&id)? }))
+        }
+        "/api/extensionStatus" => {
+            let id = authorized_extension_id(&params, token_extension_id)?;
+            Ok(json!({ "status": registry.status(&id)? }))
+        }
+        "/api/extensionBadge" => {
+            let id = authorized_extension_id(&params, token_extension_id)?;
+            let lines = params
+                .get("lines")
+                .and_then(Value::as_array)
+                .ok_or_else(|| ExtensionError::bad_request("Extension badge requires lines."))?
+                .iter()
+                .map(|line| {
+                    line.as_str().map(str::to_string).ok_or_else(|| {
+                        ExtensionError::bad_request("Extension badge lines must be strings.")
+                    })
+                })
+                .collect::<ExtensionResult<Vec<_>>>()?;
+            Ok(json!({ "id": id, "badge": registry.set_badge(&id, lines)? }))
+        }
         _ => Err(ExtensionError::not_found(format!(
             "Unknown extension endpoint: {endpoint_path}"
         ))),
+    }
+}
+
+fn authorized_extension_id(
+    params: &Map<String, Value>,
+    token_extension_id: Option<&str>,
+) -> ExtensionResult<String> {
+    let requested = optional_text(params, "id");
+    match (token_extension_id, requested) {
+        (Some(authorized), Some(requested)) if authorized != requested => Err(
+            ExtensionError::bad_request("Extension API token cannot act on another extension."),
+        ),
+        (Some(authorized), _) => Ok(authorized.to_string()),
+        (None, Some(requested)) => Ok(requested),
+        (None, None) => Err(ExtensionError::bad_request(
+            "Extension request requires id.",
+        )),
+    }
+}
+
+fn reject_extension_token(token_extension_id: Option<&str>) -> ExtensionResult<()> {
+    if token_extension_id.is_some() {
+        Err(ExtensionError::bad_request(
+            "Extension API tokens cannot start or stop extension processes.",
+        ))
+    } else {
+        Ok(())
     }
 }
 

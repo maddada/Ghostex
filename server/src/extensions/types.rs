@@ -180,6 +180,62 @@ pub struct InstalledExtension {
     pub id: String,
     pub manifest: ExtensionManifest,
     pub state: ExtensionStoreEntry,
+    pub runtime: ExtensionRuntimeStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<ExtensionBadge>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExtensionRuntimeState {
+    Stopped,
+    Starting,
+    Ready,
+    Failed,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionRuntimeStatus {
+    pub state: ExtensionRuntimeState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl ExtensionRuntimeStatus {
+    pub(crate) fn stopped() -> Self {
+        Self {
+            state: ExtensionRuntimeState::Stopped,
+            url: None,
+            pid: None,
+            error: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionBadge {
+    pub lines: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionLaunchContext {
+    #[serde(default)]
+    pub session_id: String,
+    #[serde(default)]
+    pub project_path: String,
+    #[serde(default)]
+    pub project_name: String,
+    #[serde(default)]
+    pub worktree: bool,
+    #[serde(default)]
+    pub worktree_branch: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

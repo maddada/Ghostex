@@ -581,7 +581,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/extensionsCatalog"
         | "/api/installExtension"
         | "/api/uninstallExtension"
-        | "/api/updateExtensionState" => remote_allowed(path),
+        | "/api/updateExtensionState"
+        | "/api/startExtension"
+        | "/api/stopExtension"
+        | "/api/extensionStatus"
+        | "/api/extensionBadge" => remote_allowed(path),
         "/api/createQuickProject" => full_local(path),
         /*
         CDXC:AgentHooks 2026-06-19-14:15:

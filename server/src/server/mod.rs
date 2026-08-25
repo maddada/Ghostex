@@ -68,7 +68,7 @@ use crate::{
         DomainRepository, DomainStateError,
     },
     events::{EventClientSender, GxserverEventHub},
-    extensions::{handle_extensions_http, ExtensionRegistry},
+    extensions::{handle_extensions_http, serve_extension_static, ExtensionRegistry},
     http_client,
     identity::ensure_gxserver_identity,
     ids::{is_gxserver_project_id, is_gxserver_session_id},
@@ -447,7 +447,10 @@ pub async fn run_gxserver_foreground(
         build_identity,
         config,
         event_hub,
-        extension_registry: ExtensionRegistry::new(&paths),
+        extension_registry: ExtensionRegistry::new_with_api_url(
+            &paths,
+            format!("http://{local_host}:{local_port}"),
+        ),
         logger: logger.clone(),
         metadata: metadata.clone(),
         migration,
@@ -583,6 +586,7 @@ pub async fn run_gxserver_foreground(
     session_git_status_refresh_task.abort();
     worktree_branch_rename_task.abort();
     session_chat_follower_sync_task.abort();
+    state.extension_registry.stop_all();
     serve_result.with_context(|| "run gxserver HTTP listener")?;
 
     remove_runtime_metadata(&paths)?;
@@ -693,6 +697,9 @@ async fn route_http(
     if path == "/api/webBootstrap" {
         return handle_web_bootstrap(&state, &parts.headers, &parts.uri, method, request_id);
     }
+    if method == Method::GET && path.starts_with("/ext/") {
+        return serve_extension_static(state.extension_registry.clone(), path).await;
+    }
     if method == Method::GET && !path.starts_with("/api/") {
         return serve_web_static(&state.config, &path).await;
     }
@@ -801,7 +808,13 @@ async fn route_http(
         );
     }
 
-    if endpoint.requires_auth && !is_authorized_headers(&parts.headers, &state.auth_token) {
+    let token_extension_id = state
+        .extension_registry
+        .authorize_api_token(&parts.headers, &endpoint.path);
+    if endpoint.requires_auth
+        && !is_authorized_headers(&parts.headers, &state.auth_token)
+        && token_extension_id.is_none()
+    {
         return routed_json(
             Some(endpoint.path),
             StatusCode::UNAUTHORIZED,
@@ -846,7 +859,7 @@ async fn route_http(
         json!({})
     };
 
-    if endpoint.requires_protocol_version {
+    if endpoint.requires_protocol_version && token_extension_id.is_none() {
         let protocol_version = read_protocol_version(&parts.headers, &parts.uri, Some(&body_json));
         if !is_expected_protocol_version(protocol_version.as_ref()) {
             return routed_json(
@@ -2022,8 +2035,19 @@ async fn route_http(
         | "/api/extensionsCatalog"
         | "/api/installExtension"
         | "/api/uninstallExtension"
-        | "/api/updateExtensionState" => {
-            handle_extensions_http(&state, endpoint.path, request_id, &body_json).await
+        | "/api/updateExtensionState"
+        | "/api/startExtension"
+        | "/api/stopExtension"
+        | "/api/extensionStatus"
+        | "/api/extensionBadge" => {
+            handle_extensions_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                token_extension_id,
+            )
+            .await
         }
         "/api/control/stop" => {
             broadcast_server_stopping(&state);

@@ -120,6 +120,29 @@ export interface GhostexInstalledExtension {
   id: string;
   manifest: GhostexExtensionManifest;
   state: GhostexExtensionStoreEntry;
+  runtime: GhostexExtensionRuntimeStatus;
+  badge?: GhostexExtensionBadge;
+}
+
+export type GhostexExtensionRuntimeState = 'stopped' | 'starting' | 'ready' | 'failed';
+
+export interface GhostexExtensionRuntimeStatus {
+  state: GhostexExtensionRuntimeState;
+  url?: string;
+  pid?: number;
+  error?: string;
+}
+
+export interface GhostexExtensionBadge {
+  lines: string[];
+}
+
+export interface GhostexExtensionLaunchContext {
+  sessionId?: string;
+  projectPath?: string;
+  projectName?: string;
+  worktree?: boolean;
+  worktreeBranch?: string;
 }
 
 export type GhostexExtensionCatalogEntry = GhostexExtensionManifest & {
@@ -159,11 +182,37 @@ export interface GhostexSetExtensionStateRequest {
   patch: GhostexExtensionStatePatch;
 }
 
+export interface GhostexStartExtensionRequest {
+  type: 'startExtension';
+  id: string;
+  context?: GhostexExtensionLaunchContext;
+}
+
+export interface GhostexStopExtensionRequest {
+  type: 'stopExtension';
+  id: string;
+}
+
+export interface GhostexExtensionStatusRequest {
+  type: 'extensionStatus';
+  id: string;
+}
+
+export interface GhostexSetExtensionBadgeRequest {
+  type: 'setExtensionBadge';
+  id: string;
+  lines: string[];
+}
+
 export type GhostexExtensionSidebarRequest =
   | GhostexListExtensionsRequest
   | GhostexInstallExtensionRequest
   | GhostexUninstallExtensionRequest
-  | GhostexSetExtensionStateRequest;
+  | GhostexSetExtensionStateRequest
+  | GhostexStartExtensionRequest
+  | GhostexStopExtensionRequest
+  | GhostexExtensionStatusRequest
+  | GhostexSetExtensionBadgeRequest;
 
 export interface GhostexListExtensionsResult {
   extensions: GhostexInstalledExtension[];
@@ -186,4 +235,13 @@ export interface GhostexUninstallExtensionResult {
 
 export interface GhostexSetExtensionStateResult {
   extension: GhostexInstalledExtension;
+}
+
+export interface GhostexExtensionRuntimeResult {
+  status: GhostexExtensionRuntimeStatus;
+}
+
+export interface GhostexSetExtensionBadgeResult {
+  id: string;
+  badge: GhostexExtensionBadge;
 }

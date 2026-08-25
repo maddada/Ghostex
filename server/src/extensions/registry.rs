@@ -9,8 +9,9 @@ use crate::paths::GxserverPaths;
 use super::{
     activate_staged_payload, apply_state_patch, catalog_zip_url, default_store_entry,
     fetch_catalog, read_manifest, read_store, stage_local_payload, stage_zip_payload,
-    store_entry_for_install, validate_extension_id, write_store, ExtensionCatalogSnapshot,
-    ExtensionError, ExtensionResult, ExtensionStatePatch, InstalledExtension,
+    store_entry_for_install, validate_extension_id, write_store, ExtensionBadge,
+    ExtensionCatalogSnapshot, ExtensionError, ExtensionLaunchContext, ExtensionResult,
+    ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch, InstalledExtension,
 };
 
 #[derive(Clone)]
@@ -18,14 +19,16 @@ pub(crate) struct ExtensionRegistry {
     extensions_dir: PathBuf,
     store_file: PathBuf,
     gate: Arc<Mutex<()>>,
+    runtime: ExtensionRuntime,
 }
 
 impl ExtensionRegistry {
-    pub(crate) fn new(paths: &GxserverPaths) -> Self {
+    pub(crate) fn new_with_api_url(paths: &GxserverPaths, api_url: String) -> Self {
         Self {
             extensions_dir: paths.extensions_dir.clone(),
             store_file: paths.extensions_store_file.clone(),
             gate: Arc::new(Mutex::new(())),
+            runtime: ExtensionRuntime::new(api_url),
         }
     }
 
@@ -78,6 +81,7 @@ impl ExtensionRegistry {
 
     pub(crate) fn uninstall(&self, id: &str) -> ExtensionResult<()> {
         validate_extension_id(id)?;
+        self.runtime.stop(id)?;
         let _guard = self.lock()?;
         let destination = self.installed_dir().join(id);
         let metadata = fs::symlink_metadata(&destination).map_err(|error| {
@@ -131,7 +135,12 @@ impl ExtensionRegistry {
             .entry(id.to_string())
             .or_insert_with(|| default_store_entry(&manifest));
         apply_state_patch(&manifest, state, patch)?;
+        if !state.enabled {
+            self.runtime.stop(id)?;
+        }
         let installed = InstalledExtension {
+            runtime: self.runtime_status(id, &manifest, state),
+            badge: self.runtime.badge(id),
             id: id.to_string(),
             manifest,
             state: state.clone(),
@@ -159,12 +168,15 @@ impl ExtensionRegistry {
         manifest: super::ExtensionManifest,
     ) -> ExtensionResult<InstalledExtension> {
         let id = manifest.name.clone();
+        self.runtime.stop(&id)?;
         let mut store = read_store(&self.store_file)?;
         let state = store_entry_for_install(&manifest, store.get(&id));
         activate_staged_payload(&self.installed_dir(), &id, staged_payload)?;
         store.insert(id.clone(), state.clone());
         write_store(&self.store_file, &store)?;
         Ok(InstalledExtension {
+            runtime: self.runtime_status(&id, &manifest, &state),
+            badge: self.runtime.badge(&id),
             id,
             manifest,
             state,
@@ -223,6 +235,8 @@ impl ExtensionRegistry {
                 .cloned()
                 .unwrap_or_else(|| default_store_entry(&manifest));
             installed.push(InstalledExtension {
+                runtime: self.runtime_status(&id, &manifest, &state),
+                badge: self.runtime.badge(&id),
                 id,
                 manifest,
                 state,
@@ -233,6 +247,137 @@ impl ExtensionRegistry {
 
     fn installed_dir(&self) -> PathBuf {
         self.extensions_dir.join("installed")
+    }
+
+    pub(crate) fn static_root(&self, id: &str) -> ExtensionResult<PathBuf> {
+        validate_extension_id(id)?;
+        let payload_dir = self.installed_dir().join(id);
+        let manifest = read_manifest(&payload_dir, Some(id)).map_err(|error| {
+            if payload_dir.exists() {
+                error
+            } else {
+                ExtensionError::not_found(format!("Extension {id:?} is not installed."))
+            }
+        })?;
+        let state = read_store(&self.store_file)?
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| default_store_entry(&manifest));
+        if !state.enabled {
+            return Err(ExtensionError::not_found(format!(
+                "Extension {id:?} is disabled."
+            )));
+        }
+        let static_dir = manifest
+            .server
+            .and_then(|server| server.static_dir)
+            .ok_or_else(|| {
+                ExtensionError::not_found(format!("Extension {id:?} is not a static extension."))
+            })?;
+        let canonical_payload = fs::canonicalize(&payload_dir).map_err(|error| {
+            ExtensionError::internal(format!(
+                "Could not resolve installed extension {id}: {error}"
+            ))
+        })?;
+        let canonical_static = fs::canonicalize(payload_dir.join(static_dir)).map_err(|error| {
+            ExtensionError::internal(format!(
+                "Could not resolve static files for extension {id}: {error}"
+            ))
+        })?;
+        if !canonical_static.starts_with(&canonical_payload) || !canonical_static.is_dir() {
+            return Err(ExtensionError::bad_request(format!(
+                "Static files for extension {id:?} must stay inside its installed payload."
+            )));
+        }
+        Ok(canonical_static)
+    }
+
+    pub(crate) fn start(
+        &self,
+        id: &str,
+        context: ExtensionLaunchContext,
+    ) -> ExtensionResult<ExtensionRuntimeStatus> {
+        validate_extension_id(id)?;
+        let _guard = self.lock()?;
+        let payload_dir = self.installed_dir().join(id);
+        let manifest = read_manifest(&payload_dir, Some(id)).map_err(|error| {
+            if payload_dir.exists() {
+                error
+            } else {
+                ExtensionError::not_found(format!("Extension {id:?} is not installed."))
+            }
+        })?;
+        let state = read_store(&self.store_file)?
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| default_store_entry(&manifest));
+        if !state.enabled {
+            return Err(ExtensionError::bad_request(format!(
+                "Extension {id:?} is disabled."
+            )));
+        }
+        self.runtime.start(&payload_dir, &manifest, context)
+    }
+
+    pub(crate) fn stop(&self, id: &str) -> ExtensionResult<ExtensionRuntimeStatus> {
+        validate_extension_id(id)?;
+        self.runtime.stop(id)
+    }
+
+    pub(crate) fn status(&self, id: &str) -> ExtensionResult<ExtensionRuntimeStatus> {
+        validate_extension_id(id)?;
+        let payload_dir = self.installed_dir().join(id);
+        let manifest = read_manifest(&payload_dir, Some(id)).map_err(|error| {
+            if payload_dir.exists() {
+                error
+            } else {
+                ExtensionError::not_found(format!("Extension {id:?} is not installed."))
+            }
+        })?;
+        let state = read_store(&self.store_file)?
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| default_store_entry(&manifest));
+        Ok(self.runtime_status(id, &manifest, &state))
+    }
+
+    pub(crate) fn set_badge(
+        &self,
+        id: &str,
+        lines: Vec<String>,
+    ) -> ExtensionResult<ExtensionBadge> {
+        validate_extension_id(id)?;
+        if !self.installed_dir().join(id).is_dir() {
+            return Err(ExtensionError::not_found(format!(
+                "Extension {id:?} is not installed."
+            )));
+        }
+        self.runtime.set_badge(id, lines)
+    }
+
+    pub(crate) fn authorize_api_token(
+        &self,
+        headers: &axum::http::HeaderMap,
+        endpoint: &str,
+    ) -> Option<String> {
+        self.runtime.authorize(headers, endpoint)
+    }
+
+    pub(crate) fn stop_all(&self) {
+        self.runtime.stop_all();
+    }
+
+    fn runtime_status(
+        &self,
+        id: &str,
+        manifest: &super::ExtensionManifest,
+        state: &super::ExtensionStoreEntry,
+    ) -> ExtensionRuntimeStatus {
+        if state.enabled {
+            self.runtime.status(id, manifest)
+        } else {
+            ExtensionRuntimeStatus::stopped()
+        }
     }
 
     fn lock(&self) -> ExtensionResult<std::sync::MutexGuard<'_, ()>> {
