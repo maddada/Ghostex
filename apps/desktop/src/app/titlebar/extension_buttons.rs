@@ -150,7 +150,7 @@ impl GhostexGpuiApp {
             84.0
         };
         let tooltip = extension.title.clone();
-        let icon_data_url = extension.icon_data_url.clone();
+        let icon_image = extension.icon_image.clone();
 
         h_flex()
             .id(format!(
@@ -214,7 +214,7 @@ impl GhostexGpuiApp {
                     }
                 }
             })
-            .child(img(icon_data_url).size(px(18.0)))
+            .child(img(icon_image).size(px(18.0)))
             .when(!badge_lines.is_empty(), |this| {
                 this.child(
                     v_flex()

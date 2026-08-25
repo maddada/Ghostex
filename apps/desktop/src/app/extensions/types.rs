@@ -1,4 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
+
+use gpui::Image;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum GpuiExtensionPermission {
@@ -65,7 +68,7 @@ impl GpuiExtensionPlacement {
 pub(crate) struct GpuiInstalledExtension {
     pub(crate) id: String,
     pub(crate) title: String,
-    pub(crate) icon_data_url: String,
+    pub(crate) icon_image: Arc<Image>,
     pub(crate) declared_permissions: HashSet<GpuiExtensionPermission>,
     pub(crate) granted_permissions: HashSet<GpuiExtensionPermission>,
     pub(crate) placements: Vec<GpuiExtensionPlacement>,

@@ -2,8 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Component, Path};
 use std::time::Duration;
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use gpui::{Image, ImageFormat};
 
 use crate::GhostexGpuiApp;
 use crate::app::helpers::{gpui_gxserver_domain_projects_result, gpui_gxserver_rpc_result};
@@ -92,7 +91,7 @@ fn parse_installed_extension(value: &serde_json::Value) -> Option<GpuiInstalledE
     let manifest = object.get("manifest")?.as_object()?;
     let state = object.get("state")?.as_object()?;
     let title = text(manifest.get("title"))?.to_string();
-    let icon_data_url = extension_icon_data_url(&id, text(manifest.get("icon"))?)?;
+    let icon_image = extension_icon_image(&id, text(manifest.get("icon"))?)?;
     let declared_permissions = parse_permissions(manifest.get("permissions"));
     let granted_permissions = parse_permissions(state.get("grantedPermissions"));
     let placements = manifest
@@ -137,7 +136,7 @@ fn parse_installed_extension(value: &serde_json::Value) -> Option<GpuiInstalledE
     Some(GpuiInstalledExtension {
         id,
         title,
-        icon_data_url,
+        icon_image,
         declared_permissions,
         granted_permissions,
         placements,
@@ -154,7 +153,7 @@ fn parse_installed_extension(value: &serde_json::Value) -> Option<GpuiInstalledE
     })
 }
 
-fn extension_icon_data_url(id: &str, icon: &str) -> Option<String> {
+fn extension_icon_image(id: &str, icon: &str) -> Option<std::sync::Arc<Image>> {
     let icon = Path::new(icon);
     if icon.is_absolute()
         || icon
@@ -171,10 +170,7 @@ fn extension_icon_data_url(id: &str, icon: &str) -> Option<String> {
     if bytes.is_empty() || bytes.len() > 256 * 1024 {
         return None;
     }
-    Some(format!(
-        "data:image/svg+xml;base64,{}",
-        BASE64_STANDARD.encode(bytes)
-    ))
+    Some(std::sync::Arc::new(Image::from_bytes(ImageFormat::Svg, bytes)))
 }
 
 fn parse_permissions(value: Option<&serde_json::Value>) -> HashSet<GpuiExtensionPermission> {

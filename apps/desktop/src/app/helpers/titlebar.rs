@@ -781,7 +781,7 @@ pub(crate) fn titlebar_popup_extension_menu_row(
                 .size(px(20.0))
                 .items_center()
                 .justify_center()
-                .child(img(extension.icon_data_url).size(px(18.0))),
+                .child(img(extension.icon_image).size(px(18.0))),
         )
         .child(
             div()
