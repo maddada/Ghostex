@@ -310,6 +310,7 @@ impl GhostexGpuiApp {
                     TitlebarMode::Kanban => ProjectWorkareaCefSurfaceSlotKey::Kanban,
                     TitlebarMode::Automate => ProjectWorkareaCefSurfaceSlotKey::Automate,
                     TitlebarMode::Manage => ProjectWorkareaCefSurfaceSlotKey::Manage,
+                    TitlebarMode::Extension(id) => ProjectWorkareaCefSurfaceSlotKey::Extension(id),
                     TitlebarMode::Agents | TitlebarMode::Browser => return false,
                 };
                 self.project_workarea_runtime_cef_surface_for_render(slot_key)

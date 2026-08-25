@@ -2124,6 +2124,9 @@ impl GhostexGpuiApp {
         if mode == TitlebarMode::Browser && self.project_editor_shell.is_mode_awake(mode) {
             self.sync_active_browser_tab_to_surface(window, cx);
         } else {
+            if let TitlebarMode::Extension(id) = mode {
+                self.ensure_extension_view_runtime_for_current_context(id, cx);
+            }
             self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
             self.update_active_mode_cef_child_visibility(cx);
         }

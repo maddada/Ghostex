@@ -1324,7 +1324,8 @@ impl GhostexGpuiApp {
                 TitlebarMode::Source
                 | TitlebarMode::Kanban
                 | TitlebarMode::Automate
-                | TitlebarMode::Manage => ShellFocusTarget::ProjectEditorSurface(mode),
+                | TitlebarMode::Manage
+                | TitlebarMode::Extension(_) => ShellFocusTarget::ProjectEditorSurface(mode),
             };
             self.set_shell_focus(focus);
             if mode == TitlebarMode::Browser {
@@ -1385,7 +1386,8 @@ impl GhostexGpuiApp {
             TitlebarMode::Source
             | TitlebarMode::Kanban
             | TitlebarMode::Automate
-            | TitlebarMode::Manage => ShellFocusTarget::ProjectEditorSurface(mode),
+            | TitlebarMode::Manage
+            | TitlebarMode::Extension(_) => ShellFocusTarget::ProjectEditorSurface(mode),
             TitlebarMode::Agents => return false,
         };
         self.set_shell_focus(focus);
@@ -2338,7 +2340,10 @@ impl GhostexGpuiApp {
             | TitlebarMode::Browser
             | TitlebarMode::Kanban
             | TitlebarMode::Automate
-            | TitlebarMode::Manage => self.project_editor_surface_bounds_for_mode(mode).is_some(),
+            | TitlebarMode::Manage
+            | TitlebarMode::Extension(_) => {
+                self.project_editor_surface_bounds_for_mode(mode).is_some()
+            }
             TitlebarMode::Agents => false,
         };
 

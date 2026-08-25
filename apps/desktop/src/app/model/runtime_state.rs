@@ -419,6 +419,7 @@ impl ProjectScopedWorkareaAvailability {
         */
         match mode {
             TitlebarMode::Agents => true,
+            TitlebarMode::Extension(_) => self.project_context.has_project_scoped_workareas(),
             TitlebarMode::Source => self.project_features.source && !self.active_project_is_remote,
             TitlebarMode::Browser | TitlebarMode::Kanban | TitlebarMode::Automate => {
                 self.project_context.has_project_scoped_workareas()
@@ -492,6 +493,7 @@ pub(crate) enum ProjectWorkareaCefSurfaceSlotKey {
     Kanban,
     Automate,
     Manage,
+    Extension(ExtensionId),
 }
 
 impl ProjectWorkareaCefSurfaceSlotKey {
@@ -505,6 +507,7 @@ impl ProjectWorkareaCefSurfaceSlotKey {
             Self::Kanban => "kanban",
             Self::Automate => "automate",
             Self::Manage => "manage",
+            Self::Extension(id) => id.as_str(),
         }
     }
 
@@ -514,6 +517,7 @@ impl ProjectWorkareaCefSurfaceSlotKey {
             Self::Kanban => TitlebarMode::Kanban,
             Self::Automate => TitlebarMode::Automate,
             Self::Manage => TitlebarMode::Manage,
+            Self::Extension(id) => TitlebarMode::Extension(id),
         }
     }
 

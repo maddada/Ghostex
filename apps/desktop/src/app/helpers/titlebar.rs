@@ -17,6 +17,8 @@ use windows_sys::Win32::Security::Cryptography::{
 };
 
 use anyhow::{Context as _, Result};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use futures::StreamExt as _;
 use gpui::http_client::HttpRequestExt as _;
 use gpui::{
@@ -1752,6 +1754,7 @@ pub(crate) fn gpui_titlebar_resources_project_editor_kind(
         ProjectWorkareaCefSurfaceSlotKey::Kanban => "tasks",
         ProjectWorkareaCefSurfaceSlotKey::Automate => "automate",
         ProjectWorkareaCefSurfaceSlotKey::Manage => "manage",
+        ProjectWorkareaCefSurfaceSlotKey::Extension(_) => "extension",
     }
 }
 
@@ -2509,6 +2512,56 @@ pub(crate) fn titlebar_mode_switcher_items(
     availability.titlebar_mode_switcher_items()
 }
 
+pub(crate) struct GpuiExtensionViewPresentation {
+    pub(crate) title: String,
+    pub(crate) icon_data_url: String,
+    pub(crate) server_is_static: bool,
+}
+
+pub(crate) fn gpui_extension_view_presentation(
+    id: ExtensionId,
+) -> Option<GpuiExtensionViewPresentation> {
+    let payload_dir = shared_settings::ghostex_storage_paths()
+        .extensions_dir()
+        .join("installed")
+        .join(id.as_str());
+    let manifest_text = std::fs::read_to_string(payload_dir.join("ghostex-extension.json")).ok()?;
+    let manifest = serde_json::from_str::<serde_json::Value>(&manifest_text)
+        .ok()?
+        .as_object()?
+        .clone();
+    if manifest.get("name")?.as_str()? != id.as_str() {
+        return None;
+    }
+    let title = manifest.get("title")?.as_str()?.trim().to_string();
+    if title.is_empty() {
+        return None;
+    }
+    let icon_path = std::path::Path::new(manifest.get("icon")?.as_str()?);
+    if icon_path.is_absolute()
+        || icon_path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir | std::path::Component::RootDir
+            )
+        })
+    {
+        return None;
+    }
+    let icon = std::fs::read(payload_dir.join(icon_path)).ok()?;
+    if icon.is_empty() || icon.len() > 256 * 1024 {
+        return None;
+    }
+    Some(GpuiExtensionViewPresentation {
+        title,
+        icon_data_url: format!("data:image/svg+xml;base64,{}", BASE64_STANDARD.encode(icon)),
+        server_is_static: manifest
+            .get("server")
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|server| server.get("static").is_some()),
+    })
+}
+
 pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(
     mode: TitlebarMode,
 ) -> Option<&'static str> {
@@ -2518,7 +2571,7 @@ pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(
         TitlebarMode::Kanban => Some(KANBAN_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Automate => Some(AUTOMATE_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Manage => Some(DOCS_VIEW_TAB_HIDDEN_SETTINGS_KEY),
-        TitlebarMode::Agents => None,
+        TitlebarMode::Agents | TitlebarMode::Extension(_) => None,
     }
 }
 
@@ -2536,6 +2589,7 @@ pub(crate) fn gpui_titlebar_mode_plugin_display_name(mode: TitlebarMode) -> &'st
         TitlebarMode::Kanban => "Kanban",
         TitlebarMode::Automate => "Automate",
         TitlebarMode::Manage => "Docs",
+        TitlebarMode::Extension(id) => id.as_str(),
     }
 }
 

@@ -299,9 +299,19 @@ impl GhostexGpuiApp {
             .h(px(TITLEBAR_CONTROL_HEIGHT))
             .items_center();
         for (index, item) in items.into_iter().enumerate() {
+            let presentation = match item.mode {
+                TitlebarMode::Extension(id) => gpui_extension_view_presentation(id),
+                _ => None,
+            };
+            let label = presentation
+                .as_ref()
+                .map(|presentation| presentation.title.clone())
+                .unwrap_or_else(|| item.mode.display_label().to_string());
+            let icon_data_url = presentation.map(|presentation| presentation.icon_data_url);
             switcher = switcher.child(self.render_mode_tab(
                 item.mode,
-                item.mode.display_label(),
+                label,
+                icon_data_url,
                 index + 1 == mode_count,
                 item.is_available,
                 item.disabled_reason,
@@ -315,7 +325,12 @@ impl GhostexGpuiApp {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
-        let label = self.active_mode.display_label();
+        let label = match self.active_mode {
+            TitlebarMode::Extension(id) => gpui_extension_view_presentation(id)
+                .map(|presentation| presentation.title)
+                .unwrap_or_else(|| id.as_str().to_string()),
+            mode => mode.display_label().to_string(),
+        };
         h_flex()
             .id("ghostex-gpui-titlebar-compact-mode-dropdown")
             .h(px(25.0))
@@ -362,7 +377,8 @@ impl GhostexGpuiApp {
     pub(crate) fn render_mode_tab(
         &self,
         mode: TitlebarMode,
-        label: &'static str,
+        label: String,
+        icon_data_url: Option<String>,
         is_last: bool,
         is_available: bool,
         disabled_reason: Option<&'static str>,
@@ -374,7 +390,10 @@ impl GhostexGpuiApp {
         Disabled Quick/projectless tabs remain normal titlebar segments with a hover reason and no separate hit target. Browser, Kanban, Automate, and Docs share the native disabled reason while click handling still calls the central availability guard before changing active workspace mode.
         */
         div()
-            .id(format!("ghostex-gpui-titlebar-mode-{label}"))
+            .id(format!(
+                "ghostex-gpui-titlebar-mode-{}",
+                mode.element_slug()
+            ))
             .relative()
             .flex()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
@@ -433,6 +452,15 @@ impl GhostexGpuiApp {
                 this.managed_tooltip_with_placement(
                     ManagedTooltipPlacement::Right,
                     move |window, cx| titlebar_tooltip(reason, window, cx),
+                )
+            })
+            .when_some(icon_data_url, |this, icon_data_url| {
+                this.child(
+                    img(icon_data_url)
+                        .size(px(16.0))
+                        .mr(px(6.0))
+                        .flex_shrink_0()
+                        .object_fit(ObjectFit::Contain),
                 )
             })
             .child(label)

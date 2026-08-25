@@ -51,7 +51,7 @@ impl ProjectEditorAutoSleepEpochs {
             TitlebarMode::Kanban => Some(self.kanban),
             TitlebarMode::Automate => Some(self.automate),
             TitlebarMode::Manage => Some(self.manage),
-            TitlebarMode::Agents => None,
+            TitlebarMode::Agents | TitlebarMode::Extension(_) => None,
         }
     }
 
@@ -62,7 +62,7 @@ impl ProjectEditorAutoSleepEpochs {
             TitlebarMode::Kanban => &mut self.kanban,
             TitlebarMode::Automate => &mut self.automate,
             TitlebarMode::Manage => &mut self.manage,
-            TitlebarMode::Agents => return None,
+            TitlebarMode::Agents | TitlebarMode::Extension(_) => return None,
         };
         *epoch = epoch.wrapping_add(1);
         Some(*epoch)
@@ -103,7 +103,7 @@ impl ProjectEditorAutoSleepPolicySnapshot {
             TitlebarMode::Kanban => self.kanban,
             TitlebarMode::Automate => self.automate,
             TitlebarMode::Manage => self.manage,
-            TitlebarMode::Agents => None,
+            TitlebarMode::Agents | TitlebarMode::Extension(_) => None,
         }
     }
 }
@@ -198,6 +198,10 @@ impl ProjectEditorShellModel {
             TitlebarMode::Kanban => Some(self.kanban_lifecycle),
             TitlebarMode::Automate => Some(self.automate_lifecycle),
             TitlebarMode::Manage => Some(self.manage_lifecycle),
+            TitlebarMode::Extension(_) => Some(ProjectEditorModeLifecycle {
+                state: ProjectEditorLifecycleState::Awake,
+                recency: u64::MAX,
+            }),
             TitlebarMode::Agents => None,
         }
     }
@@ -212,7 +216,7 @@ impl ProjectEditorShellModel {
             TitlebarMode::Kanban => Some(&mut self.kanban_lifecycle),
             TitlebarMode::Automate => Some(&mut self.automate_lifecycle),
             TitlebarMode::Manage => Some(&mut self.manage_lifecycle),
-            TitlebarMode::Agents => None,
+            TitlebarMode::Agents | TitlebarMode::Extension(_) => None,
         }
     }
 

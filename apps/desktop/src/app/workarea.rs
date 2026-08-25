@@ -4,8 +4,9 @@
 //
 // Cluster: project-workarea runtime CEF surfaces, source code server, tab scroll handles
 
-use std::sync::Arc;
-use std::time::Instant;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
@@ -22,6 +23,59 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::app::window::*;
 use crate::*;
+
+#[derive(Clone)]
+enum ExtensionViewRuntimeState {
+    Starting,
+    Ready(ProjectWorkareaRealRuntimeUrl),
+    Failed(String),
+}
+
+fn extension_view_runtime_states() -> &'static Mutex<HashMap<ExtensionId, ExtensionViewRuntimeState>>
+{
+    static STATES: OnceLock<Mutex<HashMap<ExtensionId, ExtensionViewRuntimeState>>> =
+        OnceLock::new();
+    STATES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn extension_view_runtime_state(id: ExtensionId) -> Option<ExtensionViewRuntimeState> {
+    extension_view_runtime_states()
+        .lock()
+        .ok()?
+        .get(&id)
+        .cloned()
+}
+
+fn set_extension_view_runtime_state(id: ExtensionId, state: ExtensionViewRuntimeState) {
+    if let Ok(mut states) = extension_view_runtime_states().lock() {
+        states.insert(id, state);
+    }
+}
+
+fn extension_bridge_surface_spec_for_runtime_url(
+    id: ExtensionId,
+    url: &str,
+) -> Option<cef::ExtensionBridgeSurfaceSpec> {
+    let rest = url.strip_prefix("http://")?;
+    let origin_end = rest.find('/').unwrap_or(rest.len());
+    let authority = rest.get(..origin_end)?;
+    if authority.is_empty() {
+        return None;
+    }
+    let static_prefix = format!("/ext/{}/", id.as_str());
+    let path_prefix = if rest.get(origin_end..)?.starts_with(&static_prefix) {
+        static_prefix
+    } else {
+        "/".to_string()
+    };
+    cef::ExtensionBridgeSurfaceSpec::new(
+        id.as_str().to_string(),
+        format!("http://{authority}"),
+        path_prefix,
+    )
+    .ok()
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn persist_shell_layout_state(&self) {
         persist_gpui_workspace_shell_state(self);
@@ -461,6 +515,240 @@ impl GhostexGpuiApp {
         true
     }
 
+    fn installed_extension_view(&self, id: ExtensionId) -> Option<&GpuiInstalledExtension> {
+        self.extensions_snapshot
+            .installed
+            .get(id.as_str())
+            .filter(|extension| {
+                extension.enabled
+                    && extension.placements.contains(&GpuiExtensionPlacement::View)
+                    && extension.placement == Some(GpuiExtensionPlacement::View)
+            })
+    }
+
+    fn extension_view_runtime_url(&self, id: ExtensionId) -> Option<ProjectWorkareaRealRuntimeUrl> {
+        let extension = self.installed_extension_view(id)?;
+        let presentation = gpui_extension_view_presentation(id)?;
+        if presentation.server_is_static {
+            return extension
+                .runtime_url
+                .clone()
+                .and_then(ProjectWorkareaRealRuntimeUrl::from_authorized_runtime_url);
+        }
+        match extension_view_runtime_state(id) {
+            Some(ExtensionViewRuntimeState::Ready(url)) => Some(url),
+            Some(ExtensionViewRuntimeState::Starting | ExtensionViewRuntimeState::Failed(_))
+            | None => None,
+        }
+    }
+
+    pub(crate) fn extension_view_placeholder_signature(
+        &self,
+        id: ExtensionId,
+    ) -> ProjectEditorPlaceholderSignature {
+        let mode = TitlebarMode::Extension(id);
+        let title = gpui_extension_view_presentation(id)
+            .map(|presentation| presentation.title)
+            .unwrap_or_else(|| id.as_str().to_string());
+        let (title, message) = match extension_view_runtime_state(id) {
+            Some(ExtensionViewRuntimeState::Failed(error)) => {
+                (Some(format!("{title} could not start")), error)
+            }
+            Some(ExtensionViewRuntimeState::Starting) => {
+                (Some(format!("Starting {title}…")), String::new())
+            }
+            Some(ExtensionViewRuntimeState::Ready(_)) => {
+                (Some(format!("Opening {title}…")), String::new())
+            }
+            None if self.installed_extension_view(id).is_none() => (
+                Some("Extension unavailable".to_string()),
+                "This extension is no longer installed, enabled, or assigned to View.".to_string(),
+            ),
+            None => (Some(format!("Preparing {title}…")), String::new()),
+        };
+        ProjectEditorPlaceholderSignature {
+            mode,
+            title,
+            message,
+            actions: Vec::new(),
+        }
+    }
+
+    pub(crate) fn ensure_extension_view_runtime_for_current_context(
+        &mut self,
+        id: ExtensionId,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if self.installed_extension_view(id).is_none()
+            || gpui_extension_view_presentation(id).is_some_and(|value| value.server_is_static)
+            || matches!(
+                extension_view_runtime_state(id),
+                Some(ExtensionViewRuntimeState::Starting | ExtensionViewRuntimeState::Ready(_))
+            )
+        {
+            return false;
+        }
+        let Some(snapshot) = self.latest_sidebar_project_snapshot.as_ref() else {
+            return false;
+        };
+        let session_id = self
+            .active_extension_session_details()
+            .and_then(|details| details.get("sessionId").cloned())
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_default();
+        let project_id = snapshot.active_project_id.as_ref().map(|id| id.0.as_str());
+        let project = project_id.and_then(|id| self.extension_projects.get(id));
+        let params = serde_json::json!({
+            "id": id.as_str(),
+            "context": {
+                "sessionId": session_id,
+                "projectPath": project
+                    .and_then(|project| project.path.as_deref())
+                    .or_else(|| snapshot.in_memory_project_path.as_deref().and_then(|path| path.to_str()))
+                    .unwrap_or(""),
+                "projectName": project
+                    .map(|project| project.name.as_str())
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or(snapshot.display_name.as_str()),
+                "worktree": project.is_some_and(|project| project.is_worktree),
+                "worktreeBranch": project
+                    .and_then(|project| project.worktree_branch.as_deref())
+                    .unwrap_or(""),
+            },
+        });
+        set_extension_view_runtime_state(id, ExtensionViewRuntimeState::Starting);
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move {
+                    gpui_gxserver_rpc_result(
+                        "/api/startExtension",
+                        &params,
+                        Duration::from_secs(65),
+                    )
+                })
+                .await;
+            let next_state = match result {
+                Ok(result) => {
+                    let status = result.get("status").and_then(serde_json::Value::as_object);
+                    match status
+                        .and_then(|status| status.get("state"))
+                        .and_then(serde_json::Value::as_str)
+                    {
+                        Some("ready") => status
+                            .and_then(|status| status.get("url"))
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                            .and_then(ProjectWorkareaRealRuntimeUrl::from_authorized_runtime_url)
+                            .map(ExtensionViewRuntimeState::Ready)
+                            .unwrap_or_else(|| {
+                                ExtensionViewRuntimeState::Failed(
+                                    "The extension did not provide a runtime URL.".to_string(),
+                                )
+                            }),
+                        Some("failed") => ExtensionViewRuntimeState::Failed(
+                            status
+                                .and_then(|status| status.get("error"))
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("The extension failed to launch.")
+                                .to_string(),
+                        ),
+                        _ => ExtensionViewRuntimeState::Failed(
+                            "The extension did not reach its ready state.".to_string(),
+                        ),
+                    }
+                }
+                Err(error) => ExtensionViewRuntimeState::Failed(error),
+            };
+            set_extension_view_runtime_state(id, next_state);
+            let _ = this.update(cx, |this, cx| {
+                this.refresh_extensions_in_background(cx);
+                this.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
+                cx.notify();
+            });
+        })
+        .detach();
+        true
+    }
+
+    fn extension_view_bridge_event_handler(
+        &self,
+        slot_key: ProjectWorkareaCefSurfaceSlotKey,
+        cx: &mut gpui::Context<Self>,
+    ) -> cef::ExtensionBridgeEventHandler {
+        let app = cx.entity().downgrade();
+        let async_cx = cx.to_async();
+        let foreground = cx.foreground_executor().clone();
+        Rc::new(move |event: cef::ExtensionBridgeEvent| {
+            let app = app.clone();
+            let mut async_cx = async_cx.clone();
+            let foreground = foreground.clone();
+            foreground
+                .clone()
+                .spawn(async move {
+                    let _ = app.update_in(&mut async_cx, |this, _window, cx| {
+                        let response_app = cx.entity().downgrade();
+                        let response_async_cx = cx.to_async();
+                        let response_foreground = cx.foreground_executor().clone();
+                        let responder: GpuiExtensionBridgeResponder = Rc::new(move |payload| {
+                            let response_app = response_app.clone();
+                            let mut response_async_cx = response_async_cx.clone();
+                            response_foreground
+                                .spawn(async move {
+                                    let _ = response_app.update_in(
+                                        &mut response_async_cx,
+                                        |this, _window, cx| {
+                                            let Some(surface) = this
+                                                .project_workarea_runtime_cef_surfaces
+                                                .get(&slot_key)
+                                                .map(|owned| owned.surface.clone())
+                                            else {
+                                                return;
+                                            };
+                                            surface.update(cx, |surface, _| {
+                                                surface.dispatch_extension_bridge_message(&payload);
+                                            });
+                                        },
+                                    );
+                                })
+                                .detach();
+                        });
+                        let close_app = cx.entity().downgrade();
+                        let close_async_cx = cx.to_async();
+                        let close_foreground = cx.foreground_executor().clone();
+                        let close_handler: GpuiExtensionCloseHandler = Rc::new(move || {
+                            let close_app = close_app.clone();
+                            let mut close_async_cx = close_async_cx.clone();
+                            close_foreground
+                                .spawn(async move {
+                                    let _ = close_app.update_in(
+                                        &mut close_async_cx,
+                                        |this, window, cx| {
+                                            if this.set_active_mode(
+                                                TitlebarMode::Agents,
+                                                window,
+                                                cx,
+                                            ) {
+                                                cx.notify();
+                                            }
+                                        },
+                                    );
+                                })
+                                .detach();
+                        });
+                        this.handle_extension_bridge_event(
+                            event,
+                            this.extension_surface_context(GpuiExtensionPlacement::View),
+                            responder,
+                            Some(close_handler),
+                            cx,
+                        );
+                    });
+                })
+                .detach();
+        })
+    }
+
     pub(crate) fn project_workarea_runtime_cef_surface_replacement_permitted(
         &self,
         slot_key: ProjectWorkareaCefSurfaceSlotKey,
@@ -480,6 +768,10 @@ impl GhostexGpuiApp {
         &self,
         slot_key: ProjectWorkareaCefSurfaceSlotKey,
     ) -> Option<ProjectWorkareaRealRuntimeUrl> {
+        if let ProjectWorkareaCefSurfaceSlotKey::Extension(id) = slot_key {
+            self.latest_sidebar_project_snapshot.as_ref()?;
+            return self.extension_view_runtime_url(id);
+        }
         let snapshot = self.latest_sidebar_project_snapshot.as_ref()?;
         match slot_key {
             ProjectWorkareaCefSurfaceSlotKey::Source => {
@@ -499,6 +791,7 @@ impl GhostexGpuiApp {
             ProjectWorkareaCefSurfaceSlotKey::Manage => {
                 manage_workarea_runtime_url_from_project_snapshot(snapshot)
             }
+            ProjectWorkareaCefSurfaceSlotKey::Extension(_) => None,
         }
     }
 
@@ -585,7 +878,8 @@ impl GhostexGpuiApp {
         let trusted_clipboard_origin =
             (slot_key == ProjectWorkareaCefSurfaceSlotKey::Source).then(|| url.clone());
         let project_workarea_bridge_event_handler =
-            self.project_workarea_bridge_event_handler(slot_key, cx);
+            (!matches!(slot_key, ProjectWorkareaCefSurfaceSlotKey::Extension(_)))
+                .then(|| self.project_workarea_bridge_event_handler(slot_key, cx));
         let surface_background = if slot_key == ProjectWorkareaCefSurfaceSlotKey::Source {
             source_view_background_color()
         } else {
@@ -670,29 +964,55 @@ impl GhostexGpuiApp {
         } else {
             None
         };
-        let surface = match CefSurface::try_new(
-            surface_id,
-            parent_ns_view,
-            url,
-            profile,
-            CEF_DARK_PREPAINT_BACKGROUND_COLOR,
-            false,
-            surface_background,
-            trusted_clipboard_origin,
-            true,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(project_workarea_bridge_event_handler),
-            manage_docs_resource_scope,
-            None,
-            None,
-            None,
-            cx,
-        ) {
+        let creation_result = match slot_key {
+            ProjectWorkareaCefSurfaceSlotKey::Extension(id) => {
+                let bridge_surface = self
+                    .installed_extension_view(id)?
+                    .bridge_surface_spec()
+                    .filter(|surface| surface.matches_url(&url))
+                    .or_else(|| extension_bridge_surface_spec_for_runtime_url(id, &url));
+                let Some(bridge_surface) = bridge_surface else {
+                    return None;
+                };
+                CefSurface::try_new_extension(
+                    surface_id,
+                    parent_ns_view,
+                    url,
+                    profile,
+                    CEF_DARK_PREPAINT_BACKGROUND_COLOR,
+                    false,
+                    surface_background,
+                    true,
+                    bridge_surface,
+                    self.extension_view_bridge_event_handler(slot_key, cx),
+                    cx,
+                )
+            }
+            _ => CefSurface::try_new(
+                surface_id,
+                parent_ns_view,
+                url,
+                profile,
+                CEF_DARK_PREPAINT_BACKGROUND_COLOR,
+                false,
+                surface_background,
+                trusted_clipboard_origin,
+                true,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                project_workarea_bridge_event_handler,
+                manage_docs_resource_scope,
+                None,
+                None,
+                None,
+                cx,
+            ),
+        };
+        let surface = match creation_result {
             Ok(surface) => surface,
             Err(error) => {
                 // Ensure-style reconcile: skip this pass, retried on the next
@@ -733,7 +1053,11 @@ impl GhostexGpuiApp {
         ) {
             changed |= self.ensure_source_code_server_runtime_for_current_context(cx);
         }
-        for slot_key in ProjectWorkareaCefSurfaceSlotKey::project_placeholder_slots() {
+        let mut slot_keys = ProjectWorkareaCefSurfaceSlotKey::project_placeholder_slots().to_vec();
+        if let TitlebarMode::Extension(id) = self.active_mode {
+            slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::Extension(id));
+        }
+        for slot_key in slot_keys {
             if !self.project_workarea_runtime_cef_surface_may_be_visible(slot_key) {
                 continue;
             }
@@ -888,9 +1212,18 @@ impl GhostexGpuiApp {
         and say why); this predicate is the backstop that keeps the rest from
         silently parking the user on a view they turned off.
         */
-        self.project_scoped_workarea_availability()
-            .titlebar_mode_available(mode)
-            && !gpui_titlebar_mode_hidden_from_settings(mode)
+        let available = match mode {
+            TitlebarMode::Extension(id) => {
+                self.project_scoped_workarea_availability()
+                    .titlebar_mode_available(mode)
+                    && self.installed_extension_view(id).is_some()
+                    && gpui_extension_view_presentation(id).is_some()
+            }
+            _ => self
+                .project_scoped_workarea_availability()
+                .titlebar_mode_available(mode),
+        };
+        available && !gpui_titlebar_mode_hidden_from_settings(mode)
     }
 
     pub(crate) fn available_titlebar_mode_or_agents(&self, mode: TitlebarMode) -> TitlebarMode {
@@ -906,6 +1239,36 @@ impl GhostexGpuiApp {
             .into_iter()
             .filter(|item| !gpui_titlebar_mode_hidden_from_settings(item.mode))
             .collect::<Vec<_>>();
+        let extension_available = self
+            .project_scoped_workarea_availability()
+            .project_context
+            .has_project_scoped_workareas();
+        let mut extension_modes = self
+            .extensions_snapshot
+            .installed
+            .values()
+            .filter(|extension| {
+                extension.enabled
+                    && extension.placements.contains(&GpuiExtensionPlacement::View)
+                    && extension.placement == Some(GpuiExtensionPlacement::View)
+            })
+            .filter_map(|extension| {
+                let id = ExtensionId::new(&extension.id)?;
+                let title = gpui_extension_view_presentation(id)?.title;
+                Some((title, id))
+            })
+            .collect::<Vec<_>>();
+        extension_modes.sort_by(|left, right| left.0.cmp(&right.0));
+        items.extend(
+            extension_modes
+                .into_iter()
+                .map(|(_, id)| TitlebarModeSwitcherItem {
+                    mode: TitlebarMode::Extension(id),
+                    is_available: extension_available,
+                    disabled_reason: (!extension_available)
+                        .then_some(TITLEBAR_PROJECT_CONTEXT_DISABLED_REASON),
+                }),
+        );
         if items.len() == 1 && items[0].mode == TitlebarMode::Agents {
             items.clear();
         }

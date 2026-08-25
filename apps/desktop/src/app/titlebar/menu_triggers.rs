@@ -148,14 +148,16 @@ impl GhostexGpuiApp {
             let action = Box::new(SelectGpuiTitlebarMode {
                 mode_index: item.mode.switcher_index(),
             });
+            let label = match item.mode {
+                TitlebarMode::Extension(id) => gpui_extension_view_presentation(id)
+                    .map(|presentation| presentation.title)
+                    .unwrap_or_else(|| id.as_str().to_string()),
+                mode => mode.display_label().to_string(),
+            };
             if item.is_available {
-                menu = menu.menu_with_check(
-                    item.mode.display_label(),
-                    self.active_mode == item.mode,
-                    action,
-                );
+                menu = menu.menu_with_check(label, self.active_mode == item.mode, action);
             } else {
-                menu = menu.menu_with_disabled(item.mode.display_label(), true, action);
+                menu = menu.menu_with_disabled(label, true, action);
             }
         }
         menu.show(position, window, cx);
@@ -185,7 +187,12 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(mode) = TitlebarMode::from_switcher_index(mode_index) else {
+        let Some(mode) = self
+            .titlebar_mode_switcher_items()
+            .into_iter()
+            .find(|item| item.mode.switcher_index() == mode_index)
+            .map(|item| item.mode)
+        else {
             return;
         };
         if self.set_active_mode(mode, window, cx) {

@@ -319,7 +319,7 @@ pub(crate) fn project_editor_auto_sleep_duration(
         TitlebarMode::Kanban | TitlebarMode::Automate | TitlebarMode::Manage => {
             shared_settings::SharedSettingsAutoSleepTarget::ProjectEditor
         }
-        TitlebarMode::Agents => return None,
+        TitlebarMode::Agents | TitlebarMode::Extension(_) => return None,
     };
     settings.auto_sleep_duration(target)
 }

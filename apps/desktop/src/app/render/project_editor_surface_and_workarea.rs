@@ -32,7 +32,14 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        if mode.is_project_editor_mode() && !self.project_editor_shell.is_mode_awake(mode) {
+        if matches!(mode, TitlebarMode::Extension(_)) && !self.titlebar_mode_available(mode) {
+            let _ = self.set_active_mode(TitlebarMode::Agents, window, cx);
+            return self.render_agents_workspace(window, cx);
+        }
+        if mode.is_project_editor_mode()
+            && !matches!(mode, TitlebarMode::Extension(_))
+            && !self.project_editor_shell.is_mode_awake(mode)
+        {
             return self.render_project_editor_sleeping_placeholder(mode, cx);
         }
 
@@ -43,6 +50,7 @@ impl GhostexGpuiApp {
             TitlebarMode::Kanban => self.render_kanban_workarea_surface(cx),
             TitlebarMode::Automate => self.render_automate_workarea_surface(cx),
             TitlebarMode::Manage => self.render_manage_workarea_surface(cx),
+            TitlebarMode::Extension(id) => self.render_extension_workarea_surface(id, cx),
         }
     }
 
@@ -262,6 +270,18 @@ impl GhostexGpuiApp {
         let signature = ProjectEditorPlaceholderSignature::for_mode(TitlebarMode::Manage)
             .expect("Docs placeholder signature must exist");
         self.render_project_editor_placeholder(signature, cx)
+    }
+
+    pub(crate) fn render_extension_workarea_surface(
+        &self,
+        id: ExtensionId,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let slot_key = ProjectWorkareaCefSurfaceSlotKey::Extension(id);
+        if let Some(surface) = self.project_workarea_runtime_cef_surface_for_render(slot_key) {
+            return self.render_project_workarea_runtime_cef_surface(slot_key, surface, cx);
+        }
+        self.render_project_editor_placeholder(self.extension_view_placeholder_signature(id), cx)
     }
 
     pub(crate) fn render_project_editor_sleeping_placeholder(

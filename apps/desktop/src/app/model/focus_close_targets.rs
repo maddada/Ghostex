@@ -107,7 +107,8 @@ pub(crate) fn focused_surface_close_decision(
             TitlebarMode::Source
             | TitlebarMode::Kanban
             | TitlebarMode::Automate
-            | TitlebarMode::Manage => FocusedSurfaceCloseDecision::NoOp,
+            | TitlebarMode::Manage
+            | TitlebarMode::Extension(_) => FocusedSurfaceCloseDecision::NoOp,
         },
         ShellFocusTarget::AgentsPane(_)
         | ShellFocusTarget::BrowserSurface
