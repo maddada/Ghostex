@@ -1,7 +1,7 @@
 interface:
   display_name: 'ghostex-manage-beads'
-  short_description: 'Manage Ghostex project board beads'
-  default_prompt: 'Use $ghostex-manage-beads to create, update, comment on, or associate project board beads with the current Ghostex/Codex session.'
+  short_description: 'Work and manage Ghostex project board beads'
+  default_prompt: 'Use $ghostex-manage-beads when asked to work or tackle a project board bead, and to create, update, comment on, or link the current Ghostex session to a bead.'
 
 policy:
   allow_implicit_invocation: false

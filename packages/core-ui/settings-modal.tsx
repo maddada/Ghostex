@@ -258,6 +258,7 @@ export type SettingsModalProps = {
   onInstallManageBeadsSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
+  onInstallManageBeadsSkill?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
   onPlayCompletionSound?: (sound: CompletionSoundSetting) => void;
   onRequestMacOSNotificationPermission?: () => void;
@@ -320,6 +321,7 @@ export function SettingsModal({
   onInstallManageBeadsSkill,
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
+  onInstallManageBeadsSkill,
   onInstallMoveCodexSessionSkill,
   onPlayCompletionSound,
   onRequestMacOSNotificationPermission,
@@ -2782,6 +2784,7 @@ export function SettingsModal({
                       onInstallManageBeadsSkill={onInstallManageBeadsSkill}
                       onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
                       onInstallGhostexCli={onInstallGhostexCli}
+                      onInstallManageBeadsSkill={onInstallManageBeadsSkill}
                       onInstallMoveCodexSessionSkill={onInstallMoveCodexSessionSkill}
                       onUninstallBundledAgentSkill={onUninstallBundledAgentSkill}
                       onUninstallBundledAgentSkills={onUninstallBundledAgentSkills}

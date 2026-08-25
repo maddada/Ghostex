@@ -108,6 +108,7 @@ export function hasInstalledBundledAgentSkills(ghostexCliStatus: SidebarGhostexC
     ghostexCliStatus?.fable56OrchestrationSkillInstalled === true ||
     ghostexCliStatus?.manageBeadsSkillInstalled === true ||
     ghostexCliStatus?.generateTitleSkillInstalled === true ||
+    ghostexCliStatus?.manageBeadsSkillInstalled === true ||
     ghostexCliStatus?.moveCodexSessionSkillInstalled === true
   );
 }

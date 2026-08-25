@@ -169,6 +169,10 @@ export function createGhostexCliStatusMessage(
     ...(env.ghostexCli.gxUsable ? { gxPath: '/usr/local/bin/gx' } : {}),
     gxUsable: env.ghostexCli.gxUsable,
     installed,
+    manageBeadsSkillInstalled: skills.manageBeads,
+    ...(skills.manageBeads
+      ? { manageBeadsSkillPath: '~/agents/skills/ghostex-manage-beads/SKILL.md' }
+      : {}),
     moveCodexSessionSkillInstalled: skills.moveCodexSession,
     ...(skills.moveCodexSession
       ? { moveCodexSessionSkillPath: '~/agents/skills/ghostex-move-codex-session/SKILL.md' }

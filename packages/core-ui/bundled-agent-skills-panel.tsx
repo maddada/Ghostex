@@ -478,6 +478,8 @@ function isBundledGhostexAgentSkillInstalled(
       return status?.manageBeadsSkillInstalled === true;
     case 'generateTitle':
       return status?.generateTitleSkillInstalled === true;
+    case 'manageBeads':
+      return status?.manageBeadsSkillInstalled === true;
     case 'moveCodexSession':
       return status?.moveCodexSessionSkillInstalled === true;
   }

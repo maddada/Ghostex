@@ -228,6 +228,13 @@ its story) when the look must change:
 
 When working from a Ghostex Project board ticket, use the `bd` CLI installed in the environment running that project—macOS, Linux, or the selected WSL distribution—and move the bead through the project swimlanes instead of leaving it in `open`/Todo. Ghostex's Kanban runtime uses this same system binary, so do not depend on a separate `gx bd` wrapper or a bundled Ghostex copy. If `bd` is missing or a board command fails, ask the user to install or update to the latest Beads release in that same environment before continuing.
 
+- Put your session on the card: `gx board associate <id>` — run this first, with no
+  other arguments, whenever you are asked to work a bead. It links the session you are
+  running in to the card, which is otherwise only linked when the work was dispatched
+  from the card's own "Start work" button, so a hand-prompted agent leaves the card
+  looking unworked. It creates no session and is safe to repeat; `gx board start-work`
+  is the opposite command (it dispatches a card to a *new* worker) and must not be run
+  for a bead you are working yourself.
 - Park for later: `bd update <id> --status backlog`
 - Claim work: `bd update <id> --status in_progress`
 - Ready for test: `bd update <id> --status test`

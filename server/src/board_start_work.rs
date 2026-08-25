@@ -51,10 +51,17 @@ pub fn start_board_work(
     let bead_id = read_trimmed(params, "beadId")
         .ok_or_else(|| DomainStateError::bad_request("startBoardWork requires a bead id."))?;
     let projects = repository.list_projects()?;
-    let (board_project, bead) =
-        resolve_board_project_and_bead(&projects, params, &bead_id, bd_executable_path)?;
+    let global_beads_directory = global_beads_directory();
+    let (board_project, bead) = resolve_board_project_and_bead(
+        &projects,
+        params,
+        &bead_id,
+        bd_executable_path,
+        &global_beads_directory,
+    )?;
     let board_project_id = project_id_of(&board_project)?;
-    let store_projects = select_link_store_projects(&board_project, &projects);
+    let store_projects =
+        select_link_store_projects(&board_project, &projects, &global_beads_directory);
 
     // Redline 2: any usable linked conversation — live, sleeping, or
     // restorable — is an idempotent success, never a second worker.
@@ -156,7 +163,9 @@ pub fn start_board_work(
         &session,
         &session_project_id,
         &session_id,
-        agent_button,
+        agent_button
+            .and_then(|button| button.get("name"))
+            .and_then(Value::as_str),
         &agent_id,
     )?;
     drop(transaction_repository);
@@ -177,6 +186,96 @@ pub fn start_board_work(
 }
 
 /*
+CDXC:BoardAssociateSession 2026-08-24:
+`ghostex board associate <bead-id>` is the other half of "this session is working
+that card": an agent that was prompted by hand instead of dispatched from the
+board links the session it is running in to the bead itself, writing the same
+conversation link `start-work` writes. It never creates a worker — the session
+already exists — so a hand-started agent shows on the card exactly like a
+dispatched one, and repeated calls update the one link instead of adding copies.
+*/
+/// Link an already running Ghostex session to a Project Board bead.
+pub fn associate_board_session(
+    repository: &DomainRepository<'_>,
+    params: &Map<String, Value>,
+    bd_executable_path: &str,
+) -> Result<Value, DomainStateError> {
+    let bead_id = read_trimmed(params, "beadId").ok_or_else(|| {
+        DomainStateError::bad_request("associateBoardSession requires a bead id.")
+    })?;
+    let requested_session_id = read_trimmed(params, "sessionId").ok_or_else(|| {
+        DomainStateError::bad_request("associateBoardSession requires a session id.")
+    })?;
+    // A `combined-session:` id already names its own project; a bare one needs
+    // the caller to say which project owns it.
+    let (session_project_id, session_id) = match parse_scoped_session_id(&requested_session_id) {
+        Some(reference) => reference,
+        None => (
+            read_trimmed(params, "sessionProjectId").ok_or_else(|| {
+                DomainStateError::bad_request(
+                    "associateBoardSession requires the session's projectId.",
+                )
+            })?,
+            requested_session_id,
+        ),
+    };
+    let projects = repository.list_projects()?;
+    let global_beads_directory = global_beads_directory();
+    let (board_project, bead) = resolve_board_project_and_bead(
+        &projects,
+        params,
+        &bead_id,
+        bd_executable_path,
+        &global_beads_directory,
+    )?;
+    /*
+    Write the link on the row the worker's own project owns whenever that row
+    mounts this board. A card is read back from the board the user has open,
+    which is the one in the project the session lives in — writing on some other
+    row of the same board would store a link nobody looking at the card reads.
+    */
+    let link_project =
+        select_link_store_projects(&board_project, &projects, &global_beads_directory)
+            .into_iter()
+            .find(|project| {
+                project.get("projectId").and_then(Value::as_str)
+                    == Some(session_project_id.as_str())
+            })
+            .unwrap_or(board_project);
+    let board_project_id = project_id_of(&link_project)?;
+    let session = repository
+        .get_session(&session_project_id, &session_id)?
+        .ok_or_else(|| {
+            DomainStateError::not_found(format!(
+                "Session {session_id} does not exist in project {session_project_id}."
+            ))
+        })?;
+    let canonical_bead_id = read_trimmed_value(&bead, "id").unwrap_or_else(|| bead_id.clone());
+    let agent_id = read_trimmed_value(&session, "agentId").unwrap_or_default();
+    let agent_name = board_prompt_agent_options(&projects)
+        .iter()
+        .find(|button| button.get("agentId").and_then(Value::as_str) == Some(agent_id.as_str()))
+        .and_then(|button| read_trimmed_value(button, "name"))
+        .or_else(|| read_session_identity_field(&session, "agentName"));
+    write_bead_conversation_link(
+        repository,
+        &board_project_id,
+        &canonical_bead_id,
+        &session,
+        &session_project_id,
+        &session_id,
+        agent_name.as_deref(),
+        &agent_id,
+    )?;
+    Ok(json!({
+        "beadId": canonical_bead_id,
+        "projectId": board_project_id,
+        "sessionId": session_id,
+        "sessionProjectId": session_project_id,
+    }))
+}
+
+/*
 Board-project resolution mirrors the shared-mount link-store contract in
 packages/shared/bead-conversation-links.ts: rows that mount the same Beads directory
 (projectBoardConfig.beadsDirectory, else the project path) are one board. An
@@ -188,6 +287,7 @@ fn resolve_board_project_and_bead(
     params: &Map<String, Value>,
     bead_id: &str,
     bd_executable_path: &str,
+    global_beads_directory: &str,
 ) -> Result<(Value, Value), DomainStateError> {
     if let Some(project_id) = read_trimmed(params, "projectId") {
         let project = projects
@@ -199,7 +299,7 @@ fn resolve_board_project_and_bead(
             .ok_or_else(|| {
                 DomainStateError::not_found(format!("Project {project_id} does not exist."))
             })?;
-        let store = link_store_key(&project);
+        let store = link_store_key(&project, global_beads_directory);
         if store.is_empty() {
             return Err(DomainStateError::bad_request(format!(
                 "Project {project_id} has no Beads directory."
@@ -215,7 +315,7 @@ fn resolve_board_project_and_bead(
     let mut matches: Vec<(Value, Value)> = Vec::new();
     let mut probed: HashMap<String, bool> = HashMap::new();
     for project in projects {
-        let store = link_store_key(project);
+        let store = link_store_key(project, global_beads_directory);
         if store.is_empty() || probed.contains_key(&store) {
             continue;
         }
@@ -401,6 +501,10 @@ pub(crate) fn build_board_bead_work_prompt(
         String::new(),
         description.to_string(),
         String::new(),
+        "Put this session on the card before you start, so the board shows who is working it:".to_string(),
+        format!("- `gx board associate {bead_id}`"),
+        "- Run it again after forking or restoring, so the card follows the session that is really working.".to_string(),
+        String::new(),
         "After each turn where you made progress on this bead, add a bead comment summarizing what you did:".to_string(),
         format!("- `bd comment {bead_id} \"<summary>\"`"),
         "- Focus on user-facing requirements delivered and high-level technical approach.".to_string(),
@@ -417,15 +521,30 @@ pub(crate) fn build_board_bead_work_prompt(
     .join("\n")
 }
 
-fn link_store_key(project: &Value) -> String {
+/*
+CDXC:BoardAssociateSession 2026-08-24:
+A project with no Beads directory of its own still shows the Global Default's
+board, so its link store is that board's — not its own folder. Resolving the
+same cascade `/api/runBeadsAction` resolves is what keeps the links a card shows
+in step with the tickets it shows: without it, every default-board project is
+its own island and a link written from one is invisible from the next.
+*/
+fn link_store_key(project: &Value, global_beads_directory: &str) -> String {
     let configured = project
         .get("projectBoardConfig")
         .and_then(Value::as_object)
         .and_then(|config| config.get("beadsDirectory"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let directory = configured.or_else(|| project.get("path").and_then(Value::as_str));
+        .and_then(Value::as_str);
+    let resolved = crate::global_project_defaults::resolve_with_global_default(
+        configured,
+        global_beads_directory,
+    );
+    let directory = resolved.or_else(|| {
+        project
+            .get("path")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
     directory
         .unwrap_or_default()
         .trim()
@@ -433,8 +552,18 @@ fn link_store_key(project: &Value) -> String {
         .to_string()
 }
 
-fn select_link_store_projects(board_project: &Value, projects: &[Value]) -> Vec<Value> {
-    let board_store_key = link_store_key(board_project);
+/// The Global Default Beads directory every project without its own falls back
+/// to, read once per request like the board's own ticket reads do.
+fn global_beads_directory() -> String {
+    crate::global_project_defaults::read_global_project_defaults().beads_directory
+}
+
+fn select_link_store_projects(
+    board_project: &Value,
+    projects: &[Value],
+    global_beads_directory: &str,
+) -> Vec<Value> {
+    let board_store_key = link_store_key(board_project, global_beads_directory);
     let board_project_id = board_project.get("projectId").and_then(Value::as_str);
     let mut store_projects = vec![board_project.clone()];
     if board_store_key.is_empty() {
@@ -442,7 +571,7 @@ fn select_link_store_projects(board_project: &Value, projects: &[Value]) -> Vec<
     }
     for candidate in projects {
         if candidate.get("projectId").and_then(Value::as_str) != board_project_id
-            && link_store_key(candidate) == board_store_key
+            && link_store_key(candidate, global_beads_directory) == board_store_key
         {
             store_projects.push(candidate.clone());
         }
@@ -632,7 +761,7 @@ fn write_bead_conversation_link(
     session: &Value,
     session_project_id: &str,
     session_id: &str,
-    agent_button: Option<&Value>,
+    agent_name: Option<&str>,
     agent_id: &str,
 ) -> Result<(), DomainStateError> {
     // Writes stay on the board's own row (shared-mount reads span the rows).
@@ -653,17 +782,19 @@ fn write_bead_conversation_link(
         .collect::<Vec<_>>()
         .join(":");
     let mut link = Map::new();
-    link.insert("agentId".to_string(), Value::String(agent_id.to_string()));
-    if let Some(name) = agent_button.and_then(|button| button.get("name")).cloned() {
-        link.insert("agentName".to_string(), name);
+    if !agent_id.trim().is_empty() {
+        link.insert("agentId".to_string(), Value::String(agent_id.to_string()));
     }
-    if let Some(agent_session_id) = read_trimmed_value(session, "agentSessionId") {
+    if let Some(name) = agent_name.map(str::trim).filter(|name| !name.is_empty()) {
+        link.insert("agentName".to_string(), Value::String(name.to_string()));
+    }
+    if let Some(agent_session_id) = read_session_identity_field(session, "agentSessionId") {
         link.insert(
             "agentSessionId".to_string(),
             Value::String(agent_session_id),
         );
     }
-    if let Some(agent_session_path) = read_trimmed_value(session, "agentSessionPath") {
+    if let Some(agent_session_path) = read_session_identity_field(session, "agentSessionPath") {
         link.insert(
             "agentSessionPath".to_string(),
             Value::String(agent_session_path),
@@ -769,6 +900,16 @@ fn read_trimmed(params: &Map<String, Value>, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+/// Agent identity a session carries either at the top level (a freshly created
+/// session) or inside its stored `runtimeSettings` (a session read back).
+fn read_session_identity_field(session: &Value, key: &str) -> Option<String> {
+    read_trimmed_value(session, key).or_else(|| {
+        session
+            .get("runtimeSettings")
+            .and_then(|settings| read_trimmed_value(settings, key))
+    })
 }
 
 fn read_trimmed_value(value: &Value, key: &str) -> Option<String> {

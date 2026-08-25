@@ -1922,6 +1922,9 @@ async fn route_http(
         "/api/startBoardWork" => {
             handle_board_start_work_http(&state, endpoint.path, request_id, &body_json).await
         }
+        "/api/associateBoardSession" => {
+            handle_board_associate_session_http(&state, endpoint.path, request_id, &body_json).await
+        }
         "/api/generateCommitMessage" => {
             handle_generate_commit_message_http(&state, endpoint.path, request_id, &body_json).await
         }

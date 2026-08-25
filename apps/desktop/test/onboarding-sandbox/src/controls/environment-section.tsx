@@ -59,6 +59,7 @@ const SKILL_LABELS: Record<BundledSkillId, string> = {
   fable56Orchestration: 'fable 5.6 orchestration',
   manageBeads: 'find prev session',
   generateTitle: 'generate title',
+  manageBeads: 'project board beads',
   moveCodexSession: 'move codex session',
 };
 
