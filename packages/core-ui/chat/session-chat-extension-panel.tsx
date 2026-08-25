@@ -8,11 +8,16 @@ import {
   DropdownMenuTrigger,
 } from '@/packages/components/ui/dropdown-menu';
 import type {
+  GhostexChatBarBridgeChunkMessage,
+  GhostexChatBarBridgeContextChangedMessage,
   GhostexChatBarBridgeReadyMessage,
   GhostexChatBarBridgeRequestMessage,
   GhostexChatBarBridgeResponseMessage,
 } from '@/packages/shared/ghostex-extensions';
-import { GHOSTEX_CHAT_BAR_BRIDGE_VERSION } from '@/packages/shared/ghostex-extensions';
+import {
+  GHOSTEX_CHAT_BAR_BRIDGE_VERSION,
+  GHOSTEX_CHAT_BAR_CONTEXT_CHANGED_EVENT,
+} from '@/packages/shared/ghostex-extensions';
 
 export interface SessionChatBarExtension {
   id: string;
@@ -27,7 +32,11 @@ export interface SessionChatExtensionPanelProps {
   extensions: readonly SessionChatBarExtension[];
   minimized: boolean;
   onActiveExtensionChange: (extensionId: string) => void;
-  onBridgeRequest?: (extensionId: string, request: GhostexChatBarBridgeRequestMessage) => Promise<unknown>;
+  onBridgeRequest?: (
+    extensionId: string,
+    request: GhostexChatBarBridgeRequestMessage,
+    onChunk: (chunk: GhostexChatBarBridgeChunkMessage['chunk']) => void
+  ) => Promise<unknown>;
   onClose: () => void;
   onMinimizedChange: (minimized: boolean) => void;
 }
@@ -126,7 +135,6 @@ export function SessionChatExtensionPanel({
   onMinimizedChange,
 }: SessionChatExtensionPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
   const activeExtension = useMemo(
     () => extensions.find((extension) => extension.id === activeExtensionId) ?? extensions[0],
     [activeExtensionId, extensions]
@@ -134,7 +142,13 @@ export function SessionChatExtensionPanel({
   const activeOrigin = extensionOrigin(activeExtension?.url);
 
   const postToFrame = useCallback(
-    (message: GhostexChatBarBridgeResponseMessage | GhostexChatBarBridgeReadyMessage) => {
+    (
+      message:
+        | GhostexChatBarBridgeChunkMessage
+        | GhostexChatBarBridgeContextChangedMessage
+        | GhostexChatBarBridgeResponseMessage
+        | GhostexChatBarBridgeReadyMessage
+    ) => {
       const frameWindow = iframeRef.current?.contentWindow;
       if (frameWindow && activeOrigin) {
         frameWindow.postMessage(message, activeOrigin);
@@ -144,12 +158,20 @@ export function SessionChatExtensionPanel({
   );
 
   useEffect(() => {
-    if (!toast) {
-      return;
-    }
-    const timeout = window.setTimeout(() => setToast(null), 3_000);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
+    const handleContextChanged = (event: Event): void => {
+      const context = (event as CustomEvent<GhostexChatBarBridgeContextChangedMessage['context']>).detail;
+      if (!context) {
+        return;
+      }
+      postToFrame({
+        type: 'ghostexChatBarBridgeContextChanged',
+        bridgeVersion: GHOSTEX_CHAT_BAR_BRIDGE_VERSION,
+        context,
+      });
+    };
+    window.addEventListener(GHOSTEX_CHAT_BAR_CONTEXT_CHANGED_EVENT, handleContextChanged);
+    return () => window.removeEventListener(GHOSTEX_CHAT_BAR_CONTEXT_CHANGED_EVENT, handleContextChanged);
+  }, [postToFrame]);
 
   useEffect(() => {
     if (!activeExtension || !activeOrigin) {
@@ -164,35 +186,41 @@ export function SessionChatExtensionPanel({
         return;
       }
       const request = event.data;
+      const requestWindow = event.source;
+      const requestOrigin = event.origin;
       const respond = (response: Omit<GhostexChatBarBridgeResponseMessage, 'bridgeVersion' | 'requestId' | 'type'>) => {
-        postToFrame({
-          type: 'ghostexChatBarBridgeResponse',
-          bridgeVersion: GHOSTEX_CHAT_BAR_BRIDGE_VERSION,
-          requestId: request.requestId,
-          ...response,
-        });
+        requestWindow?.postMessage(
+          {
+            type: 'ghostexChatBarBridgeResponse',
+            bridgeVersion: GHOSTEX_CHAT_BAR_BRIDGE_VERSION,
+            requestId: request.requestId,
+            ...response,
+          } satisfies GhostexChatBarBridgeResponseMessage,
+          { targetOrigin: requestOrigin }
+        );
       };
-      if (request.method === 'ui.close') {
-        onClose();
-        respond({ ok: true, result: null });
-        return;
-      }
-      if (request.method === 'ui.toast') {
-        const message = request.params?.message;
-        if (typeof message !== 'string' || !message.trim() || message.length > 2_000) {
-          respond({ ok: false, error: { code: 'invalidRequest', message: 'Toast message is required.' } });
-          return;
-        }
-        setToast(message);
-        respond({ ok: true, result: null });
-        return;
-      }
       if (!onBridgeRequest) {
         respond({ ok: false, error: { code: 'operationFailed', message: 'The chat-bar bridge is unavailable.' } });
         return;
       }
-      void onBridgeRequest(activeExtension.id, request)
-        .then((result) => respond({ ok: true, result }))
+      const onChunk = (chunk: GhostexChatBarBridgeChunkMessage['chunk']): void => {
+        requestWindow?.postMessage(
+          {
+            type: 'ghostexChatBarBridgeChunk',
+            bridgeVersion: GHOSTEX_CHAT_BAR_BRIDGE_VERSION,
+            requestId: request.requestId,
+            chunk,
+          } satisfies GhostexChatBarBridgeChunkMessage,
+          { targetOrigin: requestOrigin }
+        );
+      };
+      void onBridgeRequest(activeExtension.id, request, onChunk)
+        .then((result) => {
+          respond({ ok: true, result });
+          if (request.method === 'ui.close') {
+            onClose();
+          }
+        })
         .catch((error: unknown) => respond({ ok: false, error: bridgeError(error) }));
     };
     window.addEventListener('message', handleMessage);
@@ -280,11 +308,6 @@ export function SessionChatExtensionPanel({
               Loading extension…
             </div>
           )}
-          {toast ? (
-            <div aria-live='polite' className='ghostex-chat-extension-toast' role='status'>
-              {toast}
-            </div>
-          ) : null}
         </div>
       ) : null}
     </section>

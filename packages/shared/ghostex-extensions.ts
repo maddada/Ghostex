@@ -308,7 +308,25 @@ export interface GhostexChatBarBridgeResponseMessage {
   };
 }
 
+export interface GhostexChatBarBridgeChunkMessage {
+  type: 'ghostexChatBarBridgeChunk';
+  bridgeVersion: typeof GHOSTEX_CHAT_BAR_BRIDGE_VERSION;
+  requestId: string;
+  chunk: {
+    stream: 'stdout' | 'stderr';
+    text: string;
+  };
+}
+
+export interface GhostexChatBarBridgeContextChangedMessage {
+  type: 'ghostexChatBarBridgeContextChanged';
+  bridgeVersion: typeof GHOSTEX_CHAT_BAR_BRIDGE_VERSION;
+  context: import('./ghostex-extension-sdk').GhostexExtensionContext;
+}
+
 export interface GhostexChatBarBridgeReadyMessage {
   type: 'ghostexChatBarBridgeReady';
   bridgeVersion: typeof GHOSTEX_CHAT_BAR_BRIDGE_VERSION;
 }
+
+export const GHOSTEX_CHAT_BAR_CONTEXT_CHANGED_EVENT = 'ghostex:chat-bar-extension-context-changed';

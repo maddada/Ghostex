@@ -44,6 +44,11 @@ impl GhostexGpuiApp {
         &self,
         surface: &GpuiExtensionSurfaceContext,
     ) -> serde_json::Value {
+        let active_session = if surface.placement == GpuiExtensionPlacement::ChatBar {
+            surface.start_session.clone()
+        } else {
+            self.active_extension_session_details()
+        };
         let project_id = self
             .latest_sidebar_project_snapshot
             .as_ref()
@@ -52,7 +57,7 @@ impl GhostexGpuiApp {
         let project_metadata = project_id.and_then(|id| self.extension_projects.get(id));
         let snapshot = self.latest_sidebar_project_snapshot.as_ref();
         serde_json::json!({
-            "activeSession": self.active_extension_session_details(),
+            "activeSession": active_session,
             "startSession": surface.start_session,
             "project": {
                 "name": project_metadata
@@ -134,5 +139,6 @@ impl GhostexGpuiApp {
                 }
             });
         }
+        self.broadcast_chat_bar_extension_context_changes(cx);
     }
 }

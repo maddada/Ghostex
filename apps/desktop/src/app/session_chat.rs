@@ -177,6 +177,12 @@ impl GhostexGpuiApp {
         let Ok(message) = serde_json::from_str::<serde_json::Value>(payload) else {
             return;
         };
+        if message.get("type").and_then(serde_json::Value::as_str)
+            == Some("sessionChatExtensionBridgeRequest")
+        {
+            self.handle_chat_bar_extension_bridge_request(session_id, &message, cx);
+            return;
+        }
         if message.get("type").and_then(serde_json::Value::as_str) != Some("sessionChatHostAction")
         {
             return;

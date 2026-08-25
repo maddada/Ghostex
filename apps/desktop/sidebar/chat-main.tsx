@@ -26,8 +26,13 @@ import {
   type GxserverPresentationSnapshot,
   type GxserverReadSessionAgentNoteResult,
 } from '@/packages/shared/gxserver-protocol';
-import type { GhostexExtensionContext } from '@/packages/shared/ghostex-extension-sdk';
+import type {
+  GhostexBridgeError,
+  GhostexExecChunk,
+  GhostexExtensionContext,
+} from '@/packages/shared/ghostex-extension-sdk';
 import {
+  GHOSTEX_CHAT_BAR_CONTEXT_CHANGED_EVENT,
   GHOSTEX_CHAT_BAR_PANEL_STORAGE_KEY,
   type GhostexChatBarBridgeRequestMessage,
   type GhostexChatBarPanelSessionState,
@@ -37,7 +42,6 @@ import {
   type GhostexExtensionRuntimeResult,
   type GhostexInstalledExtension,
   type GhostexListExtensionsResult,
-  type GhostexSetExtensionBadgeResult,
   type GhostexSetExtensionStateResult,
 } from '@/packages/shared/ghostex-extensions';
 import {
@@ -93,6 +97,8 @@ interface ChatBridgeNamespace {
   onSessionChatInsertPromptRequested?: (payload: { content?: unknown }) => void;
   onSessionChatStashPromptRequested?: () => void;
   onSessionChatExtensionRequested?: (payload: GhostexChatBarPanelShowMessage) => void;
+  onSessionChatExtensionBridgeMessage?: (payload: unknown) => void;
+  onSessionChatExtensionContextChanged?: (context: GhostexExtensionContext) => void;
 }
 
 const BOOTSTRAP_RETRY_DELAY_MS = 120;
@@ -254,14 +260,6 @@ function extensionIconUrl(extension: GhostexInstalledExtension): string | undefi
   }
 }
 
-function bridgeCallError(
-  code: 'invalidRequest' | 'notFound' | 'permissionDenied' | 'operationFailed',
-  message: string,
-  permission?: 'exec' | 'cli'
-): Error {
-  return Object.assign(new Error(message), { code, ...(permission ? { permission } : {}) });
-}
-
 function extensionLaunchContext(
   project: GxserverPresentationProject,
   session: GxserverPresentationSession
@@ -272,44 +270,6 @@ function extensionLaunchContext(
     ...(project.path ? { projectPath: project.path } : {}),
     worktree: Boolean(project.worktree),
     ...(recordText(project.worktree, 'branch') ? { worktreeBranch: recordText(project.worktree, 'branch') } : {}),
-  };
-}
-
-function extensionPageContext(
-  project: GxserverPresentationProject,
-  session: GxserverPresentationSession
-): GhostexExtensionContext {
-  const worktreeName = recordText(project.worktree, 'name');
-  const worktreeBranch = recordText(project.worktree, 'branch');
-  const parentProject = recordText(project.worktree, 'parentProjectName');
-  const title = session.displayTitle ?? session.primaryTitle ?? session.title;
-  const details = {
-    title,
-    ...(session.title !== title ? { alias: session.title } : {}),
-    sessionId: session.sessionId,
-    kind: session.kind,
-    status: session.lifecycleState,
-    activity: session.activity,
-    ...(session.agentId ? { agent: session.agentId } : {}),
-    ...(session.agentSessionId ? { agentSessionId: session.agentSessionId } : {}),
-    ...(session.terminalTitle ? { terminalTitle: session.terminalTitle } : {}),
-    ...(session.subtitle ? { detail: session.subtitle } : {}),
-    ...(session.sessionPersistenceProvider
-      ? { persistence: `${session.sessionPersistenceProvider} (${session.zmxName})` }
-      : {}),
-    project: project.title,
-    ...(project.path ? { projectPath: project.path } : {}),
-    ...(worktreeName ? { worktree: worktreeName } : {}),
-    ...(worktreeBranch ? { worktreeBranch } : {}),
-    ...(parentProject ? { parentProject } : {}),
-    ...(session.lastActiveAt ? { lastActive: session.lastActiveAt } : {}),
-  };
-  return {
-    activeSession: details,
-    startSession: details,
-    project: { name: project.title, ...(project.path ? { path: project.path } : {}) },
-    worktree: { isWorktree: Boolean(project.worktree), ...(worktreeBranch ? { branch: worktreeBranch } : {}) },
-    placement: 'chat-bar',
   };
 }
 
@@ -603,6 +563,41 @@ interface AppModalHostMessageHandler {
   postMessage: (payload: string) => unknown;
 }
 
+interface NativeExtensionBridgeMessage {
+  requestId: string;
+  ok?: boolean;
+  result?: unknown;
+  chunk?: GhostexExecChunk;
+  error?: {
+    code?: GhostexBridgeError['code'];
+    message?: string;
+    permission?: GhostexBridgeError['permission'];
+  };
+}
+
+interface PendingNativeExtensionBridgeCall {
+  onChunk: (chunk: GhostexExecChunk) => void;
+  reject: (error: GhostexBridgeError) => void;
+  resolve: (result: unknown) => void;
+}
+
+function nativeExtensionBridgeError(
+  code: GhostexBridgeError['code'],
+  message: string,
+  permission?: GhostexBridgeError['permission']
+): GhostexBridgeError {
+  return Object.assign(new Error(message), { code, ...(permission ? { permission } : {}) });
+}
+
+function appModalHostMessageHandler(): AppModalHostMessageHandler | undefined {
+  const target = window as unknown as {
+    webkit?: {
+      messageHandlers?: { ghostexAppModalHost?: AppModalHostMessageHandler };
+    };
+  };
+  return target.webkit?.messageHandlers?.ghostexAppModalHost;
+}
+
 /*
 CDXC:SessionChatFocusDiagnostics 2026-08-24:
 Typing-focus-loss repro breadcrumbs. The chat page has no disk writer of its
@@ -616,12 +611,7 @@ function postSessionChatDiagnosticLog(event: string, details?: Record<string, un
 }
 
 function postSessionChatHostAction(action: string, fields?: Record<string, unknown>): void {
-  const target = window as unknown as {
-    webkit?: {
-      messageHandlers?: { ghostexAppModalHost?: AppModalHostMessageHandler };
-    };
-  };
-  target.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage(
+  appModalHostMessageHandler()?.postMessage(
     JSON.stringify({
       action,
       type: 'sessionChatHostAction',
@@ -962,6 +952,71 @@ function GpuiSessionChatPage({
     session: GxserverPresentationSession;
   } | null>(null);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const nativeBridgeSequenceRef = useRef(0);
+  const pendingNativeBridgeCallsRef = useRef(new Map<string, PendingNativeExtensionBridgeCall>());
+
+  useEffect(() => {
+    const namespace = chatBridgeNamespace();
+    const previousMessageHandler = namespace.onSessionChatExtensionBridgeMessage;
+    const previousContextHandler = namespace.onSessionChatExtensionContextChanged;
+    const handleMessage = (payload: unknown): void => {
+      if (!payload || typeof payload !== 'object') {
+        return;
+      }
+      const message = payload as Partial<NativeExtensionBridgeMessage>;
+      if (typeof message.requestId !== 'string') {
+        return;
+      }
+      const pending = pendingNativeBridgeCallsRef.current.get(message.requestId);
+      if (!pending) {
+        return;
+      }
+      if (
+        message.chunk &&
+        (message.chunk.stream === 'stdout' || message.chunk.stream === 'stderr') &&
+        typeof message.chunk.text === 'string'
+      ) {
+        pending.onChunk(message.chunk);
+        return;
+      }
+      pendingNativeBridgeCallsRef.current.delete(message.requestId);
+      if (message.ok === true) {
+        pending.resolve(message.result);
+        return;
+      }
+      const error = message.error;
+      pending.reject(
+        nativeExtensionBridgeError(
+          error?.code === 'invalidRequest' ||
+            error?.code === 'notFound' ||
+            error?.code === 'permissionDenied' ||
+            error?.code === 'operationFailed'
+            ? error.code
+            : 'operationFailed',
+          typeof error?.message === 'string' ? error.message : 'The extension call failed.',
+          error?.permission
+        )
+      );
+    };
+    const handleContextChanged = (context: GhostexExtensionContext): void => {
+      window.dispatchEvent(new CustomEvent(GHOSTEX_CHAT_BAR_CONTEXT_CHANGED_EVENT, { detail: context }));
+    };
+    namespace.onSessionChatExtensionBridgeMessage = handleMessage;
+    namespace.onSessionChatExtensionContextChanged = handleContextChanged;
+    const pendingCalls = pendingNativeBridgeCallsRef.current;
+    return () => {
+      if (namespace.onSessionChatExtensionBridgeMessage === handleMessage) {
+        namespace.onSessionChatExtensionBridgeMessage = previousMessageHandler;
+      }
+      if (namespace.onSessionChatExtensionContextChanged === handleContextChanged) {
+        namespace.onSessionChatExtensionContextChanged = previousContextHandler;
+      }
+      for (const pending of pendingCalls.values()) {
+        pending.reject(nativeExtensionBridgeError('operationFailed', 'The chat-bar extension host closed.'));
+      }
+      pendingCalls.clear();
+    };
+  }, []);
 
   const publishExtensions = useCallback((next: GhostexInstalledExtension[]): void => {
     extensionsRef.current = next;
@@ -1129,84 +1184,45 @@ function GpuiSessionChatPage({
   }, [updatePanelState]);
 
   const handleBridgeRequest = useCallback(
-    async (extensionId: string, request: GhostexChatBarBridgeRequestMessage): Promise<unknown> => {
+    async (
+      extensionId: string,
+      request: GhostexChatBarBridgeRequestMessage,
+      onChunk: (chunk: GhostexExecChunk) => void
+    ): Promise<unknown> => {
       const extension = extensionsRef.current.find((candidate) => candidate.id === extensionId);
-      const context = extensionContextRef.current;
-      if (!extension || !context) {
-        throw bridgeCallError('notFound', 'The chat-bar extension is not available.');
+      if (!extension) {
+        throw nativeExtensionBridgeError('notFound', 'The chat-bar extension is not available.');
       }
-      const params = request.params ?? {};
-      switch (request.method) {
-        case 'context':
-          return extensionPageContext(context.project, context.session);
-        case 'settings.get':
-          return extension.state.preferences;
-        case 'settings.set': {
-          const values = params.values;
-          if (!values || typeof values !== 'object' || Array.isArray(values)) {
-            throw bridgeCallError('invalidRequest', 'Settings values must be an object.');
-          }
-          const result = await rpc<GhostexSetExtensionStateResult>(bootstrap, '/api/updateExtensionState', {
-            id: extensionId,
-            patch: { preferences: values },
-          });
-          replaceExtension(result.extension);
-          return result.extension.state.preferences;
-        }
-        case 'storage.get': {
-          const key = typeof params.key === 'string' ? params.key : '';
-          if (!key || key.length > 128) {
-            throw bridgeCallError('invalidRequest', 'Storage requires a valid key.');
-          }
-          return extension.state.storage[key] ?? null;
-        }
-        case 'storage.set': {
-          const key = typeof params.key === 'string' ? params.key : '';
-          if (!key || key.length > 128) {
-            throw bridgeCallError('invalidRequest', 'Storage requires a valid key.');
-          }
-          const result = await rpc<GhostexSetExtensionStateResult>(bootstrap, '/api/updateExtensionState', {
-            id: extensionId,
-            patch: { storage: { [key]: params.value ?? null } },
-          });
-          replaceExtension(result.extension);
-          return result.extension.state.storage;
-        }
-        case 'ui.setBadge': {
-          const lines = params.lines;
-          if (!Array.isArray(lines) || lines.some((line) => typeof line !== 'string')) {
-            throw bridgeCallError('invalidRequest', 'Badge lines must be strings.');
-          }
-          await rpc<GhostexSetExtensionBadgeResult>(bootstrap, '/api/extensionBadge', {
-            id: extensionId,
-            lines,
-          });
-          return null;
-        }
-        case 'cli':
-        case 'exec': {
-          const permission = request.method;
-          if (
-            extension.manifest.permissions?.includes(permission) !== true ||
-            !extension.state.grantedPermissions.includes(permission)
-          ) {
-            throw bridgeCallError(
-              'permissionDenied',
-              `Extension ${extensionId} does not have ${permission} permission.`,
-              permission
-            );
-          }
-          throw bridgeCallError(
-            'operationFailed',
-            `${permission} is unavailable from a chat-bar subframe because CEF does not install native bridges in subframes.`
+      const handler = appModalHostMessageHandler();
+      if (!handler) {
+        throw nativeExtensionBridgeError('operationFailed', 'The native extension bridge is unavailable.');
+      }
+      const nativeRequestId = `chat-bar-${Date.now().toString(36)}-${(++nativeBridgeSequenceRef.current).toString(36)}`;
+      return new Promise((resolve, reject) => {
+        pendingNativeBridgeCallsRef.current.set(nativeRequestId, { onChunk, reject, resolve });
+        try {
+          const accepted = handler.postMessage(
+            JSON.stringify({
+              type: 'sessionChatExtensionBridgeRequest',
+              extensionId,
+              request: {
+                requestId: nativeRequestId,
+                method: request.method,
+                params: request.params ?? {},
+              },
+            })
           );
+          if (accepted === false) {
+            pendingNativeBridgeCallsRef.current.delete(nativeRequestId);
+            reject(nativeExtensionBridgeError('operationFailed', 'Ghostex rejected the extension call.'));
+          }
+        } catch {
+          pendingNativeBridgeCallsRef.current.delete(nativeRequestId);
+          reject(nativeExtensionBridgeError('operationFailed', 'Ghostex could not send the extension call.'));
         }
-        case 'ui.close':
-        case 'ui.toast':
-          return null;
-      }
+      });
     },
-    [bootstrap, replaceExtension]
+    []
   );
 
   const chatBarExtensions = useMemo<SessionChatBarExtension[]>(
