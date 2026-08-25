@@ -6,6 +6,7 @@ pub mod board;
 pub mod browser_mcp;
 pub mod diagnostics;
 pub mod editors;
+pub mod extensions;
 pub mod launchers;
 pub mod output;
 pub mod picker;
@@ -62,6 +63,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "computer-use",
     "cli",
     "editor-daemon",
+    "extensions",
     "f",
     "fable-5.6-orchestration",
     "find",
@@ -159,6 +161,7 @@ fn is_known_command(name: &str) -> bool {
         "floating-monaco-editor",
         "fme",
         "editor-daemon",
+        "extensions",
         "prompt-editor",
         "state",
         "dump-state",
@@ -316,6 +319,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "floating-editor" | "fe" => editors::floating_editor_command(args),
         "floating-monaco-editor" | "fme" => editors::floating_monaco_editor_command(args),
         "editor-daemon" => editors::editor_daemon_command(args),
+        "extensions" => extensions::extensions_command(args),
         "prompt-editor" => editors::prompt_editor_command(args),
         "state" => run_bridge_action("state", Parser::None, plain, args),
         "dump-state" => run_bridge_action("dumpState", Parser::None, plain, args),

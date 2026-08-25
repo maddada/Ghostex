@@ -12,6 +12,7 @@ pub mod constants;
 pub mod delayed_sends;
 pub mod domain;
 pub mod events;
+pub mod extensions;
 pub mod ghostex_cli;
 pub mod global_project_defaults;
 pub mod http_client;

@@ -58,6 +58,14 @@ impl GhostexPaths {
         self.config_dir.join("native-sidebar-settings.json")
     }
 
+    pub fn extensions_dir(&self) -> PathBuf {
+        self.data_dir.join("extensions")
+    }
+
+    pub fn extensions_store_file(&self) -> PathBuf {
+        self.extensions_dir().join("extensions-store.json")
+    }
+
     pub fn gxserver_config_dir(&self) -> PathBuf {
         self.config_dir.join("gxserver")
     }

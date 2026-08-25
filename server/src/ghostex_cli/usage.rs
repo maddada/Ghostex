@@ -115,6 +115,10 @@ pub fn usage() -> String {
             "Create a Quick terminal",
         ),
         format_help_command(
+            "extensions --help",
+            "Browse, install, and manage gxserver extensions",
+        ),
+        format_help_command(
             "create-session [title] [--input text] [--start] [--project-id id] [--group-id id]",
             "Create a terminal session; --start materializes the live terminal immediately",
         ),
@@ -479,6 +483,27 @@ Specialized workflows:
   $ghostex-browser-use, $ghostex-computer-use, $ghostex-manage-beads,
   $ghostex-fable-5.6-orchestration, $ghostex-auto-rename-session, or
   $ghostex-move-codex-session when their domain applies.
+"
+    .to_string()
+}
+
+pub fn extensions_usage() -> String {
+    "Ghostex Extensions - browse, install, and manage gxserver extensions
+
+Usage:
+  ghostex extensions <command> [args] [--json]
+
+Commands:
+  list [--json]                         List installed extensions and state
+  catalog [--json]                      Fetch the configured extension catalog
+  install <id> [--json]                 Install an extension from the catalog
+  install-local <path> [--json]         Validate and install a local extension folder
+  uninstall <id> [--json]               Remove an installed extension
+  state <id> [--set k=v] [--json]       Read or update extension state
+
+State keys:
+  enabled, pinned, placement, terminalPlacement,
+  preferences.<name>, preferences, grantedPermissions
 "
     .to_string()
 }

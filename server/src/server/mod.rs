@@ -68,6 +68,7 @@ use crate::{
         DomainRepository, DomainStateError,
     },
     events::{EventClientSender, GxserverEventHub},
+    extensions::{handle_extensions_http, ExtensionRegistry},
     http_client,
     identity::ensure_gxserver_identity,
     ids::{is_gxserver_project_id, is_gxserver_session_id},
@@ -220,6 +221,7 @@ pub(crate) struct AppState {
     pub(crate) build_identity: String,
     pub(crate) config: GxserverConfig,
     pub(crate) event_hub: GxserverEventHub,
+    pub(crate) extension_registry: ExtensionRegistry,
     pub(crate) logger: Arc<GxserverLogger>,
     pub(crate) metadata: RuntimeMetadata,
     pub(crate) migration: MigrationStatus,
@@ -445,6 +447,7 @@ pub async fn run_gxserver_foreground(
         build_identity,
         config,
         event_hub,
+        extension_registry: ExtensionRegistry::new(&paths),
         logger: logger.clone(),
         metadata: metadata.clone(),
         migration,
@@ -2014,6 +2017,13 @@ async fn route_http(
         }
         "/api/resolveGitRootForPath" => {
             handle_resolve_git_root_for_path_http(&state, endpoint.path, request_id, &body_json)
+        }
+        "/api/listExtensions"
+        | "/api/extensionsCatalog"
+        | "/api/installExtension"
+        | "/api/uninstallExtension"
+        | "/api/updateExtensionState" => {
+            handle_extensions_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/control/stop" => {
             broadcast_server_stopping(&state);

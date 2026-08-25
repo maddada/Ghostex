@@ -11,6 +11,8 @@ pub struct GxserverPaths {
     pub auth_dir: PathBuf,
     pub auth_token_file: PathBuf,
     pub config_file: PathBuf,
+    pub extensions_dir: PathBuf,
+    pub extensions_store_file: PathBuf,
     pub home_dir: PathBuf,
     pub identity_file: PathBuf,
     pub isolated_agent_home_dir: Option<PathBuf>,
@@ -51,6 +53,8 @@ pub fn get_gxserver_paths(home_dir: Option<PathBuf>) -> GxserverPaths {
     let portless_state_dir = root_dir.join("portless");
     let runtime_dir = root_dir.join("runtime");
     let zmx_dir = root_dir.join("zmx");
+    let extensions_dir = storage.extensions_dir();
+    let extensions_store_file = storage.extensions_store_file();
 
     GxserverPaths {
         app_cache_dir: storage.cache_dir,
@@ -60,6 +64,8 @@ pub fn get_gxserver_paths(home_dir: Option<PathBuf>) -> GxserverPaths {
         auth_token_file: auth_dir.join("token"),
         auth_dir,
         config_file,
+        extensions_dir,
+        extensions_store_file,
         home_dir,
         identity_file: root_dir.join("identity.json"),
         isolated_agent_home_dir,

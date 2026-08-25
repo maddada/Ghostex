@@ -576,7 +576,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         endpoints below.
         */
         | "/api/discoverSourceControl"
-        | "/api/lookupRepository" => remote_allowed(path),
+        | "/api/lookupRepository"
+        | "/api/listExtensions"
+        | "/api/extensionsCatalog"
+        | "/api/installExtension"
+        | "/api/uninstallExtension"
+        | "/api/updateExtensionState" => remote_allowed(path),
         "/api/createQuickProject" => full_local(path),
         /*
         CDXC:AgentHooks 2026-06-19-14:15:
