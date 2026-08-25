@@ -37,10 +37,10 @@ export function InstalledExtensionCard({
       </CardContent>
       <CardFooter className='justify-between gap-4 px-5'>
         <div className='flex items-center gap-2'>
-          <Button disabled={pending} onClick={onDetails} size='sm' type='button' variant='outline'>
+          <Button disabled={pending} onClick={onDetails} type='button' variant='outline'>
             Details
           </Button>
-          <Button disabled={pending} onClick={onRemove} size='sm' type='button' variant='outline'>
+          <Button disabled={pending} onClick={onRemove} type='button' variant='outline'>
             Remove
           </Button>
         </div>
@@ -86,7 +86,7 @@ export function StoreExtensionCard({
         <span className='text-xs text-muted-foreground'>
           {installedVersion ? `Installed ${installedVersion}` : `Version ${entry.version}`}
         </span>
-        <Button onClick={onDetails} size='sm' type='button' variant='outline'>
+        <Button onClick={onDetails} type='button' variant='outline'>
           Details
           <IconArrowUpRight data-icon='inline-end' />
         </Button>
