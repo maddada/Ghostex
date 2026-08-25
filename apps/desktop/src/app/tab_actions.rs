@@ -37,6 +37,37 @@ impl GhostexGpuiApp {
         placement: AgentsWorkspaceNewTerminalPlacement,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.create_registered_agents_terminal_with_launch(requested_pane_id, placement, None, cx);
+    }
+
+    pub(crate) fn create_registered_agents_extension_terminal(
+        &mut self,
+        requested_pane_id: WorkspacePaneId,
+        placement: AgentsWorkspaceNewTerminalPlacement,
+        title: String,
+        working_directory: Option<String>,
+        startup_text: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.create_registered_agents_terminal_with_launch(
+            requested_pane_id,
+            placement,
+            Some(AgentsWorkspaceTerminalLaunch {
+                title,
+                working_directory,
+                startup_text,
+            }),
+            cx,
+        );
+    }
+
+    fn create_registered_agents_terminal_with_launch(
+        &mut self,
+        requested_pane_id: WorkspacePaneId,
+        placement: AgentsWorkspaceNewTerminalPlacement,
+        launch: Option<AgentsWorkspaceTerminalLaunch>,
+        cx: &mut gpui::Context<Self>,
+    ) {
         /*
         CDXC:GPUIRegisteredQuickTerminals 2026-07-24:
         Every Agents-workspace quick-create surface (Cmd+T, tab-strip "+", split
@@ -58,6 +89,15 @@ impl GhostexGpuiApp {
         if let Some(remote_project) =
             gpui_remote_project_reference_from_project_id(project_id.as_str())
         {
+            if launch.is_some() {
+                self.dispatch_gpui_workspace_action_toast(
+                    "warning",
+                    "Extension unavailable",
+                    "Terminal extensions currently run only for local projects.",
+                    cx,
+                );
+                return;
+            }
             support_logs::append_temporary(
                 support_logs::GpuiSupportLog::TerminalFocus,
                 "TEMP.remoteNewTerminal.requestReceived",
@@ -136,12 +176,18 @@ impl GhostexGpuiApp {
         }
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result =
-                background
-                    .spawn(async move {
+            let result = background
+                .spawn(async move {
+                    if let Some(launch) = launch.as_ref() {
+                        gpui_create_local_project_workspace_terminal_with_launch(
+                            project_id.as_str(),
+                            launch,
+                        )
+                    } else {
                         gpui_create_local_project_workspace_terminal(project_id.as_str())
-                    })
-                    .await;
+                    }
+                })
+                .await;
             let _ = this.update(cx, |this, cx| match result {
                 Ok((key, plan)) => {
                     #[cfg(target_os = "windows")]

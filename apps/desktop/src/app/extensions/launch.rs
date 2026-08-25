@@ -79,7 +79,10 @@ impl GhostexGpuiApp {
                 self.close_titlebar_extension_popup(window, cx);
                 self.open_gpui_extension_modal(id, Some(window), cx)
             }
-            GpuiExtensionLaunch::TerminalPane(_) => false,
+            GpuiExtensionLaunch::TerminalPane(id) => {
+                self.close_titlebar_extension_popup(window, cx);
+                self.launch_terminal_pane_extension(id, cx)
+            }
         }
     }
 

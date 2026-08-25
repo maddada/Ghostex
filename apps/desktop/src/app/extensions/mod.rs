@@ -3,6 +3,7 @@ mod launch;
 mod permissions;
 mod rpc;
 mod snapshot;
+mod terminal;
 mod types;
 
 pub(crate) use context::*;

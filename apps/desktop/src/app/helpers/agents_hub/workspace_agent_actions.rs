@@ -5,9 +5,7 @@
 // bundled agent skill uninstall helpers. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use std::fs;
-#[cfg(target_os = "windows")]
-use std::time::Duration;
+use std::{fs, time::Duration};
 
 use crate::app::helpers::*;
 use crate::*;
@@ -103,6 +101,72 @@ pub(crate) enum AgentsWorkspaceNewTerminalPlacement {
     SplitRight,
     SplitBelow,
     BottomRow,
+}
+
+#[derive(Clone)]
+pub(crate) struct AgentsWorkspaceTerminalLaunch {
+    pub(crate) title: String,
+    pub(crate) working_directory: Option<String>,
+    pub(crate) startup_text: String,
+}
+
+pub(crate) fn gpui_create_local_project_workspace_terminal_with_launch(
+    project_id: &str,
+    launch: &AgentsWorkspaceTerminalLaunch,
+) -> Result<
+    (
+        GpuiLocalWorkspaceSessionKey,
+        GpuiLocalWorkspaceAttachTerminalPlan,
+    ),
+    String,
+> {
+    if !gpui_remote_sidebar_project_id_allowed(project_id) {
+        return Err("The active project is unavailable.".to_string());
+    }
+    let mut params = serde_json::Map::new();
+    params.insert("kind".to_string(), serde_json::json!("terminal"));
+    params.insert("lifecycleState".to_string(), serde_json::json!("running"));
+    params.insert("projectId".to_string(), serde_json::json!(project_id));
+    params.insert("surface".to_string(), serde_json::json!("workspace"));
+    params.insert("title".to_string(), serde_json::json!(launch.title));
+    if let Some(working_directory) = launch.working_directory.as_deref() {
+        params.insert("cwd".to_string(), serde_json::json!(working_directory));
+    }
+    let result = gpui_gxserver_rpc_result(
+        "/api/createSession",
+        &serde_json::Value::Object(params),
+        Duration::from_secs(15),
+    )?;
+    let session = result
+        .get("session")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| "gxserver did not create the extension terminal.".to_string())?;
+    let created_project_id = gpui_trimmed_json_string_field(session, "projectId")
+        .unwrap_or(project_id)
+        .to_string();
+    let session_id = gpui_trimmed_json_string_field(session, "sessionId")
+        .ok_or_else(|| "gxserver did not return an extension terminal id.".to_string())?
+        .to_string();
+    if !gpui_remote_sidebar_project_id_allowed(&created_project_id)
+        || !gpui_remote_sidebar_session_id_allowed(&session_id)
+    {
+        return Err("gxserver returned an invalid extension terminal id.".to_string());
+    }
+    let key = GpuiLocalWorkspaceSessionKey {
+        project_id: created_project_id,
+        session_id,
+    };
+    match gpui_prepare_local_workspace_attach_terminal_plan_with_startup_text(
+        &key,
+        Some(&launch.startup_text),
+        GpuiLocalWorkspaceAttachIntent::Attach,
+    ) {
+        Ok(plan) => Ok((key, plan)),
+        Err(message) => {
+            gpui_close_command_terminal_gxserver_session(&key);
+            Err(message)
+        }
+    }
 }
 
 /*
