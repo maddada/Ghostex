@@ -1,5 +1,39 @@
 # Changelog
 
+## 8.0.0 - 2026-08-25
+
+- Major
+  - Every session can now carry a note — what you were doing, what to pick up next — attached to the agent's own conversation so it survives closing, resuming, and compaction, shown as a dot with a hover preview on the session row across the desktop, web, and Android apps, editable from the chat composer and the session menu, and readable from `ghostex session-note`.
+  - Stashed Prompts is now Saved Prompts and gained colored tags, a tag rail with an Untagged filter, and a Go to session action that takes you back to the conversation a prompt came from; saved prompts stay attached to that conversation even after the agent compacts it, Alt+S saves what is in the composer, and Cmd+Alt+S opens the list.
+  - Sessions you are not working on right now can be parked instead of closed: they leave the active list, collect in a collapsible Parked section at the bottom of their project, and keep their terminal — turn it on with Enable session parking.
+  - Scheduled automations now resume the durable agent session they created instead of starting a new conversation on every run, so a recurring job keeps its context, and an agent can link the session it is working in to the board card it came from.
+  - Session Chat shows the sub-agents Claude is running as their own strip with per-agent status and token counters, reports what the terminal is doing while a turn is in flight, and shows Claude's current permission mode as a pill you can change from the composer.
+  - Prompt search opens as its own window over whatever you were doing, on Cmd+Shift+F, instead of taking over the focused terminal, and now finds text inside prompts you pasted into Claude Code rather than only the collapsed "Pasted text" marker.
+  - Closing browser panes, chat surfaces, and terminals no longer leaves their renderer processes behind, so a long day of work releases memory instead of climbing into tens of gigabytes, and a chat surface you have not looked at for twenty minutes is unloaded and restored the moment you return to it.
+  - First launch now walks through a six-step setup that skips the steps your machine already satisfies and ends by creating your first project and session, so a new install is usable without a trip through Settings.
+  - The Linux app draws the same integrated titlebar and window controls as Windows and macOS, and Linux downloads now include a portable `.tar.zst` archive alongside the DEB and RPM packages.
+  - Ghostex ships a refreshed look: a new app icon, darker app chrome, one toggle and focus-ring shape across every control, restyled Kanban, Automate, and Settings surfaces, and new defaults for fresh installs — Session Chat as the agent interface, sessions grouped by project in the sidebar, and colored agent logos.
+- Minor
+  - Exporting a transcript now asks what to include first — the commands the agent ran, the patches it applied, and its reasoning — instead of always writing everything.
+  - Trycua can be installed from Settings on Windows and Linux, not only macOS, and Settings shows the exact command the button runs.
+  - Ghostex's bundled agent skills are consolidated behind one Ghostex CLI skill that covers orchestration, prompt-history search, and automations, and Project Board Beads is installable alongside it.
+  - A session that runs `/compact` no longer gets stuck reporting work forever, so its queued prompts keep being delivered.
+  - A Delayed Send now delivers the message staged in the chat composer instead of pressing Enter on an empty line and dropping it.
+  - Large tool outputs no longer disappear from the middle of a transcript, and very long ones are shortened for display with the full text still one click away in the file.
+  - Scrolling up in a chat keeps loading older messages on its own instead of stopping at a Load earlier button, and jumping back to the newest message animates instead of snapping.
+  - A session forked with `codex fork` keeps its chat instead of freezing on the conversation it was forked from.
+  - A terminal title that only repeats the working directory no longer becomes the session's name, and Grok's status prefixes are stripped out of generated titles.
+  - Renaming a session from chat now shows the name the agent picked as its own card in the conversation, and a command you type in the composer reads as your own turn instead of a system line.
+  - Claude's rotating status markers are recognized again, so live status shows while it works, and the messages it prints when it rejects a prompt — an unknown command, for example — now appear in the chat instead of the prompt silently vanishing.
+  - Images in a transcript render as compact thumbnails with a copy-path action on the thumbnail and in the preview, and Codex's generated images show the same way.
+  - Typing in the chat composer no longer loses the keyboard to the terminal behind it, and a chat draft is kept until the terminal confirms it was pasted.
+  - Ghostex's own bundled command-line tools are recognized on Linux, so the CLI installs and repairs correctly there.
+  - Sending a prompt now waits for the terminal to confirm it was queued, so a message can no longer be reported as sent while it was dropped.
+  - The macOS titlebar zooms on a double-click, the traffic lights and project name sit at a comfortable inset, and workarea switch hotkeys work from every surface.
+  - Resources now attributes an orphaned listener to the project that owns it.
+  - Browser and editor panes wait ten minutes before sleeping instead of five, and an agent terminal that has never been prompted is never put to sleep.
+  - Card association from an agent session contributed by [@banozz](https://github.com/banozz).
+
 ## 7.13.0 - 2026-08-22
 
 - Major
