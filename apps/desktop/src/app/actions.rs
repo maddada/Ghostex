@@ -41,6 +41,7 @@ gpui::actions!(
         SwitchKanbanWorkarea,
         SwitchManageWorkarea,
         OpenGpuiSettingsModal,
+        OpenGpuiExtensionsModal,
         OpenGpuiCustomizeSettingsModal,
         OpenGpuiPluginsModal,
         OpenGpuiHotkeysModal,

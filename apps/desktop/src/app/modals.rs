@@ -7,6 +7,7 @@
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
@@ -67,6 +68,130 @@ impl GhostexGpuiApp {
             Some(window),
             cx,
         );
+    }
+
+    pub(crate) fn open_gpui_extension_modal(
+        &mut self,
+        id: ExtensionId,
+        source_window: Option<&mut Window>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(extension) =
+            self.extensions_snapshot
+                .installed
+                .get(id.as_str())
+                .filter(|extension| {
+                    extension.enabled && extension.placement == Some(GpuiExtensionPlacement::Modal)
+                })
+        else {
+            return false;
+        };
+        if extension.runtime_url.is_some() {
+            self.open_gpui_extension_modal_window(id, source_window, cx);
+            return true;
+        }
+
+        let params = serde_json::json!({
+            "id": id.as_str(),
+            "context": self.extension_launch_context_value(),
+        });
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move {
+                    gpui_gxserver_rpc_result(
+                        "/api/startExtension",
+                        &params,
+                        Duration::from_secs(65),
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                let ready_url = result
+                    .as_ref()
+                    .ok()
+                    .and_then(|result| result.get("status"))
+                    .and_then(serde_json::Value::as_object)
+                    .filter(|status| {
+                        status.get("state").and_then(serde_json::Value::as_str) == Some("ready")
+                    })
+                    .and_then(|status| status.get("url"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                let error = match (&result, &ready_url) {
+                    (_, Some(_)) => None,
+                    (Ok(result), None) => Some(
+                        result
+                            .get("status")
+                            .and_then(serde_json::Value::as_object)
+                            .and_then(|status| status.get("error"))
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("The extension did not reach its ready state.")
+                            .to_string(),
+                    ),
+                    (Err(error), None) => Some(error.clone()),
+                };
+                let Some(ready_url) = ready_url else {
+                    this.dispatch_gpui_workspace_action_toast(
+                        "warning",
+                        "Extensions",
+                        error
+                            .as_deref()
+                            .unwrap_or("The extension could not be opened."),
+                        cx,
+                    );
+                    return;
+                };
+                let Some(extension) = this.extensions_snapshot.installed.get_mut(id.as_str())
+                else {
+                    return;
+                };
+                extension.runtime_url = Some(ready_url);
+                this.open_gpui_extension_modal_window(id, None, cx);
+                this.refresh_extensions_in_background(cx);
+            });
+        })
+        .detach();
+        true
+    }
+
+    fn open_gpui_extension_modal_window(
+        &mut self,
+        id: ExtensionId,
+        source_window: Option<&mut Window>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let modal = GpuiAppModalKind::Extension(id);
+        self.open_gpui_app_modal_window(
+            modal,
+            modal.open_message(),
+            serde_json::Value::Null,
+            source_window,
+            cx,
+        );
+    }
+
+    fn extension_modal_runtime_url(&self, id: ExtensionId) -> Option<String> {
+        self.extensions_snapshot
+            .installed
+            .get(id.as_str())
+            .filter(|extension| {
+                extension.enabled && extension.placement == Some(GpuiExtensionPlacement::Modal)
+            })?
+            .runtime_url
+            .clone()
+    }
+
+    fn gpui_app_modal_window_title(&self, modal: GpuiAppModalKind) -> String {
+        match modal {
+            GpuiAppModalKind::Extension(id) => self
+                .extensions_snapshot
+                .installed
+                .get(id.as_str())
+                .map(|extension| extension.title.clone())
+                .unwrap_or_else(|| modal.window_title().to_string()),
+            _ => modal.window_title().to_string(),
+        }
     }
 
     pub(crate) fn gpui_command_delayed_send_open_message(
@@ -1086,6 +1211,7 @@ impl GhostexGpuiApp {
             serde_json::json!({ "action": "open", "modal": modal.modal_id() }),
         );
         let window_size = modal.window_size();
+        let window_title = self.gpui_app_modal_window_title(modal);
         let return_focus_target = gpui_app_modal_command_return_focus_target(
             modal,
             &open_message,
@@ -1097,6 +1223,7 @@ impl GhostexGpuiApp {
                 .update(cx, |host, _modal_window, _cx| {
                     host.current_modal.uses_react_modal_host() == modal.uses_react_modal_host()
                         && host.current_modal.is_resizable() == modal.is_resizable()
+                        && (modal.uses_react_modal_host() || host.current_modal == modal)
                         && (modal.is_resizable()
                             || host.current_modal.window_size() == modal.window_size())
                 })
@@ -1123,7 +1250,7 @@ impl GhostexGpuiApp {
                         cx,
                     );
                     modal_window.resize(window_size);
-                    modal_window.set_window_title(modal.window_title());
+                    modal_window.set_window_title(&window_title);
                     modal_window.activate_window();
                     modal_window.refresh();
                 });
@@ -1165,6 +1292,17 @@ impl GhostexGpuiApp {
                 return;
             };
             url
+        } else if let GpuiAppModalKind::Extension(id) = modal {
+            let Some(url) = self.extension_modal_runtime_url(id) else {
+                if let Some(window) = source_window {
+                    window.push_notification(
+                        Notification::warning("The extension runtime is unavailable."),
+                        cx,
+                    );
+                }
+                return;
+            };
+            url
         } else {
             GHOSTEX_TUTORIAL_VIDEO_URL.to_string()
         };
@@ -1178,7 +1316,7 @@ impl GhostexGpuiApp {
             is_resizable: modal.is_resizable(),
             window_min_size: Some(modal.window_min_size()),
             titlebar: Some(gpui::TitlebarOptions {
-                title: Some(modal.window_title().into()),
+                title: Some(window_title.into()),
                 appears_transparent: false,
                 traffic_light_position: None,
             }),

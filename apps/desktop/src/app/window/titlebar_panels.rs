@@ -319,6 +319,13 @@ impl Render for GpuiTitlebarPopupWindow {
                 }),
             )
             .on_action(cx.listener(|this, _: &BrowseGpuiExtensions, window, cx| {
+                this.update_main_window(cx, |app, main_window, cx| {
+                    app.open_gpui_app_modal_from_titlebar(
+                        GpuiAppModalKind::ExtensionsBrowser,
+                        main_window,
+                        cx,
+                    );
+                });
                 this.close_from_popup_window(window, cx);
             }))
             .on_action(

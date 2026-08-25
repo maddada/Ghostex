@@ -223,6 +223,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("openSessionSearchPalette", "cmd+p"),
     ("openCommandsPanel", "f12"),
     ("openSettings", "cmd+,"),
+    ("openExtensions", ""),
     ("openHotkeys", "cmd+."),
     ("toggleSidebarCollapsed", "cmd+b"),
     ("toggleCompanionPane", "cmd+alt+b"),
@@ -488,6 +489,9 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action
     per-owner page-key policy, instead of repeating the ids in every arm.
     */
     if gpui_workarea_switch_hotkey_action_id(action_id) {
+        return true;
+    }
+    if action_id == "openExtensions" {
         return true;
     }
     match owner {

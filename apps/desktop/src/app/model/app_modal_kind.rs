@@ -38,6 +38,8 @@ pub(crate) enum GpuiAppModalKind {
     GitFileDiff,
     PortlessSetup,
     DiscoverGhostex,
+    ExtensionsBrowser,
+    Extension(ExtensionId),
     UpdateAvailable,
 }
 
@@ -75,6 +77,10 @@ impl GpuiAppModalKind {
             "gitFileDiff" => Some(Self::GitFileDiff),
             "portlessSetup" => Some(Self::PortlessSetup),
             "discoverGhostex" => Some(Self::DiscoverGhostex),
+            "extensionsBrowser" => Some(Self::ExtensionsBrowser),
+            value if value.starts_with("extension:") => {
+                ExtensionId::new(value.trim_start_matches("extension:")).map(Self::Extension)
+            }
             "updateAvailable" => Some(Self::UpdateAvailable),
             _ => None,
         }
@@ -113,6 +119,8 @@ impl GpuiAppModalKind {
             Self::GitFileDiff => "gitFileDiff",
             Self::PortlessSetup => "portlessSetup",
             Self::DiscoverGhostex => "discoverGhostex",
+            Self::ExtensionsBrowser => "extensionsBrowser",
+            Self::Extension(id) => extension_modal_id(id),
             Self::UpdateAvailable => "updateAvailable",
         }
     }
@@ -150,6 +158,8 @@ impl GpuiAppModalKind {
             Self::GitFileDiff => "Ghostex File Diff",
             Self::PortlessSetup => "Ghostex Portless Setup",
             Self::DiscoverGhostex => "Discover Ghostex",
+            Self::ExtensionsBrowser => "Ghostex Extensions",
+            Self::Extension(_) => "Ghostex Extension",
             Self::UpdateAvailable => "Ghostex Update",
         }
     }
@@ -253,6 +263,8 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_UPDATE_AVAILABLE_WINDOW_HEIGHT),
             ),
             Self::DiscoverGhostex => size(px(1120.0), px(850.0)),
+            Self::ExtensionsBrowser => size(px(1120.0), px(850.0)),
+            Self::Extension(id) => extension_modal_window_size(id),
             Self::RemoteGxserverInstall => size(
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT),
@@ -270,15 +282,21 @@ impl GpuiAppModalKind {
         CDXC:GPUIAppModalSizes 2026-07-26-07:20:
         Every app-modal window is now fitted to its own dialog, so none of them are resizable. The React dialogs own their internal scrolling, and a resizable frame only ever produced dead space around a fixed-height form or a stretched compact dialog.
         */
-        false
+        matches!(self, Self::ExtensionsBrowser)
     }
 
     pub(crate) fn window_min_size(self) -> Size<Pixels> {
-        self.window_size()
+        match self {
+            Self::ExtensionsBrowser => size(px(720.0), px(560.0)),
+            _ => self.window_size(),
+        }
     }
 
     pub(crate) fn uses_react_modal_host(self) -> bool {
-        !matches!(self, Self::FindPrompts | Self::WatchGhostexVideo)
+        !matches!(
+            self,
+            Self::FindPrompts | Self::WatchGhostexVideo | Self::Extension(_)
+        )
     }
 
     pub(crate) fn is_settings_modal_entry(self) -> bool {
@@ -343,10 +361,12 @@ impl GpuiAppModalKind {
             | Self::DelayedSend
             | Self::RenameSession
             | Self::SessionNote
-            | Self::WatchGhostexVideo => serde_json::json!({
+            | Self::WatchGhostexVideo
+            | Self::ExtensionsBrowser => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
             }),
+            Self::Extension(_) => serde_json::Value::Null,
             // CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19: the setup modal's
             // first page plays the tutorial, and it cannot embed YouTube from
             // the file:// modal host, so it is handed the app-served player
@@ -425,6 +445,55 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
         "configureAgents" => Some(GpuiAppModalKind::ConfigureAgents),
         "actions" | "configureActions" => Some(GpuiAppModalKind::ConfigureActions),
         "openTargets" => Some(GpuiAppModalKind::OpenTargets),
+        "openExtensions" => Some(GpuiAppModalKind::ExtensionsBrowser),
         _ => None,
     }
+}
+
+fn extension_modal_id(id: ExtensionId) -> &'static str {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    static MODAL_IDS: OnceLock<Mutex<HashMap<ExtensionId, &'static str>>> = OnceLock::new();
+    let mut modal_ids = MODAL_IDS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("extension modal id cache lock poisoned");
+    if let Some(modal_id) = modal_ids.get(&id) {
+        return modal_id;
+    }
+    let modal_id = Box::leak(format!("extension:{}", id.as_str()).into_boxed_str());
+    modal_ids.insert(id, modal_id);
+    modal_id
+}
+
+fn extension_modal_window_size(id: ExtensionId) -> Size<Pixels> {
+    const DEFAULT_WIDTH: f32 = 1120.0;
+    const DEFAULT_HEIGHT: f32 = 850.0;
+    const MAX_WIDTH: f32 = 1400.0;
+    const MAX_HEIGHT: f32 = 900.0;
+
+    let manifest_path = crate::shared_settings::ghostex_storage_paths()
+        .extensions_dir()
+        .join("installed")
+        .join(id.as_str())
+        .join("ghostex-extension.json");
+    let modal = std::fs::read(manifest_path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .and_then(|manifest| manifest.get("modal").cloned());
+    let dimension = |name: &str, default: f32, cap: f32| {
+        modal
+            .as_ref()
+            .and_then(|modal| modal.get(name))
+            .and_then(serde_json::Value::as_f64)
+            .map(|value| value as f32)
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .map(|value| value.min(cap))
+            .unwrap_or(default)
+    };
+    size(
+        px(dimension("width", DEFAULT_WIDTH, MAX_WIDTH)),
+        px(dimension("height", DEFAULT_HEIGHT, MAX_HEIGHT)),
+    )
 }

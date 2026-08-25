@@ -16,6 +16,7 @@ export type ghostexHotkeyActionId =
   | 'openHotkeys'
   | 'moveSidebar'
   | 'openCommandsPanel'
+  | 'openExtensions'
   | 'openPlugins'
   | 'popOutPane'
   | 'promptEditor'
@@ -92,6 +93,7 @@ export type ghostexHotkeyAction =
   | { id: ghostexHotkeyActionId; kind: 'openCommandPalette' }
   | { id: ghostexHotkeyActionId; kind: 'openSessionSearchPalette' }
   | { id: ghostexHotkeyActionId; kind: 'openCommandsPanel' }
+  | { id: ghostexHotkeyActionId; kind: 'openExtensions' }
   | { id: ghostexHotkeyActionId; kind: 'openDocsFoldersSettings' }
   | { id: ghostexHotkeyActionId; kind: 'openSettings' }
   | { id: ghostexHotkeyActionId; kind: 'openFindPrompts' }
@@ -187,6 +189,13 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     description: 'Open app settings.',
     id: 'openSettings',
     title: 'Open Settings',
+  },
+  {
+    action: { id: 'openExtensions', kind: 'openExtensions' },
+    defaultKey: '',
+    description: 'Browse and manage Ghostex extensions.',
+    id: 'openExtensions',
+    title: 'Open Extensions',
   },
   {
     action: { id: 'openHotkeys', kind: 'openHotkeys' },
