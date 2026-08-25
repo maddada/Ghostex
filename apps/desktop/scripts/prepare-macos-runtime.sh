@@ -373,6 +373,118 @@ prepare_code_server_app_node_runtime() {
 	printf '%s\n' "$node_bin"
 }
 
+# CDXC:StrandedSubmoduleCheckout 2026-08-25: The 2026-08-22 restructure moved the
+# code-server, zmx and zehn gitlinks from the repository root into .dependencies/.
+# Git cannot relocate a submodule working tree as part of a gitlink rename, so every
+# checkout that had them initialized before that commit keeps the real tree at the old
+# top-level path and receives an empty directory at the new one. That state is
+# indistinguishable from "this contributor never initialized the optional submodule"
+# unless the stranded signature is checked explicitly, and the contributor skip would
+# otherwise package an app whose Code tab cannot start. These helpers identify the
+# stranded signature so the packaging steps can fail with repair instructions, while
+# still skipping for a checkout that genuinely has no working tree for the submodule:
+# a real checkout at the old top-level path proves stranding, and for a checkout with
+# no tree at either path, git's recorded core.worktree separates "initialized here"
+# from "never initialized or deliberately `git submodule deinit`ed", which unsets it.
+repo_git_common_dir() {
+	local dir
+	dir="$(cd "$REPO_ROOT" && git rev-parse --git-common-dir 2>/dev/null)" || return 1
+	[[ -n "$dir" ]] || return 1
+	(cd "$REPO_ROOT" && cd "$dir" && pwd)
+}
+
+submodule_git_module_dir() {
+	# $1 = submodule name in .gitmodules (unchanged by the restructure).
+	local common_dir
+	common_dir="$(repo_git_common_dir)" || return 1
+	[[ -d "$common_dir/modules/$1" ]] || return 1
+	printf '%s\n' "$common_dir/modules/$1"
+}
+
+submodule_configured_worktree() {
+	# $1 = submodule name. Prints the working tree git recorded when the submodule was
+	# initialized here. `git submodule deinit` unsets core.worktree, so an unset value
+	# means this checkout deliberately has no working tree for the submodule and the
+	# optional-resource skip is the correct behaviour.
+	local module_dir worktree resolved
+	module_dir="$(submodule_git_module_dir "$1")" || return 1
+	worktree="$(git config -f "$module_dir/config" --get core.worktree 2>/dev/null)" || return 1
+	[[ -n "$worktree" ]] || return 1
+	case "$worktree" in
+	/*) resolved="$worktree" ;;
+	*) resolved="$module_dir/$worktree" ;;
+	esac
+	if [[ -d "$resolved" ]]; then
+		(cd "$resolved" && pwd)
+		return 0
+	fi
+	printf '%s\n' "$resolved"
+}
+
+legacy_submodule_checkout() {
+	# $1 = pre-restructure top-level directory, $2 = file that proves a real checkout.
+	[[ -f "$REPO_ROOT/$1/$2" ]] || return 1
+	(cd "$REPO_ROOT/$1" && pwd)
+}
+
+fail_if_code_server_checkout_is_stranded() {
+	local expected_root legacy_root configured_worktree
+	expected_root="$REPO_ROOT/.dependencies/code-server"
+	legacy_root="$(legacy_submodule_checkout code-server package.json || true)"
+	if [[ -z "$legacy_root" ]]; then
+		configured_worktree="$(submodule_configured_worktree code-server || true)"
+		# Never initialized here, or deliberately deinitialized: keep the contributor skip.
+		[[ -n "$configured_worktree" ]] || return 0
+		if [[ "$configured_worktree" == "$expected_root" ]]; then
+			cat >&2 <<EOF
+code-server source is missing:
+  $expected_root
+
+This checkout initialized the code-server submodule, so its working tree was
+removed rather than never having been set up. Refusing to package an app whose
+Code tab cannot start.
+
+Restore the checkout:
+  git -C $REPO_ROOT submodule update --init .dependencies/code-server
+
+If you moved the tree elsewhere, point the build at it instead:
+  GHOSTEX_CODE_SERVER_ROOT=/path/to/code-server bun run start
+EOF
+			exit 1
+		fi
+		legacy_root="$configured_worktree"
+	fi
+	cat >&2 <<EOF
+code-server source is stranded outside .dependencies/code-server:
+  $legacy_root
+
+The 2026-08-22 restructure moved the submodule from code-server to
+.dependencies/code-server. Git cannot move a submodule working tree with the
+gitlink, so your checkout stayed where it was and .dependencies/code-server is
+empty. Refusing to package an app whose Code tab cannot start.
+
+Unblock this build without moving anything:
+  GHOSTEX_CODE_SERVER_ROOT=$legacy_root bun run start
+
+Repair the checkout (keeps node_modules and the built VS Code payload):
+  cd $REPO_ROOT
+  rmdir .dependencies/code-server
+  mv $legacy_root .dependencies/code-server
+  echo 'gitdir: ../../.git/modules/code-server' > .dependencies/code-server/.git
+  git config -f .git/modules/code-server/config \\
+    core.worktree ../../../.dependencies/code-server
+  echo 'gitdir: ../../../../.git/modules/code-server/modules/lib/vscode' \\
+    > .dependencies/code-server/lib/vscode/.git
+  git config -f .git/modules/code-server/modules/lib/vscode/config \\
+    core.worktree ../../../../../../.dependencies/code-server/lib/vscode
+
+Then verify the repair:
+  git -C .dependencies/code-server rev-parse HEAD
+  git submodule status .dependencies/code-server
+EOF
+	exit 1
+}
+
 resolve_code_server_root() {
 	local configured="${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-}}"
 	if [[ -n "$configured" ]]; then
@@ -1732,6 +1844,13 @@ if [[ ! -x "$CODE_SERVER_NPM_BIN" ]]; then
 fi
 CODE_SERVER_ROOT="$(resolve_code_server_root || true)"
 if [[ -z "$CODE_SERVER_ROOT" ]]; then
+	# CDXC:StrandedSubmoduleCheckout 2026-08-25: An explicitly configured root that does
+	# not resolve is a caller mistake, not a stranded checkout, so keep its own message.
+	# Otherwise a previously initialized code-server must never fall through to the
+	# contributor skip below; that skip is only correct when nothing was ever set up.
+	if [[ "$CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED" != "1" ]]; then
+		fail_if_code_server_checkout_is_stranded
+	fi
 	if [[ "$CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED" == "1" || "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" == "0" ]]; then
 		cat >&2 <<EOF
 code-server source is required to package the embedded Source-tab runtime.
@@ -1817,12 +1936,41 @@ mkdir -p "$CLI_DIR"
 # CDXC:ZmxPersistence 2026-05-20-09:57: zmx pane refresh is now a zmx IPC feature, so Ghostex must bundle the pinned submodule binary instead of depending on whichever zmx happens to be on PATH. Build the submodule for the requested macOS architecture and copy it into app resources where TerminalWorkspaceView can launch it directly.
 if [[ ! -f "$ZMX_ROOT/build.zig" ]]; then
 	{
-		printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
 		if [[ "$ZMX_ROOT_EXPLICITLY_CONFIGURED" == "1" ]]; then
+			printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
 			printf 'ZMX_ROOT is set to an external checkout, so it is not a submodule of this repository.\nPoint ZMX_ROOT at a zmx checkout that contains build.zig, or unset it to use the bundled submodule.\n'
 		else
-			printf 'Initialize submodules before building:\n  git -C %q submodule update --init --recursive -- %q\n' \
-				"$REPO_ROOT" "$ZMX_ROOT"
+			# CDXC:StrandedSubmoduleCheckout 2026-08-25: `git submodule update --init` is the
+			# wrong repair for a checkout the 2026-08-22 restructure stranded at the old
+			# top-level zmx path: it re-clones instead of reusing the tree that is already
+			# on disk. Detect that signature and print the move plus pointer repair.
+			ZMX_LEGACY_ROOT="$(legacy_submodule_checkout zmx build.zig || true)"
+			if [[ -n "$ZMX_LEGACY_ROOT" ]]; then
+				printf 'zmx source is stranded at its pre-restructure path:\n  %s\n\n' "$ZMX_LEGACY_ROOT"
+				cat <<EOF
+The 2026-08-22 restructure moved the submodule from zmx to .dependencies/zmx.
+Git cannot move a submodule working tree with the gitlink, so your checkout
+stayed at the old path and .dependencies/zmx is empty.
+
+Unblock this build without moving anything:
+  ZMX_ROOT=$ZMX_LEGACY_ROOT bun run start
+
+Repair the checkout (keeps the built zig-out payload):
+  cd $REPO_ROOT
+  rmdir .dependencies/zmx
+  mv zmx .dependencies/zmx
+  echo 'gitdir: ../../.git/modules/zmx' > .dependencies/zmx/.git
+  git config -f .git/modules/zmx/config core.worktree ../../../.dependencies/zmx
+
+Then verify the repair:
+  git -C .dependencies/zmx rev-parse HEAD
+  git submodule status .dependencies/zmx
+EOF
+			else
+				printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
+				printf 'Initialize submodules before building:\n  git -C %q submodule update --init --recursive -- %q\n' \
+					"$REPO_ROOT" "$ZMX_ROOT"
+			fi
 		fi
 	} >&2
 	exit 1
