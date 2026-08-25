@@ -8,6 +8,52 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>8.0.0</title>
+            <pubDate>Tue, 25 Aug 2026 03:41:13 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.0.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>80000</sparkle:version>
+            <sparkle:shortVersionString>8.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 8.0.0
+
+## 8.0.0 - 2026-08-25
+
+- Major
+  - Every session can now carry a note — what you were doing, what to pick up next — attached to the agent's own conversation so it survives closing, resuming, and compaction, shown as a dot with a hover preview on the session row across the desktop, web, and Android apps, editable from the chat composer and the session menu, and readable from `ghostex session-note`.
+  - Stashed Prompts is now Saved Prompts and gained colored tags, a tag rail with an Untagged filter, and a Go to session action that takes you back to the conversation a prompt came from; saved prompts stay attached to that conversation even after the agent compacts it, Alt+S saves what is in the composer, and Cmd+Alt+S opens the list.
+  - Sessions you are not working on right now can be parked instead of closed: they leave the active list, collect in a collapsible Parked section at the bottom of their project, and keep their terminal — turn it on with Enable session parking.
+  - Scheduled automations now resume the durable agent session they created instead of starting a new conversation on every run, so a recurring job keeps its context, and an agent can link the session it is working in to the board card it came from.
+  - Session Chat shows the sub-agents Claude is running as their own strip with per-agent status and token counters, reports what the terminal is doing while a turn is in flight, and shows Claude's current permission mode as a pill you can change from the composer.
+  - Prompt search opens as its own window over whatever you were doing, on Cmd+Shift+F, instead of taking over the focused terminal, and now finds text inside prompts you pasted into Claude Code rather than only the collapsed "Pasted text" marker.
+  - Closing browser panes, chat surfaces, and terminals no longer leaves their renderer processes behind, so a long day of work releases memory instead of climbing into tens of gigabytes, and a chat surface you have not looked at for twenty minutes is unloaded and restored the moment you return to it.
+  - First launch now walks through a six-step setup that skips the steps your machine already satisfies and ends by creating your first project and session, so a new install is usable without a trip through Settings.
+  - The Linux app draws the same integrated titlebar and window controls as Windows and macOS, and Linux downloads now include a portable `.tar.zst` archive alongside the DEB and RPM packages.
+  - Ghostex ships a refreshed look: a new app icon, darker app chrome, one toggle and focus-ring shape across every control, restyled Kanban, Automate, and Settings surfaces, and new defaults for fresh installs — Session Chat as the agent interface, sessions grouped by project in the sidebar, and colored agent logos.
+- Minor
+  - Exporting a transcript now asks what to include first — the commands the agent ran, the patches it applied, and its reasoning — instead of always writing everything.
+  - Trycua can be installed from Settings on Windows and Linux, not only macOS, and Settings shows the exact command the button runs.
+  - Ghostex's bundled agent skills are consolidated behind one Ghostex CLI skill that covers orchestration, prompt-history search, and automations, and Project Board Beads is installable alongside it.
+  - A session that runs `/compact` no longer gets stuck reporting work forever, so its queued prompts keep being delivered.
+  - A Delayed Send now delivers the message staged in the chat composer instead of pressing Enter on an empty line and dropping it.
+  - Large tool outputs no longer disappear from the middle of a transcript, and very long ones are shortened for display with the full text still one click away in the file.
+  - Scrolling up in a chat keeps loading older messages on its own instead of stopping at a Load earlier button, and jumping back to the newest message animates instead of snapping.
+  - A session forked with `codex fork` keeps its chat instead of freezing on the conversation it was forked from.
+  - A terminal title that only repeats the working directory no longer becomes the session's name, and Grok's status prefixes are stripped out of generated titles.
+  - Renaming a session from chat now shows the name the agent picked as its own card in the conversation, and a command you type in the composer reads as your own turn instead of a system line.
+  - Claude's rotating status markers are recognized again, so live status shows while it works, and the messages it prints when it rejects a prompt — an unknown command, for example — now appear in the chat instead of the prompt silently vanishing.
+  - Images in a transcript render as compact thumbnails with a copy-path action on the thumbnail and in the preview, and Codex's generated images show the same way.
+  - Typing in the chat composer no longer loses the keyboard to the terminal behind it, and a chat draft is kept until the terminal confirms it was pasted.
+  - Ghostex's own bundled command-line tools are recognized on Linux, so the CLI installs and repairs correctly there.
+  - Sending a prompt now waits for the terminal to confirm it was queued, so a message can no longer be reported as sent while it was dropped.
+  - The macOS titlebar zooms on a double-click, the traffic lights and project name sit at a comfortable inset, and workarea switch hotkeys work from every surface.
+  - Resources now attributes an orphaned listener to the project that owns it.
+  - Browser and editor panes wait ten minutes before sleeping instead of five, and an agent terminal that has never been prompted is never put to sleep.
+  - Card association from an agent session contributed by [@banozz](https://github.com/banozz).
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.0.0/ghostex-8.0.0-arm64.dmg" length="114719912" type="application/octet-stream" sparkle:edSignature="PTDl1fdqi0dcP+yV0W0W79HnfEMQaouzPoZo2N5cnE2pAfejLHxsnJvoBSbR8a9QhtxZa2uja7iCdLrRAhF3DA=="/>
+        </item>
+        <item>
             <title>7.13.0</title>
             <pubDate>Sat, 22 Aug 2026 09:44:43 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.13.0</sparkle:fullReleaseNotesLink>
@@ -176,46 +222,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.9.0/ghostex-7.9.0-arm64.dmg" length="114699750" type="application/octet-stream" sparkle:edSignature="dLVkQg22iLNIT5zpz/pCjCNOd6QrvMJlVz+kxq6qpPGLWu6k6QkhfU9hFuYTKuPMlwUar3x7EOJ5O6M2xMdnCQ=="/>
         </item>
         <item>
-            <title>7.8.0</title>
-            <pubDate>Sat, 15 Aug 2026 14:04:39 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.8.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>70800</sparkle:version>
-            <sparkle:shortVersionString>7.8.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.8.0
-
-## 7.8.0 - 2026-08-15
-
-- Major
-  - Ghostex now uses the latest upstream Ghostty terminal engine to improve terminal performance while lowering RAM and CPU use.
-  - Session Chat can search the full conversation and jump between matching results on desktop, web, and Android.
-  - Session Chat can mention installed agent skills by typing `$` and choosing from the session's available skills.
-  - Session Chat now puts Claude and Codex model, reasoning effort, Fast Mode, permission mode, and Plan mode controls directly in the chat workflow.
-  - Automations can run once after a countdown timer or at a chosen date and time.
-  - Recent Projects can open a real project-scoped terminal on a connected remote machine.
-  - Project Board can initialize, update, and migrate Beads in the connected environment.
-- Minor
-  - The Ghostty update fixes a terminal crash that could occur when hyperlinks reflowed.
-  - Windows ARM64 now uses an optimized native Ghostty terminal build.
-  - Session Chat makes agent activity easier to scan with grouped thinking, compact tool summaries, and optional Verbose Mode.
-  - Session Chat appearance settings now cover theme, custom font, and transcript width on desktop and Android.
-  - Session Chat drafts can be stashed directly from the composer.
-  - Failed Session Chat sends restore the unsent message and show a clear error.
-  - Accepted Session Chat sends clear the composer and show the working state immediately.
-  - Session Chat keeps keyboard focus and Select All inside the composer on the desktop app.
-  - Expansion for sidebar collections and session groups stays local to each window and device.
-  - Sidebar item tooltips wait longer before appearing so they do not interrupt normal navigation.
-  - Toggle Chat View now defaults to `Alt+G`, and customized hotkeys can be reset individually.
-  - Manually launched Codex sessions reconnect to the correct conversation when process detection is delayed.
-  - macOS no longer lets Chromium clone the app bundle on every launch and leave gigabytes of temporary data behind.
-  - On-demand component cleanup now removes obsolete versions and abandoned installation artifacts.
-  - Source mode is disabled for remote projects where it cannot operate correctly.
-  - One-shot automations preserve their deadline across restarts and disable themselves after the due run is queued.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.8.0/ghostex-7.8.0-arm64.dmg" length="114778165" type="application/octet-stream" sparkle:edSignature="1H7Ut5fK8FrEoaJ/kJJwTJkCC8eLrg8VPVQZ0B4ceseqHj04jkSp19WHC1t90T5u4JI34ugX/VBq5ZQX+iSIAA=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -227,6 +233,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: Kqng9cCKsWA5A/srfFF5YsfeoRysHUtp0LYT36jXhyay/JECcJdoT12Ax2thoV2OxNaa8VpnBXuW/QlU05+BCA==
-length: 22568
+edSignature: /eFMX/3hz1rS2PuNKcjDIEblz88uhdQMoRwVmlfz5HlEQJUU4pUYiBErmF6AOSc92bQCCvQxEX9P54ZsFbttCg==
+length: 25926
 -->
