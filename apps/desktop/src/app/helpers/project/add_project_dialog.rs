@@ -136,7 +136,7 @@ pub(crate) fn gpui_add_project_dialog_translate_local_windows_paths(
         else {
             continue;
         };
-        let translated = windows_terminal_backend::wsl_path_for_windows_path(Path::new(path))
+        let translated = crate::windows_terminal_backend::wsl_path_for_windows_path(Path::new(path))
             .map_err(|_| {
                 "The selected Windows path could not be translated into WSL.".to_string()
             })?;

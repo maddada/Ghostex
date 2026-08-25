@@ -967,14 +967,15 @@ impl GhostexGpuiApp {
     pub(crate) fn receive_sidebar_create_project_agent_payload(
         &mut self,
         payload: &str,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) {
         let Ok(message) = gpui_sidebar_create_project_agent_from_json(payload) else {
             return;
         };
+        // Only the Windows arm below drives a workspace agent from this payload.
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = message;
+            let _ = (message, cx);
             return;
         }
         #[cfg(target_os = "windows")]

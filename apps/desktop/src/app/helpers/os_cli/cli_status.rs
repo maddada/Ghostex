@@ -59,7 +59,7 @@ pub(crate) struct GpuiGhostexCliProbe {
 
 #[cfg(target_os = "windows")]
 pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
-    let status = windows_terminal_backend::ghostex_cli_status()?;
+    let status = crate::windows_terminal_backend::ghostex_cli_status()?;
     Ok(GpuiGhostexCliProbe {
         cli_skill_path: status.cli_skill_path,
         browser_skill_path: status.browser_skill_path,
