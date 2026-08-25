@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '@/packages/core-ui/styles.css';
 import {
   isSessionChatEventType,
@@ -20,8 +21,25 @@ import {
 import {
   GXSERVER_PROTOCOL_VERSION,
   type GxserverListStashedPromptsResult,
+  type GxserverPresentationProject,
+  type GxserverPresentationSession,
+  type GxserverPresentationSnapshot,
   type GxserverReadSessionAgentNoteResult,
 } from '@/packages/shared/gxserver-protocol';
+import type { GhostexExtensionContext } from '@/packages/shared/ghostex-extension-sdk';
+import {
+  GHOSTEX_CHAT_BAR_PANEL_STORAGE_KEY,
+  type GhostexChatBarBridgeRequestMessage,
+  type GhostexChatBarPanelSessionState,
+  type GhostexChatBarPanelSessions,
+  type GhostexChatBarPanelShowMessage,
+  type GhostexExtensionLaunchContext,
+  type GhostexExtensionRuntimeResult,
+  type GhostexInstalledExtension,
+  type GhostexListExtensionsResult,
+  type GhostexSetExtensionBadgeResult,
+  type GhostexSetExtensionStateResult,
+} from '@/packages/shared/ghostex-extensions';
 import {
   clampSessionChatTranscriptWidthPercent,
   DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
@@ -34,6 +52,7 @@ import {
   type SessionChatHostComposerBridge,
   type SessionChatHostLinks,
 } from '@/packages/core-ui/chat/session-chat-view';
+import type { SessionChatBarExtension } from '@/packages/core-ui/chat/session-chat-extension-panel';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 
 /*
@@ -73,6 +92,7 @@ interface ChatBridgeNamespace {
   onSessionChatHandoffToTerminalRequested?: () => void;
   onSessionChatInsertPromptRequested?: (payload: { content?: unknown }) => void;
   onSessionChatStashPromptRequested?: () => void;
+  onSessionChatExtensionRequested?: (payload: GhostexChatBarPanelShowMessage) => void;
 }
 
 const BOOTSTRAP_RETRY_DELAY_MS = 120;
@@ -169,6 +189,128 @@ async function rpc<TResult>(
     throw new Error(message);
   }
   return envelope.result as TResult;
+}
+
+interface GxserverReadPresentationSnapshotResult {
+  snapshot: GxserverPresentationSnapshot;
+}
+
+function recordText(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === 'string' && field.trim() ? field : undefined;
+}
+
+function isChatBarExtension(extension: GhostexInstalledExtension): boolean {
+  return (
+    extension.state.enabled &&
+    extension.manifest.placements?.includes('chat-bar') === true &&
+    (extension.state.placement ?? extension.manifest.defaultPlacement) === 'chat-bar'
+  );
+}
+
+function readChatBarPanelSessions(value: unknown): GhostexChatBarPanelSessions {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  const sessions: GhostexChatBarPanelSessions = {};
+  for (const [sessionKey, candidate] of Object.entries(value)) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      continue;
+    }
+    const state = candidate as Partial<GhostexChatBarPanelSessionState>;
+    if (typeof state.open !== 'boolean' || typeof state.minimized !== 'boolean') {
+      continue;
+    }
+    sessions[sessionKey] = {
+      open: state.open,
+      minimized: state.minimized,
+      ...(typeof state.activeExtensionId === 'string' && state.activeExtensionId
+        ? { activeExtensionId: state.activeExtensionId }
+        : {}),
+    };
+  }
+  return sessions;
+}
+
+function extensionIconUrl(extension: GhostexInstalledExtension): string | undefined {
+  const icon = extension.manifest.icon.trim();
+  if (!icon) {
+    return undefined;
+  }
+  if (icon.startsWith('data:') || icon.startsWith('http://') || icon.startsWith('https://')) {
+    return icon;
+  }
+  const runtimeUrl = extension.runtime.url;
+  if (!runtimeUrl) {
+    return undefined;
+  }
+  try {
+    return new URL(icon, runtimeUrl).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function bridgeCallError(
+  code: 'invalidRequest' | 'notFound' | 'permissionDenied' | 'operationFailed',
+  message: string,
+  permission?: 'exec' | 'cli'
+): Error {
+  return Object.assign(new Error(message), { code, ...(permission ? { permission } : {}) });
+}
+
+function extensionLaunchContext(
+  project: GxserverPresentationProject,
+  session: GxserverPresentationSession
+): GhostexExtensionLaunchContext {
+  return {
+    sessionId: session.sessionId,
+    projectName: project.title,
+    ...(project.path ? { projectPath: project.path } : {}),
+    worktree: Boolean(project.worktree),
+    ...(recordText(project.worktree, 'branch') ? { worktreeBranch: recordText(project.worktree, 'branch') } : {}),
+  };
+}
+
+function extensionPageContext(
+  project: GxserverPresentationProject,
+  session: GxserverPresentationSession
+): GhostexExtensionContext {
+  const worktreeName = recordText(project.worktree, 'name');
+  const worktreeBranch = recordText(project.worktree, 'branch');
+  const parentProject = recordText(project.worktree, 'parentProjectName');
+  const title = session.displayTitle ?? session.primaryTitle ?? session.title;
+  const details = {
+    title,
+    ...(session.title !== title ? { alias: session.title } : {}),
+    sessionId: session.sessionId,
+    kind: session.kind,
+    status: session.lifecycleState,
+    activity: session.activity,
+    ...(session.agentId ? { agent: session.agentId } : {}),
+    ...(session.agentSessionId ? { agentSessionId: session.agentSessionId } : {}),
+    ...(session.terminalTitle ? { terminalTitle: session.terminalTitle } : {}),
+    ...(session.subtitle ? { detail: session.subtitle } : {}),
+    ...(session.sessionPersistenceProvider
+      ? { persistence: `${session.sessionPersistenceProvider} (${session.zmxName})` }
+      : {}),
+    project: project.title,
+    ...(project.path ? { projectPath: project.path } : {}),
+    ...(worktreeName ? { worktree: worktreeName } : {}),
+    ...(worktreeBranch ? { worktreeBranch } : {}),
+    ...(parentProject ? { parentProject } : {}),
+    ...(session.lastActiveAt ? { lastActive: session.lastActiveAt } : {}),
+  };
+  return {
+    activeSession: details,
+    startSession: details,
+    project: { name: project.title, ...(project.path ? { path: project.path } : {}) },
+    worktree: { isWorktree: Boolean(project.worktree), ...(worktreeBranch ? { branch: worktreeBranch } : {}) },
+    placement: 'chat-bar',
+  };
 }
 
 function createGpuiSessionChatTransport(
@@ -786,6 +928,323 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
   };
 }
 
+interface GpuiSessionChatPageProps {
+  agentLabel: string | null;
+  bootstrap: { authToken: string; baseUrl: string };
+  composerBridge: SessionChatHostComposerBridge;
+  projectId: string;
+  sessionId: string;
+  theme: SessionChatTheme;
+  transport: SessionChatTransport;
+}
+
+function GpuiSessionChatPage({
+  agentLabel,
+  bootstrap,
+  composerBridge,
+  projectId,
+  sessionId,
+  theme,
+  transport,
+}: GpuiSessionChatPageProps) {
+  const sessionKey = `${projectId}:${sessionId}`;
+  const [extensions, setExtensions] = useState<GhostexInstalledExtension[]>([]);
+  const extensionsRef = useRef<GhostexInstalledExtension[]>([]);
+  const [panelState, setPanelState] = useState<GhostexChatBarPanelSessionState>({
+    open: false,
+    minimized: false,
+  });
+  const panelStateRef = useRef(panelState);
+  const panelSessionsRef = useRef<GhostexChatBarPanelSessions>({});
+  const ownerExtensionIdRef = useRef<string | undefined>(undefined);
+  const extensionContextRef = useRef<{
+    project: GxserverPresentationProject;
+    session: GxserverPresentationSession;
+  } | null>(null);
+  const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const publishExtensions = useCallback((next: GhostexInstalledExtension[]): void => {
+    extensionsRef.current = next;
+    setExtensions(next);
+  }, []);
+
+  const replaceExtension = useCallback(
+    (replacement: GhostexInstalledExtension): void => {
+      publishExtensions(
+        extensionsRef.current.map((extension) => (extension.id === replacement.id ? replacement : extension))
+      );
+    },
+    [publishExtensions]
+  );
+
+  const startExtension = useCallback(
+    async (extensionId: string): Promise<void> => {
+      const extension = extensionsRef.current.find((candidate) => candidate.id === extensionId);
+      const context = extensionContextRef.current;
+      if (!extension || !context || (extension.runtime.state === 'ready' && extension.runtime.url)) {
+        return;
+      }
+      replaceExtension({
+        ...extension,
+        runtime: { state: 'starting' },
+      });
+      try {
+        const result = await rpc<GhostexExtensionRuntimeResult>(bootstrap, '/api/startExtension', {
+          id: extensionId,
+          context: extensionLaunchContext(context.project, context.session),
+        });
+        const current = extensionsRef.current.find((candidate) => candidate.id === extensionId);
+        if (current) {
+          replaceExtension({ ...current, runtime: result.status });
+        }
+      } catch (error) {
+        const current = extensionsRef.current.find((candidate) => candidate.id === extensionId);
+        if (current) {
+          replaceExtension({
+            ...current,
+            runtime: {
+              state: 'failed',
+              error: error instanceof Error ? error.message : 'The extension could not be started.',
+            },
+          });
+        }
+      }
+    },
+    [bootstrap, replaceExtension]
+  );
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      rpc<GhostexListExtensionsResult>(bootstrap, '/api/listExtensions', {}),
+      rpc<GxserverReadPresentationSnapshotResult>(bootstrap, '/api/readPresentationSnapshot', {}),
+    ])
+      .then(([extensionResult, presentationResult]) => {
+        if (!active) {
+          return;
+        }
+        const project = presentationResult.snapshot.projects.find((candidate) => candidate.projectId === projectId);
+        const session = presentationResult.snapshot.sessions.find(
+          (candidate) => candidate.projectId === projectId && candidate.sessionId === sessionId
+        );
+        if (!project || !session) {
+          throw new Error(`Session ${sessionId} was not found in project ${projectId}.`);
+        }
+        const chatBarExtensions = extensionResult.extensions
+          .filter(isChatBarExtension)
+          .sort((a, b) => a.id.localeCompare(b.id));
+        const owner = chatBarExtensions[0];
+        const storedSessions = readChatBarPanelSessions(owner?.state.storage[GHOSTEX_CHAT_BAR_PANEL_STORAGE_KEY]);
+        const storedState = storedSessions[sessionKey];
+        const requestedActiveId = storedState?.activeExtensionId;
+        const activeExtensionId = chatBarExtensions.some((extension) => extension.id === requestedActiveId)
+          ? requestedActiveId
+          : chatBarExtensions[0]?.id;
+        const initialState: GhostexChatBarPanelSessionState = {
+          open: storedState?.open ?? chatBarExtensions.length > 0,
+          minimized: storedState?.minimized ?? false,
+          ...(activeExtensionId ? { activeExtensionId } : {}),
+        };
+        extensionContextRef.current = { project, session };
+        ownerExtensionIdRef.current = owner?.id;
+        panelSessionsRef.current = storedSessions;
+        panelStateRef.current = initialState;
+        publishExtensions(chatBarExtensions);
+        setPanelState(initialState);
+        if (activeExtensionId) {
+          void startExtension(activeExtensionId);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          console.error('Could not initialize chat-bar extensions.', error);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [bootstrap, projectId, publishExtensions, sessionId, sessionKey, startExtension]);
+
+  const persistPanelState = useCallback(
+    (next: GhostexChatBarPanelSessionState): void => {
+      const ownerExtensionId = ownerExtensionIdRef.current;
+      if (!ownerExtensionId) {
+        return;
+      }
+      const nextSessions = { ...panelSessionsRef.current, [sessionKey]: next };
+      panelSessionsRef.current = nextSessions;
+      persistenceQueueRef.current = persistenceQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const result = await rpc<GhostexSetExtensionStateResult>(bootstrap, '/api/updateExtensionState', {
+            id: ownerExtensionId,
+            patch: {
+              storage: { [GHOSTEX_CHAT_BAR_PANEL_STORAGE_KEY]: nextSessions },
+            },
+          });
+          replaceExtension(result.extension);
+        })
+        .catch((error: unknown) => {
+          console.error('Could not persist chat-bar panel state.', error);
+        });
+    },
+    [bootstrap, replaceExtension, sessionKey]
+  );
+
+  const updatePanelState = useCallback(
+    (patch: { activeExtensionId?: string; minimized?: boolean; open?: boolean }): void => {
+      const next: GhostexChatBarPanelSessionState = {
+        ...panelStateRef.current,
+        ...patch,
+      };
+      panelStateRef.current = next;
+      setPanelState(next);
+      persistPanelState(next);
+      if (patch.activeExtensionId) {
+        void startExtension(patch.activeExtensionId);
+      }
+    },
+    [persistPanelState, startExtension]
+  );
+
+  useEffect(() => {
+    const namespace = chatBridgeNamespace();
+    const previous = namespace.onSessionChatExtensionRequested;
+    const handleExtensionRequest = (payload: GhostexChatBarPanelShowMessage): void => {
+      const extensionId =
+        payload?.type === 'ghostexChatBarPanelShow' && typeof payload.extensionId === 'string'
+          ? payload.extensionId
+          : '';
+      if (!extensionsRef.current.some((extension) => extension.id === extensionId)) {
+        return;
+      }
+      updatePanelState({ activeExtensionId: extensionId, minimized: false, open: true });
+    };
+    namespace.onSessionChatExtensionRequested = handleExtensionRequest;
+    return () => {
+      if (namespace.onSessionChatExtensionRequested === handleExtensionRequest) {
+        namespace.onSessionChatExtensionRequested = previous;
+      }
+    };
+  }, [updatePanelState]);
+
+  const handleBridgeRequest = useCallback(
+    async (extensionId: string, request: GhostexChatBarBridgeRequestMessage): Promise<unknown> => {
+      const extension = extensionsRef.current.find((candidate) => candidate.id === extensionId);
+      const context = extensionContextRef.current;
+      if (!extension || !context) {
+        throw bridgeCallError('notFound', 'The chat-bar extension is not available.');
+      }
+      const params = request.params ?? {};
+      switch (request.method) {
+        case 'context':
+          return extensionPageContext(context.project, context.session);
+        case 'settings.get':
+          return extension.state.preferences;
+        case 'settings.set': {
+          const values = params.values;
+          if (!values || typeof values !== 'object' || Array.isArray(values)) {
+            throw bridgeCallError('invalidRequest', 'Settings values must be an object.');
+          }
+          const result = await rpc<GhostexSetExtensionStateResult>(bootstrap, '/api/updateExtensionState', {
+            id: extensionId,
+            patch: { preferences: values },
+          });
+          replaceExtension(result.extension);
+          return result.extension.state.preferences;
+        }
+        case 'storage.get': {
+          const key = typeof params.key === 'string' ? params.key : '';
+          if (!key || key.length > 128) {
+            throw bridgeCallError('invalidRequest', 'Storage requires a valid key.');
+          }
+          return extension.state.storage[key] ?? null;
+        }
+        case 'storage.set': {
+          const key = typeof params.key === 'string' ? params.key : '';
+          if (!key || key.length > 128) {
+            throw bridgeCallError('invalidRequest', 'Storage requires a valid key.');
+          }
+          const result = await rpc<GhostexSetExtensionStateResult>(bootstrap, '/api/updateExtensionState', {
+            id: extensionId,
+            patch: { storage: { [key]: params.value ?? null } },
+          });
+          replaceExtension(result.extension);
+          return result.extension.state.storage;
+        }
+        case 'ui.setBadge': {
+          const lines = params.lines;
+          if (!Array.isArray(lines) || lines.some((line) => typeof line !== 'string')) {
+            throw bridgeCallError('invalidRequest', 'Badge lines must be strings.');
+          }
+          await rpc<GhostexSetExtensionBadgeResult>(bootstrap, '/api/extensionBadge', {
+            id: extensionId,
+            lines,
+          });
+          return null;
+        }
+        case 'cli':
+        case 'exec': {
+          const permission = request.method;
+          if (
+            extension.manifest.permissions?.includes(permission) !== true ||
+            !extension.state.grantedPermissions.includes(permission)
+          ) {
+            throw bridgeCallError(
+              'permissionDenied',
+              `Extension ${extensionId} does not have ${permission} permission.`,
+              permission
+            );
+          }
+          throw bridgeCallError(
+            'operationFailed',
+            `${permission} is unavailable from a chat-bar subframe because CEF does not install native bridges in subframes.`
+          );
+        }
+        case 'ui.close':
+        case 'ui.toast':
+          return null;
+      }
+    },
+    [bootstrap, replaceExtension]
+  );
+
+  const chatBarExtensions = useMemo<SessionChatBarExtension[]>(
+    () =>
+      extensions.map((extension) => ({
+        id: extension.id,
+        title: extension.manifest.title,
+        ...(extensionIconUrl(extension) ? { iconUrl: extensionIconUrl(extension) } : {}),
+        ...(extension.runtime.url ? { url: extension.runtime.url } : {}),
+        ...(extension.runtime.error ? { error: extension.runtime.error } : {}),
+      })),
+    [extensions]
+  );
+
+  return (
+    <div className='native-sidebar-shell gpui-session-chat'>
+      <SessionChatView
+        agentLabel={agentLabel}
+        chatBarExtensions={chatBarExtensions}
+        chatBarPanelState={panelState}
+        className='gpui-session-chat-view'
+        diagnosticLog={postSessionChatDiagnosticLog}
+        hostActions={GPUI_SESSION_CHAT_HOST_ACTIONS}
+        hostComposerBridge={composerBridge}
+        hostLinks={GPUI_SESSION_CHAT_HOST_LINKS}
+        monacoVsBaseUrl='./monaco/vs'
+        onChatBarBridgeRequest={handleBridgeRequest}
+        onChatBarPanelStateChange={updatePanelState}
+        onDelayedActions={() => postSessionChatHostAction('delayedActions')}
+        sessionKey={sessionKey}
+        theme={theme}
+        transport={transport}
+        verboseMode={chatVerboseMode}
+      />
+    </div>
+  );
+}
+
 function renderFailure(root: ReturnType<typeof createRoot>, message: string, theme: SessionChatTheme): void {
   root.render(
     <div className='native-sidebar-shell gpui-session-chat'>
@@ -887,23 +1346,15 @@ if (!projectId || !sessionId) {
       const agentLabel = agentId ? (resolveSessionChatDisplayAgent(agentId) ?? agentId) : null;
       renderReadyChat = (theme) => {
         root.render(
-          <div className='native-sidebar-shell gpui-session-chat'>
-            <SessionChatView
-              agentLabel={agentLabel}
-              className='gpui-session-chat-view'
-              diagnosticLog={postSessionChatDiagnosticLog}
-              hostActions={GPUI_SESSION_CHAT_HOST_ACTIONS}
-              hostComposerBridge={composerBridge}
-              hostLinks={GPUI_SESSION_CHAT_HOST_LINKS}
-              // Staged next to chat.html by apps/desktop/vite.config.ts (stageMonacoVs).
-              monacoVsBaseUrl='./monaco/vs'
-              onDelayedActions={() => postSessionChatHostAction('delayedActions')}
-              sessionKey={`${projectId}:${sessionId}`}
-              theme={theme}
-              transport={transport}
-              verboseMode={chatVerboseMode}
-            />
-          </div>
+          <GpuiSessionChatPage
+            agentLabel={agentLabel}
+            bootstrap={bootstrap}
+            composerBridge={composerBridge}
+            projectId={projectId}
+            sessionId={sessionId}
+            theme={theme}
+            transport={transport}
+          />
         );
       };
       renderReadyChat(chatTheme);

@@ -246,3 +246,69 @@ export interface GhostexSetExtensionBadgeResult {
   id: string;
   badge: GhostexExtensionBadge;
 }
+
+/*
+Chat-bar pages are CEF subframes, while the native extension bridge is
+main-frame-only. A proxy-aware vendored SDK posts only these typed messages to
+its parent; the chat panel verifies the frame window and loopback origin before
+answering. This protocol deliberately has no generic script/eval message.
+*/
+export const GHOSTEX_CHAT_BAR_PANEL_STORAGE_KEY = 'ghostex.chatBar.panelSessions';
+export const GHOSTEX_CHAT_BAR_BRIDGE_VERSION = 1 as const;
+
+export interface GhostexChatBarPanelSessionState {
+  open: boolean;
+  minimized: boolean;
+  activeExtensionId?: string;
+}
+
+export type GhostexChatBarPanelSessions = Record<string, GhostexChatBarPanelSessionState>;
+
+export interface GhostexChatBarPanelShowMessage {
+  type: 'ghostexChatBarPanelShow';
+  extensionId: string;
+}
+
+export interface GhostexChatBarPanelStateMessage {
+  type: 'ghostexChatBarPanelState';
+  sessionKey: string;
+  state: GhostexChatBarPanelSessionState;
+}
+
+export type GhostexChatBarBridgeMethod =
+  | 'context'
+  | 'cli'
+  | 'exec'
+  | 'settings.get'
+  | 'settings.set'
+  | 'storage.get'
+  | 'storage.set'
+  | 'ui.toast'
+  | 'ui.close'
+  | 'ui.setBadge';
+
+export interface GhostexChatBarBridgeRequestMessage {
+  type: 'ghostexChatBarBridgeRequest';
+  bridgeVersion: typeof GHOSTEX_CHAT_BAR_BRIDGE_VERSION;
+  requestId: string;
+  method: GhostexChatBarBridgeMethod;
+  params?: Record<string, unknown>;
+}
+
+export interface GhostexChatBarBridgeResponseMessage {
+  type: 'ghostexChatBarBridgeResponse';
+  bridgeVersion: typeof GHOSTEX_CHAT_BAR_BRIDGE_VERSION;
+  requestId: string;
+  ok: boolean;
+  result?: unknown;
+  error?: {
+    code: 'invalidRequest' | 'notFound' | 'permissionDenied' | 'operationFailed';
+    message: string;
+    permission?: GhostexExtensionPermission;
+  };
+}
+
+export interface GhostexChatBarBridgeReadyMessage {
+  type: 'ghostexChatBarBridgeReady';
+  bridgeVersion: typeof GHOSTEX_CHAT_BAR_BRIDGE_VERSION;
+}

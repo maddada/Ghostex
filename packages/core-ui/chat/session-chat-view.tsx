@@ -22,6 +22,11 @@ import { AppTooltip, TooltipProvider } from '../app-tooltip';
 import { SessionChatComposer, type SessionChatComposerHandle } from './session-chat-composer';
 import { sessionChatEmptyStateCopy } from './session-chat-empty-state';
 import {
+  SessionChatExtensionPanel,
+  type SessionChatBarExtension,
+  type SessionChatExtensionPanelProps,
+} from './session-chat-extension-panel';
+import {
   SessionChatHostActionsCluster,
   type SessionChatHostAction,
   type SessionChatHostActions,
@@ -204,6 +209,14 @@ export interface SessionChatViewProps {
    * logging omit it; the callback gates on the host's diagnostic scenario.
    */
   diagnosticLog?: (event: string, details?: Record<string, unknown>) => void;
+  /** Enabled extensions whose selected placement is below this chat's composer. */
+  chatBarExtensions?: readonly SessionChatBarExtension[];
+  /** Per-session persisted panel state supplied by the gxserver-backed host. */
+  chatBarPanelState?: { activeExtensionId?: string; minimized: boolean; open: boolean };
+  /** Persists a partial panel-state update for this session. */
+  onChatBarPanelStateChange?: (patch: { activeExtensionId?: string; minimized?: boolean; open?: boolean }) => void;
+  /** Strict typed SDK proxy used because CEF does not inject the bridge into chat subframes. */
+  onChatBarBridgeRequest?: SessionChatExtensionPanelProps['onBridgeRequest'];
   className?: string;
 }
 
@@ -312,6 +325,8 @@ function SessionAgentIdentity({ agentLabel, showName = true }: { agentLabel?: st
 export function SessionChatView({
   agentLabel,
   canSend = true,
+  chatBarExtensions = [],
+  chatBarPanelState,
   className,
   commandCatalog,
   diagnosticLog,
@@ -321,6 +336,8 @@ export function SessionChatView({
   monacoVsBaseUrl,
   onSwitchToTerminalForAgentPicker,
   onDelayedActions,
+  onChatBarBridgeRequest,
+  onChatBarPanelStateChange,
   previewText,
   sendOnEnter = true,
   sessionKey,
@@ -1059,6 +1076,19 @@ export function SessionChatView({
                       skillHeading={`${displayAgentName(agentLabel) ?? 'Agent'} skills`}
                     />
                   </div>
+                  {chatBarPanelState?.open && chatBarExtensions.length > 0 ? (
+                    <SessionChatExtensionPanel
+                      activeExtensionId={chatBarPanelState.activeExtensionId}
+                      extensions={chatBarExtensions}
+                      minimized={chatBarPanelState.minimized}
+                      onActiveExtensionChange={(activeExtensionId) =>
+                        onChatBarPanelStateChange?.({ activeExtensionId, minimized: false, open: true })
+                      }
+                      onBridgeRequest={onChatBarBridgeRequest}
+                      onClose={() => onChatBarPanelStateChange?.({ open: false })}
+                      onMinimizedChange={(minimized) => onChatBarPanelStateChange?.({ minimized })}
+                    />
+                  ) : null}
                 </div>
               </div>
             </div>
