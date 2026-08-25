@@ -1,12 +1,16 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::{Component, Path};
 use std::time::Duration;
+
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 
 use crate::GhostexGpuiApp;
 use crate::app::helpers::{gpui_gxserver_domain_projects_result, gpui_gxserver_rpc_result};
 
 use super::{
-    GpuiExtensionPermission, GpuiExtensionPlacement, GpuiExtensionProjectMetadata,
-    GpuiExtensionsSnapshot, GpuiInstalledExtension,
+    GpuiExtensionPermission, GpuiExtensionPlacement, GpuiExtensionPopupSize,
+    GpuiExtensionProjectMetadata, GpuiExtensionsSnapshot, GpuiInstalledExtension,
 };
 
 pub(crate) fn read_gpui_extensions_snapshot() -> Result<
@@ -86,6 +90,8 @@ fn parse_installed_extension(value: &serde_json::Value) -> Option<GpuiInstalledE
     let id = text(object.get("id"))?.to_string();
     let manifest = object.get("manifest")?.as_object()?;
     let state = object.get("state")?.as_object()?;
+    let title = text(manifest.get("title"))?.to_string();
+    let icon_data_url = extension_icon_data_url(&id, text(manifest.get("icon"))?)?;
     let declared_permissions = parse_permissions(manifest.get("permissions"));
     let granted_permissions = parse_permissions(state.get("grantedPermissions"));
     let placements = manifest
@@ -108,17 +114,66 @@ fn parse_installed_extension(value: &serde_json::Value) -> Option<GpuiInstalledE
         .and_then(|runtime| runtime.get("url"))
         .and_then(serde_json::Value::as_str)
         .map(str::to_string);
+    let popup_size = manifest
+        .get("popup")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|size| {
+            Some(GpuiExtensionPopupSize {
+                width: size.get("width")?.as_u64()?.min(420) as f32,
+                height: size.get("height")?.as_u64()?.min(640) as f32,
+            })
+        });
+    let badge_lines = object
+        .get("badge")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|badge| badge.get("lines"))
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .map(str::to_string)
+        .collect();
     Some(GpuiInstalledExtension {
         id,
+        title,
+        icon_data_url,
         declared_permissions,
         granted_permissions,
         placements,
         placement,
+        popup_size,
         preferences,
         storage,
         runtime_url,
+        badge_lines,
         enabled: state.get("enabled").and_then(serde_json::Value::as_bool) == Some(true),
+        pinned: state.get("pinned").and_then(serde_json::Value::as_bool) == Some(true),
+        terminal_pane: manifest.get("kind").and_then(serde_json::Value::as_str)
+            == Some("terminal-pane"),
     })
+}
+
+fn extension_icon_data_url(id: &str, icon: &str) -> Option<String> {
+    let icon = Path::new(icon);
+    if icon.is_absolute()
+        || icon
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::RootDir))
+    {
+        return None;
+    }
+    let payload_dir = crate::shared_settings::ghostex_storage_paths()
+        .extensions_dir()
+        .join("installed")
+        .join(id);
+    let bytes = std::fs::read(payload_dir.join(icon)).ok()?;
+    if bytes.is_empty() || bytes.len() > 256 * 1024 {
+        return None;
+    }
+    Some(format!(
+        "data:image/svg+xml;base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    ))
 }
 
 fn parse_permissions(value: Option<&serde_json::Value>) -> HashSet<GpuiExtensionPermission> {

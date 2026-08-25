@@ -360,7 +360,7 @@ fn request_text<'a>(value: &'a serde_json::Value, key: &str, max_chars: usize) -
         .filter(|text| !text.is_empty() && text.chars().count() <= max_chars)
 }
 
-fn extension_rpc_result(
+pub(crate) fn extension_rpc_result(
     path: &str,
     params: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {

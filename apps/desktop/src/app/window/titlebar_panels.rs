@@ -24,6 +24,7 @@ impl Default for GpuiTitlebarAnchoredDropdownState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiTitlebarPopupKind {
     Actions,
+    Extensions,
     Git,
     OpenTargets,
     Resources,
@@ -34,6 +35,7 @@ impl GpuiTitlebarPopupKind {
     pub(crate) fn diagnostic_label(self) -> &'static str {
         match self {
             Self::Actions => "actions",
+            Self::Extensions => "extensions",
             Self::Git => "git",
             Self::OpenTargets => "openTargets",
             Self::Resources => "resources",
@@ -284,6 +286,41 @@ impl Render for GpuiTitlebarPopupWindow {
                     });
                 }),
             )
+            .on_action(
+                cx.listener(|this, action: &LaunchGpuiExtension, window, cx| {
+                    let extension_id = action.extension_id.clone();
+                    this.update_main_window(cx, move |app, main_window, cx| {
+                        let Some(trigger_bounds) = app
+                            .titlebar_popup_menu
+                            .as_ref()
+                            .filter(|state| state.kind == GpuiTitlebarPopupKind::Extensions)
+                            .map(|state| state.trigger_bounds)
+                        else {
+                            return;
+                        };
+                        app.launch_extension_from_titlebar(
+                            &extension_id,
+                            trigger_bounds,
+                            main_window,
+                            cx,
+                        );
+                    });
+                    this.close_from_popup_window(window, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &ToggleGpuiExtensionPin, window, cx| {
+                    let extension_id = action.extension_id.clone();
+                    let pinned = action.pinned;
+                    this.update_main_window(cx, move |app, _window, cx| {
+                        app.update_extension_pin(extension_id, pinned, cx);
+                    });
+                    this.close_from_popup_window(window, cx);
+                }),
+            )
+            .on_action(cx.listener(|this, _: &BrowseGpuiExtensions, window, cx| {
+                this.close_from_popup_window(window, cx);
+            }))
             .on_action(
                 cx.listener(|this, action: &RunGpuiTitlebarGitMenuAction, _window, cx| {
                     this.update_main_window(cx, |app, _window, cx| {

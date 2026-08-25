@@ -979,6 +979,8 @@ pub struct GhostexGpuiApp {
     pub(crate) titlebar_dropdown_previous_focus_handle: Option<FocusHandle>,
     pub(crate) titlebar_popup_menu: Option<GpuiTitlebarPopupState>,
     pub(crate) titlebar_popup_window: Option<WindowHandle<GpuiTitlebarPopupWindow>>,
+    pub(crate) titlebar_extension_popup_generation: u64,
+    pub(crate) titlebar_extension_popup: Option<GpuiTitlebarExtensionPopupState>,
     pub(crate) titlebar_tips_panel_open: bool,
     pub(crate) titlebar_tips_panel: Option<Entity<GpuiTitlebarTipsPanel>>,
     pub(crate) titlebar_resources_panel_open: bool,
@@ -1455,6 +1457,8 @@ impl Render for GhostexGpuiApp {
             .on_action(cx.listener(|this, _: &TitlebarDropdownCancel, window, cx| {
                 if this.titlebar_popup_menu.is_some() {
                     this.close_gpui_titlebar_popup(None, window, cx);
+                } else if this.titlebar_extension_popup.is_some() {
+                    this.close_titlebar_extension_popup(window, cx);
                 } else if this.titlebar_resources_panel_open {
                     this.set_gpui_titlebar_resources_panel_open(false, window, cx);
                 } else if this.titlebar_tips_panel_open {

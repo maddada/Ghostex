@@ -24,7 +24,7 @@ use gpui::http_client::HttpRequestExt as _;
 use gpui::{
     Action, App, AppContext as _, Asset, Bounds, Element, FontWeight, Hsla,
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div,
-    point, prelude::FluentBuilder as _, px, rgb, size, svg,
+    img, point, prelude::FluentBuilder as _, px, rgb, size, svg,
 };
 use gpui_component::{Theme, ThemeMode, h_flex, menu::PopupMenu, tooltip::Tooltip, v_flex};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
@@ -62,6 +62,7 @@ pub(crate) fn titlebar_popup_menu_width(kind: GpuiTitlebarPopupKind) -> f32 {
         GpuiTitlebarPopupKind::Actions | GpuiTitlebarPopupKind::OpenTargets => {
             TITLEBAR_POPUP_COMPACT_WIDTH
         }
+        GpuiTitlebarPopupKind::Extensions => TITLEBAR_POPUP_EXTENSIONS_WIDTH,
         GpuiTitlebarPopupKind::Git => TITLEBAR_POPUP_GIT_WIDTH,
         GpuiTitlebarPopupKind::Resources => TITLEBAR_POPUP_RESOURCES_WIDTH,
         GpuiTitlebarPopupKind::Tips => TITLEBAR_POPUP_TIPS_WIDTH,
@@ -748,6 +749,77 @@ pub(crate) fn titlebar_popup_standard_menu_row(
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .child(label),
+        )
+}
+
+pub(crate) fn titlebar_popup_extension_menu_row(
+    extension: GpuiInstalledExtension,
+) -> impl IntoElement {
+    let pin_action = ToggleGpuiExtensionPin {
+        extension_id: extension.id.clone(),
+        pinned: !extension.pinned,
+    };
+    let pin_icon = if extension.pinned {
+        "titlebar/pin-slash.svg"
+    } else {
+        "titlebar/pin.svg"
+    };
+    let pin_tooltip = if extension.pinned { "Unpin" } else { "Pin" };
+    let placement_label = extension.launch_placement_label();
+
+    h_flex()
+        .min_w_0()
+        .max_w_full()
+        .flex_1()
+        .min_h(px(TITLEBAR_POPUP_EXTENSION_ROW_HEIGHT))
+        .items_center()
+        .gap(px(10.0))
+        .text_color(titlebar_text_color())
+        .child(
+            div()
+                .flex_shrink_0()
+                .size(px(20.0))
+                .items_center()
+                .justify_center()
+                .child(img(extension.icon_data_url).size(px(18.0))),
+        )
+        .child(
+            div()
+                .min_w_0()
+                .flex_1()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(px(TITLEBAR_POPUP_MENU_ROW_TEXT_SIZE))
+                .child(extension.title),
+        )
+        .child(
+            div()
+                .flex_shrink_0()
+                .px(px(6.0))
+                .py(px(2.0))
+                .rounded(px(3.0))
+                .bg(rgb(0xffffff).opacity(0.07))
+                .text_size(px(10.0))
+                .text_color(titlebar_inactive_text_color())
+                .child(placement_label),
+        )
+        .child(
+            div()
+                .id(format!("ghostex-gpui-extension-pin-{}", extension.id))
+                .flex_shrink_0()
+                .size(px(26.0))
+                .items_center()
+                .justify_center()
+                .rounded(px(3.0))
+                .hover(|this| this.bg(titlebar_button_hover_color()))
+                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    window.dispatch_action(Box::new(pin_action.clone()), cx);
+                })
+                .child(titlebar_svg_icon(pin_icon, 14.0, titlebar_icon_color()))
+                .tooltip(move |window, cx| titlebar_tooltip(pin_tooltip, window, cx)),
         )
 }
 

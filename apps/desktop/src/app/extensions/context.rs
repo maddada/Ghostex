@@ -3,6 +3,33 @@ use crate::*;
 use super::{GpuiExtensionPlacement, GpuiExtensionSurfaceContext};
 
 impl GhostexGpuiApp {
+    pub(crate) fn extension_launch_context_value(&self) -> serde_json::Value {
+        let snapshot = self.latest_sidebar_project_snapshot.as_ref();
+        let project_id = snapshot
+            .and_then(|snapshot| snapshot.active_project_id.as_ref())
+            .map(|id| id.0.as_str());
+        let project = project_id.and_then(|id| self.extension_projects.get(id));
+        serde_json::json!({
+            "sessionId": self.active_extension_session_details()
+                .and_then(|details| details.get("sessionId").cloned())
+                .and_then(|value| value.as_str().map(str::to_string))
+                .unwrap_or_default(),
+            "projectPath": project
+                .and_then(|project| project.path.as_deref())
+                .or_else(|| snapshot.and_then(|snapshot| snapshot.in_memory_project_path.as_deref()).and_then(|path| path.to_str()))
+                .unwrap_or(""),
+            "projectName": project
+                .map(|project| project.name.as_str())
+                .filter(|name| !name.is_empty())
+                .or_else(|| snapshot.map(|snapshot| snapshot.display_name.as_str()))
+                .unwrap_or(""),
+            "worktree": project.is_some_and(|project| project.is_worktree),
+            "worktreeBranch": project
+                .and_then(|project| project.worktree_branch.as_deref())
+                .unwrap_or(""),
+        })
+    }
+
     pub(crate) fn extension_surface_context(
         &self,
         placement: GpuiExtensionPlacement,

@@ -226,6 +226,11 @@ impl GhostexGpuiApp {
                 },
             )
             .when(
+                !button_hidden(EXTENSIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
+                |this| this.child(self.render_titlebar_extensions_button(window, cx)),
+            )
+            .children(self.render_titlebar_pinned_extension_buttons(window, cx))
+            .when(
                 !button_hidden(GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
                 |this| this.child(self.render_titlebar_git_button(window, cx)),
             )
@@ -239,7 +244,8 @@ impl GhostexGpuiApp {
             .when(
                 !button_hidden(OPEN_IN_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
                 |this| this.child(self.render_titlebar_open_targets_button(window, cx)),
-            );
+            )
+            .child(self.render_titlebar_extension_popup_panel(window, cx));
         #[cfg(target_os = "windows")]
         let controls = controls
             .child(
@@ -368,6 +374,7 @@ impl GhostexGpuiApp {
             titlebar_icon_color()
         };
         let anchor_key = match kind {
+            GpuiTitlebarPopupKind::Extensions => "ghostex-gpui-titlebar-extensions-popup-anchor",
             GpuiTitlebarPopupKind::Tips => "ghostex-gpui-titlebar-tips-popup-anchor",
             GpuiTitlebarPopupKind::Resources => "ghostex-gpui-titlebar-resources-popup-anchor",
             _ => "ghostex-gpui-titlebar-native-popup-anchor",
@@ -383,6 +390,9 @@ impl GhostexGpuiApp {
 
         div()
             .id(match kind {
+                GpuiTitlebarPopupKind::Extensions => {
+                    "ghostex-gpui-titlebar-button-extensions-native"
+                }
                 GpuiTitlebarPopupKind::Tips => "ghostex-gpui-titlebar-button-tips-native",
                 GpuiTitlebarPopupKind::Resources => "ghostex-gpui-titlebar-button-resources-native",
                 _ => "ghostex-gpui-titlebar-button-native-popup",

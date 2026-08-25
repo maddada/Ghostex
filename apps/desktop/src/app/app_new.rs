@@ -424,6 +424,8 @@ impl GhostexGpuiApp {
                 titlebar_dropdown_previous_focus_handle: None,
                 titlebar_popup_menu: None,
                 titlebar_popup_window: None,
+                titlebar_extension_popup_generation: 0,
+                titlebar_extension_popup: None,
                 titlebar_tips_panel_open: false,
                 titlebar_tips_panel: None,
                 titlebar_resources_panel_open: false,

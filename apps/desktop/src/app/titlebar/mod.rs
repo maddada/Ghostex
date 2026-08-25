@@ -10,6 +10,7 @@
 pub(crate) mod action_execution;
 pub(crate) mod browser_toolbar_buttons;
 pub(crate) mod dropdown_panels;
+pub(crate) mod extension_buttons;
 pub(crate) mod icon_button_and_browser_toolbar;
 pub(crate) mod menu_triggers;
 pub(crate) mod open_targets_and_window_controls;

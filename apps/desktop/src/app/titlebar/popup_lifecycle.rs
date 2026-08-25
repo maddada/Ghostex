@@ -60,6 +60,9 @@ impl GhostexGpuiApp {
             return;
         }
 
+        if self.titlebar_extension_popup.is_some() {
+            self.close_titlebar_extension_popup(window, cx);
+        }
         self.close_gpui_titlebar_popup(None, window, cx);
         let Some(trigger_bounds) = trigger_bounds else {
             log_gpui_titlebar_popup_repro(
@@ -271,6 +274,11 @@ impl GhostexGpuiApp {
                         self.titlebar_tips_agent_hook_status.clone(),
                         live_agent_ids,
                     )
+                }))
+            }
+            GpuiTitlebarPopupKind::Extensions => {
+                GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
+                    self.build_gpui_titlebar_extensions_popup_menu(menu)
                 }))
             }
         }

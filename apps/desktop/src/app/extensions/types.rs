@@ -64,14 +64,20 @@ impl GpuiExtensionPlacement {
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiInstalledExtension {
     pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) icon_data_url: String,
     pub(crate) declared_permissions: HashSet<GpuiExtensionPermission>,
     pub(crate) granted_permissions: HashSet<GpuiExtensionPermission>,
     pub(crate) placements: Vec<GpuiExtensionPlacement>,
     pub(crate) placement: Option<GpuiExtensionPlacement>,
+    pub(crate) popup_size: Option<GpuiExtensionPopupSize>,
     pub(crate) preferences: BTreeMap<String, serde_json::Value>,
     pub(crate) storage: BTreeMap<String, serde_json::Value>,
     pub(crate) runtime_url: Option<String>,
+    pub(crate) badge_lines: Vec<String>,
     pub(crate) enabled: bool,
+    pub(crate) pinned: bool,
+    pub(crate) terminal_pane: bool,
 }
 
 impl GpuiInstalledExtension {
@@ -79,7 +85,13 @@ impl GpuiInstalledExtension {
         if !self.enabled || self.placements.is_empty() {
             return None;
         }
-        let url = self.runtime_url.as_deref()?;
+        self.bridge_surface_spec_for_url(self.runtime_url.as_deref()?)
+    }
+
+    pub(crate) fn bridge_surface_spec_for_url(
+        &self,
+        url: &str,
+    ) -> Option<crate::cef::ExtensionBridgeSurfaceSpec> {
         let rest = url.strip_prefix("http://")?;
         let origin_end = rest.find('/').unwrap_or(rest.len());
         let authority = &rest[..origin_end];
@@ -95,6 +107,25 @@ impl GpuiInstalledExtension {
         };
         crate::cef::ExtensionBridgeSurfaceSpec::new(self.id.clone(), origin, path_prefix).ok()
     }
+
+    pub(crate) fn launch_placement_label(&self) -> &'static str {
+        if self.terminal_pane {
+            return "Terminal";
+        }
+        match self.placement {
+            Some(GpuiExtensionPlacement::View) => "View",
+            Some(GpuiExtensionPlacement::ChatBar) => "Chat bar",
+            Some(GpuiExtensionPlacement::Popup) => "Popup",
+            Some(GpuiExtensionPlacement::Modal) => "Modal",
+            None => "Unavailable",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GpuiExtensionPopupSize {
+    pub(crate) width: f32,
+    pub(crate) height: f32,
 }
 
 #[derive(Clone, Debug, Default)]

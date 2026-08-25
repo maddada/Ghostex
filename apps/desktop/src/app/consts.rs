@@ -523,6 +523,8 @@ pub(crate) const TITLEBAR_ICON_INFO: &str = "titlebar/info-circle.svg";
 
 pub(crate) const TITLEBAR_ICON_DEVICE_DESKTOP: &str = "titlebar/device-desktop.svg";
 
+pub(crate) const TITLEBAR_ICON_EXTENSIONS: &str = "titlebar/puzzle.svg";
+
 pub(crate) const TITLEBAR_ICON_GIT_COMMIT: &str = "titlebar/git-commit.svg";
 
 pub(crate) const TITLEBAR_ICON_PLAYER_PLAY: &str = "titlebar/player-play.svg";
@@ -875,6 +877,8 @@ pub(crate) const TITLEBAR_POPUP_COMPACT_WIDTH: f32 = 240.0;
 
 pub(crate) const TITLEBAR_POPUP_GIT_WIDTH: f32 = 300.0;
 
+pub(crate) const TITLEBAR_POPUP_EXTENSIONS_WIDTH: f32 = 340.0;
+
 pub(crate) const TITLEBAR_POPUP_TIPS_WIDTH: f32 = 556.0;
 
 pub(crate) const TITLEBAR_POPUP_RESOURCES_WIDTH: f32 = 656.0;
@@ -896,6 +900,12 @@ pub(crate) const TITLEBAR_POPUP_MENU_ROW_ICON_SIZE: f32 = 16.0;
 pub(crate) const TITLEBAR_POPUP_GIT_SECTION_LABEL_HEIGHT: f32 = 22.0;
 
 pub(crate) const TITLEBAR_POPUP_ACTION_ROW_HEIGHT: f32 = 44.0;
+
+pub(crate) const TITLEBAR_POPUP_EXTENSION_ROW_HEIGHT: f32 = 40.0;
+
+pub(crate) const TITLEBAR_EXTENSION_POPUP_DEFAULT_WIDTH: f32 = 380.0;
+
+pub(crate) const TITLEBAR_EXTENSION_POPUP_DEFAULT_HEIGHT: f32 = 560.0;
 
 pub(crate) const TITLEBAR_POPUP_READING_HEADER_HEIGHT: f32 = 34.0;
 
@@ -940,6 +950,8 @@ pub(crate) const TITLEBAR_ACTION_UNCONFIGURED_PREVIEW: &str = "Set the command";
 pub(crate) const TITLEBAR_TIPS_TOOLTIP: &str = "Tips";
 
 pub(crate) const TITLEBAR_RESOURCES_TOOLTIP: &str = "Resources Monitor";
+
+pub(crate) const TITLEBAR_EXTENSIONS_TOOLTIP: &str = "Extensions";
 
 pub(crate) const TITLEBAR_GIT_TOOLTIP: &str = "Git actions";
 
@@ -1619,6 +1631,9 @@ pub(crate) const TIPS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
 
 pub(crate) const RESOURCES_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
     "resourcesTitlebarButtonHidden";
+
+pub(crate) const EXTENSIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
+    "extensionsTitlebarButtonHidden";
 
 pub(crate) const GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
     "gitActionsTitlebarButtonHidden";

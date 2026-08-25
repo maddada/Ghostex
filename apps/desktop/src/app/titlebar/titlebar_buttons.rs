@@ -327,6 +327,25 @@ impl GhostexGpuiApp {
     pub(crate) fn titlebar_popup_content_height(&self, kind: GpuiTitlebarPopupKind) -> f32 {
         match kind {
             GpuiTitlebarPopupKind::Actions => self.titlebar_actions_popup_content_height(),
+            GpuiTitlebarPopupKind::Extensions => {
+                let extension_count = self
+                    .extensions_snapshot
+                    .installed
+                    .values()
+                    .filter(|extension| extension.enabled)
+                    .count();
+                let mut rows = if extension_count == 0 {
+                    vec![TITLEBAR_POPUP_MENU_ROW_HEIGHT]
+                } else {
+                    vec![TITLEBAR_POPUP_EXTENSION_ROW_HEIGHT; extension_count]
+                };
+                rows.push(TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT);
+                rows.push(TITLEBAR_POPUP_MENU_ROW_HEIGHT);
+                titlebar_popup_menu_height_for_rows_with_chrome(
+                    &rows,
+                    TITLEBAR_POPUP_MENU_FLUSH_BOTTOM_VERTICAL_CHROME,
+                )
+            }
             GpuiTitlebarPopupKind::Git => self.titlebar_git_popup_content_height(),
             GpuiTitlebarPopupKind::OpenTargets => self.titlebar_open_targets_popup_content_height(),
             GpuiTitlebarPopupKind::Resources | GpuiTitlebarPopupKind::Tips => {
