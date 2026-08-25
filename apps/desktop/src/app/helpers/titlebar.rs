@@ -758,16 +758,22 @@ pub(crate) fn titlebar_popup_standard_menu_row(
 pub(crate) fn titlebar_popup_extension_menu_row(
     extension: GpuiInstalledExtension,
 ) -> impl IntoElement {
+    let pinned = extension.pinned;
     let pin_action = ToggleGpuiExtensionPin {
         extension_id: extension.id.clone(),
-        pinned: !extension.pinned,
+        pinned: !pinned,
     };
-    let pin_icon = if extension.pinned {
-        "titlebar/pin-slash.svg"
+    let pin_icon = if pinned {
+        "titlebar/pin-filled.svg"
     } else {
         "titlebar/pin.svg"
     };
-    let pin_tooltip = if extension.pinned { "Unpin" } else { "Pin" };
+    let pin_icon_color = if pinned {
+        titlebar_active_text_color()
+    } else {
+        titlebar_icon_color()
+    };
+    let pin_tooltip = if pinned { "Unpin" } else { "Pin" };
     let placement_label = extension.launch_placement_label();
 
     h_flex()
@@ -815,13 +821,20 @@ pub(crate) fn titlebar_popup_extension_menu_row(
                 .items_center()
                 .justify_center()
                 .rounded(px(3.0))
-                .hover(|this| this.bg(titlebar_button_hover_color()))
+                .when(pinned, |this| this.bg(titlebar_active_segment_color()))
+                .hover(move |this| {
+                    if pinned {
+                        this.bg(titlebar_active_segment_color())
+                    } else {
+                        this.bg(titlebar_button_hover_color())
+                    }
+                })
                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
                     window.dispatch_action(Box::new(pin_action.clone()), cx);
                 })
-                .child(titlebar_svg_icon(pin_icon, 16.0, titlebar_icon_color()))
+                .child(titlebar_svg_icon(pin_icon, 15.0, pin_icon_color))
                 .managed_tooltip_with_placement(
                     ManagedTooltipPlacement::BelowLeft,
                     move |window, cx| titlebar_tooltip(pin_tooltip, window, cx),

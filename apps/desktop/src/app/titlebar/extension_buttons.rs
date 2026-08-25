@@ -46,7 +46,6 @@ impl GhostexGpuiApp {
         });
         let mut menu =
             titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
-                .items_padding_bottom(px(0.0))
                 .check_side(Side::Right);
         if extensions.is_empty() {
             menu = menu.menu_element_with_disabled(

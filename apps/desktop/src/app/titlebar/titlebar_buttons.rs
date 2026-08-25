@@ -341,10 +341,7 @@ impl GhostexGpuiApp {
                 };
                 rows.push(TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT);
                 rows.push(TITLEBAR_POPUP_MENU_ROW_HEIGHT);
-                titlebar_popup_menu_height_for_rows_with_chrome(
-                    &rows,
-                    TITLEBAR_POPUP_MENU_FLUSH_BOTTOM_VERTICAL_CHROME,
-                )
+                titlebar_popup_menu_height_for_rows(&rows)
             }
             GpuiTitlebarPopupKind::Git => self.titlebar_git_popup_content_height(),
             GpuiTitlebarPopupKind::OpenTargets => self.titlebar_open_targets_popup_content_height(),
