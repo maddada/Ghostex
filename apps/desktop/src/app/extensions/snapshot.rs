@@ -77,6 +77,7 @@ impl GhostexGpuiApp {
                     this.extensions_snapshot = snapshot;
                     this.extension_projects = projects;
                     this.extension_session_details = session_details;
+                    this.broadcast_extension_context_changes(cx);
                     cx.notify();
                 }
             });
@@ -204,6 +205,13 @@ fn parse_project_metadata(value: &serde_json::Value) -> Option<GpuiExtensionProj
     let worktree = object
         .get("worktree")
         .and_then(serde_json::Value::as_object);
+    let remote_machine_name = object
+        .get("remoteMachineContext")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|remote| text(remote.get("machineName")))
+        .or_else(|| text(object.get("remoteMachine")))
+        .or_else(|| text(object.get("machineName")))
+        .map(str::to_string);
     Some(GpuiExtensionProjectMetadata {
         project_id,
         name: text(object.get("title"))
@@ -211,6 +219,7 @@ fn parse_project_metadata(value: &serde_json::Value) -> Option<GpuiExtensionProj
             .unwrap_or("")
             .to_string(),
         path: text(object.get("path")).map(str::to_string),
+        remote_machine_name,
         is_worktree: worktree.is_some(),
         worktree_branch: worktree
             .and_then(|value| text(value.get("branch")))
@@ -252,6 +261,9 @@ fn copy_details_from_presentation_session(
         (None, Some(name)) => Some(name.to_string()),
         (None, None) => None,
     };
+    let remote_machine = text(session.get("remoteMachine"))
+        .or_else(|| text(session.get("remoteMachineName")))
+        .or_else(|| project.and_then(|project| project.remote_machine_name.as_deref()));
     Some((
         session_id.clone(),
         serde_json::json!({
@@ -267,6 +279,7 @@ fn copy_details_from_presentation_session(
             "terminalTitle": terminal_title,
             "detail": text(session.get("detail")),
             "persistence": persistence,
+            "remoteMachine": remote_machine,
             "project": project.map(|project| project.name.as_str()),
             "projectPath": project.and_then(|project| project.path.as_deref()),
             "worktree": project.and_then(|project| project.worktree_name.as_deref()),

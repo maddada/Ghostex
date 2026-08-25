@@ -79,4 +79,60 @@ impl GhostexGpuiApp {
             .and_then(|id| self.extension_session_details.get(id))
             .cloned()
     }
+
+    pub(crate) fn broadcast_extension_context_changes(&mut self, cx: &mut gpui::Context<Self>) {
+        let view_message = cef::sidebar_bridge_manifest::extension_bridge_context_changed_message(
+            self.extension_context_payload(
+                &self.extension_surface_context(GpuiExtensionPlacement::View),
+            ),
+        );
+        let view_surfaces = self
+            .project_workarea_runtime_cef_surfaces
+            .iter()
+            .filter_map(|(slot, owned)| {
+                matches!(slot, ProjectWorkareaCefSurfaceSlotKey::Extension(_))
+                    .then(|| owned.surface.clone())
+            })
+            .collect::<Vec<_>>();
+        for surface in view_surfaces {
+            surface.update(cx, |surface, _| {
+                surface.dispatch_extension_bridge_message(&view_message);
+            });
+        }
+
+        if let Some(panel) = self
+            .titlebar_extension_popup
+            .as_ref()
+            .and_then(|state| state.panel.clone())
+        {
+            let popup_message =
+                cef::sidebar_bridge_manifest::extension_bridge_context_changed_message(
+                    self.extension_context_payload(
+                        &self.extension_surface_context(GpuiExtensionPlacement::Popup),
+                    ),
+                );
+            panel.update(cx, |panel, cx| {
+                panel.dispatch_bridge_message(&popup_message, cx);
+            });
+        }
+
+        if let Some(handle) = self.app_modal_window.clone() {
+            let modal_message =
+                cef::sidebar_bridge_manifest::extension_bridge_context_changed_message(
+                    self.extension_context_payload(
+                        &self.extension_surface_context(GpuiExtensionPlacement::Modal),
+                    ),
+                );
+            let _ = handle.update(cx, |host, _window, cx| {
+                if !matches!(host.current_modal, GpuiAppModalKind::Extension(_)) {
+                    return;
+                }
+                if let Some(surface) = host.surface.clone() {
+                    surface.update(cx, |surface, _| {
+                        surface.dispatch_extension_bridge_message(&modal_message);
+                    });
+                }
+            });
+        }
+    }
 }

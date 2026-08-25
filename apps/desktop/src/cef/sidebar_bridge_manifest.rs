@@ -330,6 +330,15 @@ pub(crate) const EXTENSION_BRIDGE_RUNTIME_SHIM: &str = r#"
 })();
 "#;
 
+pub(crate) fn extension_bridge_context_changed_message(
+    context: serde_json::Value,
+) -> serde_json::Value {
+    serde_json::json!({
+        "event": "contextChanged",
+        "value": context,
+    })
+}
+
 /*
 CDXC:GPUISidebarBridgeOwnership 2026-06-28-23:24:
 The sidebar CEF post-function allowlist must have one Rust manifest shared by main-process macOS CEF and the helper renderer, so packaged helper-backed sidebars cannot lose supported calls such as workspace terminal rename.

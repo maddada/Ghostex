@@ -705,6 +705,7 @@ impl GhostexGpuiApp {
                 self.shell_focus == ShellFocusTarget::ProjectEditorCompanion(self.active_mode);
             self.sync_windows_project_editor_companion_to_presentation_focus(focus_companion, cx);
         }
+        self.broadcast_extension_context_changes(cx);
         cx.notify();
     }
 

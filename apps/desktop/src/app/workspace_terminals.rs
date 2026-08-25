@@ -338,6 +338,7 @@ impl GhostexGpuiApp {
             self.persist_shell_layout_state();
             self.sync_gpui_keep_awake_automation_from_current_settings(cx);
         }
+        self.broadcast_extension_context_changes(cx);
         cx.notify();
     }
 

@@ -138,6 +138,7 @@ pub(crate) struct GpuiExtensionProjectMetadata {
     pub(crate) project_id: String,
     pub(crate) name: String,
     pub(crate) path: Option<String>,
+    pub(crate) remote_machine_name: Option<String>,
     pub(crate) is_worktree: bool,
     pub(crate) worktree_branch: Option<String>,
     pub(crate) worktree_name: Option<String>,
