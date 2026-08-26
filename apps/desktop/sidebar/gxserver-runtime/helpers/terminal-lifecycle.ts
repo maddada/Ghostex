@@ -112,7 +112,10 @@ export function normalizeGpuiWorkspaceTerminalRuntimeAction(
     return { action: record.action };
   }
   const action =
-    record.action === 'exportTranscript' || record.action === 'forkSession' || record.action === 'fullReloadSession'
+    record.action === 'exportTranscript' ||
+    record.action === 'forkSession' ||
+    record.action === 'fullReloadSession' ||
+    record.action === 'openSessionNote'
       ? record.action
       : undefined;
   const projectId = normalizeNonEmptyString(record.projectId)?.trim();

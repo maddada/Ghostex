@@ -32,7 +32,7 @@ import {
   parseGpuiRemotePresentationSessionId,
 } from './helpers/remote-presentation';
 import { shouldApplyGpuiLocalWorkspaceTransition } from './helpers/terminal-lifecycle';
-import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import { closeAppModal, openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import type { PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import { reorderPresentationProjectSessions } from '@/packages/shared/gxserver-presentation-cache';
 import {
@@ -96,6 +96,7 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
     sessionId: string,
     flags: { isFavorite?: boolean; isParked?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
   ): Promise<void>;
+  openSessionNoteEditor(sessionId: string): void;
   saveSessionNote(sessionId: string, note: string): Promise<void>;
   runSessionLifecycleCommand(
     sessionId: string,
@@ -107,6 +108,8 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   ): Promise<void>;
   syncSessionOrder(groupId: string, sessionIds: readonly string[]): Promise<void>;
   focusProjectId(projectId: string): void;
+  focusBrowserTabProject(projectId: string): void;
+  focusRemotePresentationProject(reference: { machineId: string; projectId: string }): boolean;
   setLocalPresentationSessionFocus(
     projectId: string,
     sessionId: string,
@@ -226,26 +229,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       the sidebar straight back to the terminal's project.
       */
       this.focusedSessionId = undefined;
-      const remoteBrowserProject = parseGpuiRemotePresentationProjectId(browserTab.projectId);
-      if (remoteBrowserProject) {
-        const remoteGroupId = createGpuiRemotePresentationGroupId(
-          remoteBrowserProject.machineId,
-          remoteBrowserProject.projectId
-        );
-        if (this.activeGroupId !== remoteGroupId) {
-          this.activeGroupId = remoteGroupId;
-          if (this.presentation) {
-            this.publishPresentation('patch');
-          } else {
-            this.publishRemotePresentationPatch();
-          }
-        }
-      } else if (this.activeProjectId !== browserTab.projectId) {
-        this.focusProjectId(browserTab.projectId);
-        if (this.presentation) {
-          this.publishPresentation('patch');
-        }
-      }
+      this.focusBrowserTabProject(browserTab.projectId);
       const post = window.ghostexGpui?.postBrowserTabFocus;
       if (typeof post === 'function') {
         post(
@@ -865,6 +849,49 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
   },
 
   /*
+  CDXC:SessionAgentNotes 2026-08-25:
+  Open the note editor for a session, as the session row's context menu does.
+  This exists so the desktop terminal's agent action bar opens the SAME dialog
+  the sidebar opens rather than a second note surface of its own: the bar is a
+  native gpui control with no modal host and no gxserver client, so it sends the
+  intent here, where the presentation that holds the current note text lives.
+
+  The note text is read from the presentation the row itself renders from — a
+  dialog that opened empty over an existing note would overwrite it on confirm,
+  so a session whose note cannot be resolved does not open one at all. Local and
+  remote resolve from their own machine's presentation for the same reason
+  `saveSessionNote` writes to its own machine's daemon.
+  */
+  openSessionNoteEditor(this: GpuiSidebarRuntime, sessionId: string): void {
+    const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
+    const presentation = remoteSession ? this.remotePresentations.get(remoteSession.machineId) : this.presentation;
+    const reference = remoteSession ?? parseGxserverPresentationProjectSessionId(sessionId);
+    if (!reference || !presentation) {
+      return;
+    }
+    const session = presentation.sessions.find(
+      (candidate) => candidate.projectId === reference.projectId && candidate.sessionId === reference.sessionId
+    );
+    if (!session) {
+      return;
+    }
+    const sessionTitle =
+      normalizeNonEmptyString(session.primaryTitle) ??
+      normalizeNonEmptyString(session.title) ??
+      normalizeNonEmptyString(session.terminalTitle);
+    // Same modal-host contract as the row's own entry: the note editor replaces
+    // whatever modal is open instead of stacking behind it.
+    closeAppModal('SettingsDismissal:terminalActionBarNote');
+    openAppModal({
+      initialNote: session.sessionNote ?? '',
+      modal: 'sessionNote',
+      sessionId,
+      ...(sessionTitle ? { sessionTitle } : {}),
+      type: 'open',
+    });
+  },
+
+  /*
   CDXC:SessionAgentNotes 2026-08-24:
   Save (or, with an empty note, clear) this session's free-text note.
 
@@ -991,6 +1018,82 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       ? GPUI_GXSERVER_CHATS_GROUP_ID
       : createGxserverPresentationProjectGroupId(normalizedProjectId);
     this.refreshSidebarHudFromClient();
+  },
+
+  focusBrowserTabProject(this: GpuiSidebarRuntime, projectId: string): void {
+    /*
+    The sidebar lists Browser rows for every project, local and remote, so a
+    row click is a project switch whenever the row belongs to another project.
+    Both kinds take the same two steps the rest of the runtime takes: select
+    the owning project, then publish the projection. Rust learns the new active
+    project only from the active-project context the publish posts, and that
+    payload is rebuilt from `latestGroups`, which only a publish refreshes — so
+    changing the selection without publishing would leave Rust on the previous
+    project and strand the tab focus that follows this call.
+    */
+    const remoteProject = parseGpuiRemotePresentationProjectId(projectId);
+    if (remoteProject) {
+      if (!this.focusRemotePresentationProject(remoteProject)) {
+        return;
+      }
+    } else {
+      /*
+      A Browser row hangs off its project's own group, so "already selected"
+      means that group is active, not merely that the project id matches: with
+      a named session group of the same project active, the row's group is not
+      the active one and its focus highlight belongs to the parent group.
+      */
+      if (
+        this.activeProjectId === projectId &&
+        this.activeGroupId === createGxserverPresentationProjectGroupId(projectId)
+      ) {
+        return;
+      }
+      this.focusProjectId(projectId);
+    }
+    /*
+    A local presentation is not required for this switch: browser rows outlive
+    a gxserver outage and remote rows never needed one. `publishPresentation`
+    would report gxserver as unavailable in that state, so use the
+    remote-aware publish, which rebuilds the same projection from whichever
+    presentations exist.
+    */
+    if (this.presentation) {
+      this.publishPresentation('patch');
+      return;
+    }
+    this.publishRemotePresentationPatch();
+  },
+
+  focusRemotePresentationProject(
+    this: GpuiSidebarRuntime,
+    reference: { machineId: string; projectId: string }
+  ): boolean {
+    /*
+    The machine-scoped group id is the only representation of a remote
+    selection: `activeProjectId` stays a local-only field, and the remote group
+    projection, the presentation focus-state bridge, and the active-project
+    context all read the selection back out of `activeGroupId`. Resolve the
+    chat-collection group the same way `setRemotePresentationSessionFocus`
+    does so both remote entry points land on the same group.
+    */
+    const machineId = normalizeNonEmptyString(reference.machineId);
+    const projectId = normalizeNonEmptyString(reference.projectId);
+    if (!machineId || !projectId) {
+      return false;
+    }
+    const project = this.remotePresentations
+      .get(machineId)
+      ?.projects.find((candidate) => candidate.projectId === projectId);
+    const scopedGroupId = createGpuiRemotePresentationGroupId(
+      machineId,
+      isGpuiPresentationChatProjectPath(project?.path) ? GPUI_GXSERVER_CHATS_GROUP_ID : projectId
+    );
+    if (this.activeGroupId === scopedGroupId) {
+      return false;
+    }
+    this.activeGroupId = scopedGroupId;
+    return true;
   },
 
   setLocalPresentationSessionFocus(

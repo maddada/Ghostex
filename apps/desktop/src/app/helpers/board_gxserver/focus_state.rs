@@ -162,7 +162,9 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             // forwards it, one added key cannot invalidate the whole
             // focus-state message and blank the Agents tab strip.
             "queuedPromptCount",
+            "hasSessionNote",
             "sessionId",
+            "stashedPromptCount",
             "title",
         ],
     )?;
@@ -193,6 +195,19 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             }
             Some(value.to_string())
         }
+    };
+    let has_session_note = match object.get("hasSessionNote") {
+        None | Some(serde_json::Value::Null) => false,
+        Some(value) => value
+            .as_bool()
+            .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?,
+    };
+    let stashed_prompt_count = match object.get("stashedPromptCount") {
+        None | Some(serde_json::Value::Null) => 0,
+        Some(value) => value
+            .as_u64()
+            .filter(|count| *count <= 200)
+            .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?,
     };
     let presentation_state = if is_sleeping {
         TerminalSessionPresentationState::Sleeping
@@ -229,6 +244,8 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
         kind,
         is_generating_first_prompt_title,
         presentation_state,
+        has_session_note,
+        stashed_prompt_count,
         title,
     })
 }

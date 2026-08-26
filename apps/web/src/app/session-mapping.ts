@@ -37,6 +37,9 @@ export function presentationSessionToWorkspaceSession(
     ...(typeof session.queuedPromptFailedCount === 'number' && session.queuedPromptFailedCount > 0
       ? { queuedPromptFailedCount: session.queuedPromptFailedCount }
       : {}),
+    ...(typeof session.stashedPromptCount === 'number' && session.stashedPromptCount > 0
+      ? { stashedPromptCount: session.stashedPromptCount }
+      : {}),
     presentationState: presentationStateForSession(session),
     title: session.displayTitle ?? session.title,
     workspaceId: createWorkspaceSessionId(reference),

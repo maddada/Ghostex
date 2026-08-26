@@ -353,6 +353,8 @@ export type SidebarSessionItem = {
    * which is also what a daemon that predates session notes reports.
    */
   sessionNote?: string;
+  /** Saved prompts associated with this agent conversation; absent at zero. */
+  stashedPromptCount?: number;
   /**
    * CDXC:PinnedSessions 2026-05-28-12:04:
    * Sidebar rows carry project-local pin state so the React display sorter can
@@ -958,6 +960,7 @@ export type SidebarHydrateMessage = {
   remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
   revision: number;
   scratchPadContent: string;
+  sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
   type: 'hydrate';
   hud: SidebarHudState;
 };
@@ -966,8 +969,10 @@ export type SidebarSessionStateMessage = {
   groups: SidebarSessionGroup[];
   pinnedPrompts: SidebarPinnedPrompt[];
   previousSessions: SidebarPreviousSessionItem[];
+  remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
   revision: number;
   scratchPadContent: string;
+  sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
   type: 'sessionState';
   hud: SidebarHudState;
 };
@@ -1670,16 +1675,22 @@ export type SidebarToExtensionMessage =
         | 'resetGhosttySettingsToDefault';
     }
   | {
+      /** The native host reveals only its own retained exported path. */
+      type: 'revealExportedTranscript';
+    }
+  | {
       /**
-       * CDXC:ExportTranscript 2026-08-20:
-       * The Export Transcript result dialog's two host side effects. Neither
-       * carries the exported path: the host already holds it from the dialog's
-       * own open message, so a modal page can only ever ask it to act on the
-       * export it is currently describing. `agentId` picks which configured
-       * agent the seeded follow-up conversation runs.
+       * Start the follow-up only for the exact dialog request that produced
+       * the retained export; a closed or replaced dialog cannot consume it.
        */
       agentId?: string;
-      type: 'revealExportedTranscript' | 'startExportedTranscriptConversation';
+      requestId: string;
+      type: 'startExportedTranscriptConversation';
+    }
+  | {
+      /** Invalidate an in-flight export when its owning dialog closes. */
+      requestId: string;
+      type: 'cancelExportSessionTranscript';
     }
   | {
       /**
@@ -1687,11 +1698,12 @@ export type SidebarToExtensionMessage =
        * The Export Transcript dialog's Export button: run the export with the
        * chosen include-toggles. The dialog never names the session — the
        * sidebar runtime holds the pending export context from opening the
-       * dialog, so this carries only the toggles.
+       * dialog — and `requestId` proves the command still belongs to that open.
        */
       includeCommands?: boolean;
       includePatches?: boolean;
       includeReasoning?: boolean;
+      requestId: string;
       type: 'runExportSessionTranscript';
     }
   | {
@@ -2158,6 +2170,11 @@ export type SidebarToExtensionMessage =
       groupId: string;
     }
   | {
+      /** Copy the exact Git origin URL the project presentation displayed. */
+      type: 'copyWorkspaceProjectRemoteUrl';
+      remoteUrl: string;
+    }
+  | {
       type: 'restoreRecentProject';
       projectId: string;
     }
@@ -2583,6 +2600,8 @@ export type SidebarToExtensionMessage =
       projectId?: string;
       requestId: string;
       sessionId?: string;
+      /** Explicit manual filing; an empty array means No tag. */
+      tagIds?: string[];
       type: 'saveStashedPrompt';
     }
   | {
@@ -3011,6 +3030,7 @@ export type SidebarToExtensionMessage =
   | {
       agentId: string;
       path: string;
+      requestId: string;
       type: 'firstLaunchCreateProjectSession';
     };
 

@@ -1206,6 +1206,7 @@ function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSess
     left.agentSessionId === right.agentSessionId &&
     left.alias === right.alias &&
     left.sessionNote === right.sessionNote &&
+    left.stashedPromptCount === right.stashedPromptCount &&
     left.canPopOutPane === right.canPopOutPane &&
     left.canScheduleDelayedSend === right.canScheduleDelayedSend &&
     left.canToggleCloseAfterDone === right.canToggleCloseAfterDone &&

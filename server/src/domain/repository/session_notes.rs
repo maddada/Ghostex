@@ -9,6 +9,13 @@ use crate::domain::{
 use crate::presentation::read_runtime_text;
 
 /*
+Session notes ride every presentation snapshot, so their persisted size must be
+bounded at the write boundary. Count Unicode scalar values rather than UTF-8
+bytes so the user-facing contract is stable across scripts and emoji.
+*/
+const SESSION_AGENT_NOTE_MAX_CHARS: usize = 4_096;
+
+/*
 CDXC:SessionAgentNotes 2026-08-24:
 "What to do next when I come back" text attached to a conversation, not to a
 ghostex session row. The key is the provider resume id (`agentSessionId`), so
@@ -34,6 +41,14 @@ impl DomainRepository<'_> {
         let canonical_session_id =
             read_session_text(&session, "sessionId").unwrap_or_else(|| session_id.clone());
         let note = optional_trimmed_string_param(params, "note")?;
+        if note
+            .as_ref()
+            .is_some_and(|note| note.chars().count() > SESSION_AGENT_NOTE_MAX_CHARS)
+        {
+            return Err(DomainStateError::bad_request(format!(
+                "note must be at most {SESSION_AGENT_NOTE_MAX_CHARS} characters."
+            )));
+        }
         let Some(note) = note else {
             /*
             An emptied note is a deletion, not an empty row: the table's CHECK

@@ -829,6 +829,21 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            /*
+            The note editor is the sidebar's own full-window app modal, not a
+            terminal-local panel, so the terminal bar opens the exact dialog the
+            session row's context menu opens. It is routed through the sidebar
+            runtime for the same reason Export transcript is: that runtime owns
+            the presentation the note text and heading come from, and the
+            gxserver client the confirm writes through.
+            */
+            TerminalAgentActionRequest::SessionNote => {
+                let _ = self.dispatch_gpui_workspace_terminal_runtime_action(
+                    "openSessionNote",
+                    session_id,
+                    cx,
+                );
+            }
             TerminalAgentActionRequest::StashPrompt => {
                 self.request_gpui_stash_prompt_for_active_input(session_id, cx);
             }

@@ -21,11 +21,13 @@ import { Button } from '../../components/ui/button';
 export interface SessionChatNotePanelProps {
   /** Closes the panel; the caller keeps the open/closed state. */
   onClose: () => void;
+  /** Reports whether the current body contains non-whitespace text. */
+  onHasNoteChange: (hasNote: boolean) => void;
   readNote: () => Promise<{ agentSessionId?: string; note?: string }>;
   saveNote: (note: string) => Promise<void>;
 }
 
-export function SessionChatNotePanel({ onClose, readNote, saveNote }: SessionChatNotePanelProps) {
+export function SessionChatNotePanel({ onClose, onHasNoteChange, readNote, saveNote }: SessionChatNotePanelProps) {
   const [value, setValue] = useState('');
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,6 +53,7 @@ export function SessionChatNotePanel({ onClose, readNote, saveNote }: SessionCha
       .then((result) => {
         const note = result.note ?? '';
         savedRef.current = note.trim();
+        onHasNoteChange(note.trim() !== '');
         // A read that lands after the user started typing must not overwrite
         // what they wrote.
         if (!active || editedRef.current) {
@@ -65,7 +68,7 @@ export function SessionChatNotePanel({ onClose, readNote, saveNote }: SessionCha
     return () => {
       active = false;
     };
-  }, [readNote]);
+  }, [onHasNoteChange, readNote]);
 
   const flushNote = useCallback((): void => {
     const previous = savedRef.current;
@@ -130,9 +133,10 @@ export function SessionChatNotePanel({ onClose, readNote, saveNote }: SessionCha
     editedRef.current = true;
     valueRef.current = '';
     setValue('');
+    onHasNoteChange(false);
     flushNote();
     textareaRef.current?.focus();
-  }, [flushNote]);
+  }, [flushNote, onHasNoteChange]);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -204,6 +208,7 @@ export function SessionChatNotePanel({ onClose, readNote, saveNote }: SessionCha
           editedRef.current = true;
           valueRef.current = event.target.value;
           setValue(event.target.value);
+          onHasNoteChange(event.target.value.trim() !== '');
         }}
         onKeyDown={handleKeyDown}
         placeholder='What’s next in this thread…'

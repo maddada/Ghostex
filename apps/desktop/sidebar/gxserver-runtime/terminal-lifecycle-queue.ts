@@ -316,6 +316,10 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       await this.exportSessionTranscript(sessionId);
       return;
     }
+    if (request.action === 'openSessionNote') {
+      this.openSessionNoteEditor(sessionId);
+      return;
+    }
     await this.fullReloadSession(sessionId);
   },
 

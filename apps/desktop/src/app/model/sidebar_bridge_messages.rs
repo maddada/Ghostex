@@ -14,6 +14,8 @@ pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) kind: AgentsWorkspaceSessionKind,
     pub(crate) is_generating_first_prompt_title: bool,
     pub(crate) presentation_state: TerminalSessionPresentationState,
+    pub(crate) has_session_note: bool,
+    pub(crate) stashed_prompt_count: u64,
     pub(crate) title: String,
 }
 
@@ -48,11 +50,13 @@ pub(crate) struct GpuiSidebarCreateProjectAgentMessage {
     pub(crate) agent_id: String,
     pub(crate) preferred_interface: GpuiPreferredAgentInterface,
     pub(crate) project_id: String,
+    pub(crate) request_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarCreateProjectTerminalMessage {
     pub(crate) project_id: String,
+    pub(crate) request_id: Option<String>,
 }
 
 /// True for sidebar bridge events that act on per-project runtime state, so
