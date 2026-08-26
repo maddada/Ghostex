@@ -347,8 +347,24 @@ pub extern "C" fn GhostexGpuiTerminalInsertCommittedText(
         return 0;
     }
     let bytes = unsafe { std::slice::from_raw_parts(text.as_ptr() as *const u8, len) };
-    let accepted =
-        terminal_ghostty_surface::send_native_committed_text_for_view(native_view, bytes);
+    let accepted = std::ffi::CString::new(bytes).is_ok_and(|text| {
+        terminal_ghostty_surface::send_native_key_event_for_view(
+            native_view,
+            ghostty_kit::ffi::ghostty_input_key_s {
+                action: GPUI_TERMINAL_GHOSTTY_KEY_ACTION_PRESS,
+                mods: 0,
+                consumed_mods: 0,
+                // No physical key produced committed IME/dictation/automation
+                // text. Use an unmapped native code so libghostty represents
+                // the event as an unidentified physical key instead of macOS
+                // keycode zero, which is the A key.
+                keycode: u32::MAX,
+                text: text.as_ptr(),
+                unshifted_codepoint: 0,
+                composing: false,
+            },
+        )
+    });
     support_logs::append_temporary(
         support_logs::GpuiSupportLog::TerminalFocus,
         "TEMP.gpui.fluidVoice.nativeCommittedText",
