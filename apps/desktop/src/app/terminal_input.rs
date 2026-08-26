@@ -429,6 +429,8 @@ impl GhostexGpuiApp {
             "promptEditor"
                 | "attachFileOrFolder"
                 | "exportTranscript"
+                | "copyAgentSessionId"
+                | "sessionNote"
                 | "stashPrompt"
                 | "stashedPrompts"
                 | "toggleAgentActions"
@@ -436,6 +438,24 @@ impl GhostexGpuiApp {
                 | "scrollTerminalToBottom"
         ) {
             return false;
+        }
+        if action_id == "copyAgentSessionId" {
+            if let Some(session_id) = self.focused_agents_or_companion_shell_session_id()
+                && let Some(agent_session_id) = self.agents_session_agent_session_id(session_id)
+            {
+                cx.write_to_clipboard(ClipboardItem::new_string(agent_session_id.to_string()));
+            }
+            return true;
+        }
+        if action_id == "sessionNote" {
+            if let Some(session_id) = self.focused_agents_or_companion_shell_session_id() {
+                let _ = self.dispatch_gpui_workspace_terminal_runtime_action(
+                    "openSessionNote",
+                    session_id,
+                    cx,
+                );
+            }
+            return true;
         }
         if action_id == "promptEditor" {
             if let Some((target, runtime_session_id)) =
@@ -490,10 +510,8 @@ impl GhostexGpuiApp {
             "toggleAgentActions" => {
                 if let GpuiEngineTerminalEventTarget::Agents(session_id) = target
                     && self.focused_agents_or_companion_shell_session_id() == Some(session_id)
-                    && let Some(record) = self.agents_gpui_engine_terminals.get(&session_id)
                 {
-                    let view = record.view.clone();
-                    view.update(cx, |view, cx| view.toggle_agent_actions_expanded(cx));
+                    self.toggle_terminal_agent_action_bar_menu(session_id, cx);
                 }
             }
             "scrollTerminalToTop" | "scrollTerminalToBottom" => {
@@ -673,11 +691,15 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn sync_gpui_engine_agent_actions_visibility(
+    /// The agent action bar reads chat eligibility straight off the app when it
+    /// renders (apps/desktop/src/app/render/terminal_agent_action_bar.rs), so
+    /// nothing has to be pushed into the terminal views any more. What still
+    /// belongs on this reconcile edge is the automatic Chat handoff, which
+    /// fires the moment a session first becomes chat-eligible.
+    pub(crate) fn sync_gpui_engine_agents_chat_eligibility(
         &mut self,
         cx: &mut gpui::Context<Self>,
     ) {
-        let focused_target = self.focused_terminal_text_mount_target();
         let chat_view_session_ids = self
             .agents_gpui_engine_terminals
             .keys()
@@ -685,30 +707,6 @@ impl GhostexGpuiApp {
             .filter(|session_id| self.agents_session_chat_eligible(*session_id))
             .collect::<HashSet<_>>();
         self.reconcile_automatic_agents_chat_modes(&chat_view_session_ids, cx);
-        for (session_id, record) in &self.agents_gpui_engine_terminals {
-            // Companion side panes show the same Agents sessions, so the
-            // focused companion terminal (top or bottom split) gets the same
-            // agent-actions cluster as a focused Agents-view terminal.
-            let visible = match focused_target {
-                Some(FocusedTerminalTextMountTarget::Agents(slot_id)) => {
-                    slot_id.session_id == *session_id
-                }
-                Some(FocusedTerminalTextMountTarget::ProjectEditorCompanion(slot_id)) => {
-                    slot_id.session_id == *session_id
-                }
-                _ => false,
-            };
-            record.view.update(cx, |view, cx| {
-                view.set_agent_actions_visible(visible, cx);
-                view.set_chat_view_action_visible(chat_view_session_ids.contains(session_id), cx);
-            });
-        }
-        for record in self.command_gpui_engine_terminals.values() {
-            record.view.update(cx, |view, cx| {
-                view.set_agent_actions_visible(false, cx);
-                view.set_chat_view_action_visible(false, cx);
-            });
-        }
     }
 
     pub(crate) fn reconcile_automatic_agents_chat_modes(

@@ -398,6 +398,27 @@ impl GhostexGpuiApp {
         true
     }
 
+    pub(crate) fn propagate_renderer_edit_cef_hotkey_passthrough(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        #[cfg(target_os = "macos")]
+        let renderer_edit_cef_owns_native_focus = matches!(
+            self.first_responder_target,
+            FirstResponderTarget::CefSurface(FirstResponderCefSurface::ProjectWorkarea(
+                ProjectWorkareaCefSurfaceSlotKey::Source | ProjectWorkareaCefSurfaceSlotKey::Manage
+            )) | FirstResponderTarget::CefSurface(FirstResponderCefSurface::SessionChat(_))
+        );
+        #[cfg(not(target_os = "macos"))]
+        let renderer_edit_cef_owns_native_focus = false;
+
+        if !renderer_edit_cef_owns_native_focus {
+            return false;
+        }
+        cx.propagate();
+        true
+    }
+
     pub(crate) fn propagate_source_workarea_cef_configured_hotkey_passthrough(
         &self,
         action_id: &str,
