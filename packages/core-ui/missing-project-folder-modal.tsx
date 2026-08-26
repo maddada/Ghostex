@@ -1,4 +1,4 @@
-import { IconFolderSearch } from '@tabler/icons-react';
+import { IconFolderSearch, IconTrash } from '@tabler/icons-react';
 import { Card, CardContent } from '@/packages/components/ui/card';
 import {
   AppModalButton,
@@ -40,7 +40,7 @@ export function MissingProjectFolderModal({
         <AppModalHeader>
           <AppModalTitle>Project folder can’t be found</AppModalTitle>
           <AppModalDescription>
-            Ghostex can’t start terminals or agents for {projectName} because its folder is no longer available.
+            Ghostex can’t start terminals or agents because {projectName}’s folder is missing.
           </AppModalDescription>
         </AppModalHeader>
         <AppModalStack>
@@ -54,11 +54,9 @@ export function MissingProjectFolderModal({
           </Card>
         </AppModalStack>
         <AppModalFooter>
-          <AppModalButton onClick={onCancel} type='button'>
-            Cancel
-          </AppModalButton>
-          <AppModalButton onClick={onRemove} tone='danger' type='button'>
-            Remove from Ghostex
+          <AppModalButton className='missing-project-folder-remove' onClick={onRemove} tone='danger' type='button'>
+            <IconTrash aria-hidden='true' size={15} stroke={1.9} />
+            Remove Project
           </AppModalButton>
           <AppModalButton className='missing-project-folder-locate' onClick={onLocate} type='button'>
             <IconFolderSearch aria-hidden='true' size={15} stroke={1.9} />

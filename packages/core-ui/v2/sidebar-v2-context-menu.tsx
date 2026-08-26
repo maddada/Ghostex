@@ -120,6 +120,20 @@ export type SidebarV2ContextMenuSubmenuItem = {
   trailingLabel?: string;
 };
 
+/**
+ * CDXC:SessionMenuGroupLabels 2026-08-26:
+ * One separated block of the menu, optionally named. The heading is the same
+ * quiet muted line the classic session card puts over its groups, so the two
+ * sidebars' menus read the same way. A section leaves `label` unset when a
+ * heading would only repeat its rows — a lone destructive Close names itself,
+ * and the project menu's grouping/close blocks have no session-menu counterpart
+ * to mirror.
+ */
+export type SidebarV2ContextMenuSection = {
+  actions: readonly SidebarV2ContextMenuAction[];
+  label?: string;
+};
+
 export type SidebarV2ContextMenuLifecycleState = {
   /** The row currently classifies as settled, so the item reads "Un-settle". */
   isSettled: boolean;
@@ -208,7 +222,7 @@ export function createSidebarV2ContextMenuSections(
   session: SidebarSessionItem,
   handlers: SidebarV2ContextMenuHandlers,
   options: SidebarV2ContextMenuOptions = {}
-): SidebarV2ContextMenuAction[][] {
+): SidebarV2ContextMenuSection[] {
   const isBrowser = session.kind === 'browser' || session.sessionKind === 'browser';
   const isSleeping = session.isSleeping === true;
   const isParked = session.isParked === true;
@@ -500,7 +514,24 @@ export function createSidebarV2ContextMenuSections(
     },
   ];
 
-  return [primary, sessionActions, lifecycleActions, stateActions, destructive].filter((section) => section.length > 0);
+  /*
+   * CDXC:SessionMenuGroupLabels 2026-08-26:
+   * The classic session card names its blocks Session / Actions / Below; V2
+   * keeps the first two names on the blocks that hold the same items and names
+   * its own two extra blocks after the concerns this file already calls them
+   * (`CDXC:SidebarV2Lifecycle` for settle/snooze/wake, and the pin/park/tag/
+   * sleep block that files a row rather than acting on it). V1's "Below" has no
+   * counterpart here — the inbox renders no rows below the clicked one — and
+   * Close stays unlabeled for V1's reason: a single destructive row names
+   * itself, and a heading over it only adds height.
+   */
+  return [
+    { actions: primary, label: 'Session' },
+    { actions: sessionActions, label: 'Actions' },
+    { actions: lifecycleActions, label: 'Lifecycle' },
+    { actions: stateActions, label: 'Organize' },
+    { actions: destructive, label: undefined },
+  ].filter((section) => section.actions.length > 0);
 }
 
 /*
@@ -546,7 +577,7 @@ export function createSidebarV2ProjectGroupMenuSections(
     onCloseProject?: () => void;
     onSetGroupingMode: (mode: SidebarProjectGroupingMode) => void;
   }
-): SidebarV2ContextMenuAction[][] {
+): SidebarV2ContextMenuSection[] {
   const grouping: SidebarV2ContextMenuAction[] = group.canGroupAcrossMachines
     ? [
         {
@@ -586,13 +617,22 @@ export function createSidebarV2ProjectGroupMenuSections(
         },
       ]
     : [];
-  return [grouping, destructive].filter((section) => section.length > 0);
+  /*
+   * CDXC:SessionMenuGroupLabels 2026-08-26:
+   * Deliberately unlabeled. This menu is one setting plus one destructive row,
+   * not the session menu's Session/Actions split, so a heading over either block
+   * would name a group of one and add height to a two-item menu.
+   */
+  return [
+    { actions: grouping, label: undefined },
+    { actions: destructive, label: undefined },
+  ].filter((section) => section.actions.length > 0);
 }
 
 export type SidebarV2ContextMenuProps = {
   onDismiss: () => void;
   position: SidebarV2ContextMenuPosition;
-  sections: readonly (readonly SidebarV2ContextMenuAction[])[];
+  sections: readonly SidebarV2ContextMenuSection[];
   /**
    * CDXC:SidebarV2ContextMenuLook 2026-07-30:
    * Which classic menu this one is. The two differ by exactly one thing — their
@@ -813,7 +853,8 @@ export function SidebarV2ContextMenu({
           <Fragment key={`sidebar-v2-menu-section-${sectionIndex}`}>
             {sectionIndex > 0 ? <div className='session-context-menu-divider' role='separator' /> : null}
             <div className='session-context-menu-section'>
-              {section.map((action) => {
+              {section.label ? <div className='session-context-menu-group-label'>{section.label}</div> : null}
+              {section.actions.map((action) => {
                 const isExpanded = openSubmenu?.key === action.key;
                 return (
                   <button

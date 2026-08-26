@@ -297,9 +297,12 @@ impl TerminalAgentBarAction {
 The ⋯ menu, top to bottom. It is the chat composer's menu row for row, in the
 same order, with the same icons and the same shortcut column — see
 `packages/core-ui/chat/session-chat-composer-actions.tsx`, whose expanded menu
-renders Verbose mode and Delayed actions, then the host's "Agent" group, then
-the host's remaining actions in host-list order. Prompt editor is intentionally
-absent because its accent button is always visible immediately beside the menu.
+renders a "Chat" group of Verbose mode and Delayed actions, then the host's
+"Agent" group, then the host's remaining actions in host-list order under no
+heading at all. The headings themselves come from
+[`terminal_agent_bar_menu_group_heading`], keyed off the row that opens each
+block. Prompt editor is intentionally absent because its accent button is always
+visible immediately beside the menu.
 */
 const TERMINAL_AGENT_BAR_MENU_ROWS: &[Option<TerminalAgentBarAction>] = &[
     Some(TerminalAgentBarAction::VerboseMode),
@@ -631,10 +634,8 @@ impl GhostexGpuiApp {
         for row in TERMINAL_AGENT_BAR_MENU_ROWS {
             match row {
                 Some(action) => {
-                    // The "Agent" heading introduces the session-lifecycle
-                    // block, exactly where the design reference puts it.
-                    if *action == TerminalAgentBarAction::Rename {
-                        menu = menu.child(terminal_agent_bar_menu_group_label("Agent"));
+                    if let Some(heading) = terminal_agent_bar_menu_group_heading(*action) {
+                        menu = menu.child(terminal_agent_bar_menu_group_label(heading));
                     }
                     menu = menu.child(self.render_terminal_agent_bar_menu_item(
                         surface, session_id, *action, suffix, cx,
@@ -1131,14 +1132,36 @@ fn terminal_agent_bar_stashed_prompt_count_badge(count: u64) -> AnyElement {
         .into_any_element()
 }
 
+/// Which heading, if any, introduces the block this row starts.
+///
+/// The chat composer's dots menu names exactly two of its blocks — "Chat" over
+/// the chat-surface toggles (Verbose mode, Delayed actions) and "Agent" over the
+/// host's session actions — and leaves its trailing host-action block unnamed;
+/// see `packages/core-ui/chat/session-chat-composer-actions.tsx`. This menu
+/// mirrors that, so Export transcript stays under a bare separator here too.
+fn terminal_agent_bar_menu_group_heading(action: TerminalAgentBarAction) -> Option<&'static str> {
+    match action {
+        TerminalAgentBarAction::VerboseMode => Some("Chat"),
+        TerminalAgentBarAction::Rename => Some("Agent"),
+        _ => None,
+    }
+}
+
+/// A heading row: text only, in the menu's flex column beside the item rows. It
+/// carries no `id`, no hover style and no mouse handler, so it can never be
+/// hovered, focused or clicked the way an item row can.
+///
+/// Sentence case at 11px against the menu's 13px rows keeps the same quiet
+/// relationship `DropdownMenuLabel`'s `text-xs text-muted-foreground` has to the
+/// web menu's `text-sm` rows.
 fn terminal_agent_bar_menu_group_label(label: &'static str) -> AnyElement {
     div()
         .px(px(9.0))
         .pt(px(5.0))
         .pb(px(3.0))
-        .text_size(px(10.0))
+        .text_size(px(11.0))
         .text_color(rgb(TERMINAL_AGENT_BAR_SESSION_ID_COLOR))
-        .child(label.to_uppercase())
+        .child(label)
         .into_any_element()
 }
 

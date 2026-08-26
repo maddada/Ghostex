@@ -415,6 +415,62 @@ body {
   border-radius: 6px;
 }
 
+/*
+ * CDXC:RoundedDropdownMenus 2026-08-26:
+ * Dropdown menus, submenus, popovers, and the chat surface's right-click
+ * context menu share the select popup's geometry: an
+ * 8px panel with 6px rows, so a hovered row's highlight sits inside the panel's
+ * 4px padding. The square-theme reset above still lists these slots for the
+ * rest of its chrome family, and Tailwind's `rounded-[8px]`/`rounded-[6px]` on
+ * the shared primitives lives in the utilities layer, which unlayered CSS
+ * outranks. Re-assert the radius here, after that reset, so the computed value
+ * is rounded in the sidebar, the modal host, and portaled menus alike.
+ */
+[data-slot='context-menu-content'],
+[data-slot='context-menu-sub-content'],
+[data-slot='dropdown-menu-content'],
+[data-slot='dropdown-menu-sub-content'],
+[data-slot='popover-content'] {
+  border-radius: 8px;
+}
+
+[data-slot='context-menu-item'],
+[data-slot='context-menu-checkbox-item'],
+[data-slot='context-menu-radio-item'],
+[data-slot='context-menu-sub-trigger'],
+[data-slot='dropdown-menu-item'],
+[data-slot='dropdown-menu-checkbox-item'],
+[data-slot='dropdown-menu-radio-item'],
+[data-slot='dropdown-menu-sub-trigger'] {
+  border-radius: 6px;
+}
+
+/*
+ * CDXC:RoundedDropdownMenus 2026-08-26:
+ * The app's hand-built menus — sidebar/session/project/group context menus, the
+ * git action menu, quick actions, the command icon picker — are the same kind of
+ * surface as a Base UI dropdown, so they take the same 8px/6px geometry instead
+ * of staying square beside it. `.previous-sessions-tag-filter-menu` already
+ * states this pair explicitly and keeps its own `!important` values.
+ */
+.command-icon-picker-menu,
+.git-action-menu,
+.quick-action-menu,
+.session-context-menu {
+  border-radius: 8px;
+}
+
+.command-icon-picker-option,
+.git-action-menu-item,
+.group-agent-menu-item,
+.group-control-menu-item,
+.quick-action-menu-item,
+.session-context-menu-item,
+.session-context-menu-split-item,
+.workspace-theme-menu-item {
+  border-radius: 6px;
+}
+
 .app-modal-host-body [data-slot='dialog-content'],
 [data-slot='dialog-content'] {
   border-radius: 0;
@@ -604,35 +660,12 @@ body {
   ) !important;
 }
 
-.quick-access-session-scope-toggle {
-  align-items: center;
-  align-self: stretch;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  color: var(--app-muted-foreground, var(--muted-foreground));
-  cursor: pointer;
-  display: inline-flex;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 400;
-  gap: 6px;
-  height: 32px;
-  line-height: 1;
-  padding: 0 8px;
-  white-space: nowrap;
-}
-
-.quick-access-session-scope-toggle:hover,
-.quick-access-session-scope-toggle:focus-visible,
-.quick-access-session-scope-toggle[data-selected='true'] {
-  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 10%, transparent);
-  color: var(--app-foreground, var(--foreground));
-  outline: none;
-}
-
-.quick-access-session-scope-toggle kbd {
+/*
+ * The Sessions scope dropdown restates its hotkey inside the trigger, next to
+ * the chevron, so the shortcut stays discoverable now that the control moved
+ * out of the search field.
+ */
+.quick-access-session-scope-hint {
   color: inherit;
   font: inherit;
   font-size: 10px;
@@ -1036,8 +1069,13 @@ body {
   color: var(--foreground);
 }
 
-/* Project, tag, create-tag, and Add Prompt now share one compact filter row. */
-.ghostex-stashed-prompt-toolbar {
+/*
+ * Project, tag, create-tag, and Add Prompt now share one compact filter row.
+ * The Sessions tab reuses the same row for its scope and tag filters, so both
+ * Quick Access tabs read as one control shelf under the search field.
+ */
+.ghostex-stashed-prompt-toolbar,
+.quick-access-filter-toolbar {
   align-items: center;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   display: flex;
@@ -1046,11 +1084,13 @@ body {
 }
 
 .ghostex-stashed-prompt-project-filter,
-.ghostex-stashed-prompt-tag-filter {
+.ghostex-stashed-prompt-tag-filter,
+.quick-access-filter-select {
   min-width: 0;
 }
 
-.ghostex-stashed-prompt-project-filter {
+.ghostex-stashed-prompt-project-filter,
+.quick-access-filter-select {
   flex: 0 1 180px;
 }
 
@@ -4799,64 +4839,29 @@ body {
   font-size: 13px;
 }
 
-/* Sessions toolbar: scope toggle + tag filter ----------------------------- */
+/* Sessions filter row: scope dropdown + tag filter ------------------------ */
 
 /*
- * Both trailing controls live inside the 32px search field, so they are 24px
- * chips on the raised tone. The scope toggle keeps one fixed width so switching
- * between All Sessions and Closed does not move the adjacent filter button.
+ * The scope dropdown keeps one fixed width so switching between All Sessions
+ * and Closed does not move the adjacent filter button.
  */
-.quick-access-surface .quick-access-session-scope-toggle {
-  align-self: center;
-  border-radius: var(--settings-radius-menu-item);
-  color: var(--muted-foreground, var(--app-muted));
-  font-size: 12px;
-  gap: 5px;
-  height: 24px;
-  padding: 0 7px;
-  width: 116px;
-}
-
-.quick-access-surface .quick-access-session-scope-toggle:hover,
-.quick-access-surface .quick-access-session-scope-toggle:focus-visible {
-  background: var(--settings-raised-hover);
-  color: var(--foreground);
-}
-
-.quick-access-surface .quick-access-session-scope-toggle[data-selected='true'] {
-  background: transparent;
-  color: var(--muted-foreground, var(--app-muted));
-}
-
-.quick-access-surface .quick-access-session-scope-toggle[data-selected='true']:hover,
-.quick-access-surface .quick-access-session-scope-toggle[data-selected='true']:focus-visible {
-  background: var(--settings-raised-hover);
-  color: var(--foreground);
-}
-
-.quick-access-surface .quick-access-session-scope-toggle kbd {
-  font-size: 11px;
-  opacity: 0.5;
-}
-
-.quick-access-surface .previous-sessions-tag-filter-toggle {
-  align-self: center;
-  border-radius: var(--settings-radius-menu-item);
-  color: var(--muted-foreground, var(--app-muted));
-  height: 24px;
-  min-width: 24px;
-  width: 24px;
-}
-
-.quick-access-surface .previous-sessions-tag-filter-toggle:hover,
-.quick-access-surface .previous-sessions-tag-filter-toggle:focus-visible {
-  background: var(--settings-raised-hover);
-  color: var(--foreground);
+.quick-access-surface .quick-access-session-scope-select {
+  flex: 0 0 auto;
+  width: 152px;
 }
 
 .quick-access-surface .previous-sessions-tag-filter-toggle[data-selected='true'] {
-  background: transparent;
   color: var(--ghostex-accent, #38bdf8);
+}
+
+/*
+ * The Sessions modal is portaled to <body> at `.confirm-modal-root`'s z-index
+ * 1200, while Base UI positions select popups in their own isolated z-50 layer
+ * on <body>. Lift this positioner to the layer the portaled tag filter menu
+ * already uses so the scope dropdown is not hidden behind the modal.
+ */
+div:has(> [data-slot='select-content'].quick-access-filter-select-content) {
+  z-index: 1302;
 }
 
 /*
@@ -4908,7 +4913,8 @@ body {
   border-color: var(--settings-hairline);
 }
 
-.quick-access-surface .ghostex-stashed-prompt-toolbar {
+.quick-access-surface .ghostex-stashed-prompt-toolbar,
+.quick-access-surface .quick-access-filter-toolbar {
   border-bottom: 1px solid var(--settings-hairline);
   padding: 6px;
 }

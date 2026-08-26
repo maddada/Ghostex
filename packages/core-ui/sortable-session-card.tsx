@@ -71,6 +71,13 @@ const CONTEXT_MENU_WIDTH_PX = 178;
 const CONTEXT_MENU_ITEM_HEIGHT_PX = 34;
 const CONTEXT_MENU_DIVIDER_HEIGHT_PX = 13;
 const CONTEXT_MENU_VERTICAL_PADDING_PX = 12;
+/*
+ * CDXC:SessionMenuGroupLabels 2026-08-26:
+ * A group heading row: 11px text plus its 4px/2px insets and the section grid
+ * gap. Only the pre-render placement estimate uses it; the portal still clamps
+ * against the rendered height once the menu exists.
+ */
+const CONTEXT_MENU_GROUP_LABEL_HEIGHT_PX = 21;
 const POINTER_ALIGNED_CONTEXT_MENU_MIN_SIDEBAR_WIDTH_PX = 235;
 const COMPLETION_FLASH_DURATION_MS = 3_000;
 const SESSION_CARD_IMMEDIATE_FOCUS_CLICK_SUPPRESSION_MS = 1_500;
@@ -575,12 +582,14 @@ function clampContextMenuPosition(
   clientX: number | undefined,
   clientY: number,
   itemCount: number,
-  dividerCount: number
+  dividerCount: number,
+  labelCount: number
 ): ContextMenuPosition {
   const menuHeight =
     CONTEXT_MENU_VERTICAL_PADDING_PX +
     itemCount * CONTEXT_MENU_ITEM_HEIGHT_PX +
-    dividerCount * CONTEXT_MENU_DIVIDER_HEIGHT_PX;
+    dividerCount * CONTEXT_MENU_DIVIDER_HEIGHT_PX +
+    labelCount * CONTEXT_MENU_GROUP_LABEL_HEIGHT_PX;
   return {
     /*
      * CDXC:GPUISidebarContextMenuPosition 2026-07-21:
@@ -1176,9 +1185,14 @@ export function SortableSessionCard({
       nextBelowActionCount,
       destructiveActions.length,
     ].filter((count) => count > 0);
+    /* Every group but the trailing destructive one renders a heading row. */
+    const nextLabelledSectionLengths = [primaryActions.length, sessionActions.length, nextBelowActionCount].filter(
+      (count) => count > 0
+    );
     return {
       dividerCount: Math.max(0, nextSectionLengths.length - 1),
       itemCount: nextSectionLengths.reduce((count, sectionLength) => count + sectionLength, 0),
+      labelCount: nextLabelledSectionLengths.length,
       sleepableSessionIdsBelow: nextSleepableSessionIdsBelow,
     };
   };
@@ -1242,7 +1256,13 @@ export function SortableSessionCard({
       });
     }
     setContextMenuPosition(
-      clampContextMenuPosition(clientX, clientY, nextMenuCounts.itemCount, nextMenuCounts.dividerCount)
+      clampContextMenuPosition(
+        clientX,
+        clientY,
+        nextMenuCounts.itemCount,
+        nextMenuCounts.dividerCount,
+        nextMenuCounts.labelCount
+      )
     );
   };
 
@@ -2074,12 +2094,28 @@ export function SortableSessionCard({
       onClick: () => requestClose('context-menu'),
     });
   }
+  /*
+   * CDXC:SessionMenuGroupLabels 2026-08-26:
+   * The separated groups carry the same kind of heading the chat dots menu puts
+   * over its "Agent" block. Close/Close selected stay unlabeled: a single
+   * destructive row names itself, and a heading over it only adds height. The
+   * bulk menu stays unlabeled for the same reason — every one of its rows
+   * already ends in "selected", so a "Selected" heading only repeats them.
+   */
   const contextMenuSections = (
     isBulkContextMenu
-      ? [bulkPrimaryActions, bulkDestructiveActions]
-      : [primaryActions, sessionActions, belowActions, destructiveActions]
-  ).filter((section) => section.length > 0);
-  const contextMenuItemCount = contextMenuSections.reduce((count, section) => count + section.length, 0);
+      ? [
+          { actions: bulkPrimaryActions, label: undefined },
+          { actions: bulkDestructiveActions, label: undefined },
+        ]
+      : [
+          { actions: primaryActions, label: 'Session' },
+          { actions: sessionActions, label: 'Actions' },
+          { actions: belowActions, label: 'Below' },
+          { actions: destructiveActions, label: undefined },
+        ]
+  ).filter((section) => section.actions.length > 0);
+  const contextMenuItemCount = contextMenuSections.reduce((count, section) => count + section.actions.length, 0);
   const contextMenuDividerCount = Math.max(0, contextMenuSections.length - 1);
 
   const requestFocusSession = (
@@ -2574,7 +2610,8 @@ export function SortableSessionCard({
             <Fragment key={`section-${sectionIndex}`}>
               {sectionIndex > 0 ? <div className='session-context-menu-divider' role='separator' /> : null}
               <div className='session-context-menu-section'>
-                {section.map((action) => (
+                {section.label ? <div className='session-context-menu-group-label'>{section.label}</div> : null}
+                {section.actions.map((action) => (
                   <button
                     key={action.key}
                     className={`session-context-menu-item${action.danger ? ' session-context-menu-item-danger' : ''}`}
@@ -2758,7 +2795,7 @@ function getSidebarBulkSessionContextMenuCounts({
 }: {
   availability: SidebarBulkSessionContextMenuAvailability;
   hasSessionTagSubmenu: boolean;
-}): { dividerCount: number; itemCount: number } {
+}): { dividerCount: number; itemCount: number; labelCount: number } {
   const primaryItemCount =
     Number(availability.sleepableSessionIds.length > 0) +
     Number(availability.wakeableSessionIds.length > 0) +
@@ -2771,6 +2808,8 @@ function getSidebarBulkSessionContextMenuCounts({
   return {
     dividerCount: Math.max(0, sectionLengths.length - 1),
     itemCount: sectionLengths.reduce((count, sectionLength) => count + sectionLength, 0),
+    /* The bulk menu renders no group headings; see contextMenuSections. */
+    labelCount: 0,
   };
 }
 

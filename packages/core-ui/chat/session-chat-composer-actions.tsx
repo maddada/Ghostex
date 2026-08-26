@@ -323,6 +323,14 @@ export function SessionChatComposerActions({
             <DropdownMenuContent align='end' className='min-w-52' side='top'>
               {hasBaseMenuItems ? (
                 <DropdownMenuGroup>
+                  {/*
+                  CDXC:ChatMenuGroupLabels 2026-08-26:
+                  The dots menu already names its host-action block "Agent"; the
+                  rows above it are chat-surface toggles, so they get the
+                  matching "Chat" heading instead of reading as an unlabeled
+                  preamble.
+                  */}
+                  <DropdownMenuLabel>Chat</DropdownMenuLabel>
                   {verboseMenuItem}
                   {delayedActionsMenuItem}
                 </DropdownMenuGroup>
@@ -426,6 +434,7 @@ export function SessionChatComposerActions({
           </AppTooltip>
           <DropdownMenuContent align='end' className='min-w-52' side='top'>
             <DropdownMenuGroup>
+              <DropdownMenuLabel>Chat</DropdownMenuLabel>
               {verboseMenuItem}
               {delayedActionsMenuItem}
               {onSessionNote ? (

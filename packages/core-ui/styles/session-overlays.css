@@ -159,13 +159,18 @@
   margin-bottom: 6px;
 }
 
+/*
+ * CDXC:SessionMenuGroupLabels 2026-08-26:
+ * Session context menus name their separated groups the way the chat dots menu
+ * names its "Agent" block: quiet muted sentence-case text, aligned with the
+ * 10px item inset above it rather than the panel's 6px padding, so a label and
+ * the rows it introduces share one left edge.
+ */
 .session-context-menu-group-label {
-  padding: 0 4px;
-  color: color-mix(in srgb, var(--app-foreground) 68%, transparent);
+  padding: 4px 10px 2px;
+  color: color-mix(in srgb, var(--app-foreground) 58%, transparent);
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .session-context-menu-split-row {

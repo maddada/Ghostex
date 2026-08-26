@@ -293,7 +293,8 @@ html:has(body.app-modal-host-native-window-body) {
   margin: 0;
 }
 
-.gx-app-modal .missing-project-folder-locate {
+.gx-app-modal .missing-project-folder-locate,
+.gx-app-modal .missing-project-folder-remove {
   gap: 6px;
 }
 
@@ -608,8 +609,10 @@ html:has(body.app-modal-host-native-window-body) {
   display: grid;
   gap: 0;
   /*
-   * CDXC:PreviousSessions 2026-06-13-15:59:
-   * The tag filter is now the search field's right-side action, replacing the decorative Search icon. Keep the toolbar as one full-width column so the input has equal modal-edge spacing on the left and right.
+   * CDXC:PreviousSessions 2026-08-26:
+   * The scope and tag filters sit in their own row under the search field, like
+   * Saved Prompts. Keep the toolbar as one full-width column so the input and
+   * the filter row both have equal modal-edge spacing on the left and right.
    */
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
@@ -660,42 +663,6 @@ html:has(body.app-modal-host-native-window-body) {
 
 .previous-sessions-search-shell[data-has-query='true'] .session-search-clear-button {
   right: 32px;
-}
-
-.previous-sessions-favorites-toggle {
-  align-items: center;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  color: color-mix(in srgb, var(--app-foreground) 88%, var(--app-muted) 12%);
-  cursor: pointer;
-  display: inline-flex;
-  height: 32px;
-  justify-content: center;
-  min-width: 32px;
-  padding: 0;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    opacity 120ms ease;
-  width: 32px;
-}
-
-.previous-sessions-favorites-toggle {
-  align-self: stretch;
-}
-
-.previous-sessions-favorites-toggle:hover,
-.previous-sessions-favorites-toggle:focus-visible {
-  background: color-mix(in srgb, var(--app-foreground) 10%, transparent);
-  color: color-mix(in srgb, var(--app-foreground) 94%, var(--app-muted) 6%);
-  outline: none;
-}
-
-.previous-sessions-favorites-toggle[data-selected='true'] {
-  background: color-mix(in srgb, var(--app-foreground) 10%, transparent);
-  color: color-mix(in srgb, #ffdf75 78%, #c78b12 22%);
 }
 
 .previous-sessions-tag-filter-toggle[data-selected='true'] {
@@ -891,53 +858,11 @@ html:has(body.app-modal-host-native-window-body) {
 
 /*
  * CDXC:UnifiedAppModal 2026-08-26:
- * Scratch Pad and View 1st Message render through AppModalShell, so the
- * surface, radius, hairlines, typography, and the raised textarea skin come
- * from `.gx-app-modal`. Only the sizing that is unique to each writing surface
+ * View 1st Message renders through AppModalShell, so the surface, radius,
+ * hairlines, typography, and the raised textarea skin come from
+ * `.gx-app-modal`. Only the sizing that is unique to that writing surface
  * stays here.
- *
- * CDXC:ScratchPad 2026-05-28-13:22:
- * Scratch Pad's editor is the main writing area, so it fills the modal's
- * remaining height instead of growing the modal as the note gets longer.
  */
-.gx-app-modal.scratch-pad-modal {
-  display: flex;
-  flex-direction: column;
-  height: min(720px, calc(100vh - 2rem));
-  overflow: hidden;
-}
-
-/*
- * In a native child window the window IS the modal, so Scratch Pad fills it
- * instead of taking the shared shell's fit-to-content height.
- */
-.app-modal-host-native-window-body .gx-app-modal.scratch-pad-modal {
-  height: 100vh;
-  max-height: 100vh;
-}
-
-.scratch-pad-modal-column {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.scratch-pad-modal-body {
-  display: grid;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.scratch-pad-textarea {
-  field-sizing: fixed;
-  height: 100%;
-  line-height: 1.55;
-  min-height: 0;
-  padding: 12px 13px;
-  resize: none;
-  -webkit-user-select: text;
-  user-select: text;
-  width: 100%;
-}
 
 /*
  * CDXC:FirstMessage 2026-06-30-16:08:
@@ -4381,14 +4306,14 @@ html:has(body.app-modal-host-native-window-body) {
 
 /*
  * Any modal textarea that sits in normal flow scrolls instead of growing. The
- * modals whose textarea is meant to fill the window (Scratch Pad, Commit
- * message, Saved Prompt editor) keep their own sizing, and so does the read-only
- * View 1st Message viewer, which is sized by the fit-height rule above.
+ * modals whose textarea is meant to fill the window (Commit message, Saved
+ * Prompt editor) keep their own sizing, and so does the read-only View 1st
+ * Message viewer, which is sized by the fit-height rule above.
  */
 .app-modal-host-native-window-body[data-app-modal-fixed-window='true']
-  [data-slot='textarea']:not(.scratch-pad-textarea):not(.git-commit-modal-textarea):not(
-    .ghostex-stashed-prompt-editor-textarea
-  ):not(.first-user-message-textarea) {
+  [data-slot='textarea']:not(.git-commit-modal-textarea):not(.ghostex-stashed-prompt-editor-textarea):not(
+    .first-user-message-textarea
+  ) {
   max-height: min(220px, 42vh);
   overflow-y: auto;
   resize: none;
@@ -4485,14 +4410,12 @@ html:has(body.app-modal-host-native-window-body) {
  * writing surface rather than a compact form field.
  */
 .app-modal-host-native-window-body
-  :is([data-slot='textarea'], .session-rename-textarea, .scratch-pad-textarea):not(.git-commit-modal-textarea) {
+  :is([data-slot='textarea'], .session-rename-textarea):not(.git-commit-modal-textarea) {
   scrollbar-width: auto;
 }
 
 .app-modal-host-native-window-body
-  :is([data-slot='textarea'], .session-rename-textarea, .scratch-pad-textarea):not(
-    .git-commit-modal-textarea
-  )::-webkit-scrollbar {
+  :is([data-slot='textarea'], .session-rename-textarea):not(.git-commit-modal-textarea)::-webkit-scrollbar {
   background: transparent;
   display: block;
   height: 2px;
@@ -4500,16 +4423,12 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .app-modal-host-native-window-body
-  :is([data-slot='textarea'], .session-rename-textarea, .scratch-pad-textarea):not(
-    .git-commit-modal-textarea
-  )::-webkit-scrollbar-track {
+  :is([data-slot='textarea'], .session-rename-textarea):not(.git-commit-modal-textarea)::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .app-modal-host-native-window-body
-  :is([data-slot='textarea'], .session-rename-textarea, .scratch-pad-textarea):not(
-    .git-commit-modal-textarea
-  )::-webkit-scrollbar-thumb {
+  :is([data-slot='textarea'], .session-rename-textarea):not(.git-commit-modal-textarea)::-webkit-scrollbar-thumb {
   background-color: #585858;
   border-radius: 999px;
 }
@@ -4556,10 +4475,17 @@ html:has(body.app-modal-host-native-window-body) {
   border: 0 !important;
 }
 
+/*
+ * CDXC:AddProjectChrome 2026-08-26:
+ * The path bar owns the only rounded corners in the strip. Clipping it means the
+ * flush action buttons inherit exactly the bar's 8px outer corners instead of
+ * poking square edges past them, so the whole row reads as one radius family.
+ */
 .add-project-modal [data-slot='input-group'] {
   background: #161616 !important;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px !important;
+  overflow: hidden;
 }
 
 .add-project-modal [data-slot='input-group']:focus-within {
@@ -4582,13 +4508,42 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /* The path bar actions are connected chrome, so their shared edges stay square. */
-.add-project-modal [data-add-project-field='newFolder'],
-.add-project-modal [data-add-project-field='submit'] {
+.add-project-modal [data-slot='input-group'] button {
   border-radius: 0 !important;
 }
 
+/*
+ * The path bar's submit action stays as quiet as its `New Folder` neighbour —
+ * one raised step above the #161616 bar, hairline separator, normal label
+ * colour — instead of a bright primary block that breaks the strip.
+ */
+.add-project-modal [data-add-project-field='submit'] {
+  background: var(--gx-modal-raised, #1d1d1d);
+  color: var(--foreground);
+}
+
+.add-project-modal [data-add-project-field='submit']:hover:not(:disabled) {
+  background: var(--gx-modal-raised-hover, #232323);
+}
+
+/*
+ * The source rows' `Setup Required` chip renders through the tooltip trigger,
+ * so it never carries `data-slot='button'`; give it the 6px chip radius the
+ * list rows and key caps use.
+ */
+.add-project-modal [data-add-project-field='setupRequired'] {
+  border-radius: 6px !important;
+}
+
+/* Banners and cards take the same 8px control radius as the path bar. */
+.add-project-modal [data-add-project-field='error'],
+.add-project-modal [data-add-project-field='notice'],
+.add-project-modal [data-add-project-field='repositoryCard'] {
+  border-radius: 8px;
+}
+
 .add-project-modal kbd {
-  border-radius: 5px !important;
+  border-radius: 6px !important;
 }
 
 .add-project-modal h2,

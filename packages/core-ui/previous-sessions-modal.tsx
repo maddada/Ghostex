@@ -3,6 +3,14 @@ import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/packages/components/ui/select';
+import {
   filterPreviousSessions,
   filterPreviousSessionsModalItems,
   filterSidebarSessionItems,
@@ -39,6 +47,8 @@ const PREVIOUS_SESSIONS_TAG_FILTER_MENU_GAP_PX = 6;
 const PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX = 12;
 const PREVIOUS_SESSIONS_VISIBLE_WINDOW_MS = 14 * 24 * 60 * 60 * 1_000;
 const SESSIONS_SCOPE_TOGGLE_HOTKEY = 'cmd+shift+c';
+const SESSIONS_SCOPE_ALL_VALUE = 'all';
+const SESSIONS_SCOPE_CLOSED_VALUE = 'closed';
 
 type PreviousSessionsRequestMode = 'append' | 'replace';
 
@@ -443,6 +453,18 @@ export function PreviousSessionsModal({
     searchInputRef.current?.focus({ preventScroll: true });
   }, []);
 
+  /*
+   * The scope control is a dropdown in the filter row, so the select popup
+   * restores focus to its trigger while closing. Hand typing focus back to the
+   * search field after that restore, matching the hotkey path.
+   */
+  const selectSessionsScope = useCallback((scopeValue: string) => {
+    setShowClosedSessionsOnly(scopeValue === SESSIONS_SCOPE_CLOSED_VALUE);
+    window.setTimeout(() => {
+      searchInputRef.current?.focus({ preventScroll: true });
+    }, 0);
+  }, []);
+
   const openTagFilterMenu = () => {
     const bounds = tagFilterButtonRef.current?.getBoundingClientRect();
     if (!bounds) {
@@ -813,58 +835,68 @@ export function PreviousSessionsModal({
               placeholder='Search sessions...'
               query={searchQuery}
               setQuery={setSearchQuery}
-              trailingControl={
-                <>
-                  <button
-                    aria-label={`${showClosedSessionsOnly ? 'Show all sessions' : 'Show closed sessions'} (${formatSidebarHotkeyLabel(SESSIONS_SCOPE_TOGGLE_HOTKEY)})`}
-                    aria-pressed={showClosedSessionsOnly}
-                    className='quick-access-session-scope-toggle'
-                    data-selected={String(showClosedSessionsOnly)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleClosedSessionsOnly();
-                    }}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                    }}
-                    type='button'
-                  >
-                    <span>{showClosedSessionsOnly ? 'Closed' : 'All Sessions'}</span>
-                    <kbd>{formatSidebarHotkeyLabel(SESSIONS_SCOPE_TOGGLE_HOTKEY)}</kbd>
-                  </button>
-                  {/*
-                   * CDXC:PreviousSessions 2026-06-13-15:59:
-                   * The tag filter belongs inside the search field's right-side icon slot so the search box can span the modal evenly from left to right instead of reserving a separate external action column.
-                   */}
-                  <button
-                    aria-expanded={isTagFilterMenuOpen}
-                    aria-haspopup='menu'
-                    aria-label={
-                      hasTagFilters
-                        ? `Filter sessions by ${selectedSessionTagFilters.length} tags`
-                        : 'Filter sessions by tag'
-                    }
-                    className='previous-sessions-favorites-toggle previous-sessions-tag-filter-toggle'
-                    data-selected={String(hasTagFilters)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (isTagFilterMenuOpen) {
-                        setIsTagFilterMenuOpen(false);
-                        return;
-                      }
-                      openTagFilterMenu();
-                    }}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                    }}
-                    ref={tagFilterButtonRef}
-                    type='button'
-                  >
-                    <IconFilter2 aria-hidden='true' className='toolbar-tabler-icon' stroke={1.8} />
-                  </button>
-                </>
-              }
             />
+            {/*
+             * CDXC:PreviousSessions 2026-08-26:
+             * Sessions now uses the Saved Prompts shape: a plain search field
+             * with only the search icon, and the scope and tag filters below it
+             * in the shared Quick Access filter row.
+             */}
+            <div className='quick-access-filter-toolbar'>
+              <Select
+                value={showClosedSessionsOnly ? SESSIONS_SCOPE_CLOSED_VALUE : SESSIONS_SCOPE_ALL_VALUE}
+                onValueChange={selectSessionsScope}
+              >
+                <SelectTrigger
+                  aria-label={`Filter sessions by scope (${formatSidebarHotkeyLabel(SESSIONS_SCOPE_TOGGLE_HOTKEY)} toggles closed sessions)`}
+                  className='quick-access-filter-select quick-access-session-scope-select'
+                  size='sm'
+                >
+                  <SelectValue />
+                  <kbd className='quick-access-session-scope-hint'>
+                    {formatSidebarHotkeyLabel(SESSIONS_SCOPE_TOGGLE_HOTKEY)}
+                  </kbd>
+                </SelectTrigger>
+                <SelectContent
+                  align='start'
+                  alignItemWithTrigger={false}
+                  className='quick-access-filter-select-content'
+                >
+                  <SelectGroup>
+                    <SelectItem value={SESSIONS_SCOPE_ALL_VALUE}>All Sessions</SelectItem>
+                    <SelectItem value={SESSIONS_SCOPE_CLOSED_VALUE}>Closed</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Button
+                aria-expanded={isTagFilterMenuOpen}
+                aria-haspopup='menu'
+                aria-label={
+                  hasTagFilters
+                    ? `Filter sessions by ${selectedSessionTagFilters.length} tags`
+                    : 'Filter sessions by tag'
+                }
+                className='previous-sessions-tag-filter-toggle'
+                data-selected={String(hasTagFilters)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (isTagFilterMenuOpen) {
+                    setIsTagFilterMenuOpen(false);
+                    return;
+                  }
+                  openTagFilterMenu();
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                ref={tagFilterButtonRef}
+                size='icon-sm'
+                type='button'
+                variant='outline'
+              >
+                <IconFilter2 aria-hidden='true' stroke={1.8} />
+              </Button>
+            </div>
             {isTagFilterMenuOpen
               ? createPortal(
                   <div

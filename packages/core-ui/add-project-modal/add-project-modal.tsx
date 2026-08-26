@@ -1372,7 +1372,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
             <InputGroupAddon align='inline-end' className={ADD_PROJECT_ACTION_ADDON_CLASS}>
               <Button
                 aria-label={`${repositoryActionLabel} (Enter)`}
-                className={cn(ADD_PROJECT_ACTION_BUTTON_CLASS, 'gap-1.5')}
+                className={ADD_PROJECT_ACTION_BUTTON_CLASS}
                 data-add-project-field='repositoryAction'
                 disabled={query.trim().length === 0 || busy !== null}
                 onClick={() => {
@@ -1387,7 +1387,6 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 variant='ghost'
               >
                 {busy === 'lookup' ? 'Working' : repositoryActionLabel}
-                <kbd className='rounded-none bg-muted-foreground/10 px-1.5 text-sm'>Enter</kbd>
               </Button>
             </InputGroupAddon>
           ) : isBrowsing ? (
@@ -1423,6 +1422,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 size='xs'
                 tabIndex={-1}
                 type='button'
+                variant='ghost'
               >
                 {busyLabel ?? submitActionLabel}
               </Button>
