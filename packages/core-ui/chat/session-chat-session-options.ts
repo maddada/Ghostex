@@ -11,6 +11,7 @@
 // Agents without a catalog (unknown ids) get no pills at all.
 
 import type { SessionChatSendKey } from '../../shared/session-chat';
+import type { SidebarAgentIcon } from '../../shared/sidebar-agents';
 
 export type SessionChatOptionCategory = 'model' | 'thought_level' | 'model_config' | 'mode';
 
@@ -70,6 +71,8 @@ export interface SessionChatOptionDescriptor {
 export interface SessionChatSessionOptionCatalog {
   /** The model pill's descriptor (category "model"). */
   model: SessionChatOptionDescriptor;
+  /** Provider artwork shown beside the current model name. */
+  modelIcon: SidebarAgentIcon;
   /** Everything else, in category order, for the current model. */
   optionsForModel: (modelValue: string) => readonly SessionChatOptionDescriptor[];
 }
@@ -238,6 +241,7 @@ const GROK_EFFORT: SessionChatOptionDescriptor = {
 
 const CLAUDE_CATALOG: SessionChatSessionOptionCatalog = {
   model: CLAUDE_MODEL,
+  modelIcon: 'claude',
   optionsForModel: (modelValue) =>
     sortDescriptors([
       // Until gxserver confirms the model, do not offer effort controls that
@@ -250,6 +254,7 @@ const CLAUDE_CATALOG: SessionChatSessionOptionCatalog = {
 
 const CODEX_CATALOG: SessionChatSessionOptionCatalog = {
   model: CODEX_MODEL,
+  modelIcon: 'codex',
   optionsForModel: (modelValue) =>
     sortDescriptors([{ ...CODEX_EFFORT, choices: codexEffortChoices(modelValue) }, CODEX_MODE]),
 };
@@ -260,6 +265,7 @@ function sortDescriptors(descriptors: readonly SessionChatOptionDescriptor[]): r
 
 const GROK_CATALOG: SessionChatSessionOptionCatalog = {
   model: GROK_MODEL,
+  modelIcon: 'grok-build',
   optionsForModel: () => [GROK_EFFORT],
 };
 

@@ -84,7 +84,7 @@ const CHAT_MONACO_THEMES: Record<SessionChatTheme, string> = {
   dark: 'ghostex-session-chat-dark',
   light: 'ghostex-session-chat-light',
 };
-const MIN_INPUT_HEIGHT_PX = 24;
+const MIN_INPUT_HEIGHT_PX = 72;
 const MAX_INPUT_HEIGHT_PX = 160;
 /*
 CDXC:ChatComposerQuickInputHeight 2026-08-19:
@@ -555,7 +555,7 @@ export function SessionChatMonacoInput({
 
   return (
     <div
-      className='ghostex-chat-composer-monaco min-h-6 w-full min-w-0 flex-1 overflow-hidden'
+      className='ghostex-chat-composer-monaco w-full min-w-0 flex-1 overflow-hidden'
       data-session-chat-typing-redirect-ignore='true'
       ref={containerRef}
     />

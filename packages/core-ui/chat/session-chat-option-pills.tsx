@@ -1,8 +1,9 @@
 // Composer footer session-option pills (upstream chat spec §1.2-§1.4 port).
-// Two ghost pills — Model and Options — showing the VALUE only; the category
-// name lives in the tooltip/aria label ("Effort High"). Both are disabled
-// while the agent is working or while a dispatch is in flight, because every
-// dispatch types into the same TUI input line the composer uses.
+// Ghost controls showing the current values only: Model and Effort are menu
+// triggers, while Claude's permission mode is a separate button that sends
+// Shift+Tab. The category names live in tooltips / accessible labels. Controls
+// that type into the TUI are disabled while the agent is working or a dispatch
+// is in flight.
 //
 // Values are local (see session-chat-session-options.ts): a dispatch marks the
 // value "dispatched", never "confirmed".
@@ -13,6 +14,8 @@ import { AppTooltip } from '../app-tooltip';
 import type { SessionChatSendKey } from '../../shared/session-chat';
 import { Button } from '../../components/ui/button';
 import { cn } from '@/packages/components/utils';
+import { getDefaultSidebarAgentByIcon } from '../../shared/sidebar-agents';
+import { ProjectAgentLauncherIcon } from '../project-agent-launcher-icon';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +47,18 @@ import {
   type SessionChatOptionState,
   type SessionChatSessionOptionCatalog,
 } from './session-chat-session-options';
+
+type PillSkeleton = 'model' | 'options' | 'combined' | 'mode';
+
+function pillLoadingText(skeleton: PillSkeleton): string {
+  if (skeleton === 'options') {
+    return 'Reading options…';
+  }
+  if (skeleton === 'mode') {
+    return 'Reading mode…';
+  }
+  return 'Reading model…';
+}
 
 export interface SessionChatSessionOptionsController {
   catalog: SessionChatSessionOptionCatalog | null;
@@ -169,6 +184,7 @@ function PillTrigger({
   ariaLabel,
   className,
   disabled,
+  icon,
   label,
   skeleton,
   title,
@@ -176,13 +192,14 @@ function PillTrigger({
   ariaLabel: string;
   className?: string;
   disabled: boolean;
+  icon?: ReactNode;
   label: string;
-  skeleton?: 'model' | 'options' | 'combined';
+  skeleton?: PillSkeleton;
   title: string;
 }) {
   // A skeleton has no value to name, so the tooltip and the accessible name
   // say what is happening instead of reading out the category word.
-  const loadingText = skeleton === 'options' ? 'Reading options…' : 'Reading model…';
+  const loadingText = skeleton ? pillLoadingText(skeleton) : '';
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
       <DropdownMenuTrigger
@@ -196,6 +213,7 @@ function PillTrigger({
           />
         }
       >
+        {icon}
         {skeleton ? (
           <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
         ) : (
@@ -217,6 +235,7 @@ function PillButton({
   ariaLabel,
   className,
   disabled,
+  icon,
   label,
   onClick,
   skeleton,
@@ -225,12 +244,13 @@ function PillButton({
   ariaLabel: string;
   className?: string;
   disabled: boolean;
+  icon?: ReactNode;
   label: string;
   onClick: () => void;
-  skeleton?: 'model' | 'options' | 'combined';
-  title: string;
+  skeleton?: PillSkeleton;
+  title: ReactNode;
 }) {
-  const loadingText = skeleton === 'options' ? 'Reading options…' : 'Reading model…';
+  const loadingText = skeleton ? pillLoadingText(skeleton) : '';
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
       <Button
@@ -241,13 +261,42 @@ function PillButton({
         size='xs'
         variant='ghost'
       >
+        {icon}
         {skeleton ? (
           <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
-        ) : (
+        ) : label ? (
           <span className='truncate'>{label}</span>
-        )}
+        ) : null}
       </Button>
     </AppTooltip>
+  );
+}
+
+const CLAUDE_PERMISSION_MODE_ICON_KIND: Readonly<Record<string, 'advance' | 'pause'>> = {
+  'accept-edits': 'advance',
+  auto: 'advance',
+  bypass: 'advance',
+  manual: 'pause',
+  plan: 'pause',
+};
+
+function ClaudePermissionModeIcon({ mode }: { mode: string }) {
+  const kind = CLAUDE_PERMISSION_MODE_ICON_KIND[mode];
+  if (!kind) {
+    return null;
+  }
+
+  return (
+    <svg aria-hidden='true' className='ghostex-chat-mode-icon' data-mode={mode} viewBox='0 0 16 14'>
+      {kind === 'advance' ? (
+        <path d='M1 2.1 6.9 7 1 11.9V2.1Zm7.1 0L14 7l-5.9 4.9V2.1Z' fill='currentColor' />
+      ) : (
+        <>
+          <rect fill='currentColor' height='9.8' rx='0.7' width='3.2' x='2.1' y='2.1' />
+          <rect fill='currentColor' height='9.8' rx='0.7' width='3.2' x='9.2' y='2.1' />
+        </>
+      )}
+    </svg>
   );
 }
 
@@ -380,14 +429,38 @@ export function SessionChatSessionOptionPills({
     );
   };
 
+  const modelAgent = getDefaultSidebarAgentByIcon(catalog.modelIcon);
+  const modelIcon = (
+    <span className='contents' data-icon='inline-start'>
+      <ProjectAgentLauncherIcon agent={modelAgent ? { ...modelAgent, isDefault: true } : undefined} colorMode='brand' />
+    </span>
+  );
   const modelLabel = sessionChatOptionValueLabel(catalog.model, state);
-  const optionsLabel = sessionChatOptionsPillLabel(visibleOptions, state);
-  const combinedPickerEffort = visibleOptions.find(
+  const modeButton = visibleOptions.find(
+    (descriptor) =>
+      descriptor.category === 'mode' && descriptor.dispatch.kind === 'key' && descriptor.dispatch.key === 'shift-tab'
+  );
+  const menuOptions = modeButton ? visibleOptions.filter((descriptor) => descriptor !== modeButton) : visibleOptions;
+  const modeLabel = modeButton ? sessionChatOptionValueLabel(modeButton, state) : null;
+  const modeValue = modeButton ? state[modeButton.id]?.value : undefined;
+  const modeIcon = modeValue ? <ClaudePermissionModeIcon mode={modeValue} /> : null;
+  const optionsLabel = sessionChatOptionsPillLabel(menuOptions, state);
+  const combinedPickerEffort = menuOptions.find(
     (descriptor) => descriptor.id === 'effort' && descriptor.dispatch.kind === 'agent-picker'
   );
   const usesCombinedAgentPicker = catalog.model.dispatch.kind === 'agent-picker' && combinedPickerEffort !== undefined;
   const modelTitle = modelLabel ? `${catalog.model.label} ${modelLabel}` : catalog.model.label;
   const optionsTitle = optionsLabel ? `Options ${optionsLabel}` : 'Options';
+  const modeTitle = modeLabel
+    ? `${modeLabel} mode. Click to cycle with Shift+Tab`
+    : 'Mode. Click to cycle with Shift+Tab';
+  const modeTooltip = (
+    <span className='grid gap-0.5 text-center'>
+      <span>{modeLabel ? `${modeLabel} mode` : 'Mode'}</span>
+      <span>Click to cycle with</span>
+      <span className='font-medium'>Shift+Tab</span>
+    </span>
+  );
   /*
   An unconfirmed dispatch is the weaker claim, so it wins the tooltip while any
   shown value is still only "sent". Once every shown value has agent-owned
@@ -411,7 +484,7 @@ export function SessionChatSessionOptionPills({
   };
   const tooltipText = (title: string, hint: string | null): string => hint ?? title;
   const modelHint = hintFor([catalog.model]);
-  const optionsHint = hintFor(visibleOptions);
+  const optionsHint = hintFor(menuOptions);
   /*
   CDXC:SessionChatScreenProbed 2026-08-22: a pill is "still loading" only while
   it has NO value AND gxserver has not read the screen yet. Once the screen has
@@ -420,10 +493,8 @@ export function SessionChatSessionOptionPills({
   locally dispatched value also counts as a value, so a pill the user just set
   never falls back to a skeleton while the agent repaints.
   */
-  const skeletonFor = (
-    pill: 'model' | 'options' | 'combined',
-    value: string | null | undefined
-  ): 'model' | 'options' | 'combined' | undefined => (!screenProbed && !value ? pill : undefined);
+  const skeletonFor = (pill: PillSkeleton, value: string | null | undefined): PillSkeleton | undefined =>
+    !screenProbed && !value ? pill : undefined;
 
   /*
   Read-only pills (grok): both values come from the statusline gxserver reads,
@@ -445,6 +516,7 @@ export function SessionChatSessionOptionPills({
           ariaLabel={modelHandoffTitle}
           className='ghostex-chat-model-pill'
           disabled={onSwitchToTerminal === undefined}
+          icon={modelIcon}
           label={modelLabel ?? catalog.model.label}
           onClick={() => onSwitchToTerminal?.()}
           skeleton={skeletonFor('model', modelLabel)}
@@ -486,6 +558,7 @@ export function SessionChatSessionOptionPills({
             ariaLabel={combinedTitle}
             className='ghostex-chat-model-pill'
             disabled={disabled}
+            icon={modelIcon}
             label={combinedLabel}
             skeleton={skeletonFor('combined', selectedLabel)}
             title={tooltipText(combinedTitle, combinedHint)}
@@ -514,6 +587,7 @@ export function SessionChatSessionOptionPills({
           ariaLabel={modelTitle}
           className='ghostex-chat-model-pill'
           disabled={disabled}
+          icon={modelIcon}
           label={modelLabel ?? catalog.model.label}
           skeleton={skeletonFor('model', modelLabel)}
           title={tooltipText(modelTitle, modelHint)}
@@ -529,7 +603,7 @@ export function SessionChatSessionOptionPills({
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      {visibleOptions.length > 0 ? (
+      {menuOptions.length > 0 ? (
         <DropdownMenu>
           <PillTrigger
             ariaLabel={optionsTitle}
@@ -540,7 +614,7 @@ export function SessionChatSessionOptionPills({
             title={tooltipText(optionsTitle, optionsHint)}
           />
           <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
-            {visibleOptions.map((descriptor, index) => (
+            {menuOptions.map((descriptor, index) => (
               <Fragment key={descriptor.id}>
                 {index > 0 ? <DropdownMenuSeparator /> : null}
                 {/* Base UI's GroupLabel throws outside a Menu.Group context. */}
@@ -555,6 +629,18 @@ export function SessionChatSessionOptionPills({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : null}
+      {modeButton ? (
+        <PillButton
+          ariaLabel={modeTitle}
+          className={cn('ghostex-chat-mode-pill', modeIcon && 'ghostex-chat-mode-pill-icon-only')}
+          disabled={disabled}
+          icon={modeIcon}
+          label={modeIcon ? '' : (modeLabel ?? modeButton.label)}
+          onClick={() => dispatch(modeButton)}
+          skeleton={skeletonFor('mode', modeLabel)}
+          title={modeTooltip}
+        />
       ) : null}
     </>
   );
