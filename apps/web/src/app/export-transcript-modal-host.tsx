@@ -8,7 +8,7 @@
 // only offer the path itself (copy) or hand it to a new agent session on that
 // same machine; there is no Reveal in Finder on web (`canReveal` stays false).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ExportTranscriptModal,
   type ExportTranscriptIncludeOptions,
@@ -41,14 +41,19 @@ export function ExportTranscriptModalHost() {
   const [stage, setStage] = useState<ExportTranscriptModalStage>({ stage: 'options' });
   const [starting, setStarting] = useState(false);
   const [actionError, setActionError] = useState<string>();
+  const requestSequence = useRef(0);
   // Hydrated by the web sidebar runtime's hydrate/sessionState messages, the
   // same store the shared sidebar UI reads. Used for the Continue-with picker.
   const agents = useSidebarStore((state) => state.hud.agents);
 
-  const close = useCallback(() => setDetail(undefined), []);
+  const close = useCallback(() => {
+    requestSequence.current += 1;
+    setDetail(undefined);
+  }, []);
 
   useEffect(() => {
     const onStatus = (event: WindowEventMap['ghostex-web:exportTranscriptStatus']) => {
+      requestSequence.current += 1;
       setStage({ stage: 'options' });
       setStarting(false);
       setActionError(undefined);
@@ -67,6 +72,7 @@ export function ExportTranscriptModalHost() {
   }
 
   const runExport = async (options: ExportTranscriptIncludeOptions) => {
+    const requestId = ++requestSequence.current;
     setActionError(undefined);
     setStage({ stage: 'exporting' });
     /*
@@ -86,6 +92,9 @@ export function ExportTranscriptModalHost() {
           sessionId: detail.sessionId,
         }
       );
+      if (requestSequence.current !== requestId) {
+        return;
+      }
       setStage({
         ...(detail.agentId ? { agentId: detail.agentId } : {}),
         canReveal: false,
@@ -93,11 +102,15 @@ export function ExportTranscriptModalHost() {
         stage: 'done',
       });
     } catch (error: unknown) {
+      if (requestSequence.current !== requestId) {
+        return;
+      }
       setStage({ message: error instanceof Error ? error.message : String(error), stage: 'failed' });
     }
   };
 
   const startNewConversation = async (path: string, agentId: string) => {
+    const requestId = ++requestSequence.current;
     setActionError(undefined);
     setStarting(true);
     try {
@@ -116,6 +129,9 @@ export function ExportTranscriptModalHost() {
       if (!sessionId) {
         throw new Error('gxserver created the session without reporting its id.');
       }
+      if (requestSequence.current !== requestId) {
+        return;
+      }
       const focusDetail: GhostexWebFocusSessionDetail = {
         machineId: detail.machineId,
         placement: 'focusedPane',
@@ -127,6 +143,9 @@ export function ExportTranscriptModalHost() {
       window.dispatchEvent(new CustomEvent('ghostex-web:focusSession', { detail: focusDetail }));
       close();
     } catch (error: unknown) {
+      if (requestSequence.current !== requestId) {
+        return;
+      }
       setStarting(false);
       setActionError(error instanceof Error ? error.message : String(error));
     }

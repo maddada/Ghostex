@@ -29,6 +29,7 @@ export interface GpuiSidebarRuntimeExportTranscriptMethods {
     includeCommands: boolean;
     includePatches: boolean;
     includeReasoning: boolean;
+    requestId: string;
   }): Promise<void>;
   resolveExportTranscriptAgentId(agent: string | undefined): string | undefined;
   handleGpuiExportTranscriptModalCommand(payload: unknown): Promise<void>;
@@ -45,12 +46,14 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
   client of its own.
   */
   async exportSessionTranscript(this: GpuiSidebarRuntime, sessionId: string): Promise<void> {
+    const requestId = `export-transcript-${globalThis.crypto.randomUUID()}`;
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
       this.pendingExportedTranscript = undefined;
       this.pendingExportTranscriptRequest = {
         machineId: remoteSession.machineId,
         projectId: remoteSession.projectId,
+        requestId,
         sessionId: remoteSession.sessionId,
       };
       openAppModal({
@@ -59,6 +62,7 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
         // offering a path the local file manager cannot open.
         canReveal: false,
         modal: 'exportTranscriptResult',
+        requestId,
         type: 'open',
       });
       return;
@@ -78,12 +82,14 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
     this.pendingExportTranscriptRequest = {
       ...(agentId ? { agentId } : {}),
       projectId: reference.projectId,
+      requestId,
       sessionId: reference.sessionId,
     };
     openAppModal({
       ...(agentId ? { agentId } : {}),
       canReveal: true,
       modal: 'exportTranscriptResult',
+      requestId,
       type: 'open',
     });
   },
@@ -100,10 +106,10 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
   */
   async runExportSessionTranscriptForDialog(
     this: GpuiSidebarRuntime,
-    options: { includeCommands: boolean; includePatches: boolean; includeReasoning: boolean }
+    options: { includeCommands: boolean; includePatches: boolean; includeReasoning: boolean; requestId: string }
   ): Promise<void> {
     const request = this.pendingExportTranscriptRequest;
-    if (!request) {
+    if (!request || request.requestId !== options.requestId) {
       return;
     }
     // Plain record: the runtime's ids are unbranded strings, matching how the
@@ -133,12 +139,16 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       if (!path) {
         throw new Error('gxserver did not return the exported file.');
       }
+      if (this.pendingExportTranscriptRequest?.requestId !== request.requestId) {
+        return;
+      }
       const agentId = request.agentId ?? this.resolveExportTranscriptAgentId(result?.agent);
       this.pendingExportedTranscript = {
         ...(agentId ? { agentId } : {}),
         ...(request.machineId ? { machineId: request.machineId } : {}),
         path,
         projectId: request.projectId,
+        requestId: request.requestId,
       };
       postAppModalHostMessage(
         {
@@ -146,15 +156,20 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
           canReveal: request.machineId === undefined,
           ok: true,
           path,
+          requestId: request.requestId,
           type: 'exportSessionTranscriptResult',
         },
         'AppModals:exportTranscriptResult'
       );
     } catch (error) {
+      if (this.pendingExportTranscriptRequest?.requestId !== request.requestId) {
+        return;
+      }
       postAppModalHostMessage(
         {
           error: error instanceof Error ? error.message : String(error),
           ok: false,
+          requestId: request.requestId,
           type: 'exportSessionTranscriptResult',
         },
         'AppModals:exportTranscriptResult'
@@ -190,11 +205,25 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       return;
     }
     const record = payload as Record<string, unknown>;
+    const requestId = normalizeNonEmptyString(record.requestId);
+    if (record.type === 'cancelExportSessionTranscript') {
+      if (requestId && this.pendingExportTranscriptRequest?.requestId === requestId) {
+        this.pendingExportTranscriptRequest = undefined;
+        if (this.pendingExportedTranscript?.requestId === requestId) {
+          this.pendingExportedTranscript = undefined;
+        }
+      }
+      return;
+    }
     if (record.type === 'runExportSessionTranscript') {
+      if (!requestId) {
+        return;
+      }
       await this.runExportSessionTranscriptForDialog({
         includeCommands: record.includeCommands !== false,
         includePatches: record.includePatches !== false,
         includeReasoning: record.includeReasoning === true,
+        requestId,
       });
       return;
     }
@@ -202,11 +231,11 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       return;
     }
     const exported = this.pendingExportedTranscript;
-    this.pendingExportedTranscript = undefined;
-    this.pendingExportTranscriptRequest = undefined;
-    if (!exported) {
+    if (!requestId || !exported || exported.requestId !== requestId) {
       return;
     }
+    this.pendingExportedTranscript = undefined;
+    this.pendingExportTranscriptRequest = undefined;
     const agentId = normalizeNonEmptyString(record.agentId) ?? exported.agentId;
     const agent = agentId ? this.resolveSidebarAgent(agentId) : undefined;
     if (!agent) {
