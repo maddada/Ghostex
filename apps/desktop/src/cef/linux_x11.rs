@@ -495,7 +495,16 @@ pub(super) fn child_window_info(
         width: bounds.width.max(1),
         height: bounds.height.max(1),
     };
-    cef::WindowInfo::default().set_as_child(host as cef::sys::cef_window_handle_t, &cef_bounds)
+    /*
+    CEF's default runtime style is platform-dependent and can select Chrome
+    style, which owns a separate top-level Chromium window instead of the
+    client-provided X11 child. Ghostex surfaces are embedded Alloy browsers,
+    so make that ownership contract explicit just as the Windows adapter does.
+    */
+    let mut window_info =
+        cef::WindowInfo::default().set_as_child(host as cef::sys::cef_window_handle_t, &cef_bounds);
+    window_info.runtime_style = cef::RuntimeStyle::ALLOY;
+    window_info
 }
 
 pub(super) fn native_view_ptr(handle: cef::sys::cef_window_handle_t) -> *mut c_void {
