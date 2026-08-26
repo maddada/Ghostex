@@ -1,8 +1,11 @@
 use std::{
     collections::HashSet,
     fs,
+    io::Read,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Child, Command, Stdio},
+    sync::mpsc,
+    time::{Duration, Instant},
 };
 
 use serde_json::{json, Value};
@@ -16,6 +19,10 @@ use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
 
 const SESSION_CHAT_SKILL_DISCOVERY_MAX_DEPTH: usize = 8;
+const GROK_SKILL_INSPECT_TIMEOUT: Duration = Duration::from_secs(10);
+const GROK_SKILL_INSPECT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const GROK_SKILL_INSPECT_READER_GRACE: Duration = Duration::from_secs(1);
+const GROK_SKILL_INSPECT_OUTPUT_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Clone, Copy)]
 struct SkillRootSpec {
@@ -140,13 +147,7 @@ fn read_grok_session_chat_skills(paths: &GxserverPaths, project_path: Option<&Pa
         .is_file()
         .then_some(installed_grok)
         .unwrap_or_else(|| PathBuf::from("grok"));
-    let inspected = Command::new(grok_command)
-        .args(["inspect", "--json"])
-        .current_dir(working_directory)
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| serde_json::from_slice::<Value>(&output.stdout).ok());
+    let inspected = run_grok_skill_inspect(&grok_command, working_directory);
 
     let mut seen_skill_paths = HashSet::new();
     let mut skills = inspected
@@ -214,6 +215,102 @@ fn read_grok_session_chat_skills(paths: &GxserverPaths, project_path: Option<&Pa
         "generatedAt": chrono::Utc::now().to_rfc3339(),
         "skills": skills.into_iter().map(skill_to_value).collect::<Vec<_>>(),
     })
+}
+
+/*
+Grok inspection runs on a blocking request worker, so the process must have its
+own hard deadline. Drain stdout concurrently to avoid a full pipe deadlocking
+the child, cap the captured JSON, and terminate plus reap the child on every
+timeout or wait failure. On Unix the child owns a process group so helpers it
+starts cannot keep the stdout pipe open after the deadline.
+*/
+fn run_grok_skill_inspect(grok_command: &Path, working_directory: &Path) -> Option<Value> {
+    let mut command = Command::new(grok_command);
+    command
+        .args(["inspect", "--json"])
+        .current_dir(working_directory)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    configure_grok_skill_inspect_process_group(&mut command);
+
+    let mut child = command.spawn().ok()?;
+    let Some(stdout) = child.stdout.take() else {
+        terminate_grok_skill_inspect(&mut child);
+        return None;
+    };
+    let (output_sender, output_receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut output = Vec::new();
+        let read_result = stdout
+            .take((GROK_SKILL_INSPECT_OUTPUT_LIMIT_BYTES + 1) as u64)
+            .read_to_end(&mut output);
+        let output = read_result
+            .ok()
+            .filter(|_| output.len() <= GROK_SKILL_INSPECT_OUTPUT_LIMIT_BYTES)
+            .map(|_| output);
+        let _ = output_sender.send(output);
+    });
+
+    let deadline = Instant::now() + GROK_SKILL_INSPECT_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() >= deadline => {
+                terminate_grok_skill_inspect(&mut child);
+                return None;
+            }
+            Ok(None) => std::thread::sleep(GROK_SKILL_INSPECT_POLL_INTERVAL),
+            Err(_) => {
+                terminate_grok_skill_inspect(&mut child);
+                return None;
+            }
+        }
+    };
+    if !status.success() {
+        terminate_grok_skill_inspect(&mut child);
+        return None;
+    }
+
+    let output = match output_receiver.recv_timeout(GROK_SKILL_INSPECT_READER_GRACE) {
+        Ok(Some(output)) => output,
+        Ok(None) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+            terminate_grok_skill_inspect(&mut child);
+            return None;
+        }
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            terminate_grok_skill_inspect(&mut child);
+            let _ = output_receiver.recv_timeout(GROK_SKILL_INSPECT_READER_GRACE);
+            return None;
+        }
+    };
+    serde_json::from_slice::<Value>(&output).ok()
+}
+
+fn configure_grok_skill_inspect_process_group(command: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+
+    #[cfg(not(unix))]
+    let _ = command;
+}
+
+fn terminate_grok_skill_inspect(child: &mut Child) {
+    #[cfg(unix)]
+    {
+        let process_group_id = child.id() as libc::pid_t;
+        if process_group_id > 0 {
+            unsafe {
+                libc::kill(-process_group_id, libc::SIGKILL);
+            }
+        }
+    }
+
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn normalize_agent_id(agent_id: &str) -> String {
