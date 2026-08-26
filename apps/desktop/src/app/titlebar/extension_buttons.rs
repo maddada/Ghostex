@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use gpui::AnyElement;
+use gpui::FontWeight;
 use gpui::InteractiveElement as _;
 use gpui::IntoElement;
 use gpui::MouseButton;
@@ -15,9 +16,11 @@ use gpui::px;
 use gpui::rgb;
 use gpui_component::ElementExt;
 use gpui_component::Side;
+use gpui_component::h_flex;
 use gpui_component::menu::PopupMenu;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
+use gpui_component::v_flex;
 
 use crate::*;
 
@@ -135,10 +138,19 @@ impl GhostexGpuiApp {
             .read(cx)
             .trigger_bounds_captured
             .then_some(anchor_bounds);
-        let show_badge = extension
+        let badge_lines = extension
             .badge_lines
             .iter()
-            .any(|line| !line.trim().is_empty());
+            .filter(|line| !line.trim().is_empty())
+            .take(2)
+            .cloned()
+            .collect::<Vec<_>>();
+        let show_badge = !badge_lines.is_empty();
+        let button_width = if show_badge {
+            58.0
+        } else {
+            TITLEBAR_BUTTON_WIDTH
+        };
         let tooltip = extension.title.clone();
         let icon_image = extension.icon_image.clone();
 
@@ -150,7 +162,7 @@ impl GhostexGpuiApp {
             .relative()
             .flex()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
-            .w(px(TITLEBAR_BUTTON_WIDTH))
+            .w(px(button_width))
             .items_center()
             .justify_center()
             .when(cfg!(target_os = "windows"), |this| this.occlude())
@@ -204,19 +216,24 @@ impl GhostexGpuiApp {
                     }
                 }
             })
-            .child(img(icon_image).size(px(18.0)))
-            .when(show_badge, |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .right(px(5.0))
-                        .top(px(4.0))
-                        .size(px(7.5))
-                        .rounded_full()
-                        .border_1()
-                        .border_color(titlebar_background())
-                        .bg(rgb(0x95d7f6)),
-                )
+            .map(|this| {
+                if show_badge {
+                    this.child(
+                        h_flex()
+                            .gap(px(4.0))
+                            .child(img(icon_image).size(px(14.0)))
+                            .child(
+                                v_flex()
+                                    .text_size(px(10.5))
+                                    .line_height(px(10.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xb9b9b9))
+                                    .children(badge_lines),
+                            ),
+                    )
+                } else {
+                    this.child(img(icon_image).size(px(18.0)))
+                }
             })
             .into_any_element()
     }

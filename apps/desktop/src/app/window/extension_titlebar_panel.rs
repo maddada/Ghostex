@@ -22,6 +22,9 @@ impl GpuiTitlebarExtensionPanel {
         bridge_event_handler: cef::ExtensionBridgeEventHandler,
     ) -> Result<Rc<CefBrowser>, String> {
         let id = extension_id.as_str();
+        let popup_open_handler: cef::BrowserPopupOpenHandler = Rc::new(|requested_url, _| {
+            let _ = gpui_open_external_http_url(&requested_url);
+        });
         let browser = Rc::new(CefBrowser::new(
             parent_ns_view,
             url,
@@ -29,7 +32,7 @@ impl GpuiTitlebarExtensionPanel {
             CEF_DARK_PREPAINT_BACKGROUND_COLOR,
             false,
             None,
-            None,
+            Some(popup_open_handler),
             None,
             None,
             None,
