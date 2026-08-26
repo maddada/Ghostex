@@ -47,6 +47,8 @@ import {
   type ReactNode,
 } from 'react';
 import { cn } from '@/packages/components/utils';
+import type { GxserverReadSessionTerminalTailResult, GxserverRpcErrorCode } from '@/packages/shared/gxserver-protocol';
+import { gxserverRpcErrorCode } from '@/packages/shared/gxserver-rpc-error';
 import { Button } from '../../components/ui/button';
 import {
   ContextMenu,
@@ -84,6 +86,13 @@ import { sessionChatImageTargetForHref, useSessionChatImageViewer } from './sess
 import { SessionChatAgentFleetStrip } from './session-chat-agent-fleet-strip';
 import { SessionChatQueueRows } from './session-chat-queue-rows';
 import { SessionChatComposerActions } from './session-chat-composer-actions';
+import { SessionChatComposerNotReadyNotice } from './session-chat-composer-not-ready';
+import {
+  sessionChatDataTransferHasFiles,
+  sessionChatNativeDropPaths,
+  uploadSessionChatDroppedAttachments,
+} from './session-chat-drop-attachments';
+import type { SessionChatHostActions } from './session-chat-host-actions';
 import {
   isNewerSessionChatDraftStamp,
   SESSION_CHAT_QUEUE_LONG_PRESS_MS,
@@ -107,6 +116,8 @@ export interface SessionChatComposerHandle {
   getDraft: () => string;
   /** Insert text at the caret; returns false when the composer cannot take it. */
   insertTypedText: (text: string) => boolean;
+  /** Attach files/folders dropped anywhere on the chat view. */
+  attachDroppedFiles: (data: DataTransfer) => boolean;
   /**
    * Clipboard payload redirected from the chat background: images become
    * attachments, text lands at the caret. Returns false when the composer
@@ -166,6 +177,14 @@ export interface SessionChatComposerProps {
   isWorking: boolean;
   /** Whether plain Enter sends instead of inserting a newline. */
   sendOnEnter?: boolean;
+  /**
+   * Use the platform's own text-selection/editing menu inside the input
+   * instead of the chat's custom Cut/Copy/Paste menu (the React Native
+   * webview host). The custom menu's trigger also opens on long press, which
+   * on a phone replaces the system selection menu and dismisses the keyboard
+   * mid-selection.
+   */
+  nativeContextMenu?: boolean;
   /** Stable conversation identity used to restore this session's unsent draft. */
   sessionKey?: string;
   placeholder?: string;
@@ -192,7 +211,21 @@ export interface SessionChatComposerProps {
   /** True while the host is listing files for the "@" picker. */
   filesLoading?: boolean;
   onSend: (text: string) => void | Promise<void>;
+  /**
+   * Reads the session's terminal screen for the `composerNotReady` refusal
+   * notice (see session-chat-composer-not-ready.tsx). Absent when the host's
+   * transport has no route to /api/readSessionTerminalTail, which hides the
+   * notice's "Show terminal" disclosure and leaves the rest of it intact.
+   */
+  onReadTerminalTail?: () => Promise<GxserverReadSessionTerminalTailResult>;
   onInterrupt: () => void;
+  /**
+   * Per-session actions the host owns (surface switch, Rename, Sleep, Fork, …).
+   * The switch renders as its own footer control beside Send and the rest fold
+   * into the footer's More actions menu. Hosts whose own chrome already offers
+   * these (e.g. the mobile app's native header) simply omit the prop.
+   */
+  hostActions?: SessionChatHostActions;
   /** Open the host's delayed actions for this session. */
   onDelayedActions?: () => void;
   /** Save the current draft for later and clear it after the save succeeds. */
@@ -217,6 +250,8 @@ export interface SessionChatComposerProps {
   onSessionNote?: () => void;
   /** True while the note panel is open, for the button's pressed styling. */
   sessionNoteActive?: boolean;
+  /** True when the session note contains non-whitespace text. */
+  sessionNoteHasText?: boolean;
   /** Per-session Verbose mode value shown with the right-hand composer actions. */
   verboseMode?: boolean;
   /** Toggle the per-session Verbose mode override. Omitted hides the action. */
@@ -233,7 +268,13 @@ export interface SessionChatComposerProps {
    * with the absolute path there, inserted as "[File #N](path)". When
    * omitted, the attach button only accepts images.
    */
-  onAttachFile?: (payload: { base64Data: string; suggestedName?: string }) => Promise<string>;
+  onAttachFile?: (payload: {
+    base64Data: string;
+    directory?: boolean;
+    uploadId?: string;
+    relativePath?: string;
+    suggestedName?: string;
+  }) => Promise<string>;
   /**
    * Host-native attach picker resolving with absolute paths on the session's
    * machine (may include folders). When set, the attach button uses it
@@ -326,6 +367,7 @@ const DEFAULT_SESSION_CHAT_PLACEHOLDER =
 const IMAGE_PATH_PATTERN = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i;
 const LINKED_IMAGE_REFERENCE_PATTERN = /\[Image #\d+\]\(([^)\r\n]+)\)/g;
 const SESSION_CHAT_DRAFT_STORAGE_PREFIX = 'ghostex.sessionChat.draft.';
+const SESSION_CHAT_STOP_BUTTON_COOLDOWN_MS = 2_000;
 
 function composerDraftStorage(): Storage | null {
   try {
@@ -472,8 +514,10 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       fileHeading,
       files,
       filesLoading = false,
+      hostActions,
       isWorking,
       monacoVsBaseUrl,
+      nativeContextMenu = false,
       onAttachFile,
       onDelayedActions,
       onDraftEmptyChange,
@@ -481,6 +525,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       onLoadImagePreview,
       onPasteImage,
       onPickPaths,
+      onReadTerminalTail,
       onRequestFiles,
       onSend,
       onSessionNote,
@@ -493,6 +538,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       sendOnEnter = true,
       sessionKey,
       sessionNoteActive = false,
+      sessionNoteHasText = false,
       slashCommands,
       slashHeading,
       skills,
@@ -521,6 +567,13 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const [monacoFailed, setMonacoFailed] = useState(false);
     const [maximized, setMaximized] = useState(false);
     const [sendError, setSendError] = useState<string | null>(null);
+    /**
+     * The daemon's refusal code for `sendError`, when the rejection carried
+     * one. Only `composerNotReady` changes what is rendered; every other code
+     * keeps the generic message.
+     */
+    const [sendErrorCode, setSendErrorCode] = useState<GxserverRpcErrorCode | null>(null);
+    const [stopButtonCoolingDown, setStopButtonCoolingDown] = useState(false);
     const [contextSelection, setContextSelection] = useState({ end: 0, start: 0 });
     /** A newer draft from another device, waiting behind the Use / Dismiss bar. */
     const [incomingDraft, setIncomingDraft] = useState<SessionChatDraft | null>(null);
@@ -544,6 +597,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const lastPushedDraftRef = useRef<string | null>(null);
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const longPressFiredRef = useRef(false);
+    const stopButtonCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const useMonaco = monacoVsBaseUrl !== undefined && !monacoFailed;
     const diagnosticLogRef = useRef(diagnosticLog);
     diagnosticLogRef.current = diagnosticLog;
@@ -729,6 +783,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     }, [useMonaco]);
 
     useImperativeHandle(ref, () => ({
+      attachDroppedFiles: (data: DataTransfer): boolean => consumeDroppedAttachments(data),
       appendText: (text: string): boolean => {
         if (disabled || text === '') {
           return false;
@@ -844,6 +899,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       }
       sendInFlightRef.current = true;
       setSendError(null);
+      setSendErrorCode(null);
 
       // The optimistic transcript echo is created synchronously by onSend.
       // Vacate the composer first so the submit gesture feels immediate and
@@ -864,11 +920,24 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           clearStoredSessionChatDraftIfUnchanged(sessionKey, text);
           setHistory((value) => pushSessionChatComposerHistory(value, text));
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           // Do not overwrite a next draft typed while the send was in flight.
           // Put the failed message first so retrying still preserves send order.
           restoreComposerText(text);
-          setSendError('Message could not be sent. Your draft was restored.');
+          /*
+          CDXC:SessionChatComposerReady 2026-08-26:
+          `composerNotReady` means the daemon wrote NOTHING — the agent CLI has
+          no input box on screen yet (booting, or a trust/auth/setup screen owns
+          the terminal). That is a fixable state with a place to go, so it gets
+          its own notice; every other rejection keeps the generic sentence.
+          */
+          const code = gxserverRpcErrorCode(error);
+          setSendErrorCode(code);
+          setSendError(
+            code === 'composerNotReady' && error instanceof Error && error.message !== ''
+              ? error.message
+              : 'Message could not be sent. Your draft was restored.'
+          );
         })
         .finally(() => {
           sendInFlightRef.current = false;
@@ -979,6 +1048,27 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     };
 
     useEffect(() => cancelSendLongPress, []);
+
+    const handleStopClick = (): void => {
+      if (stopButtonCooldownTimerRef.current !== null) {
+        return;
+      }
+      setStopButtonCoolingDown(true);
+      stopButtonCooldownTimerRef.current = setTimeout(() => {
+        stopButtonCooldownTimerRef.current = null;
+        setStopButtonCoolingDown(false);
+      }, SESSION_CHAT_STOP_BUTTON_COOLDOWN_MS);
+      onInterrupt();
+    };
+
+    useEffect(
+      () => () => {
+        if (stopButtonCooldownTimerRef.current !== null) {
+          clearTimeout(stopButtonCooldownTimerRef.current);
+        }
+      },
+      []
+    );
 
     // --- Cross-client draft sync -------------------------------------------------
     // Pushed on blur / session switch / unmount / backgrounding, never per
@@ -1135,6 +1225,52 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       const api = getInputApi();
       const current = api?.getValue() ?? draft;
       insertReference(`[File #${nextFileReferenceIndex(current)}](${path})`);
+    };
+
+    const appendFileReferences = (paths: readonly string[]): void => {
+      if (paths.length === 0) {
+        return;
+      }
+      const api = getInputApi();
+      const current = api?.getValue() ?? draftRef.current;
+      const firstIndex = nextFileReferenceIndex(current);
+      const references = paths.map((path, index) => `[File #${firstIndex + index}](${path})`).join('\n');
+      const separator = current === '' || current.endsWith('\n\n') ? '' : current.endsWith('\n') ? '\n' : '\n\n';
+      const next = `${current}${separator}${references}`;
+      updateDraft(next, next.length);
+      api?.applyValue(next, next.length);
+      api?.focus();
+    };
+
+    const consumeDroppedAttachments = (data: DataTransfer): boolean => {
+      if (disabled || !sessionChatDataTransferHasFiles(data)) {
+        return false;
+      }
+
+      // A local GPUI CEF drop carries real absolute paths, including folders.
+      // Remote GPUI chats omit onPickPaths, so local paths are never handed to
+      // an agent running on another machine; those bytes follow the web path.
+      const nativePaths = onPickPaths ? sessionChatNativeDropPaths(data) : [];
+      if (nativePaths.length > 0) {
+        appendFileReferences(nativePaths);
+        return true;
+      }
+      if (!onAttachFile) {
+        return false;
+      }
+
+      setPendingImagePastes((count) => count + 1);
+      void uploadSessionChatDroppedAttachments(data, onAttachFile)
+        .then(appendFileReferences)
+        .catch((error: unknown) => {
+          console.error('[session-chat] dropped attachment failed', error);
+          setSendErrorCode(null);
+          setSendError('The dropped file or folder could not be attached.');
+        })
+        .finally(() => {
+          setPendingImagePastes((count) => count - 1);
+        });
+      return true;
     };
 
     const removePastedImage = (image: PastedImagePreview): void => {
@@ -1526,8 +1662,71 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
   collapses the old isWorking-specific enablement into one condition.
   */
     const hasSendableDraft = draft.trim() !== '';
-    const showStopButton = isWorking && !hasSendableDraft;
+    const showStopButton = (isWorking || stopButtonCoolingDown) && !hasSendableDraft;
     const sendDisabled = disabled || !hasSendableDraft;
+    const composerInput = useMonaco ? (
+      <SessionChatMonacoInput
+        disabled={disabled}
+        fillHeight={maximized}
+        initialValue={draft}
+        onCaretChange={setCaret}
+        onChange={updateDraft}
+        onKeyDown={handleKeyDown}
+        onLoadFailed={(error) => {
+          console.error('[session-chat] Monaco failed to load; using the plain input.', error);
+          setMonacoFailed(true);
+        }}
+        onPasteData={processClipboardData}
+        placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
+        registerApi={(api) => {
+          monacoApiRef.current = api;
+          if (api && pendingInsertTextRef.current) {
+            const pending = pendingInsertTextRef.current;
+            pendingInsertTextRef.current = '';
+            api.insertText(pending);
+          }
+          if (api && pendingFocusRef.current) {
+            pendingFocusRef.current = false;
+            api.focus();
+          }
+        }}
+        theme={theme}
+        vsBaseUrl={monacoVsBaseUrl ?? ''}
+      />
+    ) : (
+      <textarea
+        aria-invalid={sendError !== null}
+        className='ghostex-chat-composer-input max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground'
+        disabled={disabled}
+        onChange={(event) => {
+          updateDraft(event.target.value, event.target.selectionStart ?? event.target.value.length);
+        }}
+        onKeyDown={(event) => {
+          const adapted = reactKeyEventAdapter(event);
+          if (adapted.isComposing) {
+            if (adapted.key === 'Enter') {
+              event.preventDefault();
+            }
+            return;
+          }
+          handleKeyDown(adapted);
+        }}
+        onPaste={(event) => {
+          if (processClipboardData(event.clipboardData)) {
+            event.preventDefault();
+          }
+        }}
+        onSelect={(event) => {
+          // Caret moves (click, arrows, Home/End) decide which token
+          // the pickers read, so they have to reach state too.
+          setCaret(event.currentTarget.selectionStart ?? null);
+        }}
+        placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
+        ref={textareaRef}
+        rows={3}
+        value={draft}
+      />
+    );
     return (
       <>
         {maximized ? (
@@ -1676,7 +1875,15 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
               </div>
             </div>
           ) : null}
-          {sendError ? <FieldError className='px-2'>{sendError}</FieldError> : null}
+          {sendError && sendErrorCode === 'composerNotReady' ? (
+            <SessionChatComposerNotReadyNotice
+              reason={sendError}
+              {...(onReadTerminalTail ? { onReadTerminalTail } : {})}
+              {...(hostActions?.onSwitchToTerminal ? { onOpenTerminal: hostActions.onSwitchToTerminal } : {})}
+            />
+          ) : sendError ? (
+            <FieldError className='px-2'>{sendError}</FieldError>
+          ) : null}
           <SessionChatAgentFleetStrip fleet={agentFleet ?? null} />
           {incomingDraft ? (
             <div className='ghostex-chat-draft-conflict' role='status'>
@@ -1803,108 +2010,52 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   : {})}
               />
             ) : null}
-            <ContextMenu
-              onOpenChange={(open) => {
-                if (open) {
-                  setContextSelection(getInputApi()?.getSelection() ?? { end: 0, start: 0 });
-                }
-              }}
-            >
-              <ContextMenuTrigger className='ghostex-chat-composer-row flex min-w-0 select-text items-end gap-2 pb-1.5'>
-                {useMonaco ? (
-                  <SessionChatMonacoInput
-                    disabled={disabled}
-                    fillHeight={maximized}
-                    initialValue={draft}
-                    onCaretChange={setCaret}
-                    onChange={updateDraft}
-                    onKeyDown={handleKeyDown}
-                    onLoadFailed={(error) => {
-                      console.error('[session-chat] Monaco failed to load; using the plain input.', error);
-                      setMonacoFailed(true);
-                    }}
-                    onPasteData={processClipboardData}
-                    placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
-                    registerApi={(api) => {
-                      monacoApiRef.current = api;
-                      if (api && pendingInsertTextRef.current) {
-                        const pending = pendingInsertTextRef.current;
-                        pendingInsertTextRef.current = '';
-                        api.insertText(pending);
-                      }
-                      if (api && pendingFocusRef.current) {
-                        pendingFocusRef.current = false;
-                        api.focus();
-                      }
-                    }}
-                    theme={theme}
-                    vsBaseUrl={monacoVsBaseUrl ?? ''}
-                  />
-                ) : (
-                  <textarea
-                    aria-invalid={sendError !== null}
-                    className='ghostex-chat-composer-input max-h-40 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground'
-                    disabled={disabled}
-                    onChange={(event) => {
-                      updateDraft(event.target.value, event.target.selectionStart ?? event.target.value.length);
-                    }}
-                    onKeyDown={(event) => {
-                      const adapted = reactKeyEventAdapter(event);
-                      if (adapted.isComposing) {
-                        if (adapted.key === 'Enter') {
-                          event.preventDefault();
-                        }
-                        return;
-                      }
-                      handleKeyDown(adapted);
-                    }}
-                    onPaste={(event) => {
-                      if (processClipboardData(event.clipboardData)) {
-                        event.preventDefault();
-                      }
-                    }}
-                    onSelect={(event) => {
-                      // Caret moves (click, arrows, Home/End) decide which token
-                      // the pickers read, so they have to reach state too.
-                      setCaret(event.currentTarget.selectionStart ?? null);
-                    }}
-                    placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
-                    ref={textareaRef}
-                    rows={1}
-                    value={draft}
-                  />
-                )}
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuGroup>
-                  <ContextMenuItem
-                    disabled={disabled || contextSelection.start === contextSelection.end}
-                    onClick={() => copyContextSelection(true)}
-                  >
-                    <IconCut aria-hidden='true' />
-                    Cut
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    disabled={contextSelection.start === contextSelection.end}
-                    onClick={() => copyContextSelection(false)}
-                  >
-                    <IconCopy aria-hidden='true' />
-                    Copy
-                  </ContextMenuItem>
-                  <ContextMenuItem disabled={disabled} onClick={pasteFromContextMenu}>
-                    <IconClipboard aria-hidden='true' />
-                    Paste
-                  </ContextMenuItem>
-                </ContextMenuGroup>
-                <ContextMenuSeparator />
-                <ContextMenuGroup>
-                  <ContextMenuItem disabled={draft.length === 0} onClick={() => getInputApi()?.selectAll()}>
-                    <IconSelectAll aria-hidden='true' />
-                    Select all
-                  </ContextMenuItem>
-                </ContextMenuGroup>
-              </ContextMenuContent>
-            </ContextMenu>
+            {nativeContextMenu ? (
+              <div className='ghostex-chat-composer-row flex min-w-0 select-text items-end gap-2 pb-1.5'>
+                {composerInput}
+              </div>
+            ) : (
+              <ContextMenu
+                onOpenChange={(open) => {
+                  if (open) {
+                    setContextSelection(getInputApi()?.getSelection() ?? { end: 0, start: 0 });
+                  }
+                }}
+              >
+                <ContextMenuTrigger className='ghostex-chat-composer-row flex min-w-0 select-text items-end gap-2 pb-1.5'>
+                  {composerInput}
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuGroup>
+                    <ContextMenuItem
+                      disabled={disabled || contextSelection.start === contextSelection.end}
+                      onClick={() => copyContextSelection(true)}
+                    >
+                      <IconCut aria-hidden='true' />
+                      Cut
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      disabled={contextSelection.start === contextSelection.end}
+                      onClick={() => copyContextSelection(false)}
+                    >
+                      <IconCopy aria-hidden='true' />
+                      Copy
+                    </ContextMenuItem>
+                    <ContextMenuItem disabled={disabled} onClick={pasteFromContextMenu}>
+                      <IconClipboard aria-hidden='true' />
+                      Paste
+                    </ContextMenuItem>
+                  </ContextMenuGroup>
+                  <ContextMenuSeparator />
+                  <ContextMenuGroup>
+                    <ContextMenuItem disabled={draft.length === 0} onClick={() => getInputApi()?.selectAll()}>
+                      <IconSelectAll aria-hidden='true' />
+                      Select all
+                    </ContextMenuItem>
+                  </ContextMenuGroup>
+                </ContextMenuContent>
+              </ContextMenu>
+            )}
             <div className='ghostex-chat-composer-footer flex w-full items-center justify-between gap-2'>
               <div className='ghostex-chat-composer-footer-options flex min-w-0 items-center gap-0.5'>
                 {optionPills}
@@ -1946,8 +2097,10 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                     setMaximizedAndFocus(!maximized);
                   }}
                   sessionNoteActive={sessionNoteActive}
+                  sessionNoteHasText={sessionNoteHasText}
                   stashedPromptCount={stashedPromptCount}
                   verboseMode={verboseMode}
+                  {...(hostActions ? { hostActions } : {})}
                   {...(onDelayedActions ? { onDelayedActions } : {})}
                   {...(onSessionNote ? { onSessionNote } : {})}
                   {...(onShowStashedPrompts ? { onShowStashedPrompts } : {})}
@@ -1969,9 +2122,8 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   <Button
                     aria-label='Stop the agent'
                     className='size-8 rounded-full'
-                    onClick={() => {
-                      onInterrupt();
-                    }}
+                    disabled={stopButtonCoolingDown}
+                    onClick={handleStopClick}
                     size='icon'
                     variant='secondary'
                   >

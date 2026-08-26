@@ -114,8 +114,9 @@ use crate::{
     },
     session_chat_options::SessionChatOptionCacheEntry,
     session_chat_queue_runtime::{
-        handle_session_chat_queue_http, session_chat_queue_notice_reader,
-        session_chat_queue_publisher_factory, session_chat_queue_sender_factory,
+        handle_session_chat_queue_http, session_chat_queue_composer_reader,
+        session_chat_queue_notice_reader, session_chat_queue_publisher_factory,
+        session_chat_queue_sender_factory,
     },
     session_chat_read::handle_read_session_chat_http,
     session_chat_send::{
@@ -168,6 +169,8 @@ pub mod http_infra;
 pub mod presentation_delta;
 pub mod project_paths;
 pub mod session_state_sync;
+pub mod telemetry_http;
+pub mod telemetry_tasks;
 #[cfg(test)]
 mod tests;
 pub mod title_generation;
@@ -186,6 +189,8 @@ pub(crate) use http_infra::*;
 pub(crate) use presentation_delta::*;
 pub(crate) use project_paths::*;
 pub(crate) use session_state_sync::*;
+pub(crate) use telemetry_http::*;
+pub(crate) use telemetry_tasks::*;
 pub(crate) use title_generation::*;
 pub(crate) use typed_operation_http::*;
 pub(crate) use web_static::*;
@@ -275,12 +280,25 @@ pub(crate) struct SessionChatFollowerEntry {
 }
 
 const GXSERVER_AGENT_TITLE_METADATA_DEBOUNCE_MS: u64 = 3_000;
+/*
+CDXC:SessionChatComposerReady 2026-08-26:
+These two were flat `sleep(4s)` calls: the provider had just launched a CLI, and
+four seconds was the guess for when its composer would exist. Both numbers were
+wrong in both directions — an idle claude is ready in well under a second, while
+a cold agent loading skills and MCP servers is still painting at five — so the
+fast case paid a pointless wait and the slow case typed into a blank screen.
+
+They are now the UNKNOWN HOLD of a real composer wait: an agent with a measured
+signature is released the moment its input box appears, and an agent without one
+keeps exactly the four-second behaviour it had rather than being released early
+on evidence that does not exist. The ceiling is separate and higher, because the
+case worth waiting out is precisely the slow cold start.
+*/
 const GXSERVER_FORK_INITIAL_RENAME_READY_DELAY_MS: u64 = 4_000;
 const GXSERVER_FIRST_USER_INPUT_DRAFT_READY_DELAY_MS: u64 = 4_000;
+/// Ceiling for every provider-startup composer wait.
+pub(crate) const GXSERVER_PROVIDER_COMPOSER_WAIT_TIMEOUT_MS: u64 = 10_000;
 const GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS: u64 = 300;
-/// How long the manual "generate name" job lets its `/rename` submit settle in
-/// the CLI before it yanks the user's killed composer draft back.
-const MANUAL_TITLE_DRAFT_RESTORE_DELAY_MS: u64 = 500;
 const GXSERVER_FIRST_PROMPT_TITLE_SOURCE_MAX_LENGTH: usize = 250;
 const GXSERVER_GENERATED_SESSION_TITLE_MAX_LENGTH: usize = 39;
 /*
@@ -409,6 +427,9 @@ pub async fn run_gxserver_foreground(
         });
     }
     let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    // Install age for the analytics heartbeat, taken before `identity` is
+    // consumed by the runtime metadata below.
+    let install_created_at = identity.created_at.clone();
     let metadata = RuntimeMetadata {
         build_identity: build_identity.clone(),
         pid: std::process::id(),
@@ -538,6 +559,7 @@ pub async fn run_gxserver_foreground(
         session_chat_queue_sender_factory(&state),
         session_chat_queue_publisher_factory(&state),
         session_chat_queue_notice_reader(&state),
+        session_chat_queue_composer_reader(&state),
     )
     .start(shutdown_tx.subscribe());
     /*
@@ -565,6 +587,13 @@ pub async fn run_gxserver_foreground(
     let session_git_status_refresh_task = spawn_session_git_status_refresh_task(&state);
     let worktree_branch_rename_task = spawn_worktree_branch_rename_task(&state);
     let session_chat_follower_sync_task = spawn_session_chat_follower_sync_task(&state);
+    /*
+    CDXC:AnonymousAnalytics 2026-08-26:
+    Analytics exists only in the long-running daemon. Starting it here rather
+    than in `AppState` construction is what keeps one-shot `ghostex` CLI verbs
+    — which build no server loop — completely silent.
+    */
+    let telemetry_tasks = spawn_telemetry_tasks(&state, install_created_at);
 
     let mut shutdown_rx = shutdown_tx.subscribe();
     let shutdown_for_signal = shutdown_tx.clone();
@@ -586,6 +615,18 @@ pub async fn run_gxserver_foreground(
     session_git_status_refresh_task.abort();
     worktree_branch_rename_task.abort();
     session_chat_follower_sync_task.abort();
+    /*
+    The telemetry flush task is AWAITED rather than aborted, because it does a
+    final flush after the shutdown broadcast: aborting it would throw away
+    everything captured since the last interval, i.e. most of a short session.
+    The wait is bounded so a dead network can never delay quitting.
+    */
+    telemetry_tasks.heartbeat.abort();
+    let _ = tokio::time::timeout(
+        crate::telemetry::SHUTDOWN_FLUSH_TIMEOUT,
+        telemetry_tasks.flush,
+    )
+    .await;
     state.extension_registry.stop_all();
     serve_result.with_context(|| "run gxserver HTTP listener")?;
 
@@ -1085,6 +1126,9 @@ async fn route_http(
                 Ok(json!({ "project": project }))
             },
         ),
+        "/api/recordClientEvent" => {
+            handle_record_client_event_http(endpoint.path, request_id, &body_json)
+        }
         "/api/createQuickProject" => {
             let home_dir = state.paths.home_dir.clone();
             let quick_project_state = state.clone();
@@ -1725,7 +1769,24 @@ async fn route_http(
             endpoint.path,
             request_id,
             &body_json,
-            |repository, _, params, _| repository.save_stashed_prompt(params),
+            |repository, db, params, _| {
+                let result = repository.save_stashed_prompt(params)?;
+                if let Some((project_id, session_id)) = result
+                    .get("prompt")
+                    .and_then(Value::as_object)
+                    .and_then(|prompt| {
+                        prompt
+                            .get("projectId")
+                            .and_then(Value::as_str)
+                            .zip(prompt.get("sessionId").and_then(Value::as_str))
+                    })
+                {
+                    schedule_presentation_session_delta(
+                        &state, db, repository, project_id, session_id,
+                    )?;
+                }
+                Ok(result)
+            },
         ),
         "/api/listStashedPrompts" => handle_domain_http(
             &state,
@@ -1739,7 +1800,19 @@ async fn route_http(
             endpoint.path,
             request_id,
             &body_json,
-            |repository, _, params, _| repository.delete_stashed_prompt(params),
+            |repository, db, params, _| {
+                let result = repository.delete_stashed_prompt(params)?;
+                if let Some((project_id, session_id)) = result
+                    .get("projectId")
+                    .and_then(Value::as_str)
+                    .zip(result.get("sessionId").and_then(Value::as_str))
+                {
+                    schedule_presentation_session_delta(
+                        &state, db, repository, project_id, session_id,
+                    )?;
+                }
+                Ok(result)
+            },
         ),
         /*
         CDXC:StashedPromptTags 2026-08-23:
@@ -2002,6 +2075,27 @@ async fn route_http(
         | "/api/setSessionChatDraft" => {
             handle_session_chat_queue_http(&state, endpoint.path, request_id, &body_json).await
         }
+        /*
+        CDXC:SessionChatComposerReady 2026-08-26:
+        The evidence read behind a `composerNotReady` refusal. Domain-shaped
+        because everything it needs is one session row plus one screen capture,
+        and the capture is a direct socket read measured in single-digit
+        milliseconds — the same one every screen-state reader already takes.
+        */
+        "/api/readSessionTerminalTail" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, _db, params, _| {
+                crate::session_chat_composer::read_session_terminal_tail(
+                    repository,
+                    &read_project_id(params)?,
+                    &read_session_id(params)?,
+                    params.get("agentId").and_then(Value::as_str),
+                )
+            },
+        ),
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
                 .await

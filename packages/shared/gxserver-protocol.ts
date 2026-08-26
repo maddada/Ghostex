@@ -83,9 +83,28 @@ export type GxserverListenerKind = 'local' | 'remote';
 export type GxserverApiPermission = 'fullLocal' | 'remoteAllowed' | 'remoteBlocked';
 export type GxserverRpcErrorCode =
   | 'badRequest'
+  /*
+  CDXC:SessionChatComposerReady 2026-08-26:
+  The send was refused because the agent CLI has no input box on screen — it is
+  still booting, or a trust/auth/setup screen owns the terminal. Distinct from
+  `dependencyUnavailable` (the terminal refused bytes we DID write) because
+  nothing was written at all: no clear burst, no paste, and never an Enter.
+
+  The screen behind the refusal is not carried on the error. Read it from
+  `/api/readSessionTerminalTail`, which answers with the same verdict plus the
+  last thirty lines of the terminal.
+  */
+  | 'composerNotReady'
   | 'corruptState'
   | 'dependencyUnavailable'
   | 'forbidden'
+  /*
+  Raised when an ANSWERABLE terminal notice (Claude Code's resume-usage picker)
+  owns the input line: the message would confirm a row instead of being sent.
+  Emitted by `/api/sendSessionChatMessage` since 2026-08-21; mirrored here so a
+  client can distinguish it from a generic internal error.
+  */
+  | 'invalidState'
   | 'internalError'
   | 'methodNotAllowed'
   | 'notFound'
@@ -200,6 +219,7 @@ export type GxserverEndpointPath =
   | '/api/toggleAgentPromptFavorite'
   | '/api/resolveAgentPromptLaunch'
   | '/api/readSessionChat'
+  | '/api/readSessionTerminalTail'
   | '/api/readSessionChatSkills'
   | '/api/readSessionChatFiles'
   | '/api/sendSessionChatMessage'
@@ -232,6 +252,7 @@ export type GxserverEndpointPath =
   | '/api/restoreRecentProject'
   | '/api/removeRecentProject'
   | '/api/readProjectStatus'
+  | '/api/runProjectDocsAction'
   | '/api/addProjectPath'
   | '/api/createQuickProject'
   | '/api/listProjectWorktrees'
@@ -720,6 +741,12 @@ export interface GxserverSaveStashedPromptParams {
   promptId?: string;
   projectId?: string;
   sessionId?: string;
+  /**
+   * Explicit filing for a manually saved prompt. Omit this only for a real
+   * stash action, which assigns the builtin Stashed tag; an empty array means
+   * the user deliberately chose No tag.
+   */
+  tagIds?: readonly string[];
 }
 
 export interface GxserverSaveStashedPromptResult {
@@ -1949,6 +1976,45 @@ export interface GxserverForkSessionResult {
 }
 
 /*
+CDXC:SessionChatComposerReady 2026-08-26:
+readSessionTerminalTail answers "is the agent CLI's input box on screen, and if
+not, what IS on screen". The daemon reads the same capture every other
+screen-state reader takes (a direct zmx socket read, single-digit milliseconds)
+and returns the bottom of it.
+
+`composerState` is deliberately three-valued and `unknown` is the common case,
+not an error: the daemon has measured composer signatures for nine agent CLIs
+and answers `unknown` for every other agent, and for any capture it could not
+read. Nothing may treat `unknown` as "not ready" — the daemon itself fails open
+on it, and a client that did otherwise would block sends the daemon allows.
+*/
+export type GxserverSessionComposerState = 'ready' | 'notReady' | 'unknown';
+
+export interface GxserverReadSessionTerminalTailParams {
+  projectId: GxserverProjectId;
+  sessionId: GxserverSessionId;
+  /** Overrides the agent the daemon resolves from the session row. */
+  agentId?: string;
+}
+
+export interface GxserverReadSessionTerminalTailResult {
+  /** The agent id the verdict was computed for, when one could be resolved. */
+  agentId: string | null;
+  /** False when no whole screen could be read; `lines` is then empty. */
+  captured: boolean;
+  composerState: GxserverSessionComposerState;
+  /**
+   * Up to 30 non-blank screen lines, ANSI-stripped, OLDEST FIRST — so the
+   * newest line is last, the order a terminal renders in.
+   */
+  lines: readonly string[];
+  /** User-facing sentence, present only for `notReady`. */
+  reason: string | null;
+  projectId: GxserverProjectId;
+  sessionId: GxserverSessionId;
+}
+
+/*
 CDXC:ExportTranscript 2026-08-20:
 exportSessionTranscript renders the session's agent transcript into a markdown
 file so a NEW agent conversation can be started with that file mentioned. The
@@ -2403,6 +2469,12 @@ export interface GxserverPresentationSession {
    * predates session notes publishes.
    */
   sessionNote?: string;
+  /**
+   * Prompts saved from this provider conversation, including legacy rows that
+   * still carry only the raw Ghostex session id. Absent at zero and on daemons
+   * that predate the terminal action-bar badge.
+   */
+  stashedPromptCount?: number;
   sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
   sessionTag?: GxserverSessionTag;
   sendWhenAllProjectSessionsStopActive?: boolean;
@@ -2469,6 +2541,22 @@ export interface GxserverSidebarProjectCollectionsState {
   order: readonly string[];
 }
 
+export interface GxserverWorkspaceSessionGroup {
+  groupId: string;
+  sessionIds: readonly string[];
+  title: string;
+}
+
+export interface GxserverWorkspaceProjectGroups {
+  groups: readonly GxserverWorkspaceSessionGroup[];
+  nextGroupNumber?: number;
+}
+
+export interface GxserverWorkspaceSessionGroupsState {
+  projectOrder: readonly string[];
+  projects: Readonly<Record<string, GxserverWorkspaceProjectGroups>>;
+}
+
 export interface GxserverReadSidebarProjectCollectionsResult {
   sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
 }
@@ -2507,6 +2595,7 @@ export interface GxserverPresentationSnapshot {
   revision: GxserverPresentationRevision;
   sessions: readonly GxserverPresentationSession[];
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
+  workspaceGroups?: GxserverWorkspaceSessionGroupsState;
 }
 
 export type GxserverPresentationDelta =
@@ -2916,6 +3005,13 @@ export type GxserverEvent =
       serverId: GxserverServerId;
       sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
       type: 'sidebarProjectCollectionsChanged';
+    }
+  | {
+      groups: GxserverWorkspaceSessionGroupsState;
+      protocolVersion: GxserverProtocolVersion;
+      revision: GxserverPresentationRevision;
+      serverId: GxserverServerId;
+      type: 'workspaceGroupsChanged';
     }
   /*
    * CDXC:GlobalActions 2026-08-07:

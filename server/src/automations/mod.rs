@@ -92,8 +92,17 @@ Mirror the GPUI sidebar's agent prompt contract (`GPUI_AGENT_PROMPT_READY_DELAY_
 a freshly launched agent TUI needs a settle window before it accepts composer
 input. The daemon waits inside the spawned run watcher, never inside the
 scheduler tick or the `runAutomationNow` endpoint, so neither blocks.
+
+CDXC:SessionChatComposerReady 2026-08-26: the settle window is now the FALLBACK
+for an agent with no measured composer signature; a signed agent is released as
+soon as its input box appears. An automation is the case that suffered most from
+the blind version — nobody is watching the pane, so a prompt typed into a boot
+screen shows up only as a run that fails at the watcher timeout with no
+AUTOMATION_RESULT marker.
 */
 const AUTOMATION_PROMPT_READY_DELAY_SECONDS: u64 = 4;
+/// Ceiling for the automation composer wait; matches the provider-startup one.
+const AUTOMATION_PROMPT_COMPOSER_WAIT_TIMEOUT_MS: u64 = 10_000;
 const AUTOMATION_RESULT_PREFIX: &str = "AUTOMATION_RESULT:";
 const AUTOMATION_MAX_COUNT: usize = 500;
 const AUTOMATION_MAX_RUN_COUNT: usize = 5_000;
@@ -227,7 +236,18 @@ impl AutomationRuntime {
         session_id: &str,
         prompt: &str,
     ) -> Result<(), DomainStateError> {
-        tokio::time::sleep(Duration::from_secs(AUTOMATION_PROMPT_READY_DELAY_SECONDS)).await;
+        crate::session_chat_composer::wait_for_session_chat_composer_by_ids(
+            &self.paths,
+            self.server_id.as_str(),
+            session_project_id,
+            session_id,
+            crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                settle_ms: 0,
+                timeout_ms: AUTOMATION_PROMPT_COMPOSER_WAIT_TIMEOUT_MS,
+                unknown_hold_ms: AUTOMATION_PROMPT_READY_DELAY_SECONDS * 1_000,
+            },
+        )
+        .await;
         let db = open_gxserver_database(&self.paths).map_err(internal_error)?;
         let repository = DomainRepository::new(&db, self.server_id.as_str());
         send_automation_prompt(&repository, session_project_id, session_id, prompt)
@@ -251,6 +271,16 @@ fn send_automation_prompt(
     );
     params.insert("submit".to_string(), Value::Bool(true));
     params.insert("text".to_string(), Value::String(prompt.to_string()));
+    /*
+    Tag the write with its origin. The send queue already uses
+    `diagnosticInputSource` to attribute every byte to its caller; analytics
+    reads the same tag to attribute this prompt to `automation` rather than
+    lumping it in with the untagged `gx sendMessage` default.
+    */
+    params.insert(
+        "diagnosticInputSource".to_string(),
+        Value::String("automation".to_string()),
+    );
     dispatch_zmx_session_interaction_endpoint(repository, "/api/sendSessionMessage", &params)
         .map_err(zmx_error)?;
     Ok(())

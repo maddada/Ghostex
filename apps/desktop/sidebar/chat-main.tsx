@@ -25,7 +25,10 @@ import {
   type GxserverPresentationSession,
   type GxserverPresentationSnapshot,
   type GxserverReadSessionAgentNoteResult,
+  type GxserverReadSessionTerminalTailResult,
 } from '@/packages/shared/gxserver-protocol';
+import { gxserverRpcErrorFromResponseBody } from '@/packages/shared/gxserver-rpc-error';
+import { listProjectMarkdownDocumentPaths, saveProjectMarkdownDocument } from '@/packages/shared/project-docs';
 import type {
   GhostexBridgeError,
   GhostexExecChunk,
@@ -186,13 +189,21 @@ async function rpc<TResult>(
   } catch {
     body = undefined;
   }
-  const envelope = body as { error?: { message?: string }; ok?: boolean; result?: TResult } | undefined;
+  const envelope = body as { ok?: boolean; result?: TResult } | undefined;
   if (!response.ok || !envelope || envelope.ok !== true) {
-    const message =
-      envelope && typeof envelope.error?.message === 'string'
-        ? envelope.error.message
-        : `gxserver rejected ${path} (${response.status > 0 ? response.status : 'no response'}).`;
-    throw new Error(message);
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26:
+    A gxserver refusal is `{ ok: false, error: <code>, message }` — the code is
+    a string on the envelope, not a nested object. Rethrowing it as the typed
+    GxserverRpcError is what lets the shared chat composer tell
+    `composerNotReady` apart from every other send failure, and it also carries
+    the daemon's own sentence instead of an HTTP status.
+    */
+    const rpcError = gxserverRpcErrorFromResponseBody(path, body);
+    if (rpcError) {
+      throw rpcError;
+    }
+    throw new Error(`gxserver rejected ${path} (${response.status > 0 ? response.status : 'no response'}).`);
   }
   return envelope.result as TResult;
 }
@@ -343,12 +354,27 @@ function createGpuiSessionChatTransport(
         projectId,
         sessionId,
         base64Data: params.base64Data,
+        ...(params.directory !== undefined ? { directory: params.directory } : {}),
+        ...(params.uploadId ? { uploadId: params.uploadId } : {}),
+        ...(params.relativePath ? { relativePath: params.relativePath } : {}),
         ...(params.suggestedName ? { suggestedName: params.suggestedName } : {}),
       });
     },
     loadImage(params) {
       return rpc<GxserverReadSessionChatImageResult>(bootstrap, '/api/readSessionChatImage', {
         path: params.path,
+      });
+    },
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26:
+    The evidence read behind a `composerNotReady` refusal. It lands on the
+    session's own machine like every other call here, so a remote session's
+    excerpt is the remote terminal's screen.
+    */
+    readTerminalTail() {
+      return rpc<GxserverReadSessionTerminalTailResult>(bootstrap, '/api/readSessionTerminalTail', {
+        projectId,
+        sessionId,
       });
     },
     // Native picker paths are valid only for sessions on this Mac. Remote
@@ -365,6 +391,14 @@ function createGpuiSessionChatTransport(
     // the bytes travel with the request and never touch the session's machine.
     saveImageAs(params) {
       return requestNativeImageSave(params.base64Data, params.suggestedName);
+    },
+    listMessageMarkdownPaths() {
+      return listProjectMarkdownDocumentPaths(projectId, (endpoint, request) => rpc(bootstrap, endpoint, request));
+    },
+    saveMessageMarkdown(params) {
+      return saveProjectMarkdownDocument({ ...params, projectId }, (endpoint, request) =>
+        rpc(bootstrap, endpoint, request)
+      );
     },
     /*
     CDXC:GPUISessionChatPromptQueue 2026-08-21:
@@ -865,6 +899,8 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
   return {
     onSwitchToTerminal: () => postSessionChatHostAction('terminalView'),
     onSwitchToTerminalForAgentPicker: () => postSessionChatHostAction('agentPickerTerminalView'),
+    moreActionsShortcut: shortcut('toggleAgentActions'),
+    sessionNoteShortcut: shortcut('sessionNote'),
     switchViewShortcut: shortcut('toggleChatView'),
     actions: [
       {
@@ -877,40 +913,46 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
         label: 'Sleep',
         shortcut: shortcut('sleepFocusedSession'),
       },
+      /*
+      Sentence case, matching the desktop terminal's native agent action bar
+      (apps/desktop/src/app/render/terminal_agent_action_bar.rs). The two
+      surfaces show the same menu, so their rows may not read as two different
+      products; the labels the host supplies are the only copy the chat menu has.
+      */
       {
         id: 'delayedActions',
-        label: 'Delayed Actions',
+        label: 'Delayed actions',
         shortcut: shortcut('delayedSend'),
       },
       { id: 'fork', label: 'Fork', shortcut: shortcut('forkSession') },
       {
         id: 'fullReload',
-        label: 'Full Reload',
+        label: 'Full reload',
         shortcut: shortcut('reloadSession'),
       },
       {
         id: 'promptEditor',
-        label: 'Prompt Editor',
+        label: 'Prompt editor',
         shortcut: shortcut('promptEditor'),
       },
       {
         id: 'stashPrompt',
-        label: 'Stash Prompt',
+        label: 'Stash prompt',
         shortcut: shortcut('stashPrompt'),
       },
       {
         id: 'stashedPrompts',
-        label: 'Saved Prompts',
+        label: 'Saved prompts',
         shortcut: shortcut('stashedPrompts'),
       },
       {
         id: 'attachPath',
-        label: 'Attach File or Folder',
+        label: 'Attach a file or folder',
         shortcut: shortcut('attachFileOrFolder'),
       },
       {
         id: 'exportTranscript',
-        label: 'Export Transcript',
+        label: 'Export transcript',
         shortcut: shortcut('exportTranscript'),
       },
     ],
@@ -938,6 +980,7 @@ function GpuiSessionChatPage({
   transport,
 }: GpuiSessionChatPageProps) {
   const sessionKey = `${projectId}:${sessionId}`;
+  const [sessionTitle, setSessionTitle] = useState('');
   const [extensions, setExtensions] = useState<GhostexInstalledExtension[]>([]);
   const extensionsRef = useRef<GhostexInstalledExtension[]>([]);
   const [panelState, setPanelState] = useState<GhostexChatBarPanelSessionState>({
@@ -999,6 +1042,9 @@ function GpuiSessionChatPage({
       );
     };
     const handleContextChanged = (context: GhostexExtensionContext): void => {
+      if (context.activeSession?.title) {
+        setSessionTitle(context.activeSession.title);
+      }
       window.dispatchEvent(new CustomEvent(GHOSTEX_CHAT_BAR_CONTEXT_CHANGED_EVENT, { detail: context }));
     };
     namespace.onSessionChatExtensionBridgeMessage = handleMessage;
@@ -1085,6 +1131,7 @@ function GpuiSessionChatPage({
         if (!project || !session) {
           throw new Error(`Session ${sessionId} was not found in project ${projectId}.`);
         }
+        setSessionTitle(session.displayTitle ?? session.primaryTitle ?? session.title);
         const chatBarExtensions = extensionResult.extensions
           .filter(isChatBarExtension)
           .sort((a, b) => a.id.localeCompare(b.id));
@@ -1261,6 +1308,7 @@ function GpuiSessionChatPage({
         onChatBarPanelStateChange={updatePanelState}
         onDelayedActions={() => postSessionChatHostAction('delayedActions')}
         sessionKey={sessionKey}
+        sessionTitle={sessionTitle}
         theme={theme}
         transport={transport}
         verboseMode={chatVerboseMode}

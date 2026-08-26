@@ -168,12 +168,34 @@ export class GxserverConnection {
             this.reconnectAttempt = 0;
             this.updateState({ error: undefined, reconnectAt: undefined, status: 'connected' });
           },
+          onSidebarProjectCollections: (sidebarProjectCollections, revision) => {
+            if (generation !== this.generation) {
+              return;
+            }
+            const current = this.state.presentation;
+            if (current) {
+              this.updateState({
+                presentation: { ...current, revision, sidebarProjectCollections },
+              });
+            }
+          },
           onSnapshot: (snapshot) => {
             if (generation !== this.generation) {
               return;
             }
             this.updateState({ presentation: snapshot });
             logPresentationSnapshot(this.machine, snapshot.revision, snapshot.projects.length);
+          },
+          onWorkspaceGroups: (workspaceGroups, revision) => {
+            if (generation !== this.generation) {
+              return;
+            }
+            const current = this.state.presentation;
+            if (current) {
+              this.updateState({
+                presentation: { ...current, revision, workspaceGroups },
+              });
+            }
           },
         },
         presentation.revision

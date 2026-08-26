@@ -3,10 +3,14 @@ import {
   GXSERVER_PROTOCOL_VERSION,
   type GxserverEvent,
   type GxserverPresentationDelta,
+  type GxserverPresentationRevision,
   type GxserverPresentationSnapshot,
   type GxserverRpcEndpointPath,
   type GxserverServerHealthResponse,
+  type GxserverSidebarProjectCollectionsState,
+  type GxserverWorkspaceSessionGroupsState,
 } from '@/packages/shared/gxserver-protocol';
+import { gxserverRpcErrorFromResponseBody } from '@/packages/shared/gxserver-rpc-error';
 import { isSessionChatEventType, type GxserverSessionChatEvent } from '@/packages/shared/session-chat';
 import type { GhostexWebMachine } from './types';
 
@@ -36,10 +40,15 @@ export type PresentationSubscription = {
 
 type PresentationSubscriptionHandlers = {
   onClose(): void;
-  onDelta(delta: GxserverPresentationDelta, revision: number): void;
+  onDelta(delta: GxserverPresentationDelta, revision: GxserverPresentationRevision): void;
   onError(): void;
   onOpen(): void;
+  onSidebarProjectCollections(
+    state: GxserverSidebarProjectCollectionsState,
+    revision: GxserverPresentationRevision
+  ): void;
   onSnapshot(snapshot: GxserverPresentationSnapshot): void;
+  onWorkspaceGroups(state: GxserverWorkspaceSessionGroupsState, revision: GxserverPresentationRevision): void;
 };
 
 export function createGxserverClient(machine: GhostexWebMachine) {
@@ -74,7 +83,16 @@ export function createGxserverClient(machine: GhostexWebMachine) {
     });
     const body = await readJson(response);
     if (!response.ok || !isRpcResponse(body)) {
-      throw new Error(readErrorMessage(body, `gxserver request failed (${response.status}).`));
+      /*
+      CDXC:SessionChatComposerReady 2026-08-26:
+      A daemon refusal carries its own code (`{ ok: false, error, message }`),
+      and the shared chat composer branches on it — `composerNotReady` gets its
+      own notice instead of "message could not be sent". Bodies that are not a
+      gxserver envelope (a proxy page, a dropped connection) still throw the
+      plain transport error, because there is no daemon verdict to report.
+      */
+      const rpcError = gxserverRpcErrorFromResponseBody(path, body);
+      throw rpcError ?? new Error(readErrorMessage(body, `gxserver request failed (${response.status}).`));
     }
     if (body.protocolVersion !== GXSERVER_PROTOCOL_VERSION) {
       throw new Error(
@@ -145,6 +163,10 @@ export function createGxserverClient(machine: GhostexWebMachine) {
         handlers.onSnapshot(parsed.snapshot);
       } else if (parsed?.type === 'presentationDelta') {
         handlers.onDelta(parsed.delta, parsed.revision);
+      } else if (parsed?.type === 'sidebarProjectCollectionsChanged') {
+        handlers.onSidebarProjectCollections(parsed.sidebarProjectCollections, parsed.revision);
+      } else if (parsed?.type === 'workspaceGroupsChanged') {
+        handlers.onWorkspaceGroups(parsed.groups, parsed.revision);
       } else if (parsed && isSessionChatEventType(parsed.type)) {
         const chatEvent = parsed as GxserverSessionChatEvent;
         const entry = chatHandlers.get(chatKey(chatEvent.projectId, chatEvent.sessionId));

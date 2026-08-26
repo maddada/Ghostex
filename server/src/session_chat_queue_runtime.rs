@@ -49,12 +49,13 @@ use crate::server::{
     domain_error_response, read_runtime_text, routed_json, schedule_presentation_session_delta,
     session_observer_key, AppState, RoutedResponse,
 };
+use crate::session_chat_composer::SessionChatComposerReadiness;
 use crate::session_chat_follower::{session_chat_agent_for_session, session_chat_hook_working};
 use crate::session_chat_options::{
-    cached_session_chat_screen_state, cached_session_chat_terminal_notice,
-    emit_session_chat_options_state_frame, schedule_session_chat_option_redetect,
-    session_chat_terminal_notice_publisher, session_chat_watchdog_state_reader,
-    SessionChatOptionDetector,
+    cached_session_chat_composer_readiness, cached_session_chat_screen_state,
+    cached_session_chat_terminal_notice, emit_session_chat_options_state_frame,
+    schedule_session_chat_option_redetect, session_chat_terminal_notice_publisher,
+    session_chat_watchdog_state_reader, SessionChatOptionDetector,
 };
 use crate::session_chat_send::resolve_session_chat_send_target;
 use crate::{
@@ -97,6 +98,15 @@ the sender and publisher are, so this module never learns about AppState.
 pub type SessionChatQueueNoticeReader =
     Arc<dyn Fn(&str, &str) -> Option<SessionChatTerminalNotice> + Send + Sync>;
 
+/*
+CDXC:SessionChatComposerReady 2026-08-26:
+The session's last known composer verdict, injected the same way. Read from the
+cache only — a tick must never spawn a capture — so a session nobody has probed
+reads `Unknown` and the queue behaves exactly as it did before this feature.
+*/
+pub type SessionChatQueueComposerReader =
+    Arc<dyn Fn(&str, &str) -> SessionChatComposerReadiness + Send + Sync>;
+
 #[derive(Default)]
 struct SessionQueueGate {
     /// First moment this session looked stopped without looking busy since.
@@ -122,6 +132,7 @@ pub struct SessionChatQueueRuntime {
     sender_factory: SessionChatQueueSenderFactory,
     publisher_factory: SessionChatQueuePublisherFactory,
     notice_reader: SessionChatQueueNoticeReader,
+    composer_reader: SessionChatQueueComposerReader,
     gates: Arc<Mutex<HashMap<String, SessionQueueGate>>>,
     /// Sessions with a delivery in flight. The claim in
     /// `deliver_session_chat_queued_prompt` is the real guard; this only keeps
@@ -137,6 +148,7 @@ impl SessionChatQueueRuntime {
         sender_factory: SessionChatQueueSenderFactory,
         publisher_factory: SessionChatQueuePublisherFactory,
         notice_reader: SessionChatQueueNoticeReader,
+        composer_reader: SessionChatQueueComposerReader,
     ) -> Self {
         Self {
             paths,
@@ -144,6 +156,7 @@ impl SessionChatQueueRuntime {
             sender_factory,
             publisher_factory,
             notice_reader,
+            composer_reader,
             gates: Arc::new(Mutex::new(HashMap::new())),
             delivering: Arc::new(Mutex::new(HashSet::new())),
         }
@@ -272,6 +285,24 @@ impl SessionChatQueueRuntime {
                     ));
                     continue;
                 }
+            }
+            /*
+            CDXC:SessionChatComposerReady 2026-08-26:
+            No input box on screen ⇒ HOLD, and deliberately not the `blocked`
+            treatment above. A blocking notice is a state only the user can
+            leave — a trust dialog waits forever for a keypress — so failing the
+            row makes the stall visible and retryable. A missing composer is the
+            opposite: it is what a CLI looks like while it BOOTS, and it clears
+            on its own within seconds. Burning the head row for that would fail
+            every queued prompt on a session that was merely restarted, which is
+            precisely the moment a queue exists to cover.
+
+            `Unknown` is not a hold. Only positive evidence that the box is
+            absent stops the drain.
+            */
+            if (self.composer_reader)(&project_id, &session_id).is_not_ready() {
+                self.reset_gate(&key);
+                continue;
             }
             ready.push(ReadyDelivery {
                 project_id,
@@ -488,17 +519,23 @@ THE internal chat-message send. `/api/sendSessionChatMessage` is one caller;
 the prompt queue ("Send now" and the scheduler) is the other, which is why it
 lives here instead of inside the HTTP handler. Everything a chat send needs
 travels with it — the per-session send mutex in session_chat_send.rs, the
-answerable-picker refusal, the Ctrl+G draft-preservation handshake, the delivery
-watchdog and the option re-detect — so a queued prompt is indistinguishable from
-one the user typed and can never interleave with a Delayed Send.
+answerable-picker refusal, the terminal-input clear, the delivery watchdog and
+the option re-detect — so a queued prompt is indistinguishable from one the user
+typed and can never interleave with a Delayed Send.
 Returns the number of text bytes handed to zmx.
 */
+///
+/// `prompt_source` is the analytics attribution for this send: `chat` when the
+/// user typed it into the composer, `queue` when the prompt queue delivered it.
+/// The two are indistinguishable from inside this function (that is the whole
+/// point of the queue), so the caller is the only place that knows.
 pub(crate) async fn send_session_chat_message_internal(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     text: &str,
     image_paths: &[String],
+    prompt_source: &'static str,
 ) -> std::result::Result<usize, DomainStateError> {
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
@@ -531,21 +568,60 @@ pub(crate) async fn send_session_chat_message_internal(
     through to the delivery watchdog, which is the only thing that can explain
     them.
     */
-    if let Some(blocking) = SessionChatOptionDetector::new(state)
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26:
+    The detect below is keyed on the transcript agent when there is one, and
+    falls back to the broader composer id otherwise. Preferring the transcript
+    agent keeps the statusline/notice/activity readings this call already
+    produced for claude, codex and grok; the fallback is what lets a cursor,
+    copilot, opencode, gemini or omp session — none of which has a transcript
+    decoder, so `agent` is `None` for all of them — reach the funnel at all.
+    */
+    let detect_agent = agent
+        .clone()
+        .or_else(|| crate::session_chat_composer::session_chat_composer_agent_id(&target.session));
+    let detection = SessionChatOptionDetector::new(state)
         .detect(
             &target.project_id,
             &target.session_id,
-            agent.as_deref(),
+            detect_agent.as_deref(),
             true,
         )
-        .await
+        .await;
+    if let Some(blocking) = detection
         .notice
-        .filter(crate::session_chat_notice::SessionChatTerminalNotice::is_answerable)
+        .as_ref()
+        .filter(|notice| notice.is_answerable())
     {
         session_chat_terminal_notice_publisher(state, &target.project_id, &target.session_id)();
         return Err(DomainStateError {
             code: "invalidState",
             message: format!("{}. Answer it in chat before sending.", blocking.title),
+        });
+    }
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26:
+    The positive gate. Everything above is "is a screen we RECOGNISE in the
+    way?"; this is "did the CLI paint an input box at all?". It catches the
+    states no notice rule covers — a CLI still booting, an auth screen shipped
+    after our catalog, a dialog we have never seen — which are exactly the ones
+    that used to eat a message and answer with a delivery-failed banner minutes
+    later.
+
+    `Unknown` FAILS OPEN and is by far the common case for unmeasured agents, so
+    this can only ever refuse a send it has positive evidence about. The screen
+    tail behind the verdict is not squeezed into the error (DomainStateError
+    carries a code and a message and nothing else, at 169 construction sites);
+    clients read it from /api/readSessionTerminalTail instead.
+    */
+    if detection.composer.is_not_ready() {
+        return Err(DomainStateError {
+            code: "composerNotReady",
+            message: detection
+                .composer
+                .reason
+                .clone()
+                .unwrap_or_else(|| "The agent's input box is not accepting input yet.".to_string()),
         });
     }
     let send_probe = crate::session_chat_watchdog::SessionChatSendProbe::sample(
@@ -559,22 +635,19 @@ pub(crate) async fn send_session_chat_message_internal(
         text,
     )
     .await;
-    let mut steps = crate::session_chat_send::build_session_chat_message_steps(text, image_paths);
     /*
-    Grok Build fullscreen maps Ctrl+G to its Tasks pane rather than its
-    external editor. Its terminal-to-chat transition therefore leaves any
-    draft in the CLI and warns the user to copy it manually; chat sends must
-    skip the same impossible preservation handshake before taking ownership
-    of the terminal input line.
+    Chat owns the terminal composer when it sends. Discard anything already
+    sitting on that hidden input line instead of turning it into a user-facing
+    Saved Prompt: `build_session_chat_message_steps` starts with the measured
+    Ctrl+U/Ctrl+K clear burst, settles it, and only then pastes this message.
+    Terminal -> Chat view switching remains the separate, loss-safe draft
+    transfer path for text the user actually wants to carry between views.
     */
-    if agent.as_deref() != Some("grok") {
-        steps.insert(
-            0,
-            crate::session_chat_send::SessionChatSendStep::PreserveTerminalDraft {
-                state_dir: state.paths.app_state_dir.clone(),
-            },
-        );
-    }
+    let steps = crate::session_chat_send::build_session_chat_message_steps(
+        detect_agent.as_deref(),
+        text,
+        image_paths,
+    );
     if let Err(error) = crate::session_chat_send::execute_session_chat_send(
         &target.project_id,
         &target.session_id,
@@ -587,10 +660,10 @@ pub(crate) async fn send_session_chat_message_internal(
         /*
         CDXC:SessionChatTerminalNotices 2026-08-19:
         The case this feature exists for — the agent CLI in this pane is dead —
-        fails HERE, not at the delivery watchdog: the Ctrl+G draft handshake
-        never gets an answer, so the send errors out long before any watchdog is
-        started, and the user would see only a generic toast. When the TERMINAL
-        is what refused the message (as opposed to the send being superseded or
+        fails HERE, not at the delivery watchdog: zmx refuses the clear or paste,
+        or the terminal screen proves that the paste never landed, so the user
+        would otherwise see only a generic toast. When the TERMINAL is what
+        refused the message (as opposed to the send being superseded or
         cancelled), escalate once with the same one-capture verdict the watchdog
         takes at its deadline. It runs as its own task so the error response is
         not made to wait for the capture, it never retries the send, and the
@@ -613,6 +686,15 @@ pub(crate) async fn send_session_chat_message_internal(
                 );
             }
         }
+        // CDXC:SessionChatComposerReady 2026-08-26: the in-worker wait raises
+        // the same code the pre-send gate does, so a client has one case to
+        // handle whichever of the two caught it.
+        if error.composer_not_ready() {
+            return Err(DomainStateError {
+                code: "composerNotReady",
+                message: error.message,
+            });
+        }
         return Err(DomainStateError {
             code: "dependencyUnavailable",
             message: error.message,
@@ -633,6 +715,13 @@ pub(crate) async fn send_session_chat_message_internal(
             session_chat_watchdog_state_reader(state, &target.project_id, &target.session_id),
         );
     }
+    /*
+    CDXC:AnonymousAnalytics 2026-08-26:
+    Counted after the bytes reached zmx and only on the success path, so a
+    refused send is not reported as a prompt. The COUNT and the agent id are all
+    that leave; the prompt text is not in scope for the emitter and cannot be.
+    */
+    crate::telemetry::prompt_sent(agent.as_deref(), prompt_source);
     // An option command changes what the statusline reports: read it back.
     if crate::session_chat_options::is_session_chat_option_command_text(agent.as_deref(), text)
         || crate::session_chat_options::is_session_chat_activity_command_text(
@@ -845,10 +934,17 @@ pub(crate) fn session_chat_queue_sender(
         let project_id = project_id.clone();
         let session_id = session_id.clone();
         Box::pin(async move {
-            send_session_chat_message_internal(&state, &project_id, &session_id, &text, &[])
-                .await
-                .map(|_| ())
-                .map_err(|error| error.message)
+            send_session_chat_message_internal(
+                &state,
+                &project_id,
+                &session_id,
+                &text,
+                &[],
+                "queue",
+            )
+            .await
+            .map(|_| ())
+            .map_err(|error| error.message)
         })
     })
 }
@@ -893,5 +989,16 @@ pub(crate) fn session_chat_queue_notice_reader(
     let state = state.clone();
     Arc::new(move |project_id: &str, session_id: &str| {
         cached_session_chat_terminal_notice(&state, project_id, session_id)
+    })
+}
+
+/// CDXC:SessionChatComposerReady 2026-08-26: the composer half of the same
+/// view, under the same no-spawn rule.
+pub(crate) fn session_chat_queue_composer_reader(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue_runtime::SessionChatQueueComposerReader {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str| {
+        cached_session_chat_composer_readiness(&state, project_id, session_id)
     })
 }

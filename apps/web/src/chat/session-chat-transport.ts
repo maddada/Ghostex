@@ -15,8 +15,12 @@ import type {
   GxserverSessionChatQueueResult,
   GxserverSessionChatRemoveQueuedPromptResult,
 } from '@/packages/shared/session-chat';
-import type { GxserverReadSessionAgentNoteResult } from '@/packages/shared/gxserver-protocol';
+import type {
+  GxserverReadSessionAgentNoteResult,
+  GxserverReadSessionTerminalTailResult,
+} from '@/packages/shared/gxserver-protocol';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
+import { listProjectMarkdownDocumentPaths, saveProjectMarkdownDocument } from '@/packages/shared/project-docs';
 import { rpcForMachine, subscribeSessionChatForMachine } from '../connections/connection-registry';
 
 export function createSessionChatTransport(
@@ -87,12 +91,37 @@ export function createSessionChatTransport(
         projectId,
         sessionId,
         base64Data: params.base64Data,
+        ...(params.directory !== undefined ? { directory: params.directory } : {}),
+        ...(params.uploadId ? { uploadId: params.uploadId } : {}),
+        ...(params.relativePath ? { relativePath: params.relativePath } : {}),
         ...(params.suggestedName ? { suggestedName: params.suggestedName } : {}),
       });
     },
     loadImage(params) {
       return rpcForMachine<GxserverReadSessionChatImageResult>(machineId, '/api/readSessionChatImage', {
         path: params.path,
+      });
+    },
+    listMessageMarkdownPaths() {
+      return listProjectMarkdownDocumentPaths(projectId, (endpoint, request) =>
+        rpcForMachine(machineId, endpoint, request)
+      );
+    },
+    saveMessageMarkdown(params) {
+      return saveProjectMarkdownDocument({ ...params, projectId }, (endpoint, request) =>
+        rpcForMachine(machineId, endpoint, request)
+      );
+    },
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26:
+    The evidence read behind a `composerNotReady` refusal — the session's own
+    machine answers with its composer verdict plus the bottom of the terminal
+    screen, which the chat composer shows inside its refusal notice.
+    */
+    readTerminalTail() {
+      return rpcForMachine<GxserverReadSessionTerminalTailResult>(machineId, '/api/readSessionTerminalTail', {
+        projectId,
+        sessionId,
       });
     },
     /*

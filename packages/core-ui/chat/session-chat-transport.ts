@@ -4,6 +4,7 @@
 // scoped to one (projectId, sessionId): subscribe frames are pre-filtered by
 // the host and the mutation calls omit the identity params.
 
+import type { GxserverReadSessionTerminalTailResult } from '../../shared/gxserver-protocol';
 import type {
   GxserverAnswerSessionChatPromptParams,
   GxserverQueueSessionChatPromptResult,
@@ -61,6 +62,12 @@ export interface SessionChatTransport {
    */
   saveAttachment?(params: {
     base64Data: string;
+    /** Creates a dropped directory (or one of its empty descendants). */
+    directory?: boolean;
+    /** Stable per-drop id used to recreate every entry under one root. */
+    uploadId?: string;
+    /** Slash-separated path below a dropped directory's root. */
+    relativePath?: string;
     suggestedName?: string;
   }): Promise<GxserverSaveSessionChatAttachmentResult>;
   /**
@@ -82,6 +89,20 @@ export interface SessionChatTransport {
    * image" uses a browser download instead.
    */
   saveImageAs?(params: { base64Data: string; suggestedName: string }): Promise<void>;
+  /** Lists existing project Markdown paths used to choose a non-colliding save name. */
+  listMessageMarkdownPaths?(): Promise<readonly string[]>;
+  /** Saves a final assistant response inside the session project's Docs tree. */
+  saveMessageMarkdown?(params: { content: string; path: string }): Promise<{ path: string }>;
+  /*
+  CDXC:SessionChatComposerReady 2026-08-26:
+  The evidence behind a `composerNotReady` send refusal: the daemon's composer
+  verdict plus the bottom of the session's terminal screen, ANSI-stripped. The
+  composer's refusal notice reads it on demand so the user can see the trust /
+  auth / setup prompt that is holding the input line. Hosts without a route to
+  the endpoint omit it and the notice renders without its excerpt rather than
+  offering a disclosure that would 404.
+  */
+  readTerminalTail?(): Promise<GxserverReadSessionTerminalTailResult>;
   answerPrompt(params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>): Promise<void>;
   interrupt(): Promise<void>;
   /*

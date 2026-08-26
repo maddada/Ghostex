@@ -198,6 +198,17 @@ second process spawn.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionChatTerminalDetection {
     pub options: Option<SessionChatDetectedOptions>,
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26: whether the agent CLI's input box
+    is on screen and accepting input. Fifth reading of the same capture, for the
+    same reason as the second through fourth: it must never cost a spawn.
+
+    Unlike the others this is not an `Option`: absence of a notice means "no
+    notice", but absence of composer evidence is itself a verdict the send path
+    has to distinguish from "the composer is missing", so the three-way state
+    lives inside the value (`Unknown` by `Default`).
+    */
+    pub composer: crate::session_chat_composer::SessionChatComposerReadiness,
     pub notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
     /*
     CDXC:SessionChatTerminalActivity 2026-08-22: live work the CLI reports on
@@ -884,27 +895,46 @@ pub fn detect_session_chat_terminal_state(
     session_id: &str,
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
-    let Some(agent) = session_chat_option_agent(agent_id) else {
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26:
+    Two independent reasons to spend a capture on this session now. The
+    statusline grammar covers three agents; the composer signature table covers
+    nine, so an agent with only the latter (cursor, copilot, opencode, gemini,
+    omp) reaches the funnel through this second door and gets every reading the
+    capture can support — which for it is composer readiness alone, since the
+    notice, activity and fleet classifiers are all keyed on the option agent.
+    */
+    let agent = session_chat_option_agent(agent_id);
+    if agent.is_none()
+        && !crate::session_chat_composer::has_session_chat_composer_signature(agent_id)
+    {
         return SessionChatTerminalDetection::default();
-    };
-    let transcript =
-        read_session_chat_transcript_selection(repository, project_id, session_id, agent);
+    }
+    let transcript = agent.and_then(|agent| {
+        read_session_chat_transcript_selection(repository, project_id, session_id, agent)
+    });
     let capture =
         crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id).ok();
-    let terminal = capture
-        .as_ref()
-        .and_then(|capture| detect_session_chat_selection(agent, &capture.text));
+    let terminal = agent
+        .zip(capture.as_ref())
+        .and_then(|(agent, capture)| detect_session_chat_selection(agent, &capture.text));
     // A capped capture lost its tail, so the live screen is not in it.
     let screen = capture.as_ref().filter(|capture| !capture.truncated);
+    let notice = screen.and_then(|capture| {
+        crate::session_chat_notice::classify_session_chat_terminal_notice(agent_id, &capture.text)
+    });
     SessionChatTerminalDetection {
         options: merge_session_chat_option_selections(transcript, terminal)
             .map(SessionChatDetectedOptions::new),
-        notice: screen.and_then(|capture| {
-            crate::session_chat_notice::classify_session_chat_terminal_notice(
+        composer: match screen {
+            Some(capture) => crate::session_chat_composer::detect_session_chat_composer_readiness(
                 agent_id,
                 &capture.text,
-            )
-        }),
+                notice.as_ref(),
+            ),
+            None => crate::session_chat_composer::SessionChatComposerReadiness::default(),
+        },
+        notice,
         activity: screen.and_then(|capture| {
             crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
                 agent_id,
@@ -1428,7 +1458,12 @@ impl SessionChatOptionDetector {
         agent: Option<&str>,
         force: bool,
     ) -> crate::session_chat_options::SessionChatTerminalDetection {
-        if crate::session_chat_options::session_chat_option_agent(agent).is_none() {
+        // CDXC:SessionChatComposerReady 2026-08-26: same two-door gate the
+        // funnel itself uses, restated here so an agent with only a composer
+        // signature is not turned away before the cache is even consulted.
+        if crate::session_chat_options::session_chat_option_agent(agent).is_none()
+            && !crate::session_chat_composer::has_session_chat_composer_signature(agent)
+        {
             return crate::session_chat_options::SessionChatTerminalDetection::default();
         }
         let key = session_observer_key(project_id, session_id);
@@ -1472,7 +1507,17 @@ impl SessionChatOptionDetector {
         Neither publishes anything itself: every consumer already re-reads this
         cache (plus the watchdog store) and emits on change.
         */
-        if detected.captured && detected.notice.is_none() {
+        /*
+        CDXC:SessionChatComposerReady 2026-08-26: only an agent the NOTICE
+        catalog covers can prove a screen clean. A composer-only agent always
+        classifies to no notice — there are no rules for it — so retiring on
+        that absence would clear a watchdog verdict on evidence that was never
+        collected.
+        */
+        if detected.captured
+            && detected.notice.is_none()
+            && crate::session_chat_options::session_chat_option_agent(agent).is_some()
+        {
             crate::session_chat_notice::retire_session_chat_watchdog_notice_on_clean_screen(
                 project_id, session_id,
             );
@@ -1604,6 +1649,30 @@ pub(crate) fn cached_session_chat_screen_state(
         fleet,
         probed,
     }
+}
+
+/*
+CDXC:SessionChatComposerReady 2026-08-26:
+Last known composer verdict with no process spawn, for the prompt-queue
+scheduler. A tick must never trigger a capture (that is the rule the notice
+reader next to this one exists to keep), so a session nobody has probed reads
+`Unknown` and the queue proceeds exactly as it did before this feature.
+*/
+pub(crate) fn cached_session_chat_composer_readiness(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> crate::session_chat_composer::SessionChatComposerReadiness {
+    state
+        .session_chat_option_cache
+        .lock()
+        .ok()
+        .and_then(|cache| {
+            cache
+                .get(&session_observer_key(project_id, session_id))
+                .map(|entry| entry.value.composer.clone())
+        })
+        .unwrap_or_default()
 }
 
 pub(crate) fn cached_session_chat_terminal_notice(

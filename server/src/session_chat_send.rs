@@ -66,10 +66,9 @@ asynchronously — it paints "Pasting text…" and only later collapses the body
 into a "[Pasted text #N +M lines]" placeholder — and under machine load that
 ingestion takes LONGER than 500ms. Reproduced deterministically 2026-08-23
 with a 69-line / 4.6KB message: the bare Enter submitted an EMPTY composer,
-the body arrived afterwards, and the user's message was silently lost (it
-ended up stranded in the composer and later swept into Saved Prompts by the
-next send's draft preservation). zmx transport was byte-perfect at that size,
-so the race is purely TUI ingestion time versus a fixed delay.
+the body arrived afterwards, and the user's message was silently lost because
+it remained stranded in the terminal composer. zmx transport was byte-perfect
+at that size, so the race is purely TUI ingestion time versus a fixed delay.
 
 The fix is to watch the screen instead of the clock: settle briefly (so a
 paste that already landed costs no extra latency), then poll captures until
@@ -81,6 +80,18 @@ pub const SESSION_CHAT_VERIFY_SETTLE_MS: u64 = SESSION_CHAT_SUBMIT_DELAY_MS;
 pub const SESSION_CHAT_VERIFY_POLL_MS: u64 = 150;
 pub const SESSION_CHAT_VERIFY_MIN_TIMEOUT_MS: u64 = 2_000;
 pub const SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS: u64 = 8_000;
+
+/*
+CDXC:SessionChatComposerReady 2026-08-26:
+The window `SessionChatSendStep::WaitForComposer` gives a CLI to paint its input
+box. Short settle because the overwhelming majority of sends go to a CLI that
+has been idle for minutes and answers on the first capture; six seconds of
+ceiling because the slow case is a cold agent process still loading its config,
+skills and MCP servers, which was measured past four on this machine — the very
+reason the old blind four-second sleeps kept losing first prompts.
+*/
+pub const SESSION_CHAT_COMPOSER_WAIT_SETTLE_MS: u64 = 0;
+pub const SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS: u64 = 6_000;
 /// Bytes of payload per millisecond of extra patience: a paste twice the size
 /// takes about twice as long to ingest.
 pub const SESSION_CHAT_VERIFY_BYTES_PER_MS: u64 = 2;
@@ -103,6 +114,9 @@ const SESSION_CHAT_PASTING_INDICATOR_NEEDLE: &str = "Pastingtext";
 /// Shown to the user when the composer never took the body. Deliberately
 /// describes the terminal, not the network: nothing was submitted.
 pub const SESSION_CHAT_PASTE_NOT_ACCEPTED: &str = "The terminal did not accept the pasted message.";
+/// Fallback for a composer wait that timed out without a per-agent reason.
+pub const SESSION_CHAT_COMPOSER_NOT_READY: &str =
+    "The agent's input box is not on screen, so nothing was sent.";
 /*
 Esc in the kitty CSI-u encoding (CSI 27 u). Ghostex agent sessions always run
 under zmx, whose VT layer answers the kitty keyboard-protocol query, so Claude
@@ -125,12 +139,20 @@ reasoning as SESSION_CHAT_INTERRUPT above.
 pub const SESSION_CHAT_SHIFT_TAB: &str = "\u{1b}[9;2u";
 pub const SESSION_CHAT_SHIFT_UP: &str = "\u{1b}[1;2A";
 pub const SESSION_CHAT_SHIFT_DOWN: &str = "\u{1b}[1;2B";
+/*
+The two kill keys, and deliberately no Ctrl+Y beside them. A yank returns only
+the LAST kill, which after a 2N-1 burst is a fragment of a multi-line draft or
+nothing at all, so no writer of this input line can restore what it cleared.
+Writers discard (the chat-send policy); terminal→chat view switching stays the
+loss-safe transfer.
+*/
 pub const AGENT_TUI_CLEAR_INPUT_LINE: &str = "\u{15}"; // Ctrl+U — clear toward start
 pub const AGENT_TUI_CLEAR_INPUT_FORWARD: &str = "\u{b}"; // Ctrl+K — clear toward end
-pub const AGENT_TUI_RESTORE_INPUT_LINE: &str = "\u{19}"; // Ctrl+Y — yank back a killed line
 pub const AGENT_TUI_CLEAR_LINE_SLACK: usize = 8;
 pub const AGENT_TUI_CLEAR_MAX_LINES: usize = 40;
 const SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT: Duration = Duration::from_secs(16);
+const SESSION_CHAT_PROMPT_EDITOR_INPUT: &str = "\u{7}";
+const SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT: &str = "\u{10}editor\r";
 const PROMPT_STASH_REQUEST_FRESHNESS: Duration = Duration::from_secs(15);
 const BRACKETED_PASTE_START: &str = "\u{1b}[200~";
 const BRACKETED_PASTE_END: &str = "\u{1b}[201~";
@@ -205,6 +227,25 @@ pub fn normalize_terminal_paste_line_endings(text: &str) -> String {
     text.replace("\r\n", "\r").replace('\n', "\r")
 }
 
+/*
+Agent composers reserve a final backslash followed by Return for inserting a
+newline. Ghostex sends the body and Return as separate pty writes, so a prompt
+whose final byte is `\\` otherwise triggers that shortcut instead of submitting.
+
+Stage one terminal-only trailing space to disambiguate the Return. Supported
+agent composers trim trailing whitespace when they submit, so the logical
+prompt still ends in the user's backslash. Apply this at the shared terminal
+encoding boundary so direct chat sends, queued sends, interactive free-text
+answers, and generic submitted session messages all obey the same rule.
+*/
+pub fn disambiguate_agent_tui_submit_text(text: &str) -> String {
+    let mut staged = text.to_string();
+    if staged.ends_with('\\') {
+        staged.push(' ');
+    }
+    staged
+}
+
 pub fn wrap_terminal_bracketed_paste_text(text: &str) -> String {
     format!(
         "{BRACKETED_PASTE_START}{}{BRACKETED_PASTE_END}",
@@ -219,10 +260,11 @@ pub fn is_multiline_draft(text: &str) -> bool {
 
 /// Multiline → framed (NO submit); single-line → sanitized unframed text.
 pub fn build_session_chat_paste_bytes(text: &str) -> String {
+    let staged = disambiguate_agent_tui_submit_text(text);
     if is_multiline_draft(text) {
-        wrap_terminal_bracketed_paste_text(text)
+        wrap_terminal_bracketed_paste_text(&staged)
     } else {
-        sanitize_bracketed_paste_text(text)
+        sanitize_bracketed_paste_text(&staged)
     }
 }
 
@@ -429,6 +471,7 @@ pub enum SessionChatSendStep {
     /// answers only after the CLI has durably stashed and cleared that draft.
     PreserveTerminalDraft {
         state_dir: PathBuf,
+        prompt_editor_input: String,
     },
     /// One `zmx send` stdin burst.
     Write(String),
@@ -443,6 +486,24 @@ pub enum SessionChatSendStep {
         payload: String,
     },
     SleepMs(u64),
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26:
+    Hold the sequence until the agent CLI's input box is on screen. This runs
+    BEFORE the clear burst, which is the whole point: the burst is Ctrl+U/Ctrl+K
+    keystrokes, and a CLI showing a trust dialog or an auth menu answers those
+    with whatever those keys mean to IT. Nothing is written until the composer
+    is proved, and a proof that never arrives aborts the sequence, so no Enter
+    can follow.
+
+    Fail-open on `Unknown` is deliberate and matches VerifyPasteLanded: an
+    unreadable screen, or an agent with no measured signature, must never be
+    what stops a message.
+    */
+    WaitForComposer {
+        agent: Option<String>,
+        settle_ms: u64,
+        timeout_ms: u64,
+    },
     /// Hold the sequence until the session's screen proves `text` reached the
     /// agent's composer (CDXC:SessionChatVerifyPaste). Settles `settle_ms`,
     /// then polls captures until the deadline `timeout_ms` sets. Failing this
@@ -466,20 +527,48 @@ pub fn session_chat_verify_timeout_ms(text_bytes: usize) -> u64 {
         .min(SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS)
 }
 
-/// clear burst → 150ms settle → image pastes back-to-back → (300ms settle
-/// when text follows images) → paste body → screen-verified wait → SEPARATE
-/// Enter.
+/*
+The clear discipline EVERY server-side writer of the agent composer shares:
+the measured burst (the 2N-1 law, sized for the text about to be written) as
+its OWN write, followed by the settle that keeps it out of the next write's
+stdin chunk. Chunk separation is not cosmetic — a burst that coalesces with
+the following frame is inserted as literal text (see
+SESSION_CHAT_CLEAR_INPUT_SETTLE_MS above) — so the pair is built here once
+rather than restated by each writer. `source` attributes the burst to an
+out-of-band writer's own diagnostic-input source (the title jobs); `None`
+leaves it on the job's.
+*/
+pub fn build_agent_tui_clear_input_steps(
+    source: Option<&str>,
+    text: &str,
+) -> Vec<SessionChatSendStep> {
+    let payload = build_agent_tui_clear_input_for_text(text);
+    vec![
+        match source {
+            Some(source) => SessionChatSendStep::WriteFrom {
+                source: source.to_string(),
+                payload,
+            },
+            None => SessionChatSendStep::Write(payload),
+        },
+        SessionChatSendStep::SleepMs(SESSION_CHAT_CLEAR_INPUT_SETTLE_MS),
+    ]
+}
+
+/// composer wait → clear burst → 150ms settle → image pastes back-to-back →
+/// (300ms settle when text follows images) → paste body → screen-verified wait
+/// → SEPARATE Enter.
 pub fn build_session_chat_message_steps(
+    agent: Option<&str>,
     text: &str,
     image_paths: &[String],
 ) -> Vec<SessionChatSendStep> {
-    let mut steps = Vec::new();
-    steps.push(SessionChatSendStep::Write(
-        build_agent_tui_clear_input_for_text(text),
-    ));
-    steps.push(SessionChatSendStep::SleepMs(
-        SESSION_CHAT_CLEAR_INPUT_SETTLE_MS,
-    ));
+    let mut steps = vec![SessionChatSendStep::WaitForComposer {
+        agent: agent.map(str::to_string),
+        settle_ms: SESSION_CHAT_COMPOSER_WAIT_SETTLE_MS,
+        timeout_ms: SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
+    }];
+    steps.extend(build_agent_tui_clear_input_steps(None, text));
     for path in image_paths {
         steps.push(SessionChatSendStep::Write(
             build_session_chat_image_paste_bytes(path),
@@ -659,6 +748,15 @@ pub enum SessionChatSendFailure {
     PreserveTerminalDraft,
     /// A `zmx send` burst was refused.
     Write,
+    /*
+    CDXC:SessionChatComposerReady 2026-08-26:
+    The agent CLI never showed an input box within the wait. Distinct from
+    `Write` because nothing was written: there is no half-typed composer to
+    explain and nothing for the delivery watchdog to verify, and the caller maps
+    it to its own `composerNotReady` code so the UI can say what is on the
+    screen instead of "the terminal refused the input".
+    */
+    ComposerNotReady,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -676,9 +774,20 @@ impl SessionChatSendError {
         Self::new(SessionChatSendFailure::NotAttempted, message)
     }
 
-    /// True when the session's own terminal is what refused the message.
+    /// True when the session's own terminal is what refused the message —
+    /// which is what makes a watchdog escalation (one more capture, to explain
+    /// the refusal) worth spending. A composer that never appeared already
+    /// carries its own explanation, so it is not one of these.
     pub fn terminal_refused(&self) -> bool {
-        self.failure != SessionChatSendFailure::NotAttempted
+        matches!(
+            self.failure,
+            SessionChatSendFailure::PreserveTerminalDraft | SessionChatSendFailure::Write
+        )
+    }
+
+    /// True when the send stopped because the agent CLI had no input box.
+    pub fn composer_not_ready(&self) -> bool {
+        self.failure == SessionChatSendFailure::ComposerNotReady
     }
 }
 
@@ -873,12 +982,16 @@ async fn run_session_chat_send_worker(
                 SessionChatSendStep::SleepMs(delay_ms) => {
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
-                SessionChatSendStep::PreserveTerminalDraft { state_dir } => {
+                SessionChatSendStep::PreserveTerminalDraft {
+                    state_dir,
+                    prompt_editor_input,
+                } => {
                     match preserve_terminal_draft(
                         &state_dir,
                         &project_id,
                         &session_id,
                         &zmx_name,
+                        &prompt_editor_input,
                         &generation,
                         job_generation,
                     )
@@ -930,6 +1043,61 @@ async fn run_session_chat_send_worker(
                             error,
                         ));
                         break;
+                    }
+                }
+                SessionChatSendStep::WaitForComposer {
+                    agent,
+                    settle_ms,
+                    timeout_ms,
+                } => {
+                    let wait = crate::session_chat_composer::wait_for_session_chat_composer(
+                        &zmx_name,
+                        agent.as_deref(),
+                        crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                            settle_ms,
+                            timeout_ms,
+                            // A screen this worker cannot read, or an agent with
+                            // no measured signature, releases the sequence on
+                            // the FIRST probe. The send is what matters; the
+                            // gate is only allowed to help.
+                            unknown_hold_ms: 0,
+                        },
+                        &|| job_generation != generation.load(Ordering::SeqCst),
+                    )
+                    .await;
+                    match wait {
+                        crate::session_chat_composer::SessionChatComposerWait::Ready
+                        | crate::session_chat_composer::SessionChatComposerWait::Unknown => {}
+                        crate::session_chat_composer::SessionChatComposerWait::Cancelled => {
+                            outcome = Err(SessionChatSendError::not_attempted(
+                                SESSION_CHAT_SEND_CANCELLED.to_string(),
+                            ));
+                            break;
+                        }
+                        crate::session_chat_composer::SessionChatComposerWait::NotReady(
+                            readiness,
+                        ) => {
+                            let reason = readiness
+                                .reason
+                                .clone()
+                                .unwrap_or_else(|| SESSION_CHAT_COMPOSER_NOT_READY.to_string());
+                            log_session_chat_paste_verification(
+                                LogLevel::Error,
+                                "sessionChatComposerNotReady",
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                &source,
+                                0,
+                                timeout_ms,
+                                &reason,
+                            );
+                            outcome = Err(SessionChatSendError::new(
+                                SessionChatSendFailure::ComposerNotReady,
+                                reason,
+                            ));
+                            break;
+                        }
                     }
                 }
                 SessionChatSendStep::VerifyPasteLanded {
@@ -1169,17 +1337,19 @@ pub struct CapturedTerminalDraft {
 CDXC:SessionChatDraftHandoff 2026-08-18:
 Terminal → chat draft transfer, shared by every host. The bytes a user typed
 into the agent TUI live only in that TUI's composer, so the sole way to read
-them is the Ctrl+G prompt-editor contract: drop a one-shot `handoff:<id>`
-marker, send BEL, and let `ghostex prompt-editor` stash the composer into
-Saved Prompts, clear it, and answer through the response file. Running it here
-rather than in each client is what lets remote gpui sessions and the phone use
-it at all — they have no filesystem on the agent's machine.
+them is the agent's prompt-editor contract: drop a one-shot `handoff:<id>`
+marker, ask the agent to open its external editor, and let `ghostex
+prompt-editor` stash the composer into Saved Prompts, clear it, and answer
+through the response file. Running it here rather than in each client is what
+lets remote gpui sessions and the phone use it at all; they have no filesystem
+on the agent's machine.
 */
 async fn preserve_terminal_draft(
     state_dir: &Path,
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
+    prompt_editor_input: &str,
     generation: &AtomicU64,
     job_generation: u64,
 ) -> Result<CapturedTerminalDraft, SessionChatSendError> {
@@ -1188,6 +1358,7 @@ async fn preserve_terminal_draft(
         project_id,
         session_id,
         zmx_name,
+        prompt_editor_input,
         Some((generation, job_generation)),
     )
     .await
@@ -1196,8 +1367,8 @@ async fn preserve_terminal_draft(
         CDXC:SessionChatTerminalNotices 2026-08-19:
         The generation, not the message text, is what says whether this send was
         superseded while the handshake ran. Anything else here is the CLI in the
-        pane failing to answer Ctrl+G at all, which is exactly the evidence the
-        terminal-notice escalation acts on.
+        pane failing to answer its prompt-editor invocation at all, which is
+        exactly the evidence the terminal-notice escalation acts on.
         */
         if job_generation != generation.load(Ordering::SeqCst) {
             SessionChatSendError::not_attempted(message)
@@ -1216,11 +1387,11 @@ This used to run the handshake directly, on the reasoning that the stash
 marker's `create_new` open already excludes a concurrent chat send's preserve
 step and that a view switch never races a send from the same client. Both
 halves were wrong. The marker only stops two CAPTURES from overlapping; it says
-nothing about the rest of a send sequence, so the handoff's BEL — which makes
-the CLI stash and CLEAR the composer — could land between another sequence's
-paste and its Enter and turn that send into an empty-line submit. And the
-desktop fires this on every terminal→chat view switch, which is emphatically not
-serialized against the sends that same client just made.
+nothing about the rest of a send sequence, so the handoff's editor invocation,
+which makes the CLI stash and CLEAR the composer, could land between another
+sequence's paste and its Enter and turn that send into an empty-line submit.
+And the desktop fires this on every terminal→chat view switch, which is
+emphatically not serialized against the sends that same client just made.
 
 Riding the queue cannot self-deadlock: the only caller is the HTTP handler, and
 the in-worker draft capture (`SessionChatSendStep::PreserveTerminalDraft`) calls
@@ -1232,6 +1403,7 @@ pub async fn capture_session_chat_terminal_draft(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
+    agent: Option<&str>,
 ) -> Result<CapturedTerminalDraft, String> {
     let (completion_tx, completion_rx) = oneshot::channel();
     let (draft_tx, draft_rx) = oneshot::channel();
@@ -1242,6 +1414,12 @@ pub async fn capture_session_chat_terminal_draft(
         "session-chat-draft-handoff",
         vec![SessionChatSendStep::PreserveTerminalDraft {
             state_dir: state_dir.to_path_buf(),
+            prompt_editor_input: if agent == Some("grok") {
+                SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT
+            } else {
+                SESSION_CHAT_PROMPT_EDITOR_INPUT
+            }
+            .to_string(),
         }],
         Some(completion_tx),
         Some(draft_tx),
@@ -1262,6 +1440,7 @@ async fn run_terminal_draft_capture(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
+    prompt_editor_input: &str,
     cancellation: Option<(&AtomicU64, u64)>,
 ) -> Result<CapturedTerminalDraft, String> {
     let request_id = format!(
@@ -1308,11 +1487,12 @@ async fn run_terminal_draft_capture(
         zmx_name,
         "sessionChatPreserveTerminalDraft",
         "session-chat-preserve-draft",
-        "\u{7}",
+        prompt_editor_input,
     );
     let zmx_name_owned = zmx_name.to_string();
+    let prompt_editor_input = prompt_editor_input.to_string();
     let delivered = tokio::task::spawn_blocking(move || {
-        crate::zmx::session_chat_zmx_write(&zmx_name_owned, "\u{7}")
+        crate::zmx::session_chat_zmx_write(&zmx_name_owned, &prompt_editor_input)
     })
     .await;
     if !matches!(delivered, Ok(Ok(_))) {
@@ -1454,10 +1634,15 @@ mod tests {
 
     #[test]
     fn message_steps_verify_the_paste_before_the_separate_enter() {
-        let steps = build_session_chat_message_steps("hi", &[]);
+        let steps = build_session_chat_message_steps(Some("claude"), "hi", &[]);
         assert_eq!(
             steps,
             vec![
+                SessionChatSendStep::WaitForComposer {
+                    agent: Some("claude".to_string()),
+                    settle_ms: 0,
+                    timeout_ms: 6_000,
+                },
                 SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("hi")),
                 SessionChatSendStep::SleepMs(150),
                 SessionChatSendStep::Write("hi".to_string()),
@@ -1470,12 +1655,18 @@ mod tests {
             ]
         );
         let with_images = build_session_chat_message_steps(
+            Some("claude"),
             "what is this",
             &["/tmp/ghostex-paste-1.png".to_string()],
         );
         assert_eq!(
             with_images,
             vec![
+                SessionChatSendStep::WaitForComposer {
+                    agent: Some("claude".to_string()),
+                    settle_ms: 0,
+                    timeout_ms: 6_000,
+                },
                 SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("what is this")),
                 SessionChatSendStep::SleepMs(150),
                 SessionChatSendStep::Write(
@@ -1493,10 +1684,16 @@ mod tests {
         );
         // Images without text: no body write, nothing on screen to verify, so
         // the Enter keeps the original blind settle.
-        let images_only = build_session_chat_message_steps("", &["/tmp/a.png".to_string()]);
+        let images_only =
+            build_session_chat_message_steps(Some("claude"), "", &["/tmp/a.png".to_string()]);
         assert_eq!(
             images_only,
             vec![
+                SessionChatSendStep::WaitForComposer {
+                    agent: Some("claude".to_string()),
+                    settle_ms: 0,
+                    timeout_ms: 6_000,
+                },
                 SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("")),
                 SessionChatSendStep::SleepMs(150),
                 SessionChatSendStep::Write("\u{1b}[200~/tmp/a.png\u{1b}[201~".to_string()),
@@ -1853,6 +2050,7 @@ pub(crate) async fn handle_send_session_chat_message_http(
         &target.session_id,
         &text,
         &image_paths,
+        "chat",
     )
     .await
     {
@@ -1990,12 +2188,26 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                     &crate::session_chat_send::build_codex_ask_answer_keys(&questions, &selections),
                 ),
                 _ => {
-                    // Non-stepping agents (Grok): the formatted answer text
-                    // goes through the normal send path (upstream chat spec §8.6).
+                    /*
+                    Non-stepping agents (Grok): the formatted answer text goes
+                    through the normal send path (upstream chat spec §8.6).
+
+                    That path's clear burst is kept deliberately. These agents
+                    render no selector that owns the input line — the answer is
+                    an ordinary message typed into the composer and submitted —
+                    so a draft already sitting there would be prepended to the
+                    answer and submitted as part of it. The tool is waiting for
+                    the answer text and nothing else, so writing verbatim would
+                    corrupt the answer AND send the draft; clearing first is the
+                    only write that is correct. It also keeps the paste
+                    verification, so an answer the composer never took is never
+                    followed by an Enter.
+                    */
                     if !crate::session_chat_send::has_ask_answer(&selections) {
                         Vec::new()
                     } else {
                         crate::session_chat_send::build_session_chat_message_steps(
+                            agent.as_deref(),
                             &crate::session_chat_send::format_ask_answer(&questions, &selections),
                             &[],
                         )
@@ -2108,15 +2320,15 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
 /*
 CDXC:SessionChatDraftHandoff 2026-08-18:
 Terminal → chat draft transfer for every host. A user who typed into the agent
-CLI and then lands on the chat surface — by tapping the toggle, or because the
-app auto-switched a terminal-started agent into Chat — must find that text in
-the chat composer instead of stranded behind the parked terminal. The capture
-is the Ctrl+G prompt-editor handshake, which parks the draft in Saved Prompts;
-this reads that row back and (when this capture created it) removes it again,
-so a transfer leaves no residue in the user's Saved Prompts list.
+CLI and then lands on the chat surface, by tapping the toggle or because the app
+auto-switched a terminal-started agent into Chat, must find that text in the
+chat composer instead of stranded behind the parked terminal. The capture uses
+the agent's prompt-editor handshake, which parks the draft in Saved Prompts;
+this reads that row back and (when this capture created it) removes it again, so
+a transfer leaves no residue in the user's Saved Prompts list.
 
-Grok Build binds Ctrl+G to its Tasks pane and can never answer the handshake,
-so its sessions are rejected up front rather than made to wait out the timeout.
+Grok Build binds Ctrl+G to its Tasks pane, so its capture opens the editor from
+the command palette with Ctrl+P, `editor`, Enter instead.
 */
 pub(crate) async fn handle_handoff_session_chat_draft_http(
     state: &AppState,
@@ -2132,21 +2344,13 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
         Ok(target) => target,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    if session_chat_agent_for_session(&target.session).as_deref() == Some("grok") {
-        return domain_error_response(
-            endpoint_path,
-            request_id,
-            DomainStateError {
-                code: "unsupported",
-                message: "Grok Build cannot transfer its composer draft.".to_string(),
-            },
-        );
-    }
+    let agent = session_chat_agent_for_session(&target.session);
     let captured = match crate::session_chat_send::capture_session_chat_terminal_draft(
         &state.paths.app_state_dir,
         &target.project_id,
         &target.session_id,
         &target.zmx_name,
+        agent.as_deref(),
     )
     .await
     {

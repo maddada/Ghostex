@@ -438,6 +438,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/toggleAgentPromptFavorite"
         | "/api/resolveAgentPromptLaunch"
         | "/api/readSessionChat"
+        /*
+        CDXC:SessionChatComposerReady 2026-08-26:
+        Remote-allowed for the same reason `/api/readSessionText` next to it is:
+        the screen only exists on the machine running the session, and this
+        carries a bounded thirty-line tail of it plus the composer verdict. A
+        client that just had a send refused needs to SHOW the user what is in
+        the terminal, and it cannot do that from the other side of an SSH hop
+        without asking.
+        */
+        | "/api/readSessionTerminalTail"
         | "/api/readSessionChatSkills"
         | "/api/readSessionChatFiles"
         | "/api/sendSessionChatMessage"
@@ -587,6 +597,22 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/extensionStatus"
         | "/api/extensionBadge" => remote_allowed(path),
         "/api/createQuickProject" => full_local(path),
+        /*
+        CDXC:AnonymousAnalytics 2026-08-26:
+        The desktop app's loopback analytics ping. Authenticated like every other
+        local endpoint, but deliberately NOT protocol-version gated: the caller
+        is fire-and-forget, never reads the response, and has no way to react to
+        a 426 — so a version skew would silently turn into a retry loop against a
+        wall instead of an event that simply does not arrive. Local-only, because
+        a remote helper's analytics are the desktop's to report, not its own.
+        */
+        "/api/recordClientEvent" => descriptor(
+            path,
+            ApiPermission::FullLocal,
+            true,
+            false,
+            Transport::Http,
+        ),
         /*
         CDXC:AgentHooks 2026-06-19-14:15:
         Hook read/install/uninstall endpoints inspect or mutate user-local provider config files, so Rust keeps the TypeScript contract as full-local HTTP APIs requiring auth and protocol-version gates.

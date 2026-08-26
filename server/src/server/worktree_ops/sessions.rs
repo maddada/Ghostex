@@ -15,9 +15,13 @@ and the branch on its card comes from the per-session git probe reading that cwd
 */
 pub(crate) const GXSERVER_WORKTREE_SESSION_FIRST_PROMPT_MAX_BYTES: usize = 16_384;
 /*
-The same settle window GPUI uses between starting an agent session's provider
-and submitting its first prompt: the agent CLI has to draw its composer before
-typed text means anything.
+The settle window between starting an agent session's provider and submitting
+its first prompt: the agent CLI has to draw its composer before typed text means
+anything.
+
+CDXC:SessionChatComposerReady 2026-08-26: this is no longer the wait itself, only
+the fallback the wait uses when the agent has no measured composer signature.
+An agent that does have one releases the prompt the moment its box appears.
 */
 pub(crate) const GXSERVER_WORKTREE_SESSION_FIRST_PROMPT_READY_DELAY_MS: u64 = 4_000;
 pub(crate) const GXSERVER_WORKTREE_SESSION_UNIQUE_TARGET_ATTEMPTS: usize = 8;
@@ -495,9 +499,17 @@ pub(crate) async fn start_worktree_session(
         worth discarding a working session and its worktree over, so it is
         logged rather than rolled back.
         */
-        tokio::time::sleep(Duration::from_millis(
-            GXSERVER_WORKTREE_SESSION_FIRST_PROMPT_READY_DELAY_MS,
-        ))
+        crate::session_chat_composer::wait_for_session_chat_composer_by_ids(
+            &state.paths,
+            state.metadata.server_id.as_str(),
+            &project_id,
+            &session_id,
+            crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                settle_ms: 0,
+                timeout_ms: crate::server::GXSERVER_PROVIDER_COMPOSER_WAIT_TIMEOUT_MS,
+                unknown_hold_ms: GXSERVER_WORKTREE_SESSION_FIRST_PROMPT_READY_DELAY_MS,
+            },
+        )
         .await;
         send_worktree_session_first_prompt(state, &project_id, &session_id, prompt);
     }
@@ -703,6 +715,16 @@ pub(crate) fn send_worktree_session_first_prompt(
     );
     prompt_params.insert("submit".to_string(), Value::Bool(true));
     prompt_params.insert("text".to_string(), Value::String(prompt.to_string()));
+    /*
+    Same origin tag as the automation prompt. The worktree first prompt is a
+    prompt the user composed in the app, so analytics attributes it to `chat`
+    (see the mapping table in `telemetry::capture`), not to the untagged
+    `gx sendMessage` default.
+    */
+    prompt_params.insert(
+        "diagnosticInputSource".to_string(),
+        Value::String("worktree-first-prompt".to_string()),
+    );
     if let Err(error) = dispatch_zmx_session_interaction_endpoint(
         &repository,
         "/api/sendSessionMessage",
