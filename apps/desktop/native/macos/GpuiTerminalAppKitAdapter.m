@@ -225,6 +225,13 @@ static BOOL GhostexGpuiTerminalShouldBypassTextInput(NSEvent *event,
          (flags & NSEventModifierFlagControl) != 0;
 }
 
+static BOOL GhostexGpuiTerminalHasBulkCommittedText(NSEvent *event) {
+  NSEventModifierFlags flags =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  flags &= ~(NSEventModifierFlagShift | NSEventModifierFlagCapsLock);
+  return flags == 0 && event.characters.length > 1;
+}
+
 static NSEvent *GhostexGpuiTerminalTranslatedTextInputEvent(
     NSEvent *event, NSEventModifierFlags translationFlags) {
   if (translationFlags == event.modifierFlags) {
@@ -636,6 +643,22 @@ GhostexGpuiTerminalDropInsertionText(NSArray<NSString *> *paths) {
   int consumedMods = GhostexGpuiTerminalConsumedTextInputMods(translationFlags);
   int action = event.isARepeat ? GhostexGpuiGhosttyActionRepeat
                                : GhostexGpuiGhosttyActionPress;
+
+  /*
+   CDXC:GPUITerminalBulkCommittedText 2026-08-26:
+   Dictation and automation can post one key event whose Unicode payload is
+   the complete committed string while its placeholder physical keycode is
+   zero. Passing that event through interpretKeyEvents makes AppKit translate
+   every character from keycode zero (the macOS A key), destroying the payload
+   before libghostty sees it. Bulk, otherwise-unmodified text has no truthful
+   physical-key identity, so deliver it through the committed-text key-event
+   path. Hardware keys and ordinary one-character events retain their native
+   keycode and continue through the normal keyDown/IME path below.
+   */
+  if (GhostexGpuiTerminalHasBulkCommittedText(event)) {
+    [self insertCommittedText:event.characters];
+    return;
+  }
 
   if (GhostexGpuiTerminalShouldBypassTextInput(event, [self hasMarkedText])) {
     if ([self sendKeyEvent:event

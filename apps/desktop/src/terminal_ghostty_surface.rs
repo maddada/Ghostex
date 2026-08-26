@@ -204,11 +204,6 @@ pub(crate) fn send_native_dropped_text_for_view(native_view: *mut c_void, bytes:
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn send_native_committed_text_for_view(native_view: *mut c_void, bytes: &[u8]) -> bool {
-    send_native_surface_text_for_view(native_view, bytes)
-}
-
-#[cfg(target_os = "macos")]
 pub(crate) fn send_native_prompt_editor_shortcut_for_view(native_view: *mut c_void) -> bool {
     send_native_surface_text_for_view(native_view, b"\x07")
 }
@@ -299,6 +294,7 @@ pub(crate) struct GhosttyKitFunctionTable {
     surface_set_content_scale: unsafe fn(ffi::ghostty_surface_t, f64, f64),
     surface_set_size: unsafe fn(ffi::ghostty_surface_t, u32, u32),
     surface_set_focus: unsafe fn(ffi::ghostty_surface_t, bool),
+    surface_set_occlusion: unsafe fn(ffi::ghostty_surface_t, bool),
     surface_size: unsafe fn(ffi::ghostty_surface_t) -> ffi::ghostty_surface_size_s,
     surface_needs_confirm_quit: unsafe fn(ffi::ghostty_surface_t) -> bool,
     surface_binding_action: unsafe fn(ffi::ghostty_surface_t, *const c_char, usize) -> bool,
@@ -333,7 +329,8 @@ pub(crate) struct GhosttyKitFunctionTable {
     surface_ime_point: unsafe fn(ffi::ghostty_surface_t, *mut f64, *mut f64, *mut f64, *mut f64),
     surface_request_close: unsafe fn(ffi::ghostty_surface_t),
     surface_complete_clipboard_request:
-        unsafe fn(ffi::ghostty_surface_t, *const c_char, *mut c_void, bool),
+        unsafe fn(ffi::ghostty_surface_t, *const ffi::ghostty_clipboard_complete_s, *mut c_void),
+    surface_deny_clipboard_request: unsafe fn(ffi::ghostty_surface_t, *mut c_void),
 }
 
 impl GhosttyKitFunctionTable {
@@ -367,6 +364,7 @@ impl GhosttyKitFunctionTable {
             surface_set_content_scale: production_ghostty_surface_set_content_scale,
             surface_set_size: production_ghostty_surface_set_size,
             surface_set_focus: production_ghostty_surface_set_focus,
+            surface_set_occlusion: production_ghostty_surface_set_occlusion,
             surface_size: production_ghostty_surface_size,
             surface_needs_confirm_quit: production_ghostty_surface_needs_confirm_quit,
             surface_binding_action: production_ghostty_surface_binding_action,
@@ -387,6 +385,7 @@ impl GhosttyKitFunctionTable {
             surface_request_close: production_ghostty_surface_request_close,
             surface_complete_clipboard_request:
                 production_ghostty_surface_complete_clipboard_request,
+            surface_deny_clipboard_request: production_ghostty_surface_deny_clipboard_request,
         }
     }
 }
@@ -502,6 +501,11 @@ unsafe fn production_ghostty_surface_set_size(
 #[cfg(target_os = "macos")]
 unsafe fn production_ghostty_surface_set_focus(surface: ffi::ghostty_surface_t, focused: bool) {
     unsafe { ffi::ghostty_surface_set_focus(surface, focused) }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn production_ghostty_surface_set_occlusion(surface: ffi::ghostty_surface_t, visible: bool) {
+    unsafe { ffi::ghostty_surface_set_occlusion(surface, visible) }
 }
 
 #[cfg(target_os = "macos")]
@@ -648,11 +652,18 @@ unsafe fn production_ghostty_surface_request_close(surface: ffi::ghostty_surface
 #[cfg(target_os = "macos")]
 unsafe fn production_ghostty_surface_complete_clipboard_request(
     surface: ffi::ghostty_surface_t,
-    data: *const c_char,
+    complete: *const ffi::ghostty_clipboard_complete_s,
     state: *mut c_void,
-    confirmed: bool,
 ) {
-    unsafe { ffi::ghostty_surface_complete_clipboard_request(surface, data, state, confirmed) }
+    unsafe { ffi::ghostty_surface_complete_clipboard_request(surface, complete, state) }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn production_ghostty_surface_deny_clipboard_request(
+    surface: ffi::ghostty_surface_t,
+    state: *mut c_void,
+) {
+    unsafe { ffi::ghostty_surface_deny_clipboard_request(surface, state) }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1620,7 +1631,7 @@ The low-level Ghostty clipboard path is surface-scoped only. Runtime app userdat
 */
 const GHOSTTY_RUNTIME_SUPPORTS_SELECTION_CLIPBOARD: bool = false;
 const GHOSTTY_RUNTIME_CLIPBOARD_TEXT_PLAIN_MIME: &[u8] = b"text/plain";
-const GHOSTTY_RUNTIME_EMPTY_CLIPBOARD_C_STRING: &[u8] = b"\0";
+const GHOSTTY_RUNTIME_CLIPBOARD_TEXT_PLAIN_C_STRING: &[u8] = b"text/plain\0";
 
 fn runtime_config_for_state(state: &GhosttyRuntimeCallbackState) -> ffi::ghostty_runtime_config_s {
     ffi::ghostty_runtime_config_s {
@@ -1739,36 +1750,47 @@ unsafe extern "C" fn ghostty_runtime_read_clipboard_cb(
     userdata: *mut c_void,
     clipboard: ffi::ghostty_clipboard_e,
     state: *mut c_void,
-) -> bool {
+    mimes: *const *const c_char,
+    mimes_len: usize,
+    list: bool,
+) -> ffi::ghostty_clipboard_read_result_e {
     if clipboard != ffi::GHOSTTY_CLIPBOARD_STANDARD || state.is_null() {
-        return false;
+        return ffi::GHOSTTY_CLIPBOARD_READ_UNSUPPORTED;
+    }
+    if list || !(unsafe { runtime_clipboard_requests_text_plain(mimes, mimes_len) }) {
+        return ffi::GHOSTTY_CLIPBOARD_READ_UNAVAILABLE;
     }
     let Some(token) = registered_surface_close_token_from_userdata(userdata) else {
-        return false;
+        return ffi::GHOSTTY_CLIPBOARD_READ_UNSUPPORTED;
     };
-    unsafe { token.as_ref().enqueue_runtime_clipboard_read(state) }
+    if unsafe { token.as_ref().enqueue_runtime_clipboard_read(state) } {
+        ffi::GHOSTTY_CLIPBOARD_READ_STARTED
+    } else {
+        ffi::GHOSTTY_CLIPBOARD_READ_UNAVAILABLE
+    }
 }
 
 unsafe extern "C" fn ghostty_runtime_confirm_read_clipboard_cb(
     userdata: *mut c_void,
-    content: *const c_char,
+    confirm: *const ffi::ghostty_clipboard_confirm_s,
     state: *mut c_void,
     request: ffi::ghostty_clipboard_request_e,
 ) {
-    if content.is_null()
-        || state.is_null()
-        || !runtime_clipboard_confirm_read_request_supported(request)
-    {
-        return;
-    }
     let Some(token) = registered_surface_close_token_from_userdata(userdata) else {
         return;
     };
+    if confirm.is_null()
+        || state.is_null()
+        || !runtime_clipboard_confirm_read_request_supported(request)
+    {
+        unsafe { token.as_ref().deny_runtime_clipboard_request(state) };
+        return;
+    }
     unsafe {
         token
             .as_ref()
-            .complete_runtime_clipboard_request(content, state, true);
-    }
+            .complete_runtime_clipboard_confirmation(confirm, state)
+    };
 }
 
 unsafe extern "C" fn ghostty_runtime_write_clipboard_cb(
@@ -1829,7 +1851,8 @@ struct GhosttySurfaceCloseToken {
     close_state: AtomicU8,
     surface: AtomicPtr<c_void>,
     surface_complete_clipboard_request:
-        unsafe fn(ffi::ghostty_surface_t, *const c_char, *mut c_void, bool),
+        unsafe fn(ffi::ghostty_surface_t, *const ffi::ghostty_clipboard_complete_s, *mut c_void),
+    surface_deny_clipboard_request: unsafe fn(ffi::ghostty_surface_t, *mut c_void),
     runtime_clipboard_operations: Mutex<VecDeque<GhosttyRuntimeClipboardOperation>>,
     runtime_action_events: Mutex<VecDeque<GhosttyRuntimeActionEvent>>,
 }
@@ -1846,6 +1869,7 @@ impl GhosttySurfaceCloseToken {
             close_state: AtomicU8::new(GHOSTTY_SURFACE_CLOSE_STATE_NONE),
             surface: AtomicPtr::new(ptr::null_mut()),
             surface_complete_clipboard_request: functions.surface_complete_clipboard_request,
+            surface_deny_clipboard_request: functions.surface_deny_clipboard_request,
             runtime_clipboard_operations: Mutex::new(VecDeque::new()),
             runtime_action_events: Mutex::new(VecDeque::new()),
         }
@@ -1974,11 +1998,7 @@ impl GhosttySurfaceCloseToken {
         let operations = self.take_runtime_clipboard_operations();
         for operation in operations {
             if let GhosttyRuntimeClipboardOperation::ReadStandard { state } = operation {
-                self.complete_runtime_clipboard_request(
-                    empty_runtime_clipboard_c_string(),
-                    state,
-                    false,
-                );
+                self.deny_runtime_clipboard_request(state);
             }
         }
     }
@@ -1991,25 +2011,65 @@ impl GhosttySurfaceCloseToken {
     }
 
     fn complete_runtime_clipboard_read(&self, state: *mut c_void, text: Option<String>) {
-        let text = text.and_then(|text| CString::new(text).ok());
-        let data = text
-            .as_ref()
-            .map_or_else(empty_runtime_clipboard_c_string, |text| text.as_ptr());
-        self.complete_runtime_clipboard_request(data, state, false);
+        let text = text.map(String::into_bytes);
+        let content = text.as_ref().map(|bytes| ffi::ghostty_clipboard_content_s {
+            mime: GHOSTTY_RUNTIME_CLIPBOARD_TEXT_PLAIN_C_STRING
+                .as_ptr()
+                .cast(),
+            data: bytes.as_ptr().cast(),
+            len: bytes.len(),
+        });
+        let complete = ffi::ghostty_clipboard_complete_s {
+            contents: content
+                .as_ref()
+                .map_or(ptr::null(), |content| content as *const _),
+            contents_len: usize::from(content.is_some()),
+            available: ptr::null(),
+            available_len: 0,
+            confirmed: false,
+            remember: false,
+        };
+        self.complete_runtime_clipboard_request(&complete, state);
     }
 
     fn complete_runtime_clipboard_request(
         &self,
-        data: *const c_char,
+        complete: *const ffi::ghostty_clipboard_complete_s,
         state: *mut c_void,
-        confirmed: bool,
     ) {
         let Some(surface) = self.runtime_surface() else {
             return;
         };
         unsafe {
-            (self.surface_complete_clipboard_request)(surface, data, state, confirmed);
+            (self.surface_complete_clipboard_request)(surface, complete, state);
         }
+    }
+
+    unsafe fn complete_runtime_clipboard_confirmation(
+        &self,
+        confirm: *const ffi::ghostty_clipboard_confirm_s,
+        state: *mut c_void,
+    ) {
+        let Some(confirm) = (unsafe { confirm.as_ref() }) else {
+            self.deny_runtime_clipboard_request(state);
+            return;
+        };
+        let complete = ffi::ghostty_clipboard_complete_s {
+            contents: confirm.contents,
+            contents_len: confirm.contents_len,
+            available: confirm.available,
+            available_len: confirm.available_len,
+            confirmed: true,
+            remember: false,
+        };
+        self.complete_runtime_clipboard_request(&complete, state);
+    }
+
+    fn deny_runtime_clipboard_request(&self, state: *mut c_void) {
+        let Some(surface) = self.runtime_surface() else {
+            return;
+        };
+        unsafe { (self.surface_deny_clipboard_request)(surface, state) };
     }
 
     fn consume_confirmed_close_requested(&self) -> bool {
@@ -2094,15 +2154,27 @@ fn registered_surface_close_token_from_userdata(
     if is_registered { Some(token) } else { None }
 }
 
-fn empty_runtime_clipboard_c_string() -> *const c_char {
-    GHOSTTY_RUNTIME_EMPTY_CLIPBOARD_C_STRING.as_ptr().cast()
-}
-
 fn runtime_clipboard_confirm_read_request_supported(
     request: ffi::ghostty_clipboard_request_e,
 ) -> bool {
     request == ffi::GHOSTTY_CLIPBOARD_REQUEST_PASTE
         || request == ffi::GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ
+        || request == ffi::GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE
+        || request == ffi::GHOSTTY_CLIPBOARD_REQUEST_KITTY_READ
+        || request == ffi::GHOSTTY_CLIPBOARD_REQUEST_KITTY_WRITE
+}
+
+unsafe fn runtime_clipboard_requests_text_plain(mimes: *const *const c_char, len: usize) -> bool {
+    if mimes.is_null() || len == 0 {
+        return false;
+    }
+    unsafe { std::slice::from_raw_parts(mimes, len) }
+        .iter()
+        .copied()
+        .filter(|mime| !mime.is_null())
+        .any(|mime| {
+            unsafe { CStr::from_ptr(mime) }.to_bytes() == GHOSTTY_RUNTIME_CLIPBOARD_TEXT_PLAIN_MIME
+        })
 }
 
 unsafe fn runtime_clipboard_text_plain_content(
@@ -2120,8 +2192,8 @@ unsafe fn runtime_clipboard_text_plain_content(
         if mime.to_bytes() != GHOSTTY_RUNTIME_CLIPBOARD_TEXT_PLAIN_MIME {
             continue;
         }
-        let data = unsafe { CStr::from_ptr(entry.data) };
-        let Ok(text) = data.to_str() else {
+        let data = unsafe { std::slice::from_raw_parts(entry.data.cast::<u8>(), entry.len) };
+        let Ok(text) = std::str::from_utf8(data) else {
             continue;
         };
         if text.is_empty() {
@@ -2314,6 +2386,7 @@ pub(crate) struct GhosttySurfaceOwner<SlotId = AgentsTerminalBodyMountSlotId> {
     latest_scale_factor: Option<GhosttySurfaceScaleFactor>,
     latest_pixel_size: Option<GhosttySurfacePixelSize>,
     latest_focus_state: Option<bool>,
+    latest_occlusion_state: bool,
 }
 
 impl<SlotId> GhosttySurfaceOwner<SlotId>
@@ -2340,6 +2413,7 @@ where
             latest_scale_factor: None,
             latest_pixel_size: None,
             latest_focus_state: None,
+            latest_occlusion_state: true,
         })
     }
 
@@ -2387,6 +2461,7 @@ where
             latest_scale_factor: owner.latest_scale_factor,
             latest_pixel_size: owner.latest_pixel_size,
             latest_focus_state: None,
+            latest_occlusion_state: owner.latest_occlusion_state,
         }
     }
 
@@ -2410,6 +2485,16 @@ where
             (self.functions.surface_set_focus)(self.as_raw(), focused);
         }
         self.latest_focus_state = Some(focused);
+    }
+
+    pub(crate) fn set_occlusion(&mut self, visible: bool) {
+        if self.latest_occlusion_state == visible {
+            return;
+        }
+        unsafe {
+            (self.functions.surface_set_occlusion)(self.as_raw(), visible);
+        }
+        self.latest_occlusion_state = visible;
     }
 
     pub(crate) fn surface_size(&self) -> ffi::ghostty_surface_size_s {
@@ -2713,6 +2798,7 @@ impl StartupGhosttySurfaceOwner {
             latest_scale_factor: startup_owner.latest_scale_factor,
             latest_pixel_size: startup_owner.latest_pixel_size,
             latest_focus_state: None,
+            latest_occlusion_state: true,
         }
     }
 

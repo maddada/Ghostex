@@ -89,11 +89,20 @@ pub mod ffi {
     pub type ghostty_clipboard_e = c_int;
     pub const GHOSTTY_CLIPBOARD_STANDARD: ghostty_clipboard_e = 0;
     pub const GHOSTTY_CLIPBOARD_SELECTION: ghostty_clipboard_e = 1;
+    pub const GHOSTTY_CLIPBOARD_PRIMARY: ghostty_clipboard_e = 2;
 
     pub type ghostty_clipboard_request_e = c_int;
     pub const GHOSTTY_CLIPBOARD_REQUEST_PASTE: ghostty_clipboard_request_e = 0;
     pub const GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ: ghostty_clipboard_request_e = 1;
     pub const GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE: ghostty_clipboard_request_e = 2;
+    pub const GHOSTTY_CLIPBOARD_REQUEST_KITTY_READ: ghostty_clipboard_request_e = 3;
+    pub const GHOSTTY_CLIPBOARD_REQUEST_KITTY_WRITE: ghostty_clipboard_request_e = 4;
+    pub const GHOSTTY_CLIPBOARD_REQUEST_LIST: ghostty_clipboard_request_e = 5;
+
+    pub type ghostty_clipboard_read_result_e = c_int;
+    pub const GHOSTTY_CLIPBOARD_READ_STARTED: ghostty_clipboard_read_result_e = 0;
+    pub const GHOSTTY_CLIPBOARD_READ_UNAVAILABLE: ghostty_clipboard_read_result_e = 1;
+    pub const GHOSTTY_CLIPBOARD_READ_UNSUPPORTED: ghostty_clipboard_read_result_e = 2;
 
     pub type ghostty_target_tag_e = c_int;
     pub type ghostty_action_tag_e = c_int;
@@ -118,6 +127,29 @@ pub mod ffi {
     pub struct ghostty_clipboard_content_s {
         pub mime: *const c_char,
         pub data: *const c_char,
+        pub len: usize,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    pub struct ghostty_clipboard_complete_s {
+        pub contents: *const ghostty_clipboard_content_s,
+        pub contents_len: usize,
+        pub available: *const *const c_char,
+        pub available_len: usize,
+        pub confirmed: bool,
+        pub remember: bool,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    pub struct ghostty_clipboard_confirm_s {
+        pub contents: *const ghostty_clipboard_content_s,
+        pub contents_len: usize,
+        pub available: *const *const c_char,
+        pub available_len: usize,
+        pub name: *const c_char,
+        pub can_remember: bool,
     }
 
     #[repr(C)]
@@ -471,10 +503,23 @@ pub mod ffi {
     }
 
     pub type ghostty_runtime_wakeup_cb = Option<unsafe extern "C" fn(*mut c_void)>;
-    pub type ghostty_runtime_read_clipboard_cb =
-        Option<unsafe extern "C" fn(*mut c_void, ghostty_clipboard_e, *mut c_void) -> bool>;
+    pub type ghostty_runtime_read_clipboard_cb = Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            ghostty_clipboard_e,
+            *mut c_void,
+            *const *const c_char,
+            usize,
+            bool,
+        ) -> ghostty_clipboard_read_result_e,
+    >;
     pub type ghostty_runtime_confirm_read_clipboard_cb = Option<
-        unsafe extern "C" fn(*mut c_void, *const c_char, *mut c_void, ghostty_clipboard_request_e),
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const ghostty_clipboard_confirm_s,
+            *mut c_void,
+            ghostty_clipboard_request_e,
+        ),
     >;
     pub type ghostty_runtime_write_clipboard_cb = Option<
         unsafe extern "C" fn(
@@ -564,6 +609,7 @@ pub mod ffi {
         pub fn ghostty_surface_set_content_scale(surface: ghostty_surface_t, x: f64, y: f64);
         pub fn ghostty_surface_set_size(surface: ghostty_surface_t, width: u32, height: u32);
         pub fn ghostty_surface_set_focus(surface: ghostty_surface_t, focused: bool);
+        pub fn ghostty_surface_set_occlusion(surface: ghostty_surface_t, visible: bool);
         pub fn ghostty_surface_size(surface: ghostty_surface_t) -> ghostty_surface_size_s;
         pub fn ghostty_surface_needs_confirm_quit(surface: ghostty_surface_t) -> bool;
         pub fn ghostty_surface_binding_action(
@@ -620,9 +666,12 @@ pub mod ffi {
         pub fn ghostty_surface_request_close(surface: ghostty_surface_t);
         pub fn ghostty_surface_complete_clipboard_request(
             surface: ghostty_surface_t,
-            data: *const c_char,
+            complete: *const ghostty_clipboard_complete_s,
             state: *mut c_void,
-            confirmed: bool,
+        );
+        pub fn ghostty_surface_deny_clipboard_request(
+            surface: ghostty_surface_t,
+            state: *mut c_void,
         );
     }
 }

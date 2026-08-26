@@ -1563,8 +1563,8 @@ pub(crate) fn resolve_current() -> Result<ResolvedWindowsTerminalBackend, String
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn prepare_gxserver_for_current_settings(
-) -> Result<ResolvedWindowsTerminalBackend, String> {
+pub(crate) fn prepare_gxserver_for_current_settings()
+-> Result<ResolvedWindowsTerminalBackend, String> {
     platform::prepare_gxserver(current_preference(), &mut |_| {})
 }
 

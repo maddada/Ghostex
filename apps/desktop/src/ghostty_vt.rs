@@ -44,6 +44,9 @@ pub mod ffi {
     pub const GHOSTTY_INVALID_VALUE: GhosttyResult = -2;
     pub const GHOSTTY_OUT_OF_SPACE: GhosttyResult = -3;
     pub const GHOSTTY_NO_VALUE: GhosttyResult = -4;
+    pub const GHOSTTY_IO_ERROR: GhosttyResult = -5;
+    pub const GHOSTTY_LIMIT_EXCEEDED: GhosttyResult = -6;
+    pub const GHOSTTY_REJECTED: GhosttyResult = -7;
 
     pub type GhosttyTerminal = *mut c_void;
     pub type GhosttyRenderState = *mut c_void;
@@ -75,6 +78,8 @@ pub mod ffi {
     pub const GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE: GhosttyRenderStateData = 14;
     pub const GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X: GhosttyRenderStateData = 15;
     pub const GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y: GhosttyRenderStateData = 16;
+    pub const GHOSTTY_RENDER_STATE_DATA_CURSOR: GhosttyRenderStateData = 18;
+    pub const GHOSTTY_RENDER_STATE_DATA_COLORS: GhosttyRenderStateData = 19;
 
     pub type GhosttyRenderStateOption = c_int;
     pub const GHOSTTY_RENDER_STATE_OPTION_DIRTY: GhosttyRenderStateOption = 0;
@@ -83,6 +88,7 @@ pub mod ffi {
     pub const GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY: GhosttyRenderStateRowData = 1;
     pub const GHOSTTY_RENDER_STATE_ROW_DATA_RAW: GhosttyRenderStateRowData = 2;
     pub const GHOSTTY_RENDER_STATE_ROW_DATA_CELLS: GhosttyRenderStateRowData = 3;
+    pub const GHOSTTY_RENDER_STATE_ROW_DATA_CELLS_RAW: GhosttyRenderStateRowData = 5;
 
     pub type GhosttyRenderStateRowOption = c_int;
     pub const GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY: GhosttyRenderStateRowOption = 0;
@@ -210,6 +216,8 @@ pub mod ffi {
     pub const GHOSTTY_TERMINAL_OPT_COLOR_PALETTE: GhosttyTerminalOption = 14;
     pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE: GhosttyTerminalOption = 26;
     pub const GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES: GhosttyTerminalOption = 27;
+    pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ: GhosttyTerminalOption = 38;
+    pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES: GhosttyTerminalOption = 39;
 
     #[repr(C)]
     #[derive(Clone, Copy, Debug)]
@@ -228,6 +236,7 @@ pub mod ffi {
     pub const GHOSTTY_TERMINAL_DATA_TITLE: GhosttyTerminalData = 12;
     pub const GHOSTTY_TERMINAL_DATA_PWD: GhosttyTerminalData = 13;
     pub const GHOSTTY_TERMINAL_DATA_MODE: GhosttyTerminalData = 37;
+    pub const GHOSTTY_TERMINAL_DATA_CLIPBOARD_WRITE_MAX_BYTES: GhosttyTerminalData = 40;
 
     pub type GhosttyTerminalScreen = c_int;
     pub const GHOSTTY_TERMINAL_SCREEN_PRIMARY: GhosttyTerminalScreen = 0;
@@ -244,11 +253,13 @@ pub mod ffi {
     pub const GHOSTTY_SCROLL_VIEWPORT_TOP: GhosttyTerminalScrollViewportTag = 0;
     pub const GHOSTTY_SCROLL_VIEWPORT_BOTTOM: GhosttyTerminalScrollViewportTag = 1;
     pub const GHOSTTY_SCROLL_VIEWPORT_DELTA: GhosttyTerminalScrollViewportTag = 2;
+    pub const GHOSTTY_SCROLL_VIEWPORT_ROW: GhosttyTerminalScrollViewportTag = 3;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub union GhosttyTerminalScrollViewportValue {
         pub delta: isize,
+        pub row: usize,
         pub _padding: [u64; 2],
     }
 
@@ -557,12 +568,17 @@ pub mod ffi {
     /// destination of a program-initiated clipboard write.
     pub type GhosttyClipboardLocation = c_int;
     pub const GHOSTTY_CLIPBOARD_LOCATION_STANDARD: GhosttyClipboardLocation = 0;
+    pub const GHOSTTY_CLIPBOARD_LOCATION_SELECTION: GhosttyClipboardLocation = 1;
+    pub const GHOSTTY_CLIPBOARD_LOCATION_PRIMARY: GhosttyClipboardLocation = 2;
 
-    /// terminal.h `GhosttyClipboardWriteResult`. Protocols without write
-    /// acknowledgements (OSC 52, OSC 1337 Copy) ignore the result.
+    /// terminal.h `GhosttyClipboardWriteResult`.
     pub type GhosttyClipboardWriteResult = c_int;
     pub const GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS: GhosttyClipboardWriteResult = 0;
+    pub const GHOSTTY_CLIPBOARD_WRITE_RESULT_DENIED: GhosttyClipboardWriteResult = 1;
     pub const GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED: GhosttyClipboardWriteResult = 2;
+    pub const GHOSTTY_CLIPBOARD_WRITE_RESULT_BUSY: GhosttyClipboardWriteResult = 3;
+    pub const GHOSTTY_CLIPBOARD_WRITE_RESULT_INVALID_DATA: GhosttyClipboardWriteResult = 4;
+    pub const GHOSTTY_CLIPBOARD_WRITE_RESULT_IO_ERROR: GhosttyClipboardWriteResult = 5;
 
     /// terminal.h `GhosttyClipboardContent`: one MIME representation in a
     /// clipboard write. Both strings are borrowed and only valid for the
@@ -574,26 +590,43 @@ pub mod ffi {
         pub data: GhosttyString,
     }
 
-    /// Sized struct (terminal.h `GhosttyClipboardWrite`): a semantic, atomic
-    /// clipboard write. `contents_len == 0` requests clearing the
-    /// destination. Borrowed for the duration of the callback.
+    /// Sized reply for terminal.h `GhosttyClipboardWrite`.
+    #[repr(C)]
+    pub struct GhosttyClipboardWriteReply {
+        pub size: usize,
+        pub result: GhosttyClipboardWriteResult,
+        pub remember: bool,
+    }
+
+    pub type GhosttyClipboardWriteReplyFn = Option<
+        unsafe extern "C" fn(
+            write: *const GhosttyClipboardWrite,
+            reply: *const GhosttyClipboardWriteReply,
+        ),
+    >;
+
+    /// Sized terminal.h `GhosttyClipboardWrite`: a semantic, atomic clipboard
+    /// write which must be answered through `reply` before the callback returns.
     #[repr(C)]
     pub struct GhosttyClipboardWrite {
         pub size: usize,
         pub location: GhosttyClipboardLocation,
         pub contents: *const GhosttyClipboardContent,
         pub contents_len: usize,
+        pub name: GhosttyString,
+        pub granted: bool,
+        pub can_remember: bool,
+        pub ctx: *const c_void,
+        pub reply: GhosttyClipboardWriteReplyFn,
     }
 
-    /// terminal.h `GhosttyTerminalClipboardWriteFn`: invoked synchronously
-    /// from feed() when the running program performs a clipboard write
-    /// (OSC 52, OSC 1337 Copy). Read requests are never forwarded.
+    /// terminal.h `GhosttyTerminalClipboardWriteFn`: invoked synchronously and
+    /// answered through `GhosttyClipboardWrite::reply` before returning.
     pub type GhosttyTerminalClipboardWriteFn = unsafe extern "C" fn(
         terminal: GhosttyTerminal,
         userdata: *mut c_void,
         write: *const GhosttyClipboardWrite,
-    )
-        -> GhosttyClipboardWriteResult;
+    );
 
     pub type GhosttyStyleColorTag = c_int;
     pub const GHOSTTY_STYLE_COLOR_NONE: GhosttyStyleColorTag = 0;
@@ -710,11 +743,6 @@ pub mod ffi {
             option: GhosttyRenderStateOption,
             value: *const c_void,
         ) -> GhosttyResult;
-        pub fn ghostty_render_state_colors_get(
-            state: GhosttyRenderState,
-            out_colors: *mut GhosttyRenderStateColors,
-        ) -> GhosttyResult;
-
         pub fn ghostty_render_state_row_iterator_new(
             allocator: *const c_void,
             out_iterator: *mut GhosttyRenderStateRowIterator,
@@ -1522,16 +1550,40 @@ unsafe extern "C" fn clipboard_write_trampoline(
     _terminal: ffi::GhosttyTerminal,
     userdata: *mut c_void,
     write: *const ffi::GhosttyClipboardWrite,
-) -> ffi::GhosttyClipboardWriteResult {
+) {
     let callbacks = unsafe { &mut *userdata.cast::<VtHostCallbacks>() };
-    let Some(clipboard_write) = callbacks.clipboard_write.as_mut() else {
-        return ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+    let result = if let Some(clipboard_write) = callbacks.clipboard_write.as_mut() {
+        if let Some(text) = unsafe { clipboard_write_standard_text_plain(write) } {
+            clipboard_write(text);
+            ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS
+        } else {
+            ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED
+        }
+    } else {
+        ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED
     };
-    let Some(text) = (unsafe { clipboard_write_standard_text_plain(write) }) else {
-        return ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+    unsafe { reply_to_clipboard_write(write, result) };
+}
+
+unsafe fn reply_to_clipboard_write(
+    write: *const ffi::GhosttyClipboardWrite,
+    result: ffi::GhosttyClipboardWriteResult,
+) {
+    let Some(write_ref) = (unsafe { write.as_ref() }) else {
+        return;
     };
-    clipboard_write(text);
-    ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS
+    if write_ref.size < std::mem::size_of::<ffi::GhosttyClipboardWrite>() {
+        return;
+    }
+    let Some(reply_fn) = write_ref.reply else {
+        return;
+    };
+    let reply = ffi::GhosttyClipboardWriteReply {
+        size: std::mem::size_of::<ffi::GhosttyClipboardWriteReply>(),
+        result,
+        remember: false,
+    };
+    unsafe { reply_fn(write, &reply) };
 }
 
 /// Copy the non-empty `text/plain` representation out of a standard-clipboard
@@ -1691,7 +1743,13 @@ impl VtRenderState {
     /// 256-color palette.
     pub fn colors(&self) -> Result<ffi::GhosttyRenderStateColors, VtError> {
         let mut colors = ffi::GhosttyRenderStateColors::init_sized();
-        check(unsafe { ffi::ghostty_render_state_colors_get(self.raw, &mut colors) })?;
+        check(unsafe {
+            ffi::ghostty_render_state_get(
+                self.raw,
+                ffi::GHOSTTY_RENDER_STATE_DATA_COLORS,
+                (&mut colors as *mut ffi::GhosttyRenderStateColors).cast(),
+            )
+        })?;
         Ok(colors)
     }
 
