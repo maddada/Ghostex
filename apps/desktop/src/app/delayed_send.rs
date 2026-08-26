@@ -596,23 +596,25 @@ impl GhostexGpuiApp {
             return;
         }
         self.command_delayed_send_countdown_ticker_active = true;
-        cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(Duration::from_secs(1)).await;
-            let keep_running = this
-                .update(cx, |this, cx| {
-                    if this.command_delayed_send_timers.is_empty() {
-                        this.command_delayed_send_countdown_ticker_active = false;
-                        cx.notify();
-                        false
-                    } else {
-                        this.refresh_sidebar_command_pane_sessions_if_changed(cx);
-                        cx.notify();
-                        true
-                    }
-                })
-                .unwrap_or(false);
-            if !keep_running {
-                break;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                let keep_running = this
+                    .update(cx, |this, cx| {
+                        if this.command_delayed_send_timers.is_empty() {
+                            this.command_delayed_send_countdown_ticker_active = false;
+                            cx.notify();
+                            false
+                        } else {
+                            this.refresh_sidebar_command_pane_sessions_if_changed(cx);
+                            cx.notify();
+                            true
+                        }
+                    })
+                    .unwrap_or(false);
+                if !keep_running {
+                    break;
+                }
             }
         })
         .detach();
@@ -632,23 +634,25 @@ impl GhostexGpuiApp {
             return;
         }
         self.command_delayed_send_persistence_ticker_active = true;
-        cx.spawn(async move |this, cx| loop {
-            cx.background_executor()
-                .timer(COMMAND_PANE_DELAYED_SEND_PERSIST_INTERVAL)
-                .await;
-            let keep_running = this
-                .update(cx, |this, _cx| {
-                    if this.command_delayed_send_timers.is_empty() {
-                        this.command_delayed_send_persistence_ticker_active = false;
-                        false
-                    } else {
-                        this.persist_shell_layout_state();
-                        true
-                    }
-                })
-                .unwrap_or(false);
-            if !keep_running {
-                break;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(COMMAND_PANE_DELAYED_SEND_PERSIST_INTERVAL)
+                    .await;
+                let keep_running = this
+                    .update(cx, |this, _cx| {
+                        if this.command_delayed_send_timers.is_empty() {
+                            this.command_delayed_send_persistence_ticker_active = false;
+                            false
+                        } else {
+                            this.persist_shell_layout_state();
+                            true
+                        }
+                    })
+                    .unwrap_or(false);
+                if !keep_running {
+                    break;
+                }
             }
         })
         .detach();
@@ -1146,17 +1150,19 @@ impl GhostexGpuiApp {
         generation: u64,
         cx: &mut gpui::Context<Self>,
     ) {
-        cx.spawn(async move |this, cx| loop {
-            cx.background_executor()
-                .timer(GPUI_AGENTS_SEND_WHEN_STOPPED_POLL_INTERVAL)
-                .await;
-            let keep_watching = this
-                .update(cx, |this, cx| {
-                    this.poll_gpui_agents_send_when_stopped(session_id, generation, cx)
-                })
-                .unwrap_or(false);
-            if !keep_watching {
-                break;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(GPUI_AGENTS_SEND_WHEN_STOPPED_POLL_INTERVAL)
+                    .await;
+                let keep_watching = this
+                    .update(cx, |this, cx| {
+                        this.poll_gpui_agents_send_when_stopped(session_id, generation, cx)
+                    })
+                    .unwrap_or(false);
+                if !keep_watching {
+                    break;
+                }
             }
         })
         .detach();
@@ -1214,20 +1220,22 @@ impl GhostexGpuiApp {
             return;
         }
         self.agents_delayed_send_countdown_ticker_active = true;
-        cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(Duration::from_secs(1)).await;
-            let keep_ticking = this
-                .update(cx, |this, cx| {
-                    if this.agents_delayed_send_timers.is_empty() {
-                        this.agents_delayed_send_countdown_ticker_active = false;
-                        return false;
-                    }
-                    this.refresh_sidebar_agents_delayed_sends_if_changed(cx);
-                    true
-                })
-                .unwrap_or(false);
-            if !keep_ticking {
-                break;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                let keep_ticking = this
+                    .update(cx, |this, cx| {
+                        if this.agents_delayed_send_timers.is_empty() {
+                            this.agents_delayed_send_countdown_ticker_active = false;
+                            return false;
+                        }
+                        this.refresh_sidebar_agents_delayed_sends_if_changed(cx);
+                        true
+                    })
+                    .unwrap_or(false);
+                if !keep_ticking {
+                    break;
+                }
             }
         })
         .detach();
@@ -1244,25 +1252,27 @@ impl GhostexGpuiApp {
             return;
         }
         self.agents_delayed_send_persistence_ticker_active = true;
-        cx.spawn(async move |this, cx| loop {
-            cx.background_executor()
-                .timer(COMMAND_PANE_DELAYED_SEND_PERSIST_INTERVAL)
-                .await;
-            let keep_running = this
-                .update(cx, |this, _cx| {
-                    if this.agents_delayed_send_timers.is_empty()
-                        && this.agents_send_when_stopped_watchers.is_empty()
-                    {
-                        this.agents_delayed_send_persistence_ticker_active = false;
-                        false
-                    } else {
-                        this.persist_shell_layout_state();
-                        true
-                    }
-                })
-                .unwrap_or(false);
-            if !keep_running {
-                break;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(COMMAND_PANE_DELAYED_SEND_PERSIST_INTERVAL)
+                    .await;
+                let keep_running = this
+                    .update(cx, |this, _cx| {
+                        if this.agents_delayed_send_timers.is_empty()
+                            && this.agents_send_when_stopped_watchers.is_empty()
+                        {
+                            this.agents_delayed_send_persistence_ticker_active = false;
+                            false
+                        } else {
+                            this.persist_shell_layout_state();
+                            true
+                        }
+                    })
+                    .unwrap_or(false);
+                if !keep_running {
+                    break;
+                }
             }
         })
         .detach();
@@ -1725,23 +1735,25 @@ impl GhostexGpuiApp {
             return;
         }
         self.command_close_after_done_countdown_ticker_active = true;
-        cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(Duration::from_secs(1)).await;
-            let keep_running = this
-                .update(cx, |this, cx| {
-                    if this.command_close_after_done_timers.is_empty() {
-                        this.command_close_after_done_countdown_ticker_active = false;
-                        cx.notify();
-                        false
-                    } else {
-                        this.refresh_sidebar_command_pane_sessions_if_changed(cx);
-                        cx.notify();
-                        true
-                    }
-                })
-                .unwrap_or(false);
-            if !keep_running {
-                break;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                let keep_running = this
+                    .update(cx, |this, cx| {
+                        if this.command_close_after_done_timers.is_empty() {
+                            this.command_close_after_done_countdown_ticker_active = false;
+                            cx.notify();
+                            false
+                        } else {
+                            this.refresh_sidebar_command_pane_sessions_if_changed(cx);
+                            cx.notify();
+                            true
+                        }
+                    })
+                    .unwrap_or(false);
+                if !keep_running {
+                    break;
+                }
             }
         })
         .detach();
@@ -1987,7 +1999,9 @@ impl GhostexGpuiApp {
             "revealExportedTranscript" => {
                 self.reveal_gpui_exported_transcript(cx);
             }
-            "startExportedTranscriptConversation" | "runExportSessionTranscript" => {
+            "cancelExportSessionTranscript"
+            | "startExportedTranscriptConversation"
+            | "runExportSessionTranscript" => {
                 self.forward_gpui_export_transcript_modal_command_to_sidebar(
                     command_type,
                     command,
@@ -2754,6 +2768,16 @@ impl GhostexGpuiApp {
                     .get("sessionId")
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string);
+                let tag_ids = command
+                    .get("tagIds")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(serde_json::Value::as_str)
+                            .map(str::to_string)
+                            .collect::<Vec<_>>()
+                    });
                 self.run_gpui_app_modal_sidebar_status_task(
                     move || {
                         gpui_save_stashed_prompt_result_message(
@@ -2762,6 +2786,7 @@ impl GhostexGpuiApp {
                             prompt_id.as_deref(),
                             project_id.as_deref(),
                             session_id.as_deref(),
+                            tag_ids.as_deref(),
                         )
                     },
                     cx,
