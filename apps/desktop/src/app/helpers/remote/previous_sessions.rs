@@ -449,6 +449,7 @@ pub(crate) fn gpui_save_stashed_prompt_result_message(
     prompt_id: Option<&str>,
     project_id: Option<&str>,
     session_id: Option<&str>,
+    tag_ids: Option<&[String]>,
 ) -> serde_json::Value {
     let mut params = serde_json::Map::new();
     params.insert(
@@ -472,6 +473,9 @@ pub(crate) fn gpui_save_stashed_prompt_result_message(
             "sessionId".to_string(),
             serde_json::Value::String(session_id.to_string()),
         );
+    }
+    if let Some(tag_ids) = tag_ids {
+        params.insert("tagIds".to_string(), serde_json::json!(tag_ids));
     }
     let prompt = gpui_gxserver_rpc_result(
         "/api/saveStashedPrompt",
