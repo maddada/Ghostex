@@ -2635,6 +2635,6 @@ impl GhostexGpuiApp {
         self.sync_agents_terminal_surface_host(scale_factor, cx);
         self.sync_command_terminal_surface_host(scale_factor, cx);
         self.sync_project_editor_companion_terminal_surface_host(scale_factor, cx);
-        self.sync_gpui_engine_agent_actions_visibility(cx);
+        self.sync_gpui_engine_agents_chat_eligibility(cx);
     }
 }

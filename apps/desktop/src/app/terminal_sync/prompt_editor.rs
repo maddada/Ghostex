@@ -2,7 +2,7 @@
 // lines, itself moved verbatim out of main.rs) into descriptively named
 // modules; pure move, no logic changes. Cluster: stash-prompt requests, session-chat handoff, and the Monaco prompt-editor shortcut/attach/deliver/report pipeline.
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use gpui::Window;
 
@@ -83,20 +83,11 @@ impl GhostexGpuiApp {
         CDXC:SessionChatViewSwitch 2026-08-21:
         Show Chat before asking the daemon to copy the terminal draft. Agent
         startup prompts, permission prompts, shell state, and older CLIs may
-        not answer Ctrl+G; none of those terminal states may veto the view
-        switch. The daemon handshake is already loss-safe: success clears and
-        delivers the captured draft, while failure leaves it in the parked
-        terminal.
+        not answer their prompt-editor command; none of those terminal states
+        may veto the view switch. The daemon handshake is already loss-safe:
+        success clears and delivers the captured draft, while failure leaves it
+        in the parked terminal.
         */
-        if self.agents_session_chat_transcript_agent(shell_session_id) == Some("grok") {
-            self.dispatch_gpui_app_modal_toast(
-                "info",
-                "Note: Prompt Text is left in the CLI for Grok Build (limitation).",
-                "Please copy your prompt manually to the chat view.",
-                cx,
-            );
-            return;
-        }
         self.request_session_chat_draft_transfer(shell_session_id, cx);
     }
 
@@ -141,6 +132,16 @@ impl GhostexGpuiApp {
         runtime_session_id: AgentsTerminalRuntimeSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        if let GpuiEngineTerminalEventTarget::Agents(shell_session_id) = target
+            && self.agents_session_chat_transcript_agent(shell_session_id) == Some("grok")
+        {
+            self.send_grok_prompt_editor_command_to_gpui_engine_terminal(
+                shell_session_id,
+                runtime_session_id,
+                cx,
+            );
+            return;
+        }
         let remote_context = match target {
             GpuiEngineTerminalEventTarget::Agents(shell_session_id) => self
                 .remote_prompt_editor_context_for_shell_session(shell_session_id)
@@ -511,6 +512,25 @@ impl GhostexGpuiApp {
         view.update(cx, |view, cx| view.send_text_input("\u{7}", cx));
     }
 
+    /// Grok Build owns Ctrl+G for Tasks. Its prompt editor is a command-palette
+    /// action, so invoke the same Ctrl+P, `editor`, Enter sequence a user types.
+    pub(crate) fn send_grok_prompt_editor_command_to_gpui_engine_terminal(
+        &mut self,
+        shell_session_id: TerminalSessionId,
+        runtime_session_id: AgentsTerminalRuntimeSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(view) = self
+            .agents_gpui_engine_terminals
+            .get(&shell_session_id)
+            .filter(|record| record.runtime_session_id == runtime_session_id)
+            .map(|record| record.view.clone())
+        else {
+            return;
+        };
+        view.update(cx, |view, cx| view.send_text_input("\u{10}editor\r", cx));
+    }
+
     pub(crate) fn open_gpui_engine_terminal_action_url(
         &mut self,
         value: &str,
@@ -569,6 +589,14 @@ impl GhostexGpuiApp {
         } else {
             file_link_path
         };
+        if gpui_terminal_file_opens_with_os_default(&file_path)
+            && fs::metadata(&file_path).is_ok_and(|metadata| metadata.is_file())
+        {
+            if let Err(message) = gpui_open_path(&file_path) {
+                self.report_session_chat_file_open_failure(&message, cx);
+            }
+            return;
+        }
         let file_path = file_path.to_string_lossy().to_string();
         cx.spawn(async move |this, cx| {
             let _ = this.update_in(cx, |this, window, cx| {

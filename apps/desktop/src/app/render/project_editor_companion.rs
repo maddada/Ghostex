@@ -456,6 +456,15 @@ impl GhostexGpuiApp {
             .bg(workspace_terminal_placeholder_color())
             .when_some(search_bar, |this, search_bar| this.child(search_bar))
             .child(terminal_body)
+            // Companion terminals show Agents sessions and carried the same
+            // overlay cluster, so they get the same bare bottom bar, as a
+            // normal sibling below the body.
+            .when_some(
+                self.render_project_editor_companion_terminal_agent_action_bar(
+                    mode, session_id, cx,
+                ),
+                |this, bar| this.child(bar),
+            )
             .into_any_element()
     }
 

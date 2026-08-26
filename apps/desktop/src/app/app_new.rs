@@ -118,6 +118,7 @@ impl GhostexGpuiApp {
                 parked_agents_workspaces_by_project: shell_layout_state
                     .parked_agents_workspaces_by_project,
                 parked_agents_terminal_runtimes_by_project: HashMap::new(),
+                parked_agents_chat_runtimes_by_project: HashMap::new(),
                 project_switch_settling_until: None,
                 project_switch_pending_requests: Vec::new(),
                 project_switch_flush_scheduled: false,
@@ -132,7 +133,9 @@ impl GhostexGpuiApp {
                 browser_tabs: shell_layout_state.browser_tabs,
                 browser_tabs_project_id: shell_layout_state.browser_tabs_project_id,
                 parked_browser_tabs_by_project: shell_layout_state.parked_browser_tabs_by_project,
+                parked_browser_runtimes_by_project: HashMap::new(),
                 browser_tabs_project_epoch: 0,
+                browser_tabs_runtime_key: 0,
                 sidebar_browser_tabs_snapshot: String::new(),
                 sidebar_displayed_sessions_snapshot: String::new(),
                 pending_sidebar_browser_tab_reveal: None,
@@ -207,6 +210,8 @@ impl GhostexGpuiApp {
                     .local_workspace_session_mappings,
                 local_workspace_attach_pending: HashSet::new(),
                 agents_chat_mode_sessions: shell_layout_state.agents_chat_mode_sessions,
+                agents_terminal_action_bar_menu_session: None,
+                terminal_agent_bar_companion_focus_return: None,
                 agents_chat_auto_switch_observed_sessions: HashSet::new(),
                 agents_chat_auto_switch_preference: gpui_preferred_agent_interface_from_settings(
                     shared_settings_snapshot.object(),
