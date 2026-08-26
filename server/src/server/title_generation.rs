@@ -165,18 +165,29 @@ pub(crate) fn fork_initial_rename_target(
 pub(crate) fn schedule_fork_initial_rename(state: AppState, target: ForkInitialRenameTarget) {
     /*
     CDXC:GxserverForkTitles 2026-07-11:
-    Fork provider startup already owns the resumed CLI process. Give its prompt
-    editor the same four-second readiness window used by automated agent
-    prompts, then submit the provisional `Fork: <old title>` through zmx's
+    Fork provider startup already owns the resumed CLI process. Wait for its
+    composer, then submit the provisional `Fork: <old title>` through zmx's
     separate text/Enter path. Pi uses `/name`, Hermes Agent uses `/title`, and
     Codex and Claude use `/rename`.
     If the user has already sent the fork's first prompt, its generated-title
     job wins and this provisional rename is skipped.
+
+    CDXC:SessionChatComposerReady 2026-08-26: this used to be a blind four-second
+    sleep. A rename typed before the composer exists is not merely lost — the
+    slash command lands as literal text in whatever screen IS up.
     */
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(
-            GXSERVER_FORK_INITIAL_RENAME_READY_DELAY_MS,
-        ))
+        crate::session_chat_composer::wait_for_session_chat_composer_by_ids(
+            &state.paths,
+            state.metadata.server_id.as_str(),
+            &target.project_id,
+            &target.session_id,
+            crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                settle_ms: 0,
+                timeout_ms: GXSERVER_PROVIDER_COMPOSER_WAIT_TIMEOUT_MS,
+                unknown_hold_ms: GXSERVER_FORK_INITIAL_RENAME_READY_DELAY_MS,
+            },
+        )
         .await;
         let Ok(db) = open_gxserver_database(&state.paths) else {
             return;
@@ -326,11 +337,24 @@ pub(crate) fn schedule_first_user_input_draft(state: AppState, target: FirstUser
     draft then goes through zmx's text path with `submit: false`, so no Enter
     and no trailing carriage return is ever produced — the composer keeps the
     text staged for the user to write around.
+
+    CDXC:SessionChatComposerReady 2026-08-26: the readiness window is now a real
+    composer wait rather than a blind four-second sleep. Staging a draft into a
+    trust dialog types the user's text at it and then discards it on the next
+    repaint, with nothing anywhere to recover it from.
     */
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(
-            GXSERVER_FIRST_USER_INPUT_DRAFT_READY_DELAY_MS,
-        ))
+        crate::session_chat_composer::wait_for_session_chat_composer_by_ids(
+            &state.paths,
+            state.metadata.server_id.as_str(),
+            &target.project_id,
+            &target.session_id,
+            crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                settle_ms: 0,
+                timeout_ms: GXSERVER_PROVIDER_COMPOSER_WAIT_TIMEOUT_MS,
+                unknown_hold_ms: GXSERVER_FIRST_USER_INPUT_DRAFT_READY_DELAY_MS,
+            },
+        )
         .await;
         let Ok(db) = open_gxserver_database(&state.paths) else {
             return;
@@ -478,6 +502,7 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         Some("generateTitleAndName") => format!("/name {}", title.as_deref().ok_or(())?),
         _ => format!("/rename {}", title.as_deref().ok_or(())?),
     };
+    let uses_bare_rename = decision.strategy == Some("sendBareRenameCommand");
     {
         let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
@@ -494,6 +519,14 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         ) {
             return Ok(());
         }
+        let title_metadata_baseline = uses_bare_rename
+            .then(|| {
+                crate::agents::agent_metadata_title_observation(
+                    &state.paths.home_dir,
+                    &latest_session,
+                )
+            })
+            .flatten();
         /*
         CDXC:SessionChatSerializedWriters 2026-08-24:
         Command text, settle, and Enter are ONE queued job. They used to be two
@@ -509,25 +542,43 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         better of the two outcomes anyway — the alternative left `/rename …`
         sitting unsent in the user's composer. The re-check below still gates
         everything that is persisted.
+
+        CDXC:SessionChatSerializedWriters 2026-08-26:
+        The command lands on the SAME composer line the user types into, so the
+        job opens with the measured clear burst every other writer of that line
+        uses — as its own write, followed by the settle, because a burst glued
+        to the command text is inserted as literal text instead of read as kill
+        keys. This job used to carry no clear at all, so a draft in the composer
+        got `/rename …` appended to it and the rename was submitted as one
+        corrupted line. Discarding that residue is right here rather than merely
+        tolerable: the job is triggered by the user's FIRST prompt having just
+        been submitted, so the composer is expected empty and anything left on
+        it belongs to the prompt that already went out. No restore, for the same
+        reason.
         */
+        let mut auto_title_steps = crate::session_chat_send::build_agent_tui_clear_input_steps(
+            Some("auto-title-clear"),
+            &command_text,
+        );
+        auto_title_steps.extend([
+            crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                source: "auto-title-command".to_string(),
+                payload: command_text.clone(),
+            },
+            crate::session_chat_send::SessionChatSendStep::SleepMs(
+                GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS,
+            ),
+            crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                source: "auto-title-submit".to_string(),
+                payload: crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
+            },
+        ]);
         crate::session_chat_send::enqueue_session_write_sequence(
             &latest_session,
             &project_id,
             &session_id,
             "auto-title",
-            vec![
-                crate::session_chat_send::SessionChatSendStep::WriteFrom {
-                    source: "auto-title-command".to_string(),
-                    payload: command_text.clone(),
-                },
-                crate::session_chat_send::SessionChatSendStep::SleepMs(
-                    GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS,
-                ),
-                crate::session_chat_send::SessionChatSendStep::WriteFrom {
-                    source: "auto-title-submit".to_string(),
-                    payload: crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
-                },
-            ],
+            auto_title_steps,
         )
         .map_err(|_| ())?;
         /*
@@ -538,11 +589,20 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         NOTHING to its rollout for a command it intercepts, so without this row
         a session that renamed itself mid-conversation left no trace in chat.
         */
-        crate::session_chat_app_command::record_session_chat_app_command(
-            &project_id,
-            &session_id,
-            &command_text,
-        );
+        if uses_bare_rename {
+            crate::session_chat_app_command::record_session_chat_app_command_with_title_metadata_baseline(
+                &project_id,
+                &session_id,
+                &command_text,
+                title_metadata_baseline,
+            );
+        } else {
+            crate::session_chat_app_command::record_session_chat_app_command(
+                &project_id,
+                &session_id,
+                &command_text,
+            );
+        }
     }
 
     /*
@@ -1001,49 +1061,61 @@ pub(crate) async fn run_manual_session_title_generation_job(
         }
         /*
         CDXC:SessionChatSerializedWriters 2026-08-24:
-        Kill the in-progress composer draft, stage the rename command, submit
-        it, and yank the draft back — as ONE queued job. These were four
-        separate zmx dispatches spread across two `tokio::time::sleep`s, and the
-        first of them is a Ctrl+U: landing that between another sequence's paste
-        and its Enter deletes the user's message and submits an empty line. The
-        Ctrl+Y restore belongs to the same job for the same reason — nothing may
-        write to that input line while the user's draft is parked in the kill
-        ring.
+        Clear the composer, stage the rename command, and submit it — as ONE
+        queued job. These were separate zmx dispatches spread across
+        `tokio::time::sleep`s, and the first of them is a composer kill: landing
+        that between another sequence's paste and its Enter deletes the user's
+        message and submits an empty line.
 
         Like the auto-title job, folding gives up the mid-delay attempt re-check
         that used to gate the Enter; a staged `/rename …` left unsent would be
         worse than submitting it. The re-check below still gates persistence.
+
+        CDXC:SessionChatSerializedWriters 2026-08-26:
+        The clear is the measured burst now, and there is no Ctrl+Y restore.
+        Constraint: the command must reach an EMPTY composer, multi-line drafts
+        included. The single Ctrl+U this job used to send kills one logical
+        line, so a two-line draft left its first line in place and the rename
+        was submitted glued to it — which is exactly what the 2N-1 burst sized
+        for the command text (its own write, then the settle) fixes.
+
+        A burst and a Ctrl+Y are incompatible by construction: the yank returns
+        the LAST kill, so after 2N-1 kills it restores at most a fragment of a
+        multi-line draft, and after the trailing Ctrl+K kills it restores
+        nothing at all. Restoring a fragment is worse than not restoring, so the
+        yank is gone rather than left as decoration. Real preservation would
+        mean the Ctrl+G prompt-editor handshake
+        (`SessionChatSendStep::PreserveTerminalDraft`), and that is not usable
+        here: a CLI that does not answer it fails the step, which aborts the
+        rest of the sequence and would leave the session unrenamed for up to the
+        16s handshake timeout, and it publishes the draft as a user-facing Saved
+        Prompt. So this follows the chat-send policy instead — an app-owned
+        write owns the composer and discards residue, and terminal→chat view
+        switching stays the loss-safe path for text the user wants to keep.
         */
+        let mut manual_title_steps = crate::session_chat_send::build_agent_tui_clear_input_steps(
+            Some("manual-title-draft-kill"),
+            &command_text,
+        );
+        manual_title_steps.extend([
+            crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                source: "manual-title-command".to_string(),
+                payload: command_text.clone(),
+            },
+            crate::session_chat_send::SessionChatSendStep::SleepMs(
+                GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS,
+            ),
+            crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                source: "manual-title-submit".to_string(),
+                payload: crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
+            },
+        ]);
         crate::session_chat_send::enqueue_session_write_sequence(
             &latest_session,
             &project_id,
             &session_id,
             "manual-title",
-            vec![
-                crate::session_chat_send::SessionChatSendStep::WriteFrom {
-                    source: "manual-title-draft-kill".to_string(),
-                    payload: crate::session_chat_send::AGENT_TUI_CLEAR_INPUT_LINE.to_string(),
-                },
-                crate::session_chat_send::SessionChatSendStep::WriteFrom {
-                    source: "manual-title-command".to_string(),
-                    payload: command_text.clone(),
-                },
-                crate::session_chat_send::SessionChatSendStep::SleepMs(
-                    GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS,
-                ),
-                crate::session_chat_send::SessionChatSendStep::WriteFrom {
-                    source: "manual-title-submit".to_string(),
-                    payload: crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
-                },
-                // Restore the killed draft once the submit has settled.
-                crate::session_chat_send::SessionChatSendStep::SleepMs(
-                    MANUAL_TITLE_DRAFT_RESTORE_DELAY_MS,
-                ),
-                crate::session_chat_send::SessionChatSendStep::WriteFrom {
-                    source: "manual-title-draft-restore".to_string(),
-                    payload: crate::session_chat_send::AGENT_TUI_RESTORE_INPUT_LINE.to_string(),
-                },
-            ],
+            manual_title_steps,
         )
         .map_err(|_| ())?;
         /*

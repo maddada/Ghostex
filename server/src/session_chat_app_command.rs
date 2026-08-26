@@ -57,6 +57,8 @@ pub struct SessionChatAppCommand {
     pub title: Option<String>,
     /// RFC3339 millis, for display ordering only.
     pub sent_at: String,
+    title_metadata_baseline: Option<(String, String)>,
+    title_metadata_baseline_captured: bool,
     recorded: Instant,
 }
 
@@ -94,6 +96,32 @@ draft-kill bytes and bare `\r` submits through that same path, and none of those
 are commands the user needs told about.
 */
 pub fn record_session_chat_app_command(project_id: &str, session_id: &str, command: &str) {
+    record_session_chat_app_command_inner(project_id, session_id, command, None, false);
+}
+
+/// Record a bare rename together with the title record visible before dispatch.
+pub fn record_session_chat_app_command_with_title_metadata_baseline(
+    project_id: &str,
+    session_id: &str,
+    command: &str,
+    title_metadata_baseline: Option<(String, String)>,
+) {
+    record_session_chat_app_command_inner(
+        project_id,
+        session_id,
+        command,
+        title_metadata_baseline,
+        true,
+    );
+}
+
+fn record_session_chat_app_command_inner(
+    project_id: &str,
+    session_id: &str,
+    command: &str,
+    title_metadata_baseline: Option<(String, String)>,
+    title_metadata_baseline_captured: bool,
+) {
     let command = command.trim();
     if command.is_empty() {
         return;
@@ -111,6 +139,8 @@ pub fn record_session_chat_app_command(project_id: &str, session_id: &str, comma
         command: command.to_string(),
         title: app_command_title(command),
         sent_at,
+        title_metadata_baseline,
+        title_metadata_baseline_captured,
         recorded: now,
     });
     prune(rows, now);
@@ -127,13 +157,19 @@ fn app_command_title(command: &str) -> Option<String> {
 }
 
 /// Attach the title emitted by an agent after Ghostex sent a bare `/rename`.
-/// Explicit title commands are already complete and are never rewritten.
+/// Explicit title commands are already complete and are never rewritten. A
+/// bare command resolves only after metadata advances beyond its pre-send
+/// record and title, so an earlier title cannot permanently claim the row.
 pub fn resolve_latest_session_chat_app_command_title(
     project_id: &str,
     session_id: &str,
     title: &str,
+    title_metadata_revision: Option<&str>,
 ) {
     let title = title.trim();
+    let Some(title_metadata_revision) = title_metadata_revision else {
+        return;
+    };
     if title.is_empty() {
         return;
     }
@@ -145,6 +181,12 @@ pub fn resolve_latest_session_chat_app_command_title(
     };
     let Some(row) = rows.iter_mut().rev().find(|row| {
         row.title.is_none()
+            && row.title_metadata_baseline_captured
+            && row.title_metadata_baseline.as_ref().is_none_or(
+                |(baseline_title, baseline_revision)| {
+                    baseline_title != title && baseline_revision != title_metadata_revision
+                },
+            )
             && matches!(
                 row.command.split_whitespace().next(),
                 Some("/rename" | "/name" | "/title")

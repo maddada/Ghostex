@@ -12,6 +12,7 @@ use super::*;
 pub(crate) struct AgentMetadataTitle {
     agent_session_id: Option<String>,
     provider: &'static str,
+    record_revision: Option<String>,
     title: String,
     updated_at: Option<String>,
 }
@@ -95,6 +96,7 @@ pub(crate) fn reconcile_agent_metadata_title(
         &lifecycle.project_id,
         &lifecycle.session_id,
         &metadata_title.title,
+        metadata_title.record_revision.as_deref(),
     );
 
     let pending_status = pending_title.as_deref().map(|pending_title| {
@@ -204,6 +206,15 @@ pub(crate) fn read_agent_metadata_title(
     }
 }
 
+/// The current title plus the exact provider record that supplied it.
+pub(crate) fn agent_metadata_title_observation(
+    home_dir: &Path,
+    session: &Value,
+) -> Option<(String, String)> {
+    let metadata_title = read_agent_metadata_title(home_dir, session)?;
+    Some((metadata_title.title, metadata_title.record_revision?))
+}
+
 pub(crate) fn agent_metadata_title_source(
     home_dir: &Path,
     session: &Value,
@@ -279,8 +290,13 @@ from the resolved identity on resumed and forked Claude sessions.
 pub(crate) const CLAUDE_TRANSCRIPT_TITLE_TAIL_BYTES: u64 = 256 * 1024;
 
 pub(crate) fn read_claude_transcript_title(transcript_path: &Path) -> Option<AgentMetadataTitle> {
-    let tail = read_transcript_tail_text(transcript_path, CLAUDE_TRANSCRIPT_TITLE_TAIL_BYTES)?;
-    for line in tail.lines().rev() {
+    let (tail, tail_start) =
+        read_transcript_tail_text_with_offset(transcript_path, CLAUDE_TRANSCRIPT_TITLE_TAIL_BYTES)?;
+    for (line_offset, line) in tail.rsplit('\n').scan(tail.len(), |line_end, line| {
+        let line_offset = line_end.saturating_sub(line.len());
+        *line_end = line_offset.saturating_sub(1);
+        Some((line_offset, line))
+    }) {
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -298,6 +314,11 @@ pub(crate) fn read_claude_transcript_title(transcript_path: &Path) -> Option<Age
         return Some(AgentMetadataTitle {
             agent_session_id: None,
             provider: "claude-transcript",
+            record_revision: Some(format!(
+                "{}:{}",
+                transcript_path.to_string_lossy(),
+                tail_start.saturating_add(line_offset as u64),
+            )),
             title,
             updated_at: None,
         });
@@ -305,22 +326,28 @@ pub(crate) fn read_claude_transcript_title(transcript_path: &Path) -> Option<Age
     None
 }
 
-pub(crate) fn read_transcript_tail_text(path: &Path, tail_bytes: u64) -> Option<String> {
+fn read_transcript_tail_text_with_offset(path: &Path, tail_bytes: u64) -> Option<(String, u64)> {
     let mut file = fs::File::open(path).ok()?;
     let length = file.metadata().ok()?.len();
     let start = length.saturating_sub(tail_bytes);
     file.seek(SeekFrom::Start(start)).ok()?;
     let mut bytes = Vec::with_capacity(length.saturating_sub(start) as usize);
     file.read_to_end(&mut bytes).ok()?;
+    let mut text_start = start;
     if start > 0 {
         match bytes.iter().position(|byte| *byte == b'\n') {
             Some(first_newline) => {
-                bytes.drain(..=first_newline);
+                let removed = first_newline + 1;
+                bytes.drain(..removed);
+                text_start = text_start.saturating_add(removed as u64);
             }
-            None => bytes.clear(),
+            None => {
+                bytes.clear();
+                text_start = length;
+            }
         }
     }
-    Some(String::from_utf8_lossy(&bytes).into_owned())
+    Some((String::from_utf8_lossy(&bytes).into_owned(), text_start))
 }
 
 pub(crate) fn read_codex_session_index_title(
@@ -364,6 +391,7 @@ pub(crate) fn read_codex_session_index_title_from_path(
         return Some(AgentMetadataTitle {
             agent_session_id: Some(agent_session_id.to_string()),
             provider: "codex-session-index",
+            record_revision: None,
             title,
             updated_at: entry
                 .get("updated_at")
@@ -445,6 +473,7 @@ pub(crate) fn read_pending_codex_rename_metadata_title(
             return Some(AgentMetadataTitle {
                 agent_session_id: Some(agent_session_id.to_string()),
                 provider: "codex-session-index-pending-rename",
+                record_revision: None,
                 title,
                 updated_at: Some(updated_at.to_string()),
             });

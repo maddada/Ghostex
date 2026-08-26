@@ -1,4 +1,4 @@
-use std::{sync::OnceLock, thread, time::Duration};
+use std::sync::OnceLock;
 
 use serde_json::{json, Map, Value};
 
@@ -650,6 +650,178 @@ impl ZmxQueuedSessionWrite {
     }
 }
 
+/*
+CDXC:SessionChatSerializedWriters 2026-08-26:
+`/api/sendSessionMessage` — the automation prompt, the worktree first prompt,
+the fork rename, the remote rename, and `gx sendMessage` — is the last writer of
+the session's TUI input line that bypassed the per-session queue. It wrote its
+text straight to the pty and slept a whole HTTP worker thread before the Enter,
+so its bytes could land inside another sequence (and its own text/Enter pair
+could be split by somebody else's job). It rides the queue now, as ONE job whose
+settle is a queue step rather than a `thread::sleep`.
+
+It also opens with the measured clear burst, as its own write plus the settle:
+this endpoint types a whole message and submits it, so a draft on that line was
+previously prepended to the message and submitted with it. The API shape is
+unchanged — `submit`, `sendDelayMs` (same default and clamp), and the same
+result object.
+*/
+pub struct ZmxQueuedSessionMessage {
+    pub project_id: String,
+    pub session_id: String,
+    pub zmx_name: String,
+    pub session: Value,
+    /// `diagnosticInputSource`, carried through so every write of this job is
+    /// still attributed to its caller instead of to the queue.
+    pub source: String,
+    pub text: String,
+    pub submit: bool,
+    pub send_delay_ms: u64,
+}
+
+/// Callers that widen the settle window past this are clamped, so a bad value
+/// cannot park the session's queue.
+const SEND_SESSION_MESSAGE_SUBMIT_DELAY_DEFAULT_MS: u64 = 150;
+const SEND_SESSION_MESSAGE_SUBMIT_DELAY_MAX_MS: u64 = 2_000;
+
+impl ZmxQueuedSessionMessage {
+    fn read(
+        lifecycle: &LifecycleParams,
+        session: Value,
+        zmx_name: String,
+        source: &str,
+        params: &Map<String, Value>,
+    ) -> ZmxEndpointResult<Self> {
+        Ok(Self {
+            project_id: lifecycle.project_id.clone(),
+            session_id: lifecycle.session_id.clone(),
+            zmx_name,
+            session,
+            source: source.to_string(),
+            text: read_interaction_text(params.get("text"), "sendSessionMessage")?,
+            submit: params.get("submit").and_then(Value::as_bool) != Some(false),
+            send_delay_ms: params
+                .get("sendDelayMs")
+                .and_then(Value::as_u64)
+                .unwrap_or(SEND_SESSION_MESSAGE_SUBMIT_DELAY_DEFAULT_MS)
+                .min(SEND_SESSION_MESSAGE_SUBMIT_DELAY_MAX_MS),
+        })
+    }
+
+    /*
+    CDXC:GxserverSendMessageSubmit 2026-07-04-17:02:
+    Submit must be a separate zmx send after a short settle delay, never a
+    trailing \r inside the same stdin burst. Bracketed-paste TUIs (Claude Code
+    and similar composers) treat a \r that arrives in the same paste burst as
+    newline text, leaving the message staged in the composer instead of
+    submitted. The clear burst obeys the same rule for the same reason.
+    */
+    fn steps(&self) -> Vec<crate::session_chat_send::SessionChatSendStep> {
+        let mut steps =
+            crate::session_chat_send::build_agent_tui_clear_input_steps(None, &self.text);
+        steps.push(crate::session_chat_send::SessionChatSendStep::Write(
+            if self.submit {
+                crate::session_chat_send::disambiguate_agent_tui_submit_text(&self.text)
+            } else {
+                self.text.clone()
+            },
+        ));
+        if self.submit {
+            if self.send_delay_ms > 0 {
+                steps.push(crate::session_chat_send::SessionChatSendStep::SleepMs(
+                    self.send_delay_ms,
+                ));
+            }
+            steps.push(crate::session_chat_send::SessionChatSendStep::Write(
+                crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
+            ));
+        }
+        steps
+    }
+
+    /// The unchanged `sendSessionMessage` response shape. `exitCode` is 0
+    /// because the queue reports a refused burst as an error rather than as a
+    /// zmx status.
+    fn into_result(self) -> Value {
+        let submit = self.submit;
+        let mut value = send_result(0, self.session, &self.text, false, self.zmx_name);
+        value
+            .as_object_mut()
+            .expect("send result object")
+            .insert("submit".to_string(), Value::Bool(submit));
+        value
+    }
+
+    /// Awaited delivery, used by the HTTP layer so its callers still learn that
+    /// the terminal refused the message.
+    pub async fn execute(self) -> ZmxEndpointResult<Value> {
+        let steps = self.steps();
+        crate::session_chat_send::execute_session_chat_send(
+            &self.project_id,
+            &self.session_id,
+            &self.zmx_name,
+            &self.source,
+            steps,
+        )
+        .await
+        .map_err(|error| ZmxEndpointError::DependencyUnavailable(error.message))?;
+        self.capture_prompt_sent();
+        Ok(self.into_result())
+    }
+
+    /// Fire-and-forget enqueue, used by the synchronous in-process dispatch.
+    pub fn enqueue(self) -> Value {
+        crate::session_chat_send::enqueue_session_chat_send(
+            &self.project_id,
+            &self.session_id,
+            &self.zmx_name,
+            &self.source,
+            self.steps(),
+        );
+        self.capture_prompt_sent();
+        self.into_result()
+    }
+
+    /*
+    CDXC:AnonymousAnalytics 2026-08-26:
+    `/api/sendSessionMessage` carries two very different things: real user
+    prompts (automation runs, the worktree first prompt, `gx sendMessage`) and
+    gxserver's own non-prompt writes (auto-title generation, the fork rename,
+    the remote rename). `diagnosticInputSource` already distinguishes them —
+    every caller tags itself — so the mapping is an explicit ALLOW table:
+    unrecognised tags emit nothing rather than being guessed at. Counting a
+    rename as a prompt would inflate every per-user prompt metric.
+    */
+    fn capture_prompt_sent(&self) {
+        let Some(prompt_source) =
+            crate::telemetry::prompt_source_for_diagnostic_input_source(&self.source)
+        else {
+            return;
+        };
+        crate::telemetry::prompt_sent(
+            self.session.get("agentId").and_then(Value::as_str),
+            prompt_source,
+        );
+    }
+}
+
+pub fn read_zmx_queued_session_message(
+    repository: &DomainRepository<'_>,
+    params: &Map<String, Value>,
+) -> ZmxEndpointResult<ZmxQueuedSessionMessage> {
+    require_zmx()?;
+    let lifecycle = read_lifecycle_params(params)?;
+    let session = require_session(repository, &lifecycle)?;
+    let zmx_name = provider_zmx_session_name(&session)?;
+    ZmxQueuedSessionMessage::read(
+        &lifecycle,
+        session,
+        zmx_name,
+        read_diagnostic_input_source(params),
+        params,
+    )
+}
+
 fn read_diagnostic_input_source(params: &Map<String, Value>) -> &str {
     params
         .get("diagnosticInputSource")
@@ -727,65 +899,14 @@ pub fn dispatch_zmx_session_interaction_endpoint(
             }
             .enqueue())
         }
-        "/api/sendSessionMessage" => {
-            let text = read_interaction_text(params.get("text"), "sendSessionMessage")?;
-            let submit = params.get("submit").and_then(Value::as_bool) != Some(false);
-            /*
-            CDXC:GxserverSendMessageSubmit 2026-07-04-17:02:
-            Submit must be a separate zmx send after a short settle delay, never a
-            trailing \r inside the same stdin burst. Bracketed-paste TUIs (Claude
-            Code and similar composers) treat a \r that arrives in the same paste
-            burst as newline text, leaving the message staged in the composer
-            instead of submitted. `sendDelayMs` lets callers widen the settle
-            window; the clamp keeps a bad value from stalling the endpoint.
-            */
-            log_temporary_zmx_input_write(
-                &lifecycle.project_id,
-                &lifecycle.session_id,
-                &zmx_name,
-                endpoint_path,
-                diagnostic_source,
-                &text,
-            );
-            let result = run_zmx_interaction_command(
-                build_zmx_send_command(&zmx_name, &zmx.executable_path),
-                ZmxCommandOptions {
-                    stdin: Some(text.clone()),
-                    ..ZmxCommandOptions::default()
-                },
-            )?;
-            if submit {
-                let send_delay_ms = params
-                    .get("sendDelayMs")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(150)
-                    .min(2000);
-                if send_delay_ms > 0 {
-                    thread::sleep(Duration::from_millis(send_delay_ms));
-                }
-                log_temporary_zmx_input_write(
-                    &lifecycle.project_id,
-                    &lifecycle.session_id,
-                    &zmx_name,
-                    "sendSessionMessageSubmit",
-                    diagnostic_source,
-                    "\r",
-                );
-                run_zmx_interaction_command(
-                    build_zmx_send_command(&zmx_name, &zmx.executable_path),
-                    ZmxCommandOptions {
-                        stdin: Some("\r".to_string()),
-                        ..ZmxCommandOptions::default()
-                    },
-                )?;
-            }
-            let mut value = send_result(result.exit_code, session, &text, false, zmx_name);
-            value
-                .as_object_mut()
-                .expect("send result object")
-                .insert("submit".to_string(), Value::Bool(submit));
-            Ok(value)
-        }
+        "/api/sendSessionMessage" => Ok(ZmxQueuedSessionMessage::read(
+            &lifecycle,
+            session,
+            zmx_name,
+            diagnostic_source,
+            params,
+        )?
+        .enqueue()),
         _ => Err(DomainStateError::not_found(format!(
             "{endpoint_path} is not a gxserver zmx session interaction endpoint."
         ))

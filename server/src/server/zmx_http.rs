@@ -244,7 +244,7 @@ pub(crate) async fn handle_zmx_session_interaction_http(
     };
     /*
     CDXC:SessionChatSerializedWriters 2026-08-24:
-    The two raw input-line writers ride the per-session send queue, so their
+    The raw input-line writers ride the per-session send queue, so their
     delivery is awaited here rather than performed inside the synchronous
     dispatch. The repository is scoped and the connection dropped before the
     await, because a rusqlite handle cannot be held across one.
@@ -256,6 +256,32 @@ pub(crate) async fn handle_zmx_session_interaction_http(
         let queued = {
             let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
             crate::zmx::read_zmx_queued_session_write(&repository, &endpoint_path, &params)
+        };
+        drop(db);
+        let queued = match queued {
+            Ok(queued) => queued,
+            Err(error) => return zmx_error_response(endpoint_path, request_id, error),
+        };
+        return match queued.execute().await {
+            Ok(result) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result),
+            ),
+            Err(error) => zmx_error_response(endpoint_path, request_id, error),
+        };
+    }
+    /*
+    CDXC:SessionChatSerializedWriters 2026-08-26:
+    Same shape for `/api/sendSessionMessage` (clear burst → text → settle →
+    Enter, as one queued job): awaiting it here is what keeps the HTTP answer
+    telling the caller whether the terminal actually took the message, now that
+    the synchronous dispatch only enqueues.
+    */
+    if endpoint_path == "/api/sendSessionMessage" {
+        let queued = {
+            let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+            crate::zmx::read_zmx_queued_session_message(&repository, &params)
         };
         drop(db);
         let queued = match queued {
