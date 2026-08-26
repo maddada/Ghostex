@@ -237,6 +237,92 @@ pub(crate) fn insert_session_agent_note_session_projection(session: &mut Value, 
     }
 }
 
+#[derive(Clone)]
+struct StashedPromptSessionOwner {
+    agent_session_id: Option<String>,
+    project_id: Option<String>,
+    session_id: Option<String>,
+}
+
+/*
+CDXC:TerminalAgentBarSavedPromptCount 2026-08-26:
+The terminal action bar badges Saved Prompts with the number filed against the
+current agent conversation. Read the bounded stash table once per presentation
+snapshot, then match each session using the same union as the chat composer:
+the durable provider conversation id, plus the raw project/session ids for
+legacy rows created before conversation ownership was recorded. A row that
+matches both predicates still counts once because each database row is visited
+only once.
+*/
+fn read_stashed_prompt_session_owners(db: &Connection) -> Vec<StashedPromptSessionOwner> {
+    let Ok(mut statement) =
+        db.prepare("SELECT projectId, sessionId, agentSessionId FROM stashed_prompts")
+    else {
+        return Vec::new();
+    };
+    let Ok(rows) = statement.query_map([], |row| {
+        Ok(StashedPromptSessionOwner {
+            project_id: row.get(0)?,
+            session_id: row.get(1)?,
+            agent_session_id: row.get(2)?,
+        })
+    }) else {
+        return Vec::new();
+    };
+    rows.filter_map(Result::ok).collect()
+}
+
+fn stashed_prompt_count_for_session(
+    prompts: &[StashedPromptSessionOwner],
+    session: &Value,
+) -> usize {
+    let project_id = session.get("projectId").and_then(Value::as_str);
+    let session_id = session.get("sessionId").and_then(Value::as_str);
+    let agent_session_id = session.get("agentSessionId").and_then(Value::as_str);
+    prompts
+        .iter()
+        .filter(|prompt| {
+            agent_session_id.is_some_and(|id| prompt.agent_session_id.as_deref() == Some(id))
+                || project_id
+                    .zip(session_id)
+                    .is_some_and(|(project_id, session_id)| {
+                        prompt.project_id.as_deref() == Some(project_id)
+                            && prompt.session_id.as_deref() == Some(session_id)
+                    })
+        })
+        .count()
+}
+
+pub(crate) fn insert_stashed_prompt_counts_presentation_payload(
+    snapshot: &mut Value,
+    db: &Connection,
+) {
+    let prompts = read_stashed_prompt_session_owners(db);
+    if prompts.is_empty() {
+        return;
+    }
+    let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for session in sessions {
+        let count = stashed_prompt_count_for_session(&prompts, session);
+        if count > 0 {
+            if let Some(object) = session.as_object_mut() {
+                object.insert("stashedPromptCount".to_string(), json!(count));
+            }
+        }
+    }
+}
+
+pub(crate) fn insert_stashed_prompt_count_session_projection(session: &mut Value, db: &Connection) {
+    let count = stashed_prompt_count_for_session(&read_stashed_prompt_session_owners(db), session);
+    if count > 0 {
+        if let Some(object) = session.as_object_mut() {
+            object.insert("stashedPromptCount".to_string(), json!(count));
+        }
+    }
+}
+
 pub(crate) fn insert_auto_settle_window_presentation_payload(
     snapshot: &mut Value,
     auto_settle_after_days: Option<f64>,

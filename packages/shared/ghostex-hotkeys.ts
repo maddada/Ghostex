@@ -4,6 +4,7 @@ export type ghostexHotkeyActionId =
   | 'attachFileOrFolder'
   | 'closeAfterDone'
   | 'closeFocusedSession'
+  | 'copyAgentSessionId'
   | 'createSession'
   | 'delayedSend'
   | 'exportTranscript'
@@ -22,6 +23,7 @@ export type ghostexHotkeyActionId =
   | 'promptEditor'
   | 'reloadSession'
   | 'renameActiveSession'
+  | 'sessionNote'
   | 'rotatePanesClockwise'
   | 'sleepFocusedSession'
   | 'scrollTerminalToBottom'
@@ -72,10 +74,12 @@ export type ghostexFocusedPaneAction =
 
 export type ghostexTerminalToolbarAction =
   | 'attachFileOrFolder'
+  | 'copyAgentSessionId'
   | 'exportTranscript'
   | 'promptEditor'
   | 'scrollTerminalToBottom'
   | 'scrollTerminalToTop'
+  | 'sessionNote'
   | 'stashPrompt'
   | 'stashedPrompts'
   | 'toggleAgentActions'
@@ -179,7 +183,8 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { id: 'openCommandsPanel', kind: 'openCommandsPanel' },
     defaultKey: 'f12',
-    description: 'Open the project command terminal panel.',
+    description:
+      'Open the project command terminal panel. When the pane is already focused, hide it; press again to show it.',
     id: 'openCommandsPanel',
     title: 'Open Commands Panel',
   },
@@ -358,10 +363,32 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       kind: 'terminalToolbarAction',
       terminalToolbarAction: 'attachFileOrFolder',
     },
-    defaultKey: '',
+    defaultKey: 'cmd+alt+p',
     description: 'Attach a file or folder to the focused terminal.',
     id: 'attachFileOrFolder',
     title: 'Attach File or Folder',
+  },
+  {
+    action: {
+      id: 'sessionNote',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'sessionNote',
+    },
+    defaultKey: 'cmd+alt+n',
+    description: 'Open the note attached to the focused agent conversation.',
+    id: 'sessionNote',
+    title: 'Session Note',
+  },
+  {
+    action: {
+      id: 'copyAgentSessionId',
+      kind: 'terminalToolbarAction',
+      terminalToolbarAction: 'copyAgentSessionId',
+    },
+    defaultKey: 'cmd+alt+c',
+    description: 'Copy the focused agent conversation id.',
+    id: 'copyAgentSessionId',
+    title: 'Copy Agent Session ID',
   },
   {
     action: {
@@ -385,6 +412,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     id: 'stashedPrompts',
     retiredDefaultKeys: ['alt+shift+s'],
     title: 'Saved Prompts',
+    windowsLinuxDefaultKey: 'cmd+shift+s',
   },
   {
     action: {
@@ -396,11 +424,9 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * CDXC:ExportTranscript 2026-08-20:
      * Export transcript writes the focused agent session's conversation to a
      * markdown file on the machine that owns the transcript, then offers to
-     * seed a new conversation from it. It ships unassigned by default, like
-     * the other Agent Actions menu rows (Stash Prompt, Attach File or Folder),
-     * so it cannot claim a chord users already rely on.
+     * seed a new conversation from it.
      */
-    defaultKey: '',
+    defaultKey: 'cmd+alt+e',
     description: "Export the focused agent session's transcript to a markdown file.",
     id: 'exportTranscript',
     title: 'Export Transcript',
@@ -411,7 +437,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       kind: 'terminalToolbarAction',
       terminalToolbarAction: 'toggleAgentActions',
     },
-    defaultKey: '',
+    defaultKey: 'cmd+alt+a',
     description: "Show or hide the focused terminal's Agent Actions buttons.",
     id: 'toggleAgentActions',
     title: 'Toggle Agent Actions',

@@ -314,14 +314,10 @@ impl GhostexGpuiApp {
             .min_w_0()
             .min_h_0()
             .overflow_hidden()
-            .when(
-                border_state == WorkspacePaneBorderState::Attention,
-                |this| this.border_2(),
-            )
-            .when(
-                border_state != WorkspacePaneBorderState::Attention,
-                |this| this.border_1(),
-            )
+            // Attention changes only the border color. Keeping its width
+            // constant prevents status transitions from resizing the pane's
+            // content box and nudging the tab bar, terminal, or action bar.
+            .border_1()
             .border_color(workspace_pane_border_color_for_state(border_state))
             .bg(workspace_terminal_placeholder_color())
             .on_mouse_down(
@@ -339,6 +335,13 @@ impl GhostexGpuiApp {
                 |this, surface| this.child(surface),
             )
             .child(self.render_terminal_body_slot(leaf, cx))
+            // The agent action bar is a normal sibling *below* the body, the
+            // same way the search bar is one above it, so the terminal never
+            // renders under it.
+            .when_some(
+                self.render_agents_pane_terminal_agent_action_bar(leaf, cx),
+                |this, bar| this.child(bar),
+            )
             .into_any_element()
     }
 }

@@ -79,6 +79,17 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
   max-width: calc(100% - 60px);
 }
 
+/* Live terminal activity is composer-adjacent status, not a transcript-width
+   message. Keep it centered on the viewport and exactly as wide as the prompt
+   card: the composer's max-w-3xl outer column (48rem), minus its px-4 gutters
+   (2rem), or the viewport minus those same gutters in a narrow pane. */
+.ghostex-chat-activity-row {
+  left: 50%;
+  position: relative;
+  transform: translateX(-50%);
+  width: min(calc(100vw - 2rem), 46rem);
+}
+
 ::highlight(ghostex-chat-search-match) {
   background-color: color-mix(in srgb, var(--ring) 40%, transparent);
   color: inherit;
@@ -538,7 +549,42 @@ body[data-session-chat-bullets='off'] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-agent-message::before {
+  anchor-name: --ghostex-chat-final-message-marker;
   margin-block-start: var(--chat-marker-bullet-offset);
+}
+
+/* A final reply's action rail belongs to the marker gutter, not to a footer row
+   beneath the prose. Its first action replaces the bullet and the save action
+   continues directly below it, all outside layout. The nearest preceding marker
+   with this name is the one in the same message row. */
+.ghostex-chat-final-actions {
+  display: contents;
+}
+
+.ghostex-chat-final-action {
+  left: anchor(center);
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  position-anchor: --ghostex-chat-final-message-marker;
+  top: anchor(center);
+  transform: translate(-50%, -50%);
+  transition: opacity 120ms ease;
+}
+
+.ghostex-chat-final-action-save {
+  top: calc(anchor(center) + 1.625rem);
+}
+
+.ghostex-session-chat-scope [data-slot='message']:is(:hover, :focus-within) .ghostex-chat-final-action {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ghostex-session-chat-scope
+  [data-slot='message']:has(.ghostex-chat-final-actions):is(:hover, :focus-within)
+  .ghostex-chat-agent-message::before {
+  opacity: 0;
 }
 
 .ghostex-chat-thinking-row {
@@ -1191,6 +1237,41 @@ body[data-session-chat-theme='dark']
   background: var(--muted);
 }
 
+/* Claude Code's Shift+Tab states use the same compact terminal glyphs as the
+   CLI footer. Color carries the distinction, while the shared tooltip names
+   the active mode for mouse and keyboard users. */
+.ghostex-chat-mode-pill-icon-only {
+  min-width: 1.75rem;
+  padding-inline: 0.375rem;
+}
+
+.ghostex-chat-mode-icon {
+  display: block;
+  flex: 0 0 auto;
+  height: 0.875rem;
+  width: 1rem;
+}
+
+.ghostex-chat-mode-icon[data-mode='bypass'] {
+  color: #ffb6c5;
+}
+
+.ghostex-chat-mode-icon[data-mode='plan'] {
+  color: #a6ddd8;
+}
+
+.ghostex-chat-mode-icon[data-mode='accept-edits'] {
+  color: #d3bff8;
+}
+
+.ghostex-chat-mode-icon[data-mode='manual'] {
+  color: #d2d4dc;
+}
+
+.ghostex-chat-mode-icon[data-mode='auto'] {
+  color: #f6daa0;
+}
+
 /*
 The stack-push glyph only draws across 16x15 of its 24px box, while the
 paperclip next to it draws across roughly 19x20, so at the shared 16px icon size
@@ -1233,6 +1314,43 @@ Rendering this one glyph a size up lines its ink up with its neighbours.
   top: -1px;
   width: max-content;
   z-index: 2;
+}
+
+/* A session-note dot means the editor contains real text, not that the panel
+   is merely open. It is out of flow and pointer-transparent so the
+   note button keeps exactly the same geometry and click target. */
+.ghostex-chat-session-note-presence-dot {
+  background: var(--primary);
+  border-radius: 50%;
+  height: 5px;
+  pointer-events: none;
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 5px;
+  z-index: 2;
+}
+
+/*
+ * Terminal-surface bottom bar (packages/core-ui/chat/session-terminal-action-bar.tsx).
+ * The horizontal inset is the chat composer's total content inset — the
+ * composer wrapper's `px-4` plus the composer's own 1px border and `px-4` —
+ * so the view toggle lands on the same x whichever surface is showing. It is
+ * plain CSS rather than an arbitrary Tailwind utility because the bar renders
+ * outside the chat scope, against the pre-generated shadcn sheet.
+ */
+.ghostex-terminal-action-bar {
+  padding-inline: 33px;
+}
+
+/* The inline field a host action with `input` (Rename) swaps its control row
+   for, on both surfaces — the composer footer's dots menu and this bar. One
+   width for both so the field looks the same whichever surface it opens on.
+   Plain CSS rather than Tailwind's `w-48` because that utility is absent from
+   the checked-in shadcn sheet, which would ship the field at zero width. */
+.ghostex-chat-host-action-input,
+.ghostex-terminal-action-bar-input {
+  width: 12rem;
 }
 
 /* --- Session note panel (CDXC:SessionAgentNotes 2026-08-24) ---------------- */
@@ -1360,10 +1478,15 @@ so the swap barely moves the composer row.
    min-content width enormous and push the whole page past the viewport.
    Pin the width to the row and let any long run wrap mid-token instead. */
 .ghostex-chat-composer-input {
+  min-height: 4.5rem;
   min-width: 0;
   width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.ghostex-chat-composer-monaco {
+  min-height: 4.5rem;
 }
 
 /* 3px scrollbar in the chat input (the Monaco backend gets the same width via
@@ -2179,45 +2302,6 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   width: 3rem;
 }
 
-/* Hovering a thumbnail reveals a corner button that copies the image's machine
-   path (its URL for a hosted picture) — the counterpart of the message row's
-   hover copy button. It stays visible while showing the "copied" check so the
-   feedback is not cut short by the pointer drifting off the picture. */
-.ghostex-chat-inline-image-copy {
-  align-items: center;
-  background: rgb(0 0 0 / 0.55);
-  border: none;
-  border-radius: 5px;
-  color: rgb(255 255 255 / 0.85);
-  display: flex;
-  height: 1.25rem;
-  justify-content: center;
-  opacity: 0;
-  padding: 0;
-  position: absolute;
-  right: 2px;
-  top: 2px;
-  transition: opacity 120ms ease;
-  width: 1.25rem;
-  z-index: 1;
-}
-
-.ghostex-chat-inline-image-frame:hover .ghostex-chat-inline-image-copy,
-.ghostex-chat-inline-image-copy:focus-visible,
-.ghostex-chat-inline-image-copy[data-copied='true'] {
-  opacity: 1;
-}
-
-.ghostex-chat-inline-image-copy:hover {
-  background: rgb(0 0 0 / 0.75);
-  color: rgb(255 255 255 / 1);
-}
-
-.ghostex-chat-inline-image-copy svg {
-  height: 0.75rem;
-  width: 0.75rem;
-}
-
 .ghostex-chat-inline-image-button {
   background: none;
   border: none;
@@ -2232,8 +2316,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    chrome keeps the arrow. A picture in the transcript is content, not chrome,
    and its only affordance for "click to see it full size" is the cursor — so
    the zoomable image opts back out, scoped to the chat. */
-.ghostex-chat-inline-image-button,
-.ghostex-chat-markdown .ghostex-chat-image-link {
+.ghostex-chat-inline-image-button {
   cursor: zoom-in !important;
 }
 
@@ -2247,6 +2330,35 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 }
 
 /* --- Image preview overlay ------------------------------------------------- */
+
+/* The three common image actions sit beside the close button, outside the
+   scrolling layer so zooming and panning never move them. ButtonGroup owns
+   their shared borders and joined corners. */
+.ghostex-chat-image-preview-actions {
+  position: absolute;
+  right: 3.5rem;
+  top: 0.75rem;
+  z-index: 10;
+}
+
+/* The chat scope deliberately rounds every ordinary button, which is correct
+   for standalone controls but would turn these actions back into three pills.
+   Re-establish ButtonGroup's joined geometry after that scope rule: one outer
+   silhouette, square internal corners, and shared hairlines. :first-child also
+   handles sources that do not expose the optional Copy path action. */
+.ghostex-session-chat-scope .ghostex-chat-image-preview-actions > [data-slot='button'] {
+  border-radius: 0 !important;
+}
+
+.ghostex-session-chat-scope .ghostex-chat-image-preview-actions > [data-slot='button']:first-child {
+  border-bottom-left-radius: calc(var(--radius, 0.625rem) - 2px) !important;
+  border-top-left-radius: calc(var(--radius, 0.625rem) - 2px) !important;
+}
+
+.ghostex-session-chat-scope .ghostex-chat-image-preview-actions > [data-slot='button']:last-child {
+  border-bottom-right-radius: calc(var(--radius, 0.625rem) - 2px) !important;
+  border-top-right-radius: calc(var(--radius, 0.625rem) - 2px) !important;
+}
 
 /* `width: fit-content` with `min-width: 100%` centres the picture while it fits
    the window and stops the overflow being clipped once it does not: plain flex
@@ -2348,9 +2460,10 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   width: 3rem;
 }
 
-/* Inside markdown prose an image sits on its own line rather than mid-sentence. */
+/* A linked image stays where the author placed its reference. */
 .ghostex-chat-markdown .ghostex-chat-inline-image-frame {
-  margin: 0.5rem 0;
+  margin: 0.125rem 0.25rem;
+  vertical-align: middle;
 }
 
 /* File-path links (host opens them in its editor surfaces) read as links but
@@ -2372,18 +2485,6 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   background-position: 0 100%;
   background-repeat: repeat-x;
   background-size: 4px 2px;
-}
-
-.ghostex-chat-markdown .ghostex-chat-image-link {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: zoom-in;
-  font: inherit;
-  padding: 0;
-  text-align: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 /* Tables (MarkdownTable in session-chat-markdown.tsx).

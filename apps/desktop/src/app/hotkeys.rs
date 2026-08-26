@@ -74,6 +74,7 @@ pub(crate) fn gpui_platform_hotkey_for_action<'a>(action_id: &str, key: &'a str)
             "mergeAllTabs" => Some(("ctrl+shift+m", "cmd+alt+m")),
             "delayedSend" => Some(("ctrl+shift+s", "cmd+alt+s")),
             "promptEditor" => Some(("ctrl+g", "cmd+shift+g")),
+            "stashedPrompts" => Some(("cmd+alt+s", "cmd+shift+s")),
             "forkSession" => Some(("ctrl+shift+f", "cmd+alt+f")),
             "reloadSession" => Some(("ctrl+shift+r", "cmd+alt+r")),
             "popOutPane" => Some(("ctrl+shift+o", "cmd+alt+o")),
@@ -240,11 +241,13 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("delayedSend", "ctrl+shift+s"),
     ("closeAfterDone", ""),
     ("promptEditor", "ctrl+g"),
-    ("attachFileOrFolder", ""),
+    ("attachFileOrFolder", "cmd+alt+p"),
+    ("sessionNote", "cmd+alt+n"),
+    ("copyAgentSessionId", "cmd+alt+c"),
     ("stashPrompt", "alt+s"),
     ("stashedPrompts", "cmd+alt+s"),
-    ("exportTranscript", ""),
-    ("toggleAgentActions", ""),
+    ("exportTranscript", "cmd+alt+e"),
+    ("toggleAgentActions", "cmd+alt+a"),
     ("toggleChatView", "alt+g"),
     // CDXC:AgentHistorySearch 2026-08-24: mirrors packages/shared/ghostex-hotkeys.ts.
     ("openFindPrompts", "cmd+shift+f"),
@@ -552,6 +555,7 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action
         )) => matches!(
             action_id,
             "toggleChatView"
+                | "sessionNote"
                 | "focusNextSession"
                 | "focusPreviousSession"
                 | "navigateHistoryBack"

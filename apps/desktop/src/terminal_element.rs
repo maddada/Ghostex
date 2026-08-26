@@ -68,8 +68,8 @@ use futures::StreamExt as _;
 use image::Frame;
 
 use gpui::{
-    AnyElement, App, BorderStyle, Bounds, BoxShadow, ClipboardItem, ContentMask, Context, Corners,
-    CursorStyle, DevicePixels, DispatchPhase, Element, ElementId, ElementInputHandler, Entity,
+    App, BorderStyle, Bounds, BoxShadow, ClipboardItem, ContentMask, Context, Corners, CursorStyle,
+    DevicePixels, DispatchPhase, Element, ElementId, ElementInputHandler, Entity,
     EntityInputHandler, EventEmitter, ExternalPaths, FocusHandle, Focusable, Font, FontStyle,
     FontWeight, Global, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InteractiveElement,
     IntoElement, KeyContext, KeyDownEvent, KeyUpEvent, Keystroke, LayoutId, Modifiers,
@@ -77,7 +77,7 @@ use gpui::{
     ParentElement, Pixels, Point, Render, RenderImage, Rgba, ScrollDelta, ScrollWheelEvent,
     ShapedLine, SharedString, Size, StrikethroughStyle, Style, Styled, TextAlign, TextRun,
     UTF16Selection, UnderlineStyle as GpuiUnderlineStyle, Window, canvas, div, fill, outline,
-    point, prelude::FluentBuilder as _, px, size, svg,
+    point, prelude::FluentBuilder as _, px, size,
 };
 use gpui_component::{
     native_menu::NativeMenu,
@@ -105,23 +105,13 @@ const TERMINAL_CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 const TERMINAL_SCROLLBAR_THICKNESS: f32 = 2.0;
 const TERMINAL_SCROLLBAR_MIN_KNOB_HEIGHT: f32 = 18.0;
 const TERMINAL_SCROLL_BUTTON_SIZE: f32 = 28.125;
-/// Shared edge inset for terminal overlay chrome: Agent Actions (top-right) and
-/// scroll-to-top/bottom (bottom-right) both sit 13px in from the pane edge,
-/// matching the chat surface's floating cluster
-/// (packages/core-ui/chat/session-chat-host-actions-cluster.tsx).
+/// Edge inset for the terminal's remaining overlay chrome: scroll-to-top and
+/// scroll-to-bottom sit 13px in from the bottom-right pane edge.
 const TERMINAL_ACTION_BUTTON_EDGE_INSET: f32 = 13.0;
-/// Vertical gap between the cluster row and the expanded Agent Actions menu.
-const TERMINAL_AGENT_ACTIONS_MENU_GAP: f32 = 13.0;
 const TERMINAL_BUTTON_GAP: f32 = 0.0;
 const TERMINAL_SCROLL_BUTTON_VISIBILITY_THRESHOLD: f32 = 200.0;
 const TERMINAL_SCROLL_BUTTON_MIN_WIDTH: f32 = 80.0;
 const TERMINAL_SCROLL_BUTTON_MIN_HEIGHT: f32 = 96.0;
-const TERMINAL_PROMPT_EDITOR_ICON: &str = "titlebar/message-code.svg";
-const TERMINAL_ATTACH_PATH_ICON: &str = "titlebar/paperclip.svg";
-const TERMINAL_RENAME_ICON: &str = "titlebar/pencil.svg";
-const TERMINAL_SLEEP_ICON: &str = "titlebar/moon.svg";
-const TERMINAL_DELAYED_ACTIONS_ICON: &str = "titlebar/clock-check.svg";
-const TERMINAL_FORK_ICON: &str = "titlebar/git-branch.svg";
 
 fn temporary_terminal_control_labels(bytes: &[u8]) -> Vec<&'static str> {
     let mut controls = Vec::new();
@@ -237,11 +227,6 @@ fn install_terminal_paste_diagnostic_sink() {
         );
     }));
 }
-const TERMINAL_FULL_RELOAD_ICON: &str = "titlebar/refresh.svg";
-const TERMINAL_STASHED_PROMPTS_ICON: &str = "titlebar/stack.svg";
-const TERMINAL_STASH_PROMPT_ICON: &str = "titlebar/stack-push.svg";
-const TERMINAL_CHAT_VIEW_ICON: &str = "titlebar/message-circle.svg";
-const TERMINAL_EXPORT_TRANSCRIPT_ICON: &str = "titlebar/file-export.svg";
 // #101010 blended 15% toward white.
 const TERMINAL_SCROLL_BUTTON_HOVER_BACKGROUND_RGB: u32 = 0x343434;
 
@@ -441,6 +426,7 @@ pub enum TerminalAgentActionRequest {
     Fork,
     FullReload,
     ExportTranscript,
+    SessionNote,
     StashPrompt,
     StashedPrompts,
     ToggleChatView,
@@ -611,9 +597,6 @@ pub struct TerminalView {
     scrollbar_drag_offset: Option<f32>,
     terminal_bounds: Option<Bounds<Pixels>>,
     scroll_button_visibility: TerminalScrollButtonVisibility,
-    agent_actions_visible: bool,
-    chat_view_action_visible: bool,
-    agent_actions_expanded: bool,
     /// Last OSC title/pwd read back from the terminal, for change detection.
     title: Option<String>,
     pwd: Option<String>,
@@ -717,9 +700,6 @@ impl TerminalView {
             scrollbar_drag_offset: None,
             terminal_bounds: None,
             scroll_button_visibility: TerminalScrollButtonVisibility::default(),
-            agent_actions_visible: false,
-            chat_view_action_visible: false,
-            agent_actions_expanded: false,
             title: None,
             pwd: None,
             hover_cell: None,
@@ -787,33 +767,6 @@ impl TerminalView {
         if suppressed {
             self.marked_text = None;
         }
-        cx.notify();
-    }
-
-    pub fn set_agent_actions_visible(&mut self, visible: bool, cx: &mut Context<Self>) {
-        if self.agent_actions_visible == visible {
-            return;
-        }
-        self.agent_actions_visible = visible;
-        if !visible {
-            self.agent_actions_expanded = false;
-        }
-        cx.notify();
-    }
-
-    pub fn set_chat_view_action_visible(&mut self, visible: bool, cx: &mut Context<Self>) {
-        if self.chat_view_action_visible == visible {
-            return;
-        }
-        self.chat_view_action_visible = visible;
-        cx.notify();
-    }
-
-    pub fn toggle_agent_actions_expanded(&mut self, cx: &mut Context<Self>) {
-        if !self.agent_actions_visible {
-            return;
-        }
-        self.agent_actions_expanded = !self.agent_actions_expanded;
         cx.notify();
     }
 
@@ -2365,292 +2318,22 @@ impl Render for TerminalView {
                 cx,
             ));
         }
-        if self.agent_actions_visible {
-            // Agent Actions is always present for the focused agent terminal.
-            // Prompts stays directly to its left. Chat View joins the cluster
-            // once the provider session identity can resolve a transcript.
-            if self.chat_view_action_visible {
-                root = root.child(terminal_agent_action_button(
-                    TerminalAgentAction::ToggleChatView,
-                    2,
-                    TerminalAgentActionRow::Cluster,
-                    cx,
-                ));
-            }
-            root = root.child(terminal_agent_action_button(
-                TerminalAgentAction::StashedPrompts,
-                1,
-                TerminalAgentActionRow::Cluster,
-                cx,
-            ));
-            root = root.child(terminal_agent_action_button(
-                TerminalAgentAction::ToggleMenu,
-                0,
-                TerminalAgentActionRow::Cluster,
-                cx,
-            ));
-            if self.agent_actions_expanded {
-                for (column_from_right, action) in [
-                    TerminalAgentAction::AttachPath,
-                    TerminalAgentAction::StashPrompt,
-                    TerminalAgentAction::PromptEditor,
-                    TerminalAgentAction::ExportTranscript,
-                    TerminalAgentAction::FullReload,
-                    TerminalAgentAction::Fork,
-                    TerminalAgentAction::DelayedActions,
-                    TerminalAgentAction::Sleep,
-                    TerminalAgentAction::Rename,
-                ]
-                .into_iter()
-                .enumerate()
-                {
-                    root = root.child(terminal_agent_action_button(
-                        action,
-                        column_from_right,
-                        TerminalAgentActionRow::Menu,
-                        cx,
-                    ));
-                }
-            }
-        }
+        // The agent action cluster used to float here, in the terminal's
+        // top-right corner. It is now a bare bottom bar that lives in real
+        // layout space below the terminal body
+        // (apps/desktop/src/app/render/terminal_agent_action_bar.rs), so the
+        // terminal no longer renders underneath any agent chrome at all.
 
         root
     }
 }
 
-/// Which overlay row a button belongs to: the always-visible cluster
-/// ([Chat View][Prompts][Agent Actions]) or the expanded menu bar below.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TerminalAgentActionRow {
-    Cluster,
-    Menu,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TerminalAgentAction {
-    ToggleChatView,
-    Rename,
-    Sleep,
-    DelayedActions,
-    Fork,
-    FullReload,
-    ExportTranscript,
-    PromptEditor,
-    StashPrompt,
-    StashedPrompts,
-    AttachPath,
-    ToggleMenu,
-}
-
-fn terminal_agent_action_button(
-    action: TerminalAgentAction,
-    column_from_right: usize,
-    row: TerminalAgentActionRow,
-    cx: &mut Context<TerminalView>,
-) -> impl IntoElement {
-    let (id, tooltip, hotkey_action_id) = match action {
-        TerminalAgentAction::ToggleChatView => (
-            "ghostex-terminal-toggle-chat-view",
-            "Chat View",
-            "toggleChatView",
-        ),
-        TerminalAgentAction::Rename => ("ghostex-terminal-rename", "Rename", "renameActiveSession"),
-        TerminalAgentAction::Sleep => ("ghostex-terminal-sleep", "Sleep", "sleepFocusedSession"),
-        TerminalAgentAction::DelayedActions => (
-            "ghostex-terminal-delayed-actions",
-            "Delayed Actions",
-            "delayedSend",
-        ),
-        TerminalAgentAction::Fork => ("ghostex-terminal-fork", "Fork", "forkSession"),
-        TerminalAgentAction::FullReload => (
-            "ghostex-terminal-full-reload",
-            "Full Reload",
-            "reloadSession",
-        ),
-        TerminalAgentAction::ExportTranscript => (
-            "ghostex-terminal-export-transcript",
-            "Export Transcript",
-            "exportTranscript",
-        ),
-        TerminalAgentAction::PromptEditor => (
-            "ghostex-terminal-prompt-editor",
-            "Prompt Editor",
-            "promptEditor",
-        ),
-        TerminalAgentAction::StashPrompt => (
-            "ghostex-terminal-stash-prompt",
-            "Stash Prompt",
-            "stashPrompt",
-        ),
-        TerminalAgentAction::StashedPrompts => (
-            "ghostex-terminal-stashed-prompts",
-            "Saved Prompts",
-            "stashedPrompts",
-        ),
-        TerminalAgentAction::AttachPath => (
-            "ghostex-terminal-attach-path",
-            "Attach File or Folder",
-            "attachFileOrFolder",
-        ),
-        TerminalAgentAction::ToggleMenu => (
-            "ghostex-terminal-agent-actions",
-            "Agent Actions",
-            "toggleAgentActions",
-        ),
-    };
-    let tooltip = terminal_overlay_tooltip(tooltip, hotkey_action_id);
-    let (edge_right, edge_top) = terminal_overlay_edge_insets();
-    let right =
-        edge_right + column_from_right as f32 * (TERMINAL_SCROLL_BUTTON_SIZE + TERMINAL_BUTTON_GAP);
-    let top = match row {
-        TerminalAgentActionRow::Cluster => edge_top,
-        // The Agent Actions menu bar sits 13px below the cluster row.
-        TerminalAgentActionRow::Menu => {
-            edge_top + TERMINAL_SCROLL_BUTTON_SIZE + TERMINAL_AGENT_ACTIONS_MENU_GAP
-        }
-    };
-    terminal_overlay_button(id)
-        .right(px(right))
-        .top(px(top))
-        .border_t_1()
-        .border_b_1()
-        .border_l_1()
-        .when(column_from_right == 0, |this| this.border_r_1())
-        .on_mouse_down(
-            MouseButton::Left,
-            cx.listener(move |view, _event: &MouseDownEvent, window, cx| {
-                window.prevent_default();
-                cx.stop_propagation();
-                match action {
-                    TerminalAgentAction::ToggleChatView
-                    | TerminalAgentAction::Rename
-                    | TerminalAgentAction::Sleep
-                    | TerminalAgentAction::DelayedActions
-                    | TerminalAgentAction::Fork
-                    | TerminalAgentAction::FullReload
-                    | TerminalAgentAction::ExportTranscript
-                    | TerminalAgentAction::StashPrompt
-                    | TerminalAgentAction::StashedPrompts => {
-                        view.agent_actions_expanded = false;
-                        let request = match action {
-                            TerminalAgentAction::ToggleChatView => {
-                                TerminalAgentActionRequest::ToggleChatView
-                            }
-                            TerminalAgentAction::Rename => TerminalAgentActionRequest::Rename,
-                            TerminalAgentAction::Sleep => TerminalAgentActionRequest::Sleep,
-                            TerminalAgentAction::DelayedActions => {
-                                TerminalAgentActionRequest::DelayedActions
-                            }
-                            TerminalAgentAction::Fork => TerminalAgentActionRequest::Fork,
-                            TerminalAgentAction::FullReload => {
-                                TerminalAgentActionRequest::FullReload
-                            }
-                            TerminalAgentAction::ExportTranscript => {
-                                TerminalAgentActionRequest::ExportTranscript
-                            }
-                            TerminalAgentAction::StashPrompt => {
-                                TerminalAgentActionRequest::StashPrompt
-                            }
-                            TerminalAgentAction::StashedPrompts => {
-                                TerminalAgentActionRequest::StashedPrompts
-                            }
-                            TerminalAgentAction::PromptEditor
-                            | TerminalAgentAction::AttachPath
-                            | TerminalAgentAction::ToggleMenu => unreachable!(),
-                        };
-                        cx.emit(TerminalViewEvent::AgentActionRequested(request));
-                        cx.notify();
-                    }
-                    TerminalAgentAction::PromptEditor => {
-                        view.agent_actions_expanded = false;
-                        view.focus_handle.focus(window, cx);
-                        cx.emit(TerminalViewEvent::PromptEditorShortcutRequested);
-                        cx.notify();
-                    }
-                    TerminalAgentAction::AttachPath => {
-                        view.agent_actions_expanded = false;
-                        cx.emit(TerminalViewEvent::AttachPathsRequested);
-                        cx.notify();
-                    }
-                    TerminalAgentAction::ToggleMenu => {
-                        view.agent_actions_expanded = !view.agent_actions_expanded;
-                        cx.notify();
-                    }
-                }
-            }),
-        )
-        .managed_tooltip_with_placement(ManagedTooltipPlacement::Below, move |window, cx| {
-            Tooltip::new(tooltip.clone()).build(window, cx)
-        })
-        .child(terminal_agent_action_icon(action))
-}
-
-fn terminal_agent_action_icon(action: TerminalAgentAction) -> AnyElement {
-    match action {
-        TerminalAgentAction::ToggleChatView => terminal_agent_action_svg(TERMINAL_CHAT_VIEW_ICON),
-        TerminalAgentAction::Rename => terminal_agent_action_svg(TERMINAL_RENAME_ICON),
-        TerminalAgentAction::Sleep => terminal_agent_action_svg(TERMINAL_SLEEP_ICON),
-        TerminalAgentAction::DelayedActions => {
-            terminal_agent_action_svg(TERMINAL_DELAYED_ACTIONS_ICON)
-        }
-        TerminalAgentAction::Fork => terminal_agent_action_svg(TERMINAL_FORK_ICON),
-        TerminalAgentAction::FullReload => terminal_agent_action_svg(TERMINAL_FULL_RELOAD_ICON),
-        TerminalAgentAction::ExportTranscript => {
-            terminal_agent_action_svg(TERMINAL_EXPORT_TRANSCRIPT_ICON)
-        }
-        TerminalAgentAction::StashPrompt => terminal_agent_action_svg(TERMINAL_STASH_PROMPT_ICON),
-        TerminalAgentAction::StashedPrompts => {
-            terminal_agent_action_svg(TERMINAL_STASHED_PROMPTS_ICON)
-        }
-        TerminalAgentAction::PromptEditor => svg()
-            .size(px(14.0))
-            .path(TERMINAL_PROMPT_EDITOR_ICON)
-            .text_color(gpui::rgb(0xa6a6a6))
-            .into_any_element(),
-        TerminalAgentAction::AttachPath => svg()
-            .size(px(14.0))
-            .path(TERMINAL_ATTACH_PATH_ICON)
-            .text_color(gpui::rgb(0xa6a6a6))
-            .into_any_element(),
-        TerminalAgentAction::ToggleMenu => terminal_agent_actions_glyph().into_any_element(),
-    }
-}
-
-fn terminal_agent_action_svg(path: &'static str) -> AnyElement {
-    svg()
-        .size(px(14.0))
-        .path(path)
-        .text_color(gpui::rgb(0xa6a6a6))
-        .into_any_element()
-}
-
-fn terminal_agent_actions_glyph() -> impl IntoElement {
-    canvas(
-        |_bounds, _window, _cx| {},
-        |bounds, _state: (), window, _cx| {
-            let center_y = bounds.top().as_f32() + bounds.size.height.as_f32() / 2.0;
-            let center_x = bounds.left().as_f32() + bounds.size.width.as_f32() / 2.0;
-            let color: Hsla = gpui::rgb(0xa6a6a6).into();
-            for x in [center_x - 4.5, center_x, center_x + 4.5] {
-                window.paint_quad(gpui::quad(
-                    Bounds::centered_at(point(px(x), px(center_y)), size(px(2.25), px(2.25))),
-                    px(1.125),
-                    color,
-                    px(0.0),
-                    gpui::transparent_black(),
-                    BorderStyle::default(),
-                ));
-            }
-        },
-    )
-}
-
 /// Overlay chrome is anchored to the *pane body*, not to the terminal grid.
 /// `main.rs` mounts this view inside a wrapper inset by the configured terminal
-/// pane padding, so anchoring at a plain 13px would render the buttons
-/// `padding + 13`px in from the pane edge and no longer line up with the chat
-/// surface's cluster. Subtract the padding back out so both surfaces show the
-/// same 13px gap regardless of the terminal padding setting.
+/// pane padding, so anchoring at a plain 13px would render the scroll buttons
+/// `padding + 13`px in from the pane edge instead of the intended 13px.
+/// Subtract the padding back out so the gap stays the same regardless of the
+/// terminal padding setting.
 fn terminal_overlay_edge_insets() -> (f32, f32) {
     let (horizontal_padding, vertical_padding) =
         crate::shared_settings::shared_sidebar_settings_snapshot().terminal_pane_padding_px();
@@ -2736,29 +2419,58 @@ fn terminal_scroll_button(
         .child(terminal_scroll_button_glyph(edge))
 }
 
-fn terminal_overlay_tooltip(label: &str, hotkey_action_id: &str) -> String {
+/// Shared by the terminal's own scroll buttons and by the pane's agent action
+/// bar (apps/desktop/src/app/render/terminal_agent_action_bar.rs), so both
+/// resolve the same persisted-or-default hotkey label for the same action id.
+pub(crate) fn terminal_overlay_tooltip(label: &str, hotkey_action_id: &str) -> String {
     match terminal_overlay_hotkey_label(hotkey_action_id) {
         Some(hotkey) => format!("{label} ({hotkey})"),
         None => label.to_string(),
     }
 }
 
-fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
+/// Focus mode is bound in `main.rs` from a fixed chord instead of through the
+/// configurable hotkey map, so the bar's Maximize control names it with this
+/// pseudo action id and the label resolver answers with that same chord.
+pub(crate) const TERMINAL_OVERLAY_FOCUS_MODE_HOTKEY_ACTION_ID: &str = "toggleAgentsFocusMode";
+
+/// The effective (persisted-or-default) chord for an action, formatted for
+/// display. `terminal_overlay_tooltip` wraps it in parentheses after a label;
+/// the agent action bar's menu rows show it bare, in a column of its own.
+pub(crate) fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
+    /*
+    Kept in step with `GPUI_DEFAULT_GHOSTEX_HOTKEYS` in
+    apps/desktop/src/app/hotkeys.rs, which is where the bindings that actually
+    fire come from. This file is also compiled standalone by the
+    terminal-element-demo binary, which does not pull in the `app` module, so
+    the defaults are mirrored rather than referenced.
+
+    A default of "" means "no chord unless the user assigns one" — it must NOT
+    be used for an action that has a real default binding, or the control
+    silently advertises no shortcut while one works. That is exactly what Stash
+    prompt and Saved prompts did until this table was corrected.
+    */
     let default_key = match action_id {
         "renameActiveSession" => "cmd+r",
+        // `SLEEP_FOCUSED_SESSION_DEFAULT_KEY`, in the shared "+" chord syntax
+        // this resolver reads (that constant is in gpui keystroke syntax).
         "sleepFocusedSession" => "alt+shift+s",
         "delayedSend" => "ctrl+shift+s",
         "forkSession" => "ctrl+shift+f",
         "reloadSession" => "ctrl+shift+r",
         "promptEditor" => "ctrl+g",
+        "sessionNote" => "cmd+alt+n",
+        "copyAgentSessionId" => "cmd+alt+c",
         "toggleChatView" => "alt+g",
-        "attachFileOrFolder"
-        | "exportTranscript"
-        | "stashPrompt"
-        | "stashedPrompts"
-        | "toggleAgentActions"
-        | "scrollTerminalToTop"
-        | "scrollTerminalToBottom" => "",
+        "stashPrompt" => "alt+s",
+        "stashedPrompts" => "cmd+alt+s",
+        // Focus mode is bound in main.rs from a fixed chord rather than through
+        // the configurable hotkey map, so its label is fixed too.
+        TERMINAL_OVERLAY_FOCUS_MODE_HOTKEY_ACTION_ID => "cmd+ctrl+f",
+        "attachFileOrFolder" => "cmd+alt+p",
+        "exportTranscript" => "cmd+alt+e",
+        "toggleAgentActions" => "cmd+alt+a",
+        "scrollTerminalToTop" | "scrollTerminalToBottom" => "",
         _ => return None,
     };
     let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
@@ -2781,6 +2493,8 @@ fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
     )
 }
 
+/// Mirrors the same-named cases of `gpui_platform_hotkey_for_action` in
+/// apps/desktop/src/app/hotkeys.rs, for the action ids this file labels.
 fn terminal_overlay_platform_hotkey<'a>(action_id: &str, key: &'a str) -> &'a str {
     if cfg!(target_os = "macos") {
         return key;
@@ -2790,6 +2504,7 @@ fn terminal_overlay_platform_hotkey<'a>(action_id: &str, key: &'a str) -> &'a st
         "forkSession" => Some(("ctrl+shift+f", "cmd+alt+f")),
         "reloadSession" => Some(("ctrl+shift+r", "cmd+alt+r")),
         "promptEditor" => Some(("ctrl+g", "cmd+shift+g")),
+        "stashedPrompts" => Some(("cmd+alt+s", "cmd+shift+s")),
         _ => None,
     };
     match defaults {
