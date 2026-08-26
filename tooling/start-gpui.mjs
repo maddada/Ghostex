@@ -6,14 +6,16 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   readSync,
   rmSync,
   statSync,
+  writeFileSync,
   writeSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -849,6 +851,7 @@ async function installAndOpenMacosApp(stagedAppPath) {
   syncInstalledAppBundle(stagedAppPath);
   logStartStep('Checking installed GPUI app signature...');
   ensureInstalledAppCodeSignature(installedAppPath);
+  ensureMacosInstalledAppBundleBit(installedAppPath);
   logStartStep('Preparing LaunchServices environment...');
   const explicitGxserverCount = publishLaunchServicesGxserverExplicitEnvironment();
   logStartDetail(
@@ -898,6 +901,18 @@ function syncInstalledAppBundle(stagedAppPath) {
     });
   }
   logStartDetail(`Installed bundle synced to ${installedAppPath}.`);
+}
+
+function ensureMacosInstalledAppBundleBit(appBundlePath) {
+  /*
+  CDXC:GPUIStartCommand 2026-08-25:
+  rsync copies staged bundle contents into the existing /Applications wrapper
+  and does not copy Finder package flags. Without the bundle bit, Launch
+  Services reports kLSNoExecutableErr even though the Mach-O exists. Set the
+  bit after signing: SetFile writes Finder information, which codesign rejects
+  as detritus if it is present beforehand.
+  */
+  run('/usr/bin/SetFile', ['-a', 'B', appBundlePath], { env: startEnvironment });
 }
 
 function ensureInstalledAppCodeSignature(appPathForSignature) {
@@ -1428,18 +1443,67 @@ function resolveLocalStartCodeSignIdentity(environment) {
     return environment.GHOSTEX_GPUI_SIGN_IDENTITY ?? '';
   }
   const identities = listCodeSigningIdentities(environment);
-  const preferredIdentity =
-    identities.find((identity) => identity.name.startsWith('Apple Development: ')) ??
-    identities.find((identity) => identity.name.startsWith('Mac Developer: ')) ??
-    identities.find((identity) => identity.name.startsWith('Developer ID Application: ')) ??
-    identities.find((identity) => identity.name.startsWith('Apple Distribution: '));
+  const preferredIdentity = preferredLocalStartCodeSignIdentities(identities).find((identity) =>
+    identityCanSign(identity.name, environment)
+  );
   if (preferredIdentity) {
     return preferredIdentity.name;
   }
   console.warn(
-    'No Apple code-signing identity was found; falling back to ad-hoc GPUI signing. macOS may ask for permissions again after GPUI rebuilds.'
+    identities.length > 0
+      ? 'Found code-signing identities, but none could sign; falling back to ad-hoc GPUI signing. macOS may ask for permissions again after GPUI rebuilds.'
+      : 'No Apple code-signing identity was found; falling back to ad-hoc GPUI signing. macOS may ask for permissions again after GPUI rebuilds.'
   );
   return '-';
+}
+
+function preferredLocalStartCodeSignIdentities(identities) {
+  const prefixes = [
+    'Apple Development: ',
+    'Mac Developer: ',
+    'Developer ID Application: ',
+    'Apple Distribution: ',
+  ];
+  const seen = new Set();
+  const preferred = [];
+  for (const prefix of prefixes) {
+    for (const identity of identities) {
+      if (!identity.name.startsWith(prefix) || seen.has(identity.name)) {
+        continue;
+      }
+      seen.add(identity.name);
+      preferred.push(identity);
+    }
+  }
+  return preferred;
+}
+
+function identityCanSign(identityName, environment) {
+  /*
+  CDXC:GPUIStartCommand 2026-08-25:
+  `security find-identity -v -p codesigning` can list Apple Development certs
+  that `codesign --sign` then rejects with "no identity found" (missing private
+  key, locked keychain, or a stale listing). Probe with a throwaway file so
+  local start falls back to ad-hoc instead of failing after the full rebuild.
+  */
+  const probeDir = mkdtempSync(path.join(tmpdir(), 'ghostex-gpui-sign-'));
+  const probePath = path.join(probeDir, 'probe');
+  try {
+    writeFileSync(probePath, 'ghostex-gpui-codesign-probe\n');
+    const result = spawnSync(
+      'codesign',
+      ['--force', '--sign', identityName, '--timestamp=none', probePath],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: environment,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+    return result.status === 0;
+  } finally {
+    rmSync(probeDir, { force: true, recursive: true });
+  }
 }
 
 function resolveLocalStartCodeSignTimestampFlag(environment) {

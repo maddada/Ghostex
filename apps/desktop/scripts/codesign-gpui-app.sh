@@ -42,6 +42,10 @@ EOF
 	exit 1
 fi
 
+# codesign rejects resource forks, Finder information (SetFile bundle bit),
+# and similar xattrs. Clear them on the target before any signing pass.
+/usr/bin/xattr -cr "$SIGN_TARGET"
+
 if [[ "$CODE_SIGN_IDENTITY" == "-" ]]; then
 	codesign --force --deep --sign - "$SIGN_TARGET"
 	codesign --verify --deep --strict --verbose=2 "$SIGN_TARGET"
