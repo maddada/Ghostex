@@ -422,9 +422,10 @@ function Pane({
         </div>
         <div className='workspace-tabbar__actions'>
           {/*
-            The terminal↔chat switch lives in the floating top-right cluster
-            over the surface itself (SessionChatHostActionsCluster), matching
-            the gpui terminal overlay — no tab-bar toggle.
+            The terminal↔chat switch lives on the surface itself: the chat
+            composer's footer row one way (SessionChatComposerActions), the
+            terminal's bottom bar the other (SessionTerminalActionBar) — no
+            tab-bar toggle.
           */}
           <button aria-label='Find in terminal' onClick={() => onFindOpenChange(true)} type='button'>
             <WorkspaceIcon name='find' />

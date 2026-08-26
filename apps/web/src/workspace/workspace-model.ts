@@ -39,6 +39,8 @@ export interface WorkspaceSession {
    * delete the row, so the terminal-view button says so in red.
    */
   queuedPromptFailedCount?: number;
+  /** Saved prompts associated with this provider conversation. */
+  stashedPromptCount?: number;
   /** Terminal↔chat body toggle; defaults to "terminal" when absent. */
   sessionSurfaceMode?: SessionSurfaceMode;
 }

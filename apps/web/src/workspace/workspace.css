@@ -425,20 +425,29 @@
 }
 
 /*
- * Terminal body wrapper: fills the terminal surface layer and anchors the
- * floating top-right [Chat View][Agent Actions] cluster over xterm.
+ * Terminal body wrapper: fills the terminal surface layer, stacks xterm above
+ * the bottom action bar (SessionTerminalActionBar, a real sibling so the
+ * terminal never renders underneath it), and anchors the floating top-left
+ * queued-prompts button over xterm.
  */
 .workspace-terminal-surface {
   display: flex;
   position: relative;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   align-items: stretch;
   justify-content: stretch;
 }
 
+/*
+ * xterm takes whatever the bar leaves. `flex-basis: 0` is what makes that
+ * work: .session-terminal sets `height: 100%`, which would otherwise resolve
+ * against the whole surface and push the bar off the bottom.
+ */
 .workspace-terminal-surface > :first-child {
+  flex: 1 1 0;
   width: 100%;
   min-width: 0;
   min-height: 0;

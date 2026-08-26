@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  getghostexHotkeyActionIdForKey,
+  ghostexHotkeyTextFromKeyboardEvent,
+  normalizeghostexHotkeySettings,
+} from '@/packages/shared/ghostex-hotkeys';
+import { hasActiveSidebarHotkeyRecorder } from '@/packages/core-ui/sidebar-app/session-ordering';
 import type {
   GxserverPresentationSession,
   GxserverProjectId,
@@ -23,9 +29,10 @@ import {
 } from '../workspace/workspace-model';
 import { prepareSessionAttach, RestoreBlockedError, type AttachIntent } from './attach-flow';
 import './action-events';
-import { CommandPane } from './command-pane';
+import { CommandPane, type CommandPaneOpenRequest } from './command-pane';
+import { readWebSettings } from './web-settings';
 import { resolveSessionChatTranscriptAgent } from '@/packages/shared/session-chat';
-import { SessionChatHostActionsCluster } from '@/packages/core-ui/chat/session-chat-host-actions-cluster';
+import { SessionTerminalActionBar } from '@/packages/core-ui/chat/session-terminal-action-bar';
 import { SessionChatQueuedPromptsButton } from '../chat/session-chat-queued-prompts-button';
 import { createWebSessionHostActions, SessionChatHost } from './session-chat-host';
 import {
@@ -48,9 +55,17 @@ interface OpenOptions {
   targetPaneId?: string;
 }
 
-interface CommandPaneOpenRequest {
-  requestId: number;
-  sessionId?: string;
+
+
+/**
+ * The terminal bar's left label. `agentSessionId` is the agent's own
+ * conversation id, which every supported agent writes as a UUID
+ * (`01a00854-13cb-7500-…`), so the first group alone is short enough to sit in
+ * a bar and still long enough to match against `ghostex sessions` output.
+ */
+function shortAgentSessionId(agentSessionId: string | undefined): string | undefined {
+  const trimmed = agentSessionId?.trim();
+  return trimmed ? trimmed.slice(0, 8) : undefined;
 }
 
 async function sendCommandSessionText(session: SessionReference, text: string): Promise<void> {
@@ -470,17 +485,45 @@ export function IntegratedAgentsPage() {
         setError(nextError instanceof Error ? nextError.message : String(nextError))
       );
     };
-    const openCommandPane = () =>
+    const openCommandPane = (event: WindowEventMap['ghostex-web:openCommandPane']) => {
+      const toggle = event.detail?.toggle === true;
+      if (toggle && commandSessions.length === 0) {
+        if (!activeProject) return;
+        void createCommandTerminal(activeProject).catch((nextError: unknown) =>
+          setError(nextError instanceof Error ? nextError.message : String(nextError))
+        );
+        return;
+      }
       setCommandPaneOpenRequest({
         requestId: ++commandPaneRequestId.current,
+        ...(toggle ? { toggle: true } : {}),
       });
+    };
     window.addEventListener('ghostex-web:runTitlebarAction', runAction);
     window.addEventListener('ghostex-web:openCommandPane', openCommandPane);
     return () => {
       window.removeEventListener('ghostex-web:runTitlebarAction', runAction);
       window.removeEventListener('ghostex-web:openCommandPane', openCommandPane);
     };
-  }, [activeProject, createCommandTerminal]);
+  }, [activeProject, commandSessions.length, createCommandTerminal]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || hasActiveSidebarHotkeyRecorder()) return;
+      const hotkeyText = ghostexHotkeyTextFromKeyboardEvent(event);
+      if (!hotkeyText) return;
+      const actionId = getghostexHotkeyActionIdForKey(
+        normalizeghostexHotkeySettings(readWebSettings().hotkeys),
+        hotkeyText
+      );
+      if (actionId !== 'openCommandsPanel') return;
+      event.preventDefault();
+      event.stopPropagation();
+      window.dispatchEvent(new CustomEvent('ghostex-web:openCommandPane', { detail: { toggle: true } }));
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
 
   const attachCommandSession = useCallback(
     (session: WorkspaceSession, action: WorkspacePlaceholderAction) => {
@@ -558,6 +601,7 @@ export function IntegratedAgentsPage() {
             const chatEligible =
               Boolean(session.agentSessionId?.trim()) &&
               resolveSessionChatTranscriptAgent(session.agentId, session.agentIcon) !== null;
+            const shortSessionId = shortAgentSessionId(session.agentSessionId);
             return (
               <div className='workspace-terminal-surface'>
                 <SessionTerminal
@@ -589,9 +633,10 @@ export function IntegratedAgentsPage() {
                       failedCount={session.queuedPromptFailedCount ?? 0}
                       onOpenChat={controls.switchToChat}
                     />
-                    <SessionChatHostActionsCluster
+                    <SessionTerminalActionBar
                       hostActions={createWebSessionHostActions(session, controls.switchToChat)}
-                      surface='terminal'
+                      {...(shortSessionId ? { sessionId: shortSessionId } : {})}
+                      stashedPromptCount={session.stashedPromptCount ?? 0}
                     />
                   </>
                 ) : null}

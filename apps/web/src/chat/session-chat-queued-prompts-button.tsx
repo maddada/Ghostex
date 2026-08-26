@@ -3,8 +3,7 @@
 // The Ghostex prompt queue is edited in the chat view, but it keeps draining
 // while the user watches the terminal, so the terminal surface needs to say how
 // many prompts are still waiting and offer one click back to the place they can
-// be edited. Top-left, mirroring the floating top-right
-// SessionChatHostActionsCluster, hidden entirely at count 0.
+// be edited. Floats top-left over the terminal, hidden entirely at count 0.
 //
 // The count comes from the presentation projection's `queuedPromptCount` (the
 // same field the sidebar badge reads), which gxserver republishes on every
@@ -44,7 +43,8 @@ export function SessionChatQueuedPromptsButton({
       <AppTooltip content={tooltip}>
         {/*
           data-slot opts out of the unlayered legacy `button:where(:not([data-slot]))`
-          chrome in theme.css, exactly as the host action cluster does.
+          chrome in theme.css, which would otherwise beat the layered Tailwind
+          `bg-[#101010]` / `hover:bg-[#343434]` utilities below.
         */}
         <button
           aria-label={hasFailed ? `${label}. Delivery failed. Open Chat View.` : `${label}. Open Chat View.`}

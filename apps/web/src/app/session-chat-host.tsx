@@ -4,8 +4,9 @@
 // live in packages/core-ui/styles/chat.css, pulled in through the shared sheet below
 // (already loaded app-wide by WebSidebar; the duplicate import dedupes).
 //
-// The top-right Agent Actions row mirrors the gpui terminal overlay, limited
-// to the actions the web app can actually execute against gxserver: Rename
+// The Agent Actions list is limited to what the web app can actually execute
+// against gxserver — the chat composer's ⋯ menu and the terminal surface's
+// bottom bar both render it from this one list: Rename
 // (/api/requestSessionRename via an inline input), Sleep, Fork (focuses the
 // created session like the sidebar fork), Full Reload (sleep→wake, the same
 // composition gpui uses), and Export Transcript (the daemon writes the
@@ -20,10 +21,7 @@ import type {
   GxserverForkSessionResult,
   GxserverSessionRenameRequestResult,
 } from '@/packages/shared/gxserver-protocol';
-import {
-  resolveSessionChatDisplayAgent,
-  resolveSessionChatTranscriptAgent,
-} from '@/packages/shared/session-chat';
+import { resolveSessionChatDisplayAgent, resolveSessionChatTranscriptAgent } from '@/packages/shared/session-chat';
 import { getSidebarAgentIconById } from '@/packages/shared/sidebar-agents';
 import { openAppModal } from '@/packages/core-ui/app-modal-host-bridge';
 import { SessionChatView, type SessionChatHostActions } from '@/packages/core-ui/chat/session-chat-view';
@@ -145,10 +143,10 @@ async function runChatAgentAction(session: WorkspaceSession, actionId: string, v
 }
 
 /**
- * The cluster contract for a web workspace session: the primary switch button
- * plus the gxserver-backed action row. Shared by the chat layer (switch =
- * back to terminal) and the terminal layer's floating overlay (switch = to
- * chat) so both surfaces offer the identical Agent Actions row.
+ * The host-action contract for a web workspace session: the surface switch
+ * plus the gxserver-backed action list. Shared by the chat layer (switch =
+ * back to terminal) and the terminal layer's bottom bar (switch = to chat) so
+ * both surfaces offer the identical Agent Actions.
  */
 export function createWebSessionHostActions(
   session: WorkspaceSession,
@@ -164,8 +162,10 @@ export function createWebSessionHostActions(
       },
       { id: 'sleep', label: 'Sleep' },
       { id: 'fork', label: 'Fork' },
-      { id: 'fullReload', label: 'Full Reload' },
-      { id: 'exportTranscript', label: 'Export Transcript' },
+      // Sentence case, matching the desktop hosts' labels so the same menu row
+      // reads the same on every surface.
+      { id: 'fullReload', label: 'Full reload' },
+      { id: 'exportTranscript', label: 'Export transcript' },
     ],
     onAction: (id, value) => {
       runChatAgentAction(session, id, value).catch((error: unknown) => {
@@ -210,6 +210,7 @@ export function SessionChatHost({
       monacoVsBaseUrl='/monaco/vs'
       onDelayedActions={() => openSessionDelayedActions(session)}
       sessionKey={`${session.machineId}:${session.projectId}:${session.sessionId}`}
+      sessionTitle={session.title}
       theme={chatSettings.sessionChatTheme}
       transport={transport}
       verboseMode={chatSettings.sessionChatVerboseMode}
