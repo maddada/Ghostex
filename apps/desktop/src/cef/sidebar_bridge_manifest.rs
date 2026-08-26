@@ -250,6 +250,7 @@ impl ExtensionBridgeSurfaceSpec {
         let Some(path) = base.strip_prefix(&self.origin) else {
             return false;
         };
+        let path = if path.is_empty() { "/" } else { path };
         path.starts_with(&self.path_prefix)
             && (self.path_prefix.ends_with('/')
                 || path.len() == self.path_prefix.len()
