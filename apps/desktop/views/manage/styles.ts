@@ -333,11 +333,17 @@ export const MANAGE_STYLES = `
     width: 14px;
   }
 
+  /*
+   * CDXC:UnifiedAppModal 2026-08-26:
+   * Docs dropdown panels follow the app's rounded menu language — 8px panels
+   * with 6px item rows — the same radii the shared modal tokens use for menu
+   * surfaces (--gx-modal-radius-control / --gx-modal-radius-menu).
+   */
   .manage-sidebar-menu {
     backdrop-filter: blur(18px);
     background: #0e0e0e;
     border: 1px solid #595959;
-    border-radius: 4px;
+    border-radius: 8px;
     box-shadow:
       0 18px 42px rgba(0, 0, 0, 0.38),
       0 4px 12px rgba(0, 0, 0, 0.28),
@@ -360,7 +366,7 @@ export const MANAGE_STYLES = `
     align-items: center;
     background: transparent;
     border: 0;
-    border-radius: 3px;
+    border-radius: 6px;
     color: rgba(244, 244, 245, 0.88);
     display: flex;
     font-size: 12.5px;
@@ -701,8 +707,7 @@ export const MANAGE_STYLES = `
    * surface, spacing, square corners, hover, dividers, and danger rows cannot
    * drift from the GPUI sidebar menu again.
    */
-  .sidebar-context-menu-backdrop,
-  .manage-rename-backdrop {
+  .sidebar-context-menu-backdrop {
     background: transparent;
     border: 0;
     cursor: default;
@@ -717,12 +722,20 @@ export const MANAGE_STYLES = `
     --app-border: var(--manage-border);
     --app-card: var(--manage-panel);
     --app-context-menu-hover-background: var(--manage-row-surface);
+    /*
+     * CDXC:UnifiedAppModal 2026-08-26:
+     * Docs-scoped only. The shared sidebar-context-menu sheet stays square for
+     * every other surface that uses it; rounding is applied through the Docs
+     * class so this page's menus match the Docs dropdown language.
+     */
+    border-radius: 8px;
     color: var(--manage-text);
     font-size: 12px;
     font-weight: 400;
   }
 
   .manage-file-context-menu-item {
+    border-radius: 6px;
     line-height: 16px;
   }
 
@@ -764,114 +777,33 @@ export const MANAGE_STYLES = `
     background: color-mix(in srgb, #ff7b72 18%, transparent);
   }
 
-  .manage-rename-backdrop {
-    background: rgba(0, 0, 0, 0.34);
-    z-index: 70;
+  /*
+   * CDXC:UnifiedAppModal 2026-08-26:
+   * Docs modals are AppModalShell dialogs, so their surface, radius, hairlines,
+   * control height, typography, and footer pills all come from the .gx-app-modal
+   * rules in packages/core-ui/styles/modals.css. Only two things stay here.
+   *
+   * 1. Stacking. The dialog primitive portals its backdrop and popup to
+   *    <body> at z-index 50, while the Docs shell paints a floating file
+   *    sidebar (650), the annotation dropdown (700), and the comment composer
+   *    (710) in the same root stacking context, so an un-raised dialog would
+   *    open underneath them with an undimmed sidebar on top of its scrim. Lift
+   *    the dialog layer above every Docs overlay, matching the 1200 app-modal
+   *    convention. Docs renders exactly one dialog stack, so scoping by slot is
+   *    precise enough and cannot leak to another surface's sheet.
+   * 2. The rename error line, which is layout unique to this modal.
+   */
+  [data-slot="dialog-overlay"] {
+    z-index: 1200;
   }
 
-  .manage-rename-dialog {
-    background: color-mix(in srgb, var(--manage-panel-raised) 94%, #000 6%);
-    border: 1px solid var(--manage-border-strong);
-    box-shadow:
-      0 20px 52px rgba(0, 0, 0, 0.46),
-      0 0 0 1px rgba(255, 255, 255, 0.04);
-    color: var(--manage-text);
-    display: grid;
-    gap: 10px;
-    left: 50%;
-    max-width: calc(100vw - 32px);
-    padding: 12px;
-    position: fixed;
-    top: 18%;
-    transform: translateX(-50%);
-    width: min(360px, calc(100vw - 32px));
-    z-index: 71;
+  [data-slot="dialog-content"] {
+    z-index: 1201;
   }
 
-  .manage-rename-header {
-    align-items: center;
-    display: flex;
-    gap: 10px;
-    min-width: 0;
-  }
-
-  .manage-rename-header span {
-    flex: 1 1 auto;
+  .manage-rename-modal [data-slot="field-error"] {
     font-size: 13px;
-    font-weight: 500;
-    min-width: 0;
-  }
-
-  .manage-rename-close {
-    height: 26px;
-    width: 26px;
-  }
-
-  .manage-rename-input {
-    background: rgba(255, 255, 255, 0.055);
-    border: 1px solid var(--manage-border);
-    color: var(--manage-text);
-    font-size: 13px;
-    height: var(--manage-control-height);
-    min-width: 0;
-    outline: 0;
-    padding: 0 9px;
-    width: 100%;
-  }
-
-  .manage-rename-input:focus {
-    border-color: rgba(125, 211, 252, 0.58);
-  }
-
-  .manage-rename-error {
-    color: var(--manage-red);
-    font-size: 12px;
-    line-height: 1.35;
-  }
-
-  .manage-rename-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-  }
-
-  .manage-rename-secondary,
-  .manage-rename-primary {
-    align-items: center;
-    border: 1px solid var(--manage-border);
-    display: inline-flex;
-    font-size: 12px;
-    font-weight: 500;
-    height: var(--manage-control-height);
-    justify-content: center;
-    min-width: 76px;
-    padding: 0 11px;
-  }
-
-  .manage-rename-secondary {
-    background: rgba(255, 255, 255, 0.04);
-    color: rgba(248, 250, 252, 0.78);
-  }
-
-  .manage-rename-primary {
-    background: rgba(125, 211, 252, 0.16);
-    border-color: rgba(125, 211, 252, 0.42);
-    color: var(--manage-text);
-  }
-
-  .manage-rename-secondary:hover,
-  .manage-rename-secondary:focus-visible,
-  .manage-rename-primary:hover,
-  .manage-rename-primary:focus-visible {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--manage-text);
-    outline: none;
-  }
-
-  .manage-rename-secondary:disabled,
-  .manage-rename-primary:disabled {
-    color: var(--manage-subtle);
-    cursor: wait;
+    line-height: 1.45;
   }
 
   .manage-empty {

@@ -5,7 +5,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from 'react';
@@ -31,11 +33,20 @@ import {
   IconRefresh,
   IconSettings,
   IconTrash,
-  IconX,
 } from '@tabler/icons-react';
 import { type ProjectDocsFileEntry as ManageFileEntry } from '@/packages/shared/project-docs';
+import { Field, FieldError, FieldLabel } from '@/packages/components/ui/field';
+import { Input } from '@/packages/components/ui/input';
+import {
+  AppModalButton,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalForm,
+  AppModalHeader,
+  AppModalShell,
+  AppModalTitle,
+} from '@/packages/core-ui/app-modal-shell';
 import { SidebarContextMenuPortal } from '@/packages/core-ui/sidebar-context-menu-portal';
-import { createPortal } from 'react-dom';
 import { ManageArtifactKind, ManageFileContextMenuState, ManageFileOperationState, ManageSidebarSide } from './types';
 import { ManageTooltipButton } from './manage-tooltip-button';
 import { fileIconForPath } from './file-tree-utils';
@@ -558,6 +569,15 @@ export function ManageFileContextMenu({
   );
 }
 
+/**
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * Docs used to hand-roll this dialog as a portaled backdrop button plus a
+ * square `.manage-rename-dialog` card with its own primary/secondary buttons,
+ * so it was the one app modal that did not speak the shared modal language.
+ * It now composes AppModalShell like every other app modal, which also hands
+ * Escape/backdrop dismissal and focus trapping to the dialog primitive instead
+ * of a window-level keydown listener.
+ */
 export function ManageRenameDialog({
   error,
   isRenaming,
@@ -574,26 +594,22 @@ export function ManageRenameDialog({
   value: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
   const isSubmitDisabled = isRenaming || value.trim().length === 0;
 
-  useEffect(() => {
+  /*
+   * Own the dialog's initial focus so the existing name opens fully selected
+   * and the user can type a replacement immediately. Returning false stops the
+   * dialog primitive from re-focusing afterwards and collapsing the selection.
+   */
+  const focusAndSelectInput = useCallback(() => {
     const input = inputRef.current;
-    if (!input) {
-      return;
+    if (input) {
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(0, input.value.length);
     }
-    input.focus();
-    input.select();
+    return false as const;
   }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -603,41 +619,35 @@ export function ManageRenameDialog({
     onSubmit();
   };
 
-  return createPortal(
-    <>
-      <button aria-label='Cancel rename' className='manage-rename-backdrop' onClick={onCancel} type='button' />
-      <form className='manage-rename-dialog' onSubmit={submit}>
-        <div className='manage-rename-header'>
-          <span>Rename item</span>
-          <button
-            aria-label='Cancel rename'
-            className='manage-icon-button manage-rename-close'
-            onClick={onCancel}
-            type='button'
-          >
-            <IconX aria-hidden='true' size={15} stroke={1.8} />
-          </button>
-        </div>
-        <input
-          aria-label='Item name'
-          className='manage-rename-input'
-          disabled={isRenaming}
-          onChange={(event) => onChange(event.currentTarget.value)}
-          ref={inputRef}
-          value={value}
-        />
-        {error ? <div className='manage-rename-error'>{error}</div> : null}
-        <div className='manage-rename-actions'>
-          <button className='manage-rename-secondary' disabled={isRenaming} onClick={onCancel} type='button'>
+  return (
+    <AppModalShell className='manage-rename-modal' initialFocus={focusAndSelectInput} isOpen onClose={onCancel}>
+      <AppModalForm onSubmit={submit}>
+        <AppModalHeader>
+          <AppModalTitle>Rename item</AppModalTitle>
+          <AppModalDescription>Choose a new name for the selected file or folder.</AppModalDescription>
+        </AppModalHeader>
+        <Field>
+          <FieldLabel htmlFor={inputId}>Name</FieldLabel>
+          <Input
+            aria-label='Item name'
+            disabled={isRenaming}
+            id={inputId}
+            onChange={(event) => onChange(event.currentTarget.value)}
+            ref={inputRef}
+            value={value}
+          />
+          {error ? <FieldError>{error}</FieldError> : null}
+        </Field>
+        <AppModalFooter>
+          <AppModalButton disabled={isRenaming} onClick={onCancel} type='button'>
             Cancel
-          </button>
-          <button className='manage-rename-primary' disabled={isSubmitDisabled} type='submit'>
+          </AppModalButton>
+          <AppModalButton disabled={isSubmitDisabled} type='submit'>
             {isRenaming ? 'Renaming' : 'Rename'}
-          </button>
-        </div>
-      </form>
-    </>,
-    document.body
+          </AppModalButton>
+        </AppModalFooter>
+      </AppModalForm>
+    </AppModalShell>
   );
 }
 
