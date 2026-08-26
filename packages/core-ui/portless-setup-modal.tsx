@@ -1,12 +1,14 @@
-import { Button } from '@/packages/components/ui/button';
+import { Card, CardDescription, CardHeader } from '@/packages/components/ui/card';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/packages/components/ui/dialog';
+  AppModalButton,
+  AppModalColumn,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalHeader,
+  AppModalShell,
+  AppModalStack,
+  AppModalTitle,
+} from './app-modal-shell';
 import type { NativePortlessAdminInstallAction, NativePortlessProtocol } from '../shared/native-ghostty-host-protocol';
 
 export type PortlessSetupModalMode = 'firstSetup' | 'standaloneReconfigure';
@@ -71,45 +73,45 @@ export function PortlessSetupModal({
    * alert. Buttons send only action/protocol/request-id enums or booleans to
    * native-sidebar so the logged modal command boundary never receives the
    * user's full settings object, paths, domains, URLs, or project metadata.
+   *
+   * CDXC:UnifiedAppModal 2026-08-26:
+   * Portless setup now composes the shared AppModalShell, so its chrome comes
+   * from `.gx-app-modal`. Keep the `portless-setup-modal-shadcn` marker class:
+   * apps/desktop/views/modal-host.tsx measures that selector for the one-shot
+   * native fit-height pass.
    */
   return (
-    <Dialog
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          dismiss();
-        }
-      }}
-      open={isOpen}
-    >
-      <DialogContent className='command-config-modal-shadcn portless-setup-modal-shadcn font-sans'>
-        <div className='portless-setup-modal-content'>
-          <DialogHeader>
-            <DialogTitle className='text-xl'>{copy.title}</DialogTitle>
-            <DialogDescription className='sr-only'>{copy.title}</DialogDescription>
-          </DialogHeader>
-          <div className='portless-setup-modal-body'>
-            <p>{copy.body[0]}</p>
-            <p>{copy.body[1]}</p>
-          </div>
-          <DialogFooter className='portless-setup-modal-actions'>
-            <Button
-              onClick={() =>
-                onAdminAction(copy.primaryAction, protocol, createPortlessSetupModalRequestId(copy.primaryAction))
-              }
-              type='button'
-            >
-              {copy.primaryLabel}
-            </Button>
-            <Button onClick={dismiss} type='button' variant='outline'>
-              {copy.dismissLabel}
-            </Button>
-            <Button onClick={onDisable} type='button' variant='destructive'>
-              Disable
-            </Button>
-          </DialogFooter>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <AppModalShell className='portless-setup-modal-shadcn' isOpen={isOpen} onClose={dismiss}>
+      <AppModalColumn>
+        <AppModalHeader>
+          <AppModalTitle>{copy.title}</AppModalTitle>
+          <AppModalDescription>{copy.body[0]}</AppModalDescription>
+        </AppModalHeader>
+        <AppModalStack className='portless-setup-modal-body'>
+          <Card size='sm'>
+            <CardHeader>
+              <CardDescription>{copy.body[1]}</CardDescription>
+            </CardHeader>
+          </Card>
+        </AppModalStack>
+        <AppModalFooter>
+          <AppModalButton onClick={dismiss} type='button'>
+            {copy.dismissLabel}
+          </AppModalButton>
+          <AppModalButton onClick={onDisable} tone='danger' type='button'>
+            Disable
+          </AppModalButton>
+          <AppModalButton
+            onClick={() =>
+              onAdminAction(copy.primaryAction, protocol, createPortlessSetupModalRequestId(copy.primaryAction))
+            }
+            type='button'
+          >
+            {copy.primaryLabel}
+          </AppModalButton>
+        </AppModalFooter>
+      </AppModalColumn>
+    </AppModalShell>
   );
 }
 

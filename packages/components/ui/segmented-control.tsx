@@ -39,7 +39,7 @@ const segmentedControlClass =
  * back on each segment and undo the joined-strip shape.
  */
 const segmentedControlItemClass =
-  'relative inline-flex min-w-0 shrink-0 items-center justify-center gap-1.5 bg-transparent px-3 font-normal whitespace-nowrap text-muted-foreground transition-colors outline-none select-none hover:bg-accent/60 hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-accent aria-pressed:text-foreground [&_svg]:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0';
+  'relative inline-flex min-w-0 shrink-0 items-center justify-center gap-1.5 bg-transparent px-3 font-normal whitespace-nowrap text-muted-foreground transition-colors outline-none select-none hover:bg-accent/60 hover:text-foreground focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-foreground/14 aria-pressed:text-foreground [&_svg]:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0';
 
 function SegmentedControl({
   className,
@@ -92,11 +92,7 @@ function SegmentedControlItem({ className, children, ...props }: TogglePrimitive
     <TogglePrimitive
       data-slot='segmented-control-item'
       data-size={size}
-      className={cn(
-        segmentedControlItemClass,
-        size === 'sm' ? 'h-7 text-xs' : 'h-8 text-[0.8125rem]',
-        className
-      )}
+      className={cn(segmentedControlItemClass, size === 'sm' ? 'h-7 text-xs' : 'h-8 text-[0.8125rem]', className)}
       {...props}
     >
       {children}

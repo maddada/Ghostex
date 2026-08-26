@@ -1,4 +1,14 @@
 import { useEffect, useRef } from 'react';
+import { Textarea } from '@/packages/components/ui/textarea';
+import {
+  AppModalButton,
+  AppModalColumn,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalHeader,
+  AppModalShell,
+  AppModalTitle,
+} from './app-modal-shell';
 
 export type FirstUserMessageModalProps = {
   isOpen: boolean;
@@ -9,23 +19,6 @@ export type FirstUserMessageModalProps = {
 
 export function FirstUserMessageModal({ isOpen, message, onClose, title }: FirstUserMessageModalProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown, true);
-    };
-  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -45,33 +38,31 @@ export function FirstUserMessageModal({ isOpen, message, onClose, title }: First
   }
 
   return (
-    <div className='confirm-modal-root scroll-mask-y' role='presentation'>
-      <button className='confirm-modal-backdrop' onClick={onClose} type='button' />
-      <div
-        aria-labelledby='first-user-message-modal-title'
-        aria-modal='true'
-        className='confirm-modal first-user-message-modal scroll-mask-y'
-        role='dialog'
-      >
-        <div className='confirm-modal-header'>
-          <div className='confirm-modal-title' id='first-user-message-modal-title'>
-            View 1st Message
-          </div>
-          {title ? <div className='confirm-modal-description'>{title}</div> : null}
-        </div>
+    <AppModalShell className='first-user-message-modal' isOpen={isOpen} onClose={onClose} width={560}>
+      <AppModalColumn>
+        <AppModalHeader>
+          <AppModalTitle>View 1st Message</AppModalTitle>
+          {title ? <AppModalDescription>{title}</AppModalDescription> : null}
+        </AppModalHeader>
         {/*
          * CDXC:FirstMessage 2026-04-28-05:48
          * The first-message viewer must use a textarea, not a styled paragraph,
          * so users can read the saved prompt and select/copy the exact text
          * from both active sessions and previous-session modal cards.
          */}
-        <textarea
-          className='scratch-pad-textarea first-user-message-textarea'
+        <Textarea
+          aria-label='First message'
+          className='first-user-message-textarea'
           readOnly
           ref={textareaRef}
           value={message}
         />
-      </div>
-    </div>
+        <AppModalFooter>
+          <AppModalButton onClick={onClose} type='button'>
+            Close
+          </AppModalButton>
+        </AppModalFooter>
+      </AppModalColumn>
+    </AppModalShell>
   );
 }

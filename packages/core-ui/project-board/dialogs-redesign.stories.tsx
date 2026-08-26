@@ -309,7 +309,7 @@ function BoardColumnsStory() {
 }
 
 const meta: Meta = {
-  title: 'Project Board Redesign/Dialogs',
+  title: 'Modals/Embedded/Project Board',
 };
 
 export default meta;

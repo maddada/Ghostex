@@ -1,7 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from 'react';
-import { Button } from '@/packages/components/ui/button';
 import { cn } from '@/packages/components/utils';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/packages/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -11,6 +9,14 @@ import {
   SelectValue,
 } from '@/packages/components/ui/select';
 import { Textarea } from '@/packages/components/ui/textarea';
+import {
+  APP_MODAL_SELECT_CONTENT_CLASS,
+  AppModalButton,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalShell,
+  AppModalTitle,
+} from './app-modal-shell';
 import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
 import { createSidebarAgentSelectItems, type SidebarAgentButton } from '../shared/sidebar-agents';
 import type { SidebarGitAction, SidebarGitChangedFile } from '../shared/sidebar-git';
@@ -340,272 +346,253 @@ export function GitCommitModal({
    */
   return (
     <>
-      <Dialog
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            onCancel(draft.requestId);
-          }
-        }}
-        open={isOpen}
+      <AppModalShell
+        aria-describedby={descriptionId}
+        aria-labelledby={titleId}
+        className={cn('git-commit-modal-shadcn flex flex-col gap-0 overflow-hidden p-0', isDarkTheme && 'dark')}
+        data-sidebar-theme={theme}
+        isOpen={isOpen}
+        onClose={() => onCancel(draft.requestId)}
       >
-        <DialogContent
-          aria-describedby={descriptionId}
-          aria-labelledby={titleId}
-          className={cn(
-            'ghostex-settings-shadcn settings-modal-dialog command-config-modal-shadcn git-commit-modal-shadcn flex flex-col gap-0 overflow-hidden p-0 font-sans',
-            isDarkTheme && 'dark'
-          )}
-          data-sidebar-theme={theme}
-        >
-          <DialogTitle className='sr-only' id={titleId}>
-            Commit changes
-          </DialogTitle>
-          <DialogDescription className='sr-only' id={descriptionId}>
-            {draft.description || 'Review and confirm your commit. Leave the message blank to auto-generate one.'}
-          </DialogDescription>
-          <div className='git-commit-modal-body'>
-            <div className='git-commit-modal-left' data-has-message={String(showCommitMessage)}>
-              <div className='git-commit-files-panel'>
-                <div className='git-commit-files-header'>
-                  <div className='git-commit-files-heading'>
-                    {draft.branch !== undefined ? (
-                      <div className='git-commit-branch-row'>
-                        <span aria-label='Branch' className='git-commit-branch-name'>
-                          {draft.branch ?? '(detached HEAD)'}
-                        </span>
-                      </div>
-                    ) : null}
-                    {isEditingFiles && changedFiles.length > 0 ? (
-                      <span className='git-commit-files-selected'>
-                        {selectedFiles.length} of {changedFiles.length} selected
+        <AppModalTitle className='sr-only' id={titleId}>
+          Commit changes
+        </AppModalTitle>
+        <AppModalDescription className='sr-only' id={descriptionId}>
+          {draft.description || 'Review and confirm your commit. Leave the message blank to auto-generate one.'}
+        </AppModalDescription>
+        <div className='git-commit-modal-body'>
+          <div className='git-commit-modal-left' data-has-message={String(showCommitMessage)}>
+            <div className='git-commit-files-panel'>
+              <div className='git-commit-files-header'>
+                <div className='git-commit-files-heading'>
+                  {draft.branch !== undefined ? (
+                    <div className='git-commit-branch-row'>
+                      <span aria-label='Branch' className='git-commit-branch-name'>
+                        {draft.branch ?? '(detached HEAD)'}
                       </span>
-                    ) : null}
-                  </div>
-                </div>
-                {changedFiles.length > 0 ? (
-                  <>
-                    {isEditingFiles ? (
-                      <label className='git-commit-files-select-all'>
-                        <input
-                          checked={allSelected}
-                          className='changed-files-tree-checkbox'
-                          onChange={() => {
-                            setExcludedFiles(allSelected ? new Set(changedFiles.map((file) => file.path)) : new Set());
-                          }}
-                          type='checkbox'
-                        />
-                        Include all files
-                      </label>
-                    ) : null}
-                    <div className='git-commit-files-list'>
-                      <ChangedFilesTree
-                        excludedPaths={excludedFiles}
-                        files={changedFiles}
-                        isEditing={isEditingFiles}
-                        onToggleFile={(filePath) => {
-                          setExcludedFiles((current) => {
-                            const next = new Set(current);
-                            if (next.has(filePath)) {
-                              next.delete(filePath);
-                            } else {
-                              next.add(filePath);
-                            }
-                            return next;
-                          });
-                        }}
-                        onOpenFile={openInlineFileDiff}
-                        selectedPath={inlineDiffMode === 'file' ? selectedDiffFilePath : undefined}
-                      />
                     </div>
-                    <div className='git-commit-files-footer'>
-                      <div className='git-commit-files-actions'>
-                        <button
-                          className='git-commit-files-edit-button'
-                          onClick={() => setIsEditingFiles((current) => !current)}
-                          type='button'
-                        >
-                          {isEditingFiles ? 'Done' : 'Select'}
-                        </button>
-                        <button
-                          className='git-commit-files-show-all-button'
-                          data-active={inlineDiffMode === 'all' ? 'true' : 'false'}
-                          onClick={showAllInlineFileDiffs}
-                          type='button'
-                        >
-                          Show All
-                        </button>
-                      </div>
-                      <div className='git-commit-files-summary'>
-                        <span className='changed-files-tree-additions'>+{selectedStats.additions}</span>
-                        <span className='changed-files-tree-stat-divider'>/</span>
-                        <span className='changed-files-tree-deletions'>-{selectedStats.deletions}</span>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className='git-commit-files-empty'>No changed files.</div>
-                )}
-              </div>
-              {showCommitMessage ? (
-                <label className='command-config-field'>
-                  <span className='command-config-label'>Commit Message</span>
-                  <Textarea
-                    autoFocus
-                    className='git-commit-modal-textarea'
-                    onChange={(event) => setMessage(event.currentTarget.value)}
-                    onPaste={handleMessagePaste}
-                    placeholder='Leave empty to auto-generate'
-                    rows={draft.suggestedBody ? 10 : 4}
-                    value={message}
-                    wrap='soft'
-                  />
-                </label>
-              ) : null}
-              {draft.isWorktree ? (
-                <label className='command-config-toggle git-commit-delete-worktree-toggle'>
-                  <input
-                    checked={deleteWorktreeAfter}
-                    className='command-config-checkbox'
-                    onChange={(event) => setDeleteWorktreeAfter(event.currentTarget.checked)}
-                    type='checkbox'
-                  />
-                  <span className='command-config-toggle-copy'>
-                    Delete worktree project after this action finishes
-                    {draft.worktreeName ? ` (${draft.worktreeName})` : ''}.
-                  </span>
-                </label>
-              ) : null}
-            </div>
-            <section className='git-commit-inline-diff-panel' aria-label='Selected file diff'>
-              <div className='git-commit-inline-diff-header'>
-                {activeDiffFileLabel ? (
-                  <div className='git-commit-inline-diff-file'>
-                    <span className='git-file-diff-modal-path'>{activeDiffFileLabel}</span>
-                    <span className='git-file-diff-modal-stats'>
-                      <span className='changed-files-tree-additions'>+{activeDiffStats.additions}</span>
-                      <span className='changed-files-tree-stat-divider'>/</span>
-                      <span className='changed-files-tree-deletions'>-{activeDiffStats.deletions}</span>
+                  ) : null}
+                  {isEditingFiles && changedFiles.length > 0 ? (
+                    <span className='git-commit-files-selected'>
+                      {selectedFiles.length} of {changedFiles.length} selected
                     </span>
+                  ) : null}
+                </div>
+              </div>
+              {changedFiles.length > 0 ? (
+                <>
+                  {isEditingFiles ? (
+                    <label className='git-commit-files-select-all'>
+                      <input
+                        checked={allSelected}
+                        className='changed-files-tree-checkbox'
+                        onChange={() => {
+                          setExcludedFiles(allSelected ? new Set(changedFiles.map((file) => file.path)) : new Set());
+                        }}
+                        type='checkbox'
+                      />
+                      Include all files
+                    </label>
+                  ) : null}
+                  <div className='git-commit-files-list'>
+                    <ChangedFilesTree
+                      excludedPaths={excludedFiles}
+                      files={changedFiles}
+                      isEditing={isEditingFiles}
+                      onToggleFile={(filePath) => {
+                        setExcludedFiles((current) => {
+                          const next = new Set(current);
+                          if (next.has(filePath)) {
+                            next.delete(filePath);
+                          } else {
+                            next.add(filePath);
+                          }
+                          return next;
+                        });
+                      }}
+                      onOpenFile={openInlineFileDiff}
+                      selectedPath={inlineDiffMode === 'file' ? selectedDiffFilePath : undefined}
+                    />
                   </div>
-                ) : null}
-                <GitFileDiffControls
-                  hideWhitespace={inlineDiffHideWhitespace}
-                  lineWrap={inlineDiffLineWrap}
-                  onHideWhitespaceChange={(hideWhitespace) => updateInlineDiffPreferences({ hideWhitespace })}
-                  onLineWrapChange={(lineWrap) => updateInlineDiffPreferences({ lineWrap })}
-                  onViewModeChange={(viewMode) => updateInlineDiffPreferences({ viewMode })}
-                  viewMode={inlineDiffViewMode}
+                  <div className='git-commit-files-footer'>
+                    <div className='git-commit-files-actions'>
+                      <button
+                        className='git-commit-files-edit-button'
+                        onClick={() => setIsEditingFiles((current) => !current)}
+                        type='button'
+                      >
+                        {isEditingFiles ? 'Done' : 'Select'}
+                      </button>
+                      <button
+                        className='git-commit-files-show-all-button'
+                        data-active={inlineDiffMode === 'all' ? 'true' : 'false'}
+                        onClick={showAllInlineFileDiffs}
+                        type='button'
+                      >
+                        Show All
+                      </button>
+                    </div>
+                    <div className='git-commit-files-summary'>
+                      <span className='changed-files-tree-additions'>+{selectedStats.additions}</span>
+                      <span className='changed-files-tree-stat-divider'>/</span>
+                      <span className='changed-files-tree-deletions'>-{selectedStats.deletions}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className='git-commit-files-empty'>No changed files.</div>
+              )}
+            </div>
+            {showCommitMessage ? (
+              <label className='command-config-field'>
+                <span className='command-config-label'>Commit Message</span>
+                <Textarea
+                  autoFocus
+                  className='git-commit-modal-textarea'
+                  onChange={(event) => setMessage(event.currentTarget.value)}
+                  onPaste={handleMessagePaste}
+                  placeholder='Leave empty to auto-generate'
+                  rows={draft.suggestedBody ? 10 : 4}
+                  value={message}
+                  wrap='soft'
                 />
-              </div>
-              <div className='git-commit-inline-diff-body'>
-                <GitFileDiffPanel
-                  draft={activeDiffDraft}
-                  hideWhitespace={inlineDiffHideWhitespace}
-                  isLoading={isSelectedDiffLoading}
-                  lineWrap={inlineDiffLineWrap}
-                  onHideWhitespaceChange={(hideWhitespace) => updateInlineDiffPreferences({ hideWhitespace })}
-                  onLineWrapChange={(lineWrap) => updateInlineDiffPreferences({ lineWrap })}
-                  onViewModeChange={(viewMode) => updateInlineDiffPreferences({ viewMode })}
-                  placeholder={
-                    changedFiles.length > 0 ? 'Select a file to preview its diff.' : 'No changed files to preview.'
-                  }
-                  showToolbar={false}
-                  viewMode={inlineDiffViewMode}
+              </label>
+            ) : null}
+            {draft.isWorktree ? (
+              <label className='command-config-toggle git-commit-delete-worktree-toggle'>
+                <input
+                  checked={deleteWorktreeAfter}
+                  className='command-config-checkbox'
+                  onChange={(event) => setDeleteWorktreeAfter(event.currentTarget.checked)}
+                  type='checkbox'
                 />
-              </div>
-            </section>
+                <span className='command-config-toggle-copy'>
+                  Delete worktree project after this action finishes
+                  {draft.worktreeName ? ` (${draft.worktreeName})` : ''}.
+                </span>
+              </label>
+            ) : null}
           </div>
-          <DialogFooter className='git-commit-modal-actions'>
-            {promptAgents.length > 0 ? (
-              <Select
-                items={promptAgentSelectItems}
-                onValueChange={handlePromptAgentChange}
-                value={selectedPromptAgentId}
-              >
-                <SelectTrigger
-                  aria-label='Generate commit agent'
-                  className='git-commit-prompt-agent-select'
-                  id={generateAgentId}
-                >
-                  <SelectValue placeholder='Select agent' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {promptAgents.map((agent) => (
-                      <SelectItem key={agent.agentId} value={agent.agentId}>
-                        {agent.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            ) : null}
-            <Button
-              className='git-commit-modal-button'
-              onClick={() => onCancel(draft.requestId)}
-              type='button'
-              variant='outline'
-            >
-              Cancel
-            </Button>
-            {canDirectMerge ? (
-              <Button
-                className='git-commit-modal-button'
-                disabled={!canRunDirectMerge}
-                onClick={() => setIsDirectMergeConfirmOpen(true)}
-                type='button'
-                variant='outline'
-              >
-                Merge to main
-              </Button>
-            ) : null}
-            {showCommitMessage ? (
-              <Button
-                className='git-commit-modal-button'
-                disabled={!canConfirm}
-                onClick={() =>
-                  onConfirm(draft.requestId, trimmedMessage, {
-                    agentId: selectedPromptAgentId || undefined,
-                    commitOnNewRef: true,
-                    deleteWorktreeAfter,
-                    filePaths: selectedFilePaths,
-                  })
+          <section className='git-commit-inline-diff-panel' aria-label='Selected file diff'>
+            <div className='git-commit-inline-diff-header'>
+              {activeDiffFileLabel ? (
+                <div className='git-commit-inline-diff-file'>
+                  <span className='git-file-diff-modal-path'>{activeDiffFileLabel}</span>
+                  <span className='git-file-diff-modal-stats'>
+                    <span className='changed-files-tree-additions'>+{activeDiffStats.additions}</span>
+                    <span className='changed-files-tree-stat-divider'>/</span>
+                    <span className='changed-files-tree-deletions'>-{activeDiffStats.deletions}</span>
+                  </span>
+                </div>
+              ) : null}
+              <GitFileDiffControls
+                hideWhitespace={inlineDiffHideWhitespace}
+                lineWrap={inlineDiffLineWrap}
+                onHideWhitespaceChange={(hideWhitespace) => updateInlineDiffPreferences({ hideWhitespace })}
+                onLineWrapChange={(lineWrap) => updateInlineDiffPreferences({ lineWrap })}
+                onViewModeChange={(viewMode) => updateInlineDiffPreferences({ viewMode })}
+                viewMode={inlineDiffViewMode}
+              />
+            </div>
+            <div className='git-commit-inline-diff-body'>
+              <GitFileDiffPanel
+                draft={activeDiffDraft}
+                hideWhitespace={inlineDiffHideWhitespace}
+                isLoading={isSelectedDiffLoading}
+                lineWrap={inlineDiffLineWrap}
+                onHideWhitespaceChange={(hideWhitespace) => updateInlineDiffPreferences({ hideWhitespace })}
+                onLineWrapChange={(lineWrap) => updateInlineDiffPreferences({ lineWrap })}
+                onViewModeChange={(viewMode) => updateInlineDiffPreferences({ viewMode })}
+                placeholder={
+                  changedFiles.length > 0 ? 'Select a file to preview its diff.' : 'No changed files to preview.'
                 }
-                type='button'
-                variant='outline'
+                showToolbar={false}
+                viewMode={inlineDiffViewMode}
+              />
+            </div>
+          </section>
+        </div>
+        <AppModalFooter className='git-commit-modal-actions'>
+          {promptAgents.length > 0 ? (
+            <Select
+              items={promptAgentSelectItems}
+              onValueChange={handlePromptAgentChange}
+              value={selectedPromptAgentId}
+            >
+              <SelectTrigger
+                aria-label='Generate commit agent'
+                className='git-commit-prompt-agent-select'
+                id={generateAgentId}
               >
-                Commit on new branch
-              </Button>
-            ) : null}
-            {showCommitMessage ? (
-              <Button
-                className='git-commit-modal-button'
-                disabled={!canConfirm}
-                onClick={() => onMultipleCommits(draft.requestId, selectedPromptAgentId || undefined)}
-                type='button'
-                variant='outline'
-              >
-                Multiple Commits
-              </Button>
-            ) : null}
-            <Button
+                <SelectValue placeholder='Select agent' />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false} className={APP_MODAL_SELECT_CONTENT_CLASS}>
+                <SelectGroup>
+                  {promptAgents.map((agent) => (
+                    <SelectItem key={agent.agentId} value={agent.agentId}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          ) : null}
+          <AppModalButton className='git-commit-modal-button' onClick={() => onCancel(draft.requestId)} type='button'>
+            Cancel
+          </AppModalButton>
+          {canDirectMerge ? (
+            <AppModalButton
+              className='git-commit-modal-button'
+              disabled={!canRunDirectMerge}
+              onClick={() => setIsDirectMergeConfirmOpen(true)}
+              type='button'
+            >
+              Merge to main
+            </AppModalButton>
+          ) : null}
+          {showCommitMessage ? (
+            <AppModalButton
               className='git-commit-modal-button'
               disabled={!canConfirm}
               onClick={() =>
                 onConfirm(draft.requestId, trimmedMessage, {
                   agentId: selectedPromptAgentId || undefined,
+                  commitOnNewRef: true,
                   deleteWorktreeAfter,
                   filePaths: selectedFilePaths,
                 })
               }
               type='button'
-              variant='outline'
             >
-              {draft.confirmLabel}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              Commit on new branch
+            </AppModalButton>
+          ) : null}
+          {showCommitMessage ? (
+            <AppModalButton
+              className='git-commit-modal-button'
+              disabled={!canConfirm}
+              onClick={() => onMultipleCommits(draft.requestId, selectedPromptAgentId || undefined)}
+              type='button'
+            >
+              Multiple Commits
+            </AppModalButton>
+          ) : null}
+          <AppModalButton
+            className='git-commit-modal-button'
+            disabled={!canConfirm}
+            onClick={() =>
+              onConfirm(draft.requestId, trimmedMessage, {
+                agentId: selectedPromptAgentId || undefined,
+                deleteWorktreeAfter,
+                filePaths: selectedFilePaths,
+              })
+            }
+            type='button'
+          >
+            {draft.confirmLabel}
+          </AppModalButton>
+        </AppModalFooter>
+      </AppModalShell>
       <ConfirmationModal
         confirmLabel='Merge to main'
         description={`This will merge ${draft.worktreeName ?? 'this worktree'} directly into main without creating a PR.`}

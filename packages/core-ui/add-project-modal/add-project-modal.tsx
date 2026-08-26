@@ -64,6 +64,7 @@ import {
   matchesAddProjectFilter,
   orderedAddProjectSources,
 } from './add-project-modal-logic';
+import { MiddleEllipsisText } from './middle-ellipsis-text';
 import type {
   AddProjectBrowseEntry,
   AddProjectBrowseResult,
@@ -1077,7 +1078,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
       ? (clonePreview.warning ?? 'Choose a different destination before cloning.')
       : clonePreview.destinationExists && clonePreview.destinationIsEmpty
         ? 'Existing empty folder. The repository will be cloned directly into it.'
-        : 'This folder will be created for the repository.';
+        : null;
     const canClone = !hasInvalidBranchName && !clonePreview.destinationBlocked && busy === null;
 
     return (
@@ -1086,8 +1087,8 @@ function AddProjectModalBody(props: AddProjectModalProps) {
         data-add-project-clone-step='review'
         data-add-project-modal=''
       >
-        <div className='min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-5'>
-          <div className='mx-auto flex w-full max-w-lg flex-col gap-4'>
+        <div className='min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4'>
+          <div className='flex w-full flex-col gap-4'>
             <div className='flex min-w-0 items-start gap-3'>
               <Button
                 aria-label='Back to clone destination'
@@ -1114,7 +1115,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
               ) : null}
             </div>
 
-            <div className='grid min-w-0 gap-2 sm:grid-cols-2'>
+            <div className='flex min-w-0 flex-col gap-2'>
               <div
                 className='flex min-w-0 items-start gap-2.5 border border-border/60 bg-muted/15 px-3 py-2.5'
                 data-add-project-field='reviewRepository'
@@ -1122,12 +1123,14 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 <span className='mt-0.5 shrink-0 text-muted-foreground/80'>{sourceIcon(cloneFlow.source)}</span>
                 <span className='flex min-w-0 flex-1 flex-col'>
                   <span className='text-sm font-medium text-muted-foreground'>Repository</span>
-                  <span className='mt-1 truncate text-sm font-medium text-foreground'>
-                    {cloneFlow.repository?.nameWithOwner ?? cloneFlow.repositoryInput}
-                  </span>
-                  <span className='mt-0.5 truncate text-sm text-muted-foreground'>
-                    {cloneFlow.repository?.url ?? cloneFlow.remoteUrl}
-                  </span>
+                  <MiddleEllipsisText
+                    className='mt-1 text-sm font-medium text-foreground'
+                    value={cloneFlow.repository?.nameWithOwner ?? cloneFlow.repositoryInput}
+                  />
+                  <MiddleEllipsisText
+                    className='mt-0.5 text-sm text-muted-foreground'
+                    value={cloneFlow.repository?.url ?? cloneFlow.remoteUrl}
+                  />
                 </span>
               </div>
 
@@ -1141,20 +1144,20 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 <IconFolderCheck aria-hidden='true' className='mt-0.5 size-4 shrink-0 text-muted-foreground/80' />
                 <span className='flex min-w-0 flex-1 flex-col'>
                   <span className='text-sm font-medium text-muted-foreground'>Destination</span>
-                  <span
-                    className='mt-1 break-all text-sm font-medium text-foreground'
-                    title={clonePreview.destinationPath}
-                  >
-                    {clonePreview.destinationPath}
-                  </span>
-                  <span
-                    className={cn(
-                      'mt-0.5 text-sm leading-relaxed',
-                      clonePreview.destinationBlocked ? 'text-destructive' : 'text-muted-foreground'
-                    )}
-                  >
-                    {destinationDescription}
-                  </span>
+                  <MiddleEllipsisText
+                    className='mt-1 text-sm font-medium text-foreground'
+                    value={clonePreview.destinationPath}
+                  />
+                  {destinationDescription ? (
+                    <span
+                      className={cn(
+                        'mt-0.5 text-sm leading-relaxed',
+                        clonePreview.destinationBlocked ? 'text-destructive' : 'text-muted-foreground'
+                      )}
+                    >
+                      {destinationDescription}
+                    </span>
+                  ) : null}
                 </span>
               </div>
             </div>
@@ -1275,7 +1278,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
         </div>
 
         <div
-          className='flex shrink-0 items-center gap-3 border-t border-border/70 px-4 py-2.5 text-sm text-muted-foreground'
+          className='flex shrink-0 items-center gap-3 border-t border-border/70 px-3 py-2.5 text-sm text-muted-foreground'
           data-add-project-field='footer'
         >
           <AddProjectFooterHint keys='Esc' label='Close' />
@@ -1403,7 +1406,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 type='button'
                 variant='ghost'
               >
-                <IconFolderPlus aria-hidden='true' className='size-3.5' />
+                <IconFolderPlus aria-hidden='true' data-icon='inline-start' />
                 New Folder
               </Button>
               <Button
@@ -1420,7 +1423,6 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 size='xs'
                 tabIndex={-1}
                 type='button'
-                variant='ghost'
               >
                 {busyLabel ?? submitActionLabel}
               </Button>

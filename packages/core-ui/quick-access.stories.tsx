@@ -341,7 +341,7 @@ function RecentSessionsLoadingStory() {
 }
 
 const meta = {
-  title: 'Quick Access/Visual Comparison',
+  title: 'Modals/App Host/Quick Access',
   parameters: {
     layout: 'fullscreen',
   },

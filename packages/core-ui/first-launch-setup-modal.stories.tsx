@@ -232,7 +232,7 @@ function FirstLaunchSetupModalStory({
 }
 
 const meta = {
-  title: 'Sidebar/First Launch Setup Modal',
+  title: 'Modals/Onboarding/First Launch',
   parameters: {
     layout: 'fullscreen',
   },

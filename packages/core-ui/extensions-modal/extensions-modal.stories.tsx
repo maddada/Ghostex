@@ -125,7 +125,7 @@ const CATALOG_ENTRY: GhostexExtensionCatalogEntry = {
 
 const meta = {
   parameters: { layout: 'fullscreen' },
-  title: 'Extensions/Modal',
+  title: 'Modals/Nested/Extensions',
 } satisfies Meta;
 
 export default meta;

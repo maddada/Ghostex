@@ -216,7 +216,7 @@ html:has(body.app-modal-host-native-window-body) {
    *
    * CDXC:AppModals 2026-05-28-13:52:
    * All legacy confirm-modal shells should use var(--app-modal-background) so previous-session,
-   * pinned-prompt, first-message, and confirmation dialogs match Settings.
+   * first-message, and confirmation dialogs match Settings.
    */
   border-radius: 0;
   box-shadow:
@@ -259,52 +259,42 @@ html:has(body.app-modal-host-native-window-body) {
   justify-content: flex-end;
 }
 
-.missing-project-folder-modal {
-  max-width: min(540px, 100%);
-  width: min(540px, calc(100vw - 32px));
-}
-
-.missing-project-folder-heading {
+/*
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * Missing Project Folder now renders inside AppModalShell, so its chrome (shell
+ * width, heading row, footer button tones) comes from `.gx-app-modal`. Only the
+ * body layout of its one section card is modal-specific.
+ */
+.missing-project-folder-details {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.missing-project-folder-heading > svg {
-  flex: none;
-  color: var(--vscode-editorWarning-foreground, #cca700);
-  margin-top: 1px;
-}
-
-.missing-project-folder-path {
+.gx-app-modal .missing-project-folder-path {
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-control);
+  color: var(--foreground);
   display: block;
-  overflow: hidden;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
-  color: var(--vscode-foreground);
   font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
   font-size: 12px;
   line-height: 1.45;
+  overflow: hidden;
+  padding: 8px 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.missing-project-folder-note {
-  color: var(--vscode-descriptionForeground);
-  font-size: 12px;
-  line-height: 1.45;
+.gx-app-modal .missing-project-folder-note {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
 }
 
-.missing-project-folder-actions .primary {
-  display: inline-flex;
-  align-items: center;
+.gx-app-modal .missing-project-folder-locate {
   gap: 6px;
-}
-
-.missing-project-folder-actions .danger {
-  color: var(--vscode-errorForeground, #f14c4c);
 }
 
 .command-config-modal {
@@ -614,342 +604,6 @@ html:has(body.app-modal-host-native-window-body) {
   max-height: calc(100vh - 16px);
 }
 
-.app-modal-host-body .pinned-prompts-modal,
-.app-modal-host-body .pinned-prompt-editor-modal {
-  max-width: min(720px, calc(100vw - 32px));
-  width: min(720px, calc(100vw - 32px));
-}
-
-.pinned-prompts-modal,
-.pinned-prompt-editor-modal {
-  gap: 14px;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  max-height: 80vh;
-  max-width: min(280px, 100%);
-  overflow: hidden;
-  width: min(280px, 100%);
-}
-
-.daemon-sessions-modal {
-  /*
-   * CDXC:AppModals 2026-05-28-13:22:
-   * Running sessions should use the same var(--app-modal-background) modal background as the
-   * newer Settings-family surfaces while preserving row/card contrast inside
-   * the operational list.
-   */
-  background: var(--app-modal-background);
-  gap: 14px;
-  max-height: calc(100vh - 24px);
-  max-width: min(840px, 100%);
-  width: min(840px, 100%);
-}
-
-.daemon-sessions-toolbar {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.daemon-sessions-search-control {
-  min-width: 0;
-}
-
-.daemon-sessions-search-input {
-  font-size: 12px;
-  font-weight: 600;
-  height: 32px;
-  letter-spacing: 0.01em;
-  min-height: 32px;
-  min-width: 0;
-  padding-right: 34px;
-  text-transform: none;
-  width: 100%;
-}
-
-.daemon-sessions-toolbar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.daemon-sessions-toolbar-button {
-  align-items: center;
-  display: inline-flex;
-  gap: 6px;
-  justify-content: center;
-  min-width: 0;
-}
-
-.daemon-sessions-toolbar-button-danger {
-  border-color: color-mix(in srgb, #b03a3a 56%, var(--app-border));
-  color: color-mix(in srgb, #e78484 72%, var(--app-foreground) 28%);
-}
-
-.daemon-sessions-toolbar-button-danger:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-
-.daemon-sessions-modal-body {
-  display: grid;
-  gap: 14px;
-  max-height: calc(100vh - 184px);
-  min-height: 0;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.daemon-sessions-summary {
-  background: color-mix(in srgb, var(--app-card-active) 90%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
-  border-radius: 0;
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-}
-
-.daemon-collapsible-heading,
-.daemon-session-card-heading-button {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  display: inline-flex;
-  flex: 1;
-  gap: 8px;
-  justify-content: flex-start;
-  min-width: 0;
-  padding: 0;
-  text-align: left;
-}
-
-.daemon-collapsible-heading:focus-visible,
-.daemon-session-card-heading-button:focus-visible {
-  border-radius: 0;
-  outline: 1px solid color-mix(in srgb, var(--app-button-background) 62%, transparent);
-  outline-offset: 4px;
-}
-
-.daemon-collapsible-chevron {
-  color: color-mix(in srgb, var(--app-foreground) 72%, var(--app-muted) 28%);
-  flex: 0 0 auto;
-  transition: transform 120ms ease;
-}
-
-.daemon-collapsible-chevron[data-expanded='true'] {
-  transform: rotate(90deg);
-}
-
-.daemon-collapsible-body {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-}
-
-.daemon-collapsible-body[hidden] {
-  display: none;
-}
-
-.daemon-sessions-summary .daemon-collapsible-body {
-  gap: 8px;
-}
-
-.daemon-sessions-heading-meta {
-  color: var(--app-muted);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.45;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.daemon-sessions-section {
-  display: grid;
-  gap: 12px;
-}
-
-.daemon-sessions-section-header {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-}
-
-.daemon-sessions-section-title {
-  color: color-mix(in srgb, var(--app-foreground) 84%, var(--app-muted) 16%);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.daemon-sessions-summary-row {
-  align-items: baseline;
-  column-gap: 10px;
-  display: grid;
-  grid-template-columns: minmax(0, 110px) minmax(0, 1fr);
-}
-
-.daemon-sessions-summary-label {
-  color: var(--app-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.daemon-sessions-summary-value {
-  font-size: 12px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.daemon-sessions-error-banner {
-  background: color-mix(in srgb, #712626 16%, var(--app-card));
-  border: 1px solid color-mix(in srgb, #b03a3a 38%, var(--app-border));
-  border-radius: 0;
-  color: color-mix(in srgb, #efb2b2 80%, var(--app-foreground) 20%);
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 10px 12px;
-}
-
-.daemon-sessions-list {
-  display: grid;
-  gap: 12px;
-}
-
-.daemon-session-card {
-  /**
-   * CDXC:RunningSessionsModal 2026-05-26-14:11:
-   * Collapsed-by-default running rows keep only their command header visible until the user expands the record for operational details.
-   */
-  background: color-mix(in srgb, var(--app-card-active) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
-  border-radius: 0;
-  display: grid;
-  gap: 12px;
-  padding: 13px;
-}
-
-.daemon-session-card[data-collapsed='true'] {
-  gap: 0;
-}
-
-.daemon-session-card[data-current-workspace='true'] {
-  border-color: color-mix(in srgb, var(--app-button-background) 52%, var(--app-border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-button-background) 12%, transparent);
-}
-
-.daemon-session-card-header {
-  align-items: flex-start;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-}
-
-.daemon-session-card-title-wrap {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.daemon-session-card-title {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.daemon-session-card-subtitle {
-  color: var(--app-muted);
-  font-size: 11px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.daemon-session-card-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.daemon-session-badge {
-  background: color-mix(in srgb, var(--app-button-background) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-button-background) 24%, var(--app-border));
-  border-radius: 0;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  padding: 6px 8px;
-  text-transform: uppercase;
-}
-
-.daemon-session-badge-current {
-  background: color-mix(in srgb, var(--app-button-background) 18%, transparent);
-}
-
-.daemon-session-card-details {
-  column-gap: 12px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  row-gap: 10px;
-}
-
-.daemon-session-detail {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.daemon-session-detail-label {
-  color: var(--app-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.daemon-session-detail-value {
-  font-size: 11px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.daemon-session-card-error {
-  background: color-mix(in srgb, #712626 10%, transparent);
-  border: 1px solid color-mix(in srgb, #b03a3a 24%, var(--app-border));
-  border-radius: 0;
-  color: color-mix(in srgb, #efb2b2 72%, var(--app-foreground) 28%);
-  font-size: 11px;
-  line-height: 1.5;
-  padding: 8px 10px;
-}
-
-.daemon-session-card-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.daemon-session-action-button {
-  min-width: 112px;
-}
-
-.daemon-session-action-button-danger {
-  border-color: color-mix(in srgb, #b03a3a 56%, var(--app-border));
-  color: color-mix(in srgb, #e78484 72%, var(--app-foreground) 28%);
-}
-
-.daemon-sessions-empty-state {
-  line-height: 1.35;
-  min-height: 112px;
-  padding: 12px;
-  text-align: center;
-}
-
 .previous-sessions-toolbar {
   display: grid;
   gap: 0;
@@ -1030,50 +684,6 @@ html:has(body.app-modal-host-native-window-body) {
 
 .previous-sessions-favorites-toggle {
   align-self: stretch;
-}
-
-.previous-sessions-find-button {
-  align-items: center;
-  align-self: stretch;
-  /**
-   * CDXC:PreviousSessions 2026-05-09-17:44
-   * Footer actions are normal visible sidebar-style buttons: content width,
-   * right aligned, and never dimmed in their resting state.
-   *
-   * CDXC:PinnedPrompts 2026-06-13-01:09:
-   * Previous Sessions no longer renders footer launch buttons, but Pinned
-   * Prompts still reuses this footer button treatment for Add Prompt.
-   */
-  background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
-  border-radius: 0;
-  color: color-mix(in srgb, var(--app-foreground) 86%, var(--app-muted) 14%);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 15.55px;
-  font-weight: 300 !important;
-  height: 34px;
-  justify-content: flex-start;
-  letter-spacing: 0;
-  line-height: 14px;
-  min-height: 34px;
-  min-width: 0;
-  padding: 0 13px;
-  text-align: left;
-  text-transform: none;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
-  width: auto;
-}
-
-.previous-sessions-find-button:hover,
-.previous-sessions-find-button:focus-visible {
-  background: #ffffff;
-  border-color: #ffffff;
-  color: #111111;
-  outline: none;
 }
 
 .previous-sessions-favorites-toggle:hover,
@@ -1279,201 +889,65 @@ html:has(body.app-modal-host-native-window-body) {
   padding-left: 4px;
 }
 
-.pinned-prompts-modal-body,
-.pinned-prompt-editor-body {
-  display: grid;
-  min-height: 0;
-  min-width: 0;
-}
-
-.pinned-prompt-editor-body {
-  gap: 12px;
-}
-
-.pinned-prompt-editor-title-input {
-  background: color-mix(in srgb, var(--app-card-active) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-button-background) 32%, var(--app-border));
-  border-radius: 0;
-  color: inherit;
-  font-size: var(--vscode-editor-font-size, 12px);
-  font-weight: 400;
-  letter-spacing: normal;
-  line-height: 1.55;
-  outline: none;
-  padding: 12px 13px;
-}
-
-.pinned-prompt-editor-title-input:focus {
-  border-color: color-mix(in srgb, var(--app-button-background) 68%, var(--app-border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-button-background) 22%, transparent);
-}
-
-.pinned-prompt-editor-title-input::placeholder {
-  color: color-mix(in srgb, var(--app-muted) 88%, transparent);
-}
-
-.pinned-prompt-editor-textarea {
-  height: max(400px, 100%);
-  min-height: 400px;
-}
-
-.pinned-prompts-list {
-  display: grid;
-  gap: 10px;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding-right: 2px;
-}
-
-.pinned-prompt-card {
-  background: color-mix(in srgb, var(--app-card-active) 90%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-border) 90%, transparent);
-  border-radius: 0;
-  display: grid;
-  min-width: 0;
-  padding: 14px 12px;
-  position: relative;
-}
-
-.pinned-prompt-card-actions {
-  background: color-mix(in srgb, var(--app-card) 82%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
-  border-radius: 0;
-  display: inline-flex;
-  justify-self: end;
-  opacity: 0;
+/*
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * Scratch Pad and View 1st Message render through AppModalShell, so the
+ * surface, radius, hairlines, typography, and the raised textarea skin come
+ * from `.gx-app-modal`. Only the sizing that is unique to each writing surface
+ * stays here.
+ *
+ * CDXC:ScratchPad 2026-05-28-13:22:
+ * Scratch Pad's editor is the main writing area, so it fills the modal's
+ * remaining height instead of growing the modal as the note gets longer.
+ */
+.gx-app-modal.scratch-pad-modal {
+  display: flex;
+  flex-direction: column;
+  height: min(720px, calc(100vh - 2rem));
   overflow: hidden;
-  pointer-events: none;
-  position: absolute;
-  right: 10px;
-  top: 10px;
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
-  transform: translateY(-2px);
 }
 
-.pinned-prompt-card:hover .pinned-prompt-card-actions,
-.pinned-prompt-card:focus-within .pinned-prompt-card-actions {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
+/*
+ * In a native child window the window IS the modal, so Scratch Pad fills it
+ * instead of taking the shared shell's fit-to-content height.
+ */
+.app-modal-host-native-window-body .gx-app-modal.scratch-pad-modal {
+  height: 100vh;
+  max-height: 100vh;
 }
 
-.pinned-prompt-card-action {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: color-mix(in srgb, var(--app-muted) 34%, var(--app-foreground) 66%);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 10px;
-  font-weight: 700;
-  height: 24px;
-  justify-content: center;
-  min-width: 26px;
-  padding: 0 6px;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.pinned-prompt-card-action + .pinned-prompt-card-action {
-  border-left: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
-}
-
-.pinned-prompt-card-action:hover,
-.pinned-prompt-card-action:focus-visible {
-  background: color-mix(in srgb, var(--app-button-background) 12%, var(--app-card-active) 88%);
-  color: var(--app-foreground);
-  outline: none;
-}
-
-.pinned-prompt-card-title {
-  box-sizing: border-box;
-  color: inherit;
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  line-height: 1.45;
-  margin: 0;
-  max-height: calc(1.45em * 2);
-  max-width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: normal;
-  width: 100%;
-  word-break: break-word;
-}
-
-.scratch-pad-modal {
-  /*
-   * CDXC:ScratchPad 2026-05-28-13:22:
-   * Scratch Pad should visually belong to the var(--app-modal-background) app-modal family. Keep
-   * both the shell and editable note surface on that background so the main
-   * writing area does not read as a separate lighter modal.
-   */
-  background: var(--app-modal-background);
-  gap: 14px;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: min(90vh, calc(100vh - 24px));
-  max-height: min(90vh, calc(100vh - 24px));
-  max-width: min(420px, 100%);
-  width: min(420px, 100%);
-}
-
-.first-user-message-modal {
-  /*
-   * CDXC:FirstMessage 2026-06-30-16:08:
-   * First Message is measured once for a native fit-height child window. Let
-   * the textarea's real minimum height define the dialog instead of assigning a
-   * percentage of the WebView viewport to the modal shell.
-   */
-  gap: 14px;
-  grid-template-rows: auto auto;
-  height: fit-content;
-  max-height: none;
-  max-width: min(560px, 100%);
-  width: min(560px, 100%);
-}
-
-.first-user-message-textarea {
-  min-height: 220px;
-  resize: none;
+.scratch-pad-modal-column {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .scratch-pad-modal-body {
   display: grid;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
 .scratch-pad-textarea {
-  background: var(--app-modal-background);
-  border: 1px solid color-mix(in srgb, var(--app-button-background) 32%, var(--app-border));
-  border-radius: 0;
+  field-sizing: fixed;
   height: 100%;
-  color: inherit;
-  font-size: var(--vscode-editor-font-size, 12px);
   line-height: 1.55;
   min-height: 0;
-  outline: none;
   padding: 12px 13px;
-  resize: vertical;
+  resize: none;
   -webkit-user-select: text;
   user-select: text;
   width: 100%;
 }
 
-.scratch-pad-textarea:focus {
-  border-color: color-mix(in srgb, var(--app-button-background) 68%, var(--app-border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-button-background) 22%, transparent);
-}
-
-.scratch-pad-textarea::placeholder {
-  color: color-mix(in srgb, var(--app-muted) 88%, transparent);
+/*
+ * CDXC:FirstMessage 2026-06-30-16:08:
+ * First Message is measured once for a native fit-height child window, so the
+ * textarea's own minimum height defines the dialog instead of a percentage of
+ * the WebView viewport.
+ */
+.first-user-message-textarea {
+  min-height: 220px;
+  resize: none;
 }
 
 .hotkeys-modal {
@@ -1778,12 +1252,10 @@ html:has(body.app-modal-host-native-window-body) {
   padding: 0 12px;
 }
 
-.ghostex-settings-shadcn.settings-modal-dialog.git-commit-modal-shadcn {
+.gx-app-modal.git-commit-modal-shadcn {
   /**
    * CDXC:TitlebarGit 2026-05-25-07:40:
-   * The commit review modal should visually belong to Settings: shadcn dark
-   * surface, larger Settings typography, rounded outline buttons, matching
-   * checkbox controls, and branch-only user-facing copy.
+   * Superseded by CDXC:UnifiedAppModal 2026-08-26.
    *
    * CDXC:TitlebarGit 2026-05-29-18:40:
    * Commit, push, PR, and publishing review dialogs must fit their content
@@ -1819,27 +1291,36 @@ html:has(body.app-modal-host-native-window-body) {
    * CDXC:TitlebarGit 2026-06-08-13:41:
    * Hide the commit modal close control so users exit commit review through
    * the explicit footer actions instead of an extra top-right dismissal button.
+   *
+   * CDXC:UnifiedAppModal 2026-08-26:
+   * Commit review is an AppModalShell like every other app modal: the #0e0e0e
+   * surface, 12px radius, hairline edges, 32px controls, and outline pill
+   * footer actions all come from `.gx-app-modal`. Only the two-pane review
+   * geometry below stays per-modal, so this rule overrides the shell's
+   * centered-dialog size with the wide review workspace.
    */
   --git-review-mono-font: 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   height: min(900px, calc(100vh - 1rem));
   max-height: min(900px, calc(100vh - 1rem));
   max-width: min(1480px, calc(100vw - 1rem));
+  overflow: hidden;
   width: min(1480px, calc(100vw - 1rem));
 }
 
-.git-commit-modal-shadcn [data-slot='dialog-close'] {
-  display: none !important;
-}
-
-.git-commit-modal-header {
-  gap: 10px;
-  padding: 20px 32px 14px 20px;
-}
-
-.git-commit-modal-description {
-  font-size: 14px;
-  line-height: 1.55;
-  max-width: 760px;
+/*
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * Commit review is not one of the one-shot fit-height modals: its native child
+ * window is sized by the app, and the dialog fills it edge to edge. Qualify
+ * this with the modal class so it outranks the shell's fit-content native-host
+ * rule, which would otherwise collapse the two-pane workspace.
+ */
+.app-modal-host-native-window-body .gx-app-modal.git-commit-modal-shadcn {
+  height: 100vh;
+  max-height: 100vh;
+  max-width: 100vw;
+  overflow: hidden;
+  padding: 0;
+  width: 100vw;
 }
 
 .git-commit-modal-body {
@@ -1873,9 +1354,9 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .git-commit-modal-shadcn .command-config-label {
-  color: var(--foreground);
-  font-size: 14px;
-  font-weight: 650;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -1891,7 +1372,7 @@ html:has(body.app-modal-host-native-window-body) {
   flex: 1 1 auto;
   font-family: inherit;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   height: auto;
   letter-spacing: 0;
   line-height: 1.5;
@@ -1931,10 +1412,14 @@ html:has(body.app-modal-host-native-window-body) {
    * The branch header should be plain text without the visible "Branch" label
    * or a branch-name card. Move Select and Show All into the bottom file footer
    * so the file tree header stays visually quiet.
+   *
+   * CDXC:UnifiedAppModal 2026-08-26:
+   * The file rail is a shell section card: #161616 panel, hairline edge, 12px
+   * section radius.
    */
-  background: color-mix(in srgb, var(--input) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--input) 82%, transparent);
-  border-radius: 0;
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-section);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1952,10 +1437,10 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-commit-branch-name {
   align-items: center;
-  color: color-mix(in srgb, var(--foreground) 92%, var(--muted-foreground) 8%);
+  color: var(--foreground);
   display: block;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 500;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1980,8 +1465,8 @@ html:has(body.app-modal-host-native-window-body) {
 .git-commit-files-selected {
   color: var(--muted-foreground);
   display: block;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 400;
   margin-top: 4px;
 }
 
@@ -2002,15 +1487,15 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-commit-files-edit-button,
 .git-commit-files-show-all-button {
-  background: color-mix(in srgb, var(--input) 30%, transparent);
-  border: 1px solid var(--input);
-  border-radius: 0;
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-control);
   color: var(--foreground);
   flex: none;
-  font-size: 14px;
-  font-weight: 650;
-  height: 30px;
-  min-height: 30px;
+  font-size: 13px;
+  font-weight: 400;
+  height: var(--gx-modal-control-height);
+  min-height: var(--gx-modal-control-height);
   padding: 0 10px;
   transition:
     background-color 160ms ease,
@@ -2022,21 +1507,21 @@ html:has(body.app-modal-host-native-window-body) {
 .git-commit-files-edit-button:focus-visible,
 .git-commit-files-show-all-button:hover,
 .git-commit-files-show-all-button:focus-visible {
-  background: color-mix(in srgb, var(--input) 50%, transparent);
+  background: var(--gx-modal-raised-hover);
   outline: none;
 }
 
 .git-commit-files-show-all-button[data-active='true'] {
   background: color-mix(in srgb, var(--foreground) 12%, transparent);
-  border-color: color-mix(in srgb, var(--foreground) 28%, transparent);
+  border-color: color-mix(in srgb, var(--foreground) 22%, transparent);
 }
 
 .git-commit-files-select-all {
   align-items: center;
-  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
+  color: var(--foreground);
   display: inline-flex;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 400;
   gap: 10px;
 }
 
@@ -2052,24 +1537,24 @@ html:has(body.app-modal-host-native-window-body) {
    * layout space when it appears. Keep native scrollbar dimensions stable and
    * make only the thumb color change on hover/focus.
    */
-  background: color-mix(in srgb, var(--background) 56%, transparent);
-  border: 1px solid color-mix(in srgb, var(--input) 62%, transparent);
-  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--gx-modal-radius-control);
   max-height: none;
   flex: 1 1 auto;
   min-height: 240px;
   min-width: 0;
   overflow: auto;
-  padding: 8px;
+  padding: 2px 0;
   scrollbar-color: transparent transparent;
   scrollbar-width: thin;
 }
 
 .git-commit-inline-diff-panel {
   align-self: stretch;
-  background: color-mix(in srgb, var(--input) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--input) 82%, transparent);
-  border-radius: 0;
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-section);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
@@ -2080,18 +1565,12 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-commit-inline-diff-header {
   align-items: center;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-bottom: 1px solid var(--gx-modal-hairline);
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
   padding: 10px 12px;
-}
-
-.git-commit-inline-diff-title {
-  color: var(--foreground);
-  font-size: 14px;
-  font-weight: 750;
 }
 
 .git-commit-inline-diff-file {
@@ -2159,23 +1638,23 @@ html:has(body.app-modal-host-native-window-body) {
   display: flex;
   flex: none;
   font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 500;
   gap: 4px;
   justify-content: flex-end;
 }
 
 .git-commit-files-empty {
   color: var(--muted-foreground);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 400;
   padding: 4px 0;
 }
 
-.git-commit-delete-worktree-toggle {
-  background: color-mix(in srgb, var(--input) 16%, transparent);
-  border-color: color-mix(in srgb, var(--input) 82%, transparent);
-  border-radius: 0;
+.gx-app-modal .git-commit-delete-worktree-toggle {
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-section);
 }
 
 .git-commit-prompt-agent-select {
@@ -2188,25 +1667,31 @@ html:has(body.app-modal-host-native-window-body) {
    * CDXC:PromptAgents 2026-05-29-18:57:
    * The selector should sit on the left side of the footer while the commit
    * action buttons stay on the right, and its trigger height should match the
-   * default shadcn button height in the same row.
+   * footer button height in the same row (now the shell's 32px control scale).
    */
-  height: 2.25rem;
   flex: 0 0 160px;
   margin-right: auto;
-  min-height: 2.25rem;
   width: 160px;
 }
 
 .git-commit-modal-shadcn .changed-files-tree-row {
-  border-radius: 0;
+  border-radius: var(--gx-modal-radius-menu);
   color: color-mix(in srgb, var(--foreground) 86%, var(--muted-foreground) 14%);
   gap: 7px;
   min-height: 28px;
+  padding-left: 6px;
+}
+
+/* The shell language has no accent fills: hover and selection are white washes. */
+.git-commit-modal-shadcn .changed-files-tree-row:hover,
+.git-commit-modal-shadcn .changed-files-tree-row:focus-visible,
+.git-commit-modal-shadcn .changed-files-tree-file:focus-within {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 .git-commit-modal-shadcn .changed-files-tree-row[data-selected='true'] {
-  background: color-mix(in srgb, var(--foreground) 8%, transparent);
-  color: color-mix(in srgb, var(--foreground) 96%, var(--muted-foreground) 4%);
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  color: var(--foreground);
 }
 
 .git-file-path-context-menu {
@@ -2223,15 +1708,15 @@ html:has(body.app-modal-host-native-window-body) {
 .git-commit-modal-shadcn .changed-files-tree-excluded {
   font-family: var(--git-review-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .git-commit-modal-shadcn .changed-files-tree-checkbox,
 .git-commit-modal-shadcn .command-config-checkbox {
   appearance: none;
-  background: color-mix(in srgb, var(--input) 30%, transparent);
-  border: 1px solid var(--input);
-  border-radius: 0;
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: 4px;
   flex: none;
   height: 16px;
   margin: 0;
@@ -2241,13 +1726,13 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-commit-modal-shadcn .changed-files-tree-checkbox:checked,
 .git-commit-modal-shadcn .command-config-checkbox:checked {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--foreground);
+  border-color: var(--foreground);
 }
 
 .git-commit-modal-shadcn .changed-files-tree-checkbox:checked::after,
 .git-commit-modal-shadcn .command-config-checkbox:checked::after {
-  border: solid var(--primary-foreground);
+  border: solid var(--gx-modal-surface);
   border-width: 0 2px 2px 0;
   content: '';
   height: 8px;
@@ -2259,13 +1744,13 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .git-commit-modal-shadcn .command-config-toggle-copy {
-  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
-  font-size: 14px;
+  color: var(--foreground);
+  font-size: 13px;
 }
 
 .git-commit-modal-actions {
   align-items: center;
-  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-top: 1px solid var(--gx-modal-hairline);
   display: flex !important;
   flex-direction: row !important;
   flex-wrap: wrap;
@@ -2274,20 +1759,15 @@ html:has(body.app-modal-host-native-window-body) {
   padding: 14px 19px 20px 20px;
 }
 
-.git-commit-modal-button {
-  /*
-   * CDXC:TitlebarGit 2026-06-02-19:47:
-   * Commit review footer actions should match the prompt-agent dropdown height
-   * in the same row so Cancel, generated-commit actions, and Commit align as
-   * one control group.
-   *
-   * CDXC:TitlebarGit 2026-06-08-04:47:
-   * The final Commit action should use the same outline visual treatment as the
-   * other commit footer actions instead of a filled primary button.
-   */
-  height: 2.25rem;
-  min-height: 2.25rem;
+/*
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * Commit review has five footer actions plus the agent select, so its row keeps
+ * sized pills instead of the shell's equal-width full-bleed footer grid. The
+ * pill skin itself still comes from `.gx-app-modal-action-button`.
+ */
+.gx-app-modal .git-commit-modal-button {
   min-width: 132px;
+  width: auto;
 }
 
 .worktree-delete-modal-shadcn {
@@ -2892,7 +2372,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 @media (max-width: 980px) {
-  .ghostex-settings-shadcn.settings-modal-dialog.git-commit-modal-shadcn {
+  .gx-app-modal.git-commit-modal-shadcn {
     height: min(900px, calc(100vh - 1rem));
   }
 
@@ -3114,7 +2594,15 @@ html:has(body.app-modal-host-native-window-body) {
   }
 }
 
-.session-rename-modal-shadcn {
+/*
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * Rename Session and Session Note now render through AppModalShell, so their
+ * chrome (surface, radius, padding, footer buttons) comes from `.gx-app-modal`.
+ * Clone Repository still uses the legacy `.session-rename-modal-shadcn` chrome,
+ * so the pre-unification rules below are qualified with `:not(.gx-app-modal)`
+ * instead of being deleted.
+ */
+.session-rename-modal-shadcn:not(.gx-app-modal) {
   /**
    * CDXC:SidebarRename 2026-05-09-17:25
    * Rename Session must use the same shadcn dialog controls and typography as
@@ -3146,46 +2634,75 @@ html:has(body.app-modal-host-native-window-body) {
   padding-top: 8px;
 }
 
-.session-rename-modal-shadcn .session-rename-form {
+.session-rename-modal-shadcn:not(.gx-app-modal) .session-rename-form {
   gap: 16px;
 }
 
 /*
  * CDXC:ExportTranscriptOptions 2026-08-24:
- * The Export Transcript dialog follows the Automate dialog language: a
- * #161616-family popover surface, a 15px regular-weight title over a 12px
- * muted description, quiet 12px/500 section labels, list rows in a bordered
- * rounded container, and one 32px control scale for footer buttons and the
- * agent select. The path is the one piece of content that can be arbitrarily
- * long, so it wraps at path separators instead of widening the dialog.
+ * The Export Transcript dialog keeps quiet 12px/500 section labels, list rows
+ * in a bordered rounded container, and one control scale for the footer and
+ * the agent select. The path is the one piece of content that can be
+ * arbitrarily long, so it wraps at path separators instead of widening the
+ * dialog.
+ *
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * The dialog surface, radius, title/description type, control skin, and footer
+ * pills now come from `.gx-app-modal` (AppModalShell). Only the export-specific
+ * layout below remains per-modal; the dialog width is the shell's `width` prop.
  */
 .export-transcript-modal-shadcn {
-  background: var(--popover, #161616);
-  background-color: var(--popover, #161616);
-  gap: 16px;
-  max-width: min(540px, calc(100vw - 2rem));
-  padding: 20px;
-}
-
-.export-transcript-modal-shadcn [data-slot='dialog-close'] {
-  right: 20px;
-  top: 20px;
-}
-
-.export-transcript-modal-title {
-  font-size: 15px;
-  font-weight: 400;
-}
-
-.export-transcript-modal-description {
-  color: var(--muted-foreground);
-  font-size: 12px;
-  font-weight: 400;
+  gap: 20px;
 }
 
 .export-transcript-modal-body {
   display: grid;
   gap: 10px;
+}
+
+.export-transcript-result-options {
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-section);
+  gap: 0;
+  overflow: hidden;
+}
+
+.export-transcript-result-option {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.export-transcript-result-option + .export-transcript-result-option {
+  border-top: 1px solid var(--gx-modal-hairline);
+}
+
+.export-transcript-result-option-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+}
+
+.export-transcript-result-option-number {
+  align-items: center;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  height: 20px;
+  justify-content: center;
+  width: 20px;
+}
+
+.export-transcript-result-option-title {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
 }
 
 .export-transcript-section-title {
@@ -3195,8 +2712,9 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .export-transcript-toggle-list {
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-section);
   overflow: hidden;
 }
 
@@ -3210,7 +2728,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .export-transcript-toggle-row + .export-transcript-toggle-row {
-  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-top: 1px solid var(--gx-modal-hairline);
 }
 
 .export-transcript-toggle-copy {
@@ -3233,9 +2751,9 @@ html:has(body.app-modal-host-native-window-body) {
 
 .export-transcript-path-row {
   align-items: center;
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-control);
   display: flex;
   gap: 6px;
   padding: 8px 8px 8px 12px;
@@ -3252,16 +2770,12 @@ html:has(body.app-modal-host-native-window-body) {
   white-space: normal;
 }
 
-.export-transcript-copy-button {
+.export-transcript-reveal-button {
   flex: 0 0 auto;
 }
 
-.export-transcript-hint {
-  color: var(--muted-foreground);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.5;
-  margin: 0;
+.export-transcript-result-action {
+  width: 100%;
 }
 
 .export-transcript-error {
@@ -3272,38 +2786,25 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .export-transcript-modal-shadcn [data-slot='select-trigger'] {
-  background: color-mix(in srgb, var(--input) 22%, transparent);
-  border: 1px solid var(--border);
-  font-size: 14px;
-  font-weight: 400;
-  height: 32px;
-  min-height: 32px;
   width: 100%;
-}
-
-.export-transcript-modal-shadcn [data-slot='dialog-footer'] [data-slot='button'] {
-  font-size: 14px;
-  font-weight: 400;
-  height: 32px;
-  min-height: 32px;
 }
 
 /*
  * CDXC:ExportTranscriptOptions 2026-08-24:
  * The native child window fits itself to the dialog once, at the options
- * stage, and never resizes again. Reserve enough height there for the done
- * stage (wrapped path, agent select, hint, footer) so the stage change cannot
- * clip against the fitted window.
+ * stage, and never resizes again. Reserve enough height there for the two-part
+ * done stage (copy path, then continue with an agent) so the stage change
+ * cannot clip against the fitted window.
  */
 .app-modal-host-native-window-body .export-transcript-modal-shadcn {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  min-height: 384px;
+  min-height: 408px;
 }
 
-/* Keep the action row pinned to the reserved window's bottom edge on both
- * stages instead of letting the grid spread the reserved space between rows. */
+/* Keep the options-stage action row pinned to the reserved window's bottom
+ * edge instead of letting the grid spread the reserved space between rows. */
 .app-modal-host-native-window-body .export-transcript-modal-shadcn > [data-slot='dialog-footer'] {
   margin-top: auto;
 }
@@ -3329,7 +2830,7 @@ html:has(body.app-modal-host-native-window-body) {
   top: 8px;
 }
 
-.session-rename-modal-shadcn [data-slot='dialog-footer'] [data-slot='button']:disabled {
+.session-rename-modal-shadcn:not(.gx-app-modal) [data-slot='dialog-footer'] [data-slot='button']:disabled {
   /*
    * CDXC:SidebarRename 2026-06-13-12:00:
    * A disabled Generate Name/Rename action should not read as a half-faded
@@ -3342,7 +2843,7 @@ html:has(body.app-modal-host-native-window-body) {
   opacity: 1;
 }
 
-.session-rename-modal-shadcn [data-slot='dialog-footer'] [data-slot='button']:not(:disabled) {
+.session-rename-modal-shadcn:not(.gx-app-modal) [data-slot='dialog-footer'] [data-slot='button']:not(:disabled) {
   /*
    * CDXC:SidebarRename 2026-06-13-13:30:
    * Rename and (when text is long enough to enable it) Generate Name are the
@@ -3354,7 +2855,7 @@ html:has(body.app-modal-host-native-window-body) {
   color: #111111;
 }
 
-.session-rename-modal-shadcn [data-slot='dialog-footer'] [data-slot='button']:not(:disabled):hover {
+.session-rename-modal-shadcn:not(.gx-app-modal) [data-slot='dialog-footer'] [data-slot='button']:not(:disabled):hover {
   background: color-mix(in srgb, #ffffff 88%, #000000);
   border-color: color-mix(in srgb, #ffffff 88%, #000000);
   color: #111111;
@@ -3484,192 +2985,223 @@ html:has(body.app-modal-host-native-window-body) {
   top: 17px;
 }
 
-.portless-setup-modal-shadcn {
-  /*
-   * CDXC:PortlessSetupModal 2026-06-23-13:42:
-   * Portless setup uses the compact app-modal child-window surface rather than
-   * an AppKit alert. Keep the copy readable in the default native modal frame
-   * and make the three explicit actions stable, equal-width controls.
-   */
-  max-width: min(560px, calc(100vw - 2rem));
-}
+/*
+ * CDXC:PortlessSetupModal 2026-06-23-13:42:
+ * Portless setup uses the compact app-modal child-window surface rather than an
+ * AppKit alert, with three explicit actions.
+ *
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * All of that chrome — width, native fit-height shell, copy typography, and the
+ * equal-width action row — now comes from the shared `.gx-app-modal` rules
+ * below. `.portless-setup-modal-body` survives only as the fit-height scroll
+ * hook at the bottom of this file.
+ */
 
-.app-modal-host-native-window-body .portless-setup-modal-shadcn {
-  box-sizing: border-box;
-  /*
-   * CDXC:PortlessSetupModal 2026-06-30-16:08:
-   * Portless setup joins the one-shot native fit-height modal list, so the
-   * React shell must use content height instead of filling the WebView.
-   */
-  height: fit-content;
-  max-height: none;
-  max-width: 100vw;
-  overflow: visible;
-  padding: 24px;
-  width: 100vw;
-}
-
-.app-modal-host-native-window-body .portless-setup-modal-shadcn [data-slot='dialog-close'] {
-  right: 24px;
-  top: 24px;
-}
-
-.portless-setup-modal-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  height: auto;
-}
-
-.portless-setup-modal-body {
-  color: color-mix(in srgb, var(--foreground) 86%, var(--muted-foreground) 14%);
-  display: flex;
-  flex-direction: column;
-  font-size: 14px;
-  gap: 12px;
-  line-height: 1.55;
-}
-
-.portless-setup-modal-body p {
-  margin: 0;
-}
-
-.portless-setup-modal-actions {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 0;
-}
-
-.portless-setup-modal-actions [data-slot='button'] {
-  min-width: 0;
-  width: 100%;
-}
-
-.delayed-send-modal-shadcn {
-  /**
-   * CDXC:SessionAutomations 2026-08-02:
-   * Delayed Send and Close After Done are two automations for one session, so
-   * the shared gpui/web dialog presents them as compact cards with explicit
-   * enabled switches. A single trigger selector owns the mutually-exclusive
-   * send modes, and the duration fields only appear for the delay mode.
-   */
-  /**
-   * CDXC:CodexModalRestyle 2026-08-24:
-   * Session Automations follows the Codex-style language already shipped on
-   * the Kanban/Automate pages: a #0e0e0e window, #161616 automation panels,
-   * #1d1d1d raised controls, hairline rgba(255,255,255,0.08) edges, 12px
-   * sections / 8px controls / 6px menu items / pill switches, one 32px control
-   * height, and no bold weights. `--app-modal-background` is redeclared here
-   * (instead of fighting the native-host `!important` background rule) so the
-   * shell resolves to the window color on every theme.
-   */
-  max-width: min(460px, calc(100vw - 2rem));
+/**
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * One source of truth for the Codex-style app-modal design language that
+ * shipped on Session Automations (CDXC:CodexModalRestyle 2026-08-24): a
+ * #0e0e0e window, #161616 section panels, #1d1d1d raised controls, hairline
+ * rgba(255,255,255,0.08) edges, 12px sections / 8px controls / 6px menu items,
+ * one 32px control height, no bold weights, and full-width paired outline
+ * footer buttons. Every app modal opts in through the AppModalShell component
+ * (packages/core-ui/app-modal-shell.tsx), which applies `.gx-app-modal`.
+ * Restyle every modal at once by editing these tokens and slot rules; add
+ * per-modal rules only for layout that is unique to that modal.
+ * `--app-modal-background` is redeclared here (instead of fighting the
+ * native-host `!important` background rules above) so the child-window shell
+ * resolves to the window color on every theme.
+ */
+.gx-app-modal {
   --app-modal-background: #0e0e0e;
-  --delayed-send-surface: #0e0e0e;
-  --delayed-send-panel: #161616;
-  --delayed-send-raised: #1d1d1d;
-  --delayed-send-raised-hover: #232323;
-  --delayed-send-hairline: rgba(255, 255, 255, 0.08);
-  --delayed-send-radius-pill: 999px;
-  --delayed-send-radius-menu: 6px;
-  --delayed-send-radius-control: 8px;
-  --delayed-send-radius-section: 12px;
-  --delayed-send-control-height: 32px;
-  border-radius: var(--delayed-send-radius-section) !important;
+  --gx-modal-surface: #0e0e0e;
+  --gx-modal-panel: #161616;
+  --gx-modal-raised: #1d1d1d;
+  --gx-modal-raised-hover: #232323;
+  --gx-modal-hairline: rgba(255, 255, 255, 0.08);
+  --gx-modal-radius-pill: 999px;
+  --gx-modal-radius-menu: 6px;
+  --gx-modal-radius-control: 8px;
+  --gx-modal-radius-section: 12px;
+  --gx-modal-control-height: 32px;
+  background: var(--gx-modal-surface);
+  background-color: var(--gx-modal-surface);
+  border-radius: var(--gx-modal-radius-section) !important;
+  color-scheme: dark;
+  font-family: var(--app-font-family, var(--vscode-font-family, ui-sans-serif, system-ui));
+  font-size: 14px;
+  max-height: min(720px, calc(100vh - 2rem));
+  max-width: min(var(--gx-modal-width, 460px), calc(100vw - 2rem));
+  overflow: auto;
+  width: min(var(--gx-modal-width, 460px), calc(100vw - 2rem));
 }
 
-.delayed-send-modal-shadcn [data-slot='card'] {
-  background: var(--delayed-send-panel);
-  border: 1px solid var(--delayed-send-hairline);
-  border-radius: var(--delayed-send-radius-section) !important;
-  /* Card ships `ring-1 ring-foreground/10`; this unlayered rule outranks the
-     Tailwind utilities layer, so the ring is replaced by the hairline border. */
-  box-shadow: none;
-}
-
-.delayed-send-modal-shadcn :is([data-slot='button'], [data-slot='input'], [data-slot='select-trigger']) {
-  border-radius: var(--delayed-send-radius-control) !important;
-  font-weight: 400;
-  height: var(--delayed-send-control-height);
-  min-height: var(--delayed-send-control-height);
-}
-
-.delayed-send-modal-shadcn :is([data-slot='input'], [data-slot='select-trigger']) {
-  background: var(--delayed-send-raised);
-  border: 1px solid var(--delayed-send-hairline);
-  color: var(--foreground);
-}
-
-.delayed-send-modal-shadcn
-  :is([data-slot='input'], [data-slot='select-trigger']):hover:not(:disabled, :focus, :focus-visible) {
-  background: var(--delayed-send-raised-hover);
-}
-
-/* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
-.delayed-send-modal-shadcn [data-slot='switch'] {
-  border-radius: 6px !important;
-}
-
-.delayed-send-modal-shadcn [data-slot='switch-thumb'] {
-  border-radius: 4px !important;
-}
-
-.delayed-send-modal-shadcn [data-slot='dialog-title'] {
+.gx-app-modal [data-slot='dialog-title'] {
+  font-family: inherit;
   font-size: 16px;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.3;
 }
 
-.delayed-send-modal-shadcn [data-slot='dialog-description'],
-.delayed-send-modal-shadcn [data-slot='card-description'] {
+.gx-app-modal [data-slot='dialog-description'],
+.gx-app-modal [data-slot='card-description'] {
   color: var(--muted-foreground);
   font-size: 13px;
   font-weight: 400;
+  line-height: 1.55;
 }
 
-.delayed-send-modal-shadcn [data-slot='card-title'] {
+.gx-app-modal [data-slot='card'] {
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-section) !important;
+  /* Card ships `ring-1 ring-foreground/10`; this unlayered rule outranks the
+     Tailwind utilities layer, so the ring is replaced by the hairline border. */
+  box-shadow: none;
+}
+
+.gx-app-modal [data-slot='card-title'] {
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0;
 }
 
-.delayed-send-modal-shadcn [data-slot='field-label'] {
+.gx-app-modal [data-slot='field-label'] {
   color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.delayed-send-modal-shadcn [data-slot='card-description'].delayed-send-automation-status-active {
-  color: var(--ghostex-accent, #38bdf8);
+.gx-app-modal :is([data-slot='button'], [data-slot='input'], [data-slot='select-trigger']) {
+  border-radius: var(--gx-modal-radius-control) !important;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  height: var(--gx-modal-control-height);
+  letter-spacing: 0;
+  min-height: var(--gx-modal-control-height);
+}
+
+.gx-app-modal :is([data-slot='input'], [data-slot='select-trigger']) {
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  color: var(--foreground);
+}
+
+.gx-app-modal :is([data-slot='input'], [data-slot='select-trigger']):hover:not(:disabled, :focus, :focus-visible) {
+  background: var(--gx-modal-raised-hover);
+}
+
+/* Textareas share the raised-control skin but keep their own height. */
+.gx-app-modal [data-slot='textarea'] {
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-control) !important;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
 }
 
 /*
- * The trigger popover portals to <body>, outside the modal element, so it
- * cannot inherit the dialog's tokens. styles.css pins every select-content to
+ * CDXC:ModalTextFocus 2026-06-15-11:30:
+ * Text fields and textareas in app modals reuse the input border as a white
+ * focus outline and suppress the shadcn outer ring so editable text controls
+ * do not read as active terminal panes.
+ */
+.gx-app-modal
+  :is([data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger']):is(:focus, :focus-visible) {
+  border-color: #fff;
+  box-shadow: none;
+  outline: none;
+}
+
+/* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
+.gx-app-modal [data-slot='switch'] {
+  border-radius: 6px !important;
+}
+
+.gx-app-modal [data-slot='switch-thumb'] {
+  border-radius: 4px !important;
+}
+
+/*
+ * Select popovers portal to <body>, outside the modal element, so they cannot
+ * inherit the dialog's tokens. styles.css pins every select-content to
  * --app-dropdown-background with `!important` at the same specificity and from
  * a later sheet, so this rule qualifies with the slot attribute to win.
  */
-[data-slot='select-content'].delayed-send-select-content {
+[data-slot='select-content'].gx-app-modal-select-content {
   background: #161616 !important;
   background-color: #161616 !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 8px !important;
 }
 
-.delayed-send-select-content [data-slot='select-item'] {
+.gx-app-modal-select-content [data-slot='select-item'] {
   border-radius: 6px !important;
   font-weight: 400;
 }
 
-.app-modal-host-native-window-body .delayed-send-modal-shadcn {
+/* The modal's top-level form/content column: 20px between header, body, footer. */
+.gx-app-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* A stack of section cards inside the body: 12px apart. */
+.gx-app-modal-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Footer: equal-width pill buttons filling the modal width, any button count. */
+.gx-app-modal-footer {
+  display: grid;
+  gap: 8px;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+
+.gx-app-modal-action-button {
+  min-width: 0;
+  width: 100%;
+}
+
+.gx-app-modal .gx-app-modal-action-button {
+  background: transparent;
+  border: 1px solid var(--gx-modal-hairline);
+  color: var(--foreground);
+}
+
+.gx-app-modal .gx-app-modal-action-button:hover:not(:disabled) {
+  background: var(--gx-modal-raised-hover);
+  color: var(--foreground);
+}
+
+/* Destructive confirms keep the neutral pill shape with a danger tint. */
+.gx-app-modal .gx-app-modal-action-button.gx-app-modal-action-danger {
+  border-color: color-mix(in srgb, var(--destructive, #f87171) 45%, transparent);
+  color: var(--destructive, #f87171);
+}
+
+.gx-app-modal .gx-app-modal-action-button.gx-app-modal-action-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive, #f87171) 12%, transparent);
+  color: var(--destructive, #f87171);
+}
+
+.app-modal-host-native-window-body .gx-app-modal {
   --tw-translate-y: 0px;
   box-sizing: border-box;
   /*
    * CDXC:DelayedSend 2026-06-30-16:08:
-   * Delayed Send now participates in one-shot native fit-height measurement.
-   * The React form should determine the child-window height instead of
+   * Shell modals participate in one-shot native fit-height measurement. The
+   * React content should determine the child-window height instead of
    * spreading title, fields, and actions across a fixed 100vh container.
    */
   height: fit-content;
@@ -3681,15 +3213,25 @@ html:has(body.app-modal-host-native-window-body) {
   width: 100vw;
 }
 
-.app-modal-host-native-window-body .delayed-send-modal-shadcn .delayed-send-form {
+.app-modal-host-native-window-body .gx-app-modal .gx-app-modal-form {
   height: auto;
   justify-content: flex-start;
 }
 
-.delayed-send-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+/**
+ * CDXC:SessionAutomations 2026-08-02:
+ * Delayed Send and Close After Done are two automations for one session, so
+ * the shared gpui/web dialog presents them as compact cards with explicit
+ * enabled switches. A single trigger selector owns the mutually-exclusive
+ * send modes, and the duration fields only appear for the delay mode.
+ *
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * All of the Session Automations chrome (tokens, card/control/switch skins,
+ * typography, footer buttons, native fit-height shell) moved to the shared
+ * `.gx-app-modal` rules above; only delayed-send-specific layout remains here.
+ */
+.gx-app-modal [data-slot='card-description'].delayed-send-automation-status-active {
+  color: var(--ghostex-accent, #38bdf8);
 }
 
 .delayed-send-dialog-description {
@@ -3736,12 +3278,6 @@ html:has(body.app-modal-host-native-window-body) {
   gap: 12px;
 }
 
-.delayed-send-automation-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .delayed-send-duration-grid {
   display: grid;
   gap: 10px;
@@ -3764,17 +3300,6 @@ html:has(body.app-modal-host-native-window-body) {
 
 .delayed-send-close-card [data-slot='card-description'] {
   white-space: nowrap;
-}
-
-.delayed-send-footer {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.delayed-send-action-button {
-  min-width: 0;
-  width: 100%;
 }
 
 .session-rename-form {
@@ -3913,9 +3438,9 @@ html:has(body.app-modal-host-native-window-body) {
 /*
  * CDXC:SessionAgentNotes 2026-08-24:
  * The note dialog reuses Rename Session's chrome, but a note is a paragraph
- * rather than a title, so its field opens taller. Everything else — the native
- * child-window inset, the fit-height cap, the footer buttons — is inherited
- * from `.session-rename-modal-shadcn` and deliberately not duplicated here.
+ * rather than a title, so its field opens taller. The native child window owns
+ * a full-height layout below so the editor can grow between its header and
+ * footer instead of inheriting Rename Session's compact 80px editor.
  */
 .session-note-modal-shadcn .session-note-textarea {
   min-height: 140px;
@@ -4651,59 +4176,23 @@ html:has(body.app-modal-host-native-window-body) {
   .previous-sessions-search-input {
     font-size: 11px;
   }
-
-  .previous-sessions-find-button {
-    font-size: 10px;
-    letter-spacing: 0.03em;
-    padding: 0 10px;
-  }
 }
 
-@media (max-width: 640px) {
-  .daemon-session-card-details {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .daemon-session-card-header {
-    display: grid;
-  }
-
-  .daemon-session-card-badges {
-    justify-content: flex-start;
-  }
-
-  .daemon-sessions-summary-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.remote-gxserver-install-modal {
-  max-width: 520px;
-}
-
-.remote-gxserver-install-modal-body {
-  color: rgba(244, 244, 245, 0.76);
-  display: flex;
-  flex-direction: column;
-  font-size: 13px;
-  gap: 12px;
-  line-height: 1.5;
-}
-
-.remote-gxserver-install-modal-body code {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  color: rgba(244, 244, 245, 0.92);
+/*
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * The remote install prompt's width, body typography, and action row now come
+ * from the shared `.gx-app-modal` rules. Only the inline monospace chips for
+ * the install path and the exposed binaries are specific to this modal;
+ * `.remote-gxserver-install-modal-body` also stays as the fit-height scroll
+ * hook at the bottom of this file.
+ */
+.gx-app-modal .remote-gxserver-install-modal-body code {
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-menu);
+  color: var(--foreground);
   font-size: 12px;
-  padding: 1px 4px;
-}
-
-.remote-gxserver-install-modal-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  padding-top: 6px;
+  padding: 1px 5px;
 }
 
 /*
@@ -4893,10 +4382,13 @@ html:has(body.app-modal-host-native-window-body) {
 /*
  * Any modal textarea that sits in normal flow scrolls instead of growing. The
  * modals whose textarea is meant to fill the window (Scratch Pad, Commit
- * message) keep their own sizing.
+ * message, Saved Prompt editor) keep their own sizing, and so does the read-only
+ * View 1st Message viewer, which is sized by the fit-height rule above.
  */
 .app-modal-host-native-window-body[data-app-modal-fixed-window='true']
-  [data-slot='textarea']:not(.scratch-pad-textarea):not(.git-commit-modal-textarea) {
+  [data-slot='textarea']:not(.scratch-pad-textarea):not(.git-commit-modal-textarea):not(
+    .ghostex-stashed-prompt-editor-textarea
+  ):not(.first-user-message-textarea) {
   max-height: min(220px, 42vh);
   overflow-y: auto;
   resize: none;
@@ -4919,6 +4411,66 @@ html:has(body.app-modal-host-native-window-body) {
   min-height: 80px;
   overflow-y: auto;
   resize: none;
+}
+
+/*
+ * Rename Session and Session Note are writing surfaces inside the same compact
+ * native frame. Fill that frame from its top edge, let the first field consume
+ * the space between the header and footer, and keep the actions anchored to the
+ * bottom inset. Each textarea scrolls internally once that space is full.
+ */
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'][data-app-modal-fixed-window='true']
+  .session-rename-modal-shadcn:is(.rename-session-modal-shadcn, .session-note-modal-shadcn) {
+  --tw-translate-y: 0px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  top: 0;
+}
+
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'][data-app-modal-fixed-window='true']
+  :is(.rename-session-modal-shadcn, .session-note-modal-shadcn)
+  :is(.rename-session-form, .session-note-form) {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'][data-app-modal-fixed-window='true']
+  :is(.rename-session-modal-shadcn, .session-note-modal-shadcn)
+  .session-rename-field-group {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'][data-app-modal-fixed-window='true']
+  :is(.rename-session-modal-shadcn, .session-note-modal-shadcn)
+  .session-rename-field-group
+  > [data-slot='field']:first-child {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'][data-app-modal-fixed-window='true']
+  :is(.rename-session-modal-shadcn, .session-note-modal-shadcn)
+  [data-slot='textarea'].session-rename-textarea {
+  flex: 1 1 auto;
+  field-sizing: fixed;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
+  resize: none;
+}
+
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'][data-app-modal-fixed-window='true']
+  :is(.rename-session-modal-shadcn, .session-note-modal-shadcn)
+  [data-slot='dialog-footer'] {
+  flex: 0 0 auto;
+  margin-top: auto;
 }
 
 /*
@@ -5029,6 +4581,12 @@ html:has(body.app-modal-host-native-window-body) {
   font-weight: 400;
 }
 
+/* The path bar actions are connected chrome, so their shared edges stay square. */
+.add-project-modal [data-add-project-field='newFolder'],
+.add-project-modal [data-add-project-field='submit'] {
+  border-radius: 0 !important;
+}
+
 .add-project-modal kbd {
   border-radius: 5px !important;
 }
@@ -5092,5 +4650,141 @@ html:has(body.app-modal-host-native-window-body) {
  * selected fill is restated here so the strip reads on the #161616 sheet.
  */
 .worktree-create-mode-toggle [data-slot='segmented-control-item'][aria-pressed='true'] {
-  background: #1d1d1d;
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+/* Extensions --------------------------------------------------------------- */
+
+/*
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * Extensions is a large management surface rather than a 460px sheet, so it
+ * opts into the shared `.gx-app-modal` chrome (12px window, #0e0e0e surface,
+ * hairline edges, 8px pills, 16px/400 title, 13px descriptions) and restates
+ * only what is unique to it: a fixed-height flex column whose panes own their
+ * own scrolling, and the #161616 panel/#1d1d1d control skin for the store rows,
+ * detail cards, and icon tiles that are plain divs instead of shadcn Cards.
+ * The panel rules are written against `var(--gx-modal-*, <literal>)` so the
+ * Storybook stories that render these pieces outside the dialog still match.
+ */
+.gx-app-modal.extensions-modal-dialog {
+  --gx-modal-width: 1120px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: min(850px, calc(100vh - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+  padding: 0;
+}
+
+/*
+ * Extensions opens as a fixed 1120x850 native child window, so there the window
+ * IS the modal and the surface fills it instead of leaving the shared shell's
+ * 1rem viewport inset as dead space around its own edge.
+ */
+.app-modal-host-native-window-body .gx-app-modal.extensions-modal-dialog {
+  height: 100vh;
+  max-height: 100vh;
+}
+
+/*
+ * The shell's single 32px control height is meant for stacked form rows; this
+ * surface is a dense list, so its buttons keep the shadcn sizes and take only
+ * the pill radius and the unbolded label from the shared chrome.
+ */
+.gx-app-modal.extensions-modal-dialog [data-slot='button'] {
+  font-weight: 400;
+  height: auto;
+  min-height: 0;
+}
+
+/*
+ * The shadcn dialog close button paints a `bg-secondary` box; the app-modal
+ * language wants an unboxed ghost affordance in the top-right corner.
+ */
+.extensions-modal-dialog [data-slot='dialog-close'] {
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.extensions-modal-dialog [data-slot='dialog-close']:hover {
+  background: var(--gx-modal-raised-hover, #232323);
+  color: var(--foreground);
+}
+
+.extensions-modal-header,
+.extensions-modal-toolbar,
+.extensions-modal-error {
+  border-bottom: 1px solid var(--gx-modal-hairline, rgba(255, 255, 255, 0.08));
+}
+
+.extensions-modal-toolbar [data-slot='input-group'] {
+  background: var(--gx-modal-raised, #1d1d1d);
+  border: 1px solid var(--gx-modal-hairline, rgba(255, 255, 255, 0.08));
+  border-radius: var(--gx-modal-radius-control, 8px) !important;
+}
+
+.extensions-modal-toolbar [data-slot='input-group']:focus-within {
+  border-color: #fff;
+}
+
+/* Section panels: one #161616 sheet, hairline edge, hairline row dividers. */
+.extensions-group {
+  background: var(--gx-modal-panel, #161616);
+  border: 1px solid var(--gx-modal-hairline, rgba(255, 255, 255, 0.08));
+  border-radius: var(--gx-modal-radius-section, 12px);
+}
+
+.extensions-group > :not(:last-child),
+.extensions-group-list > :not(:last-child) {
+  border-color: var(--gx-modal-hairline, rgba(255, 255, 255, 0.08));
+}
+
+.extensions-row:is(:hover, :focus-within) {
+  background: var(--gx-modal-raised, #1d1d1d);
+}
+
+/* Raised tiles: extension icons, screenshots, and the empty-state glyph. */
+.extensions-icon,
+.extensions-screenshot {
+  background: var(--gx-modal-raised, #1d1d1d);
+  border: 1px solid var(--gx-modal-hairline, rgba(255, 255, 255, 0.08));
+  border-radius: var(--gx-modal-radius-control, 8px);
+}
+
+.extensions-icon.extensions-icon-lg,
+.extensions-empty-icon {
+  background: var(--gx-modal-panel, #161616);
+  border: 1px solid var(--gx-modal-hairline, rgba(255, 255, 255, 0.08));
+  border-radius: var(--gx-modal-radius-section, 12px);
+}
+
+/*
+ * Install consent is a nested dialog inside the Extensions window, not a child
+ * window of its own, so it keeps the centered sheet geometry that the native
+ * child-window rules otherwise stretch across the whole host window.
+ */
+.app-modal-host-native-window-body .gx-app-modal.extensions-consent-modal {
+  --tw-translate-y: -50%;
+  max-width: min(var(--gx-modal-width, 460px), calc(100vw - 2rem));
+  top: 50%;
+  width: min(var(--gx-modal-width, 460px), calc(100vw - 2rem));
+}
+
+/* Install consent is a plain app modal, so it only needs its list layout. */
+.extensions-consent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.extensions-consent-item {
+  align-items: flex-start;
+  background: var(--gx-modal-panel, #161616);
+  border: 1px solid var(--gx-modal-hairline, rgba(255, 255, 255, 0.08));
+  border-radius: var(--gx-modal-radius-section, 12px);
+  display: flex;
+  font-size: 13px;
+  gap: 12px;
+  padding: 12px;
 }

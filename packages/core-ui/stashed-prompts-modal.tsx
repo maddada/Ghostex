@@ -21,11 +21,14 @@ import {
   CommandItem,
   CommandList,
 } from '../components/ui/command';
+import { Button } from '../components/ui/button';
+import { Field, FieldGroup, FieldLabel } from '../components/ui/field';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import { SegmentedControl, SegmentedControlItem } from '../components/ui/segmented-control';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Textarea } from '../components/ui/textarea';
 import { parseGxserverPresentationProjectSessionId } from '../shared/gxserver-presentation-sidebar-projection';
 import type { GxserverStashedPrompt, GxserverStashedPromptTag } from '../shared/gxserver-protocol';
-import { GXSERVER_FAVORITE_PROMPT_TAG_ID } from '../shared/gxserver-protocol';
+import { GXSERVER_FAVORITE_PROMPT_TAG_ID, GXSERVER_STASHED_PROMPT_TAG_ID } from '../shared/gxserver-protocol';
 import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
 import type { ExtensionToSidebarMessage } from '../shared/session-grid-contract';
 import {
@@ -101,6 +104,30 @@ const MAX_TAG_NAME_LENGTH = 40;
 type StashedPromptTagFilter = { kind: 'all' } | { kind: 'tag'; tagId: string } | { kind: 'untagged' };
 
 const ALL_PROMPTS_FILTER: StashedPromptTagFilter = { kind: 'all' };
+const ALL_PROJECTS_VALUE = 'scope:all';
+const CURRENT_SESSION_VALUE = 'scope:session';
+const NO_PROJECT_VALUE = 'project:none';
+const ALL_TAGS_VALUE = 'tag:all';
+const NO_TAG_VALUE = 'tag:none';
+
+type SavedPromptProjectOption = {
+  name: string;
+  projectId: string;
+};
+
+function projectFilterValue(scope: StashedPromptsScope, projectId: string | undefined): string {
+  if (scope === 'session') {
+    return CURRENT_SESSION_VALUE;
+  }
+  return scope === 'project' && projectId ? `project:${projectId}` : ALL_PROJECTS_VALUE;
+}
+
+function tagFilterValue(filter: StashedPromptTagFilter): string {
+  if (filter.kind === 'tag') {
+    return `tag:${filter.tagId}`;
+  }
+  return filter.kind === 'untagged' ? NO_TAG_VALUE : ALL_TAGS_VALUE;
+}
 
 type StashedPromptDayGroup = {
   dayLabel: string;
@@ -123,6 +150,10 @@ function stashedPromptTitle(prompt: GxserverStashedPrompt): string {
 
 function promptTagIds(prompt: GxserverStashedPrompt): readonly string[] {
   return prompt.tagIds ?? [];
+}
+
+function promptLabelTagIds(prompt: GxserverStashedPrompt): readonly string[] {
+  return promptTagIds(prompt).filter((tagId) => tagId !== GXSERVER_FAVORITE_PROMPT_TAG_ID);
 }
 
 type StashedPromptSessionContext = {
@@ -204,6 +235,7 @@ export function StashedPromptsModal({
   const [prompts, setPrompts] = useState<GxserverStashedPrompt[]>();
   const [tags, setTags] = useState<GxserverStashedPromptTag[]>([]);
   const [scope, setScope] = useState<StashedPromptsScope>(initialScope ?? 'all');
+  const [scopeProjectId, setScopeProjectId] = useState<string>();
   const [tagFilter, setTagFilter] = useState<StashedPromptTagFilter>(ALL_PROMPTS_FILTER);
   const [tagMenuPromptId, setTagMenuPromptId] = useState<string>();
   const [isCreatingTag, setIsCreatingTag] = useState(false);
@@ -214,6 +246,8 @@ export function StashedPromptsModal({
   const [isAddingPrompt, setIsAddingPrompt] = useState(false);
   const [editingPromptId, setEditingPromptId] = useState<string>();
   const [draftContent, setDraftContent] = useState('');
+  const [draftProjectId, setDraftProjectId] = useState(NO_PROJECT_VALUE);
+  const [draftTagId, setDraftTagId] = useState(NO_TAG_VALUE);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [selectedPromptValue, setSelectedPromptValue] = useState('');
@@ -258,23 +292,47 @@ export function StashedPromptsModal({
   const currentAgentSessionId = useSidebarStore((state) =>
     sessionId ? state.sessionsById[sessionId]?.agentSessionId : undefined
   );
+  const groupOrder = useSidebarStore((state) => state.groupOrder);
+  const groupsById = useSidebarStore((state) => state.groupsById);
   const sessionContext = useMemo<StashedPromptSessionContext>(
     () => ({ agentSessionId: currentAgentSessionId, projectId: rawProjectId, sessionId: rawSessionId }),
     [currentAgentSessionId, rawProjectId, rawSessionId]
   );
   const hasSessionScope = Boolean(rawSessionId || currentAgentSessionId);
-  const hasProjectScope = rawProjectId !== undefined;
+  const projectOptions = useMemo(() => {
+    const options = new Map<string, SavedPromptProjectOption>();
+    for (const groupId of groupOrder) {
+      const group = groupsById[groupId];
+      const groupProjectId = group?.projectContext?.editor.projectId;
+      if (groupProjectId && !options.has(groupProjectId)) {
+        options.set(groupProjectId, { name: group.title, projectId: groupProjectId });
+      }
+    }
+    for (const prompt of prompts ?? []) {
+      if (prompt.projectId && !options.has(prompt.projectId)) {
+        options.set(prompt.projectId, {
+          name: prompt.projectName?.trim() || 'Unnamed project',
+          projectId: prompt.projectId,
+        });
+      }
+    }
+    if (rawProjectId && !options.has(rawProjectId)) {
+      options.set(rawProjectId, { name: 'This project', projectId: rawProjectId });
+    }
+    return [...options.values()].sort((left, right) => left.name.localeCompare(right.name));
+  }, [groupOrder, groupsById, prompts, rawProjectId]);
   /*
    * A scope whose segment is not on screen must not silently filter the list,
    * so an unavailable scope reads as "all" without rewriting the user's choice.
    */
   const effectiveScope: StashedPromptsScope =
-    (scope === 'session' && !hasSessionScope) || (scope === 'project' && !hasProjectScope) ? 'all' : scope;
+    (scope === 'session' && !hasSessionScope) || (scope === 'project' && !scopeProjectId) ? 'all' : scope;
 
   useEffect(() => {
     if (!isOpen) {
       setPrompts(undefined);
       setTags([]);
+      setScopeProjectId(undefined);
       setTagFilter(ALL_PROMPTS_FILTER);
       setTagMenuPromptId(undefined);
       setIsCreatingTag(false);
@@ -284,6 +342,8 @@ export function StashedPromptsModal({
       setIsAddingPrompt(false);
       setEditingPromptId(undefined);
       setDraftContent('');
+      setDraftProjectId(NO_PROJECT_VALUE);
+      setDraftTagId(NO_TAG_VALUE);
       setIsSavingPrompt(false);
       setSaveError(undefined);
       latestRequestIdRef.current = undefined;
@@ -311,6 +371,8 @@ export function StashedPromptsModal({
           ...(current ?? []).filter((prompt) => prompt.promptId !== savedPrompt.promptId),
         ]);
         setDraftContent('');
+        setDraftProjectId(NO_PROJECT_VALUE);
+        setDraftTagId(NO_TAG_VALUE);
         setSearchQuery('');
         setSaveError(undefined);
         setIsAddingPrompt(false);
@@ -402,6 +464,8 @@ export function StashedPromptsModal({
       setIsAddingPrompt(false);
       setEditingPromptId(undefined);
       setDraftContent('');
+      setDraftProjectId(NO_PROJECT_VALUE);
+      setDraftTagId(NO_TAG_VALUE);
       setSaveError(undefined);
     };
     document.addEventListener('keydown', handleKeyDown, true);
@@ -427,11 +491,12 @@ export function StashedPromptsModal({
      */
     hasResolvedDefaultScopeRef.current = false;
     setScope(initialScope ?? 'all');
+    setScopeProjectId(rawProjectId);
     vscode.postMessage({
       requestId,
       type: 'requestStashedPrompts',
     });
-  }, [initialScope, isOpen, vscode]);
+  }, [initialScope, isOpen, rawProjectId, vscode]);
 
   /*
    * CDXC:StashedPromptSessionAssociation 2026-08-24:
@@ -480,23 +545,23 @@ export function StashedPromptsModal({
       return searchedPrompts;
     }
     if (effectiveScope === 'project') {
-      return searchedPrompts.filter((prompt) => promptBelongsToProject(prompt, rawProjectId));
+      return searchedPrompts.filter((prompt) => promptBelongsToProject(prompt, scopeProjectId));
     }
     return searchedPrompts.filter((prompt) => promptBelongsToSession(prompt, sessionContext));
-  }, [effectiveScope, rawProjectId, searchedPrompts, sessionContext]);
+  }, [effectiveScope, scopeProjectId, searchedPrompts, sessionContext]);
 
   const visiblePrompts = useMemo(() => {
     if (tagFilter.kind === 'all') {
       return scopedPrompts;
     }
     if (tagFilter.kind === 'untagged') {
-      return scopedPrompts.filter((prompt) => promptTagIds(prompt).length === 0);
+      return scopedPrompts.filter((prompt) => promptLabelTagIds(prompt).length === 0);
     }
     return scopedPrompts.filter((prompt) => promptTagIds(prompt).includes(tagFilter.tagId));
   }, [scopedPrompts, tagFilter]);
 
   const untaggedPromptCount = useMemo(
-    () => scopedPrompts.filter((prompt) => promptTagIds(prompt).length === 0).length,
+    () => scopedPrompts.filter((prompt) => promptLabelTagIds(prompt).length === 0).length,
     [scopedPrompts]
   );
 
@@ -506,7 +571,10 @@ export function StashedPromptsModal({
    * search: its count narrows with the query like every other pill, but the
    * pill itself must not blink in and out of the rail as the user types.
    */
-  const hasTaggedPrompt = useMemo(() => (prompts ?? []).some((prompt) => promptTagIds(prompt).length > 0), [prompts]);
+  const hasTaggedPrompt = useMemo(
+    () => (prompts ?? []).some((prompt) => promptLabelTagIds(prompt).length > 0),
+    [prompts]
+  );
 
   const promptCountByTagId = useMemo(() => {
     const counts = new Map<string, number>();
@@ -521,11 +589,7 @@ export function StashedPromptsModal({
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.tagId, tag])), [tags]);
 
   const groupedVisiblePrompts = useMemo(() => groupStashedPromptsByDay(visiblePrompts), [visiblePrompts]);
-  const normalizedSearchQuery = searchQuery.toLowerCase().replace(/\s+/g, ' ').trim();
-  const showAddPrompt =
-    tagFilter.kind === 'all' &&
-    (normalizedSearchQuery.length === 0 || 'add saved prompt new prompt'.includes(normalizedSearchQuery));
-  const topPromptValue = showAddPrompt ? 'add saved prompt new prompt' : (visiblePrompts[0]?.promptId ?? '');
+  const topPromptValue = visiblePrompts[0]?.promptId ?? '';
 
   useLayoutEffect(() => {
     if (!isOpen || isAddingPrompt) {
@@ -536,6 +600,20 @@ export function StashedPromptsModal({
       promptListRef.current.scrollTop = 0;
     }
   }, [isAddingPrompt, isOpen, searchQuery, topPromptValue]);
+
+  const openAddPrompt = () => {
+    const defaultProjectId = effectiveScope === 'project' ? scopeProjectId : rawProjectId;
+    const defaultTagId =
+      tagFilter.kind === 'tag' && tagFilter.tagId !== GXSERVER_FAVORITE_PROMPT_TAG_ID
+        ? `tag:${tagFilter.tagId}`
+        : NO_TAG_VALUE;
+    setEditingPromptId(undefined);
+    setDraftContent('');
+    setDraftProjectId(defaultProjectId ? `project:${defaultProjectId}` : NO_PROJECT_VALUE);
+    setDraftTagId(defaultTagId);
+    setSaveError(undefined);
+    setIsAddingPrompt(true);
+  };
 
   const insertPrompt = (prompt: GxserverStashedPrompt) => {
     vscode.postMessage({
@@ -580,10 +658,16 @@ export function StashedPromptsModal({
 
   const togglePromptTag = (prompt: GxserverStashedPrompt, tagId: string) => {
     const current = promptTagIds(prompt);
-    setPromptTags(
-      prompt,
-      current.includes(tagId) ? current.filter((candidate) => candidate !== tagId) : [...current, tagId]
-    );
+    const favoriteTagIds = current.includes(GXSERVER_FAVORITE_PROMPT_TAG_ID) ? [GXSERVER_FAVORITE_PROMPT_TAG_ID] : [];
+    if (tagId === GXSERVER_FAVORITE_PROMPT_TAG_ID) {
+      const labelTagId = current.find((candidate) => candidate !== GXSERVER_FAVORITE_PROMPT_TAG_ID);
+      setPromptTags(prompt, [
+        ...(favoriteTagIds.length > 0 ? [] : [GXSERVER_FAVORITE_PROMPT_TAG_ID]),
+        ...(labelTagId ? [labelTagId] : []),
+      ]);
+      return;
+    }
+    setPromptTags(prompt, current.includes(tagId) ? favoriteTagIds : [...favoriteTagIds, tagId]);
   };
 
   const openCreateTag = (origin: 'rail' | 'row', promptId?: string) => {
@@ -636,7 +720,10 @@ export function StashedPromptsModal({
     }
     const prompt = prompts?.find((candidate) => candidate.promptId === pending.promptId);
     if (prompt && !promptTagIds(prompt).includes(createdTag.tagId)) {
-      setPromptTags(prompt, [...promptTagIds(prompt), createdTag.tagId]);
+      setPromptTags(prompt, [
+        ...(promptTagIds(prompt).includes(GXSERVER_FAVORITE_PROMPT_TAG_ID) ? [GXSERVER_FAVORITE_PROMPT_TAG_ID] : []),
+        createdTag.tagId,
+      ]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompts, tags]);
@@ -662,6 +749,8 @@ export function StashedPromptsModal({
     latestSaveRequestIdRef.current = requestId;
     setIsSavingPrompt(true);
     setSaveError(undefined);
+    const selectedProjectId = draftProjectId === NO_PROJECT_VALUE ? undefined : draftProjectId.slice('project:'.length);
+    const selectedTagIds = draftTagId === NO_TAG_VALUE ? [] : [draftTagId.slice('tag:'.length)];
     /*
      * CDXC:StashedPromptSessionAssociation 2026-08-24:
      * Post the raw gxserver ids decoded out of the combined presentation key.
@@ -672,9 +761,10 @@ export function StashedPromptsModal({
     vscode.postMessage({
       content,
       ...(editingPromptId ? { promptId: editingPromptId } : {}),
-      ...(rawProjectId ? { projectId: rawProjectId } : {}),
+      ...(!editingPromptId && selectedProjectId ? { projectId: selectedProjectId } : {}),
       requestId,
-      ...(rawSessionId ? { sessionId: rawSessionId } : {}),
+      ...(!editingPromptId && selectedProjectId === rawProjectId && rawSessionId ? { sessionId: rawSessionId } : {}),
+      ...(!editingPromptId ? { tagIds: selectedTagIds } : {}),
       type: 'saveStashedPrompt',
     });
   };
@@ -719,11 +809,53 @@ export function StashedPromptsModal({
         >
           <QuickAccessHeader activeTab='savedPrompts' />
           {isAddingPrompt ? (
-            <div className='ghostex-stashed-prompt-editor'>
+            <div className='ghostex-stashed-prompt-editor' data-editing={String(Boolean(editingPromptId))}>
               <div className='ghostex-stashed-prompt-editor-heading'>
                 {editingPromptId ? 'Edit Saved Prompt' : 'Add Saved Prompt'}
               </div>
-              <textarea
+              {!editingPromptId ? (
+                <FieldGroup className='ghostex-stashed-prompt-editor-metadata'>
+                  <Field>
+                    <FieldLabel className='sr-only'>Project</FieldLabel>
+                    <Select value={draftProjectId} onValueChange={setDraftProjectId}>
+                      <SelectTrigger aria-label='Project for saved prompt' size='sm'>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align='start' alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          <SelectItem value={NO_PROJECT_VALUE}>No project</SelectItem>
+                          {projectOptions.map((project) => (
+                            <SelectItem key={project.projectId} value={`project:${project.projectId}`}>
+                              {project.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel className='sr-only'>Tag</FieldLabel>
+                    <Select value={draftTagId} onValueChange={setDraftTagId}>
+                      <SelectTrigger aria-label='Tag for saved prompt' size='sm'>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align='start' alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          <SelectItem value={NO_TAG_VALUE}>No tag</SelectItem>
+                          {tags
+                            .filter((tag) => tag.tagId !== GXSERVER_FAVORITE_PROMPT_TAG_ID)
+                            .map((tag) => (
+                              <SelectItem key={tag.tagId} value={`tag:${tag.tagId}`}>
+                                {tag.name}
+                              </SelectItem>
+                            ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </FieldGroup>
+              ) : null}
+              <Textarea
                 aria-label='Saved prompt content'
                 className='ghostex-stashed-prompt-editor-textarea'
                 disabled={isSavingPrompt}
@@ -747,27 +879,25 @@ export function StashedPromptsModal({
                 </div>
               ) : null}
               <div className='ghostex-stashed-prompt-editor-actions'>
-                <button
-                  className='ghostex-stashed-prompt-editor-button'
+                <Button
                   disabled={isSavingPrompt}
                   onClick={() => {
                     setIsAddingPrompt(false);
                     setEditingPromptId(undefined);
                     setDraftContent('');
+                    setDraftProjectId(NO_PROJECT_VALUE);
+                    setDraftTagId(NO_TAG_VALUE);
                     setSaveError(undefined);
                   }}
+                  size='sm'
                   type='button'
+                  variant='outline'
                 >
                   Cancel
-                </button>
-                <button
-                  className='ghostex-stashed-prompt-editor-button ghostex-stashed-prompt-editor-button-primary'
-                  disabled={!draftContent.trim() || isSavingPrompt}
-                  onClick={savePrompt}
-                  type='button'
-                >
+                </Button>
+                <Button disabled={!draftContent.trim() || isSavingPrompt} onClick={savePrompt} size='sm' type='button'>
                   {isSavingPrompt ? 'Saving...' : editingPromptId ? 'Save Changes' : 'Add Prompt'}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -788,29 +918,23 @@ export function StashedPromptsModal({
                 value={searchQuery}
                 onValueChange={setSearchQuery}
               />
-              {/*
-                CDXC:StashedPromptSessionAssociation 2026-08-24:
-                Scope sits above the tag rail because it answers a different
-                question than a tag does: tags say what a prompt is about, scope
-                says where it came from. A segment is only offered when the
-                modal actually has that context, so no segment can select a set
-                that is empty by construction.
-              */}
-              {hasProjectScope || hasSessionScope ? (
-                <div className='ghostex-stashed-prompt-scope-row'>
-                  <SegmentedControl
-                    aria-label='Filter saved prompts by origin'
-                    onValueChange={(nextScope) => setScope(nextScope as StashedPromptsScope)}
-                    size='sm'
-                    value={effectiveScope}
-                  >
-                    <SegmentedControlItem value='all'>All</SegmentedControlItem>
-                    {hasProjectScope ? <SegmentedControlItem value='project'>This project</SegmentedControlItem> : null}
-                    {hasSessionScope ? <SegmentedControlItem value='session'>This session</SegmentedControlItem> : null}
-                  </SegmentedControl>
-                </div>
-              ) : null}
-              <StashedPromptTagRail
+              <StashedPromptFiltersToolbar
+                onAddPrompt={openAddPrompt}
+                onProjectFilterChange={(value) => {
+                  if (value === CURRENT_SESSION_VALUE) {
+                    setScope('session');
+                    return;
+                  }
+                  if (value === ALL_PROJECTS_VALUE) {
+                    setScope('all');
+                    return;
+                  }
+                  setScopeProjectId(value.slice('project:'.length));
+                  setScope('project');
+                }}
+                projectFilterValue={projectFilterValue(effectiveScope, scopeProjectId)}
+                projectOptions={projectOptions}
+                showSessionFilter={hasSessionScope}
                 onSelectFilter={setTagFilter}
                 tagFilter={tagFilter}
                 createTagColor={createTagColor}
@@ -839,7 +963,7 @@ export function StashedPromptsModal({
                 </div>
               ) : null}
               <CommandList className='ghostex-command-palette-list ghostex-stashed-prompts-list' ref={promptListRef}>
-                {prompts !== undefined && !showAddPrompt && visiblePrompts.length === 0 ? (
+                {prompts !== undefined && visiblePrompts.length === 0 ? (
                   <CommandEmpty>
                     {tagFilter.kind === 'tag'
                       ? 'No saved prompts carry this tag yet.'
@@ -852,21 +976,8 @@ export function StashedPromptsModal({
                             : 'No saved prompts match this search.'}
                   </CommandEmpty>
                 ) : null}
-                {showAddPrompt || visiblePrompts.length > 0 ? (
+                {prompts === undefined || visiblePrompts.length > 0 ? (
                   <CommandGroup>
-                    {showAddPrompt ? (
-                      <CommandItem
-                        onSelect={() => {
-                          setIsAddingPrompt(true);
-                        }}
-                        value='add saved prompt new prompt'
-                      >
-                        <IconPlus aria-hidden='true' />
-                        <span className='ghostex-command-palette-copy'>
-                          <span className='ghostex-command-palette-title'>Add Saved Prompt</span>
-                        </span>
-                      </CommandItem>
-                    ) : null}
                     {prompts === undefined ? (
                       <div className='ghostex-stashed-prompts-empty'>Loading saved prompts…</div>
                     ) : (
@@ -947,18 +1058,23 @@ export function StashedPromptsModal({
   );
 }
 
-type StashedPromptTagRailProps = {
+type StashedPromptFiltersToolbarProps = {
   createTagColor: string;
   createTagName: string;
   isCreatingTag: boolean;
+  onAddPrompt: () => void;
   onCommitCreateTag: () => void;
   onCreateTagColorChange: (color: string) => void;
   onCreateTagNameChange: (name: string) => void;
   onCreateTagOpenChange: (nextOpen: boolean) => void;
   onDeleteTag: (tag: GxserverStashedPromptTag) => void;
+  onProjectFilterChange: (value: string) => void;
   onSelectFilter: (filter: StashedPromptTagFilter) => void;
+  projectFilterValue: string;
+  projectOptions: readonly SavedPromptProjectOption[];
   promptCount: number;
   promptCountByTagId: Map<string, number>;
+  showSessionFilter: boolean;
   showUntaggedFilter: boolean;
   tagFilter: StashedPromptTagFilter;
   tags: readonly GxserverStashedPromptTag[];
@@ -967,122 +1083,104 @@ type StashedPromptTagRailProps = {
 
 /*
  * CDXC:StashedPromptTags 2026-08-23:
- * The rail is the tag surface: one horizontally scrollable row of pills above
- * the list, so picking a tag never costs a menu round trip and the whole
- * vocabulary stays visible while scanning. It is deliberately a filter strip
- * and not a sidebar — the modal is 654px wide and a column would halve the
- * space prompt text has to be readable in.
+ * Project and tag filters share one compact toolbar. Dropdowns keep the whole
+ * vocabulary reachable without spending two rows, the new-tag action sits
+ * immediately after the tag selector, and Add Prompt remains pinned right.
  */
-function StashedPromptTagRail({
+function StashedPromptFiltersToolbar({
   createTagColor,
   createTagName,
   isCreatingTag,
+  onAddPrompt,
   onCommitCreateTag,
   onCreateTagColorChange,
   onCreateTagNameChange,
   onCreateTagOpenChange,
   onDeleteTag,
+  onProjectFilterChange,
   onSelectFilter,
+  projectFilterValue: selectedProjectFilter,
+  projectOptions,
   promptCount,
   promptCountByTagId,
+  showSessionFilter,
   showUntaggedFilter,
   tagFilter,
   tags,
   untaggedPromptCount,
-}: StashedPromptTagRailProps) {
+}: StashedPromptFiltersToolbarProps) {
   return (
-    <div className='ghostex-stashed-prompt-tag-rail-wrap'>
-      <div className='ghostex-stashed-prompt-tag-rail' role='group' aria-label='Filter saved prompts by tag'>
-        <button
-          aria-pressed={tagFilter.kind === 'all'}
-          className='ghostex-stashed-prompt-tag-pill'
-          data-active={String(tagFilter.kind === 'all')}
-          onClick={() => onSelectFilter(ALL_PROMPTS_FILTER)}
-          style={{ '--ghostex-tag-color': '#9a9aa4' } as React.CSSProperties}
-          type='button'
+    <div className='ghostex-stashed-prompt-toolbar'>
+      <Select value={selectedProjectFilter} onValueChange={onProjectFilterChange}>
+        <SelectTrigger
+          aria-label='Filter saved prompts by project'
+          className='ghostex-stashed-prompt-project-filter'
+          size='sm'
         >
-          All
-          <span className='ghostex-stashed-prompt-tag-count'>{promptCount}</span>
-        </button>
-        <span aria-hidden='true' className='ghostex-stashed-prompt-tag-rail-separator' />
-        {tags.map((tag) => (
-          <button
-            aria-pressed={tagFilter.kind === 'tag' && tagFilter.tagId === tag.tagId}
-            className='ghostex-stashed-prompt-tag-pill'
-            data-active={String(tagFilter.kind === 'tag' && tagFilter.tagId === tag.tagId)}
-            key={tag.tagId}
-            onClick={() =>
-              onSelectFilter(
-                tagFilter.kind === 'tag' && tagFilter.tagId === tag.tagId
-                  ? ALL_PROMPTS_FILTER
-                  : { kind: 'tag', tagId: tag.tagId }
-              )
-            }
-            /*
-             * Removing a tag lives on its own pill rather than in a settings
-             * screen, so the place you file prompts is the place you unfile a
-             * mistake. Builtin tags have no delete affordance at all.
-             */
-            onContextMenu={(event) => {
-              if (tag.isBuiltin) {
-                return;
-              }
-              event.preventDefault();
-              onDeleteTag(tag);
-            }}
-            style={{ '--ghostex-tag-color': tag.color } as React.CSSProperties}
-            title={tag.isBuiltin ? tag.name : `${tag.name} — right-click to delete this tag`}
-            type='button'
-          >
-            {tag.tagId === GXSERVER_FAVORITE_PROMPT_TAG_ID ? (
-              <IconStarFilled aria-hidden='true' className='ghostex-stashed-prompt-tag-star' size={11} />
-            ) : (
-              <span aria-hidden='true' className='ghostex-stashed-prompt-tag-dot' />
-            )}
-            {tag.name}
-            <span className='ghostex-stashed-prompt-tag-count'>{promptCountByTagId.get(tag.tagId) ?? 0}</span>
-          </button>
-        ))}
-        {/*
-          CDXC:StashedPromptTags 2026-08-23:
-          "No tag" closes the rail so the pills partition the list completely —
-          without it, prompts nobody has filed are reachable only through All.
-          It stays out of the rail until something is tagged, because until then
-          it selects the same set as All. It also stays put while it is the
-          active filter, so tagging the last loose prompt cannot leave the list
-          filtered by a pill that is no longer on screen.
-        */}
-        {showUntaggedFilter || tagFilter.kind === 'untagged' ? (
-          <button
-            aria-pressed={tagFilter.kind === 'untagged'}
-            className='ghostex-stashed-prompt-tag-pill ghostex-stashed-prompt-tag-pill-untagged'
-            data-active={String(tagFilter.kind === 'untagged')}
-            onClick={() => onSelectFilter(tagFilter.kind === 'untagged' ? ALL_PROMPTS_FILTER : { kind: 'untagged' })}
-            title='Saved prompts with no tag'
-            type='button'
-          >
-            <span aria-hidden='true' className='ghostex-stashed-prompt-tag-dot' />
-            No tag
-            <span className='ghostex-stashed-prompt-tag-count'>{untaggedPromptCount}</span>
-          </button>
-        ) : null}
-      </div>
-      {/*
-        The "+" lives outside the scrolling strip: once there are more tags than
-        fit, a New-tag control that scrolled away with them would be the one
-        thing you cannot reach when you most need it.
-      */}
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent align='start' alignItemWithTrigger={false}>
+          <SelectGroup>
+            <SelectItem value={ALL_PROJECTS_VALUE}>All projects</SelectItem>
+            {showSessionFilter ? <SelectItem value={CURRENT_SESSION_VALUE}>This session</SelectItem> : null}
+            {projectOptions.map((project) => (
+              <SelectItem key={project.projectId} value={`project:${project.projectId}`}>
+                {project.name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <Select
+        value={tagFilterValue(tagFilter)}
+        onValueChange={(value) => {
+          if (value === ALL_TAGS_VALUE) {
+            onSelectFilter(ALL_PROMPTS_FILTER);
+          } else if (value === NO_TAG_VALUE) {
+            onSelectFilter({ kind: 'untagged' });
+          } else {
+            onSelectFilter({ kind: 'tag', tagId: value.slice('tag:'.length) });
+          }
+        }}
+      >
+        <SelectTrigger aria-label='Filter saved prompts by tag' className='ghostex-stashed-prompt-tag-filter' size='sm'>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent align='start' alignItemWithTrigger={false}>
+          <SelectGroup>
+            <SelectItem value={ALL_TAGS_VALUE}>All tags ({promptCount})</SelectItem>
+            {tags.map((tag) => (
+              <SelectItem
+                key={tag.tagId}
+                onContextMenu={(event) => {
+                  if (!tag.isBuiltin) {
+                    event.preventDefault();
+                    onDeleteTag(tag);
+                  }
+                }}
+                title={tag.isBuiltin ? tag.name : `${tag.name} — right-click to delete this tag`}
+                value={`tag:${tag.tagId}`}
+              >
+                <span
+                  aria-hidden='true'
+                  className='ghostex-stashed-prompt-select-tag-dot'
+                  style={{ '--ghostex-tag-color': tag.color } as React.CSSProperties}
+                />
+                {tag.name} ({promptCountByTagId.get(tag.tagId) ?? 0})
+              </SelectItem>
+            ))}
+            {showUntaggedFilter || tagFilter.kind === 'untagged' ? (
+              <SelectItem value={NO_TAG_VALUE}>No tag ({untaggedPromptCount})</SelectItem>
+            ) : null}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       <Popover open={isCreatingTag} onOpenChange={onCreateTagOpenChange}>
         <PopoverTrigger
           render={
-            <button
-              aria-label='New tag'
-              className='ghostex-stashed-prompt-tag-pill ghostex-stashed-prompt-tag-pill-add'
-              title='New tag'
-              type='button'
-            >
-              <IconPlus aria-hidden='true' size={13} stroke={2.2} />
-            </button>
+            <Button aria-label='New tag' size='icon-sm' title='New tag' type='button' variant='outline'>
+              <IconPlus aria-hidden='true' />
+            </Button>
           }
         />
         <StashedPromptCreateTagPopover
@@ -1094,6 +1192,16 @@ function StashedPromptTagRail({
           onNameChange={onCreateTagNameChange}
         />
       </Popover>
+      <Button
+        className='ghostex-stashed-prompt-add-button'
+        onClick={onAddPrompt}
+        size='default'
+        type='button'
+        variant='outline'
+      >
+        <IconPlus aria-hidden='true' data-icon='inline-start' />
+        Add Prompt
+      </Button>
     </div>
   );
 }
@@ -1237,10 +1345,11 @@ function StashedPromptRow({
   const tooltipTruncated = lines.length > TOOLTIP_LINE_COUNT;
   const tagIds = promptTagIds(prompt);
   const isFavorite = tagIds.includes(GXSERVER_FAVORITE_PROMPT_TAG_ID);
-  const rowTags = tagIds
+  const labelTags = tagIds
     .filter((tagId) => tagId !== GXSERVER_FAVORITE_PROMPT_TAG_ID)
     .map((tagId) => tagsById.get(tagId))
     .filter((tag): tag is GxserverStashedPromptTag => tag !== undefined);
+  const visibleRowTags = labelTags.filter((tag) => tag.tagId !== GXSERVER_STASHED_PROMPT_TAG_ID);
   /*
    * CDXC:StashedPromptTags 2026-08-23:
    * The row's left edge carries its first non-Favorites tag color. That stripe
@@ -1248,7 +1357,7 @@ function StashedPromptRow({
    * between rows: a repeating vertical mark the eye can group by, instead of a
    * hairline that competes with the hover and selection fills.
    */
-  const stripeColor = rowTags[0]?.color;
+  const stripeColor = labelTags[0]?.color;
   /*
    * CDXC:StashedPromptSessionAssociation 2026-08-24:
    * A prompt is jumpable while gxserver can still name where it came from: the
@@ -1363,33 +1472,31 @@ function StashedPromptRow({
               >
                 <div className='ghostex-stashed-prompt-tag-popover-title'>Tags</div>
                 <div className='ghostex-stashed-prompt-tag-menu-list'>
-                  {tags.map((tag) => (
-                    <button
-                      className='ghostex-stashed-prompt-tag-menu-item'
-                      data-active={String(tagIds.includes(tag.tagId))}
-                      key={tag.tagId}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onToggleTag(tag.tagId);
-                      }}
-                      style={{ '--ghostex-tag-color': tag.color } as React.CSSProperties}
-                      type='button'
-                    >
-                      {tag.tagId === GXSERVER_FAVORITE_PROMPT_TAG_ID ? (
-                        <IconStarFilled aria-hidden='true' className='ghostex-stashed-prompt-tag-star' size={11} />
-                      ) : (
+                  {tags
+                    .filter((tag) => tag.tagId !== GXSERVER_FAVORITE_PROMPT_TAG_ID)
+                    .map((tag) => (
+                      <button
+                        className='ghostex-stashed-prompt-tag-menu-item'
+                        data-active={String(tagIds.includes(tag.tagId))}
+                        key={tag.tagId}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onToggleTag(tag.tagId);
+                        }}
+                        style={{ '--ghostex-tag-color': tag.color } as React.CSSProperties}
+                        type='button'
+                      >
                         <span aria-hidden='true' className='ghostex-stashed-prompt-tag-dot' />
-                      )}
-                      <span className='ghostex-stashed-prompt-tag-menu-name'>{tag.name}</span>
-                      <IconCheck
-                        aria-hidden='true'
-                        className='ghostex-stashed-prompt-tag-menu-check'
-                        size={13}
-                        stroke={2.4}
-                      />
-                    </button>
-                  ))}
+                        <span className='ghostex-stashed-prompt-tag-menu-name'>{tag.name}</span>
+                        <IconCheck
+                          aria-hidden='true'
+                          className='ghostex-stashed-prompt-tag-menu-check'
+                          size={13}
+                          stroke={2.4}
+                        />
+                      </button>
+                    ))}
                 </div>
                 <Popover open={isCreatingTag} onOpenChange={onCreateTagOpenChange}>
                   <PopoverTrigger
@@ -1470,9 +1577,9 @@ function StashedPromptRow({
                 <span className='ghostex-stashed-prompt-session-chip-label'>{prompt.sessionTitle}</span>
               </span>
             ) : null}
-            {rowTags.length > 0 ? (
+            {visibleRowTags.length > 0 ? (
               <span className='ghostex-stashed-prompt-chips'>
-                {rowTags.map((tag) => (
+                {visibleRowTags.map((tag) => (
                   <span
                     className='ghostex-stashed-prompt-chip'
                     key={tag.tagId}

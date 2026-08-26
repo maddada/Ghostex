@@ -2,14 +2,6 @@ import { IconCheck, IconCopy, IconFolderSearch, IconLoader2 } from '@tabler/icon
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/packages/components/ui/dialog';
-import {
   Select,
   SelectContent,
   SelectGroup,
@@ -19,13 +11,24 @@ import {
 } from '@/packages/components/ui/select';
 import { Switch } from '@/packages/components/ui/switch';
 import { type SidebarAgentButton } from '../shared/sidebar-agents';
+import {
+  APP_MODAL_SELECT_CONTENT_CLASS,
+  AppModalButton,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalHeader,
+  AppModalShell,
+  AppModalTitle,
+} from './app-modal-shell';
+import { AppTooltip } from './app-tooltip';
 
 /**
  * CDXC:ExportTranscriptOptions 2026-08-24:
  * The export dialog's include-toggles. User and agent messages are never
  * optional, so only the three optional record families appear here. The
  * defaults mirror the daemon's historical selection: commands and patches in,
- * reasoning out.
+ * reasoning out. The user's last combination is a per-client UI preference so
+ * repeat exports reopen exactly as they left them without involving gxserver.
  */
 export type ExportTranscriptIncludeOptions = {
   includeCommands: boolean;
@@ -38,6 +41,43 @@ export const DEFAULT_EXPORT_TRANSCRIPT_INCLUDE_OPTIONS: ExportTranscriptIncludeO
   includePatches: true,
   includeReasoning: false,
 };
+
+const EXPORT_TRANSCRIPT_INCLUDE_OPTIONS_STORAGE_KEY = 'ghostex.exportTranscript.includeOptions';
+
+function readExportTranscriptIncludeOptions(): ExportTranscriptIncludeOptions {
+  if (typeof window === 'undefined') {
+    return DEFAULT_EXPORT_TRANSCRIPT_INCLUDE_OPTIONS;
+  }
+  try {
+    const stored = JSON.parse(
+      window.localStorage.getItem(EXPORT_TRANSCRIPT_INCLUDE_OPTIONS_STORAGE_KEY) ?? 'null'
+    ) as Partial<ExportTranscriptIncludeOptions> | null;
+    return {
+      includeCommands:
+        typeof stored?.includeCommands === 'boolean'
+          ? stored.includeCommands
+          : DEFAULT_EXPORT_TRANSCRIPT_INCLUDE_OPTIONS.includeCommands,
+      includePatches:
+        typeof stored?.includePatches === 'boolean'
+          ? stored.includePatches
+          : DEFAULT_EXPORT_TRANSCRIPT_INCLUDE_OPTIONS.includePatches,
+      includeReasoning:
+        typeof stored?.includeReasoning === 'boolean'
+          ? stored.includeReasoning
+          : DEFAULT_EXPORT_TRANSCRIPT_INCLUDE_OPTIONS.includeReasoning,
+    };
+  } catch {
+    return DEFAULT_EXPORT_TRANSCRIPT_INCLUDE_OPTIONS;
+  }
+}
+
+function writeExportTranscriptIncludeOptions(options: ExportTranscriptIncludeOptions): void {
+  try {
+    window.localStorage.setItem(EXPORT_TRANSCRIPT_INCLUDE_OPTIONS_STORAGE_KEY, JSON.stringify(options));
+  } catch {
+    // Storage can be unavailable in isolated web, test, and story contexts.
+  }
+}
 
 /**
  * The dialog's lifecycle, owned by the host: choose what to include, watch the
@@ -99,8 +139,9 @@ const INCLUDE_TOGGLE_ROWS: Array<{
  * Export Transcript's one dialog: an options stage with include-toggles, the
  * in-flight stage, and the result stage. The export only runs once the user
  * confirms it here, so the toggles govern the file that is actually written.
- * On the result, every button is an optional follow-up: stage the file as a
- * mention in a fresh conversation's input, copy its path, or reveal it.
+ * On the result, two numbered choices separate copying the path from staging
+ * the file as a mention in a fresh conversation's input. Reveal stays a small
+ * icon action beside the path instead of competing with those choices.
  * Starting a conversation never sends a prompt for the user — the mention is
  * typed into the new agent's input and left unsubmitted. Reveal is omitted
  * entirely — not disabled — when the file lives on another machine, because
@@ -121,7 +162,7 @@ export function ExportTranscriptModal({
   const agentSelectId = useId();
   const [selectedAgentId, setSelectedAgentId] = useState('');
   const [copied, setCopied] = useState(false);
-  const [includeOptions, setIncludeOptions] = useState(DEFAULT_EXPORT_TRANSCRIPT_INCLUDE_OPTIONS);
+  const [includeOptions, setIncludeOptions] = useState(readExportTranscriptIncludeOptions);
   const promptAgents = useMemo(() => agents.filter((agent) => agent.command?.trim()), [agents]);
   const doneAgentId = stage.stage === 'done' ? stage.agentId : undefined;
   const effectiveAgentId =
@@ -136,7 +177,7 @@ export function ExportTranscriptModal({
     }
     setSelectedAgentId('');
     setCopied(false);
-    setIncludeOptions(DEFAULT_EXPORT_TRANSCRIPT_INCLUDE_OPTIONS);
+    setIncludeOptions(readExportTranscriptIncludeOptions());
   }, [isOpen]);
 
   useEffect(() => {
@@ -151,141 +192,142 @@ export function ExportTranscriptModal({
   const showOptions = stage.stage !== 'done';
 
   return (
-    <Dialog
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          onClose();
-        }
-      }}
-      open={isOpen}
-    >
-      <DialogContent className='command-config-modal-shadcn export-transcript-modal-shadcn font-sans'>
-        <DialogHeader className='gap-1'>
-          <DialogTitle className='export-transcript-modal-title'>
-            {stage.stage === 'done' ? 'Transcript Exported' : 'Export Transcript'}
-          </DialogTitle>
-          <DialogDescription className='export-transcript-modal-description'>
-            {stage.stage === 'done'
-              ? 'Start a new conversation with this file already mentioned in its input, or take the path somewhere else.'
-              : 'The conversation is written as a markdown file. Choose what to include alongside the messages.'}
-          </DialogDescription>
-        </DialogHeader>
-        {showOptions ? (
-          <div className='export-transcript-modal-body'>
-            <div className='export-transcript-section-title'>Include</div>
-            <div className='export-transcript-toggle-list'>
-              {INCLUDE_TOGGLE_ROWS.map((row) => (
-                <label className='export-transcript-toggle-row' key={row.key}>
-                  <span className='export-transcript-toggle-copy'>
-                    <span className='export-transcript-toggle-label'>{row.label}</span>
-                    <span className='export-transcript-toggle-description'>{row.description}</span>
-                  </span>
-                  <Switch
-                    checked={includeOptions[row.key]}
-                    disabled={isExporting}
-                    onCheckedChange={(checked) =>
-                      setIncludeOptions((current) => ({ ...current, [row.key]: checked === true }))
-                    }
-                  />
-                </label>
-              ))}
-            </div>
-            {stage.stage === 'failed' ? (
-              <p className='export-transcript-error' role='alert'>
-                {stage.message}
-              </p>
-            ) : null}
+    <AppModalShell className='export-transcript-modal-shadcn' isOpen={isOpen} onClose={onClose} width={540}>
+      <AppModalHeader className='gap-1'>
+        <AppModalTitle>{stage.stage === 'done' ? 'Transcript Exported' : 'Export Transcript'}</AppModalTitle>
+        <AppModalDescription>
+          {stage.stage === 'done'
+            ? 'Copy the exported file path, or continue the conversation with another agent.'
+            : 'The conversation is written as a markdown file. Choose what to include alongside the messages.'}
+        </AppModalDescription>
+      </AppModalHeader>
+      {showOptions ? (
+        <div className='export-transcript-modal-body'>
+          <div className='export-transcript-section-title'>Include</div>
+          <div className='export-transcript-toggle-list'>
+            {INCLUDE_TOGGLE_ROWS.map((row) => (
+              <label className='export-transcript-toggle-row' key={row.key}>
+                <span className='export-transcript-toggle-copy'>
+                  <span className='export-transcript-toggle-label'>{row.label}</span>
+                  <span className='export-transcript-toggle-description'>{row.description}</span>
+                </span>
+                <Switch
+                  checked={includeOptions[row.key]}
+                  disabled={isExporting}
+                  onCheckedChange={(checked) => {
+                    const next = { ...includeOptions, [row.key]: checked === true };
+                    setIncludeOptions(next);
+                    writeExportTranscriptIncludeOptions(next);
+                  }}
+                />
+              </label>
+            ))}
           </div>
-        ) : (
-          <div className='export-transcript-modal-body'>
-            <div className='export-transcript-section-title'>Exported file</div>
+          {stage.stage === 'failed' ? (
+            <p className='export-transcript-error' role='alert'>
+              {stage.message}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className='export-transcript-modal-body export-transcript-result-options'>
+          <section className='export-transcript-result-option'>
+            <div className='export-transcript-result-option-heading'>
+              <span aria-hidden='true' className='export-transcript-result-option-number'>
+                1
+              </span>
+              <div className='export-transcript-result-option-title'>Copy the path</div>
+            </div>
             <div className='export-transcript-path-row'>
               <code className='export-transcript-path'>{stage.stage === 'done' ? stage.path : ''}</code>
-              <Button
-                aria-label={copied ? 'Path copied' : 'Copy path'}
-                className='export-transcript-copy-button'
-                onClick={() => {
-                  if (stage.stage !== 'done') {
-                    return;
-                  }
-                  void navigator.clipboard.writeText(stage.path).then(
-                    () => setCopied(true),
-                    () => setCopied(false)
-                  );
-                }}
-                size='icon'
-                type='button'
-                variant='ghost'
-              >
-                {copied ? (
-                  <IconCheck aria-hidden='true' size={15} stroke={1.9} />
-                ) : (
-                  <IconCopy aria-hidden='true' size={15} stroke={1.9} />
-                )}
-              </Button>
-            </div>
-            {promptAgents.length > 0 ? (
-              <>
-                <div className='export-transcript-section-title'>Continue with</div>
-                <Select onValueChange={setSelectedAgentId} value={effectiveAgentId}>
-                  <SelectTrigger aria-label='New conversation agent' id={agentSelectId}>
-                    <SelectValue placeholder='Select agent' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {promptAgents.map((agent) => (
-                        <SelectItem key={agent.agentId} value={agent.agentId}>
-                          {agent.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <p className='export-transcript-hint'>
-                  The new session starts in the same project with the transcript mentioned in its
-                  input. Nothing is sent until you write your prompt and press Enter.
-                </p>
-              </>
-            ) : null}
-            {actionErrorMessage ? (
-              <p className='export-transcript-error' role='alert'>
-                {actionErrorMessage}
-              </p>
-            ) : null}
-          </div>
-        )}
-        <DialogFooter>
-          {showOptions ? (
-            <>
-              <Button onClick={onClose} type='button' variant='secondary'>
-                Cancel
-              </Button>
-              <Button disabled={isExporting} onClick={() => onExport(includeOptions)} type='button'>
-                {isExporting ? (
-                  <IconLoader2 aria-hidden='true' className='export-transcript-spinner' size={15} stroke={1.9} />
-                ) : null}
-                {isExporting ? 'Exporting…' : stage.stage === 'failed' ? 'Try Again' : 'Export'}
-              </Button>
-            </>
-          ) : (
-            <>
               {stage.stage === 'done' && stage.canReveal && onRevealInFinder ? (
-                <Button onClick={onRevealInFinder} type='button' variant='secondary'>
-                  <IconFolderSearch aria-hidden='true' size={15} stroke={1.9} />
-                  Reveal in Finder
-                </Button>
+                <AppTooltip content='Reveal in Finder'>
+                  <Button
+                    aria-label='Reveal in Finder'
+                    className='export-transcript-reveal-button'
+                    onClick={onRevealInFinder}
+                    size='icon'
+                    type='button'
+                    variant='ghost'
+                  >
+                    <IconFolderSearch aria-hidden='true' size={15} stroke={1.9} />
+                  </Button>
+                </AppTooltip>
               ) : null}
-              <Button
+            </div>
+            <AppModalButton
+              className='export-transcript-result-action'
+              onClick={() => {
+                if (stage.stage !== 'done') {
+                  return;
+                }
+                void navigator.clipboard.writeText(stage.path).then(
+                  () => setCopied(true),
+                  () => setCopied(false)
+                );
+              }}
+              type='button'
+            >
+              {copied ? (
+                <IconCheck aria-hidden='true' size={15} stroke={1.9} />
+              ) : (
+                <IconCopy aria-hidden='true' size={15} stroke={1.9} />
+              )}
+              {copied ? 'Path Copied' : 'Copy Path'}
+            </AppModalButton>
+          </section>
+          {promptAgents.length > 0 ? (
+            <section className='export-transcript-result-option'>
+              <div className='export-transcript-result-option-heading'>
+                <span aria-hidden='true' className='export-transcript-result-option-number'>
+                  2
+                </span>
+                <div className='export-transcript-result-option-title'>Continue with another agent</div>
+              </div>
+              <Select onValueChange={setSelectedAgentId} value={effectiveAgentId}>
+                <SelectTrigger aria-label='New conversation agent' id={agentSelectId}>
+                  <SelectValue placeholder='Select agent' />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false} className={APP_MODAL_SELECT_CONTENT_CLASS}>
+                  <SelectGroup>
+                    {promptAgents.map((agent) => (
+                      <SelectItem key={agent.agentId} value={agent.agentId}>
+                        {agent.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <AppModalButton
+                className='export-transcript-result-action'
                 disabled={!effectiveAgentId || startBusy}
                 onClick={() => onStartNewConversation(effectiveAgentId)}
                 type='button'
               >
                 {startBusy ? 'Starting…' : 'Start New Conversation'}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              </AppModalButton>
+            </section>
+          ) : null}
+          {actionErrorMessage ? (
+            <p className='export-transcript-error' role='alert'>
+              {actionErrorMessage}
+            </p>
+          ) : null}
+        </div>
+      )}
+      {showOptions ? (
+        <AppModalFooter>
+          <AppModalButton onClick={onClose} type='button'>
+            Cancel
+          </AppModalButton>
+          <AppModalButton disabled={isExporting} onClick={() => onExport(includeOptions)} type='button'>
+            {isExporting ? (
+              <IconLoader2 aria-hidden='true' className='export-transcript-spinner' size={15} stroke={1.9} />
+            ) : null}
+            {isExporting ? 'Exporting…' : stage.stage === 'failed' ? 'Try Again' : 'Export'}
+          </AppModalButton>
+        </AppModalFooter>
+      ) : null}
+    </AppModalShell>
   );
 }

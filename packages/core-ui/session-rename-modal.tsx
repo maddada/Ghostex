@@ -8,15 +8,6 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { Button } from '@/packages/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/packages/components/ui/dialog';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import {
   Select,
@@ -27,6 +18,16 @@ import {
   SelectValue,
 } from '@/packages/components/ui/select';
 import { Textarea } from '@/packages/components/ui/textarea';
+import {
+  APP_MODAL_SELECT_CONTENT_CLASS,
+  AppModalButton,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalForm,
+  AppModalHeader,
+  AppModalShell,
+  AppModalTitle,
+} from './app-modal-shell';
 import { createSidebarAgentSelectItems, type SidebarAgentButton } from '../shared/sidebar-agents';
 import { normalizeSessionRenameTitle } from '../shared/session-grid-contract';
 
@@ -230,97 +231,85 @@ export function SessionRenameModal({
   };
 
   return (
-    <Dialog
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          onCancel();
-        }
-      }}
-      open={isOpen}
+    <AppModalShell
+      className='session-rename-modal-shadcn rename-session-modal-shadcn'
+      initialFocus={focusAndSelectInput}
+      isOpen={isOpen}
+      onClose={onCancel}
     >
-      <DialogContent
-        className='command-config-modal-shadcn session-rename-modal-shadcn font-sans'
-        initialFocus={focusAndSelectInput}
+      <AppModalForm
+        className='session-rename-form rename-session-form'
+        onKeyDownCapture={markUserInteractedAfterOpen}
+        onPointerDownCapture={markUserInteractedAfterOpen}
+        onSubmit={submitRename}
       >
-        <form
-          className='session-rename-form'
-          onKeyDownCapture={markUserInteractedAfterOpen}
-          onPointerDownCapture={markUserInteractedAfterOpen}
-          onSubmit={submitRename}
-        >
-          <DialogHeader>
-            <DialogTitle className='text-xl'>Rename Session</DialogTitle>
-            <DialogDescription>
-              {canGenerateNameFromSessionHistory
-                ? "Rename directly, or Generate Name from longer text — leave the name unchanged to generate from the session's recent messages."
-                : 'Rename directly or generate a name from longer text.'}
-            </DialogDescription>
-          </DialogHeader>
-          <FieldGroup className='session-rename-field-group'>
+        <AppModalHeader>
+          <AppModalTitle>Rename Session</AppModalTitle>
+          <AppModalDescription>
+            {canGenerateNameFromSessionHistory
+              ? "Rename directly, or Generate Name from longer text — leave the name unchanged to generate from the session's recent messages."
+              : 'Rename directly or generate a name from longer text.'}
+          </AppModalDescription>
+        </AppModalHeader>
+        <FieldGroup className='session-rename-field-group'>
+          <Field>
+            <FieldLabel htmlFor={inputId}>Session name</FieldLabel>
+            <Textarea
+              aria-label='Session Name'
+              className='session-rename-textarea'
+              id={inputId}
+              onChange={(event) => setTitle(event.currentTarget.value)}
+              onKeyDown={handleInputKeyDown}
+              ref={inputRef}
+              value={title}
+            />
+            <FieldDescription>
+              {trimmedTitle.length} / {SESSION_RENAME_GENERATE_NAME_THRESHOLD} characters
+            </FieldDescription>
+          </Field>
+          {promptAgents.length > 0 ? (
             <Field>
-              <FieldLabel htmlFor={inputId}>Session name</FieldLabel>
-              <Textarea
-                aria-label='Session Name'
-                className='session-rename-textarea'
-                id={inputId}
-                onChange={(event) => setTitle(event.currentTarget.value)}
-                onKeyDown={handleInputKeyDown}
-                ref={inputRef}
-                value={title}
-              />
-              <FieldDescription>
-                {trimmedTitle.length} / {SESSION_RENAME_GENERATE_NAME_THRESHOLD} characters
-              </FieldDescription>
+              <FieldLabel htmlFor={agentSelectId}>Generate with</FieldLabel>
+              <Select
+                items={promptAgentSelectItems}
+                onValueChange={handlePromptAgentChange}
+                value={selectedPromptAgentId}
+              >
+                <SelectTrigger aria-label='Generate name agent' id={agentSelectId}>
+                  <SelectValue placeholder='Select agent' />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false} className={APP_MODAL_SELECT_CONTENT_CLASS}>
+                  <SelectGroup>
+                    {promptAgents.map((agent) => (
+                      <SelectItem key={agent.agentId} value={agent.agentId}>
+                        {agent.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
-            {promptAgents.length > 0 ? (
-              <Field>
-                <FieldLabel htmlFor={agentSelectId}>Generate with</FieldLabel>
-                <Select
-                  items={promptAgentSelectItems}
-                  onValueChange={handlePromptAgentChange}
-                  value={selectedPromptAgentId}
-                >
-                  <SelectTrigger aria-label='Generate name agent' id={agentSelectId}>
-                    <SelectValue placeholder='Select agent' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {promptAgents.map((agent) => (
-                        <SelectItem key={agent.agentId} value={agent.agentId}>
-                          {agent.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-            ) : null}
-          </FieldGroup>
-          <DialogFooter>
-            <Button
-              disabled={!directRenameTitle}
-              onClick={() => confirmTitle(title, false)}
-              type='button'
-              variant='secondary'
-            >
-              Rename
-            </Button>
-            <Button
-              disabled={!canGenerateTitle && !canGenerateTitleFromSessionHistory}
-              onClick={() => {
-                if (canGenerateTitleFromSessionHistory) {
-                  confirmGenerateFromSessionHistory();
-                  return;
-                }
-                confirmTitle(title, true);
-              }}
-              type='button'
-            >
-              Generate Name
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          ) : null}
+        </FieldGroup>
+        <AppModalFooter>
+          <AppModalButton disabled={!directRenameTitle} onClick={() => confirmTitle(title, false)} type='button'>
+            Rename
+          </AppModalButton>
+          <AppModalButton
+            disabled={!canGenerateTitle && !canGenerateTitleFromSessionHistory}
+            onClick={() => {
+              if (canGenerateTitleFromSessionHistory) {
+                confirmGenerateFromSessionHistory();
+                return;
+              }
+              confirmTitle(title, true);
+            }}
+            type='button'
+          >
+            Generate Name
+          </AppModalButton>
+        </AppModalFooter>
+      </AppModalForm>
+    </AppModalShell>
   );
 }

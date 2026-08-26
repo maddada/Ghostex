@@ -428,7 +428,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   [data-slot="segmented-control-item"][aria-pressed="true"] {
-    background: rgba(255, 255, 255, 0.09);
+    background: color-mix(in srgb, var(--foreground) 14%, transparent);
     color: var(--foreground);
   }
 
@@ -566,6 +566,7 @@ export const PROJECT_BOARD_STYLES = `
     align-items: center;
     background: rgba(231, 184, 91, 0.13);
     border: 1px solid rgba(231, 184, 91, 0.2);
+    border-radius: 9999px;
     color: #e7b85b;
     display: flex;
     flex: 0 0 auto;
@@ -642,68 +643,16 @@ export const PROJECT_BOARD_STYLES = `
     color: rgba(231, 184, 91, 0.82);
   }
 
-  .project-board-migration-option .project-board-notice-command {
-    max-width: 100%;
-  }
-
-  .project-board-migration-option .project-board-notice-command code {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   @media (max-width: 760px) {
     .project-board-migration-options {
       grid-template-columns: minmax(0, 1fr);
     }
   }
 
-  .project-board-notice-command {
-    align-items: center;
+  .project-board-notice-copy-prompt {
     align-self: flex-start;
-    background: rgba(0, 0, 0, 0.22);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    display: inline-flex;
-    gap: 7px;
-    min-height: 30px;
-    padding: 3px 4px 3px 9px;
-  }
-
-  .project-board-notice-command code {
-    color: rgba(250, 250, 250, 0.9);
-    font-family: "SF Mono", ui-monospace, monospace;
-    font-size: 12px;
-    line-height: 1;
-    white-space: nowrap;
-  }
-
-  .project-board-notice-command button {
-    color: rgba(244, 244, 245, 0.58);
-    height: 22px;
-    width: 22px;
-  }
-
-  .project-board-notice-command button:hover {
-    color: rgba(250, 250, 250, 0.92);
-  }
-
-  .project-board-notice-command .project-board-notice-run-button {
     gap: 5px;
-    padding-inline: 7px;
-    width: auto;
-  }
-
-  .project-board-notice-command .project-board-notice-run-button svg {
-    height: 14px;
-    width: 14px;
-  }
-
-  .project-board-confirm-command {
-    max-width: 100%;
-  }
-
-  .project-board-confirm-command code {
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin-top: 3px;
   }
 
   .project-ticket-dialog {

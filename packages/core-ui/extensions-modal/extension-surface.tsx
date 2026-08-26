@@ -15,7 +15,7 @@ export function ExtensionEmptyState({
 }) {
   return (
     <section className='flex min-h-0 flex-1 flex-col items-center justify-center gap-2.5 p-8 text-center'>
-      <div className='mb-1 flex size-12 items-center justify-center rounded-xl border border-border/80 bg-white/[0.04] text-muted-foreground'>
+      <div className='extensions-empty-icon mb-1 flex size-12 items-center justify-center text-muted-foreground'>
         <Icon aria-hidden='true' className='size-6' />
       </div>
       <span className='text-sm font-normal text-foreground'>{title}</span>
@@ -34,14 +34,5 @@ export function ExtensionSectionLabel({ children, id }: { children: ReactNode; i
 }
 
 export function ExtensionGroup({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn(
-        'divide-y divide-border/60 overflow-hidden rounded-xl border border-border/80 bg-white/[0.03]',
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
+  return <div className={cn('extensions-group divide-y overflow-hidden', className)}>{children}</div>;
 }

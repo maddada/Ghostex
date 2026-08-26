@@ -10,7 +10,7 @@ import { AddProjectStoryHarness } from './add-project-modal.story-harness';
  */
 
 const meta = {
-  title: 'Modals/Add Project',
+  title: 'Modals/App Host/Add Project',
   component: AddProjectStoryHarness,
 } satisfies Meta<typeof AddProjectStoryHarness>;
 

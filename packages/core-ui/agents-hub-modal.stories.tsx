@@ -454,7 +454,7 @@ function AgentsHubModalStory({
 }
 
 const meta = {
-  title: 'Sidebar/Agents Hub Modal',
+  title: 'Modals/App Host/Agents Hub',
   parameters: {
     layout: 'fullscreen',
   },

@@ -11,7 +11,6 @@ export type AppModalKind =
   | 'commandPalette'
   | 'configureActions'
   | 'configureAgents'
-  | 'daemonSessions'
   | 'discoverGhostex'
   | 'exportTranscriptResult'
   | 'watchGhostexVideo'
@@ -21,7 +20,6 @@ export type AppModalKind =
   | 'hotkeys'
   | 'missingProjectFolder'
   | 'openTargets'
-  | 'pinnedPrompts'
   | 'portlessSetup'
   | 'previousSessions'
   | 'recentProjects'
@@ -99,6 +97,7 @@ export type OpenAppModalMessage =
       canReveal: boolean;
       modal: 'exportTranscriptResult';
       path?: string;
+      requestId: string;
       type: 'open';
     }
   | {

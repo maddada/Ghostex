@@ -57,14 +57,6 @@ impl GpuiAppModalHostWindow {
         } else {
             (None, None)
         };
-        /*
-        CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19:
-        The React modal host serves one app-owned page from the synthetic https
-        origin: the first-launch tutorial player. The handler only answers URLs
-        under that origin, so every other request on this surface is untouched.
-        */
-        let app_served_resource_scope =
-            uses_react_modal_host.then(gpui_app_modal_host_resource_scope);
         let find_theme = is_find_prompts.then(|| {
             gpui_session_chat_theme_from_settings(
                 shared_settings::shared_sidebar_settings_snapshot().object(),
@@ -117,7 +109,7 @@ impl GpuiAppModalHostWindow {
                 .flatten(),
                 None,
                 None,
-                app_served_resource_scope,
+                None,
                 bridge_surface,
                 event_handler,
                 page_load_end_handler,

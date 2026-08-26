@@ -15,8 +15,6 @@ pub(crate) enum GpuiAppModalKind {
     FindPrompts,
     PreviousSessions,
     RecentProjects,
-    DaemonSessions,
-    PinnedPrompts,
     StashedPrompts,
     ScratchPad,
     AgentsHub,
@@ -54,8 +52,6 @@ impl GpuiAppModalKind {
             "findPrompts" => Some(Self::FindPrompts),
             "previousSessions" => Some(Self::PreviousSessions),
             "recentProjects" => Some(Self::RecentProjects),
-            "daemonSessions" => Some(Self::DaemonSessions),
-            "pinnedPrompts" => Some(Self::PinnedPrompts),
             "stashedPrompts" => Some(Self::StashedPrompts),
             "scratchPad" => Some(Self::ScratchPad),
             "agentsHub" => Some(Self::AgentsHub),
@@ -96,8 +92,6 @@ impl GpuiAppModalKind {
             Self::FindPrompts => "findPrompts",
             Self::PreviousSessions => "previousSessions",
             Self::RecentProjects => "recentProjects",
-            Self::DaemonSessions => "daemonSessions",
-            Self::PinnedPrompts => "pinnedPrompts",
             Self::StashedPrompts => "stashedPrompts",
             Self::ScratchPad => "scratchPad",
             Self::AgentsHub => "agentsHub",
@@ -135,9 +129,7 @@ impl GpuiAppModalKind {
             | Self::PreviousSessions
             | Self::RecentProjects
             | Self::StashedPrompts => "Ghostex Quick Access",
-            Self::DaemonSessions => "Ghostex Running Sessions",
             Self::FindPrompts => "Ghostex Search by Prompt",
-            Self::PinnedPrompts => "Ghostex Pinned Prompts",
             Self::ScratchPad => "Ghostex Scratch Pad",
             Self::AgentsHub => "Ghostex Agents Hub",
             Self::DelayedSend => "Ghostex Session Automations",
@@ -195,14 +187,6 @@ impl GpuiAppModalKind {
             Self::MissingProjectFolder => size(
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT),
-            ),
-            Self::PinnedPrompts => size(
-                px(APP_MODAL_HOST_COMPACT_WINDOW_WIDTH),
-                px(APP_MODAL_HOST_WINDOW_HEIGHT),
-            ),
-            Self::DaemonSessions => size(
-                px(APP_MODAL_HOST_DAEMON_SESSIONS_WINDOW_WIDTH),
-                px(APP_MODAL_HOST_WINDOW_HEIGHT),
             ),
             Self::ScratchPad => size(
                 px(APP_MODAL_HOST_SCRATCH_PAD_WINDOW_WIDTH),
@@ -320,7 +304,6 @@ impl GpuiAppModalKind {
                 | Self::OpenTargets
                 | Self::FirstLaunchSetup
                 | Self::AgentsHub
-                | Self::PinnedPrompts
                 | Self::ScratchPad
                 | Self::DelayedSend
                 | Self::RenameSession
@@ -353,8 +336,6 @@ impl GpuiAppModalKind {
             | Self::OpenTargets
             | Self::PreviousSessions
             | Self::RecentProjects
-            | Self::DaemonSessions
-            | Self::PinnedPrompts
             | Self::StashedPrompts
             | Self::ScratchPad
             | Self::AgentsHub
@@ -362,22 +343,12 @@ impl GpuiAppModalKind {
             | Self::RenameSession
             | Self::SessionNote
             | Self::WatchGhostexVideo
+            | Self::FirstLaunchSetup
             | Self::ExtensionsBrowser => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
             }),
             Self::Extension(_) => serde_json::Value::Null,
-            // CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19: the setup modal's
-            // first page plays the tutorial, and it cannot embed YouTube from
-            // the file:// modal host, so it is handed the app-served player
-            // page instead.
-            Self::FirstLaunchSetup => serde_json::json!({
-                "modal": self.modal_id(),
-                "tutorialVideoEmbedUrl": cef::app_served_resource_url(
-                    GPUI_TUTORIAL_VIDEO_PLAYER_RESOURCE_PATH,
-                ),
-                "type": "open",
-            }),
             Self::UpdateAvailable => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
@@ -438,8 +409,6 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
         "openFindPrompts" => Some(GpuiAppModalKind::FindPrompts),
         "openSessionSearchPalette" => Some(GpuiAppModalKind::PreviousSessions),
         "openPreviousSessions" => Some(GpuiAppModalKind::PreviousSessions),
-        "daemonSessions" | "openDaemonSessions" => Some(GpuiAppModalKind::DaemonSessions),
-        "pinnedPrompts" | "openPinnedPrompts" => Some(GpuiAppModalKind::PinnedPrompts),
         "scratchPad" | "openScratchPad" => Some(GpuiAppModalKind::ScratchPad),
         "agentsHub" | "openAgentsHub" => Some(GpuiAppModalKind::AgentsHub),
         "configureAgents" => Some(GpuiAppModalKind::ConfigureAgents),

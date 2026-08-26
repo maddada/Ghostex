@@ -62,7 +62,7 @@ function DetailHeader({
       <Button aria-label='Back to extensions' onClick={onBack} size='icon-sm' type='button' variant='ghost'>
         <IconArrowLeft />
       </Button>
-      <ExtensionIcon className='size-11 rounded-xl p-2' src={iconUrl} title={title} />
+      <ExtensionIcon className='extensions-icon-lg size-11 p-2' src={iconUrl} title={title} />
       <div className='min-w-0 flex-1'>
         <h2 className='truncate text-lg font-normal text-foreground'>{title}</h2>
         <p className='mt-1 max-w-3xl text-[13px] font-normal leading-relaxed text-muted-foreground'>{description}</p>
@@ -86,7 +86,7 @@ function PermissionsList({ permissions }: { permissions: readonly GhostexExtensi
       <ExtensionSectionLabel id='extension-permissions-heading'>Permissions</ExtensionSectionLabel>
       <ExtensionGroup>
         {permissions.length ? (
-          <ul className='divide-y divide-border/60'>
+          <ul className='extensions-group-list divide-y'>
             {permissions.map((permission) => (
               <li className='flex min-h-10 items-center gap-3 px-4 py-2.5' key={permission}>
                 <span aria-hidden='true' className='size-1.5 shrink-0 rounded-full bg-white/20' />
@@ -212,7 +212,7 @@ export function InstalledExtensionDetail({
                     onClick={() => void onSetState({ preferences })}
                     size='sm'
                     type='button'
-                    variant='secondary'
+                    variant='outline'
                   >
                     Save preferences
                   </Button>
@@ -274,6 +274,7 @@ export function InstalledExtensionDetail({
                     onClick={() => void onUpdate()}
                     size='sm'
                     type='button'
+                    variant='outline'
                   >
                     Update to {catalogEntry?.version}
                   </Button>
@@ -330,12 +331,12 @@ export function StoreExtensionDetail({
             {screenshotUrls.length ? (
               <section
                 aria-label={`${entry.title} screenshots`}
-                className='flex gap-3 overflow-x-auto rounded-xl border border-border/80 bg-white/[0.03] p-3'
+                className='extensions-group flex gap-3 overflow-x-auto p-3'
               >
                 {screenshotUrls.map((url, index) => (
                   <img
                     alt={`${entry.title} screenshot ${index + 1}`}
-                    className='h-44 w-auto shrink-0 rounded-lg border border-border/70 object-contain'
+                    className='extensions-screenshot h-44 w-auto shrink-0 object-contain'
                     key={url}
                     src={url}
                   />
@@ -382,6 +383,7 @@ export function StoreExtensionDetail({
               onClick={onInstall}
               size='sm'
               type='button'
+              variant='outline'
             >
               {actionLabel}
             </Button>

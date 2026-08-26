@@ -1,5 +1,12 @@
-import { createPortal } from 'react-dom';
-import { useEffect } from 'react';
+import {
+  AppModalButton,
+  AppModalColumn,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalHeader,
+  AppModalShell,
+  AppModalTitle,
+} from './app-modal-shell';
 
 export type ConfirmationModalProps = {
   confirmLabel: string;
@@ -10,6 +17,13 @@ export type ConfirmationModalProps = {
   title: string;
 };
 
+/**
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * The shared yes/no prompt. It used to hand-roll its own portal, backdrop, and
+ * primary/secondary button row; it now composes AppModalShell so it inherits
+ * the one app-modal design language (and Radix's Escape/backdrop handling)
+ * instead of maintaining a parallel `.confirm-modal-*` chrome.
+ */
 export function ConfirmationModal({
   confirmLabel,
   description,
@@ -18,55 +32,22 @@ export function ConfirmationModal({
   onConfirm,
   title,
 }: ConfirmationModalProps) {
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onCancel();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, onCancel]);
-
-  if (!isOpen) {
-    return null;
-  }
-
-  return createPortal(
-    <div className='confirm-modal-root scroll-mask-y' role='presentation'>
-      <button className='confirm-modal-backdrop' onClick={onCancel} type='button' />
-      <div
-        aria-describedby='confirm-modal-description'
-        aria-labelledby='confirm-modal-title'
-        aria-modal='true'
-        className='confirm-modal scroll-mask-y'
-        role='dialog'
-      >
-        <div className='confirm-modal-header'>
-          <div className='confirm-modal-title' id='confirm-modal-title'>
-            {title}
-          </div>
-          <div className='confirm-modal-description' id='confirm-modal-description'>
-            {description}
-          </div>
-        </div>
-        <div className='confirm-modal-actions'>
-          <button className='secondary confirm-modal-button' onClick={onCancel} type='button'>
+  return (
+    <AppModalShell className='confirmation-modal' isOpen={isOpen} onClose={onCancel}>
+      <AppModalColumn>
+        <AppModalHeader>
+          <AppModalTitle>{title}</AppModalTitle>
+          <AppModalDescription>{description}</AppModalDescription>
+        </AppModalHeader>
+        <AppModalFooter>
+          <AppModalButton onClick={onCancel} type='button'>
             Cancel
-          </button>
-          <button className='primary confirm-modal-button' onClick={onConfirm} type='button'>
+          </AppModalButton>
+          <AppModalButton onClick={onConfirm} type='button'>
             {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
+          </AppModalButton>
+        </AppModalFooter>
+      </AppModalColumn>
+    </AppModalShell>
   );
 }

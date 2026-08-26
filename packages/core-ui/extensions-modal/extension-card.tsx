@@ -6,7 +6,7 @@ import type { GhostexExtensionCatalogEntry, GhostexInstalledExtension } from '@/
 
 export function ExtensionIcon({ className, src, title }: { className?: string; src?: string; title: string }) {
   const iconClassName = cn(
-    'flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-white/[0.04] p-1.5 text-muted-foreground',
+    'extensions-icon flex size-9 shrink-0 items-center justify-center p-1.5 text-muted-foreground',
     className
   );
   return src ? (
@@ -49,7 +49,7 @@ export function InstalledExtensionCard({
   const supportsChatBar = extension.manifest.placements?.includes('chat-bar') === true;
   return (
     <div
-      className='group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-white/[0.04] focus-within:bg-white/[0.04]'
+      className='extensions-row group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors'
       data-extension-id={extension.id}
     >
       <span
@@ -124,7 +124,7 @@ export function StoreExtensionCard({
   const metadata = [entry.author, `Version ${entry.version}`, ...entry.categories.slice(0, 2)];
   return (
     <div
-      className='group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-white/[0.04] focus-within:bg-white/[0.04]'
+      className='extensions-row group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors'
       data-extension-id={entry.name}
     >
       <span

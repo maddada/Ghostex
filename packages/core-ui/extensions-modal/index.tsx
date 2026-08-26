@@ -2,7 +2,6 @@ import { IconPuzzle, IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/packages/components/ui/tabs';
 import { cn } from '@/packages/components/utils';
 import type { SidebarTheme } from '@/packages/shared/session-grid-contract';
 import type {
@@ -13,12 +12,9 @@ import type {
 } from '@/packages/shared/ghostex-extensions';
 import { InstalledExtensionDetail, StoreExtensionDetail } from './extension-detail';
 import { InstallConsentDialog } from './install-consent';
-import { InstalledTab } from './installed-tab';
 import { StoreTab } from './store-tab';
 import { ExtensionEmptyState } from './extension-surface';
 import { createExtensionsModalTransport, extensionStaticAssetUrl, type ExtensionsModalTransport } from './transport';
-
-export type ExtensionsModalTab = 'store' | 'installed';
 
 type CatalogSnapshot = {
   catalog: GhostexExtensionCatalog;
@@ -40,13 +36,11 @@ function replaceInstalled(
 }
 
 export function ExtensionsModal({
-  initialTab = 'store',
   isOpen,
   onClose,
   theme = 'dark-blue',
   transport,
 }: {
-  initialTab?: ExtensionsModalTab;
   isOpen: boolean;
   onClose: () => void;
   theme?: SidebarTheme;
@@ -54,7 +48,6 @@ export function ExtensionsModal({
 }) {
   const defaultTransport = useMemo(() => createExtensionsModalTransport(), []);
   const dataSource = transport ?? defaultTransport;
-  const [activeTab, setActiveTab] = useState<ExtensionsModalTab>(initialTab);
   const [installed, setInstalled] = useState<GhostexInstalledExtension[]>([]);
   const [catalogSnapshot, setCatalogSnapshot] = useState<CatalogSnapshot>();
   const [selectedInstalledId, setSelectedInstalledId] = useState<string>();
@@ -85,12 +78,11 @@ export function ExtensionsModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setActiveTab(initialTab);
     setSelectedInstalledId(undefined);
     setSelectedStoreId(undefined);
     setConsentEntry(undefined);
     void load();
-  }, [initialTab, isOpen, load]);
+  }, [isOpen, load]);
 
   const catalog = catalogSnapshot?.catalog.extensions ?? [];
   const catalogById = useMemo(() => new Map(catalog.map((entry) => [entry.name, entry])), [catalog]);
@@ -204,21 +196,16 @@ export function ExtensionsModal({
       open={isOpen}
     >
       <DialogContent
-        className={cn(
-          'extensions-modal-dialog flex h-[min(850px,calc(100vh-2rem))] max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden rounded-xl border-border/80 bg-[#0e0e0e] p-0 font-sans sm:max-w-[1120px]',
-          dark && 'dark'
-        )}
+        className={cn('extensions-modal-dialog gx-app-modal font-sans', dark && 'dark')}
         data-sidebar-theme={theme}
         showCloseButton
       >
-        <DialogHeader className='shrink-0 border-b border-border/60 px-5 py-4 pr-16'>
-          <DialogTitle className='text-lg font-normal'>Extensions</DialogTitle>
-          <DialogDescription className='text-[13px] font-normal'>
-            Browse audited extensions and manage what is installed.
-          </DialogDescription>
+        <DialogHeader className='extensions-modal-header shrink-0 px-5 py-4 pr-16'>
+          <DialogTitle>Extensions</DialogTitle>
+          <DialogDescription>Browse audited extensions and manage what is installed.</DialogDescription>
         </DialogHeader>
         {error ? (
-          <div className='shrink-0 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-[13px] font-normal text-destructive'>
+          <div className='extensions-modal-error shrink-0 bg-destructive/10 px-5 py-2 text-[13px] font-normal text-destructive'>
             {error}
           </div>
         ) : null}
@@ -231,7 +218,7 @@ export function ExtensionsModal({
         ) : error && !catalogSnapshot ? (
           <ExtensionEmptyState
             action={
-              <Button className='font-normal' onClick={() => void load()} size='sm' type='button' variant='secondary'>
+              <Button className='font-normal' onClick={() => void load()} size='sm' type='button' variant='outline'>
                 <IconRefresh data-icon='inline-start' />
                 Try again
               </Button>
@@ -269,52 +256,22 @@ export function ExtensionsModal({
             }
           />
         ) : (
-          <Tabs
-            className='min-h-0 flex-1 gap-0'
-            onValueChange={(value) => setActiveTab(value as ExtensionsModalTab)}
-            value={activeTab}
-          >
-            <div className='flex h-11 shrink-0 items-center justify-between border-b border-border/60 px-5'>
-              <TabsList className='h-8 gap-4 p-0' variant='line'>
-                <TabsTrigger className='h-8 flex-none px-1.5 text-[13px] font-normal' value='store'>
-                  Store
-                </TabsTrigger>
-                <TabsTrigger className='h-8 flex-none px-1.5 text-[13px] font-normal' value='installed'>
-                  Installed ({installed.length})
-                </TabsTrigger>
-              </TabsList>
-              <Button
-                aria-label='Refresh extensions'
-                disabled={loading}
-                onClick={() => void load()}
-                size='icon-sm'
-                variant='ghost'
-              >
-                <IconRefresh />
-              </Button>
-            </div>
-            <TabsContent className='min-h-0 overflow-hidden' value='store'>
-              <StoreTab
-                catalog={catalog}
-                iconUrlFor={iconUrlForCatalogEntry}
-                installed={installed}
-                onDetails={(entry) => setSelectedStoreId(entry.name)}
-              />
-            </TabsContent>
-            <TabsContent className='min-h-0 overflow-hidden' value='installed'>
-              <InstalledTab
-                extensions={installed}
-                iconUrlFor={iconUrlForInstalled}
-                onDetails={(extension) => setSelectedInstalledId(extension.id)}
-                onRemove={(extension) => void uninstallExtension(extension)}
-                onSetChatBarAutoOpen={(extension, chatBarAutoOpen) =>
-                  void setExtensionState(extension, { chatBarAutoOpen })
-                }
-                onSetEnabled={(extension, enabled) => void setExtensionState(extension, { enabled })}
-                pendingIds={pendingIds}
-              />
-            </TabsContent>
-          </Tabs>
+          <StoreTab
+            catalog={catalog}
+            iconUrlForCatalogEntry={iconUrlForCatalogEntry}
+            iconUrlForInstalled={iconUrlForInstalled}
+            installed={installed}
+            loading={loading}
+            onInstalledDetails={(extension) => setSelectedInstalledId(extension.id)}
+            onRefresh={() => void load()}
+            onRemove={(extension) => void uninstallExtension(extension)}
+            onSetChatBarAutoOpen={(extension, chatBarAutoOpen) =>
+              void setExtensionState(extension, { chatBarAutoOpen })
+            }
+            onSetEnabled={(extension, enabled) => void setExtensionState(extension, { enabled })}
+            onStoreDetails={(entry) => setSelectedStoreId(entry.name)}
+            pendingIds={pendingIds}
+          />
         )}
         <InstallConsentDialog
           entry={consentEntry}

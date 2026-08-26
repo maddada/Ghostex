@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Button } from '@/packages/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/packages/components/ui/dialog';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import { Textarea } from '@/packages/components/ui/textarea';
+import {
+  AppModalButton,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalForm,
+  AppModalHeader,
+  AppModalShell,
+  AppModalTitle,
+} from './app-modal-shell';
 
 export type SessionNoteModalProps = {
   initialNote: string;
@@ -135,63 +135,56 @@ export function SessionNoteModal({ initialNote, isOpen, onCancel, onConfirm, ses
   };
 
   return (
-    <Dialog
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          onCancel();
-        }
-      }}
-      open={isOpen}
+    <AppModalShell
+      className='session-rename-modal-shadcn session-note-modal-shadcn'
+      initialFocus={focusInput}
+      isOpen={isOpen}
+      onClose={onCancel}
     >
-      <DialogContent
-        className='command-config-modal-shadcn session-rename-modal-shadcn session-note-modal-shadcn font-sans'
-        initialFocus={focusInput}
+      <AppModalForm
+        className='session-rename-form session-note-form'
+        onKeyDownCapture={markUserInteractedAfterOpen}
+        onPointerDownCapture={markUserInteractedAfterOpen}
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitNote();
+        }}
       >
-        <form
-          className='session-rename-form'
-          onKeyDownCapture={markUserInteractedAfterOpen}
-          onPointerDownCapture={markUserInteractedAfterOpen}
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitNote();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle className='text-xl'>Session Note</DialogTitle>
-            <DialogDescription>
-              {sessionTitle
-                ? `What to do next in “${sessionTitle}”. The note stays with this agent conversation.`
-                : 'What to do next here. The note stays with this agent conversation.'}
-            </DialogDescription>
-          </DialogHeader>
-          <FieldGroup className='session-rename-field-group'>
-            <Field>
-              <FieldLabel htmlFor={inputId}>Note</FieldLabel>
-              <Textarea
-                aria-label='Session Note'
-                className='session-rename-textarea session-note-textarea'
-                id={inputId}
-                onChange={(event) => setNote(event.currentTarget.value)}
-                onKeyDown={handleInputKeyDown}
-                placeholder='What to pick up when you come back…'
-                ref={inputRef}
-                value={note}
-              />
-              <FieldDescription>
-                {hasExistingNote ? 'Save an empty note to clear it.' : 'Press ⌘/Ctrl + Enter to save.'}
-              </FieldDescription>
-            </Field>
-          </FieldGroup>
-          <DialogFooter>
-            <Button onClick={onCancel} type='button' variant='secondary'>
-              Cancel
-            </Button>
-            <Button onClick={submitNote} type='button'>
-              {trimmedNote.length === 0 && hasExistingNote ? 'Clear Note' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <AppModalHeader>
+          <AppModalTitle>Session Note</AppModalTitle>
+          <AppModalDescription>
+            {sessionTitle
+              ? `What to do next in “${sessionTitle}”. The note stays with this agent conversation.`
+              : 'What to do next here. The note stays with this agent conversation.'}
+          </AppModalDescription>
+        </AppModalHeader>
+        <FieldGroup className='session-rename-field-group'>
+          <Field>
+            <FieldLabel htmlFor={inputId}>Note</FieldLabel>
+            <Textarea
+              aria-label='Session Note'
+              className='session-rename-textarea session-note-textarea'
+              id={inputId}
+              onChange={(event) => setNote(event.currentTarget.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder='What to pick up when you come back…'
+              ref={inputRef}
+              value={note}
+            />
+            <FieldDescription>
+              {hasExistingNote ? 'Save an empty note to clear it.' : 'Press ⌘/Ctrl + Enter to save.'}
+            </FieldDescription>
+          </Field>
+        </FieldGroup>
+        <AppModalFooter>
+          <AppModalButton onClick={onCancel} type='button'>
+            Cancel
+          </AppModalButton>
+          <AppModalButton onClick={submitNote} type='button'>
+            {trimmedNote.length === 0 && hasExistingNote ? 'Clear Note' : 'Save'}
+          </AppModalButton>
+        </AppModalFooter>
+      </AppModalForm>
+    </AppModalShell>
   );
 }

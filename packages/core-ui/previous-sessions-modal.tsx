@@ -829,7 +829,7 @@ export function PreviousSessionsModal({
                     }}
                     type='button'
                   >
-                    <span>{showClosedSessionsOnly ? 'Closed Sessions' : 'All Sessions'}</span>
+                    <span>{showClosedSessionsOnly ? 'Closed' : 'All Sessions'}</span>
                     <kbd>{formatSidebarHotkeyLabel(SESSIONS_SCOPE_TOGGLE_HOTKEY)}</kbd>
                   </button>
                   {/*

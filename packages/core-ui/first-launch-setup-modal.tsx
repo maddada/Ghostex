@@ -35,6 +35,7 @@ import {
 import { useEffect, useId, useRef, useState, type ComponentType } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
+import { Switch } from '@/packages/components/ui/switch';
 import { cn } from '@/packages/components/utils';
 import type { FirstLaunchSetupMainSettingKey } from '../shared/first-launch-setup-settings';
 import type { SidebarTheme } from '../shared/session-grid-contract';
@@ -88,8 +89,6 @@ export type FirstLaunchSetupModalProps = {
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
   ghostexCliStatusLoading?: boolean;
   initialPage?: FirstLaunchSetupPage;
-  /** Player page URL for hosts that cannot embed YouTube from their own origin. */
-  tutorialVideoEmbedUrl?: string;
   isOpen: boolean;
   onClose: () => void;
   onChange: (settings: ghostexSettings) => void;
@@ -110,7 +109,7 @@ export type FirstLaunchSetupModalProps = {
   /** Opens the native folder dialog; the picked path returns as a `firstLaunchProjectFolderPicked` host message. */
   onPickProjectFolder?: () => void;
   /** Registers the chosen folder as a project and starts the first session in it. `agentId` is a sidebar agent id or `'terminal'`. */
-  onFinishFirstLaunch?: (options: { agentId: string; path: string }) => void;
+  onFinishFirstLaunch?: (options: { agentId: string; path: string }) => Promise<void> | void;
   onRequestAgentHookStatus?: (agentIds?: readonly string[]) => void;
   onRequestGhostexCliStatus?: () => void;
   settings?: ghostexSettings;
@@ -174,16 +173,6 @@ const FIRST_LAUNCH_SIDEBAR_PRESETS = FIRST_LAUNCH_SIDEBAR_PRESET_ORDER.flatMap((
  */
 const FIRST_LAUNCH_ANDROID_APK_URL = 'https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk';
 const FIRST_LAUNCH_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
-/*
- * CDXC:FirstLaunchTutorialVideo 2026-08-19:
- * The tutorial used to open as its own window on startup, so a new user got two
- * modals in a row. It is the first page of this one modal instead. Hosts whose
- * document has a real http(s) origin can embed YouTube directly; the GPUI app
- * serves the modal host from file://, where the embed player answers "Error 153
- * - Video player configuration error", so it passes its own same-origin player
- * page through `tutorialVideoEmbedUrl`.
- */
-const FIRST_LAUNCH_TUTORIAL_VIDEO_EMBED_URL = 'https://www.youtube.com/embed/APdP-j5n4Mw?rel=0&modestbranding=1';
 const FIRST_LAUNCH_TUTORIAL_VIDEO_WATCH_URL = 'https://www.youtube.com/watch?v=APdP-j5n4Mw';
 const FIRST_LAUNCH_RELEASES_URL = 'https://github.com/maddada/ghostex/releases';
 
@@ -274,7 +263,16 @@ const FIRST_LAUNCH_USE_CASES: readonly FirstLaunchUseCase[] = [
     number: '07',
     text: 'Supported agents get a real chat view of the session, so you can read and reply like a conversation. Switch between chat and terminal with one click.',
     title: 'Chat view for your agents',
-    wide: true,
+  },
+  {
+    number: '08',
+    text: 'Drive terminal CLIs from a chat interface so you can preview images and edit text more easily than in a raw terminal.',
+    title: 'Use terminal CLIs from chat',
+  },
+  {
+    number: '09',
+    text: 'Fork sessions, stash prompts, write notes or tags, park or pin sessions, and much more.',
+    title: 'Advanced Chat Controls',
   },
 ];
 
@@ -783,7 +781,6 @@ export function FirstLaunchSetupModal({
   onChange,
   settings = DEFAULT_ghostex_SETTINGS,
   theme = 'dark-blue',
-  tutorialVideoEmbedUrl,
   vscode,
 }: FirstLaunchSetupModalProps) {
   const hookStatusByAgentId = new Map(agentHookStatus?.agents.map((status) => [status.agentId, status]) ?? []);
@@ -829,6 +826,8 @@ export function FirstLaunchSetupModal({
   );
   const [projectFolder, setProjectFolder] = useState('');
   const [projectAgentChoice, setProjectAgentChoice] = useState<string>();
+  const [finishError, setFinishError] = useState<string>();
+  const [isFinishing, setIsFinishing] = useState(false);
   const projectAgentId = projectAgentChoice ?? installedCliAgents[0]?.agentId ?? 'terminal';
 
   useEffect(() => {
@@ -844,6 +843,8 @@ export function FirstLaunchSetupModal({
       setSelectedSkillIds(new Set(FIRST_LAUNCH_RECOMMENDED_SKILL_IDS));
       setProjectFolder('');
       setProjectAgentChoice(undefined);
+      setFinishError(undefined);
+      setIsFinishing(false);
       setPluginsDraft(createFirstLaunchPluginsDraft(latestSettingsRef.current));
     }
   }, [initialPage, isOpen]);
@@ -862,20 +863,29 @@ export function FirstLaunchSetupModal({
     setRequestedPage(getVisibleFirstLaunchSetupPage(page, visiblePages));
   };
 
-  const finishFirstLaunchSetup = () => {
+  const finishFirstLaunchSetup = async () => {
     if (activePage === 'plugins') {
       commitPluginsDraft(pluginsDraft);
     }
     const path = projectFolder.trim();
-    if (path) {
-      onFinishFirstLaunch?.({ agentId: projectAgentId, path });
+    if (!path || !onFinishFirstLaunch) {
+      onClose();
+      return;
     }
-    onClose();
+    setFinishError(undefined);
+    setIsFinishing(true);
+    try {
+      await onFinishFirstLaunch({ agentId: projectAgentId, path });
+      onClose();
+    } catch (error) {
+      setFinishError(error instanceof Error ? error.message : 'Ghostex could not open the selected project.');
+      setIsFinishing(false);
+    }
   };
 
   const handleContinue = () => {
     if (isLastPage) {
-      finishFirstLaunchSetup();
+      void finishFirstLaunchSetup();
       return;
     }
     navigateToPage(nextPage);
@@ -922,10 +932,7 @@ export function FirstLaunchSetupModal({
 
         <div className='first-launch-setup-body'>
           {activePage === 'welcome' ? (
-            <FirstLaunchWelcomePage
-              embedUrl={tutorialVideoEmbedUrl ?? FIRST_LAUNCH_TUTORIAL_VIDEO_EMBED_URL}
-              vscode={vscode}
-            />
+            <FirstLaunchWelcomePage vscode={vscode} />
           ) : activePage === 'plugins' ? (
             <FirstLaunchPluginsPage
               draft={pluginsDraft}
@@ -1014,12 +1021,16 @@ export function FirstLaunchSetupModal({
         </div>
 
         <div className='first-launch-setup-footer'>
-          <span className='first-launch-setup-footer-note'>
-            You can re-run this tour anytime from Tips in the title bar.
+          <span
+            aria-live='polite'
+            className={cn('first-launch-setup-footer-note', finishError && 'first-launch-setup-footer-error')}
+            role={finishError ? 'alert' : undefined}
+          >
+            {finishError ?? 'You can re-run this tour anytime from Tips in the title bar.'}
           </span>
           <div className='first-launch-setup-footer-actions' role='group' aria-label='Setup actions'>
             {activePageIndex === 0 ? null : (
-              <Button onClick={() => navigateToPage(previousPage)} type='button' variant='ghost'>
+              <Button disabled={isFinishing} onClick={() => navigateToPage(previousPage)} type='button' variant='ghost'>
                 <IconArrowLeft aria-hidden='true' data-icon='inline-start' />
                 Back
               </Button>
@@ -1031,8 +1042,8 @@ export function FirstLaunchSetupModal({
               </Button>
             ) : null}
             {isLastPage ? (
-              <Button onClick={handleContinue} type='button'>
-                {hasProjectFolder ? 'Finish and Open My Project' : 'Finish'}
+              <Button disabled={isFinishing} onClick={handleContinue} type='button'>
+                {isFinishing ? 'Opening Project…' : hasProjectFolder ? 'Finish and Open My Project' : 'Finish'}
                 <IconArrowRight aria-hidden='true' data-icon='inline-end' />
               </Button>
             ) : (
@@ -1081,8 +1092,7 @@ function FirstLaunchAgentLogo({ agent }: { agent: FirstLaunchSidebarAgent }) {
   return <span aria-hidden='true' className='first-launch-onb-agent-logo' style={getBrandAgentLogoStyle(agent.icon)} />;
 }
 
-function FirstLaunchWelcomePage({ embedUrl, vscode }: { embedUrl: string; vscode?: WebviewApi }) {
-  const [tourOpen, setTourOpen] = useState(false);
+function FirstLaunchWelcomePage({ vscode }: { vscode?: WebviewApi }) {
   return (
     <section aria-labelledby='first-launch-welcome-title' className='first-launch-onb-page'>
       <h2 className='first-launch-onb-title' id='first-launch-welcome-title'>
@@ -1109,44 +1119,14 @@ function FirstLaunchWelcomePage({ embedUrl, vscode }: { embedUrl: string; vscode
           <IconPlayerPlay aria-hidden='true' size={18} />
         </span>
         <span className='first-launch-onb-row-main'>
-          <strong>Prefer watching? Take the two-minute tour</strong>
+          <strong>Prefer watching? Take the 6-minute Intro and Guide</strong>
           <span>A quick walkthrough of terminals, agents, and the workflows you just read about.</span>
         </span>
-        <Button onClick={() => setTourOpen((open) => !open)} type='button'>
-          {tourOpen ? 'Hide Tour' : 'Watch Tour'}
+        <Button onClick={() => openFirstLaunchExternalUrl(vscode, FIRST_LAUNCH_TUTORIAL_VIDEO_WATCH_URL)} type='button'>
+          Watch Intro and Guide
+          <IconExternalLink aria-hidden='true' data-icon='inline-end' />
         </Button>
       </div>
-      {tourOpen ? (
-        <>
-          <div className='first-launch-setup-video-shell'>
-            <iframe
-              allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
-              allowFullScreen
-              className='first-launch-setup-video'
-              src={embedUrl}
-              title='Ghostex two-minute tour'
-            />
-          </div>
-          <p className='first-launch-onb-hint'>
-            Prefer YouTube?{' '}
-            <a
-              href={FIRST_LAUNCH_TUTORIAL_VIDEO_WATCH_URL}
-              onClick={(event) => {
-                if (!vscode) {
-                  return;
-                }
-                event.preventDefault();
-                openFirstLaunchExternalUrl(vscode, FIRST_LAUNCH_TUTORIAL_VIDEO_WATCH_URL);
-              }}
-              rel='noreferrer'
-              target='_blank'
-            >
-              Open the video in your browser
-            </a>
-            .
-          </p>
-        </>
-      ) : null}
     </section>
   );
 }
@@ -1179,14 +1159,10 @@ function FirstLaunchPluginsPage({
               <strong>{row.title}</strong>
               <span>{row.description}</span>
             </span>
-            <button
-              aria-checked={visible}
+            <Switch
               aria-label={`${row.title} plugin`}
-              className='first-launch-onb-switch'
-              data-on={visible}
-              onClick={() => onToggle(row.key, !visible)}
-              role='switch'
-              type='button'
+              checked={visible}
+              onCheckedChange={(checked) => onToggle(row.key, checked)}
             />
           </div>
         );
@@ -1605,14 +1581,10 @@ function FirstLaunchProjectPage({
           <strong>Attention notifications</strong>
           <span>Show a notification when an agent finishes or needs you.</span>
         </span>
-        <button
-          aria-checked={attentionNotificationsEnabled}
+        <Switch
           aria-label='Attention notifications'
-          className='first-launch-onb-switch'
-          data-on={attentionNotificationsEnabled}
-          onClick={() => onToggleAttentionNotifications(!attentionNotificationsEnabled)}
-          role='switch'
-          type='button'
+          checked={attentionNotificationsEnabled}
+          onCheckedChange={onToggleAttentionNotifications}
         />
       </div>
       <div className='first-launch-onb-row'>
@@ -1623,14 +1595,10 @@ function FirstLaunchProjectPage({
           <strong>Completion sound</strong>
           <span>Play a short sound when long-running work finishes.</span>
         </span>
-        <button
-          aria-checked={completionSoundEnabled}
+        <Switch
           aria-label='Completion sound'
-          className='first-launch-onb-switch'
-          data-on={completionSoundEnabled}
-          onClick={() => onToggleCompletionSound(!completionSoundEnabled)}
-          role='switch'
-          type='button'
+          checked={completionSoundEnabled}
+          onCheckedChange={onToggleCompletionSound}
         />
       </div>
 

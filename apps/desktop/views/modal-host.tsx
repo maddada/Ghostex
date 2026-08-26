@@ -16,12 +16,10 @@ import type {
 import { AgentConfigModal, type AgentConfigDraft } from '@/packages/core-ui/agent-config-modal';
 import { AgentsHubModal } from '@/packages/core-ui/agents-hub-modal';
 import { CommandPalette } from '@/packages/core-ui/command-palette';
-import { DaemonSessionsModal } from '@/packages/core-ui/daemon-sessions-modal';
 import { DelayedSendModal } from '@/packages/core-ui/delayed-send-modal';
 import { DiscoverGhostexModal } from '@/packages/core-ui/discover-ghostex-modal';
 import { ExtensionsModal } from '@/packages/core-ui/extensions-modal';
 import { FirstUserMessageModal } from '@/packages/core-ui/first-user-message-modal';
-import { PinnedPromptsModal } from '@/packages/core-ui/pinned-prompts-modal';
 import { StashedPromptsModal, type StashedPromptsScope } from '@/packages/core-ui/stashed-prompts-modal';
 import { PortlessSetupModal, type PortlessSetupModalMode } from '@/packages/core-ui/portless-setup-modal';
 import { PreviousSessionsModal } from '@/packages/core-ui/previous-sessions-modal';
@@ -92,7 +90,6 @@ type AppModalKind =
   | 'commandPalette'
   | 'configureActions'
   | 'configureAgents'
-  | 'daemonSessions'
   | 'delayedSend'
   | 'discoverGhostex'
   | 'extensionsBrowser'
@@ -105,7 +102,6 @@ type AppModalKind =
   | 'deleteWorktree'
   | 'renameWorktree'
   | 'openTargets'
-  | 'pinnedPrompts'
   | 'portlessSetup'
   | 'previousSessions'
   | 'recentProjects'
@@ -247,14 +243,6 @@ type AppModalHostMessage =
       showFirstLaunchSetupOnClose?: boolean;
       threadId?: string;
       title?: string;
-      /*
-       * CDXC:FirstLaunchTutorialVideo 2026-08-19:
-       * The modal host document is loaded from file://, where YouTube's embed
-       * player refuses to start ("Error 153"). The native side owns a page it
-       * can serve from a real origin, so it hands the setup modal that URL
-       * instead of letting this document try to embed YouTube itself.
-       */
-      tutorialVideoEmbedUrl?: string;
       notesMarkdown?: string;
       portable?: boolean;
       state?: 'available' | 'ready';
@@ -314,6 +302,12 @@ type AppModalHostMessage =
   | { path: string; type: 'terminalBackgroundImageFilePicked' }
   | { path: string; type: 'firstLaunchProjectFolderPicked' }
   | {
+      error?: string;
+      ok: boolean;
+      requestId: string;
+      type: 'firstLaunchCreateProjectSessionResult';
+    }
+  | {
       /*
        * CDXC:RemoteMachines 2026-08-19:
        * Native's answer to `probeRemoteGxserverInstall`: whether the saved
@@ -347,6 +341,7 @@ type AppModalHostMessage =
       error?: string;
       ok: boolean;
       path?: string;
+      requestId: string;
       type: 'exportSessionTranscriptResult';
     }
   | { details?: string; event: string; type: 'debugLog' }
@@ -435,6 +430,7 @@ type StashedPromptsModalState = {
 type ExportTranscriptResultModalState = {
   agentId?: string;
   canReveal: boolean;
+  requestId?: string;
   stage: ExportTranscriptModalStage;
 };
 
@@ -715,6 +711,46 @@ function resolvePromptAgentModalSelection(
 
 function createRemoteProjectRequestId(kind: 'add' | 'browse'): string {
   return `remote-project-${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+const FIRST_LAUNCH_CREATE_PROJECT_SESSION_TIMEOUT_MS = 60_000;
+
+function requestFirstLaunchCreateProjectSession(agentId: string, path: string): Promise<void> {
+  const requestId = `first-launch-project-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return new Promise((resolve, reject) => {
+    let timeoutId = 0;
+    const handleMessage = (event: Event) => {
+      const message = (event as CustomEvent<AppModalHostMessage>).detail;
+      if (
+        !message ||
+        typeof message !== 'object' ||
+        message.type !== 'firstLaunchCreateProjectSessionResult' ||
+        message.requestId !== requestId
+      ) {
+        return;
+      }
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      if (!message.ok) {
+        reject(new Error(message.error || 'Ghostex could not open the selected project.'));
+        return;
+      }
+      resolve();
+    };
+
+    window.addEventListener('ghostex-app-modal-host-message', handleMessage);
+    timeoutId = window.setTimeout(() => {
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      reject(new Error('Opening the selected project timed out.'));
+    }, FIRST_LAUNCH_CREATE_PROJECT_SESSION_TIMEOUT_MS);
+    try {
+      vscode.postMessage({ agentId, path, requestId, type: 'firstLaunchCreateProjectSession' });
+    } catch (error) {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      reject(error);
+    }
+  });
 }
 
 function waitForRemoteProjectDirectoryBrowseResult(requestId: string): Promise<RemoteFilesystemBrowseResult> {
@@ -1046,7 +1082,6 @@ function AppModalHost() {
     settingsInitialRemoteMachineId,
     settingsInitialSearchQuery,
     settingsInitialTabOverride,
-    tutorialVideoEmbedUrl,
   } = useModalStateFromNative();
   const [agentHookStatusLoading, setAgentHookStatusLoading] = useState(false);
   const [ghostexCliStatusLoading, setGhostexCliStatusLoading] = useState(false);
@@ -1564,7 +1599,6 @@ function AppModalHost() {
         onInitialLoadReady={handleRecentProjectsInitialLoadReady}
         vscode={vscode}
       />
-      <PinnedPromptsModal isOpen={activeModal === 'pinnedPrompts'} onClose={closeModal} vscode={vscode} />
       <StashedPromptsModal
         initialScope={stashedPrompts?.initialScope}
         isOpen={activeModal === 'stashedPrompts' && stashedPrompts !== undefined}
@@ -1771,7 +1805,6 @@ function AppModalHost() {
           )
         }
       />
-      <DaemonSessionsModal isOpen={activeModal === 'daemonSessions'} onClose={closeModal} vscode={vscode} />
       <AgentsHubModal
         catalog={agentsHubCatalog}
         fileContent={agentsHubFileContent}
@@ -2234,7 +2267,6 @@ function AppModalHost() {
       <FirstLaunchSetupModal
         agentHookStatus={agentHookStatus}
         agentHookStatusLoading={agentHookStatusLoading}
-        tutorialVideoEmbedUrl={tutorialVideoEmbedUrl}
         ghostexCliStatus={ghostexCliStatus}
         ghostexCliStatusLoading={ghostexCliStatusLoading}
         isOpen={isFirstLaunchSetupRenderable}
@@ -2310,7 +2342,7 @@ function AppModalHost() {
           session in it. Rust forwards this to the sidebar runtime over the
           workspaceFolderPicked chain, which owns project registration + focus.
           */
-          vscode.postMessage({ agentId, path, type: 'firstLaunchCreateProjectSession' });
+          return requestFirstLaunchCreateProjectSession(agentId, path);
         }}
         onRequestAgentHookStatus={(agentIds) => {
           setAgentHookStatusLoading(true);
@@ -2394,10 +2426,25 @@ function AppModalHost() {
         agents={agents}
         defaultAgentId={exportTranscriptResult?.agentId}
         isOpen={activeModal === 'exportTranscriptResult' && exportTranscriptResult !== undefined}
-        onClose={closeModal}
+        onClose={() => {
+          if (exportTranscriptResult?.requestId) {
+            vscode.postMessage({
+              requestId: exportTranscriptResult.requestId,
+              type: 'cancelExportSessionTranscript',
+            });
+          }
+          closeModal();
+        }}
         onExport={(options) => {
+          if (!exportTranscriptResult?.requestId) {
+            return;
+          }
           beginExportTranscriptExport();
-          vscode.postMessage({ ...options, type: 'runExportSessionTranscript' });
+          vscode.postMessage({
+            ...options,
+            requestId: exportTranscriptResult.requestId,
+            type: 'runExportSessionTranscript',
+          });
         }}
         onRevealInFinder={
           exportTranscriptResult?.canReveal
@@ -2408,7 +2455,14 @@ function AppModalHost() {
             : undefined
         }
         onStartNewConversation={(agentId) => {
-          vscode.postMessage({ agentId, type: 'startExportedTranscriptConversation' });
+          if (!exportTranscriptResult?.requestId) {
+            return;
+          }
+          vscode.postMessage({
+            agentId,
+            requestId: exportTranscriptResult.requestId,
+            type: 'startExportedTranscriptConversation',
+          });
           closeModal();
         }}
         stage={exportTranscriptResult?.stage ?? { stage: 'options' }}
@@ -2507,7 +2561,6 @@ function useModalStateFromNative() {
   const [pluginSettingsStatus, setPluginSettingsStatus] = useState<PluginSettingsStatusMessage>();
   // CDXC:AppIconPicker 2026-06-25-21:50: Latest native App Icon state passed to Settings.
   const [appIconState, setAppIconState] = useState<AppIconStateMessage>();
-  const [tutorialVideoEmbedUrl, setTutorialVideoEmbedUrl] = useState<string | undefined>(undefined);
   const [settingsInitialSection, setSettingsInitialSection] = useState<MainSettingsInitialSectionId>();
   const [settingsInitialRemoteMachineId, setSettingsInitialRemoteMachineId] = useState<string>();
   const [settingsInitialSearchQuery, setSettingsInitialSearchQuery] = useState<string>();
@@ -2640,9 +2693,6 @@ function useModalStateFromNative() {
             });
           }
           if (isFirstLaunchSetupModalKind(message.modal)) {
-            setTutorialVideoEmbedUrl(
-              typeof message.tutorialVideoEmbedUrl === 'string' ? message.tutorialVideoEmbedUrl : undefined
-            );
             /*
              * CDXC:FirstLaunchSetupDiagnostics 2026-06-29-22:08:
              * Capture the setup open boundary after any inline sidebar-state
@@ -2723,6 +2773,8 @@ function useModalStateFromNative() {
             }
             const agentId = typeof message.agentId === 'string' && message.agentId.trim() ? message.agentId : undefined;
             const canReveal = message.canReveal === true;
+            const requestId =
+              typeof message.requestId === 'string' && message.requestId.trim() ? message.requestId : undefined;
             // A done-stage open (path present) stays supported so a host that
             // already exported can show the result directly; the normal flow
             // opens on the include-toggle options stage.
@@ -2730,7 +2782,7 @@ function useModalStateFromNative() {
               typeof message.path === 'string' && message.path.trim()
                 ? { agentId, canReveal, path: message.path, stage: 'done' }
                 : { stage: 'options' };
-            return { agentId, canReveal, stage };
+            return { agentId, canReveal, requestId, stage };
           });
           setUpdateAvailable(
             message.modal === 'updateAvailable' &&
@@ -3075,7 +3127,7 @@ function useModalStateFromNative() {
             return;
           }
           setExportTranscriptResult((current) => {
-            if (!current) {
+            if (!current || current.requestId !== message.requestId) {
               return current;
             }
             if (message.ok && typeof message.path === 'string' && message.path.trim()) {
@@ -3085,6 +3137,7 @@ function useModalStateFromNative() {
               return {
                 agentId,
                 canReveal,
+                requestId: current.requestId,
                 stage: { agentId, canReveal, path: message.path, stage: 'done' },
               };
             }
@@ -3310,7 +3363,6 @@ function useModalStateFromNative() {
     settingsInitialRemoteMachineId,
     settingsInitialSearchQuery,
     settingsInitialTabOverride,
-    tutorialVideoEmbedUrl,
   };
 }
 
@@ -3508,8 +3560,6 @@ function isModalRenderable({
       return worktree !== undefined;
     case 'portlessSetup':
       return portlessSetup !== undefined;
-    case 'daemonSessions':
-    case 'pinnedPrompts':
     case 'previousSessions':
     case 'scratchPad':
     case 'discoverGhostex':
@@ -3533,14 +3583,6 @@ function applySidebarStateMessage(message: unknown) {
         message as Parameters<ReturnType<typeof useSidebarStore.getState>['applySidebarMessage']>[0]
       );
     return;
-  }
-
-  if (message.type === 'daemonSessionsState') {
-    useSidebarStore
-      .getState()
-      .setDaemonSessionsState(
-        message as Parameters<ReturnType<typeof useSidebarStore.getState>['setDaemonSessionsState']>[0]
-      );
   }
 }
 

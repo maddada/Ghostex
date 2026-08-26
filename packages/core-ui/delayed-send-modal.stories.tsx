@@ -37,7 +37,7 @@ function DelayedSendModalStory(props: Partial<DelayedSendModalProps>) {
 }
 
 const meta = {
-  title: 'Sidebar/Delayed Send Modal',
+  title: 'Modals/App Host/Delayed Actions',
   parameters: {
     layout: 'fullscreen',
   },

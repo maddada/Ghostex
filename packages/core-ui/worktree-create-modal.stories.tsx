@@ -31,7 +31,7 @@ function WorktreeCreateModalStory() {
 
 const meta: Meta<typeof WorktreeCreateModalStory> = {
   component: WorktreeCreateModalStory,
-  title: 'Modals/Add Worktree',
+  title: 'Modals/App Host/Add Worktree',
 };
 
 export default meta;

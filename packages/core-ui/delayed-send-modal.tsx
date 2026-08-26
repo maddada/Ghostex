@@ -8,16 +8,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { Button } from '@/packages/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/packages/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/packages/components/ui/dialog';
 import { Field, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import { Input } from '@/packages/components/ui/input';
 import {
@@ -29,6 +20,17 @@ import {
   SelectValue,
 } from '@/packages/components/ui/select';
 import { Switch } from '@/packages/components/ui/switch';
+import {
+  APP_MODAL_SELECT_CONTENT_CLASS,
+  AppModalButton,
+  AppModalDescription,
+  AppModalFooter,
+  AppModalForm,
+  AppModalHeader,
+  AppModalShell,
+  AppModalStack,
+  AppModalTitle,
+} from './app-modal-shell';
 import { AGENT_LOGOS } from './agent-logos';
 import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 
@@ -292,161 +294,151 @@ export function DelayedSendModal({
   };
 
   return (
-    <Dialog
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          onCancel();
-        }
-      }}
-      open={isOpen}
+    <AppModalShell
+      className='delayed-send-modal-shadcn'
+      isOpen={isOpen}
+      onClose={onCancel}
+      onOpenAutoFocus={handleOpenAutoFocus}
     >
-      <DialogContent
-        className='command-config-modal-shadcn delayed-send-modal-shadcn font-sans'
-        onOpenAutoFocus={handleOpenAutoFocus}
-        showCloseButton={false}
-      >
-        <form className='delayed-send-form' onSubmit={submit}>
-          <DialogHeader>
-            <DialogTitle>Session Automations</DialogTitle>
-            <DialogDescription className='delayed-send-dialog-description'>
-              <span>Configure automations for this agent session.</span>
-              <span className='delayed-send-session-target'>
-                {agentIconStyle ? (
-                  <span aria-hidden='true' className='delayed-send-session-agent-icon' style={agentIconStyle} />
-                ) : null}
-                <span className='delayed-send-session-title'>{sessionTargetLabel}</span>
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-          <div className='delayed-send-automation-stack'>
-            <Card className='delayed-send-automation-card' size='sm'>
-              <CardHeader>
-                <CardTitle>Send Enter</CardTitle>
-                <CardDescription
-                  className={sendAutomationIsActive ? 'delayed-send-automation-status-active' : undefined}
-                >
-                  {sendAutomationDescription}
-                </CardDescription>
-                <CardAction>
-                  <Switch
-                    aria-label='Send Enter automation'
-                    checked={sendEnterEnabled}
-                    id={sendEnterEnabledId}
-                    onCheckedChange={(checked) => {
-                      setSendEnterEnabled(checked);
-                      if (checked && trigger === 'afterDelay') {
-                        window.requestAnimationFrame(scheduleMinutesFocus);
-                      } else {
-                        clearScheduledMinutesFocus();
-                      }
-                    }}
-                  />
-                </CardAction>
-              </CardHeader>
-              {sendEnterEnabled ? (
-                <CardContent>
-                  <FieldGroup className='delayed-send-field-group'>
-                    <Field>
-                      <FieldLabel htmlFor={sendTriggerId}>Trigger</FieldLabel>
-                      <Select
-                        disabled={triggerOptions.length === 1}
-                        items={triggerOptions}
-                        onValueChange={(value) => {
-                          const nextTrigger = value as DelayedSendTrigger;
-                          setTrigger(nextTrigger);
-                          if (nextTrigger === 'afterDelay') {
-                            window.requestAnimationFrame(scheduleMinutesFocus);
-                          } else {
-                            clearScheduledMinutesFocus();
-                          }
-                        }}
-                        value={trigger}
-                      >
-                        <SelectTrigger className='w-full' id={sendTriggerId}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent alignItemWithTrigger={false} className='delayed-send-select-content'>
-                          <SelectGroup>
-                            {triggerOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <div className='delayed-send-trigger-detail-slot'>
-                      {trigger === 'afterDelay' ? (
-                        <div className='delayed-send-duration-grid'>
-                          <Field>
-                            <FieldLabel htmlFor={hoursInputId}>Hours</FieldLabel>
-                            <Input
-                              aria-label='Hours'
-                              id={hoursInputId}
-                              min={0}
-                              onChange={(event) => setHours(event.currentTarget.value)}
-                              onKeyDown={submitFromDurationInput}
-                              step={1}
-                              type='number'
-                              value={hours}
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={minutesInputId}>Minutes</FieldLabel>
-                            <Input
-                              aria-label='Minutes'
-                              autoFocus
-                              id={minutesInputId}
-                              min={0}
-                              onChange={(event) => setMinutes(event.currentTarget.value)}
-                              onFocus={(event) => event.currentTarget.select()}
-                              onKeyDown={submitFromDurationInput}
-                              ref={minutesInputRef}
-                              step={1}
-                              type='number'
-                              value={minutes}
-                            />
-                          </Field>
-                        </div>
-                      ) : (
-                        <p className='delayed-send-trigger-description'>
-                          {trigger === 'agentStops'
-                            ? 'Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds.'
-                            : 'Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds.'}
-                        </p>
-                      )}
-                    </div>
-                  </FieldGroup>
-                </CardContent>
+      <AppModalForm onSubmit={submit}>
+        <AppModalHeader>
+          <AppModalTitle>Session Automations</AppModalTitle>
+          <AppModalDescription className='delayed-send-dialog-description'>
+            <span>Configure automations for this agent session.</span>
+            <span className='delayed-send-session-target'>
+              {agentIconStyle ? (
+                <span aria-hidden='true' className='delayed-send-session-agent-icon' style={agentIconStyle} />
               ) : null}
-            </Card>
-            <Card className='delayed-send-automation-card delayed-send-close-card' size='sm'>
-              <CardHeader>
-                <CardTitle>Close session after Done</CardTitle>
-                <CardDescription>Closes this terminal 3 minutes after Done.</CardDescription>
-                <CardAction>
-                  <Switch
-                    aria-label='Close session after Done'
-                    checked={closeAfterDoneEnabled}
-                    id={closeAfterDoneEnabledId}
-                    onCheckedChange={setCloseAfterDoneEnabled}
-                  />
-                </CardAction>
-              </CardHeader>
-            </Card>
-          </div>
-          <DialogFooter className='delayed-send-footer'>
-            <Button className='delayed-send-action-button' onClick={onCancel} type='button' variant='outline'>
-              Cancel
-            </Button>
-            <Button className='delayed-send-action-button' disabled={!canSave} type='submit'>
-              Save changes
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              <span className='delayed-send-session-title'>{sessionTargetLabel}</span>
+            </span>
+          </AppModalDescription>
+        </AppModalHeader>
+        <AppModalStack>
+          <Card className='delayed-send-automation-card' size='sm'>
+            <CardHeader>
+              <CardTitle>Send Enter</CardTitle>
+              <CardDescription className={sendAutomationIsActive ? 'delayed-send-automation-status-active' : undefined}>
+                {sendAutomationDescription}
+              </CardDescription>
+              <CardAction>
+                <Switch
+                  aria-label='Send Enter automation'
+                  checked={sendEnterEnabled}
+                  id={sendEnterEnabledId}
+                  onCheckedChange={(checked) => {
+                    setSendEnterEnabled(checked);
+                    if (checked && trigger === 'afterDelay') {
+                      window.requestAnimationFrame(scheduleMinutesFocus);
+                    } else {
+                      clearScheduledMinutesFocus();
+                    }
+                  }}
+                />
+              </CardAction>
+            </CardHeader>
+            {sendEnterEnabled ? (
+              <CardContent>
+                <FieldGroup className='delayed-send-field-group'>
+                  <Field>
+                    <FieldLabel htmlFor={sendTriggerId}>Trigger</FieldLabel>
+                    <Select
+                      disabled={triggerOptions.length === 1}
+                      items={triggerOptions}
+                      onValueChange={(value) => {
+                        const nextTrigger = value as DelayedSendTrigger;
+                        setTrigger(nextTrigger);
+                        if (nextTrigger === 'afterDelay') {
+                          window.requestAnimationFrame(scheduleMinutesFocus);
+                        } else {
+                          clearScheduledMinutesFocus();
+                        }
+                      }}
+                      value={trigger}
+                    >
+                      <SelectTrigger className='w-full' id={sendTriggerId}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false} className={APP_MODAL_SELECT_CONTENT_CLASS}>
+                        <SelectGroup>
+                          {triggerOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <div className='delayed-send-trigger-detail-slot'>
+                    {trigger === 'afterDelay' ? (
+                      <div className='delayed-send-duration-grid'>
+                        <Field>
+                          <FieldLabel htmlFor={hoursInputId}>Hours</FieldLabel>
+                          <Input
+                            aria-label='Hours'
+                            id={hoursInputId}
+                            min={0}
+                            onChange={(event) => setHours(event.currentTarget.value)}
+                            onKeyDown={submitFromDurationInput}
+                            step={1}
+                            type='number'
+                            value={hours}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={minutesInputId}>Minutes</FieldLabel>
+                          <Input
+                            aria-label='Minutes'
+                            autoFocus
+                            id={minutesInputId}
+                            min={0}
+                            onChange={(event) => setMinutes(event.currentTarget.value)}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onKeyDown={submitFromDurationInput}
+                            ref={minutesInputRef}
+                            step={1}
+                            type='number'
+                            value={minutes}
+                          />
+                        </Field>
+                      </div>
+                    ) : (
+                      <p className='delayed-send-trigger-description'>
+                        {trigger === 'agentStops'
+                          ? 'Ghostex will send Enter automatically after this agent finishes working and remains idle for 10 seconds.'
+                          : 'Ghostex will send Enter automatically after every agent in this project finishes working and remains idle for 10 seconds.'}
+                      </p>
+                    )}
+                  </div>
+                </FieldGroup>
+              </CardContent>
+            ) : null}
+          </Card>
+          <Card className='delayed-send-automation-card delayed-send-close-card' size='sm'>
+            <CardHeader>
+              <CardTitle>Close session after Done</CardTitle>
+              <CardDescription>Closes this terminal 3 minutes after Done.</CardDescription>
+              <CardAction>
+                <Switch
+                  aria-label='Close session after Done'
+                  checked={closeAfterDoneEnabled}
+                  id={closeAfterDoneEnabledId}
+                  onCheckedChange={setCloseAfterDoneEnabled}
+                />
+              </CardAction>
+            </CardHeader>
+          </Card>
+        </AppModalStack>
+        <AppModalFooter>
+          <AppModalButton onClick={onCancel} type='button'>
+            Cancel
+          </AppModalButton>
+          <AppModalButton disabled={!canSave} type='submit'>
+            Save changes
+          </AppModalButton>
+        </AppModalFooter>
+      </AppModalForm>
+    </AppModalShell>
   );
 }
 

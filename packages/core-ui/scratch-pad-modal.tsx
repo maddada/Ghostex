@@ -1,5 +1,6 @@
-import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from 'react';
+import { Textarea } from '@/packages/components/ui/textarea';
+import { AppModalColumn, AppModalHeader, AppModalShell, AppModalTitle } from './app-modal-shell';
 import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
 import { useSidebarStore } from './sidebar-store';
 
@@ -138,16 +139,17 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
       return;
     }
 
+    /*
+     * Escape is handled by the dialog itself (`onClose={closeModal}`), so this
+     * listener only records the focus/keystroke trace the Scratch Pad focus
+     * diagnostics rely on.
+     */
     const handleKeyDown = (event: KeyboardEvent) => {
       postDebug('document.keydown', {
         code: event.code,
         key: summarizeScratchPadKey(event),
         target: describeScratchPadElement(event.target),
       });
-
-      if (event.key === 'Escape') {
-        closeModal();
-      }
     };
 
     document.addEventListener('keydown', handleKeyDown);
@@ -234,22 +236,14 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
     return null;
   }
 
-  return createPortal(
-    <div className='confirm-modal-root scroll-mask-y' role='presentation'>
-      <button className='confirm-modal-backdrop' onClick={closeModal} type='button' />
-      <div
-        aria-labelledby='scratch-pad-modal-title'
-        aria-modal='true'
-        className='confirm-modal scratch-pad-modal scroll-mask-y'
-        role='dialog'
-      >
-        <div className='confirm-modal-header'>
-          <div className='confirm-modal-title' id='scratch-pad-modal-title'>
-            Scratch Pad
-          </div>
-        </div>
+  return (
+    <AppModalShell className='scratch-pad-modal' isOpen={isOpen} onClose={closeModal}>
+      <AppModalColumn className='scratch-pad-modal-column'>
+        <AppModalHeader>
+          <AppModalTitle>Scratch Pad</AppModalTitle>
+        </AppModalHeader>
         <div className='scratch-pad-modal-body'>
-          <textarea
+          <Textarea
             aria-label='Scratch pad'
             className='scratch-pad-textarea'
             onBlur={(event) => {
@@ -290,9 +284,8 @@ export function ScratchPadModal({ isOpen, onClose, onDebug, onSave }: ScratchPad
             value={draftContent}
           />
         </div>
-      </div>
-    </div>,
-    document.body
+      </AppModalColumn>
+    </AppModalShell>
   );
 }
 

@@ -1,16 +1,31 @@
-import { IconAlertTriangle, IconCopy, IconLoader2, IconPlayerPlay } from '@tabler/icons-react';
+import { IconAlertTriangle, IconCheck, IconCopy } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import { Card, CardContent } from '@/packages/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/packages/components/ui/dialog';
-import { type RunnableBeadsMigrationOption, projectBoardCommandRunKey } from './types';
+
+function CopyBeadsFixPromptButton({ prompt }: { prompt: string }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const label = copyState === 'copied' ? 'Prompt copied' : copyState === 'error' ? 'Copy failed' : 'Copy fix prompt';
+
+  return (
+    <Button
+      aria-label='Copy a prompt for an agent to fix this Beads issue'
+      className='project-board-notice-copy-prompt'
+      onClick={() => {
+        void navigator.clipboard.writeText(prompt).then(
+          () => setCopyState('copied'),
+          () => setCopyState('error')
+        );
+      }}
+      size='sm'
+      type='button'
+      variant='outline'
+    >
+      {copyState === 'copied' ? <IconCheck aria-hidden='true' /> : <IconCopy aria-hidden='true' />}
+      <span aria-live='polite'>{label}</span>
+    </Button>
+  );
+}
 
 export type RemoteMigrateGateOption = {
   commands: string[];
@@ -95,10 +110,6 @@ export function currentBeadsMigrationDocsUrl(url: string | undefined): string | 
   return url?.replace('/website/docs/getting-started/upgrading.md', '/docs/getting-started/upgrading.md');
 }
 
-export function runnableBeadsMigrationOption(id: string): RunnableBeadsMigrationOption | undefined {
-  return id === 'migrate' || id === 'adopt' || id === 'adopt-fast-forward' || id === 'reconcile-fork' ? id : undefined;
-}
-
 export function beadsMigrationOptionLabel(id: string): string {
   switch (id) {
     case 'migrate':
@@ -114,18 +125,48 @@ export function beadsMigrationOptionLabel(id: string): string {
   }
 }
 
-export function RemoteMigrateGateNotice({
-  canRunBeadsCommands,
-  gate,
-  onRunBeadsMigration,
-  runningCommand,
-}: {
-  canRunBeadsCommands: boolean;
-  gate: RemoteMigrateGate;
-  onRunBeadsMigration: (option: RunnableBeadsMigrationOption) => void;
-  runningCommand: string;
-}) {
-  const [confirmingOption, setConfirmingOption] = useState<RemoteMigrateGateOption>();
+function buildBeadsFixPrompt({ message, projectPath, title }: { message: string; projectPath: string; title: string }) {
+  return `Fix this Beads Project Board issue.
+
+Project path: ${projectPath}
+
+Notice: ${title}
+
+Reported issue:
+${message}
+
+Use the machine-installed bd CLI in the environment that runs this project. Diagnose and correct the underlying problem safely. Preserve all existing and unpushed Beads data. If this is a remote-backed database or migration, follow the coordinated migration gate: designate exactly one clone to migrate and publish, and have every other clone adopt that result. Do not bypass the remote migration gate or migrate multiple clones independently. Verify the fix by running a normal read such as bd status from the project path, then report what changed.`;
+}
+
+function buildRemoteMigrationFixPrompt({ gate, projectPath }: { gate: RemoteMigrateGate; projectPath: string }) {
+  const schemaSummary =
+    gate.currentVersion !== undefined && gate.latestVersion !== undefined
+      ? `Current schema: v${gate.currentVersion}\nTarget schema: v${gate.latestVersion}${gate.pending ? `\nPending migrations: ${gate.pending}` : ''}`
+      : 'Schema state: a migration is pending';
+  const optionSummary = gate.options
+    .map((option) => {
+      const details = [
+        `- ${beadsMigrationOptionLabel(option.id)}`,
+        option.when ? `  Use only when: ${option.when}` : '',
+        option.risk ? `  Risk: ${option.risk}` : '',
+      ].filter(Boolean);
+      return details.join('\n');
+    })
+    .join('\n');
+
+  return `Fix this coordinated Beads Project Board migration issue.
+
+Project path: ${projectPath}
+
+${schemaSummary}${gate.decision ? `\nMigration decision reported by Beads: ${gate.decision}` : ''}${gate.fallbackReason ? `\nFallback reason: ${gate.fallbackReason}` : ''}
+
+Migration choices reported by Beads:
+${optionSummary}
+
+Use the machine-installed bd CLI in the environment that runs this project. Inspect the current database and remote state before changing anything. Preserve all existing and unpushed Beads data. Follow the remote migration gate exactly: designate one canonical clone to migrate and publish, and have every other clone adopt that result. Never migrate multiple clones independently or bypass the gate. Verify the repaired board with a normal read such as bd status from the project path, then report what changed.`;
+}
+
+export function RemoteMigrateGateNotice({ gate, projectPath }: { gate: RemoteMigrateGate; projectPath: string }) {
   const docsUrl = currentBeadsMigrationDocsUrl(gate.docs);
   const versionSummary =
     gate.currentVersion !== undefined && gate.latestVersion !== undefined
@@ -143,152 +184,47 @@ export function RemoteMigrateGateNotice({
       : gate.fallbackReason === 'below-convergence-floor'
         ? "This database predates Beads' merge-safe migration floor, so unattended migration is unsafe."
         : '';
-  const confirmingOptionId = confirmingOption ? runnableBeadsMigrationOption(confirmingOption.id) : undefined;
-  const confirmationText =
-    confirmingOptionId === 'migrate'
-      ? 'Confirm that this is the one designated clone allowed to migrate and publish. Running this on another clone can fork the shared board schema unrecoverably.'
-      : confirmingOptionId === 'adopt-fast-forward'
-        ? 'Beads reports that this clone can adopt the migrated remote without losing local work. Confirm before replacing the local database.'
-        : confirmingOptionId === 'reconcile-fork'
-          ? "This first exports a backup, then replaces this clone's database from the canonical remote. Confirm that the canonical clone has already been chosen."
-          : 'Adopting re-clones and replaces this local database. Confirm that needed local work has been pushed or exported first.';
+  const fixPrompt = buildRemoteMigrationFixPrompt({ gate, projectPath });
   return (
-    <>
-      <Card className='project-board-notice' data-kind='migration' role='alert' size='sm'>
-        <CardContent>
-          <div className='project-board-notice-icon' aria-hidden='true'>
-            <IconAlertTriangle />
+    <Card className='project-board-notice' data-kind='migration' role='alert' size='sm'>
+      <CardContent>
+        <div className='project-board-notice-icon' aria-hidden='true'>
+          <IconAlertTriangle />
+        </div>
+        <div className='project-board-notice-body'>
+          <strong>Project board migration needs coordination</strong>
+          <p>{versionSummary}</p>
+          <p>
+            First install or update to the latest Beads release on every clone, then follow one coordinated migration
+            path below.
+          </p>
+          <p>{explanation}</p>
+          {fallback ? <p>{fallback}</p> : null}
+          <div className='project-board-migration-options'>
+            {gate.options.map((option) => (
+              <div className='project-board-migration-option' key={option.id}>
+                <strong>{beadsMigrationOptionLabel(option.id)}</strong>
+                {option.when ? <p>Use only when {option.when}.</p> : null}
+                {option.risk ? <p className='project-board-migration-risk'>Risk: {option.risk}.</p> : null}
+              </div>
+            ))}
           </div>
-          <div className='project-board-notice-body'>
-            <strong>Project board migration needs coordination</strong>
-            <p>{versionSummary}</p>
-            <p>
-              First install or update to the latest Beads release on every clone, then follow one coordinated migration
-              path below.
-            </p>
-            <p>{explanation}</p>
-            {fallback ? <p>{fallback}</p> : null}
-            <div className='project-board-migration-options'>
-              {gate.options.map((option) => {
-                const commands = option.commands;
-                const label = beadsMigrationOptionLabel(option.id);
-                const runnableOption = runnableBeadsMigrationOption(option.id);
-                const runKey = runnableOption ? projectBoardCommandRunKey('runBeadsMigration', runnableOption) : '';
-                const isRunning = runKey === runningCommand;
-                return (
-                  <div className='project-board-migration-option' key={option.id}>
-                    <strong>{label}</strong>
-                    {option.when ? <p>Use only when {option.when}.</p> : null}
-                    {option.risk ? <p className='project-board-migration-risk'>Risk: {option.risk}.</p> : null}
-                    <div className='project-board-notice-command'>
-                      <code>{commands.join(' && ')}</code>
-                      <Button
-                        aria-label={`Copy ${label.toLowerCase()} commands`}
-                        onClick={() => void navigator.clipboard.writeText(commands.join('\n'))}
-                        size='icon-sm'
-                        type='button'
-                        variant='ghost'
-                      >
-                        <IconCopy />
-                      </Button>
-                      {canRunBeadsCommands && runnableOption ? (
-                        <Button
-                          className='project-board-notice-run-button'
-                          disabled={Boolean(runningCommand)}
-                          onClick={() => setConfirmingOption(option)}
-                          size='sm'
-                          type='button'
-                          variant='ghost'
-                        >
-                          {isRunning ? <IconLoader2 className='animate-spin' /> : <IconPlayerPlay />}
-                          Run in Terminal
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {docsUrl ? (
-              <a href={docsUrl} rel='noreferrer' target='_blank'>
-                Read the Beads multi-clone migration guide
-              </a>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-      <Dialog
-        open={Boolean(confirmingOptionId)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setConfirmingOption(undefined);
-          }
-        }}
-      >
-        <DialogContent className='project-ticket-dialog gap-4 p-5'>
-          <DialogHeader className='gap-1'>
-            <DialogTitle className='text-[15px] font-normal'>
-              Confirm {confirmingOption ? beadsMigrationOptionLabel(confirmingOption.id) : 'Beads command'}
-            </DialogTitle>
-            <DialogDescription className='text-xs font-normal text-muted-foreground'>
-              {confirmationText}
-            </DialogDescription>
-          </DialogHeader>
-          {confirmingOption ? (
-            <div className='project-board-notice-command project-board-confirm-command'>
-              <code>{confirmingOption.commands.join(' && ')}</code>
-            </div>
+          <CopyBeadsFixPromptButton prompt={fixPrompt} />
+          {docsUrl ? (
+            <a href={docsUrl} rel='noreferrer' target='_blank'>
+              Read the Beads multi-clone migration guide
+            </a>
           ) : null}
-          <DialogFooter>
-            <Button onClick={() => setConfirmingOption(undefined)} type='button' variant='outline'>
-              Cancel
-            </Button>
-            <Button
-              disabled={!confirmingOptionId || Boolean(runningCommand)}
-              onClick={() => {
-                if (!confirmingOptionId) {
-                  return;
-                }
-                onRunBeadsMigration(confirmingOptionId);
-                setConfirmingOption(undefined);
-              }}
-              type='button'
-            >
-              <IconPlayerPlay />
-              Confirm and Run in Terminal
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
-export function ProjectBoardNotice({
-  canRunBeadsCommands,
-  message,
-  onInstallOrUpdateBeads,
-  onInitializeBeads,
-  onRunBeadsMigration,
-  runningCommand,
-}: {
-  canRunBeadsCommands: boolean;
-  message: string;
-  onInstallOrUpdateBeads: () => void;
-  onInitializeBeads: () => void;
-  onRunBeadsMigration: (option: RunnableBeadsMigrationOption) => void;
-  runningCommand: string;
-}) {
+export function ProjectBoardNotice({ message, projectPath }: { message: string; projectPath: string }) {
   const remoteMigrateGate = parseRemoteMigrateGate(message);
   if (remoteMigrateGate) {
-    return (
-      <RemoteMigrateGateNotice
-        canRunBeadsCommands={canRunBeadsCommands}
-        gate={remoteMigrateGate}
-        onRunBeadsMigration={onRunBeadsMigration}
-        runningCommand={runningCommand}
-      />
-    );
+    return <RemoteMigrateGateNotice gate={remoteMigrateGate} projectPath={projectPath} />;
   }
   /*
    * CDXC:ProjectBoardBeadsSchema 2026-08-08:
@@ -306,9 +242,6 @@ export function ProjectBoardNotice({
     /bd was not found|beads cli|executable|command not found|not found: bd|bd: not found|env: bd: no such file|cannot find/i.test(
       message
     );
-  const latestBeadsInstallCommand =
-    'curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash';
-  const command = isMissingProject ? 'bd init' : latestBeadsInstallCommand;
   const title = isMissingBeads
     ? 'Beads CLI unavailable'
     : isMissingProject
@@ -321,12 +254,13 @@ export function ProjectBoardNotice({
       ]
     : isMissingProject
       ? [
-          'This project does not have a Beads workspace yet. Run this once from the project root; Ghostex will refresh the board when it finishes.',
+          'This project does not have a Beads workspace yet. Copy a fix prompt for an agent to inspect and initialize it safely.',
         ]
       : [
           message,
           'Update Beads to the latest release, then retry. If this is a remote-backed migration, follow the coordinated migration instructions instead of migrating multiple clones independently.',
         ];
+  const fixPrompt = buildBeadsFixPrompt({ message, projectPath, title });
   return (
     <Card
       className='project-board-notice'
@@ -358,53 +292,7 @@ export function ProjectBoardNotice({
           {bodyLines.map((line) => (
             <p key={line}>{line}</p>
           ))}
-          {command ? (
-            <div className='project-board-notice-command'>
-              <code>{command}</code>
-              {isMissingProject && canRunBeadsCommands ? (
-                <Button
-                  className='project-board-notice-run-button'
-                  disabled={Boolean(runningCommand)}
-                  onClick={onInitializeBeads}
-                  size='sm'
-                  type='button'
-                  variant='ghost'
-                >
-                  {runningCommand === 'initializeBeads' ? <IconLoader2 className='animate-spin' /> : <IconPlayerPlay />}
-                  Run in Terminal
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    aria-label={`Copy ${command}`}
-                    onClick={() => void navigator.clipboard.writeText(command)}
-                    size='icon-sm'
-                    type='button'
-                    variant='ghost'
-                  >
-                    <IconCopy />
-                  </Button>
-                  {!isMissingProject && canRunBeadsCommands ? (
-                    <Button
-                      className='project-board-notice-run-button'
-                      disabled={Boolean(runningCommand)}
-                      onClick={onInstallOrUpdateBeads}
-                      size='sm'
-                      type='button'
-                      variant='ghost'
-                    >
-                      {runningCommand === 'installOrUpdateBeads' ? (
-                        <IconLoader2 className='animate-spin' />
-                      ) : (
-                        <IconPlayerPlay />
-                      )}
-                      Run in Terminal
-                    </Button>
-                  ) : null}
-                </>
-              )}
-            </div>
-          ) : null}
+          <CopyBeadsFixPromptButton prompt={fixPrompt} />
           {isMissingBeads || !isMissingProject ? (
             <a
               href='https://github.com/gastownhall/beads/blob/main/docs/INSTALLING.md'

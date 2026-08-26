@@ -90,15 +90,10 @@ import {
   type PendingBoardStatusMove,
   type ProjectBoardFocusOwnerEvent,
   type BoardRefreshOptions,
-  type ProjectBoardCommandCompletedEventDetail,
-  type ProjectBoardRunnableCommandAction,
-  type RunnableBeadsMigrationOption,
-  projectBoardCommandRunKey,
   type ProjectSurfaceTab,
   type TicketContextMenuState,
 } from './types';
 import {
-  PROJECT_BOARD_COMMAND_COMPLETED_EVENT,
   PROJECT_BOARD_AUTO_REFRESH_INTERVAL_MS,
   PROJECT_BOARD_MAX_DEPENDENCY_OPTIONS,
   NATIVE_SETTINGS_STORAGE_KEY,
@@ -251,7 +246,6 @@ export function ProjectBoardApp() {
   const pickedAgentIdByBeadIdRef = useRef(new Map<string, string>());
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [hasCompletedInitialBoardLoad, setHasCompletedInitialBoardLoad] = useState(false);
-  const [runningProjectBoardCommand, setRunningProjectBoardCommand] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -848,68 +842,6 @@ export function ProjectBoardApp() {
     },
     [displayKey, issuePrefix, runBeads]
   );
-
-  const runProjectBoardCommand = useCallback(
-    async (action: ProjectBoardRunnableCommandAction, migrationOption?: RunnableBeadsMigrationOption) => {
-      if (runningProjectBoardCommand) {
-        return;
-      }
-      const runKey = projectBoardCommandRunKey(action, migrationOption);
-      setRunningProjectBoardCommand(runKey);
-      try {
-        const response = await sendProjectBoardRequest({
-          action,
-          ...(migrationOption ? { migrationOption } : {}),
-          projectId,
-        });
-        if (!response.ok) {
-          throw new Error(response.error || 'Could not start the Beads command.');
-        }
-      } catch (error) {
-        setRunningProjectBoardCommand('');
-        showProjectBoardToast(
-          'error',
-          'Could not run Beads command',
-          error instanceof Error ? error.message : 'Could not start the Beads command.'
-        );
-      }
-    },
-    [projectId, runningProjectBoardCommand, showProjectBoardToast]
-  );
-
-  const initializeBeads = useCallback(() => {
-    void runProjectBoardCommand('initializeBeads');
-  }, [runProjectBoardCommand]);
-
-  const installOrUpdateBeads = useCallback(() => {
-    void runProjectBoardCommand('installOrUpdateBeads');
-  }, [runProjectBoardCommand]);
-
-  const runBeadsMigration = useCallback(
-    (migrationOption: RunnableBeadsMigrationOption) => {
-      void runProjectBoardCommand('runBeadsMigration', migrationOption);
-    },
-    [runProjectBoardCommand]
-  );
-
-  useEffect(() => {
-    const handleCommandCompleted = (event: Event) => {
-      const detail = (event as CustomEvent<ProjectBoardCommandCompletedEventDetail>).detail;
-      if (
-        detail?.action !== 'initializeBeads' &&
-        detail?.action !== 'installOrUpdateBeads' &&
-        detail?.action !== 'runBeadsMigration'
-      ) {
-        return;
-      }
-      setRunningProjectBoardCommand('');
-      void loadTickets({ mode: 'manual' });
-    };
-    window.addEventListener(PROJECT_BOARD_COMMAND_COMPLETED_EVENT, handleCommandCompleted);
-    return () => {
-      window.removeEventListener(PROJECT_BOARD_COMMAND_COMPLETED_EVENT, handleCommandCompleted);
-    };
-  }, [loadTickets]);
 
   useEffect(() => {
     if (activeSurfaceTab === 'board' || (experimentalFeaturesEnabled && !isAutomationGlobalScope)) {
@@ -2893,16 +2825,7 @@ export function ProjectBoardApp() {
 
           {activeSurfaceTab === 'board' ? (
             <>
-              {errorMessage ? (
-                <ProjectBoardNotice
-                  canRunBeadsCommands={!remoteMachineId}
-                  message={errorMessage}
-                  onInstallOrUpdateBeads={installOrUpdateBeads}
-                  onInitializeBeads={initializeBeads}
-                  onRunBeadsMigration={runBeadsMigration}
-                  runningCommand={runningProjectBoardCommand}
-                />
-              ) : null}
+              {errorMessage ? <ProjectBoardNotice message={errorMessage} projectPath={projectPath} /> : null}
               <div className='project-board-board-region'>
                 <DragDropProvider onDragEnd={handleDragEnd}>
                   {/*
@@ -2984,14 +2907,7 @@ export function ProjectBoardApp() {
               ) : null}
             </>
           ) : errorMessage ? (
-            <ProjectBoardNotice
-              canRunBeadsCommands={!remoteMachineId}
-              message={errorMessage}
-              onInstallOrUpdateBeads={installOrUpdateBeads}
-              onInitializeBeads={initializeBeads}
-              onRunBeadsMigration={runBeadsMigration}
-              runningCommand={runningProjectBoardCommand}
-            />
+            <ProjectBoardNotice message={errorMessage} projectPath={projectPath} />
           ) : null}
         </>
       )}

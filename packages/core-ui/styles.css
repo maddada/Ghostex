@@ -345,7 +345,9 @@ body {
  * CDXC:SquareTheme 2026-05-29:
  * The app chrome now uses squared controls everywhere. Keep this as a final
  * theme override so shadcn/Base UI primitives and older bespoke sidebar
- * controls share the same zero-radius treatment.
+ * controls share the same zero-radius treatment. Select popups and their rows
+ * are deliberately excluded: they are portaled outside modal scopes, so their
+ * shared primitive must retain the app's rounded dropdown geometry everywhere.
  */
 :is(
   button,
@@ -371,8 +373,6 @@ body {
   [data-slot='field-label'],
   [data-slot='input-group'],
   [data-slot='popover-content'],
-  [data-slot='select-content'],
-  [data-slot='select-item'],
   [data-slot='select-trigger'],
   [data-slot='slider-thumb'],
   [data-slot='slider-track'],
@@ -399,6 +399,20 @@ body {
   .workspace-theme-menu-item
 ) {
   border-radius: 0;
+}
+
+/*
+ * CDXC:RoundedSelectDropdowns 2026-08-26:
+ * Base UI portals select popups under <body>, where the modal's --radius and
+ * --settings-radius-* tokens do not inherit. Keep the shared select geometry
+ * explicit here so every app select has the same rounded popup and rows.
+ */
+[data-slot='select-content'] {
+  border-radius: 8px;
+}
+
+[data-slot='select-item'] {
+  border-radius: 6px;
 }
 
 .app-modal-host-body [data-slot='dialog-content'],
@@ -954,18 +968,6 @@ body {
   white-space: nowrap;
 }
 
-/*
- CDXC:StashedPromptSessionAssociation 2026-08-24:
- The origin-scope strip sits directly above the tag rail and shares its
- horizontal padding, so search, scope, and tags read as one stack of filters
- rather than three unrelated bars. The rail below draws the only hairline.
-*/
-.ghostex-stashed-prompt-scope-row {
-  align-items: center;
-  display: flex;
-  padding: 8px 10px 0;
-}
-
 .ghostex-stashed-prompt-actions {
   align-items: center;
   display: none;
@@ -1034,96 +1036,41 @@ body {
   color: var(--foreground);
 }
 
-/*
- CDXC:StashedPromptTags 2026-08-23:
- The tag rail sits between the search field and the list: one horizontally
- scrollable row of pills, so the whole tag vocabulary stays visible while
- scanning and picking one costs no menu round trip. The scrollbar is hidden and
- replaced by a right-edge fade, because a 10px native bar under a 26px pill row
- doubles the strip's height for no information.
-*/
-.ghostex-stashed-prompt-tag-rail-wrap {
+/* Project, tag, create-tag, and Add Prompt now share one compact filter row. */
+.ghostex-stashed-prompt-toolbar {
   align-items: center;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   display: flex;
   gap: 6px;
   padding: 8px 10px;
-  position: relative;
 }
 
-.ghostex-stashed-prompt-tag-rail {
-  align-items: center;
-  display: flex;
-  flex: 1 1 auto;
-  gap: 6px;
+.ghostex-stashed-prompt-project-filter,
+.ghostex-stashed-prompt-tag-filter {
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.ghostex-stashed-prompt-tag-rail::-webkit-scrollbar {
-  display: none;
+.ghostex-stashed-prompt-project-filter {
+  flex: 0 1 180px;
 }
 
-/*
- The fade sits just inside the pinned "+" so a rail that scrolls reads as
- continuing rather than ending on a clipped pill.
-*/
-.ghostex-stashed-prompt-tag-rail-wrap::after {
-  background: linear-gradient(90deg, transparent, var(--app-dropdown-background, var(--app-modal-background)) 82%);
-  bottom: 8px;
-  content: '';
-  pointer-events: none;
-  position: absolute;
-  right: 42px;
-  top: 8px;
-  width: 30px;
+.ghostex-stashed-prompt-tag-filter {
+  flex: 0 1 160px;
 }
 
-.ghostex-stashed-prompt-tag-pill {
-  align-items: center;
-  appearance: none;
-  background: color-mix(in srgb, var(--foreground) 3%, transparent);
-  border: 1px solid var(--border);
+.ghostex-stashed-prompt-add-button {
+  margin-left: auto;
+}
+
+.ghostex-stashed-prompt-select-tag-dot {
+  background: var(--ghostex-tag-color);
   border-radius: 9999px;
-  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
-  cursor: pointer;
-  display: inline-flex;
   flex: 0 0 auto;
-  font-family: inherit;
-  font-size: 12.5px;
-  gap: 6px;
-  height: 26px;
-  line-height: 1;
-  padding: 0 10px;
-  transition:
-    background 110ms ease,
-    border-color 110ms ease,
-    color 110ms ease;
-  white-space: nowrap;
+  height: 7px;
+  width: 7px;
 }
 
-.ghostex-stashed-prompt-tag-pill:hover,
-.ghostex-stashed-prompt-tag-pill:focus-visible {
-  background: color-mix(in srgb, var(--foreground) 8%, transparent);
-  color: var(--foreground);
-  outline: none;
-}
-
-.ghostex-stashed-prompt-tag-pill[data-active='true'] {
-  background: color-mix(in srgb, var(--ghostex-tag-color) 22%, transparent);
-  border-color: color-mix(in srgb, var(--ghostex-tag-color) 52%, transparent);
-  color: var(--foreground);
-}
-
-.ghostex-stashed-prompt-tag-pill-add {
-  border-style: dashed;
-  flex: 0 0 auto;
-  justify-content: center;
-  padding: 0;
-  width: 26px;
-}
-
+/* Row tag menus still use the compact dot and Favorites star. */
 .ghostex-stashed-prompt-tag-dot {
   background: var(--ghostex-tag-color);
   border-radius: 9999px;
@@ -1132,46 +1079,9 @@ body {
   width: 7px;
 }
 
-/*
- CDXC:StashedPromptTags 2026-08-23:
- "No tag" is the absence of a tag, so it wears a hollow dot and stays neutral
- when selected rather than borrowing a tag color it does not have.
-*/
-.ghostex-stashed-prompt-tag-pill-untagged .ghostex-stashed-prompt-tag-dot {
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--muted-foreground) 70%, transparent);
-}
-
-.ghostex-stashed-prompt-tag-pill-untagged[data-active='true'] {
-  background: color-mix(in srgb, var(--foreground) 14%, transparent);
-  border-color: color-mix(in srgb, var(--foreground) 34%, transparent);
-}
-
-.ghostex-stashed-prompt-tag-pill-untagged[data-active='true'] .ghostex-stashed-prompt-tag-dot {
-  border-color: color-mix(in srgb, var(--foreground) 70%, transparent);
-}
-
 .ghostex-stashed-prompt-tag-star {
   color: var(--ghostex-tag-color);
   flex: 0 0 auto;
-}
-
-.ghostex-stashed-prompt-tag-count {
-  color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ghostex-stashed-prompt-tag-pill[data-active='true'] .ghostex-stashed-prompt-tag-count {
-  color: color-mix(in srgb, var(--foreground) 70%, transparent);
-}
-
-.ghostex-stashed-prompt-tag-rail-separator {
-  background: var(--border);
-  flex: 0 0 auto;
-  height: 15px;
-  margin: 0 2px;
-  width: 1px;
 }
 
 .ghostex-stashed-prompt-tag-error {
@@ -1318,9 +1228,25 @@ body {
   display: grid;
   flex: 1 1 auto;
   gap: 10px;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   min-height: 0;
   padding: 9px;
+}
+
+.ghostex-stashed-prompt-editor[data-editing='true'] {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+
+.ghostex-stashed-prompt-editor-metadata {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ghostex-stashed-prompt-editor-metadata [data-slot='field'],
+.ghostex-stashed-prompt-editor-metadata [data-slot='select-trigger'] {
+  min-width: 0;
+  width: 100%;
 }
 
 .ghostex-stashed-prompt-editor-heading {
@@ -1651,6 +1577,10 @@ body {
   margin-right: auto;
 }
 
+.ghostex-settings-shadcn .first-launch-setup-footer-error {
+  color: var(--destructive);
+}
+
 .ghostex-settings-shadcn .first-launch-onb-page {
   display: flex;
   flex-direction: column;
@@ -1720,7 +1650,7 @@ body {
 .ghostex-settings-shadcn .first-launch-onb-card h3 {
   align-items: center;
   display: flex;
-  font-size: 0.84375rem;
+  font-size: 0.96875rem;
   font-weight: 500;
   gap: 0.375rem;
   margin: 0.125rem 0 0.3125rem;
@@ -1728,7 +1658,7 @@ body {
 
 .ghostex-settings-shadcn .first-launch-onb-card p {
   color: color-mix(in srgb, var(--foreground) 64%, transparent);
-  font-size: 0.78125rem;
+  font-size: 0.90625rem;
   line-height: 1.5;
   margin: 0;
 }
@@ -1811,39 +1741,6 @@ body {
   flex-wrap: wrap;
   gap: 0.375rem;
   margin-top: 0.625rem;
-}
-
-.ghostex-settings-shadcn .first-launch-onb-switch {
-  background: rgba(255, 255, 255, 0.12);
-  border: 0;
-  border-radius: var(--settings-radius-pill);
-  cursor: pointer;
-  flex: 0 0 auto;
-  height: 1.125rem;
-  padding: 0;
-  position: relative;
-  transition: background-color 120ms ease;
-  width: 2rem;
-}
-
-.ghostex-settings-shadcn .first-launch-onb-switch::after {
-  background: #ffffff;
-  border-radius: 50%;
-  content: '';
-  height: 0.875rem;
-  left: 0.125rem;
-  position: absolute;
-  top: 0.125rem;
-  transition: left 120ms ease;
-  width: 0.875rem;
-}
-
-.ghostex-settings-shadcn .first-launch-onb-switch[data-on='true'] {
-  background: var(--settings-accent);
-}
-
-.ghostex-settings-shadcn .first-launch-onb-switch[data-on='true']::after {
-  left: 1rem;
 }
 
 .ghostex-settings-shadcn .first-launch-onb-flat-details {
@@ -2957,31 +2854,6 @@ body {
   overflow: hidden;
 }
 
-.ghostex-settings-shadcn .first-launch-setup-video-shell {
-  /*
-   * CDXC:FirstLaunchTutorialVideo 2026-08-19:
-   * The tutorial player is the first page of the first-run modal instead of a
-   * second window. The shell owns the 16/9 box and caps its width so the page
-   * still fits the 1120x850 setup window without scrolling.
-   */
-  aspect-ratio: 16 / 9;
-  background: #000;
-  border: 1px solid var(--settings-hairline);
-  border-radius: var(--settings-radius-section);
-  margin-inline: auto;
-  max-width: 760px;
-  min-width: 0;
-  overflow: hidden;
-  width: 100%;
-}
-
-.ghostex-settings-shadcn .first-launch-setup-video {
-  border: 0;
-  display: block;
-  height: 100%;
-  width: 100%;
-}
-
 .ghostex-settings-shadcn .first-launch-setup-guide-visual {
   aspect-ratio: 16 / 9;
   display: block;
@@ -3326,7 +3198,21 @@ body {
  CDXC:GhostexTutorialVideo 2026-08-03:
  The native child-window title owns the tutorial heading. Collapse the copied
  feature-stage title row so the video uses the entire body without repeating it.
+
+ CDXC:UnifiedAppModal 2026-08-26:
+ The walkthrough surround is an app-modal shell, so it keeps the shared window
+ chrome it already inherits from `.ghostex-settings-shadcn[data-slot='dialog-content']`
+ (a #0e0e0e surface, a hairline edge, and 12px corners). Inset the player by the
+ shell's 12px section rhythm instead of the copied 20px carousel padding, and
+ scope the section-radius token inside the body so the video panel takes the 8px
+ control radius rather than repeating the window's own corner radius.
 */
+.ghostex-settings-shadcn .watch-ghostex-video-body {
+  --settings-radius-section: var(--settings-radius-control);
+  gap: 0;
+  padding: 12px;
+}
+
 .ghostex-settings-shadcn .watch-ghostex-video-stage {
   grid-template-rows: minmax(0, 1fr);
 }
@@ -4329,7 +4215,7 @@ body {
 
 [data-slot='segmented-control'] [data-slot='segmented-control-item'][data-pressed],
 [data-slot='segmented-control'] [data-slot='segmented-control-item'][aria-pressed='true'] {
-  background: var(--settings-raised-hover, var(--accent));
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
   color: var(--foreground);
 }
 
@@ -4622,46 +4508,37 @@ body {
   white-space: nowrap;
 }
 
-.update-available-modal {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  max-height: min(520px, calc(100vh - 32px));
-  width: min(600px, calc(100vw - 32px));
-}
+/*
+ * CDXC:UnifiedAppModal 2026-08-26:
+ * The update modal renders inside AppModalShell now, so its surface, width,
+ * title scale, and footer buttons come from `.gx-app-modal`. The old
+ * near-fullscreen shell rule and the bespoke bordered notes box / action row
+ * are gone; only the release-notes scroll body stays modal-specific.
+ */
+.update-available-modal .update-available-modal-notes {
+  --chat-code-size: 0.8125rem;
 
-.update-available-modal-version,
-.update-available-modal-portable {
-  color: var(--muted-foreground);
-  font-size: 0.82rem;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.update-available-modal-notes {
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
   color: var(--foreground);
-  flex: 1 1 auto;
-  font-size: 0.875rem;
+  font-size: 13px;
   line-height: 1.55;
-  min-height: 180px;
+  max-height: 260px;
   overflow: auto;
-  padding: 0.9rem 1rem;
+  overscroll-behavior: contain;
 }
 
-.update-available-modal-notes > :first-child {
+.update-available-modal .update-available-modal-notes > :first-child {
   margin-top: 0;
 }
 
-.update-available-modal-notes > :last-child {
+.update-available-modal .update-available-modal-notes > :last-child {
   margin-bottom: 0;
 }
 
-.update-available-modal-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
+.update-available-modal .update-available-modal-portable {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
 }
 
 /*
@@ -4926,8 +4803,8 @@ body {
 
 /*
  * Both trailing controls live inside the 32px search field, so they are 24px
- * chips on the raised tone. The scope toggle is a state, not a command, so the
- * selected state is the accent label rather than a second filled control.
+ * chips on the raised tone. The scope toggle keeps one fixed width so switching
+ * between All Sessions and Closed does not move the adjacent filter button.
  */
 .quick-access-surface .quick-access-session-scope-toggle {
   align-self: center;
@@ -4937,6 +4814,7 @@ body {
   gap: 5px;
   height: 24px;
   padding: 0 7px;
+  width: 116px;
 }
 
 .quick-access-surface .quick-access-session-scope-toggle:hover,
@@ -4947,12 +4825,13 @@ body {
 
 .quick-access-surface .quick-access-session-scope-toggle[data-selected='true'] {
   background: transparent;
-  color: var(--ghostex-accent, #38bdf8);
+  color: var(--muted-foreground, var(--app-muted));
 }
 
 .quick-access-surface .quick-access-session-scope-toggle[data-selected='true']:hover,
 .quick-access-surface .quick-access-session-scope-toggle[data-selected='true']:focus-visible {
   background: var(--settings-raised-hover);
+  color: var(--foreground);
 }
 
 .quick-access-surface .quick-access-session-scope-toggle kbd {
@@ -5024,42 +4903,14 @@ body {
 
 /* Saved Prompts ----------------------------------------------------------- */
 
-.quick-access-surface .ghostex-stashed-prompt-scope-row {
-  padding: 8px 6px 0;
-}
-
 .quick-access-surface .ghostex-stashed-prompt-session-chip {
   background: var(--settings-raised);
   border-color: var(--settings-hairline);
 }
 
-.quick-access-surface .ghostex-stashed-prompt-tag-rail-wrap {
+.quick-access-surface .ghostex-stashed-prompt-toolbar {
   border-bottom: 1px solid var(--settings-hairline);
-  padding: 6px 6px 8px;
-}
-
-.quick-access-surface .ghostex-stashed-prompt-tag-rail-wrap::after {
-  background: linear-gradient(90deg, transparent, var(--settings-surface) 82%);
-}
-
-.quick-access-surface .ghostex-stashed-prompt-tag-pill {
-  background: var(--settings-raised);
-  border-color: var(--settings-hairline);
-  font-size: 12px;
-  height: 24px;
-}
-
-.quick-access-surface .ghostex-stashed-prompt-tag-pill:hover,
-.quick-access-surface .ghostex-stashed-prompt-tag-pill:focus-visible {
-  background: var(--settings-raised-hover);
-}
-
-.quick-access-surface .ghostex-stashed-prompt-tag-pill-add {
-  width: 24px;
-}
-
-.quick-access-surface .ghostex-stashed-prompt-tag-rail-separator {
-  background: var(--settings-hairline);
+  padding: 6px;
 }
 
 .ghostex-command-palette-dialog .ghostex-stashed-prompt-item {
@@ -5118,7 +4969,7 @@ body {
 }
 
 .ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-menu-item[data-active='true'] {
-  color: var(--ghostex-accent, #38bdf8);
+  color: #ffffff;
 }
 
 .ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-popover-input {
