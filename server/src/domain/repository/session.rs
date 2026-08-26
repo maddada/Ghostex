@@ -25,11 +25,24 @@ impl<'a> DomainRepository<'a> {
         let project_id = read_string_field(&project, "projectId")?;
         let session_id = self.create_unique_session_id(&project_id)?;
         let timestamp = now_iso();
-        let normalized_params = if create_agent_session {
+        let mut normalized_params = if create_agent_session {
             normalize_create_agent_session_params(params)
         } else {
             params.clone()
         };
+        /*
+        A project-backed terminal starts in the project directory whenever the
+        caller does not request a more specific cwd. Persist that effective
+        launch directory on the session row as well: Linux shells commonly
+        publish only its final path component as their OSC title, and title
+        ingestion needs the daemon-owned cwd to distinguish that shell label
+        from a real terminal or agent session name.
+        */
+        if read_optional_text(normalized_params.get("cwd")).is_none() {
+            if let Some(project_path) = read_optional_text(project.get("path")) {
+                normalized_params.insert("cwd".to_string(), Value::String(project_path));
+            }
+        }
         let session = normalize_session_input(
             &self.server_id,
             &project_id,
@@ -58,6 +71,22 @@ impl<'a> DomainRepository<'a> {
             )
             .map_err(sql_error)?;
         self.record_id_allocation("session", &project_id, &session_id, &timestamp)?;
+        /*
+        CDXC:AnonymousAnalytics 2026-08-26:
+        The one INSERT INTO sessions in the crate, so every route that creates a
+        session — chat, terminal, worktree, fork, board worker, automation —
+        counts exactly once here, with no per-caller instrumentation to keep in
+        sync.
+
+        Only AGENT sessions are reported. A plain terminal has no `agentId`, and
+        emitting those as `custom` would swamp the agent-CLI distribution this
+        event exists to measure with rows that carry no agent at all. Unknown
+        (user-authored) agent ids still collapse to `custom` inside the emitter,
+        so the id itself never leaves the machine.
+        */
+        if let Some(agent_id) = read_optional_text(session.get("agentId")) {
+            crate::telemetry::session_started(Some(&agent_id));
+        }
         Ok(session)
     }
 

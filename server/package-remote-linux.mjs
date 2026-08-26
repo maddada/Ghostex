@@ -256,11 +256,31 @@ async function buildPackage({ config, outputDir, workRoot }) {
   await cp(stageDir, outputDir, { recursive: true });
 }
 
+/*
+CDXC:AnonymousAnalytics 2026-08-26:
+The marketing version server/build.rs bakes into the binary. The gxserver crate's
+own Cargo version is the placeholder 0.1.0 and has never tracked releases, so
+without this every remote package would report the same `server_version` forever.
+Resolution matches the desktop scripts: an explicit env wins, otherwise the root
+package.json is the source of truth.
+*/
+async function resolveMarketingVersion() {
+  const explicit = (process.env.GHOSTEX_GPUI_MARKETING_VERSION || '').trim();
+  if (explicit) {
+    return explicit;
+  }
+  const manifest = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
+  if (!manifest.version) {
+    throw new Error('Could not read the marketing version from the root package.json.');
+  }
+  return manifest.version;
+}
+
 async function buildGxserver(config) {
   await run(
     'cargo',
     ['build', '--release', '--manifest-path', path.join(gxserverRoot, 'Cargo.toml'), '--target', config.rustTarget],
-    { cwd: repoRoot }
+    { cwd: repoRoot, env: { GHOSTEX_GPUI_MARKETING_VERSION: await resolveMarketingVersion() } }
   );
   const releaseDir = path.join(cargoTargetRoot(gxserverRoot), config.rustTarget, 'release');
   return {

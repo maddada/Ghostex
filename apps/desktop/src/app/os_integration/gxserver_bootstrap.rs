@@ -166,6 +166,15 @@ impl GhostexGpuiApp {
                         this.replay_sidebar_gxserver_bootstrap(cx);
                         this.start_gpui_portless_setup_prompt_check(cx);
                         this.start_gpui_first_run_onboarding(cx);
+                        /*
+                        CDXC:AnonymousAnalytics 2026-08-26:
+                        `app.launched` is a loopback ping to the daemon we just
+                        confirmed healthy, so it can only fire once the token
+                        and listener exist. The helper latches per process, so
+                        firing it from both healthy branches still yields one
+                        event per launch.
+                        */
+                        record_gpui_app_launched_telemetry(cx.background_executor());
                         cx.notify();
                     });
                     return;
@@ -332,6 +341,7 @@ impl GhostexGpuiApp {
                             when onboarding already ran.
                             */
                             this.start_gpui_first_run_onboarding(cx);
+                            record_gpui_app_launched_telemetry(cx.background_executor());
                         });
                         return;
                     }

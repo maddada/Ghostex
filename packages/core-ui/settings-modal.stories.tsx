@@ -192,7 +192,7 @@ function SettingsModalStory({
 }
 
 const meta = {
-  title: 'Sidebar/Settings Modal',
+  title: 'Modals/App Host/Settings',
   parameters: {
     layout: 'fullscreen',
   },
@@ -301,6 +301,19 @@ export const Theming: Story = {
       await waitFor(() => {
         expect(body.getByText('Accent Color')).toBeTruthy();
       });
+    });
+  },
+  render: () => <SettingsModalStory />,
+};
+
+export const CustomColorPicker: Story = {
+  play: async ({ canvasElement, step }) => {
+    const body = within(canvasElement.ownerDocument.body);
+
+    await step('open the nested color picker dialog', async () => {
+      await userEvent.click(await body.findByRole('button', { name: 'Appearance' }));
+      await userEvent.click(await body.findByRole('button', { name: 'Accent Color custom color picker' }));
+      await body.findByRole('dialog', { name: 'Pick Color' });
     });
   },
   render: () => <SettingsModalStory />,

@@ -174,6 +174,19 @@ pub(crate) fn hold_sessions_awake(
 ) -> std::result::Result<Value, DomainStateError> {
     let holder_id =
         session_keep_awake::normalize_holder_id(params.get("holderId").and_then(Value::as_str));
+    /*
+    CDXC:AnonymousAnalytics 2026-08-26:
+    The mobile app reaches gxserver over SSH through the `ghostex` CLI, which
+    sends no client header of its own, so its keep-awake holder id (`mobile-…`,
+    minted in `apps/mobile/app/src/terminal/keepAwake.ts`) is the only signal on
+    the wire that says "a mobile client is attached". Only the PREFIX is read;
+    the holder id itself is an opaque routing key and never leaves the machine.
+    Throttled to one per hour per client kind by the emitter, which matters here
+    because keep-awake leases renew continuously.
+    */
+    if holder_id.starts_with("mobile-") {
+        crate::telemetry::client_connected("mobile");
+    }
     let ttl_ms = session_keep_awake::normalize_ttl_ms(params.get("ttlMs").and_then(Value::as_i64));
     let release = params.get("release").and_then(Value::as_bool) == Some(true);
     let requested = params

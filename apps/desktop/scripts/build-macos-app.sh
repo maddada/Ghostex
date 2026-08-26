@@ -1266,6 +1266,10 @@ stage_gpui_sparkle_framework_if_available
 # staples the app for distribution outside a DMG release.
 sign_gpui_app_bundle
 notarize_and_staple_gpui_app_if_requested
+# rsync of this bundle's contents does not copy wrapper Finder flags, so the
+# staged .app must itself be a package. Launch Services treats a missing
+# bundle bit as kLSNoExecutableErr.
+/usr/bin/SetFile -a B "$APP_PATH"
 
 # CDXC:GPUIMacBundlePackaging 2026-08-03:
 # The GPUI macOS app retains CEF helper apps in every bundle. Development apps

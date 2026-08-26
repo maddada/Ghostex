@@ -51,6 +51,15 @@ pub(crate) fn handle_web_bootstrap(
             );
         }
     };
+    /*
+    CDXC:AnonymousAnalytics 2026-08-26:
+    `/api/webBootstrap` is the browser handshake — it is how the web app gets
+    its auth token, and nothing else calls it — so a successful one is the
+    definitive "a web client attached" signal. The emitter throttles to one per
+    hour per client kind, which is what keeps a reloading tab from counting as
+    a hundred users.
+    */
+    crate::telemetry::client_connected("web");
     routed_json(
         endpoint_path,
         StatusCode::OK,

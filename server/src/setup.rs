@@ -43,12 +43,20 @@ struct SetupOptions {
     install_root: PathBuf,
     release_dir: PathBuf,
     upload_path: Option<PathBuf>,
+    /*
+    CDXC:AnonymousAnalytics 2026-08-26:
+    Declared by the installer, never guessed here. `gxserver setup` runs for BOTH
+    remote SSH installs and the Windows desktop app's local WSL install, so the
+    subcommand itself is not evidence of a remote role — only the caller knows.
+    */
+    analytics_role_is_remote: bool,
 }
 
 fn parse_setup_args(args: &[String]) -> Result<SetupOptions> {
     let mut install_root: Option<PathBuf> = None;
     let mut release_dir: Option<PathBuf> = None;
     let mut upload_path: Option<PathBuf> = None;
+    let mut analytics_role: Option<String> = None;
     let mut index = 0;
     while index < args.len() {
         let arg = args[index].as_str();
@@ -58,14 +66,32 @@ fn parse_setup_args(args: &[String]) -> Result<SetupOptions> {
                 .ok_or_else(|| anyhow!("Missing value for {name}"))?;
             Ok(PathBuf::from(value))
         };
+        let take_text = |name: &str| -> Result<String> {
+            args.get(index + 1)
+                .cloned()
+                .ok_or_else(|| anyhow!("Missing value for {name}"))
+        };
         match arg {
             "--install-root" => install_root = Some(take_value("--install-root")?),
             "--release-dir" => release_dir = Some(take_value("--release-dir")?),
             "--upload-path" => upload_path = Some(take_value("--upload-path")?),
+            "--analytics-role" => analytics_role = Some(take_text("--analytics-role")?),
             other => return Err(anyhow!("Unknown gxserver setup argument: {other}")),
         }
         index += 2;
     }
+    let analytics_role_is_remote = match analytics_role.as_deref().map(str::trim) {
+        None => false,
+        Some(value) if value.eq_ignore_ascii_case(crate::telemetry::role::REMOTE_ROLE_VALUE) => {
+            true
+        }
+        Some(value) if value.eq_ignore_ascii_case("local") => false,
+        Some(other) => {
+            return Err(anyhow!(
+                "Unknown gxserver setup --analytics-role value: {other}"
+            ))
+        }
+    };
     let install_root = match install_root {
         Some(value) => value,
         None => default_install_root()?,
@@ -86,6 +112,7 @@ fn parse_setup_args(args: &[String]) -> Result<SetupOptions> {
         install_root,
         release_dir,
         upload_path,
+        analytics_role_is_remote,
     })
 }
 
@@ -111,6 +138,17 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
         .ok_or_else(|| anyhow!("Release directory has no usable name."))?
         .to_string();
     let package_link = options.install_root.join("package");
+
+    /*
+    CDXC:AnonymousAnalytics 2026-08-26:
+    Written BEFORE the old daemon is stopped and the new package activated, so
+    no gxserver this install is responsible for can ever run without the marker
+    already on disk. It lands in the state dir, which upgrades never touch, so
+    one install covers every later restart, reboot, and package upgrade.
+    */
+    if options.analytics_role_is_remote {
+        crate::telemetry::role::write_remote_marker(&crate::paths::get_gxserver_paths(None));
+    }
 
     stop_existing_gxserver(&package_link);
 
@@ -425,6 +463,7 @@ mod tests {
             parsed.upload_path,
             Some(PathBuf::from("/tmp/root/upload.tar.gz"))
         );
+        assert!(!parsed.analytics_role_is_remote);
         assert!(parse_setup_args(&["--bogus".to_string()]).is_err());
     }
 }

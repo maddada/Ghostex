@@ -440,6 +440,15 @@ pub(crate) fn gpui_remote_gxserver_install_command(release_id: &str) -> String {
     binary exists: extract the upload and invoke setup. The app and its
     remote packages are version-paired through the sealed asset manifest, so
     the uploaded gxserver always understands `setup`.
+
+    CDXC:AnonymousAnalytics 2026-08-26:
+    `--analytics-role remote` is what makes an SSH helper permanently silent.
+    Every remote install and every remote upgrade runs this one command, and
+    setup persists the role in the remote gxserver's state dir, so the opt-out
+    outlives this SSH session and applies to launch routes the desktop never
+    issues (a `gx` verb typed in a remote pane, an agent shelling out to the
+    CLI, the daemon restarting itself). Do NOT pass this from any local install
+    path — the Windows app's WSL install runs the same subcommand.
     */
     format!(
         r#"set -eu
@@ -456,7 +465,7 @@ release_dir="$install_root/releases/{release_id}"
 mkdir -p "$release_dir"
 tar -xzf "$upload_path" -C "$release_dir"
 chmod 755 "$release_dir/bin/gxserver"
-"$release_dir/bin/gxserver" setup --install-root "$install_root" --release-dir "$release_dir" --upload-path "$upload_path"
+"$release_dir/bin/gxserver" setup --install-root "$install_root" --release-dir "$release_dir" --upload-path "$upload_path" --analytics-role remote
 {token_read}"#
     )
 }

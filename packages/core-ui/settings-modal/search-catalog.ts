@@ -552,6 +552,23 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Action Completion Sound',
       },
     ]),
+    /*
+     * CDXC:AnonymousAnalytics 2026-08-26:
+     * Searching for privacy, analytics, telemetry, or tracking must land on the
+     * opt-out switch.
+     */
+    privacy: getSettingsSectionSearch(settingsSearchQuery, 'Privacy', [
+      {
+        key: 'analyticsEnabled',
+        options: [
+          { label: 'Telemetry', value: 'telemetry' },
+          { label: 'Tracking', value: 'tracking' },
+        ],
+        subtitle:
+          'Share anonymous usage data (OS, feature usage, counts). Never prompts, file paths, project names, or anything personal.',
+        title: 'Anonymous usage analytics',
+      },
+    ]),
     storage: getSettingsSectionSearch(settingsSearchQuery, 'Storage', [
       {
         key: 'ghostexFolderStats',
@@ -870,6 +887,7 @@ export function getMainSettingsGroupSearch(settingsSearchQuery: string, settings
     ]),
     statusIndicators: settingsSearch.statusIndicators,
     notifications: getGroupedSettingsSectionSearch(settingsSearchQuery, 'Notifications', [settingsSearch.sounds]),
+    privacy: settingsSearch.privacy,
     system: getGroupedSettingsSectionSearch(settingsSearchQuery, 'System', [
       settingsSearch.autoSleep,
       settingsSearch.power,
@@ -933,6 +951,11 @@ export function getMainSettingsSectionNavigation(mainSettingsGroupSearch: MainSe
       id: 'notifications',
       searchResult: mainSettingsGroupSearch.notifications,
       title: 'Notifications',
+    },
+    {
+      id: 'privacy',
+      searchResult: mainSettingsGroupSearch.privacy,
+      title: 'Privacy',
     },
     { id: 'advanced', searchResult: mainSettingsGroupSearch.advanced, title: 'Advanced' },
   ];

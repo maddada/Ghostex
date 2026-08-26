@@ -209,6 +209,12 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   showNotificationOnTerminalBell: false,
   createSessionOnSidebarDoubleClick: false,
   enableSessionParking: false,
+  /**
+   * CDXC:AnonymousAnalytics 2026-08-26:
+   * Anonymous usage analytics are on by default and opt-out. Nothing personal,
+   * no prompts, no paths, no project names.
+   */
+  analyticsEnabled: true,
   debuggingMode: false,
   diagnosticLogging: {
     scenarios: DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS,

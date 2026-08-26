@@ -415,6 +415,8 @@ export function SettingsModal({
   const sidebarTagsSectionRef = useRef<HTMLDivElement>(null);
   const soundsSectionRef = useRef<HTMLDivElement>(null);
   const storageSectionRef = useRef<HTMLDivElement>(null);
+  // CDXC:AnonymousAnalytics 2026-08-26: Anchor for the always-visible Privacy section.
+  const privacySectionRef = useRef<HTMLDivElement>(null);
   const hotkeyActionsSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyGeneralSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyNavigationSectionRef = useRef<HTMLDivElement>(null);
@@ -724,6 +726,7 @@ export function SettingsModal({
     editor: editorSectionRef,
     notifications: soundsSectionRef,
     power: powerSectionRef,
+    privacy: privacySectionRef,
     sessionCards: sessionCardsSectionRef,
     sidebar: sidebarSectionRef,
     sidebarTags: sidebarTagsSectionRef,
@@ -821,6 +824,7 @@ export function SettingsModal({
     pendingNavigationPersistTimeoutRef,
     pendingTimeoutRef,
     powerSectionRef,
+    privacySectionRef,
     sessionCardsSectionRef,
     setActiveMainSettingsSectionId,
     setActiveTabState,
@@ -1321,8 +1325,10 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'createSessionOnSidebarDoubleClick') ? (
                               /*
-                               * CDXC:SidebarSessions 2026-06-16-09:20:
-                               * Creating sessions by double-clicking empty sidebar space is a low-frequency interaction preference, so hide it behind Show Advanced while keeping rename-on-card-double-click as a normal sidebar behavior setting.
+                               * CDXC:SidebarSessions 2026-08-26:
+                               * Creating sessions from empty space and renaming sessions from
+                               * cards are both low-frequency double-click preferences, so both
+                               * live behind Show Advanced.
                                */
                               <ToggleField
                                 checked={draft.createSessionOnSidebarDoubleClick}
@@ -2592,6 +2598,28 @@ export function SettingsModal({
                                 onChange={(value) => updateDraft('actionCompletionSound', value)}
                                 onPlay={onPlayCompletionSound}
                                 value={draft.actionCompletionSound}
+                              />
+                            ) : null}
+                          </SettingsSection>
+                        ) : null}
+
+                        {/*
+                         * CDXC:AnonymousAnalytics 2026-08-26:
+                         * The analytics opt-out is its own always-visible
+                         * Privacy section. It must never sit behind Show
+                         * Advanced or the Experimental gate: a user who wants
+                         * to turn analytics off has to be able to find the
+                         * switch by browsing Settings.
+                         */}
+                        {mainSectionVisible('privacy', settingsSearch.privacy) ? (
+                          <SettingsSection sectionRef={privacySectionRef} title='Privacy'>
+                            {mainSettingVisible(settingsSearch.privacy, 'analyticsEnabled') ? (
+                              <ToggleField
+                                checked={draft.analyticsEnabled}
+                                description='Share anonymous usage data (OS, feature usage, counts). Never prompts, file paths, project names, or anything personal.'
+                                label='Anonymous usage analytics'
+                                {...getSettingModificationProps('analyticsEnabled')}
+                                onChange={(checked) => updateDraft('analyticsEnabled', checked)}
                               />
                             ) : null}
                           </SettingsSection>

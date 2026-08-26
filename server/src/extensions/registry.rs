@@ -7,11 +7,11 @@ use std::{
 use crate::paths::GxserverPaths;
 
 use super::{
-    ExtensionBadge, ExtensionCatalogSnapshot, ExtensionError, ExtensionLaunchContext,
-    ExtensionResult, ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch,
-    InstalledExtension, activate_staged_payload, apply_state_patch, catalog_zip_url,
-    default_store_entry, fetch_catalog, read_manifest, read_store, stage_local_payload,
-    stage_zip_payload, store_entry_for_install, validate_extension_id, write_store,
+    activate_staged_payload, apply_state_patch, catalog_zip_url, default_store_entry,
+    fetch_catalog, read_manifest, read_store, stage_local_payload, stage_zip_payload,
+    store_entry_for_install, validate_extension_id, write_store, ExtensionBadge,
+    ExtensionCatalogSnapshot, ExtensionError, ExtensionLaunchContext, ExtensionResult,
+    ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch, InstalledExtension,
 };
 
 #[derive(Clone)]

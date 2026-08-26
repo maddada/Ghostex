@@ -2,13 +2,13 @@ use std::{fs, path::PathBuf};
 
 use axum::{
     body::Body,
-    http::{HeaderValue, Response, StatusCode, header},
+    http::{header, HeaderValue, Response, StatusCode},
     response::IntoResponse,
 };
 
 use crate::server::RoutedResponse;
 
-use super::{ExtensionRegistry, validate_extension_id};
+use super::{validate_extension_id, ExtensionRegistry};
 
 pub(crate) async fn serve_extension_static(
     registry: ExtensionRegistry,

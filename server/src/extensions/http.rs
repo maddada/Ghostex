@@ -31,6 +31,15 @@ pub(crate) async fn handle_extensions_http(
             );
         }
     };
+    /*
+    CDXC:AnonymousAnalytics 2026-08-26:
+    Store-vs-local is only knowable from the REQUEST — `install_local`,
+    `install_from_catalog`, and `install_zip` converge on one `activate_install`
+    that has already lost the provenance — so it is resolved here, before the
+    params move onto the blocking worker. The extension's ID is deliberately not
+    read: extension ids are not ours to report.
+    */
+    let install_source = extension_install_source(&endpoint_path, &params);
     let registry = state.extension_registry.clone();
     let operation_path = endpoint_path.clone();
     let outcome = tokio::task::spawn_blocking(move || {
@@ -48,13 +57,42 @@ pub(crate) async fn handle_extensions_http(
         )))
     });
     match outcome {
-        Ok(result) => routed_json(
-            Some(endpoint_path),
-            StatusCode::OK,
-            rpc_success(request_id, result),
-        ),
+        Ok(result) => {
+            // Only a SUCCEEDED lifecycle change is counted; a rejected install
+            // is not an install.
+            match endpoint_path.as_str() {
+                "/api/installExtension" => {
+                    if let Some(source) = install_source {
+                        crate::telemetry::extension_installed(source);
+                    }
+                }
+                "/api/uninstallExtension" => crate::telemetry::extension_uninstalled(),
+                _ => {}
+            }
+            routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result),
+            )
+        }
         Err(error) => extension_error_response(endpoint_path, request_id, error),
     }
+}
+
+/// Which install route this request asks for, mirroring the `match` in
+/// [`install_extension`]. A sideloaded directory is `local`; a catalog id, with
+/// or without an explicit signed URL, is `store`.
+fn extension_install_source(
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> Option<&'static str> {
+    if endpoint_path != "/api/installExtension" {
+        return None;
+    }
+    if params.contains_key("localPath") {
+        return Some("local");
+    }
+    params.contains_key("id").then_some("store")
 }
 
 fn dispatch_extension_operation(

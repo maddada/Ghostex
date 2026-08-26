@@ -2911,6 +2911,14 @@ async function main() {
       await runWithHeartbeat('bash tooling/build-remote-gxserver-linux-release.sh --arch all', {
         label: 'remote Linux package build',
         timeoutMs: 30 * 60 * 1000,
+        /*
+         CDXC:AnonymousAnalytics 2026-08-26:
+         The remote packages bake this into gxserver (server/build.rs), exactly
+         like the GPUI leg does for the desktop crate. The gxserver crate's own
+         Cargo version is a 0.1.0 placeholder, so without it every shipped remote
+         daemon would report the same version forever.
+         */
+        env: { ...process.env, GHOSTEX_GPUI_MARKETING_VERSION: version },
       });
       await ensureRemoteGxserverLinuxPackagesReady();
     });

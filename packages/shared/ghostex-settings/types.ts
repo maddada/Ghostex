@@ -347,6 +347,15 @@ export type ghostexSettings = {
    * parked sessions in the ordinary Sessions section again.
    */
   enableSessionParking: boolean;
+  /**
+   * CDXC:AnonymousAnalytics 2026-08-26:
+   * Opt-out switch for the anonymous PostHog usage analytics gxserver sends.
+   * Default true. gxserver reads this key straight out of
+   * native-sidebar-settings.json and treats an absent key as enabled, so the
+   * app never has to write the file before analytics can be gated. Turning it
+   * off stops capture and drops the queue; see docs/ANALYTICS.md.
+   */
+  analyticsEnabled: boolean;
   debuggingMode: boolean;
   /**
    * CDXC:DiagnosticsSettings 2026-06-27-22:07:

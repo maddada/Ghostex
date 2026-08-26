@@ -21,7 +21,8 @@ fi
 
 "$SCRIPT_DIR/prepare-references.sh"
 if [[ ! -x "$REPO_ROOT/build/remote-gxserver-linux/x64/package/bin/gxserver" ]]; then
-	"$REPO_ROOT/tooling/build-remote-gxserver-linux-release.sh" --arch x64
+	GHOSTEX_GPUI_MARKETING_VERSION="$VERSION" \
+		"$REPO_ROOT/tooling/build-remote-gxserver-linux-release.sh" --arch x64
 fi
 GHOSTEX_ON_DEMAND_ASSETS=1 \
 	GHOSTEX_GPUI_MARKETING_VERSION="$VERSION" \

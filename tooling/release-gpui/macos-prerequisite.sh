@@ -69,6 +69,7 @@ runtime)
 		GHOSTEX_REQUIRE_BEADS_SMOKE=1 \
 		GHOSTEX_CODE_SIGN_IDENTITY="${GHOSTEX_CODE_SIGN_IDENTITY:-Developer ID Application: Mohamad Youssef (KTKP595G3B)}" \
 		GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
+		GHOSTEX_GPUI_MARKETING_VERSION="$VERSION" \
 		"$REPO_ROOT/apps/desktop/scripts/prepare-macos-runtime.sh"
 	for required_path in \
 		"apps/desktop/runtime/macos/Web/on-demand-resources.json" \

@@ -356,6 +356,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'enableSessionParking',
       DEFAULT_ghostex_SETTINGS.enableSessionParking
     ),
+    analyticsEnabled: readBoolean(source, 'analyticsEnabled', DEFAULT_ghostex_SETTINGS.analyticsEnabled),
     debuggingMode: readBoolean(source, 'debuggingMode', DEFAULT_ghostex_SETTINGS.debuggingMode),
     diagnosticLogging: normalizeDiagnosticLoggingSettings(source.diagnosticLogging),
     renameSessionOnDoubleClick: readBoolean(

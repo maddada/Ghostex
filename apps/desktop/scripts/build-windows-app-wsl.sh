@@ -322,6 +322,10 @@ EOF
 		exit 1
 	fi
 
+	# CDXC:AnonymousAnalytics 2026-08-26: GHOSTEX_GPUI_MARKETING_VERSION is set
+	# INSIDE the batch rather than exported from WSL, because the WSL->Win32 hop
+	# drops the environment unless the name is also listed in WSLENV. server/build.rs
+	# bakes it in; without it gxserver reports its 0.1.0 placeholder crate version.
 	printf '%s\r\n' \
 		'@echo off' \
 		"set \"PATH=$WINDOWS_CARGO_DIR_WIN;%PATH%\"" \
@@ -330,6 +334,7 @@ EOF
 		"set \"CARGO_TARGET_${WSL_RUST_ENV_SUFFIX}_LINKER=$rust_lld_win\"" \
 		"set \"CARGO_TARGET_${WSL_RUST_ENV_SUFFIX}_RUSTFLAGS=-C linker-flavor=ld.lld\"" \
 		"set \"CARGO_TARGET_DIR=$WSL_GXSERVER_CARGO_OUTPUT_ROOT_WIN\"" \
+		"set \"GHOSTEX_GPUI_MARKETING_VERSION=$RELEASE_VERSION\"" \
 		"cd /d \"$REPO_ROOT_WIN\"" \
 		'if errorlevel 1 exit /b %errorlevel%' \
 		"\"$WINDOWS_RUSTUP_WIN\" target add $WSL_RUST_TARGET" \

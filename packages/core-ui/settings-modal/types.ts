@@ -132,6 +132,13 @@ export type MainSettingsSectionId =
   | 'statusIndicators'
   | 'notifications'
   | 'system'
+  /*
+   * CDXC:AnonymousAnalytics 2026-08-26:
+   * Privacy is its own always-visible General group instead of a row under
+   * Advanced or System, because every one of those sections is advanced-gated
+   * and the analytics opt-out must stay findable without Show Advanced.
+   */
+  | 'privacy'
   | 'advanced';
 
 export type MainSettingsScrollTargetId =
@@ -211,11 +218,11 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'sidebarAutoSettleAfterDays',
     'sidebarSettingsPreset',
     /*
-     * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
-     * Every setting mutated by a sidebar preset must be visible directly below
-     * the preset selector, even when Show Advanced is off. Keep preset-owned
-     * session-card, project-stat, and menu-bar indicator controls in this
-     * Sidebar group so users can inspect and tune exactly what a preset changed.
+     * CDXC:SidebarSettingsPresets 2026-08-26:
+     * Preset-owned session-card and project-stat controls stay directly below
+     * the preset selector when Advanced settings are visible. They remain in
+     * this Sidebar group so users can inspect and tune exactly what a preset
+     * changed without moving the rows away from their owning control.
      *
      * CDXC:SidebarProjectStats 2026-06-16-02:14:
      * Project git-stat display controls belong with Sidebar settings because they change sidebar project rows, not editor behavior.
@@ -339,6 +346,12 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'keepAwakeDeactivateOnUserSwitch',
     'ghostexFolderStats',
   ],
+  /*
+   * CDXC:AnonymousAnalytics 2026-08-26:
+   * The analytics opt-out is deliberately not an advanced row, so it renders in
+   * ordinary Settings browsing.
+   */
+  privacy: ['analyticsEnabled'],
   /*
    * CDXC:DebuggingSettings 2026-06-15-21:34:
    * Debugging controls belong in a dedicated bottom Settings section so support-oriented logging and session metadata copy actions are grouped away from everyday Workspace and Session Cards preferences.
@@ -541,9 +554,10 @@ export const DIAGNOSTIC_LOGGING_GROUPS: readonly ['macOS', 'GPUI', 'gxserver'] =
  * CDXC:SettingsAdvanced 2026-06-16-08:12:
  * Browser feedback, Storage, session-card chrome, Workspace tuning, and Terminal Behavior controls are advanced-only browsing rows because the default General page should stay focused on common setup and daily preferences.
  *
- * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
- * Preset-owned sidebar chrome is no longer advanced-only because users need to
- * see every setting a preset changes directly below the preset selector.
+ * CDXC:SidebarSettingsPresets 2026-08-26:
+ * The detailed presentation toggles changed by sidebar presets are advanced
+ * browsing rows. Search still reveals them, and Show Advanced keeps them
+ * directly below the preset selector for inspecting a preset's effects.
  *
  * CDXC:SettingsTheming 2026-06-16-08:58:
  * Theming controls should remain visible without Show Advanced. Do not mark Theme, Background Contrast, or Background Tint as advanced rows.
@@ -565,15 +579,26 @@ export const DIAGNOSTIC_LOGGING_GROUPS: readonly ['macOS', 'GPUI', 'gxserver'] =
  * Show Advanced persists as a Settings preference so advanced rows stay visible
  * after restart until the user disables the switch.
  *
- * CDXC:SettingsAdvanced 2026-06-16-18:19:
- * Hide last-active timestamps, completion sounds, macOS attention notification, action-completion sound, Sidebar Tags, and the sidebar interface-size slider are common preferences. Keep them visible without Show Advanced while leaving terminal, debugging, storage, and lower-frequency utility controls advanced.
+ * CDXC:SettingsAdvanced 2026-08-26:
+ * Sidebar presentation details and double-click card renaming are advanced
+ * preferences. Completion sounds, macOS attention notification,
+ * action-completion sound, Sidebar Tags, and the sidebar interface-size slider
+ * remain visible without Show Advanced.
  *
  */
 export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
+  'showProjectIcons',
+  'hideSessionAgentIconUntilHover',
+  'hideBrowserFaviconUntilHover',
+  'showCloseButtonOnSessionCards',
+  'hideLastActiveTimeOnSessionCards',
+  'hideProjectHeaderDiffStats',
+  'showProjectEditorDiffFileCount',
   'sidebarDefaultWidthPx',
   'projectSessionListCollapsedCount',
   'createSessionOnSidebarDoubleClick',
   'enableSessionParking',
+  'renameSessionOnDoubleClick',
   'showSessionCloseContextMenuAction',
   'workspaceActivePaneBorderColor',
   'workspaceBackgroundColor',

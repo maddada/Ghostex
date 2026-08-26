@@ -1057,8 +1057,22 @@ EOF
 	printf '%s\n' "$cargo_bin"
 }
 
+# CDXC:AnonymousAnalytics 2026-08-26: the marketing version gxserver bakes in
+# (server/build.rs). Same resolution rule build-macos-app.sh uses for the desktop
+# crate: an explicit env wins, otherwise the root package.json is the source of
+# truth. Without this the daemon would report its placeholder crate version
+# (0.1.0) as `server_version` in every analytics event and in every build.
+resolve_gxserver_marketing_version() {
+	if [[ -n "${GHOSTEX_GPUI_MARKETING_VERSION:-}" ]]; then
+		printf '%s\n' "$GHOSTEX_GPUI_MARKETING_VERSION"
+		return 0
+	fi
+	node -p "require('$REPO_ROOT/package.json').version"
+}
+
 build_gxserver_rust_if_needed() {
 	local cargo_bin cargo_target output_path cli_output_path cargo_version build_digest
+	local marketing_version
 	if [[ ! -f "$GXSERVER_RS_ROOT/Cargo.toml" ]]; then
 		cat >&2 <<EOF
 Rust gxserver source is missing:
@@ -1074,10 +1088,12 @@ EOF
 	cli_output_path="$GXSERVER_RS_ROOT/target/$cargo_target/release/ghostex"
 	GXSERVER_RUST_BIN=""
 	cargo_version="$("$cargo_bin" --version 2>/dev/null || true)"
+	marketing_version="$(resolve_gxserver_marketing_version)"
 	build_digest="$(fingerprint_inputs \
 		--value "gxserver-rs-build-v2" \
 		--value "target=$cargo_target" \
 		--value "cargo=$cargo_version" \
+		--value "marketingVersion=$marketing_version" \
 		--path "$GXSERVER_RS_ROOT/src" \
 		--path "$GXSERVER_RS_ROOT/Cargo.toml" \
 		--path "$GXSERVER_RS_ROOT/Cargo.lock")"
@@ -1090,7 +1106,8 @@ EOF
 	fi
 
 	# CDXC:GxserverRustBuild 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
-	"$cargo_bin" build --release --bins --manifest-path "$GXSERVER_RS_ROOT/Cargo.toml" --target "$cargo_target"
+	GHOSTEX_GPUI_MARKETING_VERSION="$marketing_version" \
+		"$cargo_bin" build --release --bins --manifest-path "$GXSERVER_RS_ROOT/Cargo.toml" --target "$cargo_target"
 	if ! binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
 		echo "Rust gxserver binary does not contain $GHOSTEX_MACOS_ARCH: $output_path" >&2
 		exit 1
