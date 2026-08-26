@@ -209,6 +209,13 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       onSnapshot: (snapshot) => {
         this.applyPresentationSnapshot(snapshot, this.hasHydrated ? 'patch' : 'hydrate');
       },
+      onWorkspaceGroups: (state) => {
+        const previous = this.workspaceGroups;
+        this.adoptWorkspaceGroupsFromGxserver(state);
+        if (this.workspaceGroups !== previous) {
+          this.publishPresentation('patch');
+        }
+      },
     });
   },
 
@@ -256,6 +263,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     if (isSidebarProjectCollectionsState(snapshot.sidebarProjectCollections)) {
       this.forwardSidebarProjectCollectionsFromGxserver(snapshot.sidebarProjectCollections);
     }
+    this.adoptWorkspaceGroupsFromGxserver(snapshot.workspaceGroups);
     this.publishPresentation(kind);
     this.notifyNativeGxserverPresentationReady();
     if (kind === 'hydrate') {
@@ -332,6 +340,15 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     if (!presentation || !session) {
       return;
     }
+    /*
+    Local presentation patches are overlays on the last daemon snapshot, not
+    gxserver events. Preserve the daemon revision so the next real delta is not
+    discarded by `applyPresentationDelta` as stale when it receives the same
+    revision number a client-only `+ 1` previously invented. This matters most
+    for provider metadata changes such as `/rename`: the title delta can be the
+    next daemon event, while a later unrelated tag delta only appeared to fix
+    the stale title because it advanced the revision again.
+    */
     this.presentation = reduceGxserverPresentationDelta(
       presentation,
       {
@@ -341,7 +358,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         },
         type: 'sessionUpdated',
       },
-      presentation.revision + 1
+      presentation.revision
     );
     this.publishPresentation('patch');
   },
@@ -359,7 +376,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         sessionId: sessionId as GxserverSessionId,
         type: 'sessionRemoved',
       },
-      presentation.revision + 1
+      presentation.revision
     );
     this.publishPresentation('patch');
   },
@@ -387,7 +404,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         projectId: projectId as GxserverProjectId,
         type: 'projectRemoved',
       },
-      presentation.revision + 1
+      presentation.revision
     );
   },
 };

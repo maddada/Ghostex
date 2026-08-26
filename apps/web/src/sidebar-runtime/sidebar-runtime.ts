@@ -12,6 +12,7 @@ import type {
   GxserverProjectDomainState,
   GxserverRecentProjectDomainState,
   GxserverSidebarHudResponse,
+  GxserverSidebarProjectCollectionsState,
 } from '@/packages/shared/gxserver-protocol';
 import {
   createDefaultSessionGridSnapshot,
@@ -212,13 +213,25 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       })),
     });
     const hud = createWebSidebarHud(groups, focusedTarget, remoteHud, states, recentProjectsByMachineId, settings);
+    const localSidebarProjectCollections = states.find((state) => state.machine.machineId === 'local')?.presentation
+      ?.sidebarProjectCollections;
+    const remoteSidebarProjectCollectionsByMachineId = Object.fromEntries(
+      states.flatMap((state) => {
+        const collections = state.presentation?.sidebarProjectCollections;
+        return state.machine.machineId !== 'local' && collections
+          ? [[state.machine.machineId, collections] as const]
+          : [];
+      })
+    );
     const message: ExtensionToSidebarMessage = {
       groups,
       hud,
       pinnedPrompts: [],
       previousSessions: [],
+      remoteSidebarProjectCollectionsByMachineId,
       revision: ++revision,
       scratchPadContent: '',
+      ...(localSidebarProjectCollections ? { sidebarProjectCollections: localSidebarProjectCollections } : {}),
       type: hasHydrated ? 'sessionState' : 'hydrate',
     };
     hasHydrated = true;
@@ -575,6 +588,37 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       case 'syncSessionOrder':
         await syncSessionOrder(message.groupId, message.sessionIds);
         return;
+      case 'syncGroupOrder': {
+        const targets = message.groupIds.flatMap((groupId) => {
+          const target = parseSidebarGroupId(groupId);
+          return target ? [target] : [];
+        });
+        const machineId = targets[0]?.machineId;
+        if (
+          !machineId ||
+          targets.length !== message.groupIds.length ||
+          targets.some((target) => target.machineId !== machineId)
+        ) {
+          return;
+        }
+        const presentation = getConnectionStates().find((state) => state.machine.machineId === machineId)?.presentation;
+        await rpcForMachine(machineId, '/api/updateWorkspaceSessionGroups', {
+          state: {
+            projectOrder: targets.map((target) => target.projectId),
+            projects: presentation?.workspaceGroups?.projects ?? {},
+          },
+        });
+        return;
+      }
+      case 'updateSidebarProjectCollections': {
+        const machineId = message.remoteMachineId ?? 'local';
+        await rpcForMachine<{ sidebarProjectCollections: GxserverSidebarProjectCollectionsState }>(
+          machineId,
+          '/api/updateSidebarProjectCollections',
+          { state: message.state }
+        );
+        return;
+      }
       case 'updateSettingsPatch': {
         if (message.source === 'sidebar:remoteMachineOrder' && message.patch.remoteMachines) {
           const changed = reorderRemoteMachines(message.patch.remoteMachines.map((machine) => machine.id));
@@ -692,6 +736,13 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         }
         return;
       }
+      case 'copyWorkspaceProjectRemoteUrl': {
+        const remoteUrl = message.remoteUrl.trim();
+        if (remoteUrl) {
+          await navigator.clipboard.writeText(remoteUrl);
+        }
+        return;
+      }
       case 'pickWorkspaceFolder': {
         /*
          * CDXC:AddProject 2026-07-30:
@@ -714,8 +765,8 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         /*
          * CDXC:NavigationHistory 2026-08-19:
          * The shared command palette forwards host-owned hotkey rows as action
-         * ids. Back/Forward is the only one this shell owns today; everything
-         * else stays a native-only no-op.
+         * ids. Back/Forward, Find, and Open Commands Panel are owned here;
+         * everything else stays a native-only no-op.
          */
         const direction = navigationHistoryHotkeyDirection(message.actionId);
         if (direction) {
@@ -730,6 +781,10 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
          */
         if (message.actionId === 'openFindPrompts') {
           window.dispatchEvent(new CustomEvent('ghostex-web:openFindPrompts'));
+          return;
+        }
+        if (message.actionId === 'openCommandsPanel') {
+          window.dispatchEvent(new CustomEvent('ghostex-web:openCommandPane', { detail: { toggle: true } }));
           return;
         }
         debugLog('nativeOnlyNoOp', { actionId: message.actionId, type: message.type });
@@ -902,7 +957,8 @@ function createMergedSidebarGroups(
       return [];
     }
     const projectMetadata = createProjectProjectionMetadata(
-      projectMetadataByMachineId.get(state.machine.machineId)?.projects ?? []
+      projectMetadataByMachineId.get(state.machine.machineId)?.projects ?? [],
+      presentation.workspaceGroups?.projectOrder
     );
     if (state.machine.machineId === 'local') {
       return createGxserverPresentationSidebarGroups({
@@ -918,9 +974,21 @@ function createMergedSidebarGroups(
     }
 
     const sessionsByProject = createGxserverPresentationSessionsByProjectFromGroups({ presentation });
-    return orderGxserverPresentationSidebarProjects(
-      presentation.projects.filter((project) => !projectMetadata.hiddenProjectIds.has(project.projectId))
-    ).map((project) => {
+    const projectOrderIndex = new Map(
+      (presentation.workspaceGroups?.projectOrder ?? []).map((projectId, index) => [projectId, index])
+    );
+    const visibleProjects = presentation.projects.filter(
+      (project) => !projectMetadata.hiddenProjectIds.has(project.projectId)
+    );
+    const orderedProjects = [
+      ...visibleProjects
+        .filter((project) => projectOrderIndex.has(project.projectId))
+        .sort((left, right) => projectOrderIndex.get(left.projectId)! - projectOrderIndex.get(right.projectId)!),
+      ...orderGxserverPresentationSidebarProjects(
+        visibleProjects.filter((project) => !projectOrderIndex.has(project.projectId))
+      ),
+    ];
+    return orderedProjects.map((project) => {
       const machineId = state.machine.machineId;
       const group = createGxserverPresentationSidebarGroup({
         activeProjectId: activeTarget?.machineId === machineId ? activeTarget.projectId : undefined,
@@ -951,7 +1019,10 @@ function createMergedSidebarGroups(
   });
 }
 
-function createProjectProjectionMetadata(projects: readonly GxserverProjectDomainState[]): {
+function createProjectProjectionMetadata(
+  projects: readonly GxserverProjectDomainState[],
+  projectOrder: readonly string[] | undefined
+): {
   chatProjectIds: ReadonlySet<string>;
   hiddenProjectIds: ReadonlySet<string>;
   projectOverlays: readonly GxserverPresentationSidebarProjectOverlay[];
@@ -959,7 +1030,10 @@ function createProjectProjectionMetadata(projects: readonly GxserverProjectDomai
   const chatProjectIds = new Set<string>();
   const hiddenProjectIds = new Set<string>();
   const projectOverlays: GxserverPresentationSidebarProjectOverlay[] = [];
+  const orderIndexByProjectId = new Map((projectOrder ?? []).map((projectId, index) => [projectId, index]));
+  const projectedProjectIds = new Set<string>();
   for (const project of projects) {
+    const orderIndex = orderIndexByProjectId.get(project.projectId);
     const isChatProject = isChatDomainProject(project);
     const isQuickProject = project.launchSettings.isQuick === true || isChatProject;
     if (isChatProject || isQuickProject) {
@@ -968,13 +1042,20 @@ function createProjectProjectionMetadata(projects: readonly GxserverProjectDomai
     if (project.isRecentProject || project.visibility === 'hidden' || project.systemKind === 'remoteAttachCarrier') {
       hiddenProjectIds.add(project.projectId);
     }
+    projectedProjectIds.add(project.projectId);
     projectOverlays.push({
       isChatProject,
       isQuickProject,
       path: project.path,
       projectId: project.projectId,
+      ...(orderIndex === undefined ? {} : { orderIndex }),
       title: project.name,
     });
+  }
+  for (const [projectId, orderIndex] of orderIndexByProjectId) {
+    if (!projectedProjectIds.has(projectId)) {
+      projectOverlays.push({ orderIndex, projectId });
+    }
   }
   return { chatProjectIds, hiddenProjectIds, projectOverlays };
 }

@@ -916,6 +916,37 @@ export class GpuiSidebarRuntime {
       void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
       return;
     }
+    if (remoteEvent.payload.type === 'sidebarProjectCollectionsChanged') {
+      if (remoteEvent.payload.revision < previous.revision) {
+        void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+        return;
+      }
+      const snapshot: GxserverPresentationSnapshot = {
+        ...previous,
+        revision: remoteEvent.payload.revision as GxserverPresentationSnapshot['revision'],
+        sidebarProjectCollections: remoteEvent.payload.sidebarProjectCollections,
+      };
+      this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
+      this.forwardRemoteSidebarProjectCollectionsFromGxserver(
+        remoteEvent.remoteMachineId,
+        remoteEvent.payload.sidebarProjectCollections
+      );
+      this.publishRemotePresentationPatch();
+      return;
+    }
+    if (remoteEvent.payload.type === 'workspaceGroupsChanged') {
+      if (remoteEvent.payload.revision < previous.revision) {
+        void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+        return;
+      }
+      this.remotePresentations.set(remoteEvent.remoteMachineId, {
+        ...previous,
+        revision: remoteEvent.payload.revision as GxserverPresentationSnapshot['revision'],
+        workspaceGroups: remoteEvent.payload.groups,
+      });
+      this.publishRemotePresentationPatch();
+      return;
+    }
     if (remoteEvent.payload.revision <= previous.revision) {
       void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
       return;
@@ -1168,7 +1199,7 @@ export class GpuiSidebarRuntime {
         this.moveSessionToWorkspaceGroup(message);
         return;
       case 'syncGroupOrder':
-        this.syncWorkspaceGroupOrder(message.groupIds);
+        await this.syncWorkspaceGroupOrder(message.groupIds);
         return;
       case 'updateSidebarProjectCollections':
         if (message.remoteMachineId) {
@@ -1301,6 +1332,9 @@ export class GpuiSidebarRuntime {
         return;
       case 'copyWorkspaceProjectPathForGroup':
         this.postProjectPathActionForGroup('copyWorkspaceProjectPath', message.groupId, message);
+        return;
+      case 'copyWorkspaceProjectRemoteUrl':
+        this.copyWorkspaceProjectRemoteUrl(message);
         return;
       case 'openWorkspaceProjectInFinderForGroup':
         this.postProjectPathActionForGroup('openWorkspaceProjectInFinder', message.groupId, message);

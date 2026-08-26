@@ -6,7 +6,7 @@
 
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::Child,
     sync::{
         Arc,
@@ -110,35 +110,6 @@ pub(crate) fn gpui_remote_connect_overlay_labels(
         // not reachable yet and a connect attempt is expected.
         _ => ("Connecting to machine…", None),
     }
-}
-
-pub(crate) fn browser_repository_remote_web_url(project_path: &Path) -> Option<String> {
-    let output = std::process::Command::new("/usr/bin/git")
-        .args(["remote", "get-url", "origin"])
-        .current_dir(project_path)
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let remote = String::from_utf8(output.stdout).ok()?;
-    let remote = remote.trim().trim_end_matches('/').trim_end_matches(".git");
-    let web_url = if let Some(path) = remote.strip_prefix("git@") {
-        let (host, repository) = path.split_once(':')?;
-        format!("https://{host}/{repository}")
-    } else if let Some(path) = remote.strip_prefix("ssh://git@") {
-        let (host, repository) = path.split_once('/')?;
-        format!("https://{host}/{repository}")
-    } else if remote.starts_with("https://") || remote.starts_with("http://") {
-        remote.to_string()
-    } else {
-        return None;
-    };
-
-    sanitize_browser_tab_url_for_state(&web_url)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

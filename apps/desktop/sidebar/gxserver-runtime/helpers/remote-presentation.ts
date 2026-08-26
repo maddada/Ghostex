@@ -21,6 +21,7 @@ import type {
   GxserverPresentationSnapshot,
   GxserverRecentProjectDomainState,
   GxserverSidebarProjectCollectionsState,
+  GxserverWorkspaceSessionGroupsState,
 } from '@/packages/shared/gxserver-protocol';
 import { createDefaultSidebarProjectDiffStats } from '@/packages/shared/project-diff-stats';
 import {
@@ -78,7 +79,7 @@ export function createGpuiRemotePresentationSidebarGroups({
     );
     const orderedGroups = orderGpuiRemotePresentationGroups(
       presentation.groups,
-      remoteGroupOrderByMachineId?.get(machine.id)
+      presentation.workspaceGroups?.projectOrder ?? remoteGroupOrderByMachineId?.get(machine.id)
     );
     const orderIndexByProjectId = new Map(orderedGroups.map((group, index) => [group.projectId, index]));
     const hiddenProjectIds = new Set(
@@ -198,9 +199,10 @@ export function orderGpuiRemotePresentationGroups<Group extends { projectId: str
 ): Group[] {
   /*
   CDXC:RemoteGroupReorder 2026-07-12:
-  Apply the app-local per-machine order overlay as a stable sort: known project
-  ids render in the stored order, and projects the overlay has never seen keep
-  their remote presentation position after them.
+  Apply the machine's gxserver-owned project order as a stable sort. The caller
+  supplies the legacy app-local overlay only when an older snapshot has no
+  workspaceGroups field. Known ids render in stored order, and new projects
+  keep their remote presentation position after them.
   */
   if (!storedProjectIdOrder || storedProjectIdOrder.length === 0) {
     return [...groups];
@@ -427,5 +429,46 @@ export function normalizeGpuiSidebarRemoteEvent(value: unknown): GpuiSidebarRemo
       type: 'remoteGxserverPresentation',
     };
   }
+  if (
+    payload.type === 'sidebarProjectCollectionsChanged' &&
+    isSidebarProjectCollectionsState(payload.sidebarProjectCollections) &&
+    typeof payload.revision === 'number'
+  ) {
+    return {
+      payload: {
+        revision: payload.revision,
+        sidebarProjectCollections: payload.sidebarProjectCollections,
+        type: 'sidebarProjectCollectionsChanged',
+      },
+      remoteMachineId,
+      type: 'remoteGxserverPresentation',
+    };
+  }
+  if (
+    payload.type === 'workspaceGroupsChanged' &&
+    isWorkspaceSessionGroupsState(payload.groups) &&
+    typeof payload.revision === 'number'
+  ) {
+    return {
+      payload: {
+        groups: payload.groups,
+        revision: payload.revision,
+        type: 'workspaceGroupsChanged',
+      },
+      remoteMachineId,
+      type: 'remoteGxserverPresentation',
+    };
+  }
   return undefined;
+}
+
+export function isWorkspaceSessionGroupsState(value: unknown): value is GxserverWorkspaceSessionGroupsState {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Array.isArray((value as GxserverWorkspaceSessionGroupsState).projectOrder) &&
+    typeof (value as GxserverWorkspaceSessionGroupsState).projects === 'object' &&
+    !Array.isArray((value as GxserverWorkspaceSessionGroupsState).projects)
+  );
 }

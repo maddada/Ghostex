@@ -84,7 +84,7 @@ pub(crate) fn gpui_remote_gxserver_presentation_stream_once(
 ) -> Result<(), String> {
     /*
     CDXC:GPUIRemotePresentationStreaming 2026-06-24-19:54:
-    The remote presentation stream uses gxserver's existing WebSocket protocol through the authenticated localhost tunnel. The only renderer-bound products of this helper are presentation snapshots and deltas already consumed by SidebarApp; eventStreamReady, server ids, auth details, raw response bodies, and transport failures stay native-only.
+    The remote presentation stream uses gxserver's existing WebSocket protocol through the authenticated localhost tunnel. The only renderer-bound products of this helper are presentation snapshots/deltas and the bounded workspace-order metadata already consumed by SidebarApp; eventStreamReady, server ids, auth details, raw response bodies, and transport failures stay native-only.
     */
     let mut stream = gpui_remote_gxserver_open_presentation_websocket(target, cancel)?;
     stream
@@ -430,8 +430,70 @@ pub(crate) fn gpui_remote_gxserver_presentation_event_payload(
                 Some(revision),
             ))
         }
+        "sidebarProjectCollectionsChanged" => {
+            let collections = object.get("sidebarProjectCollections")?;
+            if !gpui_remote_sidebar_project_collections_allowed(collections) {
+                return None;
+            }
+            let revision = gpui_json_revision(event)?;
+            Some((
+                serde_json::json!({
+                    "revision": revision,
+                    "sidebarProjectCollections": (*collections).clone(),
+                    "type": "sidebarProjectCollectionsChanged",
+                }),
+                Some(revision),
+            ))
+        }
+        "workspaceGroupsChanged" => {
+            let groups = object.get("groups")?;
+            if !gpui_remote_workspace_groups_allowed(groups) {
+                return None;
+            }
+            let revision = gpui_json_revision(event)?;
+            Some((
+                serde_json::json!({
+                    "groups": (*groups).clone(),
+                    "revision": revision,
+                    "type": "workspaceGroupsChanged",
+                }),
+                Some(revision),
+            ))
+        }
         _ => None,
     }
+}
+
+fn gpui_remote_sidebar_project_collections_allowed(value: &serde_json::Value) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object
+        .get("collections")
+        .and_then(serde_json::Value::as_object)
+        .is_some()
+        && object
+            .get("order")
+            .and_then(serde_json::Value::as_array)
+            .is_some()
+        && object
+            .get("nextCollectionNumber")
+            .and_then(serde_json::Value::as_u64)
+            .is_some()
+}
+
+fn gpui_remote_workspace_groups_allowed(value: &serde_json::Value) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object
+        .get("projectOrder")
+        .and_then(serde_json::Value::as_array)
+        .is_some()
+        && object
+            .get("projects")
+            .and_then(serde_json::Value::as_object)
+            .is_some()
 }
 
 pub(crate) fn gpui_remote_gxserver_presentation_snapshot_allowed(

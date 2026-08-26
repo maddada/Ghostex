@@ -24,6 +24,7 @@ pub fn read_presentation_snapshot(
     insert_delayed_send_presentation_payload(db, &mut snapshot)?;
     insert_session_chat_queue_presentation_payload(&mut snapshot, db);
     insert_session_agent_note_presentation_payload(&mut snapshot, db);
+    insert_stashed_prompt_counts_presentation_payload(&mut snapshot, db);
     insert_auto_settle_window_presentation_payload(&mut snapshot, auto_settle_after_days);
     insert_portless_presentation_payload(&mut snapshot, db);
     insert_workspace_groups_presentation_payload(&mut snapshot, db)?;
@@ -118,6 +119,7 @@ pub fn build_presentation_session_delta(
         session_id,
     );
     insert_session_agent_note_session_projection(&mut presentation_session, db);
+    insert_stashed_prompt_count_session_projection(&mut presentation_session, db);
     Ok(json!({
         "session": presentation_session,
         "type": "sessionPresentationChanged",

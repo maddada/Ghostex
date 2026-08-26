@@ -18,6 +18,8 @@ import type {
   GxserverPresentationSnapshot,
   GxserverProjectDomainState,
   GxserverRendererCommand,
+  GxserverSidebarProjectCollectionsState,
+  GxserverWorkspaceSessionGroupsState,
 } from '@/packages/shared/gxserver-protocol';
 import type {
   ExtensionToSidebarMessage,
@@ -287,6 +289,16 @@ export type GpuiSidebarRemotePresentationEvent = {
         delta: GxserverPresentationDelta;
         revision: number;
         type: 'presentationDelta';
+      }
+    | {
+        revision: number;
+        sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
+        type: 'sidebarProjectCollectionsChanged';
+      }
+    | {
+        groups: GxserverWorkspaceSessionGroupsState;
+        revision: number;
+        type: 'workspaceGroupsChanged';
       };
   remoteMachineId: string;
   type: 'remoteGxserverPresentation';
@@ -383,6 +395,8 @@ export type GpuiActiveWorkspaceTabSessionPayload = {
   activity: 'idle' | 'working' | 'attention';
   agentIcon?: string;
   agentSessionId?: string;
+  hasSessionNote?: boolean;
+  stashedPromptCount?: number;
   isGeneratingFirstPromptTitle: boolean;
   isSleeping: boolean;
   kind: GxserverPresentationSession['kind'];
@@ -533,6 +547,8 @@ export type GpuiExportTranscriptRequestContext = {
   /** Absent for the local daemon; set for a remote machine's own daemon. */
   machineId?: string;
   projectId: string;
+  /** Identifies this exact dialog open across close/reopen races. */
+  requestId: string;
   sessionId: string;
 };
 
@@ -542,6 +558,8 @@ export type GpuiExportedTranscriptResult = {
   /** Absolute path of the markdown file, on `machineId`'s disk. */
   path: string;
   projectId: string;
+  /** The dialog request that produced this export. */
+  requestId: string;
   /** Absent for the local daemon; set for a remote machine's own daemon. */
   machineId?: string;
 };
@@ -676,7 +694,7 @@ export type GpuiSessionAttentionTarget =
 
 export type GpuiWorkspaceTerminalRuntimeActionPayload =
   | {
-      action: 'exportTranscript' | 'forkSession' | 'fullReloadSession';
+      action: 'exportTranscript' | 'forkSession' | 'fullReloadSession' | 'openSessionNote';
       projectId: string;
       sessionId: string;
     }

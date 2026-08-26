@@ -155,6 +155,7 @@ export class GpuiGxserverClient {
     onSessionChatEvent,
     onSidebarProjectCollections,
     onSnapshot,
+    onWorkspaceGroups,
   }: {
     clientId: string;
     lastRevision: number;
@@ -166,6 +167,7 @@ export class GpuiGxserverClient {
     onSessionChatEvent?: (event: GxserverSessionChatEvent) => void;
     onSidebarProjectCollections?: (state: GxserverSidebarProjectCollectionsState) => void;
     onSnapshot: (snapshot: GxserverPresentationSnapshot) => void;
+    onWorkspaceGroups?: (state: unknown) => void;
   }): GpuiPresentationSubscription {
     const url = new URL(`${this.bootstrap.baseUrl}/api/events`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -211,6 +213,10 @@ export class GpuiGxserverClient {
         isSidebarProjectCollectionsState(message.sidebarProjectCollections)
       ) {
         onSidebarProjectCollections(message.sidebarProjectCollections);
+        return;
+      }
+      if (message.type === 'workspaceGroupsChanged' && onWorkspaceGroups && parseObject(message.groups)) {
+        onWorkspaceGroups(message.groups);
         return;
       }
       /*

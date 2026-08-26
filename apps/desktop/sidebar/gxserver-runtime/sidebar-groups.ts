@@ -107,6 +107,7 @@ export interface GpuiSidebarRuntimeSidebarGroupMethods {
   publishHudPatch(): void;
   postActiveProjectContext(attempt?: number): void;
   postGxserverPresentationFocusState(): void;
+  activeRemoteProjectReference(): { machineId: string; projectId: string } | undefined;
   activeWorkspaceTabSessionsFromLatestGroups(): GpuiActiveWorkspaceTabSessionPayload[];
   postGpuiGlobalActions(): void;
   postGpuiStatusPetState(): void;
@@ -119,6 +120,7 @@ export interface GpuiSidebarRuntimeSidebarGroupMethods {
   isQuickAutomationsSidebarSessionId(sessionId: string): boolean;
   createQuickAutomationsProjectContext(): NonNullable<SidebarSessionGroup['projectContext']>;
   activeProjectContextGroups(): SidebarSessionGroup[];
+  withSelectedProjectActiveGroup(groups: SidebarSessionGroup[]): SidebarSessionGroup[];
   overlayProjectDiffStats(groups: SidebarSessionGroup[]): SidebarSessionGroup[];
   pruneWorkspaceGroupAssignments(presentation: GxserverPresentationSnapshot): void;
   pruneRemoteWorkspaceGroupAssignments(machineId: string, snapshot: GxserverPresentationSnapshot): void;
@@ -468,9 +470,6 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     if (typeof postFocusState !== 'function') {
       return;
     }
-    const focusedRemoteSession = this.focusedSessionId
-      ? parseGpuiRemotePresentationSessionId(this.focusedSessionId)
-      : undefined;
     /*
     CDXC:GPUIRemoteWorkspaceProjectKey 2026-07-30:
     Rust treats this snapshot's activeProjectId as the authoritative Agents
@@ -484,18 +483,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     machine-scoped project identity so Rust can reconcile restored attach tabs
     without confusing them with local gxserver sessions.
     */
-    const activeGroupRemoteReference = (() => {
-      if (!this.activeGroupId) {
-        return undefined;
-      }
-      const remoteGroup = parseGpuiRemotePresentationGroupId(this.activeGroupId);
-      if (remoteGroup) {
-        return remoteGroup;
-      }
-      const subgroup = parseGpuiWorkspaceSessionSubgroupId(this.activeGroupId);
-      return subgroup ? parseGpuiRemotePresentationProjectId(subgroup.projectId) : undefined;
-    })();
-    const activeRemoteReference = focusedRemoteSession ?? activeGroupRemoteReference;
+    const activeRemoteReference = this.activeRemoteProjectReference();
     const activeTabSessions = this.activeWorkspaceTabSessionsFromLatestGroups();
     const activeProjectId = activeRemoteReference
       ? createGpuiRemotePresentationProjectId(activeRemoteReference.machineId, activeRemoteReference.projectId)
@@ -516,6 +504,32 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       Focus-state publication is a sidebar-native synchronization hint for Rust bootstrap replay only. A missing or rejecting CEF bridge must not change gxserver data, create fallback focus ids, log renderer payloads, or block the visible SidebarApp state that React already owns.
       */
     }
+  },
+
+  activeRemoteProjectReference(this: GpuiSidebarRuntime): { machineId: string; projectId: string } | undefined {
+    /*
+    The one derivation of "which remote project is selected". Both bridges that
+    have to answer that question read it from here — the presentation
+    focus-state snapshot and the active-project context — because a remote
+    selection lives only in `activeGroupId`/`focusedSessionId`, and the two
+    bridges disagreeing is what let one of them publish the remote project
+    while the other published a stale local one.
+    */
+    const focusedRemoteSession = this.focusedSessionId
+      ? parseGpuiRemotePresentationSessionId(this.focusedSessionId)
+      : undefined;
+    if (focusedRemoteSession) {
+      return focusedRemoteSession;
+    }
+    if (!this.activeGroupId) {
+      return undefined;
+    }
+    const remoteGroup = parseGpuiRemotePresentationGroupId(this.activeGroupId);
+    if (remoteGroup) {
+      return remoteGroup;
+    }
+    const subgroup = parseGpuiWorkspaceSessionSubgroupId(this.activeGroupId);
+    return subgroup ? parseGpuiRemotePresentationProjectId(subgroup.projectId) : undefined;
   },
 
   activeWorkspaceTabSessionsFromLatestGroups(this: GpuiSidebarRuntime): GpuiActiveWorkspaceTabSessionPayload[] {
@@ -565,6 +579,10 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
         activity: session.activity,
         ...(session.agentIcon ? { agentIcon: session.agentIcon } : {}),
         ...(session.agentSessionId?.trim() ? { agentSessionId: session.agentSessionId.trim() } : {}),
+        ...(session.sessionNote?.trim() ? { hasSessionNote: true } : {}),
+        ...(typeof session.stashedPromptCount === 'number' && session.stashedPromptCount > 0
+          ? { stashedPromptCount: Math.floor(session.stashedPromptCount) }
+          : {}),
         isGeneratingFirstPromptTitle: session.isGeneratingFirstPromptTitle === true,
         isSleeping: session.isSleeping === true,
         kind,
@@ -910,7 +928,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
 
   activeProjectContextGroups(this: GpuiSidebarRuntime): SidebarSessionGroup[] {
     if (!this.quickAutomationsOverviewOpen || this.activeProjectId !== GPUI_QUICK_AUTOMATIONS_PROJECT_ID) {
-      return this.latestGroups;
+      return this.withSelectedProjectActiveGroup(this.latestGroups);
     }
     return this.latestGroups.map((group) =>
       group.groupId === GPUI_GXSERVER_CHATS_GROUP_ID
@@ -921,6 +939,42 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
           }
         : group
     );
+  },
+
+  withSelectedProjectActiveGroup(this: GpuiSidebarRuntime, groups: SidebarSessionGroup[]): SidebarSessionGroup[] {
+    /*
+    The active-project payload is a strict projection of these groups, so a
+    group set with no active group publishes the Quick/projectless payload: no
+    active project and every project workarea disabled. That is the right
+    answer only when nothing is selected. When a project is selected, the
+    selection is the truth and a missing `isActive` flag is a projection that
+    has not caught up yet — a patch rebuilt from a presentation that predates
+    the click, or a remote snapshot that lands a tick later. Publishing the
+    projectless payload there tells Rust to drop the project the user just
+    picked and coerce the mode away from the workarea it just opened, so
+    re-assert the selection on its own group instead of contradicting it. Only
+    a group the projection already built can be marked: identity still comes
+    from explicit project metadata, never synthesized here.
+    */
+    if (groups.some((group) => group.isActive)) {
+      return groups;
+    }
+    const remoteReference = this.activeRemoteProjectReference();
+    const selectedProjectId = remoteReference
+      ? createGpuiRemotePresentationProjectId(remoteReference.machineId, remoteReference.projectId)
+      : this.activeProjectId;
+    if (!selectedProjectId) {
+      return groups;
+    }
+    let matched = false;
+    const nextGroups = groups.map((group) => {
+      if (matched || group.projectContext?.editor.projectId !== selectedProjectId) {
+        return group;
+      }
+      matched = true;
+      return { ...group, isActive: true };
+    });
+    return matched ? nextGroups : groups;
   },
 
   overlayProjectDiffStats(this: GpuiSidebarRuntime, groups: SidebarSessionGroup[]): SidebarSessionGroup[] {
@@ -1265,6 +1319,21 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     presentation: GxserverPresentationSnapshot,
     projectProjection: GpuiPresentationProjectProjectionMetadata
   ): void {
+    /*
+    CDXC:GPUIRemoteWorkspaceProjectKey 2026-08-26:
+    A remote group the user selected owns the active project, and
+    `activeProjectId` stays a local-only field while it does — so the local id
+    beside it is stale or empty by design. Rebuilding local groups must not
+    read that as "nothing is selected" and activate the first local project,
+    which yanks the sidebar, the workspace, and the browser workarea off the
+    remote project mid-click. With no local project to steal to it is worse:
+    the fall-through below parks the selection on Chats, which publishes the
+    projectless active-project context that clears the project in Rust and
+    coerces the mode away from the workarea the user just opened.
+    */
+    if (this.activeGroupId && parseGpuiRemotePresentationGroupId(this.activeGroupId)) {
+      return;
+    }
     const projectIds = new Set<string>(presentation.projects.map((project) => project.projectId));
     if (this.quickAutomationsOverviewOpen && this.activeProjectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID) {
       if (this.activeGroupId !== GPUI_GXSERVER_CHATS_GROUP_ID) {
