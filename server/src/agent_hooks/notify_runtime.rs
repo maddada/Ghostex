@@ -61,8 +61,12 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         .or_else(|| read_state_string(&state, "agent"))
         .unwrap_or_else(|| "codex".to_string());
     let agent_key = normalized_hook_agent_key(&agent_name);
-    let event_name =
-        first_string([payload.get("hook_event_name"), payload.get("event")]).unwrap_or_default();
+    let event_name = first_string([
+        payload.get("hook_event_name"),
+        payload.get("hookEventName"),
+        payload.get("event"),
+    ])
+    .unwrap_or_default();
     let session_id = first_string([
         payload.get("session_id"),
         payload.get("sessionId"),
