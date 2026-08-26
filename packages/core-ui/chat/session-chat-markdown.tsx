@@ -77,9 +77,11 @@ import {
 import { readSessionChatCodeWrapDefault, writeSessionChatCodeWrapDefault } from './session-chat-code-wrap';
 import { remarkSessionChatDetails } from './session-chat-details';
 import {
+  remarkSessionChatBareFilePaths,
   remarkSessionChatInlineCode,
   resolveSessionChatFenceTitleFilePath,
   resolveSessionChatInlineCodeFilePath,
+  SESSION_CHAT_FILE_PATH_ATTRIBUTE,
   sessionChatFilePathChipLabel,
   sessionChatFilePathIcon,
   sessionChatFilePathTitle,
@@ -88,11 +90,13 @@ import {
 import { remarkSessionChatGithubAlerts, type SessionChatAlertKind } from './session-chat-github-alerts';
 import {
   isSessionChatImageHref,
+  SessionChatImageReference,
   SessionChatInlineImage,
   sessionChatImageTargetForHref,
   useSessionChatImageViewer,
   type SessionChatImageViewerApi,
 } from './session-chat-image-viewer';
+import { remarkSessionChatImageReferences } from './session-chat-image-reference-markdown';
 import { classifySessionChatLinkHref, useSessionChatHostLinks, type SessionChatHostLinks } from './session-chat-links';
 import {
   SESSION_CHAT_COPY_CODE_ATTRIBUTE,
@@ -110,6 +114,7 @@ import { remarkSessionChatHardBreaks, sessionChatUserMarkdownSource } from './se
  */
 const REMARK_PLUGINS = [
   remarkGfm,
+  remarkSessionChatImageReferences,
   remarkSessionChatDetails,
   remarkSessionChatCodeMeta,
   remarkSessionChatGithubAlerts,
@@ -122,7 +127,7 @@ const REMARK_PLUGINS = [
  * newline becomes a real hard break. It runs last so it also reaches the nodes
  * remarkSessionChatDetails parsed into existence.
  */
-const CHAT_TEXT_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkSessionChatHardBreaks];
+const CHAT_TEXT_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkSessionChatBareFilePaths, remarkSessionChatHardBreaks];
 
 /**
  * GitHub's five alert kinds, with GitHub's own labels and colour families. The
@@ -498,6 +503,7 @@ function FileChip({
         // it stands for: copying a table cell that holds one yields the whole
         // path the agent wrote, however much of it was visible.
         {...{ [SESSION_CHAT_COPY_CODE_ATTRIBUTE]: title }}
+        {...{ [SESSION_CHAT_FILE_PATH_ATTRIBUTE]: reference.path }}
       >
         <Icon aria-hidden='true' className='ghostex-chat-markdown-file-chip-icon' size={13} stroke={1.8} />
         {parent === '' ? null : <span className='ghostex-chat-markdown-file-chip-parent'>{parent}</span>}
@@ -800,9 +806,11 @@ function markdownComponents(
         const target = sessionChatImageTargetForHref(href);
         if (viewer.canOpen(target)) {
           return (
-            <button className='ghostex-chat-image-link' onClick={() => viewer.open(target)} type='button'>
-              {children}
-            </button>
+            <SessionChatImageReference
+              className='mx-0.5 align-middle'
+              label={nodeText(children).trim() || 'Image'}
+              target={target}
+            />
           );
         }
       }
@@ -857,16 +865,7 @@ function markdownComponents(
         if (viewer.canOpen(target)) {
           // An image the agent wrote as an image renders as one; the named
           // button stays as the stand-in when its bytes cannot be read.
-          return (
-            <SessionChatInlineImage
-              fallback={
-                <button className='ghostex-chat-image-link' onClick={() => viewer.open(target)} type='button'>
-                  {alt || 'Image'}
-                </button>
-              }
-              target={target}
-            />
-          );
+          return <SessionChatInlineImage fallback={<span>{alt || 'Image'}</span>} target={target} />;
         }
       }
       return <img alt={alt ?? ''} src={src ?? ''} />;

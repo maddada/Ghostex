@@ -102,6 +102,17 @@ export type ProjectDocsResourceTransport = (
   request: ProjectDocsResourceRequest
 ) => Promise<unknown>;
 
+export type ProjectMarkdownSaveTransport = (
+  endpoint: typeof PROJECT_DOCS_GXSERVER_ENDPOINT,
+  request: Record<string, unknown>
+) => Promise<unknown>;
+
+export type SaveProjectMarkdownDocumentParams = {
+  content: string;
+  path: string;
+  projectId: string;
+};
+
 export type ProjectDocsHostTransport = {
   eventName: string;
   eventTarget: EventTarget;
@@ -146,6 +157,81 @@ export async function readProjectDocsResource(
     requestId,
   });
   return decodeProjectDocsResourceResponse(response, requestId);
+}
+
+function checkedProjectDocsResponse(value: unknown, requestId: string): Record<string, unknown> {
+  if (!isProjectDocsResponseRecord(value) || value.requestId !== requestId) {
+    throw new Error('The Docs service returned an invalid response.');
+  }
+  if (typeof value.error === 'string' && value.error.length > 0) {
+    throw new Error(value.error);
+  }
+  return value;
+}
+
+export async function listProjectMarkdownDocumentPaths(
+  projectId: string,
+  transport: ProjectMarkdownSaveTransport
+): Promise<readonly string[]> {
+  const requestId = createProjectDocsRequestId('list-message-markdown');
+  const response = checkedProjectDocsResponse(
+    await transport(PROJECT_DOCS_GXSERVER_ENDPOINT, {
+      action: 'list',
+      projectId,
+      requestId,
+    }),
+    requestId
+  );
+  if (!Array.isArray(response.entries)) {
+    throw new Error('Docs did not return the project file list.');
+  }
+  return response.entries.flatMap((entry) => {
+    if (!isProjectDocsResponseRecord(entry) || entry.kind !== 'file' || typeof entry.path !== 'string') {
+      return [];
+    }
+    return entry.path.toLowerCase().endsWith('.md') ? [entry.path] : [];
+  });
+}
+
+/**
+ * Saves one Markdown document through the project's existing Docs boundary,
+ * then asks the same owning gxserver for its absolute machine path. The client
+ * never derives an absolute path from project metadata, which keeps remote and
+ * local sessions on the same filesystem authority.
+ */
+export async function saveProjectMarkdownDocument(
+  params: SaveProjectMarkdownDocumentParams,
+  transport: ProjectMarkdownSaveTransport
+): Promise<{ path: string }> {
+  const saveRequestId = createProjectDocsRequestId('save-message-markdown');
+  const saved = checkedProjectDocsResponse(
+    await transport(PROJECT_DOCS_GXSERVER_ENDPOINT, {
+      action: 'save',
+      content: params.content,
+      path: params.path,
+      projectId: params.projectId,
+      requestId: saveRequestId,
+    }),
+    saveRequestId
+  );
+  if (!isProjectDocsResponseRecord(saved.file)) {
+    throw new Error('Docs did not return the saved Markdown file.');
+  }
+
+  const pathRequestId = createProjectDocsRequestId('saved-message-path');
+  const resolved = checkedProjectDocsResponse(
+    await transport(PROJECT_DOCS_GXSERVER_ENDPOINT, {
+      action: 'copyFullPath',
+      path: params.path,
+      projectId: params.projectId,
+      requestId: pathRequestId,
+    }),
+    pathRequestId
+  );
+  if (typeof resolved.fullPath !== 'string' || resolved.fullPath.length === 0) {
+    throw new Error('Docs did not return the saved Markdown path.');
+  }
+  return { path: resolved.fullPath };
 }
 
 /*

@@ -1,19 +1,20 @@
-// Session chat images. Pictures shared in the conversation render inline as
-// thumbnails (SessionChatInlineImage) and click through to a centered overlay
-// at full size (max 75% of the window height, original aspect ratio). Clicking
+// Session chat images. User-authored image references render as thumbnails at
+// their exact position, as do agent-authored pictures. Both click through to a
+// centered overlay at full size (max 75% of the window height, original aspect
+// ratio). Clicking
 // the overlay picture steps it through three zoom levels and back to the
 // fitted size, panning by scroll while zoomed; the zoom-in/zoom-out cursor is
 // the affordance for it, and an image with no detail beyond its fitted size
 // never offers the toggle. Right-clicking it offers Copy image (PNG, to the
 // system clipboard), Copy path (the machine path or URL behind the picture),
 // and Save image (the host's native save panel where there is one, a browser
-// download otherwise). The inline thumbnail carries a hover copy button for
-// the same path.
+// download otherwise). The full-size viewer also keeps those three actions in
+// a top-right toolbar beside its close button; thumbnails remain image-only.
 // Machine paths load through the transport's readSessionChatImage RPC — the
 // paths inside "[Image #N](path)" references live on the session's machine, so
 // the page cannot open them directly. http(s)/data URLs render as-is.
 
-import { IconCheck, IconCopy, IconLoader2, IconPhotoX, IconX } from '@tabler/icons-react';
+import { IconCheck, IconClipboard, IconDownload, IconLink, IconLoader2, IconPhotoX, IconX } from '@tabler/icons-react';
 import {
   createContext,
   useCallback,
@@ -27,6 +28,8 @@ import {
   type ReactNode,
 } from 'react';
 import { cn } from '@/packages/components/utils';
+import { Button } from '@/packages/components/ui/button';
+import { ButtonGroup } from '@/packages/components/ui/button-group';
 
 export interface SessionChatImageTarget {
   /** Absolute path on the session's machine (loaded over the transport). */
@@ -52,6 +55,25 @@ const SessionChatImageViewerContext = createContext<SessionChatImageViewerApi | 
 
 export function useSessionChatImageViewer(): SessionChatImageViewerApi | null {
   return useContext(SessionChatImageViewerContext);
+}
+
+/** In-message thumbnail that opens the image at its authored position. */
+export function SessionChatImageReference({
+  className,
+  label,
+  target,
+}: {
+  className?: string;
+  label: string;
+  target: SessionChatImageTarget;
+}) {
+  return (
+    <SessionChatInlineImage
+      className={className}
+      fallback={<span>{label}</span>}
+      target={{ ...target, alt: target.alt ?? label }}
+    />
+  );
 }
 
 const IMAGE_HREF_PATTERN = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i;
@@ -111,24 +133,12 @@ export function SessionChatInlineImage({
   target: SessionChatImageTarget;
 }) {
   const viewer = useSessionChatImageViewer();
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLSpanElement | null>(null);
   const [nearViewport, setNearViewport] = useState(false);
   const [source, setSource] = useState<{ status: 'loading' } | { status: 'ready'; src: string } | { status: 'error' }>({
     status: 'loading',
   });
-  const [pathCopied, setPathCopied] = useState(false);
   const targetKey = target.url ?? target.path ?? '';
-  const copyPath = sessionChatImageCopyPath(target);
-
-  useEffect(() => {
-    if (!pathCopied) {
-      return;
-    }
-    const timer = window.setTimeout(() => setPathCopied(false), 1500);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [pathCopied]);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -185,44 +195,22 @@ export function SessionChatInlineImage({
     return <>{fallback ?? null}</>;
   }
   return (
-    <div className={cn('ghostex-chat-inline-image-frame', className)} ref={containerRef}>
+    <span className={cn('ghostex-chat-inline-image-frame', className)} ref={containerRef}>
       {source.status === 'ready' ? (
-        <>
-          <button
-            aria-label={target.alt ? `View ${target.alt}` : 'View image'}
-            className='ghostex-chat-inline-image-button'
-            onClick={() => viewer.open(target)}
-            type='button'
-          >
-            <img alt={target.alt ?? ''} className='ghostex-chat-inline-image' src={source.src} />
-          </button>
-          {copyPath !== undefined ? (
-            <button
-              aria-label='Copy image path'
-              className='ghostex-chat-inline-image-copy'
-              data-copied={pathCopied ? 'true' : undefined}
-              onClick={(event) => {
-                event.stopPropagation();
-                void navigator.clipboard
-                  .writeText(copyPath)
-                  .then(() => setPathCopied(true))
-                  .catch((error: unknown) => {
-                    console.error('[session-chat] Copying the image path failed.', error);
-                  });
-              }}
-              title='Copy image path'
-              type='button'
-            >
-              {pathCopied ? <IconCheck aria-hidden='true' stroke={2} /> : <IconCopy aria-hidden='true' stroke={2} />}
-            </button>
-          ) : null}
-        </>
+        <button
+          aria-label={target.alt ? `View ${target.alt}` : 'View image'}
+          className='ghostex-chat-inline-image-button'
+          onClick={() => viewer.open(target)}
+          type='button'
+        >
+          <img alt={target.alt ?? ''} className='ghostex-chat-inline-image' src={source.src} />
+        </button>
       ) : (
         <span aria-label='Loading image' className='ghostex-chat-inline-image-pending' role='img'>
           <IconLoader2 aria-hidden='true' className='size-4 animate-spin' stroke={2} />
         </span>
       )}
-    </div>
+    </span>
   );
 }
 
@@ -285,6 +273,12 @@ async function imageAsPngBlob(image: HTMLImageElement): Promise<Blob> {
   });
 }
 
+async function copySessionChatImage(image: HTMLImageElement): Promise<void> {
+  // The blob stays a promise so the clipboard write begins inside the click
+  // gesture; re-encoding it before calling write would lose that permission.
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': imageAsPngBlob(image) })]);
+}
+
 /** Original bytes behind a rendered source, base64, for handing to the host. */
 async function base64FromSource(src: string): Promise<string> {
   if (src.startsWith('data:')) {
@@ -309,6 +303,27 @@ function base64FromBlob(blob: Blob): Promise<string> {
     };
     reader.readAsDataURL(blob);
   });
+}
+
+async function saveSessionChatImage(
+  name: string,
+  src: string,
+  hostSave?: (params: { base64Data: string; suggestedName: string }) => Promise<void>
+): Promise<void> {
+  if (hostSave === undefined) {
+    // Browser hosts write the original bytes straight to the download folder.
+    const anchor = document.createElement('a');
+    anchor.download = name;
+    anchor.href = src;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return;
+  }
+  // The original bytes, not a re-encode: the suggested name carries the
+  // original extension, and a saved copy should match the file it came from.
+  await hostSave({ base64Data: await base64FromSource(src), suggestedName: name });
 }
 
 type ViewerState =
@@ -359,6 +374,7 @@ export function SessionChatImageViewerProvider({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const [menuError, setMenuError] = useState<string | null>(null);
+  const [completedAction, setCompletedAction] = useState<'copy-image' | 'copy-path' | 'save-image' | null>(null);
 
   const close = useCallback((): void => {
     openSequenceRef.current += 1;
@@ -436,6 +452,7 @@ export function SessionChatImageViewerProvider({
     setNaturalWidth(0);
     setMenuAt(null);
     setMenuError(null);
+    setCompletedAction(null);
   }, [source]);
 
   /*
@@ -539,16 +556,24 @@ export function SessionChatImageViewerProvider({
     };
   }, [menuError]);
 
+  useEffect(() => {
+    if (completedAction === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => setCompletedAction(null), 1500);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [completedAction]);
+
   const copyImage = (): void => {
     const image = imageRef.current;
     if (image === null) {
       return;
     }
     setMenuAt(null);
-    // The blob is handed over as a promise so the write stays inside the click
-    // gesture that opened the menu; re-encoding first would lose it.
-    void navigator.clipboard
-      .write([new ClipboardItem({ 'image/png': imageAsPngBlob(image) })])
+    void copySessionChatImage(image)
+      .then(() => setCompletedAction('copy-image'))
       .catch((error: unknown) => {
         console.error('[session-chat] Copying the image failed.', error);
         setMenuError('The image could not be copied.');
@@ -561,10 +586,13 @@ export function SessionChatImageViewerProvider({
     }
     const path = state.copyPath;
     setMenuAt(null);
-    void navigator.clipboard.writeText(path).catch((error: unknown) => {
-      console.error('[session-chat] Copying the image path failed.', error);
-      setMenuError('The path could not be copied.');
-    });
+    void navigator.clipboard
+      .writeText(path)
+      .then(() => setCompletedAction('copy-path'))
+      .catch((error: unknown) => {
+        console.error('[session-chat] Copying the image path failed.', error);
+        setMenuError('The path could not be copied.');
+      });
   };
 
   const saveImage = (): void => {
@@ -573,22 +601,8 @@ export function SessionChatImageViewerProvider({
     }
     const { name, src } = state;
     setMenuAt(null);
-    const hostSave = saveImageAsRef.current;
-    if (hostSave === undefined) {
-      // Browser hosts write the original bytes straight to the download folder.
-      const anchor = document.createElement('a');
-      anchor.download = name;
-      anchor.href = src;
-      anchor.rel = 'noopener';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      return;
-    }
-    // The original bytes, not a re-encode: the suggested name carries the
-    // original extension, and a saved copy should match the file it came from.
-    void base64FromSource(src)
-      .then((base64Data) => hostSave({ base64Data, suggestedName: name }))
+    void saveSessionChatImage(name, src, saveImageAsRef.current)
+      .then(() => setCompletedAction('save-image'))
       .catch((error: unknown) => {
         console.error('[session-chat] Saving the image failed.', error);
         setMenuError('The image could not be saved.');
@@ -640,6 +654,58 @@ export function SessionChatImageViewerProvider({
         >
           {/* Outside the scrolling layer so it stays put while a zoomed
               picture is panned around under it. */}
+          {state.status === 'ready' ? (
+            <ButtonGroup
+              aria-label='Image actions'
+              className='ghostex-chat-image-preview-actions'
+              onClick={(event) => event.stopPropagation()}
+            >
+              {state.copyPath !== undefined ? (
+                <Button
+                  aria-label='Copy image path'
+                  onClick={copyPath}
+                  size='icon'
+                  title='Copy image path'
+                  type='button'
+                  variant='outline'
+                >
+                  {completedAction === 'copy-path' ? (
+                    <IconCheck aria-hidden='true' stroke={2} />
+                  ) : (
+                    <IconLink aria-hidden='true' stroke={2} />
+                  )}
+                </Button>
+              ) : null}
+              <Button
+                aria-label='Save image'
+                onClick={saveImage}
+                size='icon'
+                title='Save image'
+                type='button'
+                variant='outline'
+              >
+                {completedAction === 'save-image' ? (
+                  <IconCheck aria-hidden='true' stroke={2} />
+                ) : (
+                  <IconDownload aria-hidden='true' stroke={2} />
+                )}
+              </Button>
+              <Button
+                aria-label='Copy image'
+                onClick={copyImage}
+                size='icon'
+                title='Copy image'
+                type='button'
+                variant='outline'
+              >
+                {completedAction === 'copy-image' ? (
+                  <IconCheck aria-hidden='true' stroke={2} />
+                ) : (
+                  <IconClipboard aria-hidden='true' stroke={2} />
+                )}
+              </Button>
+            </ButtonGroup>
+          ) : null}
           <button
             aria-label='Close image preview'
             className='absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:text-white'

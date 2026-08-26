@@ -18,12 +18,13 @@ import {
   IconCheck,
   IconChevronRight,
   IconCopy,
+  IconFile,
   IconInfoCircle,
   IconPhoto,
   IconSparkles,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { SessionChatMessage, SessionChatTerminalActivity } from '../../shared/session-chat';
+import type { SessionChatMessage, SessionChatTerminalActivity, SessionChatTheme } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
 import { Button } from '../../components/ui/button';
 import { Separator } from '../../components/ui/separator';
@@ -34,7 +35,11 @@ import {
   AttachmentTitle,
   AttachmentTrigger,
 } from '../../components/ui/attachment';
-import { SessionChatInlineImage, useSessionChatImageViewer } from './session-chat-image-viewer';
+import {
+  SessionChatImageReference,
+  SessionChatInlineImage,
+  useSessionChatImageViewer,
+} from './session-chat-image-viewer';
 import { normalizeSessionChatImageTranscriptMessages } from './session-chat-image-transcript-markers';
 import { Bubble, BubbleContent } from '../../components/ui/bubble';
 import { Marker, MarkerContent } from '../../components/ui/marker';
@@ -53,6 +58,11 @@ import { orderSessionChatMessages } from './session-chat-assembler';
 import { centerSessionChatExpansion, SessionChatExpansion } from './session-chat-expansion';
 import { SessionChatMarkdown } from './session-chat-markdown';
 import { SessionChatScrollCap } from './session-chat-scroll-cap';
+import {
+  SessionChatSaveMarkdownDialog,
+  type ListSessionMessageMarkdownPaths,
+  type SaveSessionMessageMarkdown,
+} from './session-chat-save-markdown-dialog';
 import { isSessionChatPendingMessageId } from './session-chat-pending';
 import {
   dropSessionChatHiddenMessages,
@@ -77,7 +87,7 @@ import { SessionChatToolRun } from './session-chat-tool-run';
 import { countSessionChatToolCalls, summarizeSessionChatToolRun } from './session-chat-tool-summary';
 
 const LOAD_EARLIER_SCROLL_TOP_PX = 320;
-const AUTO_SCROLL_EDGE_THRESHOLD_PX = 20;
+const AUTO_SCROLL_EDGE_THRESHOLD_PX = 10;
 const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
 /** Terminal-pane parity: the conversation scrollbar fades out this long after
  * the last scroll (chat.css keys on the data-user-scrolling attribute). */
@@ -95,6 +105,14 @@ export interface SessionChatMessageListProps {
   hasMore: boolean;
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
+  /** Saves a settled assistant response inside this session project's Docs tree. */
+  saveMessageMarkdown?: SaveSessionMessageMarkdown;
+  /** Reads existing project Markdown paths before generating the next file name. */
+  listMessageMarkdownPaths?: ListSessionMessageMarkdownPaths;
+  /** Current session title used to prefill a useful Markdown file name. */
+  sessionTitle?: string;
+  /** Matches the portaled save dialog and toast to this chat surface. */
+  theme?: SessionChatTheme;
   /** Reveal reasoning-owned tool activity by default. */
   verboseMode?: boolean;
 }
@@ -166,19 +184,70 @@ function ImageAttachments({
   );
 }
 
-function CopyFooter({ markdown }: { markdown: string }) {
+function UserImageThumbnails({ blocks }: { blocks: readonly { alt?: string; path?: string; url?: string }[] }) {
+  if (blocks.length === 0) {
+    return null;
+  }
   return (
-    <MessageFooter className='px-0 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100'>
+    <div className='flex min-w-0 flex-wrap justify-end gap-1.5 py-1'>
+      {blocks.map((block, index) => (
+        <SessionChatImageReference
+          key={block.path ?? block.url ?? index}
+          label={block.alt?.trim() || `Image #${index + 1}`}
+          target={{
+            ...(block.path !== undefined ? { path: block.path } : {}),
+            ...(block.url !== undefined ? { url: block.url } : {}),
+            ...(block.alt !== undefined ? { alt: block.alt } : {}),
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CopyFooter({
+  anchoredToAssistantMarker = false,
+  markdown,
+  onSaveMarkdown,
+}: {
+  anchoredToAssistantMarker?: boolean;
+  markdown: string;
+  onSaveMarkdown?: (markdown: string) => void;
+}) {
+  const canSaveMarkdown = markdown.split(/\r?\n/u).filter((line) => line.trim().length > 0).length > 1;
+  return (
+    <MessageFooter
+      className={cn(
+        'px-0',
+        anchoredToAssistantMarker
+          ? 'ghostex-chat-final-actions'
+          : 'opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100'
+      )}
+    >
       <Button
         aria-label='Copy message'
+        className={anchoredToAssistantMarker ? 'ghostex-chat-final-action ghostex-chat-final-action-copy' : undefined}
         onClick={() => {
           void navigator.clipboard.writeText(markdown);
         }}
         size='icon-xs'
+        title='Copy message'
         variant='ghost'
       >
-        <IconCopy aria-hidden='true' stroke={1.9} />
+        <IconCopy aria-hidden='true' data-icon='inline-start' stroke={1.9} />
       </Button>
+      {anchoredToAssistantMarker && onSaveMarkdown && canSaveMarkdown ? (
+        <Button
+          aria-label='Save message to Markdown'
+          className='ghostex-chat-final-action ghostex-chat-final-action-save'
+          onClick={() => onSaveMarkdown(markdown)}
+          size='icon-xs'
+          title='Save to md'
+          variant='ghost'
+        >
+          <IconFile aria-hidden='true' data-icon='inline-start' stroke={1.9} />
+        </Button>
+      ) : null}
     </MessageFooter>
   );
 }
@@ -584,11 +653,10 @@ function normalizeUserMessageMarkdown(markdown: string): string {
 }
 
 /*
- * A pasted picture reaches the agent as a "[Image #N](path)" reference inside
- * the turn's own text; the chat lifts those references out into image blocks so
- * the picture renders as a picture. Copy has to hand the whole turn back — the
- * references included — or the reader loses the one thing that names the file
- * they attached, and pasting the copy into another composer attaches nothing.
+ * Legacy agent transcripts carry a picture as a separate image block. Copy has
+ * to restore a named reference for those blocks or the reader loses the one
+ * thing that names the file they attached. Modern linked references stay in
+ * the turn's text, so both their authored position and copyable path survive.
  */
 function userTurnCopyMarkdown(markdown: string, images: readonly { path?: string; url?: string }[]): string {
   const references = images
@@ -603,6 +671,7 @@ function userTurnCopyMarkdown(markdown: string, images: readonly { path?: string
 function MessageRow({
   isStreaming = false,
   message,
+  onSaveMarkdown,
   questionPairsAsRows = false,
   showAssistantCopy,
   verboseMode,
@@ -614,6 +683,7 @@ function MessageRow({
    */
   isStreaming?: boolean;
   message: SessionChatMessage;
+  onSaveMarkdown?: (markdown: string) => void;
   /** Set inside the expanded completed-work log, where the hoisted question
    * card already shows any answered question this message carries. */
   questionPairsAsRows?: boolean;
@@ -721,7 +791,7 @@ function MessageRow({
         <MessageContent>
           {message.queued === true ? <QueuedLabel /> : null}
           {/* justify-end keeps wrapped rows against the user's side. */}
-          <ImageAttachments blocks={images} className='self-end justify-end' />
+          <UserImageThumbnails blocks={images} />
           {userMarkdown.length > 0 ? (
             <Bubble align='end' className='ghostex-chat-user-bubble' variant='default'>
               <BubbleContent>
@@ -757,7 +827,7 @@ function MessageRow({
             <SessionChatToolRun blocks={tools} questionPairsAsRows={questionPairsAsRows} />
           )
         ) : null}
-        {showCopy ? <CopyFooter markdown={markdown} /> : null}
+        {showCopy ? <CopyFooter anchoredToAssistantMarker markdown={markdown} onSaveMarkdown={onSaveMarkdown} /> : null}
       </MessageContent>
     </Message>
   );
@@ -930,10 +1000,12 @@ function hoistedQuestionExchanges(
 }
 
 function CompletedWork({
+  onSaveMarkdown,
   showAssistantCopy,
   turn,
   verboseMode,
 }: {
+  onSaveMarkdown?: (markdown: string) => void;
   /**
    * A folded turn ends at the next user row, and a harness-injected turn
    * (task notification, local command output) is one of those rows — so this
@@ -1018,7 +1090,12 @@ function CompletedWork({
           </MessageContent>
         </Message>
       ) : null}
-      <MessageRow message={turn.final} showAssistantCopy={showAssistantCopy} verboseMode={verboseMode} />
+      <MessageRow
+        message={turn.final}
+        onSaveMarkdown={onSaveMarkdown}
+        showAssistantCopy={showAssistantCopy}
+        verboseMode={verboseMode}
+      />
     </div>
   );
 }
@@ -1051,14 +1128,21 @@ export function SessionChatMessageList({
   loadingEarlier,
   messages,
   onLoadEarlier,
+  listMessageMarkdownPaths,
+  saveMessageMarkdown,
+  sessionTitle = '',
+  theme = 'dark',
   verboseMode = false,
 }: SessionChatMessageListProps) {
   const loadingEarlierRef = useRef(loadingEarlier);
   loadingEarlierRef.current = loadingEarlier;
   const hasMoreRef = useRef(hasMore);
   hasMoreRef.current = hasMore;
+  const contentRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const shouldFollowBottomRef = useRef(true);
   const scrollbarFadeTimeoutRef = useRef<number | undefined>(undefined);
+  const [markdownToSave, setMarkdownToSave] = useState<string | null>(null);
 
   useEffect(
     () => () => {
@@ -1068,6 +1152,22 @@ export function SessionChatMessageList({
     },
     []
   );
+
+  // Remember bottom-follow intent before content growth changes scrollHeight.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      const viewport = viewportRef.current;
+      if (viewport && shouldFollowBottomRef.current) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   const loadEarlierIfNearTop = useCallback(
     (viewport: HTMLDivElement): void => {
@@ -1099,6 +1199,8 @@ export function SessionChatMessageList({
   const handleScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>): void => {
       const viewport = event.currentTarget;
+      shouldFollowBottomRef.current =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= AUTO_SCROLL_EDGE_THRESHOLD_PX;
       viewport.setAttribute('data-user-scrolling', 'true');
       if (scrollbarFadeTimeoutRef.current !== undefined) {
         window.clearTimeout(scrollbarFadeTimeoutRef.current);
@@ -1151,7 +1253,10 @@ export function SessionChatMessageList({
           preserveScrollOnPrepend
           ref={viewportRef}
         >
-          <MessageScrollerContent className='mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]'>
+          <MessageScrollerContent
+            className='mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]'
+            ref={contentRef}
+          >
             {renderItems.map((item, index) => (
               <MessageScrollerItem
                 key={
@@ -1181,11 +1286,13 @@ export function SessionChatMessageList({
                      */
                     isStreaming={isWorking && index === renderItems.length - 1}
                     message={item.message}
+                    {...(saveMessageMarkdown && listMessageMarkdownPaths ? { onSaveMarkdown: setMarkdownToSave } : {})}
                     showAssistantCopy={copyableAssistantMessageIds.has(item.message.id)}
                     verboseMode={verboseMode}
                   />
                 ) : (
                   <CompletedWork
+                    {...(saveMessageMarkdown && listMessageMarkdownPaths ? { onSaveMarkdown: setMarkdownToSave } : {})}
                     showAssistantCopy={copyableAssistantMessageIds.has(item.turn.final.id)}
                     turn={item.turn}
                     verboseMode={verboseMode}
@@ -1214,6 +1321,21 @@ export function SessionChatMessageList({
         </MessageScrollerViewport>
         <MessageScrollerButton className='ghostex-chat-scroll-bottom-button' />
       </MessageScroller>
+      {saveMessageMarkdown && listMessageMarkdownPaths ? (
+        <SessionChatSaveMarkdownDialog
+          listExistingPaths={listMessageMarkdownPaths}
+          markdown={markdownToSave ?? ''}
+          onOpenChange={(open) => {
+            if (!open) {
+              setMarkdownToSave(null);
+            }
+          }}
+          open={markdownToSave !== null}
+          save={saveMessageMarkdown}
+          sessionTitle={sessionTitle}
+          theme={theme}
+        />
+      ) : null}
     </MessageScrollerProvider>
   );
 }

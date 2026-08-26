@@ -409,10 +409,10 @@ pub(crate) fn handle_save_session_chat_image_http(
 CDXC:SessionChatAttachments 2026-08-02:
 Non-image sibling of the image paste: any attached file's bytes land in
 the resolved Ghostex attachment directory on THIS machine and the returned
-absolute path becomes the composer's "[File #N](path)" reference. The
-suggested name is sanitized to one flat file name (path segments and
-non-portable characters stripped), so no caller-controlled path components
-touch the filesystem.
+absolute path becomes the composer's "[File #N](path)" reference. Ordinary
+uploads stay flat. A dropped browser folder supplies an opaque upload id plus
+separately sanitized relative components so its hierarchy can be recreated
+without allowing traversal.
 */
 pub(crate) const SESSION_CHAT_ATTACHMENT_MAX_BYTES: usize = 32 * 1024 * 1024;
 
@@ -473,6 +473,62 @@ pub(crate) fn unique_session_chat_attachment_path(
     )))
 }
 
+fn sanitized_session_chat_attachment_component(component: &str) -> Option<String> {
+    let component = component.trim();
+    if component.is_empty() || matches!(component, "." | "..") {
+        return None;
+    }
+    let cleaned: String = component
+        .chars()
+        .map(|character| {
+            if character.is_control()
+                || matches!(
+                    character,
+                    '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
+                )
+            {
+                '-'
+            } else {
+                character
+            }
+        })
+        .take(120)
+        .collect();
+    let cleaned = cleaned.trim_matches([' ', '.']);
+    (!cleaned.is_empty()).then(|| cleaned.to_string())
+}
+
+fn session_chat_attachment_upload_path(
+    data_dir: &std::path::Path,
+    upload_id: &str,
+    suggested_name: Option<&str>,
+    relative_path: Option<&str>,
+) -> std::result::Result<(std::path::PathBuf, std::path::PathBuf), DomainStateError> {
+    let upload_id = sanitized_session_chat_attachment_name(Some(upload_id)).ok_or_else(|| {
+        DomainStateError {
+            code: "invalidParams",
+            message: "saveSessionChatAttachment uploadId is invalid.".to_string(),
+        }
+    })?;
+    let root_name = sanitized_session_chat_attachment_name(suggested_name)
+        .unwrap_or_else(|| "folder".to_string());
+    let root = data_dir.join("f").join(format!("{upload_id}-{root_name}"));
+    let mut target = root.clone();
+    if let Some(relative_path) = relative_path {
+        for component in relative_path.split(['/', '\\']) {
+            let component =
+                sanitized_session_chat_attachment_component(component).ok_or_else(|| {
+                    DomainStateError {
+                        code: "invalidParams",
+                        message: "saveSessionChatAttachment relativePath is invalid.".to_string(),
+                    }
+                })?;
+            target.push(component);
+        }
+    }
+    Ok((root, target))
+}
+
 pub(crate) fn handle_save_session_chat_attachment_http(
     state: &AppState,
     endpoint_path: String,
@@ -484,18 +540,61 @@ pub(crate) fn handle_save_session_chat_attachment_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    let base64_data = params
-        .get("base64Data")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    // Tolerate a full data URL so hosts can pass FileReader output verbatim.
-    let base64_payload = base64_data
-        .split_once(",")
-        .filter(|(prefix, _)| prefix.starts_with("data:"))
-        .map(|(_, payload)| payload)
-        .unwrap_or(base64_data)
-        .trim();
-    if base64_payload.is_empty() {
+    let directory = params
+        .get("directory")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let upload_id = params.get("uploadId").and_then(Value::as_str);
+    let relative_path = params.get("relativePath").and_then(Value::as_str);
+    let suggested_name = params.get("suggestedName").and_then(Value::as_str);
+    if directory || upload_id.is_some() || relative_path.is_some() {
+        let Some(upload_id) = upload_id else {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "invalidParams",
+                    message: "saveSessionChatAttachment directory uploads require uploadId."
+                        .to_string(),
+                },
+            );
+        };
+        let (root, target) = match session_chat_attachment_upload_path(
+            &state.paths.app_data_dir,
+            upload_id,
+            suggested_name,
+            relative_path,
+        ) {
+            Ok(paths) => paths,
+            Err(error) => return domain_error_response(endpoint_path, request_id, error),
+        };
+        let create_target = if directory {
+            target.clone()
+        } else {
+            target.parent().unwrap_or(&root).to_path_buf()
+        };
+        if std::fs::create_dir_all(&create_target).is_err() {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "Could not create the dropped attachment directory.".to_string(),
+                },
+            );
+        }
+        if directory {
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    json!({ "path": root.to_string_lossy(), "bytes": 0 }),
+                ),
+            );
+        }
+    }
+    let Some(base64_data) = params.get("base64Data").and_then(Value::as_str) else {
         return domain_error_response(
             endpoint_path,
             request_id,
@@ -504,7 +603,14 @@ pub(crate) fn handle_save_session_chat_attachment_http(
                 message: "saveSessionChatAttachment requires base64Data.".to_string(),
             },
         );
-    }
+    };
+    // Tolerate a full data URL so hosts can pass FileReader output verbatim.
+    let base64_payload = base64_data
+        .split_once(",")
+        .filter(|(prefix, _)| prefix.starts_with("data:"))
+        .map(|(_, payload)| payload)
+        .unwrap_or(base64_data)
+        .trim();
     let bytes = match BASE64_STANDARD.decode(base64_payload) {
         Ok(bytes) => bytes,
         Err(_) => {
@@ -519,24 +625,36 @@ pub(crate) fn handle_save_session_chat_attachment_http(
             );
         }
     };
-    if bytes.is_empty() || bytes.len() > SESSION_CHAT_ATTACHMENT_MAX_BYTES {
+    if bytes.len() > SESSION_CHAT_ATTACHMENT_MAX_BYTES {
         return domain_error_response(
             endpoint_path,
             request_id,
             DomainStateError {
                 code: "invalidParams",
                 message: format!(
-                    "saveSessionChatAttachment files must be between 1 byte and {SESSION_CHAT_ATTACHMENT_MAX_BYTES} bytes."
+                    "saveSessionChatAttachment files must be at most {SESSION_CHAT_ATTACHMENT_MAX_BYTES} bytes."
                 ),
             },
         );
     }
-    let suggested_name = params.get("suggestedName").and_then(Value::as_str);
-    let file_name = sanitized_session_chat_attachment_name(suggested_name)
-        .unwrap_or_else(|| "attachment.bin".to_string());
-    let path = match unique_session_chat_attachment_path(&state.paths.app_data_dir, &file_name) {
-        Ok(path) => path,
-        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    let (path, response_path) = match upload_id {
+        Some(upload_id) => match session_chat_attachment_upload_path(
+            &state.paths.app_data_dir,
+            upload_id,
+            suggested_name,
+            relative_path,
+        ) {
+            Ok((root, path)) => (path, root),
+            Err(error) => return domain_error_response(endpoint_path, request_id, error),
+        },
+        None => {
+            let file_name = sanitized_session_chat_attachment_name(suggested_name)
+                .unwrap_or_else(|| "attachment.bin".to_string());
+            match unique_session_chat_attachment_path(&state.paths.app_data_dir, &file_name) {
+                Ok(path) => (path.clone(), path),
+                Err(error) => return domain_error_response(endpoint_path, request_id, error),
+            }
+        }
     };
     if std::fs::write(&path, &bytes).is_err() {
         return domain_error_response(
@@ -553,7 +671,7 @@ pub(crate) fn handle_save_session_chat_attachment_http(
         StatusCode::OK,
         rpc_success(
             request_id,
-            json!({ "path": path.to_string_lossy(), "bytes": bytes.len() }),
+            json!({ "path": response_path.to_string_lossy(), "bytes": bytes.len() }),
         ),
     )
 }

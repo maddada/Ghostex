@@ -63,6 +63,9 @@ export interface SessionChatFilePathRef {
   position?: SessionChatFilePosition;
 }
 
+/** Exposes a file chip's unadorned path to the transcript context menu. */
+export const SESSION_CHAT_FILE_PATH_ATTRIBUTE = 'data-session-chat-file-path';
+
 /** Long enough for any real path; past this it is a blob, not a reference. */
 const MAX_CANDIDATE_LENGTH = 240;
 /** Whitespace or a backtick means this span holds more than one token. */
@@ -344,6 +347,84 @@ interface MarkdownAstNode {
     hProperties?: Record<string, unknown>;
   };
   type?: string;
+  value?: unknown;
+}
+
+/** Whitespace-delimited prose token; the path resolver remains authoritative. */
+const BARE_PROSE_TOKEN = /\S+/g;
+/** Sentence punctuation that cannot be part of a path under PATH_SEGMENT. */
+const LEADING_PROSE_PUNCTUATION = /^[([{'"<]+/;
+const TRAILING_PROSE_PUNCTUATION = /[)\]},.!?;'">]+$/;
+const NON_PROSE_CONTAINERS = new Set(['code', 'definition', 'html', 'inlineCode', 'link', 'linkReference']);
+
+function taggedInlineCode(value: string): MarkdownAstNode {
+  return {
+    type: 'inlineCode',
+    value,
+    data: { hProperties: { dataInlineCode: '' } },
+  };
+}
+
+/**
+ * Promotes plain file paths in text somebody typed into the composer to the
+ * same tagged inline-code node an agent-authored `path/to/file.ts` span uses.
+ * The renderer therefore draws the exact same FileChip and invokes the exact
+ * same host open-file route for both roles; this pass only supplies the AST
+ * node that ordinary prose otherwise lacks.
+ *
+ * Links and existing code are left alone. Candidate discovery only splits on
+ * whitespace and sentence punctuation; resolveSessionChatInlineCodeFilePath
+ * still makes every actual path/not-path decision, so commands, hosts,
+ * versions, package names, and extensionless directory names remain prose.
+ */
+export function remarkSessionChatBareFilePaths() {
+  return (tree: MarkdownAstNode): void => {
+    const visit = (node: MarkdownAstNode): void => {
+      const children = node.children;
+      if (!children) return;
+
+      const rebuilt: MarkdownAstNode[] = [];
+      let changed = false;
+      for (const child of children) {
+        if (child.type !== 'text' || typeof child.value !== 'string') {
+          if (!NON_PROSE_CONTAINERS.has(child.type ?? '')) {
+            visit(child);
+          }
+          rebuilt.push(child);
+          continue;
+        }
+
+        const value = child.value;
+        let cursor = 0;
+        const pattern = new RegExp(BARE_PROSE_TOKEN.source, 'g');
+        let match = pattern.exec(value);
+        while (match !== null) {
+          const rawToken = match[0];
+          const leading = LEADING_PROSE_PUNCTUATION.exec(rawToken)?.[0].length ?? 0;
+          const withoutLeading = rawToken.slice(leading);
+          const trailing = TRAILING_PROSE_PUNCTUATION.exec(withoutLeading)?.[0].length ?? 0;
+          const candidate = withoutLeading.slice(0, withoutLeading.length - trailing);
+          const reference = resolveSessionChatInlineCodeFilePath(candidate);
+          if (reference) {
+            changed = true;
+            const candidateStart = match.index + leading;
+            const candidateEnd = candidateStart + candidate.length;
+            if (candidateStart > cursor) {
+              rebuilt.push({ type: 'text', value: value.slice(cursor, candidateStart) });
+            }
+            rebuilt.push(taggedInlineCode(candidate));
+            cursor = candidateEnd;
+          }
+          match = pattern.exec(value);
+        }
+        if (cursor < value.length) {
+          rebuilt.push({ type: 'text', value: value.slice(cursor) });
+        }
+      }
+      if (changed) node.children = rebuilt;
+    };
+    visit(tree);
+  };
 }
 
 export function remarkSessionChatInlineCode() {
