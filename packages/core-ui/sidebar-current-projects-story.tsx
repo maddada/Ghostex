@@ -168,7 +168,6 @@ function createCurrentProjectsSidebarMessage(
     pinnedPrompts: [],
     previousSessions: [],
     revision: 1,
-    scratchPadContent: '',
     type: 'hydrate',
   };
 }

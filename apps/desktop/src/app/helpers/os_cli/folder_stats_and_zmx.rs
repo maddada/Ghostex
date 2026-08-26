@@ -342,7 +342,6 @@ pub(crate) fn gpui_directory_size_bytes(path: &Path) -> u64 {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct GpuiAppModalProductState {
     pub(crate) pinned_prompts: Vec<GpuiPinnedPrompt>,
-    pub(crate) scratch_pad_content: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -161,10 +161,10 @@ a non-blank prompt must fail if the submitted agent is not configured instead
 of silently opening the worktree without starting the requested session.
 
 CDXC:GxserverAppUserData 2026-06-24-13:30:
-Scratch Pad and Pinned Prompts in the reused GPUI SidebarApp must hydrate and
-save through gxserver app-user-data, matching the app-modal host and macOS
-sidebar. Keep note and prompt bodies inside authenticated RPC payloads only;
-do not log them or persist them in a GPUI-only JSON file.
+Pinned Prompts in the reused GPUI SidebarApp must hydrate and save through
+gxserver app-user-data, matching the app-modal host. Keep prompt bodies inside
+authenticated RPC payloads only; do not log them or persist them in a
+GPUI-only JSON file.
 
 CDXC:GPUISidebarGit 2026-06-24-15:22:
 GPUI Git controls may use gxserver-owned project ids and typed Git/GitHub/Beads endpoints for status, diffs, commit, push, and direct remote sync. Commit and PR creation paths must use the reused review modal or visible gxserver agent sessions, with remote-machine actions routed through the Rust-owned saved-machine tunnel and the owning remote gxserver.
@@ -1240,9 +1240,6 @@ export class GpuiSidebarRuntime {
       }
       case 'requestProjectWorktrees':
         await this.requestProjectWorktrees(message);
-        return;
-      case 'saveScratchPad':
-        await this.saveScratchPad(message.content);
         return;
       case 'savePinnedPrompt':
         await this.savePinnedPrompt(message);

@@ -91,11 +91,11 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
     guesses.
 
     CDXC:GxserverAppUserData 2026-06-24-13:30:
-    Hydrate Pinned Prompts and Scratch Pad from gxserver app-user-data every
-    time the app-modal host opens or refreshes. Settings, Previous Sessions,
-    Running Sessions, and Portless data keep their existing
-    stored-vs-transient behavior; these two user-data modal fields must not
-    read or write the old GPUI-only product-state file.
+    Hydrate Pinned Prompts from gxserver app-user-data every time the app-modal
+    host opens or refreshes. Settings, Previous Sessions, Running Sessions, and
+    Portless data keep their existing stored-vs-transient behavior; this
+    user-data modal field must not read or write the old GPUI-only
+    product-state file.
 
     CDXC:GPUISettingsActiveProjectActions 2026-06-24-13:34:
     App-modal Settings action hydration uses the explicit active project id from the latest live sidebar snapshot when one exists, matching the SidebarApp gxserver runtime's project-scoped command owner selection. Quick/projectless, no-snapshot, and no-active-id hydrates keep the existing no-active-project behavior; an unknown explicit id returns default actions instead of silently using another project's custom commands.
@@ -197,7 +197,6 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
         "pinnedPrompts": pinned_prompts,
         "previousSessions": [],
         "revision": settings_snapshot.revision(),
-        "scratchPadContent": product_state.scratch_pad_content,
         "type": "hydrate",
     });
     if let Some(portless_state) = portless_state {

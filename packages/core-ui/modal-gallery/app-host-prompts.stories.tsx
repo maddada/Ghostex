@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
 import { AgentConfigModal } from '../agent-config-modal';
@@ -8,10 +7,8 @@ import { MissingProjectFolderModal } from '../missing-project-folder-modal';
 import { PortlessSetupModal } from '../portless-setup-modal';
 import { RemoteGxserverInstallModal } from '../remote-gxserver-install-modal';
 import { RemoteProjectPickerModal } from '../remote-project-picker/remote-project-picker-modal';
-import { ScratchPadModal } from '../scratch-pad-modal';
 import { SessionNoteModal } from '../session-note-modal';
 import { SessionRenameModal } from '../session-rename-modal';
-import { useSidebarStore } from '../sidebar-store';
 import { UpdateAvailableModal } from '../update-available-modal';
 import { WatchGhostexVideoModal } from '../watch-ghostex-video-modal';
 import { ModalStorySurface, modalStoryParameters } from './modal-story-surface';
@@ -180,23 +177,6 @@ export const SessionNote: Story = {
     </ModalStorySurface>
   ),
 };
-
-function ScratchPadStory() {
-  useEffect(() => {
-    useSidebarStore.setState({
-      scratchPadContent: 'Modal review notes:\n\n- Header hierarchy\n- Footer alignment\n- Button order',
-    });
-    return () => useSidebarStore.getState().reset();
-  }, []);
-
-  return (
-    <ModalStorySurface>
-      <ScratchPadModal isOpen onClose={noop} onDebug={noop} onSave={noop} />
-    </ModalStorySurface>
-  );
-}
-
-export const ScratchPad: Story = { render: () => <ScratchPadStory /> };
 
 export const VideoWalkthrough: Story = {
   render: () => (

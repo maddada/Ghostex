@@ -29,7 +29,6 @@ export type AppModalKind =
   | 'delayedSend'
   | 'renameSession'
   | 'sessionNote'
-  | 'scratchPad'
   | 'settings'
   | 'stashedPrompts'
   | 'worktree'

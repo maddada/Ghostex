@@ -624,12 +624,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/installAgentSkills"
         /*
         CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Scratch Pad and Pinned Prompts can carry user-authored bodies, so their
-        shared gxserver RPCs are local-only authenticated endpoints rather than
-        remote-listener APIs.
+        Pinned Prompts can carry user-authored bodies, so their shared gxserver
+        RPCs are local-only authenticated endpoints rather than remote-listener
+        APIs.
         */
         | "/api/readAppUserData"
-        | "/api/saveScratchPad"
         | "/api/savePinnedPrompt"
         /*
         CDXC:StashedPrompts 2026-07-29-00:00:

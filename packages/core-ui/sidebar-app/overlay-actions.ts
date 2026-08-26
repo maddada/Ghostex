@@ -7,7 +7,6 @@ import type { SidebarKeepAwakeRuntimeState } from './types';
 
 export type SidebarOverlayActionsOptions = {
   setIsPreviousSessionsOpen: Dispatch<SetStateAction<boolean>>;
-  setIsScratchPadOpen: Dispatch<SetStateAction<boolean>>;
   setIsSessionSearchOpen: Dispatch<SetStateAction<boolean>>;
   setIsSessionSearchSelectionVisible: Dispatch<SetStateAction<boolean>>;
   setSessionSearchQuery: Dispatch<SetStateAction<string>>;
@@ -25,7 +24,6 @@ export type SidebarOverlayActionsOptions = {
  */
 export function useSidebarOverlayActions({
   setIsPreviousSessionsOpen,
-  setIsScratchPadOpen,
   setIsSessionSearchOpen,
   setIsSessionSearchSelectionVisible,
   setSessionSearchQuery,
@@ -39,7 +37,6 @@ export function useSidebarOverlayActions({
       return;
     }
     setIsPreviousSessionsOpen(false);
-    setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
     setSessionSearchQuery('');
@@ -52,7 +49,6 @@ export function useSidebarOverlayActions({
      * Cmd+. is advertised in the sidebar Settings dropdown after the menu moved out of the titlebar. Route it to the same full-window app-modal host as Settings and Command Palette, closing transient sidebar drawers first so the shortcut opens one focused Hotkeys surface.
      */
     setIsPreviousSessionsOpen(false);
-    setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
     setSessionSearchQuery('');
@@ -74,7 +70,6 @@ export function useSidebarOverlayActions({
      *
      */
     setIsPreviousSessionsOpen(false);
-    setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
     setSessionSearchQuery('');
@@ -83,7 +78,6 @@ export function useSidebarOverlayActions({
 
   const openKeepAwakePowerSettings = () => {
     setIsPreviousSessionsOpen(false);
-    setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
     setSessionSearchQuery('');

@@ -47,7 +47,6 @@ gpui::actions!(
         OpenGpuiHotkeysModal,
         OpenGpuiCommandPaletteModal,
         OpenGpuiPreviousSessionsModal,
-        OpenGpuiScratchPadModal,
         OpenGpuiAgentsHubModal,
         OpenGpuiConfigureAgentsModal,
         OpenGpuiConfigureActionsModal,

@@ -230,7 +230,6 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       previousSessions: [],
       remoteSidebarProjectCollectionsByMachineId,
       revision: ++revision,
-      scratchPadContent: '',
       ...(localSidebarProjectCollections ? { sidebarProjectCollections: localSidebarProjectCollections } : {}),
       type: hasHydrated ? 'sessionState' : 'hydrate',
     };

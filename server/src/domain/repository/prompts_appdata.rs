@@ -14,48 +14,11 @@ impl<'a> DomainRepository<'a> {
     pub fn read_app_user_data(&self) -> DomainResult<Value> {
         /*
         CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Scratch Pad and Pinned Prompts hydrate through one gxserver-owned
-        product-data snapshot. Return only the exact shared React fields and do
-        not derive values from GPUI product-state files, presentation labels,
-        terminal text, project paths, command text, URLs, or logs.
+        Pinned Prompts hydrate through one gxserver-owned product-data
+        snapshot. Return only the exact shared React fields and do not derive
+        values from GPUI product-state files, presentation labels, terminal
+        text, project paths, command text, URLs, or logs.
         */
-        read_app_user_data_state(self.db)
-    }
-
-    pub fn save_scratch_pad(&self, params: &Map<String, Value>) -> DomainResult<Value> {
-        /*
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Scratch Pad autosave stores freeform user text in gxserver state and
-        returns the refreshed app-user-data snapshot. The daemon must not log or
-        echo note content outside the authenticated RPC response.
-        */
-        let content = required_string_param(params, "content")?;
-        let timestamp = now_iso();
-        let created_at = self
-            .db
-            .query_row(
-                "SELECT createdAt FROM app_user_data WHERE itemKind = 'scratchPad' AND itemId = 'global'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .unwrap_or_else(|| timestamp.clone());
-        self.db
-            .execute(
-                r#"
-                INSERT INTO app_user_data (
-                  itemKind, itemId, content, title, createdAt, updatedAt
-                ) VALUES (
-                  'scratchPad', 'global', ?1, NULL, ?2, ?3
-                )
-                ON CONFLICT(itemKind, itemId) DO UPDATE SET
-                  content = excluded.content,
-                  updatedAt = excluded.updatedAt
-                "#,
-                params![content, created_at, timestamp],
-            )
-            .map_err(sql_error)?;
         read_app_user_data_state(self.db)
     }
 
@@ -745,15 +708,6 @@ impl<'a> DomainRepository<'a> {
 }
 
 fn read_app_user_data_state(db: &Connection) -> DomainResult<Value> {
-    let scratch_pad_content = db
-        .query_row(
-            "SELECT content FROM app_user_data WHERE itemKind = 'scratchPad' AND itemId = 'global'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(sql_error)?
-        .unwrap_or_default();
     let mut statement = db
         .prepare(
             r#"
@@ -786,7 +740,6 @@ fn read_app_user_data_state(db: &Connection) -> DomainResult<Value> {
         .map_err(sql_error)?;
     Ok(json!({
         "pinnedPrompts": pinned_prompts,
-        "scratchPadContent": scratch_pad_content,
     }))
 }
 

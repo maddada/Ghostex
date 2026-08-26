@@ -147,7 +147,6 @@ export type GxserverEndpointPath =
   | '/api/readAgentSettings'
   | '/api/updateAgentSettings'
   | '/api/readAppUserData'
-  | '/api/saveScratchPad'
   | '/api/savePinnedPrompt'
   | '/api/saveStashedPrompt'
   | '/api/listStashedPrompts'
@@ -661,10 +660,10 @@ export interface GxserverEndpointDescriptor {
 
 /*
 CDXC:GxserverAppUserData 2026-06-24-13:30:
-Scratch Pad and Pinned Prompts use the same shared React hydrate fields on
-macOS and GPUI, but persistence belongs to gxserver instead of platform-local
-storage. These RPC payloads can include user-authored note or prompt bodies, so
-clients must not log request params or daemon response bodies.
+Pinned Prompts use shared React hydrate fields on every client, but persistence
+belongs to gxserver instead of platform-local storage. These RPC payloads can
+include user-authored prompt bodies, so clients must not log request params or
+daemon response bodies.
 */
 export interface GxserverPinnedPrompt {
   content: string;
@@ -676,11 +675,6 @@ export interface GxserverPinnedPrompt {
 
 export interface GxserverAppUserData {
   pinnedPrompts: readonly GxserverPinnedPrompt[];
-  scratchPadContent: string;
-}
-
-export interface GxserverSaveScratchPadParams {
-  content: string;
 }
 
 export interface GxserverSavePinnedPromptParams {

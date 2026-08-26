@@ -1750,13 +1750,6 @@ async fn route_http(
         "/api/scheduleDelayedSend" | "/api/cancelDelayedSend" | "/api/readDelayedSends" => {
             handle_delayed_send_http(&state, endpoint.path, request_id, &body_json)
         }
-        "/api/saveScratchPad" => handle_domain_http(
-            &state,
-            endpoint.path,
-            request_id,
-            &body_json,
-            |repository, _, params, _| repository.save_scratch_pad(params),
-        ),
         "/api/savePinnedPrompt" => handle_domain_http(
             &state,
             endpoint.path,

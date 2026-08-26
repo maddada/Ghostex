@@ -1,7 +1,7 @@
 // C1 wave-1 deferred split: apps/desktop/src/app/helpers/board_gxserver.rs
 // (~4.3k lines) further divided into responsibility-scoped submodules (pure
 // move, no logic changes). This file holds sidebar HUD hydration, gxserver app user-data reads, and
-// scratch-pad/pinned-prompt persistence helpers.
+// pinned-prompt persistence helpers.
 // See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
 use std::time::Duration;
@@ -95,24 +95,15 @@ pub(crate) fn gpui_persist_sidebar_agents_to_gxserver_projects(
 pub(crate) fn gpui_read_gxserver_app_user_data(timeout: Duration) -> GpuiAppModalProductState {
     /*
     CDXC:GxserverAppUserData 2026-06-24-13:30:
-    GPUI app-modal hydrate reads Scratch Pad and Pinned Prompts from gxserver's
-    shared app-user-data snapshot instead of the old GPUI product-state file.
-    Parse only the shared React contract fields and silently drop malformed
-    prompt rows without logging note or prompt content.
+    GPUI app-modal hydrate reads Pinned Prompts from gxserver's shared
+    app-user-data snapshot instead of the old GPUI product-state file. Parse
+    only the shared React contract fields and silently drop malformed prompt
+    rows without logging prompt content.
     */
     gpui_gxserver_rpc_result("/api/readAppUserData", &serde_json::json!({}), timeout)
         .ok()
         .and_then(|value| gpui_app_modal_product_state_from_value(&value))
         .unwrap_or_default()
-}
-
-pub(crate) fn gpui_save_gxserver_scratch_pad(content: &str) -> Result<(), String> {
-    gpui_gxserver_rpc_result(
-        "/api/saveScratchPad",
-        &serde_json::json!({ "content": content }),
-        Duration::from_secs(5),
-    )
-    .map(|_| ())
 }
 
 pub(crate) fn gpui_save_gxserver_pinned_prompt(
@@ -149,11 +140,6 @@ pub(crate) fn gpui_app_modal_product_state_from_value(
     let object = value.as_object()?;
     Some(GpuiAppModalProductState {
         pinned_prompts: gpui_pinned_prompts_from_value(object.get("pinnedPrompts")),
-        scratch_pad_content: object
-            .get("scratchPadContent")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("")
-            .to_string(),
     })
 }
 

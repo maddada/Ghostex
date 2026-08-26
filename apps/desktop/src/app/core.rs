@@ -1796,15 +1796,6 @@ impl Render for GhostexGpuiApp {
                     );
                 }),
             )
-            .on_action(
-                cx.listener(|this, _: &OpenGpuiScratchPadModal, window, cx| {
-                    this.open_gpui_app_modal_from_titlebar(
-                        GpuiAppModalKind::ScratchPad,
-                        window,
-                        cx,
-                    );
-                }),
-            )
             .on_action(cx.listener(|this, _: &OpenGpuiAgentsHubModal, window, cx| {
                 this.open_gpui_app_modal_from_titlebar(GpuiAppModalKind::AgentsHub, window, cx);
             }))

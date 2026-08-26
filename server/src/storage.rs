@@ -37,7 +37,7 @@ CDXC:GxserverStorage 2026-06-14-20:37:
 SQLite remains TypeScript-compatible during the Rust port. Open every connection with foreign_keys=ON and journal_mode=WAL, then apply migration IDs 0001 through 0015 without inventing a parallel schema.
 
 CDXC:GxserverAppUserData 2026-06-24-13:30:
-Scratch Pad and Pinned Prompts are shared user-data surfaces, not GPUI-local modal state. Store their content in gxserver SQLite behind explicit product-data RPCs so macOS and GPUI hydrate the same React contract without logging prompt or note bodies.
+Pinned Prompts are a shared user-data surface, not GPUI-local modal state. Store their content in gxserver SQLite behind explicit product-data RPCs so every client hydrates the same React contract without logging prompt bodies.
 */
 pub fn initialize_gxserver_storage(paths: &GxserverPaths) -> Result<StorageInitResult> {
     ensure_gxserver_storage_layout(paths)?;

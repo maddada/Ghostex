@@ -682,7 +682,6 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       previousSessions: [],
       remoteSidebarProjectCollectionsByMachineId: this.remoteSidebarProjectCollectionsByMachineId(),
       revision: ++this.revision,
-      scratchPadContent: this.appUserData.scratchPadContent,
       type: 'hydrate',
     };
   },

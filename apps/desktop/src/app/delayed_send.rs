@@ -185,29 +185,6 @@ impl GhostexGpuiApp {
         );
     }
 
-    pub(crate) fn handle_gpui_save_scratch_pad_command(
-        &mut self,
-        command: &serde_json::Map<String, serde_json::Value>,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Scratch Pad autosave payloads are shared app user data. Accept only
-        string content, persist through gxserver, and refresh the open modal
-        hydrate without logging note text or claiming success when the daemon
-        write fails.
-        */
-        let Some(content) = command.get("content").and_then(serde_json::Value::as_str) else {
-            return;
-        };
-        if gpui_save_gxserver_scratch_pad(content).is_ok() {
-            self.refresh_open_gpui_app_modal_sidebar_state(
-                self.gpui_app_modal_sidebar_state_message(),
-                cx,
-            );
-        }
-    }
-
     pub(crate) fn handle_gpui_save_pinned_prompt_command(
         &mut self,
         command: &serde_json::Map<String, serde_json::Value>,
@@ -2321,9 +2298,6 @@ impl GhostexGpuiApp {
             }
             "refreshDaemonSessions" => {
                 self.refresh_gpui_daemon_sessions_state_in_background(None, cx);
-            }
-            "saveScratchPad" => {
-                self.handle_gpui_save_scratch_pad_command(command, cx);
             }
             "savePinnedPrompt" => {
                 self.handle_gpui_save_pinned_prompt_command(command, cx);

@@ -162,7 +162,6 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
   saveSidebarSettingsPatch(message: Extract<SidebarToExtensionMessage, { type: 'updateSettingsPatch' }>): void;
   openExternalUrl(message: Extract<SidebarToExtensionMessage, { type: 'openExternalUrl' }>): void;
   openAppModal(modal: 'firstLaunchSetup' | 'settings' | 'watchGhostexVideo'): void;
-  saveScratchPad(content: string): Promise<void>;
   savePinnedPrompt(message: Extract<SidebarToExtensionMessage, { type: 'savePinnedPrompt' }>): Promise<void>;
   publishAppUserDataHydrate(): void;
 }
@@ -1166,15 +1165,6 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     } catch {
       this.handleUnsupportedSidebarMessage({ type: 'openSettings' });
     }
-  },
-
-  async saveScratchPad(this: GpuiSidebarRuntime, content: string): Promise<void> {
-    const client = this.client;
-    if (!client) {
-      return;
-    }
-    this.appUserData = await client.saveScratchPad(content);
-    this.publishAppUserDataHydrate();
   },
 
   async savePinnedPrompt(

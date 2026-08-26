@@ -104,7 +104,6 @@ const MODAL_GALLERY_GROUPS = [
       entry({ kind: 'previousSessions', label: 'previousSessions' }),
       entry({ kind: 'openTargets', label: 'openTargets' }),
       entry({ kind: 'stashedPrompts', label: 'stashedPrompts' }),
-      entry({ kind: 'scratchPad', label: 'scratchPad' }),
       entry({ kind: 'gitCommit', label: 'gitCommit', note: 'needs a gitCommitDraft' }),
       entry({ kind: 'gitFileDiff', label: 'gitFileDiff' }),
       entry({

@@ -109,10 +109,6 @@ export class GpuiGxserverClient {
     return this.rpc<GxserverAppUserData>('/api/readAppUserData');
   }
 
-  async saveScratchPad(content: string): Promise<GxserverAppUserData> {
-    return this.rpc<GxserverAppUserData>('/api/saveScratchPad', { content });
-  }
-
   async savePinnedPrompt(params: { content: string; promptId?: string; title: string }): Promise<GxserverAppUserData> {
     return this.rpc<GxserverAppUserData>('/api/savePinnedPrompt', params);
   }

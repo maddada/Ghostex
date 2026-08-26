@@ -58,7 +58,6 @@ type SidebarStoryWorkspaceOptions = {
   autoSettleAfterDaysByMachineId?: SidebarHydrateMessage['hud']['autoSettleAfterDaysByMachineId'];
   lifecycleCapabilitiesByMachineId?: SidebarHydrateMessage['hud']['lifecycleCapabilitiesByMachineId'];
   recentProjects: SidebarHydrateMessage['hud']['recentProjects'];
-  scratchPadContent: string;
   showCloseButtonOnSessionCards: boolean;
   settings?: ghostexSettings;
   theme: SidebarHydrateMessage['hud']['theme'];
@@ -164,7 +163,6 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
       lifecycleCapabilities: message.hud.lifecycleCapabilities,
       lifecycleCapabilitiesByMachineId: message.hud.lifecycleCapabilitiesByMachineId,
       recentProjects: message.hud.recentProjects,
-      scratchPadContent: message.scratchPadContent,
       showCloseButtonOnSessionCards: message.hud.showCloseButtonOnSessionCards,
       settings: message.hud.settings,
       theme: message.hud.theme,
@@ -343,7 +341,6 @@ export function createSidebarStoryMessage(
     pinnedPrompts: workspace.pinnedPrompts.map((prompt) => ({ ...prompt })),
     previousSessions: workspace.previousSessions.map((session) => ({ ...session })),
     revision: 1,
-    scratchPadContent: workspace.options.scratchPadContent,
     type,
   };
 }
@@ -464,15 +461,6 @@ export function reduceSidebarStoryWorkspace(
       return {
         ...workspace,
         snapshot: toggleFullscreenSessionInWorkspace(workspace.snapshot),
-      };
-
-    case 'saveScratchPad':
-      return {
-        ...workspace,
-        options: {
-          ...workspace.options,
-          scratchPadContent: message.content,
-        },
       };
 
     case 'savePinnedPrompt': {

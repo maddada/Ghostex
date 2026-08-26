@@ -46,7 +46,6 @@ type SidebarStoreDataState = {
   pinnedPrompts: SidebarPinnedPrompt[];
   previousSessions: SidebarPreviousSessionItem[];
   revision: number;
-  scratchPadContent: string;
   sessionIdsByGroup: Record<string, string[]>;
   sessionsById: Record<string, SidebarSessionItem>;
   workspaceGroupIds: string[];
@@ -134,7 +133,6 @@ export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
     pinnedPrompts: [],
     previousSessions: [],
     revision: 0,
-    scratchPadContent: '',
     sessionIdsByGroup: {},
     sessionsById: {},
     workspaceGroupIds: [],
@@ -330,7 +328,6 @@ function applySidebarMessageState(
     pinnedPrompts: message.pinnedPrompts,
     previousSessions: message.previousSessions,
     revision: message.revision,
-    scratchPadContent: message.scratchPadContent,
     sessionIdsByGroup: normalizedGroups.sessionIdsByGroup,
     sessionsById: normalizedGroups.sessionsById,
     workspaceGroupIds: normalizedGroups.workspaceGroupIds,

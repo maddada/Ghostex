@@ -50,7 +50,6 @@ const REQUIRES_SIDEBAR_STATE: ReadonlySet<SandboxModalKind> = new Set<SandboxMod
   'openTargets',
   'firstLaunchSetup',
   'agentsHub',
-  'scratchPad',
   'delayedSend',
   'renameSession',
   'worktree',
@@ -133,7 +132,6 @@ const CHROME: Record<SandboxModalKind, ChromeSpec> = {
     initialHeight: 640,
   },
   renameSession: { title: 'Ghostex Rename Session', width: 570, height: 'fit', initialHeight: 440 },
-  scratchPad: { title: 'Ghostex Scratch Pad', width: 520, height: 700 },
   settings: { title: 'Ghostex Settings', width: SETTINGS_WIDTH, height: SETTINGS_HEIGHT },
   stashedPrompts: {
     title: 'Ghostex Quick Access',
@@ -242,7 +240,6 @@ export const MODAL_GALLERY_GROUPS: ReadonlyArray<{
       'previousSessions',
       'recentProjects',
       'stashedPrompts',
-      'scratchPad',
       'delayedSend',
       'renameSession',
       'agentConfig',

@@ -803,8 +803,8 @@ pub(crate) const APP_MODAL_HOST_FIT_CONTENT_MAX_WINDOW_HEIGHT: f32 = 850.0;
  * shared 1080x760 Settings frame that left short forms stranded in dead space.
  * Measured dialog footprints: Add Worktree 619, Clone Repository 633, Delete
  * Worktree 505 (CSS-capped at 560), Portless Setup 290, Remote Setup 311,
- * Browser Access 544, Rename Session 431. Scratch Pad and Remote Project size
- * to their stylesheet width and scroll.
+ * Browser Access 544, Rename Session 431. Remote Project sizes to its
+ * stylesheet width and scrolls.
  */
 pub(crate) const APP_MODAL_HOST_WORKTREE_WINDOW_WIDTH: f32 = 640.0;
 
@@ -846,10 +846,6 @@ pub(crate) const APP_MODAL_HOST_UPDATE_AVAILABLE_WINDOW_HEIGHT: f32 = 560.0;
 pub(crate) const APP_MODAL_HOST_ADD_PROJECT_WINDOW_WIDTH: f32 = 640.0;
 
 pub(crate) const APP_MODAL_HOST_ADD_PROJECT_WINDOW_HEIGHT: f32 = 460.0;
-
-pub(crate) const APP_MODAL_HOST_SCRATCH_PAD_WINDOW_WIDTH: f32 = 520.0;
-
-pub(crate) const APP_MODAL_HOST_SCRATCH_PAD_WINDOW_HEIGHT: f32 = 700.0;
 
 pub(crate) const APP_MODAL_HOST_READY_TIMEOUT: Duration = Duration::from_secs(3);
 

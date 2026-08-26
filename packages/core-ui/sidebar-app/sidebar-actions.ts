@@ -23,7 +23,6 @@ export type SidebarActionsOptions = {
   enabledVisibleSidebarSessionTagSet: ReadonlySet<SidebarSessionTagFilter>;
   revision: number;
   setIsPreviousSessionsOpen: Dispatch<SetStateAction<boolean>>;
-  setIsScratchPadOpen: Dispatch<SetStateAction<boolean>>;
   setIsSessionSearchOpen: Dispatch<SetStateAction<boolean>>;
   setIsSessionSearchSelectionVisible: Dispatch<SetStateAction<boolean>>;
   setPrimaryAgentLauncherId: Dispatch<SetStateAction<string | undefined>>;
@@ -51,7 +50,6 @@ export function useSidebarActions({
   enabledVisibleSidebarSessionTagSet,
   revision,
   setIsPreviousSessionsOpen,
-  setIsScratchPadOpen,
   setIsSessionSearchOpen,
   setIsSessionSearchSelectionVisible,
   setPrimaryAgentLauncherId,
@@ -261,7 +259,6 @@ export function useSidebarActions({
 
   const openPreviousSessions = () => {
     dismissAppModalForSidebarNavigation('SettingsDismissal:previousSessions');
-    setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
     setSessionSearchQuery('');
@@ -270,7 +267,6 @@ export function useSidebarActions({
 
   const searchPreviousSessionsByPrompt = () => {
     dismissAppModalForSidebarNavigation('SettingsDismissal:previousSessionsPromptSearch');
-    setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
     setSessionSearchQuery('');

@@ -422,7 +422,6 @@ describe('sidebar store', () => {
       pinnedPrompts: [],
       previousSessions: [],
       revision: 2,
-      scratchPadContent: '',
       type: 'sessionState',
     };
 
@@ -663,7 +662,6 @@ function createHydrateMessage(
     pinnedPrompts: [],
     previousSessions: [],
     revision: options?.revision ?? 1,
-    scratchPadContent: '',
     type: 'hydrate',
   };
 }

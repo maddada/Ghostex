@@ -959,7 +959,6 @@ export type SidebarHydrateMessage = {
   previousSessions: SidebarPreviousSessionItem[];
   remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
   revision: number;
-  scratchPadContent: string;
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
   type: 'hydrate';
   hud: SidebarHudState;
@@ -971,7 +970,6 @@ export type SidebarSessionStateMessage = {
   previousSessions: SidebarPreviousSessionItem[];
   remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
   revision: number;
-  scratchPadContent: string;
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
   type: 'sessionState';
   hud: SidebarHudState;
@@ -2543,10 +2541,6 @@ export type SidebarToExtensionMessage =
        * remains the direct Search row launcher only.
        */
       type: 'searchPreviousSessionsByText';
-    }
-  | {
-      content: string;
-      type: 'saveScratchPad';
     }
   | {
       content: string;

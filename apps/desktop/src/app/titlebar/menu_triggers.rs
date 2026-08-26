@@ -105,9 +105,6 @@ impl GhostexGpuiApp {
         CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
         Previous Sessions is exposed from the same titlebar NativeMenu so GPUI opens the shared history/restore modal through a typed app-modal action rather than duplicating the React UI or adding an overlay surface.
 
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Scratch Pad is a shared React app modal. GPUI exposes it through a typed NativeMenu action and hydrates it from gxserver app-user-data so the titlebar route does not duplicate UI or fake persistence.
-
         CDXC:GPUIAgentsHubModal 2026-06-24-12:26:
         Agents Hub belongs in the same typed GPUI app-modal route as the Settings utility surfaces. The menu action must open the shared React Hub in the owned CEF app-modal host while Rust supplies the real filesystem catalog/content bridge instead of duplicate modal UI or fallback rows.
 
@@ -123,7 +120,6 @@ impl GhostexGpuiApp {
             .menu("Configure Actions", Box::new(OpenGpuiConfigureActionsModal))
             .menu("Open Targets", Box::new(OpenGpuiOpenTargetsModal))
             .menu("Previous Sessions", Box::new(OpenGpuiPreviousSessionsModal))
-            .menu("Scratch Pad", Box::new(OpenGpuiScratchPadModal))
             .menu("Agents Hub", Box::new(OpenGpuiAgentsHubModal))
             .show(position, window, cx);
     }

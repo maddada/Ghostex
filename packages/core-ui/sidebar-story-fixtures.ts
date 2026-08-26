@@ -377,7 +377,6 @@ export function createSidebarStoryMessage(
       ...session,
     })),
     revision: 1,
-    scratchPadContent: '',
     type: 'hydrate',
   };
 }

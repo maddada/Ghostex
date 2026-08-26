@@ -16,7 +16,6 @@ pub(crate) enum GpuiAppModalKind {
     PreviousSessions,
     RecentProjects,
     StashedPrompts,
-    ScratchPad,
     AgentsHub,
     DelayedSend,
     RenameSession,
@@ -53,7 +52,6 @@ impl GpuiAppModalKind {
             "previousSessions" => Some(Self::PreviousSessions),
             "recentProjects" => Some(Self::RecentProjects),
             "stashedPrompts" => Some(Self::StashedPrompts),
-            "scratchPad" => Some(Self::ScratchPad),
             "agentsHub" => Some(Self::AgentsHub),
             "delayedSend" => Some(Self::DelayedSend),
             "renameSession" => Some(Self::RenameSession),
@@ -93,7 +91,6 @@ impl GpuiAppModalKind {
             Self::PreviousSessions => "previousSessions",
             Self::RecentProjects => "recentProjects",
             Self::StashedPrompts => "stashedPrompts",
-            Self::ScratchPad => "scratchPad",
             Self::AgentsHub => "agentsHub",
             Self::DelayedSend => "delayedSend",
             Self::RenameSession => "renameSession",
@@ -130,7 +127,6 @@ impl GpuiAppModalKind {
             | Self::RecentProjects
             | Self::StashedPrompts => "Ghostex Quick Access",
             Self::FindPrompts => "Ghostex Search by Prompt",
-            Self::ScratchPad => "Ghostex Scratch Pad",
             Self::AgentsHub => "Ghostex Agents Hub",
             Self::DelayedSend => "Ghostex Session Automations",
             Self::RenameSession => "Ghostex Rename Session",
@@ -187,10 +183,6 @@ impl GpuiAppModalKind {
             Self::MissingProjectFolder => size(
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT),
-            ),
-            Self::ScratchPad => size(
-                px(APP_MODAL_HOST_SCRATCH_PAD_WINDOW_WIDTH),
-                px(APP_MODAL_HOST_SCRATCH_PAD_WINDOW_HEIGHT),
             ),
             /*
             CDXC:GPUIAppModalSizes 2026-07-26-07:20:
@@ -304,7 +296,6 @@ impl GpuiAppModalKind {
                 | Self::OpenTargets
                 | Self::FirstLaunchSetup
                 | Self::AgentsHub
-                | Self::ScratchPad
                 | Self::DelayedSend
                 | Self::RenameSession
                 // The export result dialog's agent picker renders the user's
@@ -337,7 +328,6 @@ impl GpuiAppModalKind {
             | Self::PreviousSessions
             | Self::RecentProjects
             | Self::StashedPrompts
-            | Self::ScratchPad
             | Self::AgentsHub
             | Self::DelayedSend
             | Self::RenameSession
@@ -409,7 +399,6 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
         "openFindPrompts" => Some(GpuiAppModalKind::FindPrompts),
         "openSessionSearchPalette" => Some(GpuiAppModalKind::PreviousSessions),
         "openPreviousSessions" => Some(GpuiAppModalKind::PreviousSessions),
-        "scratchPad" | "openScratchPad" => Some(GpuiAppModalKind::ScratchPad),
         "agentsHub" | "openAgentsHub" => Some(GpuiAppModalKind::AgentsHub),
         "configureAgents" => Some(GpuiAppModalKind::ConfigureAgents),
         "actions" | "configureActions" => Some(GpuiAppModalKind::ConfigureActions),

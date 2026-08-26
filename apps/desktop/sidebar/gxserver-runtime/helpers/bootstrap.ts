@@ -23,7 +23,6 @@ import type { SidebarTheme } from '@/packages/shared/session-grid-contract';
 export function createEmptyGpuiAppUserData(): GxserverAppUserData {
   return {
     pinnedPrompts: [],
-    scratchPadContent: '',
   };
 }
 

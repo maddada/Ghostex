@@ -27,7 +27,6 @@ import { RecentProjectsModal } from '@/packages/core-ui/recent-projects-modal';
 import { RemoteGxserverInstallModal } from '@/packages/core-ui/remote-gxserver-install-modal';
 import { RemoteProjectPickerModal } from '@/packages/core-ui/remote-project-picker/remote-project-picker-modal';
 import type { RemoteFilesystemBrowseResult } from '@/packages/core-ui/remote-project-picker/remote-filesystem';
-import { ScratchPadModal } from '@/packages/core-ui/scratch-pad-modal';
 import {
   SettingsModal,
   type MainSettingsInitialSectionId,
@@ -110,7 +109,6 @@ type AppModalKind =
   | 'remoteProjectPicker'
   | 'renameSession'
   | 'sessionNote'
-  | 'scratchPad'
   | 'settings'
   | 'stashedPrompts'
   | 'worktree'
@@ -2081,31 +2079,6 @@ function AppModalHost() {
         }}
         protocol={portlessSetup?.protocol ?? 'https'}
       />
-      <ScratchPadModal
-        isOpen={activeModal === 'scratchPad'}
-        onClose={closeModal}
-        onDebug={(event, details) => {
-          /**
-           * CDXC:ScratchPadFocus 2026-04-28-05:21
-           * Scratch Pad focus repros run inside the full-window modal host, not
-           * the narrow sidebar webview. Forward those modal-host events through
-           * the normal sidebar command bridge so native logs can correlate
-           * textarea blur/focus with terminal first-responder changes.
-           */
-          vscode.postMessage({
-            details,
-            event,
-            scenarioId: 'native.terminal.focus',
-            type: 'sidebarDebugLog',
-          });
-        }}
-        onSave={(content) => {
-          vscode.postMessage({
-            content,
-            type: 'saveScratchPad',
-          });
-        }}
-      />
       <SettingsModal
         agentHookStatus={agentHookStatus}
         agentHookStatusLoading={agentHookStatusLoading}
@@ -3561,7 +3534,6 @@ function isModalRenderable({
     case 'portlessSetup':
       return portlessSetup !== undefined;
     case 'previousSessions':
-    case 'scratchPad':
     case 'discoverGhostex':
     case 'extensionsBrowser':
     case 'watchGhostexVideo':

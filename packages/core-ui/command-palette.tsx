@@ -22,7 +22,6 @@ import {
   IconLayoutSidebar,
   IconListDetails,
   IconMoon,
-  IconNotebook,
   IconPlayerPlay,
   IconPlus,
   IconPuzzle,
@@ -155,14 +154,7 @@ type CommandPaletteSearchItem =
     };
 
 type AppModalPaletteCommandId =
-  | 'actions'
-  | 'addProject'
-  | 'agentsHub'
-  | 'configureAgents'
-  | 'extensions'
-  | 'openTargets'
-  | 'previousSessions'
-  | 'scratchPad';
+  'actions' | 'addProject' | 'agentsHub' | 'configureAgents' | 'extensions' | 'openTargets' | 'previousSessions';
 
 type AppModalPaletteModal =
   | 'addProject'
@@ -172,8 +164,7 @@ type AppModalPaletteModal =
   | 'extensionsBrowser'
   | 'hotkeys'
   | 'openTargets'
-  | 'previousSessions'
-  | 'scratchPad';
+  | 'previousSessions';
 
 type SidebarMessagePaletteCommandId =
   | 'automations'
@@ -227,14 +218,6 @@ const APP_MODAL_PALETTE_COMMANDS = [
     modal: 'previousSessions',
     searchText: 'Reopen a Session history restore previous sessions old sessions',
     title: 'Reopen a Session',
-  },
-  {
-    commandId: 'scratchPad',
-    hotkey: '',
-    kind: 'appModal',
-    modal: 'scratchPad',
-    searchText: 'Scratch Pad notes modal',
-    title: 'Scratch Pad',
   },
   {
     commandId: 'agentsHub',
@@ -1066,9 +1049,6 @@ function AppModalCommandIcon({ modal }: { modal: AppModalPaletteModal }) {
   }
   if (modal === 'previousSessions') {
     return <IconHistory aria-hidden='true' />;
-  }
-  if (modal === 'scratchPad') {
-    return <IconNotebook aria-hidden='true' />;
   }
   if (modal === 'agentsHub' || modal === 'configureAgents') {
     return <IconSettingsAutomation aria-hidden='true' />;

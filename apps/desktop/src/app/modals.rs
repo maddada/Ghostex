@@ -43,9 +43,6 @@ impl GhostexGpuiApp {
         CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
         Previous Sessions joins the same GPUI-owned CEF app-modal window path as Settings, Hotkeys, and Command Palette. The titlebar route must open the shared React modal component directly and let its gxserver-backed query resolve through sidebarCommand responses, not duplicated GPUI UI, overlays, hit-test routing, or stored hydrate rewrites.
 
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Scratch Pad opens through this same React modal host and must receive real persisted gxserver app-user-data on every route. Keep note content inside the authenticated hydrate payload only; do not log it or create duplicate GPUI modal UI.
-
         CDXC:GPUISettingsEntryModals 2026-06-24-12:22:
         Configure Agents, Configure Actions, and Open Targets are Settings-modal entry points in the shared React host. GPUI must preserve their modal ids, attach the latest Settings-compatible sidebar hydrate, and reuse this production CEF app-modal route instead of adding duplicate React UI, stubs, fallback routing, overlays, or hidden hit regions.
 
@@ -1292,9 +1289,6 @@ impl GhostexGpuiApp {
 
         CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
         Previous Sessions app-modal requests share this launcher so titlebar/menu actions and modal-host open messages use one CEF window owner, while gxserver result messages remain transient sidebarState events owned by the command bridge.
-
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Scratch Pad shares the reusable hydrate snapshot because its React modal renders directly from SidebarStore state. Saves refresh that durable snapshot after the gxserver write rather than sending fake success or transient-only local edits.
 
         CDXC:GPUISettingsEntryModals 2026-06-24-12:22:
         Settings sub-entry modal ids must share this launcher so bridge opens, command-palette commands, and titlebar actions all hydrate the same shared Settings modal while letting the React host choose the initial tab from the modal id.

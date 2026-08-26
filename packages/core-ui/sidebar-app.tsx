@@ -275,7 +275,6 @@ export function SidebarApp({
   const [isReferenceProjectsCollapsed, setIsReferenceProjectsCollapsed] = useState(
     initialUiCollapseState.isReferenceProjectsCollapsed
   );
-  const [isScratchPadOpen, setIsScratchPadOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSessionSearchOpen, setIsSessionSearchOpen] = useState(false);
   const [initialHiddenItems] = useState(readSidebarHiddenItems);
@@ -2717,7 +2716,6 @@ export function SidebarApp({
     stopSidebarKeepAwake,
   } = useSidebarOverlayActions({
     setIsPreviousSessionsOpen,
-    setIsScratchPadOpen,
     setIsSessionSearchOpen,
     setIsSessionSearchSelectionVisible,
     setSessionSearchQuery,
@@ -2739,11 +2737,6 @@ export function SidebarApp({
 
     if (isPreviousSessionsOpen) {
       setIsPreviousSessionsOpen(false);
-      return true;
-    }
-
-    if (isScratchPadOpen) {
-      setIsScratchPadOpen(false);
       return true;
     }
 
@@ -2861,7 +2854,6 @@ export function SidebarApp({
         event.defaultPrevented ||
         gitCommitDraft !== undefined ||
         isPreviousSessionsOpen ||
-        isScratchPadOpen ||
         (isEditableSidebarKeyboardTarget(target) && !isSearchInputTarget)
       ) {
         return;
@@ -2923,7 +2915,6 @@ export function SidebarApp({
     closeTopmostSidebarOverlay,
     gitCommitDraft,
     isPreviousSessionsOpen,
-    isScratchPadOpen,
     isSessionSearchOpen,
     selectedSessionSearchResult,
     sessionSearchQuery,
@@ -2958,7 +2949,6 @@ export function SidebarApp({
     enabledVisibleSidebarSessionTagSet,
     revision,
     setIsPreviousSessionsOpen,
-    setIsScratchPadOpen,
     setIsSessionSearchOpen,
     setIsSessionSearchSelectionVisible,
     setPrimaryAgentLauncherId,
