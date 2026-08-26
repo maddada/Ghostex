@@ -74,7 +74,7 @@
      ptr: *anyopaque,
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -1098,10 +1098,12 @@
+@@ -1139,10 +1139,12 @@
  GHOSTTY_API ghostty_config_t ghostty_config_clone(ghostty_config_t);
  GHOSTTY_API void ghostty_config_load_cli_args(ghostty_config_t);
  GHOSTTY_API void ghostty_config_load_file(ghostty_config_t, const char*);

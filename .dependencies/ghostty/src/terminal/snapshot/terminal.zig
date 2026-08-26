@@ -206,7 +206,8 @@
 //! bit 39  report_color_scheme
 //! bit 40  report_visibility
 //! bit 41  in_band_size_reports
-//! bits 42-63  reserved, zero
+//! bit 42  kitty_paste_events
+//! bits 43-63  reserved, zero
 //! ```
 //!
 //! This is the packed field order of native `ModePacked`. Its layout is
@@ -470,7 +471,7 @@ pub const Header = struct {
         try writer.writeByte(@intCast(@intFromEnum(self.mouse_shape)));
         try writer.writeByte(@intFromBool(self.password_input));
 
-        // Runtime, saved, and reset mode sets. ModePacked occupies 41 bits;
+        // Runtime, saved, and reset mode sets. ModePacked occupies 43 bits;
         // its eight-byte wire slots zero-extend the native packed value.
         const mode_values = [_]terminal_modes.ModePacked{
             self.current_modes,
@@ -1203,7 +1204,7 @@ const test_header_fixture = test_fixture.parse(
 
 test "TERMINAL mode bit layout" {
     try std.testing.expectEqual(
-        @as(usize, 42),
+        @as(usize, 43),
         @bitSizeOf(terminal_modes.ModePacked),
     );
 
@@ -1212,8 +1213,8 @@ test "TERMINAL mode bit layout" {
     );
     first.disable_keyboard = true;
     try std.testing.expectEqual(
-        @as(u42, 1) << 0,
-        @as(u42, @bitCast(first)),
+        @as(u43, 1) << 0,
+        @as(u43, @bitCast(first)),
     );
 
     var visibility: terminal_modes.ModePacked = std.mem.zeroes(
@@ -1221,17 +1222,26 @@ test "TERMINAL mode bit layout" {
     );
     visibility.report_visibility = true;
     try std.testing.expectEqual(
-        @as(u42, 1) << 40,
-        @as(u42, @bitCast(visibility)),
+        @as(u43, 1) << 40,
+        @as(u43, @bitCast(visibility)),
+    );
+
+    var size_reports: terminal_modes.ModePacked = std.mem.zeroes(
+        terminal_modes.ModePacked,
+    );
+    size_reports.in_band_size_reports = true;
+    try std.testing.expectEqual(
+        @as(u43, 1) << 41,
+        @as(u43, @bitCast(size_reports)),
     );
 
     var last: terminal_modes.ModePacked = std.mem.zeroes(
         terminal_modes.ModePacked,
     );
-    last.in_band_size_reports = true;
+    last.kitty_paste_events = true;
     try std.testing.expectEqual(
-        @as(u42, 1) << 41,
-        @as(u42, @bitCast(last)),
+        @as(u43, 1) << 42,
+        @as(u43, @bitCast(last)),
     );
 }
 

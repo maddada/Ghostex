@@ -1,6 +1,6 @@
 --- a/build.zig
 +++ b/build.zig
-@@ -80,6 +80,11 @@
+@@ -88,6 +88,11 @@
  
      // Ghostty resources like terminfo, shell integration, themes, etc.
      const resources = try buildpkg.GhosttyResources.init(b, &config, &deps);
@@ -12,7 +12,7 @@
      const i18n = if (config.i18n) try buildpkg.GhosttyI18n.init(b, &config) else null;
  
      // Ghostty executable, the actual runnable Ghostty program.
-@@ -117,20 +122,25 @@
+@@ -125,26 +130,31 @@
      }
  
      // libghostty-vt
@@ -36,15 +36,26 @@
                  &mod,
              );
 -        }
--
++        };
++        libghostty_vt_shared.install(b.getInstallStep());
+ 
 -        break :shared try buildpkg.GhosttyLibVt.initShared(
 -            b,
 -            &mod,
 -        );
 -    };
 -    libghostty_vt_shared.install(b.getInstallStep());
-+        };
-+        libghostty_vt_shared.install(b.getInstallStep());
+-
+-    const type_schema_test = b.addSystemCommand(&.{"python3"});
+-    type_schema_test.addFileArg(b.path("src/terminal/c/types-schema-verify.py"));
+-    type_schema_test.addFileArg(b.path("src/terminal/c/types.schema.json"));
+-    type_schema_test.addFileArg(libghostty_vt_shared.output);
+-    test_lib_vt_schema_step.dependOn(&type_schema_test.step);
++        const type_schema_test = b.addSystemCommand(&.{"python3"});
++        type_schema_test.addFileArg(b.path("src/terminal/c/types-schema-verify.py"));
++        type_schema_test.addFileArg(b.path("src/terminal/c/types.schema.json"));
++        type_schema_test.addFileArg(libghostty_vt_shared.output);
++        test_lib_vt_schema_step.dependOn(&type_schema_test.step);
 +    }
  
      // libghostty-vt static lib
@@ -59,7 +70,7 @@
  emit_macos_app: bool = false,
  emit_terminfo: bool = false,
  emit_termcap: bool = false,
-@@ -138,10 +139,14 @@
+@@ -161,10 +162,14 @@
      // one exists so this is hardcoded.
      const wasm_target: WasmTarget = .browser;
  
@@ -78,9 +89,9 @@
  
      // Grab the environment from build state
      const env = &b.graph.environ_map;
-@@ -402,6 +407,18 @@
- 
-     config.emit_lib_vt = emit_lib_vt;
+@@ -449,6 +454,18 @@
+         };
+     };
  
 +    // Ghostex patch (2026-07-11): consumers that only link the static
 +    // libghostty-vt archive (the GPUI cargo build) can skip the shared
@@ -97,7 +108,7 @@
      config.emit_exe = b.option(
          bool,
          "emit-exe",
-@@ -669,6 +686,11 @@
+@@ -722,6 +739,11 @@
              .ghostty => self.version,
              .lib => self.lib_version,
          },

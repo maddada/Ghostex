@@ -62,14 +62,8 @@ pub const bundle_id = "com.mitchellh.ghostty";
 /// slow but very thorough. But they made it so slow that the terminal couldn't
 /// be used for real work. We'd love to have an option to run a build with
 /// safety checks that could be used for real work. This lets us do that.
-///
-/// CDXC:GhosttyPerformance 2026-05-08-17:28
-/// zmux can run with debugging enabled while showing only a few light
-/// terminals. Non-test Debug builds must not execute page/PageList integrity
-/// checks because they repeatedly scan terminal pages during normal output and
-/// can drive WindowServer GPU load.
 pub const slow_runtime_safety = std.debug.runtime_safety and switch (builtin.mode) {
-    .Debug => builtin.is_test,
+    .Debug => true,
     .ReleaseSafe,
     .ReleaseSmall,
     .ReleaseFast,

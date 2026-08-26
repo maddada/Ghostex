@@ -1,6 +1,6 @@
 --- a/src/Surface.zig
 +++ b/src/Surface.zig
-@@ -234,6 +234,9 @@
+@@ -235,6 +235,9 @@
      /// The last x/y sent for mouse reports.
      event_point: ?terminal.point.Coordinate = null,
  
@@ -10,7 +10,7 @@
      /// The pressure stage for the mouse. This should always be none if
      /// the mouse is not pressed.
      pressure_stage: input.MousePressureStage = .none,
-@@ -1440,6 +1443,25 @@
+@@ -1445,6 +1448,25 @@
      };
  }
  
@@ -36,7 +36,7 @@
  fn searchCallback_(
      self: *Surface,
      event: terminal.search.Thread.Event,
-@@ -1484,10 +1506,7 @@
+@@ -1489,10 +1511,7 @@
                  );
  
                  // Send the selected index to the surface mailbox
@@ -48,7 +48,7 @@
              } else {
                  // Reset our selected match
                  _ = self.renderer_thread.mailbox.push(
-@@ -1497,20 +1516,14 @@
+@@ -1502,20 +1521,14 @@
                  );
  
                  // Reset the selected index
@@ -71,7 +71,7 @@
          },
  
          // When we quit, tell our renderer to reset any search state.
-@@ -1531,14 +1544,8 @@
+@@ -1536,14 +1549,8 @@
              try self.renderer_thread.wakeup.notify();
  
              // Reset search totals in the surface
@@ -88,7 +88,7 @@
          },
  
          // Unhandled, so far.
-@@ -3723,6 +3730,7 @@
+@@ -3713,6 +3720,7 @@
          // Keep track of our last reported viewport cell for event
          // deduplication.
          opts.last_cell = &self.mouse.event_point;
@@ -98,7 +98,7 @@
      };
 --- a/src/renderer/generic.zig
 +++ b/src/renderer/generic.zig
-@@ -1743,20 +1743,36 @@
+@@ -1910,23 +1910,37 @@
              self: *Self,
              health: Health,
          ) void {
@@ -108,8 +108,9 @@
 +            // released before any wait, a blocked push wedges the renderer
 +            // thread in nextFrame()/frame_sema.wait() and the app thread in
 +            // SwapChain.deinit — both unbounded joins reachable from
-+            // ghostty_surface_free.
-+            self.swap_chain.releaseFrame();
++            // ghostty_surface_free. The swap chain is guaranteed to exist
++            // here because teardown waits for this completion.
++            self.swap_chain.?.releaseFrame();
 +
              // If our health value hasn't changed, then we do nothing. We don't
              // do a cmpxchg here because strict atomicity isn't important.
@@ -136,12 +137,15 @@
 +                }
              }
 -
--            // Always release our semaphore
--            self.swap_chain.releaseFrame();
+-            // Always release our semaphore. The swap chain is
+-            // guaranteed to exist here: it is only torn down after
+-            // waiting for all in-flight frames to complete, and this
+-            // callback is what signals that completion.
+-            self.swap_chain.?.releaseFrame();
          }
  
          /// Call this any time the background image path changes.
-@@ -2741,8 +2757,13 @@
+@@ -2911,8 +2925,13 @@
  
                      // Advance our index until we reach or pass
                      // our current x position in the shaper cells.
@@ -285,7 +289,7 @@
                  continue;
 --- a/src/termio/Termio.zig
 +++ b/src/termio/Termio.zig
-@@ -500,8 +500,19 @@
+@@ -516,8 +516,19 @@
          }
      }
  
@@ -339,7 +343,7 @@
      }
 --- a/src/termio/stream_handler.zig
 +++ b/src/termio/stream_handler.zig
-@@ -121,7 +121,23 @@
+@@ -136,7 +136,23 @@
          if (self.surface_mailbox.push(msg, .{ .instant = {} }) == 0) {
              self.renderer_state.mutex.unlock(global.io());
              defer self.renderer_state.mutex.lockUncancelable(global.io());

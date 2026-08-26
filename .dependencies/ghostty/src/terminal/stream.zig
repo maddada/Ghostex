@@ -128,6 +128,8 @@ pub const Action = union(Key) {
     kitty_color_report: kitty.color.OSC,
     color_operation: ColorOperation,
     semantic_prompt: SemanticPrompt,
+    kitty_clipboard: KittyClipboard,
+    kitty_dnd: KittyDnd,
 
     pub const Key = lib.Enum(
         lib.target,
@@ -227,6 +229,8 @@ pub const Action = union(Key) {
             "kitty_color_report",
             "color_operation",
             "semantic_prompt",
+            "kitty_clipboard",
+            "kitty_dnd",
         },
     );
 
@@ -236,7 +240,7 @@ pub const Action = union(Key) {
         @This(),
         // TODO: Before shipping an ABI-compatible libghostty, verify this.
         // This was just arbitrarily chosen for now.
-        [16]u64,
+        .{ .padding = [16]u64 },
     );
     pub const Tag = c_union.Tag;
     pub const Value = c_union.Value;
@@ -412,6 +416,7 @@ pub const Action = union(Key) {
     pub const ClipboardContents = struct {
         kind: u8,
         data: []const u8,
+        terminator: osc.Terminator,
 
         pub const C = extern struct {
             kind: u8,
@@ -444,6 +449,10 @@ pub const Action = union(Key) {
     };
 
     pub const SemanticPrompt = osc.Command.SemanticPrompt;
+
+    pub const KittyClipboard = osc.Command.KittyClipboardProtocol;
+
+    pub const KittyDnd = osc.Command.KittyDndProtocol;
 };
 
 /// Returns a type that can process a stream of tty control characters.
@@ -646,9 +655,12 @@ pub fn Stream(comptime H: type) type {
         }
 
         inline fn nextSliceUntracked(self: *Self, input: []const u8) void {
-            // Disable SIMD optimizations if build requests it or if our
-            // manual debug mode is on.
-            if (comptime debug or !build_options.simd) {
+            // Byte-at-a-time parsing in debug mode only. Even without
+            // SIMD support (build_options.simd == false, e.g. wasm), the
+            // batched path below is much faster than per-byte dispatch
+            // because it decodes UTF-8 in bulk (via scalar fallbacks) and
+            // hands printable runs to the handler as print_slice actions.
+            if (comptime debug) {
                 for (input) |c| self.nextUntracked(c);
                 return;
             }
@@ -845,6 +857,47 @@ pub fn Stream(comptime H: type) type {
                         // Aborting transitions need the scalar path so the
                         // handler can distinguish them from terminators.
                     }
+
+                    // Bulk-consume OSC string bytes into the OSC parser.
+                    // OSC payloads (e.g. OSC 52 clipboard operations and
+                    // the kitty clipboard protocol) can be megabytes of
+                    // base64 data, so per-byte dispatch is far too slow.
+                    // This can't be used for handlers with a vtRaw hook
+                    // because the bytes never produce osc_put actions.
+                    if (self.parser.state == .osc_string) {
+                        offset += self.consumeOscString(input[offset..]);
+                        if (offset >= input.len) return input.len;
+
+                        // Fast-path normal string termination. This matches
+                        // Parser.next's exit and entry actions while avoiding
+                        // the generic action loop for every completed OSC.
+                        switch (input[offset]) {
+                            // The sequence should be terminated by a full
+                            // ST ("ESC \"); the "\" that should follow is
+                            // dispatched as a normal escape sequence.
+                            std.ascii.control_code.esc => {
+                                if (self.parser.osc_parser.end(
+                                    std.ascii.control_code.esc,
+                                )) |cmd| self.oscDispatch(cmd.*);
+                                self.parser.clear();
+                                self.parser.state = .escape;
+                                offset += 1;
+                                continue;
+                            },
+                            // BEL terminates the string directly.
+                            std.ascii.control_code.bel => {
+                                if (self.parser.osc_parser.end(
+                                    std.ascii.control_code.bel,
+                                )) |cmd| self.oscDispatch(cmd.*);
+                                self.parser.state = .ground;
+                                offset += 1;
+                                continue;
+                            },
+                            // CAN/SUB abort and ignored C0 bytes go
+                            // through the state machine below.
+                            else => {},
+                        }
+                    }
                 }
 
                 self.nextNonUtf8(input[offset]);
@@ -996,6 +1049,43 @@ pub fn Stream(comptime H: type) type {
                 .apc_put_slice,
                 .{ .bytes = input[0..end] },
             );
+            return end;
+        }
+
+        /// Bulk-consume OSC string bytes into the OSC parser. Returns
+        /// the number of bytes consumed. Stops at the first byte that
+        /// is not an osc_put byte in the parse table, leaving it for
+        /// the caller to process through the state machine. Every byte
+        /// >= 0x20 is an osc_put byte; bytes below either terminate or
+        /// abort the string (BEL, CAN, SUB, ESC) or are ignored.
+        ///
+        /// Must not be used by handlers with a vtRaw hook because the
+        /// consumed bytes never produce osc_put actions.
+        fn consumeOscString(self: *Self, input: []const u8) usize {
+            comptime assert(!@hasDecl(T, "vtRaw"));
+            assert(self.parser.state == .osc_string);
+
+            var end: usize = 0;
+            if (comptime std.simd.suggestVectorLength(u8)) |vector_len| {
+                const ByteVector = @Vector(vector_len, u8);
+                while (end + vector_len <= input.len) {
+                    const bytes: ByteVector = input[end..][0..vector_len].*;
+                    const stop = bytes < @as(ByteVector, @splat(0x20));
+                    if (@reduce(.Or, stop)) break;
+                    end += vector_len;
+                }
+            }
+            while (end < input.len) {
+                switch (input[end]) {
+                    // Not osc_put bytes: BEL/CAN/SUB/ESC terminate or
+                    // abort the state; other C0 bytes are ignored by it.
+                    0x00...0x1F => break,
+                    // Everything else is an osc_put byte.
+                    else => end += 1,
+                }
+            }
+
+            if (end > 0) self.parser.osc_parser.nextSlice(input[0..end]);
             return end;
         }
 
@@ -2493,6 +2583,7 @@ pub fn Stream(comptime H: type) type {
                     self.handler.vt(.clipboard_contents, .{
                         .kind = clip.kind,
                         .data = clip.data,
+                        .terminator = clip.terminator,
                     });
                 },
 
@@ -2548,6 +2639,14 @@ pub fn Stream(comptime H: type) type {
                     self.handler.vt(.progress_report, v);
                 },
 
+                .kitty_clipboard_protocol => |v| {
+                    self.handler.vt(.kitty_clipboard, v);
+                },
+
+                .kitty_dnd_protocol => |v| {
+                    self.handler.vt(.kitty_dnd, v);
+                },
+
                 .conemu_sleep,
                 .conemu_show_message_box,
                 .conemu_change_tab_title,
@@ -2558,8 +2657,7 @@ pub fn Stream(comptime H: type) type {
                 .conemu_output_environment_variable,
                 .conemu_run_process,
                 .kitty_text_sizing,
-                .kitty_clipboard_protocol,
-                .kitty_dnd_protocol,
+                .kitty_desktop_notification,
                 .context_signal,
                 => {
                     log.debug("unimplemented OSC callback: {}", .{cmd});
@@ -3511,6 +3609,191 @@ test "stream: change window title with invalid utf-8" {
         var s: Stream(H) = .init(.{ .handler = .{} });
         s.nextSlice("\x1b]2;abc\xc0\x1b\\");
         try testing.expect(!s.handler.seen);
+    }
+}
+
+test "stream: osc 52 large payload in chunks" {
+    const alloc = testing.allocator;
+
+    const H = struct {
+        const Self = @This();
+        data: std.ArrayListUnmanaged(u8) = .empty,
+        kind: u8 = 0,
+        terminator: ?osc.Terminator = null,
+        count: usize = 0,
+
+        pub fn vt(
+            self: *Self,
+            comptime action: Action.Tag,
+            value: Action.Value(action),
+        ) void {
+            switch (action) {
+                .clipboard_contents => {
+                    self.count += 1;
+                    self.kind = value.kind;
+                    self.terminator = value.terminator;
+                    self.data.appendSlice(
+                        testing.allocator,
+                        value.data,
+                    ) catch @panic("OOM");
+                },
+                else => {},
+            }
+        }
+    };
+
+    // A payload that far exceeds the fixed buffer so the allocating
+    // capture is used, fed in chunk sizes that don't align with the
+    // sequence so the bulk path sees every kind of boundary.
+    const prefix = "\x1b]52;c;";
+    const payload_len = 150_000;
+    var input: std.ArrayListUnmanaged(u8) = .empty;
+    defer input.deinit(alloc);
+    try input.appendSlice(alloc, prefix);
+    for (0..payload_len) |i| try input.append(
+        alloc,
+        'A' + @as(u8, @intCast(i % 26)),
+    );
+    try input.appendSlice(alloc, "\x1b\\");
+
+    var s: Stream(H) = .init(.{ .handler = .{}, .allocator = alloc });
+    defer s.parser.deinit();
+    defer s.handler.data.deinit(alloc);
+
+    var i: usize = 0;
+    while (i < input.items.len) {
+        const end = @min(i + 4093, input.items.len);
+        s.nextSlice(input.items[i..end]);
+        i = end;
+    }
+
+    try testing.expectEqual(@as(usize, 1), s.handler.count);
+    try testing.expectEqual(@as(u8, 'c'), s.handler.kind);
+    try testing.expectEqual(osc.Terminator.st, s.handler.terminator.?);
+    try testing.expectEqualSlices(
+        u8,
+        input.items[prefix.len .. prefix.len + payload_len],
+        s.handler.data.items,
+    );
+}
+
+test "stream: osc bulk path matches per-byte path" {
+    const alloc = testing.allocator;
+
+    // Records every dispatch relevant to OSC processing in a
+    // normalized text form so streams fed different ways can be
+    // compared byte-for-byte.
+    const H = struct {
+        const Self = @This();
+        alloc: Allocator,
+        journal: std.ArrayListUnmanaged(u8) = .empty,
+
+        fn record(self: *Self, comptime fmt: []const u8, args: anytype) void {
+            const s = std.fmt.allocPrint(
+                self.alloc,
+                fmt,
+                args,
+            ) catch @panic("OOM");
+            defer self.alloc.free(s);
+            self.journal.appendSlice(self.alloc, s) catch @panic("OOM");
+        }
+
+        pub fn vt(
+            self: *Self,
+            comptime action: Action.Tag,
+            value: Action.Value(action),
+        ) void {
+            switch (action) {
+                .clipboard_contents => self.record(
+                    "clip kind={c} term={s} data={s}\n",
+                    .{ value.kind, @tagName(value.terminator), value.data },
+                ),
+                .kitty_clipboard => self.record(
+                    "kitty meta={s} payload={?s}\n",
+                    .{ value.metadata, value.payload },
+                ),
+                .window_title => self.record(
+                    "title {s}\n",
+                    .{value.title},
+                ),
+                // Normalize prints to per-codepoint so the per-byte
+                // and slice paths journal identically.
+                .print => self.record("print {u}\n", .{value.cp}),
+                .print_slice => for (value.cps) |cp| self.record(
+                    "print {u}\n",
+                    .{@as(u21, @intCast(cp))},
+                ),
+                else => {},
+            }
+        }
+    };
+
+    const cases = [_][]const u8{
+        "\x1b]52;c;aGVsbG8=\x1b\\",
+        "\x1b]52;c;aGVsbG8=\x07",
+        "\x1b]52;;aGVsbG8=\x07",
+        // Ignored C0 byte embedded in the payload.
+        "\x1b]52;c;aGVs\x01bG8=\x07",
+        // CAN and SUB aborts.
+        "\x1b]52;c;aGVsbG8=\x18",
+        "\x1b]52;c;aGVsbG8=\x1a",
+        // C1 byte embedded in the payload is data.
+        "\x1b]0;ab\x9ccd\x07",
+        // Terminated with trailing printable text.
+        "\x1b]0;a title\x07x",
+        // Back-to-back sequences.
+        "\x1b]2;another title\x1b\\\x1b]0;t2\x07",
+        "\x1b]5522;type=write;aGVsbG8=\x1b\\",
+        // Invalid OSC number.
+        "\x1b]999;junk\x07",
+        // Exceeds the fixed buffer: allocating capture.
+        "\x1b]52;c;" ++ "y" ** 3000 ++ "\x1b\\",
+        // Exceeds the fixed buffer: overflow, no dispatch.
+        "\x1b]0;" ++ "x" ** 3000 ++ "\x07",
+    };
+
+    for (cases) |case| {
+        // Reference: byte-at-a-time.
+        var ref: Stream(H) = .init(.{
+            .handler = .{ .alloc = alloc },
+            .allocator = alloc,
+        });
+        defer ref.parser.deinit();
+        defer ref.handler.journal.deinit(alloc);
+        for (case) |c| ref.next(c);
+
+        // The whole slice at once.
+        {
+            var s: Stream(H) = .init(.{
+                .handler = .{ .alloc = alloc },
+                .allocator = alloc,
+            });
+            defer s.parser.deinit();
+            defer s.handler.journal.deinit(alloc);
+            s.nextSlice(case);
+            try testing.expectEqualSlices(
+                u8,
+                ref.handler.journal.items,
+                s.handler.journal.items,
+            );
+        }
+
+        // Split into two slices at every possible boundary.
+        for (0..case.len + 1) |split| {
+            var s: Stream(H) = .init(.{
+                .handler = .{ .alloc = alloc },
+                .allocator = alloc,
+            });
+            defer s.parser.deinit();
+            defer s.handler.journal.deinit(alloc);
+            s.nextSlice(case[0..split]);
+            s.nextSlice(case[split..]);
+            try testing.expectEqualSlices(
+                u8,
+                ref.handler.journal.items,
+                s.handler.journal.items,
+            );
+        }
     }
 }
 

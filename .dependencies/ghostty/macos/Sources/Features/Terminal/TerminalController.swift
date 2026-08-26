@@ -453,20 +453,28 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         // If we don't allow tabs then we create a new window instead.
         if window.tabbingMode != .disallowed {
+            let tabCreated: Bool
             // Add the window to the tab group and show it.
             switch ghostty.config.windowNewTabPosition {
             case "end":
                 // If we already have a tab group and we want the new tab to open at the end,
                 // then we use the last window in the tab group as the parent.
                 if let last = parent.tabGroup?.windows.last {
-                    last.addTabbedWindowSafely(window, ordered: .above)
+                    tabCreated = last.addTabbedWindowSafely(window, ordered: .above)
                 } else {
                     fallthrough
                 }
 
             case "current": fallthrough
             default:
-                parent.addTabbedWindowSafely(window, ordered: .above)
+                tabCreated = parent.addTabbedWindowSafely(window, ordered: .above)
+            }
+            if tabCreated {
+                // We set the selectedWindow early here because we want the next window
+                // to become first responder as quickly as possible. Usually this is
+                // set while `-[NSWindowController showWindow:]` is called, but we're
+                // dispatching it to resolve other issues.
+                parent.tabGroup?.selectedWindow = window
             }
         }
 
@@ -1239,12 +1247,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         super.windowDidBecomeKey(notification)
         self.relabelTabs()
         self.fixTabBar()
-        terminalViewContainer?.updateGlassTintOverlay(isKeyWindow: true)
-    }
-
-    override func windowDidResignKey(_ notification: Notification) {
-        super.windowDidResignKey(notification)
-        terminalViewContainer?.updateGlassTintOverlay(isKeyWindow: false)
     }
 
     override func windowDidMove(_ notification: Notification) {

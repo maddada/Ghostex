@@ -119,13 +119,15 @@ const ThreadEnterState = struct {
     ) (Allocator.Error || error{InputNotFound})![]const Input {
         const alloc = self.arena.allocator();
 
-        var input = try alloc.alloc(
-            Input,
+        var inputs: std.ArrayList(Input) = try .initCapacity(
+            alloc,
             self.input.list.items.len,
         );
-        for (self.input.list.items, 0..) |item, i| {
-            input[i] = switch (item) {
-                .raw => |v| .{ .string = try alloc.dupe(u8, v) },
+        errdefer for (inputs.items) |item| item.deinit();
+
+        for (self.input.list.items) |item| {
+            inputs.appendAssumeCapacity(switch (item) {
+                .raw => |v| .{ .string = v },
                 .path => |path| file: {
                     const f = std.Io.Dir.cwd().openFile(
                         global.io(),
@@ -141,15 +143,22 @@ const ThreadEnterState = struct {
 
                     break :file .{ .file = f };
                 },
-            };
+            });
         }
 
-        return input;
+        return inputs.items;
     }
 
     const Input = union(enum) {
         string: []const u8,
         file: std.Io.File,
+
+        fn deinit(self: Input) void {
+            switch (self) {
+                .string => {},
+                .file => |f| f.close(global.io()),
+            }
+        }
     };
 };
 
@@ -168,6 +177,7 @@ pub const DerivedConfig = struct {
     background: configpkg.Config.Color,
     osc_color_report_format: configpkg.Config.OSCColorReportFormat,
     clipboard_write: configpkg.ClipboardAccess,
+    clipboard_write_limit: usize,
     enquiry_response: []const u8,
     conditional_state: configpkg.ConditionalState,
 
@@ -204,6 +214,7 @@ pub const DerivedConfig = struct {
             .background = config.background,
             .osc_color_report_format = config.@"osc-color-report-format",
             .clipboard_write = config.@"clipboard-write",
+            .clipboard_write_limit = config.@"clipboard-write-limit-bytes".value,
             .enquiry_response = try alloc.dupe(u8, config.@"enquiry-response"),
             .conditional_state = config._conditional_state,
 
@@ -288,6 +299,7 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
         .terminal = &self.terminal,
         .osc_color_report_format = opts.config.osc_color_report_format,
         .clipboard_write = opts.config.clipboard_write,
+        .clipboard_write_limit = opts.config.clipboard_write_limit,
         .enquiry_response = opts.config.enquiry_response,
     };
 
@@ -346,6 +358,9 @@ pub fn threadEnter(
         try v.prepareInput()
     else
         null;
+    defer if (inputs) |items| {
+        for (items) |input| input.deinit();
+    };
 
     data.* = .{
         .alloc = self.alloc,
@@ -366,20 +381,21 @@ pub fn threadEnter(
             log.warn("failed to queue input string err={}", .{err});
             return error.InputFailed;
         },
-        .file => |f| self.queueWrite(
-            data,
-            compat_file.readToEndAlloc(
+        .file => |f| {
+            const contents = compat_file.readToEndAlloc(
                 f,
                 self.alloc,
                 10 * 1024 * 1024, // 10 MiB max
             ) catch |err| {
                 log.warn("failed to read input file err={}", .{err});
                 return error.InputFailed;
-            },
-            false,
-        ) catch |err| {
-            log.warn("failed to queue input file err={}", .{err});
-            return error.InputFailed;
+            };
+            defer self.alloc.free(contents);
+
+            self.queueWrite(data, contents, false) catch |err| {
+                log.warn("failed to queue input file err={}", .{err});
+                return error.InputFailed;
+            };
         },
     };
 }
@@ -715,6 +731,19 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
 }
 
 /// Sends a DSR response for the current color scheme to the pty.
+/// Record a Kitty clipboard protocol session grant so future requests
+/// carrying the password skip the permission prompt.
+pub fn kittyClipboardGrant(
+    self: *Termio,
+    pw: []const u8,
+    dir: terminalpkg.kitty.clipboard.Grants.Direction,
+) error{OutOfMemory}!void {
+    self.renderer_state.mutex.lockUncancelable(global.io());
+    defer self.renderer_state.mutex.unlock(global.io());
+
+    try self.terminal_stream.handler.kittyClipboardGrant(pw, dir);
+}
+
 pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
     self.renderer_state.mutex.lockUncancelable(global.io());
     defer self.renderer_state.mutex.unlock(global.io());

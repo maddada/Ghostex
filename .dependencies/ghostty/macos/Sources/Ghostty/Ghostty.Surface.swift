@@ -44,8 +44,9 @@ extension Ghostty {
             }
         }
 
-        /// Send text to the terminal as if it was typed. This doesn't send the key events so keyboard
-        /// shortcuts and other encodings do not take effect.
+        /// Send text to the terminal using paste semantics. This doesn't send key events, so keyboard
+        /// shortcuts and other encodings do not take effect. Bracketed paste framing is applied when
+        /// the terminal has enabled it.
         @MainActor
         func sendText(_ text: String) {
             let len = text.utf8CString.count

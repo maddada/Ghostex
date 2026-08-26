@@ -25,9 +25,6 @@ patch_files() {
 	0003-build-metallib-developer-dir-override)
 		echo "src/build/MetallibStep.zig"
 		;;
-	0004-app-debug-skip-slow-integrity-checks)
-		echo "src/build_config.zig"
-		;;
 	0005-embed-config-string-apis)
 		echo "src/config/CApi.zig include/ghostty.h"
 		;;
@@ -48,7 +45,6 @@ PATCH_NAMES=(
 	0001-build-lib-vt-shared-option-and-themes-install
 	0002-build-xcframework-lazy-universal
 	0003-build-metallib-developer-dir-override
-	0004-app-debug-skip-slow-integrity-checks
 	0005-embed-config-string-apis
 	0006-mouse-cmd-click-encode-and-mod-dedupe
 	0007-teardown-deadlock-hardening
@@ -66,7 +62,9 @@ clone_upstream() {
 regen() {
 	local workdir
 	workdir="$(mktemp -d)"
-	trap 'rm -rf "$workdir"' EXIT
+	local cleanup_command
+	printf -v cleanup_command 'rm -rf -- %q' "$workdir"
+	trap "$cleanup_command" EXIT
 	local pin
 	pin="$(pinned_commit)"
 	echo "Regenerating patches against pinned upstream $pin"
@@ -88,7 +86,9 @@ sync() {
 	local ref="$1"
 	local workdir
 	workdir="$(mktemp -d)"
-	trap 'rm -rf "$workdir"' EXIT
+	local cleanup_command
+	printf -v cleanup_command 'rm -rf -- %q' "$workdir"
+	trap "$cleanup_command" EXIT
 
 	clone_upstream "$workdir"
 	local sha
@@ -124,8 +124,8 @@ sync() {
 
 Synced to $sha. Now verify (see .dependencies/ghostty-patches/README.md):
   1. cd .dependencies/ghostty && zig build test-lib-vt
-  2. cd gpui && cargo check
-  3. Re-audit gpui/src/ghostty_vt.rs + ghostty_kit.rs against .dependencies/ghostty/include/
+  2. cd apps/desktop && cargo check
+  3. Re-audit apps/desktop/src/ghostty_vt.rs + ghostty_kit.rs against .dependencies/ghostty/include/
      (implicit C enums renumber when upstream inserts entries!)
   4. cd .dependencies/ghostty && zig build -Demit-xcframework -Dxcframework-target=universal \\
        -Demit-macos-app=false -Doptimize=ReleaseSafe

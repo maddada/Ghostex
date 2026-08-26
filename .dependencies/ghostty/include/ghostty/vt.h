@@ -34,7 +34,7 @@
  * - @ref snapshot "Terminal Snapshot" - Encode and incrementally restore terminal state
  * - @ref osc "OSC Parser" - Parse OSC (Operating System Command) sequences
  * - @ref sgr "SGR Parser" - Parse SGR (Select Graphic Rendition) sequences
- * - @ref paste "Paste Utilities" - Validate paste data safety
+ * - @ref paste "Paste" - Paste into a terminal, validate and encode paste data
  * - @ref unicode "Unicode Utilities" - Codepoint properties for text layout
  * - @ref build_info "Build Info" - Query compile-time build configuration
  * - @ref allocator "Memory Management" - Memory management and custom allocators
@@ -53,7 +53,7 @@
  * - @ref c-vt/src/main.c - OSC parser example
  * - @ref c-vt-encode-key/src/main.c - Key encoding example
  * - @ref c-vt-encode-mouse/src/main.c - Mouse encoding example
- * - @ref c-vt-paste/src/main.c - Paste safety check example
+ * - @ref c-vt-paste/src/main.c - Paste example
  * - @ref c-vt-sgr/src/main.c - SGR parser example
  * - @ref c-vt-formatter/src/main.c - Terminal formatter example
  * - @ref c-vt-grid-traverse/src/main.c - Grid traversal example using grid refs
@@ -83,8 +83,10 @@
  */
 
 /** @example c-vt-paste/src/main.c
- * This example demonstrates how to use the paste utilities to check if
- * paste data is safe before sending it to the terminal.
+ * This example demonstrates how to paste into a terminal, including the
+ * unsafe-paste confirmation flow and Kitty clipboard protocol paste events
+ * (mode 5522), as well as the terminal-free paste safety and encoding
+ * utilities.
  */
 
 /** @example c-vt-sgr/src/main.c

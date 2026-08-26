@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("terminal_options");
+const lib = @import("../lib/main.zig");
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const assert = @import("../quirks.zig").inlineAssert;
@@ -1290,6 +1291,18 @@ pub const Page = struct {
         @memset(@as([]u64, @ptrCast(cells)), 0);
     }
 
+    /// Reset the given row to the default state: all cells zeroed and
+    /// all row metadata reset, as if the row was never used. This
+    /// reclaims memory used by graphemes, styles, etc. like clearCells.
+    ///
+    /// This must be used instead of clearCells whenever a row's storage
+    /// is recycled. Clearing the cells alone is not enough because row
+    /// metadata such as the wrap state and semantic prompt remain.
+    pub inline fn resetRow(self: *Page, row: *Row) void {
+        self.clearCells(row, 0, self.size.cols);
+        row.reset();
+    }
+
     /// Returns the hyperlink ID for the given cell.
     pub inline fn lookupHyperlink(self: *const Page, cell: *const Cell) ?hyperlink.Id {
         const cell_offset = getOffset(Cell, self.memory, cell);
@@ -2040,6 +2053,26 @@ pub const Row = packed struct(u64) {
         // Ordered on purpose for likelihood.
         return self.styled or self.hyperlink or self.grapheme;
     }
+
+    /// Reset all row metadata to the default state, preserving only
+    /// the cells offset, and mark the row dirty. This is a single
+    /// 8-byte store.
+    ///
+    /// This must be applied to any row whose storage is recycled as a
+    /// blank row or retired into unused page capacity, in addition to
+    /// clearing its cells (in either order; this doesn't touch cell
+    /// memory). See Page.resetRow, which does both, for details. This
+    /// exists separately for callers that clear the cells in a
+    /// specialized way (e.g. filling with a background-colored blank
+    /// cell rather than zeroing).
+    ///
+    /// Asserts that the row has no managed memory: releasing that is
+    /// the cell-clearing side's job and must happen while the flags
+    /// are still accurate.
+    pub inline fn reset(self: *Row) void {
+        assert(!self.managedMemory());
+        self.* = .{ .cells = self.cells, .dirty = true };
+    }
 };
 
 /// A cell represents a single terminal grid cell.
@@ -2143,6 +2176,51 @@ pub const Cell = packed struct(u64) {
         /// application, such as "user@host >"
         prompt = 2,
     };
+
+    /// Metadata for the C representation. All physical bit offsets and
+    /// widths are reflected from Cell.
+    pub const CLayout = lib.Packed(Cell, .{ .fields = .{
+        .content_tag = .{ .type_name = "GhosttyCellContentTag" },
+        .content = .{ .encoding = .{ .tagged_union = lib.PackedTaggedUnion(
+            Cell,
+            .content,
+            .content_tag,
+            .{ .arms = .{
+                .codepoint = .{ .codepoint = lib.Packed(
+                    @FieldType(@FieldType(Cell, "content"), "codepoint"),
+                    .{ .fields = .{
+                        .data = .{ .name = "codepoint" },
+                        ._pad = .{ .omit = true },
+                    } },
+                ) },
+                .codepoint_grapheme = .{ .codepoint = lib.Packed(
+                    @FieldType(@FieldType(Cell, "content"), "codepoint"),
+                    .{ .fields = .{
+                        .data = .{ .name = "codepoint" },
+                        ._pad = .{ .omit = true },
+                    } },
+                ) },
+                .bg_color_palette = .{ .color_palette = lib.Packed(
+                    @FieldType(@FieldType(Cell, "content"), "color_palette"),
+                    .{ .fields = .{
+                        .data = .{
+                            .name = "index",
+                            .type_name = "GhosttyColorPaletteIndex",
+                        },
+                        ._pad = .{ .omit = true },
+                    } },
+                ) },
+                .bg_color_rgb = .{ .color_rgb = lib.Packed(
+                    @FieldType(@FieldType(Cell, "content"), "color_rgb"),
+                    .{},
+                ) },
+            } },
+        ) } },
+        .style_id = .{ .type_name = "GhosttyStyleId" },
+        .wide = .{ .type_name = "GhosttyCellWide" },
+        .semantic_content = .{ .type_name = "GhosttyCellSemanticContent" },
+        ._padding = .{ .omit = true },
+    } });
 
     /// The backing integer of this packed struct. Prefer this over
     /// hardcoding the integer type so that code is resilient to the

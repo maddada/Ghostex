@@ -2454,6 +2454,32 @@ keybind: Keybinds = .{},
 @"clipboard-read": ClipboardAccess = .ask,
 @"clipboard-write": ClipboardAccess = .allow,
 
+/// The maximum size in bytes of a single clipboard write by a program
+/// running in the terminal via the Kitty clipboard protocol (OSC 5522).
+/// This doesn't apply to OSC 52, which is limited by the maximum length
+/// of an escape sequence hardcoded into Ghostty for now.
+///
+/// Data beyond the limit fails the entire write with an `EFBIG` status,
+/// discards the transaction, and leaves the clipboard untouched. Later
+/// write-related packets are ignored until a new write begins.
+///
+/// The data is buffered in memory while the write is in progress, so
+/// this limit bounds how much memory a program can make Ghostty
+/// allocate per write. A future improvement will attempt to spool large
+/// writes to disk.
+///
+/// The default is 64 MiB, the minimum a conforming implementation must
+/// accept. Set this to `unlimited` to remove the limit, allowing writes
+/// bounded only by available memory. A value of `0` rejects every non-empty
+/// write. To reject clipboard writes entirely, use `clipboard-write = deny`
+/// instead.
+///
+/// This can be changed at runtime and applies to writes that begin
+/// after the change.
+///
+/// Available since: 1.4.0
+@"clipboard-write-limit-bytes": Limit(usize, 64 * 1024 * 1024) = .default,
+
 /// Trims trailing whitespace on data that is copied to the clipboard. This does
 /// not affect data sent to the clipboard via `clipboard-write`. This only
 /// applies to trailing whitespace on lines that have other characters.
@@ -2931,10 +2957,9 @@ keybind: Keybinds = .{},
 ///     (Available since: 1.2.0)
 ///
 ///   * `ssh-terminfo` - Enable automatic terminfo installation on remote hosts.
-///     Attempts to install Ghostty's terminfo entry using `infocmp` and `tic` when
-///     connecting to hosts that lack it. Requires `infocmp` to be available locally
-///     and `tic` to be available on remote hosts. Once terminfo is installed on a
-///     remote host, it will be automatically "cached" to avoid repeat installations.
+///     Attempts to install Ghostty's embedded terminfo entry using `tic` on local
+///     cache misses. Requires `tic` to be available on remote hosts. Successful
+///     installations are cached locally to avoid repeat installations.
 ///     If desired, the `+ssh-cache` CLI action can be used to manage the installation
 ///     cache manually using various arguments.
 ///     (Available since: 1.2.0)
@@ -4518,6 +4543,29 @@ fn expandPaths(self: *Config, base: []const u8) !void {
     }
 }
 
+/// Expand tilde paths to absolute paths to the user's home directory.
+/// If expansion fails, an error is logged and the original path is returned.
+fn expandHome(path: []const u8, buf: []u8) []const u8 {
+    if (!std.mem.startsWith(u8, path, "~/"))
+        return path;
+
+    var environ_map = global.environMap() catch |err| {
+        log.warn("failed to get environment map for path \"{s}\": {}", .{ path, err });
+        return path;
+    };
+    defer environ_map.deinit();
+
+    return internal_os.expandHome(
+        global.io(),
+        &environ_map,
+        path,
+        buf,
+    ) catch |err| {
+        log.warn("failed to expand home directory in path \"{s}\": {}", .{ path, err });
+        return path;
+    };
+}
+
 fn loadTheme(self: *Config, theme: Theme) !void {
     // Load the correct theme depending on the conditional state.
     // Dark/light themes were programmed prior to conditional configuration
@@ -4617,14 +4665,17 @@ fn loadTheme(self: *Config, theme: Theme) !void {
 /// Call this once after you are done setting configuration. This
 /// is idempotent but will waste memory if called multiple times.
 pub fn finalize(self: *Config) !void {
+    const alloc = self._arena.?.allocator();
+
     // We always load the theme first because it may set other fields
     // in our config.
-    if (self.theme) |theme| {
+    if (self.theme) |*theme| {
+        try theme.finalize(alloc);
         const different = !std.mem.eql(u8, theme.light, theme.dark);
 
         // Warning: loadTheme will deinit our existing config and replace
         // it so all memory from self prior to this point will be freed.
-        try self.loadTheme(theme);
+        try self.loadTheme(theme.*);
 
         // If we have different light vs dark mode themes, disable
         // window-theme = auto since that breaks it.
@@ -4637,8 +4688,6 @@ pub fn finalize(self: *Config) !void {
             self._conditional_set.insert(.theme);
         }
     }
-
-    const alloc = self._arena.?.allocator();
 
     // Used for a variety of defaults. See the function docs as well the
     // specific variable use sites for more details.
@@ -5444,20 +5493,8 @@ pub const WorkingDirectory = union(enum) {
             else => return,
         };
 
-        if (!std.mem.startsWith(u8, path, "~/")) return;
-
         var buf: [std.fs.max_path_bytes]u8 = undefined;
-        const expanded = expanded: {
-            var environ_map = global.environMap() catch |err| break :expanded err;
-            defer environ_map.deinit();
-            break :expanded internal_os.expandHome(global.io(), &environ_map, path, &buf);
-        } catch |err| {
-            log.warn(
-                "error expanding home directory for working-directory path={s}: {}",
-                .{ path, err },
-            );
-            return;
-        };
+        const expanded = expandHome(path, &buf);
 
         if (std.mem.eql(u8, expanded, path)) return;
         self.* = .{ .path = try alloc.dupe(u8, expanded) };
@@ -9980,6 +10017,19 @@ pub const Theme = struct {
         };
     }
 
+    /// Expand tilde paths in light/dark theme values.
+    pub fn finalize(self: *Theme, alloc: Allocator) Allocator.Error!void {
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+
+        const light = expandHome(self.light, &buf);
+        if (!std.mem.eql(u8, light, self.light))
+            self.light = try alloc.dupeZ(u8, light);
+
+        const dark = expandHome(self.dark, &buf);
+        if (!std.mem.eql(u8, dark, self.dark))
+            self.dark = try alloc.dupeZ(u8, dark);
+    }
+
     /// Deep copy of the struct. Required by Config.
     pub fn clone(self: *const Theme, alloc: Allocator) Allocator.Error!Theme {
         return .{
@@ -10034,6 +10084,34 @@ pub const Theme = struct {
             try v.parseCLI(alloc, " light:foo,  dark : bar  ");
             try testing.expectEqualStrings("foo", v.light);
             try testing.expectEqualStrings("bar", v.dark);
+        }
+
+        // Expand tilde to home
+        {
+            var environ_map = try testing.environ.createMap(alloc);
+            defer environ_map.deinit();
+
+            var home_buf: [std.fs.max_path_bytes]u8 = undefined;
+            const home = try internal_os.expandHome(
+                testing.io,
+                &environ_map,
+                "~/",
+                &home_buf,
+            );
+
+            var v: Theme = undefined;
+            try v.parseCLI(alloc, "light:~/foo, dark:~/bar");
+            try v.finalize(alloc);
+
+            var expected_buf: [std.fs.max_path_bytes]u8 = undefined;
+            try testing.expectEqualStrings(
+                try std.fmt.bufPrint(&expected_buf, "{s}foo", .{home}),
+                v.light,
+            );
+            try testing.expectEqualStrings(
+                try std.fmt.bufPrint(&expected_buf, "{s}bar", .{home}),
+                v.dark,
+            );
         }
 
         var v: Theme = undefined;
@@ -10981,6 +11059,38 @@ test "scrollback limits" {
     try testing.expectEqual(
         std.math.maxInt(usize),
         cfg.@"scrollback-limit-lines".value,
+    );
+}
+
+test "clipboard write limit" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var cfg = try Config.default(alloc);
+    defer cfg.deinit();
+    try testing.expectEqual(
+        @as(usize, 64 * 1024 * 1024),
+        cfg.@"clipboard-write-limit-bytes".value,
+    );
+
+    var it: TestIterator = .{ .data = &.{
+        "--clipboard-write-limit-bytes=1234",
+    } };
+    try cfg.loadIter(alloc, &it);
+
+    try testing.expectEqual(
+        @as(usize, 1234),
+        cfg.@"clipboard-write-limit-bytes".value,
+    );
+
+    var unlimited_it: TestIterator = .{ .data = &.{
+        "--clipboard-write-limit-bytes=unlimited",
+    } };
+    try cfg.loadIter(alloc, &unlimited_it);
+
+    try testing.expectEqual(
+        std.math.maxInt(usize),
+        cfg.@"clipboard-write-limit-bytes".value,
     );
 }
 
