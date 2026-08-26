@@ -340,7 +340,10 @@ Usage:
   gxserver agent-skills status [skill...] [--json]
   gxserver agent-skills install <skill...> --source <path> [--json]
   gxserver setup [--install-root <dir>] [--release-dir <dir>] [--upload-path <file>]
-                     Activate an extracted release package (stop old server, link tools)
+                 [--analytics-role remote|local]
+                     Activate an extracted release package (stop old server, link tools).
+                     --analytics-role remote marks this install as an SSH helper
+                     driven by a desktop, so it never emits anonymous analytics.
   gxserver --version Print the gxserver package version
 "
     );

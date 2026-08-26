@@ -1,13 +1,30 @@
 /*
- * The mobile WebView only renders Session Chat. Pulling in sidebar/styles.css
- * also bundled every desktop sidebar, modal, project, and Agents style into
- * the inline HTML that iOS has to parse before showing the chat surface.
- * Keep this entry limited to the shared primitives and chat-specific chrome.
+ * Session Chat and Saved Prompts are both shared desktop surfaces. Import the
+ * shared stylesheet itself so modal improvements ship to mobile without a
+ * second mobile-only CSS implementation.
  */
-@import '@/packages/core-ui/styles/shadcn.generated.css';
-@import '@/packages/core-ui/styles/theme.css';
-@import '@/packages/core-ui/styles/workspace-theme.css';
-@import '@/packages/core-ui/styles/chat.css';
+@import '@/packages/core-ui/styles.css';
+
+/*
+ * Only Saved Prompts is hosted in this mobile page. Hide the desktop Quick
+ * Access sibling tabs (their native-window bridge does not exist here) and
+ * let the active title occupy the narrow phone rail.
+ */
+.native-sidebar-body .ghostex-stashed-prompts-dialog .quick-access-tabs {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.native-sidebar-body .ghostex-stashed-prompts-dialog .quick-access-tab:not([data-active='true']) {
+  display: none;
+}
+
+.native-sidebar-body .ghostex-stashed-prompts-dialog .quick-access-tab[data-active='true'] {
+  pointer-events: none;
+}
+
+.native-sidebar-body .ghostex-stashed-prompts-dialog .quick-access-tab[data-active='true'] kbd {
+  display: none;
+}
 
 /*
  * Phone/tablet transcript gutter. The shared rule reserves 30px each side

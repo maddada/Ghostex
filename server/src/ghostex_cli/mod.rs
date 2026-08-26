@@ -11,6 +11,7 @@ pub mod launchers;
 pub mod output;
 pub mod picker;
 pub mod rpc;
+pub mod saved_prompts;
 pub mod selector;
 pub mod sessions;
 pub mod skills;
@@ -73,6 +74,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "history",
     "move-codex-session",
     "quick-actions",
+    "saved-prompts",
     "server",
     "web",
 ];
@@ -206,6 +208,7 @@ fn is_known_command(name: &str) -> bool {
         "sleep-session",
         "tag-session",
         "session-note",
+        "saved-prompts",
         "pin-session",
         "delayed-send",
         "close-after-done",
@@ -482,6 +485,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
                 };
             run_bridge_action(action, parser, fail_on_not_ok, rest)
         }
+        "saved-prompts" => saved_prompts::saved_prompts_command(args),
         "pin-session" => {
             run_bridge_action("pinSession", Parser::SessionBoolean("pinned"), plain, args)
         }

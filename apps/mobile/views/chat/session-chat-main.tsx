@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import './session-chat.css';
 import {
@@ -19,12 +19,24 @@ import {
   type SessionChatTheme,
 } from '@/packages/shared/session-chat';
 import { GXSERVER_PROTOCOL_VERSION } from '@/packages/shared/gxserver-protocol';
+import type {
+  GxserverListStashedPromptsResult,
+  GxserverDeleteStashedPromptTagResult,
+  GxserverSaveStashedPromptResult,
+  GxserverSaveStashedPromptTagResult,
+  GxserverSetStashedPromptTagsResult,
+} from '@/packages/shared/gxserver-protocol';
+import { createGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import {
   SessionChatView,
+  type SessionChatComposerHandoff,
   type SessionChatHostComposerBridge,
   type SessionChatHostSearchBridge,
+  type SessionChatHostSessionNoteBridge,
 } from '@/packages/core-ui/chat/session-chat-view';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
+import { StashedPromptsModal } from '@/packages/core-ui/stashed-prompts-modal';
+import type { WebviewApi } from '@/packages/core-ui/webview-api';
 
 /*
 CDXC:SessionChatMobileWebview 2026-07-31:
@@ -46,31 +58,42 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
         | "saveImage" | "saveAttachment" | "loadImage"
         | "queuePrompt" | "updateQueuedPrompt"
         | "removeQueuedPrompt" | "reorderQueue" | "sendQueuedPrompt"
-        | "setDraft" | "sessionNoteRead" | "sessionNoteSave",
+        | "setDraft" | "sessionNoteRead" | "sessionNoteSave"
+        | "savedPrompts" | "jumpToSavedPromptSession",
       params }))
 - page → RN notice (no id, no answer):
   { notice: "queueCount", count } — see reportQueueCount below
+  { notice: "draftHandoffToTerminal", content, promptId? } — the answer to
+    ghostexMobileChatHandoffToTerminal below
 - RN → page: window.ghostexMobileChatDeliver({ id, ok, result?, error? })
 - RN config (injected before content loads):
   window.__ghostexMobileChatConfig = {
-    agentId?, sessionKey?, theme?, fontFamily?, transcriptWidthPercent?, verboseMode?
+    agentId?, projectId?, sessionId?, sessionKey?, theme?, fontFamily?,
+    transcriptWidthPercent?, verboseMode?
   }
 - RN presentation updates (pushed when mobile settings change):
   window.ghostexMobileChatSetPresentation({
     theme?, fontFamily?, transcriptWidthPercent?, verboseMode?
   })
 - RN host state (pushed on every change, may arrive before or after mount):
-  window.ghostexMobileChatSetHostState({ working?, canSend? })
+  window.ghostexMobileChatSetHostState({ working? })
 - RN terminal-draft transfer (pushed when the user switches into chat and the
   agent CLI's composer held text): window.ghostexMobileChatInsertDraft(content)
+- RN chat-draft handoff (pushed when the user switches out to the terminal):
+  window.ghostexMobileChatHandoffToTerminal()
 - RN transcript search (the phone's entry point is the terminal header's
   overflow menu, not a button on this page):
   window.ghostexMobileChatOpenSearch()
+- RN shared-action entry points:
+  window.ghostexMobileChatOpenSessionNote()
+  window.ghostexMobileChatOpenSavedPrompts()
 */
 
 interface MobileChatConfig {
   agentId?: string;
   fontFamily?: string;
+  projectId?: string;
+  sessionId?: string;
   sessionKey?: string;
   theme?: SessionChatTheme;
   transcriptWidthPercent?: number;
@@ -92,14 +115,13 @@ interface BridgeResponse {
 }
 
 /*
-Live session state the page cannot see for itself: the RN app polls the
-machine inventory (`ghostex sessions --mobile-summary`) and pushes the
-resulting working / can-send signals in, the same two values the desktop and
-web hosts read straight off their workspace session record.
+Live working state the page cannot see for itself: the RN app polls the
+machine inventory (`ghostex sessions --mobile-summary`) and pushes that signal
+in. Input availability is deliberately not mirrored from the inventory: it is
+a periodic snapshot and must not lock a usable composer while it is stale.
 */
 interface MobileChatHostState {
   working: boolean;
-  canSend: boolean;
 }
 
 type BridgeOp =
@@ -121,7 +143,9 @@ type BridgeOp =
   | 'sendQueuedPrompt'
   | 'setDraft'
   | 'sessionNoteRead'
-  | 'sessionNoteSave';
+  | 'sessionNoteSave'
+  | 'savedPrompts'
+  | 'jumpToSavedPromptSession';
 
 const CONFIG_RETRY_DELAY_MS = 100;
 const CONFIG_MAX_ATTEMPTS = 100;
@@ -147,12 +171,15 @@ declare global {
     ghostexMobileChatSetPresentation?: (state: Partial<MobileChatPresentation>) => void;
     ghostexMobileChatSetHostState?: (state: Partial<MobileChatHostState>) => void;
     ghostexMobileChatInsertDraft?: (content: string) => void;
+    ghostexMobileChatHandoffToTerminal?: () => void;
     ghostexMobileChatOpenSearch?: () => void;
+    ghostexMobileChatOpenSessionNote?: () => void;
+    ghostexMobileChatOpenSavedPrompts?: () => void;
     __ghostexMobileChatConfig?: MobileChatConfig;
   }
 }
 
-let hostState: MobileChatHostState = { canSend: true, working: false };
+let hostState: MobileChatHostState = { working: false };
 const hostStateListeners = new Set<() => void>();
 
 function subscribeHostState(listener: () => void): () => void {
@@ -188,24 +215,80 @@ window.ghostexMobileChatInsertDraft = (content) => {
 };
 
 /*
-The mobile host registers composer actions but cannot stash: gxserver's stash
-endpoints have no CLI verb, and this page reaches the machine only through
-SSH-exec'd verbs. Omitting `stashPrompt` keeps the composer's Stash control
-unrendered instead of offering a button that would always fail.
+The same rule in the other direction. The shared composer parks the draft in
+Saved Prompts before it lets go of it, so the notice below only ever describes
+text that is already durable on the machine: RN types it into the agent CLI and
+drops the parking row once the terminal has taken it. Nothing is posted when
+there is no composer registered yet, when it held nothing, or when the handoff
+failed — all three mean the terminal must be left alone, and the text (if any)
+stays exactly where the user typed it.
 */
-const mobileComposerBridge: SessionChatHostComposerBridge = {
-  register(actions) {
-    insertDraftIntoComposer = actions.insertPrompt;
-    if (pendingComposerDraft.length > 0 && actions.insertPrompt(pendingComposerDraft)) {
-      pendingComposerDraft = '';
-    }
-    return () => {
-      if (insertDraftIntoComposer === actions.insertPrompt) {
-        insertDraftIntoComposer = null;
+let handoffComposerDraftToTerminal: (() => Promise<SessionChatComposerHandoff>) | null = null;
+
+window.ghostexMobileChatHandoffToTerminal = () => {
+  void handoffComposerDraftToTerminal?.()
+    .then((handoff) => {
+      if (handoff.content.length === 0) {
+        return;
       }
-    };
-  },
+      window.ReactNativeWebView?.postMessage(
+        JSON.stringify({
+          content: handoff.content,
+          notice: 'draftHandoffToTerminal',
+          ...(handoff.stashedPromptId ? { promptId: handoff.stashedPromptId } : {}),
+        })
+      );
+    })
+    .catch(() => undefined);
 };
+
+function createMobileComposerBridge(
+  projectId: string | undefined,
+  sessionId: string | undefined,
+  showStashedPrompts: () => void
+): SessionChatHostComposerBridge {
+  return {
+    register(actions) {
+      insertDraftIntoComposer = actions.insertPrompt;
+      handoffComposerDraftToTerminal = actions.handoffToTerminal;
+      if (pendingComposerDraft.length > 0 && actions.insertPrompt(pendingComposerDraft)) {
+        pendingComposerDraft = '';
+      }
+      return () => {
+        if (insertDraftIntoComposer === actions.insertPrompt) {
+          insertDraftIntoComposer = null;
+        }
+        if (handoffComposerDraftToTerminal === actions.handoffToTerminal) {
+          handoffComposerDraftToTerminal = null;
+        }
+      };
+    },
+    async stashPrompt(content, options) {
+      const result = await bridgeCall<GxserverSaveStashedPromptResult>('savedPrompts', {
+        action: 'save',
+        payload: {
+          content,
+          ...(projectId ? { projectId } : {}),
+          ...(sessionId ? { sessionId } : {}),
+        },
+      });
+      const promptId = result.prompt?.promptId;
+      return options?.transient && result.created && promptId ? { promptId } : {};
+    },
+    async countSessionStashedPrompts(agentSessionId) {
+      const result = await bridgeCall<GxserverListStashedPromptsResult>('savedPrompts', {
+        action: 'list',
+        payload: projectId ? { projectId } : {},
+      });
+      return result.prompts.filter(
+        (prompt) =>
+          (agentSessionId !== null && prompt.agentSessionId === agentSessionId) ||
+          (sessionId !== undefined && prompt.sessionId === sessionId)
+      ).length;
+    },
+    showStashedPrompts,
+  };
+}
 
 /*
 Transcript search is opened from the app's own chrome (the terminal header's
@@ -239,12 +322,48 @@ const mobileSearchBridge: SessionChatHostSearchBridge = {
   },
 };
 
+let openSessionNote: (() => void) | null = null;
+let pendingSessionNoteOpen = false;
+
+window.ghostexMobileChatOpenSessionNote = () => {
+  if (openSessionNote === null) {
+    pendingSessionNoteOpen = true;
+    return;
+  }
+  openSessionNote();
+};
+
+const mobileSessionNoteBridge: SessionChatHostSessionNoteBridge = {
+  register(actions) {
+    openSessionNote = actions.open;
+    if (pendingSessionNoteOpen) {
+      pendingSessionNoteOpen = false;
+      actions.open();
+    }
+    return () => {
+      if (openSessionNote === actions.open) {
+        openSessionNote = null;
+      }
+    };
+  },
+};
+
+let openSavedPrompts: (() => void) | null = null;
+let pendingSavedPromptsOpen = false;
+
+window.ghostexMobileChatOpenSavedPrompts = () => {
+  if (openSavedPrompts === null) {
+    pendingSavedPromptsOpen = true;
+    return;
+  }
+  openSavedPrompts();
+};
+
 window.ghostexMobileChatSetHostState = (state) => {
   const next: MobileChatHostState = {
-    canSend: typeof state?.canSend === 'boolean' ? state.canSend : hostState.canSend,
     working: typeof state?.working === 'boolean' ? state.working : hostState.working,
   };
-  if (next.canSend === hostState.canSend && next.working === hostState.working) {
+  if (next.working === hostState.working) {
     return;
   }
   hostState = next;
@@ -362,6 +481,150 @@ function bridgeCall<TResult>(op: BridgeOp, params?: Record<string, unknown>): Pr
     });
     host.postMessage(JSON.stringify({ id, op, params: params ?? {} }));
   });
+}
+
+function deliverSavedPromptsMessage(data: Record<string, unknown>): void {
+  window.dispatchEvent(new MessageEvent('message', { data }));
+}
+
+function savedPromptsPayload(message: Record<string, unknown>): Record<string, unknown> {
+  const { requestId: _requestId, type: _type, ...payload } = message;
+  return payload;
+}
+
+/*
+CDXC:MobileSavedPrompts 2026-08-26:
+The desktop modal speaks the VS Code sidebar message contract. This adapter
+translates only the host transport: requests become an allowlisted mobile
+bridge call, then the daemon's answer is re-emitted as the same window message
+the component receives on desktop. Prompt bodies never enter RN state or logs.
+*/
+function createMobileSavedPromptsApi(): WebviewApi {
+  return {
+    postMessage(message) {
+      const record = message as unknown as Record<string, unknown>;
+      switch (message.type) {
+        case 'requestStashedPrompts':
+          void bridgeCall<GxserverListStashedPromptsResult>('savedPrompts', {
+            action: 'list',
+            payload: {},
+          }).then((result) => {
+            deliverSavedPromptsMessage({
+              prompts: [...result.prompts],
+              requestId: message.requestId,
+              tags: result.tags ? [...result.tags] : [],
+              type: 'stashedPromptsResult',
+            });
+          });
+          return;
+        case 'saveStashedPrompt':
+          void bridgeCall<GxserverSaveStashedPromptResult>('savedPrompts', {
+            action: 'save',
+            payload: savedPromptsPayload(record),
+          })
+            .then((result) => {
+              deliverSavedPromptsMessage({
+                ok: true,
+                prompt: result.prompt,
+                requestId: message.requestId,
+                type: 'saveStashedPromptResult',
+              });
+            })
+            .catch((error: unknown) => {
+              deliverSavedPromptsMessage({
+                error: error instanceof Error ? error.message : String(error),
+                ok: false,
+                requestId: message.requestId,
+                type: 'saveStashedPromptResult',
+              });
+            });
+          return;
+        case 'deleteStashedPrompt':
+          void bridgeCall('savedPrompts', {
+            action: 'delete',
+            payload: savedPromptsPayload(record),
+          });
+          return;
+        case 'saveStashedPromptTag':
+          void bridgeCall<GxserverSaveStashedPromptTagResult>('savedPrompts', {
+            action: 'save-tag',
+            payload: savedPromptsPayload(record),
+          })
+            .then((result) => {
+              deliverSavedPromptsMessage({
+                ok: true,
+                requestId: message.requestId,
+                tags: [...result.tags],
+                type: 'stashedPromptTagsResult',
+              });
+            })
+            .catch((error: unknown) => {
+              deliverSavedPromptsMessage({
+                error: error instanceof Error ? error.message : String(error),
+                ok: false,
+                requestId: message.requestId,
+                tags: [],
+                type: 'stashedPromptTagsResult',
+              });
+            });
+          return;
+        case 'deleteStashedPromptTag':
+          void bridgeCall<GxserverDeleteStashedPromptTagResult>('savedPrompts', {
+            action: 'delete-tag',
+            payload: savedPromptsPayload(record),
+          })
+            .then((result) => {
+              deliverSavedPromptsMessage({
+                deletedTagId: message.tagId,
+                ok: true,
+                requestId: message.requestId,
+                tags: [...result.tags],
+                type: 'stashedPromptTagsResult',
+              });
+            })
+            .catch((error: unknown) => {
+              deliverSavedPromptsMessage({
+                error: error instanceof Error ? error.message : String(error),
+                ok: false,
+                requestId: message.requestId,
+                tags: [],
+                type: 'stashedPromptTagsResult',
+              });
+            });
+          return;
+        case 'setStashedPromptTags':
+          void bridgeCall<GxserverSetStashedPromptTagsResult>('savedPrompts', {
+            action: 'set-tags',
+            payload: savedPromptsPayload(record),
+          })
+            .then((result) => {
+              deliverSavedPromptsMessage({
+                ok: true,
+                prompt: result.prompt,
+                requestId: message.requestId,
+                type: 'setStashedPromptTagsResult',
+              });
+            })
+            .catch((error: unknown) => {
+              deliverSavedPromptsMessage({
+                error: error instanceof Error ? error.message : String(error),
+                ok: false,
+                requestId: message.requestId,
+                type: 'setStashedPromptTagsResult',
+              });
+            });
+          return;
+        case 'insertStashedPrompt':
+          window.ghostexMobileChatInsertDraft?.(message.content);
+          return;
+        case 'jumpToStashedPromptSession':
+          void bridgeCall('jumpToSavedPromptSession', savedPromptsPayload(record));
+          return;
+        default:
+          return;
+      }
+    },
+  };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -689,35 +952,77 @@ trackVisualViewportHeight();
 
 function MobileSessionChat({
   agentLabel,
+  projectId,
+  sessionId,
   sessionKey,
   transport,
 }: {
   agentLabel: string | null;
+  projectId: string | undefined;
+  sessionId: string | undefined;
   sessionKey: string | undefined;
   transport: SessionChatTransport;
 }) {
-  const { canSend, working } = useSyncExternalStore(subscribeHostState, readHostState, readHostState);
+  const { working } = useSyncExternalStore(subscribeHostState, readHostState, readHostState);
   const { theme, verboseMode } = useSyncExternalStore(subscribePresentation, readPresentation, readPresentation);
+  const [savedPromptsOpen, setSavedPromptsOpen] = useState(false);
+  const showSavedPrompts = useMemo(() => () => setSavedPromptsOpen(true), []);
+  const composerBridge = useMemo(
+    () => createMobileComposerBridge(projectId, sessionId, showSavedPrompts),
+    [projectId, sessionId, showSavedPrompts]
+  );
+  const savedPromptsApi = useMemo(() => createMobileSavedPromptsApi(), []);
+  const combinedSessionId = useMemo(
+    () => (projectId && sessionId ? createGxserverPresentationProjectSessionId(projectId, sessionId) : undefined),
+    [projectId, sessionId]
+  );
+
+  useEffect(() => {
+    openSavedPrompts = showSavedPrompts;
+    if (pendingSavedPromptsOpen) {
+      pendingSavedPromptsOpen = false;
+      showSavedPrompts();
+    }
+    return () => {
+      if (openSavedPrompts === showSavedPrompts) {
+        openSavedPrompts = null;
+      }
+    };
+  }, [showSavedPrompts]);
+
   return (
     <div className='native-sidebar-shell gpui-session-chat'>
       <SessionChatView
         agentLabel={agentLabel}
-        canSend={canSend}
         className='gpui-session-chat-view'
-        hostComposerBridge={mobileComposerBridge}
+        hostComposerBridge={composerBridge}
         hostSearchBridge={mobileSearchBridge}
+        hostSessionNoteBridge={mobileSessionNoteBridge}
+        nativeSelectionMenus
         onSwitchToTerminalForAgentPicker={() => {
           void bridgeCall('switchToTerminalForAgentPicker');
         }}
         sendOnEnter={false}
         sessionKey={sessionKey}
-        showComposerAgentName={false}
         showNewSessionWelcomeTitle={false}
         searchLayout='overlay'
         theme={theme}
         transport={transport}
         verboseMode={verboseMode}
         working={working}
+      />
+      <StashedPromptsModal
+        isOpen={savedPromptsOpen}
+        onClose={() => {
+          setSavedPromptsOpen(false);
+          // Desktop's separate modal window naturally returns focus to chat,
+          // which refreshes the stash badge. Mirror that lifecycle in this
+          // same-document mobile host.
+          window.dispatchEvent(new Event('focus'));
+        }}
+        projectId={projectId}
+        sessionId={combinedSessionId}
+        vscode={savedPromptsApi}
       />
     </div>
   );
@@ -727,6 +1032,8 @@ const root = createRoot(rootElement);
 void waitForConfig().then((config) => {
   const agentId = config.agentId?.trim() ?? '';
   const agentLabel = agentId ? (resolveSessionChatDisplayAgent(agentId) ?? agentId) : null;
+  const projectId = config.projectId?.trim() || undefined;
+  const sessionId = config.sessionId?.trim() || undefined;
   const sessionKey = config.sessionKey?.trim() || undefined;
   window.ghostexMobileChatSetPresentation?.({
     fontFamily: config.fontFamily,
@@ -735,6 +1042,12 @@ void waitForConfig().then((config) => {
     verboseMode: config.verboseMode,
   });
   root.render(
-    <MobileSessionChat agentLabel={agentLabel} sessionKey={sessionKey} transport={createMobileSessionChatTransport()} />
+    <MobileSessionChat
+      agentLabel={agentLabel}
+      projectId={projectId}
+      sessionId={sessionId}
+      sessionKey={sessionKey}
+      transport={createMobileSessionChatTransport()}
+    />
   );
 });

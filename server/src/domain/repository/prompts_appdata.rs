@@ -137,6 +137,7 @@ impl<'a> DomainRepository<'a> {
             )));
         }
         let requested_prompt_id = optional_trimmed_string_param(params, "promptId")?;
+        let requested_tag_ids = optional_stashed_prompt_tag_ids(params)?;
         let (project_id, session_id) = normalize_stashed_prompt_session_ref(
             optional_trimmed_string_param(params, "projectId")?,
             optional_trimmed_string_param(params, "sessionId")?,
@@ -158,6 +159,9 @@ impl<'a> DomainRepository<'a> {
                 .map_err(sql_error)?;
             if updated == 0 {
                 return Err(DomainStateError::not_found("Saved prompt does not exist."));
+            }
+            if let Some(tag_ids) = requested_tag_ids.as_deref() {
+                replace_stashed_prompt_tag_links(self.db, &prompt_id, tag_ids, &timestamp)?;
             }
             let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
                 DomainStateError::corrupt_state("Saved prompt vanished during update.")
@@ -260,16 +264,29 @@ impl<'a> DomainRepository<'a> {
                 (prompt_id, true)
             }
         };
-        self.db
-            .execute(
-                r#"
-                INSERT INTO stashed_prompt_tag_links (promptId, tagId, createdAt)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(promptId, tagId) DO NOTHING
-                "#,
-                params![prompt_id, STASHED_PROMPT_TAG_ID, timestamp],
-            )
-            .map_err(sql_error)?;
+        if let Some(tag_ids) = requested_tag_ids.as_deref() {
+            replace_stashed_prompt_tag_links(self.db, &prompt_id, tag_ids, &timestamp)?;
+        } else {
+            let is_favorite: bool = self
+                .db
+                .query_row(
+                    r#"
+                    SELECT EXISTS(
+                      SELECT 1 FROM stashed_prompt_tag_links
+                      WHERE promptId = ?1 AND tagId = ?2
+                    )
+                    "#,
+                    params![prompt_id, FAVORITE_PROMPT_TAG_ID],
+                    |row| row.get(0),
+                )
+                .map_err(sql_error)?;
+            let mut tag_ids = Vec::with_capacity(if is_favorite { 2 } else { 1 });
+            if is_favorite {
+                tag_ids.push(FAVORITE_PROMPT_TAG_ID.to_string());
+            }
+            tag_ids.push(STASHED_PROMPT_TAG_ID.to_string());
+            replace_stashed_prompt_tag_links(self.db, &prompt_id, &tag_ids, &timestamp)?;
+        }
         let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
             DomainStateError::corrupt_state("Stashed prompt vanished during save.")
         })?;
@@ -484,21 +501,7 @@ impl<'a> DomainRepository<'a> {
     */
     pub fn set_stashed_prompt_tags(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         let prompt_id = required_string_param(params, "promptId")?.to_string();
-        let requested_tag_ids = match params.get("tagIds") {
-            Some(Value::Array(items)) => items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::trim)
-                .filter(|tag_id| !tag_id.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>(),
-            None | Some(Value::Null) => Vec::new(),
-            Some(_) => {
-                return Err(DomainStateError::bad_request(
-                    "tagIds must be an array of strings.",
-                ))
-            }
-        };
+        let requested_tag_ids = optional_stashed_prompt_tag_ids(params)?.unwrap_or_default();
         let prompt_exists: bool = self
             .db
             .query_row(
@@ -511,57 +514,8 @@ impl<'a> DomainRepository<'a> {
             return Err(DomainStateError::not_found("Saved prompt does not exist."));
         }
 
-        let known_tag_ids = read_stashed_prompt_tags(self.db)?
-            .iter()
-            .filter_map(|tag| tag.get("tagId").and_then(Value::as_str).map(str::to_string))
-            .collect::<HashSet<_>>();
         let timestamp = now_iso();
-
-        /*
-        Replacing a set is a delete plus inserts, so it takes the writer
-        reservation first: a failure partway would otherwise leave the prompt
-        with the old links stripped and the new ones missing — an untagged
-        prompt the user never asked for.
-        */
-        self.db
-            .execute_batch("BEGIN IMMEDIATE TRANSACTION")
-            .map_err(sql_error)?;
-        let result = (|| -> DomainResult<()> {
-            self.db
-                .execute(
-                    "DELETE FROM stashed_prompt_tag_links WHERE promptId = ?1",
-                    [&prompt_id],
-                )
-                .map_err(sql_error)?;
-            let mut applied: HashSet<&str> = HashSet::new();
-            for tag_id in &requested_tag_ids {
-                if !known_tag_ids.contains(tag_id) || !applied.insert(tag_id.as_str()) {
-                    continue;
-                }
-                self.db
-                    .execute(
-                        r#"
-                        INSERT INTO stashed_prompt_tag_links (promptId, tagId, createdAt)
-                        VALUES (?1, ?2, ?3)
-                        "#,
-                        params![prompt_id, tag_id, timestamp],
-                    )
-                    .map_err(sql_error)?;
-            }
-            Ok(())
-        })();
-        match result {
-            Ok(()) => {
-                if let Err(error) = self.db.execute_batch("COMMIT") {
-                    let _ = self.db.execute_batch("ROLLBACK");
-                    return Err(sql_error(error));
-                }
-            }
-            Err(error) => {
-                let _ = self.db.execute_batch("ROLLBACK");
-                return Err(error);
-            }
-        }
+        replace_stashed_prompt_tag_links(self.db, &prompt_id, &requested_tag_ids, &timestamp)?;
 
         let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
             DomainStateError::corrupt_state("Saved prompt vanished while tagging.")
@@ -607,6 +561,10 @@ impl<'a> DomainRepository<'a> {
 
     pub fn delete_stashed_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         let prompt_id = required_string_param(params, "promptId")?;
+        let deleted_prompt = read_stashed_prompt_row(self.db, prompt_id)?.and_then(|prompt| {
+            enrich_stashed_prompts_with_sessions(vec![prompt], &self.list_sessions(None).ok()?)
+                .pop()
+        });
         let deleted = self
             .db
             .execute(
@@ -614,7 +572,11 @@ impl<'a> DomainRepository<'a> {
                 [prompt_id],
             )
             .map_err(sql_error)?;
-        Ok(json!({ "deleted": deleted > 0 }))
+        Ok(json!({
+            "deleted": deleted > 0,
+            "projectId": deleted_prompt.as_ref().and_then(|prompt| prompt.get("projectId")),
+            "sessionId": deleted_prompt.as_ref().and_then(|prompt| prompt.get("sessionId")),
+        }))
     }
 
     /*
@@ -867,9 +829,93 @@ fn normalize_app_pinned_prompt_title(title_candidate: &str, content: &str) -> St
 }
 
 const MAX_STASHED_PROMPTS: i64 = 200;
+const FAVORITE_PROMPT_TAG_ID: &str = "favorite";
 const STASHED_PROMPT_TAG_ID: &str = "stashed";
 
 const MAX_STASHED_PROMPT_CONTENT_CHARS: usize = 200_000;
+
+fn optional_stashed_prompt_tag_ids(
+    params: &Map<String, Value>,
+) -> DomainResult<Option<Vec<String>>> {
+    match params.get("tagIds") {
+        Some(Value::Array(items)) => {
+            let tag_ids = items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|tag_id| !tag_id.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            let selected_label_count = tag_ids
+                .iter()
+                .filter(|tag_id| tag_id.as_str() != FAVORITE_PROMPT_TAG_ID)
+                .collect::<HashSet<_>>()
+                .len();
+            if selected_label_count > 1 {
+                return Err(DomainStateError::bad_request(
+                    "A saved prompt can have Favorites plus at most one label.",
+                ));
+            }
+            Ok(Some(tag_ids))
+        }
+        None | Some(Value::Null) => Ok(None),
+        Some(_) => Err(DomainStateError::bad_request(
+            "tagIds must be an array of strings.",
+        )),
+    }
+}
+
+/*
+An explicit tag selection replaces the whole set atomically. This is shared by
+manual prompt creation and later row edits so "No tag" is a deliberate empty
+set, never confused with an omitted tagIds field from a genuine stash action.
+*/
+fn replace_stashed_prompt_tag_links(
+    db: &Connection,
+    prompt_id: &str,
+    requested_tag_ids: &[String],
+    timestamp: &str,
+) -> DomainResult<()> {
+    let known_tag_ids = read_stashed_prompt_tags(db)?
+        .iter()
+        .filter_map(|tag| tag.get("tagId").and_then(Value::as_str).map(str::to_string))
+        .collect::<HashSet<_>>();
+
+    db.execute_batch("BEGIN IMMEDIATE TRANSACTION")
+        .map_err(sql_error)?;
+    let result = (|| -> DomainResult<()> {
+        db.execute(
+            "DELETE FROM stashed_prompt_tag_links WHERE promptId = ?1",
+            [prompt_id],
+        )
+        .map_err(sql_error)?;
+        let mut applied = HashSet::new();
+        for tag_id in requested_tag_ids {
+            if !known_tag_ids.contains(tag_id) || !applied.insert(tag_id.as_str()) {
+                continue;
+            }
+            db.execute(
+                r#"
+                INSERT INTO stashed_prompt_tag_links (promptId, tagId, createdAt)
+                VALUES (?1, ?2, ?3)
+                "#,
+                params![prompt_id, tag_id, timestamp],
+            )
+            .map_err(sql_error)?;
+        }
+        Ok(())
+    })();
+    match result {
+        Ok(()) => db.execute_batch("COMMIT").map_err(|error| {
+            let _ = db.execute_batch("ROLLBACK");
+            sql_error(error)
+        }),
+        Err(error) => {
+            let _ = db.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
 
 fn create_unique_stashed_prompt_id(db: &Connection) -> DomainResult<String> {
     let millis = chrono::Utc::now().timestamp_millis();

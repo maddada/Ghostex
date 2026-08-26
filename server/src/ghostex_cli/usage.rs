@@ -100,6 +100,10 @@ pub fn usage() -> String {
             "hold-sessions-awake --sessions-json <json> [--ttl-ms <n>] [--holder-id <id>] [--release] [--json]",
             "Keep attached sessions out of a client's Auto Sleep sweep while a remote client is viewing them",
         ),
+        format_help_command(
+            "saved-prompts <action> --payload-json json --json",
+            "Read and update the daemon-owned Saved Prompts library",
+        ),
     ]
     .join("\n");
 
