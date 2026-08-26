@@ -265,7 +265,11 @@ function planComponents({ componentIdentities, componentTagState, entries, produ
 }
 
 function componentJobAction({ arch, components, products }) {
-  const consumers = ['macos-arm64', `windows-${arch}`];
+  const consumers = [
+    'macos-arm64',
+    `windows-${arch}`,
+    ...(arch === 'x64' ? ['linux-deb-x64', 'linux-rpm-x64', 'linux-tar-x64'] : []),
+  ];
   const needed = consumers.some((productId) => products[productId]?.action === 'build');
   if (!needed) return 'skip';
   const component = components['code-server'];

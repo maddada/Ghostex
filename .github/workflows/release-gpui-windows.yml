@@ -159,6 +159,28 @@ jobs:
         with:
           name: ${{ steps.code_server_identity.outputs.artifact_name }}
           path: build/runtime-artifacts/${{ inputs.arch }}
+      - name: Reuse the published Source component for standalone runs
+        if: ${{ ! inputs.runtime_artifacts_ready }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
+            --reuse-published \
+            --metadata-only \
+            --require-sha256-sidecars \
+            --component code-server \
+            --version '${{ steps.code_server_identity.outputs.component_version }}' \
+            --platform "linux-${{ inputs.arch }}" \
+            --asset-dir "build/runtime-artifacts/${{ inputs.arch }}" \
+            --output build/runtime-artifacts/code-server-components.json
+      - name: Validate the Source component archive
+        shell: bash
+        run: |
+          node tooling/release-gpui/verify-code-server-archive.mjs \
+            --archive "build/runtime-artifacts/${{ inputs.arch }}/${{ steps.code_server_identity.outputs.archive_name }}" \
+            --version '${{ steps.code_server_identity.outputs.component_version }}' \
+            --platform "linux-${{ inputs.arch }}"
       - name: Build installer and portable package
         shell: pwsh
         env:

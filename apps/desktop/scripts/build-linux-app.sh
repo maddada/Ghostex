@@ -9,10 +9,9 @@
 # items to port as Linux support matures): completion sound assets, CLI
 # resources, portless admin runtime, updater integration, signing,
 # desktop-entry/icon install, and package formats (deb/rpm/AppImage/flatpak).
-# Also not yet staged: the Source code-server payload (<app>/code-server).
-# Dev builds resolve the repo checkout at <repo>/code-server through the
-# baked CARGO_MANIFEST_DIR candidate, so staging only matters for
-# relocatable packages.
+# Source is an on-demand code-server component in relocatable packages. Dev
+# builds resolve the repository checkout through the baked CARGO_MANIFEST_DIR
+# candidate instead.
 #
 # Development layouts keep CEF beside the executable. Release layouts stage a
 # CEF-free native bootstrap plus the internal runtime; the bootstrap installs
@@ -104,12 +103,14 @@ fi
 
 prepare_cef_component() {
 	local component_root asset_dir component_manifest stage_root archive_path build_manifest
+	local code_server_archive code_server_component_version code_server_asset_dir expected_code_server_archive
 	component_root="${GHOSTEX_ON_DEMAND_COMPONENT_ROOT:-$REPO_ROOT/build/on-demand-components}"
 	asset_dir="${GHOSTEX_ON_DEMAND_COMPONENT_ASSET_DIR:-$component_root/assets}"
 	component_manifest="${GHOSTEX_ON_DEMAND_COMPONENTS_MANIFEST:-$component_root/components.json}"
 	stage_root="$(mktemp -d "$GPUI_DIR/build/cef-linux-component-XXXXXX")"
 	archive_path="$asset_dir/cef-$CEF_COMPONENT_VERSION-linux-$CEF_COMPONENT_ARCH.tar.gz"
 	mkdir -p "$asset_dir"
+	printf '{"components":{}}\n' >"$component_manifest"
 	cp -R "$CEF_PAYLOAD/." "$stage_root/"
 	rm -rf "$stage_root/CMakeLists.txt" "$stage_root/cmake" "$stage_root/include" \
 		"$stage_root/libcef_dll" "$stage_root/archive.json"
@@ -122,6 +123,35 @@ prepare_cef_component() {
 		--version "$CEF_COMPONENT_VERSION" \
 		--asset-dir "$asset_dir" \
 		--output "$component_manifest"
+	code_server_archive="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE:-}"
+	if [[ -n "$code_server_archive" ]]; then
+		code_server_component_version="${GHOSTEX_CODE_SERVER_COMPONENT_VERSION:-}"
+		[[ -n "$code_server_component_version" ]] || {
+			echo "GHOSTEX_CODE_SERVER_COMPONENT_VERSION is required with the Linux Source component archive" >&2
+			exit 1
+		}
+		expected_code_server_archive="code-server-$code_server_component_version-linux-x64.tar.gz"
+		[[ "$(basename "$code_server_archive")" == "$expected_code_server_archive" ]] || {
+			echo "Linux Source component identity mismatch: expected $expected_code_server_archive" >&2
+			exit 1
+		}
+		[[ -f "$code_server_archive" && -f "$code_server_archive.sha256" ]] || {
+			echo "Linux Source component archive or checksum sidecar is missing: $code_server_archive" >&2
+			exit 1
+		}
+		node "$REPO_ROOT/tooling/release-gpui/verify-code-server-archive.mjs" \
+			--archive "$code_server_archive" \
+			--version "$code_server_component_version" \
+			--platform linux-x64
+		code_server_asset_dir="$(dirname "$code_server_archive")"
+		node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
+			--metadata-only \
+			--require-sha256-sidecars \
+			--component code-server \
+			--version "$code_server_component_version" \
+			--asset-dir "$code_server_asset_dir" \
+			--output "$component_manifest"
+	fi
 	build_manifest="$component_root/linux-$CEF_COMPONENT_ARCH-assets.json"
 	node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({assets:[],version:process.argv[2]},null,2)+"\n")' \
 		"$build_manifest" "$RELEASE_VERSION"

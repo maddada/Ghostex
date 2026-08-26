@@ -184,6 +184,7 @@ if ($OnDemandComponents) {
 $WslArchive = $env:GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE
 $WslCodeServerArchive = $env:GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE
 $RequireWslArchive = $env:GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME -ne "0"
+$RequireSourceArchive = $OnDemandComponents
 if ($WslArchive -and (Test-Path $WslArchive)) {
     $WslResources = Join-Path $AppDir "resources/wsl"
     New-Item -ItemType Directory -Force -Path $WslResources | Out-Null
@@ -257,7 +258,7 @@ if ($WslCodeServerArchive -and (Test-Path $WslCodeServerArchive)) {
     if ($LASTEXITCODE -ne 0) { throw "Could not seal Windows code-server component metadata" }
 
 }
-elseif ($RequireWslArchive) {
+elseif ($RequireSourceArchive) {
     throw "Required WSL Source archive is missing: $WslCodeServerArchive"
 }
 

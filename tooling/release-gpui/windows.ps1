@@ -57,6 +57,15 @@ $CefAsset = $CefComponent.platforms."windows-$Arch"
 if (-not $CefComponent.componentVersion -or $CefComponent.downloadTag -ne "cef-$($CefComponent.componentVersion)" -or $CefAsset.sha256 -cnotmatch '^[0-9a-f]{64}$') {
     throw "Windows staged app has an invalid CEF component entry"
 }
+$BundledWslSourceArchives = @(Get-ChildItem (Join-Path $AppDir "resources/wsl") -File -Filter "code-server-*-linux-$Arch.tar.gz" -ErrorAction SilentlyContinue)
+if ($BundledWslSourceArchives.Count -ne 0) {
+    throw "Windows staged app still bundles its optional WSL Source runtime"
+}
+$CodeServerComponent = $OnDemandManifest.components.'code-server'
+$CodeServerAsset = $CodeServerComponent.platforms."windows-$Arch"
+if (-not $CodeServerComponent.componentVersion -or $CodeServerComponent.downloadTag -ne "code-server-$($CodeServerComponent.componentVersion)" -or $CodeServerAsset.sha256 -cnotmatch '^[0-9a-f]{64}$') {
+    throw "Windows staged app has an invalid code-server component entry"
+}
 if ($env:GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME -ne "0") {
     if (-not (Test-Path $WslArchive)) {
         throw "Windows staged app is missing its WSL gxserver runtime: $WslArchive"
@@ -68,15 +77,6 @@ if ($env:GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME -ne "0") {
     $ActualWslSha = (Get-FileHash -Algorithm SHA256 $WslArchive).Hash.ToLowerInvariant()
     if ($ExpectedWslSha -cnotmatch '^[0-9a-f]{64}$' -or $ExpectedWslSha -cne $ActualWslSha) {
         throw "Windows staged WSL gxserver checksum does not match its runtime archive"
-    }
-    $BundledWslSourceArchives = @(Get-ChildItem (Join-Path $AppDir "resources/wsl") -File -Filter "code-server-*-linux-$Arch.tar.gz" -ErrorAction SilentlyContinue)
-    if ($BundledWslSourceArchives.Count -ne 0) {
-        throw "Windows staged app still bundles its optional WSL Source runtime"
-    }
-    $CodeServerComponent = $OnDemandManifest.components.'code-server'
-    $CodeServerAsset = $CodeServerComponent.platforms."windows-$Arch"
-    if (-not $CodeServerComponent.componentVersion -or $CodeServerComponent.downloadTag -ne "code-server-$($CodeServerComponent.componentVersion)" -or $CodeServerAsset.sha256 -cnotmatch '^[0-9a-f]{64}$') {
-        throw "Windows staged app has an invalid code-server component entry"
     }
 }
 

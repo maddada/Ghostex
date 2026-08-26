@@ -134,6 +134,11 @@ jobs:
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       - name: Install JavaScript dependencies
         run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+      - name: Restore code-server source identity input
+        run: git submodule update --init --depth=1 -- .dependencies/code-server
+      - name: Resolve immutable code-server component identity
+        id: code_server_identity
+        run: node tooling/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
       - name: Pre-fetch Zig package dependencies
         run: tooling/release-gpui/fetch-zig-deps.sh ghostty
       # Known tradeoff, deliberately not restructured.
@@ -158,14 +163,39 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           node tooling/release-gpui/await-run-artifacts.mjs \
-            --names release-gxserver-linux-x64 \
-            --producer-pattern '^(gxserver_x64|reuse)' \
+            --names "release-gxserver-linux-x64,${{ steps.code_server_identity.outputs.artifact_name }}" \
+            --producer-pattern '^(gxserver_x64|code_server_x64|reuse)' \
             --timeout-minutes 45
       - uses: actions/download-artifact@v8
         if: ${{ inputs.runtime_artifacts_ready }}
         with:
           name: release-gxserver-linux-x64
           path: build/runtime-artifacts/x64
+      - uses: actions/download-artifact@v8
+        if: ${{ inputs.runtime_artifacts_ready }}
+        with:
+          name: ${{ steps.code_server_identity.outputs.artifact_name }}
+          path: build/runtime-artifacts/code-server-x64
+      - name: Reuse the published Source component for standalone runs
+        if: ${{ ! inputs.runtime_artifacts_ready }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
+            --reuse-published \
+            --metadata-only \
+            --require-sha256-sidecars \
+            --component code-server \
+            --version '${{ steps.code_server_identity.outputs.component_version }}' \
+            --platform linux-x64 \
+            --asset-dir build/runtime-artifacts/code-server-x64 \
+            --output build/runtime-artifacts/code-server-components.json
+      - name: Validate the Source component archive
+        run: |
+          node tooling/release-gpui/verify-code-server-archive.mjs \
+            --archive "build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}" \
+            --version '${{ steps.code_server_identity.outputs.component_version }}' \
+            --platform linux-x64
       - name: Restore remote runtime package
         if: ${{ inputs.runtime_artifacts_ready }}
         run: |
@@ -174,6 +204,8 @@ jobs:
       - name: Stage the Linux desktop payload once
         env:
           GH_TOKEN: ${{ github.token }}
+          GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
+          GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}
         run: tooling/release-gpui/linux-stage.sh "${{ inputs.version }}" "$GHOSTEX_LINUX_PACKAGE_ROOT"
       # RPM and the portable tarball first: both archive the whole staged root,
       # and linux-deb.sh creates DEBIAN/ inside it.

@@ -87,10 +87,6 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
     why: 'Mobile Find Prompts bundle source; consumed by the mobile submodule build, not by release jobs.',
   },
   {
-    path: '.dependencies/zehn',
-    why: 'Retired Zig prompt-history source; kept as reference only. The shipped implementation is the packages/find crate compiled into gxserver.',
-  },
-  {
     path: 'vitest.config.ts',
     why: 'Test runner configuration; release:test uses tooling/release-gpui/vitest.release.config.ts.',
   },
@@ -234,7 +230,7 @@ const LINUX_DESKTOP_SCOPE_FLAGS = Object.freeze({ deb: 'linuxDeb', rpm: 'linuxRp
 function linuxDesktopProduct(format) {
   return {
     artifacts: LINUX_DESKTOP_ARTIFACT_NAMES[format],
-    composedFrom: ['gxserver-linux-x64', 'cef'],
+    composedFrom: ['gxserver-linux-x64', 'code-server', 'cef'],
     id: `linux-${format}-x64`,
     kind: 'product',
     pathspecs: [
@@ -567,7 +563,7 @@ export function componentPlatformRequirements(productId) {
     return { cef: ['darwin-arm64'], 'code-server': ['darwin-arm64', 'linux-arm64', 'linux-x64'] };
   }
   if (productId === 'linux-deb-x64' || productId === 'linux-rpm-x64' || productId === 'linux-tar-x64') {
-    return { cef: ['linux-x64'] };
+    return { cef: ['linux-x64'], 'code-server': ['linux-x64'] };
   }
   if (productId === 'windows-x64' || productId === 'windows-arm64') {
     const arch = productId.slice('windows-'.length);
