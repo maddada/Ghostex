@@ -75,8 +75,6 @@ impl GhostexGpuiApp {
                             CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
                             The same Settings glyph menu owns Previous Sessions access so the GPUI titlebar opens the production shared modal and its gxserver bridge, not a separate GPUI-local history picker.
 
-                            CDXC:GPUIDaemonSessionsModal 2026-06-24-12:00:
-                            Running Sessions is a menu action into the shared app-modal host, not a titlebar overlay or duplicated GPUI inventory surface.
                             */
                         this.show_titlebar_settings_menu(event.position, window, cx);
                     } else if id == "keep-awake" {

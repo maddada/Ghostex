@@ -6,8 +6,6 @@ import { readSidebarKeepAwakeRuntime } from './collapse-state';
 import type { SidebarKeepAwakeRuntimeState } from './types';
 
 export type SidebarOverlayActionsOptions = {
-  setIsDaemonSessionsOpen: Dispatch<SetStateAction<boolean>>;
-  setIsPinnedPromptsOpen: Dispatch<SetStateAction<boolean>>;
   setIsPreviousSessionsOpen: Dispatch<SetStateAction<boolean>>;
   setIsScratchPadOpen: Dispatch<SetStateAction<boolean>>;
   setIsSessionSearchOpen: Dispatch<SetStateAction<boolean>>;
@@ -26,8 +24,6 @@ export type SidebarOverlayActionsOptions = {
  * close over the same drawer state setters.
  */
 export function useSidebarOverlayActions({
-  setIsDaemonSessionsOpen,
-  setIsPinnedPromptsOpen,
   setIsPreviousSessionsOpen,
   setIsScratchPadOpen,
   setIsSessionSearchOpen,
@@ -38,13 +34,11 @@ export function useSidebarOverlayActions({
   vscode,
 }: SidebarOverlayActionsOptions) {
   const openSidebarSettings = () => {
-    setIsPinnedPromptsOpen(false);
     if (!settings) {
       vscode.postMessage({ type: 'openSettings' });
       return;
     }
     setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
@@ -57,9 +51,7 @@ export function useSidebarOverlayActions({
      * CDXC:SidebarTopChrome 2026-06-29-01:43:
      * Cmd+. is advertised in the sidebar Settings dropdown after the menu moved out of the titlebar. Route it to the same full-window app-modal host as Settings and Command Palette, closing transient sidebar drawers first so the shortcut opens one focused Hotkeys surface.
      */
-    setIsPinnedPromptsOpen(false);
     setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
@@ -81,9 +73,7 @@ export function useSidebarOverlayActions({
      * id instead of encoding a mode in this input query.
      *
      */
-    setIsPinnedPromptsOpen(false);
     setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
@@ -92,9 +82,7 @@ export function useSidebarOverlayActions({
   };
 
   const openKeepAwakePowerSettings = () => {
-    setIsPinnedPromptsOpen(false);
     setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);

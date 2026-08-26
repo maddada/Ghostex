@@ -268,8 +268,6 @@ export function SidebarApp({
   const [isStartupInteractionBlocked, setIsStartupInteractionBlocked] = useState(true);
   const [autoEditingGroupId, setAutoEditingGroupId] = useState<string>();
   const [agentCreateRequestId, setAgentCreateRequestId] = useState(0);
-  const [isDaemonSessionsOpen, setIsDaemonSessionsOpen] = useState(false);
-  const [isPinnedPromptsOpen, setIsPinnedPromptsOpen] = useState(false);
   const [isPreviousSessionsOpen, setIsPreviousSessionsOpen] = useState(false);
   const [isReferenceChatsCollapsed, setIsReferenceChatsCollapsed] = useState(
     initialUiCollapseState.isReferenceChatsCollapsed
@@ -831,15 +829,40 @@ export function SidebarApp({
       return;
     }
 
-    if (event.data.type === 'hydrate' && enableProjectCollections) {
-      const nextRemoteCollections: Record<string, SidebarProjectCollectionsState> = {};
-      for (const [machineId, state] of Object.entries(event.data.remoteSidebarProjectCollectionsByMachineId ?? {})) {
-        const parsed = parseSidebarProjectCollectionsFromGxserver(state);
-        if (parsed) {
-          nextRemoteCollections[machineId] = parsed;
+    if ((event.data.type === 'hydrate' || event.data.type === 'sessionState') && enableProjectCollections) {
+      if (event.data.type === 'hydrate' || event.data.remoteSidebarProjectCollectionsByMachineId !== undefined) {
+        const nextRemoteCollections: Record<string, SidebarProjectCollectionsState> = {};
+        for (const [machineId, state] of Object.entries(event.data.remoteSidebarProjectCollectionsByMachineId ?? {})) {
+          const parsed = parseSidebarProjectCollectionsFromGxserver(state);
+          if (parsed) {
+            nextRemoteCollections[machineId] = parsed;
+          }
+        }
+        setRemoteProjectCollectionsByMachineId(nextRemoteCollections);
+      }
+
+      const parsedLocalCollections = parseSidebarProjectCollectionsFromGxserver(event.data.sidebarProjectCollections);
+      if (parsedLocalCollections) {
+        if (parsedLocalCollections.collections.length === 0 && projectCollections.collections.length > 0) {
+          lastGxserverSyncedProjectCollectionsRef.current = projectCollections;
+          vscode.postMessage({
+            state: serializeSidebarProjectCollectionsForGxserver(projectCollections),
+            type: 'updateSidebarProjectCollections',
+          });
+        } else {
+          const adopted: SidebarProjectCollectionsState = {
+            collections: parsedLocalCollections.collections,
+            nextCollectionNumber: Math.max(
+              parsedLocalCollections.nextCollectionNumber,
+              projectCollections.nextCollectionNumber
+            ),
+          };
+          lastGxserverSyncedProjectCollectionsRef.current = adopted;
+          if (!areSidebarProjectCollectionsStatesEqual(adopted, projectCollections)) {
+            setProjectCollections(adopted);
+          }
         }
       }
-      setRemoteProjectCollectionsByMachineId(nextRemoteCollections);
     }
 
     if (event.data.type === 'gpuiProjectSlotHotkey') {
@@ -1555,12 +1578,19 @@ export function SidebarApp({
       projectIdByGroupId.has(groupId) ? [] : [{ groupId, kind: 'project' as const }]
     );
     for (const collection of collectionState.collections) {
-      const visibleProjectIds = sectionGroupIds.flatMap((candidateGroupId) => {
+      const visibleProjectIds = collection.projectIds.filter((projectId) => groupIdByProjectId.has(projectId));
+      const explicitlyOrderedProjectIds = new Set(visibleProjectIds);
+      for (const candidateGroupId of sectionGroupIds) {
         const candidateProjectId = projectIdByGroupId.get(candidateGroupId);
-        return candidateProjectId && collectionIdByProjectId.get(candidateProjectId) === collection.collectionId
-          ? [candidateProjectId]
-          : [];
-      });
+        if (
+          candidateProjectId &&
+          !explicitlyOrderedProjectIds.has(candidateProjectId) &&
+          collectionIdByProjectId.get(candidateProjectId) === collection.collectionId
+        ) {
+          explicitlyOrderedProjectIds.add(candidateProjectId);
+          visibleProjectIds.push(candidateProjectId);
+        }
+      }
       if (visibleProjectIds.length === 0) {
         continue;
       }
@@ -2686,8 +2716,6 @@ export function SidebarApp({
     startSidebarKeepAwake,
     stopSidebarKeepAwake,
   } = useSidebarOverlayActions({
-    setIsDaemonSessionsOpen,
-    setIsPinnedPromptsOpen,
     setIsPreviousSessionsOpen,
     setIsScratchPadOpen,
     setIsSessionSearchOpen,
@@ -2704,11 +2732,6 @@ export function SidebarApp({
       return true;
     }
 
-    if (isDaemonSessionsOpen) {
-      setIsDaemonSessionsOpen(false);
-      return true;
-    }
-
     if (isSettingsOpen) {
       setIsSettingsOpen(false);
       return true;
@@ -2716,11 +2739,6 @@ export function SidebarApp({
 
     if (isPreviousSessionsOpen) {
       setIsPreviousSessionsOpen(false);
-      return true;
-    }
-
-    if (isPinnedPromptsOpen) {
-      setIsPinnedPromptsOpen(false);
       return true;
     }
 
@@ -2842,7 +2860,6 @@ export function SidebarApp({
       if (
         event.defaultPrevented ||
         gitCommitDraft !== undefined ||
-        isDaemonSessionsOpen ||
         isPreviousSessionsOpen ||
         isScratchPadOpen ||
         (isEditableSidebarKeyboardTarget(target) && !isSearchInputTarget)
@@ -2905,7 +2922,6 @@ export function SidebarApp({
     activateSelectedSessionSearchResult,
     closeTopmostSidebarOverlay,
     gitCommitDraft,
-    isDaemonSessionsOpen,
     isPreviousSessionsOpen,
     isScratchPadOpen,
     isSessionSearchOpen,
@@ -2931,7 +2947,6 @@ export function SidebarApp({
     setSidebarV2Layout,
     setSidebarVersion,
     toggleActiveSessionsSortMode,
-    togglePinnedPrompts,
     toggleSessionTagFilter,
     toggleSidebarCollapsed,
   } = useSidebarActions({
@@ -2942,8 +2957,6 @@ export function SidebarApp({
     effectiveSettings,
     enabledVisibleSidebarSessionTagSet,
     revision,
-    setIsDaemonSessionsOpen,
-    setIsPinnedPromptsOpen,
     setIsPreviousSessionsOpen,
     setIsScratchPadOpen,
     setIsSessionSearchOpen,

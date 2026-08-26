@@ -171,11 +171,6 @@ impl ManageDocsResourceScope {
     }
 }
 
-/// CDXC:GPUIAppServedResource 2026-08-19: parity with the CEF synthetic origin.
-pub fn app_served_resource_url(relative_path: &str) -> String {
-    format!("https://ghostex-docs.invalid/{relative_path}")
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SidebarRuntimeSettingsSnapshot {
     pub debugging_mode: bool,

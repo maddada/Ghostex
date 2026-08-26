@@ -43,11 +43,8 @@ impl GhostexGpuiApp {
         CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
         Previous Sessions joins the same GPUI-owned CEF app-modal window path as Settings, Hotkeys, and Command Palette. The titlebar route must open the shared React modal component directly and let its gxserver-backed query resolve through sidebarCommand responses, not duplicated GPUI UI, overlays, hit-test routing, or stored hydrate rewrites.
 
-        CDXC:GPUIDaemonSessionsModal 2026-06-24-12:00:
-        Running Sessions uses the same shared React daemonSessions modal in the GPUI-owned CEF app-modal host. Open-time daemon state is delivered as a transient sidebarState message so the Settings hydrate snapshot remains the stored modal host snapshot and gxserver unavailability renders honestly instead of a placeholder inventory.
-
         CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Pinned Prompts and Scratch Pad open through this same React modal host and must receive real persisted gxserver app-user-data on every route. Keep prompt/note content inside the authenticated hydrate payload only; do not log it or create duplicate GPUI modal UI.
+        Scratch Pad opens through this same React modal host and must receive real persisted gxserver app-user-data on every route. Keep note content inside the authenticated hydrate payload only; do not log it or create duplicate GPUI modal UI.
 
         CDXC:GPUISettingsEntryModals 2026-06-24-12:22:
         Configure Agents, Configure Actions, and Open Targets are Settings-modal entry points in the shared React host. GPUI must preserve their modal ids, attach the latest Settings-compatible sidebar hydrate, and reuse this production CEF app-modal route instead of adding duplicate React UI, stubs, fallback routing, overlays, or hidden hit regions.
@@ -1202,6 +1199,18 @@ impl GhostexGpuiApp {
         source_window: Option<&mut Window>,
         cx: &mut gpui::Context<Self>,
     ) {
+        /*
+        CDXC:AnonymousAnalytics 2026-08-26:
+        This launcher is the single entry point for every app-modal open route
+        (titlebar actions, hotkeys, command palette, sidebar bridge messages), so
+        Find, the Extensions store, and Settings report `surface.opened` from
+        here. The `_inner` retry path is deliberately not hooked: a retry is the
+        same open. Modals outside the spec enum — including per-extension
+        modals — send nothing.
+        */
+        if let Some(surface) = gpui_telemetry_surface_for_app_modal(modal) {
+            record_gpui_surface_opened_telemetry(surface, cx.background_executor());
+        }
         if modal == GpuiAppModalKind::StashedPrompts {
             self.enrich_gpui_saved_prompts_quick_access_open_message(&mut open_message);
         }
@@ -1284,11 +1293,8 @@ impl GhostexGpuiApp {
         CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
         Previous Sessions app-modal requests share this launcher so titlebar/menu actions and modal-host open messages use one CEF window owner, while gxserver result messages remain transient sidebarState events owned by the command bridge.
 
-        CDXC:GPUIDaemonSessionsModal 2026-06-24-12:00:
-        Running Sessions shares this launcher and receives daemonSessionsState through the transient sidebarState queue. Do not store that payload as the reusable Settings hydrate snapshot, because Settings save/reopen must keep using the shared settings service snapshot.
-
         CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Pinned Prompts and Scratch Pad share the reusable hydrate snapshot because their React modals render directly from SidebarStore state. Saves refresh that durable snapshot after the gxserver write rather than sending fake success or transient-only local edits.
+        Scratch Pad shares the reusable hydrate snapshot because its React modal renders directly from SidebarStore state. Saves refresh that durable snapshot after the gxserver write rather than sending fake success or transient-only local edits.
 
         CDXC:GPUISettingsEntryModals 2026-06-24-12:22:
         Settings sub-entry modal ids must share this launcher so bridge opens, command-palette commands, and titlebar actions all hydrate the same shared Settings modal while letting the React host choose the initial tab from the modal id.
@@ -1361,9 +1367,6 @@ impl GhostexGpuiApp {
                             self.app_modal_command_return_focus_target,
                             return_focus_target,
                         );
-                    if modal == GpuiAppModalKind::DaemonSessions {
-                        self.refresh_gpui_daemon_sessions_state_in_background(None, cx);
-                    }
                     return;
                 }
                 self.clear_lost_gpui_app_modal_window_handle();
@@ -1479,9 +1482,6 @@ impl GhostexGpuiApp {
         } else {
             self.app_modal_window_id.set(None);
             self.app_modal_command_return_focus_target = None;
-        }
-        if self.app_modal_window.is_some() && modal == GpuiAppModalKind::DaemonSessions {
-            self.refresh_gpui_daemon_sessions_state_in_background(None, cx);
         }
     }
 

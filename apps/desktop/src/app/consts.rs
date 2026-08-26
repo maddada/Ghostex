@@ -712,22 +712,6 @@ top-level CEF document so playback follows the same working path as Browser.
 */
 pub(crate) const GHOSTEX_TUTORIAL_VIDEO_URL: &str = "https://www.youtube.com/watch?v=APdP-j5n4Mw";
 
-/*
-CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19:
-The tutorial is the first page of the one first-run modal now, so it plays
-inside the React modal host instead of taking a second window. The host
-document is a file:// URL, where the YouTube embed player refuses to start
-("Error 153 - Video player configuration error"), so the modal host serves this
-one-line player page from the app's synthetic https origin and the setup modal
-embeds THAT. Verified 2026-08-19: file:// -> https player page -> YouTube embed
-plays; file:// -> YouTube embed does not.
-*/
-pub(crate) const GHOSTEX_TUTORIAL_VIDEO_EMBED_URL: &str =
-    "https://www.youtube.com/embed/APdP-j5n4Mw?rel=0&modestbranding=1";
-
-pub(crate) const GPUI_TUTORIAL_VIDEO_PLAYER_RESOURCE_PATH: &str =
-    "ghostex-tutorial-video-player.html";
-
 /// CDXC:GPUITutorialVideoFullscreen 2026-08-18: the watch page reports
 /// main-frame load-end before its player has installed keyboard shortcuts, so
 /// the host-side fullscreen key press waits this long after that edge.
@@ -819,8 +803,8 @@ pub(crate) const APP_MODAL_HOST_FIT_CONTENT_MAX_WINDOW_HEIGHT: f32 = 850.0;
  * shared 1080x760 Settings frame that left short forms stranded in dead space.
  * Measured dialog footprints: Add Worktree 619, Clone Repository 633, Delete
  * Worktree 505 (CSS-capped at 560), Portless Setup 290, Remote Setup 311,
- * Browser Access 544, Rename Session 431. List modals (Running Sessions,
- * Scratch Pad, Remote Project) size to their stylesheet width and scroll.
+ * Browser Access 544, Rename Session 431. Scratch Pad and Remote Project size
+ * to their stylesheet width and scroll.
  */
 pub(crate) const APP_MODAL_HOST_WORKTREE_WINDOW_WIDTH: f32 = 640.0;
 
@@ -862,8 +846,6 @@ pub(crate) const APP_MODAL_HOST_UPDATE_AVAILABLE_WINDOW_HEIGHT: f32 = 560.0;
 pub(crate) const APP_MODAL_HOST_ADD_PROJECT_WINDOW_WIDTH: f32 = 640.0;
 
 pub(crate) const APP_MODAL_HOST_ADD_PROJECT_WINDOW_HEIGHT: f32 = 460.0;
-
-pub(crate) const APP_MODAL_HOST_DAEMON_SESSIONS_WINDOW_WIDTH: f32 = 880.0;
 
 pub(crate) const APP_MODAL_HOST_SCRATCH_PAD_WINDOW_WIDTH: f32 = 520.0;
 
@@ -937,9 +919,6 @@ pub(crate) const TITLEBAR_POPUP_MENU_MIN_ITEM_HEIGHT: f32 = 26.0;
 pub(crate) const TITLEBAR_POPUP_MENU_BORDER_CHROME: f32 = 2.0;
 
 pub(crate) const TITLEBAR_POPUP_MENU_FLUSH_BOTTOM_VERTICAL_CHROME: f32 = 6.0;
-
-pub(crate) const TITLEBAR_POPUP_MENU_INNER_MAX_HEIGHT: f32 =
-    TITLEBAR_POPUP_MENU_MAX_HEIGHT - TITLEBAR_POPUP_MENU_BORDER_CHROME;
 
 pub(crate) const TITLEBAR_POPUP_ACTION_PREVIEW_TEXT_SIZE: f32 = 11.0;
 
@@ -1591,8 +1570,25 @@ pub(crate) const WORKSPACE_RENAME_COMMAND_MOUNT_RETRY_INTERVAL: Duration =
 // macOS AUTO_SUBMIT_STAGED_RENAME_DELAY_MS parity (native/sidebar/native-sidebar.tsx).
 pub(crate) const WORKSPACE_RENAME_COMMAND_SUBMIT_DELAY: Duration = Duration::from_millis(1_000);
 
-pub(crate) const WORKSPACE_RENAME_COMMAND_RESTORE_DRAFT_DELAY: Duration =
-    Duration::from_millis(500);
+/*
+CDXC:GPUIWorkspaceRenameCommand 2026-08-26:
+gxserver's measured clear-burst law, mirrored for the local rename command
+(`build_agent_tui_clear_input` in server/src/session_chat_send.rs): kill toward
+the start (Ctrl+U) 2 * (lines + slack) - 1 times, then the same count toward the
+end (Ctrl+K). One Ctrl+U kills exactly ONE logical line, which is why the single
+kill this path used to send left a multi-line draft in the composer with the
+rename glued onto its remains. The rename command is one logical line, so with
+gxserver's 8-line slack the count is 2 * (1 + 8) - 1 = 17 — the same overshoot
+bias gxserver takes, because the draft's real line count is unknowable from
+here.
+*/
+pub(crate) const WORKSPACE_RENAME_COMMAND_CLEAR_REPETITIONS: usize = 17;
+
+/// Ctrl+U — kill toward the start of the composer line.
+pub(crate) const AGENT_TUI_CLEAR_INPUT_LINE: &str = "\u{15}";
+
+/// Ctrl+K — kill toward the end of the composer line.
+pub(crate) const AGENT_TUI_CLEAR_INPUT_FORWARD: &str = "\u{b}";
 
 /*
 CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:

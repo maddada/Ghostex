@@ -8,7 +8,6 @@
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 
@@ -98,28 +97,6 @@ pub(crate) fn gpui_cef_html_entry_url(env_var: &str, entry_file_name: &str) -> R
     }
 
     anyhow::bail!("GPUI CEF workarea bundle entry was not found")
-}
-
-/// The one-page document the first-launch tutorial player iframe points at.
-/// Served from the app's synthetic https origin so YouTube's embed player has
-/// a real embedding origin (CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19).
-pub(crate) fn gpui_tutorial_video_player_document() -> Vec<u8> {
-    format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
-<style>html,body{{margin:0;height:100%;background:#000;overflow:hidden}}\
-iframe{{border:0;display:block;height:100%;width:100%}}</style></head><body>\
-<iframe src=\"{GHOSTEX_TUTORIAL_VIDEO_EMBED_URL}\" title=\"Ghostex introduction\" \
-allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" \
-allowfullscreen></iframe></body></html>"
-    )
-    .into_bytes()
-}
-
-pub(crate) fn gpui_app_modal_host_resource_scope() -> cef::ManageDocsResourceScope {
-    cef::ManageDocsResourceScope::new_remote(Arc::new(|relative_path: &str| {
-        (relative_path == GPUI_TUTORIAL_VIDEO_PLAYER_RESOURCE_PATH)
-            .then(gpui_tutorial_video_player_document)
-    }))
 }
 
 pub(crate) fn app_modal_host_url() -> Result<String> {

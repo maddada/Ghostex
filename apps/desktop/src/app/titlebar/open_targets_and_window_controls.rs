@@ -184,8 +184,6 @@ impl GhostexGpuiApp {
         };
         let pinned_extension_buttons = self.render_titlebar_pinned_extension_buttons(window, cx);
         let show_extensions_button = !button_hidden(EXTENSIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY);
-        let show_extension_cluster_gap =
-            !pinned_extension_buttons.is_empty() || show_extensions_button;
         let controls = h_flex()
             .absolute()
             .right_0()
@@ -195,14 +193,6 @@ impl GhostexGpuiApp {
             .children(pinned_extension_buttons)
             .when(show_extensions_button, |this| {
                 this.child(self.render_titlebar_extensions_button(window, cx))
-            })
-            .when(show_extension_cluster_gap, |this| {
-                this.child(
-                    div()
-                        .id("ghostex-gpui-titlebar-extension-cluster-gap")
-                        .h_full()
-                        .w(px(5.0)),
-                )
             })
             .map(|this| {
                 // Prompt Editor and Exit Focus share the same titlebar slot;

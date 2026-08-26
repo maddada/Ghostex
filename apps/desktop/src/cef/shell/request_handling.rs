@@ -72,18 +72,6 @@ pub struct ManageDocsResourceScope {
     pub(crate) source: ManageDocsResourceSource,
 }
 
-/*
-CDXC:GPUIAppServedResource 2026-08-19:
-The synthetic origin this scope serves is not Docs-specific: it is simply the
-one http(s) origin the app can hand to a CEF document that must not be a
-file:// URL. The first-launch tutorial player page uses it because YouTube's
-embed player answers "Error 153 - Video player configuration error" when the
-embedding document has no real origin.
-*/
-pub fn app_served_resource_url(relative_path: &str) -> String {
-    format!("{MANAGE_DOCS_RESOURCE_BASE_URL}{relative_path}")
-}
-
 impl ManageDocsResourceScope {
     pub fn new(resolve_root: ManageDocsLocalRootResolver) -> Self {
         Self {

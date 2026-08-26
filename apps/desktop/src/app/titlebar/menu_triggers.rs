@@ -105,11 +105,8 @@ impl GhostexGpuiApp {
         CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
         Previous Sessions is exposed from the same titlebar NativeMenu so GPUI opens the shared history/restore modal through a typed app-modal action rather than duplicating the React UI or adding an overlay surface.
 
-        CDXC:GPUIDaemonSessionsModal 2026-06-24-12:00:
-        Running Sessions belongs in this same OS-owned Settings utility menu because the shared React daemonSessions modal already owns the production UI and GPUI only supplies the modal route plus real gxserver-backed state.
-
         CDXC:GxserverAppUserData 2026-06-24-13:30:
-        Pinned Prompts and Scratch Pad are also shared React app modals. GPUI exposes them through typed NativeMenu actions and hydrates from gxserver app-user-data so the titlebar route does not duplicate UI or fake persistence.
+        Scratch Pad is a shared React app modal. GPUI exposes it through a typed NativeMenu action and hydrates it from gxserver app-user-data so the titlebar route does not duplicate UI or fake persistence.
 
         CDXC:GPUIAgentsHubModal 2026-06-24-12:26:
         Agents Hub belongs in the same typed GPUI app-modal route as the Settings utility surfaces. The menu action must open the shared React Hub in the owned CEF app-modal host while Rust supplies the real filesystem catalog/content bridge instead of duplicate modal UI or fallback rows.
@@ -126,8 +123,6 @@ impl GhostexGpuiApp {
             .menu("Configure Actions", Box::new(OpenGpuiConfigureActionsModal))
             .menu("Open Targets", Box::new(OpenGpuiOpenTargetsModal))
             .menu("Previous Sessions", Box::new(OpenGpuiPreviousSessionsModal))
-            .menu("Running Sessions", Box::new(OpenGpuiDaemonSessionsModal))
-            .menu("Pinned Prompts", Box::new(OpenGpuiPinnedPromptsModal))
             .menu("Scratch Pad", Box::new(OpenGpuiScratchPadModal))
             .menu("Agents Hub", Box::new(OpenGpuiAgentsHubModal))
             .show(position, window, cx);

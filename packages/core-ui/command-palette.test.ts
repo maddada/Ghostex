@@ -659,8 +659,6 @@ describe('command palette source contracts', () => {
      */
     expect(commandPaletteSource).toContain('const APP_MODAL_PALETTE_COMMANDS');
     expect(commandPaletteSource).toContain('Reopen a Session');
-    expect(commandPaletteSource).toContain('Pinned Prompts');
-    expect(commandPaletteSource).toContain('Running Sessions');
     expect(commandPaletteSource).toContain('Scratch Pad');
     expect(commandPaletteSource).toContain('Agents Hub');
     expect(commandPaletteSource).toContain('Configure Agents');

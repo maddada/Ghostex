@@ -147,7 +147,7 @@ Main code:
 
 Vite emits `manage.html`. Rust creates a project-scoped CEF surface when Manage is available and active. Manage file requests leave the renderer only through fixed bridge functions and are handled by Rust-side project/file policy code instead of trusting arbitrary renderer paths.
 
-### App modals: Settings, Hotkeys, Command Palette, Previous Sessions, Running Sessions, Agents Hub
+### App modals: Settings, Hotkeys, Command Palette, Previous Sessions, Agents Hub
 
 **Technology:** separate GPUI-owned window containing the shared React modal host inside CEF.
 

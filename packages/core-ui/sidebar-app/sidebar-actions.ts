@@ -22,8 +22,6 @@ export type SidebarActionsOptions = {
   effectiveSettings: ghostexSettings;
   enabledVisibleSidebarSessionTagSet: ReadonlySet<SidebarSessionTagFilter>;
   revision: number;
-  setIsDaemonSessionsOpen: Dispatch<SetStateAction<boolean>>;
-  setIsPinnedPromptsOpen: Dispatch<SetStateAction<boolean>>;
   setIsPreviousSessionsOpen: Dispatch<SetStateAction<boolean>>;
   setIsScratchPadOpen: Dispatch<SetStateAction<boolean>>;
   setIsSessionSearchOpen: Dispatch<SetStateAction<boolean>>;
@@ -52,8 +50,6 @@ export function useSidebarActions({
   effectiveSettings,
   enabledVisibleSidebarSessionTagSet,
   revision,
-  setIsDaemonSessionsOpen,
-  setIsPinnedPromptsOpen,
   setIsPreviousSessionsOpen,
   setIsScratchPadOpen,
   setIsSessionSearchOpen,
@@ -263,21 +259,8 @@ export function useSidebarActions({
     openAppModal({ modal: 'agentsHub', type: 'open' });
   };
 
-  const togglePinnedPrompts = () => {
-    dismissAppModalForSidebarNavigation('SettingsDismissal:pinnedPrompts');
-    setIsDaemonSessionsOpen(false);
-    setIsPreviousSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery('');
-    openAppModal({ modal: 'pinnedPrompts', type: 'open' });
-  };
-
   const openPreviousSessions = () => {
     dismissAppModalForSidebarNavigation('SettingsDismissal:previousSessions');
-    setIsPinnedPromptsOpen(false);
-    setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
@@ -287,8 +270,6 @@ export function useSidebarActions({
 
   const searchPreviousSessionsByPrompt = () => {
     dismissAppModalForSidebarNavigation('SettingsDismissal:previousSessionsPromptSearch');
-    setIsPinnedPromptsOpen(false);
-    setIsDaemonSessionsOpen(false);
     setIsScratchPadOpen(false);
     setIsSessionSearchSelectionVisible(false);
     setIsSessionSearchOpen(false);
@@ -313,7 +294,6 @@ export function useSidebarActions({
     setSidebarV2Layout,
     setSidebarVersion,
     toggleActiveSessionsSortMode,
-    togglePinnedPrompts,
     toggleSessionTagFilter,
     toggleSidebarCollapsed,
   };

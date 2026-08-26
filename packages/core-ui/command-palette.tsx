@@ -26,11 +26,9 @@ import {
   IconPlayerPlay,
   IconPlus,
   IconPuzzle,
-  IconPinned,
   IconRefresh,
   IconRotateClockwise,
   IconSearch,
-  IconServer,
   IconSettings,
   IconSettingsAutomation,
   IconStars,
@@ -163,9 +161,7 @@ type AppModalPaletteCommandId =
   | 'configureAgents'
   | 'extensions'
   | 'openTargets'
-  | 'pinnedPrompts'
   | 'previousSessions'
-  | 'runningSessions'
   | 'scratchPad';
 
 type AppModalPaletteModal =
@@ -173,11 +169,9 @@ type AppModalPaletteModal =
   | 'agentsHub'
   | 'configureActions'
   | 'configureAgents'
-  | 'daemonSessions'
   | 'extensionsBrowser'
   | 'hotkeys'
   | 'openTargets'
-  | 'pinnedPrompts'
   | 'previousSessions'
   | 'scratchPad';
 
@@ -233,22 +227,6 @@ const APP_MODAL_PALETTE_COMMANDS = [
     modal: 'previousSessions',
     searchText: 'Reopen a Session history restore previous sessions old sessions',
     title: 'Reopen a Session',
-  },
-  {
-    commandId: 'pinnedPrompts',
-    hotkey: '',
-    kind: 'appModal',
-    modal: 'pinnedPrompts',
-    searchText: 'Pinned Prompts prompt library saved prompts modal',
-    title: 'Pinned Prompts',
-  },
-  {
-    commandId: 'runningSessions',
-    hotkey: '',
-    kind: 'appModal',
-    modal: 'daemonSessions',
-    searchText: 'Running Sessions daemon sessions runtimes modal',
-    title: 'Running Sessions',
   },
   {
     commandId: 'scratchPad',
@@ -1088,12 +1066,6 @@ function AppModalCommandIcon({ modal }: { modal: AppModalPaletteModal }) {
   }
   if (modal === 'previousSessions') {
     return <IconHistory aria-hidden='true' />;
-  }
-  if (modal === 'pinnedPrompts') {
-    return <IconPinned aria-hidden='true' />;
-  }
-  if (modal === 'daemonSessions') {
-    return <IconServer aria-hidden='true' />;
   }
   if (modal === 'scratchPad') {
     return <IconNotebook aria-hidden='true' />;

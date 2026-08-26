@@ -369,14 +369,6 @@ impl GhostexGpuiApp {
                     false,
                 )
             })
-            .menu_element(Box::new(OpenGpuiDaemonSessionsModal), move |_, _| {
-                titlebar_popup_standard_menu_row(
-                    TITLEBAR_ICON_DEVICE_DESKTOP,
-                    TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
-                    "Running Sessions…".to_string(),
-                    false,
-                )
-            })
             .menu_element(Box::new(RestartGpuiGxserverFromTitlebar), move |_, _| {
                 titlebar_popup_standard_menu_row(
                     BROWSER_ICON_RELOAD,

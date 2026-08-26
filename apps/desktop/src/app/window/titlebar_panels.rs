@@ -418,17 +418,6 @@ impl Render for GpuiTitlebarPopupWindow {
                 }),
             )
             .on_action(
-                cx.listener(|this, _: &OpenGpuiDaemonSessionsModal, _window, cx| {
-                    this.update_main_window(cx, |app, window, cx| {
-                        app.open_gpui_app_modal_from_titlebar(
-                            GpuiAppModalKind::DaemonSessions,
-                            window,
-                            cx,
-                        );
-                    });
-                }),
-            )
-            .on_action(
                 cx.listener(|this, _: &RestartGpuiGxserverFromTitlebar, _window, cx| {
                     this.update_main_window(cx, |app, _window, cx| {
                         app.stop_gpui_local_gxserver_from_titlebar(true, cx);
