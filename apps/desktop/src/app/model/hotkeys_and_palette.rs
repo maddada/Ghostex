@@ -151,7 +151,10 @@ pub(crate) fn gpui_focused_pane_hotkey_action(
     `rotatePanesClockwise` must enter the GPUI focused-pane bridge instead of falling through to modal routing. Command-pane, Browser, and project-editor focus no-op by policy; active Agents-pane focus is the only admitted execution target once the WorkspaceModel pure rotation helper is available.
 
     CDXC:GPUICommandPalette 2026-06-26-07:15:
-    `openCommandsPanel` is the shared command-palette, sidebar-header, and F12 open/focus route for the Commands panel. It never collapses an already-focused visible command pane.
+    `openCommandsPanel` is the shared command-palette, sidebar-header, and F12
+    route for the Commands panel. Hidden panels open and focus; a visible pane
+    that is not already focused becomes active; the same hotkey minimizes an
+    already-focused pane.
 
     CDXC:GPUICommandPalette 2026-06-26-07:24:
     `createSession` from the command palette must reuse the focused Cmd+T hotkey helper. That preserves command-pane visible-source gating and Agents-pane placeholder targeting instead of adding a separate fallback that could create a session in the wrong surface.

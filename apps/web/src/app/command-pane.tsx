@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FocusEvent, type PointerEvent } from 'react';
 import type { GxserverProjectId, GxserverSessionId } from '@/packages/shared/gxserver-protocol';
 import type { GhostexWebMachine } from '../connections/types';
-import { SessionTerminal } from '../terminal';
+import { SessionTerminal, type SessionTerminalHandle } from '../terminal';
 import {
   workspaceSessionId,
   type WorkspacePlaceholderAction,
   type WorkspaceSession,
 } from '../workspace/workspace-model';
 import type { ActiveProject } from './types';
+
+export interface CommandPaneOpenRequest {
+  requestId: number;
+  sessionId?: string;
+  toggle?: boolean;
+}
 
 interface CommandPaneProps {
   activeProject?: ActiveProject;
@@ -18,7 +24,7 @@ interface CommandPaneProps {
   onCreate(project: ActiveProject): Promise<void>;
   onError(message: string): void;
   onReady(session: WorkspaceSession): void;
-  openRequest?: { requestId: number; sessionId?: string };
+  openRequest?: CommandPaneOpenRequest;
 }
 
 const HEIGHT_STORAGE_KEY = 'ghostexWeb.commandPaneHeight.v1';
@@ -51,12 +57,37 @@ export function CommandPane({
   const [creating, setCreating] = useState(false);
   const [height, setHeight] = useState(readHeight);
   const handledOpenRequest = useRef(0);
+  const paneActiveRef = useRef(false);
+  const expandedProjectsRef = useRef(expandedProjects);
+  const paneRef = useRef<HTMLElement>(null);
+  const terminalRef = useRef<SessionTerminalHandle>(null);
+  const pendingFocusRef = useRef(false);
+  expandedProjectsRef.current = expandedProjects;
   const activeId = activeByProject[projectKey];
   const activeSession = useMemo(
     () => sessions.find((session) => workspaceSessionId(session) === activeId) ?? sessions[0],
     [activeId, sessions]
   );
   const expanded = expandedProjects.has(projectKey) && Boolean(activeSession);
+
+  const collapse = () => {
+    paneActiveRef.current = false;
+    setExpandedProjects((current) => {
+      const next = new Set(current);
+      next.delete(projectKey);
+      return next;
+    });
+  };
+
+  const markPaneActive = () => {
+    paneActiveRef.current = true;
+  };
+
+  const markPaneInactiveIfLeaving = (event: FocusEvent<HTMLElement>) => {
+    const next = event.relatedTarget;
+    if (next instanceof Node && event.currentTarget.contains(next)) return;
+    paneActiveRef.current = false;
+  };
 
   useEffect(() => {
     if (!activeSession || activeId === workspaceSessionId(activeSession)) return;
@@ -69,6 +100,16 @@ export function CommandPane({
   useEffect(() => {
     if (!openRequest || openRequest.requestId === handledOpenRequest.current || sessions.length === 0) return;
     handledOpenRequest.current = openRequest.requestId;
+    const currentlyExpanded = expandedProjectsRef.current.has(projectKey);
+    if (openRequest.toggle && currentlyExpanded && paneActiveRef.current) {
+      paneActiveRef.current = false;
+      setExpandedProjects((current) => {
+        const next = new Set(current);
+        next.delete(projectKey);
+        return next;
+      });
+      return;
+    }
     const requestedSession = openRequest.sessionId
       ? sessions.find((session) => workspaceSessionId(session) === openRequest.sessionId)
       : undefined;
@@ -78,8 +119,20 @@ export function CommandPane({
         [projectKey]: workspaceSessionId(requestedSession),
       }));
     }
+    paneActiveRef.current = true;
+    pendingFocusRef.current = true;
     setExpandedProjects((current) => new Set(current).add(projectKey));
   }, [openRequest, projectKey, sessions]);
+
+  useEffect(() => {
+    if (!expanded || !pendingFocusRef.current) return;
+    pendingFocusRef.current = false;
+    if (terminalRef.current) {
+      terminalRef.current.focus();
+      return;
+    }
+    paneRef.current?.focus();
+  }, [activeSession, expanded, openRequest]);
 
   useEffect(() => {
     window.localStorage.setItem(HEIGHT_STORAGE_KEY, String(Math.round(height)));
@@ -126,7 +179,15 @@ export function CommandPane({
   if (!expanded || !activeSession) return null;
 
   return (
-    <section className='command-pane' style={{ height }}>
+    <section
+      className='command-pane'
+      onBlurCapture={markPaneInactiveIfLeaving}
+      onFocusCapture={markPaneActive}
+      onPointerDown={markPaneActive}
+      ref={paneRef}
+      style={{ height }}
+      tabIndex={-1}
+    >
       <div
         aria-label='Resize command pane'
         className='command-pane__resize'
@@ -181,13 +242,7 @@ export function CommandPane({
         <button
           aria-label='Hide command pane'
           className='command-pane__hide'
-          onClick={() =>
-            setExpandedProjects((current) => {
-              const next = new Set(current);
-              next.delete(projectKey);
-              return next;
-            })
-          }
+          onClick={collapse}
           type='button'
         >
           ⌄
@@ -198,10 +253,12 @@ export function CommandPane({
           <SessionTerminal
             aria-label={`Command terminal ${activeSession.title}`}
             authToken={machine.authToken}
+            autoFocus
             baseUrl={machine.baseUrl}
             onError={(error) => onError(error.message)}
             onReady={() => onReady(activeSession)}
             projectId={activeSession.projectId as GxserverProjectId}
+            ref={terminalRef}
             sessionId={activeSession.sessionId as GxserverSessionId}
           />
         )}

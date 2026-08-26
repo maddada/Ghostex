@@ -2054,11 +2054,21 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPalette 2026-06-26-07:15:
-        The command-palette Open Commands Panel route must perform the same activation side effects as a native open/focus command: expand through shared settings when hidden, focus the command pane, acknowledge only the live focused Attention tab, reveal that tab, persist shell layout, refresh sidebar command sessions, and notify GPUI.
+        Open Commands Panel and F12 expand a hidden pane, focus a visible pane
+        that is not already active, and minimize when the command pane already
+        owns shell focus. Minimize reuses the titlebar chevron collapse path so
+        sessions, height, and previous non-command focus stay intact.
         */
         match command_pane_palette_open_decision(self.command_pane.is_expanded(), self.shell_focus)
         {
+            CommandPanePaletteOpenDecision::Minimize => {
+                self.handle_command_pane_control_action(
+                    CommandPaneControlAction::ToggleExpanded,
+                    None,
+                    window,
+                    cx,
+                );
+            }
             CommandPanePaletteOpenDecision::OpenAndFocus
             | CommandPanePaletteOpenDecision::FocusVisible => {
                 let Some((_group_id, _session_id, _created_session)) =
@@ -2231,11 +2241,9 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPanePerProject 2026-07-10:
-        F12 and the Recent Projects header button are the same open command.
-        Reuse the command-palette open/focus path so the active project's pane
-        creates one terminal only when empty and otherwise simply expands and
-        focuses its existing command tabs. F12 never minimizes the pane.
+        F12 and the configured Open Commands Panel hotkey share the
+        command-palette route: expand when hidden, focus when visible but
+        inactive, minimize when the command pane is already the active surface.
         */
         self.open_command_pane_from_command_palette(window, cx);
     }

@@ -149,20 +149,26 @@ pub(crate) struct SidebarFocusBorderHandoff {
 pub(crate) enum CommandPanePaletteOpenDecision {
     OpenAndFocus,
     FocusVisible,
+    Minimize,
 }
 
 pub(crate) fn command_pane_palette_open_decision(
     command_pane_expanded: bool,
-    _shell_focus: ShellFocusTarget,
+    shell_focus: ShellFocusTarget,
 ) -> CommandPanePaletteOpenDecision {
     /*
-    CDXC:GPUICommandPalette 2026-06-26-07:15:
-    Open Commands Panel and F12 share one open/focus contract. Hidden panels open through the normal default-height path, while visible panels only focus the command pane even if command focus is already active.
+    Open Commands Panel and F12 share one open/focus/minimize contract.
+    Hidden panels open through the normal default-height path. Visible panels
+    that do not already own shell focus become active. When the command pane
+    is already the focused surface (click or a previous F12), the same hotkey
+    minimizes it; the next press expands it again.
     */
-    if command_pane_expanded {
-        CommandPanePaletteOpenDecision::FocusVisible
-    } else {
+    if !command_pane_expanded {
         CommandPanePaletteOpenDecision::OpenAndFocus
+    } else if shell_focus == ShellFocusTarget::CommandPane {
+        CommandPanePaletteOpenDecision::Minimize
+    } else {
+        CommandPanePaletteOpenDecision::FocusVisible
     }
 }
 

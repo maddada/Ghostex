@@ -66,7 +66,7 @@ declare global {
     'ghostex-web:exportTranscriptStatus': CustomEvent<ExportTranscriptStatusDetail>;
     'ghostex-web:openSettingsModal': CustomEvent;
     'ghostex-web:openAddProjectModal': CustomEvent<OpenAddProjectModalDetail>;
-    'ghostex-web:openCommandPane': CustomEvent;
+    'ghostex-web:openCommandPane': CustomEvent<{ toggle?: boolean } | undefined>;
     'ghostex-web:openDelayedActionsModal': CustomEvent<OpenDelayedActionsModalDetail>;
     'ghostex-web:openRecentProjectsModal': CustomEvent<OpenRecentProjectsModalDetail>;
     'ghostex-web:openSessionNoteModal': CustomEvent<OpenSessionNoteModalDetail>;
