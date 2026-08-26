@@ -195,6 +195,7 @@ impl GhostexGpuiApp {
             .justify_center()
             .border_l_1()
             .border_color(terminal_search_bar_border_color())
+            .rounded(px(0.0))
             .text_size(px(12.0))
             .line_height(px(20.0))
             .text_color(terminal_search_bar_button_color())
