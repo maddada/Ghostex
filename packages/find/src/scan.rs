@@ -1005,9 +1005,13 @@ impl Scanner {
                 .and_then(|n| n.to_str())
                 .unwrap_or("")
                 .to_string();
-            let fallback_project = self.cursor_project_for_project_directory(&encoded);
             let transcripts = project_dir.join("agent-transcripts");
-            for session_dir in read_dir_sorted(&transcripts) {
+            let session_dirs = read_dir_sorted(&transcripts);
+            if session_dirs.is_empty() {
+                continue;
+            }
+            let fallback_project = self.cursor_project_for_project_directory(&encoded);
+            for session_dir in session_dirs {
                 let Some(session_id) = session_dir
                     .file_name()
                     .and_then(|n| n.to_str())
@@ -1416,10 +1420,60 @@ Agent transcripts frequently encode injected instructions as user-role records.
 This picker is specifically a history of prompts a person sent, so reject those
 provider envelopes at ingestion rather than making every UI hide them later.
 */
+const INJECTED_PROVIDER_TAG_NAMES: &[&str] = &[
+    "INSTRUCTIONS",
+    "agent-message",
+    "app-context",
+    "bash-input",
+    "bash-stderr",
+    "bash-stdout",
+    "collaboration_mode",
+    "command-args",
+    "command-message",
+    "command-name",
+    "cross-session-message",
+    "environment_context",
+    "fork-boilerplate",
+    "ide_opened_file",
+    "local-command-caveat",
+    "local-command-stderr",
+    "local-command-stdout",
+    "mcp-polling-update",
+    "mcp-resource-update",
+    "rules",
+    "system-reminder",
+    "task-notification",
+    "teammate-message",
+    "turn_aborted",
+    "user-memory-input",
+    "user-prompt-submit-hook",
+    "user_info",
+    "user_instructions",
+];
+
+fn leading_tag_name(text: &str) -> Option<&str> {
+    let rest = text.strip_prefix('<')?;
+    let end = rest
+        .find(|ch: char| ch.is_whitespace() || ch == '>')
+        .unwrap_or(rest.len());
+    let name = &rest[..end];
+    (!name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_'))
+    .then_some(name)
+}
+
+fn starts_with_injected_provider_envelope(text: &str) -> bool {
+    leading_tag_name(text).is_some_and(|tag| INJECTED_PROVIDER_TAG_NAMES.contains(&tag))
+        || text.starts_with("<channel source=")
+        || text.starts_with("<permissions instructions>")
+}
+
 fn visible_user_prompt(text: &str) -> Option<String> {
     let trimmed = text.trim_matches(|ch: char| ch.is_whitespace() || ch.is_control());
     if trimmed.is_empty()
-        || trimmed.starts_with('<')
+        || starts_with_injected_provider_envelope(trimmed)
         || trimmed.starts_with("# AGENTS.md instructions")
         || trimmed.starts_with("[Image extracted from tool result above]")
         || trimmed.starts_with("[Request interrupted")
