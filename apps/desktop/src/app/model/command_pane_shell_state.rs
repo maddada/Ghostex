@@ -367,9 +367,24 @@ pub(crate) fn command_session_from_shell_state(
     let activity = if is_sleeping {
         CommandTerminalActivity::Idle
     } else {
-        json_string_field(object, "activity")
+        /*
+        CDXC:GPUICommandPaneActions 2026-08-26:
+        Action run ids and status-file paths are runtime-only, so any restored
+        pane (startup live pane or a per-project parked pane swapped back in)
+        has no run the status-file poller can ever clear. A `working` stamp
+        restored as-is therefore sticks forever and turns that Action's
+        titlebar/sidebar runs into permanent `ReusedActive` select-only no-ops.
+        Restore Working as Idle — matching the startup restore-intent contract,
+        which already treats Working as a one-shot wake hint cleared to Idle —
+        and keep Attention visible.
+        */
+        match json_string_field(object, "activity")
             .and_then(CommandTerminalActivity::from_slug)
             .unwrap_or_default()
+        {
+            CommandTerminalActivity::Working => CommandTerminalActivity::Idle,
+            activity => activity,
+        }
     };
     let delayed_send_active = json_bool_field(object, "delayedSendActive").unwrap_or(false);
     let close_after_done_armed = json_bool_field(object, "closeAfterDone").unwrap_or(false);
