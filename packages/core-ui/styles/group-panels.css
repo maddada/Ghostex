@@ -811,6 +811,14 @@ body:has(.sidebar-reference-layout[data-reference-sidebar='true'])
   flex: none;
 }
 
+.reference-sidebar-top::after {
+  border-bottom: 1px solid var(--app-border);
+  content: '';
+  display: block;
+  margin-left: calc(-1 * var(--reference-sidebar-footer-edge-bleed-left));
+  margin-right: calc(-1 * var(--reference-sidebar-edge-bleed-right));
+}
+
 .reference-sidebar-window-row {
   align-items: center;
   display: none;

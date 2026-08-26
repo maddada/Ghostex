@@ -296,13 +296,10 @@ pub(crate) fn spawn_session_git_status_refresh_task(
             let pass_result = tokio::task::spawn_blocking(move || {
                 /*
                 CDXC:SidebarV2DataGate 2026-07-29:
-                The two git-backed passes below feed Sidebar V2 surfaces and
-                nothing else, so they run only while this machine is ON V2 — the same
-                `sidebarVersion` gate the auto-settle sweep already applies. One
-                settings read per PASS, shared by the two, and deliberately
-                inside the loop rather than hoisted to task spawn: flipping the
-                toggle then takes effect within one interval instead of needing a
-                daemon restart.
+                Session git status remains Sidebar V2-only, so read the current
+                setting for that pass. Project origin URLs are now also shown by
+                the classic project's Copy Remote URL menu item, so their pass
+                runs for both sidebar versions below.
                 */
                 let sidebar_v2_selected =
                     session_lifecycle::read_sidebar_v2_selected(&pass_state.paths);
@@ -321,9 +318,7 @@ pub(crate) fn spawn_session_git_status_refresh_task(
                 spawns nothing. A failure in one pass must not skip the other, so
                 they are independent statements rather than a `?` chain.
                 */
-                if let Err(error) =
-                    run_project_git_remote_refresh_once(&pass_state, sidebar_v2_selected)
-                {
+                if let Err(error) = run_project_git_remote_refresh_once(&pass_state, true) {
                     log_project_git_remote_refresh_failure(&pass_state, &error.message);
                 }
                 /*
@@ -486,11 +481,10 @@ CHANGED, which for real repositories is approximately never.
 */
 pub(crate) fn run_project_git_remote_refresh_once(
     state: &Arc<AppState>,
-    sidebar_v2_selected: bool,
+    enabled: bool,
 ) -> std::result::Result<(), DomainStateError> {
-    // Same gate, same reason as the git-status pass above: a V1 machine does not
-    // open the database to assemble a project path set it will not probe.
-    if !sidebar_v2_selected {
+    // Keep the caller gate ahead of the database read and path-set assembly.
+    if !enabled {
         return Ok(());
     }
     let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
@@ -514,7 +508,7 @@ pub(crate) fn run_project_git_remote_refresh_once(
     }
 
     let changed: HashSet<String> =
-        project_git_remote::refresh_project_git_remote_cache(&paths, sidebar_v2_selected)
+        project_git_remote::refresh_project_git_remote_cache(&paths, enabled)
             .into_iter()
             .collect();
     if changed.is_empty() {

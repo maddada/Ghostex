@@ -12,6 +12,7 @@ import {
   IconEyeOff,
   IconGitBranch,
   IconGitPullRequest,
+  IconLink,
   IconMessageCircle,
   IconMoon,
   IconPencil,
@@ -578,6 +579,7 @@ export function getGroupContextMenuItemCount({
   canCreateSessionGroup = false,
   canFullReloadGroup,
   canHideGroup = false,
+  canCopyProjectRemoteUrl = false,
   hasProjectContext,
   isWorktreeProject,
   projectCollectionsEnabled = false,
@@ -585,6 +587,7 @@ export function getGroupContextMenuItemCount({
   canCreateSessionGroup?: boolean;
   canFullReloadGroup: boolean;
   canHideGroup?: boolean;
+  canCopyProjectRemoteUrl?: boolean;
   hasProjectContext: boolean;
   isWorktreeProject: boolean;
   projectCollectionsEnabled?: boolean;
@@ -607,6 +610,7 @@ export function getGroupContextMenuItemCount({
   if (hasProjectContext) {
     return (
       Number(canHideGroup) +
+      Number(canCopyProjectRemoteUrl) +
       (isWorktreeProject
         ? 5 + Number(projectCollectionsEnabled)
         : 5 + Number(canFullReloadGroup) + Number(canCreateSessionGroup) + Number(projectCollectionsEnabled))
@@ -846,6 +850,7 @@ export function SessionGroupSection({
    */
   const isChatCollection = group?.isChatCollection === true;
   const projectContext = group?.projectContext;
+  const projectGitRemoteOriginUrl = projectContext?.gitRemoteOriginUrl?.trim();
   const rawProjectSessionListStorageId = projectContext?.editor.projectId ?? group?.groupId;
   const projectSessionListStorageId =
     rawProjectSessionListStorageId && group?.remoteMachineContext?.machineId
@@ -925,8 +930,7 @@ export function SessionGroupSection({
         state.hud.settings?.renameSessionOnDoubleClick ?? state.hud.renameSessionOnDoubleClick,
       showCloseButton: state.hud.showCloseButtonOnSessionCards,
       showDebugSessionNumbers: state.hud.debuggingMode,
-      enableSessionParking:
-        state.hud.settings?.enableSessionParking ?? DEFAULT_ghostex_SETTINGS.enableSessionParking,
+      enableSessionParking: state.hud.settings?.enableSessionParking ?? DEFAULT_ghostex_SETTINGS.enableSessionParking,
       showLastActiveTime: !(
         state.hud.settings?.hideLastActiveTimeOnSessionCards ??
         DEFAULT_ghostex_SETTINGS.hideLastActiveTimeOnSessionCards
@@ -1740,6 +1744,17 @@ export function SessionGroupSection({
     });
   };
 
+  const copyProjectRemoteUrl = () => {
+    if (!projectGitRemoteOriginUrl) {
+      return;
+    }
+    setContextMenuPosition(undefined);
+    vscode.postMessage({
+      remoteUrl: projectGitRemoteOriginUrl,
+      type: 'copyWorkspaceProjectRemoteUrl',
+    });
+  };
+
   const openProjectInFinder = () => {
     setContextMenuPosition(undefined);
     vscode.postMessage({
@@ -1946,6 +1961,7 @@ export function SessionGroupSection({
         event.clientY,
         getGroupContextMenuItemCount({
           canCreateSessionGroup: group.canCreateSessionGroup === true,
+          canCopyProjectRemoteUrl: Boolean(projectGitRemoteOriginUrl),
           canFullReloadGroup,
           canHideGroup: Boolean(onHideGroup),
           hasProjectContext: Boolean(projectContext),
@@ -2935,6 +2951,17 @@ export function SessionGroupSection({
                   <IconCopy aria-hidden='true' className='session-context-menu-icon' size={14} />
                   Copy Path
                 </button>
+                {projectGitRemoteOriginUrl ? (
+                  <button
+                    className='session-context-menu-item'
+                    onClick={copyProjectRemoteUrl}
+                    role='menuitem'
+                    type='button'
+                  >
+                    <IconLink aria-hidden='true' className='session-context-menu-icon' size={14} />
+                    Copy Remote URL
+                  </button>
+                ) : null}
                 <button
                   className='session-context-menu-item'
                   onClick={openProjectInFinder}
@@ -3045,6 +3072,17 @@ export function SessionGroupSection({
                   <IconCopy aria-hidden='true' className='session-context-menu-icon' size={14} />
                   Copy Path
                 </button>
+                {projectGitRemoteOriginUrl ? (
+                  <button
+                    className='session-context-menu-item'
+                    onClick={copyProjectRemoteUrl}
+                    role='menuitem'
+                    type='button'
+                  >
+                    <IconLink aria-hidden='true' className='session-context-menu-icon' size={14} />
+                    Copy Remote URL
+                  </button>
+                ) : null}
                 <button
                   className='session-context-menu-item'
                   onClick={openProjectInFinder}

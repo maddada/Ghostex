@@ -470,6 +470,10 @@ export function createGxserverPresentationSidebarSession({
     still paint the note dot and a blank tooltip line.
     */
     sessionNote: presentation.sessionNote?.trim() ? presentation.sessionNote : undefined,
+    stashedPromptCount:
+      typeof presentation.stashedPromptCount === 'number' && presentation.stashedPromptCount > 0
+        ? Math.floor(presentation.stashedPromptCount)
+        : undefined,
     sessionNumber: String(index + 1),
     sessionPersistenceName: presentation.zmxName,
     sessionPersistenceProvider: presentation.sessionPersistenceProvider,

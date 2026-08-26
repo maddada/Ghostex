@@ -25,6 +25,7 @@ pub(crate) fn gpui_project_snapshot_from_contract_project_value(
         &[
             "activeProjectId",
             "displayName",
+            "gitRemoteOriginUrl",
             "projectIconDataUrl",
             "projectPath",
             "selectionOwnerProjectId",
@@ -51,6 +52,12 @@ pub(crate) fn gpui_project_snapshot_from_contract_project_value(
         "displayName",
         GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS,
     )?;
+    let browser_home_url = required_nullable_contract_string_field(
+        object,
+        "gitRemoteOriginUrl",
+        GPUI_PROJECT_CONTRACT_PATH_MAX_CHARS,
+    )?
+    .and_then(|remote_url| browser_remote_web_url(&remote_url));
     let project_icon_data_url =
         optional_contract_icon_data_url_field(object, "projectIconDataUrl")?;
     let in_memory_project_path = required_nullable_contract_string_field(
@@ -82,6 +89,7 @@ pub(crate) fn gpui_project_snapshot_from_contract_project_value(
     if is_quick_projectless {
         if active_project_id.is_some()
             || selection_owner_project_id.is_some()
+            || browser_home_url.is_some()
             || project_icon_data_url.is_some()
             || in_memory_project_path.is_some()
             || surface_ids.has_any()
@@ -97,6 +105,7 @@ pub(crate) fn gpui_project_snapshot_from_contract_project_value(
         active_project_id,
         selection_owner_project_id,
         display_name,
+        browser_home_url,
         project_icon_data_url,
         in_memory_project_path,
         is_quick_projectless,

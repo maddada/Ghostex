@@ -127,6 +127,9 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
     }
   ): void;
   postSidebarActionToast(level: AppToastLevel, title: string, options?: { description?: string }): void;
+  copyWorkspaceProjectRemoteUrl(
+    message: Extract<SidebarToExtensionMessage, { type: 'copyWorkspaceProjectRemoteUrl' }>
+  ): void;
   postProjectPathActionForGroup(
     action: Extract<
       GpuiSidebarNativeProjectPathAction,
@@ -165,6 +168,25 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
 }
 
 export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
+  copyWorkspaceProjectRemoteUrl(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'copyWorkspaceProjectRemoteUrl' }>
+  ): void {
+    const remoteUrl = normalizeNonEmptyString(message.remoteUrl);
+    if (!remoteUrl) {
+      this.handleUnsupportedSidebarMessage(message);
+      return;
+    }
+    try {
+      postAppModalHostMessage(
+        { detailsText: remoteUrl, type: 'copySessionDetails' },
+        'GPUISidebarActions:copyRemoteUrl'
+      );
+    } catch {
+      this.handleUnsupportedSidebarMessage(message);
+    }
+  },
+
   handleGpuiStatusPetActivation(this: GpuiSidebarRuntime, payload: unknown): void {
     const activation = normalizeGpuiStatusPetActivation(payload);
     if (!activation) {

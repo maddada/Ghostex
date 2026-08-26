@@ -10,11 +10,9 @@ use crate::session_git_status::run_project_git_remote_probe_command;
 
 /*
 CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
-Server side of Sidebar V2's cross-machine logical projects (spec
-`plans/009-sidebar-v2-inbox.md`, decision 3 + the P5 wire contract). The same
-repository checked out on this Mac and on a remote machine has to read as ONE
-logical project, and the only identity both machines can agree on is the `origin`
-remote their checkouts point at. gxserver publishes that URL on
+Server side of project Git origin presentation. Sidebar V2 uses the origin to
+merge matching cross-machine checkouts, while the classic sidebar exposes the
+exact value through Copy Remote URL. gxserver publishes that URL on
 `GxserverPresentationProject.gitRemoteOriginUrl`:
 
   ABSENT  the path is not a git work tree, or has not been probed yet
@@ -229,17 +227,14 @@ pub fn run_project_git_remote_refresh_pass(
     paths: &[String],
     prober: &dyn ProjectGitRemoteProber,
     monotonic_now_ms: i64,
-    sidebar_v2_selected: bool,
+    enabled: bool,
 ) -> Vec<String> {
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
-    The `origin` remote exists in presentation for ONE reason — Sidebar V2's
-    cross-machine logical grouping — so a machine on V1 must not spawn git for
-    it. Same gate, same argument-not-ambient-read shape, and same placement
-    BEFORE `plan_refresh` as the git-status pass: nothing probed, nothing
-    published, nothing evicted, and the first V2 pass warms normally.
+    The explicit caller gate sits before `plan_refresh`: when disabled, nothing
+    is probed, published, or evicted. Production enables this for both sidebar
+    versions because project menus and V2 grouping consume the same URL.
     */
-    if !sidebar_v2_selected {
+    if !enabled {
         return Vec::new();
     }
     let targets = {
@@ -282,18 +277,13 @@ fn monotonic_now_ms() -> i64 {
 
 /// Runs one pass against the process-wide cache with the real git prober.
 /// Blocking: callers must be on a blocking worker, never on a request path.
-/// `sidebar_v2_selected` must come from `session_lifecycle::
-/// read_sidebar_v2_selected`, resolved once per pass.
-pub fn refresh_project_git_remote_cache(
-    paths: &[String],
-    sidebar_v2_selected: bool,
-) -> Vec<String> {
+pub fn refresh_project_git_remote_cache(paths: &[String], enabled: bool) -> Vec<String> {
     run_project_git_remote_refresh_pass(
         project_git_remote_cache(),
         paths,
         &SystemProjectGitRemoteProber,
         monotonic_now_ms(),
-        sidebar_v2_selected,
+        enabled,
     )
 }
 
@@ -362,16 +352,13 @@ sitting outside its cross-machine group. This probes ONLY when the cache has no
 entry for the path at all: every later delta for the same project is a pure cache
 read, and refreshes stay the background pass's job.
 */
-pub fn ensure_project_git_remote_probed(project: &Value, sidebar_v2_selected: bool) {
+pub fn ensure_project_git_remote_probed(project: &Value, enabled: bool) {
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
-    The warm is gated at the PROBE, not at the hook: the delta path stays wired
-    exactly as it is on every daemon, and a V1 daemon's `projectAdded` (or clone,
-    or restore) simply announces the project without spawning git for a remote
-    nothing on that machine renders. That keeps one rule — "V1 probes nothing" —
-    instead of a second, divergent set of warm call sites.
+    Keep the caller gate at the probe rather than at each hook. Production
+    enables it for both sidebar versions; retaining the explicit gate also lets
+    bounded maintenance callers suppress work without unwiring publication.
     */
-    if !sidebar_v2_selected {
+    if !enabled {
         return;
     }
     let Some(path) = project_git_remote_key(project) else {
@@ -416,11 +403,11 @@ re-probing a path the next pass would immediately evict again.
 Still at most ONE probe per path (`ensure_project_git_remote_probed` returns
 immediately once an entry exists), and still off the presentation sequencer.
 */
-pub fn ensure_published_project_git_remote_probed(project: &Value, sidebar_v2_selected: bool) {
+pub fn ensure_published_project_git_remote_probed(project: &Value, enabled: bool) {
     if !crate::presentation::should_include_presentation_project(project) {
         return;
     }
-    ensure_project_git_remote_probed(project, sidebar_v2_selected);
+    ensure_project_git_remote_probed(project, enabled);
 }
 
 #[cfg(test)]

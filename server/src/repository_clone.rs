@@ -427,15 +427,13 @@ fn publish_cloned_project_presentation(
     leaves refreshes to the background pass.
     */
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
-    The git-remote warm answers to the same `sidebarVersion` gate as its
-    background pass. Project icons render in both sidebar versions, so the icon
-    warm below is deliberately independent of that gate.
+    CDXC:ProjectRemoteCopy 2026-08-26:
+    Both sidebar versions need the origin now: V2 groups by it and the classic
+    project menu copies it. Probe before the clone's first presentation delta so
+    either surface receives the URL immediately.
     */
     if let Ok(Some(project)) = repository.get_project(project_id) {
-        let sidebar_v2_selected =
-            crate::session_lifecycle::read_sidebar_v2_selected(&runtime.paths);
-        crate::project_git_remote::ensure_project_git_remote_probed(&project, sidebar_v2_selected);
+        crate::project_git_remote::ensure_project_git_remote_probed(&project, true);
         /*
         CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
         A just-cloned repository has its icon on disk already, so discovering it

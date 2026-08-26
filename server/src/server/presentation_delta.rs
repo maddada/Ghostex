@@ -26,17 +26,13 @@ pub(crate) fn schedule_presentation_project_delta(
     every later delta for the same project is a pure cache read.
     */
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
-    The git-remote warm answers to the same `sidebarVersion` gate as its
-    background pass. The icon warm below is intentionally ungated because both
-    sidebar versions render discovered project icons.
+    CDXC:ProjectRemoteCopy 2026-08-26:
+    Both sidebar versions expose the project's Git origin now: V2 uses it for
+    repository grouping and the classic sidebar offers Copy Remote URL. Warm it
+    before publishing either version so the menu does not appear a pass later.
     */
     if let Some(project) = repository.get_project(project_id)? {
-        let sidebar_v2_selected = session_lifecycle::read_sidebar_v2_selected(&state.paths);
-        project_git_remote::ensure_published_project_git_remote_probed(
-            &project,
-            sidebar_v2_selected,
-        );
+        project_git_remote::ensure_published_project_git_remote_probed(&project, true);
         /*
         CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
         The project's own icon rides the same first-sighting warm, for the same
