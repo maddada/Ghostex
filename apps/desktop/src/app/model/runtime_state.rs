@@ -140,7 +140,7 @@ CDXC:GPUIProjectSnapshot 2026-06-24-07:41:
 The live sidebar active-project snapshot is strict instead of a pre-bridge placeholder. The snapshot carries active project id, display name, Quick/projectless state, project-scoped availability, the allowlisted in-memory project path, and identity-only Source, Kanban, Automate, and gated Manage surface ids from explicit sidebar/native project-editor state without inventing .git, path, fixture, workspace-name, or fallback project detection. Browser runtime state plus Source/Kanban/Automate/Manage runtime URL, CEF, and file-bridge facts stay outside the snapshot; real workarea surfaces are created only through direct runtime gates after snapshot acceptance.
 
 CDXC:GPUIProjectSnapshot 2026-06-22-18:14:
-Project display names and project paths are private runtime facts. `in_memory_project_path` is accepted only from the future allowlisted sidebar contract, is not normalized or probed on disk, and must not be serialized by GPUI shell-state persistence or emitted in logs; durable shell state may only store privacy-boundary booleans/count-like facts unless a later requirement explicitly adds a sanitized field.
+Project display names, project paths, and the sanitized Browser home URL are private runtime facts. `in_memory_project_path` and `browser_home_url` are accepted only from the allowlisted sidebar contract, are not probed on disk, and must not be serialized by GPUI shell-state persistence or emitted in logs; durable shell state may only store privacy-boundary booleans/count-like facts unless a later requirement explicitly adds a sanitized field.
 
 CDXC:GPUIProjectSnapshotContract 2026-06-22-18:14:
 The staged sidebar message contract is deliberately narrow: version 1, type `ghostex.gpui.sidebar.activeProjectContext`, and one `activeProject` object with explicit allowlisted fields. Reject non-object JSON, malformed booleans/strings, unknown keys, unsupported versions, unexpected message types, and Quick/projectless payloads that still carry project ids, paths, project-scoped surface ids, or enabled project-only workareas.
@@ -249,6 +249,7 @@ pub(crate) struct GpuiProjectSnapshot {
     pub(crate) active_project_id: Option<GpuiProjectId>,
     pub(crate) selection_owner_project_id: Option<GpuiProjectId>,
     pub(crate) display_name: String,
+    pub(crate) browser_home_url: Option<String>,
     pub(crate) project_icon_data_url: Option<String>,
     pub(crate) in_memory_project_path: Option<PathBuf>,
     pub(crate) is_quick_projectless: bool,
