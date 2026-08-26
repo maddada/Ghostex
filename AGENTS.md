@@ -26,7 +26,7 @@ Current root:
 ```
 Ghostex/
 ├── .dependencies/     # ALL external-origin code (edited or not)
-│   ├── ghostty/  ghostty-patches/  code-server/  zmx/  zehn/
+│   ├── ghostty/  ghostty-patches/  code-server/  zmx/
 │   └── zed/  cef-rs/  gpui-component/
 ├── apps/
 │   ├── desktop/       # Rust/GPUI desktop app (crate ghostex-gpui)
@@ -61,7 +61,7 @@ The full move map, per-file referencer inventory, and split log live in
 
 #### Migration: submodules stranded at their old top-level path
 
-The restructure also moved the `code-server`, `zmx` and `zehn` **submodule**
+The restructure also moved the `code-server` and `zmx` **submodule**
 gitlinks into `.dependencies/`. Git cannot move a submodule's working tree as
 part of a gitlink rename, so a checkout that had any of them initialized before
 2026-08-22 keeps the real tree at the old top-level path (now untracked) and
@@ -92,8 +92,7 @@ git config -f .git/modules/code-server/modules/lib/vscode/config \
   core.worktree ../../../../../../.dependencies/code-server/lib/vscode
 ```
 
-`zmx` and `zehn` have no nested submodule, so they need only the first two
-(substitute the name):
+`zmx` has no nested submodule, so it needs only the first two:
 
 ```sh
 rmdir .dependencies/zmx && mv zmx .dependencies/zmx
@@ -103,9 +102,7 @@ git config -f .git/modules/zmx/config core.worktree ../../../.dependencies/zmx
 
 Verify: `git -C .dependencies/code-server rev-parse HEAD` prints
 `390f119a145e…`, and `git submodule status .dependencies/code-server` shows a
-leading space (not `-` or `+`). `.dependencies/zehn` is reference-only and is
-never built or bundled, so a stranded zehn breaks nothing — move it for
-tidiness or re-init it.
+leading space (not `-` or `+`).
 
 ### Active apps vs deprecated apps
 
@@ -122,8 +119,7 @@ Deprecated. Never route new features, refactors, parity work, or bug fixes to th
 
 Everything under `apps/`, `packages/`, and `server/` is active. `.dependencies/`
 is external-origin code: some of it we edit (ghostty, zmx, code-server),
-some of it is a pure build input (zed, cef-rs, gpui-component), and one entry
-(`.dependencies/zehn`) is reference-only.
+and some of it is a pure build input (zed, cef-rs, gpui-component).
 
 - **`ghostex-tui` terminal app (`.dependencies/tui2`)** — deleted on 2026-08-23,
   together with `gx tui`, its build/staging plumbing, and `bin/ghostex-tui` in
@@ -220,7 +216,7 @@ modal host, titlebar host, Docs/manage, Kanban, or `meo` pages, or about the
 shared `apps/desktop/views/*.ts` logic. Add `packages/components` for shadcn
 primitives, and `apps/mobile/views` for the mobile embedded pages.
 
-### Prompt-history search: it is Rust, and `.dependencies/zehn/` is dead
+### Prompt-history search: it is Rust; the old Zig Zehn source is gone
 
 `gx f` used to spawn a bundled Zig binary built from the `zehn` submodule. It
 does not any more. Prompt-history search is the `packages/find/` Rust crate
@@ -230,9 +226,9 @@ does not any more. Prompt-history search is the `packages/find/` Rust crate
   `GHOSTEX_ZEHN_BIN`, and no `ZEHN_ZIG`. (Releases do still require Zig 0.16 —
   for ghostty and zmx, not for zehn — and 0.16 is now the repo's _only_ Zig
   toolchain.)
-- `.dependencies/zehn/` is kept only as reference for the original
-  implementation. Never build it, bundle it, add it back to a packaging list, or
-  treat it as the spec for new work — change `packages/find/` instead.
+- The old Zig `zehn` submodule was removed after the Rust port replaced it.
+  Never restore it, build it, bundle it, or treat it as the spec for new work —
+  change `packages/find/` instead.
 - Two hotkeys moved in **both** the terminal picker and the GUI so the surfaces
   share one key map: agents is `^g` (was `^t`) and projects is `^j` (was `^r`),
   because browsers reserve Ctrl+T and Ctrl+R and will not hand them to a page.

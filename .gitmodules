@@ -3,10 +3,6 @@
 	path = .dependencies/zmx
 	url = https://github.com/maddada/zmx.git
 # CDXC:CrossPlatformExternalCheckout 2026-06-14-12:50: Keep the cross-platform Electron app outside this repository at `~/dev/prev/crossplatform` so the parent repo no longer pins or initializes it as a submodule.
-# CDXC:AgentHistorySearch 2026-05-29-12:27: Pin zehn as a first-party submodule so Ghostex can bundle the reviewed prompt-history search binary and expose it through `gx find` and `gx f` instead of depending on an arbitrary PATH install. `gx search` is intentionally not a public alias.
-[submodule "zehn"]
-	path = .dependencies/zehn
-	url = https://github.com/maddada/zehn.git
 # CDXC:CodeServerSubmodule 2026-06-07-11:20: Keep the embedded legacy code-server checkout under the Ghostex repo as a pinned fork submodule so the native code-server launcher resolves a reviewed Ghostex-specific branch instead of maintainer-local ~/dev/custom/code-server state.
 [submodule "code-server"]
 	path = .dependencies/code-server
