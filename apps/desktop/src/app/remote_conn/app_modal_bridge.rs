@@ -321,6 +321,15 @@ impl GhostexGpuiApp {
                 state the dialog's old done-stage open message used to seed —
                 so Reveal never trusts a path posted back by the modal page.
                 */
+                let Some(request_id) = message
+                    .get("requestId")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|request_id| {
+                        !request_id.trim().is_empty() && request_id.chars().count() <= 128
+                    })
+                else {
+                    return;
+                };
                 let ok = message.get("ok").and_then(serde_json::Value::as_bool) == Some(true);
                 let can_reveal = message
                     .get("canReveal")
@@ -336,6 +345,7 @@ impl GhostexGpuiApp {
                 let mut result = serde_json::json!({
                     "canReveal": can_reveal,
                     "ok": ok,
+                    "requestId": request_id,
                     "type": "exportSessionTranscriptResult",
                 });
                 if let Some(path) = path {
@@ -345,6 +355,29 @@ impl GhostexGpuiApp {
                     result["agentId"] = serde_json::json!(agent_id);
                 }
                 if let Some(error) = message.get("error").and_then(serde_json::Value::as_str) {
+                    result["error"] = serde_json::json!(error);
+                }
+                self.dispatch_open_gpui_app_modal_message(result, cx);
+            }
+            "firstLaunchCreateProjectSessionResult" => {
+                let Some(command) = message.as_object() else {
+                    return;
+                };
+                let Some(request_id) = gpui_remote_request_id_from_command(command) else {
+                    return;
+                };
+                let ok = message.get("ok").and_then(serde_json::Value::as_bool) == Some(true);
+                let mut result = serde_json::json!({
+                    "ok": ok,
+                    "requestId": request_id,
+                    "type": "firstLaunchCreateProjectSessionResult",
+                });
+                if let Some(error) = message
+                    .get("error")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|error| !error.is_empty())
+                {
                     result["error"] = serde_json::json!(error);
                 }
                 self.dispatch_open_gpui_app_modal_message(result, cx);

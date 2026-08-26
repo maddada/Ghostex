@@ -7,11 +7,17 @@ import { normalizeNonEmptyString } from './records';
 
 export function normalizeGpuiWorkspaceFolderPick(
   payload: unknown
-): { firstLaunchAgentId?: string; name?: string; path: string } | undefined {
+): { firstLaunchAgentId?: string; name?: string; path: string; requestId?: string } | undefined {
   if (typeof payload !== 'object' || payload === null) {
     return undefined;
   }
-  const record = payload as { firstLaunchAgentId?: unknown; name?: unknown; path?: unknown; type?: unknown };
+  const record = payload as {
+    firstLaunchAgentId?: unknown;
+    name?: unknown;
+    path?: unknown;
+    requestId?: unknown;
+    type?: unknown;
+  };
   if (record.type !== 'workspaceFolderPicked') {
     return undefined;
   }
@@ -29,6 +35,7 @@ export function normalizeGpuiWorkspaceFolderPick(
     firstLaunchAgentId: normalizeNonEmptyString(record.firstLaunchAgentId),
     name: normalizeNonEmptyString(record.name),
     path,
+    requestId: normalizeNonEmptyString(record.requestId),
   };
 }
 

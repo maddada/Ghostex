@@ -163,6 +163,7 @@ pub(crate) fn gpui_sidebar_create_project_agent_from_json(
             "projectId",
             "agentId",
             "preferredInterface",
+            "requestId",
         ],
     )?;
 
@@ -199,6 +200,7 @@ pub(crate) fn gpui_sidebar_create_project_agent_from_json(
         agent_id,
         preferred_interface,
         project_id,
+        request_id: gpui_remote_request_id_from_command(object),
     })
 }
 
@@ -209,7 +211,10 @@ pub(crate) fn gpui_sidebar_create_project_terminal_from_json(
     let value = serde_json::from_str::<serde_json::Value>(text)
         .map_err(|_| GpuiGxserverPresentationFocusStateContractError::MalformedJson)?;
     let object = gpui_gxserver_focus_contract_object(&value)?;
-    reject_unexpected_gxserver_focus_contract_keys(object, &["version", "type", "projectId"])?;
+    reject_unexpected_gxserver_focus_contract_keys(
+        object,
+        &["version", "type", "projectId", "requestId"],
+    )?;
 
     let version = object
         .get("version")
@@ -228,7 +233,10 @@ pub(crate) fn gpui_sidebar_create_project_terminal_from_json(
     }
 
     let project_id = gxserver_workspace_focus_project_id_field(object, "projectId")?;
-    Ok(GpuiSidebarCreateProjectTerminalMessage { project_id })
+    Ok(GpuiSidebarCreateProjectTerminalMessage {
+        project_id,
+        request_id: gpui_remote_request_id_from_command(object),
+    })
 }
 
 pub(crate) fn gpui_sidebar_workspace_terminal_rename_command_from_json(

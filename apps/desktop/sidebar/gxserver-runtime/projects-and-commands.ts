@@ -5,6 +5,7 @@ changed. See `core.ts` for how the runtime's methods are re-attached.
 */
 import { GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS } from './constants';
 import type { GpuiSidebarRuntime } from './core';
+import { createGpuiSidebarSettings } from './helpers/bootstrap';
 import { normalizeGpuiReplacementProjectFolderPick, normalizeGpuiWorkspaceFolderPick } from './helpers/folder-picker';
 import { isGpuiPresentationQuickDomainProject } from './helpers/presentation-projection';
 import { normalizeNonEmptyString } from './helpers/records';
@@ -417,6 +418,17 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       return;
     }
     if (!this.client) {
+      if (pick.requestId) {
+        postAppModalHostMessage(
+          {
+            error: 'gxserver is not connected.',
+            ok: false,
+            requestId: pick.requestId,
+            type: 'firstLaunchCreateProjectSessionResult',
+          },
+          'AppModals:firstLaunchCreateProjectSessionResult'
+        );
+      }
       this.postSidebarActionToast('error', 'Add Project failed', {
         description: 'gxserver is not connected.',
       });
@@ -444,13 +456,57 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
         agent chosen on the Get Started page ('terminal' means a plain shell).
         */
         const groupId = createGxserverPresentationProjectGroupId(project.projectId);
-        if (pick.firstLaunchAgentId === 'terminal') {
-          await this.createSession(groupId);
+        const isWindowsHost = typeof navigator !== 'undefined' && /Windows/iu.test(navigator.userAgent);
+        if (isWindowsHost && pick.requestId) {
+          const payload = JSON.stringify({
+            ...(pick.firstLaunchAgentId === 'terminal' ? {} : { agentId: pick.firstLaunchAgentId }),
+            ...(pick.firstLaunchAgentId === 'terminal'
+              ? { type: 'ghostex.gpui.sidebar.createProjectTerminal' }
+              : {
+                  preferredInterface: createGpuiSidebarSettings(this.runtimeSettings).preferredAgentInterface,
+                  type: 'ghostex.gpui.sidebar.createProjectAgent',
+                }),
+            projectId: project.projectId,
+            requestId: pick.requestId,
+            version: 1,
+          });
+          const accepted =
+            pick.firstLaunchAgentId === 'terminal'
+              ? window.ghostexGpui?.postCreateProjectTerminal?.(payload)
+              : window.ghostexGpui?.postCreateProjectAgent?.(payload);
+          if (!accepted) {
+            throw new Error('The Windows terminal host did not accept the project session request.');
+          }
         } else {
-          await this.createAgentSession(pick.firstLaunchAgentId, groupId);
+          if (pick.firstLaunchAgentId === 'terminal') {
+            await this.createSession(groupId);
+          } else {
+            await this.createAgentSession(pick.firstLaunchAgentId, groupId);
+          }
+          if (pick.requestId) {
+            postAppModalHostMessage(
+              {
+                ok: true,
+                requestId: pick.requestId,
+                type: 'firstLaunchCreateProjectSessionResult',
+              },
+              'AppModals:firstLaunchCreateProjectSessionResult'
+            );
+          }
         }
       }
-    } catch {
+    } catch (error) {
+      if (pick.requestId) {
+        postAppModalHostMessage(
+          {
+            error: error instanceof Error ? error.message : 'Ghostex could not add the selected folder.',
+            ok: false,
+            requestId: pick.requestId,
+            type: 'firstLaunchCreateProjectSessionResult',
+          },
+          'AppModals:firstLaunchCreateProjectSessionResult'
+        );
+      }
       this.postSidebarActionToast('error', 'Add Project failed', {
         description: 'Ghostex could not add the selected folder.',
       });
