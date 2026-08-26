@@ -293,7 +293,8 @@ impl GhostexGpuiApp {
     /// The Export Transcript dialog's two sidebar-bound commands. The dialog
     /// only knows the user's choices — the include-toggles for
     /// `runExportSessionTranscript`, the configured agent for
-    /// `startExportedTranscriptConversation`; the sidebar runtime owns the
+    /// `startExportedTranscriptConversation`, and the bounded request id that
+    /// ties either command to the current dialog. The sidebar runtime owns the
     /// session context, the exported path, and the gxserver calls, so only
     /// those whitelisted fields are forwarded and nothing else.
     pub(crate) fn forward_gpui_export_transcript_modal_command_to_sidebar(
@@ -304,6 +305,13 @@ impl GhostexGpuiApp {
     ) -> bool {
         let mut message = serde_json::Map::new();
         message.insert("type".to_string(), serde_json::json!(command_type));
+        if let Some(request_id) = command
+            .get("requestId")
+            .and_then(serde_json::Value::as_str)
+            .filter(|request_id| !request_id.trim().is_empty() && request_id.chars().count() <= 128)
+        {
+            message.insert("requestId".to_string(), serde_json::json!(request_id));
+        }
         if let Some(agent_id) = command.get("agentId").and_then(serde_json::Value::as_str) {
             message.insert("agentId".to_string(), serde_json::json!(agent_id));
         }
@@ -887,10 +895,28 @@ impl GhostexGpuiApp {
             let Some(path) = paths.into_iter().next() else {
                 return;
             };
+            #[cfg(target_os = "windows")]
+            let picked_path =
+                match windows_terminal_backend::wsl_path_for_windows_path(path.as_path()) {
+                    Ok(path) => path,
+                    Err(message) => {
+                        let _ = this.update(cx, |this, cx| {
+                            this.dispatch_gpui_app_modal_toast(
+                                "warning",
+                                "Could not use that project folder",
+                                &message,
+                                cx,
+                            );
+                        });
+                        return;
+                    }
+                };
+            #[cfg(not(target_os = "windows"))]
+            let picked_path = path.to_string_lossy().to_string();
             let _ = this.update(cx, |this, cx| {
                 this.dispatch_open_gpui_app_modal_message(
                     serde_json::json!({
-                        "path": path.to_string_lossy(),
+                        "path": picked_path,
                         "type": "firstLaunchProjectFolderPicked",
                     }),
                     cx,
@@ -913,6 +939,9 @@ impl GhostexGpuiApp {
         command: &serde_json::Map<String, serde_json::Value>,
         cx: &mut gpui::Context<Self>,
     ) {
+        let Some(request_id) = gpui_remote_request_id_from_command(command) else {
+            return;
+        };
         let Some(path) = command
             .get("path")
             .and_then(serde_json::Value::as_str)
@@ -920,6 +949,12 @@ impl GhostexGpuiApp {
             .filter(|path| !path.is_empty())
             .map(str::to_string)
         else {
+            self.dispatch_gpui_first_launch_create_project_session_result(
+                &request_id,
+                false,
+                Some("Choose a project folder before finishing setup."),
+                cx,
+            );
             return;
         };
         let Some(agent_id) = command
@@ -935,16 +970,68 @@ impl GhostexGpuiApp {
             })
             .map(str::to_string)
         else {
+            self.dispatch_gpui_first_launch_create_project_session_result(
+                &request_id,
+                false,
+                Some("Choose an available agent before finishing setup."),
+                cx,
+            );
             return;
         };
-        self.dispatch_gpui_workspace_folder_picked_message(
+        #[cfg(target_os = "windows")]
+        let project_path = if gpui_add_project_dialog_is_windows_absolute_path(&path) {
+            match windows_terminal_backend::wsl_path_for_windows_path(Path::new(&path)) {
+                Ok(path) => path,
+                Err(message) => {
+                    self.dispatch_gpui_first_launch_create_project_session_result(
+                        &request_id,
+                        false,
+                        Some(&message),
+                        cx,
+                    );
+                    return;
+                }
+            }
+        } else {
+            path
+        };
+        #[cfg(not(target_os = "windows"))]
+        let project_path = path;
+        let dispatched = self.dispatch_gpui_workspace_folder_picked_message(
             serde_json::json!({
                 "firstLaunchAgentId": agent_id,
-                "path": path,
+                "path": project_path,
+                "requestId": request_id,
                 "type": "workspaceFolderPicked",
             }),
             cx,
         );
+        if !dispatched {
+            self.dispatch_gpui_first_launch_create_project_session_result(
+                &request_id,
+                false,
+                Some("The project sidebar is not available."),
+                cx,
+            );
+        }
+    }
+
+    pub(crate) fn dispatch_gpui_first_launch_create_project_session_result(
+        &mut self,
+        request_id: &str,
+        ok: bool,
+        error: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let mut result = serde_json::json!({
+            "ok": ok,
+            "requestId": request_id,
+            "type": "firstLaunchCreateProjectSessionResult",
+        });
+        if let Some(error) = error {
+            result["error"] = serde_json::json!(error);
+        }
+        self.dispatch_open_gpui_app_modal_message(result, cx);
     }
 
     pub(crate) fn handle_gpui_pick_worktree_images_message(
@@ -1243,6 +1330,19 @@ impl GhostexGpuiApp {
             .keys()
             .copied()
             .collect::<HashSet<_>>();
+        /*
+        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        A tab of an inactive project is asleep only when its page is really
+        gone. Since a project switch parks the outgoing project's pages instead
+        of destroying them, "awake" is per-project surface ownership: the live
+        map for the mounted project, that project's parked bundle for every
+        other one.
+        */
+        let parked_browser_surface_tab_ids = self
+            .parked_browser_runtimes_by_project
+            .iter()
+            .map(|(project_id, runtime)| (project_id.as_str(), runtime.surface_tab_ids()))
+            .collect::<HashMap<_, _>>();
         let mut projects = self
             .parked_browser_tabs_by_project
             .iter()
@@ -1261,7 +1361,10 @@ impl GhostexGpuiApp {
                 let awake_tab_ids = if project_is_active {
                     active_browser_surface_tab_ids.clone()
                 } else {
-                    HashSet::new()
+                    parked_browser_surface_tab_ids
+                        .get(project_id)
+                        .cloned()
+                        .unwrap_or_default()
                 };
                 let visible_tab_ids = model
                     .rendered_leaf_order()

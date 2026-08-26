@@ -16,6 +16,20 @@ use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
+
+/// The measured clear burst as raw bytes, for the Ghostty-surface pipeline
+/// (the engine pipeline sends the same law as VT key events). Kills toward the
+/// start first, then toward the end, exactly like gxserver's
+/// `build_agent_tui_clear_input`.
+#[cfg(target_os = "macos")]
+fn workspace_terminal_clear_input_burst() -> String {
+    format!(
+        "{}{}",
+        AGENT_TUI_CLEAR_INPUT_LINE.repeat(WORKSPACE_RENAME_COMMAND_CLEAR_REPETITIONS),
+        AGENT_TUI_CLEAR_INPUT_FORWARD.repeat(WORKSPACE_RENAME_COMMAND_CLEAR_REPETITIONS)
+    )
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn receive_sidebar_workspace_terminal_rename_command_payload(
         &mut self,
@@ -139,21 +153,42 @@ impl GhostexGpuiApp {
         let terminal_input =
             gpui_workspace_terminal_rename_command_input(message.command, &message.title);
         /*
-        CDXC:GPUIWorkspaceRenameCommand 2026-07-29:
-        The composer may already hold user-typed draft text. On the engine
-        pipeline, kill the current line (Ctrl+U) before staging the rename
-        command and yank it back (Ctrl+Y) after the submit, so a rename never
-        merges with or destroys an in-progress draft. The opt-out Ghostty
-        surface pipeline stages text only, as before.
+        CDXC:GPUIWorkspaceRenameCommand 2026-08-26:
+        The composer may already hold user-typed draft text, and the rename is
+        written onto that same line, so BOTH pipelines open with the measured
+        clear burst (WORKSPACE_RENAME_COMMAND_CLEAR_REPETITIONS) as its own pty
+        write before the command text.
+
+        This replaces two different wrong behaviours. The engine pipeline sent a
+        single Ctrl+U, which kills one logical line: a two-line draft kept its
+        first line and the rename was submitted glued to it. The Ghostty-surface
+        pipeline sent no clear at all, so any draft simply got `/rename …`
+        appended. The burst is a separate write from the command text in both,
+        never concatenated with it.
+
+        There is no Ctrl+Y restore any more, matching gxserver's title jobs: a
+        yank returns only the LAST kill, so after a 2N-1 burst it can restore at
+        most a fragment of a multi-line draft, and after the trailing Ctrl+K
+        kills it restores nothing. The draft is discarded, the same way a chat
+        send owns and clears this line; terminal -> chat view switching remains
+        the loss-safe transfer path.
         */
         let text_sent = if let Some(view) = engine_terminal_view {
             view.update(cx, |view, cx| {
-                view.send_ctrl_letter_key(ghostty_vt::VtKey::U, 'u', cx);
+                for _ in 0..WORKSPACE_RENAME_COMMAND_CLEAR_REPETITIONS {
+                    view.send_ctrl_letter_key(ghostty_vt::VtKey::U, 'u', cx);
+                }
+                for _ in 0..WORKSPACE_RENAME_COMMAND_CLEAR_REPETITIONS {
+                    view.send_ctrl_letter_key(ghostty_vt::VtKey::K, 'k', cx);
+                }
                 view.send_text_input(&terminal_input, cx);
             });
             true
         } else {
             self.send_text_bytes_to_mounted_agents_terminal_surface(
+                target.slot_id,
+                workspace_terminal_clear_input_burst().as_bytes(),
+            ) && self.send_text_bytes_to_mounted_agents_terminal_surface(
                 target.slot_id,
                 terminal_input.as_bytes(),
             )
@@ -165,49 +200,20 @@ impl GhostexGpuiApp {
         CDXC:GPUIWorkspaceRenameCommand 2026-07-29:
         macOS parity (AUTO_SUBMIT_STAGED_RENAME_DELAY_MS): agent CLIs treat
         command text and Enter arriving in one stdin chunk as a paste and
-        insert a newline instead of submitting. Stage the command now, press
-        the real Return on the re-validated exact target after the same
-        one-second delay native uses, then restore the killed draft.
+        insert a newline instead of submitting. Stage the command now, then
+        press the real Return on the re-validated exact target after the same
+        one-second delay native uses.
         */
         let submit_key = key.clone();
         cx.spawn(async move |this, cx| {
             cx.background_executor()
                 .timer(WORKSPACE_RENAME_COMMAND_SUBMIT_DELAY)
                 .await;
-            let submitted = this
-                .update(cx, |this, cx| {
-                    let Some(target) = this.local_workspace_rename_command_target(&submit_key)
-                    else {
-                        return false;
-                    };
-                    this.send_return_key_to_mounted_agents_terminal_surface(target.slot_id, cx)
-                })
-                .unwrap_or(false);
-            if !submitted {
-                return;
-            }
-            cx.background_executor()
-                .timer(WORKSPACE_RENAME_COMMAND_RESTORE_DRAFT_DELAY)
-                .await;
             let _ = this.update(cx, |this, cx| {
                 let Some(target) = this.local_workspace_rename_command_target(&submit_key) else {
                     return;
                 };
-                if !this
-                    .agents_workspace
-                    .is_current_terminal_body_mount_slot(target.slot_id)
-                {
-                    return;
-                }
-                if let Some(record) = this
-                    .agents_gpui_engine_terminals
-                    .get(&target.slot_id.session_id)
-                {
-                    let view = record.view.clone();
-                    view.update(cx, |view, cx| {
-                        view.send_ctrl_letter_key(ghostty_vt::VtKey::Y, 'y', cx);
-                    });
-                }
+                let _ = this.send_return_key_to_mounted_agents_terminal_surface(target.slot_id, cx);
             });
         })
         .detach();

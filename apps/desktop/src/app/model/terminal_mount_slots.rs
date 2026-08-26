@@ -34,6 +34,16 @@ pub(crate) enum ProjectEditorCompanionTerminalSlot {
     Bottom,
 }
 
+/// Runtime-only route back to the project view whose companion terminal asked
+/// to be maximized in Agents. It remembers only stable shell identities and is
+/// consumed when the same bar's minimize action restores that view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TerminalAgentBarCompanionFocusReturn {
+    pub(crate) mode: TitlebarMode,
+    pub(crate) session_id: TerminalSessionId,
+    pub(crate) slot: ProjectEditorCompanionTerminalSlot,
+}
+
 /*
 CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
 Runtime-only identity of the terminal slot that currently owns shell focus,

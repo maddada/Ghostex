@@ -4,7 +4,7 @@
 use std::{
     fmt, fs,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -1239,9 +1239,29 @@ pub(crate) fn sanitize_browser_tab_cached_title(title: &str) -> Option<String> {
     )
 }
 
-pub(crate) fn browser_shell_default_url(project_path: Option<&Path>) -> String {
-    project_path
-        .and_then(browser_repository_remote_web_url)
+pub(crate) fn browser_remote_web_url(remote_url: &str) -> Option<String> {
+    let remote = remote_url
+        .trim()
+        .trim_end_matches('/')
+        .trim_end_matches(".git");
+    let web_url = if let Some(path) = remote.strip_prefix("git@") {
+        let (host, repository) = path.split_once(':')?;
+        format!("https://{host}/{repository}")
+    } else if let Some(path) = remote.strip_prefix("ssh://git@") {
+        let (host, repository) = path.split_once('/')?;
+        format!("https://{host}/{repository}")
+    } else if remote.starts_with("https://") || remote.starts_with("http://") {
+        remote.to_string()
+    } else {
+        return None;
+    };
+
+    sanitize_browser_tab_url_for_state(&web_url)
+}
+
+pub(crate) fn browser_shell_default_url(browser_home_url: Option<&str>) -> String {
+    browser_home_url
+        .map(str::to_owned)
         .unwrap_or_else(|| DEFAULT_BROWSER_URL.to_string())
 }
 

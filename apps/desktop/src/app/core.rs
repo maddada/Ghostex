@@ -228,6 +228,13 @@ pub struct GhostexGpuiApp {
     pub(crate) parked_agents_terminal_runtimes_by_project:
         HashMap<String, ParkedAgentsTerminalRuntime>,
     /*
+    CDXC:GPUISessionChatSurfacePerProject 2026-08-26:
+    The chat pages of inactive projects, parked beside their terminal owners on
+    the same switch path instead of being destroyed and reloaded. Runtime-only,
+    and dropped with the app because the entity owns the Chromium browser.
+    */
+    pub(crate) parked_agents_chat_runtimes_by_project: HashMap<String, ParkedAgentsChatRuntime>,
+    /*
     CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
     Leading-edge + trailing-debounce state for project switches. `until` is the
     end of the settle window opened by the switch that is currently executing,
@@ -260,7 +267,26 @@ pub struct GhostexGpuiApp {
     pub(crate) browser_tabs: BrowserTabModel,
     pub(crate) browser_tabs_project_id: Option<String>,
     pub(crate) parked_browser_tabs_by_project: HashMap<String, BrowserTabModel>,
+    /*
+    CDXC:GPUIBrowserProjectParking 2026-08-26:
+    The live browser pages of inactive projects, parked beside their tab models
+    on the same switch path instead of being destroyed. Dropping the
+    `Entity<CefSurface>` closes the Chromium browser, so a project switch that
+    cleared `browser_surfaces` slept every browser tab of the project the user
+    just left and reloaded its pages from scratch on the way back.
+    */
+    pub(crate) parked_browser_runtimes_by_project: HashMap<String, ParkedBrowserRuntime>,
     pub(crate) browser_tabs_project_epoch: u64,
+    /*
+    CDXC:GPUIBrowserProjectParking 2026-08-26:
+    Identity of the browser tab model currently mounted in the Browser workarea.
+    BrowserTabIds are project-local counters, so a surface's async CEF callbacks
+    capture the key that was live when the surface was created and resolve it
+    back to their own model — live or parked — instead of applying a title,
+    favicon, address, or load update to whichever project happens to hold the
+    same tab id now.
+    */
+    pub(crate) browser_tabs_runtime_key: u64,
     pub(crate) sidebar_browser_tabs_snapshot: String,
     /*
     CDXC:AutoSleepDisplayedSessions 2026-08-20:
@@ -507,6 +533,15 @@ pub struct GhostexGpuiApp {
     last-used view after an app restart. The CEF surfaces stay runtime-only.
     */
     pub(crate) agents_chat_mode_sessions: HashSet<TerminalSessionId>,
+    /// The one terminal agent action bar whose "More actions" menu is open, by
+    /// shell session id. Runtime-only, and single-valued because opening a
+    /// second bar's menu closes the first, exactly like the chat composer's
+    /// dropdown.
+    pub(crate) agents_terminal_action_bar_menu_session: Option<TerminalSessionId>,
+    /// A companion-pane maximize route waiting for the matching Agents bar's
+    /// minimize action to restore its exact project view and companion slot.
+    pub(crate) terminal_agent_bar_companion_focus_return:
+        Option<TerminalAgentBarCompanionFocusReturn>,
     /// Sessions whose current compatibility state has already been considered
     /// for the saved automatic Chat preference. Runtime-only so a later agent
     /// detection in the same shell slot is still a fresh eligibility edge.
@@ -1383,7 +1418,7 @@ impl Render for GhostexGpuiApp {
             )
             .on_action(
                 cx.listener(|this, _: &PasteIntoFocusedTerminal, _window, cx| {
-                    if this.propagate_source_workarea_cef_hotkey_passthrough(cx) {
+                    if this.propagate_renderer_edit_cef_hotkey_passthrough(cx) {
                         return;
                     }
                     if !this.paste_into_focused_terminal_from_clipboard(cx) {
@@ -1756,24 +1791,6 @@ impl Render for GhostexGpuiApp {
                 cx.listener(|this, _: &OpenGpuiPreviousSessionsModal, window, cx| {
                     this.open_gpui_app_modal_from_titlebar(
                         GpuiAppModalKind::PreviousSessions,
-                        window,
-                        cx,
-                    );
-                }),
-            )
-            .on_action(
-                cx.listener(|this, _: &OpenGpuiDaemonSessionsModal, window, cx| {
-                    this.open_gpui_app_modal_from_titlebar(
-                        GpuiAppModalKind::DaemonSessions,
-                        window,
-                        cx,
-                    );
-                }),
-            )
-            .on_action(
-                cx.listener(|this, _: &OpenGpuiPinnedPromptsModal, window, cx| {
-                    this.open_gpui_app_modal_from_titlebar(
-                        GpuiAppModalKind::PinnedPrompts,
                         window,
                         cx,
                     );

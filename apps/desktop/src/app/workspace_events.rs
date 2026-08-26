@@ -577,10 +577,15 @@ impl GhostexGpuiApp {
         The sidebar lists browser rows for every project (parked local and
         machine-scoped remote models included), so this bridge must reach
         beyond the active browser project: close edits the parked model
-        directly (parked tabs own no CEF surfaces), and focus swaps the
-        browser workarea to the owning project first — but only when that
-        parked model really contains the tab, so stale rows cannot park the
-        live project into an empty default model.
+        directly, and focus swaps the browser workarea to the owning project
+        first — but only when that parked model really contains the tab, so
+        stale rows cannot park the live project into an empty default model.
+
+        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        A parked project's tabs do own live CEF surfaces now, so close and
+        sleep reach the parked bundle too: both drop that tab's parked page, the
+        same teardown the mounted project gets, instead of leaving an orphaned
+        browser behind a row that says it is asleep.
         */
         let is_active_browser_project =
             self.browser_tabs_project_id.as_deref() == Some(message.project_id.as_str());
@@ -589,22 +594,15 @@ impl GhostexGpuiApp {
                 self.close_browser_tab(message.tab_id, window, cx);
                 return;
             }
-            let active_profile_id = self.browser_profiles.active_profile_id();
-            if let Some(parked_tabs) = self
-                .parked_browser_tabs_by_project
-                .get_mut(&message.project_id)
-            {
-                if parked_tabs.close_tab(message.tab_id, active_profile_id) {
-                    self.persist_shell_layout_state();
-                    cx.notify();
-                }
-            }
+            self.close_parked_browser_tab(&message.project_id, message.tab_id, cx);
             return;
         }
         if object.get("sleeping").and_then(serde_json::Value::as_bool) == Some(true) {
-            if !is_active_browser_project
-                || find_browser_leaf_id_for_tab(&self.browser_tabs.root, message.tab_id).is_none()
-            {
+            if !is_active_browser_project {
+                self.sleep_parked_browser_tab(&message.project_id, message.tab_id, cx);
+                return;
+            }
+            if find_browser_leaf_id_for_tab(&self.browser_tabs.root, message.tab_id).is_none() {
                 return;
             }
             self.remove_browser_surface(message.tab_id, cx);
@@ -625,8 +623,21 @@ impl GhostexGpuiApp {
         tabs that already exist, but everything past this point focuses the
         Browser workarea. With Browser turned off in Settings → Customize a
         stale sidebar tab row must not be able to drag the shell back into it.
+
+        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        Availability is decided by the tab's own project, not by whichever
+        project the shell is currently showing. A row of another project is
+        exactly the click that has to switch projects, and its active-project
+        context is still in flight — the sidebar publishes it first, but the
+        project-switch coalescer can hold it for the settle window — so
+        answering the arriving payload from the outgoing context dropped those
+        clicks silently. Every payload here carries a validated real project
+        key, and a real project always has the Browser workarea, so this
+        matches `open_browser_url_from_renderer_command`: an explicit project
+        target skips the context-scoped predicate and only the
+        project-independent Customize refusal still applies.
         */
-        if !self.titlebar_mode_available(TitlebarMode::Browser) {
+        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Browser) {
             return;
         }
         if !is_active_browser_project {
@@ -992,6 +1003,7 @@ impl GhostexGpuiApp {
             let agent_id = message.agent_id;
             let preferred_interface = message.preferred_interface;
             let project_id = message.project_id;
+            let request_id = message.request_id;
             let background = cx.background_executor().clone();
             cx.spawn(async move |this, cx| {
                 let result = background
@@ -1013,24 +1025,44 @@ impl GhostexGpuiApp {
                             this.pending_agents_chat_launch_intents
                                 .insert(workspace_key.clone());
                         }
-                        if !this.open_gpui_local_workspace_terminal(
+                        let opened = this.open_gpui_local_workspace_terminal(
                             key,
                             plan,
                             requested_pane_id,
                             false,
                             cx,
-                        ) {
+                        );
+                        if !opened {
                             this.pending_agents_chat_launch_intents
                                 .remove(&workspace_key);
                             this.compensate_unmaterialized_created_workspace_terminal(&cleanup_key);
                         }
+                        if let Some(request_id) = request_id.as_deref() {
+                            this.dispatch_gpui_first_launch_create_project_session_result(
+                                request_id,
+                                opened,
+                                (!opened)
+                                    .then_some("Ghostex could not open the new agent session."),
+                                cx,
+                            );
+                        }
                     }
-                    Err(message) => this.dispatch_gpui_app_modal_toast(
-                        "warning",
-                        "Agent unavailable",
-                        message.as_str(),
-                        cx,
-                    ),
+                    Err(message) => {
+                        this.dispatch_gpui_app_modal_toast(
+                            "warning",
+                            "Agent unavailable",
+                            message.as_str(),
+                            cx,
+                        );
+                        if let Some(request_id) = request_id.as_deref() {
+                            this.dispatch_gpui_first_launch_create_project_session_result(
+                                request_id,
+                                false,
+                                Some(message.as_str()),
+                                cx,
+                            );
+                        }
+                    }
                 });
             })
             .detach();
@@ -1064,6 +1096,7 @@ impl GhostexGpuiApp {
             PowerShell process, or route creation back through CEF.
             */
             let project_id = message.project_id;
+            let request_id = message.request_id;
             let background = _cx.background_executor().clone();
             _cx.spawn(async move |this, cx| {
                 let result = background
@@ -1077,22 +1110,42 @@ impl GhostexGpuiApp {
                         let requested_pane_id = this.agents_workspace.focused_pane;
                         this.local_workspace_latest_focus_key = Some(key.clone());
                         let cleanup_key = key.clone();
-                        if !this.open_gpui_local_workspace_terminal(
+                        let opened = this.open_gpui_local_workspace_terminal(
                             key,
                             plan,
                             requested_pane_id,
                             false,
                             cx,
-                        ) {
+                        );
+                        if !opened {
                             this.compensate_unmaterialized_created_workspace_terminal(&cleanup_key);
                         }
+                        if let Some(request_id) = request_id.as_deref() {
+                            this.dispatch_gpui_first_launch_create_project_session_result(
+                                request_id,
+                                opened,
+                                (!opened)
+                                    .then_some("Ghostex could not open the new terminal session."),
+                                cx,
+                            );
+                        }
                     }
-                    Err(message) => this.dispatch_gpui_app_modal_toast(
-                        "warning",
-                        "Terminal unavailable",
-                        message.as_str(),
-                        cx,
-                    ),
+                    Err(message) => {
+                        this.dispatch_gpui_app_modal_toast(
+                            "warning",
+                            "Terminal unavailable",
+                            message.as_str(),
+                            cx,
+                        );
+                        if let Some(request_id) = request_id.as_deref() {
+                            this.dispatch_gpui_first_launch_create_project_session_result(
+                                request_id,
+                                false,
+                                Some(message.as_str()),
+                                cx,
+                            );
+                        }
+                    }
                 });
             })
             .detach();
@@ -1416,24 +1469,20 @@ impl GhostexGpuiApp {
     Background terminal → chat draft transfer for every view switch. Automatic,
     manual, local, and remote switches all show Chat first; draft capture must
     never keep the user trapped on a terminal startup/permission prompt or on
-    an agent version that cannot answer the Ctrl+G handshake.
+    an agent version that cannot answer its prompt-editor handshake.
 
     Chat is shown immediately and the captured draft lands in the composer when
-    the daemon's Ctrl+G handshake answers, so a slow or unanswerable capture
-    costs the user nothing but the text staying where they typed it. That is
-    also why failures are silent here: the user did not ask for a transfer, so
-    a warning toast would be noise about an operation they never requested.
+    the daemon's prompt-editor handshake answers, so a slow or unanswerable
+    capture costs the user nothing but the text staying where they typed it.
+    That is also why failures are silent here: the user did not ask for a
+    transfer, so a warning toast would be noise about an operation they never
+    requested.
     */
     pub(crate) fn request_session_chat_draft_transfer(
         &mut self,
         session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
-        // Grok Build binds Ctrl+G to its Tasks pane, so it can never answer the
-        // handshake. The daemon rejects it outright; skip the round trip.
-        if self.agents_session_chat_transcript_agent(session_id) == Some("grok") {
-            return;
-        }
         let request = if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
             let params = serde_json::json!({
                 "projectId": key.project_id,
@@ -2166,6 +2215,27 @@ impl GhostexGpuiApp {
             self.session_chat_composer_empty_reports.remove(&session_id);
             self.agents_chat_surface_hidden_since.remove(&session_id);
         }
+        /*
+        CDXC:GPUISessionChatSurfacePerProject 2026-08-26:
+        Parked projects keep their chat pages alive, so the same RAM ceiling has
+        to reach them; otherwise every project the user ever visited would hold
+        its browsers until the app quits. A parked surface ages on the stamp it
+        carried into the park and, once dropped, is rebuilt by the normal
+        ensure/reconcile path when its project becomes active again. No frame
+        renders a parked surface, so this needs no redraw.
+        */
+        for parked in self.parked_agents_chat_runtimes_by_project.values_mut() {
+            for session_id in parked.expired_hidden_evictable_session_ids() {
+                let Some(surface) = parked.surfaces.remove(&session_id) else {
+                    continue;
+                };
+                surface.update(cx, |surface, _| surface.set_visible(false));
+                drop(surface);
+                parked.composer_ready_sessions.remove(&session_id);
+                parked.composer_empty_reports.remove(&session_id);
+                parked.surface_hidden_since.remove(&session_id);
+            }
+        }
         if evicted_any {
             // A frame could still be rendering the surface if the render tree
             // and the reconcile visibility set ever disagree; request a redraw
@@ -2279,23 +2349,84 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn remove_all_agents_chat_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
+    /*
+    CDXC:GPUISessionChatSurfacePerProject 2026-08-26:
+    An active-project switch parks the outgoing project's chat pages instead of
+    destroying them, the same treatment the terminal runtime already gets on
+    that path. Destroying them closed every Chromium browser and made the next
+    reconcile reload chat.html from scratch, which is the visible kill + reload
+    on every project switch.
+
+    The surfaces and every companion map keyed by the same project-local shell
+    session ids leave together in one bundle, so the incoming project's colliding
+    ids can never read the outgoing project's composer state. Chat-mode
+    membership is cleared here and reinstated by the caller from the incoming
+    project's parked shell-state JSON.
+
+    The rest is deliberately still cleared, exactly as before: the auto-switch
+    observation set and the pending launch intents are switch-scoped, and the two
+    draft-handoff records are dropped under the same contract as the per-session
+    teardown above (every dropped handoff still has its Saved Prompts row, which
+    only a confirmed terminal paste deletes).
+    */
+    pub(crate) fn park_all_agents_chat_surfaces(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> ParkedAgentsChatRuntime {
         self.agents_chat_mode_sessions.clear();
         self.agents_chat_auto_switch_observed_sessions.clear();
         self.pending_agents_chat_launch_intents.clear();
-        self.session_chat_composer_ready_sessions.clear();
-        self.session_chat_composer_empty_reports.clear();
-        self.agents_chat_surface_hidden_since.clear();
-        self.pending_session_chat_composer_focus = None;
-        self.pending_session_chat_composer_insert.clear();
-        // Same contract as the per-session teardown above: every dropped
-        // handoff still has its Saved Prompts row, which only a confirmed
-        // terminal paste deletes.
         self.pending_session_terminal_composer_insert.clear();
         self.pending_session_chat_draft_handoffs.clear();
-        for surface in self.agents_chat_surfaces.values() {
+        for (session_id, surface) in &self.agents_chat_surfaces {
             surface.update(cx, |surface, _| surface.set_visible(false));
+            // A parked surface is hidden by definition, so it must carry the
+            // eviction clock into the park or it would age forever. Same
+            // `or_insert_with` contract as the reconcile pass: a surface that is
+            // already aging keeps its original stamp.
+            self.agents_chat_surface_hidden_since
+                .entry(*session_id)
+                .or_insert_with(Instant::now);
         }
-        self.agents_chat_surfaces.clear();
+        ParkedAgentsChatRuntime {
+            surfaces: std::mem::take(&mut self.agents_chat_surfaces),
+            surface_hidden_since: std::mem::take(&mut self.agents_chat_surface_hidden_since),
+            composer_ready_sessions: std::mem::take(&mut self.session_chat_composer_ready_sessions),
+            composer_empty_reports: std::mem::take(&mut self.session_chat_composer_empty_reports),
+            pending_composer_focus: self.pending_session_chat_composer_focus.take(),
+            pending_composer_insert: std::mem::take(&mut self.pending_session_chat_composer_insert),
+        }
+    }
+
+    /// Reinstall a project's parked chat pages as the live ones. The caller has
+    /// already restored that project's `WorkspaceModel` and session mappings, so
+    /// the restored surfaces match live session ids and `reconcile_agents_chat_surfaces`
+    /// makes them visible again through `ensure_agents_chat_surface` without
+    /// recreating a browser.
+    pub(crate) fn restore_parked_agents_chat_surfaces(
+        &mut self,
+        parked: ParkedAgentsChatRuntime,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.agents_chat_surfaces = parked.surfaces;
+        self.agents_chat_surface_hidden_since = parked.surface_hidden_since;
+        self.session_chat_composer_ready_sessions = parked.composer_ready_sessions;
+        self.session_chat_composer_empty_reports = parked.composer_empty_reports;
+        self.pending_session_chat_composer_focus = parked.pending_composer_focus;
+        self.pending_session_chat_composer_insert = parked.pending_composer_insert;
+        /*
+        CDXC:GPUISessionChatSurface 2026-07-31 (extended 2026-08-26):
+        A parked page still holds whichever gxserver bootstrap it had when it
+        went hidden, and a remote chat page points at an SSH tunnel whose local
+        port and token can be rebuilt while its project is away. Re-push each
+        restored page's bootstrap from its own session identity, so a restored
+        remote chat cannot keep talking to a dead tunnel.
+        */
+        for (session_id, surface) in &self.agents_chat_surfaces {
+            let bootstrap = self.agents_session_chat_gxserver_bootstrap(*session_id);
+            surface.update(cx, |surface, _| {
+                surface.refresh_session_chat_gxserver_bootstrap(bootstrap);
+            });
+        }
     }
 }

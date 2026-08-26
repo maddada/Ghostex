@@ -24,6 +24,7 @@ pub(crate) mod window;
 
 pub(crate) mod app_new;
 pub(crate) mod browser_pane;
+pub(crate) mod browser_parked_runtime;
 pub(crate) mod delayed_send;
 pub(crate) mod drag_resize;
 pub(crate) mod focus;

@@ -569,7 +569,7 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:GPUICommandPalette 2026-06-27-08:17:
-        Shared SidebarApp and command-palette hotkey rows reach GPUI through the CEF sidebar runtime, not the native WKScriptMessage path. Parse only the fixed action-id selector and feed the existing Rust `runGhostexHotkeyAction` dispatcher so Open Commands Panel opens/focuses without collapsing and focused-pane, Settings, and modal routes do not accept renderer-owned sessions, paths, commands, URLs, or launch metadata.
+        Shared SidebarApp and command-palette hotkey rows reach GPUI through the CEF sidebar runtime, not the native WKScriptMessage path. Parse only the fixed action-id selector and feed the existing Rust `runGhostexHotkeyAction` dispatcher so Open Commands Panel uses the shared open/focus/minimize route and focused-pane, Settings, and modal routes do not accept renderer-owned sessions, paths, commands, URLs, or launch metadata.
         */
         let Ok(action_id) = gpui_sidebar_ghostex_hotkey_action_from_json(payload) else {
             return;
@@ -913,22 +913,43 @@ impl GhostexGpuiApp {
             &self.agents_send_when_stopped_watchers,
             SystemTime::now(),
         );
-        if let Some(old_project_id) = self.agents_workspace_project_id.take() {
-            self.parked_agents_workspaces_by_project
-                .insert(old_project_id.clone(), outgoing_state);
-            self.parked_agents_terminal_runtimes_by_project.insert(
-                old_project_id,
-                ParkedAgentsTerminalRuntime {
-                    runtime_sessions: std::mem::take(&mut self.agents_terminal_runtime_sessions),
-                    gpui_engine_terminals: std::mem::take(&mut self.agents_gpui_engine_terminals),
-                    runtime_osc_states: std::mem::take(
-                        &mut self.agents_terminal_runtime_osc_states,
-                    ),
-                    gpui_engine_close_confirms: std::mem::take(
-                        &mut self.agents_gpui_engine_close_confirms,
-                    ),
-                },
-            );
+        /*
+        CDXC:GPUISessionChatSurfacePerProject 2026-08-26:
+        Chat pages park with the terminal owners rather than being destroyed and
+        reloaded, so the outgoing project's Chromium browsers survive the switch.
+        The bundle is taken before the ownership branch below because it also
+        clears the switch-scoped chat state that must go regardless of whether
+        there is a project id to park it under.
+        */
+        let parked_chat_runtime = self.park_all_agents_chat_surfaces(cx);
+        match self.agents_workspace_project_id.take() {
+            Some(old_project_id) => {
+                self.parked_agents_workspaces_by_project
+                    .insert(old_project_id.clone(), outgoing_state);
+                self.parked_agents_terminal_runtimes_by_project.insert(
+                    old_project_id.clone(),
+                    ParkedAgentsTerminalRuntime {
+                        runtime_sessions: std::mem::take(
+                            &mut self.agents_terminal_runtime_sessions,
+                        ),
+                        gpui_engine_terminals: std::mem::take(
+                            &mut self.agents_gpui_engine_terminals,
+                        ),
+                        runtime_osc_states: std::mem::take(
+                            &mut self.agents_terminal_runtime_osc_states,
+                        ),
+                        gpui_engine_close_confirms: std::mem::take(
+                            &mut self.agents_gpui_engine_close_confirms,
+                        ),
+                    },
+                );
+                self.parked_agents_chat_runtimes_by_project
+                    .insert(old_project_id, parked_chat_runtime);
+            }
+            // No owning project id means there is nothing to park these pages
+            // under and nothing that could ever restore them, so they are
+            // destroyed here exactly as the pre-parking teardown did.
+            None => drop(parked_chat_runtime),
         }
 
         let restored_state = new_project_id.as_ref().and_then(|project_id| {
@@ -973,6 +994,18 @@ impl GhostexGpuiApp {
         self.agents_terminal_runtime_osc_states = restored_terminal_runtime.runtime_osc_states;
         self.agents_gpui_engine_close_confirms =
             restored_terminal_runtime.gpui_engine_close_confirms;
+        // The incoming project's chat pages come back with the workspace model
+        // whose session ids they are keyed by, so `ensure_agents_chat_surface`
+        // finds them and the reconcile pass below only has to make them visible.
+        let restored_chat_runtime = self
+            .agents_workspace_project_id
+            .as_ref()
+            .and_then(|project_id| {
+                self.parked_agents_chat_runtimes_by_project
+                    .remove(project_id)
+            })
+            .unwrap_or_default();
+        self.restore_parked_agents_chat_surfaces(restored_chat_runtime, cx);
 
         /*
         Shell, pane, and runtime ids are intentionally project-local. Tear down
@@ -985,7 +1018,6 @@ impl GhostexGpuiApp {
         self.local_workspace_lifecycle_requests.clear();
         self.local_workspace_latest_focus_key = None;
         self.local_app_shot_session_mappings.clear();
-        self.remove_all_agents_chat_surfaces(cx);
         self.agents_chat_mode_sessions = chat_mode_sessions;
         self.agents_terminal_startup_coordinator = AgentsTerminalStartupCoordinator::new();
         self.agents_terminal_surface_host = NativeTerminalSurfaceHost::new();
@@ -1190,9 +1222,32 @@ impl GhostexGpuiApp {
 
         self.browser_tabs_project_epoch = self.browser_tabs_project_epoch.wrapping_add(1);
 
+        /*
+        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        Browser ids are project-local, so the live surface/input maps can only
+        describe one project at a time — but that is a reason to move the
+        outgoing project's runtime out of the way, not to destroy it. The whole
+        bundle parks under the outgoing project id (hidden, still loaded) and
+        the incoming project's bundle, if it has one, becomes live again, so a
+        project switch no longer sleeps and reloads every browser tab of the
+        project the user just left.
+
+        The projectless pre-project model is the one exception: it has no key to
+        park under and its model is dropped here, so its pages go with it.
+        */
         if let Some(old_project_id) = self.browser_tabs_project_id.take() {
             self.parked_browser_tabs_by_project
-                .insert(old_project_id, self.browser_tabs.clone());
+                .insert(old_project_id.clone(), self.browser_tabs.clone());
+            let parked_runtime = self.park_all_browser_surfaces(cx);
+            if parked_runtime.holds_runtime_state() {
+                self.parked_browser_runtimes_by_project
+                    .insert(old_project_id, parked_runtime);
+            } else {
+                self.parked_browser_runtimes_by_project
+                    .remove(&old_project_id);
+            }
+        } else {
+            self.drop_all_browser_surfaces(cx);
         }
         self.browser_tabs = new_project_id
             .as_ref()
@@ -1202,22 +1257,22 @@ impl GhostexGpuiApp {
                     self.browser_profiles.active_profile_id(),
                 )
             });
+        match new_project_id
+            .as_ref()
+            .and_then(|project_id| self.parked_browser_runtimes_by_project.remove(project_id))
+        {
+            Some(parked_runtime) => self.restore_parked_browser_surfaces(parked_runtime),
+            // A model that never had a parked runtime starts a fresh runtime
+            // identity, so no surface parked under an older one can claim it.
+            None => self.browser_tabs_runtime_key = self.browser_tabs_project_epoch,
+        }
         self.browser_tabs_project_id = new_project_id;
         self.browser_url = self.browser_tabs.active_address_value();
 
-        // Browser ids are project-local. Tear down only the outgoing project's
-        // exact CEF/input runtime before the incoming model can reuse those ids.
-        for surface in self.browser_surfaces.values() {
-            surface.update(cx, |surface, _cx| surface.set_visible(false));
-        }
-        self.browser_surfaces.clear();
-        self.browser_address_inputs.clear();
-        self.browser_address_input_subscriptions.clear();
-        self.browser_address_input_editing.clear();
-        self.browser_find_states.clear();
+        // A pending media prompt belongs to the page that raised it and cannot
+        // be answered from another project's workarea; dropping it releases the
+        // page's `getUserMedia()` promise instead of leaving it hanging.
         self.browser_media_permission_prompts.clear();
-        self.browser_find_inputs.clear();
-        self.browser_find_input_subscriptions.clear();
         self.browser_tab_scroll_handles.clear();
         self.browser_leaf_layout_bounds.clear();
         self.browser_split_layout_metrics.clear();
@@ -1237,6 +1292,14 @@ impl GhostexGpuiApp {
                 self.browser_tabs.focused_pane,
             ));
         }
+        /*
+        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        Restored surfaces come back hidden, because parking hid them. Run the
+        normal visibility gate so the incoming project's rendered tabs are shown
+        again by the one owner of that decision, instead of leaving the Browser
+        workarea black until the next unrelated repaint.
+        */
+        self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         cx.notify();
     }
@@ -1422,15 +1485,15 @@ impl GhostexGpuiApp {
     ) {
         /*
         The Browser home target is the current project's primary remote web
-        page, resolved by the same origin-to-web-URL helper used for fresh
-        project Browser tabs. Navigate the selected tab through the normal
+        page, carried by the active-project snapshot from the owning gxserver
+        machine. Navigate the selected tab through the normal
         address commit path so CEF history, tab metadata, focus, and shell
         persistence all stay under their existing owners.
         */
         let home_url = browser_shell_default_url(
             self.latest_sidebar_project_snapshot
                 .as_ref()
-                .and_then(|snapshot| snapshot.in_memory_project_path.as_deref()),
+                .and_then(|snapshot| snapshot.browser_home_url.as_deref()),
         );
         self.browser_address_input_editing.remove(&pane_id);
         self.pending_browser_address_focus = None;
@@ -1817,7 +1880,7 @@ impl GhostexGpuiApp {
         let default_url = browser_shell_default_url(
             self.latest_sidebar_project_snapshot
                 .as_ref()
-                .and_then(|snapshot| snapshot.in_memory_project_path.as_deref()),
+                .and_then(|snapshot| snapshot.browser_home_url.as_deref()),
         );
         let created_tab_id = self.browser_tabs.add_loaded_popup_tab(
             default_url.clone(),
@@ -1890,7 +1953,7 @@ impl GhostexGpuiApp {
         let default_url = browser_shell_default_url(
             self.latest_sidebar_project_snapshot
                 .as_ref()
-                .and_then(|snapshot| snapshot.in_memory_project_path.as_deref()),
+                .and_then(|snapshot| snapshot.browser_home_url.as_deref()),
         );
         if let Some(created_tab_id) = self.browser_tabs.split_new_loaded_tab_to_pane(
             pane_id,
@@ -2072,7 +2135,24 @@ impl GhostexGpuiApp {
             return false;
         }
 
+        if mode != TitlebarMode::Agents {
+            self.terminal_agent_bar_companion_focus_return = None;
+        }
+
         let previous_mode = self.active_mode;
+        /*
+        CDXC:AnonymousAnalytics 2026-08-26:
+        Every workarea switch route — center tabs, the compact titlebar menu,
+        Option+1..5, the command palette, and the sidebar focus helpers — funnels
+        through set_active_mode, so this is the one place a `surface.opened` ping
+        belongs. Re-selecting the current workarea is not a switch, and only the
+        fixed spec enum is reportable (extension workareas send nothing).
+        */
+        if previous_mode != mode
+            && let Some(surface) = gpui_telemetry_surface_for_titlebar_mode(mode)
+        {
+            record_gpui_surface_opened_telemetry(surface, cx.background_executor());
+        }
         let previous_shell_focus = self.shell_focus;
         let previous_first_responder_target = self.first_responder_target;
         self.active_mode = mode;
@@ -2163,14 +2243,14 @@ impl GhostexGpuiApp {
         /*
         CDXC:GPUIProjectBrowserDefault 2026-07-14:
         A project with no saved Browser tabs starts at its repository origin's
-        web URL when available. Reuse the same repository-remote resolver as
-        explicit new-tab actions, and mutate only the single address-only
+        web URL when available. Reuse the active project's machine-scoped
+        Browser home URL, and mutate only the single address-only
         placeholder so existing project tabs are never replaced.
         */
         let default_url = browser_shell_default_url(
             self.latest_sidebar_project_snapshot
                 .as_ref()
-                .and_then(|snapshot| snapshot.in_memory_project_path.as_deref()),
+                .and_then(|snapshot| snapshot.browser_home_url.as_deref()),
         );
         let pane_id = self.browser_tabs.focused_pane;
         if self

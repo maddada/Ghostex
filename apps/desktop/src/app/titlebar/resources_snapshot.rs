@@ -58,12 +58,22 @@ impl GhostexGpuiApp {
         } else {
             HashSet::new()
         };
-        sleep_all_session_count += self.browser_surfaces.len();
+        /*
+        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        The sleep counts are accounting for every page this shell keeps loaded,
+        not just the mounted project's. Inactive projects now park their browser
+        pages instead of losing them on a project switch, so those pages are
+        real sleep candidates here — and every one of them is unprotected,
+        because only the mounted project can have rendered tabs.
+        */
+        let parked_browser_surface_count = self.parked_browser_surface_count();
+        sleep_all_session_count += self.browser_surfaces.len() + parked_browser_surface_count;
         inactive_terminal_sleep_count += self
             .browser_surfaces
             .keys()
             .filter(|tab_id| !protected_browser_tab_ids.contains(tab_id))
-            .count();
+            .count()
+            + parked_browser_surface_count;
 
         for session in &self.agents_workspace.terminal_sessions {
             let title = self.agents_workspace_tab_display_title(session.id);

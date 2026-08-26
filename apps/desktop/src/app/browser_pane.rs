@@ -680,6 +680,16 @@ impl GhostexGpuiApp {
         Some(surface)
     }
 
+    /*
+    CDXC:GPUIBrowserProjectParking 2026-08-26:
+    A surface's async CEF callbacks carry the runtime key of the browser tab
+    model that was live when the surface was created, because BrowserTabIds are
+    project-local and would otherwise land on whichever project holds the same
+    id when the callback arrives. The key resolves to that exact model whether
+    it is still mounted or parked behind another project, so a parked page keeps
+    updating its own tabs instead of being permanently invalidated (which would
+    leave restored tabs with a dead title, favicon, and load state forever).
+    */
     pub(crate) fn browser_popup_open_handler(
         &self,
         cx: &mut gpui::Context<Self>,
@@ -687,7 +697,7 @@ impl GhostexGpuiApp {
         let app = cx.entity().downgrade();
         let async_cx = cx.to_async();
         let foreground = cx.foreground_executor().clone();
-        let project_epoch = self.browser_tabs_project_epoch;
+        let runtime_key = self.browser_tabs_runtime_key;
 
         Rc::new(
             move |requested_url: String, placement: cef::BrowserPopupPlacement| {
@@ -696,10 +706,25 @@ impl GhostexGpuiApp {
                 foreground
                     .spawn(async move {
                         let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                            if this.browser_tabs_project_epoch != project_epoch {
-                                return;
+                            match this.browser_runtime_owner_for_key(runtime_key) {
+                                Some(BrowserRuntimeOwner::Live) => {
+                                    this.open_browser_popup_tab(
+                                        requested_url,
+                                        placement,
+                                        window,
+                                        cx,
+                                    );
+                                }
+                                Some(BrowserRuntimeOwner::Parked(project_id)) => {
+                                    this.open_parked_browser_popup_tab(
+                                        &project_id,
+                                        requested_url,
+                                        placement,
+                                        cx,
+                                    );
+                                }
+                                None => {}
                             }
-                            this.open_browser_popup_tab(requested_url, placement, window, cx);
                         });
                     })
                     .detach();
@@ -715,7 +740,7 @@ impl GhostexGpuiApp {
         let app = cx.entity().downgrade();
         let async_cx = cx.to_async();
         let foreground = cx.foreground_executor().clone();
-        let project_epoch = self.browser_tabs_project_epoch;
+        let runtime_key = self.browser_tabs_runtime_key;
 
         Rc::new(move |event: cef::BrowserPageMetadataEvent| {
             let app = app.clone();
@@ -723,10 +748,20 @@ impl GhostexGpuiApp {
             foreground
                 .spawn(async move {
                     let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        if this.browser_tabs_project_epoch != project_epoch {
-                            return;
+                        match this.browser_runtime_owner_for_key(runtime_key) {
+                            Some(BrowserRuntimeOwner::Live) => {
+                                this.handle_browser_page_metadata_event(tab_id, event, window, cx);
+                            }
+                            Some(BrowserRuntimeOwner::Parked(project_id)) => {
+                                this.handle_parked_browser_page_metadata_event(
+                                    &project_id,
+                                    tab_id,
+                                    event,
+                                    cx,
+                                );
+                            }
+                            None => {}
                         }
-                        this.handle_browser_page_metadata_event(tab_id, event, window, cx);
                     });
                 })
                 .detach();
@@ -742,7 +777,7 @@ impl GhostexGpuiApp {
         let app = cx.entity().downgrade();
         let async_cx = cx.to_async();
         let foreground = cx.foreground_executor().clone();
-        let project_epoch = self.browser_tabs_project_epoch;
+        let runtime_key = self.browser_tabs_runtime_key;
 
         Rc::new(move |request: cef::BrowserMediaAccessRequest| {
             let app = app.clone();
@@ -751,11 +786,17 @@ impl GhostexGpuiApp {
                 .spawn(async move {
                     /*
                     An unanswered request cancels itself when dropped, so a
-                    stale project epoch or a gone app entity releases the
-                    page's `getUserMedia()` promise instead of hanging it.
+                    request from a page whose project is not mounted, or a gone
+                    app entity, releases the page's `getUserMedia()` promise
+                    instead of hanging it. A camera/microphone prompt is an
+                    answer the user gives in the Browser workarea, so it is only
+                    raised for the project that owns that workarea right now.
                     */
                     let _ = app.update(&mut async_cx, |this, cx| {
-                        if this.browser_tabs_project_epoch != project_epoch {
+                        if !matches!(
+                            this.browser_runtime_owner_for_key(runtime_key),
+                            Some(BrowserRuntimeOwner::Live)
+                        ) {
                             return;
                         }
                         this.handle_browser_media_access_request(tab_id, profile_id, request, cx);

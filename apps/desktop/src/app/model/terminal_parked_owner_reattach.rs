@@ -509,6 +509,7 @@ pub(crate) fn park_agents_terminal_runtime_owner_before_host_detach(
         return false;
     };
     surface_owner.set_focus(false);
+    surface_owner.set_occlusion(false);
     terminal_native_view::set_app_owned_terminal_host_native_view_visible(
         Some(&host_native_view),
         false,
@@ -590,6 +591,7 @@ pub(crate) fn park_agents_terminal_runtime_owner_for_group_move(
         return false;
     };
     surface_owner.set_focus(false);
+    surface_owner.set_occlusion(false);
     terminal_native_view::set_app_owned_terminal_host_native_view_visible(
         Some(&host_native_view),
         false,
@@ -691,7 +693,8 @@ pub(crate) fn transfer_agents_terminal_parked_runtime_owner_reattach(
         }
     }
 
-    let (host_native_view, surface_owner) = parked_owner.into_running_owners(plan);
+    let (host_native_view, mut surface_owner) = parked_owner.into_running_owners(plan);
+    surface_owner.set_occlusion(true);
     running_mount_slot_bounds.insert(plan.current_mount_slot_id, plan.bounds);
     running_host_native_views.insert(plan.current_mount_slot_id, host_native_view);
     running_surface_owners.insert(plan.current_mount_slot_id, surface_owner);
@@ -807,6 +810,7 @@ pub(crate) fn park_command_terminal_runtime_owner_before_host_detach(
         return false;
     };
     surface_owner.set_focus(false);
+    surface_owner.set_occlusion(false);
     terminal_native_view::set_app_owned_terminal_host_native_view_visible(
         Some(&host_native_view),
         false,
@@ -942,7 +946,8 @@ pub(crate) fn transfer_command_terminal_parked_runtime_owner_reattach(
     let Some(parked_owner) = parked_runtime_owners.remove(&plan.runtime_session_id) else {
         return false;
     };
-    let (host_native_view, surface_owner) = parked_owner.into_running_owners(plan);
+    let (host_native_view, mut surface_owner) = parked_owner.into_running_owners(plan);
+    surface_owner.set_occlusion(true);
     running_mount_slot_bounds.insert(plan.current_mount_slot_id, plan.bounds);
     running_host_native_views.insert(plan.current_mount_slot_id, host_native_view);
     running_surface_owners.insert(plan.current_mount_slot_id, surface_owner);
