@@ -1,4 +1,5 @@
 use super::*;
+use crate::agents::{repair_session_working_directory_title, LifecycleParams};
 
 pub(crate) fn sync_zmx_provider_existence(
     state: &AppState,
@@ -305,15 +306,30 @@ pub(crate) fn sync_session_state_sidecars(
     _reason: &str,
 ) -> std::result::Result<(), DomainStateError> {
     for session in repository.list_sessions(project_id)? {
-        if !should_sync_session_state_sidecar(&session) {
-            continue;
-        }
         let Some(session_project_id) = read_session_text(&session, "projectId") else {
             continue;
         };
         let Some(session_id) = read_session_text(&session, "sessionId") else {
             continue;
         };
+        let lifecycle = LifecycleParams {
+            project_id: session_project_id.clone(),
+            session_id: session_id.clone(),
+        };
+        let (session, repaired_working_directory_title) =
+            repair_session_working_directory_title(repository, &lifecycle, session)?;
+        if repaired_working_directory_title {
+            schedule_presentation_session_delta(
+                state,
+                db,
+                repository,
+                &session_project_id,
+                &session_id,
+            )?;
+        }
+        if !should_sync_session_state_sidecar(&session) {
+            continue;
+        }
         let Some(sidecar) =
             read_session_state_sidecar(&state.paths, &session_project_id, &session_id)
         else {

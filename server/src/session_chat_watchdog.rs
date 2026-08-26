@@ -884,8 +884,8 @@ it. This one answers the sharper question "was something ELSE submitted in its
 place?", which is what actually happened in the incident this exists for: the
 send's trailing Enter committed the composer before the pasted text had been
 ingested into it, so the agent recorded an EMPTY user turn, started answering it,
-and the message stayed behind in the composer until a later send's
-draft-preservation step stashed it into Saved Prompts.
+and the message stayed behind in the composer until another terminal write
+replaced or cleared it.
 
 It cannot reuse the decoders. Both of them drop a contentless user row on the
 floor (`claude_content_blocks` returns no blocks for an empty string, and

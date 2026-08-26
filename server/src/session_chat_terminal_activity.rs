@@ -9,10 +9,12 @@ works:
 It also reports a small set of meaningful states under other markers:
 
     ✻ Waiting for 1 dynamic workflow to finish
+    ✻ Cooked for 46s · 1 shell still running
 
-The client keeps each changed value as a transient reasoning row, then lets the
-authoritative transcript replace it when JSONL catches up. Claude's compaction
-is the structured-progress variant:
+The client keeps each general status change as a transient reasoning row, then
+lets the authoritative transcript replace it when JSONL catches up. A running
+shell stays as one bottom activity row only while it remains on screen.
+Claude's compaction is the structured-progress variant:
 
     ❯ /compact
 
@@ -54,6 +56,9 @@ pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
 
 /// Claude Code's current assistant status, not yet flushed to transcript JSONL.
 pub const SESSION_CHAT_ACTIVITY_CLAUDE_STATUS: &str = "claude-status";
+
+/// A Claude Code background shell that remains live after the assistant turn.
+pub const SESSION_CHAT_ACTIVITY_SHELLS_RUNNING: &str = "shells-running";
 
 /// Star frames Claude may use for allowlisted non-general status rows. Merely
 /// having one of these markers is not sufficient evidence: custom working
@@ -119,7 +124,18 @@ impl SessionChatTerminalActivity {
     */
     pub fn carry_forward_detected_at(&mut self, previous: Option<&SessionChatTerminalActivity>) {
         if let Some(previous) = previous.filter(|previous| self.same_activity(Some(previous))) {
+            // Once a run has an elapsed baseline, keep that first sample with
+            // its first timestamp. The client advances it locally; accepting
+            // every later CLI clock sample as well would count the same time
+            // twice. If elapsed first APPEARS later, that later sample needs
+            // its own timestamp and becomes the baseline instead.
+            if previous.elapsed_seconds.is_none() && self.elapsed_seconds.is_some() {
+                return;
+            }
             self.detected_at = previous.detected_at.clone();
+            if self.elapsed_seconds.is_some() {
+                self.elapsed_seconds = previous.elapsed_seconds;
+            }
         }
     }
 
@@ -135,6 +151,13 @@ impl SessionChatTerminalActivity {
         }
         map.insert("detectedAt".to_string(), json!(self.detected_at));
         Value::Object(map)
+    }
+
+    /// Most terminal activity is stale scrollback once the main turn becomes
+    /// ready. A background shell is the exception: Claude reports it precisely
+    /// because that work remains live after the assistant turn has finished.
+    pub fn remains_live_when_ready(&self) -> bool {
+        self.kind == SESSION_CHAT_ACTIVITY_SHELLS_RUNNING
     }
 }
 
@@ -240,6 +263,57 @@ fn is_dynamic_workflow_wait_label(label: &str) -> bool {
         || (count > 1 && suffix == "dynamic workflows to finish")
 }
 
+/// Claude picks a playful action word for this row (`Cooked`, `Crunched`,
+/// `Sautéed`, ...), so the stable evidence is the rest of its whole grammar:
+///
+///     <one alphabetic word> for <duration> · <count> shell(s) still running
+///     <one alphabetic word> for <duration> · done <time> · <count> shell(s) still running
+///
+/// The first shape is an advancing clock, so move it into progress metadata.
+/// In the second shape Claude has frozen that duration and added a completion
+/// timestamp; keep both in the stable label rather than making a finished
+/// duration tick forward in the client.
+fn running_shells_activity(label: &str) -> Option<SessionChatTerminalActivity> {
+    let (action, rest) = label.split_once(" for ")?;
+    if action.is_empty() || !action.chars().all(char::is_alphabetic) {
+        return None;
+    }
+    let (timing, shell_status) = rest.rsplit_once(" · ")?;
+    let (elapsed, completed_at) = match timing.split_once(" · ") {
+        Some((elapsed, completed_at)) if completed_at.trim().starts_with("done ") => {
+            (elapsed, Some(completed_at.trim()))
+        }
+        Some(_) => return None,
+        None => (timing, None),
+    };
+    let elapsed_seconds = parse_elapsed_seconds(elapsed.trim())?;
+    let (count, suffix) = shell_status.trim().split_once(' ')?;
+    let count = count.parse::<u64>().ok()?;
+    let valid_suffix = (count == 1 && suffix == "shell still running")
+        || (count > 1 && suffix == "shells still running");
+    if !valid_suffix {
+        return None;
+    }
+
+    let activity = if let Some(completed_at) = completed_at {
+        SessionChatTerminalActivity::new(
+            SESSION_CHAT_ACTIVITY_SHELLS_RUNNING,
+            format!(
+                "{action} for {} · {completed_at} · {count} {suffix}",
+                elapsed.trim()
+            ),
+        )
+    } else {
+        let mut activity = SessionChatTerminalActivity::new(
+            SESSION_CHAT_ACTIVITY_SHELLS_RUNNING,
+            format!("{action} · {count} {suffix}"),
+        );
+        activity.elapsed_seconds = Some(elapsed_seconds);
+        activity
+    };
+    Some(activity)
+}
+
 /// `49%` anywhere on the line (the bar glyphs around it are ignored).
 fn parse_percent(line: &str) -> Option<u8> {
     for token in line.split_whitespace() {
@@ -289,7 +363,11 @@ fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
     if !rest.chars().next().is_some_and(char::is_whitespace) {
         return None;
     }
-    let (label, elapsed_seconds) = stable_status_label(rest.trim());
+    let raw_label = rest.trim();
+    if let Some(activity) = running_shells_activity(raw_label) {
+        return Some(activity);
+    }
+    let (label, elapsed_seconds) = stable_status_label(raw_label);
     if label.is_empty() {
         return None;
     }

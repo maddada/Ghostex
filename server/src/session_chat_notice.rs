@@ -1416,9 +1416,8 @@ working" suppression: the working turn is the SYMPTOM, not proof of delivery.
 
 The wording lives here, with the rest of the catalog, and says the two things
 the user cannot see from chat: the message was not delivered, and where the text
-went. It did not vanish — it stays in the terminal's composer, and the moment a
-later send runs its draft-preservation step that leftover text is stashed, which
-surfaces in the UI as Saved Prompts.
+went. It stays in the terminal's composer until the user opens Terminal view or
+a later Chat send deliberately clears that hidden input before pasting.
 */
 pub fn session_chat_delivery_mismatch_notice(
     submitted_empty: bool,
@@ -1436,7 +1435,7 @@ pub fn session_chat_delivery_mismatch_notice(
         "Your message was not delivered to the agent",
     )
     .with_detail(format!(
-        "The agent recorded {recorded} where your message should be, and started answering that instead, so your message never reached it. Your text is most likely still sitting unsent in this session's terminal composer. If you have sent another message since, Ghostex preserved that leftover composer text as a draft — look for it in Saved Prompts."
+        "The agent recorded {recorded} where your message should be, and started answering that instead, so your message never reached it. Your text may still be sitting unsent in this session's terminal composer if you have not sent another Chat message since."
     ))
     .with_screen_tail(screen_tail)
     .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(

@@ -258,6 +258,49 @@ pub(crate) struct TerminalTitleIngestOutput {
     pub(crate) schedule_presentation_delta: bool,
 }
 
+pub(crate) fn repair_session_working_directory_title(
+    repository: &DomainRepository<'_>,
+    lifecycle: &LifecycleParams,
+    mut session: Value,
+) -> Result<(Value, bool), DomainStateError> {
+    let mut changed = false;
+    if read_text_value(&session, "cwd").is_none() {
+        let project_path = repository
+            .get_project(&lifecycle.project_id)?
+            .as_ref()
+            .and_then(|project| read_text_value(project, "path"));
+        if let Some(project_path) = project_path {
+            let mut update = lifecycle_update(lifecycle);
+            update.insert("cwd".to_string(), json!(project_path));
+            session = repository.update_session(&update)?;
+            changed = true;
+        }
+    }
+
+    let mut runtime_settings = object_field(&session, "runtimeSettings");
+    let title_came_only_from_terminal =
+        read_text_from_map(&runtime_settings, "titleSource").as_deref() == Some("terminal-auto")
+            && read_text_from_map(&runtime_settings, "titleMetadataSource").is_none();
+    if title_came_only_from_terminal && is_terminal_auto_working_directory_title(&session) {
+        let default_title = if session.get("kind").and_then(Value::as_str) == Some("agent") {
+            create_agent_session_default_title(None, session.get("agentId").and_then(Value::as_str))
+        } else {
+            "Terminal Session".to_string()
+        };
+        runtime_settings.insert("titleSource".to_string(), json!("placeholder"));
+        let mut update = lifecycle_update(lifecycle);
+        update.insert(
+            "runtimeSettings".to_string(),
+            Value::Object(runtime_settings),
+        );
+        update.insert("title".to_string(), json!(default_title));
+        session = repository.update_session(&update)?;
+        changed = true;
+    }
+
+    Ok((session, changed))
+}
+
 #[cfg(test)]
 pub(crate) fn ingest_terminal_title_event(
     repository: &DomainRepository<'_>,
@@ -274,6 +317,8 @@ pub(crate) fn ingest_terminal_title_event_with_home(
     home_dir: &Path,
 ) -> Result<TerminalTitleIngestOutput, DomainStateError> {
     let current = require_session(repository, lifecycle)?;
+    let (current, repaired_working_directory_title) =
+        repair_session_working_directory_title(repository, lifecycle, current)?;
     let raw_title = read_text(params, "rawTitle");
     let visible_title = raw_title.as_deref().and_then(get_visible_terminal_title);
     let title_detected_agent = raw_title
@@ -305,7 +350,8 @@ pub(crate) fn ingest_terminal_title_event_with_home(
     if let Some(agent_session_id) = captured_agent_session_id.clone() {
         runtime_settings.insert("agentSessionId".to_string(), json!(agent_session_id));
     }
-    let mut decision_changed = captured_agent_session_id.is_some();
+    let mut decision_changed =
+        captured_agent_session_id.is_some() || repaired_working_directory_title;
     let mut reason = terminal_title_skip_reason(
         &current,
         params,

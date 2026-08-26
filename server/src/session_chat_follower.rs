@@ -1048,10 +1048,16 @@ pub async fn run_session_chat_follower(
         both exist, so approvals and richer hook payloads are unaffected.
         */
         let effective_prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt);
-        // A `⏺` row remains in terminal scrollback after Claude stops. It is
-        // live status only while the agent is working, so the ready transition
-        // must clear it even before the next screen sample.
-        if !live.working {
+        let became_ready = published_state_valid && published_working && !live.working;
+        // A `⏺` row remains in terminal scrollback after Claude stops. Clear
+        // that stale status on the ready transition, but retain Claude's
+        // explicit background-shell activity: those shells outlive the main
+        // turn by definition and the screen row is their liveness signal.
+        if !live.working
+            && !published_activity
+                .as_ref()
+                .is_some_and(|activity| activity.remains_live_when_ready())
+        {
             published_activity = None;
         }
         if !published_state_valid
@@ -1130,7 +1136,9 @@ pub async fn run_session_chat_follower(
           - the agent working with no activity known ⇒ a middle cadence, which
             is what discovers an AUTOMATIC compaction (nothing announces it,
             and the user never typed a command we could hang a re-detect on);
-          - idle ⇒ the original 30s.
+          - idle ⇒ the original 30s, plus one immediate probe on the working
+            → ready edge so a newly painted background-shell footer is not
+            hidden until the next steady sample.
 
         Only followed sessions probe at all, and only while a client is
         subscribed, so the faster tiers are bounded by what is actually on
@@ -1143,7 +1151,7 @@ pub async fn run_session_chat_follower(
         } else {
             crate::session_chat_options::SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS
         };
-        let periodic_probe_due = reconcile_ticks % probe_interval_ticks == 0;
+        let periodic_probe_due = became_ready || reconcile_ticks % probe_interval_ticks == 0;
         if published_state_valid
             && config.options_reader.is_some()
             && (startup_probe_due || periodic_probe_due)
@@ -1169,7 +1177,12 @@ pub async fn run_session_chat_follower(
             )
             .await;
             if let Ok(Ok(mut detection)) = probe {
-                if !published_working {
+                if !published_working
+                    && !detection
+                        .activity
+                        .as_ref()
+                        .is_some_and(|activity| activity.remains_live_when_ready())
+                {
                     detection.activity = None;
                 }
                 let options_changed = detection

@@ -978,38 +978,43 @@ fn classify_terminal_title_status(
     if is_opencode_title_prefix(&normalized_title) {
         return None;
     }
-    if let Some(state) =
-        get_cursor_title_state(title, normalized_agent_name.as_deref() == Some("cursor"))
-    {
+    if let Some(agent_name) = normalized_agent_name.as_deref() {
+        let state = match agent_name {
+            "antigravity" => get_antigravity_title_state(title, true),
+            "claude" => get_claude_code_title_state(title, true),
+            "codex" => get_codex_title_state(title, true),
+            "copilot" => get_copilot_title_state(title, true),
+            "cursor" => get_cursor_title_state(title, true),
+            "gemini" => get_gemini_title_state(title, true),
+            "grok" => get_grok_title_state(title),
+            "pi" => get_pi_title_state(title, true),
+            "opencode" => None,
+            _ => None,
+        };
+        return state.map(|state| signal(agent_name, state));
+    }
+    if let Some(state) = get_grok_title_state(title) {
+        return Some(signal("grok", state));
+    }
+    if let Some(state) = get_cursor_title_state(title, false) {
         return Some(signal("cursor", state));
     }
-    if let Some(state) = get_antigravity_title_state(
-        title,
-        normalized_agent_name.as_deref() == Some("antigravity"),
-    ) {
+    if let Some(state) = get_antigravity_title_state(title, false) {
         return Some(signal("antigravity", state));
     }
-    if let Some(state) =
-        get_claude_code_title_state(title, normalized_agent_name.as_deref() == Some("claude"))
-    {
+    if let Some(state) = get_claude_code_title_state(title, false) {
         return Some(signal("claude", state));
     }
-    if let Some(state) = get_pi_title_state(title, normalized_agent_name.as_deref() == Some("pi")) {
+    if let Some(state) = get_pi_title_state(title, false) {
         return Some(signal("pi", state));
     }
-    if let Some(state) =
-        get_codex_title_state(title, normalized_agent_name.as_deref() == Some("codex"))
-    {
+    if let Some(state) = get_codex_title_state(title, false) {
         return Some(signal("codex", state));
     }
-    if let Some(state) =
-        get_gemini_title_state(title, normalized_agent_name.as_deref() == Some("gemini"))
-    {
+    if let Some(state) = get_gemini_title_state(title, false) {
         return Some(signal("gemini", state));
     }
-    if let Some(state) =
-        get_copilot_title_state(title, normalized_agent_name.as_deref() == Some("copilot"))
-    {
+    if let Some(state) = get_copilot_title_state(title, false) {
         return Some(signal("copilot", state));
     }
     None
@@ -1030,19 +1035,31 @@ fn normalize_status_agent_name(value: Option<&str>) -> Option<String> {
         "github copilot" => "copilot",
         "agy" | "antigravity cli" | "antigravity" => "antigravity",
         "cursor cli" | "cursor-agent" | "cursor agent" => "cursor",
+        "grok build" => "grok",
         "open code" => "opencode",
         "\u{03c0}" => "pi",
         other => other,
     };
     matches!(
         mapped,
-        "antigravity" | "claude" | "codex" | "cursor" | "gemini" | "copilot" | "opencode" | "pi"
+        "antigravity"
+            | "claude"
+            | "codex"
+            | "cursor"
+            | "gemini"
+            | "copilot"
+            | "grok"
+            | "opencode"
+            | "pi"
     )
     .then(|| mapped.to_string())
 }
 
 fn requires_observed_title_transitions(agent_name: Option<&str>) -> bool {
-    matches!(agent_name, Some("claude" | "codex" | "cursor" | "pi"))
+    matches!(
+        agent_name,
+        Some("claude" | "codex" | "cursor" | "grok" | "pi")
+    )
 }
 
 fn get_title_activity_window_ms(agent_name: Option<&str>) -> i64 {
@@ -1096,7 +1113,38 @@ fn create_title_activity_signature(
     if signal.map(|signal| signal.agent_name.as_str()) == Some("cursor") {
         signature = replace_cursor_working_suffix(&signature);
     }
+    if signal.map(|signal| signal.agent_name.as_str()) == Some("grok") {
+        signature =
+            crate::presentation::normalize_grok_terminal_title(&signature).unwrap_or(signature);
+    }
     Some(collapse_signature_noise(&signature))
+}
+
+fn get_grok_title_state(title: &str) -> Option<&'static str> {
+    let normalized = normalize_spaces(title);
+    let split_at = normalized
+        .len()
+        .checked_sub(crate::presentation::GROK_TERMINAL_TITLE_SUFFIX.len())?;
+    if !normalized.is_char_boundary(split_at) {
+        return None;
+    }
+    let (body, suffix) = normalized.split_at(split_at);
+    if !suffix.eq_ignore_ascii_case(crate::presentation::GROK_TERMINAL_TITLE_SUFFIX) {
+        return None;
+    }
+
+    let status_stripped =
+        body.trim_start_matches(crate::presentation::is_leading_terminal_title_status_marker);
+    if status_stripped.len() != body.len()
+        || status_stripped
+            .strip_prefix('-')
+            .map(str::trim_start)
+            .is_some_and(|rest| rest.contains(" - "))
+    {
+        Some("working")
+    } else {
+        Some("idle")
+    }
 }
 
 fn get_cursor_title_state(title: &str, allow_agent_hint_match: bool) -> Option<&'static str> {

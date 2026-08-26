@@ -29,7 +29,15 @@ export type {
 
 import type { SessionChatDraft, SessionChatQueuedPrompt } from './session-chat-queue';
 
-export const SESSION_CHAT_SUPPORTED_AGENTS = new Set(['claude', 'openclaude', 'codex', 'grok', 'pi', 'omp']);
+export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
+  'claude',
+  'openclaude',
+  'codex',
+  'grok',
+  'grok-build',
+  'pi',
+  'omp',
+]);
 
 export type SessionChatTranscriptAgent = 'claude' | 'codex' | 'grok' | 'pi';
 
@@ -290,7 +298,9 @@ export interface SessionChatTerminalNotice {
 CDXC:SessionChatTerminalActivity 2026-08-22:
 Live work the agent CLI reports on its terminal before transcript JSONL catches
 up. `claude-status` is the current `⏺ …` assistant line and becomes transient
-reasoning history in the client; `compacting` is structured progress:
+reasoning history in the client; `shells-running` remains one bottom activity
+row only while Claude shows its background-shell status; `compacting` is
+structured progress:
 
     ✶ Compacting conversation… (1m 1s)
       ████████████████████░░░░░░░░░░░░░░░░░░░░ 49%
@@ -306,7 +316,7 @@ numbers move. Carried by read results and by snapshot/replaced/state frames with
 learns the work finished.
 */
 export interface SessionChatTerminalActivity {
-  /** Open set (`compacting`, `claude-status`). */
+  /** Open set (`compacting`, `claude-status`, `shells-running`). */
   kind: string;
   /** Agent-facing wording, without the spinner glyph or the clock. */
   label: string;
@@ -590,6 +600,12 @@ export interface GxserverSaveSessionChatAttachmentParams {
   sessionId: string;
   /** Raw base64 or a full data URL (the data: prefix is tolerated). */
   base64Data: string;
+  /** Creates a dropped directory instead of writing file bytes. */
+  directory?: boolean;
+  /** Stable, sanitized identity shared by one recursively uploaded folder. */
+  uploadId?: string;
+  /** Slash-separated path below the recursively uploaded folder root. */
+  relativePath?: string;
   /** Sanitized into the stored file name; path segments are stripped. */
   suggestedName?: string;
 }

@@ -404,13 +404,17 @@ pub(crate) async fn handle_read_session_chat_http(
             &session_id,
         );
         /*
-        CDXC:SessionChatTerminalActivity 2026-08-22: same capture, same cache,
-        same running-only gate. Omitted means the client clears its progress row.
+        CDXC:SessionChatTerminalActivity 2026-08-22: same capture, same cache.
+        Ordinary activity is live only during the main turn, but Claude's
+        background-shell footer deliberately remains live after that turn is
+        ready. Omitted means the client clears its progress row.
         */
-        if working {
-            if let Some(activity) = detection.activity.as_ref() {
-                result.insert("terminalActivity".to_string(), activity.to_value());
-            }
+        if let Some(activity) = detection
+            .activity
+            .as_ref()
+            .filter(|activity| working || activity.remains_live_when_ready())
+        {
+            result.insert("terminalActivity".to_string(), activity.to_value());
         }
         /*
         CDXC:SessionChatAgentFleet 2026-08-23: same capture, same cache — but no

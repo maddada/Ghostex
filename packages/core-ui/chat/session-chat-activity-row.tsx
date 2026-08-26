@@ -18,11 +18,13 @@ comes off the screen or is not drawn at all.
 */
 
 import { useEffect, useState } from 'react';
+import { IconLoader2 } from '@tabler/icons-react';
 import type { SessionChatTerminalActivity } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
 
 /** How often the local clock re-renders between server samples. */
 const ACTIVITY_CLOCK_TICK_MS = 1_000;
+const SHELLS_RUNNING_ACTIVITY_KIND = 'shells-running';
 
 export function formatSessionChatActivityElapsed(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
@@ -67,6 +69,7 @@ export interface SessionChatActivityRowProps {
 
 export function SessionChatActivityRow({ activity }: SessionChatActivityRowProps) {
   const [now, setNow] = useState(() => Date.now());
+  const shellsRunning = activity.kind === SHELLS_RUNNING_ACTIVITY_KIND;
 
   // Only run a timer when there is a clock to advance.
   const hasClock = activity.elapsedSeconds !== undefined;
@@ -90,7 +93,11 @@ export function SessionChatActivityRow({ activity }: SessionChatActivityRowProps
       role='status'
     >
       <div className='flex min-w-0 items-center gap-2'>
-        <span aria-hidden='true' className='size-1.5 shrink-0 animate-pulse rounded-full bg-primary' />
+        {shellsRunning ? (
+          <IconLoader2 aria-hidden='true' className='size-3.5 shrink-0 animate-spin text-primary' stroke={2} />
+        ) : (
+          <span aria-hidden='true' className='size-1.5 shrink-0 animate-pulse rounded-full bg-primary' />
+        )}
         <span className='min-w-0 flex-1 truncate text-sm text-foreground/90'>{activity.label}</span>
         {elapsed !== null ? (
           <span className='shrink-0 text-xs text-muted-foreground tabular-nums'>
