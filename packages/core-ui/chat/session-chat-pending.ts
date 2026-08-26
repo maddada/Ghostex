@@ -30,6 +30,14 @@ const SKILL_MENTION_LINK = /\[(\$(?:[^\]\\\n]|\\.)+)\]\((?:<(?:[^>\\]|\\.)*>|(?:
 
 const SKILL_CHIP_LINE = /^Skill: (.+)$/;
 
+// A file drag-dropped onto the terminal pane types its shell-escaped path into
+// the agent's input line. A composer send that follows coalesces with that
+// staged text into ONE recorded turn — "<escaped path><composer text>" — while
+// the optimistic echo only carries the composer text. One or more path tokens
+// (absolute, ~, or dot-relative; `\ `-escaped spaces allowed), each optionally
+// followed by whitespace, is the recognizable shape of such staged input.
+const STAGED_PATH_INPUT = /^(?:(?:~|\.{1,2})?\/(?:[^\s\\]|\\.)*\s?)+$/;
+
 /**
  * Daemons that predate the chip-drop decode Codex's skill content chip into a
  * "Skill: name" text block the composer never typed. Drop such a line when the
@@ -309,17 +317,27 @@ function filterPendingSends(
   const embeddedRepresented = new Set<number>();
   stillOpen.forEach((entry, index) => {
     const pendingText = normalizeSessionChatPendingText(entry.text);
-    // Codex's steering bundle separator is preserved in the optimistic text,
-    // while the authoritative turn can prepend an already-staged input. That
-    // makes the pending text an exact suffix rather than an exact whole-turn
-    // match. Only apply this rule to an actual steering bundle so ordinary
-    // suffixes ("fun" in "jokes are fun") cannot consume an echo.
-    if (!pendingText.includes(' --- ')) {
+    if (!pendingText) {
       return;
     }
-    const represented = texts(messagesAfterPendingBoundary(messages, entry)).some(
-      (userText) => userText !== pendingText && userText.endsWith(pendingText)
-    );
+    // The authoritative turn can prepend input that was already staged in the
+    // agent's input line when the send landed, making the pending text an
+    // exact suffix rather than an exact whole-turn match. Two known shapes:
+    // Codex's steering bundle (separator preserved in the optimistic text),
+    // and a drag-dropped file path typed into the terminal before the send.
+    // Anything else stays unconsumed so ordinary suffixes ("fun" in "jokes
+    // are fun") cannot consume an echo.
+    const isSteeringBundle = pendingText.includes(' --- ');
+    const represented = texts(messagesAfterPendingBoundary(messages, entry)).some((userText) => {
+      if (userText === pendingText || !userText.endsWith(pendingText)) {
+        return false;
+      }
+      if (isSteeringBundle) {
+        return true;
+      }
+      const stagedPrefix = userText.slice(0, userText.length - pendingText.length);
+      return STAGED_PATH_INPUT.test(stagedPrefix);
+    });
     if (represented) {
       embeddedRepresented.add(index);
     }
