@@ -1,6 +1,10 @@
 import { IconX } from '@tabler/icons-react';
 import { useRef } from 'react';
-import type { SidebarPreviousSessionItem, SidebarSessionItem } from '../shared/session-grid-contract';
+import {
+  getSidebarSessionLifecycleState,
+  type SidebarPreviousSessionItem,
+  type SidebarSessionItem,
+} from '../shared/session-grid-contract';
 import {
   getSessionCardTitleTooltip,
   OverflowTooltipText,
@@ -13,6 +17,7 @@ import { getEffectiveSessionTag } from './session-tag-ui';
 
 export type SessionHistoryCardProps = {
   displayTimestamp?: string;
+  fileSizeBytes?: number | null;
   isSearchSelected?: boolean;
   onDelete?: () => void;
   onPointerMove?: () => void;
@@ -25,6 +30,7 @@ export type SessionHistoryCardProps = {
 
 export function SessionHistoryCard({
   displayTimestamp,
+  fileSizeBytes,
   isSearchSelected = false,
   onDelete,
   onPointerMove,
@@ -36,6 +42,7 @@ export function SessionHistoryCard({
 }: SessionHistoryCardProps) {
   const aliasHeadingRef = useRef<HTMLDivElement>(null);
   const isClosedSession = 'historyId' in session;
+  const lifecycleState = isClosedSession ? 'closed' : getSidebarSessionLifecycleState(session);
   const canActivate = !isClosedSession || session.isRestorable;
   const displayTitle = getSessionHistoryCardTitle(session);
   const titleDisplaySession =
@@ -66,9 +73,9 @@ export function SessionHistoryCard({
     session.isReloading === true;
   /**
    * CDXC:PreviousSessions 2026-05-13-16:11:
-   * Previous Sessions rows place project metadata on the right, directly
-   * before Last Active, so the title column stays dedicated to the session
-   * title while project context remains visible during scanning.
+   * Previous Sessions rows place project metadata and transcript size on the
+   * right before Last Active, so the title column stays dedicated to the
+   * session title while useful context remains visible during scanning.
    *
    * CDXC:PreviousSessions 2026-06-09-09:41:
    * Tagged Previous Sessions rows must advertise the same leading identity
@@ -91,6 +98,7 @@ export function SessionHistoryCard({
         data-has-project-label={String(Boolean(projectLabel))}
         data-pinned={String(session.isPinned === true)}
         data-running={String(!isClosedSession)}
+        data-session-lifecycle={lifecycleState}
         data-restorable={String(canActivate)}
         data-tagged={String(Boolean(effectiveSessionTag))}
         data-visible='false'
@@ -116,6 +124,7 @@ export function SessionHistoryCard({
           data-focused='false'
           data-pinned={String(session.isPinned === true)}
           data-running={String(!isClosedSession)}
+          data-session-lifecycle={lifecycleState}
           data-search-selected={String(isSearchSelected)}
           data-sidebar-history-id={isClosedSession ? session.historyId : undefined}
           data-quick-access-session-key={quickAccessSessionKey}
@@ -196,17 +205,55 @@ export function SessionHistoryCard({
             showCloseButton={false}
             showLastInteractionTime={true}
             trailingPrefix={
-              projectLabel ? (
-                <div className='session-history-project-label' aria-hidden='true'>
-                  {projectLabel}
+              <>
+                {projectLabel ? (
+                  <div className='session-history-project-label' aria-hidden='true'>
+                    {projectLabel}
+                  </div>
+                ) : (
+                  <div aria-hidden='true' className='session-history-project-label' />
+                )}
+                <div
+                  aria-label={
+                    typeof fileSizeBytes === 'number'
+                      ? `Transcript file size ${fileSizeBytes.toLocaleString()} bytes`
+                      : fileSizeBytes === null
+                        ? 'Transcript file unavailable'
+                        : 'Loading transcript file size'
+                  }
+                  className='session-history-file-size'
+                  data-loading={String(fileSizeBytes === undefined)}
+                  title={typeof fileSizeBytes === 'number' ? `${fileSizeBytes.toLocaleString()} bytes` : undefined}
+                >
+                  {formatSessionFileSize(fileSizeBytes)}
                 </div>
-              ) : null
+              </>
             }
           />
         </article>
       </div>
     </OverflowTooltipText>
   );
+}
+
+function formatSessionFileSize(sizeBytes: number | null | undefined): string {
+  if (sizeBytes === undefined) {
+    return '…';
+  }
+  if (sizeBytes === null) {
+    return '-';
+  }
+  if (sizeBytes < 1_024) {
+    return `${sizeBytes} B`;
+  }
+  const units = ['KB', 'MB', 'GB'];
+  let value = sizeBytes / 1_024;
+  let unitIndex = 0;
+  while (value >= 1_024 && unitIndex < units.length - 1) {
+    value /= 1_024;
+    unitIndex += 1;
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unitIndex]}`;
 }
 
 function getSessionHistoryProjectLabel(session: SidebarPreviousSessionItem): string | undefined {

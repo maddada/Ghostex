@@ -1,7 +1,13 @@
-import { useEffect } from 'react';
-import { ghostexHotkeyTextFromKeyboardEvent } from '../shared/ghostex-hotkeys';
+import { useEffect, useMemo } from 'react';
+import {
+  getghostexHotkeyActionIdForKey,
+  ghostexHotkeyTextFromKeyboardEvent,
+  normalizeghostexHotkeySettings,
+  type ghostexHotkeyActionId,
+} from '../shared/ghostex-hotkeys';
 import { openQuickAccess, type QuickAccessPage } from './app-modal-host-bridge';
 import { formatSidebarHotkeyLabel } from './hotkey-label';
+import { useSidebarStore } from './sidebar-store';
 
 export type QuickAccessTab = QuickAccessPage;
 
@@ -16,11 +22,26 @@ const QUICK_ACCESS_TABS = [
   label: string;
 }>;
 
+const QUICK_ACCESS_HOTKEY_ACTION_TABS: Partial<Record<ghostexHotkeyActionId, QuickAccessTab>> = {
+  openCommandPalette: 'commands',
+  openSessionSearchPalette: 'recentSessions',
+  stashedPrompts: 'savedPrompts',
+};
+
 export function QuickAccessHeader({ activeTab }: { activeTab: QuickAccessTab }) {
+  const hotkeys = useSidebarStore((state) => state.hud.settings?.hotkeys);
+  const normalizedHotkeys = useMemo(() => normalizeghostexHotkeySettings(hotkeys), [hotkeys]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const hotkey = ghostexHotkeyTextFromKeyboardEvent(event);
-      const tab = QUICK_ACCESS_TABS.find((candidate) => candidate.hotkey === hotkey)?.id;
+      if (!hotkey) {
+        return;
+      }
+      const actionId = getghostexHotkeyActionIdForKey(normalizedHotkeys, hotkey);
+      const tab =
+        QUICK_ACCESS_TABS.find((candidate) => candidate.hotkey === hotkey)?.id ??
+        (actionId ? QUICK_ACCESS_HOTKEY_ACTION_TABS[actionId] : undefined);
       if (!tab) {
         return;
       }
@@ -30,7 +51,7 @@ export function QuickAccessHeader({ activeTab }: { activeTab: QuickAccessTab }) 
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, []);
+  }, [normalizedHotkeys]);
 
   return (
     <nav aria-label='Ghostex Quick Access sections' className='quick-access-tabs'>

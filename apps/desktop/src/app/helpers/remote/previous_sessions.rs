@@ -153,6 +153,213 @@ pub(crate) fn gpui_previous_sessions_result_message(
     )
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct GpuiSessionTranscriptSizeTarget {
+    pub(crate) key: String,
+    pub(crate) project_id: String,
+    pub(crate) remote_machine_id: Option<String>,
+    pub(crate) session_id: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GpuiSessionTranscriptSizesRequest {
+    pub(crate) request_id: String,
+    pub(crate) targets: Vec<GpuiSessionTranscriptSizeTarget>,
+}
+
+pub(crate) fn gpui_session_transcript_sizes_request_from_command(
+    command: &serde_json::Map<String, serde_json::Value>,
+) -> GpuiSessionTranscriptSizesRequest {
+    let request_id = command
+        .get("requestId")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let targets = command
+        .get("sessions")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(32)
+        .filter_map(gpui_session_transcript_size_target_from_value)
+        .collect();
+    GpuiSessionTranscriptSizesRequest {
+        request_id,
+        targets,
+    }
+}
+
+fn gpui_session_transcript_size_target_from_value(
+    value: &serde_json::Value,
+) -> Option<GpuiSessionTranscriptSizeTarget> {
+    let row = value.as_object()?;
+    let key = row.get("key")?.as_str()?.trim();
+    if key.is_empty()
+        || key.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS
+        || key.chars().any(char::is_control)
+    {
+        return None;
+    }
+
+    if let Some(history_id) = row.get("historyId").and_then(serde_json::Value::as_str) {
+        if let Some(reference) = gpui_remote_previous_session_reference_from_history_id(history_id)
+        {
+            return Some(GpuiSessionTranscriptSizeTarget {
+                key: key.to_string(),
+                project_id: reference.project_id,
+                remote_machine_id: Some(reference.remote_machine_id),
+                session_id: reference.session_id,
+            });
+        }
+        if let Some((project_id, session_id)) =
+            gpui_previous_session_reference_from_history_id(history_id)
+        {
+            return Some(GpuiSessionTranscriptSizeTarget {
+                key: key.to_string(),
+                project_id: project_id.to_string(),
+                remote_machine_id: None,
+                session_id: session_id.to_string(),
+            });
+        }
+        return None;
+    }
+
+    let routing_id = row.get("routingId")?.as_str()?;
+    let parts = routing_id.split(':').collect::<Vec<_>>();
+    match parts.as_slice() {
+        [project_id, session_id]
+            if gpui_remote_sidebar_project_id_allowed(project_id)
+                && gpui_remote_sidebar_session_id_allowed(session_id) =>
+        {
+            Some(GpuiSessionTranscriptSizeTarget {
+                key: key.to_string(),
+                project_id: (*project_id).to_string(),
+                remote_machine_id: None,
+                session_id: (*session_id).to_string(),
+            })
+        }
+        [remote_machine_id, project_id, session_id]
+            if gpui_remote_sidebar_project_id_allowed(project_id)
+                && gpui_remote_sidebar_session_id_allowed(session_id) =>
+        {
+            let remote_machine_id = gpui_normalize_remote_machine_id(remote_machine_id)?;
+            Some(GpuiSessionTranscriptSizeTarget {
+                key: key.to_string(),
+                project_id: (*project_id).to_string(),
+                remote_machine_id: Some(remote_machine_id),
+                session_id: (*session_id).to_string(),
+            })
+        }
+        _ => None,
+    }
+}
+
+/*
+CDXC:QuickAccessSessionSizes 2026-08-27:
+The modal requests only rows that enter its scroll viewport. Keep that lazy
+batch machine-scoped here: local ids go to the local daemon, remote ids go to
+their owning daemon, and the modal receives only its opaque row key plus byte
+count. Transcript paths never cross the native bridge.
+*/
+pub(crate) fn gpui_session_transcript_sizes_result_message(
+    request: GpuiSessionTranscriptSizesRequest,
+    remote_sources: Vec<GpuiRemotePreviousSessionSource>,
+) -> serde_json::Value {
+    let mut sizes_by_source_and_session = std::collections::HashMap::new();
+    let mut source_ids = request
+        .targets
+        .iter()
+        .map(|target| target.remote_machine_id.clone())
+        .collect::<Vec<_>>();
+    source_ids.sort();
+    source_ids.dedup();
+
+    for source_id in source_ids {
+        let source_targets = request
+            .targets
+            .iter()
+            .filter(|target| target.remote_machine_id == source_id)
+            .collect::<Vec<_>>();
+        let params = serde_json::json!({
+            "sessions": source_targets
+                .iter()
+                .map(|target| serde_json::json!({
+                    "projectId": target.project_id,
+                    "sessionId": target.session_id,
+                }))
+                .collect::<Vec<_>>(),
+        });
+        let result = match source_id.as_deref() {
+            None => gpui_gxserver_rpc_result(
+                "/api/readSessionTranscriptSizes",
+                &params,
+                Duration::from_secs(10),
+            ),
+            Some(remote_machine_id) => remote_sources
+                .iter()
+                .find(|source| source.remote_machine_id == remote_machine_id)
+                .ok_or_else(|| "Remote gxserver is not connected.".to_string())
+                .and_then(|source| {
+                    gpui_remote_gxserver_rpc_result(
+                        &source.target,
+                        "/api/readSessionTranscriptSizes",
+                        &params,
+                        Duration::from_secs(10),
+                    )
+                }),
+        };
+        let Some(rows) = result.ok().and_then(|result| {
+            result
+                .get("sessions")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+        }) else {
+            continue;
+        };
+        for row in rows {
+            let Some(project_id) = row.get("projectId").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            let Some(session_id) = row.get("sessionId").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            let size_bytes = row.get("sizeBytes").and_then(serde_json::Value::as_u64);
+            sizes_by_source_and_session.insert(
+                (
+                    source_id.clone(),
+                    project_id.to_string(),
+                    session_id.to_string(),
+                ),
+                size_bytes,
+            );
+        }
+    }
+
+    let sizes = request
+        .targets
+        .into_iter()
+        .map(|target| {
+            let size_bytes = sizes_by_source_and_session
+                .get(&(
+                    target.remote_machine_id,
+                    target.project_id,
+                    target.session_id,
+                ))
+                .copied()
+                .flatten();
+            serde_json::json!({
+                "key": target.key,
+                "sizeBytes": size_bytes,
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "requestId": request.request_id,
+        "sizes": sizes,
+        "type": "sessionTranscriptSizesResult",
+    })
+}
+
 pub(crate) fn gpui_list_previous_sessions_from_remote_gxserver(
     request: &GpuiPreviousSessionsRequest,
     remote_source: &GpuiRemotePreviousSessionSource,

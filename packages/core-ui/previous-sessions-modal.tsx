@@ -2,14 +2,7 @@ import { IconCheck, IconFilter2 } from '@tabler/icons-react';
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '@/packages/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/packages/components/ui/select';
+import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
 import {
   filterPreviousSessions,
   filterPreviousSessionsModalItems,
@@ -46,6 +39,8 @@ const PREVIOUS_SESSIONS_SCROLL_LOAD_MORE_THRESHOLD_PX = 96;
 const PREVIOUS_SESSIONS_TAG_FILTER_MENU_GAP_PX = 6;
 const PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX = 12;
 const PREVIOUS_SESSIONS_VISIBLE_WINDOW_MS = 14 * 24 * 60 * 60 * 1_000;
+const SESSION_TRANSCRIPT_SIZE_REQUEST_DELAY_MS = 40;
+const SESSION_TRANSCRIPT_SIZE_BATCH_SIZE = 24;
 const SESSIONS_SCOPE_TOGGLE_HOTKEY = 'cmd+shift+c';
 const SESSIONS_SCOPE_ALL_VALUE = 'all';
 const SESSIONS_SCOPE_CLOSED_VALUE = 'closed';
@@ -57,7 +52,7 @@ type QuickAccessSessionItem =
       groupId: string;
       key: string;
       kind: 'open';
-      projectLabel: string;
+      projectLabel?: string;
       session: SidebarSessionItem;
       timestamp: number;
     }
@@ -195,6 +190,7 @@ export function PreviousSessionsModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSessionKey, setSelectedSessionKey] = useState<string | undefined>(undefined);
   const [showClosedSessionsOnly, setShowClosedSessionsOnly] = useState(false);
+  const [sessionFileSizesByKey, setSessionFileSizesByKey] = useState<Record<string, number | null>>({});
   const [visibleHistoryWindowCount, setVisibleHistoryWindowCount] = useState(1);
   const previousSessionsBodyRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -210,6 +206,8 @@ export function PreviousSessionsModal({
   const selectedSessionKeyRef = useRef<string | undefined>(undefined);
   const visibleHistoryAnchorRef = useRef(Date.now());
   const lastHistoryWindowRevealAtRef = useRef(0);
+  const requestedSessionFileSizeKeysRef = useRef(new Set<string>());
+  const sessionFileSizeRequestIdsRef = useRef(new Set<string>());
   const isDataActive = isOpen || shouldPreload;
   const modalPreviousSessions = useMemo(
     () => filterPreviousSessionsModalItems(remotePreviousSessions ?? previousSessions),
@@ -230,7 +228,7 @@ export function PreviousSessionsModal({
               groupId,
               key: `open:${session.sessionId}`,
               kind: 'open' as const,
-              projectLabel: group?.title?.trim() ? `Open · ${group.title.trim()}` : 'Open',
+              projectLabel: group?.title?.trim() || undefined,
               session,
               timestamp: parseSessionTimestamp(session.lastInteractionAt),
             },
@@ -453,11 +451,8 @@ export function PreviousSessionsModal({
     searchInputRef.current?.focus({ preventScroll: true });
   }, []);
 
-  /*
-   * The scope control is a dropdown in the filter row, so the select popup
-   * restores focus to its trigger while closing. Hand typing focus back to the
-   * search field after that restore, matching the hotkey path.
-   */
+  /* Keep typing focus in the search field after choosing either segment,
+   * matching the scope-toggle hotkey path. */
   const selectSessionsScope = useCallback((scopeValue: string) => {
     setShowClosedSessionsOnly(scopeValue === SESSIONS_SCOPE_CLOSED_VALUE);
     window.setTimeout(() => {
@@ -653,6 +648,9 @@ export function PreviousSessionsModal({
       lastSearchSelectionResetQueryRef.current = undefined;
       selectedSessionKeyRef.current = undefined;
       setSelectedSessionKey(undefined);
+      requestedSessionFileSizeKeysRef.current.clear();
+      sessionFileSizeRequestIdsRef.current.clear();
+      setSessionFileSizesByKey({});
     }
   }, [isOpen]);
 
@@ -670,6 +668,23 @@ export function PreviousSessionsModal({
       return;
     }
     const handleMessage = (event: MessageEvent<ExtensionToSidebarMessage>) => {
+      if (event.data.type === 'sessionTranscriptSizesResult') {
+        if (!sessionFileSizeRequestIdsRef.current.delete(event.data.requestId)) {
+          return;
+        }
+        const sizeResults = event.data.sizes;
+        setSessionFileSizesByKey((current) => {
+          const next = { ...current };
+          for (const result of sizeResults) {
+            next[result.key] =
+              typeof result.sizeBytes === 'number' && Number.isFinite(result.sizeBytes) && result.sizeBytes >= 0
+                ? result.sizeBytes
+                : null;
+          }
+          return next;
+        });
+        return;
+      }
       if (event.data.type !== 'previousSessionsResult') {
         return;
       }
@@ -700,6 +715,88 @@ export function PreviousSessionsModal({
       window.removeEventListener('message', handleMessage);
     };
   }, [isDataActive]);
+
+  useEffect(() => {
+    if (!canShowModal) {
+      return;
+    }
+    const body = previousSessionsBodyRef.current;
+    if (!body) {
+      return;
+    }
+
+    const itemsByKey = new Map(visibleSessionItems.map((item) => [item.key, item]));
+    const queuedKeys = new Set<string>();
+    let flushTimeoutId: number | undefined;
+
+    const flushQueuedRequests = () => {
+      flushTimeoutId = undefined;
+      const sessions = [...queuedKeys].flatMap((key) => {
+        queuedKeys.delete(key);
+        if (requestedSessionFileSizeKeysRef.current.has(key)) {
+          return [];
+        }
+        const item = itemsByKey.get(key);
+        if (!item) {
+          return [];
+        }
+        const target =
+          item.kind === 'closed'
+            ? { historyId: item.session.historyId, key }
+            : item.session.sessionRoutingId
+              ? { key, routingId: item.session.sessionRoutingId }
+              : undefined;
+        if (!target) {
+          return [];
+        }
+        requestedSessionFileSizeKeysRef.current.add(key);
+        return [target];
+      });
+      if (sessions.length === 0) {
+        return;
+      }
+      for (let offset = 0; offset < sessions.length; offset += SESSION_TRANSCRIPT_SIZE_BATCH_SIZE) {
+        const requestId = `session-transcript-sizes-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        sessionFileSizeRequestIdsRef.current.add(requestId);
+        vscode.postMessage({
+          requestId,
+          sessions: sessions.slice(offset, offset + SESSION_TRANSCRIPT_SIZE_BATCH_SIZE),
+          type: 'requestSessionTranscriptSizes',
+        });
+      }
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) {
+            continue;
+          }
+          const key = (entry.target as HTMLElement).dataset.quickAccessSessionKey;
+          if (key && !requestedSessionFileSizeKeysRef.current.has(key)) {
+            queuedKeys.add(key);
+          }
+        }
+        if (queuedKeys.size > 0 && flushTimeoutId === undefined) {
+          flushTimeoutId = window.setTimeout(flushQueuedRequests, SESSION_TRANSCRIPT_SIZE_REQUEST_DELAY_MS);
+        }
+      },
+      { root: body, rootMargin: '72px 0px' }
+    );
+    const animationFrame = window.requestAnimationFrame(() => {
+      body
+        .querySelectorAll<HTMLElement>('[data-quick-access-session-key]')
+        .forEach((element) => observer.observe(element));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer.disconnect();
+      if (flushTimeoutId !== undefined) {
+        window.clearTimeout(flushTimeoutId);
+      }
+    };
+  }, [canShowModal, visibleSessionItems, vscode]);
 
   useEffect(() => {
     if (!isDataActive) {
@@ -843,31 +940,20 @@ export function PreviousSessionsModal({
              * in the shared Quick Access filter row.
              */}
             <div className='quick-access-filter-toolbar'>
-              <Select
+              <SegmentedControl
+                aria-label={`Filter sessions by scope (${formatSidebarHotkeyLabel(SESSIONS_SCOPE_TOGGLE_HOTKEY)} toggles closed sessions)`}
+                className='quick-access-session-scope-segmented'
                 value={showClosedSessionsOnly ? SESSIONS_SCOPE_CLOSED_VALUE : SESSIONS_SCOPE_ALL_VALUE}
                 onValueChange={selectSessionsScope}
               >
-                <SelectTrigger
-                  aria-label={`Filter sessions by scope (${formatSidebarHotkeyLabel(SESSIONS_SCOPE_TOGGLE_HOTKEY)} toggles closed sessions)`}
-                  className='quick-access-filter-select quick-access-session-scope-select'
-                  size='sm'
-                >
-                  <SelectValue />
-                  <kbd className='quick-access-session-scope-hint'>
+                <SegmentedControlItem value={SESSIONS_SCOPE_ALL_VALUE}>
+                  All Sessions
+                  <kbd aria-hidden='true' className='quick-access-session-scope-hint'>
                     {formatSidebarHotkeyLabel(SESSIONS_SCOPE_TOGGLE_HOTKEY)}
                   </kbd>
-                </SelectTrigger>
-                <SelectContent
-                  align='start'
-                  alignItemWithTrigger={false}
-                  className='quick-access-filter-select-content'
-                >
-                  <SelectGroup>
-                    <SelectItem value={SESSIONS_SCOPE_ALL_VALUE}>All Sessions</SelectItem>
-                    <SelectItem value={SESSIONS_SCOPE_CLOSED_VALUE}>Closed</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                </SegmentedControlItem>
+                <SegmentedControlItem value={SESSIONS_SCOPE_CLOSED_VALUE}>Closed</SegmentedControlItem>
+              </SegmentedControl>
               <Button
                 aria-expanded={isTagFilterMenuOpen}
                 aria-haspopup='menu'
@@ -890,11 +976,11 @@ export function PreviousSessionsModal({
                   event.preventDefault();
                 }}
                 ref={tagFilterButtonRef}
-                size='icon-sm'
+                size='icon'
                 type='button'
                 variant='outline'
               >
-                <IconFilter2 aria-hidden='true' stroke={1.8} />
+                <IconFilter2 aria-hidden='true' data-icon='inline-start' stroke={1.8} />
               </Button>
             </div>
             {isTagFilterMenuOpen
@@ -993,6 +1079,7 @@ export function PreviousSessionsModal({
                         displayTimestamp={
                           item.kind === 'closed' ? item.session.closedAt : item.session.lastInteractionAt
                         }
+                        fileSizeBytes={sessionFileSizesByKey[item.key]}
                         isSearchSelected={selectedSessionKey === item.key}
                         key={item.key}
                         onDelete={

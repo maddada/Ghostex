@@ -127,6 +127,7 @@ use crate::{
     session_git_status, session_keep_awake, session_lifecycle,
     session_status::{agent_activity_presentation_refresh_delay_ms, iso_from_ms},
     session_transcript_export::handle_export_session_transcript_http,
+    session_transcript_size::handle_read_session_transcript_sizes_http,
     sidebar_hud::{
         create_sidebar_hud_settings_mutation, read_sidebar_hud,
         read_sidebar_hud_commands_by_project, read_sidebar_hud_global_commands,
@@ -2091,6 +2092,10 @@ async fn route_http(
         ),
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
+                .await
+        }
+        "/api/readSessionTranscriptSizes" => {
+            handle_read_session_transcript_sizes_http(&state, endpoint.path, request_id, &body_json)
                 .await
         }
         "/api/createPullRequest" => {

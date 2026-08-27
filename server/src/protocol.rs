@@ -407,6 +407,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/markAutomationRunRead"
         | "/api/searchSessions"
         | "/api/listPreviousSessions"
+        | "/api/readSessionTranscriptSizes"
         | "/api/transitionSession"
         /*
         CDXC:MobileKeepAwake 2026-08-19:

@@ -181,7 +181,7 @@ export type SidebarGhostexCliStatusMessage = {
   manageBeadsSkillPath?: string;
   /**
    * CDXC:Fable56Orchestration 2026-07-04-00:00:
-   * `$ghostex-fable-5.6-orchestration` shipped after existing hosts, so its
+   * `$ghostex-fable-56-orchestration` shipped after existing hosts, so its
    * status fields stay optional and consumers must treat a missing value as
    * not installed instead of requiring every host build to send it.
    */
@@ -326,6 +326,8 @@ export type SidebarSessionItem = {
   activity: 'idle' | 'working' | 'attention';
   activityLabel?: string;
   agentIcon?: SidebarAgentIcon;
+  /** Canonical or configured agent name used by native agent-session controls. */
+  agentName?: string;
   /**
    * CDXC:SessionRestore 2026-05-22-23:59:
    * Agent CLI hook installs capture the stable provider session id separately from Ghostex's visible session id. Sidebar cards carry that value so hover tooltips can show the exact resume target while title-based restore remains a backup.
@@ -1212,6 +1214,15 @@ export type SidebarPreviousSessionsResultMessage = {
   type: 'previousSessionsResult';
 };
 
+export type SidebarSessionTranscriptSizesResultMessage = {
+  requestId: string;
+  sizes: Array<{
+    key: string;
+    sizeBytes?: number | null;
+  }>;
+  type: 'sessionTranscriptSizesResult';
+};
+
 /*
  * CDXC:StashedPrompts 2026-07-29:
  * Answer to `requestStashedPrompts`, correlated by requestId. Rows carry
@@ -1417,6 +1428,7 @@ export type ExtensionToSidebarMessage =
   | SidebarOSIntegrationStatusMessage
   | SidebarShowSessionRenameModalMessage
   | SidebarPreviousSessionsResultMessage
+  | SidebarSessionTranscriptSizesResultMessage
   | SidebarStashedPromptsResultMessage
   | SidebarSaveStashedPromptResultMessage
   | SidebarStashedPromptTagsResultMessage
@@ -1724,9 +1736,6 @@ export type SidebarToExtensionMessage =
     }
   | {
       type: 'toggleCompletionBell';
-    }
-  | {
-      type: 'cycleSessionPersistenceProvider';
     }
   | {
       delta: -1 | 1;
@@ -2513,6 +2522,15 @@ export type SidebarToExtensionMessage =
       type: 'requestPreviousSessions';
     }
   | {
+      requestId: string;
+      sessions: Array<{
+        historyId?: string;
+        key: string;
+        routingId?: string;
+      }>;
+      type: 'requestSessionTranscriptSizes';
+    }
+  | {
       machineId?: string;
       type: 'requestRecentProjects';
     }
@@ -2878,6 +2896,13 @@ export type SidebarToExtensionMessage =
       groupId?: string;
     }
   | {
+      type: 'confirmAgentHookLaunch';
+      agentId: string;
+      groupId?: string;
+      hookAgentId: string;
+      installHooks: boolean;
+    }
+  | {
       type: 'createProjectWorktree';
       agentId?: string;
       baseBranch?: string;
@@ -3012,11 +3037,11 @@ export type SidebarToExtensionMessage =
     }
   /**
    * CDXC:FirstLaunchSetup 2026-08-24:
-   * Onboarding Get Started page. Browse opens a native folder dialog host-side
-   * and the picked absolute path returns to the modal as a
-   * firstLaunchProjectFolderPicked host message. Finish registers `path` as a
-   * project and starts its first session with `agentId` (a sidebar agent id,
-   * or 'terminal' for a plain shell).
+   * The onboarding footer's Add 1st project action opens a native folder dialog
+   * host-side. The picked absolute path returns to the modal as a
+   * firstLaunchProjectFolderPicked host message, then registers `path` as a
+   * project and starts its first session with `agentId` (a sidebar agent id or
+   * 'terminal' for a plain shell).
    */
   | {
       type: 'pickFirstLaunchProjectFolder';

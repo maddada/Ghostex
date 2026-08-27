@@ -203,6 +203,7 @@ export type GxserverEndpointPath =
   | '/api/markAutomationRunRead'
   | '/api/searchSessions'
   | '/api/listPreviousSessions'
+  | '/api/readSessionTranscriptSizes'
   | '/api/transitionSession'
   | '/api/holdSessionsAwake'
   | '/api/sleepSession'
