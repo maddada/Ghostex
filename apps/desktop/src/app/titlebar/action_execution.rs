@@ -208,9 +208,29 @@ impl GhostexGpuiApp {
         Default terminal Action execution is mutually exclusive like native: mounted idle reuse writes the staged wrapper to the exact current command surface and submits Return without enqueueing startup data, while created or unmounted Action tabs receive an exact-slot launch payload for first mount. Do not use a launch payload as fallback for a mounted reused shell.
         */
         self.prepare_hidden_command_pane_open_height_from_shared_settings(window);
-        let selection = self
+        let mut selection = self
             .command_pane
             .select_or_create_action_session(command_id.clone(), title.clone());
+        if matches!(
+            selection.kind,
+            CommandPaneActionSessionSelectionKind::ReusedActive
+        ) {
+            /*
+            CDXC:GPUICommandPaneActions 2026-08-27:
+            Re-running an Action whose owner tab is still working restarts it:
+            close that tab through the direct tab-close path (which kills the
+            gxserver zmx session and the running command with it), then launch
+            a fresh run in a replacement tab, replacing the old select-only
+            no-op. Spam protection lives at the click source via the titlebar
+            quick-action cooldown, not here.
+            */
+            if self.close_command_pane_tab(selection.group_id, selection.session_id, cx) {
+                self.prepare_hidden_command_pane_open_height_from_shared_settings(window);
+                selection = self
+                    .command_pane
+                    .select_or_create_action_session(command_id.clone(), title.clone());
+            }
+        }
         let group_id = selection.group_id;
         let session_id = selection.session_id;
         if matches!(
@@ -219,9 +239,9 @@ impl GhostexGpuiApp {
         ) {
             /*
             CDXC:GPUICommandPaneActions 2026-08-09:
-            A live same-Action command tab is already the requested command
-            pane. Select and reveal it without allocating another owner or
-            writing a second command into the process that is still running.
+            The still-running owner tab could not be closed (or a second live
+            owner claimed the same command id). Never write a second command
+            into a process that is still running: select and reveal only.
             */
             self.refresh_sidebar_command_pane_sessions_if_changed(cx);
             self.scroll_command_group_active_tab(group_id);
@@ -298,6 +318,7 @@ impl GhostexGpuiApp {
             self.focus_command_pane();
             self.request_command_terminal_text_focus_handoff(slot_id);
         }
+        self.begin_titlebar_quick_action_button_cooldown(cx);
         self.scroll_command_group_active_tab(group_id);
         self.scroll_focused_command_active_tab();
         self.persist_shell_layout_state();

@@ -16,7 +16,6 @@ import {
   getSidebarTitlebarGradientColors,
   isDiagnosticLoggingScenarioEnabled,
   type KeepAwakeDurationMinutes,
-  type SessionPersistenceProvider,
   type WebLinkOpenTarget,
 } from '@/packages/shared/ghostex-settings';
 import { parseRemoteProjectId } from '@/packages/shared/remote-terminal-selection';
@@ -48,7 +47,6 @@ import {
 } from './constants';
 import {
   TITLEBAR_DEBUGGING_MODE_NOTICE,
-  TITLEBAR_PERSISTENCE_OFF_NOTICE,
   TITLEBAR_TIPS,
   createTitlebarGhostexCliNotice,
   createTitlebarMissingAgentHooksNotice,
@@ -256,11 +254,10 @@ export function App() {
   const notices = useMemo(
     () => [
       ...(ghostexCliNotice ? [ghostexCliNotice] : []),
-      ...(projectState.sessionPersistenceProvider === 'off' ? [TITLEBAR_PERSISTENCE_OFF_NOTICE] : []),
       ...(projectState.debuggingMode ? [TITLEBAR_DEBUGGING_MODE_NOTICE] : []),
       ...(missingAgentHooksNotice ? [missingAgentHooksNotice] : []),
     ],
-    [ghostexCliNotice, missingAgentHooksNotice, projectState.debuggingMode, projectState.sessionPersistenceProvider]
+    [ghostexCliNotice, missingAgentHooksNotice, projectState.debuggingMode]
   );
   const markTipRead = useCallback((tipId: string) => {
     setReadTipIds((current) => {
@@ -1316,25 +1313,6 @@ export function App() {
     });
   };
 
-  const openSessionPersistenceSettings = () => {
-    /**
-     * CDXC:SessionPersistence 2026-06-04-02:52:
-     * The persistence-off Tips notice is an actionable warning. Clicking it
-     * should open the Settings page that owns Session Persistence and pre-fill
-     * search with the exact setting label so users land on it immediately.
-     *
-     * CDXC:SettingsNavigation 2026-08-19-00:00:
-     * The terminal settings moved into the General page, so this must request
-     * the real `settings` tab; the retired `ghostty` id resolves to no page.
-     */
-    window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialSearchQuery: 'Session Persistence',
-      initialTab: 'settings',
-      modal: 'settings',
-      type: 'open',
-    });
-  };
-
   const openAgentHooksSettings = () => {
     /**
      * CDXC:AgentHooks 2026-06-23-05:09:
@@ -1384,11 +1362,7 @@ export function App() {
       openDebuggingModeSettings();
       return;
     }
-    if (target === 'ghostexCli') {
-      openGhostexCliSettings();
-      return;
-    }
-    openSessionPersistenceSettings();
+    openGhostexCliSettings();
   };
 
   useEffect(() => {
@@ -2017,9 +1991,6 @@ export function App() {
           serverBundles={resourceServerBundles}
           sidebarTheme={projectState.sidebarTheme}
           linkOpenTarget={projectState.webLinkOpenTarget}
-          sessionPersistenceProvider={
-            projectState.sessionPersistenceProvider === 'off' ? undefined : projectState.sessionPersistenceProvider
-          }
           unreadTips={unreadTips}
         />
       </TooltipProvider>
@@ -2063,7 +2034,6 @@ export function TitlebarDropdownPanelSurface({
   serverBundles,
   sidebarTheme,
   linkOpenTarget,
-  sessionPersistenceProvider,
   unreadTips,
 }: {
   browserBundles: ResourceProcessBundle[];
@@ -2099,7 +2069,6 @@ export function TitlebarDropdownPanelSurface({
   serverBundles: ResourceProcessBundle[];
   sidebarTheme: SidebarTheme;
   linkOpenTarget: WebLinkOpenTarget;
-  sessionPersistenceProvider: Exclude<SessionPersistenceProvider, 'off'> | undefined;
   unreadTips: TitlebarTip[];
 }) {
   useEffect(() => {
@@ -2172,7 +2141,6 @@ export function TitlebarDropdownPanelSurface({
             quittingKeys={quittingResourceKeys}
             serverBundles={serverBundles}
             linkOpenTarget={linkOpenTarget}
-            sessionPersistenceProvider={sessionPersistenceProvider}
           />
         </div>
       ) : null}

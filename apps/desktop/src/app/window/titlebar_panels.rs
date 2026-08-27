@@ -458,7 +458,6 @@ pub(crate) enum GpuiNativeTitlebarNoticeTarget {
     AgentHooks,
     DebuggingMode,
     GhostexCli,
-    SessionPersistence,
 }
 
 pub(crate) struct GpuiNativeTitlebarNotice {
@@ -1062,13 +1061,6 @@ impl GpuiTitlebarReadingPanel {
                 title: "Ghostex CLI is not accessible".to_string(),
             });
         }
-        if gpui_titlebar_session_persistence_provider_from_settings(settings.object()) == "off" {
-            notices.push(GpuiNativeTitlebarNotice {
-                body: "Android and iOS attach can have issues while Session Persistence is Off. Enable zmx persistence so mobile clients reconnect to durable terminal sessions.".to_string(),
-                target: GpuiNativeTitlebarNoticeTarget::SessionPersistence,
-                title: "Mobile attach needs persistence".to_string(),
-            });
-        }
         if settings.debugging_mode() {
             notices.push(GpuiNativeTitlebarNotice {
                 body: "Ghostex is showing debug UI controls and allowing enabled Diagnostic disk logging scenarios to write routine logs.".to_string(),
@@ -1313,21 +1305,19 @@ impl GpuiTitlebarReadingPanel {
                     });
                 }),
             ))
-            .when(snapshot.persistent_session_mode, |this| {
-                this.child(self.render_resource_text_button(
-                    "gpui-resources-sleep-all",
-                    COMMAND_ICON_MOON,
-                    "Sleep All",
-                    snapshot.sleep_all_session_count > 0,
-                    cx.listener(|this, _event: &MouseDownEvent, window, cx| {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                        let _ = this.main_app.update_in(cx, |app, _window, cx| {
-                            app.dispatch_gpui_workspace_sleep_all_daemon_sessions(cx);
-                        });
-                    }),
-                ))
-            })
+            .child(self.render_resource_text_button(
+                "gpui-resources-sleep-all",
+                COMMAND_ICON_MOON,
+                "Sleep All",
+                snapshot.sleep_all_session_count > 0,
+                cx.listener(|this, _event: &MouseDownEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    let _ = this.main_app.update_in(cx, |app, _window, cx| {
+                        app.dispatch_gpui_workspace_sleep_all_daemon_sessions(cx);
+                    });
+                }),
+            ))
             .child(
                 h_flex()
                     .flex_shrink_0()

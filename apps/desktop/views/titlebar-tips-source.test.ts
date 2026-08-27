@@ -123,7 +123,7 @@ describe('native titlebar Tips & Tricks source', () => {
     const tipsSource = sourceBetween(
       tipsDataSource,
       'const TITLEBAR_TIPS: TitlebarTip[] = [',
-      'const TITLEBAR_PERSISTENCE_OFF_NOTICE'
+      'export const TITLEBAR_DEBUGGING_MODE_NOTICE'
     );
     const rowSource = sourceBetween(tipsPanelSource, 'function TitlebarTipRow', 'function getTitlebarTipIcon');
 

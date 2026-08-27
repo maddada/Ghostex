@@ -253,34 +253,17 @@ impl GhostexGpuiApp {
             );
         }
 
-        let settings = shared_settings::shared_sidebar_settings_snapshot();
-        let show_persistence_notice =
-            gpui_titlebar_session_persistence_provider_from_settings(settings.object()) == "off";
-        let show_debug_notice = settings.debugging_mode();
-        if show_persistence_notice || show_debug_notice {
+        if shared_settings::shared_sidebar_settings_snapshot().debugging_mode() {
             menu = titlebar_popup_git_section(menu.separator(), "Notices");
-            if show_persistence_notice {
-                menu = menu.menu_element(
-                    Box::new(RunGpuiTitlebarTipsHeaderAction { action_index: 4 }),
-                    move |_, _| titlebar_popup_tip_row(
-                        "titlebar/bug.svg",
-                        "Mobile attach needs persistence".to_string(),
-                        "Enable zmx persistence so mobile clients reconnect to durable terminal sessions.".to_string(),
-                        false,
-                    ),
-                );
-            }
-            if show_debug_notice {
-                menu = menu.menu_element(
-                    Box::new(RunGpuiTitlebarTipsHeaderAction { action_index: 4 }),
-                    move |_, _| titlebar_popup_tip_row(
-                        "titlebar/bug.svg",
-                        "Debug mode is on".to_string(),
-                        "Ghostex is showing debug UI controls and allowing enabled diagnostic scenarios to write routine logs.".to_string(),
-                        false,
-                    ),
-                );
-            }
+            menu = menu.menu_element(
+                Box::new(RunGpuiTitlebarTipsHeaderAction { action_index: 4 }),
+                move |_, _| titlebar_popup_tip_row(
+                    "titlebar/bug.svg",
+                    "Debug mode is on".to_string(),
+                    "Ghostex is showing debug UI controls and allowing enabled diagnostic scenarios to write routine logs.".to_string(),
+                    false,
+                ),
+            );
         }
 
         let unread = GPUI_NATIVE_TITLEBAR_TIPS

@@ -653,9 +653,6 @@ impl GhostexGpuiApp {
             "activeMode": self.active_mode.element_slug(),
             "debuggingMode": settings_snapshot.debugging_mode(),
             "projectName": self.project_name,
-            "sessionPersistenceProvider": gpui_titlebar_session_persistence_provider_from_settings(
-                settings_snapshot.object(),
-            ),
             "showBetaFeatures": settings_snapshot.show_beta_features(),
             "sidebarTheme": gpui_app_modal_sidebar_theme_from_settings(settings_snapshot.object()),
         })
@@ -921,7 +918,6 @@ impl GhostexGpuiApp {
             .as_ref()
             .is_some_and(|snapshot| snapshot.is_quick_projectless);
         let resource_groups = self.gpui_titlebar_resources_resource_groups(
-            &settings_snapshot,
             active_project_id.as_deref(),
             &project_name,
             &project_path,
@@ -949,9 +945,6 @@ impl GhostexGpuiApp {
             "projectName": project_name,
             "projectPath": project_path,
             "resourceGroups": resource_groups,
-            "sessionPersistenceProvider": gpui_titlebar_session_persistence_provider_from_settings(
-                settings_object,
-            ),
             "showBetaFeatures": settings_snapshot.show_beta_features(),
             "sidebarTheme": gpui_app_modal_sidebar_theme_from_settings(settings_object),
             "webLinkOpenTarget": gpui_titlebar_web_link_open_target_from_settings(settings_object),
@@ -964,13 +957,10 @@ impl GhostexGpuiApp {
 
     pub(crate) fn gpui_titlebar_resources_resource_groups(
         &self,
-        settings_snapshot: &shared_settings::SharedSidebarSettingsSnapshot,
         active_project_id: Option<&str>,
         project_name: &str,
         project_path: &str,
     ) -> Vec<serde_json::Value> {
-        let persistence_provider =
-            gpui_titlebar_session_persistence_provider_from_settings(settings_snapshot.object());
         let now = SystemTime::now();
         let sessions = self
             .agents_workspace
@@ -997,13 +987,12 @@ impl GhostexGpuiApp {
                     "isSleeping": session.presentation_state == TerminalSessionPresentationState::Sleeping,
                     "nativePaneState": gpui_titlebar_resources_native_pane_state(session.presentation_state),
                     "providerSessionState": gpui_titlebar_resources_provider_session_state(
-                        persistence_provider,
                         session.zmx_session_name.as_deref(),
                     ),
                     "sessionId": session_id,
                     "sessionKind": "terminal",
                     "sessionPersistenceName": session.zmx_session_name.clone(),
-                    "sessionPersistenceProvider": persistence_provider,
+                    "sessionPersistenceProvider": "zmx",
                     "terminalTitle": title.clone(),
                     "title": title,
                 });

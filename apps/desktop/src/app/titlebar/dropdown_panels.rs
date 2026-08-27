@@ -476,13 +476,8 @@ impl GhostexGpuiApp {
         second read-id store, duplicate tip rows in UI, or infer notices from
         project/session labels.
         */
-        let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
-        let notice_count = u64::from(settings_snapshot.debugging_mode())
-            + u64::from(
-                gpui_titlebar_session_persistence_provider_from_settings(
-                    settings_snapshot.object(),
-                ) == "off",
-            );
+        let notice_count =
+            u64::from(shared_settings::shared_sidebar_settings_snapshot().debugging_mode());
         gpui_titlebar_tips_unread_count_from_settings().saturating_add(notice_count)
     }
 }

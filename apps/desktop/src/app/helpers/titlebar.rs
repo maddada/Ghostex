@@ -1825,12 +1825,9 @@ pub(crate) fn gpui_titlebar_resources_native_pane_state(
 }
 
 pub(crate) fn gpui_titlebar_resources_provider_session_state(
-    persistence_provider: &str,
     persistence_name: Option<&str>,
 ) -> &'static str {
-    if persistence_provider == "off" {
-        "persistence-disabled"
-    } else if persistence_name.is_some_and(|name| !name.trim().is_empty()) {
+    if persistence_name.is_some_and(|name| !name.trim().is_empty()) {
         "exists"
     } else {
         "unknown"
@@ -2494,21 +2491,6 @@ pub(crate) fn gpui_titlebar_action_links_from_sidebar_command_button(
             })
         })
         .collect()
-}
-
-pub(crate) fn gpui_titlebar_session_persistence_provider_from_settings(
-    settings: &serde_json::Map<String, serde_json::Value>,
-) -> &'static str {
-    match settings
-        .get("sessionPersistenceProvider")
-        .and_then(serde_json::Value::as_str)
-    {
-        Some("off") => "off",
-        Some("tmux") => "tmux",
-        Some("zellij") => "zellij",
-        Some("zmx") => "zmx",
-        _ => "zmx",
-    }
 }
 
 pub(crate) fn gpui_completion_sound_label(sound: &str) -> &'static str {

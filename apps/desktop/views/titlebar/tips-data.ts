@@ -115,21 +115,6 @@ export const TITLEBAR_TIPS: TitlebarTip[] = [
 ];
 
 /**
- * CDXC:SessionPersistence 2026-06-04-01:57:
- * When Session Persistence is Off, Android and iOS attach can reconnect to the
- * macOS native terminal instead of a durable zmx/tmux/zellij session. Surface
- * this as a non-dismissable Tips & Tricks notice, not a normal read tip, so it
- * stays visible until persistence is enabled again.
- */
-export const TITLEBAR_PERSISTENCE_OFF_NOTICE: TitlebarNotice = {
-  body: 'Android and iOS attach can have issues while Session Persistence is Off. Enable zmx persistence so mobile clients reconnect to durable terminal sessions.',
-  icon: 'warning',
-  id: 'session-persistence-off-mobile-attach',
-  settingsTarget: 'sessionPersistence',
-  title: 'Mobile attach needs persistence',
-};
-
-/**
  * CDXC:DiagnosticsSettings 2026-06-06-07:09:
  * Debugging Mode previously wrote detailed diagnostics to disk and could affect
  * performance.

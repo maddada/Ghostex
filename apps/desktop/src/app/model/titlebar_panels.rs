@@ -71,7 +71,6 @@ pub(crate) struct GpuiNativeResourcesSnapshot {
     pub(crate) code_rows: Vec<GpuiNativeResourceRow>,
     pub(crate) inactive_terminal_sleep_count: usize,
     pub(crate) orphan_rows: Vec<GpuiNativeResourceRow>,
-    pub(crate) persistent_session_mode: bool,
     pub(crate) project_label: String,
     pub(crate) server_rows: Vec<GpuiNativeResourceRow>,
     pub(crate) session_rows: Vec<GpuiNativeResourceRow>,

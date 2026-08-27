@@ -159,6 +159,29 @@ impl GhostexGpuiApp {
         );
     }
 
+    pub(crate) fn open_gpui_settings_agent_hooks_page(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let modal = GpuiAppModalKind::Settings;
+        let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
+        let mut open_message = serde_json::json!({
+            "initialSearchQuery": "Agent Hooks",
+            "initialTab": "agents",
+            "modal": modal.modal_id(),
+            "type": "open",
+        });
+        open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
+        self.open_gpui_app_modal_window(
+            modal,
+            open_message,
+            sidebar_state_message,
+            Some(window),
+            cx,
+        );
+    }
+
     pub(crate) fn open_gpui_titlebar_notice_settings(
         &mut self,
         target: GpuiNativeTitlebarNoticeTarget,
@@ -169,9 +192,6 @@ impl GhostexGpuiApp {
             GpuiNativeTitlebarNoticeTarget::AgentHooks => ("integrations", "Agent Hooks"),
             GpuiNativeTitlebarNoticeTarget::DebuggingMode => ("settings", "Show debug UI controls"),
             GpuiNativeTitlebarNoticeTarget::GhostexCli => ("integrations", "Ghostex CLI"),
-            GpuiNativeTitlebarNoticeTarget::SessionPersistence => {
-                ("ghostty", "Session Persistence")
-            }
         };
         let modal = GpuiAppModalKind::Settings;
         let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
@@ -287,11 +307,40 @@ impl GhostexGpuiApp {
             .or_else(|| actions.into_iter().next())
     }
 
+    pub(crate) fn titlebar_quick_action_button_on_cooldown(&self) -> bool {
+        self.titlebar_quick_action_cooldown_until
+            .is_some_and(|until| std::time::Instant::now() < until)
+    }
+
+    pub(crate) fn begin_titlebar_quick_action_button_cooldown(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:GPUIQuickActionCooldown 2026-08-27:
+        Every command-Action terminal launch arms a 2-second cooldown on the
+        titlebar Quick Actions button, because clicking it while the Action is
+        still running now kills and relaunches that terminal — without the
+        cooldown, spamming the button would churn kill/create cycles. Popup
+        menu rows and hotkeys stay ungated; only the primary button click is.
+        */
+        let cooldown = std::time::Duration::from_secs(2);
+        self.titlebar_quick_action_cooldown_until = Some(std::time::Instant::now() + cooldown);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(cooldown).await;
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+
     pub(crate) fn run_active_gpui_titlebar_action(
         &mut self,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        if self.titlebar_quick_action_button_on_cooldown() {
+            return;
+        }
         let Some(action) = self.active_gpui_titlebar_action() else {
             self.open_gpui_settings_actions_modal_from_titlebar(window, cx);
             return;

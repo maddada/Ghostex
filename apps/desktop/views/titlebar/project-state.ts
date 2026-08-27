@@ -77,7 +77,6 @@ export function mergeTitlebarProjectState(
     customSidebarTitlebarBackgroundColor,
     sidebarActions: state.sidebarActions ?? current.sidebarActions,
     sidebarSide: state.sidebarSide ?? current.sidebarSide,
-    sessionPersistenceProvider: state.sessionPersistenceProvider ?? current.sessionPersistenceProvider,
     toggleSidebarHotkeyLabel: state.toggleSidebarHotkeyLabel ?? current.toggleSidebarHotkeyLabel,
     workspaceOpenTargets: state.workspaceOpenTargets ?? current.workspaceOpenTargets,
     isFocusModeActive: state.isFocusModeActive ?? current.isFocusModeActive,
@@ -321,7 +320,6 @@ export function createInitialProjectState(bootstrap: Record<string, unknown>): T
       commands: [],
     },
     showProjectEditorDiffFileCount: settings.showProjectEditorDiffFileCount,
-    sessionPersistenceProvider: settings.sessionPersistenceProvider,
     webLinkOpenTarget: settings.webLinkOpenTarget,
     toggleSidebarHotkeyLabel: formatToggleSidebarTooltipLabel(settings.hotkeys.toggleSidebarCollapsed),
     workspaceOpenTargets: {

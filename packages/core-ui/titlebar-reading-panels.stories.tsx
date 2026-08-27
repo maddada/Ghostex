@@ -93,7 +93,6 @@ function installTitlebarStoryHost(panel: 'resources' | 'tips') {
         title: 'Ghostex',
       },
     ],
-    sessionPersistenceProvider: 'zmx',
     sidebarTheme: 'dark',
     webLinkOpenTarget: 'internal-browser',
     workspaceName: 'Ghostex',

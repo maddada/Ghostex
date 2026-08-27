@@ -8,6 +8,7 @@ use crate::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiAppModalKind {
     AddProject,
+    AgentHooksRequired,
     Settings,
     Hotkeys,
     MissingProjectFolder,
@@ -44,6 +45,7 @@ impl GpuiAppModalKind {
     pub(crate) fn from_modal_id(value: &str) -> Option<Self> {
         match value {
             "addProject" => Some(Self::AddProject),
+            "agentHooksRequired" => Some(Self::AgentHooksRequired),
             "settings" => Some(Self::Settings),
             "hotkeys" => Some(Self::Hotkeys),
             "missingProjectFolder" => Some(Self::MissingProjectFolder),
@@ -83,6 +85,7 @@ impl GpuiAppModalKind {
     pub(crate) fn modal_id(self) -> &'static str {
         match self {
             Self::AddProject => "addProject",
+            Self::AgentHooksRequired => "agentHooksRequired",
             Self::Settings => "settings",
             Self::Hotkeys => "hotkeys",
             Self::MissingProjectFolder => "missingProjectFolder",
@@ -119,6 +122,7 @@ impl GpuiAppModalKind {
     pub(crate) fn window_title(self) -> &'static str {
         match self {
             Self::AddProject => "Ghostex Add Project",
+            Self::AgentHooksRequired => "Ghostex Install Required Hooks",
             Self::Settings => "Ghostex Settings",
             Self::Hotkeys => "Ghostex Hotkeys",
             Self::MissingProjectFolder => "Ghostex Project Folder Missing",
@@ -182,6 +186,10 @@ impl GpuiAppModalKind {
             ),
             Self::MissingProjectFolder => size(
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_WIDTH),
+                px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT),
+            ),
+            Self::AgentHooksRequired => size(
+                px(APP_MODAL_HOST_RENAME_SESSION_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT),
             ),
             /*
@@ -370,6 +378,7 @@ impl GpuiAppModalKind {
             // carry their full payload (worktree and diff drafts); the bare
             // open message is the menu-path shape.
             Self::Worktree
+            | Self::AgentHooksRequired
             | Self::DeleteWorktree
             | Self::RenameWorktree
             | Self::GitCommit

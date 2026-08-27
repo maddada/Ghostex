@@ -468,9 +468,6 @@ impl GhostexGpuiApp {
             code_rows,
             inactive_terminal_sleep_count,
             orphan_rows,
-            persistent_session_mode: gpui_titlebar_session_persistence_provider_from_settings(
-                shared_settings::shared_sidebar_settings_snapshot().object(),
-            ) != "off",
             project_label: active_project_label,
             server_rows,
             session_rows,

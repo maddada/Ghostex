@@ -21,7 +21,7 @@ import { AppTooltip } from '@/packages/core-ui/app-tooltip';
 import { AGENT_LOGO_COLORS, AGENT_LOGOS } from '@/packages/core-ui/agent-logos';
 import type { SidebarAgentIcon } from '@/packages/shared/sidebar-agents';
 import type { NativePortlessAdminInstallAction } from '@/packages/shared/native-ghostty-host-protocol';
-import type { SessionPersistenceProvider, WebLinkOpenTarget } from '@/packages/shared/ghostex-settings';
+import type { WebLinkOpenTarget } from '@/packages/shared/ghostex-settings';
 import { postNative, postTitlebarSidebarCommand } from './native-bridge';
 import {
   createResourceItemCollapseTarget,
@@ -81,7 +81,6 @@ export function TitlebarResourcesMenu({
   quittingKeys,
   serverBundles,
   linkOpenTarget,
-  sessionPersistenceProvider,
 }: {
   browserBundles: ResourceProcessBundle[];
   codeIdeBundles: ResourceProcessBundle[];
@@ -104,7 +103,6 @@ export function TitlebarResourcesMenu({
   quittingKeys: Set<string>;
   serverBundles: ResourceProcessBundle[];
   linkOpenTarget: WebLinkOpenTarget;
-  sessionPersistenceProvider?: Exclude<SessionPersistenceProvider, 'off'>;
 }) {
   const visibleGroupViews = processSnapshotReady ? groupViews.filter((view) => view.bundles.length > 0) : [];
   const metricBundles = processSnapshotReady
@@ -143,13 +141,8 @@ export function TitlebarResourcesMenu({
    * CDXC:TitlebarResources 2026-05-25-16:59:
    * The old yellow zmx warning duplicated the action wording and made the menu
    * noisier than the controls themselves. Remove that note and expose the bulk
-   * terminal action as Sleep All only when session persistence is active through
-   * tmux, zmx, or zellij.
+   * terminal action as Sleep All.
    */
-  const persistentSessionMode =
-    sessionPersistenceProvider === 'tmux' ||
-    sessionPersistenceProvider === 'zmx' ||
-    sessionPersistenceProvider === 'zellij';
   const sleepAllSessionBundles = visibleGroupViews
     .flatMap((view) => view.bundles)
     .filter((bundle) => bundle.type === 'session' && bundle.session?.sessionKind === 'terminal');
@@ -275,20 +268,16 @@ export function TitlebarResourcesMenu({
             <IconMoon aria-hidden='true' size={14} stroke={1.8} />
             <span>Sleep Inactive</span>
           </button>
-          {persistentSessionMode ? (
-            <>
-              <button
-                className='titlebar-resources-action-button'
-                data-variant='sleep'
-                disabled={sleepAllSessionBundles.length === 0}
-                onClick={() => onQuit(sleepAllSessionBundles)}
-                type='button'
-              >
-                <IconMoon aria-hidden='true' size={14} stroke={1.9} />
-                <span>Sleep All</span>
-              </button>
-            </>
-          ) : null}
+          <button
+            className='titlebar-resources-action-button'
+            data-variant='sleep'
+            disabled={sleepAllSessionBundles.length === 0}
+            onClick={() => onQuit(sleepAllSessionBundles)}
+            type='button'
+          >
+            <IconMoon aria-hidden='true' size={14} stroke={1.9} />
+            <span>Sleep All</span>
+          </button>
           <div className='titlebar-resources-summary'>
             <AppTooltip
               {...TITLEBAR_TOOLTIP_ROOT_PROPS}

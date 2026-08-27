@@ -45,6 +45,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let open = self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Actions);
+        let on_cooldown = self.titlebar_quick_action_button_on_cooldown();
         let icon_color = if open {
             titlebar_icon_hover_color()
         } else {
@@ -72,14 +73,17 @@ impl GhostexGpuiApp {
             .text_color(icon_color)
             .cursor_default()
             .when(open, |this| this.bg(titlebar_active_segment_color()))
-            .hover(move |this| {
-                if open {
-                    this.bg(titlebar_active_segment_color())
-                        .text_color(titlebar_icon_hover_color())
-                } else {
-                    this.bg(titlebar_button_hover_color())
-                        .text_color(titlebar_icon_hover_color())
-                }
+            .when(on_cooldown, |this| this.opacity(0.5))
+            .when(!on_cooldown, |this| {
+                this.hover(move |this| {
+                    if open {
+                        this.bg(titlebar_active_segment_color())
+                            .text_color(titlebar_icon_hover_color())
+                    } else {
+                        this.bg(titlebar_button_hover_color())
+                            .text_color(titlebar_icon_hover_color())
+                    }
+                })
             })
             .on_mouse_down(
                 MouseButton::Left,

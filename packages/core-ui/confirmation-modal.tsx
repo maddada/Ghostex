@@ -9,10 +9,13 @@ import {
 } from './app-modal-shell';
 
 export type ConfirmationModalProps = {
+  cancelLabel?: string;
   confirmLabel: string;
+  confirmTone?: 'neutral' | 'danger' | 'primary';
   description: string;
   isOpen: boolean;
   onCancel: () => void;
+  onClose?: () => void;
   onConfirm: () => void;
   title: string;
 };
@@ -25,15 +28,18 @@ export type ConfirmationModalProps = {
  * instead of maintaining a parallel `.confirm-modal-*` chrome.
  */
 export function ConfirmationModal({
+  cancelLabel = 'Cancel',
   confirmLabel,
+  confirmTone = 'neutral',
   description,
   isOpen,
   onCancel,
+  onClose = onCancel,
   onConfirm,
   title,
 }: ConfirmationModalProps) {
   return (
-    <AppModalShell className='confirmation-modal' isOpen={isOpen} onClose={onCancel}>
+    <AppModalShell className='confirmation-modal' isOpen={isOpen} onClose={onClose}>
       <AppModalColumn>
         <AppModalHeader>
           <AppModalTitle>{title}</AppModalTitle>
@@ -41,9 +47,9 @@ export function ConfirmationModal({
         </AppModalHeader>
         <AppModalFooter>
           <AppModalButton onClick={onCancel} type='button'>
-            Cancel
+            {cancelLabel}
           </AppModalButton>
-          <AppModalButton onClick={onConfirm} type='button'>
+          <AppModalButton onClick={onConfirm} tone={confirmTone} type='button'>
             {confirmLabel}
           </AppModalButton>
         </AppModalFooter>
