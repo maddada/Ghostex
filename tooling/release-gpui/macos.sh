@@ -175,6 +175,10 @@ INFO_PLIST="$APP_PATH/Contents/Info.plist"
 	echo "GPUI build did not produce $APP_PATH" >&2
 	exit 1
 }
+# The shared app builder marks its staging wrapper as a Finder package for
+# local rsync installs. Distribution bundles must not carry FinderInfo or any
+# other extended attributes into the strict signature/notarization gate.
+/usr/bin/xattr -cr "$APP_PATH"
 [[ "$(plutil -extract CFBundleIdentifier raw "$INFO_PLIST")" == "com.madda.ghostex.host" ]]
 [[ "$(plutil -extract CFBundleName raw "$INFO_PLIST")" == "Ghostex" ]]
 [[ "$(plutil -extract CFBundleExecutable raw "$INFO_PLIST")" == "Ghostex" ]]
