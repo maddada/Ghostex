@@ -233,6 +233,7 @@ Join the Discord: https://discord.gg/df7b3G92CS
 
 Ghostex builds on open source work from these projects and communities:
 
+- [OpenUsage](https://github.com/robinebers/openusage) - Usage stats for the 2 Claude & Codex extensions
 - [CEF Project](https://github.com/chromiumembedded/cef) — embedded Chromium browser panes
 - [Agentation](https://github.com/benjitaylor/agentation) — browser annotation and feedback tooling
 - [CMUX](https://github.com/manaflow-ai/cmux) — agent hook patterns and notification integration
