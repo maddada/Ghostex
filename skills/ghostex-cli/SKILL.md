@@ -10,6 +10,7 @@ description: >-
   UI controls, logs, screenshots, and diagnostics. It teaches help-first
   command discovery, stable target selection, JSON inspection, safe execution,
   verification, and routing to Ghostex's more specialized skills.
+disable-model-invocation: true
 ---
 
 # ghostex-cli
@@ -57,7 +58,7 @@ above. Route to a specialized skill only when its domain applies:
 - Use `$ghostex-computer-use` for native desktop application control.
 - Use `$ghostex-manage-beads` for Project Board bead workflows through the
   machine-installed `bd` CLI.
-- Use `$ghostex-fable-5.6-orchestration` for the Fable-planned,
+- Use `$ghostex-fable-56-orchestration` for the Fable-planned,
   Codex-implemented, Fable-verified multi-pane pipeline.
 - Use `$ghostex-auto-rename-session` when asked to generate a session title.
 - Use `$ghostex-move-codex-session` to fork a Codex session into another

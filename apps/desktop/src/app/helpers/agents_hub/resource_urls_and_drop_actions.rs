@@ -20,7 +20,7 @@ pub(crate) fn gpui_bundled_agent_skill_name(skill_id: &str) -> Option<&'static s
         "computerUse" => Some("ghostex-computer-use"),
         "embeddedBrowserUse" => Some("ghostex-embedded-browser-use"),
         "cli" => Some("ghostex-cli"),
-        "fable56Orchestration" => Some("ghostex-fable-5.6-orchestration"),
+        "fable56Orchestration" => Some("ghostex-fable-56-orchestration"),
         "manageBeads" => Some("ghostex-manage-beads"),
         "generateTitle" => Some("ghostex-auto-rename-session"),
         "manageBeads" => Some("ghostex-manage-beads"),

@@ -27,7 +27,7 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-computer-use",
     "ghostex-cli",
     "ghostex-manage-beads",
-    "ghostex-fable-5.6-orchestration",
+    "ghostex-fable-56-orchestration",
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
     /*

@@ -485,7 +485,7 @@ Specialized workflows:
   chat queues, prompt history, server, diagnostics) is covered by ghostex --help
   and the focused help pages. Use $ghostex-embedded-browser-use,
   $ghostex-browser-use, $ghostex-computer-use, $ghostex-manage-beads,
-  $ghostex-fable-5.6-orchestration, $ghostex-auto-rename-session, or
+  $ghostex-fable-56-orchestration, $ghostex-auto-rename-session, or
   $ghostex-move-codex-session when their domain applies.
 "
     .to_string()
@@ -926,7 +926,7 @@ Usage:
   gx fable-5.6-orchestration install-skill [--json]
 
 Agent skill:
-  Use $ghostex-fable-5.6-orchestration to run a multi-phase coding task as a
+  Use $ghostex-fable-56-orchestration to run a multi-phase coding task as a
   pipeline over Ghostex panes: plan inline with Fable, launch one Codex
   gpt-5.6 worker pane per phase, then verify with a Fable pane and spawn
   fixer panes until verification passes.

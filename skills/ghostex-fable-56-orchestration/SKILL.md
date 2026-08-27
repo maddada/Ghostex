@@ -1,5 +1,5 @@
 ---
-name: ghostex-fable-5.6-orchestration
+name: ghostex-fable-56-orchestration
 description: >-
   Use this skill to execute a multi-phase coding task with a Fable-planned,
   Codex-implemented, Fable-verified pipeline inside Ghostex: the invoking
@@ -11,7 +11,7 @@ description: >-
 disable-model-invocation: true
 ---
 
-# ghostex-fable-5.6-orchestration
+# ghostex-fable-56-orchestration
 
 Plan → implement → verify → fix pipeline over Ghostex panes:
 

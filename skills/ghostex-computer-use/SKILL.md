@@ -5,7 +5,6 @@ description: >-
   or native macOS app automation. It wraps the CLI-first Trycua workflow so
   agents can drive the computer and desktop apps without the user needing to
   remember `$cua-driver`.
-disable-model-invocation: true
 ---
 
 # ghostex-computer-use

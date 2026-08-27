@@ -99,7 +99,7 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         browser_skill_path: skill_path("ghostex-browser-use"),
         computer_use_skill_path: skill_path("ghostex-computer-use"),
         embedded_browser_skill_path: skill_path("ghostex-embedded-browser-use"),
-        fable56_orchestration_skill_path: skill_path("ghostex-fable-5.6-orchestration"),
+        fable56_orchestration_skill_path: skill_path("ghostex-fable-56-orchestration"),
         manage_beads_skill_path: skill_path("ghostex-manage-beads"),
         generate_title_skill_path: skill_path("ghostex-auto-rename-session"),
         ghostex_path: ghostex_path.as_ref().map(|path| gpui_path_string(path)),

@@ -4,4 +4,4 @@ interface:
   default_prompt: 'Use $ghostex-cli to discover the supported Ghostex CLI command, perform the requested operation, and verify the result.'
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false
