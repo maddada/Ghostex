@@ -274,7 +274,7 @@ const FIRST_LAUNCH_USE_CASES: readonly FirstLaunchUseCase[] = [
   },
   {
     number: '07',
-    text: 'Supported agents get a real chat view of the session, so you can read and reply like a conversation. Switch between chat and terminal with one click.',
+    text: 'Supported agents get a chat view, so you can read and reply like a conversation. Switch between chat and terminal with one click.',
     title: 'Chat view for your agents',
   },
   {
