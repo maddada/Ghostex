@@ -1,5 +1,22 @@
 # Changelog
 
+## 8.1.0 - 2026-08-27
+
+- Major
+  - Extensions now run as first-class Ghostex experiences: install hash-verified packages from the redesigned Store, pin live titlebar launchers, and open extension views in the chat bar, terminal panes, popups, or app modals, with gxserver managing their processes and lifecycle.
+  - Session Chat can attach multiple images, files, and whole folders as compact pills, walk dropped folders, open file references at the right line in Docs or Code, save transcript images to Downloads, and reach the agent's model, effort, delayed actions, transcript export, terminal handoff, and other session controls without leaving the conversation.
+  - The embedded Ghostty engine moves to a substantially newer upstream build that cuts terminal memory by roughly 75% in its libghostty path, releases GPU resources for hidden surfaces, accelerates terminal string parsing, and improves Kitty graphics, clipboard, paste, Unicode, and IME behavior.
+- Minor
+  - Kimi, Campfire, OpenClaude, Command Code, and Devin join the built-in agent catalog with their own icons, status recognition, launch and resume behavior, and title cleanup; Settings can choose Chat or Terminal per agent and guides you through installing required hooks before a supported agent opens in Chat.
+  - Agent terminals now share a focused bottom action bar across desktop and web, can be centered at a configurable width with horizontal and vertical padding, and can apply that layout to command and editor companion terminals too.
+  - Previous Sessions shows transcript sizes, session rows surface note and Saved Prompt counts, and prompt search produces more relevant matches and clearer excerpts while ignoring empty Cursor projects and injected envelopes.
+  - Session and project actions are grouped into clearer menus, app dialogs share one rounded modal shell, Docs rename uses that shell, and Quick Access, Add Project, missing-folder, extension, and titlebar panels have more consistent spacing and labels.
+  - Parked browser, chat, command, and terminal runtimes restore more reliably, terminal writers are serialized to prevent dropped input, forks wait for their composers, F12 minimizes a focused command pane, and agent status stays tied to the session's actual agent.
+  - Linux embeds its browser views as native Alloy child windows and stages the Code runtime on demand; Arch Linux is included through the official prefix-preserving `ghostex-8.1.0-linux-x64.tar.zst` package alongside the DEB and RPM downloads.
+  - Android gains streamed macOS uploads, machine-level session menus, a kill-session action, Saved Prompt draft handoff, stable session collection ordering, and refreshed adaptive icons.
+  - Anonymous usage analytics now report only coarse OS, feature, and count data, never prompts, paths, project names, or personal content, and can be disabled immediately in Settings > Privacy.
+  - File drops can be saved as message markdown, terminal media opens with the operating system, browser home URLs persist with project snapshots, remote Saved Prompts keep their tag IDs, and transcript exports and project pickers correctly correlate concurrent requests.
+
 ## 8.0.0 - 2026-08-25
 
 - Major
