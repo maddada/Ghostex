@@ -1900,10 +1900,10 @@ body {
 .ghostex-settings-shadcn .first-launch-onb-video-thumb {
   align-items: center;
   aspect-ratio: 16 / 9;
-  background: linear-gradient(135deg, #1b2735, #151a22);
-  border: 1px solid var(--settings-hairline);
+  background: linear-gradient(135deg, #2a1c1c, #1a1414);
+  border: 1px solid color-mix(in srgb, #c4302b 28%, var(--settings-hairline));
   border-radius: var(--settings-radius-compact);
-  color: var(--settings-accent);
+  color: #c4302b;
   display: flex;
   flex: 0 0 auto;
   justify-content: center;
