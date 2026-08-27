@@ -5,7 +5,7 @@ import {
   IconCopy,
   IconClock,
   IconDeviceMobile,
-  IconExternalLink,
+  IconDots,
   IconFocus2,
   IconGitFork,
   IconLayoutSidebarRightExpand,
@@ -146,7 +146,7 @@ type SessionContextMenuAction = {
   key: string;
   label: string;
   onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  submenu?: 'session-tags';
+  submenu?: 'advanced' | 'session-tags';
 };
 
 export type SidebarSessionSelectionChangeRequest = {
@@ -699,6 +699,7 @@ export function SortableSessionCard({
   } = sessionCardSettings;
   const canFocusMode = sessionGroup?.canFocusMode === true;
   const [tagSubmenuPosition, setTagSubmenuPosition] = useState<ContextMenuPosition>();
+  const [advancedSubmenuPosition, setAdvancedSubmenuPosition] = useState<ContextMenuPosition>();
   const [completionFlashRunId, setCompletionFlashRunId] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const aliasHeadingRef = useRef<HTMLDivElement>(null);
@@ -730,7 +731,6 @@ export function SortableSessionCard({
     canGenerateSessionTitle,
     canOpenSessionNote,
     canPinSession,
-    canPopOutPane,
     canRenameSession,
     canSleepSession,
     canTagSession,
@@ -931,6 +931,7 @@ export function SortableSessionCard({
   useEffect(() => {
     setContextMenuPosition(undefined);
     setTagSubmenuPosition(undefined);
+    setAdvancedSubmenuPosition(undefined);
   }, [session.alias, session.sessionId]);
 
   useEffect(() => {
@@ -1179,20 +1180,35 @@ export function SortableSessionCard({
     const nextSleepableSessionIdsBelow = getSleepableSessionIds(nextSessionIdsBelow);
     const nextBelowActionCount =
       nextSessionIdsBelow.length > 0 ? 1 + Number(nextSleepableSessionIdsBelow.length > 0) : 0;
+    const nextPrimaryCount =
+      Number(canRenameSession) +
+      Number(canSleepSession) +
+      Number(canPinSession) +
+      Number(enableSessionParking && canPinSession && !isBrowserSession) +
+      Number(canOpenSessionNote) +
+      Number(canTagSession && sessionTagSubmenuItemCount > 0);
+    const nextAdvancedNestedCount =
+      Number(canDelayedSend) +
+      Number(canCloseAfterDone) +
+      Number(canFullReloadSession) +
+      Number(canForkSession) +
+      Number(Boolean(session.firstUserMessage?.trim())) +
+      Number(canGenerateSessionTitle) +
+      Number(sessionGroup?.canCreateSessionGroup === true) +
+      Number(canFocusMode) +
+      Number(canCopySessionDetails) +
+      Number(canCopyResumeCommand) +
+      Number(canCopyAttachCommand) +
+      nextBelowActionCount;
     const nextSectionLengths = [
-      primaryActions.length,
-      sessionActions.length,
-      nextBelowActionCount,
-      destructiveActions.length,
+      nextPrimaryCount,
+      Number(nextAdvancedNestedCount > 0),
+      Number(showSessionCloseContextMenuAction),
     ].filter((count) => count > 0);
-    /* Every group but the trailing destructive one renders a heading row. */
-    const nextLabelledSectionLengths = [primaryActions.length, sessionActions.length, nextBelowActionCount].filter(
-      (count) => count > 0
-    );
     return {
       dividerCount: Math.max(0, nextSectionLengths.length - 1),
       itemCount: nextSectionLengths.reduce((count, sectionLength) => count + sectionLength, 0),
-      labelCount: nextLabelledSectionLengths.length,
+      labelCount: 0,
       sleepableSessionIdsBelow: nextSleepableSessionIdsBelow,
     };
   };
@@ -1237,6 +1253,7 @@ export function SortableSessionCard({
           return belowMenuCounts;
         })();
     setTagSubmenuPosition(undefined);
+    setAdvancedSubmenuPosition(undefined);
     setContextMenuSessionIdsBelow(nextSessionIdsBelow);
     setContextMenuSleepableSessionIdsBelow(nextSleepableSessionIdsBelow);
     setContextMenuSelectedSessionIds(shouldOpenBulkContextMenu ? nextSelectedSessionIds : EMPTY_SESSION_IDS);
@@ -1490,24 +1507,6 @@ export function SortableSessionCard({
     });
   };
 
-  const requestPopOutPane = () => {
-    if (!canPopOutPane) {
-      return;
-    }
-
-    setContextMenuPosition(undefined);
-    /**
-     * CDXC:PanePopOut 2026-05-19-10:15:
-     * Browser and agent session cards expose Pop Out Pane in the sidebar context
-     * menu. The native controller toggles presentation from the current session
-     * record, matching the focused-pane hotkey and tab-bar overflow behavior.
-     */
-    vscode.postMessage({
-      sessionId: session.sessionId,
-      type: 'popOutPane',
-    });
-  };
-
   const requestViewFirstUserMessage = () => {
     const message = session.firstUserMessage?.trim();
     if (!message) {
@@ -1645,6 +1644,7 @@ export function SortableSessionCard({
   const dismissBulkContextMenu = () => {
     setContextMenuPosition(undefined);
     setTagSubmenuPosition(undefined);
+    setAdvancedSubmenuPosition(undefined);
     setContextMenuSelectedSessionIds(EMPTY_SESSION_IDS);
   };
 
@@ -1750,6 +1750,11 @@ export function SortableSessionCard({
   };
 
   const openSessionTagSubmenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (tagSubmenuPosition) {
+      setTagSubmenuPosition(undefined);
+      return;
+    }
+    setAdvancedSubmenuPosition(undefined);
     const bounds = event.currentTarget.getBoundingClientRect();
     const submenuWidth = 204;
     const submenuHeight =
@@ -1864,6 +1869,18 @@ export function SortableSessionCard({
       onClick: requestRename,
     });
   }
+  if (canSleepSession) {
+    primaryActions.push({
+      icon: session.isSleeping ? (
+        <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+      ) : (
+        <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+      ),
+      key: 'sleep',
+      label: session.isSleeping ? 'Wake' : 'Sleep',
+      onClick: () => requestSetSleeping(!session.isSleeping),
+    });
+  }
   if (canPinSession) {
     primaryActions.push({
       icon: session.isPinned ? (
@@ -1890,6 +1907,14 @@ export function SortableSessionCard({
       onClick: () => requestSetParked(!session.isParked),
     });
   }
+  if (canOpenSessionNote) {
+    primaryActions.push({
+      icon: <IconNote aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'session-note',
+      label: 'Note',
+      onClick: requestOpenSessionNote,
+    });
+  }
   if (canTagSession && sessionTagSubmenuItemCount > 0) {
     primaryActions.push({
       icon: <IconTag aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
@@ -1899,16 +1924,116 @@ export function SortableSessionCard({
       submenu: 'session-tags',
     });
   }
-  if (canSleepSession) {
-    primaryActions.push({
-      icon: session.isSleeping ? (
-        <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-      ) : (
-        <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+
+  const advancedSessionActions: SessionContextMenuAction[] = [];
+  if (canDelayedSend) {
+    advancedSessionActions.push({
+      icon: <IconClock aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'delayed-send',
+      label: 'Delayed Send',
+      onClick: requestDelayedSend,
+    });
+  }
+  if (canCloseAfterDone) {
+    /*
+     * CDXC:CloseAfterDone 2026-06-15-21:00:
+     * Close After Done stays next to Delayed Send. The menu glyph inherits the
+     * normal context-menu icon tint. Only the armed session-card status clock
+     * uses pastel red.
+     */
+    advancedSessionActions.push({
+      icon: <IconClock aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'close-after-done',
+      label: 'Close After Done',
+      onClick: requestToggleCloseAfterDone,
+    });
+  }
+  if (canFullReloadSession) {
+    advancedSessionActions.push({
+      icon: <IconRefresh aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'full-reload',
+      label: 'Full reload',
+      onClick: requestFullReloadSession,
+    });
+  }
+  if (canForkSession) {
+    advancedSessionActions.push({
+      icon: <IconGitFork aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'fork',
+      label: 'Fork',
+      onClick: requestForkSession,
+    });
+  }
+  if (session.firstUserMessage?.trim()) {
+    advancedSessionActions.push({
+      icon: <IconMessageCircle aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'view-first-message',
+      label: 'View 1st message',
+      onClick: requestViewFirstUserMessage,
+    });
+  }
+  if (canGenerateSessionTitle) {
+    /**
+     * CDXC:SessionNaming 2026-05-08-10:54
+     * Claude and Codex thread cards need a direct "Generate Title" action that
+     * retitles the session from the saved 1st user message. The action is only
+     * useful once that message exists, because the controller intentionally
+     * generates from real user text rather than from title fallbacks.
+     */
+    advancedSessionActions.push({
+      icon: <IconSparkles aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'generate-title',
+      label: 'Generate Title',
+      onClick: requestGenerateSessionTitle,
+    });
+  }
+  if (canCreateSessionGroupFromSession) {
+    advancedSessionActions.push({
+      icon: (
+        <IconLayoutSidebarRightExpand aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ),
-      key: 'sleep',
-      label: session.isSleeping ? 'Wake' : 'Sleep',
-      onClick: () => requestSetSleeping(!session.isSleeping),
+      key: 'move-to-new-group',
+      label: 'Move to New Group',
+      onClick: requestCreateSessionGroupFromSession,
+    });
+  }
+  if (canFocusMode) {
+    /**
+     * CDXC:SessionFocusMode 2026-05-28-12:52:
+     * Sidebar context-menu Focus should only appear when the group has split panes to zoom.
+     * A single pane with multiple tabs still uses normal tab selection, so hiding Focus here keeps the menu aligned with double-click behavior.
+     */
+    advancedSessionActions.push({
+      icon: <IconFocus2 aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'focus-mode',
+      label: 'Focus',
+      onClick: requestFocusMode,
+    });
+  }
+
+  const advancedCopyActions: SessionContextMenuAction[] = [];
+  if (canCopySessionDetails) {
+    advancedCopyActions.push({
+      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'copy-details',
+      label: 'Copy details',
+      onClick: requestCopySessionDetails,
+    });
+  }
+  if (canCopyResumeCommand) {
+    advancedCopyActions.push({
+      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'copy-resume',
+      label: 'Copy resume',
+      onClick: requestCopyResumeCommand,
+    });
+  }
+  if (canCopyAttachCommand) {
+    advancedCopyActions.push({
+      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'copy-attach',
+      label: 'Copy attach command',
+      onClick: requestCopyAttachCommand,
     });
   }
 
@@ -1944,133 +2069,45 @@ export function SortableSessionCard({
     });
   }
 
-  const sessionActions: SessionContextMenuAction[] = [];
-  if (session.firstUserMessage?.trim()) {
-    sessionActions.push({
-      icon: <IconMessageCircle aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'view-first-message',
-      label: 'View 1st message',
-      onClick: requestViewFirstUserMessage,
-    });
-  }
-  if (canOpenSessionNote) {
-    sessionActions.push({
-      icon: <IconNote aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'session-note',
-      label: 'Session Note',
-      onClick: requestOpenSessionNote,
-    });
-  }
-  if (canCopyResumeCommand) {
-    sessionActions.push({
-      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'copy-resume',
-      label: 'Copy resume',
-      onClick: requestCopyResumeCommand,
-    });
-  }
-  if (canCopyAttachCommand) {
-    sessionActions.push({
-      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'copy-attach',
-      label: 'Copy attach command',
-      onClick: requestCopyAttachCommand,
-    });
-  }
-  if (canCopySessionDetails) {
-    sessionActions.push({
-      icon: <IconCopy aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'copy-details',
-      label: 'Copy details',
-      onClick: requestCopySessionDetails,
-    });
-  }
-  if (canDelayedSend) {
-    sessionActions.push({
-      icon: <IconClock aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'delayed-send',
-      label: 'Delayed Send',
-      onClick: requestDelayedSend,
-    });
-  }
-  if (canCloseAfterDone) {
-    /*
-     * CDXC:CloseAfterDone 2026-06-15-21:00:
-     * Sidebar context menus should place Close After Done immediately below
-     * Delayed Send, but the menu glyph itself inherits the normal context-menu
-     * icon tint. Only the armed session-card status clock uses pastel red.
-     */
-    sessionActions.push({
-      icon: <IconClock aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'close-after-done',
-      label: 'Close After Done',
-      onClick: requestToggleCloseAfterDone,
-    });
-  }
-  if (canForkSession) {
-    sessionActions.push({
-      icon: <IconGitFork aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'fork',
-      label: 'Fork',
-      onClick: requestForkSession,
-    });
-  }
-  if (canGenerateSessionTitle) {
-    /**
-     * CDXC:SessionNaming 2026-05-08-10:54
-     * Claude and Codex thread cards need a direct "Generate Title" action that
-     * retitles the session from the saved 1st user message. The action is only
-     * useful once that message exists, because the controller intentionally
-     * generates from real user text rather than from title fallbacks.
-     */
-    sessionActions.push({
-      icon: <IconSparkles aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'generate-title',
-      label: 'Generate Title',
-      onClick: requestGenerateSessionTitle,
-    });
-  }
-  if (canFullReloadSession) {
-    sessionActions.push({
-      icon: <IconRefresh aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'full-reload',
-      label: 'Full reload',
-      onClick: requestFullReloadSession,
-    });
-  }
-  if (canCreateSessionGroupFromSession) {
-    sessionActions.push({
-      icon: (
-        <IconLayoutSidebarRightExpand aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+  const advancedSections = [
+    { actions: advancedSessionActions, label: 'Session' },
+    { actions: advancedCopyActions, label: 'Copy' },
+    { actions: belowActions, label: 'Below' },
+  ].filter((section) => section.actions.length > 0);
+
+  const openAdvancedSubmenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (advancedSubmenuPosition) {
+      setAdvancedSubmenuPosition(undefined);
+      return;
+    }
+    setTagSubmenuPosition(undefined);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const submenuWidth = 204;
+    const itemCount = advancedSections.reduce((count, section) => count + section.actions.length, 0);
+    const dividerCount = Math.max(0, advancedSections.length - 1);
+    const labelCount = advancedSections.length;
+    const submenuHeight =
+      CONTEXT_MENU_VERTICAL_PADDING_PX +
+      itemCount * CONTEXT_MENU_ITEM_HEIGHT_PX +
+      dividerCount * CONTEXT_MENU_DIVIDER_HEIGHT_PX +
+      labelCount * CONTEXT_MENU_GROUP_LABEL_HEIGHT_PX;
+    setAdvancedSubmenuPosition({
+      x: getCenteredSidebarMenuX(submenuWidth),
+      y: Math.max(
+        CONTEXT_MENU_MARGIN_PX,
+        Math.min(bounds.bottom + 4, window.innerHeight - submenuHeight - CONTEXT_MENU_MARGIN_PX)
       ),
-      key: 'move-to-new-group',
-      label: 'Move to New Group',
-      onClick: requestCreateSessionGroupFromSession,
     });
-  }
-  if (canFocusMode) {
-    /**
-     * CDXC:SessionFocusMode 2026-05-28-12:52:
-     * Sidebar context-menu Focus should only appear when the group has split panes to zoom.
-     * A single pane with multiple tabs still uses normal tab selection, so hiding Focus here keeps the menu aligned with double-click behavior.
-     */
-    sessionActions.push({
-      icon: <IconFocus2 aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'focus-mode',
-      label: 'Focus',
-      onClick: requestFocusMode,
-    });
-  }
-  if (canPopOutPane) {
-    sessionActions.push({
-      icon: session.isPoppedOut ? (
-        <IconLayoutSidebarRightExpand aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-      ) : (
-        <IconExternalLink aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-      ),
-      key: 'pop-out-pane',
-      label: session.isPoppedOut ? 'Restore Pane' : 'Pop Out Pane',
-      onClick: requestPopOutPane,
+  };
+
+  const advancedRootActions: SessionContextMenuAction[] = [];
+  if (advancedSections.length > 0) {
+    advancedRootActions.push({
+      icon: <IconDots aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'advanced',
+      label: 'Advanced',
+      onClick: openAdvancedSubmenu,
+      submenu: 'advanced',
     });
   }
 
@@ -2096,11 +2133,10 @@ export function SortableSessionCard({
   }
   /*
    * CDXC:SessionMenuGroupLabels 2026-08-26:
-   * The separated groups carry the same kind of heading the chat dots menu puts
-   * over its "Agent" block. Close/Close selected stay unlabeled: a single
-   * destructive row names itself, and a heading over it only adds height. The
-   * bulk menu stays unlabeled for the same reason — every one of its rows
-   * already ends in "selected", so a "Selected" heading only repeats them.
+   * The root menu is unlabeled: Rename/Sleep/Pin/Park/Note/Tag as are the
+   * everyday rows, Advanced is the only nested parent, and Close names itself.
+   * Group headings live inside Advanced (Session / Copy / Below). The bulk menu
+   * stays unlabeled because every one of its rows already ends in "selected".
    */
   const contextMenuSections = (
     isBulkContextMenu
@@ -2109,9 +2145,8 @@ export function SortableSessionCard({
           { actions: bulkDestructiveActions, label: undefined },
         ]
       : [
-          { actions: primaryActions, label: 'Session' },
-          { actions: sessionActions, label: 'Actions' },
-          { actions: belowActions, label: 'Below' },
+          { actions: primaryActions, label: undefined },
+          { actions: advancedRootActions, label: undefined },
           { actions: destructiveActions, label: undefined },
         ]
   ).filter((section) => section.actions.length > 0);
@@ -2602,6 +2637,7 @@ export function SortableSessionCard({
           onDismiss={() => {
             setContextMenuPosition(undefined);
             setTagSubmenuPosition(undefined);
+            setAdvancedSubmenuPosition(undefined);
             setContextMenuSelectedSessionIds(EMPTY_SESSION_IDS);
           }}
           vscode={vscode}
@@ -2616,14 +2652,20 @@ export function SortableSessionCard({
                     key={action.key}
                     className={`session-context-menu-item${action.danger ? ' session-context-menu-item-danger' : ''}`}
                     onClick={(event) => action.onClick(event)}
-                    aria-expanded={action.submenu === 'session-tags' ? Boolean(tagSubmenuPosition) : undefined}
-                    aria-haspopup={action.submenu === 'session-tags' ? 'menu' : undefined}
+                    aria-expanded={
+                      action.submenu === 'session-tags'
+                        ? Boolean(tagSubmenuPosition)
+                        : action.submenu === 'advanced'
+                          ? Boolean(advancedSubmenuPosition)
+                          : undefined
+                    }
+                    aria-haspopup={action.submenu ? 'menu' : undefined}
                     role='menuitem'
                     type='button'
                   >
                     {action.icon}
                     {action.label}
-                    {action.submenu === 'session-tags' ? (
+                    {action.submenu ? (
                       <IconChevronRight
                         aria-hidden='true'
                         className='session-context-menu-trailing-icon'
@@ -2719,6 +2761,44 @@ export function SortableSessionCard({
                     );
                   })}
                 </div>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
+      {contextMenuPosition && advancedSubmenuPosition && !isProjectSessionListMoreRow
+        ? createPortal(
+            <div
+              aria-label='Advanced'
+              className='session-context-menu session-tag-submenu'
+              data-empty-space-blocking='true'
+              onClick={(event) => event.stopPropagation()}
+              role='menu'
+              style={{
+                left: `${advancedSubmenuPosition.x}px`,
+                top: `${advancedSubmenuPosition.y}px`,
+                zIndex: 'var(--sidebar-context-menu-submenu-z-index, 301)',
+              }}
+            >
+              {advancedSections.map((section, sectionIndex) => (
+                <Fragment key={`advanced-${section.label}`}>
+                  {sectionIndex > 0 ? <div className='session-context-menu-divider' role='separator' /> : null}
+                  <div className='session-context-menu-section'>
+                    <div className='session-context-menu-group-label'>{section.label}</div>
+                    {section.actions.map((action) => (
+                      <button
+                        key={action.key}
+                        className={`session-context-menu-item${action.danger ? ' session-context-menu-item-danger' : ''}`}
+                        onClick={(event) => action.onClick(event)}
+                        role='menuitem'
+                        type='button'
+                      >
+                        {action.icon}
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </Fragment>
               ))}
             </div>,
             document.body

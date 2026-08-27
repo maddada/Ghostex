@@ -85,7 +85,9 @@ describe('remote presentation sidebar source', () => {
     }
     expect(menuActionsSource).toContain("label: session.isPinned ? 'Unpin' : 'Pin'");
     expect(menuActionsSource).toContain("label: session.isSleeping ? 'Wake' : 'Sleep'");
-    expect(menuActionsSource).toContain("label: session.isPoppedOut ? 'Restore Pane' : 'Pop Out Pane'");
+    expect(menuActionsSource).toContain("label: 'Advanced'");
+    expect(menuActionsSource).toContain("label: 'Note'");
+    expect(menuActionsSource).not.toContain('Pop Out Pane');
     expect(sortableSessionCardSource).toContain('supportsFork(session)');
     expect(sortableSessionCardSource).toContain('supportsFullReloadMenuAction(session, isRemoteSession)');
   });

@@ -7,6 +7,7 @@ import {
   IconClock,
   IconCopy,
   IconDeviceMobile,
+  IconDots,
   IconGitBranch,
   IconGitFork,
   IconMaximize,
@@ -116,6 +117,12 @@ export type SidebarV2ContextMenuSubmenuItem = {
    * (snooze presets, project grouping) leave it unset.
    */
   sectionKey?: string;
+  /**
+   * Visible heading for this block. Tag submenus keep `sectionKey` for
+   * dividers without spending a row on Priority/Progress/Type text. Advanced
+   * uses this so Session / Copy read as labeled groups.
+   */
+  sectionLabel?: string;
   /** Right-aligned absolute time column, e.g. "9:00 AM". */
   trailingLabel?: string;
 };
@@ -284,135 +291,6 @@ export function createSidebarV2ContextMenuSections(
       })),
     });
   }
-  /*
-   * CDXC:SidebarV2ContextMenuParity 2026-07-30:
-   * Close After Done sits with settle/snooze rather than in V1's copy/act
-   * section: in the inbox model all three answer the same question — when should
-   * this row stop asking for attention — and Close After Done is simply the
-   * answer that ends with the session gone. The host owns the armed flag and the
-   * three-minute Done timer, so the label never states which way the toggle went.
-   */
-  if (eligibility?.canCloseAfterDone === true && handlers.onCloseAfterDone) {
-    lifecycleActions.push({
-      icon: <IconClock aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'closeAfterDone',
-      label: 'Close After Done',
-      onClick: handlers.onCloseAfterDone,
-    });
-  }
-
-  const primary: SidebarV2ContextMenuAction[] = [];
-  if (!isBrowser) {
-    primary.push({
-      icon: <IconPencil aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'rename',
-      label: 'Rename',
-      onClick: handlers.onRename,
-    });
-  }
-  /*
-   * CDXC:SidebarV2ContextMenuParity 2026-07-30:
-   * Focus is offered only when the clicked row's group actually has split panes
-   * to zoom — V1's rule. A group with one pane and several tabs uses ordinary tab
-   * selection, so zooming it changes nothing the user can see.
-   */
-  if (options.canFocusMode === true) {
-    primary.push({
-      icon: <IconMaximize aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'focus',
-      label: 'Focus',
-      onClick: handlers.onFocusMode,
-    });
-  }
-  if (!isBrowser && options.worktreeBranch && handlers.onNewSessionOnBranch) {
-    primary.push({
-      icon: <IconGitBranch aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'newSessionOnBranch',
-      label: `New session on ${options.worktreeBranch}`,
-      onClick: handlers.onNewSessionOnBranch,
-    });
-  }
-
-  /*
-   * CDXC:SidebarV2ContextMenuParity 2026-07-30:
-   * The per-session act/inspect/copy section, in V1's order. Every gate is
-   * V1's own eligibility answer, and every handler is optional, so an item is
-   * absent whenever either the row cannot support it or the caller cannot serve
-   * it — never present-but-inert.
-   */
-  const sessionActions: SidebarV2ContextMenuAction[] = [];
-  if (session.firstUserMessage?.trim() && handlers.onViewFirstMessage) {
-    sessionActions.push({
-      icon: <IconMessageCircle aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'viewFirstMessage',
-      label: 'View 1st message',
-      onClick: handlers.onViewFirstMessage,
-    });
-  }
-  if (eligibility?.canOpenSessionNote === true && handlers.onSessionNote) {
-    sessionActions.push({
-      icon: <IconNote aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'sessionNote',
-      label: 'Session Note',
-      onClick: handlers.onSessionNote,
-    });
-  }
-  if (eligibility?.canCopyResumeCommand === true && handlers.onCopyResumeCommand) {
-    sessionActions.push({
-      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'copyResume',
-      label: 'Copy resume',
-      onClick: handlers.onCopyResumeCommand,
-    });
-  }
-  if (eligibility?.canCopyAttachCommand === true && handlers.onCopyAttachCommand) {
-    sessionActions.push({
-      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'copyAttach',
-      label: 'Copy attach command',
-      onClick: handlers.onCopyAttachCommand,
-    });
-  }
-  if (eligibility?.canCopySessionDetails === true && handlers.onCopyDetails) {
-    sessionActions.push({
-      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'copyDetails',
-      label: 'Copy details',
-      onClick: handlers.onCopyDetails,
-    });
-  }
-  if (eligibility?.canDelayedSend === true && handlers.onDelayedSend) {
-    sessionActions.push({
-      icon: <IconClock aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'delayedSend',
-      label: 'Delayed Send',
-      onClick: handlers.onDelayedSend,
-    });
-  }
-  if (eligibility?.canForkSession === true && handlers.onFork) {
-    sessionActions.push({
-      icon: <IconGitFork aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'fork',
-      label: 'Fork',
-      onClick: handlers.onFork,
-    });
-  }
-  if (eligibility?.canGenerateSessionTitle === true && handlers.onGenerateTitle) {
-    sessionActions.push({
-      icon: <IconSparkles aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'generateTitle',
-      label: 'Generate Title',
-      onClick: handlers.onGenerateTitle,
-    });
-  }
-  if (eligibility?.canFullReloadSession === true && handlers.onFullReload) {
-    sessionActions.push({
-      icon: <IconRefresh aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
-      key: 'fullReload',
-      label: 'Full reload',
-      onClick: handlers.onFullReload,
-    });
-  }
 
   /*
    * CDXC:SidebarV2ContextMenuParity 2026-07-30:
@@ -437,33 +315,57 @@ export function createSidebarV2ContextMenuSections(
     section.options.map((option) => ({ ...option, sectionKey: section.label }))
   );
 
-  const stateActions: SidebarV2ContextMenuAction[] = [
-    {
-      icon: isPinned ? (
-        <IconPinnedOff aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-      ) : (
-        <IconPinned aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-      ),
-      key: 'pin',
-      label: isPinned ? 'Unpin' : 'Pin',
-      onClick: () => handlers.onSetPinned(!isPinned),
-    },
-  ];
+  const primary: SidebarV2ContextMenuAction[] = [];
+  if (!isBrowser) {
+    primary.push({
+      icon: <IconPencil aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'rename',
+      label: 'Rename',
+      onClick: handlers.onRename,
+    });
+  }
+  primary.push({
+    icon: isSleeping ? (
+      <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+    ) : (
+      <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+    ),
+    key: 'sleep',
+    label: isSleeping ? 'Wake' : 'Sleep',
+    onClick: () => handlers.onSetSleeping(!isSleeping),
+  });
+  primary.push({
+    icon: isPinned ? (
+      <IconPinnedOff aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+    ) : (
+      <IconPinned aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+    ),
+    key: 'pin',
+    label: isPinned ? 'Unpin' : 'Pin',
+    onClick: () => handlers.onSetPinned(!isPinned),
+  });
   if (!isBrowser && options.enableSessionParking && handlers.onSetParked) {
-    stateActions.push({
+    primary.push({
       icon: <IconArchive aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
       key: 'park',
       label: isParked ? 'Unpark' : 'Park',
       onClick: () => handlers.onSetParked?.(!isParked),
     });
   }
+  if (eligibility?.canOpenSessionNote === true && handlers.onSessionNote) {
+    primary.push({
+      icon: <IconNote aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'sessionNote',
+      label: 'Note',
+      onClick: handlers.onSessionNote,
+    });
+  }
   const onSetSessionTag = handlers.onSetSessionTag;
   if (eligibility?.canTagSession === true && onSetSessionTag && tagSubmenuItems.length > 0) {
-    stateActions.push({
+    primary.push({
       icon: <IconTag aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
       key: 'tagAs',
       label: 'Tag as',
-      // The parent only reveals the markers; assigning one is always explicit.
       onClick: () => undefined,
       submenu: tagSubmenuItems.map((option) => ({
         icon: (
@@ -483,16 +385,138 @@ export function createSidebarV2ContextMenuSections(
       })),
     });
   }
-  stateActions.push({
-    icon: isSleeping ? (
-      <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-    ) : (
-      <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-    ),
-    key: 'sleep',
-    label: isSleeping ? 'Wake' : 'Sleep',
-    onClick: () => handlers.onSetSleeping(!isSleeping),
-  });
+
+  const advancedSession: SidebarV2ContextMenuSubmenuItem[] = [];
+  if (eligibility?.canDelayedSend === true && handlers.onDelayedSend) {
+    advancedSession.push({
+      icon: <IconClock aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'delayedSend',
+      label: 'Delayed Send',
+      onClick: handlers.onDelayedSend,
+      sectionKey: 'session',
+      sectionLabel: 'Session',
+    });
+  }
+  if (eligibility?.canCloseAfterDone === true && handlers.onCloseAfterDone) {
+    advancedSession.push({
+      icon: <IconClock aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'closeAfterDone',
+      label: 'Close After Done',
+      onClick: handlers.onCloseAfterDone,
+      sectionKey: 'session',
+      sectionLabel: 'Session',
+    });
+  }
+  if (eligibility?.canFullReloadSession === true && handlers.onFullReload) {
+    advancedSession.push({
+      icon: <IconRefresh aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'fullReload',
+      label: 'Full reload',
+      onClick: handlers.onFullReload,
+      sectionKey: 'session',
+      sectionLabel: 'Session',
+    });
+  }
+  if (eligibility?.canForkSession === true && handlers.onFork) {
+    advancedSession.push({
+      icon: <IconGitFork aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'fork',
+      label: 'Fork',
+      onClick: handlers.onFork,
+      sectionKey: 'session',
+      sectionLabel: 'Session',
+    });
+  }
+  if (session.firstUserMessage?.trim() && handlers.onViewFirstMessage) {
+    advancedSession.push({
+      icon: <IconMessageCircle aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'viewFirstMessage',
+      label: 'View 1st message',
+      onClick: handlers.onViewFirstMessage,
+      sectionKey: 'session',
+      sectionLabel: 'Session',
+    });
+  }
+  if (eligibility?.canGenerateSessionTitle === true && handlers.onGenerateTitle) {
+    advancedSession.push({
+      icon: <IconSparkles aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'generateTitle',
+      label: 'Generate Title',
+      onClick: handlers.onGenerateTitle,
+      sectionKey: 'session',
+      sectionLabel: 'Session',
+    });
+  }
+  /*
+   * CDXC:SidebarV2ContextMenuParity 2026-07-30:
+   * Focus is offered only when the clicked row's group actually has split panes
+   * to zoom — V1's rule. A group with one pane and several tabs uses ordinary tab
+   * selection, so zooming it changes nothing the user can see.
+   */
+  if (options.canFocusMode === true) {
+    advancedSession.push({
+      icon: <IconMaximize aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'focus',
+      label: 'Focus',
+      onClick: handlers.onFocusMode,
+      sectionKey: 'session',
+      sectionLabel: 'Session',
+    });
+  }
+  if (!isBrowser && options.worktreeBranch && handlers.onNewSessionOnBranch) {
+    advancedSession.push({
+      icon: <IconGitBranch aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'newSessionOnBranch',
+      label: `New session on ${options.worktreeBranch}`,
+      onClick: handlers.onNewSessionOnBranch,
+      sectionKey: 'session',
+      sectionLabel: 'Session',
+    });
+  }
+
+  const advancedCopy: SidebarV2ContextMenuSubmenuItem[] = [];
+  if (eligibility?.canCopySessionDetails === true && handlers.onCopyDetails) {
+    advancedCopy.push({
+      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'copyDetails',
+      label: 'Copy details',
+      onClick: handlers.onCopyDetails,
+      sectionKey: 'copy',
+      sectionLabel: 'Copy',
+    });
+  }
+  if (eligibility?.canCopyResumeCommand === true && handlers.onCopyResumeCommand) {
+    advancedCopy.push({
+      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'copyResume',
+      label: 'Copy resume',
+      onClick: handlers.onCopyResumeCommand,
+      sectionKey: 'copy',
+      sectionLabel: 'Copy',
+    });
+  }
+  if (eligibility?.canCopyAttachCommand === true && handlers.onCopyAttachCommand) {
+    advancedCopy.push({
+      icon: <IconCopy aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'copyAttach',
+      label: 'Copy attach command',
+      onClick: handlers.onCopyAttachCommand,
+      sectionKey: 'copy',
+      sectionLabel: 'Copy',
+    });
+  }
+
+  const advancedSubmenu = [...advancedSession, ...advancedCopy];
+  const advancedRoot: SidebarV2ContextMenuAction[] = [];
+  if (advancedSubmenu.length > 0) {
+    advancedRoot.push({
+      icon: <IconDots aria-hidden='true' className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />,
+      key: 'advanced',
+      label: 'Advanced',
+      onClick: () => undefined,
+      submenu: advancedSubmenu,
+    });
+  }
 
   const destructive: SidebarV2ContextMenuAction[] = [
     {
@@ -515,21 +539,15 @@ export function createSidebarV2ContextMenuSections(
   ];
 
   /*
-   * CDXC:SessionMenuGroupLabels 2026-08-26:
-   * The classic session card names its blocks Session / Actions / Below; V2
-   * keeps the first two names on the blocks that hold the same items and names
-   * its own two extra blocks after the concerns this file already calls them
-   * (`CDXC:SidebarV2Lifecycle` for settle/snooze/wake, and the pin/park/tag/
-   * sleep block that files a row rather than acting on it). V1's "Below" has no
-   * counterpart here — the inbox renders no rows below the clicked one — and
-   * Close stays unlabeled for V1's reason: a single destructive row names
-   * itself, and a heading over it only adds height.
+   * CDXC:SessionMenuGroupLabels 2026-08-27:
+   * The root menu matches V1: unlabeled everyday rows, then V2's settle/snooze
+   * verdicts, then Advanced, then unlabeled Close. Session / Copy headings live
+   * inside Advanced. V1's Below has no counterpart here.
    */
   return [
-    { actions: primary, label: 'Session' },
-    { actions: sessionActions, label: 'Actions' },
-    { actions: lifecycleActions, label: 'Lifecycle' },
-    { actions: stateActions, label: 'Organize' },
+    { actions: primary, label: undefined },
+    { actions: lifecycleActions, label: undefined },
+    { actions: advancedRoot, label: undefined },
     { actions: destructive, label: undefined },
   ].filter((section) => section.actions.length > 0);
 }
@@ -777,6 +795,9 @@ function SidebarV2ContextSubmenuPanel({
           className='session-tag-menu-section sidebar-v2-context-submenu-section'
           key={`sidebar-v2-submenu-section-${group.key}`}
         >
+          {group.items[0]?.sectionLabel ? (
+            <div className='session-context-menu-group-label'>{group.items[0].sectionLabel}</div>
+          ) : null}
           {group.items.map((item) => (
             <button
               aria-checked={item.isChecked === undefined ? undefined : item.isChecked}

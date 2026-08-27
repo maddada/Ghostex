@@ -681,14 +681,31 @@ async function openSidebarV2RowMenu(storyRoot: ParentNode, sessionId: string): P
   });
 }
 
-/** Every top-level item currently in the open menu, in DOM order. Order is the
-    assertion that matters most: it is what proves the parity items landed in
-    their own section between the primary and lifecycle groups. */
+/** Every top-level item currently in the open menu, in DOM order. */
 function readSidebarV2MenuLabels(storyRoot: ParentNode): string[] {
   return [...storyRoot.querySelectorAll<HTMLElement>('.sidebar-v2-session-context-menu [role="menuitem"]')].map(
     (item) => item.textContent?.trim() ?? ''
   );
 }
+
+function readSidebarV2AdvancedMenuLabels(storyRoot: ParentNode): string[] {
+  return [...storyRoot.querySelectorAll<HTMLElement>('.sidebar-v2-context-submenu [role="menuitem"]')].map(
+    (item) => item.textContent?.trim() ?? ''
+  );
+}
+
+const SIDEBAR_V2_ADVANCED_MENU_LABELS = new Set([
+  'Close After Done',
+  'Copy attach command',
+  'Copy details',
+  'Copy resume',
+  'Delayed Send',
+  'Focus',
+  'Fork',
+  'Full reload',
+  'Generate Title',
+  'View 1st message',
+]);
 
 /**
  * Delayed Send and View 1st message are the two items whose effect is a native
@@ -736,22 +753,26 @@ export const ShowsV1ParityContextMenuItems: Story = {
        */
       expect(readSidebarV2MenuLabels(storyRoot)).toEqual([
         'Rename',
-        'Focus',
-        'View 1st message',
-        'Copy resume',
-        'Copy attach command',
-        'Copy details',
-        'Delayed Send',
-        'Fork',
-        'Generate Title',
-        'Full reload',
-        'Settle',
-        'Snooze',
-        'Close After Done',
+        'Sleep',
         'Pin',
         'Tag as',
-        'Sleep',
+        'Settle',
+        'Snooze',
+        'Advanced',
         'Close',
+      ]);
+      fireEvent.click(await body.findByRole('menuitem', { name: 'Advanced' }));
+      expect(readSidebarV2AdvancedMenuLabels(storyRoot)).toEqual([
+        'Delayed Send',
+        'Close After Done',
+        'Full reload',
+        'Fork',
+        'View 1st message',
+        'Generate Title',
+        'Focus',
+        'Copy details',
+        'Copy resume',
+        'Copy attach command',
       ]);
     });
 
@@ -772,7 +793,9 @@ export const ShowsV1ParityContextMenuItems: Story = {
        * gates it on "is a concrete row" rather than on an agent: a tab's project,
        * machine and URL are still worth copying.
        */
-      expect(readSidebarV2MenuLabels(storyRoot)).toEqual(['Copy details', 'Pin', 'Sleep', 'Close']);
+      expect(readSidebarV2MenuLabels(storyRoot)).toEqual(['Sleep', 'Pin', 'Advanced', 'Close']);
+      fireEvent.click(await body.findByRole('menuitem', { name: 'Advanced' }));
+      expect(readSidebarV2AdvancedMenuLabels(storyRoot)).toEqual(['Copy details']);
     });
 
     await step('Focus is absent in a group with no split panes to zoom', async () => {
@@ -801,21 +824,16 @@ export const HidesCopyActionsWithoutTheirSettings: Story = {
       expect(labels).not.toContain('Copy resume');
       expect(labels).not.toContain('Copy attach command');
       expect(labels).not.toContain('Copy details');
-      expect(labels).toEqual([
-        'Rename',
-        'Focus',
-        'View 1st message',
+      expect(labels).toEqual(['Rename', 'Sleep', 'Pin', 'Tag as', 'Settle', 'Snooze', 'Advanced', 'Close']);
+      fireEvent.click(await body.findByRole('menuitem', { name: 'Advanced' }));
+      expect(readSidebarV2AdvancedMenuLabels(storyRoot)).toEqual([
         'Delayed Send',
-        'Fork',
-        'Generate Title',
-        'Full reload',
-        'Settle',
-        'Snooze',
         'Close After Done',
-        'Pin',
-        'Tag as',
-        'Sleep',
-        'Close',
+        'Full reload',
+        'Fork',
+        'View 1st message',
+        'Generate Title',
+        'Focus',
       ]);
       expect(body.queryByRole('menuitem', { name: 'Fork' })).toBeTruthy();
     });
@@ -832,6 +850,9 @@ export const RunsV1ParityContextMenuCommands: Story = {
     const clickMenuItem = async (label: string) => {
       resetSidebarStoryMessages();
       await openSidebarV2RowMenu(storyRoot, 'v2-quick-idle');
+      if (SIDEBAR_V2_ADVANCED_MENU_LABELS.has(label)) {
+        fireEvent.click(await body.findByRole('menuitem', { name: 'Advanced' }));
+      }
       fireEvent.click(await body.findByRole('menuitem', { name: label }));
     };
 
@@ -962,14 +983,16 @@ export const HidesLocalOnlyActionsOnRemoteRows: Story = {
 
     await step('a local agent row keeps the host-timer actions', async () => {
       await openSidebarV2RowMenu(storyRoot, 'v2-mm-local-working');
-      const labels = readSidebarV2MenuLabels(storyRoot);
+      fireEvent.click(await within(storyRoot).findByRole('menuitem', { name: 'Advanced' }));
+      const labels = readSidebarV2AdvancedMenuLabels(storyRoot);
       expect(labels).toContain('Delayed Send');
       expect(labels).toContain('Close After Done');
     });
 
     await step('the host-timer actions are absent on a row from another machine', async () => {
       await openSidebarV2RowMenu(storyRoot, 'v2-mm-remote-active');
-      const labels = readSidebarV2MenuLabels(storyRoot);
+      fireEvent.click(await within(storyRoot).findByRole('menuitem', { name: 'Advanced' }));
+      const labels = readSidebarV2AdvancedMenuLabels(storyRoot);
       /* Both need a published capability the fixture's remote rows do not claim. */
       expect(labels).not.toContain('Delayed Send');
       expect(labels).not.toContain('Close After Done');
@@ -981,8 +1004,8 @@ export const HidesLocalOnlyActionsOnRemoteRows: Story = {
        */
       expect(labels).toContain('Full reload');
       expect(labels).toContain('Copy resume');
-      expect(labels).toContain('Rename');
-      expect(labels).toContain('Tag as');
+      expect(readSidebarV2MenuLabels(storyRoot)).toContain('Rename');
+      expect(readSidebarV2MenuLabels(storyRoot)).toContain('Tag as');
     });
   },
 };
