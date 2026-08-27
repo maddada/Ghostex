@@ -148,7 +148,15 @@ const SIDEBAR_BROWSER_TAB_FOCUS_JS_FUNCTION: &str = "postBrowserTabFocus";
 const SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_JS_FUNCTION: &str =
     "postProjectBoardConversationResponse";
 
-pub(crate) const SIDEBAR_BRIDGE_PAYLOAD_MAX_CHARS: usize = 32 * 1024;
+/*
+Must fit the largest sidebar-bridge message: the project board conversation
+response, which the app bounds at
+GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_PAYLOAD_MAX_CHARS (256 KiB). At the
+previous 32 KiB, a shared board with ~45+ conversation links produced a
+response the bridge silently dropped, so every card showed
+"No linked conversation yet" while the links were stored correctly.
+*/
+pub(crate) const SIDEBAR_BRIDGE_PAYLOAD_MAX_CHARS: usize = 256 * 1024;
 pub(crate) const PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME: &str =
     "ghostex.gpui.projectWorkarea.installBridge";
 const PROJECT_WORKAREA_PROJECT_BEADS_REQUEST_PROCESS_MESSAGE_NAME: &str =

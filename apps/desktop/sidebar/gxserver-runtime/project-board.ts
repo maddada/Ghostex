@@ -311,7 +311,11 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     const boardProject = this.selectGpuiProjectBoardDomainProject(request, projects);
     return {
       boardProject,
-      linkStoreProjects: selectBeadConversationLinkStoreProjects(boardProject, projects),
+      linkStoreProjects: selectBeadConversationLinkStoreProjects(
+        boardProject,
+        projects,
+        normalizeghostexSettings(this.runtimeSettings?.settings).globalBeadsDirectory
+      ),
     };
   },
 
@@ -665,7 +669,11 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
         projects.find((candidate) => candidate.projectId === boardProject.projectId) ?? boardProject;
       return {
         boardProject: latestBoardProject,
-        linkStoreProjects: selectBeadConversationLinkStoreProjects(latestBoardProject, projects),
+        linkStoreProjects: selectBeadConversationLinkStoreProjects(
+          latestBoardProject,
+          projects,
+          normalizeghostexSettings(this.runtimeSettings?.settings).globalBeadsDirectory
+        ),
       };
     } catch {
       return {

@@ -255,24 +255,44 @@ export function selectBeadConversationLinks<TLink>(index: ReadonlyMap<string, TL
  * beadConversationLinks. Links are read across the rows that share a board so
  * a card shows the work that happened, whichever row it was started from.
  * Writes stay on their own row, so this needs no storage change.
+ *
+ * A project that stores no Beads directory of its own is showing the Global
+ * Default Beads directory's board, so the store key must resolve through the
+ * same cascade the server's link write path uses (configured directory, then
+ * the Global Default, then the project path). Without it, a row mounting the
+ * shared board via the Global Default reads only its own links and every card
+ * opened from it shows "No linked conversation yet" while the link sits on a
+ * sibling row.
  */
-export function beadConversationLinkStoreKey(project: BeadConversationLinkStoreProject): string {
+export function beadConversationLinkStoreKey(
+  project: BeadConversationLinkStoreProject,
+  globalBeadsDirectory = ''
+): string {
   const configured = project.projectBoardConfig?.beadsDirectory;
-  const directory = typeof configured === 'string' && configured.trim() ? configured : project.path;
+  const directory =
+    typeof configured === 'string' && configured.trim()
+      ? configured
+      : globalBeadsDirectory.trim()
+        ? globalBeadsDirectory
+        : project.path;
   return typeof directory === 'string' ? directory.trim().replace(/\/+$/u, '') : '';
 }
 
 export function selectBeadConversationLinkStoreProjects<TProject extends BeadConversationLinkStoreProject>(
   boardProject: TProject,
-  projects: readonly TProject[]
+  projects: readonly TProject[],
+  globalBeadsDirectory = ''
 ): TProject[] {
-  const boardStoreKey = beadConversationLinkStoreKey(boardProject);
+  const boardStoreKey = beadConversationLinkStoreKey(boardProject, globalBeadsDirectory);
   const storeProjects = [boardProject];
   if (!boardStoreKey) {
     return storeProjects;
   }
   for (const candidate of projects) {
-    if (candidate.projectId !== boardProject.projectId && beadConversationLinkStoreKey(candidate) === boardStoreKey) {
+    if (
+      candidate.projectId !== boardProject.projectId &&
+      beadConversationLinkStoreKey(candidate, globalBeadsDirectory) === boardStoreKey
+    ) {
       storeProjects.push(candidate);
     }
   }
