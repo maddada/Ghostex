@@ -522,15 +522,14 @@ export function createEngineActions(
     }
     const record = settings as Record<string, unknown>;
     const debuggingMode = record.debuggingMode === true;
-    const sessionPersistenceOff = record.sessionPersistenceProvider === 'off';
     updateEnv((current) => ({
       ...current,
-      settings: { debuggingMode, sessionPersistenceOff },
+      settings: { debuggingMode },
     }));
     emit(
       'state',
       'updateSettings applied to the simulated settings service',
-      `debuggingMode: ${debuggingMode}, session persistence off: ${sessionPersistenceOff}.`,
+      `debuggingMode: ${debuggingMode}.`,
       'apps/desktop/src/app/remote_conn/settings_and_install_probe.rs:6 handle_gpui_app_modal_update_settings_message'
     );
     const hydrate = createSandboxHydrateMessage(get().env);

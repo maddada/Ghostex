@@ -45,7 +45,7 @@ export function createDefaultEnv(): SimEnvState {
     gxserver: { scenario: 'healthyToolsAvailable', respawnFixesHealth: true },
     projectCount: 0,
     updateAvailable: false,
-    settings: { debuggingMode: false, sessionPersistenceOff: false },
+    settings: { debuggingMode: false },
     timing: {
       gxserverProbeMs: 400,
       cefInitMs: 900,

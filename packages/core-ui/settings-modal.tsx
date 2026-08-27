@@ -24,13 +24,7 @@ import {
   type SettingsModalTab,
   type SettingsModalTabVisibilityOptions,
 } from './settings-modal-tabs';
-import {
-  IconAlertTriangle,
-  IconChevronDown,
-  IconChevronRight,
-  IconFolderOpen,
-  IconInfoCircle,
-} from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconFolderOpen, IconInfoCircle } from '@tabler/icons-react';
 import { type CompletionSoundSetting } from '../shared/completion-sound';
 import { GHOSTEX_RECOMMENDED_GHOSTTY_CONFIG_LINES } from '../shared/ghostty-config-actions';
 import {
@@ -53,6 +47,7 @@ import {
   MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
   MAX_TERMINAL_PANE_PADDING_PX,
+  MAX_TERMINAL_VIEW_WIDTH_PERCENT,
   MAX_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   GHOSTTY_CONFIRM_CLOSE_SURFACE_OPTIONS,
   GHOSTTY_COPY_ON_SELECT_OPTIONS,
@@ -61,12 +56,12 @@ import {
   KEEP_AWAKE_DURATION_OPTIONS,
   MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
   MIN_TERMINAL_PANE_PADDING_PX,
+  MIN_TERMINAL_VIEW_WIDTH_PERCENT,
   MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   PROMPT_EDITOR_BACKEND_OPTIONS,
   WINDOWS_TERMINAL_BACKEND_OPTIONS,
   type PromptEditorBackend,
-  SESSION_PERSISTENCE_PROVIDER_OPTIONS,
   SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS,
   SIDEBAR_SIDE_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
@@ -80,6 +75,7 @@ import {
   MIN_SIDEBAR_DEFAULT_WIDTH_PX,
   SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS,
   SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP,
+  TERMINAL_VIEW_WIDTH_PERCENT_STEP,
   normalizeghostexSettings,
   parseSidebarAutoSettleAfterDaysSelectValue,
   sidebarAutoSettleAfterDaysSelectValue,
@@ -88,7 +84,6 @@ import {
   type GhosttyCopyOnSelect,
   type GhosttyScrollbar,
   type KeepAwakeDurationMinutes,
-  type SessionPersistenceProvider,
   type SettingsModalNavigationState,
   type CommandsPanelSide,
   type SidebarSide,
@@ -678,14 +673,13 @@ export function SettingsModal({
   }, [activeTab, agentHookStatus, agentHookStatusLoading, isOpen, onRequestAgentHookStatus]);
 
   useEffect(() => {
-    if (!isOpen || (activeTab !== 'integrations' && activeTab !== 'plugins')) {
+    if (!isOpen || activeTab !== 'integrations') {
       return;
     }
     /**
      * CDXC:CuaDriverPlugins 2026-08-09:
-     * Integrations needs CLI, skill, and macOS permission state; Plugins uses
-     * the same native-owned payload for Cua Driver version/update state. Probe
-     * only while one of those pages is active.
+     * Integrations owns CLI, skill, Trycua lifecycle, and macOS permission
+     * state. Probe only while that page is active.
      *
      * CDXC:AgentHookSettings 2026-08-19-11:20:
      * Hook install, per-agent status, and hook removal all live in Settings -> Agents, so Integrations no longer probes hook status at all.
@@ -1544,7 +1538,7 @@ export function SettingsModal({
                           <SettingsSection sectionRef={chatSectionRef} title='Chat'>
                             {mainSettingVisible(settingsSearch.chat, 'preferredAgentInterface') ? (
                               <PreferredAgentInterfaceField
-                                description='Chat switches on automatically as soon as Ghostex detects a compatible agent. The terminal stays live in the background, and you can switch back at any time.'
+                                description='Chat switches on automatically as soon as Ghostex detects a compatible agent. The terminal stays live in the background, and you can switch back at any time. Settings > Agents can override this for one agent at a time.'
                                 label='Default Agent View'
                                 {...getSettingModificationProps('preferredAgentInterface')}
                                 onChange={(preferredAgentInterface) =>
@@ -1923,16 +1917,47 @@ export function SettingsModal({
                                 value={draft.terminalLetterSpacing}
                               />
                             ) : null}
+                            {mainSettingVisible(settingsSearch.terminal, 'terminalNarrowerViewEnabled') ? (
+                              <ToggleField
+                                checked={draft.terminalNarrowerViewEnabled}
+                                description='Center and constrain terminal content on wide panes. Narrow panes stay full-width.'
+                                label='Narrower Terminal View'
+                                {...getSettingModificationProps('terminalNarrowerViewEnabled')}
+                                onChange={(checked) => updateDraft('terminalNarrowerViewEnabled', checked)}
+                              />
+                            ) : null}
+                            {draft.terminalNarrowerViewEnabled &&
+                            mainSettingVisible(settingsSearch.terminal, 'terminalViewWidthPercent') ? (
+                              <SliderNumberField
+                                description='Set the centered terminal body width. Panes 1070px wide or narrower remain full-width.'
+                                label='Terminal Width (%)'
+                                {...getSettingModificationProps('terminalViewWidthPercent')}
+                                max={MAX_TERMINAL_VIEW_WIDTH_PERCENT}
+                                min={MIN_TERMINAL_VIEW_WIDTH_PERCENT}
+                                onCommit={(value) => updateDraft('terminalViewWidthPercent', value)}
+                                onChange={(value) => updateDraftDebounced('terminalViewWidthPercent', value)}
+                                step={TERMINAL_VIEW_WIDTH_PERCENT_STEP}
+                                value={draft.terminalViewWidthPercent}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.terminal, 'terminalLayoutApplyToAllTerminals') ? (
+                              <ToggleField
+                                checked={draft.terminalLayoutApplyToAllTerminals}
+                                description='Apply Terminal Width and Padding to command and editor companion terminals too. Turn off to limit them to agent-session Terminal View.'
+                                label='Apply Layout to All Terminals'
+                                {...getSettingModificationProps('terminalLayoutApplyToAllTerminals')}
+                                onChange={(checked) => updateDraft('terminalLayoutApplyToAllTerminals', checked)}
+                              />
+                            ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'terminalPaneHorizontalPaddingPx') ? (
                               /*
                                * CDXC:TerminalPanePadding 2026-06-25-21:27:
                                * Horizontal terminal padding is a native pane content inset,
                                * not spacing between split panes. Keep the slider integer-pixel
-                               * based and default it to zero so existing terminal layouts stay
-                               * edge-to-edge until the user opts in.
+                               * based. The 16px default matches Chat's horizontal content inset.
                                */
                               <SliderNumberField
-                                description='Add left and right inner padding inside every terminal pane.'
+                                description='Add left and right inner padding inside the terminal content area.'
                                 label='Horizontal Padding'
                                 {...getSettingModificationProps('terminalPaneHorizontalPaddingPx')}
                                 max={MAX_TERMINAL_PANE_PADDING_PX}
@@ -1951,7 +1976,7 @@ export function SettingsModal({
                                * and terminal chrome in their existing frames.
                                */
                               <SliderNumberField
-                                description='Add top and bottom inner padding inside every terminal pane.'
+                                description='Add top and bottom inner padding inside the terminal content area.'
                                 label='Vertical Padding'
                                 {...getSettingModificationProps('terminalPaneVerticalPaddingPx')}
                                 max={MAX_TERMINAL_PANE_PADDING_PX}
@@ -1985,51 +2010,6 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('terminalCursorStyleBlink', checked)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.terminal, 'sessionPersistenceProvider') ? (
-                              /* CDXC:SessionPersistence 2026-05-05-07:28
-                    Session persistence is a provider choice for new terminal and
-                    agent launches. Existing panes keep their current process;
-                    new panes can use tmux, zmx, or zellij so restart restores by
-                    attach first and recreate+resume only when the named session
-                    is gone.
-
-                   CDXC:SessionPersistence 2026-05-06-03:43
-                    zellij shares the same Settings selector and semantics as
-                    tmux/zmx instead of adding a separate mode-specific control.
-
-                   CDXC:SessionPersistence 2026-05-08-14:04
-                    Explain that users should use zmx with zmx-session-manager when they care about ssh from
-                    other devices continuing sessions created through ghostex. Recommend zmx because it leaves Agent CLI tools unaffected while minor issues remain.
-
-                   CDXC:SessionPersistence 2026-05-26-13:41:
-                    zmx is now the default and recommended Settings option. Hide tmux and zellij from the dropdown without removing their code paths, so existing persisted provider sessions still normalize and launch.
-
-                  CDXC:SessionPersistence 2026-05-28-04:24:
-                    The Session Persistence setting should no longer be marked as Beta in Settings copy or search results.
-
-                   CDXC:SessionPersistence 2026-06-04-01:57:
-                    Users can disable persistence, but the Settings dropdown must warn that the React Native Android attach flow depends on persistent provider sessions. Show the warning only while Off is selected so the risk is visible at the decision point without making the default zmx state noisy. */
-                              <SelectField
-                                description="Use zmx with zmx-session-manager when you care about using ssh from other devices to continue working on sessions created using Ghostex. It doesn't affect the Agent CLI tools at all. Mostly working great, few minor issues left to fix."
-                                label='Session Persistence'
-                                {...getSettingModificationProps('sessionPersistenceProvider')}
-                                onChange={(value) =>
-                                  updateDraft('sessionPersistenceProvider', value as SessionPersistenceProvider)
-                                }
-                                options={SESSION_PERSISTENCE_PROVIDER_OPTIONS}
-                                supportingContent={
-                                  draft.sessionPersistenceProvider === 'off' ? (
-                                    <div className='settings-persistence-warning' role='note'>
-                                      <IconAlertTriangle aria-hidden='true' size={14} />
-                                      <span>
-                                        React Native Android attach can have issues while persistence is disabled.
-                                      </span>
-                                    </div>
-                                  ) : undefined
-                                }
-                                value={draft.sessionPersistenceProvider}
-                              />
-                            ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'clickToWakeSleepingSessions') ? (
                               <ToggleField
                                 checked={draft.clickToWakeSleepingSessions}
@@ -2039,14 +2019,12 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('clickToWakeSleepingSessions', checked)}
                               />
                             ) : null}
-                            {draft.sessionPersistenceProvider !== 'off' &&
-                            mainSettingVisible(settingsSearch.terminal, 'showSessionIdInTerminalPanes') ? (
+                            {mainSettingVisible(settingsSearch.terminal, 'showSessionIdInTerminalPanes') ? (
                               /*
                                * CDXC:SessionPersistence 2026-05-23-00:50:
                                * The pane-local provider/session label is useful for zmx/tmux/zellij
-                               * attach context. Keep this setting shown only when a persistence
-                               * provider is selected, while the label renderer still requires each
-                               * terminal pane to have provider metadata before showing text.
+                               * attach context. The label renderer still requires each terminal pane
+                               * to have provider metadata before showing text.
                                */
                               <ToggleField
                                 checked={draft.showSessionIdInTerminalPanes}
@@ -2824,10 +2802,6 @@ export function SettingsModal({
                 {!isFirstLaunchSetup ? (
                   <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='plugins'>
                     <PluginsSettingsTab
-                      ghostexCliStatus={ghostexCliStatus}
-                      ghostexCliStatusLoading={ghostexCliStatusLoading}
-                      onInstallCuaDriver={onInstallCuaDriver}
-                      onRequestGhostexCliStatus={onRequestGhostexCliStatus}
                       onRequestStatus={onRequestPluginSettingsStatus}
                       onReinstallPlugin={onReinstallPlugin}
                       onUpdateSetting={updateDraft}
@@ -2886,6 +2860,8 @@ export function SettingsModal({
                       agentAcceptAllEnabled={draft.agentAcceptAllEnabled}
                       customSessionTitleGenerationCommand={draft.customSessionTitleGenerationCommand}
                       defaultPromptAgentId={draft.defaultPromptAgentId}
+                      preferredAgentInterface={draft.preferredAgentInterface}
+                      preferredAgentInterfaceOverrides={draft.preferredAgentInterfaceOverrides}
                       sessionTitleGenerationAgent={draft.sessionTitleGenerationAgent}
                       onAgentAcceptAllEnabledChange={(checked) => updateDraft('agentAcceptAllEnabled', checked)}
                       onDefaultPromptAgentIdChange={(agentId) => updateDraft('defaultPromptAgentId', agentId)}
@@ -2893,6 +2869,9 @@ export function SettingsModal({
                         updateDraft('customSessionTitleGenerationCommand', command)
                       }
                       onInstallAgentHooks={onInstallAgentHooks}
+                      onPreferredAgentInterfaceOverridesChange={(overrides) =>
+                        updateDraft('preferredAgentInterfaceOverrides', overrides)
+                      }
                       onRequestAgentHookStatus={onRequestAgentHookStatus}
                       onSessionTitleGenerationAgentChange={(agent) => updateDraft('sessionTitleGenerationAgent', agent)}
                       onUninstallAgentHooks={onUninstallAgentHooks}

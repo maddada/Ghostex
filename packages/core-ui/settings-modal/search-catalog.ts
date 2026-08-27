@@ -17,7 +17,6 @@ import {
   PREFERRED_AGENT_INTERFACE_OPTIONS,
   PROMPT_EDITOR_BACKEND_OPTIONS,
   SESSION_CHAT_THEME_OPTIONS,
-  SESSION_PERSISTENCE_PROVIDER_OPTIONS,
   SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS,
   SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
   SIDEBAR_SETTINGS_PRESETS,
@@ -667,13 +666,28 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Letter Spacing',
       },
       {
+        key: 'terminalNarrowerViewEnabled',
+        subtitle: 'Center and constrain terminal body width on wide panes.',
+        title: 'Narrower Terminal View',
+      },
+      {
+        key: 'terminalViewWidthPercent',
+        subtitle: 'Set the centered terminal body width as a percentage.',
+        title: 'Terminal Width (%)',
+      },
+      {
+        key: 'terminalLayoutApplyToAllTerminals',
+        subtitle: 'Apply terminal width and padding to command and editor companion terminals too.',
+        title: 'Apply Layout to All Terminals',
+      },
+      {
         key: 'terminalPaneHorizontalPaddingPx',
-        subtitle: 'Add left and right inner padding inside every terminal pane.',
+        subtitle: 'Add left and right inner padding inside the terminal content area.',
         title: 'Horizontal Padding',
       },
       {
         key: 'terminalPaneVerticalPaddingPx',
-        subtitle: 'Add top and bottom inner padding inside every terminal pane.',
+        subtitle: 'Add top and bottom inner padding inside the terminal content area.',
         title: 'Vertical Padding',
       },
       {
@@ -692,25 +706,15 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Cursor blink',
       },
       {
-        key: 'sessionPersistenceProvider',
-        options: SESSION_PERSISTENCE_PROVIDER_OPTIONS,
-        subtitle: 'Choose whether new terminal and agent sessions should use zmx persistence.',
-        title: 'Session Persistence',
-      },
-      {
         key: 'clickToWakeSleepingSessions',
         subtitle: 'Select sleeping pane tabs without waking them until the empty pane is clicked.',
         title: 'Click to Wake Sleeping Panes',
       },
-      ...(draft.sessionPersistenceProvider === 'off'
-        ? []
-        : [
-            {
-              key: 'showSessionIdInTerminalPanes',
-              subtitle: 'Show the provider session id in the top-right corner of terminal panes.',
-              title: 'Show session id in terminal panes',
-            },
-          ]),
+      {
+        key: 'showSessionIdInTerminalPanes',
+        subtitle: 'Show the provider session id in the top-right corner of terminal panes.',
+        title: 'Show session id in terminal panes',
+      },
       {
         key: 'showNotificationOnTerminalBell',
         subtitle: 'Treat terminal bell events as session attention.',

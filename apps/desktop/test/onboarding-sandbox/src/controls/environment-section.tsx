@@ -258,13 +258,6 @@ export function EnvironmentSection() {
           onChange={(next) => patchEnv({ settings: { ...env.settings, debuggingMode: next } })}
         />
       </Row>
-      <Row label='Session persistence off'>
-        <Toggle
-          checked={env.settings.sessionPersistenceOff}
-          onChange={(next) => patchEnv({ settings: { ...env.settings, sessionPersistenceOff: next } })}
-        />
-      </Row>
-
       <div className='cp-group-label'>Timing</div>
       <Row hint='Track A' label='gxserver probe'>
         <MsSlider

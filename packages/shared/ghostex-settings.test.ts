@@ -30,7 +30,6 @@ import {
   parseSidebarAutoSettleAfterDaysSelectValue,
   sidebarAutoSettleAfterDaysSelectValue,
   PROMPT_EDITOR_BACKEND_OPTIONS,
-  SESSION_PERSISTENCE_PROVIDER_OPTIONS,
   SIDEBAR_AUTO_SETTLE_OFF_VALUE,
   SESSION_STATUS_INDICATOR_SIZE_OPTIONS,
   SIDEBAR_SETTINGS_PRESET_SETTINGS,
@@ -1481,89 +1480,6 @@ describe('normalizeghostexSettings', () => {
     ).toMatchObject({
       terminalMouseScrollMultiplierDiscrete: 8,
       terminalMouseScrollMultiplierPrecision: 0.25,
-    });
-  });
-
-  test('defaults session persistence to recommended zmx provider', () => {
-    /**
-     * CDXC:SessionPersistence 2026-05-05-07:28
-     * Legacy tmuxMode=true settings should migrate to the tmux provider, and
-     * zmx/zellij must persist as provider choices with the same restart-safe
-     * attach/recreate contract.
-     *
-     * CDXC:SessionPersistence 2026-05-23-00:50:
-     * The top-right provider/session overlay preference is normalized with
-     * settings defaults, but non-persistent terminal panes still have no
-     * provider session label to render.
-     *
-     * CDXC:SessionPersistence 2026-05-26-13:41:
-     * First-run settings should enable zmx by default, label it as recommended
-     * in Settings, and hide tmux/zellij from the dropdown while preserving
-     * their normalization support for existing settings and sessions.
-     *
-     * CDXC:SessionPersistence 2026-06-06-05:47:
-     * Provider session ids in terminal panes are disabled by default and remain
-     * available only when the user explicitly enables the pane overlay setting.
-     */
-    expect(DEFAULT_ghostex_SETTINGS.sessionPersistenceProvider).toBe('zmx');
-    expect(DEFAULT_ghostex_SETTINGS.showSessionIdInTerminalPanes).toBe(false);
-    expect(DEFAULT_ghostex_SETTINGS.tmuxMode).toBe(false);
-    expect(normalizeghostexSettings({})).toMatchObject({
-      sessionPersistenceProvider: 'zmx',
-      showSessionIdInTerminalPanes: false,
-      tmuxMode: false,
-    });
-    expect(normalizeghostexSettings({ tmuxMode: true })).toMatchObject({
-      sessionPersistenceProvider: 'tmux',
-      tmuxMode: true,
-    });
-    expect(normalizeghostexSettings({ sessionPersistenceProvider: 'zmx' })).toMatchObject({
-      sessionPersistenceProvider: 'zmx',
-      tmuxMode: false,
-    });
-    expect(normalizeghostexSettings({ sessionPersistenceProvider: 'zellij' })).toMatchObject({
-      sessionPersistenceProvider: 'zellij',
-      tmuxMode: false,
-    });
-    expect(
-      normalizeghostexSettings({
-        sessionPersistenceProvider: 'zmx',
-        showSessionIdInTerminalPanes: true,
-      })
-    ).toMatchObject({
-      sessionPersistenceProvider: 'zmx',
-      showSessionIdInTerminalPanes: true,
-    });
-    expect(
-      normalizeghostexSettings({
-        sessionPersistenceProvider: 'zmx',
-        showSessionIdInTerminalPanes: false,
-      })
-    ).toMatchObject({
-      sessionPersistenceProvider: 'zmx',
-      showSessionIdInTerminalPanes: false,
-    });
-    expect(SESSION_PERSISTENCE_PROVIDER_OPTIONS).toEqual([
-      {
-        label: 'Off',
-        value: 'off',
-      },
-      {
-        label: 'zmx (recommended)',
-        value: 'zmx',
-      },
-    ]);
-    expect(SESSION_PERSISTENCE_PROVIDER_OPTIONS).not.toContainEqual({
-      label: 'tmux',
-      value: 'tmux',
-    });
-    expect(SESSION_PERSISTENCE_PROVIDER_OPTIONS).not.toContainEqual({
-      label: 'zellij',
-      value: 'zellij',
-    });
-    expect(normalizeghostexSettings({ sessionPersistenceProvider: 'wat' })).toMatchObject({
-      sessionPersistenceProvider: 'off',
-      tmuxMode: false,
     });
   });
 

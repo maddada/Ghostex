@@ -36,7 +36,7 @@ export function getCuaPermissionStatus(
   ghostexCliStatus: SidebarGhostexCliStatusMessage | undefined,
   ghostexCliStatusLoading: boolean
 ): { status: string; tone: 'success' | 'warning' | 'neutral' } {
-  if (ghostexCliStatusLoading && !ghostexCliStatus) {
+  if (ghostexCliStatusLoading || !ghostexCliStatus) {
     return { status: 'Checking', tone: 'neutral' };
   }
   if (ghostexCliStatus?.cuaDriverInstalled !== true) {
@@ -145,6 +145,7 @@ export function IntegrationsSettingsTab({
   searchEmptyState?: ReactNode;
 }) {
   const showIntegrationRow = (settingKey: string) => shouldShowSetting(search.sections.integrations, settingKey);
+  const ghostexCliStatusChecking = ghostexCliStatusLoading || !ghostexCliStatus;
   const cliReady = ghostexCliStatus?.installed === true;
   /**
    * CDXC:CuaPermissions 2026-05-29-06:00:
@@ -153,7 +154,7 @@ export function IntegrationsSettingsTab({
    * Accessibility trust bit false. The row represents desktop automation
    * readiness for agents, not Ghostex's ability to synthesize input.
    */
-  const cuaPermissionStatus = getCuaPermissionStatus(ghostexCliStatus, ghostexCliStatusLoading);
+  const cuaPermissionStatus = getCuaPermissionStatus(ghostexCliStatus, ghostexCliStatusChecking);
 
   return (
     <SettingsNativeScrollArea className='h-full min-h-0'>
@@ -161,8 +162,8 @@ export function IntegrationsSettingsTab({
         {/*
          * CDXC:IntegrationsSetup 2026-05-27-04:17:
          * Settings owns one Integrations tab for post-onboarding CLI, bundled
-         * Ghostex skills, and macOS privacy permissions. The Trycua runtime
-         * lifecycle itself belongs to Plugins.
+         * Ghostex skills, Trycua runtime lifecycle, and macOS privacy
+         * permissions. Keeping Trycua here avoids duplicating it in Customize.
          *
          * CDXC:AgentHookSettings 2026-06-29-01:26:
          * Agent hook install/status UI lives in Settings -> Agents, where the detailed per-agent hook list already exists. Integrations should not duplicate that setup row.
@@ -187,16 +188,14 @@ export function IntegrationsSettingsTab({
               <IntegrationSettingsRow
                 description='Ghostex keeps the app-bundled ghostex command linked automatically for mobile apps and CLI-backed integration setup. gx is linked when that alias is available and not taken by another command.'
                 icon={IconTerminal2}
-                status={
-                  ghostexCliStatusLoading && !ghostexCliStatus ? 'Checking' : cliReady ? 'Installed' : 'Not installed'
-                }
-                tone={cliReady ? 'success' : 'warning'}
+                status={ghostexCliStatusChecking ? 'Checking' : cliReady ? 'Installed' : 'Not installed'}
+                tone={ghostexCliStatusChecking ? 'neutral' : cliReady ? 'success' : 'warning'}
                 title='Ghostex CLI'
               >
                 <SettingButton
-                  disabled={ghostexCliStatusLoading || !onInstallGhostexCli}
+                  disabled={ghostexCliStatusChecking || !onInstallGhostexCli}
                   disabledReason={
-                    ghostexCliStatusLoading ? 'CLI status is being checked.' : 'CLI repair isn’t available here.'
+                    ghostexCliStatusChecking ? 'CLI status is being checked.' : 'CLI repair isn’t available here.'
                   }
                   onClick={onInstallGhostexCli}
                   type='button'
@@ -206,9 +205,9 @@ export function IntegrationsSettingsTab({
                   Repair CLI
                 </SettingButton>
                 <SettingButton
-                  disabled={ghostexCliStatusLoading || !onRequestGhostexCliStatus}
+                  disabled={ghostexCliStatusChecking || !onRequestGhostexCliStatus}
                   disabledReason={
-                    ghostexCliStatusLoading
+                    ghostexCliStatusChecking
                       ? 'CLI status is being checked.'
                       : 'CLI status refresh isn’t available here.'
                   }
@@ -225,7 +224,7 @@ export function IntegrationsSettingsTab({
             {showIntegrationRow('bundledAgentSkills') ? (
               <BundledAgentSkillsPanel
                 ghostexCliStatus={ghostexCliStatus}
-                ghostexCliStatusLoading={ghostexCliStatusLoading}
+                ghostexCliStatusLoading={ghostexCliStatusChecking}
                 onInstallCuaDriver={onInstallCuaDriver}
                 onInstallSkill={{
                   cli: onInstallCliSkill,

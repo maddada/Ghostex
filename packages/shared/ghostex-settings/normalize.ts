@@ -23,6 +23,8 @@ import { DEFAULT_ghostex_SETTINGS } from './defaults';
 import { normalizeDiagnosticLoggingSettings } from './diagnostic-logging';
 import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
+  CHAT_FILE_OPEN_VIEW_SET,
+  DEFAULT_CHAT_FILE_OPEN_VIEW,
   DEFAULT_WEB_LINK_OPEN_TARGET,
   KEEP_AWAKE_DURATION_OPTIONS,
   WEB_LINK_OPEN_TARGET_SET,
@@ -48,6 +50,7 @@ import {
   type AutoSleepIdleMinutes,
   type BrowserFeedbackTool,
   type BrowserOpenMode,
+  type ChatFileOpenView,
   type CommandsPanelSide,
   type DefaultEditorCommand,
   type GhosttyConfirmCloseSurface,
@@ -57,7 +60,6 @@ import {
   type PortlessProtocol,
   type PreferredAgentInterface,
   type PromptEditorBackend,
-  type SessionPersistenceProvider,
   type SessionStatusIndicatorSize,
   type SidebarNewSessionEnvMode,
   type SidebarProjectGroupStyle,
@@ -73,6 +75,7 @@ import {
   clampCommandsPanelDefaultHeightPx,
   clampProjectSessionListCollapsedCount,
   clampSessionChatTranscriptWidthPercent,
+  clampTerminalViewWidthPercent,
   clampSidebarCollapseAnimationDurationMs,
   clampSidebarDefaultWidthPx,
   clampTerminalPanePaddingPx,
@@ -103,16 +106,9 @@ function normalizeTitlebarProjectSelectionMap(candidate: unknown): Record<string
 export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
   const source = isRecord(candidate) ? candidate : {};
   const promptEditorBackend = normalizePromptEditorBackend(source);
-  const sessionPersistenceProvider = normalizeSessionPersistenceProvider(
-    readString(
-      source,
-      'sessionPersistenceProvider',
-      readBoolean(source, 'tmuxMode', DEFAULT_ghostex_SETTINGS.tmuxMode)
-        ? 'tmux'
-        : DEFAULT_ghostex_SETTINGS.sessionPersistenceProvider
-    )
-  );
   const webLinkOpenTarget = normalizeWebLinkOpenTarget(source);
+  const markdownFileOpenView = normalizeChatFileOpenView(source.markdownFileOpenView);
+  const htmlFileOpenView = normalizeChatFileOpenView(source.htmlFileOpenView);
   const rawLegacyCustomSidebarTitlebarBackgroundColor = source.customSidebarTitlebarBackgroundColor;
   const hasValidLegacyCustomSidebarTitlebarBackgroundColor =
     typeof rawLegacyCustomSidebarTitlebarBackgroundColor === 'string' &&
@@ -203,6 +199,8 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       )
     ),
     webLinkOpenTarget,
+    markdownFileOpenView,
+    htmlFileOpenView,
     /** Normalize legacy feedback-tool settings to the sole supported tool. */
     browserFeedbackTool: normalizeBrowserFeedbackTool(
       readString(source, 'browserFeedbackTool', DEFAULT_ghostex_SETTINGS.browserFeedbackTool)
@@ -351,11 +349,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'createSessionOnSidebarDoubleClick',
       DEFAULT_ghostex_SETTINGS.createSessionOnSidebarDoubleClick
     ),
-    enableSessionParking: readBoolean(
-      source,
-      'enableSessionParking',
-      DEFAULT_ghostex_SETTINGS.enableSessionParking
-    ),
+    enableSessionParking: readBoolean(source, 'enableSessionParking', DEFAULT_ghostex_SETTINGS.enableSessionParking),
     analyticsEnabled: readBoolean(source, 'analyticsEnabled', DEFAULT_ghostex_SETTINGS.analyticsEnabled),
     debuggingMode: readBoolean(source, 'debuggingMode', DEFAULT_ghostex_SETTINGS.debuggingMode),
     diagnosticLogging: normalizeDiagnosticLoggingSettings(source.diagnosticLogging),
@@ -603,7 +597,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     sessionStatusIndicatorSize: normalizeSessionStatusIndicatorSize(
       readString(source, 'sessionStatusIndicatorSize', DEFAULT_ghostex_SETTINGS.sessionStatusIndicatorSize)
     ),
-    sessionPersistenceProvider,
     /**
      * CDXC:SessionPersistence 2026-05-23-00:50:
      * Older settings should normalize the session-id overlay preference from
@@ -627,6 +620,9 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     ),
     preferredAgentInterface: normalizePreferredAgentInterface(
       readString(source, 'preferredAgentInterface', DEFAULT_ghostex_SETTINGS.preferredAgentInterface)
+    ),
+    preferredAgentInterfaceOverrides: normalizePreferredAgentInterfaceOverrides(
+      source['preferredAgentInterfaceOverrides']
     ),
     sidebarV2Layout: normalizeSidebarV2Layout(
       readString(source, 'sidebarV2Layout', DEFAULT_ghostex_SETTINGS.sidebarV2Layout)
@@ -776,12 +772,25 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       2,
       DEFAULT_ghostex_SETTINGS.terminalLineHeight
     ),
+    terminalNarrowerViewEnabled: readBoolean(
+      source,
+      'terminalNarrowerViewEnabled',
+      DEFAULT_ghostex_SETTINGS.terminalNarrowerViewEnabled
+    ),
+    terminalViewWidthPercent: clampTerminalViewWidthPercent(
+      readNumber(source, 'terminalViewWidthPercent', DEFAULT_ghostex_SETTINGS.terminalViewWidthPercent)
+    ),
+    terminalLayoutApplyToAllTerminals: readBoolean(
+      source,
+      'terminalLayoutApplyToAllTerminals',
+      DEFAULT_ghostex_SETTINGS.terminalLayoutApplyToAllTerminals
+    ),
     /**
      * CDXC:TerminalPanePadding 2026-06-25-21:27:
-     * Missing or legacy settings should keep terminals edge-to-edge. Explicit
+     * Missing settings use the same 16px horizontal inset as Chat. Explicit
      * values are integer pixels clamped to the Settings slider range so native
-     * layout receives bounded insets without reintroducing the removed pane-gap
-     * spacing between adjacent panes.
+     * layout receives bounded inner padding without adding spacing between
+     * adjacent panes.
      */
     terminalPaneHorizontalPaddingPx: clampTerminalPanePaddingPx(
       readNumber(source, 'terminalPaneHorizontalPaddingPx', DEFAULT_ghostex_SETTINGS.terminalPaneHorizontalPaddingPx)
@@ -818,7 +827,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       MAX_GHOSTTY_MOUSE_SCROLL_MULTIPLIER,
       DEFAULT_ghostex_SETTINGS.terminalMouseScrollMultiplierPrecision
     ),
-    tmuxMode: sessionPersistenceProvider === 'tmux',
     terminalScrollToBottomWhenTyping: readBoolean(
       source,
       'terminalScrollToBottomWhenTyping',
@@ -1128,6 +1136,13 @@ function normalizeWebLinkOpenTarget(source: Record<string, unknown>): WebLinkOpe
   return DEFAULT_WEB_LINK_OPEN_TARGET;
 }
 
+function normalizeChatFileOpenView(value: unknown): ChatFileOpenView {
+  const normalized = readLooseString(value);
+  return CHAT_FILE_OPEN_VIEW_SET.has(normalized as ChatFileOpenView)
+    ? (normalized as ChatFileOpenView)
+    : DEFAULT_CHAT_FILE_OPEN_VIEW;
+}
+
 export function getDefaultEditorCommandForSettings(settings: ghostexSettings): string {
   const customCommand = settings.customDefaultEditorCommand.trim();
   return settings.defaultEditorCommand === 'other'
@@ -1153,8 +1168,32 @@ function normalizeSidebarVersion(value: string | undefined): SidebarVersion {
   return value === 'v2' ? 'v2' : DEFAULT_ghostex_SETTINGS.sidebarVersion;
 }
 
+/* Both spellings are real user choices: normalizing "terminal" to the default
+   would silently re-enable the automatic Chat handoff for a user who explicitly
+   turned it off. Only unknown or missing values fall back to the default. */
 function normalizePreferredAgentInterface(value: string | undefined): PreferredAgentInterface {
-  return value === 'chat' ? 'chat' : DEFAULT_ghostex_SETTINGS.preferredAgentInterface;
+  return value === 'chat' || value === 'terminal' ? value : DEFAULT_ghostex_SETTINGS.preferredAgentInterface;
+}
+
+/* Per-agent overrides are user-visible state that a user can also hand-edit, so
+   normalization drops anything it does not recognize instead of substituting a
+   default. An unrecognized value must not become "chat": that would force an
+   agent into a view the user never chose. Keys are kept verbatim because they
+   are agent ids, including ids of custom agents this build has never seen. */
+function normalizePreferredAgentInterfaceOverrides(value: unknown): Readonly<Record<string, PreferredAgentInterface>> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return DEFAULT_ghostex_SETTINGS.preferredAgentInterfaceOverrides;
+  }
+  const normalized: Record<string, PreferredAgentInterface> = {};
+  for (const [agentId, preferredInterface] of Object.entries(value as Record<string, unknown>)) {
+    if (agentId.trim().length === 0) {
+      continue;
+    }
+    if (preferredInterface === 'chat' || preferredInterface === 'terminal') {
+      normalized[agentId] = preferredInterface;
+    }
+  }
+  return normalized;
 }
 
 function normalizeSidebarV2Layout(value: string | undefined): SidebarV2Layout {
@@ -1218,10 +1257,6 @@ function normalizeSidebarProjectGroupingOverrides(
 
 function normalizeSessionStatusIndicatorSize(value: string | undefined): SessionStatusIndicatorSize {
   return value === 'small' || value === 'large' || value === 'x-large' ? value : 'medium';
-}
-
-function normalizeSessionPersistenceProvider(value: string | undefined): SessionPersistenceProvider {
-  return value === 'tmux' || value === 'zmx' || value === 'zellij' ? value : 'off';
 }
 
 function normalizeKeepAwakeDurationMinutes(value: number): KeepAwakeDurationMinutes {

@@ -104,7 +104,7 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
       'Use Claude Code Fable to orchestrate GPT 5.6 Sol sub-agents, then verify with Fable. A mix of the smartest model out there with the best implementer out there, for the best cost to performance.',
     id: 'fable56Orchestration',
     name: 'Ghostex Fable 5.6 Orchestration',
-    skillName: 'ghostex-fable-5.6-orchestration',
+    skillName: 'ghostex-fable-56-orchestration',
     tier: 'optional',
   },
   {

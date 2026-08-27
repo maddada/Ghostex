@@ -63,10 +63,15 @@ const DEFAULT_TERMINAL_MOUSE_SCROLL_MULTIPLIER_DISCRETE: f64 = 1.0;
 const DEFAULT_TERMINAL_MOUSE_SCROLL_MULTIPLIER_PRECISION: f64 = 1.0;
 const DEFAULT_TERMINAL_SCROLL_TO_BOTTOM_WHEN_TYPING: bool = true;
 const DEFAULT_WEB_LINKS_OPEN_IN_APP: bool = true;
-const DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX: f64 = 21.0;
+const DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX: f64 = 16.0;
 const DEFAULT_TERMINAL_PANE_VERTICAL_PADDING_PX: f64 = 0.0;
 const MIN_TERMINAL_PANE_PADDING_PX: f64 = 0.0;
 const MAX_TERMINAL_PANE_PADDING_PX: f64 = 64.0;
+const DEFAULT_TERMINAL_NARROWER_VIEW_ENABLED: bool = false;
+const DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 75.0;
+const MIN_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 50.0;
+const MAX_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 100.0;
+const DEFAULT_TERMINAL_LAYOUT_APPLY_TO_ALL_TERMINALS: bool = true;
 const MIN_TERMINAL_FONT_WEIGHT: f64 = 100.0;
 const MAX_TERMINAL_FONT_WEIGHT: f64 = 900.0;
 const MIN_TERMINAL_LINE_HEIGHT: f64 = 0.8;
@@ -186,6 +191,21 @@ Keep sidebar side in the shared native-sidebar settings object instead of creati
 pub enum SharedSidebarSide {
     Left,
     Right,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SharedChatFileOpenView {
+    Docs,
+    Code,
+}
+
+impl SharedChatFileOpenView {
+    pub fn from_settings_value(value: Option<&str>) -> Self {
+        match value {
+            Some("code") => Self::Code,
+            _ => Self::Docs,
+        }
+    }
 }
 
 impl SharedSidebarSide {
@@ -896,6 +916,20 @@ impl SharedSidebarSettingsSnapshot {
         web_links_open_in_app_from_object(&self.object)
     }
 
+    pub fn markdown_file_open_view(&self) -> SharedChatFileOpenView {
+        SharedChatFileOpenView::from_settings_value(
+            self.object
+                .get("markdownFileOpenView")
+                .and_then(Value::as_str),
+        )
+    }
+
+    pub fn html_file_open_view(&self) -> SharedChatFileOpenView {
+        SharedChatFileOpenView::from_settings_value(
+            self.object.get("htmlFileOpenView").and_then(Value::as_str),
+        )
+    }
+
     pub fn terminal_pane_padding_px(&self) -> (f32, f32) {
         (
             read_finite_number_field(
@@ -911,6 +945,31 @@ impl SharedSidebarSettingsSnapshot {
             )
             .clamp(MIN_TERMINAL_PANE_PADDING_PX, MAX_TERMINAL_PANE_PADDING_PX) as f32,
         )
+    }
+
+    pub fn terminal_pane_layout(&self, is_agent_terminal: bool) -> (f32, f32, Option<f32>) {
+        let applies_to_terminal = is_agent_terminal
+            || strict_bool_field(&self.object, "terminalLayoutApplyToAllTerminals")
+                .unwrap_or(DEFAULT_TERMINAL_LAYOUT_APPLY_TO_ALL_TERMINALS);
+        if !applies_to_terminal {
+            return (0.0, 0.0, None);
+        }
+
+        let (horizontal_padding, vertical_padding) = self.terminal_pane_padding_px();
+        let narrower_width = strict_bool_field(&self.object, "terminalNarrowerViewEnabled")
+            .unwrap_or(DEFAULT_TERMINAL_NARROWER_VIEW_ENABLED)
+            .then(|| {
+                read_finite_number_field(
+                    &self.object,
+                    "terminalViewWidthPercent",
+                    DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
+                )
+                .clamp(
+                    MIN_TERMINAL_VIEW_WIDTH_PERCENT,
+                    MAX_TERMINAL_VIEW_WIDTH_PERCENT,
+                ) as f32
+            });
+        (horizontal_padding, vertical_padding, narrower_width)
     }
 
     pub fn show_session_id_in_terminal_panes(&self) -> bool {

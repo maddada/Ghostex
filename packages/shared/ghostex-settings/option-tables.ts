@@ -5,6 +5,7 @@ import {
   type AppShotsHotkey,
   type AutoSleepIdleMinutes,
   type BrowserOpenMode,
+  type ChatFileOpenView,
   type CommandsPanelSide,
   type DefaultEditorCommand,
   type GhosttyConfirmCloseSurface,
@@ -13,7 +14,6 @@ import {
   type KeepAwakeDurationMinutes,
   type PreferredAgentInterface,
   type PromptEditorBackend,
-  type SessionPersistenceProvider,
   type SessionStatusIndicatorSize,
   type SidebarProjectGroupStyle,
   type SidebarSide,
@@ -32,6 +32,16 @@ export const WEB_LINK_OPEN_TARGET_OPTIONS: ReadonlyArray<{
 ];
 export const DEFAULT_WEB_LINK_OPEN_TARGET: WebLinkOpenTarget = 'internal-browser';
 export const WEB_LINK_OPEN_TARGET_SET = new Set(WEB_LINK_OPEN_TARGET_OPTIONS.map((option) => option.value));
+
+export const CHAT_FILE_OPEN_VIEW_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: ChatFileOpenView;
+}> = [
+  { label: 'Docs', value: 'docs' },
+  { label: 'Code', value: 'code' },
+];
+export const DEFAULT_CHAT_FILE_OPEN_VIEW: ChatFileOpenView = 'docs';
+export const CHAT_FILE_OPEN_VIEW_SET = new Set(CHAT_FILE_OPEN_VIEW_OPTIONS.map((option) => option.value));
 
 export const SIDEBAR_THEME_SETTING_OPTIONS: ReadonlyArray<{
   label: string;
@@ -95,18 +105,6 @@ export const DEFAULT_EDITOR_COMMAND_OPTIONS: ReadonlyArray<{
   { label: 'Other', value: 'other' },
 ];
 
-export const SESSION_PERSISTENCE_PROVIDER_OPTIONS: ReadonlyArray<{
-  label: string;
-  value: SessionPersistenceProvider;
-}> = [
-  /**
-   * CDXC:SessionPersistence 2026-05-26-13:41:
-   * Settings should recommend zmx and keep tmux/zellij out of the provider dropdown while code still accepts those persisted providers for existing sessions and internal launch paths.
-   */
-  { label: 'Off', value: 'off' },
-  { label: 'zmx (recommended)', value: 'zmx' },
-];
-
 export const SIDEBAR_SIDE_OPTIONS: ReadonlyArray<{
   label: string;
   value: SidebarSide;
@@ -152,6 +150,48 @@ export const PREFERRED_AGENT_INTERFACE_OPTIONS: ReadonlyArray<{
   { label: 'Terminal', value: 'terminal' },
   { label: 'Chat', value: 'chat' },
 ];
+
+/**
+ * Select value used by the per-agent Default Agent View control for "no
+ * override". It is never persisted: inherit is stored as an absent key in
+ * `preferredAgentInterfaceOverrides`.
+ */
+export const PREFERRED_AGENT_INTERFACE_INHERIT_VALUE = 'inherit';
+
+export function getPreferredAgentInterfaceOverrideOptions(
+  globalPreferredAgentInterface: PreferredAgentInterface
+): ReadonlyArray<{ label: string; value: string }> {
+  const inheritedLabel =
+    PREFERRED_AGENT_INTERFACE_OPTIONS.find((option) => option.value === globalPreferredAgentInterface)?.label ??
+    globalPreferredAgentInterface;
+  return [
+    { label: `Inherit (${inheritedLabel})`, value: PREFERRED_AGENT_INTERFACE_INHERIT_VALUE },
+    ...PREFERRED_AGENT_INTERFACE_OPTIONS,
+  ];
+}
+
+/**
+ * The one place that answers "which view should this agent's new sessions open
+ * in": the agent's own override when it has one, otherwise the global Default
+ * Agent View. Both the session-create path and the desktop auto-switch path
+ * resolve through this so a per-agent choice cannot mean two different things.
+ */
+export function resolveEffectivePreferredAgentInterface(
+  settings: {
+    preferredAgentInterface: PreferredAgentInterface;
+    preferredAgentInterfaceOverrides: Readonly<Record<string, PreferredAgentInterface>>;
+  },
+  agentId: string | null | undefined
+): PreferredAgentInterface {
+  const normalizedAgentId = agentId?.trim();
+  if (normalizedAgentId) {
+    const override = settings.preferredAgentInterfaceOverrides[normalizedAgentId];
+    if (override === 'chat' || override === 'terminal') {
+      return override;
+    }
+  }
+  return settings.preferredAgentInterface;
+}
 
 export const SIDEBAR_V2_LAYOUT_OPTIONS: ReadonlyArray<{
   label: string;

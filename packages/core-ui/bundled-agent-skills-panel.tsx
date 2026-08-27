@@ -7,6 +7,7 @@ import {
   IconDownload,
   IconGitPullRequest,
   IconLayoutKanban,
+  IconLoader2,
   IconPencil,
   IconRefresh,
   IconSitemap,
@@ -98,6 +99,7 @@ export function BundledAgentSkillsPanel({
   onUninstallSkill,
   showHeader = true,
 }: BundledAgentSkillsPanelProps) {
+  const ghostexCliStatusChecking = ghostexCliStatusLoading || !ghostexCliStatus;
   const cliReady = ghostexCliStatus?.installed === true;
   const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
   const anySkillInstalled = BUNDLED_GHOSTEX_AGENT_SKILLS.some((skill) =>
@@ -131,7 +133,7 @@ export function BundledAgentSkillsPanel({
             cliReady={cliReady}
             cuaDriverInstalled={cuaDriverInstalled}
             ghostexCliStatus={ghostexCliStatus}
-            ghostexCliStatusLoading={ghostexCliStatusLoading}
+            ghostexCliStatusLoading={ghostexCliStatusChecking}
             key={skill.id}
             onInstall={onInstallSkill?.[skill.id]}
             onUninstall={onUninstallSkill ? () => onUninstallSkill(skill.id) : undefined}
@@ -151,7 +153,7 @@ export function BundledAgentSkillsPanel({
                   cuaDriverInstalled={cuaDriverInstalled}
                   dependentSkillNames={trycuaSkills.map((skill) => skill.name)}
                   ghostexCliStatus={ghostexCliStatus}
-                  ghostexCliStatusLoading={ghostexCliStatusLoading}
+                  ghostexCliStatusLoading={ghostexCliStatusChecking}
                   onInstallCuaDriver={onInstallCuaDriver}
                 />
                 <div className='ml-3 flex flex-col gap-3 border-l-2 border-muted-foreground/25 pl-3'>
@@ -177,13 +179,13 @@ export function BundledAgentSkillsPanel({
            */}
           {onUninstallAllSkills ? (
             <DisabledSettingControlTooltip
-              disabled={ghostexCliStatusLoading || !anySkillInstalled}
+              disabled={ghostexCliStatusChecking || !anySkillInstalled}
               reason={
-                ghostexCliStatusLoading ? 'Skill status is being checked.' : 'No bundled Ghostex skills are installed.'
+                ghostexCliStatusChecking ? 'Skill status is being checked.' : 'No bundled Ghostex skills are installed.'
               }
             >
               <Button
-                disabled={ghostexCliStatusLoading || !anySkillInstalled}
+                disabled={ghostexCliStatusChecking || !anySkillInstalled}
                 onClick={onUninstallAllSkills}
                 type='button'
                 variant='outline'
@@ -194,8 +196,8 @@ export function BundledAgentSkillsPanel({
             </DisabledSettingControlTooltip>
           ) : null}
           {onRefreshStatus ? (
-            <DisabledSettingControlTooltip disabled={ghostexCliStatusLoading} reason='Skill status is being checked.'>
-              <Button disabled={ghostexCliStatusLoading} onClick={onRefreshStatus} type='button' variant='ghost'>
+            <DisabledSettingControlTooltip disabled={ghostexCliStatusChecking} reason='Skill status is being checked.'>
+              <Button disabled={ghostexCliStatusChecking} onClick={onRefreshStatus} type='button' variant='ghost'>
                 <IconRefresh aria-hidden='true' data-icon='inline-start' />
                 Refresh Skill Status
               </Button>
@@ -277,13 +279,18 @@ function BundledAgentSkillRow({
         <div className='flex w-[110px] shrink-0 flex-wrap gap-1 sm:justify-end'>
           <DisabledSettingControlTooltip disabled={installDisabled} reason={installDisabledReason}>
             <Button
-              className={cn('w-[110px]', installed && 'w-[74px] px-2.5')}
+              className={cn('w-[110px]', installed && !ghostexCliStatusLoading && 'w-[74px] px-2.5')}
               disabled={installDisabled}
               onClick={onInstall}
               type='button'
-              variant='default'
+              variant={ghostexCliStatusLoading ? 'outline' : 'default'}
             >
-              {installed ? (
+              {ghostexCliStatusLoading ? (
+                <>
+                  <IconLoader2 aria-hidden='true' className='animate-spin' data-icon='inline-start' />
+                  Checking
+                </>
+              ) : installed ? (
                 'Reinstall'
               ) : (
                 <>
@@ -341,8 +348,7 @@ function TrycuaPrerequisiteCard({
   onInstallCuaDriver?: () => void;
 }) {
   const installCommand = ghostexCliStatus?.cuaDriverInstallCommand;
-  const status =
-    ghostexCliStatusLoading && !ghostexCliStatus ? 'Checking' : cuaDriverInstalled ? 'Installed' : 'Not installed';
+  const status = ghostexCliStatusLoading ? 'Checking' : cuaDriverInstalled ? 'Installed' : 'Not installed';
 
   return (
     <Field className='rounded-none border border-border bg-muted/20 px-4 py-3'>
@@ -359,10 +365,10 @@ function TrycuaPrerequisiteCard({
                 <span
                   className={cn(
                     'inline-flex rounded-none border px-2 py-0.5 text-[11px] font-semibold',
-                    cuaDriverInstalled
-                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                      : ghostexCliStatusLoading && !ghostexCliStatus
-                        ? 'border-border bg-card text-muted-foreground'
+                    ghostexCliStatusLoading
+                      ? 'border-border bg-card text-muted-foreground'
+                      : cuaDriverInstalled
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
                         : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
                   )}
                 >
@@ -391,16 +397,20 @@ function TrycuaPrerequisiteCard({
                 disabled={ghostexCliStatusLoading || cuaDriverInstalled || !onInstallCuaDriver}
                 onClick={onInstallCuaDriver}
                 type='button'
-                variant={cuaDriverInstalled ? 'outline' : 'default'}
+                variant={ghostexCliStatusLoading || cuaDriverInstalled ? 'outline' : 'default'}
               >
-                {cuaDriverInstalled ? (
+                {ghostexCliStatusLoading ? (
+                  <IconLoader2 aria-hidden='true' className='animate-spin' data-icon='inline-start' />
+                ) : cuaDriverInstalled ? (
                   <IconCircleCheckFilled aria-hidden='true' data-icon='inline-start' />
                 ) : (
                   <IconDownload aria-hidden='true' data-icon='inline-start' />
                 )}
-                {cuaDriverInstalled
-                  ? `${GHOSTEX_TRYCUA_PRODUCT_NAME} Installed`
-                  : `Install ${GHOSTEX_TRYCUA_PRODUCT_NAME}`}
+                {ghostexCliStatusLoading
+                  ? 'Checking'
+                  : cuaDriverInstalled
+                    ? `${GHOSTEX_TRYCUA_PRODUCT_NAME} Installed`
+                    : `Install ${GHOSTEX_TRYCUA_PRODUCT_NAME}`}
               </Button>
             </DisabledSettingControlTooltip>
           </div>

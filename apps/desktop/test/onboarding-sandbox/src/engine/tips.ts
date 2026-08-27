@@ -5,7 +5,7 @@
  * fresh profile — apps/desktop/src/app/titlebar/dropdown_panels.rs:370 seeds the badge with the full count).
  *
  * Notices: apps/desktop/views/titlebar-host.tsx:833-975. Only the settings-derived
- * notices (persistence off, debugging mode) exist before the panel is opened;
+ * debugging notice exists before the panel is opened;
  * the CLI and missing-hook notices need `agentHookStatus`/`ghostexCliStatus`,
  * which are requested ONLY when the panel opens
  * (apps/desktop/src/app/modals.rs:939 request_gpui_titlebar_tips_runtime_status).
@@ -28,13 +28,6 @@ export const TITLEBAR_TIP_IDS: readonly string[] = [
   'pin-important-workspaces',
   'add-todos-to-kanban-page',
 ];
-
-const PERSISTENCE_OFF_NOTICE: SimTipsNotice = {
-  id: 'session-persistence-off-mobile-attach',
-  severity: 'warning',
-  title: 'Mobile attach needs persistence',
-  body: 'Android and iOS attach can have issues while Session Persistence is Off. Enable zmx persistence so mobile clients reconnect to durable terminal sessions.',
-};
 
 const DEBUGGING_MODE_NOTICE: SimTipsNotice = {
   id: 'debugging-mode-enabled',
@@ -101,15 +94,12 @@ function missingAgentHooksNotice(env: SimEnvState): SimTipsNotice | undefined {
 
 /** Notices available without a runtime probe (startup badge). */
 export function settingsDerivedTipsNotices(env: SimEnvState): SimTipsNotice[] {
-  return [
-    ...(env.settings.sessionPersistenceOff ? [PERSISTENCE_OFF_NOTICE] : []),
-    ...(env.settings.debuggingMode ? [DEBUGGING_MODE_NOTICE] : []),
-  ];
+  return env.settings.debuggingMode ? [DEBUGGING_MODE_NOTICE] : [];
 }
 
 /**
- * Full notice list, in the order the titlebar renders it: CLI, persistence,
- * debugging, missing hooks. Only reachable after the runtime status probe.
+ * Full notice list, in the order the titlebar renders it: CLI, debugging,
+ * missing hooks. Only reachable after the runtime status probe.
  */
 export function probedTipsNotices(env: SimEnvState): SimTipsNotice[] {
   const cli = ghostexCliNotice(env);

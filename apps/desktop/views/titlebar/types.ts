@@ -6,12 +6,11 @@ import type {
   SidebarPortlessState,
 } from '@/packages/shared/session-grid-contract-sidebar';
 import type { NativePortlessAdminInstallAction } from '@/packages/shared/native-ghostty-host-protocol';
-import type { SidebarTheme } from '@/packages/shared/session-grid-contract';
+import type { SidebarTheme, TerminalSessionPersistenceProvider } from '@/packages/shared/session-grid-contract';
 import type {
   DiagnosticLoggingSettings,
   KeepAwakeDurationMinutes,
   SidebarSide,
-  SessionPersistenceProvider,
   WebLinkOpenTarget,
 } from '@/packages/shared/ghostex-settings';
 import type { ghostexHotkeySettings } from '@/packages/shared/ghostex-hotkeys';
@@ -94,7 +93,7 @@ export type TitlebarResourceSession = {
   sessionId: string;
   sessionKind?: 'browser' | 'terminal';
   sessionPersistenceName?: string;
-  sessionPersistenceProvider?: SessionPersistenceProvider;
+  sessionPersistenceProvider?: TerminalSessionPersistenceProvider;
   terminalTitle?: string;
   title: string;
 };
@@ -124,7 +123,7 @@ export type TitlebarNotice = {
   body: string;
   icon: TitlebarTipIcon;
   id: string;
-  settingsTarget: 'agentHooks' | 'debuggingMode' | 'ghostexCli' | 'sessionPersistence';
+  settingsTarget: 'agentHooks' | 'debuggingMode' | 'ghostexCli';
   title: string;
 };
 
@@ -195,7 +194,6 @@ export type TitlebarProjectState = {
   sidebarActions: TitlebarSidebarActionsSettings;
   hotkeys: ghostexHotkeySettings;
   showProjectEditorDiffFileCount: boolean;
-  sessionPersistenceProvider: SessionPersistenceProvider;
   webLinkOpenTarget: WebLinkOpenTarget;
   toggleSidebarHotkeyLabel: string;
   workspaceOpenTargets: TitlebarOpenTargetsSettings;

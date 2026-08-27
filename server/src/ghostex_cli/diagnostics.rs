@@ -8,8 +8,8 @@ use crate::ghostex_cli::args::{parse_args, parse_boolean, Flags};
 use crate::ghostex_cli::launchers;
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json, timestamp_slug};
 use crate::ghostex_cli::rpc::{
-    call_gxserver_rpc, compact_object, fetch_gxserver_health, ghostex_config_home, ghostex_home,
-    ghostex_logs_home, resolve_gxserver_server_target, CliError, CliResult,
+    call_gxserver_rpc, compact_object, fetch_gxserver_health, ghostex_home, ghostex_logs_home,
+    resolve_gxserver_server_target, CliError, CliResult,
 };
 
 /*
@@ -31,10 +31,6 @@ fn gxserver_log_path() -> PathBuf {
     ghostex_logs_home().join("gxserver.jsonl")
 }
 
-fn shared_settings_path() -> PathBuf {
-    ghostex_config_home().join("native-sidebar-settings.json")
-}
-
 /// String(value) for the JS values these commands interpolate into messages.
 fn js_display(value: Option<&Value>) -> String {
     match value {
@@ -44,17 +40,6 @@ fn js_display(value: Option<&Value>) -> String {
         Some(Value::Bool(flag)) => flag.to_string(),
         Some(Value::Number(number)) => number.to_string(),
         Some(other) => other.to_string(),
-    }
-}
-
-/// JS truthiness for JSON values (`value || fallback` semantics).
-fn js_truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(flag) => *flag,
-        Value::Number(number) => number.as_f64().map(|n| n != 0.0).unwrap_or(true),
-        Value::String(text) => !text.is_empty(),
-        _ => true,
     }
 }
 
@@ -468,63 +453,11 @@ pub fn run_android_readiness_check(flags: &Flags) -> Value {
         ready.insert("serverId".to_string(), server_id.clone());
     }
     ready.insert("sessions".to_string(), json!(sessions));
+    ready.insert("sessionPersistenceProvider".to_string(), json!("zmx"));
     if let Some(zmx_path) = &zmx_path {
         ready.insert("zmxPath".to_string(), zmx_path.clone());
     }
     Value::Object(ready)
-}
-
-/// Port of readAndroidReadinessSettings (exported for tests/tools like the
-/// Node CLI export; the readiness check itself now uses gxserver health).
-pub fn read_android_readiness_settings(settings_path: Option<&Path>) -> Value {
-    let default_path = shared_settings_path();
-    let settings_path = settings_path.unwrap_or(&default_path);
-    let text = std::fs::read_to_string(settings_path).unwrap_or_default();
-    if text.trim().is_empty() {
-        return json!({
-            "error": format!(
-                "Ghostex settings were not found at {}. Start Ghostex, set Session persistence to zmx, and try again.",
-                settings_path.display()
-            ),
-            "ok": false,
-        });
-    }
-    let settings: Option<Value> = serde_json::from_str(&text).ok();
-    let Some(settings) = settings.filter(Value::is_object) else {
-        return json!({
-            "error": format!(
-                "Ghostex settings at {} are not valid JSON. Open Ghostex settings, save Session persistence as zmx, and try again.",
-                settings_path.display()
-            ),
-            "ok": false,
-        });
-    };
-    /*
-    Android supports zmx only for this release, but readiness should not depend
-    on presentation casing or accidental surrounding whitespace in the shared
-    settings JSON. Normalize the provider token before enforcing the contract.
-    */
-    let provider = settings.get("sessionPersistenceProvider");
-    let provider_string = match provider {
-        None | Some(Value::Null) => String::new(),
-        Some(value) => js_display(Some(value)),
-    };
-    let normalized_provider = provider_string.trim().to_lowercase();
-    if normalized_provider != "zmx" {
-        let fallback_provider = match provider {
-            Some(value) if js_truthy(value) => value.clone(),
-            _ => Value::String("off".to_string()),
-        };
-        return json!({
-            "error": format!(
-                "Ghostex session persistence is set to {}. Open Ghostex Settings and set Session persistence to zmx before connecting from Android.",
-                js_display(Some(&fallback_provider))
-            ),
-            "ok": false,
-            "sessionPersistenceProvider": fallback_provider,
-        });
-    }
-    json!({ "ok": true, "sessionPersistenceProvider": normalized_provider })
 }
 
 /// Port of resolveCommandPath: `command -v -- '<command>'` through the
@@ -604,74 +537,6 @@ mod tests {
             40.0
         );
         assert!(number_flag_or(&flags_of(&["--lines", "abc"]), "lines", 200.0).is_nan());
-    }
-
-    #[test]
-    fn android_readiness_settings_report_missing_invalid_and_wrong_provider() {
-        let root = std::env::temp_dir().join(format!(
-            "gx-cli-diagnostics-{}-settings",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&root).expect("mkdir");
-
-        let missing = root.join("missing.json");
-        let result = read_android_readiness_settings(Some(&missing));
-        assert_eq!(result.get("ok"), Some(&Value::Bool(false)));
-        assert_eq!(
-            result.get("error").and_then(Value::as_str),
-            Some(
-                format!(
-                    "Ghostex settings were not found at {}. Start Ghostex, set Session persistence to zmx, and try again.",
-                    missing.display()
-                )
-                .as_str()
-            )
-        );
-
-        let invalid = root.join("invalid.json");
-        std::fs::write(&invalid, "not-json").expect("write");
-        let result = read_android_readiness_settings(Some(&invalid));
-        assert_eq!(
-            result.get("error").and_then(Value::as_str),
-            Some(
-                format!(
-                    "Ghostex settings at {} are not valid JSON. Open Ghostex settings, save Session persistence as zmx, and try again.",
-                    invalid.display()
-                )
-                .as_str()
-            )
-        );
-
-        let wrong = root.join("wrong.json");
-        std::fs::write(&wrong, r#"{"sessionPersistenceProvider":"tmux"}"#).expect("write");
-        let result = read_android_readiness_settings(Some(&wrong));
-        assert_eq!(result.get("ok"), Some(&Value::Bool(false)));
-        assert_eq!(
-            result.get("sessionPersistenceProvider"),
-            Some(&Value::String("tmux".to_string()))
-        );
-        assert!(result
-            .get("error")
-            .and_then(Value::as_str)
-            .expect("error")
-            .starts_with("Ghostex session persistence is set to tmux."));
-
-        let off = root.join("off.json");
-        std::fs::write(&off, r#"{"sessionPersistenceProvider":""}"#).expect("write");
-        let result = read_android_readiness_settings(Some(&off));
-        assert_eq!(
-            result.get("sessionPersistenceProvider"),
-            Some(&Value::String("off".to_string()))
-        );
-
-        let ok = root.join("ok.json");
-        std::fs::write(&ok, r#"{"sessionPersistenceProvider":" ZMX "}"#).expect("write");
-        let result = read_android_readiness_settings(Some(&ok));
-        assert_eq!(result.get("ok"), Some(&Value::Bool(true)));
-        assert_eq!(
-            result.get("sessionPersistenceProvider"),
-            Some(&Value::String("zmx".to_string()))
-        );
     }
 
     #[test]

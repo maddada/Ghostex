@@ -27,9 +27,9 @@ export type PortlessProtocol = 'https' | 'http';
  * Dev Servers dropdown, which could disagree with each other.
  */
 export type WebLinkOpenTarget = 'internal-browser' | 'system-default-browser';
+export type ChatFileOpenView = 'docs' | 'code';
 export type DefaultEditorCommand =
   'code' | 'code-insiders' | 'zed' | 'zeditor' | 'cursor' | 'windsurf' | 'codium' | 'subl' | 'other';
-export type SessionPersistenceProvider = 'off' | 'tmux' | 'zmx' | 'zellij';
 export type SessionStatusIndicatorSize = 'small' | 'medium' | 'large' | 'x-large';
 export type SidebarSide = 'left' | 'right';
 export type CommandsPanelSide = 'bottom' | 'right';
@@ -42,6 +42,10 @@ export const MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 50;
 export const MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 100;
 export const SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP = 5;
 export const DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 75;
+export const MIN_TERMINAL_VIEW_WIDTH_PERCENT = MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
+export const MAX_TERMINAL_VIEW_WIDTH_PERCENT = MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
+export const TERMINAL_VIEW_WIDTH_PERCENT_STEP = SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP;
+export const DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT = DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
 
 export function clampSessionChatTranscriptWidthPercent(value: number): number {
   if (!Number.isFinite(value)) {
@@ -52,6 +56,10 @@ export function clampSessionChatTranscriptWidthPercent(value: number): number {
     Math.max(MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT, value)
   );
   return Math.round(clamped / SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP) * SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP;
+}
+
+export function clampTerminalViewWidthPercent(value: number): number {
+  return clampSessionChatTranscriptWidthPercent(value);
 }
 
 export function clampSidebarCollapseAnimationDurationMs(value: number): number {
@@ -108,7 +116,7 @@ export type AutoSleepIdleMinutes = 5 | 10 | 15 | 30 | 60 | 120 | 300;
  * The default is the sky tone those surfaces shipped hardcoded.
  */
 export const DEFAULT_ACCENT_COLOR = '#38bdf8';
-export const DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX = 21;
+export const DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX = 16;
 export const DEFAULT_TERMINAL_PANE_PADDING_PX = 0;
 export const MIN_TERMINAL_PANE_PADDING_PX = 0;
 export const MAX_TERMINAL_PANE_PADDING_PX = 64;
@@ -239,6 +247,10 @@ export type ghostexSettings = {
    * because it is the switch users actually flipped.
    */
   webLinkOpenTarget: WebLinkOpenTarget;
+  /** Preferred workarea for Markdown file links clicked in session chat. */
+  markdownFileOpenView: ChatFileOpenView;
+  /** Preferred workarea for HTML file links clicked in session chat. */
+  htmlFileOpenView: ChatFileOpenView;
   /**
    * CDXC:SettingsAdvanced 2026-06-28-08:01:
    * Show Advanced is a persisted Settings browsing preference. When users enable
@@ -454,10 +466,26 @@ export type ghostexSettings = {
   petOverlayEnabled: boolean;
   selectedPetId: PetId;
   sessionStatusIndicatorSize: SessionStatusIndicatorSize;
-  sessionPersistenceProvider: SessionPersistenceProvider;
   showSessionIdInTerminalPanes: boolean;
   /** Newly launched supported agents still start a terminal, then show this surface first. */
   preferredAgentInterface: PreferredAgentInterface;
+  /**
+   * Per-agent override of `preferredAgentInterface`, keyed by agent id.
+   *
+   * A missing key means "inherit the global Default Agent View", so inherit is
+   * stored as key-absent rather than as a third value: that keeps the global
+   * setting live for every agent the user never touched, and lets a user undo
+   * an override without leaving a stale value behind. Only agents that support
+   * Ghostex's Chat View can carry an override; every other agent can only run
+   * in the terminal, so an entry for one is meaningless and normalization is
+   * free to keep it (it simply never resolves anything different).
+   *
+   * Values are the wire-contract spellings `"chat"` and `"terminal"`. Unknown
+   * values and malformed entries are dropped by normalization rather than
+   * defaulting, so a hand-edited settings file cannot force an agent into a
+   * view the user never chose.
+   */
+  preferredAgentInterfaceOverrides: Readonly<Record<string, PreferredAgentInterface>>;
   /**
    * CDXC:SidebarV2 2026-07-29:
    * The sidebar version selector is the rollout switch for the Inbox sidebar.
@@ -619,6 +647,12 @@ export type ghostexSettings = {
   terminalBackgroundImageFit: TerminalBackgroundImageFit;
   terminalLetterSpacing: number;
   terminalLineHeight: number;
+  /** Whether wide terminal bodies use the centered percentage width below. */
+  terminalNarrowerViewEnabled: boolean;
+  /** Width of a centered terminal body while narrower terminal view is enabled. */
+  terminalViewWidthPercent: number;
+  /** Apply terminal width and padding to command and companion terminals too. */
+  terminalLayoutApplyToAllTerminals: boolean;
   /**
    * CDXC:TerminalPanePadding 2026-06-25-21:27:
    * Terminal pane padding is app layout, not a Ghostty config key. Store
@@ -630,7 +664,6 @@ export type ghostexSettings = {
   terminalPaneVerticalPaddingPx: number;
   terminalMouseScrollMultiplierDiscrete: number;
   terminalMouseScrollMultiplierPrecision: number;
-  tmuxMode: boolean;
   terminalScrollToBottomWhenTyping: boolean;
   terminalScrollbackLimitMb: number;
   terminalCopyOnSelect: GhosttyCopyOnSelect;

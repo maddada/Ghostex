@@ -103,7 +103,6 @@ export interface SimEnvState {
   /** Mirrors settings that feed tips notices. */
   settings: {
     debuggingMode: boolean;
-    sessionPersistenceOff: boolean;
   };
   timing: SimTiming;
 }

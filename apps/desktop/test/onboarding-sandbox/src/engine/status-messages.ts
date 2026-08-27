@@ -133,9 +133,7 @@ export function createGhostexCliStatusMessage(
       : 'Ghostex CLI auto-install did not find a usable ghostex command on PATH.');
   return {
     cliSkillInstalled: skills.cli,
-    ...(skills.cli
-      ? { cliSkillPath: '~/agents/skills/ghostex-cli/SKILL.md' }
-      : {}),
+    ...(skills.cli ? { cliSkillPath: '~/agents/skills/ghostex-cli/SKILL.md' } : {}),
     browserSkillInstalled: skills.browser,
     ...(skills.browser ? { browserSkillPath: '~/agents/skills/ghostex-browser-use/SKILL.md' } : {}),
     computerUseSkillInstalled: skills.computerUse,
@@ -154,13 +152,11 @@ export function createGhostexCliStatusMessage(
     fable56OrchestrationSkillInstalled: skills.fable56Orchestration,
     ...(skills.fable56Orchestration
       ? {
-          fable56OrchestrationSkillPath: '~/agents/skills/ghostex-fable-5.6-orchestration/SKILL.md',
+          fable56OrchestrationSkillPath: '~/agents/skills/ghostex-fable-56-orchestration/SKILL.md',
         }
       : {}),
     manageBeadsSkillInstalled: skills.manageBeads,
-    ...(skills.manageBeads
-      ? { manageBeadsSkillPath: '~/agents/skills/ghostex-manage-beads/SKILL.md' }
-      : {}),
+    ...(skills.manageBeads ? { manageBeadsSkillPath: '~/agents/skills/ghostex-manage-beads/SKILL.md' } : {}),
     generateTitleSkillInstalled: skills.generateTitle,
     ...(skills.generateTitle ? { generateTitleSkillPath: '~/agents/skills/ghostex-generate-title/SKILL.md' } : {}),
     generatedAt: new Date().toISOString(),
@@ -170,9 +166,7 @@ export function createGhostexCliStatusMessage(
     gxUsable: env.ghostexCli.gxUsable,
     installed,
     manageBeadsSkillInstalled: skills.manageBeads,
-    ...(skills.manageBeads
-      ? { manageBeadsSkillPath: '~/agents/skills/ghostex-manage-beads/SKILL.md' }
-      : {}),
+    ...(skills.manageBeads ? { manageBeadsSkillPath: '~/agents/skills/ghostex-manage-beads/SKILL.md' } : {}),
     moveCodexSessionSkillInstalled: skills.moveCodexSession,
     ...(skills.moveCodexSession
       ? { moveCodexSessionSkillPath: '~/agents/skills/ghostex-move-codex-session/SKILL.md' }
@@ -223,7 +217,6 @@ export function createSandboxHydrateMessage(env: SimEnvState): SidebarHydrateMes
   const settings = normalizeghostexSettings({
     ...DEFAULT_ghostex_SETTINGS,
     debuggingMode: env.settings.debuggingMode,
-    sessionPersistenceProvider: env.settings.sessionPersistenceOff ? 'off' : 'zmx',
   });
   return {
     ...base,

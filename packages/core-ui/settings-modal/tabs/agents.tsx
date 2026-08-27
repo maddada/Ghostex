@@ -30,8 +30,11 @@ import {
 } from '../../../shared/session-grid-contract';
 import {
   DEFAULT_ghostex_SETTINGS,
+  PREFERRED_AGENT_INTERFACE_INHERIT_VALUE,
   SESSION_TITLE_GENERATION_AGENT_OPTIONS,
+  getPreferredAgentInterfaceOverrideOptions,
   getSessionTitleGenerationCommandPreview,
+  type PreferredAgentInterface,
   type SessionTitleGenerationAgent,
 } from '../../../shared/ghostex-settings';
 import {
@@ -45,6 +48,7 @@ import {
   type SidebarAgentButton,
   type SidebarAgentIcon,
 } from '../../../shared/sidebar-agents';
+import { AgentChatViewSupportBadge, agentSupportsChatView } from '../../agent-menu-chat-indicator';
 import { getBrandAgentLogoStyle } from '../../agent-logos';
 import { useSidebarStore } from '../../sidebar-store';
 import { type AgentConfigDraft } from '../../agent-config-modal';
@@ -118,11 +122,14 @@ export function AgentsSettingsTab({
   agentAcceptAllEnabled,
   customSessionTitleGenerationCommand,
   defaultPromptAgentId,
+  preferredAgentInterface,
+  preferredAgentInterfaceOverrides,
   sessionTitleGenerationAgent,
   onAgentAcceptAllEnabledChange,
   onCustomSessionTitleGenerationCommandChange,
   onDefaultPromptAgentIdChange,
   onInstallAgentHooks,
+  onPreferredAgentInterfaceOverridesChange,
   onRequestAgentHookStatus,
   onSessionTitleGenerationAgentChange,
   onUninstallAgentHooks,
@@ -135,11 +142,14 @@ export function AgentsSettingsTab({
   agentAcceptAllEnabled: boolean;
   customSessionTitleGenerationCommand: string;
   defaultPromptAgentId: string;
+  preferredAgentInterface: PreferredAgentInterface;
+  preferredAgentInterfaceOverrides: Readonly<Record<string, PreferredAgentInterface>>;
   sessionTitleGenerationAgent: SessionTitleGenerationAgent;
   onAgentAcceptAllEnabledChange: (checked: boolean) => void;
   onCustomSessionTitleGenerationCommandChange: (command: string) => void;
   onDefaultPromptAgentIdChange: (agentId: string) => void;
   onInstallAgentHooks?: () => void;
+  onPreferredAgentInterfaceOverridesChange: (overrides: Readonly<Record<string, PreferredAgentInterface>>) => void;
   onRequestAgentHookStatus?: () => void;
   onSessionTitleGenerationAgentChange: (agent: SessionTitleGenerationAgent) => void;
   onUninstallAgentHooks?: (agentIds?: readonly string[]) => void;
@@ -224,6 +234,22 @@ export function AgentsSettingsTab({
       ? 'Checking hooks'
       : 'Hook status not checked';
 
+  /*
+   * CDXC:PerAgentDefaultView 2026-08-27:
+   * Inherit is stored as an absent key, never as a third stored value, so an
+   * agent the user never touched keeps following the global Default Agent View
+   * when that global setting changes later.
+   */
+  const setPreferredAgentInterfaceOverride = (agentId: string, next: PreferredAgentInterface | undefined) => {
+    const overrides: Record<string, PreferredAgentInterface> = { ...preferredAgentInterfaceOverrides };
+    if (next) {
+      overrides[agentId] = next;
+    } else {
+      delete overrides[agentId];
+    }
+    onPreferredAgentInterfaceOverridesChange(overrides);
+  };
+
   const saveAgent = (draft: AgentConfigDraft) => {
     if (!vscode) {
       return;
@@ -281,7 +307,7 @@ export function AgentsSettingsTab({
         {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
         {!editorState && shouldShowSettingsSection(search.sections.agentHooks) ? (
           <SettingsSection title='Agent Hooks'>
-            <details className='group w-full'>
+            <details className='group w-full' open={search.tab.isSearching || undefined}>
               {/*
                * CDXC:AgentHookSettings 2026-05-23-10:05:
                * Settings -> Agents starts with a collapsed hook setup panel so reliable-resume requirements are discoverable without pushing normal agent ordering/editing controls down the tab. The panel covers every current Ghostex CLI resume-hook agent.
@@ -386,7 +412,12 @@ export function AgentsSettingsTab({
                       isLoading={agentHookStatusLoading && !agentHookStatus}
                       isStatusLoading={agentHookStatusLoading}
                       key={agent.agentId}
+                      onPreferredInterfaceOverrideChange={(next) =>
+                        setPreferredAgentInterfaceOverride(agent.agentId, next)
+                      }
                       onUninstall={onUninstallAgentHooks ? () => onUninstallAgentHooks([agent.agentId]) : undefined}
+                      preferredAgentInterface={preferredAgentInterface}
+                      preferredInterfaceOverride={preferredAgentInterfaceOverrides[agent.agentId]}
                       status={hookStatusByAgentId.get(agent.agentId)}
                     />
                   ))}
@@ -574,18 +605,25 @@ export function AgentHookStatusRow({
   agent,
   isLoading,
   isStatusLoading,
+  onPreferredInterfaceOverrideChange,
   onUninstall,
+  preferredAgentInterface,
+  preferredInterfaceOverride,
   status,
 }: {
   agent: SidebarAgentButton;
   isLoading: boolean;
   isStatusLoading: boolean;
+  onPreferredInterfaceOverrideChange?: (preferredInterface: PreferredAgentInterface | undefined) => void;
   onUninstall?: () => void;
+  preferredAgentInterface?: PreferredAgentInterface;
+  preferredInterfaceOverride?: PreferredAgentInterface;
   status?: SidebarAgentHookStatusItem;
 }) {
   const statusText = getAgentHookStatusText(status, isLoading);
   const removable = hasRemovableAgentHookStatus(status);
   const uninstallDisabled = isStatusLoading || !onUninstall;
+  const supportsChatView = agentSupportsChatView(agent);
   return (
     <div className='flex items-center justify-between gap-3 rounded-none border border-border/70 bg-card/40 px-3 py-2'>
       <div className='flex min-w-0 flex-1 items-center gap-3'>
@@ -596,42 +634,106 @@ export function AgentHookStatusRow({
           <SettingsAgentIcon agent={agent} />
         </span>
         <span className='min-w-0'>
-          <span className='block truncate text-sm font-medium'>{agent.name}</span>
+          {/*
+           * CDXC:PerAgentDefaultView 2026-08-27:
+           * The chat-bubble badge sits with the agent name, not with the hook
+           * status pill: it describes the agent, not its hook state, and the
+           * two must not read as one combined status. Terminal-only agents get
+           * no badge at all rather than a negative one.
+           */}
+          <span className='flex min-w-0 items-center gap-1.5'>
+            <span className='truncate text-sm font-medium'>{agent.name}</span>
+            <AgentChatViewSupportBadge agent={agent} />
+          </span>
           <span className='block truncate text-xs text-muted-foreground'>
             {status?.detail ?? agent.command ?? 'Waiting for hook check'}
           </span>
         </span>
       </div>
-      <span
-        className={cn(
-          'flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-xs font-medium',
-          getAgentHookStatusClassName(status, isLoading)
-        )}
-      >
-        <AgentHookStatusIcon isLoading={isLoading} status={status} />
-        {statusText}
-      </span>
-      {removable ? (
-        <DisabledSettingControlTooltip
-          disabled={uninstallDisabled}
-          reason={isStatusLoading ? 'Hook status is being checked.' : 'Hook removal isn’t available here.'}
-        >
-          <AppTooltip content={`Uninstall ${agent.name} hook`}>
-            <Button
-              aria-label={`Uninstall ${agent.name} hook`}
-              className='shrink-0'
-              disabled={uninstallDisabled}
-              onClick={onUninstall}
-              size='icon'
-              type='button'
-              variant='destructive'
-            >
-              <IconTrash aria-hidden='true' />
-            </Button>
-          </AppTooltip>
-        </DisabledSettingControlTooltip>
+      {supportsChatView && preferredAgentInterface && onPreferredInterfaceOverrideChange ? (
+        <AgentPreferredInterfaceOverrideSelect
+          agentName={agent.name}
+          onChange={onPreferredInterfaceOverrideChange}
+          preferredAgentInterface={preferredAgentInterface}
+          value={preferredInterfaceOverride}
+        />
       ) : null}
+      <div className='flex w-32 shrink-0 items-center justify-end gap-3'>
+        <span
+          className={cn(
+            'flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-xs font-medium',
+            getAgentHookStatusClassName(status, isLoading)
+          )}
+        >
+          <AgentHookStatusIcon isLoading={isLoading} status={status} />
+          {statusText}
+        </span>
+        {removable ? (
+          <DisabledSettingControlTooltip
+            disabled={uninstallDisabled}
+            reason={isStatusLoading ? 'Hook status is being checked.' : 'Hook removal isn’t available here.'}
+          >
+            <AppTooltip content={`Uninstall ${agent.name} hook`}>
+              <Button
+                aria-label={`Uninstall ${agent.name} hook`}
+                className='shrink-0'
+                disabled={uninstallDisabled}
+                onClick={onUninstall}
+                size='icon'
+                type='button'
+                variant='destructive'
+              >
+                <IconTrash aria-hidden='true' />
+              </Button>
+            </AppTooltip>
+          </DisabledSettingControlTooltip>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+/*
+ * CDXC:PerAgentDefaultView 2026-08-27:
+ * Only chat-capable agents get this control. A terminal-only agent has no
+ * second view to choose, so a disabled select there would be noise; its row
+ * simply ends at the hook status.
+ */
+export function AgentPreferredInterfaceOverrideSelect({
+  agentName,
+  onChange,
+  preferredAgentInterface,
+  value,
+}: {
+  agentName: string;
+  onChange: (preferredInterface: PreferredAgentInterface | undefined) => void;
+  preferredAgentInterface: PreferredAgentInterface;
+  value?: PreferredAgentInterface;
+}) {
+  const options = getPreferredAgentInterfaceOverrideOptions(preferredAgentInterface);
+  return (
+    <SettingsSelect
+      items={options}
+      onValueChange={(nextValue) =>
+        onChange(
+          nextValue === PREFERRED_AGENT_INTERFACE_INHERIT_VALUE ? undefined : (nextValue as PreferredAgentInterface)
+        )
+      }
+      value={value ?? PREFERRED_AGENT_INTERFACE_INHERIT_VALUE}
+    >
+      <SelectTrigger aria-label={`Default view for ${agentName}`} className='h-7 w-[9.5rem] shrink-0 px-2 text-xs'>
+        <SelectValue />
+      </SelectTrigger>
+      <SettingsSelectContent>
+        <SelectGroup>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SettingsSelectContent>
+    </SettingsSelect>
   );
 }
 
@@ -758,7 +860,10 @@ export function SettingsAgentRow({
           <SettingsAgentIcon agent={agent} />
         </span>
         <span className='min-w-0 flex-1'>
-          <span className='block truncate text-sm font-medium text-foreground'>{agent.name}</span>
+          <span className='flex min-w-0 items-center gap-1.5'>
+            <span className='truncate text-sm font-medium text-foreground'>{agent.name}</span>
+            <AgentChatViewSupportBadge agent={agent} />
+          </span>
           <span className='block truncate text-xs text-muted-foreground'>
             {agent.command?.trim() || 'Not configured'}
           </span>

@@ -6,7 +6,7 @@ import { DEFAULT_WORKSPACE_OPEN_TARGET_AVAILABILITY } from '../workspace-open-ta
 import { DEFAULT_PET_ID } from '../pets';
 import { DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS } from '../session-tags';
 import { DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS } from './diagnostic-logging';
-import { DEFAULT_WEB_LINK_OPEN_TARGET } from './option-tables';
+import { DEFAULT_CHAT_FILE_OPEN_VIEW, DEFAULT_WEB_LINK_OPEN_TARGET } from './option-tables';
 import { SIDEBAR_SETTINGS_PRESET_SETTINGS } from './presets';
 import { DEFAULT_SETTINGS_MODAL_NAVIGATION_STATE } from './settings-modal-navigation';
 import { DEFAULT_TERMINAL_DEV_SERVER_IGNORED_PORT_RULES } from './terminal-dev-servers';
@@ -20,6 +20,7 @@ import {
   DEFAULT_ACCENT_COLOR,
   DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
+  DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
   DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
   DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
@@ -88,6 +89,8 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * from dev-server links.
    */
   webLinkOpenTarget: DEFAULT_WEB_LINK_OPEN_TARGET,
+  markdownFileOpenView: DEFAULT_CHAT_FILE_OPEN_VIEW,
+  htmlFileOpenView: DEFAULT_CHAT_FILE_OPEN_VIEW,
   /**
    * CDXC:SettingsAdvanced 2026-06-28-08:01:
    * New installs should start with ordinary Settings density, but an explicit
@@ -391,22 +394,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   sessionStatusIndicatorSize: 'medium',
   /**
-   * CDXC:SessionPersistence 2026-05-05-07:28
-   * Terminal persistence is provider-selected. Off preserves the direct
-   * Ghostty launch path; tmux, zmx, and zellij wrap new terminal/agent
-   * sessions in a named persistence session so app restart can reattach or
-   * recreate+resume.
-   *
-   * CDXC:SessionPersistence 2026-05-06-03:43
-   * zellij uses the same durable session name contract as tmux/zmx for restart
-   * attach and missing-session recreate+resume behavior even when hidden from
-   * the current Settings dropdown.
-   *
-   * CDXC:SessionPersistence 2026-05-26-13:41:
-   * New installs should start with zmx persistence enabled by default because zmx is the recommended provider for continuing Ghostex-created sessions from other devices.
-   */
-  sessionPersistenceProvider: 'zmx',
-  /**
    * CDXC:SessionPersistence 2026-05-23-00:50:
    * The session-id pane overlay preference is configurable, and the
    * native label itself must still render only for terminal panes that carry
@@ -419,6 +406,11 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   showSessionIdInTerminalPanes: false,
   preferredAgentInterface: 'chat',
+  /**
+   * No per-agent overrides: every agent follows the global Default Agent View
+   * until the user picks a different view for that agent in Settings > Agents.
+   */
+  preferredAgentInterfaceOverrides: {},
   /**
    * CDXC:SidebarV2 2026-07-29:
    * The classic sidebar stays the default for every user. Sidebar V2 must be
@@ -555,17 +547,13 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   terminalBackgroundImageFit: 'cover',
   terminalLetterSpacing: 0,
   terminalLineHeight: 1.2,
+  terminalNarrowerViewEnabled: false,
+  terminalViewWidthPercent: DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
+  terminalLayoutApplyToAllTerminals: true,
   terminalPaneHorizontalPaddingPx: DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
   terminalPaneVerticalPaddingPx: DEFAULT_TERMINAL_PANE_PADDING_PX,
   terminalMouseScrollMultiplierDiscrete: 1,
   terminalMouseScrollMultiplierPrecision: 1,
-  /**
-   * CDXC:SessionPersistence 2026-05-05-07:28
-   * tmuxMode remains as a compatibility mirror for older persisted settings and
-   * legacy UI code. New launch behavior reads sessionPersistenceProvider so
-   * zmx and zellij can follow the same persistence semantics as tmux.
-   */
-  tmuxMode: false,
   terminalScrollToBottomWhenTyping: true,
   terminalScrollbackLimitMb: 15,
   terminalCopyOnSelect: 'false',

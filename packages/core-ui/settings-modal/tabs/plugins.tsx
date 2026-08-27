@@ -2,13 +2,13 @@ import { type ReactNode } from 'react';
 import { cn } from '@/packages/components/utils';
 import { Button } from '@/packages/components/ui/button';
 import { Field, FieldContent, FieldDescription, FieldTitle } from '@/packages/components/ui/field';
+import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
 import { Switch } from '@/packages/components/ui/switch';
 import { AppTooltip } from '../../app-tooltip';
 import {
   IconBolt,
   IconCodeDots,
   IconDeviceDesktop,
-  IconDownload,
   IconFileText,
   IconFolderOpen,
   IconGitCommit,
@@ -18,12 +18,15 @@ import {
   IconWorld,
 } from '@tabler/icons-react';
 import {
-  type SidebarGhostexCliStatusMessage,
   type SidebarPluginSettingsItem,
   type SidebarPluginSettingsStatusMessage,
 } from '../../../shared/session-grid-contract';
-import { type ghostexSettings } from '../../../shared/ghostex-settings';
-import { SettingButton, SettingsNativeScrollArea, SettingsSection } from '../fields';
+import {
+  CHAT_FILE_OPEN_VIEW_OPTIONS,
+  type ChatFileOpenView,
+  type ghostexSettings,
+} from '../../../shared/ghostex-settings';
+import { SettingButton, SettingRow, SettingsNativeScrollArea, SettingsSection } from '../fields';
 import {
   SettingsTabSearch,
   hasVisibleSettingsSearchResult,
@@ -44,11 +47,9 @@ export type PluginVisibilitySettingKey =
   | 'quickActionsTitlebarButtonHidden'
   | 'openInTitlebarButtonHidden';
 
+type CustomizeSettingKey = PluginVisibilitySettingKey | 'markdownFileOpenView' | 'htmlFileOpenView';
+
 export function PluginsSettingsTab({
-  ghostexCliStatus,
-  ghostexCliStatusLoading,
-  onInstallCuaDriver,
-  onRequestGhostexCliStatus,
   onRequestStatus,
   onReinstallPlugin,
   onUpdateSetting,
@@ -58,13 +59,9 @@ export function PluginsSettingsTab({
   status,
   statusLoading,
 }: {
-  ghostexCliStatus?: SidebarGhostexCliStatusMessage;
-  ghostexCliStatusLoading: boolean;
-  onInstallCuaDriver?: () => void;
-  onRequestGhostexCliStatus?: () => void;
   onRequestStatus?: () => void;
   onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem['id']) => void;
-  onUpdateSetting: (key: PluginVisibilitySettingKey, value: boolean) => void;
+  onUpdateSetting: <K extends CustomizeSettingKey>(key: K, value: ghostexSettings[K]) => void;
   search: SettingsTabSearch;
   searchEmptyState?: ReactNode;
   settings: ghostexSettings;
@@ -75,37 +72,8 @@ export function PluginsSettingsTab({
   const code = statusById.get('code');
   const kanban = statusById.get('kanban');
   const cef = statusById.get('cef');
-  const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
-  const cuaDriverManagedUpdatesSupported = ghostexCliStatus?.cuaDriverManagedUpdatesSupported !== false;
-  const cuaDriverUpdateAvailable = ghostexCliStatus?.cuaDriverUpdateAvailable;
-  const cuaDriverStatusChecking = ghostexCliStatusLoading || !ghostexCliStatus;
-  const cuaDriverStatus = cuaDriverStatusChecking
-    ? 'Checking'
-    : !cuaDriverInstalled
-      ? 'Not installed'
-      : cuaDriverUpdateAvailable === true
-        ? 'Update available'
-        : cuaDriverUpdateAvailable === false
-          ? 'Up to date'
-          : 'Installed';
-  /*
-   * CDXC:TrycuaPrerequisite 2026-08-24:
-   * Every desktop platform now runs the official Trycua installer in a command
-   * pane, so hosts without managed updates offer Reinstall instead of sending
-   * the user to a downloads page.
-   */
-  const cuaDriverActionLabel = cuaDriverStatusChecking
-    ? 'Checking'
-    : !cuaDriverManagedUpdatesSupported
-      ? cuaDriverInstalled
-        ? 'Reinstall'
-        : 'Install'
-      : !cuaDriverInstalled
-        ? 'Install'
-        : cuaDriverUpdateAvailable === true
-          ? 'Upgrade'
-          : 'Check for updates';
   const showViewTab = (key: string) => shouldShowSetting(search.sections.viewTabs, key);
+  const showFileOpeningSetting = (key: string) => shouldShowSetting(search.sections.fileOpening, key);
   const showQuickAccessButton = (key: string) => shouldShowSetting(search.sections.quickAccessButtons, key);
 
   return (
@@ -171,26 +139,47 @@ export function PluginsSettingsTab({
           </SettingsSection>
         ) : null}
 
+        {shouldShowSettingsSection(search.sections.fileOpening) ? (
+          <SettingsSection
+            description='Choose where supported file links from agent chat open. If that view is unavailable, Ghostex uses the other available view.'
+            title='File opening'
+          >
+            {showFileOpeningSetting('markdown') ? (
+              <ChatFileOpenViewSetting
+                id='markdown-file-open-view'
+                label='Markdown files'
+                onChange={(value) => onUpdateSetting('markdownFileOpenView', value)}
+                subtitle='Applies to .md, .markdown, .mdown, and .mkdn links in agent chat.'
+                value={settings.markdownFileOpenView}
+              />
+            ) : null}
+            {showFileOpeningSetting('html') ? (
+              <ChatFileOpenViewSetting
+                id='html-file-open-view'
+                label='HTML files'
+                onChange={(value) => onUpdateSetting('htmlFileOpenView', value)}
+                subtitle='Applies to .html and .htm links in agent chat.'
+                value={settings.htmlFileOpenView}
+              />
+            ) : null}
+          </SettingsSection>
+        ) : null}
+
         {shouldShowSettingsSection(search.sections.components) ? (
           <SettingsSection
             actions={
               <SettingButton
-                disabled={statusLoading || ghostexCliStatusLoading || (!onRequestStatus && !onRequestGhostexCliStatus)}
+                disabled={statusLoading || !onRequestStatus}
                 disabledReason={
-                  statusLoading || ghostexCliStatusLoading
-                    ? 'Plugin status is being checked.'
-                    : 'Status refresh isn’t available here.'
+                  statusLoading ? 'Plugin status is being checked.' : 'Status refresh isn’t available here.'
                 }
-                onClick={() => {
-                  onRequestStatus?.();
-                  onRequestGhostexCliStatus?.();
-                }}
+                onClick={onRequestStatus}
                 type='button'
                 variant='ghost'
               >
                 <IconRefresh
                   aria-hidden='true'
-                  className={cn((statusLoading || ghostexCliStatusLoading) && 'animate-spin')}
+                  className={cn(statusLoading && 'animate-spin')}
                   data-icon='inline-start'
                 />
                 Refresh
@@ -205,51 +194,6 @@ export function PluginsSettingsTab({
             descriptionClassName='pb-2'
             title='Shared components'
           >
-            {shouldShowSetting(search.sections.components, 'cuaDriver') ? (
-              <IntegrationSettingsRow
-                description='Trycua lets agents control your machine. It powers /ghostex-browser-use and /ghostex-computer-use — install Trycua and both skills from the Integrations page.'
-                icon={IconDeviceDesktop}
-                status={cuaDriverStatus}
-                title='Trycua'
-                tone={
-                  cuaDriverStatusChecking
-                    ? 'neutral'
-                    : cuaDriverUpdateAvailable === true
-                      ? 'warning'
-                      : cuaDriverInstalled
-                        ? 'success'
-                        : 'warning'
-                }
-                version={ghostexCliStatus?.cuaDriverVersion}
-              >
-                <SettingButton
-                  disabled={cuaDriverStatusChecking || !onInstallCuaDriver}
-                  disabledReason={
-                    cuaDriverStatusChecking
-                      ? 'Trycua status is being checked.'
-                      : 'Trycua installation isn’t available here.'
-                  }
-                  onClick={onInstallCuaDriver}
-                  type='button'
-                  variant={
-                    cuaDriverStatusChecking || (cuaDriverInstalled && cuaDriverUpdateAvailable !== true)
-                      ? 'outline'
-                      : 'default'
-                  }
-                >
-                  {cuaDriverStatusChecking || (cuaDriverManagedUpdatesSupported && cuaDriverInstalled) ? (
-                    <IconRefresh
-                      aria-hidden='true'
-                      className={cn(cuaDriverStatusChecking && 'animate-spin')}
-                      data-icon='inline-start'
-                    />
-                  ) : (
-                    <IconDownload aria-hidden='true' data-icon='inline-start' />
-                  )}
-                  {cuaDriverActionLabel}
-                </SettingButton>
-              </IntegrationSettingsRow>
-            ) : null}
             {shouldShowSetting(search.sections.components, 'cef') ? (
               <PluginManagedSettingsRow
                 description='Chromium Embedded Framework powers Ghostex web surfaces and remains enabled because the app requires it.'
@@ -341,6 +285,38 @@ export function PluginsSettingsTab({
         ) : null}
       </div>
     </SettingsNativeScrollArea>
+  );
+}
+
+function ChatFileOpenViewSetting({
+  id,
+  label,
+  onChange,
+  subtitle,
+  value,
+}: {
+  id: string;
+  label: string;
+  onChange: (value: ChatFileOpenView) => void;
+  subtitle: string;
+  value: ChatFileOpenView;
+}) {
+  return (
+    <SettingRow htmlFor={id} label={label} subtitle={subtitle}>
+      <SegmentedControl
+        aria-label={`${label} open view`}
+        id={id}
+        onValueChange={(nextValue) => onChange(nextValue as ChatFileOpenView)}
+        size='sm'
+        value={value}
+      >
+        {CHAT_FILE_OPEN_VIEW_OPTIONS.map((option) => (
+          <SegmentedControlItem key={option.value} value={option.value}>
+            {option.label}
+          </SegmentedControlItem>
+        ))}
+      </SegmentedControl>
+    </SettingRow>
   );
 }
 

@@ -305,6 +305,12 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
               "Install hooks so Ghostex can capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Uninstall a single agent's hook from its row, or remove every Ghostex-owned hook with Uninstall All.",
             title: 'Agent resume hooks',
           },
+          {
+            key: 'preferredAgentInterfaceOverrides',
+            subtitle:
+              "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting.",
+            title: 'Default view per agent',
+          },
         ],
         title: 'Agent Hooks',
       },
@@ -414,13 +420,24 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         title: 'Plugins',
       },
       {
-        id: 'components',
+        id: 'fileOpening',
         settings: [
           {
-            key: 'cuaDriver',
-            subtitle: 'Install or upgrade Trycua for Ghostex Browser Use and native Desktop Control.',
-            title: 'Trycua',
+            key: 'markdown',
+            subtitle: 'Choose whether Markdown links from agent chat open in Docs or Code.',
+            title: 'Markdown files',
           },
+          {
+            key: 'html',
+            subtitle: 'Choose whether HTML links from agent chat open in Docs or Code.',
+            title: 'HTML files',
+          },
+        ],
+        title: 'File opening',
+      },
+      {
+        id: 'components',
+        settings: [
           {
             key: 'cef',
             subtitle: 'Inspect or reinstall the Chromium runtime used by Ghostex web surfaces.',
