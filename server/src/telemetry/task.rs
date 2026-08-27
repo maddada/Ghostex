@@ -125,6 +125,24 @@ where
     if !gate::is_enabled(paths) {
         return;
     }
+    /*
+    CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §3):
+    Collect BEFORE the due-check, and refresh the per-event profile fields from
+    the result, because those two things run on different schedules. The
+    heartbeat EVENT is due at most once a day; the `project_bucket` /
+    `default_agent` values that ride every OTHER event have to be populated from
+    the first loop iteration onwards, which is this task's immediate run at
+    server start. Folding the refresh into the collect the heartbeat already
+    does is what keeps "refresh at startup and once per heartbeat" from needing
+    a second DB reader.
+    */
+    let Some(snapshot) = collect() else {
+        return;
+    };
+    queue::refresh_profile(super::profile::ProfileSnapshot::from_counts(
+        snapshot.project_count,
+        snapshot.default_agent,
+    ));
     let Ok(db) = crate::storage::open_gxserver_database(paths) else {
         super::debug_log("telemetry heartbeat could not open the state database".to_string());
         return;
@@ -135,9 +153,6 @@ where
     ) {
         return;
     }
-    let Some(snapshot) = collect() else {
-        return;
-    };
     heartbeat::emit(&snapshot);
     state::write_last_heartbeat_at(
         &db,

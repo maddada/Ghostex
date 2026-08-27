@@ -107,7 +107,7 @@ import {
 } from './primary-agent-launcher';
 import { ProjectAgentLauncherIcon } from './project-agent-launcher-icon';
 import { getSidebarReorderActivationConstraints } from './sidebar-reorder-activation';
-import { SIDEBAR_ITEM_TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { useSidebarItemTooltipDelayMs } from './tooltip-delay';
 
 const CONTEXT_MENU_MARGIN_PX = 12;
 const CONTEXT_MENU_WIDTH_PX = 196;
@@ -715,6 +715,7 @@ export function SessionGroupSection({
   useColoredAgentIcons = false,
   vscode,
 }: SessionGroupSectionProps) {
+  const sidebarItemTooltipDelayMs = useSidebarItemTooltipDelayMs();
   const group = useSidebarStore((state) => state.groupsById[groupId]);
   const storedSessionIds = useSidebarStore((state) => state.sessionIdsByGroup[groupId] ?? []);
   const sessionsById = useSidebarStore((state) => state.sessionsById);
@@ -2139,7 +2140,7 @@ export function SessionGroupSection({
                     icon={projectContext.icon}
                     iconDataUrl={projectContext.iconDataUrl}
                     title={group.title}
-                    tooltipDelay={SIDEBAR_ITEM_TOOLTIP_DELAY_MS}
+                    tooltipDelay={sidebarItemTooltipDelayMs}
                   />
                 ) : null}
                 <div
@@ -2153,7 +2154,7 @@ export function SessionGroupSection({
                       anchor={() => projectTitleButtonRef.current?.closest<HTMLElement>('.group-head') ?? null}
                       content={projectTitleTooltip}
                       contentClassName='project-title-tooltip-content'
-                      delay={SIDEBAR_ITEM_TOOLTIP_DELAY_MS}
+                      delay={sidebarItemTooltipDelayMs}
                     >
                       <button
                         aria-controls={canToggleCollapsed && !isCollapsed ? sessionsRegionId : undefined}
@@ -2179,7 +2180,7 @@ export function SessionGroupSection({
                   ) : (
                     <AppTooltip
                       content={groupTitleActionLabel}
-                      delay={projectContext ? SIDEBAR_ITEM_TOOLTIP_DELAY_MS : undefined}
+                      delay={projectContext ? sidebarItemTooltipDelayMs : undefined}
                     >
                       <button
                         aria-controls={canToggleCollapsed && !isCollapsed ? sessionsRegionId : undefined}

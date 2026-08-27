@@ -78,6 +78,7 @@ import {
   clampTerminalViewWidthPercent,
   clampSidebarCollapseAnimationDurationMs,
   clampSidebarDefaultWidthPx,
+  clampSidebarTooltipDelayMs,
   clampTerminalPanePaddingPx,
   type ghostexSettings,
 } from './types';
@@ -647,6 +648,9 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
         'sidebarCollapseAnimationDurationMs',
         DEFAULT_ghostex_SETTINGS.sidebarCollapseAnimationDurationMs
       )
+    ),
+    sidebarTooltipDelayMs: clampSidebarTooltipDelayMs(
+      readNumber(source, 'sidebarTooltipDelayMs', DEFAULT_ghostex_SETTINGS.sidebarTooltipDelayMs)
     ),
     sidebarDefaultWidthPx: clampSidebarDefaultWidthPx(
       readNumber(source, 'sidebarDefaultWidthPx', DEFAULT_ghostex_SETTINGS.sidebarDefaultWidthPx)

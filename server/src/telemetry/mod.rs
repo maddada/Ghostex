@@ -10,8 +10,11 @@ somewhere else in the tree is how consent bugs happen.
 
 Layout:
 - `taxonomy` — the closed event/property table and its validator.
-- `gate`     — the single opt-out chokepoint (settings + env).
-- `base`     — properties added to every event.
+- `gate`     — the single opt-out chokepoint (settings + env), and the cached
+               settings read the profile fields ride on.
+- `identity` — the per-human `distinct_id` chain and its salted hash.
+- `base`     — fixed machine/build properties added to every event.
+- `profile`  — the per-install profile fields added to every event.
 - `role`     — the durable "this install is a remote helper" marker.
 - `queue`    — the process-global handle, bounded queue, and `capture` API.
 - `capture`  — one typed emitter per event, called by the instrumentation sites.
@@ -28,6 +31,8 @@ pub mod client;
 pub mod client_events;
 pub mod gate;
 pub mod heartbeat;
+pub mod identity;
+pub mod profile;
 pub mod queue;
 pub mod role;
 pub mod state;
@@ -40,7 +45,8 @@ pub use capture::{
 };
 pub use client_events::record_client_event;
 pub use gate::is_enabled;
-pub use queue::{handle, init};
+pub use profile::ProfileSnapshot;
+pub use queue::{handle, init, refresh_profile};
 pub use task::{spawn_flush_task, spawn_heartbeat_task, SHUTDOWN_FLUSH_TIMEOUT};
 
 /*

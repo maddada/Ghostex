@@ -238,6 +238,7 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'hideMenuBarSessionStatusIndicators',
     'sidebarSide',
     'sidebarCollapseAnimationDurationMs',
+    'sidebarTooltipDelayMs',
     'sidebarDefaultWidthPx',
     'commandsPanelDefaultHeightPx',
     'commandsPanelSide',

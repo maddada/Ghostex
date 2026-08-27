@@ -13,7 +13,7 @@ import {
 import { SessionHistoryCard } from './session-history-card';
 import { useSidebarStore } from './sidebar-store';
 import { applyTextEditingKey, isEditableKeyboardTarget, isTextEditingKey } from './text-input-keyboard';
-import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import { TooltipProvider } from './app-tooltip';
 import { QuickAccessSearchInput } from './quick-access-search-input';
 import { QuickAccessHeader } from './quick-access-tabs';
@@ -165,6 +165,7 @@ export function PreviousSessionsModal({
   shouldPreload = false,
   vscode,
 }: PreviousSessionsModalProps) {
+  const tooltipDelayMs = useSidebarTooltipDelayMs();
   const previousSessions = useSidebarStore((state) => state.previousSessions);
   const groupsById = useSidebarStore((state) => state.groupsById);
   const sessionIdsByGroup = useSidebarStore((state) => state.sessionIdsByGroup);
@@ -914,7 +915,7 @@ export function PreviousSessionsModal({
   }
 
   return createPortal(
-    <TooltipProvider delayDuration={TOOLTIP_DELAY_MS}>
+    <TooltipProvider delayDuration={tooltipDelayMs}>
       <div className='confirm-modal-root scroll-mask-y' role='presentation'>
         <button className='confirm-modal-backdrop' onClick={onClose} type='button' />
         <div

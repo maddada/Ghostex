@@ -208,6 +208,16 @@ impl GhostexGpuiApp {
                             );
                         }),
                     )
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                            this.handle_command_pane_empty_titlebar_right_mouse_down(
+                                Some(group_id),
+                                window,
+                                cx,
+                            );
+                        }),
+                    )
                     .children(
                         leaf.tab_group
                             .tabs
@@ -377,6 +387,14 @@ impl GhostexGpuiApp {
                                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                                     this.handle_command_pane_empty_titlebar_mouse_down(
                                         None, event, window, cx,
+                                    );
+                                }),
+                            )
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                                    this.handle_command_pane_empty_titlebar_right_mouse_down(
+                                        None, window, cx,
                                     );
                                 }),
                             )

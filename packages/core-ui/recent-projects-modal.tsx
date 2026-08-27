@@ -21,7 +21,7 @@ import { readSidebarProjectCollections } from './project-collections';
 import { QuickAccessSearchInput } from './quick-access-search-input';
 import { QuickAccessHeader } from './quick-access-tabs';
 import { isEditableKeyboardTarget } from './text-input-keyboard';
-import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import type { WebviewApi } from './webview-api';
 
 type RecentProjectContextMenuPosition = {
@@ -208,6 +208,7 @@ export function RecentProjectsModal({
   onInitialLoadReady,
   vscode,
 }: RecentProjectsModalProps) {
+  const tooltipDelayMs = useSidebarTooltipDelayMs();
   const [recentProjectsResult, setRecentProjectsResult] = useState<{
     machineId?: string;
     projects: SidebarRecentProject[];
@@ -432,7 +433,7 @@ export function RecentProjectsModal({
   }
 
   return createPortal(
-    <TooltipProvider delayDuration={TOOLTIP_DELAY_MS}>
+    <TooltipProvider delayDuration={tooltipDelayMs}>
       <div className='confirm-modal-root scroll-mask-y' role='presentation'>
         <button className='confirm-modal-backdrop' onClick={onClose} type='button' />
         <div

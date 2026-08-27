@@ -408,6 +408,11 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Collapse animation speed',
       },
       {
+        key: 'sidebarTooltipDelayMs',
+        subtitle: 'Set how long sidebar hover labels wait before appearing. Set to 0 to show them immediately.',
+        title: 'Tooltip Delay',
+      },
+      {
         key: 'sidebarDefaultWidthPx',
         subtitle: 'Width restored when double-clicking the sidebar resize handle.',
         title: 'Default Width',
@@ -564,8 +569,8 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
           { label: 'Tracking', value: 'tracking' },
         ],
         subtitle:
-          'Share anonymous usage data (OS, feature usage, counts). Never prompts, file paths, project names, or anything personal.',
-        title: 'Anonymous usage analytics',
+          'Share usage data (OS, feature usage, counts) under a one-way hashed ID that groups your own machines. Never prompts, file paths, project names, emails, or the raw account ID.',
+        title: 'Usage analytics',
       },
     ]),
     storage: getSettingsSectionSearch(settingsSearchQuery, 'Storage', [

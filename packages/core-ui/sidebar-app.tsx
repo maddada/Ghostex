@@ -52,13 +52,8 @@ import {
   writeSidebarProjectCollections,
   type SidebarProjectCollectionsState,
 } from './project-collections';
-import { TOOLTIP_DELAY_MS } from './tooltip-delay';
-import {
-  AppTooltip,
-  setSidebarTooltipsSuppressedForDrag,
-  TooltipProvider,
-  useDismissSidebarTooltipsOnScroll,
-} from './app-tooltip';
+import { SidebarTooltipDelayProvider } from './tooltip-delay';
+import { AppTooltip, setSidebarTooltipsSuppressedForDrag, useDismissSidebarTooltipsOnScroll } from './app-tooltip';
 import { useScrollGlowState } from './use-scroll-glow-state';
 import type { WebviewApi } from './webview-api';
 import { createDisplaySessionLayout } from '../shared/active-sessions-sort';
@@ -3013,7 +3008,7 @@ export function SidebarApp({
   };
 
   return (
-    <TooltipProvider delayDuration={TOOLTIP_DELAY_MS}>
+    <SidebarTooltipDelayProvider delayMs={effectiveSettings.sidebarTooltipDelayMs}>
       <SidebarCollapseAnimationProvider durationMs={effectiveSettings.sidebarCollapseAnimationDurationMs}>
         <div
           className='sidebar-reference-layout'
@@ -3885,6 +3880,6 @@ export function SidebarApp({
           />
         </div>
       </SidebarCollapseAnimationProvider>
-    </TooltipProvider>
+    </SidebarTooltipDelayProvider>
   );
 }

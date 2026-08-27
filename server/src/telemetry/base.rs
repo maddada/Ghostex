@@ -1,10 +1,23 @@
 /*
 CDXC:AnonymousAnalytics 2026-08-26:
-Properties every event carries, resolved once at init and cloned onto each
-capture so no emitter can forget one — most importantly
-`$process_person_profile: false`, which is what makes these PostHog "anonymous
-events": no person profiles are created, so nothing accumulates a per-human
-dossier while unique counts still work off `distinct_id`.
+Machine/build properties every event carries, resolved once at init and cloned
+onto each capture so no emitter can forget one.
+
+CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §2):
+`$process_person_profile: false` is GONE. Events are now identified, so PostHog
+builds a person record per `distinct_id` — which is the point, since
+`distinct_id` became per-human (`telemetry::identity`) and person profiles are
+what make cohorts, property breakdowns, and retention-by-property work in the
+UI. Two rules come with that and are enforced elsewhere in this module:
+identify/alias are NEVER called (PostHog creates the person implicitly from the
+events; an identify call risks an unrecoverable profile merge), and the person
+properties themselves ride the heartbeat's `$set` only.
+
+The per-EVENT profile fields (`interface`, `sidebar_version`, `default_agent`,
+`project_bucket`, `identity_source`) deliberately do NOT live here: they change
+while the daemon runs, and they must pass the taxonomy validator, so they are
+assembled per capture in `telemetry::profile` from cached state. This map is
+only for values that are fixed for the life of the process.
 
 `os_version` is a MAJOR version only, and it is read exactly once at startup:
 it is a machine attribute, it does not change under a running daemon, and
@@ -20,7 +33,6 @@ pub const SERVER_MARKETING_VERSION: &str = env!("GHOSTEX_BUILD_MARKETING_VERSION
 
 pub fn build_base_properties() -> Map<String, Value> {
     let mut base = Map::new();
-    base.insert("$process_person_profile".to_string(), Value::Bool(false));
     base.insert(
         "server_version".to_string(),
         Value::String(SERVER_MARKETING_VERSION.to_string()),

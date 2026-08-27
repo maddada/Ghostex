@@ -39,7 +39,7 @@ import {
   SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
 } from './app-tooltip';
 import { formatRelativeTime } from './relative-time';
-import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import { useRelativeTimeTick } from './use-relative-time-tick';
 
 const SESSION_TOOLTIP_VIEWPORT_MARGIN_PX = 8;
@@ -1413,12 +1413,14 @@ type SessionTooltipPosition = {
 
 export function OverflowTooltipText({
   children,
-  delayMs = TOOLTIP_DELAY_MS,
+  delayMs,
   text,
   textRef,
   tooltip,
   tooltipWhen = 'overflow',
 }: OverflowTooltipTextProps) {
+  const configuredDelayMs = useSidebarTooltipDelayMs();
+  const effectiveDelayMs = delayMs ?? configuredDelayMs;
   const [isOpen, setIsOpen] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState<SessionTooltipPosition>();
   const openTimeoutIdRef = useRef<number | undefined>(undefined);
@@ -1484,7 +1486,7 @@ export function OverflowTooltipText({
       activeOverflowTooltipClose = closeTooltip;
       setIsOpen(true);
       openTimeoutIdRef.current = undefined;
-    }, delayMs);
+    }, effectiveDelayMs);
   };
 
   useEffect(() => {

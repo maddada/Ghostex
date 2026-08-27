@@ -38,6 +38,10 @@ export const MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
 export const MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 1000;
 export const SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS = 100;
 export const DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 400;
+export const MIN_SIDEBAR_TOOLTIP_DELAY_MS = 0;
+export const MAX_SIDEBAR_TOOLTIP_DELAY_MS = 2_000;
+export const SIDEBAR_TOOLTIP_DELAY_STEP_MS = 100;
+export const DEFAULT_SIDEBAR_TOOLTIP_DELAY_MS = 600;
 export const MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 50;
 export const MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT = 100;
 export const SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP = 5;
@@ -70,6 +74,14 @@ export function clampSidebarCollapseAnimationDurationMs(value: number): number {
   return (
     Math.round(clamped / SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS) * SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS
   );
+}
+
+export function clampSidebarTooltipDelayMs(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_SIDEBAR_TOOLTIP_DELAY_MS;
+  }
+  const clamped = Math.min(MAX_SIDEBAR_TOOLTIP_DELAY_MS, Math.max(MIN_SIDEBAR_TOOLTIP_DELAY_MS, value));
+  return Math.round(clamped / SIDEBAR_TOOLTIP_DELAY_STEP_MS) * SIDEBAR_TOOLTIP_DELAY_STEP_MS;
 }
 /**
  * CDXC:SidebarV2 2026-07-29:
@@ -365,7 +377,7 @@ export type ghostexSettings = {
    * Default true. gxserver reads this key straight out of
    * native-sidebar-settings.json and treats an absent key as enabled, so the
    * app never has to write the file before analytics can be gated. Turning it
-   * off stops capture and drops the queue; see docs/ANALYTICS.md.
+   * off stops capture and drops the queue; see ANALYTICS.md.
    */
   analyticsEnabled: boolean;
   debuggingMode: boolean;
@@ -550,6 +562,8 @@ export type ghostexSettings = {
   sidebarSide: SidebarSide;
   /** Duration for sidebar section, group, and project disclosure animations. */
   sidebarCollapseAnimationDurationMs: number;
+  /** Delay before sidebar hover tooltips appear. */
+  sidebarTooltipDelayMs: number;
   /**
    * CDXC:SidebarChrome 2026-06-05-04:40:
    * The sidebar default width is the reset target for a double-click on the

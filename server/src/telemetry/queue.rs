@@ -23,7 +23,6 @@ use std::{
 };
 
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
 use crate::paths::GxserverPaths;
 
@@ -31,6 +30,8 @@ use super::{
     base::build_base_properties,
     client::PostHogEndpoint,
     gate,
+    identity::{self, ResolvedIdentity},
+    profile::{self, ProfileSnapshot},
     taxonomy::{self, PropertyValue},
 };
 
@@ -50,34 +51,32 @@ pub(super) struct QueuedEvent {
 
 pub struct Telemetry {
     pub(super) paths: GxserverPaths,
-    pub(super) distinct_id: String,
+    pub(super) identity: ResolvedIdentity,
     pub(super) endpoint: PostHogEndpoint,
     pub(super) base_properties: Map<String, Value>,
     queue: Mutex<VecDeque<QueuedEvent>>,
     /// Rate limiters for the events whose taxonomy row specifies one
     /// (`client.connected`, `surface.opened`). Keyed by event + enum member.
     throttles: Mutex<HashMap<String, Instant>>,
-}
-
-/// `distinct_id` is the SHA-256 of the install's `serverId`. The serverId itself
-/// is visible to anything that can reach the local API, so hashing it means the
-/// id sitting in PostHog cannot be matched back against a machine by anyone who
-/// learns that serverId.
-pub fn distinct_id_for_server_id(server_id: &str) -> String {
-    let digest = Sha256::digest(server_id.as_bytes());
-    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+    /// The DB-derived profile fields attached to every event. Refreshed at
+    /// startup and once per heartbeat run — never per capture.
+    profile: Mutex<ProfileSnapshot>,
 }
 
 /// Called exactly once, by the long-running server loop. Repeat calls are
 /// ignored, which is what keeps a second client from ever existing.
+///
+/// `server_id` is only the LAST link of the `distinct_id` chain now; see
+/// `telemetry::identity` for why a per-human id beats a per-install one.
 pub fn init(paths: GxserverPaths, server_id: &str) -> &'static Telemetry {
     TELEMETRY.get_or_init(|| Telemetry {
+        identity: identity::resolve(&paths, server_id),
         paths,
-        distinct_id: distinct_id_for_server_id(server_id),
         endpoint: PostHogEndpoint::from_environment(),
         base_properties: build_base_properties(),
         queue: Mutex::new(VecDeque::with_capacity(64)),
         throttles: Mutex::new(HashMap::new()),
+        profile: Mutex::new(ProfileSnapshot::default()),
     })
 }
 
@@ -104,6 +103,28 @@ impl Telemetry {
         }
     }
 
+    fn read_profile(&self) -> ProfileSnapshot {
+        match self.profile.lock() {
+            Ok(profile) => *profile,
+            Err(poisoned) => *poisoned.into_inner(),
+        }
+    }
+
+    /// Replace the DB-derived half of the profile. Called at startup and once
+    /// per heartbeat run — see `telemetry::profile` for why not per capture.
+    pub fn refresh_profile(&self, snapshot: ProfileSnapshot) {
+        match self.profile.lock() {
+            Ok(mut profile) => *profile = snapshot,
+            Err(poisoned) => *poisoned.into_inner() = snapshot,
+        }
+    }
+
+    /// Which link of the identity chain produced this process's `distinct_id`,
+    /// as a taxonomy member.
+    pub fn identity_source(&self) -> &'static str {
+        self.identity.source.as_enum()
+    }
+
     pub fn is_enabled(&self) -> bool {
         gate::is_enabled(&self.paths)
     }
@@ -124,7 +145,15 @@ impl Telemetry {
     }
 
     pub(super) fn enqueue(&self, event: &str, properties: &[(&'static str, PropertyValue)]) {
-        if !self.is_enabled() {
+        /*
+        ONE gate evaluation, which is also the ONE settings-file stat on this
+        path: `evaluate` hands back the opt-out answer and the two
+        settings-derived profile fields from the same mtime-keyed cached read.
+        Calling `is_enabled()` here and then reading the settings again for the
+        profile would have doubled the syscalls on the hottest telemetry path.
+        */
+        let settings = gate::evaluate(&self.paths);
+        if !settings.analytics_enabled {
             /*
             Disabled means DROP, not defer: a queue that survives an opt-out
             would ship the user's pre-opt-out activity the moment they opted
@@ -133,7 +162,20 @@ impl Telemetry {
             self.drop_queue();
             return;
         }
-        let validated = match taxonomy::validate(event, properties) {
+        /*
+        Profile properties are prepended, not spliced into the base map, so they
+        go through exactly the same validator as the call site's own properties.
+        An event that names one of these keys itself (the heartbeat re-reads
+        `default_agent` from the DB when it fires) wins, because it comes later
+        in the list and `Map::insert` overwrites.
+        */
+        let mut merged_properties = profile::profile_properties(
+            &settings,
+            &self.read_profile(),
+            self.identity.source.as_enum(),
+        );
+        merged_properties.extend_from_slice(properties);
+        let validated = match taxonomy::validate(event, &merged_properties) {
             Ok(validated) => validated,
             Err(reason) => {
                 super::debug_log(format!("telemetry capture dropped: {reason}"));
@@ -192,13 +234,27 @@ impl Telemetry {
             .map(|queued| {
                 json!({
                     "event": queued.event,
-                    "distinct_id": self.distinct_id,
+                    "distinct_id": self.identity.distinct_id,
                     "properties": Value::Object(queued.properties.clone()),
                     "timestamp": queued.timestamp,
                 })
             })
             .collect()
     }
+}
+
+/// Replace the DB-derived profile fields. A no-op in a process that never
+/// initialised telemetry, like every one-shot CLI verb.
+pub fn refresh_profile(snapshot: ProfileSnapshot) {
+    if let Some(telemetry) = handle() {
+        telemetry.refresh_profile(snapshot);
+    }
+}
+
+/// The `identity_source` member for this process, or `None` when telemetry was
+/// never initialised.
+pub fn identity_source() -> Option<&'static str> {
+    handle().map(Telemetry::identity_source)
 }
 
 /// The one public emitter. A no-op when telemetry was never initialised (every

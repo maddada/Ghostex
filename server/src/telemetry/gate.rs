@@ -18,6 +18,8 @@ use serde_json::Value;
 
 use crate::paths::GxserverPaths;
 
+use super::taxonomy;
+
 /// The cache is keyed on the settings file's MTIME, not on elapsed time: the
 /// moment the app rewrites the file, the very next capture re-reads it, so
 /// opting out takes effect immediately rather than after a timeout. This TTL is
@@ -28,10 +30,35 @@ const SETTINGS_CACHE_TTL: Duration = Duration::from_secs(5);
 
 pub const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
 
+/*
+CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §3):
+Everything this module reads out of the settings file, in ONE struct.
+
+The profile properties `interface` and `sidebar_version` ride every event, and
+they come from the same JSON document the opt-out flag does. Giving them their
+own reader would have meant a second `fs::metadata` + `read_to_string` on every
+capture — literally doubling the syscall cost of the hottest path in telemetry
+— so they are parsed during the read the gate was already doing and cached
+behind the same mtime key. One stat per capture before this change; one stat per
+capture after it.
+
+`interface` and `sidebar_version` are `Option` rather than defaulted: when the
+settings file does not exist yet the honest answer is "unknown", and the addendum
+is explicit that an unavailable profile field is OMITTED rather than guessed.
+(The gate's own flag is different — it has a shipped default of ON, and a
+missing file means the user has not opted out.)
+*/
+#[derive(Clone, Copy, Debug)]
+pub struct SettingsProfile {
+    pub analytics_enabled: bool,
+    pub interface: Option<&'static str>,
+    pub sidebar_version: Option<&'static str>,
+}
+
 struct SettingsCache {
     checked_at: Instant,
     modified_at: Option<SystemTime>,
-    analytics_enabled: bool,
+    profile: SettingsProfile,
 }
 
 static SETTINGS_CACHE: OnceLock<Mutex<Option<SettingsCache>>> = OnceLock::new();
@@ -91,11 +118,12 @@ pub fn analytics_role_is_remote() -> bool {
         .unwrap_or(false)
 }
 
-/// `analyticsEnabled` from the shared sidebar settings file. Absent file,
-/// unparseable file, or absent key all mean the shipped default: **on**.
-/// Only an explicit `false` opts out, so a corrupt settings file never silently
+/// `analyticsEnabled` from the shared sidebar settings file, plus the two
+/// profile enums that live in the same document. Absent file, unparseable file,
+/// or absent key all mean the shipped default for the flag: **on**. Only an
+/// explicit `false` opts out, so a corrupt settings file never silently
 /// disables a feature the user believes is running.
-fn settings_allow(paths: &GxserverPaths) -> bool {
+pub fn settings_profile(paths: &GxserverPaths) -> SettingsProfile {
     let settings_path = paths.app_config_dir.join(SETTINGS_FILE_NAME);
     let modified_at = std::fs::metadata(&settings_path)
         .ok()
@@ -115,30 +143,90 @@ fn settings_allow(paths: &GxserverPaths) -> bool {
         every single capture would be pure syscall churn.
         */
         if modified_at.is_some() && entry.modified_at == modified_at {
-            return entry.analytics_enabled;
+            return entry.profile;
         }
         if modified_at.is_none()
             && entry.modified_at.is_none()
             && entry.checked_at.elapsed() < SETTINGS_CACHE_TTL
         {
-            return entry.analytics_enabled;
+            return entry.profile;
         }
     }
 
-    let analytics_enabled = std::fs::read_to_string(&settings_path)
+    let settings = std::fs::read_to_string(&settings_path)
         .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .and_then(|settings| settings.get("analyticsEnabled").and_then(Value::as_bool))
-        .unwrap_or(true);
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    let profile = SettingsProfile {
+        analytics_enabled: settings
+            .as_ref()
+            .and_then(|settings| settings.get("analyticsEnabled").and_then(Value::as_bool))
+            .unwrap_or(true),
+        interface: read_settings_enum(
+            settings.as_ref(),
+            "preferredAgentInterface",
+            taxonomy::INTERFACE_KINDS,
+            "chat",
+        ),
+        sidebar_version: read_settings_enum(
+            settings.as_ref(),
+            "sidebarVersion",
+            taxonomy::SIDEBAR_VERSIONS,
+            "v1",
+        ),
+    };
     *cache = Some(SettingsCache {
         checked_at: Instant::now(),
         modified_at,
-        analytics_enabled,
+        profile,
     });
-    analytics_enabled
+    profile
+}
+
+/*
+`None` only when there is no settings document at all — that is the startup
+race the addendum says to answer by omitting the property. Once the document
+exists, an unknown or missing value normalizes to the shipped default, because
+that default is what the app itself is rendering for the user at that moment;
+reporting "unknown" there would understate a real, observable state.
+*/
+fn read_settings_enum(
+    settings: Option<&Value>,
+    key: &str,
+    table: &'static [&'static str],
+    default: &'static str,
+) -> Option<&'static str> {
+    let settings = settings?;
+    Some(
+        settings
+            .get(key)
+            .and_then(Value::as_str)
+            .and_then(|value| taxonomy::match_enum(table, value))
+            .unwrap_or(default),
+    )
 }
 
 /// The one question every capture and every flush asks.
 pub fn is_enabled(paths: &GxserverPaths) -> bool {
-    !environment_opts_out() && !install_role_opts_out(paths) && settings_allow(paths)
+    evaluate(paths).analytics_enabled
+}
+
+/// `is_enabled`, but handing back the profile enums the same cached read
+/// produced, so the capture path never stats the settings file twice.
+/// `analytics_enabled` here is the FULL gate answer (env + install role +
+/// settings), not just the settings flag.
+pub fn evaluate(paths: &GxserverPaths) -> SettingsProfile {
+    /*
+    Short-circuit before touching the filesystem, exactly as the original
+    `!env && !role && settings_allow(..)` chain did: a process that is opted out
+    by environment or by install role must not stat the settings file on every
+    capture attempt for an answer it already knows.
+    */
+    if environment_opts_out() || install_role_opts_out(paths) {
+        return SettingsProfile {
+            analytics_enabled: false,
+            interface: None,
+            sidebar_version: None,
+        };
+    }
+    settings_profile(paths)
 }

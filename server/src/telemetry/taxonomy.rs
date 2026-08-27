@@ -10,6 +10,13 @@ length-clamped. There is no `PropertyValue` variant that carries a runtime-owned
 `String` a caller could fill with a prompt, a path, or a project name, so
 "someone adds a field with user text in it" is a compile error, not a bug.
 
+That property survived the addendum-v2 restructure intact. Person profiles are
+now ON, so the heartbeat carries a `$set` object — but `$set` is modelled as
+`PropertyValue::PersonSet`, a nested list of the SAME key/value pairs, checked
+by the SAME `encode_property` against `person_property_spec`. It is not a
+`serde_json::Map` a caller can fill in, so turning person profiles on did not
+open a hole for free-form text.
+
 Anything that does not match the table below is dropped with a debug log.
 */
 
@@ -80,6 +87,48 @@ pub const SIDEBAR_VERSIONS: &[&str] = &["v1", "v2"];
 
 pub const SIDEBAR_V2_LAYOUTS: &[&str] = &["byProject", "flat"];
 
+/// Which link of the `distinct_id` chain produced this install's id
+/// (`telemetry::identity`).
+pub const IDENTITY_SOURCES: &[&str] = &["claude", "codex", "install"];
+
+/// The bucketed project count carried on EVERY event. The raw number is a
+/// heartbeat-only property: bucketing keeps a high-cardinality per-user integer
+/// off every single event while still separating power users from light ones.
+/// Listed in ordinal order rather than the alphabetical order the other tables
+/// use, because these members are a scale and reading them out of order makes
+/// the gaps hard to check. Membership is order-independent either way.
+pub const PROJECT_BUCKETS: &[&str] = &["0", "1-2", "3-5", "6-10", "10+"];
+
+/// `std::env::consts::OS` values we recognise. A platform outside this table is
+/// simply omitted rather than sent, which is why the table does not need to be
+/// exhaustive over every Rust target.
+pub const PLATFORMS: &[&str] = &[
+    "android",
+    "dragonfly",
+    "freebsd",
+    "ios",
+    "linux",
+    "macos",
+    "netbsd",
+    "openbsd",
+    "solaris",
+    "windows",
+];
+
+/// `std::env::consts::ARCH` values we recognise, same rule as `PLATFORMS`.
+pub const ARCHES: &[&str] = &[
+    "aarch64",
+    "arm",
+    "loongarch64",
+    "powerpc",
+    "powerpc64",
+    "riscv32",
+    "riscv64",
+    "s390x",
+    "x86",
+    "x86_64",
+];
+
 /// Event names. Only these reach PostHog.
 pub const EVENT_HEARTBEAT: &str = "heartbeat";
 pub const EVENT_APP_LAUNCHED: &str = "app.launched";
@@ -89,6 +138,11 @@ pub const EVENT_PROMPT_SENT: &str = "prompt.sent";
 pub const EVENT_SURFACE_OPENED: &str = "surface.opened";
 pub const EVENT_EXTENSION_INSTALLED: &str = "extension.installed";
 pub const EVENT_EXTENSION_UNINSTALLED: &str = "extension.uninstalled";
+
+/// PostHog's person-properties key. Overwrite semantics (`$set`), not
+/// `$set_once`: the person record should always show the install's CURRENT
+/// shape, not whatever it looked like on the day it first reported.
+pub const PERSON_SET_KEY: &str = "$set";
 
 /// The two events the desktop app is allowed to push over the loopback API.
 /// Everything else it might send is dropped by `/api/recordClientEvent`.
@@ -109,15 +163,26 @@ pub enum PropertyValue {
     EnumList(Vec<&'static str>),
     /// The one clamped free-form field: a marketing version string.
     Version(String),
+    /*
+    PostHog's `$set` person-properties object, carried by the heartbeat only.
+    Nesting `PropertyValue` inside itself is what keeps the privacy guarantee
+    intact across person profiles: `$set` is NOT an escape hatch handed a raw
+    JSON map, it is a list of the same key/value pairs every other property
+    goes through, validated by the same `encode_property` against
+    `person_property_spec`. That table never yields `PersonSet`, so the nesting
+    is exactly one level deep by construction.
+    */
+    PersonSet(Vec<(&'static str, PropertyValue)>),
 }
 
-/// What a given `(event, key)` pair is allowed to carry.
+/// What a given property key is allowed to carry.
 #[derive(Clone, Copy, Debug)]
 enum PropertySpec {
     Number,
     Enum(&'static [&'static str]),
     EnumList(&'static [&'static str]),
     Version,
+    PersonSet,
 }
 
 pub fn is_known_event(event: &str) -> bool {
@@ -150,6 +215,20 @@ pub fn normalize_agent_id(agent_id: Option<&str>) -> &'static str {
         .unwrap_or(CUSTOM_AGENT_ID)
 }
 
+/// Collapse a raw project count into the coarse bucket that rides every event.
+/// The raw number stays heartbeat-only: a per-user integer on every single
+/// event is high-cardinality and, for someone with an unusual count, close to
+/// an identifier.
+pub fn project_bucket(project_count: usize) -> &'static str {
+    match project_count {
+        0 => "0",
+        1..=2 => "1-2",
+        3..=5 => "3-5",
+        6..=10 => "6-10",
+        _ => "10+",
+    }
+}
+
 /// Resolve an arbitrary runtime string against a compile-time enum table,
 /// yielding the table's own `&'static str` so nothing runtime-owned escapes.
 pub fn match_enum(table: &'static [&'static str], value: &str) -> Option<&'static str> {
@@ -157,7 +236,32 @@ pub fn match_enum(table: &'static [&'static str], value: &str) -> Option<&'stati
     table.iter().copied().find(|member| *member == value)
 }
 
-fn property_spec(event: &str, key: &str) -> Option<PropertySpec> {
+/*
+CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §4):
+The table is in THREE layers, not one `(event, key)` match, because the profile
+fields now ride every event and duplicating a row per event name would mean the
+next event added to the taxonomy silently loses them:
+
+- `profile_property_spec`  — keys valid on EVERY event (§3).
+- `event_property_spec`    — keys valid only on the named event.
+- `person_property_spec`   — keys valid INSIDE the heartbeat's `$set` object.
+
+`property_spec` merges the first two. Where a key appears in both layers (the
+heartbeat also reports `default_agent` and `sidebar_version` from its own fresh
+read), the specs are identical, so the merge order is irrelevant to validation.
+*/
+fn profile_property_spec(key: &str) -> Option<PropertySpec> {
+    match key {
+        "interface" => Some(PropertySpec::Enum(INTERFACE_KINDS)),
+        "sidebar_version" => Some(PropertySpec::Enum(SIDEBAR_VERSIONS)),
+        "default_agent" => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
+        "project_bucket" => Some(PropertySpec::Enum(PROJECT_BUCKETS)),
+        "identity_source" => Some(PropertySpec::Enum(IDENTITY_SOURCES)),
+        _ => None,
+    }
+}
+
+fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
     match (event, key) {
         (EVENT_HEARTBEAT, "project_count")
         | (EVENT_HEARTBEAT, "session_count")
@@ -166,10 +270,15 @@ fn property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         | (EVENT_HEARTBEAT, "remote_machine_count")
         | (EVENT_HEARTBEAT, "days_since_install") => Some(PropertySpec::Number),
         (EVENT_HEARTBEAT, "agents_used") => Some(PropertySpec::EnumList(KNOWN_AGENT_IDS)),
-        (EVENT_HEARTBEAT, "default_agent") => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
         (EVENT_HEARTBEAT, "preferred_interface") => Some(PropertySpec::Enum(INTERFACE_KINDS)),
-        (EVENT_HEARTBEAT, "sidebar_version") => Some(PropertySpec::Enum(SIDEBAR_VERSIONS)),
         (EVENT_HEARTBEAT, "sidebar_v2_layout") => Some(PropertySpec::Enum(SIDEBAR_V2_LAYOUTS)),
+        /*
+        Person properties are attached ONLY to the heartbeat. Every other event
+        would just rewrite the same person record with staler numbers, and a
+        `$set` on a high-frequency event is how person properties end up
+        flapping in the PostHog UI.
+        */
+        (EVENT_HEARTBEAT, PERSON_SET_KEY) => Some(PropertySpec::PersonSet),
         (EVENT_APP_LAUNCHED, "client") => Some(PropertySpec::Enum(&["desktop"])),
         (EVENT_APP_LAUNCHED, "app_version") => Some(PropertySpec::Version),
         (EVENT_CLIENT_CONNECTED, "client") => Some(PropertySpec::Enum(CLIENT_KINDS)),
@@ -179,6 +288,35 @@ fn property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         (EVENT_SURFACE_OPENED, "surface") => Some(PropertySpec::Enum(SURFACES)),
         (EVENT_EXTENSION_INSTALLED, "source") => Some(PropertySpec::Enum(EXTENSION_SOURCES)),
         _ => None,
+    }
+}
+
+fn property_spec(event: &str, key: &str) -> Option<PropertySpec> {
+    event_property_spec(event, key).or_else(|| profile_property_spec(key))
+}
+
+/// The keys the heartbeat's `$set` object may carry. Note that it deliberately
+/// does NOT include `agents_used`: an array makes a poor person property, and
+/// it stays an event property. Note also that this table can never return
+/// `PersonSet`, so `$set` cannot contain another `$set`.
+fn person_property_spec(key: &str) -> Option<PropertySpec> {
+    match key {
+        "os" => Some(PropertySpec::Enum(PLATFORMS)),
+        "arch" => Some(PropertySpec::Enum(ARCHES)),
+        "server_version" => Some(PropertySpec::Version),
+        "sidebar_v2_layout" => Some(PropertySpec::Enum(SIDEBAR_V2_LAYOUTS)),
+        "project_count"
+        | "session_count"
+        | "extension_count"
+        | "remote_machine_count"
+        | "days_since_install" => Some(PropertySpec::Number),
+        /*
+        `interface`, `sidebar_version`, `default_agent`, `project_bucket`, and
+        `identity_source` reuse the profile table verbatim rather than being
+        restated, so a change to an enum member cannot apply to the event copy
+        of a field and not to the person copy.
+        */
+        _ => profile_property_spec(key),
     }
 }
 
@@ -221,6 +359,20 @@ fn encode_property(spec: PropertySpec, value: &PropertyValue) -> Option<Value> {
             }),
         (PropertySpec::Version, PropertyValue::Version(version)) => {
             normalize_version_string(version).map(Value::String)
+        }
+        (PropertySpec::PersonSet, PropertyValue::PersonSet(entries)) => {
+            let mut person = Map::new();
+            for (key, value) in entries {
+                /*
+                One rejected key fails the WHOLE `$set`, and therefore the whole
+                heartbeat. That is deliberate: a `$set` that silently drops the
+                key it could not validate would write a half-updated person
+                record, which is worse to reason about than a missing heartbeat.
+                */
+                let spec = person_property_spec(key)?;
+                person.insert((*key).to_string(), encode_property(spec, value)?);
+            }
+            Some(Value::Object(person))
         }
         _ => None,
     }

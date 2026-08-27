@@ -41,7 +41,7 @@ import { SidebarCommandIconGlyph } from './sidebar-command-icon';
 import { formatRelativeTime } from './relative-time';
 import { QuickAccessHeader } from './quick-access-tabs';
 import { useSidebarStore } from './sidebar-store';
-import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import type { WebviewApi } from './webview-api';
 
 /*
@@ -232,6 +232,7 @@ export function StashedPromptsModal({
   stashHintTooltipDefaultOpen = false,
   vscode,
 }: StashedPromptsModalProps) {
+  const tooltipDelayMs = useSidebarTooltipDelayMs();
   const [prompts, setPrompts] = useState<GxserverStashedPrompt[]>();
   const [tags, setTags] = useState<GxserverStashedPromptTag[]>([]);
   const [scope, setScope] = useState<StashedPromptsScope>(initialScope ?? 'all');
@@ -800,7 +801,7 @@ export function StashedPromptsModal({
         newest first. Selecting a row inserts the prompt into the launching
         session's active input surface without submitting it.
       */}
-      <TooltipProvider delayDuration={TOOLTIP_DELAY_MS}>
+      <TooltipProvider delayDuration={tooltipDelayMs}>
         <Command
           className='quick-access-surface ghostex-stashed-prompts-command'
           shouldFilter={false}

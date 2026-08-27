@@ -10,13 +10,14 @@ import {
   type Ref,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { TOOLTIP_DELAY_MS, TOOLTIP_MOTION_CLASS_NAME } from '../components/ui/tooltip-config';
+import { TOOLTIP_MOTION_CLASS_NAME } from '../components/ui/tooltip-config';
 import { cn } from '@/packages/components/utils';
 import {
   areSidebarTooltipsSuppressed,
   SIDEBAR_TOOLTIP_DISMISS_EVENT,
   SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT,
 } from './app-tooltip';
+import { SIDEBAR_FIXED_TOOLTIP_DELAY_OFFSET_MS, useSidebarTooltipDelayMs } from './tooltip-delay';
 
 const SIDEBAR_FIXED_TOOLTIP_VIEWPORT_MARGIN_PX = 8;
 const SIDEBAR_FIXED_TOOLTIP_TRIGGER_OFFSET_PX = 8;
@@ -230,6 +231,7 @@ export const SidebarFixedTooltipButton = forwardRef<HTMLButtonElement, SidebarFi
     const tooltipId = useId();
     const instanceIdRef = useRef(Symbol('sidebarFixedTooltip'));
     const openTimeoutIdRef = useRef<number | undefined>(undefined);
+    const tooltipDelayMs = useSidebarTooltipDelayMs(SIDEBAR_FIXED_TOOLTIP_DELAY_OFFSET_MS);
     const [isTooltipOpen, setIsTooltipOpen] = useState(false);
     const [tooltipPosition, setTooltipPosition] = useState<SidebarFixedTooltipPosition>();
     disabledRef.current = disabled;
@@ -280,7 +282,7 @@ export const SidebarFixedTooltipButton = forwardRef<HTMLButtonElement, SidebarFi
       };
 
       if (delayed) {
-        openTimeoutIdRef.current = window.setTimeout(commitOpen, TOOLTIP_DELAY_MS);
+        openTimeoutIdRef.current = window.setTimeout(commitOpen, tooltipDelayMs);
         return;
       }
       commitOpen();

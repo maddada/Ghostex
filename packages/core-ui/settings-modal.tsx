@@ -70,10 +70,13 @@ import {
   MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
   MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   MAX_SIDEBAR_DEFAULT_WIDTH_PX,
+  MAX_SIDEBAR_TOOLTIP_DELAY_MS,
   MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
   MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   MIN_SIDEBAR_DEFAULT_WIDTH_PX,
+  MIN_SIDEBAR_TOOLTIP_DELAY_MS,
   SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS,
+  SIDEBAR_TOOLTIP_DELAY_STEP_MS,
   SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP,
   TERMINAL_VIEW_WIDTH_PERCENT_STEP,
   normalizeghostexSettings,
@@ -1256,6 +1259,19 @@ export function SettingsModal({
                                 onChange={(value) => updateDraftDebounced('sidebarCollapseAnimationDurationMs', value)}
                                 step={SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS}
                                 value={draft.sidebarCollapseAnimationDurationMs}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'sidebarTooltipDelayMs') ? (
+                              <SliderNumberField
+                                description='Delay in milliseconds before sidebar tooltips appear. Set to 0 to show them immediately.'
+                                label='Tooltip Delay'
+                                {...getSettingModificationProps('sidebarTooltipDelayMs')}
+                                max={MAX_SIDEBAR_TOOLTIP_DELAY_MS}
+                                min={MIN_SIDEBAR_TOOLTIP_DELAY_MS}
+                                onCommit={(value) => updateDraft('sidebarTooltipDelayMs', value)}
+                                onChange={(value) => updateDraftDebounced('sidebarTooltipDelayMs', value)}
+                                step={SIDEBAR_TOOLTIP_DELAY_STEP_MS}
+                                value={draft.sidebarTooltipDelayMs}
                               />
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'commandsPanelDefaultHeightPx') ? (
@@ -2595,8 +2611,8 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.privacy, 'analyticsEnabled') ? (
                               <ToggleField
                                 checked={draft.analyticsEnabled}
-                                description='Share anonymous usage data (OS, feature usage, counts). Never prompts, file paths, project names, or anything personal.'
-                                label='Anonymous usage analytics'
+                                description='Share usage data (OS, feature usage, counts) under a one-way hashed ID that groups your own machines. Never prompts, file paths, project names, emails, or the raw account ID.'
+                                label='Usage analytics'
                                 {...getSettingModificationProps('analyticsEnabled')}
                                 onChange={(checked) => updateDraft('analyticsEnabled', checked)}
                               />

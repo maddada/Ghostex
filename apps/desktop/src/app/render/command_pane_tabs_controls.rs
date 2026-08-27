@@ -75,6 +75,18 @@ impl GhostexGpuiApp {
                     );
                 }),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |_this, _event: &MouseDownEvent, window, cx| {
+                    /*
+                    Right-click toggling belongs only to empty tab-strip chrome.
+                    Keep the inline New Terminal control from bubbling into the
+                    strip handler when the pointer is over this real control.
+                    */
+                    window.prevent_default();
+                    cx.stop_propagation();
+                }),
+            )
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
                 Tooltip::new(command_pane_tab_add_tooltip()).build(window, cx)
             })
@@ -155,6 +167,28 @@ impl GhostexGpuiApp {
                 command_pane_sticky_active_tab_icon_color(),
             ))
             .into_any_element()
+    }
+
+    pub(crate) fn handle_command_pane_empty_titlebar_right_mouse_down(
+        &mut self,
+        group_id: Option<CommandPaneGroupId>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        Empty command tab-strip chrome toggles between the current expanded
+        mode and the collapsed strip. Tabs consume right-click for their
+        context menu, and controls consume their own pointer events, so this
+        handler runs only for the unoccupied titlebar region.
+        */
+        window.prevent_default();
+        cx.stop_propagation();
+        self.handle_command_pane_control_action(
+            CommandPaneControlAction::ToggleExpanded,
+            group_id,
+            window,
+            cx,
+        );
     }
 
     pub(crate) fn render_command_tab_strip_end_drop_target(

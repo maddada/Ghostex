@@ -23,6 +23,7 @@ import {
   DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
   DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
+  DEFAULT_SIDEBAR_TOOLTIP_DELAY_MS,
   DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
   DEFAULT_TERMINAL_PANE_PADDING_PX,
   type PromptEditorBackend,
@@ -214,8 +215,10 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   enableSessionParking: false,
   /**
    * CDXC:AnonymousAnalytics 2026-08-26:
-   * Anonymous usage analytics are on by default and opt-out. Nothing personal,
-   * no prompts, no paths, no project names.
+   * Usage analytics are on by default and opt-out. Events carry only counts and
+   * fixed-list values, tied to a one-way salted hash so one person's machines
+   * group together. Nothing personal: no prompts, no paths, no project names,
+   * and never the raw account id the hash is derived from. See ANALYTICS.md.
    */
   analyticsEnabled: true,
   debuggingMode: false,
@@ -453,6 +456,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   sidebarSide: 'left',
   sidebarCollapseAnimationDurationMs: DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
+  sidebarTooltipDelayMs: DEFAULT_SIDEBAR_TOOLTIP_DELAY_MS,
   /**
    * CDXC:SidebarChrome 2026-06-05-04:40:
    * First-run reset target is 275px, but users can change this Settings

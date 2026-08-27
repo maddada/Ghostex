@@ -43,10 +43,88 @@ pub struct HeartbeatSnapshot {
     pub days_since_install: i64,
 }
 
+/*
+CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §2):
+The person properties. `$set` (overwrite), never `$set_once`, so the person page
+always shows what the install looks like TODAY rather than on the day it first
+reported.
+
+It is attached to the heartbeat and nothing else, on purpose: every other event
+would rewrite the same record with the same numbers, and putting `$set` on a
+high-frequency event is how person properties end up churning.
+
+Two deliberate omissions:
+- `agents_used` — an array is a poor person property (no breakdown, no cohort
+  filter that behaves), so it stays an event property.
+- `country_free` from the addendum's list — Ghostex never sends location. PostHog
+  derives country from the sender IP through its own GeoIP transformation, and
+  the base plan's "never sent" list forbids us shipping one ourselves, so there
+  is no value here to set that would not be invented.
+
+`os` and `arch` go through `match_enum` rather than being sent verbatim: an
+unrecognised target would fail validation for the WHOLE heartbeat, and a
+platform we have not enumerated is not worth losing the event over.
+*/
+fn person_properties(snapshot: &HeartbeatSnapshot) -> PropertyValue {
+    let mut person: Vec<(&'static str, PropertyValue)> = Vec::with_capacity(14);
+    if let Some(os) = taxonomy::match_enum(taxonomy::PLATFORMS, std::env::consts::OS) {
+        person.push(("os", PropertyValue::Enum(os)));
+    }
+    if let Some(arch) = taxonomy::match_enum(taxonomy::ARCHES, std::env::consts::ARCH) {
+        person.push(("arch", PropertyValue::Enum(arch)));
+    }
+    person.push((
+        "server_version",
+        PropertyValue::Version(super::base::SERVER_MARKETING_VERSION.to_string()),
+    ));
+    person.push((
+        "interface",
+        PropertyValue::Enum(snapshot.preferred_interface),
+    ));
+    person.push((
+        "sidebar_version",
+        PropertyValue::Enum(snapshot.sidebar_version),
+    ));
+    person.push((
+        "sidebar_v2_layout",
+        PropertyValue::Enum(snapshot.sidebar_v2_layout),
+    ));
+    person.push(("default_agent", PropertyValue::Enum(snapshot.default_agent)));
+    person.push((
+        "project_count",
+        PropertyValue::Number(snapshot.project_count as f64),
+    ));
+    person.push((
+        "session_count",
+        PropertyValue::Number(snapshot.session_count as f64),
+    ));
+    person.push((
+        "extension_count",
+        PropertyValue::Number(snapshot.extension_count as f64),
+    ));
+    person.push((
+        "remote_machine_count",
+        PropertyValue::Number(snapshot.remote_machine_count as f64),
+    ));
+    person.push((
+        "days_since_install",
+        PropertyValue::Number(snapshot.days_since_install as f64),
+    ));
+    person.push((
+        "project_bucket",
+        PropertyValue::Enum(taxonomy::project_bucket(snapshot.project_count)),
+    ));
+    if let Some(identity_source) = super::queue::identity_source() {
+        person.push(("identity_source", PropertyValue::Enum(identity_source)));
+    }
+    PropertyValue::PersonSet(person)
+}
+
 pub fn emit(snapshot: &HeartbeatSnapshot) {
     capture(
         taxonomy::EVENT_HEARTBEAT,
         &[
+            (taxonomy::PERSON_SET_KEY, person_properties(snapshot)),
             (
                 "project_count",
                 PropertyValue::Number(snapshot.project_count as f64),
