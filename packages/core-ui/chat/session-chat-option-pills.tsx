@@ -188,6 +188,7 @@ function PillTrigger({
   className,
   disabled,
   icon,
+  iconOnly = false,
   label,
   skeleton,
   title,
@@ -196,6 +197,7 @@ function PillTrigger({
   className?: string;
   disabled: boolean;
   icon?: ReactNode;
+  iconOnly?: boolean;
   label: string;
   skeleton?: PillSkeleton;
   title: string;
@@ -203,6 +205,7 @@ function PillTrigger({
   // A skeleton has no value to name, so the tooltip and the accessible name
   // say what is happening instead of reading out the category word.
   const loadingText = skeleton ? pillLoadingText(skeleton) : '';
+  const resolvedIconOnly = iconOnly && skeleton === undefined;
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
       <DropdownMenuTrigger
@@ -211,7 +214,7 @@ function PillTrigger({
             aria-label={skeleton ? loadingText : ariaLabel}
             className={cn('ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground', className)}
             disabled={disabled || skeleton !== undefined}
-            size='xs'
+            size={resolvedIconOnly ? 'icon-xs' : 'xs'}
             variant='ghost'
           />
         }
@@ -219,10 +222,10 @@ function PillTrigger({
         {icon}
         {skeleton ? (
           <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
-        ) : (
+        ) : resolvedIconOnly ? null : (
           <span className='truncate'>{label}</span>
         )}
-        <IconChevronDown aria-hidden='true' className='size-3 shrink-0' stroke={2} />
+        {resolvedIconOnly ? null : <IconChevronDown aria-hidden='true' className='size-3 shrink-0' stroke={2} />}
       </DropdownMenuTrigger>
     </AppTooltip>
   );
@@ -290,7 +293,13 @@ function ClaudePermissionModeIcon({ mode }: { mode: string }) {
   }
 
   return (
-    <svg aria-hidden='true' className='ghostex-chat-mode-icon' data-mode={mode} viewBox='0 0 16 14'>
+    <svg
+      aria-hidden='true'
+      className='ghostex-chat-mode-icon'
+      data-icon='inline-start'
+      data-mode={mode}
+      viewBox='0 0 16 14'
+    >
       {kind === 'advance' ? (
         <path d='M1 2.1 6.9 7 1 11.9V2.1Zm7.1 0L14 7l-5.9 4.9V2.1Z' fill='currentColor' />
       ) : (
@@ -657,9 +666,10 @@ export function SessionChatSessionOptionPills({
         <DropdownMenu>
           <PillTrigger
             ariaLabel={modeTitle}
-            className='ghostex-chat-mode-pill'
+            className='ghostex-chat-mode-pill ghostex-chat-mode-pill-icon-only'
             disabled={disabled || modeValue === undefined}
             icon={modeIcon}
+            iconOnly
             label={modeLabel ?? modeButton.label}
             skeleton={skeletonFor('mode', modeLabel)}
             title={tooltipText(modeTitle, hintFor([modeButton]))}
