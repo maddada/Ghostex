@@ -47,6 +47,8 @@ export interface FindPromptsViewProps {
   acceptAll?: boolean;
   /** Rendered at the top-right, for host chrome such as a close button. */
   hostActions?: React.ReactNode;
+  /** Called after the page has mounted and installed its input-focus lifecycle. */
+  onReady?: () => void;
   transport: FindPromptsTransport;
 }
 
@@ -76,7 +78,7 @@ function buildViewRows(rows: readonly FindPromptRow[], windowOffset: number, gro
   return out;
 }
 
-export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromptsViewProps) {
+export function FindPromptsView({ acceptAll, hostActions, onReady, transport }: FindPromptsViewProps) {
   const find = useFindPrompts({ acceptAll, transport });
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -117,6 +119,7 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
     };
 
     window.addEventListener('focus', handleWindowFocus);
+    onReady?.();
     return () => {
       window.cancelAnimationFrame(animationFrame);
       timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -124,7 +127,7 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
       windowFocusAnimationFrames.forEach((frameId) => window.cancelAnimationFrame(frameId));
       window.removeEventListener('focus', handleWindowFocus);
     };
-  }, [focusQueryInput]);
+  }, [focusQueryInput, onReady]);
 
   const agentColors = useMemo(() => {
     const colors: Record<string, string> = {};

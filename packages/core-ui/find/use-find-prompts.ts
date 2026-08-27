@@ -102,7 +102,7 @@ export function useFindPrompts({ acceptAll, transport }: UseFindPromptsOptions):
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [agents, setAgents] = useState<ReadonlySet<FindPromptAgent>>(() => new Set());
   const [project, setProjectState] = useState<string | null>(null);
-  const [groupByDay, setGroupByDayState] = useState(false);
+  const [groupByDay, setGroupByDayState] = useState(true);
   const [rows, setRows] = useState<readonly FindPromptRow[]>([]);
   const [windowOffset, setWindowOffset] = useState(0);
   const [matched, setMatched] = useState(0);

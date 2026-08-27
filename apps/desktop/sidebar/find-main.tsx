@@ -141,6 +141,10 @@ function postFindHostAction(action: string, fields?: Record<string, unknown>): v
   );
 }
 
+function notifyFindHostReady(): void {
+  postFindHostAction('ready');
+}
+
 function createGpuiFindPromptsTransport(bootstrap: { authToken: string; baseUrl: string }): FindPromptsTransport {
   return {
     close() {
@@ -233,7 +237,11 @@ waitForBootstrap()
   .then((bootstrap) => {
     root.render(
       <div className='native-sidebar-shell gpui-find-prompts'>
-        <FindPromptsView acceptAll={acceptAll} transport={createGpuiFindPromptsTransport(bootstrap)} />
+        <FindPromptsView
+          acceptAll={acceptAll}
+          onReady={notifyFindHostReady}
+          transport={createGpuiFindPromptsTransport(bootstrap)}
+        />
       </div>
     );
   })

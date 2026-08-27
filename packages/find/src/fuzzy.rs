@@ -1,8 +1,8 @@
 //! fzf-style optimal alignment matcher: a Smith-Waterman variant with affine
 //! gap penalties plus bonuses for word boundaries, camelCase humps, and
-//! unbroken runs. Direct port of zehn's `src/fuzzy.zig` — the scores, the
-//! quality gate, and the highlight positions are identical, so the TUI and the
-//! Find GUI rank results exactly the way the Zig build did.
+//! unbroken runs. Derived from zehn's `src/fuzzy.zig`; this is now the shared
+//! matcher for the TUI and Find GUI, including Ghostex's stricter quality gate
+//! and literal-match preference.
 
 pub const MAX_POSITIONS: usize = 32;
 
@@ -44,8 +44,8 @@ const NEG: i32 = i32::MIN / 2;
 // subsequence. Non-empty queries need both a minimum score percentage against an
 // ideal match and compact per-term spans, so unrelated prompts with scattered
 // matching bytes are rejected before ranking.
-const MIN_SCORE_QUALITY_PERCENT: i32 = 50;
-const MIN_TERM_COMPACTNESS_PERCENT: usize = 35;
+const MIN_SCORE_QUALITY_PERCENT: i32 = 60;
+const MIN_TERM_COMPACTNESS_PERCENT: usize = 50;
 const MIN_COMPACT_TERM_LEN: usize = 3;
 
 /// Above this much DP work, fall back to the greedy scorer to stay fast on
@@ -144,15 +144,15 @@ impl Matcher {
     // CDXC:AgentHistorySearch 2026-08-07-09:08:
     // A literal query occurrence must always remain searchable, regardless of
     // earlier characters that could form a lower-quality fuzzy subsequence.
-    // Preserve established fuzzy ranking when its best path passes the quality
-    // checks; when that path is rejected, select the literal span so compactness
-    // filtering cannot discard an exact word or phrase from any agent's history.
+    // Prefer the literal span whenever one exists so the visible reason for the
+    // result is cohesive and deterministic. Only use fuzzy alignment when no
+    // literal word or phrase occurs, and keep that path behind the quality gate.
     pub fn matches(&mut self, needle: &[u8], hay: &[u8]) -> Option<Match> {
-        let raw = self.raw_match(needle, hay);
-        if let Some(m) = quality_filter(needle, raw) {
+        if let Some(m) = exact_substring_match(needle, hay) {
             return Some(m);
         }
-        exact_substring_match(needle, hay)
+        let raw = self.raw_match(needle, hay);
+        quality_filter(needle, raw)
     }
 
     fn raw_match(&mut self, needle: &[u8], hay: &[u8]) -> Option<Match> {
@@ -315,6 +315,7 @@ fn exact_substring_match(needle: &[u8], hay: &[u8]) -> Option<Match> {
         return None;
     }
 
+    let mut best: Option<Match> = None;
     let mut start: usize = 0;
     while start + needle.len() <= hay.len() {
         let matched = needle
@@ -322,7 +323,14 @@ fn exact_substring_match(needle: &[u8], hay: &[u8]) -> Option<Match> {
             .enumerate()
             .all(|(offset, &nc)| eqi(nc, hay[start + offset]));
         if matched {
-            let mut result = Match::empty(ideal_score(needle.len()));
+            let previous = if start == 0 {
+                Class::White
+            } else {
+                class_of(hay[start - 1])
+            };
+            let boundary_bonus = bonus_at(previous, class_of(hay[start]));
+            let boundary_penalty = (BONUS_BOUNDARY - boundary_bonus).max(0) * FIRST_CHAR_MULT;
+            let mut result = Match::empty(ideal_score(needle.len()) - boundary_penalty);
             if start + needle.len() - 1 <= u16::MAX as usize {
                 let highlighted = needle.len().min(MAX_POSITIONS);
                 for offset in 0..highlighted {
@@ -330,11 +338,13 @@ fn exact_substring_match(needle: &[u8], hay: &[u8]) -> Option<Match> {
                 }
                 result.pos_len = highlighted as u8;
             }
-            return Some(result);
+            if best.is_none_or(|current| result.score > current.score) {
+                best = Some(result);
+            }
         }
         start += 1;
     }
-    None
+    best
 }
 
 /// Greedy fallback for oversized haystacks. Agrees with the DP on *whether* a

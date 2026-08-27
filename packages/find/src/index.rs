@@ -386,10 +386,16 @@ fn score_bucket(score: i32) -> i32 {
     score.div_euclid(32)
 }
 
-/// Ranking, byte-for-byte the same ordering the Zig picker used:
-/// day bucket (when grouping) → favorites tier → score bucket → recency →
-/// exact score → stable index.
+/// Empty queries are strict reverse chronology. Search results retain the
+/// established ordering: day bucket (when grouping) → favorites tier → score
+/// bucket → recency → exact score → stable index.
 fn hit_less(x: &RankedHit, y: &RankedHit, query_empty: bool, group_by_day: bool) -> bool {
+    if query_empty {
+        if x.ts != y.ts {
+            return x.ts > y.ts;
+        }
+        return x.index < y.index;
+    }
     if group_by_day {
         let dx = day_key(x.ts);
         let dy = day_key(y.ts);
@@ -399,15 +405,6 @@ fn hit_less(x: &RankedHit, y: &RankedHit, query_empty: bool, group_by_day: bool)
     }
     if x.favorite != y.favorite {
         return x.favorite;
-    }
-    if query_empty {
-        if x.ts != y.ts {
-            return x.ts > y.ts;
-        }
-        if x.score != y.score {
-            return x.score > y.score;
-        }
-        return x.index < y.index;
     }
     let bx = score_bucket(x.score);
     let by = score_bucket(y.score);

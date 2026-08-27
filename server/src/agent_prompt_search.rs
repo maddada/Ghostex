@@ -196,6 +196,32 @@ fn truncate_on_char_boundary(text: &str, limit: usize) -> &str {
     &text[..end]
 }
 
+fn prompt_row_excerpt(text: &str, highlights: &[u16], limit: usize) -> (String, Vec<u16>, bool) {
+    if text.len() <= limit {
+        return (text.to_string(), highlights.to_vec(), false);
+    }
+    if limit == 0 {
+        return (String::new(), Vec::new(), true);
+    }
+
+    let first_highlight = highlights.first().copied().map(usize::from).unwrap_or(0);
+    let leading_context = (limit / 3).min(80);
+    let mut start = first_highlight.saturating_sub(leading_context);
+    while start > 0 && !text.is_char_boundary(start) {
+        start -= 1;
+    }
+    let end = start + truncate_on_char_boundary(&text[start..], limit).len();
+
+    let visible_highlights = highlights
+        .iter()
+        .copied()
+        .map(usize::from)
+        .filter(|position| *position >= start && *position < end)
+        .filter_map(|position| u16::try_from(position - start).ok())
+        .collect();
+    (text[start..end].to_string(), visible_highlights, true)
+}
+
 /// `POST /api/searchAgentPrompts`
 pub fn search_agent_prompts(
     paths: &crate::paths::GxserverPaths,
@@ -244,7 +270,8 @@ pub fn search_agent_prompts(
             .iter()
             .map(|hit| {
                 let rec = &cached.index.records[hit.index];
-                let text = truncate_on_char_boundary(&rec.text, text_limit);
+                let (text, highlights, truncated) =
+                    prompt_row_excerpt(&rec.text, &hit.positions, text_limit);
                 json!({
                     "key": format!("{:016x}", zehn_index::record_key(rec)),
                     "index": hit.index,
@@ -252,7 +279,7 @@ pub fn search_agent_prompts(
                     "agentColor": rec.agent.hex_color(),
                     "text": text,
                     "textLength": rec.text.len(),
-                    "truncated": text.len() < rec.text.len(),
+                    "truncated": truncated,
                     "title": rec.display_title(),
                     "project": rec.project,
                     "projectName": rec.project_display_name(),
@@ -261,7 +288,7 @@ pub fn search_agent_prompts(
                     "dayKey": day_key(rec.ts),
                     "favorite": hit.favorite,
                     "score": hit.score,
-                    "highlights": hit.positions,
+                    "highlights": highlights,
                     "meta": {
                         "provider": rec.meta.provider,
                         "model": rec.meta.model,
