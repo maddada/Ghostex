@@ -71,7 +71,7 @@ const DEFAULT_TERMINAL_NARROWER_VIEW_ENABLED: bool = false;
 const DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 75.0;
 const MIN_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 50.0;
 const MAX_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 100.0;
-const DEFAULT_TERMINAL_LAYOUT_APPLY_TO_ALL_TERMINALS: bool = true;
+const DEFAULT_TERMINAL_WIDTH_APPLY_TO_COMMAND_PANE_TERMINALS: bool = false;
 const MIN_TERMINAL_FONT_WEIGHT: f64 = 100.0;
 const MAX_TERMINAL_FONT_WEIGHT: f64 = 900.0;
 const MIN_TERMINAL_LINE_HEIGHT: f64 = 0.8;
@@ -947,29 +947,28 @@ impl SharedSidebarSettingsSnapshot {
         )
     }
 
-    pub fn terminal_pane_layout(&self, is_agent_terminal: bool) -> (f32, f32, Option<f32>) {
-        let applies_to_terminal = is_agent_terminal
-            || strict_bool_field(&self.object, "terminalLayoutApplyToAllTerminals")
-                .unwrap_or(DEFAULT_TERMINAL_LAYOUT_APPLY_TO_ALL_TERMINALS);
-        if !applies_to_terminal {
-            return (0.0, 0.0, None);
-        }
-
+    pub fn terminal_pane_layout(&self, apply_narrower_width: bool) -> (f32, f32, Option<f32>) {
         let (horizontal_padding, vertical_padding) = self.terminal_pane_padding_px();
-        let narrower_width = strict_bool_field(&self.object, "terminalNarrowerViewEnabled")
-            .unwrap_or(DEFAULT_TERMINAL_NARROWER_VIEW_ENABLED)
-            .then(|| {
-                read_finite_number_field(
-                    &self.object,
-                    "terminalViewWidthPercent",
-                    DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
-                )
-                .clamp(
-                    MIN_TERMINAL_VIEW_WIDTH_PERCENT,
-                    MAX_TERMINAL_VIEW_WIDTH_PERCENT,
-                ) as f32
-            });
+        let narrower_width = (apply_narrower_width
+            && strict_bool_field(&self.object, "terminalNarrowerViewEnabled")
+                .unwrap_or(DEFAULT_TERMINAL_NARROWER_VIEW_ENABLED))
+        .then(|| {
+            read_finite_number_field(
+                &self.object,
+                "terminalViewWidthPercent",
+                DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
+            )
+            .clamp(
+                MIN_TERMINAL_VIEW_WIDTH_PERCENT,
+                MAX_TERMINAL_VIEW_WIDTH_PERCENT,
+            ) as f32
+        });
         (horizontal_padding, vertical_padding, narrower_width)
+    }
+
+    pub fn terminal_width_applies_to_command_pane_terminals(&self) -> bool {
+        strict_bool_field(&self.object, "terminalWidthApplyToCommandPaneTerminals")
+            .unwrap_or(DEFAULT_TERMINAL_WIDTH_APPLY_TO_COMMAND_PANE_TERMINALS)
     }
 
     pub fn show_session_id_in_terminal_panes(&self) -> bool {

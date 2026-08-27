@@ -780,10 +780,10 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     terminalViewWidthPercent: clampTerminalViewWidthPercent(
       readNumber(source, 'terminalViewWidthPercent', DEFAULT_ghostex_SETTINGS.terminalViewWidthPercent)
     ),
-    terminalLayoutApplyToAllTerminals: readBoolean(
+    terminalWidthApplyToCommandPaneTerminals: readBoolean(
       source,
-      'terminalLayoutApplyToAllTerminals',
-      DEFAULT_ghostex_SETTINGS.terminalLayoutApplyToAllTerminals
+      'terminalWidthApplyToCommandPaneTerminals',
+      DEFAULT_ghostex_SETTINGS.terminalWidthApplyToCommandPaneTerminals
     ),
     /**
      * CDXC:TerminalPanePadding 2026-06-25-21:27:

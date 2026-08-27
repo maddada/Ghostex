@@ -676,9 +676,9 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Terminal Width (%)',
       },
       {
-        key: 'terminalLayoutApplyToAllTerminals',
-        subtitle: 'Apply terminal width and padding to command and editor companion terminals too.',
-        title: 'Apply Layout to All Terminals',
+        key: 'terminalWidthApplyToCommandPaneTerminals',
+        subtitle: 'Apply the narrower terminal width to command pane terminals too.',
+        title: 'Apply Width to Command Pane Terminals',
       },
       {
         key: 'terminalPaneHorizontalPaddingPx',

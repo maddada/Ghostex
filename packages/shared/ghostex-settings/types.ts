@@ -651,8 +651,8 @@ export type ghostexSettings = {
   terminalNarrowerViewEnabled: boolean;
   /** Width of a centered terminal body while narrower terminal view is enabled. */
   terminalViewWidthPercent: number;
-  /** Apply terminal width and padding to command and companion terminals too. */
-  terminalLayoutApplyToAllTerminals: boolean;
+  /** Apply the narrower terminal width to command pane terminals too. */
+  terminalWidthApplyToCommandPaneTerminals: boolean;
   /**
    * CDXC:TerminalPanePadding 2026-06-25-21:27:
    * Terminal pane padding is app layout, not a Ghostty config key. Store

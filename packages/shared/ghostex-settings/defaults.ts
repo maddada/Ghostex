@@ -549,7 +549,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   terminalLineHeight: 1.2,
   terminalNarrowerViewEnabled: false,
   terminalViewWidthPercent: DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
-  terminalLayoutApplyToAllTerminals: true,
+  terminalWidthApplyToCommandPaneTerminals: false,
   terminalPaneHorizontalPaddingPx: DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
   terminalPaneVerticalPaddingPx: DEFAULT_TERMINAL_PANE_PADDING_PX,
   terminalMouseScrollMultiplierDiscrete: 1,

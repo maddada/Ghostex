@@ -1940,13 +1940,14 @@ export function SettingsModal({
                                 value={draft.terminalViewWidthPercent}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.terminal, 'terminalLayoutApplyToAllTerminals') ? (
+                            {draft.terminalNarrowerViewEnabled &&
+                            mainSettingVisible(settingsSearch.terminal, 'terminalWidthApplyToCommandPaneTerminals') ? (
                               <ToggleField
-                                checked={draft.terminalLayoutApplyToAllTerminals}
-                                description='Apply Terminal Width and Padding to command and editor companion terminals too. Turn off to limit them to agent-session Terminal View.'
-                                label='Apply Layout to All Terminals'
-                                {...getSettingModificationProps('terminalLayoutApplyToAllTerminals')}
-                                onChange={(checked) => updateDraft('terminalLayoutApplyToAllTerminals', checked)}
+                                checked={draft.terminalWidthApplyToCommandPaneTerminals}
+                                description='Use the same centered width for terminals in the command pane. Padding remains shared across terminal types.'
+                                label='Apply Width to Command Pane Terminals'
+                                {...getSettingModificationProps('terminalWidthApplyToCommandPaneTerminals')}
+                                onChange={(checked) => updateDraft('terminalWidthApplyToCommandPaneTerminals', checked)}
                               />
                             ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'terminalPaneHorizontalPaddingPx') ? (

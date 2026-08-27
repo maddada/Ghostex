@@ -48,7 +48,9 @@ impl GhostexGpuiApp {
         let native_mount_slot_id = mount_slot_id.filter(|_| gpui_engine_view.is_none());
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
         let (terminal_horizontal_padding, terminal_vertical_padding, terminal_width_percent) =
-            settings_snapshot.terminal_pane_layout(false);
+            settings_snapshot.terminal_pane_layout(
+                settings_snapshot.terminal_width_applies_to_command_pane_terminals(),
+            );
         let sleeping_wake_label = command_pane_sleeping_placeholder_wake_label(
             active_session_is_sleeping,
             command_pane_click_to_wake_sleeping_sessions_from_shared_settings(&settings_snapshot),
