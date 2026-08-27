@@ -93,9 +93,6 @@ const TERMINAL_AGENT_BAR_MENU_SHORTCUT_SIZE: f32 = 11.0;
 /// without depending on that measurement. 8px matches the chat composer's
 /// tooltip gap (`sideOffset = 8` in packages/core-ui/app-tooltip.tsx).
 const TERMINAL_AGENT_BAR_TOOLTIP_LIFT: f32 = 8.0;
-/// The Copy affordance next to the session id, sized down from the button icons
-/// so it reads as part of the 12px id text rather than as a seventh control.
-const TERMINAL_AGENT_BAR_COPY_ICON_SIZE: f32 = 13.0;
 const TERMINAL_AGENT_BAR_NOTE_DOT_SIZE: f32 = 5.0;
 const TERMINAL_AGENT_BAR_BADGE_HEIGHT: f32 = 10.0;
 const TERMINAL_AGENT_BAR_BADGE_MIN_WIDTH: f32 = 10.0;
@@ -1087,6 +1084,8 @@ fn terminal_agent_bar_session_id(
             div()
                 .min_w_0()
                 .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(px(12.0))
                 .text_color(rgb(TERMINAL_AGENT_BAR_SESSION_ID_COLOR))
                 .group_hover(group.clone(), |this| {
@@ -1095,14 +1094,25 @@ fn terminal_agent_bar_session_id(
                 .child(full_session_id),
         )
         .child(
-            svg()
+            // Same 28px round ghost shape and colors as the action buttons on
+            // the right, so the copy control reads as one of them.
+            div()
                 .flex_shrink_0()
-                .size(px(TERMINAL_AGENT_BAR_COPY_ICON_SIZE))
-                .path(TERMINAL_AGENT_BAR_COPY_SESSION_ID_ICON)
-                .text_color(rgb(TERMINAL_AGENT_BAR_SESSION_ID_COLOR))
+                .size(px(TERMINAL_AGENT_BAR_BUTTON_SIZE))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_full()
                 .group_hover(group, |this| {
-                    this.text_color(rgb(TERMINAL_AGENT_BAR_SESSION_ID_HOVER_COLOR))
-                }),
+                    this.bg(rgb(TERMINAL_AGENT_BAR_HOVER_BACKGROUND))
+                })
+                .child(
+                    svg()
+                        .flex_shrink_0()
+                        .size(px(TERMINAL_AGENT_BAR_ICON_SIZE))
+                        .path(TERMINAL_AGENT_BAR_COPY_SESSION_ID_ICON)
+                        .text_color(rgb(TERMINAL_AGENT_BAR_ICON_COLOR)),
+                ),
         )
         .into_any_element()
 }
