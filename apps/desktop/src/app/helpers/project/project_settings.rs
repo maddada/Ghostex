@@ -4,7 +4,10 @@
 // recent-project mutations, and project settings/presentation conversions.
 // See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use crate::app::helpers::*;
 use crate::*;
@@ -122,12 +125,14 @@ pub(crate) fn gpui_recent_projects_result_message(
     request: &GpuiRecentProjectsRequest,
 ) -> serde_json::Value {
     /*
-    Recent Projects follows the same transient app-modal response path as
-    Previous Sessions. The owning gxserver remains the only persistence
-    authority; failed local or remote reads return an empty contract-shaped
-    result without exposing transport details or daemon response bodies.
+    Quick Access project search follows the same transient app-modal response
+    path as Previous Sessions. The live presentation supplies open sidebar
+    projects and the recent-project endpoint supplies parked ones. The owning
+    gxserver remains the only persistence authority; failed local or remote
+    reads return a contract-shaped result without exposing transport details
+    or daemon response bodies.
     */
-    let recent_projects = match request.machine_id.as_deref() {
+    let mut recent_projects = match request.machine_id.as_deref() {
         None => gpui_gxserver_recent_projects(Duration::from_secs(10)),
         Some(machine_id) => request
             .remote_target
@@ -141,14 +146,120 @@ pub(crate) fn gpui_recent_projects_result_message(
             })
             .unwrap_or_default(),
     };
+    for project in &mut recent_projects {
+        project["isOpen"] = serde_json::Value::Bool(false);
+    }
+    let presentation_snapshot = match request.machine_id.as_deref() {
+        None => gpui_read_gxserver_presentation_snapshot().ok(),
+        Some(_) => request.remote_target.as_ref().and_then(|target| {
+            gpui_remote_gxserver_rpc_result(
+                target,
+                "/api/readPresentationSnapshot",
+                &serde_json::json!({}),
+                Duration::from_secs(10),
+            )
+            .ok()
+            .and_then(|result| result.get("snapshot").cloned())
+        }),
+    };
+    let mut projects = presentation_snapshot
+        .as_ref()
+        .map(|snapshot| {
+            gpui_open_projects_from_presentation_snapshot(
+                snapshot,
+                request.machine_id.as_deref(),
+                request.machine_name.as_deref(),
+            )
+        })
+        .unwrap_or_default();
+    let open_project_ids = projects
+        .iter()
+        .filter_map(|project| project.get("projectId").and_then(serde_json::Value::as_str))
+        .map(str::to_string)
+        .collect::<HashSet<_>>();
+    projects.extend(recent_projects.into_iter().filter(|project| {
+        project
+            .get("projectId")
+            .and_then(serde_json::Value::as_str)
+            .is_none_or(|project_id| !open_project_ids.contains(project_id))
+    }));
     let mut message = serde_json::json!({
-        "recentProjects": recent_projects,
+        "recentProjects": projects,
         "type": "recentProjectsResult",
     });
     if let Some(machine_id) = request.machine_id.as_ref() {
         message["machineId"] = serde_json::json!(machine_id);
     }
     message
+}
+
+pub(crate) fn gpui_open_projects_from_presentation_snapshot(
+    snapshot: &serde_json::Value,
+    machine_id: Option<&str>,
+    machine_name: Option<&str>,
+) -> Vec<serde_json::Value> {
+    let Some(projects) = snapshot
+        .get("projects")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut session_counts = HashMap::<&str, u64>::new();
+    for session in snapshot
+        .get("sessions")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(project_id) = session.get("projectId").and_then(serde_json::Value::as_str) {
+            *session_counts.entry(project_id).or_default() += 1;
+        }
+    }
+
+    projects
+        .iter()
+        .filter_map(|project| {
+            let project = project.as_object()?;
+            let raw_project_id = gpui_trimmed_json_string_field(project, "projectId")?;
+            if machine_id.is_some() && !gpui_remote_sidebar_project_id_allowed(raw_project_id) {
+                return None;
+            }
+            let title = gpui_trimmed_json_string_field(project, "title")?;
+            let path = gpui_trimmed_json_string_field(project, "path")?;
+            let project_id = machine_id
+                .map(|machine_id| format!("remote:{machine_id}:project:{raw_project_id}"))
+                .unwrap_or_else(|| raw_project_id.to_string());
+            let mut item = serde_json::Map::new();
+            item.insert("isOpen".to_string(), serde_json::Value::Bool(true));
+            item.insert("path".to_string(), serde_json::json!(path));
+            item.insert("projectId".to_string(), serde_json::json!(project_id));
+            item.insert(
+                "sessionCount".to_string(),
+                serde_json::json!(session_counts.get(raw_project_id).copied().unwrap_or(0)),
+            );
+            item.insert("title".to_string(), serde_json::json!(title));
+            gpui_insert_optional_nonempty_string(
+                &mut item,
+                "iconDataUrl",
+                gpui_trimmed_json_string_field(project, "discoveredIconDataUrl"),
+            );
+            gpui_insert_optional_nonempty_string(
+                &mut item,
+                "updatedAt",
+                gpui_trimmed_json_string_field(project, "updatedAt"),
+            );
+            if let Some(machine_id) = machine_id {
+                item.insert("remoteMachineId".to_string(), serde_json::json!(machine_id));
+            }
+            if let Some(machine_name) = machine_name {
+                item.insert(
+                    "remoteMachineName".to_string(),
+                    serde_json::json!(machine_name),
+                );
+            }
+            Some(serde_json::Value::Object(item))
+        })
+        .collect()
 }
 
 pub(crate) fn gpui_recent_project_mutation_and_result(

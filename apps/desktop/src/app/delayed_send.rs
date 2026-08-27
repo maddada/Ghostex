@@ -2977,6 +2977,13 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "focusRecentProject" => {
+                if let Some(project_id) =
+                    command.get("projectId").and_then(serde_json::Value::as_str)
+                {
+                    let _ = self.dispatch_gpui_menu_bar_project_activation(project_id, cx);
+                }
+            }
             "removeRecentProject" => {
                 self.handle_gpui_app_modal_recent_project_mutation(
                     GpuiRecentProjectMutation::Remove,

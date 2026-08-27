@@ -771,6 +771,8 @@ export type SidebarProjectSettingsItem = {
 export type SidebarRecentProject = {
   icon?: WorkspaceProjectIcon;
   iconDataUrl?: string;
+  /** True while the project is part of the live sidebar presentation. */
+  isOpen?: boolean;
   path: string;
   projectId: string;
   recentClosedAt?: string;
@@ -784,6 +786,7 @@ export type SidebarRecentProject = {
   theme?: SidebarTheme;
   themeColor?: string;
   title: string;
+  updatedAt?: string;
 };
 
 export type SidebarCommandSessionIndicator = {
@@ -2182,7 +2185,7 @@ export type SidebarToExtensionMessage =
       remoteUrl: string;
     }
   | {
-      type: 'restoreRecentProject';
+      type: 'focusRecentProject' | 'restoreRecentProject';
       projectId: string;
     }
   | {

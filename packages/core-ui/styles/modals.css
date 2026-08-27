@@ -834,6 +834,23 @@ html:has(body.app-modal-host-native-window-body) {
   width: 16px;
 }
 
+.recent-projects-status-dot {
+  background: rgb(255 255 255 / 20%);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  height: 6px;
+  width: 6px;
+}
+
+.recent-projects-status-dot[data-open='true'] {
+  background: #fff;
+}
+
+.recent-projects-hidden-icon {
+  color: var(--muted-foreground, var(--app-muted));
+  flex: 0 0 auto;
+}
+
 .recent-projects-row-title {
   color: var(--quick-access-item-color, var(--foreground, var(--app-foreground)));
   flex: 1 1 auto;

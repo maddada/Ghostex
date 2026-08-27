@@ -1,5 +1,6 @@
 import {
   IconCopy,
+  IconEyeOff,
   IconFolder,
   IconFolderOpen,
   IconRotateClockwise,
@@ -9,13 +10,16 @@ import {
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { ExtensionToSidebarMessage, SidebarRecentProject } from '../shared/session-grid-contract';
+import { createGxserverPresentationProjectGroupId } from '../shared/gxserver-presentation-sidebar-projection';
+import { parseRemoteProjectId } from '../shared/remote-terminal-selection';
 import { resolveWorkspaceProjectIconDataUrl } from '../shared/workspace-project-appearance';
 import { AppTooltip, TooltipProvider } from './app-tooltip';
 import { SidebarCommandIconGlyph } from './sidebar-command-icon';
 import { SidebarContextMenuPortal } from './sidebar-context-menu-portal';
+import { readSidebarHiddenItems } from './sidebar-hidden-items';
+import { readSidebarProjectCollections } from './project-collections';
 import { QuickAccessSearchInput } from './quick-access-search-input';
 import { QuickAccessHeader } from './quick-access-tabs';
-import { useSidebarStore } from './sidebar-store';
 import { isEditableKeyboardTarget } from './text-input-keyboard';
 import { TOOLTIP_DELAY_MS } from './tooltip-delay';
 import type { WebviewApi } from './webview-api';
@@ -31,6 +35,11 @@ type RecentProjectsDayGroup = {
   projects: SidebarRecentProject[];
 };
 
+type HiddenProjectState = {
+  groupIds: string[];
+  localProjectIds: string[];
+};
+
 export type RecentProjectsModalProps = {
   isOpen: boolean;
   machineId?: string;
@@ -42,10 +51,11 @@ export type RecentProjectsModalProps = {
 
 export type RecentProjectRowProps = {
   isContextMenuOpen: boolean;
+  isHidden: boolean;
   isSearchSelected: boolean;
+  onActivate: (project: SidebarRecentProject) => void;
   onContextMenu: (event: MouseEvent<HTMLButtonElement>, projectId: string) => void;
   onPointerMove: (projectId: string) => void;
-  onRestore: (projectId: string) => void;
   project: SidebarRecentProject;
 };
 
@@ -58,11 +68,14 @@ function parseRecentProjectClosedAt(value: string | undefined): number {
 }
 
 function sortRecentProjectsByClosedAt(projects: readonly SidebarRecentProject[]): SidebarRecentProject[] {
-  return [...projects].sort(
-    (left, right) =>
-      parseRecentProjectClosedAt(right.recentClosedAt) - parseRecentProjectClosedAt(left.recentClosedAt) ||
-      left.title.localeCompare(right.title)
-  );
+  return [...projects].sort((left, right) => {
+    if (left.isOpen !== right.isOpen) {
+      return left.isOpen ? -1 : 1;
+    }
+    const rightTimestamp = parseRecentProjectClosedAt(right.isOpen ? right.updatedAt : right.recentClosedAt);
+    const leftTimestamp = parseRecentProjectClosedAt(left.isOpen ? left.updatedAt : left.recentClosedAt);
+    return rightTimestamp - leftTimestamp || left.title.localeCompare(right.title);
+  });
 }
 
 function groupRecentProjectsByDay(projects: readonly SidebarRecentProject[]): RecentProjectsDayGroup[] {
@@ -82,6 +95,15 @@ function groupRecentProjectsByDay(projects: readonly SidebarRecentProject[]): Re
   });
   const projectsByDay = new Map<string, SidebarRecentProject[]>();
   for (const project of sortRecentProjectsByClosedAt(projects)) {
+    if (project.isOpen) {
+      const grouped = projectsByDay.get('Open in sidebar');
+      if (grouped) {
+        grouped.push(project);
+      } else {
+        projectsByDay.set('Open in sidebar', [project]);
+      }
+      continue;
+    }
     const timestamp = parseRecentProjectClosedAt(project.recentClosedAt);
     const dayLabel = timestamp === 0 ? 'Earlier' : formatter.format(new Date(timestamp));
     const grouped = projectsByDay.get(dayLabel);
@@ -95,6 +117,24 @@ function groupRecentProjectsByDay(projects: readonly SidebarRecentProject[]): Re
     dayLabel,
     projects: dayProjects,
   }));
+}
+
+function sidebarGroupIdForProject(project: SidebarRecentProject): string {
+  const remoteReference = parseRemoteProjectId(project.projectId);
+  return remoteReference
+    ? `remote:${remoteReference.machineId}:group:${remoteReference.projectId}`
+    : createGxserverPresentationProjectGroupId(project.projectId);
+}
+
+function readHiddenProjectState(): HiddenProjectState {
+  const hiddenItems = readSidebarHiddenItems();
+  const hiddenCollectionIds = new Set(
+    hiddenItems.collectionKeys.flatMap((key) => (key.startsWith('local:') ? [key.slice('local:'.length)] : []))
+  );
+  const localProjectIds = readSidebarProjectCollections().collections.flatMap((collection) =>
+    hiddenCollectionIds.has(collection.collectionId) ? collection.projectIds : []
+  );
+  return { groupIds: hiddenItems.groupIds, localProjectIds: [...new Set(localProjectIds)] };
 }
 
 function filterRecentProjects(projects: readonly SidebarRecentProject[], query: string): SidebarRecentProject[] {
@@ -122,21 +162,22 @@ function RecentProjectIcon({ project }: { project: SidebarRecentProject }) {
 
 export function RecentProjectRow({
   isContextMenuOpen,
+  isHidden,
   isSearchSelected,
+  onActivate,
   onContextMenu,
   onPointerMove,
-  onRestore,
   project,
 }: RecentProjectRowProps) {
   return (
     <AppTooltip content={project.path}>
       <button
-        aria-label={`Restore recent ${project.title}`}
+        aria-label={`${project.isOpen ? 'Open' : 'Restore'} ${project.title}`}
         className='recent-projects-row'
         data-context-menu-open={String(isContextMenuOpen)}
         data-recent-project-id={project.projectId}
         data-search-selected={String(isSearchSelected)}
-        onClick={() => onRestore(project.projectId)}
+        onClick={() => onActivate(project)}
         onContextMenu={(event) => onContextMenu(event, project.projectId)}
         onPointerMove={() => onPointerMove(project.projectId)}
         type='button'
@@ -144,7 +185,14 @@ export function RecentProjectRow({
         <span aria-hidden='true' className='recent-projects-row-icon'>
           <RecentProjectIcon project={project} />
         </span>
+        <span
+          aria-label={project.isOpen ? 'Open in sidebar' : 'Closed'}
+          className='recent-projects-status-dot'
+          data-open={String(project.isOpen === true)}
+          role='img'
+        />
         <span className='recent-projects-row-title'>{project.title}</span>
+        {isHidden ? <IconEyeOff aria-label='Hidden' className='recent-projects-hidden-icon' size={14} /> : null}
         <span aria-label={`${project.sessionCount} preserved sessions`} className='recent-projects-session-count'>
           {project.sessionCount}
         </span>
@@ -160,8 +208,6 @@ export function RecentProjectsModal({
   onInitialLoadReady,
   vscode,
 }: RecentProjectsModalProps) {
-  const sidebarRecentProjects = useSidebarStore((state) => state.hud.recentProjects);
-  const sidebarRevision = useSidebarStore((state) => state.revision);
   const [recentProjectsResult, setRecentProjectsResult] = useState<{
     machineId?: string;
     projects: SidebarRecentProject[];
@@ -169,23 +215,15 @@ export function RecentProjectsModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>();
   const [contextMenuPosition, setContextMenuPosition] = useState<RecentProjectContextMenuPosition>();
+  const [hiddenProjectState, setHiddenProjectState] = useState(readHiddenProjectState);
   const recentProjectsBodyRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastSearchSelectionResetQueryRef = useRef<string | undefined>(undefined);
   const selectedProjectIdRef = useRef<string | undefined>(undefined);
-  const cachedRecentProjects = useMemo(
-    () =>
-      sidebarRecentProjects.filter((project) =>
-        machineId ? project.remoteMachineId === machineId : project.remoteMachineId === undefined
-      ),
-    [machineId, sidebarRecentProjects]
-  );
   const resolvedRecentProjects =
     recentProjectsResult !== undefined && recentProjectsResult.machineId === machineId
       ? recentProjectsResult.projects
-      : sidebarRevision > 0
-        ? cachedRecentProjects
-        : undefined;
+      : undefined;
   const hasInitialLoadResolved = resolvedRecentProjects !== undefined;
   const canShowModal = isOpen && hasInitialLoadResolved;
   const filteredProjects = useMemo(
@@ -194,6 +232,9 @@ export function RecentProjectsModal({
   );
   const sortedFilteredProjects = useMemo(() => sortRecentProjectsByClosedAt(filteredProjects), [filteredProjects]);
   const groupedProjects = useMemo(() => groupRecentProjectsByDay(sortedFilteredProjects), [sortedFilteredProjects]);
+  const contextMenuProject = contextMenuPosition
+    ? resolvedRecentProjects?.find((project) => project.projectId === contextMenuPosition.projectId)
+    : undefined;
 
   useLayoutEffect(() => {
     if (!canShowModal || lastSearchSelectionResetQueryRef.current === searchQuery) {
@@ -212,10 +253,13 @@ export function RecentProjectsModal({
     vscode.postMessage({ machineId, type: 'requestRecentProjects' });
   }, [machineId, vscode]);
 
-  const restoreRecentProject = useCallback(
-    (projectId: string) => {
+  const activateRecentProject = useCallback(
+    (project: SidebarRecentProject) => {
       setContextMenuPosition(undefined);
-      vscode.postMessage({ projectId, type: 'restoreRecentProject' });
+      vscode.postMessage({
+        projectId: project.projectId,
+        type: project.isOpen ? 'focusRecentProject' : 'restoreRecentProject',
+      });
       onClose();
     },
     [onClose, vscode]
@@ -251,12 +295,15 @@ export function RecentProjectsModal({
 
   useEffect(() => {
     if (!isOpen) {
+      setRecentProjectsResult(undefined);
       setSearchQuery('');
       setContextMenuPosition(undefined);
       lastSearchSelectionResetQueryRef.current = undefined;
       selectedProjectIdRef.current = undefined;
       setSelectedProjectId(undefined);
+      return;
     }
+    setHiddenProjectState(readHiddenProjectState());
   }, [isOpen]);
 
   useEffect(() => {
@@ -322,14 +369,27 @@ export function RecentProjectsModal({
       }
 
       if (isSearchInputTarget && event.key === 'Enter' && selectedProjectIdRef.current) {
+        const selectedProject = sortedFilteredProjects.find(
+          (project) => project.projectId === selectedProjectIdRef.current
+        );
+        if (!selectedProject) {
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
-        restoreRecentProject(selectedProjectIdRef.current);
+        activateRecentProject(selectedProject);
       }
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [contextMenuPosition, isOpen, onClose, restoreRecentProject, selectRecentProjectByKeyboard]);
+  }, [
+    activateRecentProject,
+    contextMenuPosition,
+    isOpen,
+    onClose,
+    selectRecentProjectByKeyboard,
+    sortedFilteredProjects,
+  ]);
 
   useEffect(() => {
     selectedProjectIdRef.current = selectedProjectId;
@@ -404,8 +464,13 @@ export function RecentProjectsModal({
                     {group.projects.map((project) => (
                       <RecentProjectRow
                         isContextMenuOpen={contextMenuPosition?.projectId === project.projectId}
+                        isHidden={
+                          hiddenProjectState.groupIds.includes(sidebarGroupIdForProject(project)) ||
+                          hiddenProjectState.localProjectIds.includes(project.projectId)
+                        }
                         isSearchSelected={selectedProjectId === project.projectId}
                         key={project.projectId}
+                        onActivate={activateRecentProject}
                         onContextMenu={(event, projectId) => {
                           event.preventDefault();
                           event.stopPropagation();
@@ -419,7 +484,6 @@ export function RecentProjectsModal({
                           selectedProjectIdRef.current = projectId;
                           setSelectedProjectId(projectId);
                         }}
-                        onRestore={restoreRecentProject}
                         project={project}
                       />
                     ))}
@@ -428,7 +492,7 @@ export function RecentProjectsModal({
               ))
             ) : hasInitialLoadResolved ? (
               <div className='group-empty-state previous-sessions-empty-state'>
-                {searchQuery.trim() ? 'No recent projects match that search.' : 'No recent projects yet.'}
+                {searchQuery.trim() ? 'No projects match that search.' : 'No projects yet.'}
               </div>
             ) : null}
           </div>
@@ -440,67 +504,75 @@ export function RecentProjectsModal({
             >
               <button
                 className='session-context-menu-item'
-                onClick={() => restoreRecentProject(contextMenuPosition.projectId)}
+                onClick={() => contextMenuProject && activateRecentProject(contextMenuProject)}
                 role='menuitem'
                 type='button'
               >
-                <IconRotateClockwise aria-hidden='true' className='session-context-menu-icon' size={14} />
-                Restore
-              </button>
-              <button
-                className='session-context-menu-item'
-                onClick={() => {
-                  vscode.postMessage({
-                    projectId: contextMenuPosition.projectId,
-                    type: 'copyRecentProjectPath',
-                  });
-                  setContextMenuPosition(undefined);
-                }}
-                role='menuitem'
-                type='button'
-              >
-                <IconCopy aria-hidden='true' className='session-context-menu-icon' size={14} />
-                Copy Path
-              </button>
-              <button
-                className='session-context-menu-item'
-                onClick={() => {
-                  vscode.postMessage({
-                    projectId: contextMenuPosition.projectId,
-                    type: machineId ? 'openRecentProjectTerminal' : 'openRecentProjectInFinder',
-                  });
-                  setContextMenuPosition(undefined);
-                  if (machineId) {
-                    onClose();
-                  }
-                }}
-                role='menuitem'
-                type='button'
-              >
-                {machineId ? (
-                  <IconTerminal2 aria-hidden='true' className='session-context-menu-icon' size={14} />
-                ) : (
+                {contextMenuProject?.isOpen ? (
                   <IconFolderOpen aria-hidden='true' className='session-context-menu-icon' size={14} />
+                ) : (
+                  <IconRotateClockwise aria-hidden='true' className='session-context-menu-icon' size={14} />
                 )}
-                {machineId ? 'Open remote terminal here' : 'Open in Finder'}
+                {contextMenuProject?.isOpen ? 'Open' : 'Restore'}
               </button>
-              <div className='session-context-menu-divider' role='separator' />
-              <button
-                className='session-context-menu-item session-context-menu-item-danger'
-                onClick={() => {
-                  vscode.postMessage({
-                    projectId: contextMenuPosition.projectId,
-                    type: 'removeRecentProject',
-                  });
-                  setContextMenuPosition(undefined);
-                  requestRecentProjects();
-                }}
-                role='menuitem'
-                type='button'
-              >
-                <IconTrash aria-hidden='true' className='session-context-menu-icon' size={14} />
-                Remove
-              </button>
+              {contextMenuProject?.isOpen ? null : (
+                <>
+                  <button
+                    className='session-context-menu-item'
+                    onClick={() => {
+                      vscode.postMessage({
+                        projectId: contextMenuPosition.projectId,
+                        type: 'copyRecentProjectPath',
+                      });
+                      setContextMenuPosition(undefined);
+                    }}
+                    role='menuitem'
+                    type='button'
+                  >
+                    <IconCopy aria-hidden='true' className='session-context-menu-icon' size={14} />
+                    Copy Path
+                  </button>
+                  <button
+                    className='session-context-menu-item'
+                    onClick={() => {
+                      vscode.postMessage({
+                        projectId: contextMenuPosition.projectId,
+                        type: machineId ? 'openRecentProjectTerminal' : 'openRecentProjectInFinder',
+                      });
+                      setContextMenuPosition(undefined);
+                      if (machineId) {
+                        onClose();
+                      }
+                    }}
+                    role='menuitem'
+                    type='button'
+                  >
+                    {machineId ? (
+                      <IconTerminal2 aria-hidden='true' className='session-context-menu-icon' size={14} />
+                    ) : (
+                      <IconFolderOpen aria-hidden='true' className='session-context-menu-icon' size={14} />
+                    )}
+                    {machineId ? 'Open remote terminal here' : 'Open in Finder'}
+                  </button>
+                  <div className='session-context-menu-divider' role='separator' />
+                  <button
+                    className='session-context-menu-item session-context-menu-item-danger'
+                    onClick={() => {
+                      vscode.postMessage({
+                        projectId: contextMenuPosition.projectId,
+                        type: 'removeRecentProject',
+                      });
+                      setContextMenuPosition(undefined);
+                      requestRecentProjects();
+                    }}
+                    role='menuitem'
+                    type='button'
+                  >
+                    <IconTrash aria-hidden='true' className='session-context-menu-icon' size={14} />
+                    Remove
+                  </button>
+                </>
+              )}
             </SidebarContextMenuPortal>
           ) : null}
         </div>
