@@ -498,12 +498,8 @@ describe('Project Board form event handling', () => {
     expect(projectBoardSource).toContain(
       'const storedViewPreferences = useMemo(() => readProjectBoardViewPreferences(), []);'
     );
-    expect(projectBoardSource).toContain(
-      'useState<BoardPriorityFilter>(storedViewPreferences.priorityFilter);'
-    );
-    expect(projectBoardSource).toContain(
-      'useState<BoardEstimateFilter>(storedViewPreferences.estimateFilter);'
-    );
+    expect(projectBoardSource).toContain('useState<BoardPriorityFilter>(storedViewPreferences.priorityFilter);');
+    expect(projectBoardSource).toContain('useState<BoardEstimateFilter>(storedViewPreferences.estimateFilter);');
     expect(projectBoardSource).toContain('useState<BoardSortOption>(storedViewPreferences.sortOption);');
     expect(projectBoardSource).toContain('useState<BoardTagFilter>(storedViewPreferences.tagFilter);');
     expect(projectBoardSource).toContain(

@@ -294,7 +294,7 @@ When working from a Ghostex Project board ticket, use the `bd` CLI installed in 
   running in to the card, which is otherwise only linked when the work was dispatched
   from the card's own "Start work" button, so a hand-prompted agent leaves the card
   looking unworked. It creates no session and is safe to repeat; `gx board start-work`
-  is the opposite command (it dispatches a card to a *new* worker) and must not be run
+  is the opposite command (it dispatches a card to a _new_ worker) and must not be run
   for a bead you are working yourself.
 - Park for later: `bd update <id> --status backlog`
 - Claim work: `bd update <id> --status in_progress`

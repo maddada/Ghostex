@@ -55,8 +55,6 @@ interface OpenOptions {
   targetPaneId?: string;
 }
 
-
-
 /**
  * The terminal bar's left label. `agentSessionId` is the agent's own
  * conversation id, which every supported agent writes as a UUID

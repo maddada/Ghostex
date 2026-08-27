@@ -239,12 +239,7 @@ export function CommandPane({
         >
           {creating ? '…' : '+'}
         </button>
-        <button
-          aria-label='Hide command pane'
-          className='command-pane__hide'
-          onClick={collapse}
-          type='button'
-        >
+        <button aria-label='Hide command pane' className='command-pane__hide' onClick={collapse} type='button'>
           ⌄
         </button>
       </div>
