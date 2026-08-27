@@ -1678,7 +1678,7 @@ async function buildGpuiArch(version, buildVersion, entry) {
     env,
     timeoutMs: releaseTimeouts.buildArchMs,
   });
-  const appPath = path.join(repoRoot, 'apps', 'desktop', 'build', 'macos', `${config.gpuiAppName}.app`);
+  const appPath = path.join(repoRoot, 'apps', 'desktop', 'build', 'macos.noindex', `${config.gpuiAppName}.app`);
   if (!existsSync(appPath)) {
     throw new ReleaseError(`GPUI build did not produce an app bundle at ${appPath}`);
   }
@@ -1730,8 +1730,10 @@ async function validateGpuiBuiltApp(version, buildVersion, entry) {
 
 async function packageReleaseDmg(version, artifactDir, entry) {
   logStep(`Package ${entry.kind === 'gpui' ? 'GPUI ' : ''}${entry.arch} DMG`);
+  const stagingRoot = path.join(tmpdir(), 'ghostex-release-staging.noindex');
+  await mkdir(stagingRoot, { recursive: true });
   const stagingDir = await mkdtemp(
-    path.join(tmpdir(), `ghostex-${version}-${entry.kind ?? 'macos'}-${entry.arch}-stage-`)
+    path.join(stagingRoot, `ghostex-${version}-${entry.kind ?? 'macos'}-${entry.arch}-stage-`)
   );
   const finalDmg = path.join(artifactDir, entry.dmgName ?? `ghostex-${version}-${entry.arch}.dmg`);
   const stagedApp = path.join(stagingDir, entry.stagedAppName ?? config.stagedAppName);
@@ -1799,12 +1801,12 @@ async function notarizeReleaseDmg(version, artifactDir, entry) {
 
 async function validateMountedDmg(version, buildVersion, entry) {
   logStep(`Validate mounted ${entry.arch} DMG`);
-  const attachOutput = await capture(`hdiutil attach -nobrowse -readonly ${shellQuote(entry.finalDmg)}`);
-  const lines = attachOutput.split('\n').filter(Boolean);
-  const mountPoint = lines.at(-1)?.split(/\t+/).at(-1)?.trim();
-  if (!mountPoint || !mountPoint.startsWith('/Volumes/')) {
-    throw new ReleaseError(`Could not parse mount point for ${entry.finalDmg}:\n${attachOutput}`);
-  }
+  const mountRoot = path.join(tmpdir(), 'ghostex-dmg-mounts.noindex');
+  await mkdir(mountRoot, { recursive: true });
+  const mountPoint = await mkdtemp(path.join(mountRoot, `validate-${version}-${entry.arch}-`));
+  await capture(
+    `hdiutil attach -nobrowse -readonly -mountpoint ${shellQuote(mountPoint)} ${shellQuote(entry.finalDmg)}`
+  );
 
   try {
     const appPath = path.join(mountPoint, entry.stagedAppName ?? config.stagedAppName);
@@ -1847,6 +1849,7 @@ async function validateMountedDmg(version, buildVersion, entry) {
     }
   } finally {
     await run(`hdiutil detach ${shellQuote(mountPoint)}`);
+    await rm(mountPoint, { recursive: true, force: true });
   }
 }
 

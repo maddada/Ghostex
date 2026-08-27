@@ -9,7 +9,11 @@ APP_NAME="${GHOSTEX_GPUI_APP_NAME:-Ghostex}"
 # GPUI source and packaged helper identity should no longer carry the historical phase label. Use one stable GPUI bundle id so CEF helper bundle ids and the lid-sleep helper label match the app's current product identity.
 GPUI_BUNDLE_ID="${GHOSTEX_GPUI_BUNDLE_ID:-com.madda.ghostex.gpui}"
 GPUI_LID_SLEEP_HELPER_LABEL="$GPUI_BUNDLE_ID.LidSleepHelper"
-APP_PATH="$GPUI_DIR/build/macos/$APP_NAME.app"
+# Development and release builds carry the installed app's document claims.
+# Keep the complete staging bundle below a .noindex ancestor so Spotlight does
+# not make it known to Launch Services before it is installed or put in a DMG.
+APP_BUILD_DIR="$GPUI_DIR/build/macos.noindex"
+APP_PATH="$APP_BUILD_DIR/$APP_NAME.app"
 RUN_APP=0
 SOUND_SRC_DIR="$REPO_ROOT/media/sounds"
 SOUND_DEST_DIR="$APP_PATH/Contents/Resources/sidebar/sounds"
@@ -140,7 +144,7 @@ bundled_cli_skill_assets=(
 	ghostex-embedded-browser-use
 	ghostex-computer-use
 	ghostex-cli
-	ghostex-fable-5.6-orchestration
+	ghostex-fable-56-orchestration
 	ghostex-manage-beads
 	ghostex-auto-rename-session
 	ghostex-move-codex-session
@@ -828,7 +832,7 @@ notarize_and_staple_gpui_app_if_requested() {
 		echo "GHOSTEX_GPUI_NOTARIZE=1 requires GHOSTEX_GPUI_SIGN_IDENTITY (ad-hoc signatures cannot be notarized)." >&2
 		exit 1
 	fi
-	local notarize_zip="$GPUI_DIR/build/macos/$APP_NAME-notarize.zip"
+	local notarize_zip="$APP_BUILD_DIR/$APP_NAME-notarize.zip"
 	rm -f "$notarize_zip"
 	/usr/bin/ditto -c -k --keepParent "$APP_PATH" "$notarize_zip"
 	xcrun notarytool submit "$notarize_zip" --keychain-profile "$GHOSTEX_NOTARY_PROFILE" --wait

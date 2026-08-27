@@ -26,13 +26,15 @@ DMG="$OUTPUT/$DMG_NAME"
 xcrun stapler validate "$DMG"
 release_gpui_assert_dmg_budget "$DMG"
 
-ATTACH_OUTPUT="$(hdiutil attach -nobrowse -readonly "$DMG")"
-MOUNT_POINT="$(printf '%s\n' "$ATTACH_OUTPUT" | awk -F '\t' 'NF { value=$NF } END { print value }')"
-[[ "$MOUNT_POINT" == /Volumes/* ]] || {
-	echo "Could not resolve mounted DMG path" >&2
-	exit 1
+MOUNT_ROOT="${TMPDIR:-/tmp}/ghostex-dmg-mounts.noindex"
+mkdir -p "$MOUNT_ROOT"
+MOUNT_POINT="$(mktemp -d "$MOUNT_ROOT/finalize-XXXXXX")"
+hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT_POINT" "$DMG" >/dev/null
+cleanup_mounted_dmg() {
+	hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1 || true
+	rmdir "$MOUNT_POINT" >/dev/null 2>&1 || true
 }
-trap 'hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1 || true' EXIT
+trap cleanup_mounted_dmg EXIT
 APP_PATH="$MOUNT_POINT/Ghostex.app"
 if [[ ! -d "$APP_PATH" ]]; then
 	APP_PATH="$MOUNT_POINT/ghostex.app"
@@ -40,7 +42,7 @@ fi
 node --input-type=module -e \
 	'import { validateMacosAppBundle } from "./tooling/validate-macos-app-bundle.mjs"; await validateMacosAppBundle({ appName: "Ghostex", appPath: process.argv[1], arch: "arm64" });' \
 	"$APP_PATH"
-hdiutil detach "$MOUNT_POINT"
+cleanup_mounted_dmg
 trap - EXIT
 
 if [[ "${GHOSTEX_RELEASE_UPDATE_SPARKLE:-1}" == "1" ]]; then

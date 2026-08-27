@@ -169,7 +169,7 @@ process.stdout.write(version);
 	"${PUBLISH_ARGS[@]}"
 done
 
-APP_PATH="$REPO_ROOT/apps/desktop/build/macos/Ghostex.app"
+APP_PATH="$REPO_ROOT/apps/desktop/build/macos.noindex/Ghostex.app"
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 [[ -d "$APP_PATH" ]] || {
 	echo "GPUI build did not produce $APP_PATH" >&2
@@ -186,7 +186,9 @@ node --input-type=module -e \
 	'import { validateMacosAppBundle } from "./tooling/validate-macos-app-bundle.mjs"; await validateMacosAppBundle({ appName: "Ghostex", appPath: process.argv[1], arch: "arm64" });' \
 	"$APP_PATH"
 
-STAGE="$(mktemp -d "$REPO_ROOT/build/release-gpui/macos-stage-XXXXXX")"
+STAGE_ROOT="$REPO_ROOT/build/release-gpui/macos-staging.noindex"
+mkdir -p "$STAGE_ROOT"
+STAGE="$(mktemp -d "$STAGE_ROOT/stage-XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 ditto "$APP_PATH" "$STAGE/Ghostex.app"
 ln -s /Applications "$STAGE/Applications"

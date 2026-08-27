@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -30,7 +30,9 @@ if (state.macos_notarization?.status !== 'accepted' || state.macos_notarization?
   throw new Error('macOS state does not prove accepted notarization and stapling');
 }
 
-const temporary = mkdtempSync(path.join(os.tmpdir(), `ghostex-assemble-${version}-`));
+const temporaryRoot = path.join(os.tmpdir(), 'ghostex-assemble.noindex');
+mkdirSync(temporaryRoot, { recursive: true });
+const temporary = mkdtempSync(path.join(temporaryRoot, `${version}-`));
 try {
   const deliverables = state.expected.map((name) => {
     const asset = findAsset(initialRelease, name);

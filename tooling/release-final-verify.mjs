@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -596,11 +596,10 @@ async function main() {
     if (!dmgPath) {
       throw new Error('No DMG available to mount.');
     }
-    const attachOutput = await capture(`hdiutil attach -nobrowse -readonly ${shellQuote(dmgPath)}`);
-    const mountPoint = attachOutput.split('\n').filter(Boolean).at(-1)?.split(/\t+/).at(-1)?.trim();
-    if (!mountPoint || !mountPoint.startsWith('/Volumes/')) {
-      throw new Error(`Could not parse mount point from hdiutil output.`);
-    }
+    const mountRoot = path.join(tmpdir(), 'ghostex-dmg-mounts.noindex');
+    await mkdir(mountRoot, { recursive: true });
+    const mountPoint = await mkdtemp(path.join(mountRoot, `verify-${version}-`));
+    await capture(`hdiutil attach -nobrowse -readonly -mountpoint ${shellQuote(mountPoint)} ${shellQuote(dmgPath)}`);
     try {
       const appPath = path.join(mountPoint, 'ghostex.app');
       await capture(`codesign --verify --deep --strict --verbose=2 ${shellQuote(appPath)}`, { timeoutMs: 600_000 });
@@ -661,6 +660,7 @@ async function main() {
       );
     } finally {
       await runCommand(`hdiutil detach ${shellQuote(mountPoint)}`);
+      await rm(mountPoint, { recursive: true, force: true });
     }
   });
 

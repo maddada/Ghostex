@@ -58,7 +58,7 @@ data (or INSTALL_DIR), preserves gxserver/zmx sessions across the relaunch, and
 runs the installed executable.
 */
 const appPath = isDarwin
-  ? path.join(gpuiDir, 'build', 'macos', `${appName}.app`)
+  ? path.join(gpuiDir, 'build', 'macos.noindex', `${appName}.app`)
   : targetsWindows
     ? path.join(gpuiDir, 'build', 'windows', appName)
     : path.join(gpuiDir, 'build', 'linux', appName);
@@ -1458,12 +1458,7 @@ function resolveLocalStartCodeSignIdentity(environment) {
 }
 
 function preferredLocalStartCodeSignIdentities(identities) {
-  const prefixes = [
-    'Apple Development: ',
-    'Mac Developer: ',
-    'Developer ID Application: ',
-    'Apple Distribution: ',
-  ];
+  const prefixes = ['Apple Development: ', 'Mac Developer: ', 'Developer ID Application: ', 'Apple Distribution: '];
   const seen = new Set();
   const preferred = [];
   for (const prefix of prefixes) {
@@ -1490,16 +1485,12 @@ function identityCanSign(identityName, environment) {
   const probePath = path.join(probeDir, 'probe');
   try {
     writeFileSync(probePath, 'ghostex-gpui-codesign-probe\n');
-    const result = spawnSync(
-      'codesign',
-      ['--force', '--sign', identityName, '--timestamp=none', probePath],
-      {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        env: environment,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
+    const result = spawnSync('codesign', ['--force', '--sign', identityName, '--timestamp=none', probePath], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: environment,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     return result.status === 0;
   } finally {
     rmSync(probeDir, { force: true, recursive: true });
