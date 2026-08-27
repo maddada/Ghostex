@@ -48,7 +48,7 @@ describe('release fingerprint algorithm', () => {
     };
     const first = computeNodeFingerprint({ ...shared, nodeId: 'alpha' });
     const second = computeNodeFingerprint({ ...shared, nodeId: 'beta' });
-    expect(FINGERPRINT_ALGORITHM_REVISION).toBe('fp4');
+    expect(FINGERPRINT_ALGORITHM_REVISION).toBe('fp5');
     expect(first.fingerprint).not.toBe(second.fingerprint);
     expect(first.inputs.paths).toEqual([
       { digest: expect.stringMatching(/^[0-9a-f]{64}$/u), entryCount: 1, pathspec: 'package.json' },
@@ -128,7 +128,7 @@ describe('release fingerprint algorithm', () => {
     expect(moved).not.toContain('gxserver-linux-x64');
   });
 
-  test('propagates a code-server pin change into macOS and Windows but not Linux packages', () => {
+  test('propagates a code-server pin change into every desktop package', () => {
     const before = fingerprintsAt(repo.commit('checkpoint'));
     repo.setGitlink('.dependencies/code-server', '4444444444444444444444444444444444444444');
     const after = fingerprintsAt(repo.commit('code-server pin bump'));
@@ -137,9 +137,10 @@ describe('release fingerprint algorithm', () => {
     expect(moved).toContain('macos-arm64');
     expect(moved).toContain('windows-x64');
     expect(moved).toContain('windows-arm64');
-    /* §4.11 rule 6: Linux seals only cef. */
-    expect(moved).not.toContain('linux-deb-x64');
-    expect(moved).not.toContain('linux-rpm-x64');
+    /* §4.11 rule 6: Linux stages code-server for the on-demand Source runtime. */
+    expect(moved).toContain('linux-deb-x64');
+    expect(moved).toContain('linux-rpm-x64');
+    expect(moved).toContain('linux-tar-x64');
   });
 
   test('a package.json version bump alone changes nothing', () => {

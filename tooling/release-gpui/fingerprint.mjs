@@ -15,8 +15,8 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { NODES, nodeIdsInDependencyOrder, nodePathspecs, nodeValues, nodeDefinition } from './product-inputs.mjs';
 
-/* fp4 (2026-08-23): added the linux-tar-x64 product to the input map. */
-export const FINGERPRINT_ALGORITHM_REVISION = 'fp4';
+/* fp5 (2026-08-27): Linux packages now compose the on-demand code-server component. */
+export const FINGERPRINT_ALGORITHM_REVISION = 'fp5';
 
 const EXCLUDE_PREFIX = ':(exclude)';
 const PROJECTIONS = new Set(['package-json']);

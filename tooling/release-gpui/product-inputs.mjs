@@ -67,6 +67,7 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: 'AGENTS.md', why: 'Agent instructions; metadata only.' },
   { path: 'CHANGELOG.md', why: 'Release notes source; metadata only (§4.11 rule 8).' },
   { path: 'CLAUDE.md', why: 'Agent instructions; metadata only.' },
+  { path: 'docs', why: 'Design and implementation documentation; never compiled into a release artifact.' },
   { path: 'LICENSE', why: 'Metadata only.' },
   { path: 'README.md', why: 'Metadata only.' },
   { path: 'appcast.xml', why: 'Sparkle feed output written by the publisher, not a build input.' },

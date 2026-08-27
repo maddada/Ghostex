@@ -187,10 +187,10 @@ describe('release product input map', () => {
       'cef',
       'beads',
     ]);
-    expect(productDefinition('linux-deb-x64').composedFrom).toEqual(['gxserver-linux-x64', 'cef']);
-    /* Rule 6: code-server touches macOS and Windows, never the Linux packages. */
+    expect(productDefinition('linux-deb-x64').composedFrom).toEqual(['gxserver-linux-x64', 'code-server', 'cef']);
+    /* Rule 6: every desktop package stages the platform's on-demand code-server component. */
     expect(productDefinition('windows-arm64').composedFrom).toContain('code-server');
-    expect(productDefinition('linux-rpm-x64').composedFrom).not.toContain('code-server');
+    expect(productDefinition('linux-rpm-x64').composedFrom).toContain('code-server');
     /* Rule 9: a workflow file invalidates only the product it builds. */
     expect(specs('android')).toContain('.github/workflows/release-gpui-android.yml');
     expect(specs('android')).not.toContain('.github/workflows/release-gpui-macos.yml');
@@ -229,8 +229,14 @@ describe('release product input map', () => {
       cef: ['windows-arm64'],
       'code-server': ['linux-arm64', 'windows-arm64'],
     });
-    expect(componentPlatformRequirements('linux-deb-x64')).toEqual({ cef: ['linux-x64'] });
-    expect(componentPlatformRequirements('linux-tar-x64')).toEqual({ cef: ['linux-x64'] });
+    expect(componentPlatformRequirements('linux-deb-x64')).toEqual({
+      cef: ['linux-x64'],
+      'code-server': ['linux-x64'],
+    });
+    expect(componentPlatformRequirements('linux-tar-x64')).toEqual({
+      cef: ['linux-x64'],
+      'code-server': ['linux-x64'],
+    });
     expect(componentPlatformRequirements('android')).toEqual({});
   });
 
