@@ -7,6 +7,7 @@ import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 export type AppModalKind =
   | 'addProject'
   | 'agentConfig'
+  | 'agentHooksRequired'
   | 'agentsHub'
   | 'commandPalette'
   | 'configureActions'
@@ -41,6 +42,7 @@ export type OpenAppModalMessage =
         AppModalKind,
         | 'addProject'
         | 'agentConfig'
+        | 'agentHooksRequired'
         | 'commandPalette'
         | 'delayedSend'
         | 'discoverGhostex'
@@ -59,6 +61,14 @@ export type OpenAppModalMessage =
         | 'stashedPrompts'
         | 'worktree'
       >;
+      type: 'open';
+    }
+  | {
+      agentId: string;
+      agentName: string;
+      groupId?: string;
+      hookAgentId: string;
+      modal: 'agentHooksRequired';
       type: 'open';
     }
   | {

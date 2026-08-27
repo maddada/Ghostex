@@ -16,6 +16,7 @@ import {
 import { gpuiProjectNameFromPath, normalizeGpuiProjectPath } from './helpers/worktrees';
 import type { GpuiSidebarRuntimeSnapshotKind } from './types-and-protocol';
 import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import { resolveEffectivePreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectGroupId,
   parseGxserverPresentationProjectGroupId,
@@ -463,7 +464,10 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
             ...(pick.firstLaunchAgentId === 'terminal'
               ? { type: 'ghostex.gpui.sidebar.createProjectTerminal' }
               : {
-                  preferredInterface: createGpuiSidebarSettings(this.runtimeSettings).preferredAgentInterface,
+                  preferredInterface: resolveEffectivePreferredAgentInterface(
+                    createGpuiSidebarSettings(this.runtimeSettings),
+                    pick.firstLaunchAgentId
+                  ),
                   type: 'ghostex.gpui.sidebar.createProjectAgent',
                 }),
             projectId: project.projectId,

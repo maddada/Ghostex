@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use super::config::{
-    command_agent, HookDefinition, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
-    OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
+    command_agent, HookDefinition, AMP_PLUGIN_MARKER, CAMPFIRE_EXTENSION_MARKER,
+    NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION, OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER,
+    PI_EXTENSION_MARKER,
 };
 use super::probing::path_string;
 
@@ -47,6 +48,7 @@ pub(crate) fn build_plugin_file_source(agent_id: &str, notify_hook_path: &Path) 
         "amp" => build_amp_plugin_source(notify_hook_path),
         "omp" => build_omp_extension_source(notify_hook_path),
         "pi" => build_pi_extension_source(notify_hook_path),
+        "campfire" => build_campfire_extension_source(notify_hook_path),
         _ => build_pi_extension_source(notify_hook_path),
     }
 }
@@ -223,6 +225,8 @@ function handleEvent(ctx, event) {
     case "session.status":
       if (props.status && props.status.type === "idle") {
         sendHook("stop", ctx, event);
+      } else if (props.status && props.status.type) {
+        sendHook("SessionBusy", ctx, event);
       }
       break;
     case "session.idle":
@@ -230,6 +234,17 @@ function handleEvent(ctx, event) {
       break;
     case "session.deleted":
       sendHook("session-end", ctx, event);
+      break;
+    case "permission.asked":
+      sendHook("PermissionRequest", ctx, event);
+      break;
+    case "question.asked":
+      sendHook("AskUserQuestion", ctx, event);
+      break;
+    case "permission.replied":
+    case "question.replied":
+    case "question.rejected":
+      sendHook("SessionBusy", ctx, event);
       break;
     default:
       break;
@@ -242,7 +257,18 @@ const GhostexSessionRestore = async (ctx) => {
   const bus = ctx && (ctx.bus || ctx.events || ctx.event);
   const on = bus && typeof bus.on === "function" ? bus.on.bind(bus) : ctx && typeof ctx.on === "function" ? ctx.on.bind(ctx) : null;
   if (on) {
-    for (const eventName of ["session.created", "session.updated", "session.status", "session.idle", "session.deleted"]) {
+    for (const eventName of [
+      "session.created",
+      "session.updated",
+      "session.status",
+      "session.idle",
+      "session.deleted",
+      "permission.asked",
+      "permission.replied",
+      "question.asked",
+      "question.replied",
+      "question.rejected",
+    ]) {
       on(eventName, (event) => handleEvent(ctx, { ...event, type: event && event.type ? event.type : eventName }));
     }
     return {};
@@ -276,6 +302,7 @@ import type {
   AgentStartEvent,
   SessionStartEvent,
   ToolCallEvent,
+  ToolResultEvent,
 } from "@ampcode/plugin";
 
 function firstString(...values: unknown[]): string | null {
@@ -393,6 +420,13 @@ export default function ghostexAmpSessionPlugin(amp: PluginAPI) {
   amp.on("tool.call", async (event: ToolCallEvent, ctx) => {
     sendHook("PreToolUse", threadIdFrom(undefined, ctx), cwdFromEnv(), { tool: event.tool });
     return { action: "allow" as const };
+  });
+
+  amp.on("tool.result", async (event: ToolResultEvent, ctx) => {
+    sendHook("PostToolUse", threadIdFrom(undefined, ctx), cwdFromEnv(), {
+      tool: event.tool,
+      is_error: event.status === "error",
+    });
   });
 
   amp.on("agent.end", async (event: AgentEndEvent, ctx) => {
@@ -520,6 +554,36 @@ function lastAssistantMessage(event: AgentEndEvent): string | undefined {
   return undefined;
 }
 
+const SUBAGENT_TOOL_NAMES = new Set(["subagent", "team_spawn", "superpowers_dispatch", "Task"]);
+
+function toolNameFrom(event: unknown): string | null {
+  if (!event || typeof event !== "object") return null;
+  const typed = event as { toolName?: unknown; tool_name?: unknown; name?: unknown };
+  return firstString(typed.toolName, typed.tool_name, typed.name);
+}
+
+function isSubagentTool(toolName: string | null): boolean {
+  if (!toolName) return false;
+  return SUBAGENT_TOOL_NAMES.has(toolName) || /subagent/i.test(toolName);
+}
+
+function toolIsError(event: unknown): boolean | undefined {
+  if (!event || typeof event !== "object") return undefined;
+  const typed = event as { isError?: unknown; is_error?: unknown; error?: unknown };
+  if (typeof typed.isError === "boolean") return typed.isError;
+  if (typeof typed.is_error === "boolean") return typed.is_error;
+  if (typed.error !== undefined && typed.error !== null) return true;
+  return undefined;
+}
+
+type OptionalEventHandler = (event: unknown, ctx: ExtensionContext) => void | Promise<void>;
+
+function registerOptional(api: ExtensionAPI, name: string, handler: OptionalEventHandler): void {
+  try {
+    (api.on as unknown as (event: string, handler: OptionalEventHandler) => void)(name, handler);
+  } catch (_) {}
+}
+
 function sendHook(subcommand: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}): void {
   if (process.env.GHOSTEX_PI_HOOKS_DISABLED === "1") return;
 
@@ -560,10 +624,255 @@ export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
   pi.on("agent_end", async (event, ctx) => {
     sendHook("stop", ctx, { last_assistant_message: lastAssistantMessage(event) });
   });
+
+  registerOptional(pi, "tool_execution_start", (event, ctx) => {
+    const toolName = toolNameFrom(event);
+    sendHook(isSubagentTool(toolName) ? "SubagentStart" : "PreToolUse", ctx, {
+      tool_name: toolName ?? undefined,
+    });
+  });
+
+  registerOptional(pi, "tool_execution_end", (event, ctx) => {
+    const toolName = toolNameFrom(event);
+    sendHook(isSubagentTool(toolName) ? "SubagentStop" : "PostToolUse", ctx, {
+      tool_name: toolName ?? undefined,
+      is_error: toolIsError(event),
+    });
+  });
+
+  registerOptional(pi, "session_before_compact", (_event, ctx) => {
+    sendHook("PreCompact", ctx);
+  });
+
+  registerOptional(pi, "session_compact", (_event, ctx) => {
+    sendHook("PostCompact", ctx);
+  });
 }
 "###;
     source
         .replace("__MARKER__", &current_plugin_marker(PI_EXTENSION_MARKER))
+        .replace("__NOTIFY_HOOK_PATH_JSON__", &notify_json)
+}
+
+/*
+Campfire is a white-label build of pi-coding-agent, so its extension API is
+pi's, only published under `@earendil-works/pi-coding-agent`. This source is
+therefore the pi extension with the package name, agent id, disable flag, and
+launch metadata swapped — keep it in step with `build_pi_extension_source`.
+*/
+fn build_campfire_extension_source(notify_hook_path: &Path) -> String {
+    let notify = path_string(notify_hook_path);
+    let notify_json = serde_json::to_string(&notify).unwrap_or_else(|_| "\"\"".to_string());
+    let source = r###"// __MARKER__
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { AgentEndEvent, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+function resolveExecutable(name: string): string {
+  const pathEnv = process.env.PATH || "";
+  for (const dir of pathEnv.split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, name);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch (_) {}
+  }
+  return name;
+}
+
+function looksLikeCampfireExecutable(value: string): boolean {
+  const base = path.basename(value).toLowerCase();
+  return base === "campfire";
+}
+
+function looksLikeCampfireScript(value: string): boolean {
+  const normalized = value.replaceAll("\\", "/").toLowerCase();
+  const base = path.basename(normalized);
+  return (
+    normalized.includes("/@earendil-works/pi-coding-agent/") ||
+    normalized.includes("/campfire/") ||
+    ((base === "cli.js" || base === "cli.ts") && normalized.includes("coding-agent"))
+  );
+}
+
+function normalizedLaunchArgv(): string[] {
+  const raw = Array.isArray(process.argv) ? process.argv.map((value) => String(value)) : [];
+  if (raw.length === 0) return [resolveExecutable("campfire")];
+  if (looksLikeCampfireExecutable(raw[0])) return raw;
+  if (raw.length > 1 && looksLikeCampfireScript(raw[1])) {
+    return [resolveExecutable("campfire"), ...raw.slice(2)];
+  }
+  return [resolveExecutable("campfire"), ...raw.slice(1)];
+}
+
+function base64NulSeparated(values: string[]): string {
+  const bytes: Buffer[] = [];
+  for (const value of values) {
+    bytes.push(Buffer.from(String(value), "utf8"));
+    bytes.push(Buffer.from([0]));
+  }
+  return Buffer.concat(bytes).toString("base64");
+}
+
+function hookEnvironment(cwd: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, GHOSTEX_AGENT: "campfire" };
+  for (const key of ["ANSI_COLORS_DISABLED", "NO_COLOR", "NODE_DISABLE_COLORS"]) delete env[key];
+  if (!env.GHOSTEX_AGENT_LAUNCH_ARGV_B64) {
+    const argv = normalizedLaunchArgv();
+    env.GHOSTEX_AGENT_LAUNCH_KIND = "campfire";
+    env.GHOSTEX_AGENT_LAUNCH_EXECUTABLE = argv[0] || resolveExecutable("campfire");
+    env.GHOSTEX_AGENT_LAUNCH_ARGV_B64 = base64NulSeparated(argv);
+    env.GHOSTEX_AGENT_LAUNCH_CWD = cwd || process.cwd();
+  }
+  return env;
+}
+
+function eventName(subcommand: string): string {
+  switch (subcommand) {
+    case "session-start":
+      return "SessionStart";
+    case "prompt-submit":
+      return "UserPromptSubmit";
+    case "stop":
+      return "Stop";
+    default:
+      return subcommand;
+  }
+}
+
+function textFromContent(content: unknown): string | null {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return null;
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const typed = block as { type?: unknown; text?: unknown };
+    if (typed.type === "text" && typeof typed.text === "string") parts.push(typed.text);
+  }
+  return parts.join("\n") || null;
+}
+
+function lastAssistantMessage(event: AgentEndEvent): string | undefined {
+  for (let index = event.messages.length - 1; index >= 0; index -= 1) {
+    const message = event.messages[index];
+    if (!message || typeof message !== "object") continue;
+    const typed = message as { role?: unknown; content?: unknown };
+    if (typed.role !== "assistant") continue;
+    const text = firstString(textFromContent(typed.content));
+    if (text) return text;
+  }
+  return undefined;
+}
+
+const SUBAGENT_TOOL_NAMES = new Set(["subagent", "team_spawn", "superpowers_dispatch", "Task"]);
+
+function toolNameFrom(event: unknown): string | null {
+  if (!event || typeof event !== "object") return null;
+  const typed = event as { toolName?: unknown; tool_name?: unknown; name?: unknown };
+  return firstString(typed.toolName, typed.tool_name, typed.name);
+}
+
+function isSubagentTool(toolName: string | null): boolean {
+  if (!toolName) return false;
+  return SUBAGENT_TOOL_NAMES.has(toolName) || /subagent/i.test(toolName);
+}
+
+function toolIsError(event: unknown): boolean | undefined {
+  if (!event || typeof event !== "object") return undefined;
+  const typed = event as { isError?: unknown; is_error?: unknown; error?: unknown };
+  if (typeof typed.isError === "boolean") return typed.isError;
+  if (typeof typed.is_error === "boolean") return typed.is_error;
+  if (typed.error !== undefined && typed.error !== null) return true;
+  return undefined;
+}
+
+type OptionalEventHandler = (event: unknown, ctx: ExtensionContext) => void | Promise<void>;
+
+function registerOptional(api: ExtensionAPI, name: string, handler: OptionalEventHandler): void {
+  try {
+    (api.on as unknown as (event: string, handler: OptionalEventHandler) => void)(name, handler);
+  } catch (_) {}
+}
+
+function sendHook(subcommand: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}): void {
+  if (process.env.GHOSTEX_CAMPFIRE_HOOKS_DISABLED === "1") return;
+
+  const sessionId = firstString(ctx.sessionManager.getSessionId());
+  if (!sessionId) return;
+
+  const cwd = firstString(ctx.cwd, process.cwd()) || process.cwd();
+  const event = eventName(subcommand);
+  const payload: Record<string, unknown> = {
+    agent: "campfire",
+    session_id: sessionId,
+    cwd,
+    hook_event_name: event,
+    event,
+    transcript_path: ctx.sessionManager.getSessionFile() || undefined,
+    ...extra,
+  };
+  try {
+    spawnSync(__NOTIFY_HOOK_PATH_JSON__, [], {
+      input: JSON.stringify(payload),
+      encoding: "utf8",
+      env: hookEnvironment(cwd),
+      stdio: ["pipe", "ignore", "ignore"],
+      timeout: 5000,
+    });
+  } catch (_) {}
+}
+
+export default function ghostexCampfireSessionExtension(campfire: ExtensionAPI) {
+  campfire.on("session_start", async (_event, ctx) => {
+    sendHook("session-start", ctx);
+  });
+
+  campfire.on("before_agent_start", async (event, ctx) => {
+    sendHook("prompt-submit", ctx, { prompt: event.prompt });
+  });
+
+  campfire.on("agent_end", async (event, ctx) => {
+    sendHook("stop", ctx, { last_assistant_message: lastAssistantMessage(event) });
+  });
+
+  registerOptional(campfire, "tool_execution_start", (event, ctx) => {
+    const toolName = toolNameFrom(event);
+    sendHook(isSubagentTool(toolName) ? "SubagentStart" : "PreToolUse", ctx, {
+      tool_name: toolName ?? undefined,
+    });
+  });
+
+  registerOptional(campfire, "tool_execution_end", (event, ctx) => {
+    const toolName = toolNameFrom(event);
+    sendHook(isSubagentTool(toolName) ? "SubagentStop" : "PostToolUse", ctx, {
+      tool_name: toolName ?? undefined,
+      is_error: toolIsError(event),
+    });
+  });
+
+  registerOptional(campfire, "session_before_compact", (_event, ctx) => {
+    sendHook("PreCompact", ctx);
+  });
+
+  registerOptional(campfire, "session_compact", (_event, ctx) => {
+    sendHook("PostCompact", ctx);
+  });
+}
+"###;
+    source
+        .replace(
+            "__MARKER__",
+            &current_plugin_marker(CAMPFIRE_EXTENSION_MARKER),
+        )
         .replace("__NOTIFY_HOOK_PATH_JSON__", &notify_json)
 }
 
@@ -684,6 +993,36 @@ function lastAssistantMessage(event: AgentEndEvent): string | undefined {
   return undefined;
 }
 
+const SUBAGENT_TOOL_NAMES = new Set(["subagent", "team_spawn", "superpowers_dispatch", "Task"]);
+
+function toolNameFrom(event: unknown): string | null {
+  if (!event || typeof event !== "object") return null;
+  const typed = event as { toolName?: unknown; tool_name?: unknown; name?: unknown };
+  return firstString(typed.toolName, typed.tool_name, typed.name);
+}
+
+function isSubagentTool(toolName: string | null): boolean {
+  if (!toolName) return false;
+  return SUBAGENT_TOOL_NAMES.has(toolName) || /subagent/i.test(toolName);
+}
+
+function toolIsError(event: unknown): boolean | undefined {
+  if (!event || typeof event !== "object") return undefined;
+  const typed = event as { isError?: unknown; is_error?: unknown; error?: unknown };
+  if (typeof typed.isError === "boolean") return typed.isError;
+  if (typeof typed.is_error === "boolean") return typed.is_error;
+  if (typed.error !== undefined && typed.error !== null) return true;
+  return undefined;
+}
+
+type OptionalEventHandler = (event: unknown, ctx: ExtensionContext) => void | Promise<void>;
+
+function registerOptional(api: ExtensionAPI, name: string, handler: OptionalEventHandler): void {
+  try {
+    (api.on as unknown as (event: string, handler: OptionalEventHandler) => void)(name, handler);
+  } catch (_) {}
+}
+
 function hookInvocation(subcommand: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}) {
   if (process.env.GHOSTEX_OMP_HOOKS_DISABLED === "1") return null;
 
@@ -747,6 +1086,29 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   api.on("agent_end", async (event, ctx) => {
     await sendHook("stop", ctx, { last_assistant_message: lastAssistantMessage(event) });
   });
+
+  registerOptional(api, "tool_execution_start", async (event, ctx) => {
+    const toolName = toolNameFrom(event);
+    await sendHook(isSubagentTool(toolName) ? "SubagentStart" : "PreToolUse", ctx, {
+      tool_name: toolName ?? undefined,
+    });
+  });
+
+  registerOptional(api, "tool_execution_end", async (event, ctx) => {
+    const toolName = toolNameFrom(event);
+    await sendHook(isSubagentTool(toolName) ? "SubagentStop" : "PostToolUse", ctx, {
+      tool_name: toolName ?? undefined,
+      is_error: toolIsError(event),
+    });
+  });
+
+  registerOptional(api, "session_before_compact", async (_event, ctx) => {
+    await sendHook("PreCompact", ctx);
+  });
+
+  registerOptional(api, "session_compact", async (_event, ctx) => {
+    await sendHook("PostCompact", ctx);
+  });
 }
 "###;
     source
@@ -759,9 +1121,11 @@ pub(crate) fn current_plugin_marker(marker: &str) -> String {
         marker,
         OPENCODE_PLUGIN_MARKER | AMP_PLUGIN_MARKER | PI_EXTENSION_MARKER
     ) {
-        format!("{marker} v3")
-    } else if marker == OMP_EXTENSION_MARKER {
+        format!("{marker} v4")
+    } else if marker == CAMPFIRE_EXTENSION_MARKER {
         format!("{marker} v1")
+    } else if marker == OMP_EXTENSION_MARKER {
+        format!("{marker} v2")
     } else {
         format!("{marker} v2")
     }
@@ -790,5 +1154,19 @@ pub(crate) fn yaml_double_quote(value: &str) -> String {
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
             .replace('\n', "\\n")
+    )
+}
+
+/// A TOML basic string: backslash and quote escaped, plus the control
+/// characters TOML requires an escape sequence for.
+pub(crate) fn toml_basic_quote(value: &str) -> String {
+    format!(
+        "\"{}\"",
+        value
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+            .replace('\t', "\\t")
     )
 }

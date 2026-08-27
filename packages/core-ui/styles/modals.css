@@ -3109,6 +3109,24 @@ html:has(body.app-modal-host-native-window-body) {
   color: var(--foreground);
 }
 
+.gx-app-modal .gx-app-modal-action-button.gx-app-modal-action-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.gx-app-modal .gx-app-modal-action-button.gx-app-modal-action-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 88%, white);
+  color: var(--primary-foreground);
+}
+
+.agent-hooks-required-note {
+  color: #fbbf24;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: -4px 0 0;
+}
+
 /* Destructive confirms keep the neutral pill shape with a danger tint. */
 .gx-app-modal .gx-app-modal-action-button.gx-app-modal-action-danger {
   border-color: color-mix(in srgb, var(--destructive, #f87171) 45%, transparent);

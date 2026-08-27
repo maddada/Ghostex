@@ -280,6 +280,39 @@ pub(crate) fn gpui_preferred_agent_interface_from_settings(
         .unwrap_or_default()
 }
 
+/// Per-agent override of the Default Agent View, read straight off the shared
+/// settings JSON. A missing key means "inherit", so an unknown agent, an
+/// unknown value, or a settings file that predates the setting all resolve to
+/// `None` and leave the global preference in charge.
+pub(crate) fn gpui_preferred_agent_interface_override_from_settings(
+    settings: &serde_json::Map<String, serde_json::Value>,
+    agent_id: &str,
+) -> Option<GpuiPreferredAgentInterface> {
+    settings
+        .get("preferredAgentInterfaceOverrides")
+        .and_then(serde_json::Value::as_object)?
+        .get(agent_id)
+        .and_then(serde_json::Value::as_str)
+        .and_then(GpuiPreferredAgentInterface::from_str)
+}
+
+/// Resolve the effective Default Agent View for a session, which the desktop
+/// knows only by its agent icon. Overrides are keyed by agent id, and icon is
+/// not agent id for every agent (`grok-build` is agent `grok`, `rovo-dev` is
+/// agent `rovodev`), so the default catalog does the translation instead of a
+/// second hand-written match that could drift from it.
+pub(crate) fn gpui_effective_preferred_agent_interface_for_agent_icon(
+    settings: &serde_json::Map<String, serde_json::Value>,
+    agent_icon: Option<&str>,
+) -> GpuiPreferredAgentInterface {
+    agent_icon
+        .and_then(gpui_default_sidebar_agent_by_icon)
+        .and_then(|agent| {
+            gpui_preferred_agent_interface_override_from_settings(settings, agent.agent_id)
+        })
+        .unwrap_or_else(|| gpui_preferred_agent_interface_from_settings(settings))
+}
+
 pub(crate) fn gpui_session_chat_background_color() -> Hsla {
     if gpui_session_chat_theme_from_settings(
         shared_settings::shared_sidebar_settings_snapshot().object(),

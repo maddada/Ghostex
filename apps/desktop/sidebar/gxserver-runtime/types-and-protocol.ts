@@ -109,6 +109,7 @@ export type GpuiSidebarHostMessage =
          */
         type:
           | 'cancelDelayedSend'
+          | 'confirmAgentHookLaunch'
           | 'removeProject'
           | 'renameSession'
           | 'scheduleDelayedSend'
@@ -394,6 +395,7 @@ export type GpuiWorkspaceTabSessionSelectionPayload = {
 export type GpuiActiveWorkspaceTabSessionPayload = {
   activity: 'idle' | 'working' | 'attention';
   agentIcon?: string;
+  agentName?: string;
   agentSessionId?: string;
   hasSessionNote?: boolean;
   stashedPromptCount?: number;

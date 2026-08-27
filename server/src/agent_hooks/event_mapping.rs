@@ -50,7 +50,12 @@ pub(crate) fn normalized_hook_agent_key(value: &str) -> String {
     let normalized = normalize_prompt_text(&value.to_ascii_lowercase());
     let mapped = match normalized.as_str() {
         "claude" | "claude code" => "claude",
+        "openclaude" | "open claude" | "openclaude cli" => "openclaude",
+        "command-code" | "commandcode" | "command code" => "command-code",
         "codex" | "openai codex" | "codex cli" => "codex",
+        "kimi" | "kimi code" => "kimi",
+        "campfire" => "campfire",
+        "devin" => "devin",
         "pi" | "π" => "pi",
         "omp" => "omp",
         "opencode" | "open code" => "opencode",
@@ -94,17 +99,82 @@ pub(crate) fn activity_for_hook_event(
 ) -> Option<String> {
     let normalized_event_name = normalize_prompt_text(event_name);
     let lower = normalized_event_name.to_ascii_lowercase();
+    let compact = lower.replace(['_', '-', '.'], "");
+    /*
+    CDXC:AgentHooks 2026-08-27:
+    Subagent and teammate lifecycle events describe a CHILD of the session, not
+    the lead pane, so they must never move the lead session's activity. They are
+    roster-only. Returning early — before any agent-specific or generic
+    matching — keeps a future generic rule from accidentally claiming them
+    (today's compact matching is exact-string, so "subagentstop" would not hit
+    the "stop" arm, but the intent should not depend on that).
+    */
+    if matches!(
+        compact.as_str(),
+        "subagentstart" | "subagentstop" | "teammateidle"
+    ) {
+        return None;
+    }
+    /*
+    PreCompact (registered by Copilot) fires before the compaction is validated
+    and an aborted compact emits it alone, so it carries no usable activity
+    signal.
+    */
+    if compact == "precompact" {
+        return None;
+    }
+    /*
+    Copilot's ErrorOccurred ends the turn unless the runtime says it recovered
+    and kept going.
+    */
+    if compact == "erroroccurred" {
+        let recoverable = payload_boolean(
+            payload,
+            &[
+                "recoverable",
+                "metadata.recoverable",
+                "properties.recoverable",
+            ],
+        );
+        return Some(
+            if recoverable == Some(true) {
+                "working"
+            } else {
+                "idle"
+            }
+            .to_string(),
+        );
+    }
     if agent_key == "codex" {
         if lower == "stop" {
             return Some("attention".to_string());
         }
-        if matches!(lower.as_str(), "sessionend" | "session-end") {
+        if matches!(lower.as_str(), "interrupt" | "sessionend" | "session-end") {
             return Some("idle".to_string());
         }
     }
-    if agent_key == "claude" {
-        if matches!(lower.as_str(), "stop" | "idle" | "sessionend") {
+    // OpenClaude emits Claude's hook contract verbatim, so it shares every
+    // Claude-specific rule below instead of falling through to the generic
+    // tables (which have no PostCompact trigger check and no StopFailure arm).
+    if matches!(agent_key, "claude" | "openclaude") {
+        /*
+        CDXC:AgentHooks 2026-08-27:
+        Claude skips Stop after a model error and emits StopFailure instead, so
+        without this arm the pane spins "working" forever on every failed turn.
+        */
+        if matches!(
+            lower.as_str(),
+            "stop" | "stopfailure" | "idle" | "sessionend"
+        ) {
             return Some("idle".to_string());
+        }
+        /*
+        A MANUAL /compact ends at an idle input prompt with no Stop behind it,
+        so it is a real turn boundary. An AUTO-compact fires mid-turn; mapping
+        that to idle would blip a working session, so it stays unmapped.
+        */
+        if lower == "postcompact" {
+            return payload_compact_trigger_is_manual(payload).then(|| "idle".to_string());
         }
         /*
         CDXC:SessionChatPromptQueue 2026-08-24:
@@ -129,7 +199,12 @@ pub(crate) fn activity_for_hook_event(
         }
         if matches!(
             lower.as_str(),
-            "userpromptsubmit" | "prompt-submit" | "pretooluse" | "pre-tool-use"
+            "userpromptsubmit"
+                | "prompt-submit"
+                | "pretooluse"
+                | "pre-tool-use"
+                | "posttooluse"
+                | "posttoolusefailure"
         ) {
             return Some("working".to_string());
         }
@@ -171,36 +246,45 @@ pub(crate) fn activity_for_hook_event(
         }
         if matches!(
             lower.as_str(),
-            "preinvocation" | "pretooluse" | "posttooluse"
+            "preinvocation" | "postinvocation" | "pretooluse" | "posttooluse"
         ) {
             return Some("working".to_string());
         }
     }
-    let compact = lower.replace(['_', '-', '.'], "");
     if matches!(
         compact.as_str(),
         "agentstart"
+            | "aftertool"
             | "beforeagentstart"
             | "beforeagent"
+            | "beforemcpexecution"
             | "beforeshellexecution"
             | "beforesubmitprompt"
+            | "beforetool"
+            | "messagepart"
             | "onsessionreset"
             | "onsessionstart"
             | "ontoolpermission"
             | "postapprovalresponse"
+            // Devin's post-compaction event fires mid-turn, so the turn is
+            // still running (unlike Claude's manual PostCompact).
+            | "postcompaction"
             | "posttooluse"
+            | "posttoolusefailure"
             | "prellmcall"
             | "pretoolcall"
             | "preinvocation"
+            | "postinvocation"
             | "pretooluse"
             | "promptsubmit"
+            | "sessionbusy"
             | "userpromptsubmit"
     ) {
         return Some("working".to_string());
     }
     if matches!(
         compact.as_str(),
-        "notification" | "notify" | "permissionrequest" | "preapprovalrequest"
+        "askuserquestion" | "notification" | "notify" | "permissionrequest" | "preapprovalrequest"
     ) {
         return Some("attention".to_string());
     }
@@ -216,14 +300,33 @@ pub(crate) fn activity_for_hook_event(
             | "onsessionfinalize"
             | "postllmcall"
             | "release"
+            | "interrupt"
             | "sessionend"
+            | "sessionidle"
             | "sessionshutdown"
             | "stop"
+            | "stopfailure"
             | "turncompletion"
     ) {
         return Some("idle".to_string());
     }
     None
+}
+
+/*
+CDXC:AgentHooks 2026-08-27:
+Claude's PostCompact payload distinguishes a user-run /compact from an
+auto-compact through a top-level `trigger` field. Providers that wrap hook
+payloads repeat it one level down, so accept the common wrappers too.
+*/
+fn payload_compact_trigger_is_manual(payload: &Value) -> bool {
+    first_string([
+        payload.get("trigger"),
+        nested_get(payload, &["payload", "trigger"]),
+        nested_get(payload, &["metadata", "trigger"]),
+        nested_get(payload, &["properties", "trigger"]),
+    ])
+    .is_some_and(|trigger| trigger.eq_ignore_ascii_case("manual"))
 }
 
 /*

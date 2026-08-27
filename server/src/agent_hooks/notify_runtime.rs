@@ -118,24 +118,19 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         state.insert("agentSessionPath".to_string(), json!(transcript_path));
     }
 
-    let notification_is_idle_input = agent_key == "claude"
+    let notification_is_idle_input = matches!(agent_key.as_str(), "claude" | "openclaude")
         && event_name.to_ascii_lowercase().contains("notification")
         && claude_notification_is_idle_input(&payload);
     if let Some(next_activity) = activity_for_hook_event(&agent_key, &event_name, &payload) {
         /*
         CDXC:SessionChatPromptQueue 2026-08-24:
-        Claude's 60s "waiting for your input" reminder must not convert a stuck
-        "working" session into permanent attention — after a local command
-        (/compact before its SessionStart mapping, an unknown command) no Stop
-        ever fires, and attention would blockade the prompt-queue scheduler
-        forever. From working the reminder is proof the CLI is idle at its
-        prompt, so settle to idle; from idle it stays the attention ping that
-        drives the sidebar badge.
+        Claude's 60s "waiting for your input" reminder means the CLI is idle at
+        its input prompt. It is not a completion, permission, or approval
+        event, so it must always settle to idle regardless of the prior state.
+        Genuine permission notifications do not match notification_is_idle_input
+        and retain their attention transition.
         */
-        let next_activity = if notification_is_idle_input
-            && next_activity == "attention"
-            && read_state_string(&state, "status").as_deref() == Some("working")
-        {
+        let next_activity = if notification_is_idle_input && next_activity == "attention" {
             "idle".to_string()
         } else {
             next_activity
@@ -427,7 +422,7 @@ fn post_gxserver_hook_event(
     re-derives Notification → attention and re-creates the stuck-attention
     state this hook just avoided.
     */
-    if agent_key == "claude"
+    if matches!(agent_key, "claude" | "openclaude")
         && event_name.to_ascii_lowercase().contains("notification")
         && claude_notification_is_idle_input(payload)
     {

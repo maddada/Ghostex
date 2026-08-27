@@ -27,6 +27,8 @@ pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
         path,
         "/api/createSession"
             | "/api/createAgentSession"
+            | "/api/readAgentHookStatus"
+            | "/api/installAgentHooks"
             | "/api/forkSession"
             | "/api/scheduleDelayedSend"
             | "/api/cancelDelayedSend"
@@ -117,6 +119,9 @@ pub(crate) fn gpui_remote_sidebar_request_params(
     */
     match path {
         "/api/updateProject" => gpui_remote_sidebar_update_project_params(params),
+        "/api/readAgentHookStatus" | "/api/installAgentHooks" => {
+            gpui_remote_sidebar_agent_hook_params(params)
+        }
         "/api/updateSidebarProjectCollections" => {
             gpui_remote_sidebar_project_collections_params(params)
         }
@@ -149,6 +154,27 @@ pub(crate) fn gpui_remote_sidebar_request_params(
         }
         _ => Some(params),
     }
+}
+
+pub(crate) fn gpui_remote_sidebar_agent_hook_params(
+    params: serde_json::Value,
+) -> Option<serde_json::Value> {
+    let agent_ids = params
+        .as_object()?
+        .get("agentIds")?
+        .as_array()?
+        .iter()
+        .map(serde_json::Value::as_str)
+        .collect::<Option<Vec<_>>>()?;
+    if agent_ids.is_empty()
+        || agent_ids.len() > 16
+        || agent_ids
+            .iter()
+            .any(|agent_id| !gpui_remote_sidebar_agent_id_allowed(agent_id))
+    {
+        return None;
+    }
+    Some(serde_json::json!({ "agentIds": agent_ids }))
 }
 
 pub(crate) fn gpui_remote_sidebar_delayed_send_params(
@@ -763,6 +789,8 @@ pub(crate) fn gpui_remote_sidebar_request_refreshes_presentation(path: &str) -> 
     !matches!(
         path,
         "/api/listPreviousSessions"
+            | "/api/readAgentHookStatus"
+            | "/api/installAgentHooks"
             | "/api/listRecentProjects"
             | "/api/listProjectWorktrees"
             | "/api/readPresentationSnapshot"
@@ -792,6 +820,9 @@ pub(crate) fn gpui_remote_sidebar_response_payload(
         }
         "/api/listRecentProjects" => gpui_remote_sidebar_recent_projects_response_payload(result),
         "/api/readPresentationSnapshot" => result,
+        "/api/readAgentHookStatus" | "/api/installAgentHooks" => {
+            gpui_remote_sidebar_agent_hook_status_response_payload(result)
+        }
         "/api/scheduleDelayedSend" => serde_json::json!({}),
         "/api/cancelDelayedSend" => serde_json::json!({
             "changed": result
@@ -845,6 +876,40 @@ pub(crate) fn gpui_remote_sidebar_response_payload(
         }
         _ => serde_json::Value::Null,
     }
+}
+
+pub(crate) fn gpui_remote_sidebar_agent_hook_status_response_payload(
+    result: serde_json::Value,
+) -> serde_json::Value {
+    let agents = result
+        .get("agents")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|row| {
+            let agent_id = row
+                .get("agentId")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| gpui_remote_sidebar_agent_id_allowed(value))?;
+            let status = row
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| {
+                    matches!(
+                        *value,
+                        "cliMissing" | "installed" | "missing" | "updateRequired"
+                    )
+                })?;
+            Some(serde_json::json!({
+                "agentId": agent_id,
+                "status": status,
+            }))
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "agents": agents,
+        "type": "agentHookStatus",
+    })
 }
 
 /*

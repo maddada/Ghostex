@@ -183,7 +183,7 @@ pub fn uninstall_agent_hooks(
     let mut removed_paths = Vec::new();
     /*
     CDXC:AgentHooks 2026-06-19-14:15:
-    Advanced Settings uninstall must remove only Ghostex-owned hook commands, marked YAML blocks, plugin registrations, and Ghostex extension files while leaving user-managed provider hooks intact. The shared notify hook is removed after provider cleanup and status is reread with auto-upgrade disabled so uninstall never recreates hooks it just removed.
+    Advanced Settings uninstall must remove only Ghostex-owned hook commands, marked YAML blocks, plugin registrations, and Ghostex extension files while leaving user-managed provider hooks intact. The notify executable is shared by every provider, so remove it only after the last Ghostex-owned provider hook is gone. Status is reread for the complete catalog with auto-upgrade disabled so a scoped uninstall returns an authoritative UI snapshot without recreating hooks it just removed.
     */
     for agent_id in &agent_ids {
         let Some(definition) = HOOK_DEFINITIONS
@@ -196,16 +196,23 @@ pub fn uninstall_agent_hooks(
             push_unique_path(&mut removed_paths, removed_path);
         }
     }
-    match fs::remove_file(&hook_paths.notify_hook_path) {
-        Ok(()) => push_unique_path(
-            &mut removed_paths,
-            path_string(&hook_paths.notify_hook_path),
-        ),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(io_error(error)),
+    let has_remaining_provider_hook = HOOK_DEFINITIONS.iter().any(|definition| {
+        let provider_paths = provider_hook_paths(definition.agent_id, &hook_paths);
+        inspect_agent_hook_installation(definition, &hook_paths, &provider_paths)
+            .ghostex_hook_present
+    });
+    if !has_remaining_provider_hook {
+        match fs::remove_file(&hook_paths.notify_hook_path) {
+            Ok(()) => push_unique_path(
+                &mut removed_paths,
+                path_string(&hook_paths.notify_hook_path),
+            ),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_error(error)),
+        }
     }
     let mut status_params = params.clone();
-    status_params.insert("agentIds".to_string(), json!(agent_ids));
+    status_params.remove("agentIds");
     status_params.insert("autoUpgradeInstalled".to_string(), json!(false));
     let mut status = read_agent_hook_status(paths, &status_params)?
         .as_object()

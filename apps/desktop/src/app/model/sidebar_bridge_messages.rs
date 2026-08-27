@@ -9,6 +9,7 @@ use crate::*;
 pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) activity: AgentTerminalActivity,
     pub(crate) agent_icon: Option<&'static str>,
+    pub(crate) agent_name: Option<String>,
     pub(crate) agent_session_id: Option<String>,
     pub(crate) key: GpuiWorkspaceTerminalSessionKey,
     pub(crate) kind: AgentsWorkspaceSessionKind,

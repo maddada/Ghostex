@@ -19,7 +19,6 @@ import { GpuiGxserverClient } from './client';
 import type { GpuiSidebarRuntimeCloseAfterDoneMethods } from './close-after-done';
 import { gpuiSidebarRuntimeCloseAfterDoneMethods } from './close-after-done';
 import {
-  GPUI_GXSERVER_CHATS_GROUP_ID,
   GPUI_REMOTE_MACHINE_PRESENTATION_CLEAR_STATES,
   GPUI_REMOTE_MACHINE_RECONNECT_PROGRESS_STATES,
   GPUI_REMOTE_MACHINE_RECONNECT_STOP_STATES,
@@ -502,6 +501,7 @@ export class GpuiSidebarRuntime {
         message.type === 'renameSession' ||
         message.type === 'scheduleDelayedSend' ||
         message.type === 'cancelDelayedSend' ||
+        message.type === 'confirmAgentHookLaunch' ||
         message.type === 'removeProject' ||
         message.type === 'setSessionNote' ||
         message.type === 'toggleCloseAfterDone'
@@ -1017,11 +1017,10 @@ export class GpuiSidebarRuntime {
         this.openBrowserPaneInGroup(message.groupId);
         return;
       case 'runSidebarAgent':
-        if (message.groupId === GPUI_GXSERVER_CHATS_GROUP_ID) {
-          await this.createQuickAgentSession(message.agentId);
-          return;
-        }
-        await this.createAgentSession(message.agentId, message.groupId);
+        await this.requestAgentSessionLaunch(message.agentId, message.groupId);
+        return;
+      case 'confirmAgentHookLaunch':
+        await this.confirmAgentHookLaunch(message);
         return;
       case 'runSidebarCommand': {
         /*

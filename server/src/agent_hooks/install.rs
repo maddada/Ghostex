@@ -8,13 +8,14 @@ use serde_json::{json, Map, Value};
 use crate::domain::DomainStateError;
 
 use super::config::{
-    all_hook_events, command_agent, hook_format, hook_marker, nested_timeout,
-    pi_extension_path_is_loader_visible, HookDefinition, HookFormat, HookPaths, NOTIFY_HOOK_MARKER,
-    NOTIFY_HOOK_VERSION, OPENCODE_PLUGIN_MARKER, OPENCODE_PLUGIN_SPEC,
+    all_hook_events, command_agent, hook_format, hook_marker, nested_event_timeout, nested_timeout,
+    pi_extension_path_is_loader_visible, HookDefinition, HookFormat, HookPaths,
+    CODEX_INTERRUPT_HOOK_TIMEOUT_SECONDS, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
+    OPENCODE_PLUGIN_MARKER, OPENCODE_PLUGIN_SPEC,
 };
 use super::plugin_sources::{
     build_notify_hook_script, build_opencode_plugin_source, build_plugin_file_source,
-    command_for_agent, current_plugin_marker, shell_quote, yaml_double_quote,
+    command_for_agent, current_plugin_marker, shell_quote, toml_basic_quote, yaml_double_quote,
 };
 use super::probing::{
     io_error, json_error, path_string, push_unique_path, read_file_text, temp_path_for,
@@ -35,7 +36,9 @@ pub(crate) fn uninstall_agent_hook(
     let command = command_for_agent(definition, &hook_paths.notify_hook_path);
     match hook_format(definition.agent_id) {
         HookFormat::PluginFile => uninstall_plugin_file_hook(definition, config_paths),
-        HookFormat::MarkedYaml => uninstall_marked_yaml_hook(definition, config_paths),
+        HookFormat::MarkedYaml | HookFormat::TomlMarked => {
+            uninstall_marked_yaml_hook(definition, config_paths)
+        }
         HookFormat::Antigravity
         | HookFormat::FlatJson
         | HookFormat::KiroJson
@@ -73,6 +76,10 @@ pub(crate) fn uninstall_plugin_file_hook(
     Ok(removed_paths)
 }
 
+/// Removes the `# ghostex hooks <agent> begin/end` block from a marked config.
+/// Shared by [`HookFormat::MarkedYaml`] and [`HookFormat::TomlMarked`]: the
+/// marker comments are byte-identical in YAML and TOML, and only the block body
+/// differs between the two.
 pub(crate) fn uninstall_marked_yaml_hook(
     definition: &HookDefinition,
     config_paths: Vec<PathBuf>,
@@ -150,6 +157,7 @@ pub(crate) fn remove_json_hook(
     if current_text.trim().is_empty() {
         return Ok(false);
     }
+    ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
     let mut data = read_json_object(&current_text);
     let changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
     if !changed {
@@ -183,7 +191,10 @@ fn remove_owned_json_hooks(data: &mut Value, format: HookFormat, command: &str) 
                 .cloned()
                 .collect::<Vec<_>>(),
             HookFormat::NestedJson => remove_nested_hook_groups(entries, command),
-            HookFormat::Opencode | HookFormat::PluginFile | HookFormat::MarkedYaml => continue,
+            HookFormat::Opencode
+            | HookFormat::PluginFile
+            | HookFormat::MarkedYaml
+            | HookFormat::TomlMarked => continue,
         };
         let event_changed = next_entries != *entries;
         if event_changed && next_entries.is_empty() {
@@ -341,7 +352,7 @@ pub(crate) fn inspect_agent_hook_installation(
                     .any(|inspection| inspection.ghostex_hook_present),
             }
         }
-        HookFormat::MarkedYaml => {
+        HookFormat::MarkedYaml | HookFormat::TomlMarked => {
             let text = config_paths
                 .first()
                 .map(|path| read_file_text(path))
@@ -361,7 +372,13 @@ pub(crate) fn inspect_agent_hook_installation(
                 .first()
                 .map(|path| read_file_text(path))
                 .unwrap_or_default();
-            let current = text.contains(&command);
+            let current = text.contains(&command)
+                && json_hook_event_coverage_is_current(
+                    &read_json_object(&text),
+                    definition.agent_id,
+                    &command,
+                    HookFormat::Antigravity,
+                );
             HookInspection {
                 current_hook_installed: current,
                 ghostex_hook_present: current
@@ -390,7 +407,7 @@ pub(crate) fn inspect_agent_hook_installation(
             }
             let inspections = paths_to_check
                 .iter()
-                .map(|path| inspect_json_hook_config(path, &command))
+                .map(|path| inspect_json_hook_config(path, definition, &command))
                 .collect::<Vec<_>>();
             let installed_inspections = inspections
                 .iter()
@@ -407,14 +424,104 @@ pub(crate) fn inspect_agent_hook_installation(
     }
 }
 
-fn inspect_json_hook_config(config_path: &Path, command: &str) -> HookInspection {
+fn inspect_json_hook_config(
+    config_path: &Path,
+    definition: &HookDefinition,
+    command: &str,
+) -> HookInspection {
     let data = read_json_object(&read_file_text(config_path));
     let stale_ghostex_hook_present = json_contains_stale_ghostex_owned_hook_command(&data, command);
+    let codex_interrupt_timeout_current =
+        definition.agent_id != "codex" || codex_interrupt_hook_timeout_is_current(&data, command);
     HookInspection {
         current_hook_installed: json_contains_hook_command(&data, command)
-            && !stale_ghostex_hook_present,
+            && !stale_ghostex_hook_present
+            && json_hook_event_coverage_is_current(
+                &data,
+                definition.agent_id,
+                command,
+                hook_format(definition.agent_id),
+            )
+            && codex_interrupt_timeout_current,
         ghostex_hook_present: json_contains_ghostex_owned_hook_command(&data, command),
     }
+}
+
+/*
+CDXC:AgentHooks 2026-08-27:
+An install is only "current" when the config carries EXACTLY the event catalog
+Ghostex ships today: every event in `all_hook_events` must hold our command, and
+no Ghostex-owned hook may sit under an event we no longer register. The second
+half is what sweeps names a provider renamed out from under us (Gemini's
+PreToolUse → BeforeTool) — `merge_json_hook` removes every owned hook before it
+re-adds the current list, so flagging the drift here is all the repair pass
+needs. Without this rule an event-list expansion never reached existing users:
+their config already contained the command, so it looked installed forever.
+*/
+fn json_hook_event_coverage_is_current(
+    data: &Value,
+    agent_id: &str,
+    command: &str,
+    format: HookFormat,
+) -> bool {
+    let events = all_hook_events(agent_id);
+    if events.is_empty() {
+        return true;
+    }
+    let container_key = if format == HookFormat::Antigravity {
+        "ghostex"
+    } else {
+        "hooks"
+    };
+    let Some(event_groups) = data.get(container_key).and_then(Value::as_object) else {
+        return false;
+    };
+    for event_name in &events {
+        let covered = event_groups
+            .get(*event_name)
+            .and_then(Value::as_array)
+            .is_some_and(|entries| {
+                hook_entries_contain(entries, &|hook| is_hook_command(hook, command))
+            });
+        if !covered {
+            return false;
+        }
+    }
+    !event_groups.iter().any(|(event_name, value)| {
+        !events.iter().any(|event| event == event_name)
+            && value.as_array().is_some_and(|entries| {
+                hook_entries_contain(entries, &|hook| {
+                    is_ghostex_owned_hook_command(hook, command)
+                })
+            })
+    })
+}
+
+/// True when a Ghostex-owned Codex Interrupt hook already carries the clamped
+/// 3s timeout Codex CLI enforces; a stale 5s entry must be rewritten so the CLI
+/// stops printing its clamping warning.
+fn codex_interrupt_hook_timeout_is_current(data: &Value, command: &str) -> bool {
+    data.get("hooks")
+        .and_then(Value::as_object)
+        .and_then(|hooks| hooks.get("Interrupt"))
+        .and_then(Value::as_array)
+        .is_some_and(|entries| {
+            hook_entries_contain(entries, &|hook| {
+                is_hook_command(hook, command)
+                    && hook.get("timeout").and_then(Value::as_i64)
+                        == Some(CODEX_INTERRUPT_HOOK_TIMEOUT_SECONDS)
+            })
+        })
+}
+
+/// Applies `predicate` to hook objects of every JSON hook shape Ghostex writes:
+/// the flat/Kiro/Antigravity "direct entry" shape and the nested
+/// `{ matcher, hooks: [...] }` group shape.
+fn hook_entries_contain(entries: &[Value], predicate: &dyn Fn(&Value) -> bool) -> bool {
+    entries.iter().any(|entry| match entry.get("hooks") {
+        Some(Value::Array(hooks)) => hooks.iter().any(|hook| predicate(hook)),
+        _ => predicate(entry),
+    })
 }
 
 fn json_contains_stale_ghostex_owned_hook_command(value: &Value, command: &str) -> bool {
@@ -521,7 +628,7 @@ pub(crate) fn install_agent_hook(
             .map_err(io_error)?;
             Ok(vec![path_string(config_path)])
         }
-        HookFormat::MarkedYaml => {
+        HookFormat::MarkedYaml | HookFormat::TomlMarked => {
             let Some(config_path) = config_paths.first() else {
                 return Ok(Vec::new());
             };
@@ -581,7 +688,7 @@ pub(crate) fn repair_agent_hook_paths(
             }
             Ok(repaired_paths)
         }
-        HookFormat::MarkedYaml => {
+        HookFormat::MarkedYaml | HookFormat::TomlMarked => {
             let command = command_for_agent(definition, &hook_paths.notify_hook_path);
             let mut repaired_paths = Vec::new();
             for config_path in config_paths {
@@ -610,7 +717,9 @@ fn merge_json_hook(
     definition: &HookDefinition,
     command: &str,
 ) -> Result<(), DomainStateError> {
-    let mut data = read_json_object(&read_file_text(config_path));
+    let current_text = read_file_text(config_path);
+    ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
+    let mut data = read_json_object(&current_text);
     let events = all_hook_events(definition.agent_id);
     let format = hook_format(definition.agent_id);
     remove_owned_json_hooks(&mut data, format, command);
@@ -688,21 +797,66 @@ fn merge_json_hook(
                     {
                         hook.insert(
                             "timeout".to_string(),
-                            json!(nested_timeout(definition.agent_id).unwrap_or(5000)),
+                            json!(nested_event_timeout(definition.agent_id, event_name)
+                                .unwrap_or(5000)),
                         );
                     }
                     group.insert("hooks".to_string(), Value::Array(vec![Value::Object(hook)]));
-                    if definition.agent_id == "claude" {
-                        group.insert("matcher".to_string(), json!("*"));
+                    if let Some(matcher) = nested_hook_matcher(definition.agent_id, event_name) {
+                        group.insert("matcher".to_string(), json!(matcher));
                     }
                     next_groups.push(Value::Object(group));
                 }
                 hooks.insert(event_name.to_string(), Value::Array(next_groups));
             }
         }
-        HookFormat::Opencode | HookFormat::PluginFile | HookFormat::MarkedYaml => {}
+        HookFormat::Opencode
+        | HookFormat::PluginFile
+        | HookFormat::MarkedYaml
+        | HookFormat::TomlMarked => {}
     }
     write_json_file(config_path, &data)
+}
+
+/// The `matcher` a nested-JSON provider expects on one event group, if any.
+///
+/// Claude and OpenClaude read `matcher` as a glob and want `"*"` on every
+/// group. Command Code reads it as a REGEX and only accepts it on the two tool
+/// events, so it gets `".*"` there and nothing on Stop. Devin also treats the
+/// field as a regex but matches everything when it is absent, so Ghostex omits
+/// it entirely rather than writing a pattern that could filter events out.
+fn nested_hook_matcher(agent_id: &str, event_name: &str) -> Option<&'static str> {
+    match agent_id {
+        "claude" | "openclaude" => Some("*"),
+        "command-code" if matches!(event_name, "PreToolUse" | "PostToolUse") => Some(".*"),
+        _ => None,
+    }
+}
+
+/*
+CDXC:AgentHooks 2026-08-27:
+Devin's `~/.config/devin/config.json` is JSONC — comments are legal and users
+have them. `read_json_object` degrades ANY unparsable text to `{}`, so merging
+into it would replace the user's whole commented config with a bare hooks
+object, silently destroying their settings. Refuse the rewrite instead, on both
+the install and the uninstall path, and tell the user what to do.
+*/
+fn ensure_json_config_is_rewritable(
+    agent_id: &str,
+    config_path: &Path,
+    text: &str,
+) -> Result<(), DomainStateError> {
+    if agent_id != "devin" || text.trim().is_empty() {
+        return Ok(());
+    }
+    if serde_json::from_str::<Value>(text).is_ok() {
+        return Ok(());
+    }
+    Err(DomainStateError::corrupt_state(format!(
+        "{} contains JSONC comments or other non-JSON syntax that Ghostex will not rewrite. \
+         Edit the Devin hooks entry by hand, or remove the comments and run Install Hooks again.",
+        path_string(config_path)
+    )))
 }
 
 fn ensure_json_object(value: &mut Value) -> &mut Map<String, Value> {
@@ -780,7 +934,11 @@ fn install_marked_yaml_hook(
     if lines.last().map(|line| !line.trim().is_empty()) == Some(true) {
         lines.push(String::new());
     }
-    if agent_id == "hermes-agent" {
+    if agent_id == "kimi" {
+        lines.push(begin_marker.clone());
+        lines.extend(kimi_hook_block_body(command));
+        lines.push(end_marker);
+    } else if agent_id == "hermes-agent" {
         let shell_command = format!("sh -c {}", shell_quote(command));
         lines.extend([
             begin_marker.clone(),
@@ -842,6 +1000,24 @@ fn install_marked_yaml_hook(
         format!("{}\n", lines.join("\n").trim_end_matches('\n')),
     )
     .map_err(io_error)
+}
+
+/// The TOML body Ghostex writes between Kimi Code's marked-block markers: one
+/// `[[hooks]]` array-of-tables entry per registered event, separated by a blank
+/// line. No `matcher` key is written — Kimi treats `matcher` as a regex, and an
+/// absent one already matches every tool.
+fn kimi_hook_block_body(command: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    for event_name in all_hook_events("kimi") {
+        if !lines.is_empty() {
+            lines.push(String::new());
+        }
+        lines.push("[[hooks]]".to_string());
+        lines.push(format!("event = {}", toml_basic_quote(event_name)));
+        lines.push(format!("command = {}", toml_basic_quote(command)));
+        lines.push("timeout = 10".to_string());
+    }
+    lines
 }
 
 fn install_opencode_hook(hook_paths: &HookPaths) -> Result<Vec<String>, DomainStateError> {

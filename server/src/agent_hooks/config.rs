@@ -11,6 +11,7 @@ pub(crate) const OPENCODE_PLUGIN_SPEC: &str = "./plugins/ghostex-session.js";
 pub(crate) const AMP_PLUGIN_MARKER: &str = "ghostex-amp-session-extension-marker";
 pub(crate) const PI_EXTENSION_MARKER: &str = "ghostex-pi-session-extension-marker";
 pub(crate) const OMP_EXTENSION_MARKER: &str = "ghostex-omp-session-extension-marker";
+pub(crate) const CAMPFIRE_EXTENSION_MARKER: &str = "ghostex-campfire-session-extension-marker";
 pub(crate) const SHELL_PATH_SENTINEL: &str = "__GHOSTEX_GXSERVER_SHELL_PATH__";
 pub(crate) const GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS: &[&str] =
     &["ANSI_COLORS_DISABLED", "NO_COLOR", "NODE_DISABLE_COLORS"];
@@ -29,6 +30,11 @@ pub(crate) enum HookFormat {
     NestedJson,
     Opencode,
     PluginFile,
+    /// A Ghostex-owned `# ghostex hooks <agent> begin/end` block inside a TOML
+    /// config. TOML comments use the same `#` syntax as YAML, so this shares
+    /// the marked-block install/uninstall machinery with [`HookFormat::MarkedYaml`]
+    /// and differs only in the body it writes between the markers.
+    TomlMarked,
 }
 
 pub(crate) const HOOK_DEFINITIONS: &[HookDefinition] = &[
@@ -100,6 +106,26 @@ pub(crate) const HOOK_DEFINITIONS: &[HookDefinition] = &[
         agent_id: "opencode",
         cli_command: "opencode",
     },
+    HookDefinition {
+        agent_id: "kimi",
+        cli_command: "kimi",
+    },
+    HookDefinition {
+        agent_id: "campfire",
+        cli_command: "campfire",
+    },
+    HookDefinition {
+        agent_id: "openclaude",
+        cli_command: "openclaude",
+    },
+    HookDefinition {
+        agent_id: "command-code",
+        cli_command: "commandcode",
+    },
+    HookDefinition {
+        agent_id: "devin",
+        cli_command: "devin",
+    },
 ];
 
 pub(crate) struct HookPaths {
@@ -150,8 +176,9 @@ pub(crate) fn hook_format(agent_id: &str) -> HookFormat {
         "cursor" => HookFormat::FlatJson,
         "kiro" => HookFormat::KiroJson,
         "rovodev" | "hermes-agent" => HookFormat::MarkedYaml,
+        "kimi" => HookFormat::TomlMarked,
         "opencode" => HookFormat::Opencode,
-        "amp" | "omp" | "pi" => HookFormat::PluginFile,
+        "amp" | "omp" | "pi" | "campfire" => HookFormat::PluginFile,
         _ => HookFormat::NestedJson,
     }
 }
@@ -161,6 +188,7 @@ pub(crate) fn hook_marker(agent_id: &str) -> Option<&'static str> {
         "amp" => Some(AMP_PLUGIN_MARKER),
         "omp" => Some(OMP_EXTENSION_MARKER),
         "pi" => Some(PI_EXTENSION_MARKER),
+        "campfire" => Some(CAMPFIRE_EXTENSION_MARKER),
         "opencode" => Some(OPENCODE_PLUGIN_MARKER),
         _ => None,
     }
@@ -184,34 +212,85 @@ pub(crate) fn command_agent(agent_id: &str) -> Option<&'static str> {
         "codebuddy" => Some("codebuddy"),
         "qoder" => Some("qoder"),
         "opencode" => Some("opencode"),
+        "kimi" => Some("kimi"),
+        "campfire" => Some("campfire"),
+        "openclaude" => Some("openclaude"),
+        "command-code" => Some("command-code"),
+        "devin" => Some("devin"),
         _ => None,
     }
 }
+
+/*
+CDXC:AgentHooks 2026-08-27:
+Codex CLI silently clamps the Interrupt hook timeout to 3 seconds and prints
+"⚠ clamping Interrupt hook timeout to 3s in ~/.codex/hooks.json" on every run.
+Writing the clamped value ourselves keeps the warning off the user's terminal
+without changing any other Codex hook's 5s budget.
+*/
+pub(crate) const CODEX_INTERRUPT_HOOK_TIMEOUT_SECONDS: i64 = 3;
 
 pub(crate) fn nested_timeout(agent_id: &str) -> Option<i64> {
     match agent_id {
         "codex" | "grok" => Some(5),
+        "command-code" | "devin" => Some(10),
         "gemini" => Some(10000),
+        // `openclaude` is deliberately absent: OpenClaude is a Claude-shaped
+        // settings.json, and Claude has no entry either, so both fall into the
+        // same 5000 default and stay in lockstep.
         _ => None,
     }
 }
 
+/// Per-event override on top of [`nested_timeout`], for providers that cap a
+/// single event's timeout below their general budget.
+pub(crate) fn nested_event_timeout(agent_id: &str, event_name: &str) -> Option<i64> {
+    if agent_id == "codex" && event_name == "Interrupt" {
+        return Some(CODEX_INTERRUPT_HOOK_TIMEOUT_SECONDS);
+    }
+    nested_timeout(agent_id)
+}
+
 pub(crate) fn all_hook_events(agent_id: &str) -> Vec<&'static str> {
     let events: &[&str] = match agent_id {
+        // Codex deliberately has no PreCompact/PostCompact registration: its
+        // compaction lifecycle does not carry the trigger metadata needed to
+        // tell a mid-turn auto-compact from a manual one.
         "codex" => &[
             "SessionStart",
             "UserPromptSubmit",
             "Stop",
+            "Interrupt",
             "PreToolUse",
             "PermissionRequest",
+            "PostToolUse",
+            "SubagentStart",
+            "SubagentStop",
         ],
-        "claude" => &[
+        /*
+        PreCompact is deliberately absent: it fires BEFORE the compact is
+        validated, and an aborted compact emits it alone, so mapping it to
+        working would strand the pane. PostCompact is registered instead and
+        only counts when its trigger is manual.
+        */
+        // OpenClaude ships Claude's hook contract verbatim (same
+        // `~/.openclaude/settings.json` shape, same event names), so the two
+        // deliberately share one catalog and must never drift apart.
+        "claude" | "openclaude" => &[
             "SessionStart",
             "UserPromptSubmit",
             "PreToolUse",
             "Stop",
             "Notification",
             "SessionEnd",
+            "StopFailure",
+            "SubagentStart",
+            "SubagentStop",
+            "TeammateIdle",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "PermissionRequest",
+            "PostCompact",
         ],
         "cursor" => &[
             "beforeSubmitPrompt",
@@ -219,13 +298,20 @@ pub(crate) fn all_hook_events(agent_id: &str) -> Vec<&'static str> {
             "afterAgentResponse",
             "beforeShellExecution",
             "afterShellExecution",
+            "preToolUse",
+            "postToolUse",
+            "postToolUseFailure",
+            "beforeMCPExecution",
         ],
+        // Gemini's real pre-tool event is BeforeTool; the PreToolUse name it
+        // used to be registered under was never delivered.
         "gemini" => &[
             "SessionStart",
             "BeforeAgent",
             "AfterAgent",
             "SessionEnd",
-            "PreToolUse",
+            "BeforeTool",
+            "AfterTool",
         ],
         "kiro" => &[
             "agentSpawn",
@@ -234,7 +320,35 @@ pub(crate) fn all_hook_events(agent_id: &str) -> Vec<&'static str> {
             "preToolUse",
             "postToolUse",
         ],
-        "copilot" | "droid" | "codebuddy" => &[
+        // `subagentStart` is camelCase on purpose: GitHub documents the
+        // camelCase payload shape for Copilot's subagent-start event.
+        "copilot" => &[
+            "SessionStart",
+            "Stop",
+            "Notification",
+            "SessionEnd",
+            "PreToolUse",
+            "UserPromptSubmit",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "subagentStart",
+            "SubagentStop",
+            "PreCompact",
+            "ErrorOccurred",
+            "PermissionRequest",
+        ],
+        "droid" => &[
+            "SessionStart",
+            "Stop",
+            "Notification",
+            "SessionEnd",
+            "PreToolUse",
+            "UserPromptSubmit",
+            "SubagentStop",
+            "PostToolUse",
+            "PermissionRequest",
+        ],
+        "codebuddy" => &[
             "SessionStart",
             "Stop",
             "Notification",
@@ -248,10 +362,14 @@ pub(crate) fn all_hook_events(agent_id: &str) -> Vec<&'static str> {
             "Notification",
             "SessionEnd",
             "PreToolUse",
+            "StopFailure",
+            "PostToolUse",
+            "PostToolUseFailure",
         ],
         "antigravity" => &[
             "SessionStart",
             "PreInvocation",
+            "PostInvocation",
             "Stop",
             "turn-completion",
             "Notification",
@@ -260,6 +378,32 @@ pub(crate) fn all_hook_events(agent_id: &str) -> Vec<&'static str> {
             "PostToolUse",
         ],
         "qoder" => &["SessionStart", "Stop", "SessionEnd", "PreToolUse"],
+        // Kimi Code writes one `[[hooks]]` table per event and treats `matcher`
+        // as a regex, so Ghostex registers each event without a matcher.
+        "kimi" => &[
+            "SessionStart",
+            "UserPromptSubmit",
+            "Notification",
+            "Stop",
+            "StopFailure",
+            "SessionEnd",
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "PermissionRequest",
+        ],
+        "command-code" => &["PreToolUse", "PostToolUse", "Stop"],
+        // `PostCompaction` is Devin's own spelling — not Claude's PostCompact.
+        "devin" => &[
+            "SessionStart",
+            "UserPromptSubmit",
+            "Stop",
+            "PostCompaction",
+            "SessionEnd",
+            "PreToolUse",
+            "PostToolUse",
+            "PermissionRequest",
+        ],
         _ => &[],
     };
     let mut output = Vec::new();

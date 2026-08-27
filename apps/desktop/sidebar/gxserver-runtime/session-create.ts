@@ -8,6 +8,7 @@ import { GpuiGxserverRpcError } from './client';
 import {
   GPUI_AGENT_PROMPT_READY_DELAY_MS,
   GPUI_AGENT_PROMPT_STEP_DELAY_MS,
+  GPUI_GXSERVER_CHATS_GROUP_ID,
   GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE,
   GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION,
 } from './constants';
@@ -27,18 +28,23 @@ import type {
   GpuiGxserverCreatedSessionResult,
   GpuiRemoteProjectReference,
 } from './types-and-protocol';
-import type { ghostexSettings } from '@/packages/shared/ghostex-settings';
+import { openAppModal } from '@/packages/core-ui/app-modal-host-bridge';
+import { resolveEffectivePreferredAgentInterface, type ghostexSettings } from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectGroupId,
   parseGxserverPresentationProjectGroupId,
 } from '@/packages/shared/gxserver-presentation-sidebar-projection';
-import type { GxserverProjectDomainState } from '@/packages/shared/gxserver-protocol';
+import type {
+  GxserverInstallAgentHooksResult,
+  GxserverProjectDomainState,
+  GxserverReadAgentHookStatusResult,
+} from '@/packages/shared/gxserver-protocol';
 import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 import {
   DEFAULT_TERMINAL_SESSION_TITLE,
   createAgentSessionDefaultTitle,
 } from '@/packages/shared/session-grid-contract';
-import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
+import { getDefaultSidebarAgentByIcon, type SidebarAgentButton } from '@/packages/shared/sidebar-agents';
 import { DEFAULT_BROWSER_LAUNCH_URL } from '@/packages/shared/sidebar-commands';
 
 /*
@@ -80,6 +86,11 @@ export interface GpuiSidebarRuntimeSessionCreateMethods {
     sessionId: string,
     prompt?: string,
     renameCommand?: string
+  ): Promise<void>;
+  createAgentSessionFromSidebarLaunch(agentId: string, groupId?: string | undefined): Promise<void>;
+  requestAgentSessionLaunch(agentId: string, groupId?: string | undefined): Promise<void>;
+  confirmAgentHookLaunch(
+    message: Extract<SidebarToExtensionMessage, { type: 'confirmAgentHookLaunch' }>
   ): Promise<void>;
   createAgentSession(agentId: string, groupId?: string | undefined): Promise<void>;
   searchPreviousSessionsByText(): void;
@@ -542,6 +553,111 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     );
   },
 
+  async createAgentSessionFromSidebarLaunch(
+    this: GpuiSidebarRuntime,
+    agentId: string,
+    groupId?: string | undefined
+  ): Promise<void> {
+    if (groupId === GPUI_GXSERVER_CHATS_GROUP_ID) {
+      await this.createQuickAgentSession(agentId);
+      return;
+    }
+    await this.createAgentSession(agentId, groupId);
+  },
+
+  async requestAgentSessionLaunch(
+    this: GpuiSidebarRuntime,
+    agentId: string,
+    groupId?: string | undefined
+  ): Promise<void> {
+    const normalizedAgentId = agentId.trim();
+    const agent = this.resolveSidebarAgent(normalizedAgentId);
+    const hookAgentId = getDefaultSidebarAgentByIcon(agent?.icon)?.agentId;
+    if (!normalizedAgentId || !agent || !hookAgentId) {
+      await this.createAgentSessionFromSidebarLaunch(agentId, groupId);
+      return;
+    }
+
+    const remoteGroup = groupId ? parseGpuiRemotePresentationGroupId(groupId) : undefined;
+    let status: GxserverReadAgentHookStatusResult;
+    try {
+      status = remoteGroup
+        ? await this.requestRemoteGxserver<GxserverReadAgentHookStatusResult>(
+            remoteGroup.machineId,
+            '/api/readAgentHookStatus',
+            { agentIds: [hookAgentId] }
+          )
+        : await this.client!.rpc<GxserverReadAgentHookStatusResult>('/api/readAgentHookStatus', {
+            agentIds: [hookAgentId],
+          });
+    } catch {
+      this.postSidebarActionToast('warning', 'Unable to check agent hooks', {
+        description: `Ghostex could not verify ${agent.name} hooks. Try opening the agent again.`,
+      });
+      return;
+    }
+
+    const hookStatus = status.agents.find((row) => row.agentId === hookAgentId);
+    if (!hookStatus || hookStatus.status === 'installed' || hookStatus.status === 'cliMissing') {
+      await this.createAgentSessionFromSidebarLaunch(agentId, groupId);
+      return;
+    }
+
+    openAppModal({
+      agentId: normalizedAgentId,
+      agentName: agent.name,
+      groupId,
+      hookAgentId,
+      modal: 'agentHooksRequired',
+      type: 'open',
+    });
+  },
+
+  async confirmAgentHookLaunch(
+    this: GpuiSidebarRuntime,
+    message: Extract<SidebarToExtensionMessage, { type: 'confirmAgentHookLaunch' }>
+  ): Promise<void> {
+    const agent = this.resolveSidebarAgent(message.agentId);
+    const agentName = agent?.name ?? message.agentId;
+    if (!message.installHooks) {
+      this.postSidebarActionToast('warning', `Install hooks for ${agentName}`, {
+        description:
+          'Install and approve the hooks in order for Chat View to work correctly. Resuming and working/done indicators also require hooks.',
+      });
+      await this.createAgentSessionFromSidebarLaunch(message.agentId, message.groupId);
+      return;
+    }
+
+    const remoteGroup = message.groupId ? parseGpuiRemotePresentationGroupId(message.groupId) : undefined;
+    let result: GxserverInstallAgentHooksResult;
+    try {
+      result = remoteGroup
+        ? await this.requestRemoteGxserver<GxserverInstallAgentHooksResult>(
+            remoteGroup.machineId,
+            '/api/installAgentHooks',
+            { agentIds: [message.hookAgentId] },
+            { timeoutMs: 120_000 }
+          )
+        : await this.client!.rpc<GxserverInstallAgentHooksResult>('/api/installAgentHooks', {
+            agentIds: [message.hookAgentId],
+          });
+    } catch {
+      this.postSidebarActionToast('error', `Could not install ${agentName} hooks`, {
+        description: 'Open Settings > Agents > Agent Hooks and try again.',
+      });
+      return;
+    }
+
+    const installed = result.agents.some((row) => row.agentId === message.hookAgentId && row.status === 'installed');
+    if (!installed) {
+      this.postSidebarActionToast('error', `Could not install ${agentName} hooks`, {
+        description: 'Open Settings > Agents > Agent Hooks to review the hook status.',
+      });
+      return;
+    }
+    await this.createAgentSessionFromSidebarLaunch(message.agentId, message.groupId);
+  },
+
   async createAgentSession(this: GpuiSidebarRuntime, agentId: string, groupId = this.activeGroupId): Promise<void> {
     const remoteGroup = groupId ? parseGpuiRemotePresentationGroupId(groupId) : undefined;
     if (remoteGroup) {
@@ -593,7 +709,12 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
             projectId: createdProjectId,
             sessionId: createdSessionId,
           });
-          if (createGpuiSidebarSettings(this.runtimeSettings).preferredAgentInterface === 'chat') {
+          if (
+            resolveEffectivePreferredAgentInterface(
+              createGpuiSidebarSettings(this.runtimeSettings),
+              normalizedAgentId
+            ) === 'chat'
+          ) {
             this.postRemoteSessionNativeAction(
               'openRemoteSessionTerminal',
               {
@@ -636,7 +757,10 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
         const accepted = postCreate(
           JSON.stringify({
             agentId: normalizedAgentId,
-            preferredInterface: createGpuiSidebarSettings(this.runtimeSettings).preferredAgentInterface,
+            preferredInterface: resolveEffectivePreferredAgentInterface(
+              createGpuiSidebarSettings(this.runtimeSettings),
+              normalizedAgentId
+            ),
             projectId,
             type: 'ghostex.gpui.sidebar.createProjectAgent',
             version: 1,
@@ -683,7 +807,10 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     }
     const createdSessionId = normalizeNonEmptyString(response.session?.sessionId);
     if (createdSessionId) {
-      const preferredAgentInterface = createGpuiSidebarSettings(this.runtimeSettings).preferredAgentInterface;
+      const preferredAgentInterface = resolveEffectivePreferredAgentInterface(
+        createGpuiSidebarSettings(this.runtimeSettings),
+        agent.agentId
+      );
       this.focusLocalWorkspaceSession(
         normalizeNonEmptyString(response.session?.projectId) ?? projectId,
         createdSessionId,

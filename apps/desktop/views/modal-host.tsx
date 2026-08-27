@@ -14,6 +14,7 @@ import type {
   AddProjectSourceControlDiscovery,
 } from '@/packages/core-ui/add-project-modal/types';
 import { AgentConfigModal, type AgentConfigDraft } from '@/packages/core-ui/agent-config-modal';
+import { AgentHooksRequiredModal } from '@/packages/core-ui/agent-hooks-required-modal';
 import { AgentsHubModal } from '@/packages/core-ui/agents-hub-modal';
 import { CommandPalette } from '@/packages/core-ui/command-palette';
 import { DelayedSendModal } from '@/packages/core-ui/delayed-send-modal';
@@ -85,6 +86,7 @@ import '@/packages/core-ui/styles.css';
 type AppModalKind =
   | 'addProject'
   | 'agentConfig'
+  | 'agentHooksRequired'
   | 'agentsHub'
   | 'commandPalette'
   | 'configureActions'
@@ -136,6 +138,7 @@ const GPUI_APP_MODAL_HOST_ID = 'gpui';
  */
 const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, string>> = {
   agentConfig: '.agent-config-modal-shadcn',
+  agentHooksRequired: '.agent-hooks-required-modal',
   delayedSend: '.delayed-send-modal-shadcn',
   deleteWorktree: '.worktree-delete-modal-shadcn',
   exportTranscriptResult: '.export-transcript-modal-shadcn',
@@ -196,6 +199,7 @@ type AppModalHostMessage =
       agentDraft?: AgentConfigDraft;
       agentIcon?: SidebarAgentIcon;
       agentId?: string;
+      agentName?: string;
       /** CDXC:ExportTranscript 2026-08-20: see ExportTranscriptResultModalState. */
       canReveal?: boolean;
       path?: string;
@@ -220,6 +224,8 @@ type AppModalHostMessage =
       filePath?: string;
       gitCommitDraft?: GitCommitModalDraft;
       gitFileDiff?: GitFileDiffModalDraft;
+      groupId?: string;
+      hookAgentId?: string;
       worktreeDeleteDraft?: WorktreeDeleteModalDraft;
       worktreeRenameDraft?: WorktreeRenameModalDraft;
       initialRemoteMachineId?: string;
@@ -488,6 +494,13 @@ function isEditableAppModalContextMenuTarget(target: EventTarget | null): boolea
 
 type ConfigModalState = {
   agentDraft?: AgentConfigDraft;
+};
+
+type AgentHooksRequiredModalState = {
+  agentId: string;
+  agentName: string;
+  groupId?: string;
+  hookAgentId: string;
 };
 
 declare global {
@@ -1043,6 +1056,7 @@ function AppModalHost() {
     activeModal,
     activeModalRequestId,
     addProject,
+    agentHooksRequired,
     agentsHubCatalog,
     agentsHubFileContent,
     config,
@@ -1149,6 +1163,7 @@ function AppModalHost() {
   const isBaseActiveModalRenderable = isModalRenderable({
     activeModal,
     addProject,
+    agentHooksRequired,
     config,
     delayedSend,
     firstUserMessage,
@@ -1514,6 +1529,14 @@ function AppModalHost() {
   }, [activeModal, pluginSettingsStatus, pluginSettingsStatusLoading]);
 
   useEffect(() => {
+    /*
+     * Settings requests CLI status only when Integrations is active. Preserve
+     * that request's loading marker here; clearing it makes the still-unknown
+     * status render as "Not installed" until the native probe finishes.
+     */
+    if (activeModal === 'settings') {
+      return;
+    }
     if (activeModal !== 'firstLaunchSetup' && activeModal !== 'tipsAndTricks') {
       setGhostexCliStatusLoading(false);
       return;
@@ -1610,6 +1633,37 @@ function AppModalHost() {
         message={firstUserMessage?.message ?? ''}
         onClose={closeModal}
         title={firstUserMessage?.title}
+      />
+      <AgentHooksRequiredModal
+        agentName={agentHooksRequired?.agentName ?? 'this agent'}
+        isOpen={activeModal === 'agentHooksRequired' && agentHooksRequired !== undefined}
+        onClose={closeModal}
+        onInstall={() => {
+          if (!agentHooksRequired) {
+            return;
+          }
+          vscode.postMessage({
+            agentId: agentHooksRequired.agentId,
+            groupId: agentHooksRequired.groupId,
+            hookAgentId: agentHooksRequired.hookAgentId,
+            installHooks: true,
+            type: 'confirmAgentHookLaunch',
+          } satisfies SidebarToExtensionMessage);
+          closeModal();
+        }}
+        onSkip={() => {
+          if (!agentHooksRequired) {
+            return;
+          }
+          vscode.postMessage({
+            agentId: agentHooksRequired.agentId,
+            groupId: agentHooksRequired.groupId,
+            hookAgentId: agentHooksRequired.hookAgentId,
+            installHooks: false,
+            type: 'confirmAgentHookLaunch',
+          } satisfies SidebarToExtensionMessage);
+          closeModal();
+        }}
       />
       <MissingProjectFolderModal
         isOpen={activeModal === 'missingProjectFolder' && missingProjectFolder !== undefined}
@@ -2311,9 +2365,10 @@ function AppModalHost() {
         onFinishFirstLaunch={({ agentId, path }) => {
           /*
           CDXC:FirstLaunchSetup 2026-08-24:
-          Finish registers the chosen folder as a project and starts the first
-          session in it. Rust forwards this to the sidebar runtime over the
-          workspaceFolderPicked chain, which owns project registration + focus.
+          Add 1st project registers the folder chosen by the footer action and
+          starts the first session in it. Rust forwards this to the sidebar
+          runtime over the workspaceFolderPicked chain, which owns project
+          registration + focus.
           */
           return requestFirstLaunchCreateProjectSession(agentId, path);
         }}
@@ -2503,6 +2558,7 @@ function useModalStateFromNative() {
    * AppKit hide the warmed host instead of showing it to the user.
    */
   const [activeModalRequestId, setActiveModalRequestId] = useState<string>();
+  const [agentHooksRequired, setAgentHooksRequired] = useState<AgentHooksRequiredModalState>();
   const [agentsHubCatalog, setAgentsHubCatalog] = useState<AgentsHubCatalogMessage>();
   const [agentsHubFileContent, setAgentsHubFileContent] = useState<AgentsHubFileContentMessage>();
   const [config, setConfig] = useState<ConfigModalState>({});
@@ -2544,6 +2600,7 @@ function useModalStateFromNative() {
   const clearActiveModalState = useCallback(() => {
     setActiveModal(undefined);
     setActiveModalRequestId(undefined);
+    setAgentHooksRequired(undefined);
     setConfig({});
     setDelayedSend(undefined);
     setFirstUserMessage(undefined);
@@ -2694,6 +2751,22 @@ function useModalStateFromNative() {
               ? {
                   machineId:
                     typeof message.machineId === 'string' && message.machineId.trim() ? message.machineId : undefined,
+                }
+              : undefined
+          );
+          setAgentHooksRequired(
+            message.modal === 'agentHooksRequired' &&
+              typeof message.agentId === 'string' &&
+              message.agentId.trim() &&
+              typeof message.agentName === 'string' &&
+              message.agentName.trim() &&
+              typeof message.hookAgentId === 'string' &&
+              message.hookAgentId.trim()
+              ? {
+                  agentId: message.agentId,
+                  agentName: message.agentName,
+                  groupId: typeof message.groupId === 'string' && message.groupId.trim() ? message.groupId : undefined,
+                  hookAgentId: message.hookAgentId,
                 }
               : undefined
           );
@@ -3299,6 +3372,7 @@ function useModalStateFromNative() {
     activeModal,
     activeModalRequestId,
     addProject,
+    agentHooksRequired,
     agentsHubCatalog,
     agentsHubFileContent,
     config,
@@ -3441,6 +3515,7 @@ function createEmptyAgentDraft(): AgentConfigDraft {
 function isModalRenderable({
   activeModal,
   addProject,
+  agentHooksRequired,
   config,
   delayedSend,
   firstUserMessage,
@@ -3463,6 +3538,7 @@ function isModalRenderable({
 }: {
   activeModal: AppModalKind | undefined;
   addProject: AddProjectModalState | undefined;
+  agentHooksRequired: AgentHooksRequiredModalState | undefined;
   config: ConfigModalState;
   delayedSend: DelayedSendModalState | undefined;
   firstUserMessage: FirstUserMessageModalState | undefined;
@@ -3490,6 +3566,8 @@ function isModalRenderable({
       return addProject !== undefined;
     case 'agentConfig':
       return config.agentDraft !== undefined;
+    case 'agentHooksRequired':
+      return agentHooksRequired !== undefined;
     case 'agentsHub':
     case 'commandPalette':
       return true;

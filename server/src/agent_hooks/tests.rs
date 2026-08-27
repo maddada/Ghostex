@@ -7,8 +7,8 @@ use crate::paths::get_gxserver_paths;
 
 use super::api::{install_agent_hooks, read_agent_hook_status, uninstall_agent_hooks};
 use super::config::{
-    HookDefinition, HookPaths, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
-    OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
+    all_hook_events, HookDefinition, HookPaths, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER,
+    NOTIFY_HOOK_VERSION, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
 };
 use super::event_mapping::activity_for_hook_event;
 use super::install::{
@@ -58,18 +58,20 @@ fn hook_status_reports_profile_only_provider_hook_paths() {
         cli_command: "claude",
     };
     let command = command_for_agent(&claude, &hook_paths.notify_hook_path);
+    // A current install must carry the whole shipped event catalog, so the
+    // fixture registers every event Ghostex writes for Claude today.
+    let hooks = all_hook_events("claude")
+        .into_iter()
+        .map(|event_name| {
+            (
+                event_name.to_string(),
+                json!([{ "hooks": [{ "type": "command", "command": command }] }]),
+            )
+        })
+        .collect::<serde_json::Map<String, Value>>();
     write_test_file(
         &profile_path,
-        &format!(
-            "{}\n",
-            json!({
-                "hooks": {
-                    "SessionStart": [
-                        { "hooks": [{ "type": "command", "command": command }] }
-                    ]
-                }
-            })
-        ),
+        &format!("{}\n", json!({ "hooks": Value::Object(hooks) })),
     );
     let expected_paths = provider_hook_paths("claude", &hook_paths)
         .iter()
@@ -171,7 +173,7 @@ fn hook_status_uses_pi_root_extension_before_legacy_agent_paths() {
     write_test_file(
         &root_extension_path,
         &format!(
-            "// {PI_EXTENSION_MARKER} v3\nconst hook = \"{}\";\n",
+            "// {PI_EXTENSION_MARKER} v4\nconst hook = \"{}\";\n",
             path_string(&hook_paths.notify_hook_path)
         ),
     );

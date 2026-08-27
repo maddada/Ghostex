@@ -4,6 +4,7 @@
 //
 // Cluster: clipboard/paste, IME preedit, text-input handoff, close-confirm dialogs
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -714,27 +715,38 @@ impl GhostexGpuiApp {
         eligible_session_ids: &HashSet<TerminalSessionId>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let preferred_interface = gpui_preferred_agent_interface_from_settings(
-            shared_settings::shared_sidebar_settings_snapshot().object(),
-        );
-        let chat_preference_just_enabled = preferred_interface == GpuiPreferredAgentInterface::Chat
-            && self.agents_chat_auto_switch_preference != GpuiPreferredAgentInterface::Chat;
-        self.agents_chat_auto_switch_preference = preferred_interface;
-
-        let newly_eligible = eligible_session_ids
-            .iter()
-            .copied()
-            .filter(|session_id| {
-                chat_preference_just_enabled
-                    || !self
-                        .agents_chat_auto_switch_observed_sessions
-                        .contains(session_id)
-            })
-            .collect::<Vec<_>>();
-        self.agents_chat_auto_switch_observed_sessions = eligible_session_ids.clone();
-        if preferred_interface != GpuiPreferredAgentInterface::Chat {
-            return;
+        /*
+        The Default Agent View is resolved per session, not once for the whole
+        sweep: a per-agent override can put one agent in Chat while the global
+        preference keeps every other agent in the terminal. Recording the value
+        each session was considered under is also what replaces the old global
+        "preference just enabled" flag — a session is swept again exactly when
+        its own effective value changes, so a global flip and an override flip
+        are the same edge instead of two mechanisms.
+        */
+        let shared_settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        let settings_object = shared_settings_snapshot.object();
+        let mut observed_sessions = HashMap::with_capacity(eligible_session_ids.len());
+        let mut newly_eligible = Vec::new();
+        for session_id in eligible_session_ids.iter().copied() {
+            let effective_interface = gpui_effective_preferred_agent_interface_for_agent_icon(
+                settings_object,
+                self.agents_workspace
+                    .session(session_id)
+                    .and_then(|session| session.agent_icon),
+            );
+            let previous_interface = self
+                .agents_chat_auto_switch_observed_sessions
+                .get(&session_id)
+                .copied();
+            if effective_interface == GpuiPreferredAgentInterface::Chat
+                && previous_interface != Some(effective_interface)
+            {
+                newly_eligible.push(session_id);
+            }
+            observed_sessions.insert(session_id, effective_interface);
         }
+        self.agents_chat_auto_switch_observed_sessions = observed_sessions;
 
         let mut changed = false;
         for session_id in newly_eligible {

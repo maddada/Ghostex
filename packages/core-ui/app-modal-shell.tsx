@@ -82,14 +82,19 @@ export function AppModalFooter({ className, ...props }: ComponentProps<typeof Di
 }
 
 export type AppModalButtonProps = ComponentProps<typeof Button> & {
-  tone?: 'neutral' | 'danger';
+  tone?: 'neutral' | 'danger' | 'primary';
 };
 
 /** Full-width outline pill footer button; `tone='danger'` tints destructive confirms. */
 export function AppModalButton({ className, tone = 'neutral', ...props }: AppModalButtonProps) {
   return (
     <Button
-      className={cn('gx-app-modal-action-button', tone === 'danger' && 'gx-app-modal-action-danger', className)}
+      className={cn(
+        'gx-app-modal-action-button',
+        tone === 'danger' && 'gx-app-modal-action-danger',
+        tone === 'primary' && 'gx-app-modal-action-primary',
+        className
+      )}
       variant='outline'
       {...props}
     />
