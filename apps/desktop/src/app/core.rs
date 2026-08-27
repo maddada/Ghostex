@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::ops::Range;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 // RefCell backs cross-platform runtime state (window frame persistence), not
@@ -379,6 +380,14 @@ pub struct GhostexGpuiApp {
     pub(crate) active_open_target_id: Option<String>,
     pub(crate) active_action_command_id: Option<String>,
     /*
+    CDXC:GPUIQuickActionCooldown 2026-08-27:
+    Clicking the titlebar Quick Actions button now restarts a still-running
+    Action's terminal, so rapid re-clicks would churn kill/create cycles. The
+    button holds a short runtime-only cooldown after each terminal launch;
+    nothing about it is persisted or logged.
+    */
+    pub(crate) titlebar_quick_action_cooldown_until: Option<std::time::Instant>,
+    /*
     CDXC:GPUITitlebarActions 2026-06-27-09:26:
     The GPUI titlebar Action button needs the same click-time Debug rerun decision as the shared command palette, but Rust owns that native control. Keep only command ids, active run ids, and coarse run state in memory so titlebar clicks can mirror close-on-exit failure reruns without storing command text, URLs, cwd/env, paths, status-file paths, terminal output, logs, or shell-state data.
     */
@@ -476,6 +485,13 @@ pub struct GhostexGpuiApp {
     */
     pub(crate) pending_docs_file_open: Option<String>,
     /*
+    Bounded filesystem authority for the one external or out-of-tree document
+    explicitly opened from chat. The Docs bridge and HTML resource loader share
+    it, while the project id prevents cross-project reuse.
+    */
+    pub(crate) session_chat_docs_file_authorization:
+        Arc<Mutex<Option<GpuiSessionChatDocsFileAuthorization>>>,
+    /*
     CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
     Source, Kanban, Automate, and Manage real CEF panes now have permanent app-owned runtime surface storage keyed by the safe workarea slot. The map owns Entity<CefSurface> plus the process-local direct runtime URL identity required to reject stale slot reuse; it must not store project names/paths, page titles, bridge payloads, file contents, tokens, cookies, shell text, or fallback navigation state, and creation is allowed only through a helper that receives a real runtime URL value.
 
@@ -543,10 +559,14 @@ pub struct GhostexGpuiApp {
     pub(crate) terminal_agent_bar_companion_focus_return:
         Option<TerminalAgentBarCompanionFocusReturn>,
     /// Sessions whose current compatibility state has already been considered
-    /// for the saved automatic Chat preference. Runtime-only so a later agent
-    /// detection in the same shell slot is still a fresh eligibility edge.
-    pub(crate) agents_chat_auto_switch_observed_sessions: HashSet<TerminalSessionId>,
-    pub(crate) agents_chat_auto_switch_preference: GpuiPreferredAgentInterface,
+    /// for the saved automatic Chat preference, together with the effective
+    /// Default Agent View each one was considered under. Runtime-only so a
+    /// later agent detection in the same shell slot is still a fresh
+    /// eligibility edge, and keyed by effective value so a session is swept
+    /// again when that value changes — whether the user flipped the global
+    /// preference or only this agent's per-agent override.
+    pub(crate) agents_chat_auto_switch_observed_sessions:
+        HashMap<TerminalSessionId, GpuiPreferredAgentInterface>,
     /// One-shot Chat launch requests waiting for a shell-session mapping. The
     /// mapped session enters Chat mode before any terminal focus handoff.
     pub(crate) pending_agents_chat_launch_intents: HashSet<GpuiWorkspaceTerminalSessionKey>,
@@ -1577,9 +1597,19 @@ impl Render for GhostexGpuiApp {
                 }
                 /*
                 CDXC:GPUICommandFocusedSessionActions 2026-06-25-14:56:
-                The shared default Option+Shift+S Sleep Focused Session shortcut must work while a command terminal owns GPUI shell focus. Route it through the same command-tab sleep mutation so the tab stays visible, the mount slot is detached, sidebar metadata refreshes, and no command text, terminal content, paths, or logs are created.
+                Option+Shift+S sleeps whichever terminal session owns shell focus. Command tabs use their native sleep mutation; Agents and companion sessions use the same scoped lifecycle request as their tab action.
                 */
-                this.sleep_focused_command_pane_session(cx);
+                if !this.sleep_focused_command_pane_session(cx)
+                    && let Some(session_id) = this.focused_agents_or_companion_shell_session_id()
+                    && let Some(pane_id) = this.agents_workspace.pane_id_for_session(session_id)
+                {
+                    let _ = this.sleep_agents_tabs_for_scope(
+                        pane_id,
+                        session_id,
+                        AgentsWorkspaceTabSleepScope::Sleep,
+                        cx,
+                    );
+                }
             }))
             .on_action(cx.listener(|this, _: &WakeFocusedSession, _window, cx| {
                 /*

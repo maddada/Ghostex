@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 // RefCell backs cross-platform runtime state (window frame persistence), not
@@ -171,6 +172,7 @@ impl GhostexGpuiApp {
                 first_run_onboarding_started: false,
                 active_open_target_id: None,
                 active_action_command_id: None,
+                titlebar_quick_action_cooldown_until: None,
                 sidebar_command_run_feedback_states: HashMap::new(),
                 keep_awake_runtime: None,
                 keep_awake_runtime_generation: 0,
@@ -187,6 +189,7 @@ impl GhostexGpuiApp {
                 source_code_server_runtime: SourceCodeServerRuntimeOwner::new(),
                 pending_source_file_open: None,
                 pending_docs_file_open: None,
+                session_chat_docs_file_authorization: Arc::new(Mutex::new(None)),
                 startup_restore_wake_pending,
                 remote_workspace_attach_pending: HashSet::new(),
                 project_view_states_by_project: shell_layout_state.project_view_states_by_project,
@@ -212,10 +215,7 @@ impl GhostexGpuiApp {
                 agents_chat_mode_sessions: shell_layout_state.agents_chat_mode_sessions,
                 agents_terminal_action_bar_menu_session: None,
                 terminal_agent_bar_companion_focus_return: None,
-                agents_chat_auto_switch_observed_sessions: HashSet::new(),
-                agents_chat_auto_switch_preference: gpui_preferred_agent_interface_from_settings(
-                    shared_settings_snapshot.object(),
-                ),
+                agents_chat_auto_switch_observed_sessions: HashMap::new(),
                 pending_agents_chat_launch_intents: HashSet::new(),
                 agents_chat_surfaces: HashMap::new(),
                 agents_chat_surface_hidden_since: HashMap::new(),
