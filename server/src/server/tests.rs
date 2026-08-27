@@ -2816,6 +2816,13 @@ fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
         event_hub.clone(),
         presentation_event_sequence.clone(),
     );
+    let extension_registry = ExtensionRegistry::new_with_api_url(
+        &paths,
+        format!(
+            "http://{}:{}",
+            config.listeners.local.host, config.listeners.local.port
+        ),
+    );
     Arc::new(AppState {
         auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
         automation_runtime,
@@ -2824,6 +2831,7 @@ fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
         build_identity: "test-build".to_string(),
         config,
         event_hub,
+        extension_registry,
         logger: Arc::new(GxserverLogger::new(paths.clone())),
         metadata,
         migration: create_gxserver_migration_status(&storage),
