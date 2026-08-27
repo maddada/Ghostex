@@ -23,6 +23,8 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
+use super::terminal_content_layout::terminal_content_frame;
+
 impl GhostexGpuiApp {
     pub(crate) fn render_terminal_body_slot(
         &self,
@@ -99,8 +101,8 @@ impl GhostexGpuiApp {
             });
         let body_click_action = agents_terminal_body_click_action(mount_candidate, session_id);
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
-        let (terminal_horizontal_padding, terminal_vertical_padding) =
-            settings_snapshot.terminal_pane_padding_px();
+        let (terminal_horizontal_padding, terminal_vertical_padding, terminal_width_percent) =
+            settings_snapshot.terminal_pane_layout(true);
         let persistence_label = settings_snapshot
             .show_session_id_in_terminal_panes()
             .then(|| {
@@ -439,13 +441,12 @@ impl GhostexGpuiApp {
             })
             .when_some(gpui_engine_view, |this, view| {
                 this.child(
-                    div()
-                        .absolute()
-                        .left(px(terminal_horizontal_padding))
-                        .right(px(terminal_horizontal_padding))
-                        .top(px(terminal_vertical_padding))
-                        .bottom(px(terminal_vertical_padding))
-                        .child(view),
+                    terminal_content_frame(
+                        div().size_full().child(view),
+                        terminal_horizontal_padding,
+                        terminal_vertical_padding,
+                        terminal_width_percent,
+                    ),
                 )
             })
             .when_some(native_mount_slot_id, |this, slot_id| {
@@ -453,80 +454,83 @@ impl GhostexGpuiApp {
                 this.child({
                     let bounds_view = view.clone();
                     let input_handler_view = view.clone();
-                    canvas(
-                        move |bounds, window, cx| {
-                            let scale_factor = window.scale_factor();
-                            let _ = bounds_view.update(cx, |this, cx| {
-                                this.record_agents_terminal_mount_slot_bounds(
-                                    slot_id,
-                                    bounds,
-                                    scale_factor,
-                                    cx,
-                                );
-                            });
-                        },
-                        move |bounds, _, window, cx| {
-                            let input_view = input_handler_view.clone();
-                            let _ = input_handler_view.update(cx, |this, cx| {
-                                this.register_agents_terminal_text_input_handler(
-                                    slot_id, bounds, input_view, window, cx,
-                                );
-                            });
-                        },
+                    terminal_content_frame(
+                        canvas(
+                            move |bounds, window, cx| {
+                                let scale_factor = window.scale_factor();
+                                let _ = bounds_view.update(cx, |this, cx| {
+                                    this.record_agents_terminal_mount_slot_bounds(
+                                        slot_id,
+                                        bounds,
+                                        scale_factor,
+                                        cx,
+                                    );
+                                });
+                            },
+                            move |bounds, _, window, cx| {
+                                let input_view = input_handler_view.clone();
+                                let _ = input_handler_view.update(cx, |this, cx| {
+                                    this.register_agents_terminal_text_input_handler(
+                                        slot_id, bounds, input_view, window, cx,
+                                    );
+                                });
+                            },
+                        )
+                        .size_full(),
+                        terminal_horizontal_padding,
+                        terminal_vertical_padding,
+                        terminal_width_percent,
                     )
-                    .absolute()
-                    .left(px(terminal_horizontal_padding))
-                    .right(px(terminal_horizontal_padding))
-                    .top(px(terminal_vertical_padding))
-                    .bottom(px(terminal_vertical_padding))
                 })
             })
             .when_some(startup_body_slot_id, |this, slot_id| {
                 let view = cx.entity().clone();
                 this.child(
-                    canvas(
-                        move |bounds, window, cx| {
-                            let scale_factor = window.scale_factor();
-                            let _ = view.update(cx, |this, cx| {
-                                this.record_agents_terminal_startup_body_slot_bounds(
-                                    slot_id,
-                                    bounds,
-                                    scale_factor,
-                                    cx,
-                                );
-                            });
-                        },
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .left(px(terminal_horizontal_padding))
-                    .right(px(terminal_horizontal_padding))
-                    .top(px(terminal_vertical_padding))
-                    .bottom(px(terminal_vertical_padding)),
+                    terminal_content_frame(
+                        canvas(
+                            move |bounds, window, cx| {
+                                let scale_factor = window.scale_factor();
+                                let _ = view.update(cx, |this, cx| {
+                                    this.record_agents_terminal_startup_body_slot_bounds(
+                                        slot_id,
+                                        bounds,
+                                        scale_factor,
+                                        cx,
+                                    );
+                                });
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .size_full(),
+                        terminal_horizontal_padding,
+                        terminal_vertical_padding,
+                        terminal_width_percent,
+                    ),
                 )
             })
             .when_some(parked_owner_body_slot_id, |this, slot_id| {
                 let view = cx.entity().clone();
                 this.child(
-                    canvas(
-                        move |bounds, window, cx| {
-                            let scale_factor = window.scale_factor();
-                            let _ = view.update(cx, |this, cx| {
-                                this.record_agents_terminal_parked_owner_body_slot_bounds(
-                                    slot_id,
-                                    bounds,
-                                    scale_factor,
-                                    cx,
-                                );
-                            });
-                        },
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .left(px(terminal_horizontal_padding))
-                    .right(px(terminal_horizontal_padding))
-                    .top(px(terminal_vertical_padding))
-                    .bottom(px(terminal_vertical_padding)),
+                    terminal_content_frame(
+                        canvas(
+                            move |bounds, window, cx| {
+                                let scale_factor = window.scale_factor();
+                                let _ = view.update(cx, |this, cx| {
+                                    this.record_agents_terminal_parked_owner_body_slot_bounds(
+                                        slot_id,
+                                        bounds,
+                                        scale_factor,
+                                        cx,
+                                    );
+                                });
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .size_full(),
+                        terminal_horizontal_padding,
+                        terminal_vertical_padding,
+                        terminal_width_percent,
+                    ),
                 )
             })
             .when_some(persistence_label, |this, label| {

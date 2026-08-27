@@ -52,9 +52,11 @@ edges and its centre line sits 12 + 1 + 10 + 16 = 39px above the pane's bottom
 edge. A 44px-tall bar therefore needs a 17px bottom inset to put its buttons on
 that same centre line.
 
-The bar draws the composer's own rounded border around itself. It is the same
-hairline pill, at the same width and the same side inset — only as tall as the
-controls inside it, because there is no message field here to give it height.
+The bar draws the composer's own rounded border around itself and fills with
+the dark composer's #141414 surface so the controls sit on the same raised
+pill instead of on the black terminal. It is the same hairline pill, at the
+same width and the same side inset — only as tall as the controls inside it,
+because there is no message field here to give it height.
 */
 /// Tailwind `max-w-3xl` (48rem), the width the chat column centres to.
 const TERMINAL_AGENT_BAR_MAX_CONTENT_WIDTH: f32 = 768.0;
@@ -67,8 +69,10 @@ const TERMINAL_AGENT_BAR_HEIGHT: f32 = 44.0;
 const TERMINAL_AGENT_BAR_BOTTOM_INSET: f32 = 17.0;
 /// `size-7` in the chat footer.
 const TERMINAL_AGENT_BAR_BUTTON_SIZE: f32 = 28.0;
-/// `size-8`, the chat Send button, whose slot the Prompt editor takes here.
-const TERMINAL_AGENT_BAR_ACCENT_BUTTON_SIZE: f32 = 32.0;
+/// 25% under the chat footer's original `size-8` (32px), matching Send.
+const TERMINAL_AGENT_BAR_ACCENT_BUTTON_SIZE: f32 = 24.0;
+/// Chat Send's corners, scaled with the 24px control (was 8px on 32px).
+const TERMINAL_AGENT_BAR_ACCENT_BUTTON_RADIUS: f32 = 6.0;
 /// `gap-1.5` in the chat footer's action group.
 const TERMINAL_AGENT_BAR_BUTTON_GAP: f32 = 6.0;
 const TERMINAL_AGENT_BAR_ICON_SIZE: f32 = 16.0;
@@ -81,9 +85,14 @@ it. The chat footer renders that one glyph a size up; the bar does the same.
 const TERMINAL_AGENT_BAR_STASH_ICON_SIZE: f32 = 20.0;
 const TERMINAL_AGENT_BAR_MENU_ICON_SIZE: f32 = 14.0;
 const TERMINAL_AGENT_BAR_MENU_SHORTCUT_SIZE: f32 = 11.0;
-/// The stock tooltip carries a 12px outer margin. Twenty more pixels below its
-/// box keeps these bottom-bar tooltips comfortably above the controls.
-const TERMINAL_AGENT_BAR_TOOLTIP_BOTTOM_MARGIN: f32 = 32.0;
+/// How far the bottom-bar tooltips are lifted above their trigger. Applied as a
+/// relative `top` inset, not a margin: the tooltip bubble sits inside a plain
+/// block `div`, where block layout collapses child margins through the parent,
+/// so a margin never reaches the overlay positioner's measured bounds and the
+/// tooltip lands flush on the bar. A negative inset shifts the painted bubble
+/// without depending on that measurement. 8px matches the chat composer's
+/// tooltip gap (`sideOffset = 8` in packages/core-ui/app-tooltip.tsx).
+const TERMINAL_AGENT_BAR_TOOLTIP_LIFT: f32 = 8.0;
 /// The Copy affordance next to the session id, sized down from the button icons
 /// so it reads as part of the 12px id text rather than as a seventh control.
 const TERMINAL_AGENT_BAR_COPY_ICON_SIZE: f32 = 13.0;
@@ -106,11 +115,14 @@ packages/core-ui/styles/theme.css (15% white) composited on black instead, so
 the pill reads as the same hairline the composer draws rather than as a fainter
 one.
 */
+/// Dark chat composer fill (`packages/core-ui/styles/chat.css`).
+const TERMINAL_AGENT_BAR_BACKGROUND: u32 = 0x141414;
 const TERMINAL_AGENT_BAR_BORDER_COLOR: u32 = 0x262626;
 const TERMINAL_AGENT_BAR_HOVER_BACKGROUND: u32 = 0x343434;
 const TERMINAL_AGENT_BAR_SESSION_ID_COLOR: u32 = 0x6f6f6f;
 const TERMINAL_AGENT_BAR_SESSION_ID_HOVER_COLOR: u32 = 0xc4c4c4;
-const TERMINAL_AGENT_BAR_ACCENT_BACKGROUND: u32 = 0xe8e8e8;
+/// Dark chat `--primary` (`oklch(92.2% 0 0)` → #e5e5e5).
+const TERMINAL_AGENT_BAR_ACCENT_BACKGROUND: u32 = 0xe5e5e5;
 const TERMINAL_AGENT_BAR_ACCENT_HOVER_BACKGROUND: u32 = 0xffffff;
 const TERMINAL_AGENT_BAR_ACCENT_ICON_COLOR: u32 = 0x111111;
 const TERMINAL_AGENT_BAR_MENU_BACKGROUND: u32 = 0x151515;
@@ -266,7 +278,7 @@ impl TerminalAgentBarAction {
     fn icon_size(self) -> f32 {
         match self {
             Self::StashedPrompts => TERMINAL_AGENT_BAR_STASH_ICON_SIZE,
-            Self::PromptEditor => 18.0,
+            Self::PromptEditor => 13.5,
             _ => TERMINAL_AGENT_BAR_ICON_SIZE,
         }
     }
@@ -392,15 +404,21 @@ impl GhostexGpuiApp {
             return None;
         }
         let presentation_session = self.agents_sidebar_session_for_terminal(session_id)?;
+        let agent_name = terminal_agent_bar_agent_name(presentation_session);
         let agent_session_id = presentation_session
             .agent_session_id
             .as_deref()
             .map(str::trim)
-            .filter(|agent_session_id| !agent_session_id.is_empty())?;
+            .filter(|agent_session_id| !agent_session_id.is_empty());
+        if agent_name.is_none()
+            && presentation_session.agent_icon.is_none()
+            && agent_session_id.is_none()
+        {
+            return None;
+        }
         let has_session_note = presentation_session.has_session_note;
         let stashed_prompt_count = presentation_session.stashed_prompt_count;
-        let full_session_id = agent_session_id.to_string();
-        let chat_view_visible = self.agents_session_chat_eligible(session_id);
+        let full_session_id = agent_session_id.map(str::to_string);
         let menu_open = self.agents_terminal_action_bar_menu_session == Some(session_id);
         let suffix = surface.element_id_suffix(session_id);
 
@@ -422,9 +440,12 @@ impl GhostexGpuiApp {
                         .rounded_full()
                         .border_1()
                         .border_color(rgb(TERMINAL_AGENT_BAR_BORDER_COLOR))
+                        .bg(rgb(TERMINAL_AGENT_BAR_BACKGROUND))
                         .items_center()
                         .gap(px(TERMINAL_AGENT_BAR_BUTTON_GAP))
-                        .child(terminal_agent_bar_session_id(full_session_id, &suffix, cx))
+                        .when_some(full_session_id, |this, full_session_id| {
+                            this.child(terminal_agent_bar_session_id(full_session_id, &suffix, cx))
+                        })
                         .child(div().flex_1().min_w_0())
                         .child(self.render_terminal_agent_bar_menu_anchor(
                             surface, session_id, menu_open, &suffix, cx,
@@ -436,6 +457,7 @@ impl GhostexGpuiApp {
                             has_session_note,
                             0,
                             &suffix,
+                            None,
                             cx,
                         ))
                         .child(self.render_terminal_agent_bar_icon_button(
@@ -445,6 +467,7 @@ impl GhostexGpuiApp {
                             false,
                             stashed_prompt_count,
                             &suffix,
+                            None,
                             cx,
                         ))
                         .child(self.render_terminal_agent_bar_icon_button(
@@ -454,6 +477,7 @@ impl GhostexGpuiApp {
                             false,
                             0,
                             &suffix,
+                            None,
                             cx,
                         ))
                         .child(self.render_terminal_agent_bar_icon_button(
@@ -463,19 +487,19 @@ impl GhostexGpuiApp {
                             false,
                             0,
                             &suffix,
+                            None,
                             cx,
                         ))
-                        .when(chat_view_visible, |this| {
-                            this.child(self.render_terminal_agent_bar_icon_button(
-                                surface,
-                                session_id,
-                                TerminalAgentBarAction::ToggleChatView,
-                                false,
-                                0,
-                                &suffix,
-                                cx,
-                            ))
-                        })
+                        .child(self.render_terminal_agent_bar_icon_button(
+                            surface,
+                            session_id,
+                            TerminalAgentBarAction::ToggleChatView,
+                            false,
+                            0,
+                            &suffix,
+                            agent_name.as_deref(),
+                            cx,
+                        ))
                         .child(terminal_agent_bar_accent_button(
                             surface,
                             session_id,
@@ -489,11 +513,11 @@ impl GhostexGpuiApp {
     }
 
     /*
-    What a control looks like right now. Only Maximize actually varies with app
-    state; the rest resolve to their static label/icon. Keeping all of them on
-    one path means a control can never be drawn enabled while its handler
-    refuses to run it, which is the failure the old hard-coded `is_enabled` list
-    invited.
+    What a control looks like right now. Maximize varies with pane state, and
+    Chat View varies with agent support and session readiness; the rest resolve
+    to their static label/icon. Keeping all of them on one path means a control
+    can never be drawn enabled while its handler refuses to run it, which is the
+    failure the old hard-coded `is_enabled` list invited.
 
     In Agents, Maximize is the workspace's reversible pane Focus mode. In a
     project-editor companion it is a route into Agents focused on that exact
@@ -505,6 +529,7 @@ impl GhostexGpuiApp {
         surface: TerminalAgentBarSurface,
         session_id: TerminalSessionId,
         action: TerminalAgentBarAction,
+        agent_name: Option<&str>,
     ) -> TerminalAgentBarActionState {
         let (label, hotkey_action_id) = action.label_and_hotkey_action_id();
         let mut state = TerminalAgentBarActionState {
@@ -512,13 +537,30 @@ impl GhostexGpuiApp {
             hotkey_action_id,
             icon_path: action.icon_path(),
             label,
+            tooltip_override: None,
         };
         match action {
             TerminalAgentBarAction::VerboseMode => {
                 // Verbose mode chooses how much of a turn the chat transcript
                 // renders. A terminal shows the agent's own output verbatim, so
                 // there is nothing for it to expand or collapse.
-                state.disabled_reason = Some("chat view only");
+                state.disabled_reason = Some("chat view only".to_string());
+            }
+            TerminalAgentBarAction::ToggleChatView => {
+                if self
+                    .agents_session_chat_transcript_agent(session_id)
+                    .is_none()
+                {
+                    let agent_name = agent_name.unwrap_or("This agent");
+                    state.disabled_reason = Some(format!(
+                        "{agent_name} isn't supported by Ghostex Chat View yet\nOnly Claude, Codex, Pi, Omp, and Grok are supported\nPlease request other agents on X or the Discord"
+                    ));
+                } else if !self.agents_session_chat_eligible(session_id) {
+                    let agent_name = agent_name.unwrap_or("this agent");
+                    state.tooltip_override = Some(format!(
+                        "Install hooks for {agent_name} to enable Chat View\nClick to open Settings > Agents"
+                    ));
+                }
             }
             TerminalAgentBarAction::Maximize => {
                 if let TerminalAgentBarSurface::AgentsPane(pane_id) = surface {
@@ -530,7 +572,7 @@ impl GhostexGpuiApp {
                         state.icon_path = TERMINAL_AGENT_BAR_EXIT_MAXIMIZE_ICON;
                         state.label = "Exit maximize";
                     } else if self.agents_workspace.focus_mode_eligible_leaf_count() <= 1 {
-                        state.disabled_reason = Some("Session is not in a split pane");
+                        state.disabled_reason = Some("Session is not in a split pane".to_string());
                     }
                 } else {
                     // The global Agents Focus-mode chord is inert while a
@@ -550,7 +592,10 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         action: TerminalAgentBarAction,
     ) -> bool {
-        self.terminal_agent_bar_action_state(surface, session_id, action)
+        let agent_name = self
+            .agents_sidebar_session_for_terminal(session_id)
+            .and_then(terminal_agent_bar_agent_name);
+        self.terminal_agent_bar_action_state(surface, session_id, action, agent_name.as_deref())
             .disabled_reason
             .is_none()
     }
@@ -578,6 +623,7 @@ impl GhostexGpuiApp {
                 false,
                 0,
                 suffix,
+                None,
                 cx,
             ))
             .when(menu_open, |this| {
@@ -688,6 +734,27 @@ impl GhostexGpuiApp {
             return;
         }
         self.close_terminal_agent_action_bar_menu(cx);
+        if action == TerminalAgentBarAction::ToggleChatView
+            && self
+                .agents_session_chat_transcript_agent(session_id)
+                .is_some()
+            && !self.agents_session_chat_eligible(session_id)
+        {
+            let agent_name = self
+                .agents_sidebar_session_for_terminal(session_id)
+                .and_then(terminal_agent_bar_agent_name)
+                .unwrap_or_else(|| "this agent".to_string());
+            self.open_gpui_settings_agent_hooks_page(window, cx);
+            self.dispatch_gpui_app_modal_toast(
+                "warning",
+                &format!("Install hooks for {agent_name}"),
+                &format!(
+                    "Install and approve {agent_name} hooks in order for Chat View to work correctly. Resuming and working/done indicators also require hooks."
+                ),
+                cx,
+            );
+            return;
+        }
         if !self.terminal_agent_bar_action_enabled(surface, session_id, action) {
             return;
         }
@@ -835,14 +902,15 @@ impl GhostexGpuiApp {
 }
 
 /// The label, glyph and availability of one control at render time.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct TerminalAgentBarActionState {
-    /// `None` when the control works here; otherwise the short "why not", which
-    /// the tooltip appends in parentheses instead of leaving the user guessing.
-    disabled_reason: Option<&'static str>,
+    /// `None` when the control works here; otherwise the reason or complete
+    /// disabled tooltip, so an inert control never leaves the user guessing.
+    disabled_reason: Option<String>,
     hotkey_action_id: &'static str,
     icon_path: &'static str,
     label: &'static str,
+    tooltip_override: Option<String>,
 }
 
 impl GhostexGpuiApp {
@@ -858,11 +926,12 @@ impl GhostexGpuiApp {
         show_note_dot: bool,
         stashed_prompt_count: u64,
         suffix: &str,
+        agent_name: Option<&str>,
         cx: &mut gpui::Context<GhostexGpuiApp>,
     ) -> AnyElement {
-        let state = self.terminal_agent_bar_action_state(surface, session_id, action);
+        let state = self.terminal_agent_bar_action_state(surface, session_id, action, agent_name);
         let enabled = state.disabled_reason.is_none();
-        terminal_agent_bar_button_base(action, state, suffix)
+        terminal_agent_bar_button_base(action, &state, suffix)
             .size(px(TERMINAL_AGENT_BAR_BUTTON_SIZE))
             .when(enabled, |this| {
                 this.hover(|this| this.bg(rgb(TERMINAL_AGENT_BAR_HOVER_BACKGROUND)))
@@ -916,7 +985,7 @@ impl GhostexGpuiApp {
         suffix: &str,
         cx: &mut gpui::Context<GhostexGpuiApp>,
     ) -> AnyElement {
-        let state = self.terminal_agent_bar_action_state(surface, session_id, action);
+        let state = self.terminal_agent_bar_action_state(surface, session_id, action, None);
         let enabled = state.disabled_reason.is_none();
         let shortcut = enabled
             .then(|| terminal_element::terminal_overlay_hotkey_label(state.hotkey_action_id))
@@ -1003,7 +1072,7 @@ fn terminal_agent_bar_session_id(
         .managed_tooltip(move |window, cx| {
             Tooltip::new(tooltip.clone())
                 .text_center()
-                .mb(px(TERMINAL_AGENT_BAR_TOOLTIP_BOTTOM_MARGIN))
+                .top(px(-TERMINAL_AGENT_BAR_TOOLTIP_LIFT))
                 .build(window, cx)
         })
         .on_mouse_down(
@@ -1038,9 +1107,9 @@ fn terminal_agent_bar_session_id(
         .into_any_element()
 }
 
-/// The Send button's twin: same 32px filled round shape, dark glyph. Prompt
-/// editor takes that slot because it is the terminal's "put text into the
-/// session" control, so chat muscle memory stays harmless.
+/// The Send button's twin: same 24px filled shape, 6px corners, dark glyph.
+/// Prompt editor takes that slot because it is the terminal's "put text into
+/// the session" control, so chat muscle memory stays harmless.
 fn terminal_agent_bar_accent_button(
     surface: TerminalAgentBarSurface,
     session_id: TerminalSessionId,
@@ -1054,9 +1123,11 @@ fn terminal_agent_bar_accent_button(
         hotkey_action_id,
         icon_path: action.icon_path(),
         label,
+        tooltip_override: None,
     };
-    terminal_agent_bar_button_base(action, state, suffix)
+    terminal_agent_bar_button_base(action, &state, suffix)
         .size(px(TERMINAL_AGENT_BAR_ACCENT_BUTTON_SIZE))
+        .rounded(px(TERMINAL_AGENT_BAR_ACCENT_BUTTON_RADIUS))
         .bg(rgb(TERMINAL_AGENT_BAR_ACCENT_BACKGROUND))
         .hover(|this| this.bg(rgb(TERMINAL_AGENT_BAR_ACCENT_HOVER_BACKGROUND)))
         .on_mouse_down(
@@ -1079,16 +1150,24 @@ fn terminal_agent_bar_accent_button(
 
 fn terminal_agent_bar_button_base(
     action: TerminalAgentBarAction,
-    state: TerminalAgentBarActionState,
+    state: &TerminalAgentBarActionState,
     suffix: &str,
 ) -> gpui::Stateful<gpui::Div> {
     // A disabled control names why it is inert instead of leaving the user to
     // guess, and drops the shortcut: naming a chord that would do nothing here
     // is worse than naming none.
-    let tooltip = match state.disabled_reason {
-        Some(reason) if action == TerminalAgentBarAction::Maximize => reason.to_string(),
-        Some(reason) => format!("{} ({reason})", state.label),
-        None => terminal_element::terminal_overlay_tooltip(state.label, state.hotkey_action_id),
+    let tooltip = match state.tooltip_override.as_deref() {
+        Some(tooltip) => tooltip.to_string(),
+        None => match state.disabled_reason.as_deref() {
+            Some(reason)
+                if action == TerminalAgentBarAction::Maximize
+                    || action == TerminalAgentBarAction::ToggleChatView =>
+            {
+                reason.to_string()
+            }
+            Some(reason) => format!("{} ({reason})", state.label),
+            None => terminal_element::terminal_overlay_tooltip(state.label, state.hotkey_action_id),
+        },
     };
     div()
         .id(format!(
@@ -1104,9 +1183,27 @@ fn terminal_agent_bar_button_base(
         .cursor_default()
         .managed_tooltip(move |window, cx| {
             Tooltip::new(tooltip.clone())
-                .mb(px(TERMINAL_AGENT_BAR_TOOLTIP_BOTTOM_MARGIN))
+                .top(px(-TERMINAL_AGENT_BAR_TOOLTIP_LIFT))
                 .build(window, cx)
         })
+}
+
+fn terminal_agent_bar_agent_name(session: &GpuiSidebarWorkspaceTabSession) -> Option<String> {
+    if let Some(icon) = session.agent_icon
+        && let Some(agent) = gpui_default_sidebar_agent_by_icon(icon)
+    {
+        return Some(agent.name.to_string());
+    }
+    let agent_name = session.agent_name.as_deref()?.trim();
+    if agent_name.is_empty() {
+        return None;
+    }
+    let normalized_agent_name = agent_name.to_ascii_lowercase();
+    Some(
+        gpui_default_sidebar_agent_by_id(normalized_agent_name.as_str())
+            .map(|agent| agent.name.to_string())
+            .unwrap_or_else(|| agent_name.to_string()),
+    )
 }
 
 fn terminal_agent_bar_stashed_prompt_count_badge(count: u64) -> AnyElement {

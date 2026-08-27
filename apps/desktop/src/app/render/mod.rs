@@ -20,4 +20,5 @@ pub(crate) mod project_editor_surface_and_workarea;
 pub(crate) mod session_chat_and_drop_feedback;
 pub(crate) mod terminal_agent_action_bar;
 pub(crate) mod terminal_body_slot;
+pub(crate) mod terminal_content_layout;
 pub(crate) mod terminal_placeholders_and_editor_shell;

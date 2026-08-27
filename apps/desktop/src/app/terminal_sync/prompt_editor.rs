@@ -600,7 +600,7 @@ impl GhostexGpuiApp {
         let file_path = file_path.to_string_lossy().to_string();
         cx.spawn(async move |this, cx| {
             let _ = this.update_in(cx, |this, window, cx| {
-                this.open_session_chat_file(&file_path, window, cx);
+                this.open_session_chat_file(&file_path, None, None, window, cx);
             });
         })
         .detach();

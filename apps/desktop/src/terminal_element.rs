@@ -2328,18 +2328,13 @@ impl Render for TerminalView {
     }
 }
 
-/// Overlay chrome is anchored to the *pane body*, not to the terminal grid.
-/// `main.rs` mounts this view inside a wrapper inset by the configured terminal
-/// pane padding, so anchoring at a plain 13px would render the scroll buttons
-/// `padding + 13`px in from the pane edge instead of the intended 13px.
-/// Subtract the padding back out so the gap stays the same regardless of the
-/// terminal padding setting.
+/// Overlay chrome belongs to the terminal body, so it follows the same
+/// centered width and inner padding as the grid instead of escaping into the
+/// surrounding pane gutters.
 fn terminal_overlay_edge_insets() -> (f32, f32) {
-    let (horizontal_padding, vertical_padding) =
-        crate::shared_settings::shared_sidebar_settings_snapshot().terminal_pane_padding_px();
     (
-        TERMINAL_ACTION_BUTTON_EDGE_INSET - horizontal_padding,
-        TERMINAL_ACTION_BUTTON_EDGE_INSET - vertical_padding,
+        TERMINAL_ACTION_BUTTON_EDGE_INSET,
+        TERMINAL_ACTION_BUTTON_EDGE_INSET,
     )
 }
 

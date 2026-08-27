@@ -220,7 +220,7 @@ printf '%s\n' \
   "$(test -f "$skills_root/ghostex-embedded-browser-use/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-computer-use/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-cli/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-fable-5.6-orchestration/SKILL.md" && printf 1 || printf 0)" \
+  "$(test -f "$skills_root/ghostex-fable-56-orchestration/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-manage-beads/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-auto-rename-session/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-move-codex-session/SKILL.md" && printf 1 || printf 0)"
@@ -245,7 +245,7 @@ printf '%s\n' \
             "ghostex-embedded-browser-use",
             "ghostex-computer-use",
             "ghostex-cli",
-            "ghostex-fable-5.6-orchestration",
+            "ghostex-fable-56-orchestration",
             "ghostex-manage-beads",
             "ghostex-auto-rename-session",
             "ghostex-move-codex-session",
@@ -650,6 +650,8 @@ exec "$@" \
 
     pub(super) fn source_code_server_open_file_command(
         file_path: &Path,
+        line: Option<u32>,
+        column: Option<u32>,
         required_node_major: u64,
     ) -> Result<Command, String> {
         let ResolvedWindowsTerminalBackend::Wsl { distribution } =
@@ -666,6 +668,8 @@ repo_root="$1"
 user_data_dir="$2"
 file_path="$3"
 required_node_major="$4"
+line="$5"
+column="$6"
 node="$repo_root/lib/node"
 test -x "$node"
 test -f "$repo_root/out/node/entry.js"
@@ -677,13 +681,24 @@ unset VSCODE_DEV
 export NODE_ENV=production
 session_socket="$user_data_dir/code-server-ipc.sock"
 cd "$(dirname "$file_path")"
+if [ "$line" -gt 0 ]; then
+    target="$file_path:$line"
+    if [ "$column" -gt 0 ]; then
+        target="$target:$column"
+    fi
+    set -- --goto "$target"
+else
+    set -- "$file_path"
+fi
 exec "$node" "$repo_root/out/node/entry.js" \
     --user-data-dir "$user_data_dir" \
     --session-socket "$session_socket" \
     --reuse-window \
-    "$file_path"
+    "$@"
 "#;
         let required_node_major = required_node_major.to_string();
+        let line = line.unwrap_or(0).to_string();
+        let column = column.unwrap_or(0).to_string();
         let mut command = hidden_command("wsl.exe");
         command.args([
             "--distribution",
@@ -697,6 +712,8 @@ exec "$node" "$repo_root/out/node/entry.js" \
             user_data_dir.as_str(),
             wsl_file_path.as_str(),
             required_node_major.as_str(),
+            line.as_str(),
+            column.as_str(),
         ]);
         Ok(command)
     }
@@ -1633,9 +1650,11 @@ pub(crate) fn source_code_server_command(
 #[cfg(target_os = "windows")]
 pub(crate) fn source_code_server_open_file_command(
     file_path: &std::path::Path,
+    line: Option<u32>,
+    column: Option<u32>,
     required_node_major: u64,
 ) -> Result<std::process::Command, String> {
-    platform::source_code_server_open_file_command(file_path, required_node_major)
+    platform::source_code_server_open_file_command(file_path, line, column, required_node_major)
 }
 
 #[cfg(target_os = "windows")]
