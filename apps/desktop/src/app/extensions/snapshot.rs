@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use gpui::{Image, ImageFormat};
 
-use crate::GhostexGpuiApp;
 use crate::app::helpers::{gpui_gxserver_domain_projects_result, gpui_gxserver_rpc_result};
+use crate::{ExtensionId, GhostexGpuiApp};
 
 use super::{
     GpuiExtensionPermission, GpuiExtensionPlacement, GpuiExtensionPopupSize,
@@ -78,10 +78,22 @@ impl GhostexGpuiApp {
                 if let Ok((mut snapshot, projects, session_details)) = result {
                     snapshot.pending_chat_bar_toggles =
                         std::mem::take(&mut this.extensions_snapshot.pending_chat_bar_toggles);
+                    let pinned_popup_runtimes = snapshot
+                        .installed
+                        .values()
+                        .filter(|extension| {
+                            extension.enabled
+                                && extension.pinned
+                                && extension.placement == Some(GpuiExtensionPlacement::Popup)
+                                && extension.runtime_url.is_none()
+                        })
+                        .filter_map(|extension| ExtensionId::new(&extension.id))
+                        .collect();
                     this.extensions_snapshot = snapshot;
                     this.extension_projects = projects;
                     this.extension_session_details = session_details;
                     this.broadcast_extension_context_changes(cx);
+                    this.start_pinned_extension_runtimes(pinned_popup_runtimes, cx);
                     cx.notify();
                 }
             });

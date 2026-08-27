@@ -33,6 +33,43 @@ pub(crate) enum GpuiExtensionLaunch {
 }
 
 impl GhostexGpuiApp {
+    pub(crate) fn start_pinned_extension_runtimes(
+        &mut self,
+        ids: Vec<ExtensionId>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if ids.is_empty() {
+            return;
+        }
+        let context = self.extension_launch_context_value();
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let starts = ids.into_iter().map(|id| {
+                let background = background.clone();
+                let params = serde_json::json!({
+                    "id": id.as_str(),
+                    "context": context.clone(),
+                });
+                async move {
+                    background
+                        .spawn(async move {
+                            gpui_gxserver_rpc_result(
+                                "/api/startExtension",
+                                &params,
+                                Duration::from_secs(65),
+                            )
+                        })
+                        .await
+                }
+            });
+            let _ = futures::future::join_all(starts).await;
+            let _ = this.update(cx, |this, cx| {
+                this.refresh_extensions_in_background(cx);
+            });
+        })
+        .detach();
+    }
+
     pub(crate) fn extension_launch_for_id(&self, id: ExtensionId) -> Option<GpuiExtensionLaunch> {
         let extension = self
             .extensions_snapshot
