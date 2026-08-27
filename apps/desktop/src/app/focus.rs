@@ -402,12 +402,21 @@ impl GhostexGpuiApp {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        /*
+        CDXC:GPUICefFirstResponderPastePassthrough 2026-08-27:
+        Every CEF surface qualifies, not just the editable Source/Manage/Chat
+        renderers: `shell_focus` keeps naming a terminal pane while a modal,
+        the sidebar, a Kanban page, a titlebar popup, or a browser tab holds
+        AppKit's first responder, so without this gate the Cmd+V binding
+        shadow-pastes the same clipboard into that pane's hidden terminal
+        composer. That phantom draft is what a later chat send's
+        draft-preservation step sweeps into Saved Prompts. A Chromium first
+        responder always owns its own paste.
+        */
         #[cfg(target_os = "macos")]
         let renderer_edit_cef_owns_native_focus = matches!(
             self.first_responder_target,
-            FirstResponderTarget::CefSurface(FirstResponderCefSurface::ProjectWorkarea(
-                ProjectWorkareaCefSurfaceSlotKey::Source | ProjectWorkareaCefSurfaceSlotKey::Manage
-            )) | FirstResponderTarget::CefSurface(FirstResponderCefSurface::SessionChat(_))
+            FirstResponderTarget::CefSurface(_)
         );
         #[cfg(not(target_os = "macos"))]
         let renderer_edit_cef_owns_native_focus = false;
