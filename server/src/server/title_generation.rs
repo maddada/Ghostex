@@ -148,14 +148,22 @@ pub(crate) fn fork_initial_rename_target(
     }
     let fork = result.get("fork")?;
     let session = fork.get("session")?;
+    let agent_name = fork
+        .get("plan")
+        .and_then(|plan| plan.get("agentId"))
+        .and_then(Value::as_str)
+        .or_else(|| session.get("agentId").and_then(Value::as_str))?
+        .trim();
+    /*
+    Codex 0.150 names an unnamed fork from its first user turn. Do not install
+    Ghostex's provisional `/rename Fork: ...` first, because that makes the
+    provider thread non-empty and suppresses Codex's own automatic title.
+    */
+    if normalize_agent_name(Some(agent_name)).as_deref() == Some("codex") {
+        return None;
+    }
     Some(ForkInitialRenameTarget {
-        agent_name: fork
-            .get("plan")
-            .and_then(|plan| plan.get("agentId"))
-            .and_then(Value::as_str)
-            .or_else(|| session.get("agentId").and_then(Value::as_str))?
-            .trim()
-            .to_string(),
+        agent_name: agent_name.to_string(),
         project_id: read_session_text(session, "projectId")?,
         session_id: read_session_text(session, "sessionId")?,
         title: read_session_text(session, "title")?,
@@ -168,7 +176,8 @@ pub(crate) fn schedule_fork_initial_rename(state: AppState, target: ForkInitialR
     Fork provider startup already owns the resumed CLI process. Wait for its
     composer, then submit the provisional `Fork: <old title>` through zmx's
     separate text/Enter path. Pi uses `/name`, Hermes Agent uses `/title`, and
-    Codex and Claude use `/rename`.
+    Claude uses `/rename`; Codex keeps the fork unnamed so its own first-turn
+    title generation can name it.
     If the user has already sent the fork's first prompt, its generated-title
     job wins and this provisional rename is skipped.
 
@@ -1241,6 +1250,14 @@ pub(crate) fn decide_first_prompt_auto_title(
     if is_first_prompt_slash_command(raw_prompt, &prompt) {
         return decision(Some(prompt), "slashCommand", false, strategy);
     }
+    if strategy == Some("agentAutoTitle") {
+        /*
+        Codex 0.150 persists its own first-turn title in session_index.jsonl.
+        The metadata sync task adopts that canonical name, so Ghostex must not
+        start a second model request or inject `/rename <generated title>`.
+        */
+        return decision(Some(prompt), "agentAutoTitle", false, strategy);
+    }
     let current_title = read_session_text(session, "title");
     if !fork_first_prompt_rearmed
         && !is_terminal_auto_working_directory_title(session)
@@ -1272,8 +1289,9 @@ pub(crate) fn first_prompt_agent_name(session: &Value) -> Option<String> {
 pub(crate) fn first_prompt_auto_title_strategy(agent_name: Option<&str>) -> Option<&'static str> {
     match normalize_agent_name(agent_name).as_deref() {
         Some("claude") => Some("sendBareRenameCommand"),
-        Some("codex") => Some("generateTitleAndRename"),
+        Some("codex") => Some("agentAutoTitle"),
         Some("pi") => Some("generateTitleAndName"),
+        Some("omp") => Some("generateTitleAndName"),
         _ => None,
     }
 }
@@ -1293,7 +1311,7 @@ pub(crate) fn normalize_agent_name(value: Option<&str>) -> Option<String> {
 
 pub(crate) fn agent_session_title_command(agent_name: Option<&str>, title: &str) -> String {
     match normalize_agent_name(agent_name).as_deref() {
-        Some("pi") => format!("/name {title}"),
+        Some("pi") | Some("omp") => format!("/name {title}"),
         Some("hermes-agent") => format!("/title {title}"),
         _ => format!("/rename {title}"),
     }
@@ -1361,8 +1379,15 @@ pub(crate) fn is_generic_agent_session_title(
         "π",
         "pi session",
     ];
-    generic.contains(&normalized_title.as_str())
-        || normalized_agent.as_deref() == Some(normalized_title.as_str())
+    if generic.contains(&normalized_title.as_str()) {
+        return true;
+    }
+    let Some(agent) = normalized_agent else {
+        return false;
+    };
+    normalized_title == agent
+        || normalized_title == format!("{agent} session")
+        || normalized_title == format!("{agent} agent session")
 }
 
 pub(crate) fn normalize_first_prompt_title_prompt(prompt: Option<&str>) -> Option<String> {

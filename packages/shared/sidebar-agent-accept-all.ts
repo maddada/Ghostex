@@ -64,6 +64,7 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
     aliases: ['--dangerously-allow-all'],
     canonicalFlag: '--dangerously-allow-all',
   },
+  campfire: null,
   claude: {
     kind: 'flag',
     aliases: ['--dangerously-skip-permissions'],
@@ -75,6 +76,11 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
     canonicalFlag: '--yolo',
   },
   codebuddy: null,
+  'command-code': {
+    kind: 'flag',
+    aliases: ['--yolo'],
+    canonicalFlag: '--yolo',
+  },
   copilot: {
     kind: 'flag',
     aliases: ['--allow-all', '--yolo'],
@@ -85,6 +91,15 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
     aliases: ['--force', '--yolo'],
     canonicalFlag: '--yolo',
   },
+  /**
+   * CDXC:SidebarAgents 2026-08-27:
+   * Devin does expose a permission bypass, but it is the two-token
+   * `--permission-mode bypass` form. This spec shape only describes single
+   * tokens, so a spec here could be appended but never matched, deduped, or
+   * stripped again when Accept All is turned back off. Leave Devin
+   * unsupported until the shared spec can carry flag/value pairs.
+   */
+  devin: null,
   /**
    * CDXC:SidebarAgents 2026-05-19-10:05:
    * Factory Droid only documents permission bypass on `droid exec`, not the
@@ -102,8 +117,24 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
     canonicalFlag: '--always-approve',
   },
   'hermes-agent': null,
+  kimi: {
+    kind: 'flag',
+    aliases: ['--auto-approve', '--yes', '-y', '--yolo'],
+    canonicalFlag: '--yolo',
+  },
   kiro: null,
   omp: null,
+  /**
+   * CDXC:SidebarAgents 2026-08-27:
+   * OpenClaude is a Claude-shaped fork down to its hook contract and its
+   * `~/.openclaude/settings.json`, and it takes Claude's permission-bypass
+   * flag verbatim, so it gets Claude's spec instead of its own dialect.
+   */
+  openclaude: {
+    kind: 'flag',
+    aliases: ['--dangerously-skip-permissions'],
+    canonicalFlag: '--dangerously-skip-permissions',
+  },
   opencode: { kind: 'runtimeConfig' },
   pi: null,
   qoder: null,

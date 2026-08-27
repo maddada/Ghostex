@@ -69,12 +69,23 @@ pub(crate) fn accept_all_spec(agent_id: &str) -> Option<AcceptAllSpec> {
             aliases: vec!["--dangerously-allow-all".to_string()],
             canonical: "--dangerously-allow-all",
         },
-        "antigravity" | "claude" => AcceptAllSpec::Flag {
+        // OpenClaude is a Claude-shaped fork and takes Claude's bypass flag
+        // verbatim, so it shares Claude's spec rather than getting its own.
+        "antigravity" | "claude" | "openclaude" => AcceptAllSpec::Flag {
             aliases: vec!["--dangerously-skip-permissions".to_string()],
             canonical: "--dangerously-skip-permissions",
         },
-        "codex" => AcceptAllSpec::Flag {
+        "codex" | "command-code" => AcceptAllSpec::Flag {
             aliases: vec!["--yolo".to_string()],
+            canonical: "--yolo",
+        },
+        "kimi" => AcceptAllSpec::Flag {
+            aliases: vec![
+                "--auto-approve".to_string(),
+                "--yes".to_string(),
+                "-y".to_string(),
+                "--yolo".to_string(),
+            ],
             canonical: "--yolo",
         },
         "copilot" => AcceptAllSpec::Flag {

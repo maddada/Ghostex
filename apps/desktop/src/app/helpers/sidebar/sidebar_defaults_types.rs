@@ -300,6 +300,41 @@ pub(crate) const GPUI_DEFAULT_SIDEBAR_AGENTS: &[GpuiDefaultSidebarAgent] = &[
         icon: "omp",
         name: "OMP",
     },
+    GpuiDefaultSidebarAgent {
+        agent_id: "kimi",
+        command: "kimi",
+        hidden_by_default: true,
+        icon: "kimi",
+        name: "Kimi Code",
+    },
+    GpuiDefaultSidebarAgent {
+        agent_id: "campfire",
+        command: "campfire",
+        hidden_by_default: true,
+        icon: "campfire",
+        name: "Campfire",
+    },
+    GpuiDefaultSidebarAgent {
+        agent_id: "openclaude",
+        command: "openclaude",
+        hidden_by_default: true,
+        icon: "openclaude",
+        name: "OpenClaude",
+    },
+    GpuiDefaultSidebarAgent {
+        agent_id: "command-code",
+        command: "commandcode",
+        hidden_by_default: true,
+        icon: "command-code",
+        name: "Command Code",
+    },
+    GpuiDefaultSidebarAgent {
+        agent_id: "devin",
+        command: "devin",
+        hidden_by_default: true,
+        icon: "devin",
+        name: "Devin",
+    },
 ];
 
 pub(crate) const GPUI_DEFAULT_SIDEBAR_COMMANDS: &[GpuiDefaultSidebarCommand] = &[

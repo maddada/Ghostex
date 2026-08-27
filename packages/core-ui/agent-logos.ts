@@ -1,17 +1,22 @@
 import ampCliLogo from './assets/amp-cli.svg' with { type: 'text' };
 import antigravityCliLogo from './assets/antigravity-cli.svg' with { type: 'text' };
 import browserLogo from './assets/browser.svg' with { type: 'text' };
+import campfireLogo from './assets/campfire.svg' with { type: 'text' };
 import claudeLogo from './assets/claude.svg' with { type: 'text' };
 import codebuddyLogo from './assets/codebuddy.svg' with { type: 'text' };
+import commandCodeLogo from './assets/command-code.svg' with { type: 'text' };
 import cursorCliLogo from './assets/cursor-cli.svg' with { type: 'text' };
 import codexLogo from './assets/codex.svg' with { type: 'text' };
 import copilotLogo from './assets/copilot.svg' with { type: 'text' };
+import devinLogo from './assets/devin.svg' with { type: 'text' };
 import factoryDroidLogo from './assets/factory-droid.svg' with { type: 'text' };
 import geminiLogo from './assets/gemini.svg' with { type: 'text' };
 import grokBuildLogo from './assets/grok-build.svg' with { type: 'text' };
 import hermesAgentLogo from './assets/hermes-agent.svg' with { type: 'text' };
+import kimiLogo from './assets/kimi.svg' with { type: 'text' };
 import kiroLogo from './assets/kiro.svg' with { type: 'text' };
 import ompLogo from './assets/omp.svg' with { type: 'text' };
+import openclaudeLogo from './assets/openclaude.svg' with { type: 'text' };
 import opencodeLogo from './assets/opencode.svg' with { type: 'text' };
 import piLogo from './assets/pi.svg' with { type: 'text' };
 import qoderLogo from './assets/qoder.svg' with { type: 'text' };
@@ -75,17 +80,22 @@ export const AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
   'amp-cli': svgTextToDataUrl(ampCliLogo),
   'antigravity-cli': svgTextToDataUrl(antigravityCliLogo),
   browser: svgTextToDataUrl(browserLogo),
+  campfire: svgTextToDataUrl(campfireLogo),
   claude: svgTextToDataUrl(claudeLogo),
   codebuddy: svgTextToDataUrl(codebuddyLogo),
+  'command-code': svgTextToDataUrl(commandCodeLogo),
   'cursor-cli': svgTextToDataUrl(cursorCliLogo),
   codex: svgTextToDataUrl(codexLogo),
   copilot: svgTextToDataUrl(copilotLogo),
+  devin: svgTextToDataUrl(devinLogo),
   'factory-droid': svgTextToDataUrl(factoryDroidLogo),
   gemini: svgTextToDataUrl(geminiLogo),
   'grok-build': svgTextToDataUrl(grokBuildLogo),
   'hermes-agent': svgTextToDataUrl(hermesAgentLogo),
+  kimi: svgTextToDataUrl(kimiLogo),
   kiro: svgTextToDataUrl(kiroLogo),
   omp: svgTextToDataUrl(ompLogo),
+  openclaude: svgTextToDataUrl(openclaudeLogo),
   opencode: svgTextToDataUrl(opencodeLogo),
   pi: svgTextToDataUrl(piLogo),
   qoder: svgTextToDataUrl(qoderLogo),
@@ -103,17 +113,22 @@ export const AGENT_LOGO_COLORS: Record<SidebarAgentIcon, string> = {
   'amp-cli': '#ffffff',
   'antigravity-cli': '#749bff',
   browser: '#82b7ff',
+  campfire: '#ff8a3d',
   claude: '#d97757',
   codebuddy: '#72d6ff',
+  'command-code': '#22d3ee',
   'cursor-cli': '#edecec',
   codex: '#ffffff',
   copilot: '#ffffff',
+  devin: '#3ea6ff',
   'factory-droid': '#ff7a1a',
   gemini: '#8b9aff',
   'grok-build': '#ffffff',
   'hermes-agent': '#f3c46b',
+  kimi: '#7b6cf6',
   kiro: '#a6e3ff',
   omp: '#a663ed',
+  openclaude: '#f0a68a',
   opencode: '#6d96c0',
   pi: '#c8ff62',
   qoder: '#a991ff',
@@ -131,17 +146,22 @@ export const COLORED_AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
   'amp-cli': svgTextToColorizedDataUrl(ampCliLogo, AGENT_LOGO_COLORS['amp-cli']),
   'antigravity-cli': svgTextToColorizedDataUrl(antigravityCliLogo, AGENT_LOGO_COLORS['antigravity-cli']),
   browser: svgTextToColorizedDataUrl(browserLogo, AGENT_LOGO_COLORS.browser),
+  campfire: svgTextToColorizedDataUrl(campfireLogo, AGENT_LOGO_COLORS.campfire),
   claude: svgTextToColorizedDataUrl(claudeLogo, AGENT_LOGO_COLORS.claude),
   codebuddy: svgTextToColorizedDataUrl(codebuddyLogo, AGENT_LOGO_COLORS.codebuddy),
+  'command-code': svgTextToColorizedDataUrl(commandCodeLogo, AGENT_LOGO_COLORS['command-code']),
   'cursor-cli': svgTextToColorizedDataUrl(cursorCliLogo, AGENT_LOGO_COLORS['cursor-cli']),
   codex: svgTextToColorizedDataUrl(codexLogo, AGENT_LOGO_COLORS.codex),
   copilot: svgTextToColorizedDataUrl(copilotLogo, AGENT_LOGO_COLORS.copilot),
+  devin: svgTextToColorizedDataUrl(devinLogo, AGENT_LOGO_COLORS.devin),
   'factory-droid': svgTextToColorizedDataUrl(factoryDroidLogo, AGENT_LOGO_COLORS['factory-droid']),
   gemini: svgTextToColorizedDataUrl(geminiLogo, AGENT_LOGO_COLORS.gemini),
   'grok-build': svgTextToColorizedDataUrl(grokBuildLogo, AGENT_LOGO_COLORS['grok-build']),
   'hermes-agent': svgTextToColorizedDataUrl(hermesAgentLogo, AGENT_LOGO_COLORS['hermes-agent']),
+  kimi: svgTextToColorizedDataUrl(kimiLogo, AGENT_LOGO_COLORS.kimi),
   kiro: svgTextToColorizedDataUrl(kiroLogo, AGENT_LOGO_COLORS.kiro),
   omp: svgTextToColorizedDataUrl(ompLogo, AGENT_LOGO_COLORS.omp),
+  openclaude: svgTextToColorizedDataUrl(openclaudeLogo, AGENT_LOGO_COLORS.openclaude),
   opencode: svgTextToColorizedDataUrl(opencodeLogo, AGENT_LOGO_COLORS.opencode),
   pi: svgTextToColorizedDataUrl(piLogo, AGENT_LOGO_COLORS.pi),
   qoder: svgTextToColorizedDataUrl(qoderLogo, AGENT_LOGO_COLORS.qoder),

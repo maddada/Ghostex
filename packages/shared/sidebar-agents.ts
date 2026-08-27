@@ -173,6 +173,50 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     icon: 'omp',
     name: 'OMP',
   },
+  /*
+   * CDXC:AgentHooks 2026-08-27:
+   * Kimi Code, Campfire, OpenClaude, Command Code, and Devin already have hook
+   * definitions in gxserver's agent-hooks catalog, so the shared registry has
+   * to know them too or Settings and first launch would ask for hook status on
+   * providers the launcher cannot name, configure, or start. They are
+   * lower-priority launchers, so they stay hidden from the primary launcher
+   * until the user enables them, exactly like Kiro CLI and OMP above.
+   */
+  {
+    agentId: 'kimi',
+    command: 'kimi',
+    hiddenByDefault: true,
+    icon: 'kimi',
+    name: 'Kimi Code',
+  },
+  {
+    agentId: 'campfire',
+    command: 'campfire',
+    hiddenByDefault: true,
+    icon: 'campfire',
+    name: 'Campfire',
+  },
+  {
+    agentId: 'openclaude',
+    command: 'openclaude',
+    hiddenByDefault: true,
+    icon: 'openclaude',
+    name: 'OpenClaude',
+  },
+  {
+    agentId: 'command-code',
+    command: 'commandcode',
+    hiddenByDefault: true,
+    icon: 'command-code',
+    name: 'Command Code',
+  },
+  {
+    agentId: 'devin',
+    command: 'devin',
+    hiddenByDefault: true,
+    icon: 'devin',
+    name: 'Devin',
+  },
 ] as const;
 
 export const DEFAULT_SIDEBAR_AGENTS = DEFAULT_SIDEBAR_AGENT_DEFINITIONS;

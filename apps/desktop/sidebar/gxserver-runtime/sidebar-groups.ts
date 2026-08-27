@@ -578,6 +578,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       sessions.push({
         activity: session.activity,
         ...(session.agentIcon ? { agentIcon: session.agentIcon } : {}),
+        ...(session.agentName?.trim() ? { agentName: session.agentName.trim() } : {}),
         ...(session.agentSessionId?.trim() ? { agentSessionId: session.agentSessionId.trim() } : {}),
         ...(session.sessionNote?.trim() ? { hasSessionNote: true } : {}),
         ...(typeof session.stashedPromptCount === 'number' && session.stashedPromptCount > 0

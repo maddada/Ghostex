@@ -128,22 +128,14 @@ pub(crate) fn ingest_agent_hook_event(
     /*
     CDXC:SessionChatPromptQueue 2026-08-24:
     The notify hook tags Claude's 60s "waiting for your input" reminder with
-    notificationKind=idleInput. From a stored "working" state that reminder is
-    proof the CLI is idle at its prompt — no Stop ever fires after a local
-    command — and escalating it to attention would blockade the prompt-queue
-    scheduler forever. From idle it stays the attention ping behind the
-    sidebar badge. Older notify binaries omit the tag and keep today's
-    behavior.
+    notificationKind=idleInput. That reminder is proof the CLI is idle at its
+    prompt, not a completion or request for user action, so it must never enter
+    attention. Genuine permission notifications are not tagged idleInput and
+    retain their attention transition. Older notify binaries omit the tag and
+    keep their existing behavior.
     */
     if hook_activity.as_deref() == Some("attention")
         && params.get("notificationKind").and_then(Value::as_str) == Some("idleInput")
-        && normalize_agent_activity_value(
-            object_field(&current, "runtimeSettings").get("agentActivity"),
-            "idle",
-        )
-        .get("activity")
-        .and_then(Value::as_str)
-            == Some("working")
     {
         hook_activity = Some("idle".to_string());
     }
@@ -572,6 +564,10 @@ pub(crate) fn decide_first_prompt_auto_title_claim(
     if is_first_prompt_claim_slash_command(prompt, &normalized) {
         return first_prompt_claim_decision(Some(normalized), "slashCommand", false, strategy);
     }
+    if strategy == Some("agentAutoTitle") {
+        // Codex 0.150 owns first-turn naming; metadata reconciliation adopts it.
+        return first_prompt_claim_decision(Some(normalized), "agentAutoTitle", false, strategy);
+    }
     if !fork_first_prompt_rearmed
         && !is_first_prompt_claim_generic_title(
             agent_name.as_deref(),
@@ -613,8 +609,9 @@ pub(crate) fn first_prompt_claim_agent_name(
 pub(crate) fn first_prompt_claim_strategy(agent_name: Option<&str>) -> Option<&'static str> {
     match normalize_first_prompt_claim_agent_name(agent_name).as_deref() {
         Some("claude") => Some("sendBareRenameCommand"),
-        Some("codex") => Some("generateTitleAndRename"),
+        Some("codex") => Some("agentAutoTitle"),
         Some("pi") => Some("generateTitleAndName"),
+        Some("omp") => Some("generateTitleAndName"),
         _ => None,
     }
 }
@@ -664,8 +661,15 @@ pub(crate) fn is_first_prompt_claim_generic_title(
         "\u{03c0}",
         "pi session",
     ];
-    generic.contains(&normalized_title.as_str())
-        || normalized_agent.as_deref() == Some(normalized_title.as_str())
+    if generic.contains(&normalized_title.as_str()) {
+        return true;
+    }
+    let Some(agent) = normalized_agent else {
+        return false;
+    };
+    normalized_title == agent
+        || normalized_title == format!("{agent} session")
+        || normalized_title == format!("{agent} agent session")
 }
 
 pub(crate) fn normalize_first_prompt_title_claim_prompt(prompt: Option<&str>) -> Option<String> {
@@ -851,6 +855,27 @@ pub(crate) fn normalize_agent_hook_activity(
         .to_string();
     let lower = event.to_ascii_lowercase();
     /*
+    CDXC:AgentHooks 2026-08-27:
+    Separator-stripped event name, so this table reads the same event under
+    every provider's spelling (`post_tool_use`, `post-tool-use`,
+    `message.part`) exactly like the notify hook's mapping does.
+    */
+    let compact = lower.replace(['_', '-', '.'], "");
+    /*
+    CDXC:AgentHooks 2026-08-27:
+    Subagent and teammate lifecycle events describe a CHILD of the session, and
+    PreCompact fires before the compaction is validated (an aborted compact
+    emits it alone). Neither carries an activity signal for the lead pane, so
+    they must not fall through to the sidecar status either — a stale posted
+    status would move the session on a roster-only event.
+    */
+    if matches!(
+        compact.as_str(),
+        "subagentstart" | "subagentstop" | "teammateidle" | "precompact"
+    ) {
+        return None;
+    }
+    /*
     CDXC:AgentHookStatus 2026-06-22-08:31:
     Server-side hook ingestion must use provider event semantics before trusting
     sidecar status. Codex Stop is an authoritative completed-turn boundary, so
@@ -866,7 +891,9 @@ pub(crate) fn normalize_agent_hook_activity(
             return Some("idle".to_string());
         }
     }
-    if normalized_agent.as_deref() == Some("claude") {
+    // OpenClaude ships Claude's hook contract verbatim, so it shares every
+    // Claude rule here exactly as it does in the notify hook's mapping.
+    if matches!(normalized_agent.as_deref(), Some("claude" | "openclaude")) {
         if matches!(lower.as_str(), "stop" | "idle") {
             return Some("idle".to_string());
         }
@@ -957,6 +984,38 @@ pub(crate) fn normalize_agent_hook_activity(
             | "beforesubmitprompt"
     ) {
         return Some("working".to_string());
+    }
+    /*
+    CDXC:AgentHooks 2026-08-27:
+    The event names the hook installer registers today, mirrored from the notify
+    hook's table so both layers move a session the same way. They sit ahead of
+    the posted-status fallback because gxserver's own event semantics outrank a
+    sidecar status.
+
+    Two of that table's rules are deliberately NOT mirrored here: Copilot's
+    ErrorOccurred (idle unless the payload says `recoverable`) and Claude's
+    PostCompact (idle only when `trigger` is manual) both need the hook payload,
+    which this function never receives. Leaving them unmapped lets the posted
+    status — already derived from the full payload by the notify hook — decide.
+    */
+    if matches!(
+        compact.as_str(),
+        "aftertool"
+            | "beforemcpexecution"
+            | "beforetool"
+            | "messagepart"
+            | "postcompaction"
+            | "postinvocation"
+            | "posttoolusefailure"
+            | "sessionbusy"
+    ) {
+        return Some("working".to_string());
+    }
+    if compact == "askuserquestion" {
+        return Some("attention".to_string());
+    }
+    if matches!(compact.as_str(), "sessionidle" | "stopfailure") {
+        return Some("idle".to_string());
     }
     if let Some(status) = status
         .and_then(Value::as_str)

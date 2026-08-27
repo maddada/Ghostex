@@ -149,6 +149,7 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
         &[
             "activity",
             "agentIcon",
+            "agentName",
             "agentSessionId",
             "isGeneratingFirstPromptTitle",
             "isSleeping",
@@ -183,6 +184,19 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
     let is_sleeping = json_bool_field(object, "isSleeping").unwrap_or(false);
     let is_generating_first_prompt_title =
         json_bool_field(object, "isGeneratingFirstPromptTitle").unwrap_or(false);
+    let agent_name = match object.get("agentName") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(value) => {
+            let value = value
+                .as_str()
+                .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?
+                .trim();
+            if value.is_empty() || value.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS {
+                return Err(GpuiGxserverPresentationFocusStateContractError::MalformedField);
+            }
+            Some(value.to_string())
+        }
+    };
     let agent_session_id = match object.get("agentSessionId") {
         None | Some(serde_json::Value::Null) => None,
         Some(value) => {
@@ -239,6 +253,7 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
     Ok(GpuiSidebarWorkspaceTabSession {
         activity,
         agent_icon: gpui_sidebar_agent_icon(json_string_field(object, "agentIcon")),
+        agent_name,
         agent_session_id,
         key,
         kind,

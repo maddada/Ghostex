@@ -838,6 +838,13 @@ pub(crate) fn normalize_agent_id(value: Option<&str>) -> Option<String> {
         "codebuddy" | "code buddy" => "codebuddy",
         "qoder" | "qodercli" => "qoder",
         "rovo" | "rovo dev" | "rovodev" => "rovodev",
+        // Keep these folds identical to the agent-hooks resolver's alias set so
+        // a hook payload and a sidebar launch resolve to the same agent id.
+        "kimi" | "kimi code" | "kimi-code" | "kimicode" => "kimi",
+        "campfire" => "campfire",
+        "openclaude" | "open claude" | "open-claude" | "openclaude cli" => "openclaude",
+        "command-code" | "command code" | "commandcode" => "command-code",
+        "devin" => "devin",
         other => other,
     };
     let cleaned = mapped
@@ -962,6 +969,11 @@ pub(crate) fn infer_agent_id_from_command(command: &str) -> Option<String> {
         ("opencode", "opencode"),
         ("rovodev", "rovodev"),
         ("qoder", "qodercli"),
+        ("command-code", "commandcode"),
+        ("openclaude", "openclaude"),
+        ("campfire", "campfire"),
+        ("devin", "devin"),
+        ("kimi", "kimi"),
         ("claude", "claude"),
         ("copilot", "copilot"),
         ("gemini", "gemini"),

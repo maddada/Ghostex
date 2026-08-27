@@ -2,11 +2,12 @@ use super::*;
 
 /*
 CDXC:GxserverAgentTitles 2026-08-11:
-Codex `/rename` writes the canonical thread name to session_index.jsonl but
-does not update its OSC terminal title or emit a provider hook. Track the index
-revision for each live, identified Codex session on gxserver's clock and only
-reconcile when that file changes. The sidebar then receives the ordinary
-authoritative presentation delta without client-local title state.
+Codex writes canonical thread names to session_index.jsonl, both for `/rename`
+and for its automatic first-turn title generation, but does not update its OSC
+terminal title or emit a provider hook. Track the index revision for each live,
+identified Codex session on gxserver's clock and only reconcile when that file
+changes. The sidebar then receives the ordinary authoritative presentation
+delta without client-local title state.
 */
 pub(crate) fn spawn_agent_metadata_title_sync_task(
     state: &Arc<AppState>,

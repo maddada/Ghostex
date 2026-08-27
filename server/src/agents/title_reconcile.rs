@@ -123,6 +123,17 @@ pub(crate) fn reconcile_agent_metadata_title(
     if let Some(status) = pending_status {
         next_runtime_settings.insert("pendingAgentTitleRequestStatus".to_string(), json!(status));
     }
+    let codex_fork_auto_title_pending = identity.agent_id.as_deref() == Some("codex")
+        && runtime_settings
+            .get("forkFirstPromptAutoTitlePending")
+            .and_then(Value::as_bool)
+            == Some(true);
+    if codex_fork_auto_title_pending {
+        next_runtime_settings.remove("forkFirstPromptAutoTitlePending");
+        next_runtime_settings.remove("gxserverForkInitialRenameStatus");
+        next_runtime_settings.remove("gxserverForkInitialRenameUpdatedAt");
+        next_runtime_settings.insert("autoTitleFromFirstPrompt".to_string(), Value::Bool(true));
+    }
     let needs_update = session.get("title").and_then(Value::as_str)
         != Some(metadata_title.title.as_str())
         || runtime_settings.get("titleSource") != next_runtime_settings.get("titleSource")
@@ -134,7 +145,15 @@ pub(crate) fn reconcile_agent_metadata_title(
         || runtime_settings.get("titleMetadataUpdatedAt")
             != next_runtime_settings.get("titleMetadataUpdatedAt")
         || runtime_settings.get("pendingAgentTitleRequestStatus")
-            != next_runtime_settings.get("pendingAgentTitleRequestStatus");
+            != next_runtime_settings.get("pendingAgentTitleRequestStatus")
+        || runtime_settings.get("forkFirstPromptAutoTitlePending")
+            != next_runtime_settings.get("forkFirstPromptAutoTitlePending")
+        || runtime_settings.get("gxserverForkInitialRenameStatus")
+            != next_runtime_settings.get("gxserverForkInitialRenameStatus")
+        || runtime_settings.get("gxserverForkInitialRenameUpdatedAt")
+            != next_runtime_settings.get("gxserverForkInitialRenameUpdatedAt")
+        || runtime_settings.get("autoTitleFromFirstPrompt")
+            != next_runtime_settings.get("autoTitleFromFirstPrompt");
 
     if !needs_update {
         return Ok(AgentTitleReconcileResult {

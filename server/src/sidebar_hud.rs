@@ -232,6 +232,41 @@ const DEFAULT_SIDEBAR_AGENTS: &[DefaultSidebarAgent] = &[
         icon: "omp",
         name: "OMP",
     },
+    DefaultSidebarAgent {
+        agent_id: "kimi",
+        command: "kimi",
+        hidden_by_default: true,
+        icon: "kimi",
+        name: "Kimi Code",
+    },
+    DefaultSidebarAgent {
+        agent_id: "campfire",
+        command: "campfire",
+        hidden_by_default: true,
+        icon: "campfire",
+        name: "Campfire",
+    },
+    DefaultSidebarAgent {
+        agent_id: "openclaude",
+        command: "openclaude",
+        hidden_by_default: true,
+        icon: "openclaude",
+        name: "OpenClaude",
+    },
+    DefaultSidebarAgent {
+        agent_id: "command-code",
+        command: "commandcode",
+        hidden_by_default: true,
+        icon: "command-code",
+        name: "Command Code",
+    },
+    DefaultSidebarAgent {
+        agent_id: "devin",
+        command: "devin",
+        hidden_by_default: true,
+        icon: "devin",
+        name: "Devin",
+    },
 ];
 
 const DEFAULT_SIDEBAR_COMMANDS: &[DefaultSidebarCommand] = &[
