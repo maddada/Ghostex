@@ -7,8 +7,8 @@
 // the affordance for it, and an image with no detail beyond its fitted size
 // never offers the toggle. Right-clicking it offers Copy image (PNG, to the
 // system clipboard), Copy path (the machine path or URL behind the picture),
-// and Save image (the host's native save panel where there is one, a browser
-// download otherwise). The full-size viewer also keeps those three actions in
+// and Save image (Downloads, using the session title as the file name). The
+// full-size viewer also keeps those three actions in
 // a top-right toolbar beside its close button; thumbnails remain image-only.
 // Machine paths load through the transport's readSessionChatImage RPC — the
 // paths inside "[Image #N](path)" references live on the session's machine, so
@@ -235,7 +235,7 @@ function zoomWidthsForImage(fitWidth: number, naturalWidth: number): number[] {
   return widths;
 }
 
-/** File name to suggest when the picture is saved out of the overlay. */
+/** Original file name behind a picture, used only to keep its format. */
 export function sessionChatImageFileName(target: SessionChatImageTarget): string {
   const source = target.path ?? target.url ?? '';
   if (/^data:/i.test(source)) {
@@ -250,6 +250,36 @@ export function sessionChatImageFileName(target: SessionChatImageTarget): string
     // Malformed escapes: keep the raw segment.
   }
   return base === '' ? 'image.png' : base;
+}
+
+/** Extension of the original picture so a saved copy stays jpg/png/webp. */
+export function sessionChatImageDownloadExtension(target: SessionChatImageTarget): string {
+  const source = target.path ?? target.url ?? '';
+  if (/^data:/i.test(source)) {
+    const subtype = /^data:image\/([a-z0-9.+-]+)/i.exec(source)?.[1]?.toLowerCase();
+    if (subtype === undefined || subtype === 'svg+xml') {
+      return 'png';
+    }
+    return subtype === 'jpeg' ? 'jpg' : subtype;
+  }
+  const match = /\.([A-Za-z0-9]+)$/.exec(sessionChatImageFileName(target));
+  return match?.[1] ?? 'png';
+}
+
+/** Session title as a Downloads file stem: spaces become hyphens. */
+export function sessionChatImageDownloadStem(sessionTitle: string | undefined): string {
+  const stem = (sessionTitle ?? '')
+    .trim()
+    .replace(/[\\/<>:"|?*\u0000-\u001f]/gu, '')
+    .replace(/\s+/gu, '-')
+    .replace(/-+/gu, '-')
+    .replace(/^[-.]+|[-.]+$/gu, '');
+  return (stem === '' ? 'session' : stem).slice(0, 110);
+}
+
+/** Downloads name: `<session>-1.jpg` (or png/webp), spaces in the title as `-`. */
+export function sessionChatImageDownloadName(sessionTitle: string | undefined, target: SessionChatImageTarget): string {
+  return `${sessionChatImageDownloadStem(sessionTitle)}-1.${sessionChatImageDownloadExtension(target)}`;
 }
 
 /** Re-encodes the decoded picture as PNG — the only format clipboards take. */
@@ -336,16 +366,18 @@ export function SessionChatImageViewerProvider({
   children,
   loadImage,
   saveImageAs,
+  sessionTitle,
 }: {
   children: ReactNode;
   /** Resolves a machine path to a data URL; omit when the host cannot. */
   loadImage?: (path: string) => Promise<string>;
   /**
-   * Writes the picture wherever the user chooses, through the host's own save
-   * panel (gpui). Hosts without one omit it and the overlay saves with a
-   * browser download instead.
+   * Writes the picture to Downloads through the native host (gpui). Hosts
+   * without a writer omit it and the overlay saves with a browser download.
    */
   saveImageAs?: (params: { base64Data: string; suggestedName: string }) => Promise<void>;
+  /** Current session title; the saved Downloads file is named from this. */
+  sessionTitle?: string;
 }) {
   const [state, setState] = useState<ViewerState>({ status: 'closed' });
   // Distinguishes stale loads from the current one after rapid re-opens.
@@ -361,6 +393,8 @@ export function SessionChatImageViewerProvider({
   const sourcesRef = useRef(new Map<string, Promise<string>>());
   const saveImageAsRef = useRef(saveImageAs);
   saveImageAsRef.current = saveImageAs;
+  const sessionTitleRef = useRef(sessionTitle);
+  sessionTitleRef.current = sessionTitle;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   // Where in the picture the zoom click landed, as 0..1 fractions, so the
@@ -413,7 +447,7 @@ export function SessionChatImageViewerProvider({
         if (source === undefined) {
           return;
         }
-        const name = sessionChatImageFileName(target);
+        const name = sessionChatImageDownloadName(sessionTitleRef.current, target);
         const copyPath = sessionChatImageCopyPath(target);
         openSequenceRef.current += 1;
         const sequence = openSequenceRef.current;
@@ -602,7 +636,10 @@ export function SessionChatImageViewerProvider({
     const { name, src } = state;
     setMenuAt(null);
     void saveSessionChatImage(name, src, saveImageAsRef.current)
-      .then(() => setCompletedAction('save-image'))
+      .then(() => {
+        setCompletedAction('save-image');
+        setMenuError('Saved to Downloads');
+      })
       .catch((error: unknown) => {
         console.error('[session-chat] Saving the image failed.', error);
         setMenuError('The image could not be saved.');

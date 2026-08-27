@@ -685,7 +685,7 @@ export function SessionChatView({
     return hostComposerBridge.register({
       focus: () => composerRef.current?.focus(),
       handoffToTerminal: handoffComposerDraft,
-      insertPrompt: (content) => composerRef.current?.insertTypedText(content) ?? false,
+      insertPrompt: (content) => composerRef.current?.insertSavedPrompt(content) ?? false,
       requestStash: stashComposerDraft,
     });
   }, [handoffComposerDraft, hostComposerBridge, initialTranscriptLoading, stashComposerDraft]);
@@ -890,7 +890,8 @@ export function SessionChatView({
     [chatAnswerPrompt, noticeKey]
   );
   const terminalChoicePending = (chat.terminalNotice?.choices?.length ?? 0) > 0 && noticeKey !== retiredNoticeKey;
-  const composerEnabled = canSend && !terminalChoicePending;
+  const [sessionOptionSwitching, setSessionOptionSwitching] = useState(false);
+  const composerEnabled = canSend && !terminalChoicePending && !sessionOptionSwitching;
 
   // A command the user types themselves reconciles the pills (§1.4), so the
   // Model pill follows a hand-typed "/model opus" without a second dispatch.
@@ -1084,6 +1085,7 @@ export function SessionChatView({
         <SessionChatImageViewerProvider
           {...(loadImageDataUrl ? { loadImage: loadImageDataUrl } : {})}
           {...(saveImageAs ? { saveImageAs } : {})}
+          {...(sessionTitle ? { sessionTitle } : {})}
         >
           <SessionChatHostLinksProvider {...(hostLinks ? { links: hostLinks } : {})}>
             <div className='relative flex min-h-0 flex-1 flex-col'>
@@ -1272,6 +1274,7 @@ export function SessionChatView({
                           onDispatchKey={async (key, marker) => {
                             await chat.sendKey?.(key, marker);
                           }}
+                          onSwitchingChange={setSessionOptionSwitching}
                           {...(onSwitchToTerminalForAgentPicker || hostActions?.onSwitchToTerminal
                             ? {
                                 onSwitchToTerminal:
@@ -1287,7 +1290,9 @@ export function SessionChatView({
                           ? 'Input is held by another device.'
                           : terminalChoicePending
                             ? 'Answer the question above to continue.'
-                            : undefined
+                            : sessionOptionSwitching
+                              ? 'Switching Claude mode…'
+                              : undefined
                       }
                       ref={composerRef}
                       slashCommands={slashCommands}

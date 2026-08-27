@@ -83,10 +83,9 @@ export interface SessionChatTransport {
    */
   pickAttachmentPaths?(): Promise<string[]>;
   /**
-   * Writes an image from the conversation wherever the user chooses, through
-   * the host's own save panel (gpui — a CEF page has no download handler to
-   * write through). Hosts without one omit it and the image viewer's "Save
-   * image" uses a browser download instead.
+   * Writes an image from the conversation into Downloads (gpui — a CEF page
+   * has no download handler to write through). Hosts without one omit it and
+   * the image viewer's "Save image" uses a browser download instead.
    */
   saveImageAs?(params: { base64Data: string; suggestedName: string }): Promise<void>;
   /** Lists existing project Markdown paths used to choose a non-colliding save name. */

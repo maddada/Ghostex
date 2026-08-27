@@ -5,8 +5,9 @@
 // paths, and image references side by side. This module classifies a markdown
 // href and hands the click to whatever the host can actually do with it —
 // gpui opens web URLs in its own Browser view and files in Code/Docs, while the
-// web app and the phone just follow web URLs and leave machine paths inert
-// (navigating a browser to /Users/... would only break the page).
+// web app and the phone just follow web URLs and copy machine paths when a
+// reader clicks them (navigating a browser to /Users/... would only break the
+// page).
 
 import { createContext, useContext, type ReactNode } from 'react';
 import type { SessionChatFilePosition } from './session-chat-file-paths';
@@ -20,8 +21,8 @@ export interface SessionChatHostLinks {
   openUrl?: (url: string, options: { external: boolean }) => void;
   /**
    * Opens a file that lives on the session's machine, in whichever editor
-   * surface the host has. Hosts without one omit it and file links render as
-   * inert text instead of anchors that would navigate the page away.
+   * surface the host has. Hosts without one omit it and file pills copy their
+   * paths instead of trying to navigate the page away.
    *
    * The path arrives exactly as the agent wrote it, which means a relative one
    * arrives relative: the chat surface never learns the session's working
@@ -42,7 +43,7 @@ const URI_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 /** Windows drive path ("C:\repo\app.ts"), which also matches a one-letter scheme. */
 const WINDOWS_DRIVE_PATH_PATTERN = /^[a-z]:[\\/]/i;
 /** Trailing "path.ts:42" / "path.ts:42:7" editor coordinates agents like to write. */
-const LINE_COORDINATE_SUFFIX = /:\d+(?::\d+)?$/;
+const LINE_COORDINATE_SUFFIX = /:(\d+)(?::(\d+))?$/;
 
 /**
  * Classifies a markdown href into what the chat can do with it. Image hrefs
@@ -72,13 +73,30 @@ export function classifySessionChatLinkHref(href: string): SessionChatLinkTarget
  * coordinates an agent quoted them with; the host needs the literal path.
  */
 function filePathFromHref(href: string): string {
-  let path = href;
+  return decodedFileHref(href).replace(LINE_COORDINATE_SUFFIX, '');
+}
+
+function decodedFileHref(href: string): string {
   try {
-    path = decodeURI(href);
+    return decodeURI(href);
   } catch {
     // Malformed escapes: use the raw href.
+    return href;
   }
-  return path.replace(LINE_COORDINATE_SUFFIX, '');
+}
+
+/** Preserves editor coordinates from a Markdown destination after path decoding. */
+export function sessionChatFilePositionFromHref(href: string): SessionChatFilePosition | undefined {
+  const match = LINE_COORDINATE_SUFFIX.exec(decodedFileHref(href));
+  const line = Number(match?.[1]);
+  const column = Number(match?.[2]);
+  if (!Number.isSafeInteger(line) || line < 1) {
+    return undefined;
+  }
+  return {
+    line,
+    ...(Number.isSafeInteger(column) && column >= 1 ? { column } : {}),
+  };
 }
 
 const SessionChatHostLinksContext = createContext<SessionChatHostLinks | null>(null);

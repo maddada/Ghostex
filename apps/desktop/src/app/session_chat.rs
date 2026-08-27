@@ -43,6 +43,47 @@ pub(crate) struct GpuiSessionChatDraftHandoff {
     pub(crate) stashed_prompt_id: Option<String>,
 }
 
+/// Next free path in Downloads for `<session>-1.png` without overwriting.
+fn session_chat_image_downloads_path(directory: &Path, file_name: &str) -> PathBuf {
+    let candidate = directory.join(file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let path = Path::new(file_name);
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("session");
+    let extension = path.extension().and_then(|ext| ext.to_str());
+    let (base, mut next) = match stem.rsplit_once('-') {
+        Some((base, suffix))
+            if !base.is_empty()
+                && !suffix.is_empty()
+                && suffix.chars().all(|ch| ch.is_ascii_digit()) =>
+        {
+            (
+                base.to_string(),
+                suffix.parse::<u32>().unwrap_or(1).saturating_add(1),
+            )
+        }
+        _ => (stem.to_string(), 2),
+    };
+    loop {
+        let numbered = match extension {
+            Some(ext) => format!("{base}-{next}.{ext}"),
+            None => format!("{base}-{next}"),
+        };
+        let path = directory.join(&numbered);
+        if !path.exists() {
+            return path;
+        }
+        if next == u32::MAX {
+            return directory.join(format!("{base}-{next}-{}", next));
+        }
+        next += 1;
+    }
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn sidebar_bridge_event_handler(
         &self,
@@ -334,10 +375,9 @@ impl GhostexGpuiApp {
         /*
         CDXC:GPUISessionChatImageSave 2026-08-19:
         "Save image" in the chat's image overlay. A CEF page has no download
-        handler here, so the bytes ride the bridge and Rust runs the native
-        save panel and writes the file itself. The reply carries an error
-        string only when the write actually failed: a cancelled panel is a
-        completed request, not an error.
+        handler here, so the bytes ride the bridge and Rust writes them into
+        Downloads. The reply carries an error string only when the write
+        actually failed.
         */
         if action == "saveImage" {
             let request_id = message
@@ -388,7 +428,19 @@ impl GhostexGpuiApp {
             let Some(path) = message.get("path").and_then(serde_json::Value::as_str) else {
                 return;
             };
-            self.open_session_chat_file(path, window, cx);
+            let line = message
+                .get("line")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .filter(|value| *value > 0);
+            let column = line.and_then(|_| {
+                message
+                    .get("column")
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+                    .filter(|value| *value > 0)
+            });
+            self.open_session_chat_file(path, line, column, window, cx);
             return;
         }
         // The chat surface is only interactive as a rendered pane's active
@@ -568,48 +620,50 @@ impl GhostexGpuiApp {
                 return;
             }
         };
-        // A file name, never a path: the page supplies it, and the panel's
-        // directory is ours to choose.
+        // A file name, never a path: the page supplies `<session>-1.png`.
         let file_name = Path::new(&suggested_name)
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
             .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| "image.png".to_string());
-        // Downloads is where a saved picture belongs by default; the panel lets
-        // the user go anywhere else from there.
-        let home = home_dir();
-        let downloads = home.join("Downloads");
-        let directory = if downloads.is_dir() { downloads } else { home };
-        let receiver = cx.prompt_for_new_path(&directory, Some(file_name.as_str()));
+            .unwrap_or_else(|| "session-1.png".to_string());
+        let downloads = home_dir().join("Downloads");
         cx.spawn(async move |this, cx| {
-            let destination = match receiver.await {
-                Ok(Ok(Some(path))) => path,
-                // Cancelled, or the panel could not open: nothing was written
-                // and the panel already told the user. Settle the page promise.
-                _ => {
-                    let _ = this.update(cx, |this, cx| {
-                        this.deliver_session_chat_image_save(session_id, &request_id, None, cx);
-                    });
-                    return;
+            let write_result = (|| -> Result<PathBuf, String> {
+                fs::create_dir_all(&downloads).map_err(|error| error.to_string())?;
+                let destination = session_chat_image_downloads_path(&downloads, &file_name);
+                fs::write(&destination, &bytes).map_err(|error| error.to_string())?;
+                Ok(destination)
+            })();
+            let _ = this.update(cx, |this, cx| match write_result {
+                Ok(destination) => {
+                    let saved_name = destination
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| file_name.clone());
+                    this.dispatch_gpui_workspace_action_toast(
+                        "success",
+                        "Saved to Downloads",
+                        &saved_name,
+                        cx,
+                    );
+                    this.deliver_session_chat_image_save(session_id, &request_id, None, cx);
                 }
-            };
-            let error = match std::fs::write(&destination, &bytes) {
-                Ok(()) => None,
                 Err(error) => {
                     support_logs::append(
                         support_logs::GpuiSupportLog::AppModal,
                         "gpui.sessionChat.imageSaveFailed",
                         serde_json::json!({
-                            "error": error.to_string(),
-                            "path": destination.display().to_string(),
+                            "error": error,
                             "stage": "write",
                         }),
                     );
-                    Some("The image could not be written.")
+                    this.deliver_session_chat_image_save(
+                        session_id,
+                        &request_id,
+                        Some("The image could not be written."),
+                        cx,
+                    );
                 }
-            };
-            let _ = this.update(cx, |this, cx| {
-                this.deliver_session_chat_image_save(session_id, &request_id, error, cx);
             });
         })
         .detach();
@@ -919,17 +973,17 @@ impl GhostexGpuiApp {
 
     /*
     CDXC:GPUISessionChatLinks 2026-08-03:
-    A file link opens in the workarea that can actually show it. Docs is a
-    docs-scoped browser (the docs/ folder, configured extra Docs folders, and
-    root Markdown/HTML/Excalidraw artifacts), so a Markdown/HTML/Excalidraw
-    file inside that scope goes to Docs and everything else — including a .md
-    that lives outside it — goes to Code, which roots on the whole project.
-    Paths are resolved against the active project so a relative path an agent
-    quoted works the same as an absolute one.
+    Markdown and HTML file links follow their independent Docs/Code settings,
+    falling back to the other available workarea. Excalidraw prefers Docs and
+    every other file prefers Code. Absolute paths and home-relative paths stay
+    machine paths, while ordinary relative paths resolve against the active
+    project.
     */
     pub(crate) fn open_session_chat_file(
         &mut self,
         path: &str,
+        line: Option<u32>,
+        column: Option<u32>,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -937,18 +991,29 @@ impl GhostexGpuiApp {
         if trimmed.is_empty() || trimmed.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS {
             return;
         }
-        let Some(project_root) = self
-            .latest_sidebar_project_snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.in_memory_project_path.clone())
-        else {
+        let Some(snapshot) = self.latest_sidebar_project_snapshot.as_ref() else {
             self.report_session_chat_file_open_failure("No project is active in this window.", cx);
             return;
         };
+        let Some(project_root) = snapshot.in_memory_project_path.clone() else {
+            self.report_session_chat_file_open_failure("No project is active in this window.", cx);
+            return;
+        };
+        let active_project_id = snapshot
+            .active_project_id
+            .as_ref()
+            .map(|project_id| project_id.0.clone());
         // One stat of a path the reader just clicked; no directory walk, so it
         // stays on the caller's thread like the other click handlers here.
         let candidate = if Path::new(trimmed).is_absolute() {
             PathBuf::from(trimmed)
+        } else if trimmed == "~" {
+            home_dir()
+        } else if let Some(relative) = trimmed
+            .strip_prefix("~/")
+            .or_else(|| trimmed.strip_prefix("~\\"))
+        {
+            home_dir().join(relative)
         } else {
             project_root.join(trimmed)
         };
@@ -963,21 +1028,121 @@ impl GhostexGpuiApp {
             self.report_session_chat_file_open_failure("That path is not a file.", cx);
             return;
         }
-        let docs_relative_path = file_path
+        let project_relative_path = file_path
             .strip_prefix(&root)
             .ok()
-            .map(|relative| relative.to_string_lossy().replace('\\', "/"))
-            .filter(|relative| {
-                let docs_folders = gpui_manage_additional_docs_folders_text(
-                    &self.sidebar_runtime_settings_snapshot,
-                );
-                session_chat_file_opens_in_docs(relative, &docs_folders)
-            });
-        if let Some(relative_path) = docs_relative_path {
-            if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Manage) {
-                self.copy_path_for_disabled_project_workarea(trimmed, "Docs", cx);
-                return;
+            .map(|relative| relative.to_string_lossy().replace('\\', "/"));
+        let resolved_path = file_path.to_string_lossy().into_owned();
+        let extension = file_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase);
+        let settings = shared_settings::shared_sidebar_settings_snapshot();
+        let document_preferred_view = match extension.as_deref() {
+            Some("md" | "markdown" | "mdown" | "mkdn") => Some(settings.markdown_file_open_view()),
+            Some("htm" | "html") => Some(settings.html_file_open_view()),
+            Some("excalidraw") => Some(shared_settings::SharedChatFileOpenView::Docs),
+            _ => None,
+        };
+        let docs_available = !gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Manage)
+            && self.titlebar_mode_available(TitlebarMode::Manage);
+        let code_unavailable_reason =
+            if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
+                || !self.titlebar_mode_available(TitlebarMode::Source)
+            {
+                Some("Code view is not available for this project.")
+            } else {
+                self.embedded_code_editor_unavailable_reason()
+            };
+        let code_available = code_unavailable_reason.is_none();
+        let destination = match document_preferred_view {
+            Some(shared_settings::SharedChatFileOpenView::Docs) if docs_available => {
+                Some(shared_settings::SharedChatFileOpenView::Docs)
             }
+            Some(shared_settings::SharedChatFileOpenView::Docs) if code_available => {
+                Some(shared_settings::SharedChatFileOpenView::Code)
+            }
+            Some(shared_settings::SharedChatFileOpenView::Code) if code_available => {
+                Some(shared_settings::SharedChatFileOpenView::Code)
+            }
+            Some(shared_settings::SharedChatFileOpenView::Code) if docs_available => {
+                Some(shared_settings::SharedChatFileOpenView::Docs)
+            }
+            Some(_) => None,
+            None if code_available => Some(shared_settings::SharedChatFileOpenView::Code),
+            None => None,
+        };
+
+        if destination.is_none() {
+            if document_preferred_view.is_some() {
+                self.copy_path_for_unavailable_project_workarea(
+                    &resolved_path,
+                    "Docs and Code",
+                    "Docs and Code views are not available for this project.",
+                    cx,
+                );
+            } else {
+                self.copy_path_for_unavailable_project_workarea(
+                    &resolved_path,
+                    "Code",
+                    code_unavailable_reason
+                        .unwrap_or("Code view is not available for this project."),
+                    cx,
+                );
+            }
+            return;
+        }
+
+        if destination == Some(shared_settings::SharedChatFileOpenView::Docs) {
+            let docs_folders =
+                gpui_manage_additional_docs_folders_text(&self.sidebar_runtime_settings_snapshot);
+            let normal_docs_path = project_relative_path.clone().filter(|relative| {
+                manage_path_is_in_docs_scan_root(relative, &docs_folders)
+                    || manage_is_root_artifact_file_relative_path(relative)
+            });
+            let relative_path = if let Some(relative_path) = normal_docs_path {
+                if let Ok(mut authorization) = self.session_chat_docs_file_authorization.lock() {
+                    *authorization = None;
+                }
+                relative_path
+            } else {
+                let Some(project_id) = active_project_id else {
+                    self.copy_path_for_unavailable_project_workarea(
+                        &resolved_path,
+                        "Docs",
+                        "No active project can authorize this file for Docs.",
+                        cx,
+                    );
+                    return;
+                };
+                let Some(parent) = file_path.parent().map(Path::to_path_buf) else {
+                    self.report_session_chat_file_open_failure(
+                        "That document has no containing folder.",
+                        cx,
+                    );
+                    return;
+                };
+                let Some(file_name) = file_path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                else {
+                    self.report_session_chat_file_open_failure("That path is not a file.", cx);
+                    return;
+                };
+                let Ok(mut authorization) = self.session_chat_docs_file_authorization.lock() else {
+                    self.report_session_chat_file_open_failure(
+                        "Docs could not authorize that file.",
+                        cx,
+                    );
+                    return;
+                };
+                *authorization = Some(GpuiSessionChatDocsFileAuthorization {
+                    file_name: file_name.clone(),
+                    project_id,
+                    root: parent,
+                });
+                format!("{MANAGE_DOCS_CHAT_FILE_MOUNT_SEGMENT}/{file_name}")
+            };
             self.report_session_chat_file_opening("Docs view", &file_path, cx);
             self.pending_docs_file_open = Some(relative_path);
             self.switch_workarea_from_hotkey(TitlebarMode::Manage, window, cx);
@@ -988,32 +1153,14 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
-            || !self.titlebar_mode_available(TitlebarMode::Source)
-        {
-            /*
-            CDXC:GPUTitlebarAvailability 2026-08-20:
-            Source is also unavailable for remote projects, where switching
-            would be refused by set_active_mode and leave this route silently
-            dead. Fall back to the same copy-the-path affordance the hidden-tab
-            case uses instead of parking on an unreachable workarea.
-            */
-            self.copy_path_for_disabled_project_workarea(trimmed, "Code", cx);
-            return;
-        }
-        /*
-        Code view is an on-demand component, so it is not always installed.
-        Switching to Source without it only parks the reader on the component
-        installer prompt with the file still unopened, so reveal the file in the
-        OS file manager instead and let them open it with what they do have.
-        */
-        if let Some(reason) = self.embedded_code_editor_unavailable_reason() {
-            self.reveal_session_chat_file_in_file_manager(&file_path, reason, cx);
-            return;
+        if let Ok(mut authorization) = self.session_chat_docs_file_authorization.lock() {
+            *authorization = None;
         }
         self.report_session_chat_file_opening("Code view", &file_path, cx);
         self.pending_source_file_open = Some(PendingSourceFileOpen {
+            column,
             file_path,
+            line,
             project_path: root,
         });
         self.switch_workarea_from_hotkey(TitlebarMode::Source, window, cx);
@@ -1046,17 +1193,42 @@ impl GhostexGpuiApp {
         );
     }
 
+    pub(crate) fn copy_path_for_unavailable_project_workarea(
+        &mut self,
+        path: &str,
+        workarea_name: &str,
+        reason: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: format!(
+                    "gpui-unavailable-{}-file-path-copied",
+                    workarea_name.to_ascii_lowercase()
+                ),
+                level: GpuiAppToastLevel::from_raw(Some("success")),
+                title: "Copied path to clipboard".to_string(),
+                description: Some(reason.to_string()),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
     /**
     CDXC:GPUISessionChatLinks 2026-08-23:
     A path that does not resolve here is still the answer to "which file was
-    that?", and the reason is usually not that the file is gone: an agent
-    quotes partial paths, paths relative to a subdirectory it was working in,
-    and paths on a remote checkout, any of which can name a file that is
-    sitting right there on disk. So the toast claims nothing about the file. It
-    copies the path and points at Code view's file search, which is the tool
-    that turns a fragment back into the real file. When Code is not reachable
-    at all this defers to the disabled-workarea copy, so the toast never names
-    a place the reader cannot go.
+    that?": an agent quotes partial paths, paths relative to a subdirectory it
+    was working in, and paths on a remote checkout, any of which can name a
+    file that is sitting right there on disk. The toast names that (missing
+    file or incomplete path), copies the path, and points at Code view's file
+    search, which is the tool that turns a fragment back into the real file.
+    When Code is not reachable at all this defers to the disabled-workarea
+    copy, so the toast never names a place the reader cannot go.
     */
     pub(crate) fn copy_unresolved_session_chat_file_path(
         &mut self,
@@ -1075,14 +1247,14 @@ impl GhostexGpuiApp {
         let description = if self.embedded_code_editor_unavailable_reason().is_some() {
             "This path did not resolve in the active project.".to_string()
         } else {
-            "This path did not resolve here. Search for the file in Code view.".to_string()
+            "Copied the path. Try searching for it in the code view".to_string()
         };
         cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
         self.upsert_gpui_app_toast(
             GpuiAppToast {
                 id: "gpui-session-chat-unresolved-file-path-copied".to_string(),
                 level: GpuiAppToastLevel::from_raw(Some("success")),
-                title: "Copied path to clipboard".to_string(),
+                title: "Couldn't open this file (missing file/incomplete path)".to_string(),
                 description: Some(description),
                 loading: false,
                 persistent: false,
@@ -1131,32 +1303,6 @@ impl GhostexGpuiApp {
                 level: GpuiAppToastLevel::from_raw(None),
                 title: format!("Opening file in {destination}"),
                 description: gpui_path_file_name_label(file_path),
-                loading: false,
-                persistent: false,
-                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
-                epoch: 0,
-            },
-            cx,
-        );
-    }
-
-    /** Chat file link on a machine with no usable Code view: reveal it instead. */
-    pub(crate) fn reveal_session_chat_file_in_file_manager(
-        &mut self,
-        file_path: &Path,
-        reason: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if let Err(message) = gpui_reveal_path_in_finder(file_path) {
-            self.report_session_chat_file_open_failure(&message, cx);
-            return;
-        }
-        self.upsert_gpui_app_toast(
-            GpuiAppToast {
-                id: "gpui-session-chat-file-opening".to_string(),
-                level: GpuiAppToastLevel::from_raw(None),
-                title: format!("Opening file in {GPUI_FILE_MANAGER_NAME}"),
-                description: Some(reason.to_string()),
                 loading: false,
                 persistent: false,
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,

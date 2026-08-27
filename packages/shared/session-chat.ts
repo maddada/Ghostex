@@ -330,10 +330,10 @@ export interface SessionChatTerminalActivity {
 
 /*
 CDXC:SessionChatAppCommands 2026-08-23:
-Slash commands GHOSTEX typed into the agent without the composer: the
-first-prompt auto-title job and the rename modal stage `/rename <title>` (Pi
-`/name`, Hermes Agent `/title`), and a new fork submits a provisional
-`Fork: <old title>`.
+Slash commands GHOSTEX typed into the agent without the composer:
+provider-specific first-prompt auto-title jobs and the rename modal stage
+`/rename <title>` (Pi `/name`, Hermes Agent `/title`), while non-Codex forks
+submit a provisional `Fork: <old title>`.
 
 Claude Code records everything it intercepts, so its transcript already carries
 those sends. Codex records NOTHING, and a session that renamed itself mid-thread

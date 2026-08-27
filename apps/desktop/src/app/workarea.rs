@@ -931,35 +931,52 @@ impl GhostexGpuiApp {
                 */
                 let project_root = snapshot.in_memory_project_path.clone()?;
                 let project_id = active_project_id.to_string();
+                let dynamic_project_id = project_id.clone();
+                let chat_file_authorization = self.session_chat_docs_file_authorization.clone();
                 let docs_folders = gpui_manage_additional_docs_folders_text(
                     &self.sidebar_runtime_settings_snapshot,
                 );
                 let global_docs_directory =
                     gpui_global_docs_directory_text(&self.sidebar_runtime_settings_snapshot);
-                Some(cef::ManageDocsResourceScope::new(Arc::new(move || {
-                    let roots = manage_docs_root(
-                        Some(project_id.as_str()),
-                        Some(project_root.as_path()),
-                        global_docs_directory.as_str(),
-                    )
-                    .ok()?;
-                    let mut mounts = vec![cef::ManageDocsResourceRoot {
-                        allowed_relative_roots: manage_docs_scan_root_relative_paths(
-                            docs_folders.as_str(),
-                        ),
-                        mount_segment: String::new(),
-                        path: roots.project,
-                    }];
-                    if let Some(path) = roots.extra.and_then(|mount| mount.location.ok()) {
-                        mounts.push(cef::ManageDocsResourceRoot {
-                            // The whole tree, matching what the mount lists.
+                Some(cef::ManageDocsResourceScope::new(
+                    Arc::new(move || {
+                        let roots = manage_docs_root(
+                            Some(project_id.as_str()),
+                            Some(project_root.as_path()),
+                            global_docs_directory.as_str(),
+                            None,
+                            None,
+                        )
+                        .ok()?;
+                        let mut mounts = vec![cef::ManageDocsResourceRoot {
+                            allowed_relative_roots: manage_docs_scan_root_relative_paths(
+                                docs_folders.as_str(),
+                            ),
+                            mount_segment: String::new(),
+                            path: roots.project,
+                        }];
+                        if let Some(path) = roots.extra.and_then(|mount| mount.location.ok()) {
+                            mounts.push(cef::ManageDocsResourceRoot {
+                                // The whole tree, matching what the mount lists.
+                                allowed_relative_roots: vec![String::new()],
+                                mount_segment: MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT.to_string(),
+                                path,
+                            });
+                        }
+                        Some(mounts)
+                    }),
+                    Arc::new(move || {
+                        let authorization = chat_file_authorization.lock().ok()?;
+                        let authorization = authorization.as_ref().filter(|authorization| {
+                            authorization.project_id == dynamic_project_id
+                        })?;
+                        Some(cef::ManageDocsResourceRoot {
                             allowed_relative_roots: vec![String::new()],
-                            mount_segment: MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT.to_string(),
-                            path,
-                        });
-                    }
-                    Some(mounts)
-                })))
+                            mount_segment: MANAGE_DOCS_CHAT_FILE_MOUNT_SEGMENT.to_string(),
+                            path: authorization.root.clone(),
+                        })
+                    }),
+                ))
             }
         } else {
             None
@@ -1109,7 +1126,11 @@ impl GhostexGpuiApp {
         cx.spawn(async move |this, cx| {
             let result = background
                 .spawn(async move {
-                    source_code_server_open_file_in_existing_instance(&pending.file_path)
+                    source_code_server_open_file_in_existing_instance(
+                        &pending.file_path,
+                        pending.line,
+                        pending.column,
+                    )
                 })
                 .await;
             if let Err(message) = result {

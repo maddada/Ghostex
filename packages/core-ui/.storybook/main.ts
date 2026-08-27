@@ -5,6 +5,16 @@ import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
 
 const storybookDir = path.dirname(fileURLToPath(import.meta.url));
+const monacoVsSource = path.resolve(storybookDir, '../../../node_modules/monaco-editor/min/vs');
+
+function monacoContentType(filePath: string): string {
+  if (filePath.endsWith('.js')) return 'text/javascript';
+  if (filePath.endsWith('.css')) return 'text/css';
+  if (filePath.endsWith('.json')) return 'application/json';
+  if (filePath.endsWith('.ttf')) return 'font/ttf';
+  if (filePath.endsWith('.svg')) return 'image/svg+xml';
+  return 'application/octet-stream';
+}
 
 const config: StorybookConfig = {
   framework: '@storybook/react-vite',
@@ -29,6 +39,21 @@ const config: StorybookConfig = {
     };
     config.plugins = [
       ...existingPlugins,
+      {
+        name: 'ghostex-storybook-monaco-vs',
+        configureServer(server) {
+          server.middlewares.use('/monaco/vs', (request, response, next) => {
+            const requestPath = (request.url ?? '').split('?', 1)[0];
+            const filePath = path.join(monacoVsSource, requestPath);
+            if (!filePath.startsWith(monacoVsSource) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+              next();
+              return;
+            }
+            response.setHeader('content-type', monacoContentType(filePath));
+            fs.createReadStream(filePath).pipe(response);
+          });
+        },
+      },
       {
         name: 'ghostex-current-sidebar-settings',
         configureServer(server) {

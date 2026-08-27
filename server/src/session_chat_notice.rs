@@ -476,6 +476,19 @@ impl NoticeScreen {
         }
     }
 
+    /// A Codex update chooser is stale once a later bare composer row exists.
+    /// The selected update row also starts with `›`, so numbered rows do not
+    /// count as composer evidence.
+    fn has_codex_composer_after(&self, needle: &str) -> bool {
+        let Some(notice_index) = self.folded.iter().rposition(|line| line.contains(needle)) else {
+            return false;
+        };
+        self.display
+            .iter()
+            .skip(notice_index + 1)
+            .any(|line| is_codex_composer_line(line))
+    }
+
     /// The newest displayed line carrying `needle`, capped. Absent when the
     /// phrase only matched across a wrap.
     fn evidence(&self, needle: &str) -> Option<String> {
@@ -538,6 +551,22 @@ impl NoticeScreen {
             Some('$') | Some('%') | Some('#') | Some('\u{276f}') | Some('\u{279c}')
         )
     }
+}
+
+fn is_codex_composer_line(line: &str) -> bool {
+    let Some(rest) = line.trim().strip_prefix('›') else {
+        return false;
+    };
+    let mut chars = rest.trim_start().chars();
+    let mut digits = 0usize;
+    for character in chars.by_ref() {
+        if character.is_ascii_digit() {
+            digits += 1;
+            continue;
+        }
+        return digits == 0 || !matches!(character, '.' | ')');
+    }
+    digits == 0
 }
 
 fn flatten_tail(folded: &[String], lines: usize) -> String {
@@ -1184,9 +1213,13 @@ fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRule] {
     match agent {
         SessionChatOptionAgent::Claude => CLAUDE_RULES,
         SessionChatOptionAgent::Codex => CODEX_RULES,
-        // Grok is read for its model/effort statusline only; no screen state of
-        // its own has been catalogued, and an empty rule set says exactly that.
-        SessionChatOptionAgent::Grok => &[],
+        // Grok, Omp and Pi are read for their model/effort statuslines; no
+        // agent-specific notice state has been catalogued for them, and
+        // an empty rule set says exactly that. Composer readiness is detected
+        // independently from each agent's measured input chrome.
+        SessionChatOptionAgent::Grok | SessionChatOptionAgent::Omp | SessionChatOptionAgent::Pi => {
+            &[]
+        }
     }
 }
 
@@ -1373,11 +1406,18 @@ pub fn classify_session_chat_terminal_notice(
         }
     }
     for rule in notice_rules(agent) {
-        if let Some(signature) = rule
-            .signatures
-            .iter()
-            .find(|signature| signature_matches(&screen, signature))
-        {
+        if let Some(signature) = rule.signatures.iter().find(|signature| {
+            if !signature_matches(&screen, signature) {
+                return false;
+            }
+            if agent != SessionChatOptionAgent::Codex
+                || rule.kind != SESSION_CHAT_NOTICE_UPDATE_PROMPT
+            {
+                return true;
+            }
+            !signature_needle(signature)
+                .is_some_and(|needle| screen.has_codex_composer_after(needle))
+        }) {
             return Some(notice_from_rule(&screen, rule, signature));
         }
     }

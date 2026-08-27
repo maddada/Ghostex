@@ -271,12 +271,13 @@ describe('session chat detected options', () => {
     expect(sessionChatOptionValueLabel(catalog.model, next)).toBe('GPT-5.6 Sol');
     const [effort] = catalog.optionsForModel('gpt-5.6-sol');
     expect(sessionChatOptionValueLabel(effort!, next)).toBe('Extra high');
-    // …and an id it has never heard of renders exactly as the terminal shows it.
+    // …and an id it has never heard of still uses the terminal's spelling,
+    // sentence-cased for the composer chips.
     const unknown = applySessionChatDetectedOptions(catalog, next, {
       model: { value: 'gpt-9.1-nova', label: 'gpt-9.1-nova' },
       detectedAt: at(1),
     });
-    expect(sessionChatOptionValueLabel(catalog.model, unknown)).toBe('gpt-9.1-nova');
+    expect(sessionChatOptionValueLabel(catalog.model, unknown)).toBe('Gpt-9.1-nova');
   });
 
   it('confirms a pending dispatch it agrees with', () => {

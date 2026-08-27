@@ -804,10 +804,9 @@ CDXC:GPUISessionChatImageSave 2026-08-19:
 "Save image" in the chat image overlay cannot be a browser download: gpui
 installs no CEF download handler, so a <a download> click is cancelled without
 a trace. The page posts a saveImage host action carrying the bytes and a
-suggested name, Rust runs the native save panel and writes the file, then
-answers through the fixed window.ghostexGpui.onSessionChatImageSaved callback
-with {requestId, error} — no error means saved or cancelled, both of which the
-panel already told the user about.
+suggested name, Rust writes the file into Downloads, then answers through the
+fixed window.ghostexGpui.onSessionChatImageSaved callback with {requestId,
+error} — no error means the file landed in Downloads.
 */
 const IMAGE_SAVE_TIMEOUT_MS = 180_000;
 
@@ -887,7 +886,11 @@ setting is off.
 */
 const GPUI_SESSION_CHAT_HOST_LINKS: SessionChatHostLinks = {
   openUrl: (url, { external }) => postSessionChatHostAction('openLink', { external, url }),
-  openFile: (path) => postSessionChatHostAction('openFile', { path }),
+  openFile: (path, position) =>
+    postSessionChatHostAction('openFile', {
+      path,
+      ...(position ? { line: position.line, ...(position.column ? { column: position.column } : {}) } : {}),
+    }),
 };
 
 function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHostActions {

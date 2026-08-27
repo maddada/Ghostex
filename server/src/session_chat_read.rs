@@ -28,6 +28,7 @@ path while it still exists on disk.
 */
 pub(crate) struct SessionChatReadResolution {
     agent: Option<String>,
+    terminal_agent: Option<String>,
     agent_session_id: Option<String>,
     agent_session_path: Option<String>,
     lifecycle_running: bool,
@@ -64,6 +65,8 @@ pub(crate) fn resolve_session_chat_read_state(
             message: "The session no longer exists.".to_string(),
         })?;
     let agent = session_chat_agent_for_session(&session);
+    let terminal_agent = crate::session_chat_composer::session_chat_composer_agent_id(&session)
+        .or_else(|| agent.clone());
     let agent_session_id = read_runtime_text(&session, "agentSessionId");
     let agent_session_path = read_runtime_text(&session, "agentSessionPath");
     let lifecycle_running = is_session_chat_followable_session(&session);
@@ -102,6 +105,7 @@ pub(crate) fn resolve_session_chat_read_state(
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     agent.hash(&mut hasher);
+    terminal_agent.hash(&mut hasher);
     agent_session_id.hash(&mut hasher);
     stored_prompt.hash(&mut hasher);
     lifecycle_running.hash(&mut hasher);
@@ -195,6 +199,7 @@ pub(crate) fn resolve_session_chat_read_state(
 
     Ok(SessionChatReadResolution {
         agent,
+        terminal_agent,
         agent_session_id,
         agent_session_path,
         lifecycle_running,
@@ -290,6 +295,7 @@ pub(crate) async fn handle_read_session_chat_http(
     }
     let SessionChatReadResolution {
         agent,
+        terminal_agent,
         agent_session_id,
         agent_session_path: _,
         lifecycle_running,
@@ -368,7 +374,7 @@ pub(crate) async fn handle_read_session_chat_http(
             SessionChatOptionDetector::new(state).detect(
                 &project_id,
                 &session_id,
-                agent.as_deref(),
+                terminal_agent.as_deref(),
                 false,
             ),
         )

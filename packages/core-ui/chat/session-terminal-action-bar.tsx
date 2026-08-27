@@ -298,11 +298,11 @@ export function SessionTerminalActionBar({
               <span className='inline-flex'>
                 <Button
                   aria-label={promptEditorAction.label}
-                  className='size-8 rounded-full'
+                  className='ghostex-chat-send-button ghostex-terminal-action-bar-accent size-6'
                   onClick={() => runHostAction(promptEditorAction)}
                   size='icon'
                 >
-                  <IconEdit aria-hidden='true' className='size-[18px]' stroke={2} />
+                  <IconEdit aria-hidden='true' className='size-[13.5px]' stroke={2} />
                 </Button>
               </span>
             </AppTooltip>

@@ -1076,6 +1076,23 @@ the markdown block) rather than pinned to a tier of its own.
   display: none;
 }
 
+/* Send (and the terminal Prompt Editor, which reuses this class) is 25% under
+   the original size-8 control: 24px box, 6px corners, 12px glyph. Specificity
+   matches the chat-scope button radius rule plus one element so 6px wins. */
+.ghostex-session-chat-scope
+  button.ghostex-chat-send-button:not([data-slot='session-chat-host-action']):not(.ghostex-chat-expansion-rail) {
+  border-radius: 6px;
+  height: 24px;
+  min-height: 24px;
+  min-width: 24px;
+  width: 24px;
+}
+
+.ghostex-session-chat-scope button.ghostex-chat-send-button svg {
+  height: 12px;
+  width: 12px;
+}
+
 @media (max-width: 499px) {
   .ghostex-chat-composer-footer-actions-expanded {
     display: none;
@@ -1249,6 +1266,7 @@ body[data-session-chat-theme='dark']
   display: block;
   flex: 0 0 auto;
   height: 0.875rem;
+  opacity: 0.55;
   width: 1rem;
 }
 
@@ -1341,6 +1359,22 @@ Rendering this one glyph a size up lines its ink up with its neighbours.
  */
 .ghostex-terminal-action-bar {
   padding-inline: 33px;
+}
+
+/* Same 6px corners as Chat Send, scaled with the 24px control (was 8px on 32px).
+   Two classes so this beats the app-wide `button { border-radius: 0 }` reset
+   when the bar is not inside the chat scope. */
+.ghostex-terminal-action-bar .ghostex-terminal-action-bar-accent {
+  border-radius: 6px;
+  height: 24px;
+  min-height: 24px;
+  min-width: 24px;
+  width: 24px;
+}
+
+.ghostex-terminal-action-bar .ghostex-terminal-action-bar-accent svg {
+  height: 13.5px;
+  width: 13.5px;
 }
 
 /* The inline field a host action with `input` (Rename) swaps its control row
@@ -1487,6 +1521,115 @@ so the swap barely moves the composer row.
 
 .ghostex-chat-composer-monaco {
   min-height: 4.5rem;
+}
+
+/* Monaco keeps attachment and skill Markdown in its model, while these
+   decorations replace the long source string with one compact token. The
+   source's zero metrics are intentional: the injected label permanently owns
+   the reference's horizontal space while it is valid Markdown. */
+.ghostex-chat-composer-monaco .ghostex-chat-composer-reference-source {
+  font-size: 0 !important;
+  letter-spacing: 0 !important;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill,
+.ghostex-chat-markdown .ghostex-chat-reference-pill,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip {
+  --ghostex-chat-reference-outline: #94a3b8;
+  --ghostex-chat-reference-icon: none;
+  align-items: center;
+  background: var(--chat-inline-code-surface, var(--muted));
+  border: 1px solid
+    color-mix(in srgb, var(--ghostex-chat-reference-outline) 12%, var(--chat-inline-code-border, var(--border)));
+  border-radius: 0.375rem;
+  box-sizing: border-box;
+  color: var(--chat-prose-foreground, var(--foreground));
+  display: inline-flex;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: var(--chat-code-size);
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.4;
+  margin: 0 1px;
+  padding: 0.1rem 0.35rem;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill,
+.ghostex-chat-markdown .ghostex-chat-reference-pill {
+  gap: 4px;
+}
+
+/* Monaco measures caret positions from the injected characters, not from
+   generated content or horizontal padding. The injected leading spaces own
+   the icon's width, while the absolutely positioned mask adds no unmeasured
+   inline width. This keeps both cursor stops on the pill's outer edges. */
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill {
+  display: inline-block;
+  gap: 0;
+  padding-inline: 0;
+  position: relative;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill::before,
+.ghostex-chat-markdown .ghostex-chat-reference-pill::before {
+  background: color-mix(in srgb, var(--ghostex-chat-reference-outline) 55%, var(--muted-foreground));
+  content: '';
+  flex: none;
+  height: 11px;
+  -webkit-mask: var(--ghostex-chat-reference-icon) center / contain no-repeat;
+  mask: var(--ghostex-chat-reference-icon) center / contain no-repeat;
+  width: 11px;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill::before {
+  left: 0.3rem;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ghostex-chat-markdown .ghostex-chat-reference-pill {
+  cursor: pointer;
+}
+
+.ghostex-chat-markdown .ghostex-chat-reference-pill:hover,
+.ghostex-chat-markdown .ghostex-chat-reference-pill:focus-visible,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible {
+  background: color-mix(in srgb, var(--foreground) 4%, var(--chat-inline-code-surface, var(--muted)));
+  color: var(--foreground);
+  outline: none;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill--image,
+.ghostex-chat-markdown .ghostex-chat-reference-pill--image {
+  --ghostex-chat-reference-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 8h.01'/%3E%3Cpath d='M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z'/%3E%3Cpath d='m3 16 5-5c.928-.893 2.072-.893 3 0l5 5'/%3E%3Cpath d='m14 14 1-1c.928-.893 2.072-.893 3 0l3 3'/%3E%3C/svg%3E");
+  --ghostex-chat-reference-outline: #9d6c73;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill--file,
+.ghostex-chat-markdown .ghostex-chat-reference-pill--file,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip {
+  --ghostex-chat-reference-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3v4a1 1 0 0 0 1 1h4'/%3E%3Cpath d='M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z'/%3E%3C/svg%3E");
+  --ghostex-chat-reference-outline: #6c819b;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill--folder,
+.ghostex-chat-markdown .ghostex-chat-reference-pill--folder {
+  --ghostex-chat-reference-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");
+  --ghostex-chat-reference-outline: #9a835b;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill--skill,
+.ghostex-chat-markdown .ghostex-chat-reference-pill--skill {
+  --ghostex-chat-reference-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 3-1.9 5.1L5 10l5.1 1.9L12 18l1.9-5.1L19 11l-5.1-1.9z'/%3E%3Cpath d='M5 3v4'/%3E%3Cpath d='M3 5h4'/%3E%3Cpath d='M19 17v4'/%3E%3Cpath d='M17 19h4'/%3E%3C/svg%3E");
+  --ghostex-chat-reference-outline: #668773;
 }
 
 /* 3px scrollbar in the chat input (the Monaco backend gets the same width via
@@ -1835,10 +1978,9 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   padding: 0.1rem 0.35rem;
 }
 
-/* An inline-code span that is a file reference. It borrows the inline-code
-   card exactly — same fill, border, radius, and metrics — so a paragraph full
-   of chips still reads as a paragraph; the glyph and the hover lift are the
-   only things marking it as something you can press.
+/* An inline-code span that is a file reference. Its visual chrome comes from
+   the shared reference-pill rule above, so linked and backticked paths cannot
+   drift into two different pill styles.
 
    The chip shows the whole path, which a ~385px transcript column cannot
    always fit, so it is laid out as a row that knows what to give up. It stays
@@ -1851,48 +1993,18 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    No `gap`: the parent and the filename are one path and must read as one
    string, so the spacing is placed on the glyph and the detail instead. */
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip {
-  align-items: center;
-  background: var(--chat-inline-code-surface, var(--muted));
-  border: 1px solid var(--chat-inline-code-border, var(--border));
-  border-radius: 0.375rem;
-  color: var(--chat-prose-foreground);
   cursor: pointer;
-  display: inline-flex;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-  font-size: var(--chat-code-size);
-  line-height: 1.4;
   max-width: 100%;
   min-width: 0;
-  padding: 0.1rem 0.35rem 0.1rem 0.28rem;
   text-align: left;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
-  vertical-align: baseline;
-}
-
-/* Hover has to stay a lift now that the resting chip is a real card: it tints
-   the resting fill towards the link blue rather than swapping in --accent,
-   which sits below the new resting surface and would read as a press. */
-.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover,
-.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible {
-  background: color-mix(in srgb, var(--info-foreground) 14%, var(--chat-inline-code-surface, var(--muted)));
-  border-color: color-mix(in srgb, var(--info-foreground) 45%, var(--border));
-  color: var(--info-foreground);
-  outline: none;
 }
 
 .ghostex-chat-markdown-file-chip-icon {
-  color: var(--muted-foreground);
+  color: color-mix(in srgb, var(--ghostex-chat-reference-outline) 55%, var(--muted-foreground));
   flex: none;
   margin-right: 0.25rem;
-  transition: color 120ms ease;
-}
-
-.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover .ghostex-chat-markdown-file-chip-icon,
-.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible .ghostex-chat-markdown-file-chip-icon {
-  color: inherit;
+  height: 11px;
+  width: 11px;
 }
 
 /* The directories are context, so they are the part that gives: a shrink
@@ -1901,7 +2013,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    leading folder — the one that says which world this path is in — is the last
    thing to go. */
 .ghostex-chat-markdown-file-chip-parent {
-  color: var(--muted-foreground);
+  color: inherit;
   flex: 0 9999 auto;
   min-width: 0;
   overflow: hidden;
@@ -1921,7 +2033,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 
 /* L913:C8 never truncates: a half-written line number is worse than none. */
 .ghostex-chat-markdown-file-chip-detail {
-  color: var(--muted-foreground);
+  color: inherit;
   flex: none;
   margin-left: 0.25rem;
   white-space: nowrap;
@@ -2464,27 +2576,6 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 .ghostex-chat-markdown .ghostex-chat-inline-image-frame {
   margin: 0.125rem 0.25rem;
   vertical-align: middle;
-}
-
-/* File-path links (host opens them in its editor surfaces) read as links but
-   are buttons, since there is nothing for a browser to navigate to. */
-.ghostex-chat-markdown .ghostex-chat-file-link {
-  background: none;
-  border: none;
-  color: var(--info-foreground);
-  cursor: pointer;
-  font: inherit;
-  padding: 0;
-  text-align: inherit;
-  text-decoration: none;
-}
-
-.ghostex-chat-markdown .ghostex-chat-file-link:hover,
-.ghostex-chat-markdown .ghostex-chat-file-link:focus-visible {
-  background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
-  background-position: 0 100%;
-  background-repeat: repeat-x;
-  background-size: 4px 2px;
 }
 
 /* Tables (MarkdownTable in session-chat-markdown.tsx).

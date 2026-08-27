@@ -36,6 +36,8 @@ of the same daemon lookup, so neither can be answered before it.
 */
 pub(crate) type ManageDocsLocalRootResolver =
     Arc<dyn Fn() -> Option<Vec<ManageDocsResourceRoot>> + Send + Sync>;
+pub(crate) type ManageDocsDynamicRootResolver =
+    Arc<dyn Fn() -> Option<ManageDocsResourceRoot> + Send + Sync>;
 
 /// One mounted Docs root as the resource scope sees it: the reserved first path
 /// segment that addresses it (empty for the project root, which owns bare
@@ -51,6 +53,7 @@ pub struct ManageDocsResourceRoot {
 #[derive(Clone)]
 pub(crate) enum ManageDocsResourceSource {
     Local {
+        resolve_dynamic_root: ManageDocsDynamicRootResolver,
         resolve_root: ManageDocsLocalRootResolver,
         /*
         CDXC:DocsRootDirectory 2026-08-10:
@@ -73,9 +76,13 @@ pub struct ManageDocsResourceScope {
 }
 
 impl ManageDocsResourceScope {
-    pub fn new(resolve_root: ManageDocsLocalRootResolver) -> Self {
+    pub fn new(
+        resolve_root: ManageDocsLocalRootResolver,
+        resolve_dynamic_root: ManageDocsDynamicRootResolver,
+    ) -> Self {
         Self {
             source: ManageDocsResourceSource::Local {
+                resolve_dynamic_root,
                 resolve_root,
                 resolved_root: Arc::new(Mutex::new(None)),
             },
@@ -137,6 +144,7 @@ pub(crate) fn open_manage_docs_resource(
 ) -> Option<ManageDocsResourceBody> {
     match source {
         ManageDocsResourceSource::Local {
+            resolve_dynamic_root,
             resolve_root,
             resolved_root,
         } => {
@@ -147,13 +155,17 @@ pub(crate) fn open_manage_docs_resource(
             note in the mounted Docs directory resolves there and a path can
             never be resolved against the root it did not name.
             */
-            let mounts = {
+            let mut mounts = {
                 let mut resolved = resolved_root.lock().ok()?;
                 if resolved.is_none() {
                     *resolved = resolve_root();
                 }
                 resolved.clone()?
             };
+            if let Some(dynamic_root) = resolve_dynamic_root() {
+                mounts.retain(|mount| mount.mount_segment != dynamic_root.mount_segment);
+                mounts.push(dynamic_root);
+            }
             // A named mount claims its own segment first; the project root owns
             // every path no mount claimed.
             let (mount, relative_path) = mounts

@@ -123,7 +123,9 @@ pub(crate) fn gpui_agents_hub_source_open_target(
         return Err("The selected Agents Hub file has no containing folder.".to_string());
     };
     Ok(PendingSourceFileOpen {
+        column: None,
         file_path: resolved,
+        line: None,
         project_path,
     })
 }

@@ -49,6 +49,8 @@ export type SessionChatOptionDispatch =
       decreaseKey: SessionChatSendKey;
       increaseKey: SessionChatSendKey;
     }
+  /** Cycles forward through a fixed ordered setting using one repeated key. */
+  | { kind: 'cyclic-key-steps'; key: SessionChatSendKey }
   /** Writes a raw keystroke sequence (no text, no Enter). */
   | { kind: 'key'; key: SessionChatSendKey; marker: string };
 
@@ -98,11 +100,11 @@ const CLAUDE_EFFORTS: readonly SessionChatOptionChoice[] = [
 ];
 
 const CLAUDE_MODES: readonly SessionChatOptionChoice[] = [
-  { value: 'auto', label: 'Auto' },
   { value: 'bypass', label: 'Bypass permissions' },
-  { value: 'plan', label: 'Plan' },
-  { value: 'accept-edits', label: 'Accept edits' },
+  { value: 'auto', label: 'Auto' },
   { value: 'manual', label: 'Manual' },
+  { value: 'accept-edits', label: 'Accept edits' },
+  { value: 'plan', label: 'Plan' },
 ];
 
 const CLAUDE_MODEL: SessionChatOptionDescriptor = {
@@ -131,19 +133,17 @@ const CLAUDE_FAST_MODE: SessionChatOptionDescriptor = {
 };
 
 /*
-Permission mode is Shift+Tab in Claude Code's TUI — it has no slash command,
-so it is delivered as a raw keystroke through sendSessionChatMessage's `key`
-param. The terminal footer now supplies the current value for the pill; cycling
-remains one raw-key action because Claude owns the order.
+Permission mode is Shift+Tab in Claude Code's TUI. The terminal footer supplies
+the current value, so selecting a target sends the exact forward distance in
+Claude's cyclic mode order.
 */
 const CLAUDE_MODE: SessionChatOptionDescriptor = {
   id: 'mode',
   label: 'Mode',
   category: 'mode',
   choices: CLAUDE_MODES,
-  actionLabel: 'Cycle mode (Shift+Tab)',
-  description: "Steps through Claude Code's permission modes.",
-  dispatch: { kind: 'key', key: 'shift-tab', marker: 'Sent Shift+Tab (mode cycle)' },
+  description: "Select Claude Code's permission mode.",
+  dispatch: { kind: 'cyclic-key-steps', key: 'shift-tab' },
 };
 
 // ---------------------------------------------------------------------------
@@ -236,6 +236,47 @@ const GROK_EFFORT: SessionChatOptionDescriptor = {
 };
 
 // ---------------------------------------------------------------------------
+// Pi
+// ---------------------------------------------------------------------------
+
+/*
+Pi reports both values in its terminal statusline. Its model list is
+provider-dependent, and model/effort changes belong to the CLI, so these are
+read-only mirrors with the same terminal handoff used for Grok.
+*/
+const PI_MODEL: SessionChatOptionDescriptor = {
+  id: 'model',
+  label: 'Model',
+  category: 'model',
+  actionLabel: 'Change it in the CLI',
+  dispatch: { kind: 'terminal-handoff' },
+};
+
+const PI_EFFORT: SessionChatOptionDescriptor = {
+  id: 'effort',
+  label: 'Reasoning effort',
+  category: 'thought_level',
+  actionLabel: 'Change it in the CLI',
+  dispatch: { kind: 'terminal-handoff' },
+};
+
+const OMP_MODEL: SessionChatOptionDescriptor = {
+  id: 'model',
+  label: 'Model',
+  category: 'model',
+  actionLabel: 'Change it in the CLI',
+  dispatch: { kind: 'terminal-handoff' },
+};
+
+const OMP_EFFORT: SessionChatOptionDescriptor = {
+  id: 'effort',
+  label: 'Reasoning effort',
+  category: 'thought_level',
+  actionLabel: 'Change it in the CLI',
+  dispatch: { kind: 'terminal-handoff' },
+};
+
+// ---------------------------------------------------------------------------
 // Catalog resolution
 // ---------------------------------------------------------------------------
 
@@ -269,11 +310,25 @@ const GROK_CATALOG: SessionChatSessionOptionCatalog = {
   optionsForModel: () => [GROK_EFFORT],
 };
 
+const PI_CATALOG: SessionChatSessionOptionCatalog = {
+  model: PI_MODEL,
+  modelIcon: 'pi',
+  optionsForModel: () => [PI_EFFORT],
+};
+
+const OMP_CATALOG: SessionChatSessionOptionCatalog = {
+  model: OMP_MODEL,
+  modelIcon: 'omp',
+  optionsForModel: () => [OMP_EFFORT],
+};
+
 const CATALOG_BY_AGENT: Record<string, SessionChatSessionOptionCatalog> = {
   claude: CLAUDE_CATALOG,
   openclaude: CLAUDE_CATALOG,
   codex: CODEX_CATALOG,
   grok: GROK_CATALOG,
+  omp: OMP_CATALOG,
+  pi: PI_CATALOG,
 };
 
 export function sessionChatSessionOptionCatalog(
@@ -368,10 +423,28 @@ function isTrackedValue(descriptor: SessionChatOptionDescriptor, value: string):
 /** Value-carrying descriptors: a select the pills can label from. */
 export function sessionChatOptionTracksValue(descriptor: SessionChatOptionDescriptor): boolean {
   return (
-    (descriptor.dispatch.kind === 'command' || descriptor.dispatch.kind === 'bounded-key-steps') &&
+    (descriptor.dispatch.kind === 'command' ||
+      descriptor.dispatch.kind === 'bounded-key-steps' ||
+      descriptor.dispatch.kind === 'cyclic-key-steps') &&
     descriptor.choices !== undefined &&
     descriptor.choices.length > 0
   );
+}
+
+/** Exact forward-only key sequence for a cyclic ordered setting. */
+export function sessionChatCyclicKeySteps(
+  choices: readonly SessionChatOptionChoice[],
+  currentValue: string | undefined,
+  targetValue: string,
+  key: SessionChatSendKey
+): SessionChatSendKey[] {
+  const currentIndex = choices.findIndex((choice) => choice.value === currentValue);
+  const targetIndex = choices.findIndex((choice) => choice.value === targetValue);
+  if (currentIndex < 0 || targetIndex < 0 || choices.length < 2) {
+    return [];
+  }
+  const count = (targetIndex - currentIndex + choices.length) % choices.length;
+  return Array.from({ length: count }, () => key);
 }
 
 /**
@@ -588,12 +661,22 @@ export function applySessionChatDetectedOptions(
   return next;
 }
 
+/** Composer chips: first letter up, the rest left as the agent reported it. */
+function sessionChatSentenceCaseLabel(label: string): string {
+  const first = label.charAt(0);
+  if (first === '') {
+    return label;
+  }
+  return first.toUpperCase() + label.slice(1);
+}
+
 /**
  * Pill label: the value's label, or null when nothing is known.
  *
  * A detected label wins over the catalog's, so a real `Fable 5` / `Opus 4.5` /
- * unknown codex id renders verbatim. When the terminal only echoed the option's
- * own token (`high`), the catalog's prettier label is used instead.
+ * unknown model id still renders. Lowercase statusline tokens (`grok-4.6`,
+ * `medium`) are shown in sentence case. When the terminal only echoed the
+ * option's own token (`high`), the catalog's prettier label is used instead.
  */
 export function sessionChatOptionValueLabel(
   descriptor: SessionChatOptionDescriptor,
@@ -609,7 +692,7 @@ export function sessionChatOptionValueLabel(
     if (choice && detectedLabel.toLowerCase() === choice.value.toLowerCase()) {
       return choice.label;
     }
-    return detectedLabel;
+    return sessionChatSentenceCaseLabel(detectedLabel);
   }
   return choice?.label ?? null;
 }

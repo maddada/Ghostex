@@ -114,6 +114,8 @@ export interface SessionChatComposerHandle {
   clearDraft: (expected: string) => boolean;
   focus: () => void;
   getDraft: () => string;
+  /** Insert a Saved Prompt at the caret as one editor operation. */
+  insertSavedPrompt: (text: string) => boolean;
   /** Insert text at the caret; returns false when the composer cannot take it. */
   insertTypedText: (text: string) => boolean;
   /** Attach files/folders dropped anywhere on the chat view. */
@@ -151,6 +153,7 @@ export interface SessionChatComposerInputApi {
   focus: () => void;
   getSelection: () => { end: number; start: number };
   getValue: () => string;
+  insertSavedPrompt: (text: string) => boolean;
   insertText: (text: string) => boolean;
   selectAll: () => void;
 }
@@ -590,6 +593,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const monacoApiRef = useRef<SessionChatComposerInputApi | null>(null);
     const pendingFocusRef = useRef(false);
     const pendingInsertTextRef = useRef('');
+    const pendingSavedPromptRef = useRef('');
     const sendInFlightRef = useRef(false);
     /** Newest draft stamp already applied or dismissed here (never re-offered). */
     const lastHandledDraftAtRef = useRef<string | null>(null);
@@ -717,6 +721,23 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       setFileIndex(0);
     };
 
+    const insertTextareaText = (text: string): boolean => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return false;
+      }
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? textarea.value.length;
+      const next = `${textarea.value.slice(0, start)}${text}${textarea.value.slice(end)}`;
+      updateDraft(next, start + text.length);
+      textarea.focus();
+      requestAnimationFrame(() => {
+        const caret = start + text.length;
+        textarea.setSelectionRange(caret, caret);
+      });
+      return true;
+    };
+
     const textareaApi: SessionChatComposerInputApi = {
       applyValue: (next, caret) => {
         // Value arrives through the controlled `draft`; only the caret needs
@@ -736,22 +757,8 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         };
       },
       getValue: () => textareaRef.current?.value ?? draft,
-      insertText: (text) => {
-        const textarea = textareaRef.current;
-        if (!textarea) {
-          return false;
-        }
-        const start = textarea.selectionStart ?? textarea.value.length;
-        const end = textarea.selectionEnd ?? textarea.value.length;
-        const next = `${textarea.value.slice(0, start)}${text}${textarea.value.slice(end)}`;
-        updateDraft(next, start + text.length);
-        textarea.focus();
-        requestAnimationFrame(() => {
-          const caret = start + text.length;
-          textarea.setSelectionRange(caret, caret);
-        });
-        return true;
-      },
+      insertSavedPrompt: insertTextareaText,
+      insertText: insertTextareaText,
       selectAll: () => {
         const textarea = textareaRef.current;
         if (!textarea) {
@@ -774,6 +781,11 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           const pending = pendingInsertTextRef.current;
           pendingInsertTextRef.current = '';
           textareaApi.insertText(pending);
+        }
+        if (pendingSavedPromptRef.current) {
+          const pending = pendingSavedPromptRef.current;
+          pendingSavedPromptRef.current = '';
+          textareaApi.insertSavedPrompt(pending);
         }
         if (pendingFocusRef.current) {
           pendingFocusRef.current = false;
@@ -835,6 +847,17 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         input.focus();
       },
       getDraft: () => getInputApi()?.getValue() ?? draftRef.current,
+      insertSavedPrompt: (text: string): boolean => {
+        if (disabled) {
+          return false;
+        }
+        const input = getInputApi();
+        if (!input) {
+          pendingSavedPromptRef.current += text;
+          return true;
+        }
+        return input.insertSavedPrompt(text);
+      },
       insertTypedText: (text: string): boolean => {
         if (disabled) {
           return false;
@@ -1685,6 +1708,11 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
             pendingInsertTextRef.current = '';
             api.insertText(pending);
           }
+          if (api && pendingSavedPromptRef.current) {
+            const pending = pendingSavedPromptRef.current;
+            pendingSavedPromptRef.current = '';
+            api.insertSavedPrompt(pending);
+          }
           if (api && pendingFocusRef.current) {
             pendingFocusRef.current = false;
             api.focus();
@@ -1802,7 +1830,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   <button
                     aria-selected={index === highlightedSkillIndex}
                     className={cn(
-                      'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm',
+                      'grid w-full min-w-0 grid-cols-[270px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm',
                       index === highlightedSkillIndex ? 'bg-accent text-accent-foreground' : 'text-foreground'
                     )}
                     data-chat-picker-option='true'
@@ -1820,9 +1848,15 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                     role='option'
                     type='button'
                   >
-                    <IconRobot aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' stroke={1.6} />
-                    <span className='shrink-0 font-semibold'>${skill.name}</span>
-                    <span className='truncate text-muted-foreground'>{skill.directoryPath}</span>
+                    <span className='min-w-0 truncate font-normal' title={`$${skill.name}`}>
+                      ${skill.name}
+                    </span>
+                    <span
+                      className='min-w-0 truncate text-left text-muted-foreground [direction:rtl]'
+                      title={skill.directoryPath}
+                    >
+                      {skill.directoryPath}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -2121,18 +2155,18 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                 {showStopButton ? (
                   <Button
                     aria-label='Stop the agent'
-                    className='size-8 rounded-full'
+                    className='size-6'
                     disabled={stopButtonCoolingDown}
                     onClick={handleStopClick}
                     size='icon'
                     variant='secondary'
                   >
-                    <IconPlayerStopFilled aria-hidden='true' className='size-3.5' stroke={1.6} />
+                    <IconPlayerStopFilled aria-hidden='true' className='size-3' stroke={1.6} />
                   </Button>
                 ) : (
                   <Button
                     aria-label={canQueueDraft ? 'Send (hold to queue)' : 'Send'}
-                    className='ghostex-chat-send-button size-8 rounded-full'
+                    className='ghostex-chat-send-button size-6'
                     disabled={sendDisabled}
                     onClick={handleSendClick}
                     onContextMenu={(event) => {
@@ -2148,7 +2182,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                     onPointerUp={cancelSendLongPress}
                     size='icon'
                   >
-                    <IconArrowUp aria-hidden='true' className='size-4' stroke={2.2} />
+                    <IconArrowUp aria-hidden='true' className='size-3' stroke={2.2} />
                   </Button>
                 )}
               </div>

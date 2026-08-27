@@ -3,11 +3,11 @@ CDXC:SessionChatAppCommands 2026-08-23:
 Slash commands GHOSTEX types into the agent, not the user.
 
 Several flows write a command straight into the session's pty without the chat
-composer ever being involved: the first-prompt auto-title job and the rename
-modal's "Generate Name" stage `/rename <title>` (Pi `/name`, Hermes Agent
-`/title`), and a fresh fork submits a provisional `Fork: <old title>` the same
-way. Chat is a transcript projection, so what it shows afterwards depends
-entirely on whether the CLI happens to record the command:
+composer ever being involved: provider-specific first-prompt auto-title jobs,
+the rename modal's "Generate Name" stage `/rename <title>` (Pi `/name`, Hermes
+Agent `/title`), and non-Codex forks submit a provisional `Fork: <old title>`
+the same way. Chat is a transcript projection, so what it shows afterwards
+depends entirely on whether the CLI happens to record the command:
 
   * Claude Code writes a `local_command` row for everything it intercepts, so
     the send lands in the transcript and chat already renders it.

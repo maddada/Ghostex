@@ -1,7 +1,7 @@
 // Composer footer session-option pills (upstream chat spec §1.2-§1.4 port).
 // Ghost controls showing the current values only: Model and Effort are menu
-// triggers, while Claude's permission mode is a separate button that sends
-// Shift+Tab. The category names live in tooltips / accessible labels. Controls
+// triggers, including Claude's permission mode selector backed by Shift+Tab.
+// The category names live in tooltips / accessible labels. Controls
 // that type into the TUI are disabled while the agent is working or a dispatch
 // is in flight.
 //
@@ -33,6 +33,7 @@ import {
   reconcileSessionChatOptionsFromCommand,
   seedSessionChatOptionState,
   sessionChatBoundedKeySteps,
+  sessionChatCyclicKeySteps,
   sessionChatOptionsPillLabel,
   sessionChatOptionTracksValue,
   sessionChatOptionValueLabel,
@@ -168,6 +169,8 @@ export interface SessionChatSessionOptionPillsProps {
   screenProbed: boolean;
   onDispatchCommand: (command: string) => Promise<void>;
   onDispatchKey: (key: SessionChatSendKey, marker: string) => Promise<void>;
+  /** Holds the whole composer disabled while a cyclic TUI switch is running. */
+  onSwitchingChange?: (switching: boolean) => void;
   /** Agent-picker options flip the pane to the terminal after typing. */
   onSwitchToTerminal?: () => void;
 }
@@ -307,6 +310,7 @@ export function SessionChatSessionOptionPills({
   isWorking,
   onDispatchCommand,
   onDispatchKey,
+  onSwitchingChange,
   onSwitchToTerminal,
   screenProbed,
 }: SessionChatSessionOptionPillsProps) {
@@ -326,7 +330,10 @@ export function SessionChatSessionOptionPills({
     () =>
       optionDescriptors.filter(
         (descriptor) =>
-          (descriptor.dispatch.kind !== 'key' && descriptor.dispatch.kind !== 'bounded-key-steps') || canSendKey
+          (descriptor.dispatch.kind !== 'key' &&
+            descriptor.dispatch.kind !== 'bounded-key-steps' &&
+            descriptor.dispatch.kind !== 'cyclic-key-steps') ||
+          canSendKey
       ),
     [canSendKey, optionDescriptors]
   );
@@ -374,6 +381,29 @@ export function SessionChatSessionOptionPills({
           }
           return;
         }
+        if (delivery.kind === 'cyclic-key-steps') {
+          const keys = sessionChatCyclicKeySteps(
+            descriptor.choices ?? [],
+            state[descriptor.id]?.value,
+            value ?? '',
+            delivery.key
+          );
+          if (value === undefined || keys.length === 0) {
+            return;
+          }
+          onSwitchingChange?.(true);
+          recordDispatched(descriptor.id, value);
+          const minimumSwitchTime = new Promise<void>((resolve) => window.setTimeout(resolve, 160));
+          try {
+            for (const key of keys) {
+              await onDispatchKey(key, '');
+            }
+            await minimumSwitchTime;
+          } finally {
+            onSwitchingChange?.(false);
+          }
+          return;
+        }
         await onDispatchKey(delivery.key, delivery.marker);
       };
       void run()
@@ -388,7 +418,7 @@ export function SessionChatSessionOptionPills({
           }
         });
     },
-    [onDispatchCommand, onDispatchKey, onSwitchToTerminal, recordDispatched, state]
+    [onDispatchCommand, onDispatchKey, onSwitchToTerminal, onSwitchingChange, recordDispatched, state]
   );
 
   if (!catalog) {
@@ -438,7 +468,9 @@ export function SessionChatSessionOptionPills({
   const modelLabel = sessionChatOptionValueLabel(catalog.model, state);
   const modeButton = visibleOptions.find(
     (descriptor) =>
-      descriptor.category === 'mode' && descriptor.dispatch.kind === 'key' && descriptor.dispatch.key === 'shift-tab'
+      descriptor.category === 'mode' &&
+      descriptor.dispatch.kind === 'cyclic-key-steps' &&
+      descriptor.dispatch.key === 'shift-tab'
   );
   const menuOptions = modeButton ? visibleOptions.filter((descriptor) => descriptor !== modeButton) : visibleOptions;
   const modeLabel = modeButton ? sessionChatOptionValueLabel(modeButton, state) : null;
@@ -451,16 +483,7 @@ export function SessionChatSessionOptionPills({
   const usesCombinedAgentPicker = catalog.model.dispatch.kind === 'agent-picker' && combinedPickerEffort !== undefined;
   const modelTitle = modelLabel ? `${catalog.model.label} ${modelLabel}` : catalog.model.label;
   const optionsTitle = optionsLabel ? `Options ${optionsLabel}` : 'Options';
-  const modeTitle = modeLabel
-    ? `${modeLabel} mode. Click to cycle with Shift+Tab`
-    : 'Mode. Click to cycle with Shift+Tab';
-  const modeTooltip = (
-    <span className='grid gap-0.5 text-center'>
-      <span>{modeLabel ? `${modeLabel} mode` : 'Mode'}</span>
-      <span>Click to cycle with</span>
-      <span className='font-medium'>Shift+Tab</span>
-    </span>
-  );
+  const modeTitle = modeLabel ? `Mode ${modeLabel}` : 'Mode';
   /*
   An unconfirmed dispatch is the weaker claim, so it wins the tooltip while any
   shown value is still only "sent". Once every shown value has agent-owned
@@ -631,16 +654,26 @@ export function SessionChatSessionOptionPills({
         </DropdownMenu>
       ) : null}
       {modeButton ? (
-        <PillButton
-          ariaLabel={modeTitle}
-          className={cn('ghostex-chat-mode-pill', modeIcon && 'ghostex-chat-mode-pill-icon-only')}
-          disabled={disabled}
-          icon={modeIcon}
-          label={modeIcon ? '' : (modeLabel ?? modeButton.label)}
-          onClick={() => dispatch(modeButton)}
-          skeleton={skeletonFor('mode', modeLabel)}
-          title={modeTooltip}
-        />
+        <DropdownMenu>
+          <PillTrigger
+            ariaLabel={modeTitle}
+            className='ghostex-chat-mode-pill'
+            disabled={disabled || modeValue === undefined}
+            icon={modeIcon}
+            label={modeLabel ?? modeButton.label}
+            skeleton={skeletonFor('mode', modeLabel)}
+            title={tooltipText(modeTitle, hintFor([modeButton]))}
+          />
+          <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{modeButton.label}</DropdownMenuLabel>
+              {modeButton.description ? (
+                <DropdownMenuLabel className='whitespace-normal pt-0'>{modeButton.description}</DropdownMenuLabel>
+              ) : null}
+              {menuRows(modeButton)}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       ) : null}
     </>
   );

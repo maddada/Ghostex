@@ -161,6 +161,9 @@ enum ComposerSignature {
     /// composer is found by the sandwich and never by counting rows up from the
     /// bottom.
     RuleSandwich { marker: char },
+    /// An empty input row between two full-width `─` rules. Blank rows are
+    /// removed before matching, so the two rules are adjacent in `lines`.
+    EmptyRuleSandwich,
     /// A bare marker line with no frame at all: `› Ask Codex to do anything`.
     /// The weakest signature here, so it is the one that most needs the
     /// numbered-option filter — codex's own trust dialog draws `› 1. Yes,
@@ -204,12 +207,6 @@ already folded.
 Agents deliberately absent, each for a stated reason rather than because nobody
 got to them:
 
-  - **pi** paints NO chrome at all around an empty composer. Its only on-screen
-    signal is the default statusline (`π · <title> · <model> · … · Ready · …`),
-    and pi statuslines are user-customizable, so a signature built on it would
-    report NotReady for every user who changed theirs — turning a helpful gate
-    into a CLI that cannot be sent to. Unknown is the honest answer; a pi
-    session is still gated by the notice detector, which does cover it.
   - **antigravity, amp, droid, kiro, codebuddy, qoder, rovodev, hermes-agent**
     and every custom agent were not measured. An unmeasured guess would be the
     same failure as pi's, so they read Unknown until someone captures them.
@@ -222,6 +219,8 @@ fn composer_signature(agent: &str) -> Option<ComposerSignature> {
         "copilot" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
         // `› ` with no frame.
         "codex" => ComposerSignature::BareMarker { marker: '\u{203a}' },
+        // Empty row bounded by two full-width rules, statusline below.
+        "pi" => ComposerSignature::EmptyRuleSandwich,
         // `│ ❯ … │`, model/mode drawn into the bottom border.
         "grok" => ComposerSignature::BoxedMarker { marker: '\u{276f}' },
         // `▄▄▄▄` / `→ placeholder` / `▀▀▀▀`.
@@ -389,6 +388,11 @@ fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
                 is_horizontal_rule(&lines[index])
                     && is_marker_line(&lines[index + 1], marker)
                     && is_horizontal_rule(&lines[index + 2])
+            })
+        }
+        ComposerSignature::EmptyRuleSandwich => {
+            (0..lines.len().saturating_sub(1)).rev().any(|index| {
+                is_horizontal_rule(&lines[index]) && is_horizontal_rule(&lines[index + 1])
             })
         }
         ComposerSignature::BareMarker { marker } => lines.iter().rev().any(|line| {

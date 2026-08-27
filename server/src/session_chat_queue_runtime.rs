@@ -542,6 +542,9 @@ pub(crate) async fn send_session_chat_message_internal(
     params.insert("sessionId".to_string(), json!(session_id));
     let target = resolve_session_chat_send_target(state, &params, "sendSessionChatMessage")?;
     let agent = session_chat_agent_for_session(&target.session);
+    let terminal_agent =
+        crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
+            .or_else(|| agent.clone());
     /*
     CDXC:SessionChatTerminalNotices 2026-08-19:
     Sample where the transcript ends BEFORE the message is enqueued: everything
@@ -570,21 +573,17 @@ pub(crate) async fn send_session_chat_message_internal(
     */
     /*
     CDXC:SessionChatComposerReady 2026-08-26:
-    The detect below is keyed on the transcript agent when there is one, and
-    falls back to the broader composer id otherwise. Preferring the transcript
-    agent keeps the statusline/notice/activity readings this call already
-    produced for claude, codex and grok; the fallback is what lets a cursor,
-    copilot, opencode, gemini or omp session — none of which has a transcript
-    decoder, so `agent` is `None` for all of them — reach the funnel at all.
+    Terminal capture must use the concrete CLI identity, not the normalized
+    transcript family. Omp shares Pi's transcript decoder but paints different
+    composer and statusline chrome, so folding it to Pi here loses both screen
+    readings. Agents without a concrete screen identity fall back to the
+    transcript family.
     */
-    let detect_agent = agent
-        .clone()
-        .or_else(|| crate::session_chat_composer::session_chat_composer_agent_id(&target.session));
     let detection = SessionChatOptionDetector::new(state)
         .detect(
             &target.project_id,
             &target.session_id,
-            detect_agent.as_deref(),
+            terminal_agent.as_deref(),
             true,
         )
         .await;
@@ -644,7 +643,7 @@ pub(crate) async fn send_session_chat_message_internal(
     transfer path for text the user actually wants to carry between views.
     */
     let steps = crate::session_chat_send::build_session_chat_message_steps(
-        detect_agent.as_deref(),
+        terminal_agent.as_deref(),
         text,
         image_paths,
     );
@@ -723,17 +722,18 @@ pub(crate) async fn send_session_chat_message_internal(
     */
     crate::telemetry::prompt_sent(agent.as_deref(), prompt_source);
     // An option command changes what the statusline reports: read it back.
-    if crate::session_chat_options::is_session_chat_option_command_text(agent.as_deref(), text)
-        || crate::session_chat_options::is_session_chat_activity_command_text(
-            agent.as_deref(),
-            text,
-        )
-    {
+    if crate::session_chat_options::is_session_chat_option_command_text(
+        terminal_agent.as_deref(),
+        text,
+    ) || crate::session_chat_options::is_session_chat_activity_command_text(
+        terminal_agent.as_deref(),
+        text,
+    ) {
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,
             &target.session_id,
-            agent.as_deref(),
+            terminal_agent.as_deref(),
         );
     }
     Ok(text.len())

@@ -77,6 +77,22 @@ impl GhostexGpuiApp {
                 );
                 let global_docs_directory_text =
                     gpui_global_docs_directory_text(&self.sidebar_runtime_settings_snapshot);
+                let chat_docs_authorization = snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.active_project_id.as_ref())
+                    .and_then(|project_id| {
+                        self.session_chat_docs_file_authorization
+                            .lock()
+                            .ok()
+                            .and_then(|authorization| {
+                                authorization
+                                    .as_ref()
+                                    .filter(|authorization| {
+                                        authorization.project_id == project_id.0
+                                    })
+                                    .cloned()
+                            })
+                    });
                 let remote_context = snapshot
                     .as_ref()
                     .and_then(|snapshot| snapshot.active_project_id.as_ref())
@@ -108,6 +124,11 @@ impl GhostexGpuiApp {
                                     snapshot.as_ref(),
                                     &additional_docs_folders_text,
                                     &global_docs_directory_text,
+                                    chat_docs_authorization
+                                        .as_ref()
+                                        .map(|authorization| authorization.root.clone()),
+                                    chat_docs_authorization
+                                        .map(|authorization| authorization.file_name),
                                 ),
                             }
                         })
@@ -1297,6 +1318,7 @@ impl GhostexGpuiApp {
         let session = self.agents_workspace.session(session_id)?;
         match session.agent_icon {
             Some("claude") => Some("claude"),
+            Some("openclaude") => Some("claude"),
             Some("codex") => Some("codex"),
             Some("grok-build") => Some("grok"),
             Some("pi") => Some("pi"),
@@ -1944,6 +1966,16 @@ impl GhostexGpuiApp {
             return;
         };
         match action {
+            "ready" => {
+                if let Some(handle) = self.app_modal_window.clone() {
+                    let _ = handle.update(cx, |host, modal_window, cx| {
+                        modal_window.activate_window();
+                        if let Some(surface) = &host.surface {
+                            surface.update(cx, |surface, _| surface.focus());
+                        }
+                    });
+                }
+            }
             "close" => {
                 self.close_gpui_app_modal_window_and_restore_command_focus(cx);
             }

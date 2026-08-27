@@ -1938,6 +1938,37 @@ impl GhostexGpuiApp {
                 }
                 self.dispatch_gpui_sidebar_host_message(message, cx);
             }
+            "confirmAgentHookLaunch" => {
+                let bounded_text = |key: &str, max_len: usize| {
+                    command
+                        .get(key)
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty() && value.len() <= max_len)
+                };
+                let Some(agent_id) = bounded_text("agentId", 128) else {
+                    return;
+                };
+                let Some(hook_agent_id) = bounded_text("hookAgentId", 128) else {
+                    return;
+                };
+                let Some(install_hooks) = command
+                    .get("installHooks")
+                    .and_then(serde_json::Value::as_bool)
+                else {
+                    return;
+                };
+                let mut message = serde_json::json!({
+                    "agentId": agent_id,
+                    "hookAgentId": hook_agent_id,
+                    "installHooks": install_hooks,
+                    "type": "confirmAgentHookLaunch",
+                });
+                if let Some(group_id) = bounded_text("groupId", 512) {
+                    message["groupId"] = serde_json::json!(group_id);
+                }
+                self.dispatch_gpui_sidebar_host_message(message, cx);
+            }
             "removeProject" => {
                 let Some(project_id) = command
                     .get("projectId")
@@ -2691,6 +2722,14 @@ impl GhostexGpuiApp {
                 let remote_sources = self.connected_gpui_remote_previous_session_sources();
                 self.run_gpui_app_modal_sidebar_status_task(
                     move || gpui_previous_sessions_result_message(request, remote_sources),
+                    cx,
+                );
+            }
+            "requestSessionTranscriptSizes" => {
+                let request = gpui_session_transcript_sizes_request_from_command(command);
+                let remote_sources = self.connected_gpui_remote_previous_session_sources();
+                self.run_gpui_app_modal_sidebar_status_task(
+                    move || gpui_session_transcript_sizes_result_message(request, remote_sources),
                     cx,
                 );
             }

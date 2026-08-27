@@ -1570,6 +1570,8 @@ pub(crate) fn source_code_server_wait_until_not_responsive(timeout: Duration) ->
 #[cfg(not(target_os = "windows"))]
 pub(crate) fn source_code_server_open_file_in_existing_instance(
     file_path: &Path,
+    line: Option<u32>,
+    column: Option<u32>,
 ) -> Result<(), String> {
     /*
     Use the bundled code-server CLI's reviewed session-socket protocol to open
@@ -1594,11 +1596,20 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
             .arg("--session-socket")
             .arg(&session_socket)
             .arg("--reuse-window")
-            .arg(file_path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .envs(source_code_server_runtime_environment(&repo_root));
+        if let Some(line) = line {
+            let mut target = file_path.as_os_str().to_owned();
+            target.push(format!(":{line}"));
+            if let Some(column) = column {
+                target.push(format!(":{column}"));
+            }
+            command.arg("--goto").arg(target);
+        } else {
+            command.arg(file_path);
+        }
         if let Some(parent) = file_path.parent() {
             command.current_dir(parent);
         }
@@ -1614,11 +1625,15 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
 #[cfg(target_os = "windows")]
 pub(crate) fn source_code_server_open_file_in_existing_instance(
     file_path: &Path,
+    line: Option<u32>,
+    column: Option<u32>,
 ) -> Result<(), String> {
     let deadline = Instant::now() + SOURCE_CODE_SERVER_STARTUP_GRACE_INTERVAL;
     while Instant::now() < deadline {
         let mut command = windows_terminal_backend::source_code_server_open_file_command(
             file_path,
+            line,
+            column,
             SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR,
         )?;
         command

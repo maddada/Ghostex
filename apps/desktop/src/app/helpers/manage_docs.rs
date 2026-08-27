@@ -393,6 +393,8 @@ pub(crate) fn run_manage_files_bridge_request_for_project_snapshot(
     snapshot: Option<&GpuiProjectSnapshot>,
     additional_docs_folders_text: &str,
     global_docs_directory_text: &str,
+    chat_docs_root: Option<PathBuf>,
+    chat_docs_file_name: Option<String>,
 ) -> ManageFilesBridgeOutcome {
     let request = serde_json::from_str::<serde_json::Value>(payload).unwrap_or_default();
     let action = request
@@ -414,6 +416,8 @@ pub(crate) fn run_manage_files_bridge_request_for_project_snapshot(
             snapshot,
             additional_docs_folders_text,
             global_docs_directory_text,
+            chat_docs_root,
+            chat_docs_file_name,
         ),
     )
 }
@@ -423,6 +427,8 @@ pub(crate) fn manage_files_bridge_result(
     snapshot: Option<&GpuiProjectSnapshot>,
     additional_docs_folders_text: &str,
     global_docs_directory_text: &str,
+    chat_docs_root: Option<PathBuf>,
+    chat_docs_file_name: Option<String>,
 ) -> Result<serde_json::Value, String> {
     /*
     macOS `runManageFilesBridgeRequest` parity: the bridge is DOCS-scoped, not
@@ -443,6 +449,8 @@ pub(crate) fn manage_files_bridge_result(
         snapshot.active_project_id.as_ref().map(|id| id.0.as_str()),
         snapshot.in_memory_project_path.as_deref(),
         global_docs_directory_text,
+        chat_docs_root,
+        chat_docs_file_name,
     )?;
     manage_validate_request_identity(request, snapshot)?;
     let context = ManageDocsContext {
@@ -665,9 +673,8 @@ pub(crate) fn manage_session_context_language(relative_path: &str) -> &'static s
     }
 }
 
-/// Mirrors `server/src/project_docs.rs` `DocsContext`: both mounted roots
-/// plus the project's configured Docs folders, carried as one value so no
-/// operation can resolve against one root while validating against the other.
+/// The persistent project/configured roots plus the current chat-authorized
+/// document folder, carried together so resolution and validation agree.
 #[derive(Clone, Copy)]
 pub(crate) struct ManageDocsContext<'a> {
     pub(crate) additional_docs_folders_text: &'a str,
@@ -677,6 +684,7 @@ pub(crate) struct ManageDocsContext<'a> {
 /// Mirrors `DocsPath`: a Docs path routed to its root. `outer` is what the Docs
 /// page addresses, `inner` is what the filesystem under `root` sees.
 pub(crate) struct ManageDocsPath<'a> {
+    pub(crate) chat: bool,
     pub(crate) extra: bool,
     pub(crate) inner: String,
     pub(crate) outer: String,
@@ -686,6 +694,9 @@ pub(crate) struct ManageDocsPath<'a> {
 impl ManageDocsPath<'_> {
     /// What a human is shown: the mount's own name, never the reserved segment.
     pub(crate) fn display(&self, context: ManageDocsContext<'_>) -> String {
+        if self.chat {
+            return self.root.join(&self.inner).to_string_lossy().into_owned();
+        }
         let Some(mount) = context.roots.extra.as_ref().filter(|_| self.extra) else {
             return self.outer.clone();
         };
@@ -699,18 +710,32 @@ impl ManageDocsPath<'_> {
 
 /*
 CDXC:DocsRootAdditive 2026-08-09:
-Mirrors `docs_path` in `server/src/project_docs.rs`. The reserved mount
-segment is the whole routing vocabulary: a path that starts with it belongs to
-the mounted Docs directory, anything else is project-relative. One relative path
-can therefore only ever mean one root.
+Mirrors `docs_path` in `server/src/project_docs.rs`. Reserved mount segments
+route configured and chat-authorized roots; every other path is project-relative.
+One Docs address can therefore only ever mean one root.
 */
 pub(crate) fn manage_docs_path<'a>(
     context: ManageDocsContext<'a>,
     path: Option<&str>,
 ) -> Result<ManageDocsPath<'a>, String> {
     let outer = manage_normalized_relative_path(path)?;
+    if let Some(inner) = manage_chat_file_root_relative_path(&outer) {
+        let root = context
+            .roots
+            .chat
+            .as_deref()
+            .ok_or_else(|| "That chat file is no longer authorized for Docs.".to_string())?;
+        return Ok(ManageDocsPath {
+            chat: true,
+            extra: false,
+            inner,
+            outer,
+            root,
+        });
+    }
     let Some(inner) = manage_extra_root_relative_path(&outer) else {
         return Ok(ManageDocsPath {
+            chat: false,
             extra: false,
             inner: outer.clone(),
             outer,
@@ -724,11 +749,22 @@ pub(crate) fn manage_docs_path<'a>(
         .ok_or_else(|| "No Docs directory is configured.".to_string())?;
     let root = mount.location.as_deref().map_err(|error| error.clone())?;
     Ok(ManageDocsPath {
+        chat: false,
         extra: true,
         inner,
         outer,
         root,
     })
+}
+
+/// `Some(inner path)` when a chat-opened document addresses its bounded mount.
+pub(crate) fn manage_chat_file_root_relative_path(outer: &str) -> Option<String> {
+    if outer == MANAGE_DOCS_CHAT_FILE_MOUNT_SEGMENT {
+        return Some(String::new());
+    }
+    outer
+        .strip_prefix(&format!("{MANAGE_DOCS_CHAT_FILE_MOUNT_SEGMENT}/"))
+        .map(str::to_string)
 }
 
 /// `Some(inner path)` when the path addresses the mounted Docs directory.
@@ -842,35 +878,18 @@ pub(crate) fn manage_is_root_artifact_file_relative_path(relative_path: &str) ->
 }
 
 /*
-CDXC:GPUISessionChatLinks 2026-08-03:
-Docs can only show what its own bridge will read: a Markdown/HTML/Excalidraw
-artifact that is either a direct repo-root artifact or inside a configured Docs
-folder. A chat file link that fails this test is not a Docs file, so it opens in
-Code instead of bouncing off the Docs allowlist with an error.
-*/
-pub(crate) fn session_chat_file_opens_in_docs(
-    relative_path: &str,
-    additional_docs_folders_text: &str,
-) -> bool {
-    if !manage_has_docs_artifact_extension(relative_path) {
-        return false;
-    }
-    // A chat link is a path inside the project, so it is tested against the
-    // project root's own allowlist, never the mounted Docs directory's.
-    manage_path_is_in_docs_scan_root(relative_path, additional_docs_folders_text)
-        || manage_is_root_artifact_file_relative_path(relative_path)
-}
-
-/*
 CDXC:DocsRootAdditive 2026-08-09:
-The mounted Docs directory serves its whole tree, so a path that routed there
-needs no further allowlist: canonicalization already confined it to that root.
+The configured Docs directory serves its whole tree. A chat-authorized mount
+serves supported document types from the explicitly selected file's folder.
 Project-root paths keep exactly the allowlist they have always had.
 */
 pub(crate) fn manage_validate_accessible_relative_path(
     path: &ManageDocsPath<'_>,
     context: ManageDocsContext<'_>,
 ) -> Result<(), String> {
+    if path.chat && manage_has_docs_artifact_extension(&path.inner) {
+        return Ok(());
+    }
     if path.extra
         || path.inner == MANAGE_ANNOTATIONS_SIDECAR_RELATIVE_PATH
         || manage_path_is_in_docs_scan_root(&path.inner, context.additional_docs_folders_text)
@@ -900,6 +919,11 @@ pub(crate) fn manage_validate_docs_action_relative_path(
     path: &ManageDocsPath<'_>,
     context: ManageDocsContext<'_>,
 ) -> Result<(), String> {
+    if path.chat {
+        return Err(
+            "Chat-opened files can be edited here but are not Docs tree items.".to_string(),
+        );
+    }
     if path.extra
         || manage_path_is_in_docs_scan_root(&path.inner, context.additional_docs_folders_text)
         || manage_is_root_artifact_file_relative_path(&path.inner)
@@ -919,7 +943,7 @@ pub(crate) fn manage_require_same_docs_root(
     source: &ManageDocsPath<'_>,
     destination: &ManageDocsPath<'_>,
 ) -> Result<(), String> {
-    if source.extra == destination.extra {
+    if source.extra == destination.extra && source.chat == destination.chat {
         return Ok(());
     }
     Err("Docs cannot move items between the project and the Docs directory.".to_string())
@@ -993,6 +1017,8 @@ pub(crate) fn manage_docs_root(
     project_id: Option<&str>,
     in_memory_project_path: Option<&Path>,
     global_docs_directory: &str,
+    chat_root: Option<PathBuf>,
+    chat_file_name: Option<String>,
 ) -> Result<ManageDocsRoots, String> {
     let configured = match manage_project_docs_directory(project_id)? {
         Some(directory) => directory,
@@ -1001,11 +1027,15 @@ pub(crate) fn manage_docs_root(
     let project = manage_in_memory_project_root(in_memory_project_path)?;
     if configured.is_empty() {
         return Ok(ManageDocsRoots {
+            chat: chat_root,
+            chat_file_name,
             project,
             extra: None,
         });
     }
     Ok(ManageDocsRoots {
+        chat: chat_root,
+        chat_file_name,
         project,
         extra: Some(ManageDocsExtraMount {
             location: manage_configured_docs_root(&configured),
@@ -1026,12 +1056,14 @@ pub(crate) fn manage_docs_extra_root_name(configured: &str) -> String {
 
 /*
 CDXC:DocsRootAdditive 2026-08-09:
-Mirrors `DocsRoots` in `server/src/project_docs.rs`: the two roots one Docs
-request sees, canonicalized. The mount carries either where its folder is or why
-it could not be opened, because that failure belongs on one tree node instead of
-on the whole listing.
+The persistent project/configured roots mirror `DocsRoots` in
+`server/src/project_docs.rs`; `chat` is one runtime-only folder explicitly
+authorized by a file click. The configured mount carries either its location
+or its error because that failure belongs on one tree node.
 */
 pub(crate) struct ManageDocsRoots {
+    pub(crate) chat: Option<PathBuf>,
+    pub(crate) chat_file_name: Option<String>,
     pub(crate) extra: Option<ManageDocsExtraMount>,
     pub(crate) project: PathBuf,
 }
@@ -1671,6 +1703,9 @@ pub(crate) fn manage_save_project_file(
     }
     let target = manage_writable_url(&path)?;
     manage_validate_accessible_relative_path(&path, context)?;
+    if path.chat && context.roots.chat_file_name.as_deref() != Some(path.inner.as_str()) {
+        return Err("Only the document explicitly opened from chat can be saved.".to_string());
+    }
     if fs::metadata(&target)
         .map(|metadata| metadata.is_dir())
         .unwrap_or(false)

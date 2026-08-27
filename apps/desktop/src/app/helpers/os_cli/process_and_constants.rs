@@ -242,6 +242,14 @@ root and no read, save, rename, delete, move, or reveal can resolve out of the
 root it was addressed to.
 */
 pub(crate) const MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT: &str = ".ghostex-docs-root";
+/*
+CDXC:GPUISessionChatExternalDocs 2026-08-27:
+Chat may open one explicitly referenced Markdown, HTML, or Excalidraw file in
+the active project's Docs surface even when it lives outside the tree Docs
+normally lists. This reserved runtime-only mount addresses the selected file's
+containing folder without turning Docs into an unrestricted filesystem browser.
+*/
+pub(crate) const MANAGE_DOCS_CHAT_FILE_MOUNT_SEGMENT: &str = ".ghostex-chat-file";
 pub(crate) const MANAGE_ANNOTATIONS_SIDECAR_RELATIVE_PATH: &str =
     ".ghostex/manage-annotations.json";
 pub(crate) const MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS: &[&str] = &[
@@ -362,7 +370,7 @@ pub(crate) const GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-embedded-browser-use",
     "ghostex-computer-use",
     "ghostex-cli",
-    "ghostex-fable-5.6-orchestration",
+    "ghostex-fable-56-orchestration",
     "ghostex-manage-beads",
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",

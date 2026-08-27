@@ -2,12 +2,11 @@
 // client-integration map both are in the root package.json for this purpose).
 //
 // Link handling is three-way (session-chat-links.ts classifies the href):
-// image destinations open in the chat's centered image overlay, web URLs go to
-// the host's browser (gpui: its own Browser view, Shift+click for the OS
-// browser; web/phone: a normal target="_blank" anchor), and machine paths go to
-// the host's editor surfaces. A path link on a host with no editor surface
-// renders as inert text — following it would only navigate the page away from
-// the chat.
+// image destinations stay as thumbnails that open in the centered viewer,
+// machine-path links use the same typed pills as the composer and invoke the
+// host's Docs/Code route, and web URLs go to the host's browser (gpui: its own
+// Browser view, Shift+click for the OS browser; web/phone: a normal
+// target="_blank" anchor).
 //
 // Inline code gets the same treatment without a markdown link around it: a span
 // that is unmistakably a file reference (session-chat-file-paths.ts decides,
@@ -86,6 +85,7 @@ import {
   sessionChatFilePathIcon,
   sessionChatFilePathTitle,
   type SessionChatFilePathRef,
+  type SessionChatFilePosition,
 } from './session-chat-file-paths';
 import { remarkSessionChatGithubAlerts, type SessionChatAlertKind } from './session-chat-github-alerts';
 import {
@@ -97,7 +97,13 @@ import {
   type SessionChatImageViewerApi,
 } from './session-chat-image-viewer';
 import { remarkSessionChatImageReferences } from './session-chat-image-reference-markdown';
-import { classifySessionChatLinkHref, useSessionChatHostLinks, type SessionChatHostLinks } from './session-chat-links';
+import {
+  classifySessionChatLinkHref,
+  sessionChatFilePositionFromHref,
+  useSessionChatHostLinks,
+  type SessionChatHostLinks,
+} from './session-chat-links';
+import { sessionChatReferenceKind, type SessionChatReferenceKind } from './session-chat-reference-pills';
 import {
   SESSION_CHAT_COPY_CODE_ATTRIBUTE,
   sessionChatTableToCsv,
@@ -514,6 +520,21 @@ function FileChip({
   );
 }
 
+function pinMarkdownTableColumnWidths(table: HTMLTableElement): void {
+  const columnWidths: number[] = [];
+  for (const row of table.rows) {
+    [...row.cells].forEach((cell, column) => {
+      columnWidths[column] = Math.max(columnWidths[column] ?? 0, cell.getBoundingClientRect().width);
+    });
+  }
+  // The header row is where a column's width is decided, so pinning it
+  // there holds every row below it in place.
+  [...(table.tHead?.rows[0]?.cells ?? [])].forEach((cell, column) => {
+    const width = columnWidths[column] ?? cell.getBoundingClientRect().width;
+    cell.style.minWidth = `${Math.round(width)}px`;
+  });
+}
+
 /**
  * A markdown table, with the chrome that makes an agent-written one readable.
  *
@@ -524,11 +545,11 @@ function FileChip({
  * overflow, but it throws away the column algorithm with it, so every column
  * sizes itself independently of the rows below and the result is ragged.
  *
- * Cells are capped and ellipsized by default (the rule lives in chat.css), and
- * the toggle here lifts the cap so long cells wrap. Before it does, it measures
- * the widest cell in each column and pins that width on the header row:
- * expanding otherwise re-runs the column algorithm against wrapped text and
- * every column jumps somewhere else, which loses the reader's place.
+ * Cells wrap by default when anything would clip, and the toggle recaps them
+ * so long cells ellipsize. Expanding measures the widest cell in each column
+ * and pins that width on the header row: expanding otherwise re-runs the
+ * column algorithm against wrapped text and every column jumps somewhere else,
+ * which loses the reader's place.
  *
  * Copy offers markdown and CSV, serialized from the rendered table rather than
  * the source, so what lands on the clipboard is what is on screen — chips
@@ -537,11 +558,13 @@ function FileChip({
 function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'table'> & ExtraProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
+  const userCollapsedRef = useRef(false);
   const [expanded, setExpanded] = useState(false);
   /*
-   * Whether this table has anything to expand. A 2x2 table of short cells has
-   * nothing clipped and nothing off-screen, so it gets no toggle at all rather
-   * than a control that would visibly do nothing.
+   * Whether this table has anything the toggle can change. A 2x2 table of
+   * short cells has nothing clipped and nothing off-screen, so it stays
+   * collapsed with no toggle rather than a control that would visibly do
+   * nothing. Overflowing tables start expanded (wrapped) instead.
    */
   const [expandable, setExpandable] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -557,7 +580,12 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'tabl
       const clipped = [...table.querySelectorAll('.ghostex-chat-markdown-table-cell')].some(
         (cell) => cell.scrollWidth > cell.clientWidth + 1
       );
-      setExpandable(clipped || scroller.scrollWidth > scroller.clientWidth + 1);
+      const needsToggle = clipped || scroller.scrollWidth > scroller.clientWidth + 1;
+      setExpandable(needsToggle);
+      if (needsToggle && !userCollapsedRef.current) {
+        pinMarkdownTableColumnWidths(table);
+        setExpanded(true);
+      }
     };
     measure();
     // Both, and for different reasons: the scroller changes size when the pane
@@ -572,18 +600,9 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'tabl
     const table = tableRef.current;
     if (!table) return;
     if (!expanded) {
-      const columnWidths: number[] = [];
-      for (const row of table.rows) {
-        [...row.cells].forEach((cell, column) => {
-          columnWidths[column] = Math.max(columnWidths[column] ?? 0, cell.getBoundingClientRect().width);
-        });
-      }
-      // The header row is where a column's width is decided, so pinning it
-      // there holds every row below it in place.
-      [...(table.tHead?.rows[0]?.cells ?? [])].forEach((cell, column) => {
-        const width = columnWidths[column] ?? cell.getBoundingClientRect().width;
-        cell.style.minWidth = `${Math.round(width)}px`;
-      });
+      pinMarkdownTableColumnWidths(table);
+    } else {
+      userCollapsedRef.current = true;
     }
     setExpanded(!expanded);
   }, [expanded]);
@@ -634,8 +653,8 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'tabl
               {copied ? <IconCheck aria-hidden='true' stroke={1.9} /> : <IconCopy aria-hidden='true' stroke={1.9} />}
             </DropdownMenuTrigger>
           </AppTooltip>
-          <DropdownMenuContent align='end' side='top'>
-            <DropdownMenuItem onClick={() => copyTable('markdown')}>Copy as Markdown</DropdownMenuItem>
+          <DropdownMenuContent align='end' className='w-auto min-w-36' side='top' style={{ borderRadius: 8 }}>
+            <DropdownMenuItem onClick={() => copyTable('markdown')}>Copy as MD</DropdownMenuItem>
             <DropdownMenuItem onClick={() => copyTable('csv')}>Copy as CSV</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -696,6 +715,45 @@ function MarkdownSummary({ children, node: _node, ...props }: ComponentProps<'su
       <IconChevronRight aria-hidden='true' className='ghostex-chat-markdown-details-chevron' size={14} stroke={2} />
       <span className='ghostex-chat-markdown-details-summary-text'>{children}</span>
     </summary>
+  );
+}
+
+/** Rendered Markdown counterpart of the Monaco reference decoration. */
+function MarkdownReferencePill({
+  kind,
+  label,
+  openFile,
+  path,
+  position,
+}: {
+  kind: SessionChatReferenceKind;
+  label: string;
+  openFile: SessionChatHostLinks['openFile'];
+  path: string;
+  position?: SessionChatFilePosition;
+}) {
+  const action = openFile ? `Open ${label}` : `Copy path for ${label}`;
+  const title = position
+    ? `${path}:${position.line}${position.column === undefined ? '' : `:${position.column}`}`
+    : path;
+  return (
+    <AppTooltip content={title}>
+      <button
+        aria-label={`${action}, ${kind}`}
+        className={`ghostex-chat-reference-pill ghostex-chat-reference-pill--${kind}`}
+        onClick={() => {
+          if (openFile) {
+            openFile(path, position);
+          } else {
+            void navigator.clipboard.writeText(path);
+          }
+        }}
+        type='button'
+        {...{ [SESSION_CHAT_FILE_PATH_ATTRIBUTE]: path }}
+      >
+        {label}
+      </button>
+    </AppTooltip>
   );
 }
 
@@ -802,19 +860,29 @@ function markdownComponents(
           </a>
         );
       }
-      if (viewer && isSessionChatImageHref(href)) {
-        const target = sessionChatImageTargetForHref(href);
-        if (viewer.canOpen(target)) {
-          return (
-            <SessionChatImageReference
-              className='mx-0.5 align-middle'
-              label={nodeText(children).trim() || 'Image'}
-              target={target}
-            />
-          );
-        }
+      if (isSessionChatImageHref(href)) {
+        return (
+          <SessionChatImageReference
+            className='mx-0.5 align-middle'
+            label={nodeText(children).trim() || 'Image'}
+            target={sessionChatImageTargetForHref(href)}
+          />
+        );
       }
       const target = classifySessionChatLinkHref(href);
+      if (target.kind === 'file') {
+        const label = nodeText(children).trim() || target.path;
+        const position = sessionChatFilePositionFromHref(href);
+        return (
+          <MarkdownReferencePill
+            kind={sessionChatReferenceKind(label, target.path)}
+            label={label}
+            openFile={hostLinks?.openFile}
+            path={target.path}
+            position={position}
+          />
+        );
+      }
       if (target.kind === 'url') {
         const openUrl = hostLinks?.openUrl;
         if (openUrl) {
@@ -840,21 +908,7 @@ function markdownComponents(
           </a>
         );
       }
-      if (target.kind === 'file' && hostLinks?.openFile) {
-        const openFile = hostLinks.openFile;
-        return (
-          <AppTooltip content={target.path}>
-            <button className='ghostex-chat-file-link' onClick={() => openFile(target.path)} type='button'>
-              {children}
-            </button>
-          </AppTooltip>
-        );
-      }
-      return (
-        <AppTooltip content={target.kind === 'file' ? target.path : undefined}>
-          <span>{children}</span>
-        </AppTooltip>
-      );
+      return <span>{children}</span>;
     },
     img: ({ alt, src }) => {
       if (viewer && typeof src === 'string' && src !== '') {

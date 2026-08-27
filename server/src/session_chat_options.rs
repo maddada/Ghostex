@@ -269,6 +269,8 @@ pub enum SessionChatOptionAgent {
     Claude,
     Codex,
     Grok,
+    Omp,
+    Pi,
 }
 
 pub fn session_chat_option_agent(agent: Option<&str>) -> Option<SessionChatOptionAgent> {
@@ -276,6 +278,8 @@ pub fn session_chat_option_agent(agent: Option<&str>) -> Option<SessionChatOptio
         "claude" | "openclaude" => Some(SessionChatOptionAgent::Claude),
         "codex" => Some(SessionChatOptionAgent::Codex),
         "grok" => Some(SessionChatOptionAgent::Grok),
+        "omp" => Some(SessionChatOptionAgent::Omp),
+        "pi" => Some(SessionChatOptionAgent::Pi),
         _ => None,
     }
 }
@@ -620,6 +624,116 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
 }
 
 // ---------------------------------------------------------------------------
+// Pi grammar
+//   0.0%/300k (auto)              claude-fable-5@300k • medium
+//
+// Pi's statusline is configurable, so require both pieces from the measured
+// default layout: a context meter and the model/effort suffix. This keeps a
+// prose line that happens to mention `model • medium` from becoming state.
+// ---------------------------------------------------------------------------
+
+const PI_FAMILY_EFFORTS: &[&str] = &["off", "minimal", "low", "medium", "high", "xhigh"];
+const OMP_MIN_HEADER_RULE_CHARS: usize = 20;
+
+fn is_pi_context_meter(token: &str) -> bool {
+    let Some((used, total)) = token.split_once('/') else {
+        return false;
+    };
+    let Some(used) = used.strip_suffix('%') else {
+        return false;
+    };
+    if used.parse::<f64>().is_err() {
+        return false;
+    }
+    let total = total.strip_suffix(['k', 'K', 'm', 'M']).unwrap_or(total);
+    !total.is_empty() && total.chars().all(|ch| ch.is_ascii_digit() || ch == '.')
+}
+
+fn is_pi_family_model_id(token: &str) -> bool {
+    !token.is_empty()
+        && token.chars().any(|ch| ch.is_ascii_alphanumeric())
+        && token.chars().all(|ch| {
+            ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | ':' | '/' | '@' | '+')
+        })
+}
+
+fn match_pi_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
+    let tokens = line.split_whitespace().collect::<Vec<_>>();
+    let bullet = tokens.iter().rposition(|token| *token == "•")?;
+    if bullet < 2 || bullet + 2 != tokens.len() {
+        return None;
+    }
+    if !tokens[..bullet - 1]
+        .iter()
+        .any(|token| is_pi_context_meter(token))
+    {
+        return None;
+    }
+    let model = tokens[bullet - 1];
+    let effort = tokens[bullet + 1].to_ascii_lowercase();
+    if !is_pi_family_model_id(model) || !PI_FAMILY_EFFORTS.contains(&effort.as_str()) {
+        return None;
+    }
+    Some(SessionChatDetectedSelection {
+        model: Some(SessionChatDetectedChoice {
+            value: model.to_string(),
+            label: model.to_string(),
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        effort: Some(SessionChatDetectedChoice {
+            value: effort.clone(),
+            label: effort,
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        mode: None,
+        fast: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Omp grammar
+//   ╭── π > ⬢ GPT-5.6-Sol · ◒ high > … ▶────────────────────────╮
+//
+// Both values live on the rounded composer head. Require that complete chrome
+// plus Omp's two glyph labels so ordinary terminal output cannot match.
+// ---------------------------------------------------------------------------
+
+fn match_omp_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('\u{256d}')
+        || !trimmed.ends_with('\u{256e}')
+        || trimmed.chars().filter(|ch| *ch == '\u{2500}').count() < OMP_MIN_HEADER_RULE_CHARS
+    {
+        return None;
+    }
+    let tokens = trimmed.split_whitespace().collect::<Vec<_>>();
+    let model_marker = tokens.iter().position(|token| *token == "⬢")?;
+    let effort_marker = tokens.iter().position(|token| *token == "◒")?;
+    if model_marker >= effort_marker || !tokens[..model_marker].contains(&"π") {
+        return None;
+    }
+    let model = *tokens.get(model_marker + 1)?;
+    let effort = tokens.get(effort_marker + 1)?.to_ascii_lowercase();
+    if !is_pi_family_model_id(model) || !PI_FAMILY_EFFORTS.contains(&effort.as_str()) {
+        return None;
+    }
+    Some(SessionChatDetectedSelection {
+        model: Some(SessionChatDetectedChoice {
+            value: model.to_string(),
+            label: model.to_string(),
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        effort: Some(SessionChatDetectedChoice {
+            value: effort.clone(),
+            label: effort,
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        mode: None,
+        fast: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Detection
 // ---------------------------------------------------------------------------
 
@@ -631,6 +745,21 @@ pub fn detect_session_chat_selection(
 ) -> Option<SessionChatDetectedSelection> {
     let mut found = SessionChatDetectedSelection::default();
     for scanned in scan_window(text).iter().rev() {
+        match agent {
+            SessionChatOptionAgent::Pi => {
+                if let Some(selection) = match_pi_statusline(scanned) {
+                    return Some(selection);
+                }
+                continue;
+            }
+            SessionChatOptionAgent::Omp => {
+                if let Some(selection) = match_omp_statusline(scanned) {
+                    return Some(selection);
+                }
+                continue;
+            }
+            _ => {}
+        }
         // Grok draws its statusline on the composer box's bottom border.
         let unboxed;
         let line = if agent == SessionChatOptionAgent::Grok {
@@ -671,6 +800,10 @@ pub fn detect_session_chat_selection(
                         }
                     }
                 }
+                SessionChatOptionAgent::Omp => {
+                    unreachable!("Omp is parsed as a complete statusline")
+                }
+                SessionChatOptionAgent::Pi => unreachable!("Pi is parsed as a complete statusline"),
             }
         }
         if found.model.is_some() && found.effort.is_some() {
@@ -851,6 +984,8 @@ fn read_session_chat_transcript_selection(
             is nothing a transcript read could add here.
             */
             SessionChatOptionAgent::Grok => return None,
+            SessionChatOptionAgent::Omp => return None,
+            SessionChatOptionAgent::Pi => return None,
         })?;
     let path = crate::session_chat::resolve_session_chat_transcript_path(
         transcript_agent,

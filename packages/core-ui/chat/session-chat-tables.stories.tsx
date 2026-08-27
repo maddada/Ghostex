@@ -40,7 +40,7 @@ const LONG_CELL_TABLE = [
   '| Expanding threw you off | Lifting the cap re-runs the column algorithm against newly wrapped text, so every column lands somewhere else and the row you were reading moves out from under you. |',
 ].join('\n');
 
-/** The common case: nothing to expand, nothing off-screen, so no toggle. */
+/** The common case: nothing to collapse, nothing off-screen, so no toggle. */
 const SMALL_TABLE = [
   'Two by two, which is most of the tables an agent writes:',
   '',
@@ -49,7 +49,7 @@ const SMALL_TABLE = [
   '| Theme | dark |',
   '| Wrap | off |',
   '',
-  'No expand toggle appears — there is nothing clipped to expand.',
+  'No collapse toggle appears — there is nothing clipped to recap.',
 ].join('\n');
 
 /** Inline code, a link, and a file-path chip, all inside cells. */
@@ -161,15 +161,15 @@ function ChatPane({
 }
 
 /*
- * Presses the pane's real expand toggle once on mount rather than faking the
- * expanded state with story CSS — the column pinning only happens on that
- * click, so a faked pane would not show what expanding actually looks like.
+ * Presses the pane's real collapse toggle once on mount rather than faking
+ * the capped state with story CSS — overflowing tables now start expanded,
+ * so this is how the ellipsized "after" pane is shown.
  */
-function AutoExpanded({ children }: { children: ReactNode }) {
+function AutoCollapsed({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      ref.current?.querySelector<HTMLButtonElement>('button[aria-label="Expand cells"]')?.click();
+      ref.current?.querySelector<HTMLButtonElement>('button[aria-label="Collapse cells"]')?.click();
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -199,7 +199,9 @@ function SessionChatTablesStory({ narrow = false, theme }: { narrow?: boolean; t
       <style>{PREVIEW_STYLES}</style>
       <div className='flex min-h-0 flex-1 gap-2'>
         <Pane label='after — capped, ellipsized, real table layout'>
-          <ChatPane messages={LONG_MESSAGES} theme={theme} />
+          <AutoCollapsed>
+            <ChatPane messages={LONG_MESSAGES} theme={theme} />
+          </AutoCollapsed>
         </Pane>
         <Pane label='before — display:block, uncapped cells, no chrome'>
           <ChatPane before messages={LONG_MESSAGES} theme={theme} />
@@ -207,9 +209,7 @@ function SessionChatTablesStory({ narrow = false, theme }: { narrow?: boolean; t
       </div>
       <div className='flex min-h-0 flex-1 gap-2'>
         <Pane label='expanded — cells wrap, columns hold'>
-          <AutoExpanded>
-            <ChatPane messages={LONG_MESSAGES} theme={theme} />
-          </AutoExpanded>
+          <ChatPane messages={LONG_MESSAGES} theme={theme} />
         </Pane>
         <Pane label='wide — the wrapper scrolls'>
           <ChatPane messages={WIDE_MESSAGES} theme={theme} />

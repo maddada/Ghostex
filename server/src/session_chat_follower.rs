@@ -1525,6 +1525,8 @@ pub(crate) fn sync_session_chat_follower_for_session(
         })
     };
     let agent = session_chat_agent_for_session(session);
+    let terminal_agent = crate::session_chat_composer::session_chat_composer_agent_id(session)
+        .or_else(|| agent.clone());
     // Detection source for snapshot/replaced frames (cached) and the follower's
     // ~30s probe (refresh). Both run through the shared 5s-TTL cache.
     // CDXC:SessionChatTerminalNotices 2026-08-19: the reader also answers with
@@ -1534,15 +1536,14 @@ pub(crate) fn sync_session_chat_follower_for_session(
         let detector = SessionChatOptionDetector::new(state);
         let project_id = project_id.clone();
         let session_id = session_id.clone();
-        let agent = agent.clone();
+        let terminal_agent = terminal_agent.clone();
         Arc::new(move |mode| {
             let mut detection = match mode {
                 crate::session_chat_options::SessionChatOptionsReadMode::Cached => {
                     detector.cached(&project_id, &session_id)
                 }
-                crate::session_chat_options::SessionChatOptionsReadMode::Refresh => {
-                    detector.detect_blocking(&project_id, &session_id, agent.as_deref(), true)
-                }
+                crate::session_chat_options::SessionChatOptionsReadMode::Refresh => detector
+                    .detect_blocking(&project_id, &session_id, terminal_agent.as_deref(), true),
             };
             detection.notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
                 &project_id,

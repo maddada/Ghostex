@@ -124,6 +124,21 @@ is ready, then hand the file to code-server IPC. Never persist or log either
 path, and never accept a path that was not present in the current Hub catalog.
 */
 pub(crate) struct PendingSourceFileOpen {
+    pub(crate) column: Option<u32>,
     pub(crate) file_path: PathBuf,
+    pub(crate) line: Option<u32>,
     pub(crate) project_path: PathBuf,
+}
+
+/*
+One chat-selected document folder may be mounted into the active project's
+Docs surface at a time. The project id keeps a hidden/stale Docs surface from
+borrowing a file authorization granted in another project. Runtime-only: this
+must never enter shell state, settings, logs, or renderer-owned persistence.
+*/
+#[derive(Clone)]
+pub(crate) struct GpuiSessionChatDocsFileAuthorization {
+    pub(crate) file_name: String,
+    pub(crate) project_id: String,
+    pub(crate) root: PathBuf,
 }

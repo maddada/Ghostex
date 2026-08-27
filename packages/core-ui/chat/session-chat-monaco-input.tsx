@@ -15,6 +15,11 @@
 import { useEffect, useRef } from 'react';
 import type { SessionChatTheme } from '../../shared/session-chat';
 import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from './session-chat-composer';
+import {
+  sessionChatComposerReferences,
+  SESSION_CHAT_REFERENCE_REVEAL_MARKER,
+  type SessionChatComposerReference,
+} from './session-chat-reference-pills';
 
 interface MonacoPositionLike {
   column: number;
@@ -39,11 +44,21 @@ interface MonacoKeyboardEventLike {
   stopPropagation(): void;
 }
 
+interface MonacoMouseEventLike {
+  event: {
+    detail: number;
+    preventDefault(): void;
+    stopPropagation(): void;
+    target: HTMLElement;
+  };
+}
+
 interface MonacoDisposableLike {
   dispose(): void;
 }
 
 interface MonacoEditorInstanceLike {
+  deltaDecorations(oldDecorations: string[], newDecorations: MonacoDecorationLike[]): string[];
   dispose(): void;
   executeEdits(source: string, edits: { range: unknown; text: string }[]): void;
   focus(): void;
@@ -56,10 +71,21 @@ interface MonacoEditorInstanceLike {
   onDidChangeModelContent(listener: () => void): MonacoDisposableLike;
   onDidContentSizeChange(listener: () => void): MonacoDisposableLike;
   onKeyDown(listener: (event: MonacoKeyboardEventLike) => void): MonacoDisposableLike;
+  onMouseDown(listener: (event: MonacoMouseEventLike) => void): MonacoDisposableLike;
   setSelection(selection: unknown): void;
   setPosition(position: MonacoPositionLike): void;
   trigger(source: string, handlerId: string, payload: unknown): void;
   updateOptions(options: Record<string, unknown>): void;
+}
+
+interface MonacoDecorationLike {
+  options: Record<string, unknown>;
+  range: {
+    endColumn: number;
+    endLineNumber: number;
+    startColumn: number;
+    startLineNumber: number;
+  };
 }
 
 interface MonacoNamespaceLike {
@@ -95,6 +121,18 @@ one-row list. Give the editor a palette-sized box for as long as the palette is
 open; the height snaps back to the draft's own content height on close.
 */
 const QUICK_INPUT_MIN_HEIGHT_PX = 280;
+const REFERENCE_PILL_CLASS = 'ghostex-chat-reference-pill';
+const REFERENCE_PILL_ID_CLASS_PREFIX = `${REFERENCE_PILL_CLASS}--id-`;
+const REFERENCE_PILL_WORD_JOINER = '\u2060';
+const REFERENCE_PILL_WRAP_BOUNDARY = '\u200b';
+const REFERENCE_PILL_ICON_SPACE = '\u00a0\u00a0\u2009';
+const REFERENCE_PILL_TRAILING_SPACE = '\u2009';
+
+/** Injected text must be one Monaco wrap unit, not merely one DOM box. */
+function referencePillInjectedText(label: string): string {
+  const text = `${REFERENCE_PILL_ICON_SPACE}${label.replaceAll(' ', '\u00a0')}${REFERENCE_PILL_TRAILING_SPACE}`;
+  return [...text].join(REFERENCE_PILL_WORD_JOINER);
+}
 
 // Monaco has already normalized the browser event into its cross-platform
 // KeyCode enum. GPUI's CEF input path can expose navigation keys with a raw
@@ -343,6 +381,159 @@ export function SessionChatMonacoInput({
           wrappingStrategy: 'advanced',
         });
         editorRef.current = editor;
+        let referenceDecorationIds: string[] = [];
+        let references: SessionChatComposerReference[] = [];
+        let lastCaretOffset = caretOffset(editor);
+        let normalizingReferenceCaret = false;
+        const modelRangeForOffsets = (startOffset: number, endOffset: number): MonacoDecorationLike['range'] | null => {
+          const model = editor.getModel();
+          if (!model) {
+            return null;
+          }
+          const start = model.getPositionAt(startOffset);
+          const end = model.getPositionAt(endOffset);
+          return {
+            endColumn: end.column,
+            endLineNumber: end.lineNumber,
+            startColumn: start.column,
+            startLineNumber: start.lineNumber,
+          };
+        };
+        const deleteAtomicReference = (key: string): boolean => {
+          if (key !== 'Backspace' && key !== 'Delete') {
+            return false;
+          }
+          const model = editor.getModel();
+          const selection = editor.getSelection();
+          if (!model || !selection) {
+            return false;
+          }
+          const selectionStart = model.getOffsetAt(selection.getStartPosition());
+          const selectionEnd = model.getOffsetAt(selection.getEndPosition());
+          let deleteStart = selectionStart;
+          let deleteEnd = selectionEnd;
+          if (selectionStart === selectionEnd) {
+            const reference =
+              key === 'Backspace'
+                ? references.find((candidate) => candidate.end === selectionStart)
+                : references.find((candidate) => candidate.start === selectionStart);
+            if (!reference) {
+              return false;
+            }
+            deleteStart = reference.start;
+            deleteEnd = reference.end;
+          } else {
+            const overlapping = references.filter(
+              (reference) => reference.start < selectionEnd && reference.end > selectionStart
+            );
+            if (overlapping.length === 0) {
+              return false;
+            }
+            deleteStart = Math.min(selectionStart, ...overlapping.map((reference) => reference.start));
+            deleteEnd = Math.max(selectionEnd, ...overlapping.map((reference) => reference.end));
+          }
+          const range = modelRangeForOffsets(deleteStart, deleteEnd);
+          if (!range) {
+            return false;
+          }
+          editor.executeEdits('ghostex-reference-pill-delete', [{ range, text: '' }]);
+          editor.setPosition(model.getPositionAt(deleteStart));
+          lastCaretOffset = deleteStart;
+          return true;
+        };
+        const revealReferenceSource = (reference: SessionChatComposerReference): void => {
+          const model = editor.getModel();
+          if (!model) {
+            return;
+          }
+          const labelEnd = editor.getValue().indexOf('](', reference.start + 1);
+          if (labelEnd < reference.start || labelEnd >= reference.end) {
+            return;
+          }
+          const range = modelRangeForOffsets(labelEnd, labelEnd);
+          if (!range) {
+            return;
+          }
+          editor.executeEdits('ghostex-reference-pill-reveal', [{ range, text: SESSION_CHAT_REFERENCE_REVEAL_MARKER }]);
+          const nextCaret = labelEnd + 1;
+          editor.setPosition(model.getPositionAt(nextCaret));
+          lastCaretOffset = nextCaret;
+        };
+        const syncReferenceTitles = (): void => {
+          for (const [index, reference] of references.entries()) {
+            for (const pill of container.querySelectorAll<HTMLElement>(`.${REFERENCE_PILL_ID_CLASS_PREFIX}${index}`)) {
+              pill.title = reference.path;
+            }
+          }
+        };
+        const renderReferencePills = (): void => {
+          const model = editor.getModel();
+          if (!model) {
+            return;
+          }
+          references = sessionChatComposerReferences(editor.getValue());
+          referenceDecorationIds = editor.deltaDecorations(
+            referenceDecorationIds,
+            references.flatMap((reference, index) => {
+              const start = model.getPositionAt(reference.start);
+              const end = model.getPositionAt(reference.end);
+              const sourceRange = {
+                endColumn: end.column,
+                endLineNumber: end.lineNumber,
+                startColumn: start.column,
+                startLineNumber: start.lineNumber,
+              };
+              const pillRange = {
+                endColumn: start.column,
+                endLineNumber: start.lineNumber,
+                startColumn: start.column,
+                startLineNumber: start.lineNumber,
+              };
+              return [
+                {
+                  options: {
+                    inlineClassName: 'ghostex-chat-composer-reference-source',
+                    inlineClassNameAffectsLetterSpacing: true,
+                    stickiness: 1,
+                  },
+                  range: sourceRange,
+                },
+                {
+                  options: {
+                    // Monaco computes wrapping before decoration CSS hides the
+                    // source Markdown. Give its line breaker a zero-width
+                    // boundary before and after the indivisible pill instead
+                    // of letting the hidden path force a break through it.
+                    before: {
+                      content: REFERENCE_PILL_WRAP_BOUNDARY,
+                      cursorStops: 3,
+                    },
+                    after: {
+                      attachedData: { referenceIndex: index },
+                      content: `${referencePillInjectedText(reference.label)}${REFERENCE_PILL_WRAP_BOUNDARY}`,
+                      // The source range begins after the injected pill, so
+                      // its model start and end map to the pill's two distinct
+                      // visual edges. Monaco may stop only at those edges.
+                      cursorStops: 0,
+                      inlineClassName: `${REFERENCE_PILL_CLASS} ${REFERENCE_PILL_CLASS}--${reference.kind} ${REFERENCE_PILL_ID_CLASS_PREFIX}${index}`,
+                      inlineClassNameAffectsLetterSpacing: true,
+                    },
+                    // This decoration is intentionally a zero-width boundary.
+                    // Monaco otherwise drops its injected text before render.
+                    showIfCollapsed: true,
+                    stickiness: 1,
+                  },
+                  range: pillRange,
+                },
+              ];
+            })
+          );
+          queueMicrotask(syncReferenceTitles);
+        };
+        const referenceDomObserver = new MutationObserver(syncReferenceTitles);
+        referenceDomObserver.observe(container, { childList: true, subtree: true });
+        disposables.push({ dispose: () => referenceDomObserver.disconnect() });
+        renderReferencePills();
         const applyHeight = (): void => {
           if (fillHeightRef.current) {
             // Clear the inline height so the stylesheet's stretched container
@@ -393,6 +584,7 @@ export function SessionChatMonacoInput({
         });
         disposables.push(
           editor.onDidChangeModelContent(() => {
+            renderReferencePills();
             if (suppressChangeRef.current) {
               return;
             }
@@ -410,17 +602,44 @@ export function SessionChatMonacoInput({
             });
           }),
           editor.onDidChangeCursorPosition(() => {
-            if (!suppressChangeRef.current) {
-              callbacksRef.current.onCaretChange(caretOffset(editor));
+            if (suppressChangeRef.current || normalizingReferenceCaret) {
+              return;
             }
+            const model = editor.getModel();
+            const selection = editor.getSelection();
+            if (!model || !selection) {
+              return;
+            }
+            const selectionStart = model.getOffsetAt(selection.getStartPosition());
+            const selectionEnd = model.getOffsetAt(selection.getEndPosition());
+            let nextCaret = selectionEnd;
+            if (selectionStart === selectionEnd) {
+              const reference = references.find(
+                (candidate) => selectionEnd > candidate.start && selectionEnd < candidate.end
+              );
+              if (reference) {
+                nextCaret = lastCaretOffset <= reference.start ? reference.end : reference.start;
+                normalizingReferenceCaret = true;
+                editor.setPosition(model.getPositionAt(nextCaret));
+                normalizingReferenceCaret = false;
+              }
+            }
+            lastCaretOffset = nextCaret;
+            callbacksRef.current.onCaretChange(nextCaret);
           }),
           editor.onDidContentSizeChange(applyHeight),
           editor.onKeyDown((event) => {
+            const key = composerKeyForMonacoEvent(event);
+            if (deleteAtomicReference(key)) {
+              event.preventDefault();
+              event.stopPropagation();
+              return;
+            }
             callbacksRef.current.onKeyDown({
               altKey: event.browserEvent.altKey,
               ctrlKey: event.browserEvent.ctrlKey,
               isComposing: event.browserEvent.isComposing,
-              key: composerKeyForMonacoEvent(event),
+              key,
               metaKey: event.browserEvent.metaKey,
               preventDefault: () => {
                 event.preventDefault();
@@ -428,6 +647,26 @@ export function SessionChatMonacoInput({
               },
               shiftKey: event.browserEvent.shiftKey,
             });
+          }),
+          editor.onMouseDown((event) => {
+            if (event.event.detail !== 2) {
+              return;
+            }
+            const pill = event.event.target.closest<HTMLElement>(`.${REFERENCE_PILL_CLASS}`);
+            if (!pill || !container.contains(pill)) {
+              return;
+            }
+            const idClass = [...pill.classList].find((className) =>
+              className.startsWith(REFERENCE_PILL_ID_CLASS_PREFIX)
+            );
+            const index = Number.parseInt(idClass?.slice(REFERENCE_PILL_ID_CLASS_PREFIX.length) ?? '', 10);
+            const reference = references[index];
+            if (!reference) {
+              return;
+            }
+            event.event.preventDefault();
+            event.event.stopPropagation();
+            revealReferenceSource(reference);
           })
         );
         applyHeight();
@@ -461,6 +700,14 @@ export function SessionChatMonacoInput({
             };
           },
           getValue: () => editor.getValue(),
+          insertSavedPrompt: (text) => {
+            editor.focus();
+            // Saved Prompts arrive as complete strings. A non-keyboard source
+            // keeps the insertion to one edit instead of replaying every
+            // character through Monaco's physical-keyboard path.
+            editor.trigger('ghostex-saved-prompt', 'type', { text });
+            return true;
+          },
           insertText: (text) => {
             editor.focus();
             editor.trigger('keyboard', 'type', { text });
