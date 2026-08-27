@@ -127,10 +127,19 @@ const REFERENCE_PILL_WORD_JOINER = '\u2060';
 const REFERENCE_PILL_WRAP_BOUNDARY = '\u200b';
 const REFERENCE_PILL_ICON_SPACE = '\u00a0\u00a0\u2009';
 const REFERENCE_PILL_TRAILING_SPACE = '\u2009';
+const REFERENCE_PILL_MAX_LABEL_CHARACTERS = 18;
+
+function referencePillDisplayLabel(label: string): string {
+  const characters = [...label];
+  if (characters.length <= REFERENCE_PILL_MAX_LABEL_CHARACTERS) {
+    return label;
+  }
+  return `${characters.slice(0, REFERENCE_PILL_MAX_LABEL_CHARACTERS - 1).join('')}\u2026`;
+}
 
 /** Injected text must be one Monaco wrap unit, not merely one DOM box. */
 function referencePillInjectedText(label: string): string {
-  const text = `${REFERENCE_PILL_ICON_SPACE}${label.replaceAll(' ', '\u00a0')}${REFERENCE_PILL_TRAILING_SPACE}`;
+  const text = `${REFERENCE_PILL_ICON_SPACE}${referencePillDisplayLabel(label).replaceAll(' ', '\u00a0')}${REFERENCE_PILL_TRAILING_SPACE}`;
   return [...text].join(REFERENCE_PILL_WORD_JOINER);
 }
 
