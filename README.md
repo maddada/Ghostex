@@ -84,13 +84,6 @@ Supports all extensions. Sleeps when not in use to same resources (configurable)
 
 <img width="1200" alt="image" src="https://github.com/user-attachments/assets/986fbece-d0de-4739-8515-f3c2a7437b92" />
 
-### Inbox Based Agent Management
-
-This optional inbox moves work beyond individual sessions. <br/>
-Organize around threads and worktrees, focus on one project or see every project together, then snooze or settle threads as needed.
-
-<img width="3456" height="2072" alt="Inbox-based agent management in Ghostex" src="media/readme/ghostex-inbox-agent-management.png" />
-
 ### Split your terminals and use keyboard hotkeys to jump between them in the Agents view
 
 The same configurable hotkey flow you're used to from terminals like Ghostty and cmux. <br />
@@ -147,6 +140,13 @@ Press enter to resume that session! Lots of filters available. Start it from the
 Also see list of all previous sessions from all agents by title/tag/last active so you can resume any of them
 
 <img width="3456" height="2066" alt="2026-06-30_Ghostex_10-53-36@2x" src="https://github.com/user-attachments/assets/1d774329-6a5d-4d8d-98e7-34fd2613dd8b" />
+
+### Inbox Based Agent Management
+
+This optional inbox moves work beyond individual sessions. <br/>
+Organize around threads and worktrees, focus on one project or see every project together, then snooze or settle threads as needed.
+
+<img width="3456" height="2072" alt="Inbox-based agent management in Ghostex" src="media/readme/ghostex-inbox-agent-management.png" />
 
 ### Extensible Architecture (client apps <-> gxserver daemon <-> zmx persistence)
 
