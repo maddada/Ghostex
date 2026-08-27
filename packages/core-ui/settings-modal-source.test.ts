@@ -378,7 +378,8 @@ describe('settings modal source', () => {
     expect(integrationsTab).toContain('onUninstallAllSkills={onUninstallBundledAgentSkills}');
     expect(skillsPanelSource).toContain('onUninstallAllSkills');
     expect(skillsPanelSource).toContain('Uninstall All');
-    expect(skillsPanelSource).toContain('disabled={ghostexCliStatusLoading || !anySkillInstalled}');
+    expect(skillsPanelSource).toContain('const uninstallDisabled = ghostexCliStatusLoading || !onUninstall;');
+    expect(skillsPanelSource).toContain('disabled={uninstallDisabled}');
   });
 
   test('gates Keep Awake settings behind Enable Experimental Features', () => {

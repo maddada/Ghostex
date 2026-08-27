@@ -25,9 +25,10 @@ function catalogFor(agent: string) {
 }
 
 describe('session chat session-option catalogs', () => {
-  it('gives agents without a catalog no pills at all', () => {
-    expect(sessionChatSessionOptionCatalog('pi')).toBeNull();
+  it('gives Pi a terminal handoff and unknown agents no pills at all', () => {
+    expect(catalogFor('pi').model.dispatch).toEqual({ kind: 'terminal-handoff' });
     expect(sessionChatSessionOptionCatalog(null)).toBeNull();
+    expect(sessionChatSessionOptionCatalog('unknown-agent')).toBeNull();
     expect(sessionChatOptionCommandNames('grok')).toEqual([]);
   });
 
@@ -83,14 +84,11 @@ describe('session chat session-option catalogs', () => {
     const mode = catalogFor('claude')
       .optionsForModel('sonnet')
       .find((descriptor) => descriptor.id === 'mode');
-    expect(mode?.actionLabel).toBe('Cycle mode (Shift+Tab)');
     expect(mode?.dispatch).toEqual({
-      kind: 'key',
+      kind: 'cyclic-key-steps',
       key: 'shift-tab',
-      marker: 'Sent Shift+Tab (mode cycle)',
     });
-    // Keys carry no value, so they never label a pill.
-    expect(mode && sessionChatOptionTracksValue(mode)).toBe(false);
+    expect(mode && sessionChatOptionTracksValue(mode)).toBe(true);
   });
 
   it("opens codex's model picker and adjusts effort with shifted arrows", () => {
