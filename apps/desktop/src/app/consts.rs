@@ -900,9 +900,9 @@ must mirror gpui-component PopupMenu layout exactly or the last menu rows get
 clipped: the popover root adds a 1px border on each side, the items column
 adds 4px vertical padding on each side (10px chrome total), adjacent items
 are separated by a 2px column gap, separators render as a 2px border plus
-2px vertical margins (6px), and every item row is at least 26px tall. Actions
-and Open In override the bottom item padding to zero (6px chrome total) and
-reserve the root's 2px vertical border inside the 420px popup window.
+2px vertical margins (6px), and every item row is at least 26px tall. All
+menus keep the full 10px vertical chrome; zeroing the bottom item padding
+makes the last row sit flush on the window edge and read as clipped.
 */
 pub(crate) const TITLEBAR_POPUP_MENU_VERTICAL_CHROME: f32 = 10.0;
 
@@ -913,8 +913,6 @@ pub(crate) const TITLEBAR_POPUP_MENU_SEPARATOR_HEIGHT: f32 = 6.0;
 pub(crate) const TITLEBAR_POPUP_MENU_MIN_ITEM_HEIGHT: f32 = 26.0;
 
 pub(crate) const TITLEBAR_POPUP_MENU_BORDER_CHROME: f32 = 2.0;
-
-pub(crate) const TITLEBAR_POPUP_MENU_FLUSH_BOTTOM_VERTICAL_CHROME: f32 = 6.0;
 
 pub(crate) const TITLEBAR_POPUP_ACTION_PREVIEW_TEXT_SIZE: f32 = 11.0;
 
