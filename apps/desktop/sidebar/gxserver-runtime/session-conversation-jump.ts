@@ -84,9 +84,15 @@ export const gpuiSidebarRuntimeConversationJumpMethods = {
     the link to the restored session; GPUI uses the same daemon restore
     contract as the Previous Sessions modal (`createSession` with
     `restoredFromSessionId`, then remove the stopped history row).
+
+    A dead session whose row still carries a resumable agent conversation gets
+    the conversation back through the resume path instead: restoring only the
+    terminal hands the user an empty shell while the conversation the link is
+    actually about stays dead. The terminal-restore path remains for plain
+    terminal sessions, where the shell is all there is to bring back.
     */
     const row = await this.findGpuiProjectBoardPreviousSessionRow(reference);
-    if (!row) {
+    if (!row || (await this.checkGpuiProjectBoardLinkResumable(reference))) {
       return await this.resumeGpuiConversationSessionReference(reference, options);
     }
     if (!this.client) {
