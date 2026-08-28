@@ -19,6 +19,7 @@ import type {
   GxserverProjectDomainState,
   GxserverRendererCommand,
   GxserverSidebarProjectCollectionsState,
+  GxserverSidebarSpacesState,
   GxserverWorkspaceSessionGroupsState,
 } from '@/packages/shared/gxserver-protocol';
 import type {
@@ -297,6 +298,11 @@ export type GpuiSidebarRemotePresentationEvent = {
         type: 'sidebarProjectCollectionsChanged';
       }
     | {
+        revision: number;
+        sidebarSpaces: GxserverSidebarSpacesState;
+        type: 'sidebarSpacesChanged';
+      }
+    | {
         groups: GxserverWorkspaceSessionGroupsState;
         revision: number;
         type: 'workspaceGroupsChanged';
@@ -399,6 +405,15 @@ export type GpuiActiveWorkspaceTabSessionPayload = {
   agentSessionId?: string;
   hasSessionNote?: boolean;
   stashedPromptCount?: number;
+  /*
+  CDXC:DraftAgentSwitch 2026-08-28:
+  The session is a draft (no first prompt yet), copied from the projected
+  sidebar row. Rust needs it because a draft is chat-eligible WITHOUT an
+  `agentSessionId`: its CLI publishes one only once it has booted, and an agent
+  switch takes it away again for the length of the swap. PRESENT-ONLY, like
+  every other draft marker on the way here — absence means "not a draft".
+  */
+  isDraft?: boolean;
   isGeneratingFirstPromptTitle: boolean;
   isSleeping: boolean;
   kind: GxserverPresentationSession['kind'];

@@ -273,7 +273,33 @@ pub(crate) fn get_persisted_provider_startup_text_for_session(
     agent_settings: &Map<String, Value>,
 ) -> Option<String> {
     get_queued_agent_launch_startup_text_for_session(session)
-        .or_else(|| get_agent_startup_text_for_session(project, session, agent_settings))
+        .or_else(|| get_provider_restart_startup_text_for_session(project, session, agent_settings))
+}
+
+/*
+CDXC:DraftSessions 2026-08-28:
+The last step of startup-text precedence — what to run when the queued
+fresh-launch text has already been consumed and the provider has to come back.
+For an ordinary session that is the daemon-owned resume plan: reopen the agent
+on the conversation it was in.
+
+A DRAFT has no conversation to reopen. It publishes an agent session id at
+startup but writes no transcript until the first prompt, so `build_agent_resume_plan`
+would either resume a conversation that was never recorded or, with no identity
+at all, degrade to a bare shell — and the user would come back to a terminal with
+no agent in it. Relaunch it from its stored launch plan instead, which is exactly
+the command it was created with, so waking or reopening a draft is byte-identical
+to opening it the first time.
+*/
+pub(crate) fn get_provider_restart_startup_text_for_session(
+    project: &Value,
+    session: &Value,
+    agent_settings: &Map<String, Value>,
+) -> Option<String> {
+    if crate::agents::session_is_draft(session) {
+        return get_agent_launch_startup_text_for_session(session);
+    }
+    get_agent_startup_text_for_session(project, session, agent_settings)
 }
 
 pub(crate) fn has_queued_agent_launch_startup_text(session: &Value) -> bool {

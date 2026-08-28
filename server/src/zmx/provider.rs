@@ -6,7 +6,6 @@ use std::{
 use serde_json::{json, Map, Value};
 
 use crate::{
-    agents::get_agent_startup_text_for_session,
     constants::GXSERVER_PROTOCOL_VERSION,
     domain::{DomainRepository, DomainStateError},
     session_status::compute_activity_update,
@@ -40,7 +39,9 @@ pub(crate) fn create_attach_session_metadata(
     let startup_text = explicit_startup_text
         .clone()
         .or(queued_launch_startup_text.clone())
-        .or_else(|| get_agent_startup_text_for_session(&project, &probed_session, agent_settings));
+        .or_else(|| {
+            get_provider_restart_startup_text_for_session(&project, &probed_session, agent_settings)
+        });
     let startup_text_disposition =
         decide_startup_text_disposition(&probe.lifecycle_state, startup_text.as_deref());
     let session_for_attach = if explicit_startup_text.is_none()
@@ -142,7 +143,9 @@ pub(crate) fn start_session_provider(
     let startup_text = explicit_startup_text
         .clone()
         .or(queued_launch_startup_text)
-        .or_else(|| get_agent_startup_text_for_session(&project, &probed_session, agent_settings));
+        .or_else(|| {
+            get_provider_restart_startup_text_for_session(&project, &probed_session, agent_settings)
+        });
     let startup_text_disposition =
         decide_startup_text_disposition(&probe.lifecycle_state, startup_text.as_deref());
     let should_start_with_startup_text =
@@ -221,6 +224,20 @@ pub(crate) fn start_session_provider(
         }
     }
     let session = repository.update_session_for_lifecycle(&update)?;
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    An agent CLI has just been launched into this pane, so re-arm layer 1 of
+    CDXC:ActivitySuppressionPolicy for a DRAFT. `/api/wakeSession` already does
+    this for itself further up the lifecycle dispatch, but a cold desktop attach
+    and the provider restart inside `/api/switchDraftAgent` both land HERE and
+    never touch the wake path — which left the CLI's startup spinner free to
+    paint a working title, stamp `lastActiveAt`, and PROMOTE a draft the user
+    had not typed a single character into.
+
+    Scoped to drafts: an ordinary session's activity is untouched, exactly as
+    before.
+    */
+    let session = crate::agents::arm_draft_launch_activity_suppression(repository, &session)?;
     Ok(json!({
         "exitCode": result.exit_code,
         "provider": "zmx",

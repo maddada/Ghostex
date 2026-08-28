@@ -12,7 +12,11 @@ import {
   validateGpuiGxserverBootstrap,
 } from './helpers/bootstrap';
 import { sameStringSet } from './helpers/records';
-import { isSidebarProjectCollectionsState, parseGpuiRemotePresentationProjectId } from './helpers/remote-presentation';
+import {
+  isSidebarProjectCollectionsState,
+  isSidebarSpacesState,
+  parseGpuiRemotePresentationProjectId,
+} from './helpers/remote-presentation';
 import type {
   GpuiGxserverBootstrap,
   GpuiSidebarRuntimeSnapshotKind,
@@ -55,6 +59,7 @@ export interface GpuiSidebarRuntimePresentationStreamMethods {
   ): void;
   removePresentationSession(projectId: string, sessionId: string): void;
   hideLocalPresentationSession(projectId: string, sessionId: string): void;
+  unhideLocalPresentationSession(projectId: string, sessionId: string): void;
   removeLocalPresentationProject(projectId: string): void;
 }
 
@@ -113,6 +118,9 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     // Adopt whatever trail this scope already has on the daemon so Back keeps
     // working across an app restart instead of starting from an empty stack.
     void this.navigationHistory.refresh();
+    // Heal the shared composer draft cache from the daemon's durable copy —
+    // an app kill can drop localStorage batches the daemon still holds.
+    this.reconcileSessionChatDraftCache();
 
     const client = this.client;
     void Promise.all([
@@ -206,6 +214,9 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       onSidebarProjectCollections: (state) => {
         this.forwardSidebarProjectCollectionsFromGxserver(state);
       },
+      onSidebarSpaces: (state) => {
+        this.forwardSidebarSpacesFromGxserver(state);
+      },
       onSnapshot: (snapshot) => {
         this.applyPresentationSnapshot(snapshot, this.hasHydrated ? 'patch' : 'hydrate');
       },
@@ -262,6 +273,9 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     this.syncLocalPresentationAttentionTracking(previousSessions, projectedSnapshot.sessions);
     if (isSidebarProjectCollectionsState(snapshot.sidebarProjectCollections)) {
       this.forwardSidebarProjectCollectionsFromGxserver(snapshot.sidebarProjectCollections);
+    }
+    if (isSidebarSpacesState(snapshot.sidebarSpaces)) {
+      this.forwardSidebarSpacesFromGxserver(snapshot.sidebarSpaces);
     }
     this.adoptWorkspaceGroupsFromGxserver(snapshot.workspaceGroups);
     this.publishPresentation(kind);
@@ -387,6 +401,27 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     GPUI native tab close must match macOS local-first sidebar removal. Keep a runtime-only hidden-session overlay so future gxserver hydrates cannot reinsert a locally closed mapped Agents row while the backend transition catches up or fails best-effort. Store only project/session ids.
     */
     this.localFirstHiddenPresentationSessionKeys.add(createGxserverPresentationSidebarSessionKey(projectId, sessionId));
+  },
+
+  unhideLocalPresentationSession(this: GpuiSidebarRuntime, projectId: string, sessionId: string): void {
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    The inverse of `hideLocalPresentationSession`, for the one caller whose
+    local-first removal can be REFUSED by the daemon. The empty-draft discard
+    hides the row before its `/api/removeSession`, and gxserver re-derives the
+    predicate from its own state and may decline (the session was promoted, or
+    gained draft text, since the snapshot the client decided from). Dropping the
+    key here is what lets the next hydrate show the row again — the overlay is
+    consulted when groups are built, so a key left behind would keep a live
+    session invisible on this client forever.
+
+    Deliberately NOT wired into the ordinary close path: that removal is an
+    instruction, and its overlay entry is exactly what stops a hydrate still in
+    flight from resurrecting a row the user closed.
+    */
+    this.localFirstHiddenPresentationSessionKeys.delete(
+      createGxserverPresentationSidebarSessionKey(projectId, sessionId)
+    );
   },
 
   removeLocalPresentationProject(this: GpuiSidebarRuntime, projectId: string): void {

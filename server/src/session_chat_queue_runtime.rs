@@ -50,7 +50,7 @@ use crate::server::{
     session_observer_key, AppState, RoutedResponse,
 };
 use crate::session_chat_composer::SessionChatComposerReadiness;
-use crate::session_chat_follower::{session_chat_agent_for_session, session_chat_hook_working};
+use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_chat_options::{
     cached_session_chat_composer_readiness, cached_session_chat_screen_state,
     cached_session_chat_terminal_notice, emit_session_chat_options_state_frame,
@@ -630,7 +630,6 @@ pub(crate) async fn send_session_chat_message_internal(
         agent.as_deref(),
         read_runtime_text(&target.session, "agentSessionId").as_deref(),
         read_runtime_text(&target.session, "agentSessionPath").as_deref(),
-        session_chat_hook_working(&target.session),
         text,
     )
     .await;
@@ -721,14 +720,43 @@ pub(crate) async fn send_session_chat_message_internal(
     that leave; the prompt text is not in scope for the emitter and cannot be.
     */
     crate::telemetry::prompt_sent(agent.as_deref(), prompt_source);
-    // An option command changes what the statusline reports: read it back.
-    if crate::session_chat_options::is_session_chat_option_command_text(
+    /*
+    An option command changes what the statusline reports: read it back. It is
+    also NOT a user prompt — Ghostex itself typed it on the user's behalf when
+    they picked a model or an effort level out of the composer's dropdown.
+    */
+    let is_option_command = crate::session_chat_options::is_session_chat_option_command_text(
         terminal_agent.as_deref(),
         text,
     ) || crate::session_chat_options::is_session_chat_activity_command_text(
         terminal_agent.as_deref(),
         text,
-    ) {
+    );
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    THE chat half of the draft promotion choke point. Both callers reach the
+    agent through this one function — the user's composer and the prompt queue's
+    scheduler — so clearing the marker here covers every Ghostex-delivered first
+    prompt, and it happens only after the bytes were accepted: a send refused by
+    the composer gate or by zmx returns above and leaves the row a draft.
+    (The terminal-direct half lives in `agents/drafts.rs`.)
+
+    Option commands are carved out of BOTH halves. `/model` is delivered through
+    this same function, and the dropdown that sends it is the one that will host
+    the draft's own Agents section — so promoting on it would let a user destroy
+    their draft's agent switcher by picking a model in it. The carve-out has to
+    cover the terminal churn those bytes cause as well, which is why the
+    non-promoting branch re-arms the draft's launch suppression window instead
+    of doing nothing: the command's spinner is then folded back to idle exactly
+    like a startup spinner, and cannot promote the draft through the
+    activity-based half a second later.
+    */
+    if is_option_command {
+        suppress_draft_activity_after_app_command(state, &target.project_id, &target.session_id);
+    } else {
+        promote_draft_session_after_send(state, &target.project_id, &target.session_id);
+    }
+    if is_option_command {
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,
@@ -896,12 +924,50 @@ snapshot and holds no per-session chat subscription. A queue change on an
 otherwise idle session produces no other delta, so without this publish the badge
 would only appear whenever some unrelated event happened to fire.
 
+CDXC:DraftSessions 2026-08-28:
+`/api/setSessionChatDraft` rides the same publish, which is what keeps a DRAFT
+session's sidebar title following the user's typing on every client: the draft
+display title is a presentation overlay read from `session_chat_drafts`, so the
+delta this schedules is the only thing that republishes it.
+
 Every queue mutation and every scheduler delivery already funnels through
 `broadcast_session_chat_queue_state`, so the delta is published there rather than
 at each call site. Same shape as `delayed_sends::publish_session_change`: one
 short sequencer-locked section that projects, allocates the revision and
 broadcasts, so revision order and broadcast order stay identical.
 */
+/// Clears a draft session's marker after a chat/queue send reached the agent,
+/// and republishes the row so every client stops drawing it as a draft. A send
+/// into a session that was never a draft costs one indexed read and no write.
+fn promote_draft_session_after_send(state: &AppState, project_id: &str, session_id: &str) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    if matches!(
+        crate::agents::promote_draft_session(&repository, project_id, session_id),
+        Ok(true)
+    ) {
+        let _ =
+            schedule_presentation_session_delta(state, &db, &repository, project_id, session_id);
+    }
+}
+
+/// Re-arms a draft's launch activity-suppression window after Ghostex typed one
+/// of its OWN commands (a model/effort pick) into the terminal, so the churn
+/// that command causes cannot be mistaken for the user prompting the agent. A
+/// no-op on every session that is not a draft.
+fn suppress_draft_activity_after_app_command(state: &AppState, project_id: &str, session_id: &str) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
+        return;
+    };
+    let _ = crate::agents::arm_draft_launch_activity_suppression(&repository, &session);
+}
+
 pub(crate) fn publish_session_chat_queue_presentation_delta(
     state: &AppState,
     project_id: &str,

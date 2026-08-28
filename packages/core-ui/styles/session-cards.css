@@ -565,6 +565,43 @@
   z-index: 2;
 }
 
+/*
+ * CDXC:SessionForkFamilies 2026-08-28:
+ * The branch badge rides in the project-label column so the trailing grid keeps
+ * its three fixed slots. The label becomes a right-aligned flex row: the badge
+ * holds its intrinsic width and the project name is the only part that
+ * truncates, so a branched row never loses its marker to a long project path.
+ */
+.session-history-project-label {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.session-history-project-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-fork-branch-badge {
+  align-items: center;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 4px;
+  color: #8a919c;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 400;
+  gap: 2px;
+  line-height: 14px;
+  padding: 0 3px;
+  /* The label above turns pointer events off; the badge owns a tooltip. */
+  pointer-events: auto;
+}
+
 .session-history-card[data-restorable='true'] {
   cursor: pointer;
 }
@@ -851,6 +888,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * CDXC:DraftSessions 2026-08-28:
+ * A draft's title is unsent composer text, so it reads quieter than a real
+ * session's title — the dimming IS the "nothing has been sent here yet" signal.
+ * It stays dimmed while the row is focused, because that is exactly when the
+ * user needs to know the session is still a draft. Expressed as opacity rather
+ * than a color so it composes with every layout's own title color (the default
+ * card, the reference sidebar, the focused/sleeping variants) instead of having
+ * to out-specify each of them.
+ */
+.session[data-draft='true'] .session-alias-heading {
+  opacity: 0.62;
 }
 
 .session-frame:not(.project-editor-session-frame) .session-alias-heading {

@@ -369,6 +369,15 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createAgentSession"
         | "/api/relocateProject"
         | "/api/forkSession"
+        /*
+        CDXC:DraftSessions 2026-08-28:
+        Switching a draft's agent is remote-allowed for the same reason
+        createAgentSession and startSessionProvider above are: the agent CLI
+        runs on the machine that owns the project, so a client looking at a
+        remote machine has to ask that machine. It carries only bounded project
+        / session / agent ids the daemon itself published.
+        */
+        | "/api/switchDraftAgent"
         | "/api/readAgentLaunchPlan"
         | "/api/readAgentResumePlan"
         | "/api/requestSessionRename"
@@ -395,6 +404,15 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSidebarProjectCollections"
         | "/api/updateSidebarProjectCollections"
         | "/api/assignProjectToSidebarCollection"
+        /*
+        CDXC:SidebarSpaces 2026-08-27:
+        Spaces are a saved sidebar filter owned by the daemon that owns the
+        projects, so a remote gxserver section must be able to read and edit its
+        own Space set. The document carries only the same bounded ids, names,
+        icon ids, and colors the collections endpoints beside it already do.
+        */
+        | "/api/readSidebarSpaces"
+        | "/api/updateSidebarSpaces"
         | "/api/scheduleDelayedSend"
         | "/api/cancelDelayedSend"
         | "/api/readDelayedSends"
@@ -407,6 +425,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/markAutomationRunRead"
         | "/api/searchSessions"
         | "/api/listPreviousSessions"
+        /*
+        CDXC:SessionForkFamilies 2026-08-28:
+        Remote-allowed for the same reason `/api/listPreviousSessions` above it
+        is: the fork family is derived from the registry on the machine that ran
+        the sessions. It carries only the bounded project/session ids, titles,
+        and lifecycle states those list rows already send.
+        */
+        | "/api/sessionForkBranches"
         | "/api/readSessionTranscriptSizes"
         | "/api/transitionSession"
         /*
@@ -474,6 +500,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/reorderSessionChatQueue"
         | "/api/sendSessionChatQueuedPrompt"
         | "/api/setSessionChatDraft"
+        | "/api/listSessionChatDrafts"
         /*
         CDXC:ExportTranscript 2026-08-20:
         Exporting a transcript is remote-allowed for the same reason reading a

@@ -6,6 +6,7 @@ import {
   IconClock,
   IconDeviceMobile,
   IconDots,
+  IconFileExport,
   IconFocus2,
   IconGitFork,
   IconLayoutSidebarRightExpand,
@@ -40,6 +41,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { getSidebarSessionLifecycleState, type SidebarSessionItem } from '../shared/session-grid-contract';
+import { resolveSessionChatTranscriptAgent } from '../shared/session-chat';
 import { getEnabledVisibleSidebarSessionTagSections, type SidebarSessionTagListItem } from '../shared/session-tags';
 import { buildSidebarSessionDetailsClipboardText } from '../shared/session-details-copy';
 import {
@@ -405,6 +407,7 @@ export type SidebarSessionContextMenuEligibility = {
   canCopyResumeCommand: boolean;
   canCopySessionDetails: boolean;
   canDelayedSend: boolean;
+  canExportTranscript: boolean;
   canForkSession: boolean;
   canFullReloadSession: boolean;
   canGenerateSessionTitle: boolean;
@@ -431,6 +434,7 @@ export function getSidebarSessionContextMenuEligibility({
 }: SidebarSessionContextMenuEligibilityInput): SidebarSessionContextMenuEligibility {
   const isBrowserSession = isSidebarBrowserSession(session);
   const hasSession = session !== undefined;
+  const isDraftSession = session?.isDraft === true;
   const isConcreteSessionRow = hasSession && !isProjectSessionListMoreRow;
   const canUseTerminalAgentMenuAction = isConcreteSessionRow && !isBrowserSession;
 
@@ -453,9 +457,22 @@ export function getSidebarSessionContextMenuEligibility({
     canCopySessionDetails: isConcreteSessionRow && showSessionDetailsCopyAction,
     canDelayedSend:
       canUseTerminalAgentMenuAction && hasSession && supportsDelayedSendMenuAction(session, isRemoteSession),
-    canForkSession: canUseTerminalAgentMenuAction && hasSession && supportsFork(session),
+    canExportTranscript:
+      canUseTerminalAgentMenuAction && hasSession && !isDraftSession && supportsTranscriptExport(session),
+    /*
+     * CDXC:DraftSessions 2026-08-28:
+     * A draft has no conversation and no prompt yet, so Fork has nothing to
+     * fork from and Full reload has nothing to reload into: both would only
+     * ever produce an empty agent. Hide them here — the ONE resolver both the
+     * V1 card menu and the V2 row menu read — so the two menus cannot disagree.
+     * Rename, Sleep, Pin, Tag, and Close stay available on drafts.
+     */
+    canForkSession: canUseTerminalAgentMenuAction && hasSession && !isDraftSession && supportsFork(session),
     canFullReloadSession:
-      canUseTerminalAgentMenuAction && hasSession && supportsFullReloadMenuAction(session, isRemoteSession),
+      canUseTerminalAgentMenuAction &&
+      hasSession &&
+      !isDraftSession &&
+      supportsFullReloadMenuAction(session, isRemoteSession),
     canGenerateSessionTitle:
       canUseTerminalAgentMenuAction &&
       hasSession &&
@@ -727,6 +744,7 @@ export function SortableSessionCard({
     canCopyResumeCommand,
     canCopySessionDetails,
     canDelayedSend,
+    canExportTranscript,
     canForkSession,
     canFullReloadSession,
     canGenerateSessionTitle,
@@ -1193,6 +1211,7 @@ export function SortableSessionCard({
       Number(canCloseAfterDone) +
       Number(canFullReloadSession) +
       Number(canForkSession) +
+      Number(canExportTranscript) +
       Number(Boolean(session.firstUserMessage?.trim())) +
       Number(canGenerateSessionTitle) +
       Number(sessionGroup?.canCreateSessionGroup === true) +
@@ -1386,6 +1405,14 @@ export function SortableSessionCard({
     vscode.postMessage({
       sessionId: session.sessionId,
       type: 'forkSession',
+    });
+  };
+
+  const requestExportTranscript = () => {
+    setContextMenuPosition(undefined);
+    vscode.postMessage({
+      sessionId: session.sessionId,
+      type: 'exportSessionTranscript',
     });
   };
 
@@ -1965,6 +1992,14 @@ export function SortableSessionCard({
       onClick: requestForkSession,
     });
   }
+  if (canExportTranscript) {
+    advancedSessionActions.push({
+      icon: <IconFileExport aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'export-transcript',
+      label: 'Handoff / Export',
+      onClick: requestExportTranscript,
+    });
+  }
   if (session.firstUserMessage?.trim()) {
     advancedSessionActions.push({
       icon: <IconMessageCircle aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
@@ -2338,6 +2373,13 @@ export function SortableSessionCard({
             }
             data-has-agent-icon={String(hasSessionCardIcon)}
             data-dragging={String(Boolean(sortable.isDragging))}
+            /*
+             * CDXC:DraftSessions 2026-08-28:
+             * Present-only, exactly like the wire field: the attribute exists on
+             * a draft and is absent otherwise, so `[data-draft='true']` can dim
+             * the title without a `false` value needing its own rule.
+             */
+            data-draft={session.isDraft === true ? 'true' : undefined}
             data-drop-position={visibleDropPosition}
             data-drop-target={String(shouldShowGroupDropTargetChrome)}
             data-focused={String(session.isFocused)}
@@ -2591,6 +2633,7 @@ export function SortableSessionCard({
                 delayedSendRemainingLabel={session.delayedSendRemainingLabel}
                 faviconDataUrl={session.faviconDataUrl}
                 hasSessionNote={Boolean(session.sessionNote?.trim())}
+                isDraft={session.isDraft === true}
                 isFavorite={session.isFavorite}
                 isPinned={session.isPinned}
                 isReloading={session.isReloading}
@@ -2979,6 +3022,10 @@ function supportsFork(session: SidebarSessionItem): boolean {
    * as Codex in the session context menu.
    */
   return session.agentIcon === 'codex' || session.agentIcon === 'claude' || session.agentIcon === 'pi';
+}
+
+function supportsTranscriptExport(session: SidebarSessionItem): boolean {
+  return resolveSessionChatTranscriptAgent(session.agentName, session.agentIcon) !== null;
 }
 
 function supportsGeneratedName(session: SidebarSessionItem): boolean {

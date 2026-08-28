@@ -18,6 +18,7 @@ import type {
 import type {
   GxserverReadSessionAgentNoteResult,
   GxserverReadSessionTerminalTailResult,
+  GxserverSessionForkBranchesResult,
 } from '@/packages/shared/gxserver-protocol';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 import { listProjectMarkdownDocumentPaths, saveProjectMarkdownDocument } from '@/packages/shared/project-docs';
@@ -125,6 +126,18 @@ export function createSessionChatTransport(
       });
     },
     /*
+    CDXC:SessionForkFamilies 2026-08-28:
+    The branch switcher's fork family. It lands on the session's own machine
+    like every other call here, so the branches are the ones that machine's
+    registry actually knows about.
+    */
+    forkBranches() {
+      return rpcForMachine<GxserverSessionForkBranchesResult>(machineId, '/api/sessionForkBranches', {
+        projectId,
+        sessionId,
+      });
+    },
+    /*
     CDXC:SessionChatPromptQueue 2026-08-21:
     The Ghostex prompt queue and the synced composer draft (plan 016). Every
     one of these is a plain RPC on the session's own machine, exactly like
@@ -189,6 +202,20 @@ export function createSessionChatTransport(
     async saveSessionNote(note) {
       await rpcForMachine(machineId, '/api/saveSessionAgentNote', {
         note,
+        projectId,
+        sessionId,
+      });
+    },
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    The draft's agent switch runs on the session's own machine, which is where
+    the background CLI it kills and relaunches lives. Unconditional: the shared
+    UI gates the composer's "Agents" section on the daemon's `availableAgents`
+    field, so a daemon predating drafts never offers the switch.
+    */
+    async switchDraftAgent(params) {
+      await rpcForMachine(machineId, '/api/switchDraftAgent', {
+        agentId: params.agentId,
         projectId,
         sessionId,
       });

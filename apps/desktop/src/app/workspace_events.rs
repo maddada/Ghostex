@@ -1359,6 +1359,30 @@ impl GhostexGpuiApp {
             })
     }
 
+    /*
+    CDXC:DraftAgentSwitch 2026-08-28:
+    "This projected row can carry the chat view." A conversation proves that
+    with its provider conversation id, but a DRAFT has none to give: its CLI
+    publishes one only after it boots, and switching the draft's agent takes it
+    away again for the length of the swap. A draft is a real gxserver row whose
+    chat page addresses it by project/session id alone, so it qualifies on the
+    draft marker instead — otherwise the action bar answers a click on Chat
+    View with the "install hooks" settings toast, and `show_agents_session_chat_mode`
+    refuses to bring the pane back, for a session that is chatting perfectly
+    well. Membership in `agents_chat_mode_sessions` never depended on this (only
+    session teardown and the user's own toggle remove a session from it), so
+    this is about ENTERING chat, not about staying there.
+    */
+    fn gpui_projected_tab_session_is_chat_eligible(
+        session: &GpuiSidebarWorkspaceTabSession,
+    ) -> bool {
+        session.is_draft
+            || session
+                .agent_session_id
+                .as_deref()
+                .is_some_and(|agent_session_id| !agent_session_id.trim().is_empty())
+    }
+
     pub(crate) fn agents_session_chat_eligible(&self, session_id: TerminalSessionId) -> bool {
         if self
             .agents_session_chat_transcript_agent(session_id)
@@ -1376,13 +1400,12 @@ impl GhostexGpuiApp {
                         session.key == GpuiWorkspaceTerminalSessionKey::Local(key.clone())
                     })
                 })
-                .and_then(|session| session.agent_session_id.as_deref())
-                .is_some_and(|agent_session_id| !agent_session_id.trim().is_empty());
+                .is_some_and(Self::gpui_projected_tab_session_is_chat_eligible);
         }
         let Some(key) = self.agents_chat_remote_key_for_session(session_id) else {
             return false;
         };
-        let has_projected_agent_session_id = self
+        let has_chat_eligible_projection = self
             .sidebar_gxserver_presentation_focus_state
             .active_project_tab_sessions
             .as_deref()
@@ -1391,9 +1414,8 @@ impl GhostexGpuiApp {
                     session.key == GpuiWorkspaceTerminalSessionKey::Remote(key.clone())
                 })
             })
-            .and_then(|session| session.agent_session_id.as_deref())
-            .is_some_and(|agent_session_id| !agent_session_id.trim().is_empty());
-        has_projected_agent_session_id
+            .is_some_and(Self::gpui_projected_tab_session_is_chat_eligible);
+        has_chat_eligible_projection
             && self
                 .gpui_remote_gxserver_request_target(key.remote_machine_id.as_str())
                 .is_some()
@@ -2082,10 +2104,11 @@ impl GhostexGpuiApp {
         /*
         CDXC:GPUISessionChatContextMenu 2026-08-21:
         The first-party chat composer owns a shadcn context menu instead of
-        exposing Chromium's page/developer menu. Its explicit Paste action
-        reads the clipboard during the user's menu gesture, so grant only this
-        bundled chat origin the same bounded clipboard capability that the
-        app-owned Source surface receives.
+        exposing Chromium's page/developer menu. Copy and Cut still use the
+        browser clipboard writer, while Paste is routed through CEF's native
+        edit command because Chromium does not consider this windowed page
+        focused. Grant only this bundled chat origin the same bounded clipboard
+        capability that the app-owned Source surface receives.
         */
         let trusted_clipboard_origin = Some(url.clone());
         let surface = match CefSurface::try_new(
@@ -2137,12 +2160,27 @@ impl GhostexGpuiApp {
             .collect::<HashSet<_>>();
         self.agents_chat_mode_sessions
             .retain(|session_id| live_session_ids.contains(session_id));
+        /*
+        CDXC:SessionChatLoadingDiagnostics 2026-08-28:
+        Only surfaces whose SESSION is gone are destroyed here. A live session
+        toggled back to the terminal view used to lose its page too, so every
+        chat↔terminal toggle reloaded chat.html from scratch — the visible
+        blank → "Loading conversation…" → chat flash on the way back. The
+        toggled-away page now just hides: the visibility loop below stamps its
+        hidden clock, and the RAM ceiling stays enforced by the eviction pass,
+        which is also the safer destroyer (it refuses pages holding unsent
+        composer text, which this teardown would have dropped). Dead sessions
+        cannot take that route — eviction treats an unknown session as
+        not-evictable — so they are still destroyed here, with the pending
+        draft-handoff guard keeping a mid-handoff page alive long enough to
+        answer.
+        */
         let stale_surface_ids = self
             .agents_chat_surfaces
             .keys()
             .copied()
             .filter(|session_id| {
-                !self.agents_chat_mode_sessions.contains(session_id)
+                !live_session_ids.contains(session_id)
                     && !self
                         .pending_session_chat_draft_handoffs
                         .contains(session_id)

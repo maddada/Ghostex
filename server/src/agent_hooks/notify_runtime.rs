@@ -139,7 +139,10 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
     }
 
     if is_prompt_event(&event_name) {
-        if let Some(prompt) = prompt.clone() {
+        if let Some(prompt) = prompt
+            .clone()
+            .filter(|prompt| is_actual_user_message_prompt(prompt))
+        {
             if read_state_string(&state, "firstUserMessageBase64").is_none() {
                 state.insert(
                     "firstUserMessageBase64".to_string(),
@@ -187,7 +190,7 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
     );
     let first_user_message = read_state_string(&state, "pendingFirstPromptAutoRenamePrompt")
         .or_else(|| (!decoded_first_prompt.is_empty()).then_some(decoded_first_prompt))
-        .or(prompt);
+        .or_else(|| prompt.filter(|prompt| is_actual_user_message_prompt(prompt)));
     post_gxserver_hook_event(
         &agent_key,
         session_id.as_deref(),
@@ -201,6 +204,26 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         write_hook_state(Path::new(state_path), &state)?;
     }
     Ok(())
+}
+
+/*
+CDXC:FirstPromptRealMessage 2026-08-28:
+`/model`, `/effort`, and other slash or meta submissions are commands, not the
+user's first message. Capturing one as `firstUserMessageBase64` did double
+damage: it armed the first-prompt auto-title flow while the conversation held
+nothing but the command (a bare `/rename` then makes Claude name the session
+after it — "set-default-model-opus"), and because the slot is written only
+once, it also blocked the real first prompt from ever arming auto-title later.
+The first-message slot must wait for an actual message.
+*/
+fn is_actual_user_message_prompt(prompt: &str) -> bool {
+    let Some(normalized) =
+        crate::agents::activity::normalize_first_prompt_title_claim_prompt(Some(prompt))
+    else {
+        return false;
+    };
+    !crate::agents::activity::is_first_prompt_claim_meta_prompt(&normalized)
+        && !crate::agents::activity::is_first_prompt_claim_slash_command(Some(prompt), &normalized)
 }
 
 pub(crate) fn read_hook_state(path: &Path) -> Map<String, Value> {

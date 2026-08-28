@@ -31,7 +31,6 @@ import {
   IconFile,
   IconLoader2,
   IconPlayerStopFilled,
-  IconRobot,
   IconSelectAll,
   IconX,
 } from '@tabler/icons-react';
@@ -68,6 +67,12 @@ import {
   resetSessionChatComposerHistoryIndex,
 } from './session-chat-composer-state';
 import {
+  clearStoredSessionChatDraftIfUnchanged,
+  readStoredSessionChatDraft,
+  readStoredSessionChatDraftEntry,
+  writeStoredSessionChatDraft,
+} from './session-chat-draft-storage';
+import {
   filterSessionChatSlashCommands,
   sessionChatSlashQuery,
   type SessionChatSlashCommand,
@@ -77,6 +82,7 @@ import {
   filterSessionChatFiles,
   filterSessionChatSkills,
   linkedSessionChatSkillMention,
+  sessionChatDisplaySkillDirectoryPath,
   sessionChatFileBasename,
   sessionChatFileDirectory,
   sessionChatFileMention,
@@ -97,6 +103,7 @@ import {
   isNewerSessionChatDraftStamp,
   SESSION_CHAT_QUEUE_LONG_PRESS_MS,
   shouldOfferSessionChatDraft,
+  shouldRestoreOwnSessionChatDraft,
 } from './session-chat-queue';
 import type { SessionChatDraftController, SessionChatQueueController } from './use-session-chat';
 import type {
@@ -112,6 +119,14 @@ export interface SessionChatComposerHandle {
   appendText: (text: string) => boolean;
   /** Clear the draft only when it still matches the supplied snapshot. */
   clearDraft: (expected: string) => boolean;
+  /*
+  CDXC:DraftAgentSwitch 2026-08-28:
+  Persist what is in the field RIGHT NOW: the localStorage copy synchronously,
+  and gxserver's durable copy through the same debounced sync the composer uses
+  everywhere else (the push is a no-op when the server already has this text).
+  Callers use it before an action that restarts the agent CLI under the pane.
+  */
+  flushDraft: () => void;
   focus: () => void;
   getDraft: () => string;
   /** Insert a Saved Prompt at the caret as one editor operation. */
@@ -216,9 +231,11 @@ export interface SessionChatComposerProps {
   onSend: (text: string) => void | Promise<void>;
   /**
    * Reads the session's terminal screen for the `composerNotReady` refusal
-   * notice (see session-chat-composer-not-ready.tsx). Absent when the host's
-   * transport has no route to /api/readSessionTerminalTail, which hides the
-   * notice's "Show terminal" disclosure and leaves the rest of it intact.
+   * notice (see session-chat-composer-not-ready.tsx) and, polled, for the
+   * footer's Terminal View readiness tint and hover preview (see
+   * use-session-terminal-tail.ts). Absent when the host's transport has no
+   * route to /api/readSessionTerminalTail, which hides the notice's "Show
+   * terminal" disclosure and leaves the button neutral and unadorned.
    */
   onReadTerminalTail?: () => Promise<GxserverReadSessionTerminalTailResult>;
   onInterrupt: () => void;
@@ -234,10 +251,9 @@ export interface SessionChatComposerProps {
   /** Save the current draft for later and clear it after the save succeeds. */
   onStash?: () => void;
   /**
-   * Opens the host's Saved Prompts surface. With an empty draft there is
-   * nothing to stash, so the stash control switches to this instead of sitting
-   * disabled. Absent when the host cannot open that surface, which keeps the
-   * old disabled-on-empty behaviour.
+   * Opens the host's Saved Prompts surface when the stash control is clicked
+   * with a whitespace-only draft, or from the control's context click. Absent
+   * when the host cannot open that surface.
    */
   onShowStashedPrompts?: () => void;
   /**
@@ -259,6 +275,10 @@ export interface SessionChatComposerProps {
   verboseMode?: boolean;
   /** Toggle the per-session Verbose mode override. Omitted hides the action. */
   onToggleVerbose?: () => void;
+  /** Per-session Summary mode value shown below Verbose mode in the actions menu. */
+  summaryMode?: boolean;
+  /** Toggle the per-session Summary mode. Omitted hides the action. */
+  onToggleSummary?: () => void;
   /**
    * Saves a pasted image onto the session's machine and resolves with the
    * absolute path there. When set, pasting an image inserts the terminal
@@ -363,58 +383,27 @@ function nextFileReferenceIndex(text: string): number {
   return highest + 1;
 }
 
-/** Mentions the two composer pickers so they are discoverable without docs. */
+/** Mentions queue and the two composer pickers so they are discoverable without docs. */
 const DEFAULT_SESSION_CHAT_PLACEHOLDER =
-  'Send a message to the agent. Enter @ to mention a file and $ to use a skill...';
+  'Press Enter to send a message and Tab to Queue.\nUse @ to mention a file and $ for using skills...';
 
 const IMAGE_PATH_PATTERN = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i;
 const LINKED_IMAGE_REFERENCE_PATTERN = /\[Image #\d+\]\(([^)\r\n]+)\)/g;
-const SESSION_CHAT_DRAFT_STORAGE_PREFIX = 'ghostex.sessionChat.draft.';
 const SESSION_CHAT_STOP_BUTTON_COOLDOWN_MS = 2_000;
 
-function composerDraftStorage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-function readStoredSessionChatDraft(sessionKey: string | undefined): string {
-  if (!sessionKey) {
-    return '';
-  }
-  return composerDraftStorage()?.getItem(`${SESSION_CHAT_DRAFT_STORAGE_PREFIX}${sessionKey}`) ?? '';
-}
-
-function writeStoredSessionChatDraft(sessionKey: string | undefined, draft: string): void {
-  if (!sessionKey) {
-    return;
-  }
-  try {
-    const storage = composerDraftStorage();
-    const key = `${SESSION_CHAT_DRAFT_STORAGE_PREFIX}${sessionKey}`;
-    if (draft === '') {
-      storage?.removeItem(key);
-    } else {
-      storage?.setItem(key, draft);
-    }
-  } catch {
-    // Storage quota/private-mode failures must not break the composer.
-  }
-}
-
 /*
-Drops the persisted draft only while it still holds the exact text that left
-the composer. A send resolves asynchronously, and by then the field may already
-hold the next message, which must survive the acknowledgement of the previous
-one.
-*/
-function clearStoredSessionChatDraftIfUnchanged(sessionKey: string | undefined, text: string): void {
-  if (readStoredSessionChatDraft(sessionKey) === text) {
-    writeStoredSessionChatDraft(sessionKey, '');
-  }
-}
+ * CDXC:DraftCrashSafety 2026-08-28:
+ * The per-keystroke localStorage cache is NOT durable: Chromium batches its
+ * LevelDB commits and an app quit that skips a clean CEF shutdown (a dev
+ * restart, a crash, a force quit) drops everything uncommitted. gxserver's
+ * synced draft is the durable copy — its SQLite store outlives the app because
+ * the daemon deliberately survives restarts — so typing must reach it while it
+ * happens, not only on blur/unmount. A trailing debounce keeps the chatter
+ * down, and the max interval bounds staleness while the user types without a
+ * pause.
+ */
+const SESSION_CHAT_DRAFT_SYNC_DEBOUNCE_MS = 2_000;
+const SESSION_CHAT_DRAFT_SYNC_MAX_INTERVAL_MS = 10_000;
 
 function linkedImageReferenceHrefs(text: string): string[] {
   return [...text.matchAll(LINKED_IMAGE_REFERENCE_PATTERN)].map((match) => match[1]?.trim() ?? '').filter(Boolean);
@@ -534,6 +523,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       onSessionNote,
       onShowStashedPrompts,
       onStash,
+      onToggleSummary,
       onToggleVerbose,
       optionPills,
       placeholder,
@@ -547,6 +537,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       skills,
       skillHeading,
       stashedPromptCount = 0,
+      summaryMode = false,
       theme = 'dark',
       verboseMode = false,
     },
@@ -835,6 +826,16 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         setSendError(null);
         return true;
       },
+      flushDraft: (): void => {
+        /*
+        The editor's own value, not `draftRef`: a keystroke that has not been
+        committed to state yet is exactly the text this flush exists for. The
+        write goes through the same helper the per-keystroke path uses, so an
+        empty field clears the stored copy instead of leaving a stale one.
+        */
+        writeStoredSessionChatDraft(sessionKey, getInputApi()?.getValue() ?? draftRef.current);
+        pushDraftRef.current();
+      },
       focus: () => {
         const input = getInputApi();
         if (!input) {
@@ -1094,21 +1095,29 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     );
 
     // --- Cross-client draft sync -------------------------------------------------
-    // Pushed on blur / session switch / unmount / backgrounding, never per
-    // keystroke. The per-client localStorage cache above is untouched: gxserver
-    // is a sync channel, not a replacement for it.
+    // Pushed on a short typing debounce plus blur / session switch / unmount /
+    // backgrounding. The per-client localStorage cache above is untouched:
+    // gxserver is the durable copy (see SESSION_CHAT_DRAFT_SYNC_DEBOUNCE_MS),
+    // localStorage the instant one.
+    /** The draft this composer mounted with, unpushed until it changes. */
+    const initialDraftRef = useRef(draft);
+    /** True once anything mutated the composer — typing, load, send, clear. */
+    const composerTouchedRef = useRef(false);
+    const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastDraftSyncAtRef = useRef(0);
     const pushDraftIfChanged = (): void => {
       const controller = draftSync;
       if (!controller?.canSync) {
         return;
       }
+      lastDraftSyncAtRef.current = Date.now();
       const content = getInputApi()?.getValue() ?? draftRef.current;
       if (content === lastPushedDraftRef.current) {
         return;
       }
       lastPushedDraftRef.current = content;
       void controller.push(content).catch(() => {
-        // Let the next blur retry rather than silently swallowing the draft.
+        // Let the next flush retry rather than silently swallowing the draft.
         lastPushedDraftRef.current = null;
       });
     };
@@ -1130,6 +1139,42 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       };
     }, []);
 
+    useEffect(() => {
+      if (!composerTouchedRef.current) {
+        if (draft === initialDraftRef.current) {
+          // Mount, or the synced echo of the mount value: nothing new to push,
+          // and pushing here would race the crash-restore below — an empty
+          // composer must not overwrite a surviving gxserver draft with ''.
+          return;
+        }
+        composerTouchedRef.current = true;
+      }
+      if (draftSyncTimerRef.current !== null) {
+        clearTimeout(draftSyncTimerRef.current);
+        draftSyncTimerRef.current = null;
+      }
+      // Steady typing keeps resetting the debounce, so the max interval is
+      // what bounds how much a kill mid-sentence can lose.
+      if (Date.now() - lastDraftSyncAtRef.current >= SESSION_CHAT_DRAFT_SYNC_MAX_INTERVAL_MS) {
+        pushDraftRef.current();
+        return;
+      }
+      draftSyncTimerRef.current = setTimeout(() => {
+        draftSyncTimerRef.current = null;
+        pushDraftRef.current();
+      }, SESSION_CHAT_DRAFT_SYNC_DEBOUNCE_MS);
+    }, [draft]);
+    useEffect(
+      () => () => {
+        // The unmount cleanup above already flushes; the pending timer must
+        // not fire into a dead composer after it.
+        if (draftSyncTimerRef.current !== null) {
+          clearTimeout(draftSyncTimerRef.current);
+        }
+      },
+      []
+    );
+
     /*
   "Newer draft from another device": offered, never applied. The three
   conditions live in shouldOfferSessionChatDraft; the important half is here —
@@ -1143,6 +1188,30 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         return;
       }
       const composerText = getInputApi()?.getValue() ?? draftRef.current;
+      /*
+      CDXC:DraftCrashSafety 2026-08-28:
+      This client's own synced draft is normally a mute echo — but when it is
+      fresher than the stored copy, the stored copy LOST data (the app died
+      before Chromium committed the localStorage batch) and gxserver holds the
+      only surviving text. Load it back silently, exactly as a localStorage
+      restore would have; the predicate refuses the moment anything has touched
+      the composer, so it can never replace text the user is working on.
+      */
+      if (
+        shouldRestoreOwnSessionChatDraft({
+          clientId: draftClientId,
+          composerText,
+          composerTouched: composerTouchedRef.current,
+          incoming: syncedDraft,
+          stored: readStoredSessionChatDraftEntry(sessionKey),
+        })
+      ) {
+        lastHandledDraftAtRef.current = syncedDraft.updatedAt;
+        // The restore IS the synced content; pushing it back would be an echo.
+        lastPushedDraftRef.current = syncedDraft.content;
+        loadComposerText(syncedDraft.content);
+        return;
+      }
       if (
         shouldOfferSessionChatDraft({
           clientId: draftClientId,
@@ -1465,6 +1534,16 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     };
 
     const pasteFromContextMenu = (): void => {
+      if (hostActions?.onPasteIntoComposer) {
+        // Radix restores focus to the context-menu trigger as it closes. Wait
+        // until that completes, then put Monaco's textarea back in charge
+        // before the native CEF paste command delivers the real paste event.
+        window.setTimeout(() => {
+          getInputApi()?.focus();
+          hostActions.onPasteIntoComposer?.();
+        }, 0);
+        return;
+      }
       void readSessionChatSystemClipboard()
         .then((data) => {
           pasteClipboardData(data);
@@ -1788,7 +1867,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   <button
                     aria-selected={index === highlightedIndex}
                     className={cn(
-                      'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm',
+                      'grid w-full min-w-0 grid-cols-[200px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm',
                       index === highlightedIndex ? 'bg-accent text-accent-foreground' : 'text-foreground'
                     )}
                     data-chat-picker-option='true'
@@ -1807,9 +1886,12 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                     role='option'
                     type='button'
                   >
-                    <IconRobot aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' stroke={1.6} />
-                    <span className='shrink-0 font-semibold'>/{command.name}</span>
-                    <span className='truncate text-muted-foreground'>{command.description}</span>
+                    <span className='min-w-0 truncate font-normal' title={`/${command.name}`}>
+                      /{command.name}
+                    </span>
+                    <span className='min-w-0 truncate text-left text-muted-foreground' title={command.description}>
+                      {command.description}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1830,7 +1912,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   <button
                     aria-selected={index === highlightedSkillIndex}
                     className={cn(
-                      'grid w-full min-w-0 grid-cols-[270px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm',
+                      'grid w-full min-w-0 grid-cols-[200px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm',
                       index === highlightedSkillIndex ? 'bg-accent text-accent-foreground' : 'text-foreground'
                     )}
                     data-chat-picker-option='true'
@@ -1852,10 +1934,10 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                       ${skill.name}
                     </span>
                     <span
-                      className='min-w-0 truncate text-left text-muted-foreground [direction:rtl]'
-                      title={skill.directoryPath}
+                      className='min-w-0 truncate text-left text-muted-foreground'
+                      title={sessionChatDisplaySkillDirectoryPath(skill.directoryPath)}
                     >
-                      {skill.directoryPath}
+                      {sessionChatDisplaySkillDirectoryPath(skill.directoryPath)}
                     </span>
                   </button>
                 ))}
@@ -2133,12 +2215,15 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   sessionNoteActive={sessionNoteActive}
                   sessionNoteHasText={sessionNoteHasText}
                   stashedPromptCount={stashedPromptCount}
+                  summaryMode={summaryMode}
                   verboseMode={verboseMode}
                   {...(hostActions ? { hostActions } : {})}
                   {...(onDelayedActions ? { onDelayedActions } : {})}
+                  {...(onReadTerminalTail ? { onReadTerminalTail } : {})}
                   {...(onSessionNote ? { onSessionNote } : {})}
                   {...(onShowStashedPrompts ? { onShowStashedPrompts } : {})}
                   {...(onStash ? { onStash } : {})}
+                  {...(onToggleSummary ? { onToggleSummary } : {})}
                   {...(onToggleVerbose ? { onToggleVerbose } : {})}
                   {...(onPasteImage || onAttachFile || onPickPaths
                     ? {

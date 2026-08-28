@@ -769,9 +769,10 @@ and a copy still carries the markdown.
 .ghostex-chat-expansion {
   align-items: stretch;
   display: flex;
-  gap: 0.75rem;
+  gap: calc(0.75rem - 3px);
+  margin-inline-start: -3px;
   min-width: 0;
-  width: 100%;
+  width: calc(100% + 3px);
 }
 
 .ghostex-chat-expansion-body {
@@ -779,18 +780,19 @@ and a copy still carries the markdown.
   min-width: 0;
 }
 
-/* The button itself is the full five-pixel hit target. Its centered pseudo
-   element is the visible two-pixel rail, so no invisible overlap reaches into
-   the expanded content beside it. */
+/* The button is an eleven-pixel hit target centered on the unchanged visible
+   two-pixel rail. The expansion starts three pixels earlier and contracts its
+   adjacent gap so the rail and expanded content remain in their original
+   visual positions. */
 .ghostex-chat-expansion-rail {
   align-self: stretch;
   background: transparent;
   border: 0;
-  flex: 0 0 5px;
-  min-width: 5px;
+  flex: 0 0 11px;
+  min-width: 11px;
   padding: 0;
   position: relative;
-  width: 5px;
+  width: 11px;
 }
 
 .ghostex-chat-expansion-rail::before {
@@ -1254,6 +1256,21 @@ body[data-session-chat-theme='dark']
   background: var(--muted);
 }
 
+/* CDXC:ComposerTerminalReadiness 2026-08-28:
+   The Terminal View control carries the agent CLI's readiness as a tint, in the
+   same pastel family as the mode glyphs below: green when the daemon measured
+   an input box on screen, red when it measured a prompt/auth/setup screen
+   instead. The attribute is only present for those two verdicts — `unknown`,
+   an unreadable screen, and "no reading yet" all leave the button on the
+   inherited footer color, because `unknown` must never read as not ready. */
+.ghostex-chat-footer-control[data-terminal-ready='ready'] svg {
+  color: #a6e3b1;
+}
+
+.ghostex-chat-footer-control[data-terminal-ready='notReady'] svg {
+  color: #f0a3a3;
+}
+
 /* Claude Code's Shift+Tab states use the same compact terminal glyphs as the
    CLI footer. Color carries the distinction, while the shared tooltip names
    the active mode for mouse and keyboard users. */
@@ -1308,11 +1325,11 @@ Rendering this one glyph a size up lines its ink up with its neighbours.
  * nothing to the footer row's flow, `pointer-events: none` so it can never eat
  * the button's own click, and tabular figures so 1 → 2 → 3 does not jitter its
  * width. It overhangs the top-right corner of the round control; the count is
- * capped at 99+ so a long number cannot grow the badge across its neighbour.
+ * capped at 9 so every indicator remains the same circle.
  */
 .ghostex-chat-stash-count-badge {
   align-items: center;
-  background: var(--primary);
+  background: #e0e0e0;
   border-radius: 999px;
   box-sizing: border-box;
   color: var(--primary-foreground);
@@ -1320,33 +1337,51 @@ Rendering this one glyph a size up lines its ink up with its neighbours.
   font-size: 9px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
+  height: 12px;
   justify-content: center;
   letter-spacing: 0;
   line-height: 1;
-  min-height: 10px;
-  min-width: 10px;
-  padding: 0 3px;
+  padding: 0;
   pointer-events: none;
   position: absolute;
-  right: -1px;
-  top: -1px;
-  width: max-content;
+  right: 0;
+  top: 0;
+  width: 12px;
   z-index: 2;
 }
 
-/* A session-note dot means the editor contains real text, not that the panel
+/* A session-note indicator means the editor contains real text, not that the panel
    is merely open. It is out of flow and pointer-transparent so the
    note button keeps exactly the same geometry and click target. */
 .ghostex-chat-session-note-presence-dot {
-  background: var(--primary);
+  align-items: center;
+  background: #e0e0e0;
   border-radius: 50%;
-  height: 5px;
+  color: var(--primary-foreground);
+  display: flex;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  height: 12px;
+  justify-content: center;
+  line-height: 1;
   pointer-events: none;
   position: absolute;
-  right: 1px;
-  top: 1px;
-  width: 5px;
+  right: 0;
+  top: 0;
+  width: 12px;
   z-index: 2;
+}
+
+/* Dropdown rows use 16px glyphs, so their indicators need a smaller shared
+   footprint than the badges attached to the 32px footer controls. */
+.ghostex-chat-composer-menu-indicator .ghostex-chat-stash-count-badge,
+.ghostex-chat-composer-menu-indicator .ghostex-chat-session-note-presence-dot {
+  font-size: 6px;
+  height: 9px;
+  right: -2px;
+  top: -2px;
+  width: 9px;
 }
 
 /*
@@ -1519,14 +1554,29 @@ so the swap barely moves the composer row.
   word-break: break-word;
 }
 
+/* Monaco's stock placeholder is nowrap + ellipsis. The composer copy is two
+   lines of hints, so both backends must wrap instead of truncating. */
+.ghostex-chat-composer-input::placeholder {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .ghostex-chat-composer-monaco {
   min-height: 4.5rem;
 }
 
-/* Monaco keeps attachment and skill Markdown in its model, while these
-   decorations replace the long source string with one compact token. The
-   source's zero metrics are intentional: the injected label permanently owns
-   the reference's horizontal space while it is valid Markdown. */
+.ghostex-chat-composer-monaco .editorPlaceholder {
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  text-wrap: wrap;
+  white-space: pre-wrap;
+}
+
+/* Monaco keeps one private-use character in its model for each attachment or
+   skill reference. Its zero metrics are intentional: the injected pill owns
+   the token's horizontal space, while the canonical Markdown stays outside
+   Monaco's presentation model. */
 .ghostex-chat-composer-monaco .ghostex-chat-composer-reference-source {
   font-size: 0 !important;
   letter-spacing: 0 !important;
@@ -2741,16 +2791,68 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 }
 
 .ghostex-chat-new-session-agent {
-  align-items: center;
   background: color-mix(in srgb, var(--card) 88%, var(--foreground) 12%);
   border: 1px solid var(--border);
   border-radius: 1rem;
   box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, var(--background) 45%, transparent);
   color: var(--foreground);
-  display: flex;
+  display: grid;
   height: 3rem;
-  justify-content: center;
+  place-items: center;
   width: 3rem;
+}
+
+/* CDXC:DraftAgentSwitch 2026-08-28:
+   Switching a draft's agent CLI replaces the welcome's logo and headline while
+   the pane stays exactly where it is. Both live in a one-cell grid so the
+   outgoing artwork can fade out over the incoming one instead of popping — the
+   only thing that animates on this screen. The leaving layer removes itself on
+   `animationend`, so reduced motion shortens the fade rather than skipping the
+   event that cleans it up. */
+.ghostex-chat-new-session-agent > *,
+.ghostex-chat-new-session-title > * {
+  grid-area: 1 / 1;
+}
+
+.ghostex-chat-new-session-agent-slot {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.ghostex-chat-new-session-entering {
+  animation: ghostex-chat-new-session-fade-in 240ms ease both;
+}
+
+.ghostex-chat-new-session-leaving {
+  animation: ghostex-chat-new-session-fade-out 240ms ease both;
+}
+
+@keyframes ghostex-chat-new-session-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ghostex-chat-new-session-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostex-chat-new-session-entering,
+  .ghostex-chat-new-session-leaving {
+    animation-duration: 1ms;
+  }
 }
 
 .ghostex-chat-new-session-agent-logo {
@@ -2767,10 +2869,12 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 
 .ghostex-chat-new-session-title {
   color: var(--foreground);
+  display: grid;
   font-size: 1.375rem;
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.25;
+  place-items: center;
 }
 
 /* --- Ghostex prompt queue (plan 016) --------------------------------------- */

@@ -1,0 +1,300 @@
+/*
+ * CDXC:RecoveredDrafts 2026-08-28:
+ * The composer's per-keystroke draft cache, shared with the Saved Prompts
+ * modal's Recovered view. Drafts are stored one-per-session under
+ * `ghostex.sessionChat.draft.<sessionKey>` and cleared only after a successful
+ * send, so every surviving entry is text that never made it out — exactly the
+ * corpus the Recovered toggle lists. New writes carry `{text, updatedAt}` JSON
+ * so recovered rows can be day-grouped and aged out; plain-string values from
+ * before this format are still readable and get stamped on first enumeration.
+ */
+
+const SESSION_CHAT_DRAFT_STORAGE_PREFIX = 'ghostex.sessionChat.draft.';
+
+/** Recovered drafts older than this are deleted on enumeration. */
+const RECOVERED_DRAFT_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000;
+
+/** Drafts shorter than this (trimmed) are noise ("ok", a stray letter). */
+const RECOVERED_DRAFT_MIN_CHARS = 3;
+
+export type RecoveredSessionChatDraft = {
+  /** The raw `<sessionKey>` portion of the storage key. */
+  sessionKey: string;
+  projectId: string | undefined;
+  sessionId: string | undefined;
+  text: string;
+  /** Epoch milliseconds of the last edit (stamped now for legacy values). */
+  updatedAt: number;
+};
+
+type DecodedStoredDraft = {
+  text: string;
+  updatedAt: number | undefined;
+};
+
+function draftStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function draftStorageKey(sessionKey: string): string {
+  return `${SESSION_CHAT_DRAFT_STORAGE_PREFIX}${sessionKey}`;
+}
+
+function decodeStoredDraft(raw: string): DecodedStoredDraft {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as { text?: unknown }).text === 'string' &&
+      typeof (parsed as { updatedAt?: unknown }).updatedAt === 'number'
+    ) {
+      return { text: (parsed as { text: string }).text, updatedAt: (parsed as { updatedAt: number }).updatedAt };
+    }
+  } catch {
+    // Legacy drafts are the raw composer text, not JSON.
+  }
+  return { text: raw, updatedAt: undefined };
+}
+
+export function readStoredSessionChatDraft(sessionKey: string | undefined): string {
+  if (!sessionKey) {
+    return '';
+  }
+  const raw = draftStorage()?.getItem(draftStorageKey(sessionKey));
+  return raw === null || raw === undefined ? '' : decodeStoredDraft(raw).text;
+}
+
+/**
+ * The stored draft with its stamp, for deciding whether gxserver's synced copy
+ * is newer than what this client still has on disk. `updatedAt` is undefined
+ * for legacy plain-string values, which callers must treat as "age unknown".
+ */
+export function readStoredSessionChatDraftEntry(
+  sessionKey: string | undefined
+): { text: string; updatedAt: number | undefined } | null {
+  if (!sessionKey) {
+    return null;
+  }
+  const raw = draftStorage()?.getItem(draftStorageKey(sessionKey));
+  return raw === null || raw === undefined ? null : decodeStoredDraft(raw);
+}
+
+export function writeStoredSessionChatDraft(sessionKey: string | undefined, draft: string): void {
+  if (!sessionKey) {
+    return;
+  }
+  try {
+    const storage = draftStorage();
+    const key = draftStorageKey(sessionKey);
+    if (draft === '') {
+      storage?.removeItem(key);
+    } else {
+      storage?.setItem(key, JSON.stringify({ text: draft, updatedAt: Date.now() }));
+    }
+  } catch {
+    // Storage quota/private-mode failures must not break the composer.
+  }
+}
+
+/*
+Drops the persisted draft only while it still holds the exact text that left
+the composer. A send resolves asynchronously, and by then the field may already
+hold the next message, which must survive the acknowledgement of the previous
+one.
+*/
+export function clearStoredSessionChatDraftIfUnchanged(sessionKey: string | undefined, text: string): void {
+  if (readStoredSessionChatDraft(sessionKey) === text) {
+    writeStoredSessionChatDraft(sessionKey, '');
+  }
+}
+
+/*
+ * CDXC:DraftCrashSafety 2026-08-28:
+ * An explicit delete (the Recovered row's trash action) writes a STAMPED BLANK
+ * entry rather than removing the key. gxserver holds a durable copy of every
+ * draft and `reconcileSessionChatDraftsFromServer` heals this cache from it at
+ * boot — a bare removal would just resurrect the deleted draft on the next
+ * launch. The blank entry is a tombstone: newer than the server copy, so the
+ * reconcile refuses it, hidden from the Recovered list (blank is below the
+ * noise threshold), and swept by the same 5-day retention as every other
+ * entry — matching the reconcile's own 5-day cutoff, so nothing outlives it.
+ */
+export function deleteStoredSessionChatDraft(sessionKey: string): void {
+  try {
+    draftStorage()?.setItem(draftStorageKey(sessionKey), JSON.stringify({ text: '', updatedAt: Date.now() }));
+  } catch {
+    // Nothing to do: a storage failure just leaves the draft behind.
+  }
+}
+
+/*
+ * Heals this client's draft cache from gxserver's durable copy, called once
+ * per client boot. The cache is written per keystroke but Chromium commits it
+ * in batches, so a kill without a clean shutdown (a dev restart, a crash)
+ * silently drops the newest batches; gxserver's SQLite row — fed by the
+ * composer's debounced sync — survives. One rule decides each key: the server
+ * copy wins only with a STRICTLY newer stamp, and a stored value of unknown
+ * age (legacy plain string) never loses. Server drafts older than the
+ * Recovered retention window are ignored rather than resurrected.
+ */
+export function reconcileSessionChatDraftsFromServer(
+  drafts: readonly { projectId: string; sessionId: string; content: string; updatedAt: string }[],
+  sessionKeyPrefix = ''
+): void {
+  const storage = draftStorage();
+  if (!storage) {
+    return;
+  }
+  const now = Date.now();
+  for (const draft of drafts) {
+    if (draft.content.trim() === '') {
+      continue;
+    }
+    const serverAt = Date.parse(draft.updatedAt);
+    if (Number.isNaN(serverAt) || now - serverAt > RECOVERED_DRAFT_MAX_AGE_MS) {
+      continue;
+    }
+    const sessionKey = `${sessionKeyPrefix}${draft.projectId}:${draft.sessionId}`;
+    const stored = readStoredSessionChatDraftEntry(sessionKey);
+    if (stored !== null && (stored.updatedAt === undefined || stored.updatedAt >= serverAt)) {
+      continue;
+    }
+    try {
+      // The server's stamp, not now: the entry's age (retention, freshness
+      // comparisons) must describe the text, not the moment it was healed.
+      storage.setItem(draftStorageKey(sessionKey), JSON.stringify({ text: draft.content, updatedAt: serverAt }));
+    } catch {
+      // Storage quota/private-mode failures must not break the client.
+    }
+  }
+}
+
+/*
+ * CDXC:DraftSessionsDiscardOwnership 2026-08-28:
+ * Which sessions' composers THIS installation has actually mounted. An empty
+ * `readStoredSessionChatDraft` answers two very different questions with the
+ * same empty string — "the user typed nothing" and "this client has never shown
+ * this composer" — and the empty-draft discard may only act on the first. This
+ * ring is what tells them apart.
+ *
+ * It lives in the shared store rather than in memory because on desktop the
+ * composer and the sidebar are DIFFERENT CEF pages: an in-process set in the
+ * sidebar could never see a chat page mount. localStorage is shared by the
+ * bundled pages and persists across app restarts, which is also correct here —
+ * the draft cache it vouches for persists exactly as long.
+ *
+ * One bounded key, not one key per session, so it can never accumulate: the
+ * oldest entries fall off after `MAX_OPENED_COMPOSER_SESSION_KEYS`. Falling off
+ * only ever makes the discard MORE conservative (an unvouched draft is kept for
+ * gxserver's own sweep), so the cap needs no separate expiry.
+ */
+const OPENED_COMPOSER_STORAGE_KEY = 'ghostex.sessionChat.openedComposers';
+
+const MAX_OPENED_COMPOSER_SESSION_KEYS = 200;
+
+function readOpenedComposerSessionKeys(): string[] {
+  try {
+    const raw = draftStorage()?.getItem(OPENED_COMPOSER_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Record that this client mounted `sessionKey`'s chat composer. */
+export function markSessionChatComposerOpened(sessionKey: string | undefined): void {
+  if (!sessionKey) {
+    return;
+  }
+  try {
+    const existing = readOpenedComposerSessionKeys();
+    // Most-recent-first, so the cap drops the least recently opened session.
+    const next = [sessionKey, ...existing.filter((entry) => entry !== sessionKey)].slice(
+      0,
+      MAX_OPENED_COMPOSER_SESSION_KEYS
+    );
+    draftStorage()?.setItem(OPENED_COMPOSER_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Storage quota/private-mode failures must not break the composer. The
+    // discard simply stays conservative for this session.
+  }
+}
+
+/** Whether this client has ever mounted `sessionKey`'s chat composer. */
+export function hasSessionChatComposerOpened(sessionKey: string | undefined): boolean {
+  return sessionKey !== undefined && readOpenedComposerSessionKeys().includes(sessionKey);
+}
+
+/*
+ * The sessionKey is `<projectId>:<sessionId>` on desktop and
+ * `<machineId>:<projectId>:<sessionId>` on web, so the last two `:`-separated
+ * segments are the ids in both shapes.
+ */
+function parseDraftSessionKey(sessionKey: string): { projectId: string | undefined; sessionId: string | undefined } {
+  const parts = sessionKey.split(':');
+  if (parts.length < 2) {
+    return { projectId: undefined, sessionId: sessionKey || undefined };
+  }
+  return { projectId: parts[parts.length - 2] || undefined, sessionId: parts[parts.length - 1] || undefined };
+}
+
+/*
+ * Lists every surviving composer draft for the Recovered view, enforcing the
+ * retention rules in one pass: drafts older than five days are deleted, legacy
+ * timestamp-less values are re-stamped now so their five-day clock starts, and
+ * trivial drafts are hidden (but kept — the composer may be mid-typing them).
+ */
+export function listRecoveredSessionChatDrafts(): RecoveredSessionChatDraft[] {
+  const storage = draftStorage();
+  if (!storage) {
+    return [];
+  }
+  const draftKeys: string[] = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key?.startsWith(SESSION_CHAT_DRAFT_STORAGE_PREFIX)) {
+      draftKeys.push(key);
+    }
+  }
+  const now = Date.now();
+  const recovered: RecoveredSessionChatDraft[] = [];
+  for (const key of draftKeys) {
+    const raw = storage.getItem(key);
+    if (raw === null) {
+      continue;
+    }
+    const sessionKey = key.slice(SESSION_CHAT_DRAFT_STORAGE_PREFIX.length);
+    const decoded = decodeStoredDraft(raw);
+    let updatedAt = decoded.updatedAt;
+    try {
+      if (updatedAt === undefined) {
+        updatedAt = now;
+        storage.setItem(key, JSON.stringify({ text: decoded.text, updatedAt }));
+      } else if (now - updatedAt > RECOVERED_DRAFT_MAX_AGE_MS) {
+        storage.removeItem(key);
+        continue;
+      }
+    } catch {
+      // A failed re-stamp still lists the draft; retention retries next open.
+    }
+    if (decoded.text.trim().length < RECOVERED_DRAFT_MIN_CHARS) {
+      continue;
+    }
+    recovered.push({
+      sessionKey,
+      ...parseDraftSessionKey(sessionKey),
+      text: decoded.text,
+      updatedAt: updatedAt ?? now,
+    });
+  }
+  return recovered.sort((left, right) => right.updatedAt - left.updatedAt);
+}

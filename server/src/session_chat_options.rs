@@ -1911,6 +1911,13 @@ pub(crate) fn session_chat_watchdog_state_reader(
     })
 }
 
+/// Drops EVERY reading taken off this session's screen, not just the option
+/// pills: one cache entry holds the detected options, the terminal notice, the
+/// terminal activity, the fleet state and the composer-readiness verdict, and
+/// they are all readings of the same capture, so they all go stale together.
+/// Callers that need to invalidate only the readiness (there are none — a
+/// screen whose composer verdict is worthless has worthless pills too) would be
+/// splitting an entry that is only ever written whole.
 pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, session_id: &str) {
     if let Ok(mut cache) = state.session_chat_option_cache.lock() {
         cache.remove(&session_observer_key(project_id, session_id));

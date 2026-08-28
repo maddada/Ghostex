@@ -34,6 +34,7 @@ import {
   type SessionChatHostSearchBridge,
   type SessionChatHostSessionNoteBridge,
 } from '@/packages/core-ui/chat/session-chat-view';
+import { clearStoredSessionChatDraftIfUnchanged } from '@/packages/core-ui/chat/session-chat-draft-storage';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 import { StashedPromptsModal } from '@/packages/core-ui/stashed-prompts-modal';
 import type { WebviewApi } from '@/packages/core-ui/webview-api';
@@ -68,7 +69,7 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
 - RN → page: window.ghostexMobileChatDeliver({ id, ok, result?, error? })
 - RN config (injected before content loads):
   window.__ghostexMobileChatConfig = {
-    agentId?, projectId?, sessionId?, sessionKey?, theme?, fontFamily?,
+    acknowledgedDraft?, agentId?, projectId?, sessionId?, sessionKey?, theme?, fontFamily?,
     transcriptWidthPercent?, verboseMode?
   }
 - RN presentation updates (pushed when mobile settings change):
@@ -79,6 +80,8 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
   window.ghostexMobileChatSetHostState({ working? })
 - RN terminal-draft transfer (pushed when the user switches into chat and the
   agent CLI's composer held text): window.ghostexMobileChatInsertDraft(content)
+- RN late send acknowledgment (pushed when this replacement page mounted before
+  the previous page's send completed): window.ghostexMobileChatAcknowledgeDraft(content)
 - RN chat-draft handoff (pushed when the user switches out to the terminal):
   window.ghostexMobileChatHandoffToTerminal()
 - RN transcript search (the phone's entry point is the terminal header's
@@ -90,6 +93,8 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
 */
 
 interface MobileChatConfig {
+  /** A send that completed after the previous WebView had already unmounted. */
+  acknowledgedDraft?: string;
   agentId?: string;
   fontFamily?: string;
   projectId?: string;
@@ -171,11 +176,13 @@ declare global {
     ghostexMobileChatSetPresentation?: (state: Partial<MobileChatPresentation>) => void;
     ghostexMobileChatSetHostState?: (state: Partial<MobileChatHostState>) => void;
     ghostexMobileChatInsertDraft?: (content: string) => void;
+    ghostexMobileChatAcknowledgeDraft?: (content: string) => void;
     ghostexMobileChatHandoffToTerminal?: () => void;
     ghostexMobileChatOpenSearch?: () => void;
     ghostexMobileChatOpenSessionNote?: () => void;
     ghostexMobileChatOpenSavedPrompts?: () => void;
     __ghostexMobileChatConfig?: MobileChatConfig;
+    __ghostexMobileChatPendingAcknowledgedDraft?: string;
   }
 }
 
@@ -203,6 +210,8 @@ before the composer registers is held rather than dropped.
 */
 let insertDraftIntoComposer: ((content: string) => boolean) | null = null;
 let pendingComposerDraft = '';
+let clearAcknowledgedComposerDraft: ((expectedContent: string) => boolean) | null = null;
+let pendingAcknowledgedComposerDraft = '';
 
 window.ghostexMobileChatInsertDraft = (content) => {
   if (typeof content !== 'string' || content.length === 0) {
@@ -213,6 +222,23 @@ window.ghostexMobileChatInsertDraft = (content) => {
   }
   pendingComposerDraft = content;
 };
+
+window.ghostexMobileChatAcknowledgeDraft = (content) => {
+  if (typeof content !== 'string' || content.length === 0) {
+    return;
+  }
+  if (clearAcknowledgedComposerDraft !== null) {
+    clearAcknowledgedComposerDraft(content);
+    return;
+  }
+  pendingAcknowledgedComposerDraft = content;
+};
+
+const earlyAcknowledgedDraft = window.__ghostexMobileChatPendingAcknowledgedDraft;
+if (typeof earlyAcknowledgedDraft === 'string') {
+  window.__ghostexMobileChatPendingAcknowledgedDraft = undefined;
+  window.ghostexMobileChatAcknowledgeDraft(earlyAcknowledgedDraft);
+}
 
 /*
 The same rule in the other direction. The shared composer parks the draft in
@@ -250,9 +276,14 @@ function createMobileComposerBridge(
   return {
     register(actions) {
       insertDraftIntoComposer = actions.insertPrompt;
+      clearAcknowledgedComposerDraft = actions.clearDraft;
       handoffComposerDraftToTerminal = actions.handoffToTerminal;
       if (pendingComposerDraft.length > 0 && actions.insertPrompt(pendingComposerDraft)) {
         pendingComposerDraft = '';
+      }
+      if (pendingAcknowledgedComposerDraft.length > 0) {
+        actions.clearDraft(pendingAcknowledgedComposerDraft);
+        pendingAcknowledgedComposerDraft = '';
       }
       return () => {
         if (insertDraftIntoComposer === actions.insertPrompt) {
@@ -260,6 +291,9 @@ function createMobileComposerBridge(
         }
         if (handoffComposerDraftToTerminal === actions.handoffToTerminal) {
           handoffComposerDraftToTerminal = null;
+        }
+        if (clearAcknowledgedComposerDraft === actions.clearDraft) {
+          clearAcknowledgedComposerDraft = null;
         }
       };
     },
@@ -1035,6 +1069,9 @@ void waitForConfig().then((config) => {
   const projectId = config.projectId?.trim() || undefined;
   const sessionId = config.sessionId?.trim() || undefined;
   const sessionKey = config.sessionKey?.trim() || undefined;
+  if (typeof config.acknowledgedDraft === 'string') {
+    clearStoredSessionChatDraftIfUnchanged(sessionKey, config.acknowledgedDraft);
+  }
   window.ghostexMobileChatSetPresentation?.({
     fontFamily: config.fontFamily,
     theme: normalizeSessionChatTheme(config.theme),
