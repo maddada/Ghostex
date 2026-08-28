@@ -311,7 +311,11 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     const boardProject = this.selectGpuiProjectBoardDomainProject(request, projects);
     return {
       boardProject,
-      linkStoreProjects: selectBeadConversationLinkStoreProjects(boardProject, projects),
+      linkStoreProjects: selectBeadConversationLinkStoreProjects(
+        boardProject,
+        projects,
+        normalizeghostexSettings(this.runtimeSettings?.settings).globalBeadsDirectory
+      ),
     };
   },
 
@@ -602,19 +606,14 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     if (!this.client) {
       return false;
     }
-    try {
-      const response = await this.client.rpc<{ plan?: GxserverAgentResumePlan }>('/api/readAgentResumePlan', {
-        projectId: reference.projectId,
-        sessionId: reference.sessionId,
-      });
-      return (
-        Boolean(normalizeNonEmptyString(response.plan?.primaryCommand)) &&
-        GPUI_PROJECT_BOARD_RESUMABLE_AGENT_IDS.has(normalizeNonEmptyString(response.plan?.agentId)?.toLowerCase() ?? '')
-      );
-    } catch {
-      // A removed session row answers with an error; that is a dead link.
-      return false;
-    }
+    const response = await this.client.rpc<{ plan?: GxserverAgentResumePlan }>('/api/readAgentResumePlan', {
+      projectId: reference.projectId,
+      sessionId: reference.sessionId,
+    });
+    return (
+      Boolean(normalizeNonEmptyString(response.plan?.primaryCommand)) &&
+      GPUI_PROJECT_BOARD_RESUMABLE_AGENT_IDS.has(normalizeNonEmptyString(response.plan?.agentId)?.toLowerCase() ?? '')
+    );
   },
 
   async findGpuiProjectBoardPreviousSessionRow(
@@ -665,7 +664,11 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
         projects.find((candidate) => candidate.projectId === boardProject.projectId) ?? boardProject;
       return {
         boardProject: latestBoardProject,
-        linkStoreProjects: selectBeadConversationLinkStoreProjects(latestBoardProject, projects),
+        linkStoreProjects: selectBeadConversationLinkStoreProjects(
+          latestBoardProject,
+          projects,
+          normalizeghostexSettings(this.runtimeSettings?.settings).globalBeadsDirectory
+        ),
       };
     } catch {
       return {
