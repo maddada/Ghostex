@@ -306,8 +306,10 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |this, cx| {
                 this.dispatch_open_gpui_app_modal_sidebar_state_payload(result_message, cx);
                 if mutated {
-                    if mutation == GpuiRecentProjectMutation::Restore
-                        && let Some(machine_id) = machine_id
+                    if matches!(
+                        mutation,
+                        GpuiRecentProjectMutation::Close | GpuiRecentProjectMutation::Restore
+                    ) && let Some(machine_id) = machine_id
                     {
                         this.refresh_gpui_remote_gxserver_presentation_in_background(
                             machine_id, false, cx,

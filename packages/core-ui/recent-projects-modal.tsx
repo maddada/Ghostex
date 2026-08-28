@@ -54,8 +54,9 @@ export type RecentProjectRowProps = {
   isHidden: boolean;
   isSearchSelected: boolean;
   onActivate: (project: SidebarRecentProject) => void;
-  onContextMenu: (event: MouseEvent<HTMLButtonElement>, projectId: string) => void;
+  onContextMenu: (event: MouseEvent<HTMLDivElement>, projectId: string) => void;
   onPointerMove: (projectId: string) => void;
+  onRemove: (project: SidebarRecentProject) => void;
   project: SidebarRecentProject;
 };
 
@@ -167,37 +168,55 @@ export function RecentProjectRow({
   onActivate,
   onContextMenu,
   onPointerMove,
+  onRemove,
   project,
 }: RecentProjectRowProps) {
   return (
-    <AppTooltip content={project.path}>
-      <button
-        aria-label={`${project.isOpen ? 'Open' : 'Restore'} ${project.title}`}
-        className='recent-projects-row'
-        data-context-menu-open={String(isContextMenuOpen)}
-        data-recent-project-id={project.projectId}
-        data-search-selected={String(isSearchSelected)}
-        onClick={() => onActivate(project)}
-        onContextMenu={(event) => onContextMenu(event, project.projectId)}
-        onPointerMove={() => onPointerMove(project.projectId)}
-        type='button'
-      >
-        <span aria-hidden='true' className='recent-projects-row-icon'>
-          <RecentProjectIcon project={project} />
-        </span>
+    <div
+      className='recent-projects-row'
+      data-context-menu-open={String(isContextMenuOpen)}
+      data-recent-project-id={project.projectId}
+      data-search-selected={String(isSearchSelected)}
+      onContextMenu={(event) => onContextMenu(event, project.projectId)}
+      onPointerMove={() => onPointerMove(project.projectId)}
+    >
+      <AppTooltip content={project.path}>
+        <button
+          aria-label={`${project.isOpen ? 'Open' : 'Restore'} ${project.title}`}
+          className='recent-projects-row-main'
+          onClick={() => onActivate(project)}
+          type='button'
+        >
+          <span aria-hidden='true' className='recent-projects-row-icon'>
+            <RecentProjectIcon project={project} />
+          </span>
+          <span className='recent-projects-row-title'>{project.title}</span>
+          {isHidden ? <IconEyeOff aria-label='Hidden' className='recent-projects-hidden-icon' size={14} /> : null}
+          <span aria-label={`${project.sessionCount} preserved sessions`} className='recent-projects-session-count'>
+            {project.sessionCount}
+          </span>
+        </button>
+      </AppTooltip>
+      <span className='recent-projects-row-end'>
         <span
           aria-label={project.isOpen ? 'Open in sidebar' : 'Closed'}
           className='recent-projects-status-dot'
           data-open={String(project.isOpen === true)}
           role='img'
         />
-        <span className='recent-projects-row-title'>{project.title}</span>
-        {isHidden ? <IconEyeOff aria-label='Hidden' className='recent-projects-hidden-icon' size={14} /> : null}
-        <span aria-label={`${project.sessionCount} preserved sessions`} className='recent-projects-session-count'>
-          {project.sessionCount}
-        </span>
-      </button>
-    </AppTooltip>
+        <button
+          aria-label={project.isOpen ? `Close ${project.title}` : `Remove ${project.title}`}
+          className='recent-projects-remove-button'
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove(project);
+          }}
+          type='button'
+        >
+          <IconTrash aria-hidden='true' size={14} stroke={1.8} />
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -264,6 +283,17 @@ export function RecentProjectsModal({
       onClose();
     },
     [onClose, vscode]
+  );
+
+  const removeProject = useCallback(
+    (project: SidebarRecentProject) => {
+      setContextMenuPosition(undefined);
+      vscode.postMessage({
+        projectId: project.projectId,
+        type: project.isOpen ? 'closeProjectFromProjects' : 'removeRecentProject',
+      });
+    },
+    [vscode]
   );
 
   const selectRecentProjectByKeyboard = useCallback(
@@ -445,8 +475,8 @@ export function RecentProjectsModal({
           <QuickAccessHeader activeTab='recentProjects' />
           <div className='previous-sessions-toolbar'>
             <QuickAccessSearchInput
-              ariaLabel='Search recent projects'
-              clearLabel='Clear Recent Projects search'
+              ariaLabel='Search projects'
+              clearLabel='Clear Projects search'
               inputRef={searchInputRef}
               placeholder='Search projects...'
               query={searchQuery}
@@ -485,6 +515,7 @@ export function RecentProjectsModal({
                           selectedProjectIdRef.current = projectId;
                           setSelectedProjectId(projectId);
                         }}
+                        onRemove={removeProject}
                         project={project}
                       />
                     ))}
@@ -559,18 +590,15 @@ export function RecentProjectsModal({
                   <button
                     className='session-context-menu-item session-context-menu-item-danger'
                     onClick={() => {
-                      vscode.postMessage({
-                        projectId: contextMenuPosition.projectId,
-                        type: 'removeRecentProject',
-                      });
-                      setContextMenuPosition(undefined);
-                      requestRecentProjects();
+                      if (contextMenuProject) {
+                        removeProject(contextMenuProject);
+                      }
                     }}
                     role='menuitem'
                     type='button'
                   >
                     <IconTrash aria-hidden='true' className='session-context-menu-icon' size={14} />
-                    Remove
+                    Remove project
                   </button>
                 </>
               )}
