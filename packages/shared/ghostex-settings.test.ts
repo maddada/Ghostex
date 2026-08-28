@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest';
 import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
   APP_SHOTS_HOTKEY_OPTIONS,
-  BROWSER_OPEN_MODE_OPTIONS,
   COMMANDS_PANEL_SIDE_OPTIONS,
   DEFAULT_ghostex_SETTINGS,
   DEFAULT_EDITOR_COMMAND_OPTIONS,
@@ -27,11 +26,7 @@ import {
   normalizeTerminalDevServerIgnoredPortRuleInput,
   normalizeTerminalDevServerIgnoredPortRules,
   normalizeghostexSettings,
-  parseSidebarAutoSettleAfterDaysSelectValue,
-  sidebarAutoSettleAfterDaysSelectValue,
   PROMPT_EDITOR_BACKEND_OPTIONS,
-  SIDEBAR_AUTO_SETTLE_OFF_VALUE,
-  SESSION_STATUS_INDICATOR_SIZE_OPTIONS,
   SIDEBAR_SETTINGS_PRESET_SETTINGS,
   SIDEBAR_SETTINGS_PRESETS,
   SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
@@ -63,130 +58,6 @@ describe('normalizeghostexSettings', () => {
         extensionsTitlebarButtonHidden: 'hidden',
       })
     ).toMatchObject({ extensionsTitlebarButtonHidden: false });
-  });
-
-  /*
-   * CDXC:SidebarV2Lifecycle 2026-07-29:
-   * `sidebarAutoSettleAfterDays` is read by BOTH the client predicate and
-   * server (`normalize_auto_settle_after_days`, straight out of
-   * native-sidebar-settings.json). These cases are the Rust function's table:
-   * if the two ever disagree, the shelf a user sees and the shelf the daemon
-   * writes drift apart, which reads as sessions vanishing at random.
-   */
-  test("mirrors gxserver's auto-settle window normalization", () => {
-    expect(DEFAULT_ghostex_SETTINGS.sidebarAutoSettleAfterDays).toBe(3);
-    expect(normalizeghostexSettings({})).toMatchObject({ sidebarAutoSettleAfterDays: 3 });
-    expect(normalizeghostexSettings({ sidebarAutoSettleAfterDays: null })).toMatchObject({
-      sidebarAutoSettleAfterDays: null,
-    });
-    expect(normalizeghostexSettings({ sidebarAutoSettleAfterDays: 7 })).toMatchObject({
-      sidebarAutoSettleAfterDays: 7,
-    });
-    // 0 and negatives mean "never", not "settle everything immediately".
-    expect(normalizeghostexSettings({ sidebarAutoSettleAfterDays: 0 })).toMatchObject({
-      sidebarAutoSettleAfterDays: null,
-    });
-    expect(normalizeghostexSettings({ sidebarAutoSettleAfterDays: -1 })).toMatchObject({
-      sidebarAutoSettleAfterDays: null,
-    });
-    expect(normalizeghostexSettings({ sidebarAutoSettleAfterDays: Number.NaN })).toMatchObject({
-      sidebarAutoSettleAfterDays: null,
-    });
-    // A non-number is a corrupt file, not an intent to disable.
-    expect(normalizeghostexSettings({ sidebarAutoSettleAfterDays: '7' })).toMatchObject({
-      sidebarAutoSettleAfterDays: 3,
-    });
-  });
-
-  /*
-   * CDXC:SidebarV2LogicalProjects 2026-07-29:
-   * Grouping overrides are the user's explicit "do not merge these" decisions.
-   * Normalization must therefore DROP anything it cannot recognize rather than
-   * substitute the default: silently rewriting an unknown value to "repository"
-   * would re-merge checkouts the user deliberately separated.
-   */
-  test('keeps only recognized project grouping overrides', () => {
-    expect(DEFAULT_ghostex_SETTINGS.sidebarProjectGroupingOverrides).toEqual({});
-    expect(normalizeghostexSettings({})).toMatchObject({
-      sidebarProjectGroupingOverrides: {},
-    });
-    expect(
-      normalizeghostexSettings({
-        sidebarProjectGroupingOverrides: {
-          '': 'separate',
-          'build-box:/home/build/ghostex': 'repositoryPath',
-          'local:/Users/madda/dev/Ghostex': 'separate',
-          'local:/Users/madda/dev/other': 'repository',
-          'local:/Users/madda/dev/typo': 'repository_path',
-          'local:/Users/madda/dev/wrong': 3,
-        },
-      })
-    ).toMatchObject({
-      sidebarProjectGroupingOverrides: {
-        'build-box:/home/build/ghostex': 'repositoryPath',
-        'local:/Users/madda/dev/Ghostex': 'separate',
-        'local:/Users/madda/dev/other': 'repository',
-      },
-    });
-  });
-
-  test('falls back to no overrides for a malformed record', () => {
-    for (const value of [null, [], 'separate', 3]) {
-      expect(normalizeghostexSettings({ sidebarProjectGroupingOverrides: value })).toMatchObject({
-        sidebarProjectGroupingOverrides: {},
-      });
-    }
-  });
-
-  test('maps the auto-settle window onto its Settings select value', () => {
-    expect(sidebarAutoSettleAfterDaysSelectValue(3)).toBe('3');
-    expect(sidebarAutoSettleAfterDaysSelectValue(null)).toBe(SIDEBAR_AUTO_SETTLE_OFF_VALUE);
-    // A hand-edited window with no preset reads as Off rather than pretending
-    // to be a preset it is not using.
-    expect(sidebarAutoSettleAfterDaysSelectValue(2.5)).toBe(SIDEBAR_AUTO_SETTLE_OFF_VALUE);
-    expect(parseSidebarAutoSettleAfterDaysSelectValue('14')).toBe(14);
-    expect(parseSidebarAutoSettleAfterDaysSelectValue(SIDEBAR_AUTO_SETTLE_OFF_VALUE)).toBeNull();
-  });
-
-  test('normalizes browser actions to browser panes', () => {
-    /**
-     * CDXC:BrowserPanes 2026-05-27-07:24
-     * Browser actions no longer support Chrome Canary attachment. Legacy stored
-     * values must normalize to browser panes so removed settings cannot restore
-     * the old external browser route.
-     */
-    expect(DEFAULT_ghostex_SETTINGS.browserOpenMode).toBe('browser-pane');
-    expect(normalizeghostexSettings({})).toMatchObject({
-      browserOpenMode: 'browser-pane',
-    });
-    expect(normalizeghostexSettings({ browserOpenMode: 'browser-pane' })).toMatchObject({
-      browserOpenMode: 'browser-pane',
-    });
-    expect(normalizeghostexSettings({ browserOpenMode: 'chrome-canary' })).toMatchObject({
-      browserOpenMode: 'browser-pane',
-    });
-    expect(normalizeghostexSettings({ browserOpenMode: 'Safari' })).toMatchObject({
-      browserOpenMode: 'browser-pane',
-    });
-    expect(BROWSER_OPEN_MODE_OPTIONS).toEqual([
-      {
-        label: 'Browser Panes',
-        value: 'browser-pane',
-      },
-    ]);
-  });
-
-  test('normalizes legacy browser feedback choices to Agentation', () => {
-    expect(DEFAULT_ghostex_SETTINGS.browserFeedbackTool).toBe('agentation');
-    expect(normalizeghostexSettings({})).toMatchObject({
-      browserFeedbackTool: 'agentation',
-    });
-    expect(normalizeghostexSettings({ browserFeedbackTool: 'react-grab' })).toMatchObject({
-      browserFeedbackTool: 'agentation',
-    });
-    expect(normalizeghostexSettings({ browserFeedbackTool: 'unknown' })).toMatchObject({
-      browserFeedbackTool: 'agentation',
-    });
   });
 
   test('normalizes terminal dev-server discovery settings', () => {
@@ -751,7 +622,6 @@ describe('normalizeghostexSettings', () => {
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showProjectIcons).toBe(true);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards).toBe(true);
     expect(SIDEBAR_SETTINGS_PRESETS.every((preset) => preset.settings.showCloseButtonOnSessionCards)).toBe(true);
-    expect('hideFloatingSessionStatusIndicators' in SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended).toBe(false);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideMenuBarSessionStatusIndicators).toBe(false);
     expect(
       normalizeghostexSettings({
@@ -771,22 +641,7 @@ describe('normalizeghostexSettings', () => {
   });
 
   test('detects sidebar presets and custom deviations', () => {
-    /**
-     * CDXC:SidebarSettingsPresets 2026-05-16-10:11:
-     * Preset selection is derived from the controlled setting values. Any
-     * controlled value that differs from all presets is Custom rather than a
-     * persisted fourth preset state.
-     *
-     * CDXC:SessionStatusIndicators 2026-06-15-14:00:
-     * The legacy floating status indicator was a macOS Status Indicators
-     * preference, not sidebar preset chrome. Changing presets must preserve the
-     * compatibility value, and toggling that legacy value must not make the
-     * sidebar preset read as Custom.
-     *
-     * CDXC:SessionStatusIndicators 2026-06-27-20:11:
-     * Keep this as compatibility coverage for old settings files after removing
-     * the macOS/GPUI floating badge UI and renderer.
-     */
+    /** Preset selection is derived from the controlled setting values. */
     expect(getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, 'codex'))).toBe('codex');
     expect(getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, 'minimal'))).toBe('minimal');
     expect(getSidebarSettingsPresetId(applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, 'detailed'))).toBe(
@@ -797,21 +652,10 @@ describe('normalizeghostexSettings', () => {
     );
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideSessionAgentIconUntilHover).toBe(false);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideProjectHeaderDiffStats).toBe(false);
-    const floatingIndicatorsEnabled = normalizeghostexSettings({
-      hideFloatingSessionStatusIndicators: false,
-    });
-    expect(getSidebarSettingsPresetId(floatingIndicatorsEnabled)).toBe('recommended');
     for (const preset of SIDEBAR_SETTINGS_PRESETS) {
-      const appliedPreset = applySidebarSettingsPreset(floatingIndicatorsEnabled, preset.id);
-      expect(appliedPreset.hideFloatingSessionStatusIndicators).toBe(false);
+      const appliedPreset = applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, preset.id);
       expect(appliedPreset.showCloseButtonOnSessionCards).toBe(true);
     }
-    const floatingIndicatorsHidden = normalizeghostexSettings({
-      hideFloatingSessionStatusIndicators: true,
-    });
-    expect(applySidebarSettingsPreset(floatingIndicatorsHidden, 'detailed').hideFloatingSessionStatusIndicators).toBe(
-      true
-    );
     expect(
       getSidebarSettingsPresetId({
         ...DEFAULT_ghostex_SETTINGS,
@@ -978,6 +822,7 @@ describe('normalizeghostexSettings', () => {
      * focused-agent override is no longer normalized as a setting.
      */
     expect(AUTO_SLEEP_IDLE_MINUTE_OPTIONS).toEqual([
+      { label: 'Off', value: 0 },
       { label: '5 minutes', value: 5 },
       { label: '10 minutes', value: 10 },
       { label: '15 minutes', value: 15 },
@@ -987,16 +832,11 @@ describe('normalizeghostexSettings', () => {
       { label: '5 hours', value: 300 },
     ]);
     expect(normalizeghostexSettings({})).toMatchObject({
-      autoSleepAgentIdleMinutes: 15,
-      autoSleepAgentSessionsEnabled: false,
+      autoSleepAgentIdleMinutes: 0,
       autoSleepBrowserIdleMinutes: 10,
-      autoSleepBrowserSessionsEnabled: true,
-      autoSleepCodeEditorEnabled: true,
       autoSleepCodeEditorIdleMinutes: 10,
       autoSleepFavoriteAgentSessions: false,
-      autoSleepGitEditorEnabled: true,
       autoSleepGitEditorIdleMinutes: 5,
-      autoSleepProjectEditorEnabled: true,
       autoSleepProjectEditorIdleMinutes: 5,
       autoSleepRequireAgentResumeCommand: true,
     });
@@ -1013,12 +853,9 @@ describe('normalizeghostexSettings', () => {
       })
     ).toMatchObject({
       autoSleepAgentIdleMinutes: 15,
-      autoSleepAgentSessionsEnabled: true,
       autoSleepBrowserIdleMinutes: 120,
-      autoSleepBrowserSessionsEnabled: true,
       autoSleepCodeEditorIdleMinutes: 10,
-      autoSleepGitEditorEnabled: false,
-      autoSleepGitEditorIdleMinutes: 30,
+      autoSleepGitEditorIdleMinutes: 0,
       autoSleepProjectEditorIdleMinutes: 5,
     });
   });
@@ -1211,10 +1048,6 @@ describe('normalizeghostexSettings', () => {
      * computed background hex as a calibrated dark tint. Neutral #808080 must keep
      * existing Dark Gray output unchanged.
      *
-     * CDXC:SettingsTheming 2026-06-15-21:35:
-     * The old custom contrast enable toggle is retired. Normalize the retained
-     * compatibility field to true so visible Theming controls always apply.
-     *
      * CDXC:SidebarTitlebarColors 2026-06-16-14:28:
      * The custom chrome default is 95 contrast with white #FFFFFF tint. Missing
      * settings must use that explicit slider default, while valid legacy saved
@@ -1230,7 +1063,6 @@ describe('normalizeghostexSettings', () => {
      * #0c0e11 for blue, while white and black remain neutral instead of
      * receiving a blue cast.
      */
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarColorsEnabled).toBe(true);
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarForegroundColor).toBe('#d8d8d8');
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundTintColor).toBe('#808080');
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundDarknessPercent).toBe(93);
@@ -1239,7 +1071,6 @@ describe('normalizeghostexSettings', () => {
     expect(getSidebarTitlebarBackgroundForDarkness(95, '#336699')).toBe('#0c0e11');
     expect(getSidebarTitlebarBackgroundForDarkness(95, '#000000')).toBe('#000000');
     expect(normalizeghostexSettings({})).toMatchObject({
-      customSidebarTitlebarColorsEnabled: true,
       customSidebarTitlebarForegroundColor: '#d8d8d8',
       customSidebarTitlebarBackgroundTintColor: '#808080',
       customSidebarTitlebarBackgroundDarknessPercent: 93,
@@ -1256,14 +1087,12 @@ describe('normalizeghostexSettings', () => {
     });
     expect(
       normalizeghostexSettings({
-        customSidebarTitlebarColorsEnabled: true,
         customSidebarTitlebarForegroundColor: '#ABCDEF',
         customSidebarTitlebarBackgroundTintColor: '#336699',
         customSidebarTitlebarBackgroundDarknessPercent: 85,
         customSidebarTitlebarBackgroundColor: '#123456',
       })
     ).toMatchObject({
-      customSidebarTitlebarColorsEnabled: true,
       customSidebarTitlebarForegroundColor: '#d8d8d8',
       customSidebarTitlebarBackgroundTintColor: '#336699',
       customSidebarTitlebarBackgroundDarknessPercent: 85,
@@ -1271,13 +1100,11 @@ describe('normalizeghostexSettings', () => {
     });
     expect(
       normalizeghostexSettings({
-        customSidebarTitlebarColorsEnabled: false,
         customSidebarTitlebarForegroundColor: '#ABCDEF',
         customSidebarTitlebarBackgroundTintColor: 'not-a-color',
         customSidebarTitlebarBackgroundDarknessPercent: 20,
       })
     ).toMatchObject({
-      customSidebarTitlebarColorsEnabled: true,
       customSidebarTitlebarForegroundColor: '#d8d8d8',
       customSidebarTitlebarBackgroundTintColor: '#808080',
       customSidebarTitlebarBackgroundDarknessPercent: 85,
@@ -1333,66 +1160,6 @@ describe('normalizeghostexSettings', () => {
       titlebarLeft: '#141414',
       titlebarRight: '#141414',
     });
-  });
-
-  test('keeps legacy floating session status settings normalized', () => {
-    /**
-     * CDXC:SessionStatusIndicators 2026-05-07-18:20
-     * Medium is the legacy default because it was 50% of the approved X-Large
-     * indicator size. Keep all named scale points normalized for old settings
-     * files even though Settings no longer exposes this selector.
-     *
-     * CDXC:SessionStatusIndicators 2026-06-13-01:06:
-     * Menu bar status badges remain visible in the default Recommended preset
-     * while remaining independent from the selected indicator size.
-     *
-     * CDXC:SessionStatusIndicators 2026-06-15-02:01:
-     * Floating status badges originally started disabled so new installs did
-     * not show desktop floating session indicators unless the user enabled that
-     * surface.
-     *
-     * CDXC:SessionStatusIndicators 2026-06-15-14:00:
-     * The floating status toggle was an explicit Status Indicators setting, so
-     * normalization should preserve it without relying on sidebar preset data.
-     *
-     * CDXC:SessionStatusIndicators 2026-06-16-09:20:
-     * The legacy default was visible. Existing explicit hide/show values still
-     * normalize without preset involvement.
-     *
-     * CDXC:SessionStatusIndicators 2026-06-27-20:11:
-     * The macOS and GPUI floating badge was removed. These assertions now prove
-     * backward-compatible settings reads only; no renderer or Settings UI should
-     * consume the legacy toggle or size values.
-     */
-    expect(DEFAULT_ghostex_SETTINGS.hideFloatingSessionStatusIndicators).toBe(false);
-    expect(DEFAULT_ghostex_SETTINGS.hideMenuBarSessionStatusIndicators).toBe(false);
-    expect(DEFAULT_ghostex_SETTINGS.sessionStatusIndicatorSize).toBe('medium');
-    expect(normalizeghostexSettings({})).toMatchObject({
-      hideFloatingSessionStatusIndicators: false,
-      hideMenuBarSessionStatusIndicators: false,
-      sessionStatusIndicatorSize: 'medium',
-    });
-    expect(
-      normalizeghostexSettings({
-        hideFloatingSessionStatusIndicators: false,
-        hideMenuBarSessionStatusIndicators: true,
-      })
-    ).toMatchObject({
-      hideFloatingSessionStatusIndicators: false,
-      hideMenuBarSessionStatusIndicators: true,
-    });
-    expect(normalizeghostexSettings({ sessionStatusIndicatorSize: 'x-large' })).toMatchObject({
-      sessionStatusIndicatorSize: 'x-large',
-    });
-    expect(normalizeghostexSettings({ sessionStatusIndicatorSize: 'giant' })).toMatchObject({
-      sessionStatusIndicatorSize: 'medium',
-    });
-    expect(SESSION_STATUS_INDICATOR_SIZE_OPTIONS).toEqual([
-      { label: 'X-Large', value: 'x-large' },
-      { label: 'Large', value: 'large' },
-      { label: 'Medium', value: 'medium' },
-      { label: 'Small', value: 'small' },
-    ]);
   });
 
   test('keeps the pet overlay opt-in and normalizes selected pets', () => {
@@ -1549,35 +1316,22 @@ describe('normalizeghostexSettings', () => {
      */
     expect(DEFAULT_ghostex_SETTINGS.promptEditorBackend).toBe('monaco');
     expect(normalizeghostexSettings({})).toMatchObject({
-      customPromptEditorCommand: 'code --wait',
       promptEditorBackend: 'monaco',
-      richPromptEditingWithGte: false,
-      useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ richPromptEditingWithGte: false })).toMatchObject({
       promptEditorBackend: 'monaco',
-      richPromptEditingWithGte: false,
-      useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ promptEditorBackend: 'monaco' })).toMatchObject({
       promptEditorBackend: 'monaco',
-      richPromptEditingWithGte: false,
-      useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ richPromptEditingWithGte: true })).toMatchObject({
       promptEditorBackend: 'inherit',
-      richPromptEditingWithGte: false,
-      useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ useGteForCtrlGPromptEditing: true })).toMatchObject({
       promptEditorBackend: 'inherit',
-      richPromptEditingWithGte: false,
-      useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ promptEditorBackend: 'gte' })).toMatchObject({
       promptEditorBackend: 'inherit',
-      richPromptEditingWithGte: false,
-      useGteForCtrlGPromptEditing: false,
     });
     expect(normalizeghostexSettings({ promptEditorBackend: 'inherit' })).toMatchObject({
       promptEditorBackend: 'inherit',
@@ -1588,7 +1342,6 @@ describe('normalizeghostexSettings', () => {
         promptEditorBackend: 'custom',
       })
     ).toMatchObject({
-      customPromptEditorCommand: 'vim -f',
       promptEditorBackend: 'inherit',
     });
     expect(
@@ -1597,7 +1350,6 @@ describe('normalizeghostexSettings', () => {
         promptEditorBackend: 'custom',
       })
     ).toMatchObject({
-      customPromptEditorCommand: 'code --wait',
       promptEditorBackend: 'inherit',
     });
     expect(normalizeghostexSettings({ promptEditorBackend: 'invalid' })).toMatchObject({
@@ -1727,6 +1479,7 @@ describe('normalizeghostexSettings', () => {
             sshPasswordSaved: true,
             sshPort: 2222,
             sshUser: ' madda ',
+            disabled: true,
           },
           { id: 'remote-main', name: 'Second', sshHost: 'example.local', sshPort: 100000 },
           { id: 'remote-blank-name', name: '', sshHost: 'example.local' },
@@ -1742,6 +1495,7 @@ describe('normalizeghostexSettings', () => {
         sshPasswordSaved: true,
         sshPort: 2222,
         sshUser: 'madda',
+        disabled: true,
       },
       {
         id: 'remote-2',

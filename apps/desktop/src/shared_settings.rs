@@ -27,8 +27,7 @@ pub const DEFAULT_KEEP_AWAKE_DURATION_MINUTES: SharedKeepAwakeDurationMinutes =
 pub const DEFAULT_KEEP_AWAKE_ALLOW_DISPLAY_SLEEP: bool = false;
 pub const DEFAULT_KEEP_AWAKE_ACTIVATE_ON_EXTERNAL_DISPLAY: bool = false;
 pub const DEFAULT_KEEP_AWAKE_ACTIVATE_ON_LAUNCH: bool = false;
-pub const DEFAULT_KEEP_AWAKE_BATTERY_THRESHOLD_PERCENT: f64 = 20.0;
-pub const DEFAULT_KEEP_AWAKE_DEACTIVATE_BELOW_BATTERY_THRESHOLD: bool = false;
+pub const DEFAULT_KEEP_AWAKE_BATTERY_THRESHOLD_PERCENT: f64 = 0.0;
 pub const DEFAULT_KEEP_AWAKE_DEACTIVATE_ON_LOW_POWER_MODE: bool = false;
 pub const DEFAULT_KEEP_AWAKE_DEACTIVATE_ON_USER_SWITCH: bool = false;
 pub const DEFAULT_KEEP_AWAKE_PREVENT_LID_SLEEP: bool = false;
@@ -629,11 +628,9 @@ impl SharedSidebarSettingsSnapshot {
             battery_threshold_percent: normalize_keep_awake_battery_threshold_percent(
                 self.object.get("keepAwakeBatteryThresholdPercent"),
             ),
-            deactivate_below_battery_threshold: strict_bool_field(
-                &self.object,
-                "keepAwakeDeactivateBelowBatteryThreshold",
-            )
-            .unwrap_or(DEFAULT_KEEP_AWAKE_DEACTIVATE_BELOW_BATTERY_THRESHOLD),
+            deactivate_below_battery_threshold: normalize_keep_awake_battery_threshold_percent(
+                self.object.get("keepAwakeBatteryThresholdPercent"),
+            ) > 0.0,
             deactivate_on_low_power_mode: strict_bool_field(
                 &self.object,
                 "keepAwakeDeactivateOnLowPowerMode",
@@ -976,34 +973,16 @@ impl SharedSidebarSettingsSnapshot {
     }
 
     pub fn auto_sleep_duration(&self, target: SharedSettingsAutoSleepTarget) -> Option<Duration> {
-        let (enabled_key, minutes_key) = match target {
-            SharedSettingsAutoSleepTarget::CodeEditor => (
-                "autoSleepCodeEditorEnabled",
-                "autoSleepCodeEditorIdleMinutes",
-            ),
-            SharedSettingsAutoSleepTarget::Browser => (
-                "autoSleepBrowserSessionsEnabled",
-                "autoSleepBrowserIdleMinutes",
-            ),
-            SharedSettingsAutoSleepTarget::ProjectEditor => (
-                "autoSleepProjectEditorEnabled",
-                "autoSleepProjectEditorIdleMinutes",
-            ),
+        let minutes_key = match target {
+            SharedSettingsAutoSleepTarget::CodeEditor => "autoSleepCodeEditorIdleMinutes",
+            SharedSettingsAutoSleepTarget::Browser => "autoSleepBrowserIdleMinutes",
+            SharedSettingsAutoSleepTarget::ProjectEditor => "autoSleepProjectEditorIdleMinutes",
         };
-
-        let enabled = self
-            .object
-            .get(enabled_key)
-            .and_then(json_value_to_bool)
-            .unwrap_or(true);
-        if !enabled {
-            return None;
-        }
 
         let minutes = normalize_project_editor_auto_sleep_idle_minutes(
             self.object.get(minutes_key).and_then(json_value_to_f32),
         );
-        Some(Duration::from_secs_f64(minutes * 60.0))
+        (minutes > 0.0).then(|| Duration::from_secs_f64(minutes * 60.0))
     }
 }
 
@@ -2032,11 +2011,11 @@ pub fn shared_sidebar_settings_path() -> PathBuf {
 }
 
 pub fn normalize_project_editor_auto_sleep_idle_minutes(value: Option<f32>) -> f64 {
-    value
-        .map(f64::from)
-        .filter(|minutes| minutes.is_finite() && *minutes > 0.0)
-        .map(|minutes| minutes.min(PROJECT_EDITOR_AUTO_SLEEP_MAX_IDLE_MINUTES))
-        .unwrap_or(PROJECT_EDITOR_AUTO_SLEEP_DEFAULT_IDLE_MINUTES)
+    match value.map(f64::from).filter(|minutes| minutes.is_finite()) {
+        Some(0.0) => 0.0,
+        Some(minutes) if minutes > 0.0 => minutes.min(PROJECT_EDITOR_AUTO_SLEEP_MAX_IDLE_MINUTES),
+        _ => PROJECT_EDITOR_AUTO_SLEEP_DEFAULT_IDLE_MINUTES,
+    }
 }
 
 pub fn normalize_terminal_font_size(value: Option<f32>) -> f32 {
@@ -2328,19 +2307,13 @@ fn normalize_keep_awake_battery_threshold_percent(value: Option<&Value>) -> f64 
     else {
         return DEFAULT_KEEP_AWAKE_BATTERY_THRESHOLD_PERCENT;
     };
+    if percent == 0.0 {
+        return 0.0;
+    }
     percent.clamp(
         MIN_KEEP_AWAKE_BATTERY_THRESHOLD_PERCENT,
         MAX_KEEP_AWAKE_BATTERY_THRESHOLD_PERCENT,
     )
-}
-
-fn json_value_to_bool(value: &Value) -> Option<bool> {
-    match value {
-        Value::Bool(value) => Some(*value),
-        Value::String(text) if text.eq_ignore_ascii_case("true") => Some(true),
-        Value::String(text) if text.eq_ignore_ascii_case("false") => Some(false),
-        _ => None,
-    }
 }
 
 fn json_value_to_f32(value: &Value) -> Option<f32> {

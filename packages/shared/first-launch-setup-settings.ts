@@ -57,7 +57,7 @@ export const FIRST_LAUNCH_PREFERENCES_MAIN_SETTING_KEYS = [
   'keepAwakePreventLidSleep',
   'agentAcceptAllEnabled',
   'showMacOSAttentionNotifications',
-  'completionBellEnabled',
+  'completionSound',
 ] as const satisfies readonly FirstLaunchSetupMainSettingKey[];
 
 export const FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS = new Set<FirstLaunchSetupMainSettingKey>(

@@ -8,10 +8,9 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/packages/com
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@/packages/components/ui/field';
 import { SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import { AppTooltip } from '../../app-tooltip';
-import { DisabledSettingControlTooltip } from '../../disabled-setting-control-tooltip';
 import {
   IconAlertTriangle,
-  IconChevronRight,
+  IconChevronDown,
   IconCircleCheckFilled,
   IconCircleX,
   IconCodeDots,
@@ -50,6 +49,7 @@ import {
 } from '../../../shared/sidebar-agents';
 import { AgentChatViewSupportBadge, agentSupportsChatView } from '../../agent-menu-chat-indicator';
 import { getBrandAgentLogoStyle } from '../../agent-logos';
+import { AgentTypeSelectOption } from '../../agent-type-select-option';
 import { useSidebarStore } from '../../sidebar-store';
 import { type AgentConfigDraft } from '../../agent-config-modal';
 import { type WebviewApi } from '../../webview-api';
@@ -148,7 +148,7 @@ export function AgentsSettingsTab({
   onAgentAcceptAllEnabledChange: (checked: boolean) => void;
   onCustomSessionTitleGenerationCommandChange: (command: string) => void;
   onDefaultPromptAgentIdChange: (agentId: string) => void;
-  onInstallAgentHooks?: () => void;
+  onInstallAgentHooks?: (agentIds?: readonly string[]) => void;
   onPreferredAgentInterfaceOverridesChange: (overrides: Readonly<Record<string, PreferredAgentInterface>>) => void;
   onRequestAgentHookStatus?: () => void;
   onSessionTitleGenerationAgentChange: (agent: SessionTitleGenerationAgent) => void;
@@ -162,6 +162,18 @@ export function AgentsSettingsTab({
   const agentHooksAvailableForUninstall = hasRemovableAgentHooks(agentHookStatus);
   const [editorState, setEditorState] = useState<SettingsAgentEditorState>();
   const [draftAgentIds, setDraftAgentIds] = useState<string[]>();
+  /*
+   * CDXC:AgentHookSettings 2026-08-28:
+   * Row expansion is view state only: every row starts collapsed each time
+   * Settings opens so the Agents tab reads as one compact roster.
+   */
+  const [expandedAgentIds, setExpandedAgentIds] = useState<readonly string[]>([]);
+
+  const toggleExpandedAgent = (agentId: string) => {
+    setExpandedAgentIds((previous) =>
+      previous.includes(agentId) ? previous.filter((id) => id !== agentId) : [...previous, agentId]
+    );
+  };
 
   useEffect(() => {
     setDraftAgentIds((previousDraft) => reconcileDraftIds(previousDraft, agents, 'agentId'));
@@ -305,137 +317,11 @@ export function AgentsSettingsTab({
     <SettingsNativeScrollArea className='h-full min-h-0'>
       <div className='settings-page-width flex flex-col gap-6 px-5 pb-5'>
         {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
-        {!editorState && shouldShowSettingsSection(search.sections.agentHooks) ? (
-          <SettingsSection title='Agent Hooks'>
-            <details className='group w-full' open={search.tab.isSearching || undefined}>
-              {/*
-               * CDXC:AgentHookSettings 2026-05-23-10:05:
-               * Settings -> Agents starts with a collapsed hook setup panel so reliable-resume requirements are discoverable without pushing normal agent ordering/editing controls down the tab. The panel covers every current Ghostex CLI resume-hook agent.
-               *
-               * CDXC:AgentHookSettings 2026-06-11-17:45:
-               * The collapsed header must use the same field label/description typography and bordered row spacing as the other Agents settings rows. The disclosure chevron points right when collapsed and rotates down when expanded.
-               *
-               * CDXC:AgentHookSettings 2026-06-12-04:34:
-               * The hook setup UI should use the same labeled section card chrome as the Agents management list below so the Agents tab scans as consistent grouped settings instead of a loose disclosure row followed by a bordered list.
-               */}
-              <summary className='settings-management-row flex cursor-pointer list-none items-center justify-between gap-3 border border-border bg-muted/20 px-3 py-3 marker:hidden [&::-webkit-details-marker]:hidden'>
-                <div className='flex min-w-0 flex-1 items-center gap-2.5'>
-                  <IconChevronRight
-                    aria-hidden='true'
-                    className='size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-90'
-                  />
-                  <FieldContent className='min-w-0 gap-1'>
-                    <FieldLabel className='text-sm'>Agent resume hooks</FieldLabel>
-                    <FieldDescription className='text-xs text-muted-foreground'>{hookStatusSummary}</FieldDescription>
-                  </FieldContent>
-                </div>
-                <span className='flex shrink-0 items-center'>
-                  <AgentHookStatusIcon isLoading={agentHookStatusLoading} status={undefined} />
-                </span>
-              </summary>
-              <div className='mt-3 flex flex-col gap-4 border border-border/80 bg-muted/10 px-4 pb-4 pt-4'>
-                <div className='space-y-2 text-xs leading-5 text-muted-foreground'>
-                  <p>
-                    Install hooks so Ghostex can capture each agent&apos;s native session id and resume the exact
-                    conversation after sleep, reload, or app restart.
-                  </p>
-                  <p>
-                    Hooks write only session metadata into Ghostex&apos;s session-state files. The existing title-based
-                    restore path remains available when a hook has not captured an id yet.
-                  </p>
-                </div>
-                <div className='flex flex-wrap gap-2'>
-                  <SettingButton
-                    disabled={!onInstallAgentHooks || agentHookStatusLoading}
-                    disabledReason={
-                      agentHookStatusLoading
-                        ? 'Hook status is being checked.'
-                        : 'Hook installation isn’t available here.'
-                    }
-                    onClick={onInstallAgentHooks}
-                    type='button'
-                    variant='outline'
-                  >
-                    <IconDownload aria-hidden='true' data-icon='inline-start' />
-                    {updateRequiredHookCount > 0 ? 'Update Hooks' : 'Install Hooks'}
-                  </SettingButton>
-                  {/*
-                   * CDXC:AgentHookSettings 2026-08-19-11:20:
-                   * Hook removal lives beside the install control it undoes: one Uninstall All for the whole set, plus an icon-only remove on each installed agent row. Both stay disabled while status is loading or when no Ghostex-owned hook is present, so users cannot fire a no-op removal.
-                   */}
-                  <SettingButton
-                    disabled={agentHookStatusLoading || !agentHooksAvailableForUninstall || !onUninstallAgentHooks}
-                    disabledReason={
-                      agentHookStatusLoading
-                        ? 'Hook status is being checked.'
-                        : !agentHooksAvailableForUninstall
-                          ? 'No Ghostex hooks are installed.'
-                          : 'Hook removal isn’t available here.'
-                    }
-                    onClick={() => onUninstallAgentHooks?.()}
-                    type='button'
-                    variant='outline'
-                  >
-                    <IconTrash aria-hidden='true' data-icon='inline-start' />
-                    Uninstall All
-                  </SettingButton>
-                  <SettingButton
-                    disabled={!onRequestAgentHookStatus || agentHookStatusLoading}
-                    disabledReason={
-                      agentHookStatusLoading
-                        ? 'Hook status is being checked.'
-                        : 'Hook status refresh isn’t available here.'
-                    }
-                    onClick={onRequestAgentHookStatus}
-                    type='button'
-                    variant='ghost'
-                  >
-                    <IconRefresh aria-hidden='true' data-icon='inline-start' />
-                    Refresh
-                  </SettingButton>
-                </div>
-                <div className='flex flex-col gap-2'>
-                  {agentHookStatus?.errorMessage ? (
-                    <div className='rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive'>
-                      {agentHookStatus.errorMessage}
-                    </div>
-                  ) : null}
-                  {AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS.map((agent) => (
-                    <AgentHookStatusRow
-                      agent={{
-                        agentId: agent.agentId,
-                        command: agent.command,
-                        icon: agent.icon,
-                        isDefault: true,
-                        name: agent.name,
-                      }}
-                      isLoading={agentHookStatusLoading && !agentHookStatus}
-                      isStatusLoading={agentHookStatusLoading}
-                      key={agent.agentId}
-                      onPreferredInterfaceOverrideChange={(next) =>
-                        setPreferredAgentInterfaceOverride(agent.agentId, next)
-                      }
-                      onUninstall={onUninstallAgentHooks ? () => onUninstallAgentHooks([agent.agentId]) : undefined}
-                      preferredAgentInterface={preferredAgentInterface}
-                      preferredInterfaceOverride={preferredAgentInterfaceOverrides[agent.agentId]}
-                      status={hookStatusByAgentId.get(agent.agentId)}
-                    />
-                  ))}
-                </div>
-                {agentHookStatus ? (
-                  <FieldDescription className='truncate text-[11px] text-muted-foreground'>
-                    Hook state: {agentHookStatus.hookStateDirectory}
-                  </FieldDescription>
-                ) : null}
-              </div>
-            </details>
-          </SettingsSection>
-        ) : null}
         {!editorState && shouldShowSettingsSection(search.sections.config) ? (
           <SettingsSection title='Config'>
             {/*
              * CDXC:AgentConfigSettings 2026-06-12-04:40:
-             * Default prompt, title generation, custom title command, and global Accept All are configuration controls, not agent management rows. Group them under the same labeled SettingsSection chrome as Agent Hooks and Agents so the Agents tab scans as three consistent areas: hooks, config, and launchers.
+             * Default prompt, title generation, custom title command, and global Accept All are configuration controls, not agent management rows. Group them under the same labeled SettingsSection chrome as the Agents roster so the Agents tab scans as two consistent areas: config and the agent roster.
              */}
             {!shouldShowSetting(search.sections.config, 'defaultPromptAgent') ? null : promptAgentOptions.length > 0 ? (
               <SelectField
@@ -548,29 +434,169 @@ export function AgentsSettingsTab({
                 onSave={saveAgent}
               />
             ) : (
-              <>
+              <div className='flex flex-col gap-3'>
+                {/*
+                 * CDXC:AgentHookSettings 2026-08-28:
+                 * Hook setup lives inside the one Agents roster instead of a
+                 * second card that repeats every agent. The toolbar keeps the
+                 * whole-set controls quiet (ghost buttons plus the readiness
+                 * chip and an info tooltip for the long explanation) because
+                 * per-agent install is the primary action: every row without a
+                 * hook shows its own install button while collapsed, and each
+                 * row expands to the full hook detail for that agent.
+                 */}
+                <div className='flex flex-wrap items-center gap-x-3 gap-y-2 rounded-none border border-border/70 bg-muted/10 px-3 py-2'>
+                  <div className='flex min-w-0 flex-1 items-center gap-2'>
+                    <AppTooltip
+                      content={
+                        <>
+                          Install hooks so Ghostex can capture each agent&apos;s native session id and resume the exact
+                          conversation after sleep, reload, or app restart. Hooks write only session metadata into
+                          Ghostex&apos;s session-state files. The existing title-based restore path remains available
+                          when a hook has not captured an id yet.
+                        </>
+                      }
+                      contentClassName='max-w-[22rem]'
+                    >
+                      <span
+                        aria-label='About session resume hooks'
+                        className='inline-flex shrink-0 items-center text-muted-foreground'
+                        role='img'
+                      >
+                        <IconInfoCircle aria-hidden='true' className='size-4' />
+                      </span>
+                    </AppTooltip>
+                    <span className='min-w-0 truncate text-xs text-muted-foreground'>
+                      Session resume hooks let Ghostex capture each agent&apos;s native session id and resume the exact
+                      conversation.
+                    </span>
+                  </div>
+                  <span className='shrink-0 rounded-none border border-border/70 bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground'>
+                    {hookStatusSummary}
+                  </span>
+                  <div className='flex shrink-0 flex-wrap items-center gap-1.5'>
+                    <SettingButton
+                      disabled={!onInstallAgentHooks || agentHookStatusLoading}
+                      disabledReason={
+                        agentHookStatusLoading
+                          ? 'Hook status is being checked.'
+                          : 'Hook installation isn’t available here.'
+                      }
+                      onClick={() => onInstallAgentHooks?.()}
+                      size='sm'
+                      type='button'
+                      variant='ghost'
+                    >
+                      <IconDownload aria-hidden='true' data-icon='inline-start' />
+                      {updateRequiredHookCount > 0 ? 'Update All' : 'Install All'}
+                    </SettingButton>
+                    {/*
+                     * CDXC:AgentHookSettings 2026-08-19-11:20:
+                     * Hook removal lives beside the install control it undoes: one Uninstall All for the whole set, plus a per-agent removal in each expanded row. Both stay disabled while status is loading or when no Ghostex-owned hook is present, so users cannot fire a no-op removal.
+                     */}
+                    <SettingButton
+                      disabled={agentHookStatusLoading || !agentHooksAvailableForUninstall || !onUninstallAgentHooks}
+                      disabledReason={
+                        agentHookStatusLoading
+                          ? 'Hook status is being checked.'
+                          : !agentHooksAvailableForUninstall
+                            ? 'No Ghostex hooks are installed.'
+                            : 'Hook removal isn’t available here.'
+                      }
+                      onClick={() => onUninstallAgentHooks?.()}
+                      size='sm'
+                      type='button'
+                      variant='ghost'
+                    >
+                      <IconTrash aria-hidden='true' data-icon='inline-start' />
+                      Uninstall All
+                    </SettingButton>
+                    <SettingButton
+                      disabled={!onRequestAgentHookStatus || agentHookStatusLoading}
+                      disabledReason={
+                        agentHookStatusLoading
+                          ? 'Hook status is being checked.'
+                          : 'Hook status refresh isn’t available here.'
+                      }
+                      onClick={onRequestAgentHookStatus}
+                      size='sm'
+                      type='button'
+                      variant='ghost'
+                    >
+                      <IconRefresh aria-hidden='true' data-icon='inline-start' />
+                      Refresh
+                    </SettingButton>
+                  </div>
+                </div>
+                {agentHookStatus?.errorMessage ? (
+                  <div className='rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive'>
+                    {agentHookStatus.errorMessage}
+                  </div>
+                ) : null}
                 {orderedAgents.length > 0 ? (
                   <DragDropProvider onDragEnd={handleDragEnd}>
                     <div className='flex flex-col gap-2'>
-                      {orderedAgents.map((agent, index) => (
-                        <SettingsAgentRow
-                          agent={agent}
-                          index={index}
-                          key={agent.agentId}
-                          onDelete={() => deleteAgent(agent)}
-                          onEdit={() =>
-                            setEditorState({
-                              draft: {
-                                acceptAllMode: agent.acceptAllMode ?? 'inherit',
-                                agentId: agent.agentId,
-                                command: agent.command ?? '',
-                                icon: agent.icon,
-                                name: agent.name,
-                              },
-                            })
-                          }
-                        />
-                      ))}
+                      {orderedAgents.map((agent, index) => {
+                        /*
+                         * CDXC:AgentHookSettings 2026-08-28:
+                         * Hooks are per CLI, not per launcher row, so a roster
+                         * agent resolves to its default agent through the same
+                         * icon mapping session creation uses. Custom launchers
+                         * without a default agent have no hook to manage.
+                         */
+                        const hookAgentId = getDefaultSidebarAgentByIcon(agent.icon)?.agentId;
+                        return (
+                          <SettingsAgentRow
+                            acceptAllMode={agent.acceptAllMode ?? 'inherit'}
+                            agent={agent}
+                            hookStatus={hookAgentId ? hookStatusByAgentId.get(hookAgentId) : undefined}
+                            index={index}
+                            isExpanded={expandedAgentIds.includes(agent.agentId)}
+                            isHookStatusLoading={agentHookStatusLoading}
+                            isHookStatusPending={agentHookStatusLoading && !agentHookStatus}
+                            key={agent.agentId}
+                            onAcceptAllModeChange={
+                              vscode
+                                ? (acceptAllMode) =>
+                                    saveAgent({
+                                      acceptAllMode,
+                                      agentId: agent.agentId,
+                                      command: agent.command ?? '',
+                                      icon: agent.icon,
+                                      name: agent.name,
+                                    })
+                                : undefined
+                            }
+                            onDelete={() => deleteAgent(agent)}
+                            onEdit={() =>
+                              setEditorState({
+                                draft: {
+                                  acceptAllMode: agent.acceptAllMode ?? 'inherit',
+                                  agentId: agent.agentId,
+                                  command: agent.command ?? '',
+                                  icon: agent.icon,
+                                  name: agent.name,
+                                },
+                              })
+                            }
+                            onInstallHook={
+                              hookAgentId && onInstallAgentHooks ? () => onInstallAgentHooks([hookAgentId]) : undefined
+                            }
+                            onPreferredInterfaceOverrideChange={(next) =>
+                              setPreferredAgentInterfaceOverride(agent.agentId, next)
+                            }
+                            onToggleExpanded={() => toggleExpandedAgent(agent.agentId)}
+                            onUninstallHook={
+                              hookAgentId && onUninstallAgentHooks
+                                ? () => onUninstallAgentHooks([hookAgentId])
+                                : undefined
+                            }
+                            preferredAgentInterface={preferredAgentInterface}
+                            preferredInterfaceOverride={preferredAgentInterfaceOverrides[agent.agentId]}
+                            supportsHooks={Boolean(hookAgentId)}
+                          />
+                        );
+                      })}
                     </div>
                   </DragDropProvider>
                 ) : (
@@ -581,7 +607,12 @@ export function AgentsSettingsTab({
                     </EmptyHeader>
                   </Empty>
                 )}
-              </>
+                {agentHookStatus ? (
+                  <FieldDescription className='truncate text-[11px] text-muted-foreground'>
+                    Hook state: {agentHookStatus.hookStateDirectory}
+                  </FieldDescription>
+                ) : null}
+              </div>
             )}
           </SettingsSection>
         ) : null}
@@ -601,98 +632,6 @@ export function resolveSettingsTitleGenerationCommand(
   return agents.find((candidate) => candidate.agentId === agent)?.command?.trim();
 }
 
-export function AgentHookStatusRow({
-  agent,
-  isLoading,
-  isStatusLoading,
-  onPreferredInterfaceOverrideChange,
-  onUninstall,
-  preferredAgentInterface,
-  preferredInterfaceOverride,
-  status,
-}: {
-  agent: SidebarAgentButton;
-  isLoading: boolean;
-  isStatusLoading: boolean;
-  onPreferredInterfaceOverrideChange?: (preferredInterface: PreferredAgentInterface | undefined) => void;
-  onUninstall?: () => void;
-  preferredAgentInterface?: PreferredAgentInterface;
-  preferredInterfaceOverride?: PreferredAgentInterface;
-  status?: SidebarAgentHookStatusItem;
-}) {
-  const statusText = getAgentHookStatusText(status, isLoading);
-  const removable = hasRemovableAgentHookStatus(status);
-  const uninstallDisabled = isStatusLoading || !onUninstall;
-  const supportsChatView = agentSupportsChatView(agent);
-  return (
-    <div className='flex items-center justify-between gap-3 rounded-none border border-border/70 bg-card/40 px-3 py-2'>
-      <div className='flex min-w-0 flex-1 items-center gap-3'>
-        <span
-          aria-hidden='true'
-          className='settings-management-icon flex size-8 shrink-0 items-center justify-center bg-muted'
-        >
-          <SettingsAgentIcon agent={agent} />
-        </span>
-        <span className='min-w-0'>
-          {/*
-           * CDXC:PerAgentDefaultView 2026-08-27:
-           * The chat-bubble badge sits with the agent name, not with the hook
-           * status pill: it describes the agent, not its hook state, and the
-           * two must not read as one combined status. Terminal-only agents get
-           * no badge at all rather than a negative one.
-           */}
-          <span className='flex min-w-0 items-center gap-1.5'>
-            <span className='truncate text-sm font-medium'>{agent.name}</span>
-            <AgentChatViewSupportBadge agent={agent} />
-          </span>
-          <span className='block truncate text-xs text-muted-foreground'>
-            {status?.detail ?? agent.command ?? 'Waiting for hook check'}
-          </span>
-        </span>
-      </div>
-      {supportsChatView && preferredAgentInterface && onPreferredInterfaceOverrideChange ? (
-        <AgentPreferredInterfaceOverrideSelect
-          agentName={agent.name}
-          onChange={onPreferredInterfaceOverrideChange}
-          preferredAgentInterface={preferredAgentInterface}
-          value={preferredInterfaceOverride}
-        />
-      ) : null}
-      <div className='flex w-32 shrink-0 items-center justify-end gap-3'>
-        <span
-          className={cn(
-            'flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-xs font-medium',
-            getAgentHookStatusClassName(status, isLoading)
-          )}
-        >
-          <AgentHookStatusIcon isLoading={isLoading} status={status} />
-          {statusText}
-        </span>
-        {removable ? (
-          <DisabledSettingControlTooltip
-            disabled={uninstallDisabled}
-            reason={isStatusLoading ? 'Hook status is being checked.' : 'Hook removal isn’t available here.'}
-          >
-            <AppTooltip content={`Uninstall ${agent.name} hook`}>
-              <Button
-                aria-label={`Uninstall ${agent.name} hook`}
-                className='shrink-0'
-                disabled={uninstallDisabled}
-                onClick={onUninstall}
-                size='icon'
-                type='button'
-                variant='destructive'
-              >
-                <IconTrash aria-hidden='true' />
-              </Button>
-            </AppTooltip>
-          </DisabledSettingControlTooltip>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 /*
  * CDXC:PerAgentDefaultView 2026-08-27:
  * Only chat-capable agents get this control. A terminal-only agent has no
@@ -701,11 +640,15 @@ export function AgentHookStatusRow({
  */
 export function AgentPreferredInterfaceOverrideSelect({
   agentName,
+  className,
+  id,
   onChange,
   preferredAgentInterface,
   value,
 }: {
   agentName: string;
+  className?: string;
+  id?: string;
   onChange: (preferredInterface: PreferredAgentInterface | undefined) => void;
   preferredAgentInterface: PreferredAgentInterface;
   value?: PreferredAgentInterface;
@@ -721,7 +664,11 @@ export function AgentPreferredInterfaceOverrideSelect({
       }
       value={value ?? PREFERRED_AGENT_INTERFACE_INHERIT_VALUE}
     >
-      <SelectTrigger aria-label={`Default view for ${agentName}`} className='h-7 w-[9.5rem] shrink-0 px-2 text-xs'>
+      <SelectTrigger
+        aria-label={`Default view for ${agentName}`}
+        className={cn('h-8 w-full px-3 text-[13px]', className)}
+        id={id}
+      >
         <SelectValue />
       </SelectTrigger>
       <SettingsSelectContent>
@@ -813,17 +760,54 @@ export function getAgentHookStatusClassName(
   }
 }
 
+/*
+ * CDXC:AgentHookSettings 2026-08-28:
+ * One roster row owns everything about an agent: reorder, identity, its session
+ * resume hook, and the agent actions. The collapsed row stays compact and keeps
+ * the single-click install affordance for any agent whose hook is missing; the
+ * expanded panel carries the hook path, the per-agent selects, and the
+ * install/uninstall and edit/remove actions.
+ */
 export function SettingsAgentRow({
+  acceptAllMode,
   agent,
+  hookStatus,
   index,
+  isExpanded,
+  isHookStatusLoading,
+  isHookStatusPending,
+  onAcceptAllModeChange,
   onDelete,
   onEdit,
+  onInstallHook,
+  onPreferredInterfaceOverrideChange,
+  onToggleExpanded,
+  onUninstallHook,
+  preferredAgentInterface,
+  preferredInterfaceOverride,
+  supportsHooks,
 }: {
+  acceptAllMode: AgentAcceptAllMode;
   agent: SidebarAgentButton;
+  hookStatus?: SidebarAgentHookStatusItem;
   index: number;
+  isExpanded: boolean;
+  isHookStatusLoading: boolean;
+  isHookStatusPending: boolean;
+  onAcceptAllModeChange?: (acceptAllMode: AgentAcceptAllMode) => void;
   onDelete: () => void;
   onEdit: () => void;
+  onInstallHook?: () => void;
+  onPreferredInterfaceOverrideChange: (preferredInterface: PreferredAgentInterface | undefined) => void;
+  onToggleExpanded: () => void;
+  onUninstallHook?: () => void;
+  preferredAgentInterface: PreferredAgentInterface;
+  preferredInterfaceOverride?: PreferredAgentInterface;
+  supportsHooks: boolean;
 }) {
+  const acceptAllModeId = useId();
+  const panelId = useId();
+  const preferredInterfaceId = useId();
   const sortable = useSortable({
     accept: 'settings-agent',
     data: createSettingsAgentDragData(agent.agentId),
@@ -838,51 +822,221 @@ export function SettingsAgentRow({
     setSettingsSortableRowElement(sortable, element);
   };
 
+  const acceptAllSupported = supportsAgentAcceptAll(agent.agentId, agent.icon);
+  const supportsChatView = agentSupportsChatView(agent);
+  const hookInstalled = hookStatus?.status === 'installed';
+  const hookRemovable = hasRemovableAgentHookStatus(hookStatus);
+  const hookInstallLabel = hookInstalled
+    ? 'Reinstall'
+    : hookStatus?.status === 'updateRequired'
+      ? 'Update hook'
+      : 'Install hook';
+  const showInlineInstall =
+    supportsHooks && !hookInstalled && hookStatus?.status !== 'notRequired' && !isHookStatusPending;
+  const hookInstallDisabled = !onInstallHook || isHookStatusLoading;
+  const hookInstallDisabledReason = isHookStatusLoading
+    ? 'Hook status is being checked.'
+    : 'Hook installation isn’t available here.';
+
   return (
     <div
-      className='settings-management-row flex items-center gap-2 border border-border bg-muted/20 p-2'
+      className='rounded-none border border-border bg-muted/20'
       data-dragging={String(Boolean(isDragging))}
       ref={setRowRef}
     >
-      <Button aria-label={`Reorder ${agent.name}`} ref={handleRef} size='icon-sm' type='button' variant='ghost'>
-        <IconGripVertical aria-hidden='true' />
-      </Button>
-      <Button
-        className='settings-management-edit-button h-auto min-w-0 flex-1 justify-start gap-3 px-2 py-2 text-left'
-        onClick={onEdit}
-        type='button'
-        variant='ghost'
-      >
-        <span
-          aria-hidden='true'
-          className='settings-management-icon flex size-9 shrink-0 items-center justify-center bg-muted'
-        >
-          <SettingsAgentIcon agent={agent} />
-        </span>
-        <span className='min-w-0 flex-1'>
-          <span className='flex min-w-0 items-center gap-1.5'>
-            <span className='truncate text-sm font-medium text-foreground'>{agent.name}</span>
-            <AgentChatViewSupportBadge agent={agent} />
-          </span>
-          <span className='block truncate text-xs text-muted-foreground'>
-            {agent.command?.trim() || 'Not configured'}
-          </span>
-        </span>
-      </Button>
-      <span className='settings-management-row-actions'>
-        <Button aria-label={`Edit ${agent.name}`} onClick={onEdit} size='icon-sm' type='button' variant='ghost'>
-          <IconPencil aria-hidden='true' />
+      <div className='settings-management-row flex items-center gap-2 p-2'>
+        <Button aria-label={`Reorder ${agent.name}`} ref={handleRef} size='icon-sm' type='button' variant='ghost'>
+          <IconGripVertical aria-hidden='true' />
         </Button>
         <Button
-          aria-label={`Delete ${agent.name}`}
-          onClick={onDelete}
+          aria-controls={panelId}
+          aria-expanded={isExpanded}
+          className='settings-management-edit-button h-auto min-w-0 flex-1 justify-start gap-3 px-2 py-2 text-left'
+          onClick={onToggleExpanded}
+          type='button'
+          variant='ghost'
+        >
+          <span
+            aria-hidden='true'
+            className='settings-management-icon flex size-9 shrink-0 items-center justify-center bg-muted'
+          >
+            <SettingsAgentIcon agent={agent} />
+          </span>
+          <span className='min-w-0 flex-1'>
+            {/*
+             * CDXC:PerAgentDefaultView 2026-08-27:
+             * The chat-bubble badge sits with the agent name, not with the hook
+             * status pill: it describes the agent, not its hook state, and the
+             * two must not read as one combined status. Terminal-only agents get
+             * no badge at all rather than a negative one.
+             */}
+            <span className='flex min-w-0 items-center gap-1.5'>
+              <span className='truncate text-sm font-medium text-foreground'>{agent.name}</span>
+              <AgentChatViewSupportBadge agent={agent} />
+            </span>
+            <span className='block truncate text-xs text-muted-foreground'>
+              {agent.command?.trim() || 'Not configured'}
+            </span>
+          </span>
+        </Button>
+        {supportsHooks ? (
+          <span
+            className={cn(
+              'flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-xs font-medium',
+              getAgentHookStatusClassName(hookStatus, isHookStatusPending)
+            )}
+          >
+            <AgentHookStatusIcon isLoading={isHookStatusPending} status={hookStatus} />
+            {getAgentHookStatusText(hookStatus, isHookStatusPending)}
+          </span>
+        ) : null}
+        {showInlineInstall ? (
+          <SettingButton
+            className='shrink-0'
+            disabled={hookInstallDisabled}
+            disabledReason={hookInstallDisabledReason}
+            onClick={onInstallHook}
+            size='sm'
+            type='button'
+            variant='outline'
+          >
+            <IconDownload aria-hidden='true' data-icon='inline-start' />
+            {hookInstallLabel}
+          </SettingButton>
+        ) : null}
+        <Button
+          aria-controls={panelId}
+          aria-expanded={isExpanded}
+          aria-label={isExpanded ? `Collapse ${agent.name} details` : `Expand ${agent.name} details`}
+          onClick={onToggleExpanded}
           size='icon-sm'
           type='button'
-          variant='destructive'
+          variant='ghost'
         >
-          <IconTrash aria-hidden='true' />
+          <IconChevronDown
+            aria-hidden='true'
+            className={cn('transition-transform duration-150', isExpanded && 'rotate-180')}
+          />
         </Button>
-      </span>
+      </div>
+      {isExpanded ? (
+        <div className='flex flex-col gap-3 border-t border-border/70 px-3 py-3' id={panelId}>
+          {supportsHooks ? (
+            <>
+              <span className='text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
+                Session resume hook
+              </span>
+              <div className='flex items-center gap-2 border-b border-border/60 pb-3 text-xs text-muted-foreground'>
+                <AgentHookStatusIcon isLoading={isHookStatusPending} status={hookStatus} />
+                <span className='min-w-0 truncate'>{hookStatus?.detail ?? 'Waiting for hook check'}</span>
+              </div>
+            </>
+          ) : null}
+          <div className='grid gap-3 sm:grid-cols-2'>
+            <Field className='gap-1.5'>
+              <FieldContent>
+                <FieldLabel className='text-xs text-muted-foreground' htmlFor={acceptAllModeId}>
+                  Permission mode
+                </FieldLabel>
+              </FieldContent>
+              <SettingsSelect
+                disabled={!acceptAllSupported || !onAcceptAllModeChange}
+                disabledReason={
+                  acceptAllSupported
+                    ? 'This change needs the Ghostex app connection.'
+                    : 'This agent doesn’t support Accept All.'
+                }
+                disabledTooltipClassName='w-full'
+                items={AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS}
+                onValueChange={(value) => onAcceptAllModeChange?.(value as AgentAcceptAllMode)}
+                value={acceptAllMode}
+              >
+                <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={acceptAllModeId}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SettingsSelectContent>
+                  <SelectGroup>
+                    {AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SettingsSelectContent>
+              </SettingsSelect>
+            </Field>
+            {supportsChatView ? (
+              <Field className='gap-1.5'>
+                <FieldContent>
+                  <FieldLabel className='text-xs text-muted-foreground' htmlFor={preferredInterfaceId}>
+                    Default interface
+                  </FieldLabel>
+                </FieldContent>
+                <AgentPreferredInterfaceOverrideSelect
+                  agentName={agent.name}
+                  id={preferredInterfaceId}
+                  onChange={onPreferredInterfaceOverrideChange}
+                  preferredAgentInterface={preferredAgentInterface}
+                  value={preferredInterfaceOverride}
+                />
+              </Field>
+            ) : null}
+          </div>
+          {supportsHooks ? (
+            <div className='flex flex-wrap items-center justify-end gap-2'>
+              <SettingButton
+                disabled={hookInstallDisabled}
+                disabledReason={hookInstallDisabledReason}
+                onClick={onInstallHook}
+                size='sm'
+                type='button'
+                variant={hookInstalled ? 'outline' : 'default'}
+              >
+                {hookInstalled ? (
+                  <IconRefresh aria-hidden='true' data-icon='inline-start' />
+                ) : (
+                  <IconDownload aria-hidden='true' data-icon='inline-start' />
+                )}
+                {hookInstallLabel}
+              </SettingButton>
+              {hookRemovable ? (
+                <SettingButton
+                  aria-label={`Uninstall ${agent.name} hook`}
+                  disabled={isHookStatusLoading || !onUninstallHook}
+                  disabledReason={
+                    isHookStatusLoading ? 'Hook status is being checked.' : 'Hook removal isn’t available here.'
+                  }
+                  onClick={onUninstallHook}
+                  size='sm'
+                  type='button'
+                  variant='destructive'
+                >
+                  <IconTrash aria-hidden='true' data-icon='inline-start' />
+                  Uninstall hook
+                </SettingButton>
+              ) : null}
+            </div>
+          ) : null}
+          <div className='flex flex-wrap items-center gap-2 border-t border-border/60 pt-3'>
+            <span className='text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>Agent</span>
+            <span className='flex-1' />
+            <Button aria-label={`Edit ${agent.name}`} onClick={onEdit} size='sm' type='button' variant='outline'>
+              <IconPencil aria-hidden='true' data-icon='inline-start' />
+              Edit agent
+            </Button>
+            <Button
+              aria-label={`Delete ${agent.name}`}
+              onClick={onDelete}
+              size='sm'
+              type='button'
+              variant='destructive'
+            >
+              <IconTrash aria-hidden='true' data-icon='inline-start' />
+              Remove agent
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -908,6 +1062,7 @@ export function AgentSettingsEditor({
   const resolvedAgentId =
     draft.agentId ?? getDefaultSidebarAgentByIcon(icon === 'custom' ? undefined : icon)?.agentId ?? '';
   const acceptAllSupported = supportsAgentAcceptAll(resolvedAgentId, icon === 'custom' ? undefined : icon);
+  const selectedDefaultAgent = getDefaultSidebarAgentByIcon(icon === 'custom' ? undefined : icon);
 
   const updateAgentType = (value: string) => {
     const nextType = value as SidebarAgentIcon | 'custom';
@@ -941,14 +1096,18 @@ export function AgentSettingsEditor({
         </FieldContent>
         <SettingsSelect items={AGENT_TYPE_SELECT_ITEMS} onValueChange={updateAgentType} value={icon}>
           <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={agentTypeId}>
-            <SelectValue />
+            <SelectValue>
+              <AgentTypeSelectOption icon={icon} name={selectedDefaultAgent?.name ?? 'Custom'} />
+            </SelectValue>
           </SelectTrigger>
           <SettingsSelectContent>
             <SelectGroup>
-              <SelectItem value='custom'>Custom</SelectItem>
+              <SelectItem value='custom'>
+                <AgentTypeSelectOption icon='custom' name='Custom' />
+              </SelectItem>
               {DEFAULT_SIDEBAR_AGENTS.map((agent) => (
                 <SelectItem key={agent.agentId} value={agent.icon}>
-                  {agent.name}
+                  <AgentTypeSelectOption icon={agent.icon} name={agent.name} />
                 </SelectItem>
               ))}
             </SelectGroup>

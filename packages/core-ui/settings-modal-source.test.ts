@@ -340,9 +340,14 @@ describe('settings modal source', () => {
      * duplicate the Agent Hooks row.
      *
      * CDXC:AgentHookSettings 2026-08-19-11:20:
-     * Removal lives next to the install control it undoes — an icon-only remove
-     * on each installed hook row plus one Uninstall All in the Agent Hooks
-     * section — instead of a separate Hooks & Skills recovery card.
+     * Removal lives next to the install control it undoes — a per-agent remove
+     * on each installed hook row plus one Uninstall All in the hooks toolbar —
+     * instead of a separate Hooks & Skills recovery card.
+     *
+     * CDXC:AgentHookSettings 2026-08-28:
+     * Settings > Agents has one roster card. The standalone Agent Hooks card is
+     * gone, so hook install/uninstall must live in the merged card's toolbar and
+     * in each expandable agent row.
      */
     const navigation = sourceFrom(settingsModalSearchCatalogSource, 'const mainSettingsSectionNavigation');
     const integrationsTab = sourceBetween(
@@ -353,12 +358,12 @@ describe('settings modal source', () => {
     const agentsTab = sourceBetween(
       settingsModalAgentsTabSource,
       'function AgentsSettingsTab',
-      'function AgentHookStatusRow'
+      'function resolveSettingsTitleGenerationCommand'
     );
     const hookStatusRow = sourceBetween(
       settingsModalAgentsTabSource,
-      'function AgentHookStatusRow',
-      'function AgentHookStatusIcon'
+      'function SettingsAgentRow',
+      'function AgentSettingsEditor'
     );
 
     expect(navigation).not.toContain("title: 'Hooks & Skills'");
@@ -368,12 +373,13 @@ describe('settings modal source', () => {
     expect(integrationsTab).not.toContain("title='Agent Hooks'");
     expect(integrationsTab).not.toContain('Install Hooks');
     expect(integrationsTab).not.toContain('Uninstall Hooks');
-    expect(agentsTab).toContain("<SettingsSection title='Agent Hooks'>");
+    expect(settingsModalAgentsTabSource).not.toContain("title='Agent Hooks'");
     expect(agentsTab).toContain('agentHooksAvailableForUninstall');
     expect(agentsTab).toContain('Uninstall All');
     expect(agentsTab).toContain('onClick={() => onUninstallAgentHooks?.()}');
-    expect(agentsTab).toContain('() => onUninstallAgentHooks([agent.agentId])');
-    expect(hookStatusRow).toContain('hasRemovableAgentHookStatus(status)');
+    expect(agentsTab).toContain('() => onInstallAgentHooks([hookAgentId])');
+    expect(agentsTab).toContain('() => onUninstallAgentHooks([hookAgentId])');
+    expect(hookStatusRow).toContain('hasRemovableAgentHookStatus(hookStatus)');
     expect(hookStatusRow).toContain('aria-label={`Uninstall ${agent.name} hook`}');
     expect(integrationsTab).toContain('onUninstallAllSkills={onUninstallBundledAgentSkills}');
     expect(skillsPanelSource).toContain('onUninstallAllSkills');
@@ -464,7 +470,7 @@ describe('settings modal source', () => {
     const agentsTab = sourceBetween(
       settingsModalAgentsTabSource,
       'function AgentsSettingsTab',
-      'function AgentHookStatusRow'
+      'function resolveSettingsTitleGenerationCommand'
     );
 
     expect(agentsTab).toContain('const promptAgentSelectOptions = promptAgentHasSavedDefault');

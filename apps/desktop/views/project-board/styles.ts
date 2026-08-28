@@ -403,6 +403,12 @@ export const PROJECT_BOARD_STYLES = `
     border: 1px solid var(--border);
     border-radius: var(--project-board-radius-control);
     gap: 0;
+    /*
+     * The container owns the border-box control height (matching the 32px
+     * buttons and selects on the same row) and the segments fill it, exactly
+     * like the canonical rules in packages/core-ui/styles.css.
+     */
+    height: 32px;
     overflow: hidden;
   }
 
@@ -414,7 +420,7 @@ export const PROJECT_BOARD_STYLES = `
     font: inherit;
     font-size: 13px;
     font-weight: 400;
-    height: 32px;
+    height: 100%;
     transition: background-color 120ms ease, color 120ms ease;
   }
 

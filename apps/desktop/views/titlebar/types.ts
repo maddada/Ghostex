@@ -186,7 +186,6 @@ export type TitlebarProjectState = {
   petOverlayEnabled: boolean;
   resourceGroups: TitlebarResourceGroup[];
   sidebarTheme: SidebarTheme;
-  customSidebarTitlebarColorsEnabled: boolean;
   customSidebarTitlebarForegroundColor: string;
   customSidebarTitlebarBackgroundColor: string;
   sidebarCollapsed: boolean;

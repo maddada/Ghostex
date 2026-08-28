@@ -1,10 +1,9 @@
-import { type SidebarThemeSetting, type TerminalEngine } from '../session-grid-contract-core';
+import { type SidebarThemeSetting } from '../session-grid-contract-core';
 import { type SessionChatTheme } from '../session-chat';
 import { GHOSTTY_THEME_OPTIONS } from '../ghostty-theme-options';
 import {
   type AppShotsHotkey,
   type AutoSleepIdleMinutes,
-  type BrowserOpenMode,
   type ChatFileOpenView,
   type CommandsPanelSide,
   type DefaultEditorCommand,
@@ -14,13 +13,9 @@ import {
   type KeepAwakeDurationMinutes,
   type PreferredAgentInterface,
   type PromptEditorBackend,
-  type SessionStatusIndicatorSize,
   type SidebarProjectGroupStyle,
   type SidebarSide,
-  type SidebarV2Layout,
-  type SidebarVersion,
   type WebLinkOpenTarget,
-  type WindowsTerminalBackend,
 } from './types';
 
 export const WEB_LINK_OPEN_TARGET_OPTIONS: ReadonlyArray<{
@@ -63,21 +58,6 @@ export const SESSION_CHAT_THEME_OPTIONS: ReadonlyArray<{
   { label: 'Light', value: 'light' },
   { label: 'Dark', value: 'dark' },
 ];
-
-export const TERMINAL_ENGINE_SETTING_OPTIONS: ReadonlyArray<{
-  label: string;
-  value: TerminalEngine;
-}> = [{ label: 'Ghostty Native', value: 'ghostty-native' }];
-
-export const WINDOWS_TERMINAL_BACKEND_OPTIONS: ReadonlyArray<{
-  label: string;
-  value: WindowsTerminalBackend;
-}> = [{ label: 'WSL2', value: 'wsl' }];
-
-export const BROWSER_OPEN_MODE_OPTIONS: ReadonlyArray<{
-  label: string;
-  value: BrowserOpenMode;
-}> = [{ label: 'Browser Panes', value: 'browser-pane' }];
 
 export const APP_SHOTS_HOTKEY_OPTIONS: ReadonlyArray<{
   label: string;
@@ -131,16 +111,17 @@ export const SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS: ReadonlyArray<{
 ];
 
 /**
- * CDXC:SidebarV2 2026-07-29:
- * Settings and the sidebar Sort & Filter menu present the same two sidebar
- * versions, so both surfaces read their labels from one list.
+ * CDXC:SidebarSpaces 2026-08-28:
+ * The Spaces feature switch is a boolean rendered as a combined button, so its
+ * two segments are named once here for both the settings row and settings
+ * search.
  */
-export const SIDEBAR_VERSION_OPTIONS: ReadonlyArray<{
+export const SIDEBAR_SPACES_ENABLED_OPTIONS: ReadonlyArray<{
   label: string;
-  value: SidebarVersion;
+  value: 'off' | 'on';
 }> = [
-  { label: 'Standard', value: 'v1' },
-  { label: 'Inbox (Beta)', value: 'v2' },
+  { label: 'Off', value: 'off' },
+  { label: 'On', value: 'on' },
 ];
 
 export const PREFERRED_AGENT_INTERFACE_OPTIONS: ReadonlyArray<{
@@ -193,66 +174,6 @@ export function resolveEffectivePreferredAgentInterface(
   return settings.preferredAgentInterface;
 }
 
-export const SIDEBAR_V2_LAYOUT_OPTIONS: ReadonlyArray<{
-  label: string;
-  value: SidebarV2Layout;
-}> = [
-  { label: 'Flat inbox', value: 'flat' },
-  { label: 'Group by project', value: 'byProject' },
-];
-
-/**
- * CDXC:SidebarV2Lifecycle 2026-07-29:
- * Auto-settle windows offered in Settings. Presets rather than a free number
- * field because the useful values are few and the wrong one is expensive: a
- * mistyped "0.5" would sweep a whole inbox onto the settled shelf overnight.
- * `SIDEBAR_AUTO_SETTLE_OFF_VALUE` is the select's stand-in for `null`.
- */
-export const SIDEBAR_AUTO_SETTLE_OFF_VALUE = 'off';
-
-export const SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS: ReadonlyArray<{
-  label: string;
-  value: string;
-}> = [
-  { label: 'After 1 day', value: '1' },
-  { label: 'After 3 days', value: '3' },
-  { label: 'After 7 days', value: '7' },
-  { label: 'After 14 days', value: '14' },
-  { label: 'After 30 days', value: '30' },
-  { label: 'Off', value: SIDEBAR_AUTO_SETTLE_OFF_VALUE },
-];
-
-/** Select value for the current setting. An unlisted custom window (hand-edited
-    settings file) falls back to Off rather than silently showing a preset it is
-    not using. */
-export function sidebarAutoSettleAfterDaysSelectValue(value: number | null): string {
-  if (value === null) {
-    return SIDEBAR_AUTO_SETTLE_OFF_VALUE;
-  }
-  const candidate = String(value);
-  return SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS.some((option) => option.value === candidate)
-    ? candidate
-    : SIDEBAR_AUTO_SETTLE_OFF_VALUE;
-}
-
-export function parseSidebarAutoSettleAfterDaysSelectValue(value: string): number | null {
-  if (value === SIDEBAR_AUTO_SETTLE_OFF_VALUE) {
-    return null;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-export const SESSION_STATUS_INDICATOR_SIZE_OPTIONS: ReadonlyArray<{
-  label: string;
-  value: SessionStatusIndicatorSize;
-}> = [
-  { label: 'X-Large', value: 'x-large' },
-  { label: 'Large', value: 'large' },
-  { label: 'Medium', value: 'medium' },
-  { label: 'Small', value: 'small' },
-];
-
 export const KEEP_AWAKE_DURATION_OPTIONS: ReadonlyArray<{
   label: string;
   value: KeepAwakeDurationMinutes;
@@ -274,6 +195,7 @@ export const AUTO_SLEEP_IDLE_MINUTE_OPTIONS: ReadonlyArray<{
   label: string;
   value: AutoSleepIdleMinutes;
 }> = [
+  { label: 'Off', value: 0 },
   { label: '5 minutes', value: 5 },
   { label: '10 minutes', value: 10 },
   { label: '15 minutes', value: 15 },

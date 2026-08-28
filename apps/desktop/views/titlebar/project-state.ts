@@ -69,8 +69,6 @@ export function mergeTitlebarProjectState(
     petOverlayEnabled: state.petOverlayEnabled ?? current.petOverlayEnabled,
     resourceGroups: state.resourceGroups ?? current.resourceGroups,
     sidebarTheme: state.sidebarTheme ?? current.sidebarTheme,
-    customSidebarTitlebarColorsEnabled:
-      state.customSidebarTitlebarColorsEnabled ?? current.customSidebarTitlebarColorsEnabled,
     customSidebarTitlebarForegroundColor: getSidebarTitlebarForegroundForBackground(
       customSidebarTitlebarBackgroundColor
     ),
@@ -309,7 +307,6 @@ export function createInitialProjectState(bootstrap: Record<string, unknown>): T
     petOverlayEnabled: settings.petOverlayEnabled,
     resourceGroups: [],
     sidebarTheme: resolveSidebarTheme(settings.sidebarTheme, 'dark'),
-    customSidebarTitlebarColorsEnabled: settings.customSidebarTitlebarColorsEnabled,
     customSidebarTitlebarForegroundColor: getSidebarTitlebarForegroundForBackground(
       settings.customSidebarTitlebarBackgroundColor
     ),
@@ -392,7 +389,7 @@ export function createTitlebarKeepAwakeSettings(
     activateOnLaunch: settings.keepAwakeActivateOnLaunch,
     allowDisplaySleep: settings.keepAwakeAllowDisplaySleep,
     batteryThresholdPercent: settings.keepAwakeBatteryThresholdPercent,
-    deactivateBelowBatteryThreshold: settings.keepAwakeDeactivateBelowBatteryThreshold,
+    deactivateBelowBatteryThreshold: settings.keepAwakeBatteryThresholdPercent > 0,
     deactivateOnLowPowerMode: settings.keepAwakeDeactivateOnLowPowerMode,
     deactivateOnUserSwitch: settings.keepAwakeDeactivateOnUserSwitch,
     defaultDurationMinutes: settings.keepAwakeDefaultDurationMinutes,

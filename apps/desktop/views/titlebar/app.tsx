@@ -1880,62 +1880,47 @@ export function App() {
       return;
     }
 
-    if (projectState.customSidebarTitlebarColorsEnabled) {
-      const titlebarGradientColors = getSidebarTitlebarGradientColors(
-        projectState.customSidebarTitlebarBackgroundColor
-      );
-      const titlebarBackground = `linear-gradient(90deg, ${titlebarGradientColors.titlebarLeft} 0%, ${titlebarGradientColors.titlebarLeft} ${TITLEBAR_GRADIENT_BLEND_START_PERCENT}%, ${titlebarGradientColors.titlebarRight} 100%)`;
-      /**
-       * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
-       * The React titlebar is a separate WKWebView from the sidebar. Apply the
-       * experimental custom chrome colors only in this titlebar host; dropdown
-       * panels reuse this bundle but must continue using normal dropdown/theme
-       * tokens instead of the sidebar/titlebar override.
-       *
-       * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
-       * Foreground is derived from the background before it reaches this state;
-       * the titlebar host should not expose or preserve a separate foreground
-       * choice.
-       *
-       * CDXC:SidebarTitlebarColors 2026-06-15-15:01:
-       * Custom titlebar separators darken as the slider-selected background gets
-       * lighter, but only inside the real titlebar host.
-       *
-       * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
-       * The titlebar should start with the sidebar gradient's top color and
-       * use a separate surface token for the gradient paint.
-       *
-       * CDXC:SidebarTitlebarColors 2026-06-19-13:26:
-       * Keep the titlebar's left 40% on the sidebar top stop so it blends with
-       * the sidebar edge, then fade to the sidebar bottom stop at the right.
-       * The titlebar gradient should now darken across the strip rather than
-       * brighten at the right edge.
-       */
-      document.body.dataset.customSidebarTitlebarColors = 'true';
-      document.body.style.setProperty('--app-titlebar-background', titlebarGradientColors.titlebarLeft);
-      document.body.style.setProperty('--app-titlebar-surface-background', titlebarBackground);
-      document.body.style.setProperty(
-        '--custom-sidebar-titlebar-background-color',
-        titlebarGradientColors.titlebarLeft
-      );
-      document.body.style.setProperty(
-        '--custom-sidebar-titlebar-foreground-color',
-        projectState.customSidebarTitlebarForegroundColor
-      );
-      document.body.style.setProperty('--app-foreground', projectState.customSidebarTitlebarForegroundColor);
-      document.body.style.setProperty(
-        '--titlebar-button-border-color',
-        getTitlebarButtonSeparatorColorForBackground(titlebarGradientColors.titlebarLeft)
-      );
-    } else {
-      delete document.body.dataset.customSidebarTitlebarColors;
-      document.body.style.removeProperty('--app-titlebar-background');
-      document.body.style.removeProperty('--app-titlebar-surface-background');
-      document.body.style.removeProperty('--app-foreground');
-      document.body.style.removeProperty('--custom-sidebar-titlebar-background-color');
-      document.body.style.removeProperty('--custom-sidebar-titlebar-foreground-color');
-      document.body.style.removeProperty('--titlebar-button-border-color');
-    }
+    const titlebarGradientColors = getSidebarTitlebarGradientColors(projectState.customSidebarTitlebarBackgroundColor);
+    const titlebarBackground = `linear-gradient(90deg, ${titlebarGradientColors.titlebarLeft} 0%, ${titlebarGradientColors.titlebarLeft} ${TITLEBAR_GRADIENT_BLEND_START_PERCENT}%, ${titlebarGradientColors.titlebarRight} 100%)`;
+    /**
+     * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
+     * The React titlebar is a separate WKWebView from the sidebar. Apply the
+     * experimental custom chrome colors only in this titlebar host; dropdown
+     * panels reuse this bundle but must continue using normal dropdown/theme
+     * tokens instead of the sidebar/titlebar override.
+     *
+     * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
+     * Foreground is derived from the background before it reaches this state;
+     * the titlebar host should not expose or preserve a separate foreground
+     * choice.
+     *
+     * CDXC:SidebarTitlebarColors 2026-06-15-15:01:
+     * Custom titlebar separators darken as the slider-selected background gets
+     * lighter, but only inside the real titlebar host.
+     *
+     * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
+     * The titlebar should start with the sidebar gradient's top color and
+     * use a separate surface token for the gradient paint.
+     *
+     * CDXC:SidebarTitlebarColors 2026-06-19-13:26:
+     * Keep the titlebar's left 40% on the sidebar top stop so it blends with
+     * the sidebar edge, then fade to the sidebar bottom stop at the right.
+     * The titlebar gradient should now darken across the strip rather than
+     * brighten at the right edge.
+     */
+    document.body.dataset.customSidebarTitlebarColors = 'true';
+    document.body.style.setProperty('--app-titlebar-background', titlebarGradientColors.titlebarLeft);
+    document.body.style.setProperty('--app-titlebar-surface-background', titlebarBackground);
+    document.body.style.setProperty('--custom-sidebar-titlebar-background-color', titlebarGradientColors.titlebarLeft);
+    document.body.style.setProperty(
+      '--custom-sidebar-titlebar-foreground-color',
+      projectState.customSidebarTitlebarForegroundColor
+    );
+    document.body.style.setProperty('--app-foreground', projectState.customSidebarTitlebarForegroundColor);
+    document.body.style.setProperty(
+      '--titlebar-button-border-color',
+      getTitlebarButtonSeparatorColorForBackground(titlebarGradientColors.titlebarLeft)
+    );
 
     return () => {
       delete document.body.dataset.customSidebarTitlebarColors;
@@ -1946,11 +1931,7 @@ export function App() {
       document.body.style.removeProperty('--custom-sidebar-titlebar-foreground-color');
       document.body.style.removeProperty('--titlebar-button-border-color');
     };
-  }, [
-    projectState.customSidebarTitlebarBackgroundColor,
-    projectState.customSidebarTitlebarColorsEnabled,
-    projectState.customSidebarTitlebarForegroundColor,
-  ]);
+  }, [projectState.customSidebarTitlebarBackgroundColor, projectState.customSidebarTitlebarForegroundColor]);
 
   const isTitlebarDarkTheme = getTitlebarThemeVariant(projectState.sidebarTheme) === 'dark';
 

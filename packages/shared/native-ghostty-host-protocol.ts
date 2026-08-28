@@ -485,7 +485,6 @@ export type NativeGhosttyHostCommand =
        * The protocol field stays hex-only while Settings presents the source
        * control as Background Contrast.
        */
-      customSidebarTitlebarColorsEnabled?: boolean;
       customSidebarTitlebarForegroundColor?: string;
       customSidebarTitlebarBackgroundColor?: string;
       sidebarActions?: {

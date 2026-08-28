@@ -236,7 +236,8 @@ export function ProjectsSettingsPanel({
               <div className='settings-management-header-text'>
                 <h3 className='settings-management-heading'>Docs</h3>
                 <p className='settings-management-description'>
-                  Docs scans docs, artifacts, and ai by default. Add more project-relative folders here.
+                  Docs scans docs, artifacts, ai, and tmp by default, including those folders one level down. Add more
+                  project-relative folders here.
                 </p>
               </div>
               <FieldGroup>
@@ -250,8 +251,9 @@ export function ProjectsSettingsPanel({
                   />
                   <FieldDescription>
                     Comma-separated project-relative folders to scan recursively in Docs. Spaces around folder names are
-                    ignored. Leave blank to scan docs/, artifacts/, and ai/ plus root Markdown, HTML, and Excalidraw
-                    files. A Docs directory set below adds its whole tree on top of this.
+                    ignored. Leave blank to scan docs/, artifacts/, ai/, and tmp/ at the project root and one folder
+                    down, plus root Markdown, HTML, and Excalidraw files. A Docs directory set below adds its whole tree
+                    on top of this.
                   </FieldDescription>
                 </Field>
               </FieldGroup>

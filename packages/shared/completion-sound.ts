@@ -167,11 +167,16 @@ export const COMPLETION_SOUND_OPTIONS = [
 ] as const;
 
 export type CompletionSoundSetting = (typeof COMPLETION_SOUND_OPTIONS)[number]['value'];
+export type CompletionSoundPreference = CompletionSoundSetting | 'off';
 
 export const DEFAULT_COMPLETION_SOUND: CompletionSoundSetting = 'arcade';
 
 export function clampCompletionSoundSetting(value: string | undefined): CompletionSoundSetting {
   return COMPLETION_SOUND_OPTIONS.find((option) => option.value === value)?.value ?? DEFAULT_COMPLETION_SOUND;
+}
+
+export function clampCompletionSoundPreference(value: string | undefined): CompletionSoundPreference {
+  return value === 'off' ? 'off' : clampCompletionSoundSetting(value);
 }
 
 export function getCompletionSoundLabel(value: CompletionSoundSetting): string {

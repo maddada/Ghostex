@@ -9,7 +9,40 @@ export type RemoteMachineSettings = {
   sshPort?: number;
   sshUser?: string;
   wslDistribution?: string;
+  /**
+   * CDXC:RemoteMachines 2026-08-28:
+   * A saved machine can stay in Settings while being omitted from the sidebar.
+   * Missing or false means shown; true hides the tab and skips auto-connect.
+   */
+  disabled?: boolean;
 };
+
+export function isRemoteMachineEnabledInSidebar(machine: Pick<RemoteMachineSettings, 'disabled'>): boolean {
+  return machine.disabled !== true;
+}
+
+export function applyEnabledRemoteMachineOrder(
+  machines: readonly RemoteMachineSettings[],
+  nextEnabledIds: readonly string[]
+): RemoteMachineSettings[] | undefined {
+  const enabledMachines = machines.filter(isRemoteMachineEnabledInSidebar);
+  if (
+    nextEnabledIds.length !== enabledMachines.length ||
+    new Set(nextEnabledIds).size !== nextEnabledIds.length ||
+    enabledMachines.some((machine) => !nextEnabledIds.includes(machine.id))
+  ) {
+    return undefined;
+  }
+  const machineById = new Map(machines.map((machine) => [machine.id, machine]));
+  let enabledIndex = 0;
+  return machines.map((machine) => {
+    if (!isRemoteMachineEnabledInSidebar(machine)) {
+      return machine;
+    }
+    const nextId = nextEnabledIds[enabledIndex++];
+    return machineById.get(nextId) ?? machine;
+  });
+}
 
 export function normalizeRemoteMachineSettings(candidate: unknown): RemoteMachineSettings[] {
   if (!Array.isArray(candidate)) {
@@ -49,6 +82,7 @@ export function normalizeRemoteMachineSettings(candidate: unknown): RemoteMachin
       password fields from drafts/imports must be ignored by normalization.
       */
       ...(item.sshPasswordSaved === true ? { sshPasswordSaved: true } : {}),
+      ...(item.disabled === true ? { disabled: true } : {}),
       ...(sshIdentityFile ? { sshIdentityFile } : {}),
       ...(sshPort ? { sshPort } : {}),
       ...(sshUser ? { sshUser } : {}),

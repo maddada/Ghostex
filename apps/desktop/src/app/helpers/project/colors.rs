@@ -80,10 +80,6 @@ pub(crate) fn refresh_gpui_visual_settings(
         .unwrap_or_else(|| GPUI_GHOSTTY_WORKSPACE_BACKGROUND_RGB.load(Ordering::Relaxed) as u32);
     GPUI_WORKSPACE_BACKGROUND_RGB.store(u64::from(workspace), Ordering::Relaxed);
 
-    let custom_titlebar_enabled = object
-        .get("customSidebarTitlebarColorsEnabled")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(true);
     /*
     CDXC:GPUITitlebarGradient 2026-07-22:
     The saved `customSidebarTitlebarBackgroundColor` hex is a legacy migration
@@ -94,15 +90,10 @@ pub(crate) fn refresh_gpui_visual_settings(
     Rust titlebar derive its color (and gradient stops) from a darker base
     than the sidebar actually renders. Mirror the TS resolution instead.
     */
-    let titlebar_background = if custom_titlebar_enabled {
-        resolved_custom_sidebar_titlebar_background(object)
-    } else {
-        0x0e0e0e
-    };
-    let titlebar_foreground = custom_titlebar_enabled
-        .then(|| gpui_settings_hex_rgb(object.get("customSidebarTitlebarForegroundColor")))
-        .flatten()
-        .unwrap_or(0xffffff);
+    let titlebar_background = resolved_custom_sidebar_titlebar_background(object);
+    let titlebar_foreground =
+        gpui_settings_hex_rgb(object.get("customSidebarTitlebarForegroundColor"))
+            .unwrap_or(0xffffff);
     GPUI_TITLEBAR_BACKGROUND_RGB.store(u64::from(titlebar_background), Ordering::Relaxed);
     /*
     CDXC:GPUITitlebarGradient 2026-07-22:
@@ -115,11 +106,7 @@ pub(crate) fn refresh_gpui_visual_settings(
     here so the GPUI titlebar strip fades with the same colors; when custom
     chrome is disabled the stops collapse to the flat titlebar color.
     */
-    let (gradient_left, gradient_right) = if custom_titlebar_enabled {
-        sidebar_titlebar_gradient_stops(titlebar_background)
-    } else {
-        (titlebar_background, titlebar_background)
-    };
+    let (gradient_left, gradient_right) = sidebar_titlebar_gradient_stops(titlebar_background);
     GPUI_TITLEBAR_GRADIENT_LEFT_RGB.store(u64::from(gradient_left), Ordering::Relaxed);
     GPUI_TITLEBAR_GRADIENT_RIGHT_RGB.store(u64::from(gradient_right), Ordering::Relaxed);
     GPUI_TITLEBAR_FOREGROUND_RGB.store(u64::from(titlebar_foreground), Ordering::Relaxed);

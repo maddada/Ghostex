@@ -41,7 +41,33 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
             .and_then(serde_json::Value::as_bool)
             == Some(true),
         wsl_distribution,
+        disabled: machine.get("disabled").and_then(serde_json::Value::as_bool) == Some(true),
     })
+}
+
+pub(crate) fn gpui_disabled_remote_machine_ids(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Vec<String> {
+    object
+        .get("remoteMachines")
+        .and_then(serde_json::Value::as_array)
+        .map(|machines| {
+            machines
+                .iter()
+                .filter_map(|machine| {
+                    let machine_object = machine.as_object()?;
+                    if machine_object
+                        .get("disabled")
+                        .and_then(serde_json::Value::as_bool)
+                        != Some(true)
+                    {
+                        return None;
+                    }
+                    gpui_remote_machine_id_from_value(machine)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub(crate) fn gpui_remote_wsl_distribution_is_valid(distribution: &str) -> bool {

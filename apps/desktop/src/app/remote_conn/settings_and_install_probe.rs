@@ -22,13 +22,6 @@ impl GhostexGpuiApp {
         let previous_agent_settings = previous_settings_snapshot.gxserver_agent_settings();
         let previous_settings_object = previous_settings_snapshot.object().clone();
         #[cfg(target_os = "windows")]
-        let previous_windows_terminal_backend =
-            windows_terminal_backend::WindowsTerminalBackendPreference::from_settings_value(
-                previous_settings_object
-                    .get("windowsTerminalBackend")
-                    .and_then(serde_json::Value::as_str),
-            );
-        #[cfg(target_os = "windows")]
         let previous_windows_wsl_distribution = previous_settings_object
             .get("windowsWslDistribution")
             .and_then(serde_json::Value::as_str)
@@ -94,6 +87,10 @@ impl GhostexGpuiApp {
             write_result.snapshot.object(),
             cx,
         );
+        self.sync_gpui_disabled_remote_machine_connections_after_settings_save(
+            write_result.snapshot.object(),
+            cx,
+        );
         let previous_app_icon_source_id =
             app_icon::source_id_from_settings(&previous_settings_object);
         let next_app_icon_source_id =
@@ -103,23 +100,13 @@ impl GhostexGpuiApp {
         }
         #[cfg(target_os = "windows")]
         {
-            let next_windows_terminal_backend =
-                windows_terminal_backend::WindowsTerminalBackendPreference::from_settings_value(
-                    write_result
-                        .snapshot
-                        .object()
-                        .get("windowsTerminalBackend")
-                        .and_then(serde_json::Value::as_str),
-                );
             let next_windows_wsl_distribution = write_result
                 .snapshot
                 .object()
                 .get("windowsWslDistribution")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default();
-            if previous_windows_terminal_backend != next_windows_terminal_backend
-                || previous_windows_wsl_distribution != next_windows_wsl_distribution
-            {
+            if previous_windows_wsl_distribution != next_windows_wsl_distribution {
                 /*
                 WSL distribution changes apply to newly spawned ConPTY
                 terminals. Drop only the process-memory distro selection/token
@@ -156,6 +143,27 @@ impl GhostexGpuiApp {
             "source": message.get("source").cloned().unwrap_or(serde_json::Value::Null),
         });
         self.handle_gpui_app_modal_update_settings_message(&merged_message, cx);
+    }
+
+    pub(crate) fn sync_gpui_disabled_remote_machine_connections_after_settings_save(
+        &mut self,
+        next_settings: &serde_json::Map<String, serde_json::Value>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        for remote_machine_id in gpui_disabled_remote_machine_ids(next_settings) {
+            if !self
+                .remote_gxserver_connections
+                .contains_key(remote_machine_id.as_str())
+            {
+                continue;
+            }
+            self.stop_gpui_remote_gxserver_connection(remote_machine_id.as_str());
+            self.dispatch_gpui_remote_machine_status(
+                remote_machine_id.as_str(),
+                "disconnected",
+                cx,
+            );
+        }
     }
 
     pub(crate) fn handle_gpui_save_remote_machine_password_message(

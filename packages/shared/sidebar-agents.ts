@@ -513,7 +513,8 @@ export function normalizeStoredSidebarAgentOrder(candidate: unknown): string[] {
   return normalizedOrder;
 }
 
-function isSidebarAgentIcon(candidate: unknown): candidate is SidebarAgentIcon {
+/** Narrows a wire-supplied icon string (e.g. a draft's agent row) to the union. */
+export function isSidebarAgentIcon(candidate: unknown): candidate is SidebarAgentIcon {
   if (candidate === 'browser') {
     return true;
   }

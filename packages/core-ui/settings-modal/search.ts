@@ -293,28 +293,6 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
   agents: {
     sections: [
       {
-        id: 'agentHooks',
-        settings: [
-          {
-            key: 'agentResumeHooks',
-            options: AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS.map((agent) => ({
-              label: agent.name,
-              value: agent.name,
-            })),
-            subtitle:
-              "Install hooks so Ghostex can capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Uninstall a single agent's hook from its row, or remove every Ghostex-owned hook with Uninstall All.",
-            title: 'Agent resume hooks',
-          },
-          {
-            key: 'preferredAgentInterfaceOverrides',
-            subtitle:
-              "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting.",
-            title: 'Default view per agent',
-          },
-        ],
-        title: 'Agent Hooks',
-      },
-      {
         id: 'config',
         settings: [
           {
@@ -350,6 +328,13 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
       },
       {
         id: 'agentList',
+        /*
+         * CDXC:AgentHookSettings 2026-08-28:
+         * The Agents tab has one roster card: hook setup, per-agent default
+         * view, and launcher management are rows and panels inside it, so their
+         * search entries live on that one section instead of a separate Agent
+         * Hooks section that no longer exists.
+         */
         settings: [
           {
             key: 'addAgent',
@@ -359,6 +344,22 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             })),
             subtitle: 'Add, reorder, edit, or delete agent launchers used to start new sessions.',
             title: 'Add Agent',
+          },
+          {
+            key: 'agentResumeHooks',
+            options: AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS.map((agent) => ({
+              label: agent.name,
+              value: agent.name,
+            })),
+            subtitle:
+              "Agent resume hooks let Ghostex capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Install a single agent's hook from its row, or install and remove every Ghostex-owned hook with Install All and Uninstall All.",
+            title: 'Agent Hooks',
+          },
+          {
+            key: 'preferredAgentInterfaceOverrides',
+            subtitle:
+              "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting.",
+            title: 'Default view per agent',
           },
         ],
         title: 'Agents',
@@ -617,6 +618,11 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             key: 'addMachine',
             subtitle: 'Saved SSH machines appear as separate sidebar sections.',
             title: 'Add remote machine',
+          },
+          {
+            key: 'showInSidebar',
+            subtitle: 'Hide a saved remote machine from the sidebar without deleting it.',
+            title: 'Show in sidebar',
           },
           { key: 'sshHost', subtitle: 'Remote machine SSH host.', title: 'SSH host' },
           { key: 'sshUser', subtitle: 'Remote machine SSH user.', title: 'SSH user' },

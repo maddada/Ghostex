@@ -108,6 +108,7 @@ pub(crate) fn gpui_project_settings_projects_from_presentation_projects(
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GpuiRecentProjectMutation {
+    Close,
     Remove,
     Restore,
 }
@@ -115,6 +116,7 @@ pub(crate) enum GpuiRecentProjectMutation {
 impl GpuiRecentProjectMutation {
     pub(crate) fn endpoint(self) -> &'static str {
         match self {
+            Self::Close => "/api/closeProjectToRecent",
             Self::Remove => "/api/removeRecentProject",
             Self::Restore => "/api/restoreRecentProject",
         }
@@ -149,6 +151,11 @@ pub(crate) fn gpui_recent_projects_result_message(
     for project in &mut recent_projects {
         project["isOpen"] = serde_json::Value::Bool(false);
     }
+    let recent_project_ids = recent_projects
+        .iter()
+        .filter_map(|project| project.get("projectId").and_then(serde_json::Value::as_str))
+        .map(str::to_string)
+        .collect::<HashSet<_>>();
     let presentation_snapshot = match request.machine_id.as_deref() {
         None => gpui_read_gxserver_presentation_snapshot().ok(),
         Some(_) => request.remote_target.as_ref().and_then(|target| {
@@ -172,17 +179,13 @@ pub(crate) fn gpui_recent_projects_result_message(
             )
         })
         .unwrap_or_default();
-    let open_project_ids = projects
-        .iter()
-        .filter_map(|project| project.get("projectId").and_then(serde_json::Value::as_str))
-        .map(str::to_string)
-        .collect::<HashSet<_>>();
-    projects.extend(recent_projects.into_iter().filter(|project| {
+    projects.retain(|project| {
         project
             .get("projectId")
             .and_then(serde_json::Value::as_str)
-            .is_none_or(|project_id| !open_project_ids.contains(project_id))
-    }));
+            .is_none_or(|project_id| !recent_project_ids.contains(project_id))
+    });
+    projects.extend(recent_projects);
     let mut message = serde_json::json!({
         "recentProjects": projects,
         "type": "recentProjectsResult",
@@ -267,6 +270,11 @@ pub(crate) fn gpui_recent_project_mutation_and_result(
     project_id: String,
     request: GpuiRecentProjectsRequest,
 ) -> (bool, serde_json::Value) {
+    let scoped_project_id = request
+        .machine_id
+        .as_deref()
+        .map(|machine_id| format!("remote:{machine_id}:project:{project_id}"))
+        .unwrap_or_else(|| project_id.clone());
     let mutated = match request.machine_id.as_deref() {
         None => gpui_gxserver_rpc_result(
             mutation.endpoint(),
@@ -284,7 +292,18 @@ pub(crate) fn gpui_recent_project_mutation_and_result(
             .is_ok()
         }),
     };
-    let result = gpui_recent_projects_result_message(&request);
+    let mut result = gpui_recent_projects_result_message(&request);
+    if mutated
+        && mutation == GpuiRecentProjectMutation::Remove
+        && let Some(projects) = result
+            .get_mut("recentProjects")
+            .and_then(serde_json::Value::as_array_mut)
+    {
+        projects.retain(|project| {
+            project.get("projectId").and_then(serde_json::Value::as_str)
+                != Some(scoped_project_id.as_str())
+        });
+    }
     (mutated, result)
 }
 
