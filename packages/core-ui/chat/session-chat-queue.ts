@@ -197,6 +197,53 @@ export function shouldOfferSessionChatDraft(params: {
   return isNewerSessionChatDraftStamp(incoming.updatedAt, lastHandledUpdatedAt);
 }
 
+/**
+ * The crash-recovery rule: whether this client's OWN synced draft should be
+ * put straight back into the composer. The offer bar above deliberately never
+ * fires for own-client drafts (they are echoes), which meant a draft that
+ * survived only in gxserver — because the app was killed before Chromium
+ * committed the per-keystroke localStorage batch — was unreachable. This
+ * predicate closes that hole, and stays conservative:
+ *
+ * - only own-client drafts: another device's text keeps the explicit Use bar;
+ * - only a virgin composer: any edit, load, send, or clear since mount means
+ *   the user is working here, and nothing may replace their text silently;
+ * - only when the synced copy is demonstrably fresher than the stored one —
+ *   the stored draft is missing/blank, or carries an older stamp. A legacy
+ *   stored value without a stamp is "age unknown" and is never overridden.
+ */
+export function shouldRestoreOwnSessionChatDraft(params: {
+  incoming: SessionChatDraft | null;
+  clientId: string;
+  /** True once anything mutated the composer since mount. */
+  composerTouched: boolean;
+  /** Live composer text, so an identical draft never reloads. */
+  composerText: string;
+  /** This client's stored draft entry, null when absent. */
+  stored: { text: string; updatedAt: number | undefined } | null;
+}): boolean {
+  const { clientId, composerText, composerTouched, incoming, stored } = params;
+  if (!incoming || incoming.originClientId !== clientId || composerTouched) {
+    return false;
+  }
+  if (incoming.content.trim() === '' || incoming.content === composerText) {
+    return false;
+  }
+  if (stored === null) {
+    return true;
+  }
+  if (stored.updatedAt === undefined) {
+    // Legacy plain-string value: age unknown, so only a BLANK one may lose.
+    return stored.text.trim() === '';
+  }
+  // One rule, shared with the reconcile in session-chat-draft-storage: the
+  // synced copy wins only with a strictly newer stamp. A stamped blank entry
+  // is a deliberate tombstone (the Recovered list's delete) and refuses older
+  // server text exactly like real text would.
+  const incomingAt = Date.parse(incoming.updatedAt);
+  return !Number.isNaN(incomingAt) && incomingAt > stored.updatedAt;
+}
+
 // ---------------------------------------------------------------------------
 // Drag-to-reorder activation
 // ---------------------------------------------------------------------------
