@@ -38,17 +38,9 @@ Starting with 7.0.0, Windows installations receive automatic updates from GitHub
 
 ### Linux
 
-Latest downloads: [Linux DEB](https://maddada.com/download/linux-deb-x64) · [Linux RPM](https://maddada.com/download/linux-rpm-x64) · [Arch Linux AUR](https://aur.archlinux.org/packages/ghostex-bin) · [Linux tarball](https://maddada.com/download/linux-tar-x64).
+Latest downloads: [Linux DEB](https://maddada.com/download/linux-deb-x64) · [Linux RPM](https://maddada.com/download/linux-rpm-x64) · [Arch Linux tarball](https://maddada.com/download/linux-tar-x64).
 
 #### Arch Linux and other distributions
-
-Install the vendor-maintained AUR package with your preferred helper:
-
-```sh
-yay -S ghostex-bin
-```
-
-The AUR package tracks each stable Ghostex release and verifies the portable archive's SHA-256 digest before installation.
 
 The portable `ghostex-<version>-linux-x64.tar.zst` on the
 [latest release](https://github.com/maddada/Ghostex/releases/latest) works on any x64
