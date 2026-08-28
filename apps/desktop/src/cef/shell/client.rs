@@ -172,6 +172,16 @@ wrap_client! {
                 let Some(surface) = self.extension_bridge_surface.as_ref() else {
                     return 0;
                 };
+                /*
+                CDXC:GPUIExtensionRemoteUrlSurface 2026-08-28:
+                A remote `server.url` surface never receives the bridge install
+                message, so this shape can only arrive from a page that built
+                the message itself. Drop it here as well, so the inbound path
+                does not depend on the renderer shim staying uninstalled.
+                */
+                if !surface.bridge_enabled {
+                    return 1;
+                }
                 let frame_url = frame
                     .as_ref()
                     .map(|frame| CefString::from(&frame.url()).to_string())

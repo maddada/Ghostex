@@ -236,6 +236,10 @@ impl CefSurface {
         self.browser.focus();
     }
 
+    pub(crate) fn paste(&mut self) -> bool {
+        self.browser.paste()
+    }
+
     /// CDXC:GPUITutorialVideoFullscreen 2026-08-18: forwards one host-side "f"
     /// key press (see the CEF backend for why injected JavaScript cannot put
     /// the tutorial player in fullscreen).
@@ -283,6 +287,16 @@ impl CefSurface {
         &mut self,
         message: &serde_json::Value,
     ) -> bool {
+        /*
+        CDXC:GPUIExtensionRemoteUrlSurface 2026-08-28:
+        Outbound bridge dispatch injects the app-owned context payload as script
+        source in the page's own world, and a remote `server.url` page could
+        define `__ghostexExtensionBridgeReceive` itself to read it. Surfaces
+        without an installed bridge get nothing.
+        */
+        if !self.browser.extension_bridge_installed() {
+            return false;
+        }
         let Ok(payload) = serde_json::to_string(message) else {
             return false;
         };

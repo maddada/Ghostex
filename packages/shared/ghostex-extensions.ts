@@ -56,7 +56,17 @@ export interface GhostexExtensionCommandServer {
   install?: GhostexExtensionPlatformInstalls;
 }
 
-export type GhostexExtensionServer = GhostexExtensionStaticServer | GhostexExtensionCommandServer;
+/**
+ * A fixed remote page gxserver neither starts nor serves. It is ready as soon
+ * as the extension is installed, and the desktop app opens it without the
+ * extension bridge because the origin is not first-party.
+ */
+export interface GhostexExtensionUrlServer {
+  url: string;
+}
+
+export type GhostexExtensionServer =
+  GhostexExtensionStaticServer | GhostexExtensionCommandServer | GhostexExtensionUrlServer;
 
 export interface GhostexExtensionTerminal {
   command: string;
