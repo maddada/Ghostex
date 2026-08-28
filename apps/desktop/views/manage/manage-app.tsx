@@ -66,9 +66,10 @@ import { ManagePreview } from './preview/manage-preview';
 import { ManageTooltipButton } from './manage-tooltip-button';
 import {
   canCreateManageEntryChildren,
+  canDeleteManageEntry,
   canMoveManageEntryToDirectory,
   canOpenManageEntryContextMenu,
-  canRenameOrDeleteManageEntry,
+  canRenameManageEntry,
   createDuplicateManageFilePath,
   createInitialArtifactContent,
   createInitialCollapsedManageDirectoryPaths,
@@ -81,6 +82,7 @@ import {
   isHtmlPath,
   isManageDescendantPath,
   isMarkdownPath,
+  isNoOpManageEntryDrop,
   manageFileMetadataSignature,
   moveManagePathToDirectory,
   orderManageEntriesForTree,
@@ -1489,7 +1491,7 @@ export function ManageApp() {
 
   const moveEntryToDirectory = useCallback(
     async (entry: ManageFileEntry, targetDirectoryPath: string) => {
-      if (fileOperation) {
+      if (fileOperation || !canMoveManageEntryToDirectory(entry, targetDirectoryPath, entries)) {
         return;
       }
       const nextPath = moveManagePathToDirectory(entry.path, targetDirectoryPath);
@@ -1584,21 +1586,29 @@ export function ManageApp() {
     [dragState, entries]
   );
 
+  /*
+   * Every internal drag over a Docs row belongs to this tree, including an
+   * invalid drop onto the same item or another file in the same folder. Consume
+   * those drops as explicit no-ops so CEF never applies its default drag move.
+   */
   const updateEntryDropTarget = useCallback(
     (entry: ManageFileEntry, event: ReactDragEvent<HTMLButtonElement>) => {
-      const targetDirectoryPath = dropDirectoryPathForManageEntry(entry);
-      if (
-        !dragEntry ||
-        !targetDirectoryPath ||
-        !canMoveManageEntryToDirectory(dragEntry, targetDirectoryPath, entries)
-      ) {
-        if (dragEntry) {
-          setDropTarget(undefined);
-        }
+      if (!dragEntry) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
+      if (isNoOpManageEntryDrop(dragEntry, entry)) {
+        event.dataTransfer.dropEffect = 'none';
+        setDropTarget(undefined);
+        return;
+      }
+      const targetDirectoryPath = dropDirectoryPathForManageEntry(entry);
+      if (!targetDirectoryPath || !canMoveManageEntryToDirectory(dragEntry, targetDirectoryPath, entries)) {
+        event.dataTransfer.dropEffect = 'none';
+        setDropTarget(undefined);
+        return;
+      }
       event.dataTransfer.dropEffect = 'move';
       setDropTarget({ kind: 'entry', path: entry.path, targetDirectoryPath });
     },
@@ -1607,16 +1617,22 @@ export function ManageApp() {
 
   const dropOnEntry = useCallback(
     (entry: ManageFileEntry, event: ReactDragEvent<HTMLButtonElement>) => {
-      const targetDirectoryPath = dropDirectoryPathForManageEntry(entry);
-      if (
-        !dragEntry ||
-        !targetDirectoryPath ||
-        !canMoveManageEntryToDirectory(dragEntry, targetDirectoryPath, entries)
-      ) {
+      if (!dragEntry) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
+      if (isNoOpManageEntryDrop(dragEntry, entry)) {
+        event.dataTransfer.dropEffect = 'none';
+        clearDragState();
+        return;
+      }
+      const targetDirectoryPath = dropDirectoryPathForManageEntry(entry);
+      if (!targetDirectoryPath || !canMoveManageEntryToDirectory(dragEntry, targetDirectoryPath, entries)) {
+        event.dataTransfer.dropEffect = 'none';
+        clearDragState();
+        return;
+      }
       clearDragState();
       void moveEntryToDirectory(dragEntry, targetDirectoryPath);
     },
@@ -1632,10 +1648,12 @@ export function ManageApp() {
       if (target instanceof Element && target.closest('.manage-file-row')) {
         return;
       }
+      event.preventDefault();
       if (!canMoveManageEntryToDirectory(dragEntry, MANAGE_DOCS_ROOT_PATH, entries)) {
+        event.dataTransfer.dropEffect = 'none';
+        setDropTarget(undefined);
         return;
       }
-      event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
       setDropTarget({ kind: 'root', path: MANAGE_DOCS_ROOT_PATH });
     },
@@ -1644,21 +1662,23 @@ export function ManageApp() {
 
   const dropOnRoot = useCallback(
     (event: ReactDragEvent<HTMLElement>) => {
-      if (!dragEntry || dropTarget?.kind !== 'root') {
+      if (!dragEntry) {
         return;
       }
       const target = event.target;
       if (target instanceof Element && target.closest('.manage-file-row')) {
         return;
       }
+      event.preventDefault();
       if (!canMoveManageEntryToDirectory(dragEntry, MANAGE_DOCS_ROOT_PATH, entries)) {
+        event.dataTransfer.dropEffect = 'none';
+        clearDragState();
         return;
       }
-      event.preventDefault();
       clearDragState();
       void moveEntryToDirectory(dragEntry, MANAGE_DOCS_ROOT_PATH);
     },
-    [clearDragState, dragEntry, dropTarget, entries, moveEntryToDirectory]
+    [clearDragState, dragEntry, entries, moveEntryToDirectory]
   );
 
   const handleSidebarDragLeave = useCallback((event: ReactDragEvent<HTMLElement>) => {
@@ -1736,7 +1756,8 @@ export function ManageApp() {
   const contextMenuEntry = fileContextMenu ? entries.find((entry) => entry.path === fileContextMenu.path) : undefined;
   const contextMenuOperation =
     contextMenuEntry && fileOperation?.path === contextMenuEntry.path ? fileOperation.action : undefined;
-  const contextMenuCanRenameOrDelete = contextMenuEntry !== undefined && canRenameOrDeleteManageEntry(contextMenuEntry);
+  const contextMenuCanDelete = contextMenuEntry !== undefined && canDeleteManageEntry(contextMenuEntry);
+  const contextMenuCanRename = contextMenuEntry !== undefined && canRenameManageEntry(contextMenuEntry);
   const contextMenuCanCreateHere = contextMenuEntry !== undefined && canCreateManageEntryChildren(contextMenuEntry);
 
   useEffect(() => {
@@ -1940,8 +1961,9 @@ export function ManageApp() {
         <ManageFileContextMenu
           canAddToSessionContext={contextMenuEntry.kind === 'file'}
           canCreateHere={contextMenuCanCreateHere}
+          canDelete={contextMenuCanDelete}
           canDuplicate={contextMenuEntry.kind === 'file'}
-          canRenameOrDelete={contextMenuCanRenameOrDelete}
+          canRename={contextMenuCanRename}
           confirmingDelete={fileContextMenu.confirmingDelete === true}
           creatingKind={contextMenuCanCreateHere ? creatingArtifactKind : undefined}
           isCreatingFolder={
@@ -1964,7 +1986,7 @@ export function ManageApp() {
           }}
           onDuplicate={() => void duplicateFile(contextMenuEntry)}
           onDelete={() => {
-            if (!contextMenuCanRenameOrDelete) {
+            if (!contextMenuCanDelete) {
               return;
             }
             if (!fileContextMenu.confirmingDelete) {
@@ -1982,7 +2004,7 @@ export function ManageApp() {
           }}
           onDismiss={dismissFileContextMenu}
           onRename={() => {
-            if (contextMenuCanRenameOrDelete) {
+            if (contextMenuCanRename) {
               startRenameFile(contextMenuEntry);
             }
           }}

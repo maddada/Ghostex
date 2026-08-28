@@ -810,13 +810,109 @@ pub(crate) fn manage_additional_docs_folder_relative_paths(
     folders
 }
 
+fn manage_is_built_in_docs_folder_name(name: &str) -> bool {
+    MANAGE_BUILT_IN_DOCS_RELATIVE_PATHS
+        .iter()
+        .any(|folder| folder.eq_ignore_ascii_case(name))
+}
+
+fn manage_is_skipped_first_level_docs_parent(name: &str) -> bool {
+    name.starts_with('.')
+        || manage_is_built_in_docs_folder_name(name)
+        || MANAGE_IGNORED_DIRECTORY_NAMES.contains(&name)
+}
+
+fn manage_relative_path_segments(relative_path: &str) -> Vec<&str> {
+    relative_path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+fn manage_path_is_in_built_in_docs_scan_root(relative_path: &str) -> bool {
+    let parts = manage_relative_path_segments(relative_path);
+    match parts.as_slice() {
+        [] => false,
+        [first, ..] if manage_is_built_in_docs_folder_name(first) => true,
+        [parent, folder, ..]
+            if !manage_is_skipped_first_level_docs_parent(parent)
+                && manage_is_built_in_docs_folder_name(folder) =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn manage_path_is_built_in_docs_scan_root(relative_path: &str) -> bool {
+    let parts = manage_relative_path_segments(relative_path);
+    match parts.as_slice() {
+        [name] if manage_is_built_in_docs_folder_name(name) => true,
+        [parent, folder]
+            if !manage_is_skipped_first_level_docs_parent(parent)
+                && manage_is_built_in_docs_folder_name(folder) =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn manage_nested_built_in_docs_relative_paths(root: &Path) -> Vec<String> {
+    let mut folders = Vec::new();
+    let mut seen = HashSet::new();
+    let Ok(entries) = fs::read_dir(root) else {
+        return folders;
+    };
+    let mut parents = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if manage_is_skipped_first_level_docs_parent(&name) {
+                return None;
+            }
+            entry.metadata().ok().filter(|metadata| metadata.is_dir())?;
+            Some(name)
+        })
+        .collect::<Vec<_>>();
+    parents.sort_unstable();
+    for parent in parents {
+        let parent_path = root.join(&parent);
+        let Ok(children) = fs::read_dir(&parent_path) else {
+            continue;
+        };
+        let mut nested = children
+            .filter_map(Result::ok)
+            .filter_map(|child| {
+                let name = child.file_name().to_string_lossy().to_string();
+                if !manage_is_built_in_docs_folder_name(&name) {
+                    return None;
+                }
+                child.metadata().ok().filter(|metadata| metadata.is_dir())?;
+                Some(name)
+            })
+            .collect::<Vec<_>>();
+        nested.sort_unstable();
+        for name in nested {
+            let relative = format!("{parent}/{name}");
+            if manage_project_directory(root, &relative).is_none() {
+                continue;
+            }
+            if seen.insert(relative.to_lowercase()) {
+                folders.push(relative);
+            }
+        }
+    }
+    folders
+}
+
 /*
 CDXC:DocsRootAdditive 2026-08-09:
 Mirrors `scan_roots` in `server/src/project_docs.rs`. Docs folders is
 project-root-relative again, the meaning it had before a custom root existed:
-`docs` plus each configured folder. Round 2 made it narrow the custom root
-instead; with additive mounting that is no longer coherent, because the mounted
-Docs directory always shows its whole tree.
+built-in Docs folders plus each configured folder. Round 2 made it narrow the
+custom root instead; with additive mounting that is no longer coherent, because
+the mounted Docs directory always shows its whole tree.
 */
 pub(crate) fn manage_docs_scan_root_relative_paths(
     additional_docs_folders_text: &str,
@@ -832,11 +928,38 @@ pub(crate) fn manage_docs_scan_root_relative_paths(
     roots
 }
 
+pub(crate) fn manage_docs_project_scan_root_relative_paths(
+    project_root: &Path,
+    additional_docs_folders_text: &str,
+) -> Vec<String> {
+    let mut roots = manage_docs_scan_root_relative_paths(additional_docs_folders_text);
+    let mut seen = roots
+        .iter()
+        .map(|path| path.to_lowercase())
+        .collect::<HashSet<_>>();
+    for nested in manage_nested_built_in_docs_relative_paths(project_root) {
+        let key = nested.to_lowercase();
+        if roots.iter().any(|existing| {
+            key == existing.to_lowercase()
+                || key.starts_with(&format!("{}/", existing.to_lowercase()))
+        }) {
+            continue;
+        }
+        if seen.insert(key) {
+            roots.push(nested);
+        }
+    }
+    roots
+}
+
 pub(crate) fn manage_path_is_in_docs_scan_root(
     relative_path: &str,
     additional_docs_folders_text: &str,
 ) -> bool {
-    manage_docs_scan_root_relative_paths(additional_docs_folders_text)
+    if manage_path_is_in_built_in_docs_scan_root(relative_path) {
+        return true;
+    }
+    manage_additional_docs_folder_relative_paths(additional_docs_folders_text, true)
         .iter()
         .any(|root| relative_path == root || relative_path.starts_with(&format!("{root}/")))
 }
@@ -845,12 +968,15 @@ pub(crate) fn manage_path_is_docs_scan_root(
     relative_path: &str,
     additional_docs_folders_text: &str,
 ) -> bool {
-    manage_docs_scan_root_relative_paths(additional_docs_folders_text)
+    if manage_path_is_built_in_docs_scan_root(relative_path) {
+        return true;
+    }
+    manage_additional_docs_folder_relative_paths(additional_docs_folders_text, true)
         .iter()
         .any(|root| relative_path == root)
 }
 
-/// The nodes no operation may rename, move, or delete: the project root's scan
+/// The nodes rename and move operations must preserve: the project root's scan
 /// roots, and the mounted Docs directory itself.
 pub(crate) fn manage_path_is_docs_root_node(
     path: &ManageDocsPath<'_>,
@@ -1179,7 +1305,8 @@ pub(crate) fn manage_project_root_file_entries(
     walked (bounded), so the Docs sidebar never becomes a broad repo browser.
     */
     let mut entries = Vec::new();
-    let scan_roots = manage_docs_scan_root_relative_paths(context.additional_docs_folders_text);
+    let scan_roots =
+        manage_docs_project_scan_root_relative_paths(root, context.additional_docs_folders_text);
     for relative_path in &scan_roots {
         let Some(directory) = manage_project_directory(root, relative_path) else {
             continue;
@@ -1786,13 +1913,12 @@ pub(crate) fn manage_delete_project_file(
     path: Option<&str>,
 ) -> Result<(), String> {
     /*
-    macOS `manageDeleteProjectFile` parity: files or folders inside Docs scan
-    roots (recursive for folders) plus root artifact files; the scan roots
-    themselves, and the mounted Docs directory, are never deletable through
-    this path.
+    Files or folders inside Docs scan roots (recursive for folders), the scan
+    roots themselves, and root artifact files are deletable. The mounted Docs
+    directory remains protected because its routed inner path is empty.
     */
     let path = manage_docs_path(context, path)?;
-    if path.inner.is_empty() || manage_path_is_docs_root_node(&path, context) {
+    if path.inner.is_empty() {
         return Err("Select an item to delete.".to_string());
     }
     let target = manage_operation_url(&path)?;

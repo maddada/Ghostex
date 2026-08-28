@@ -3,7 +3,7 @@ import {
   type ProjectDocsFileEntry as ManageFileEntry,
   type ProjectDocsFilePreview as ManageFilePreview,
 } from '@/packages/shared/project-docs';
-import { MANAGE_DOCS_ROOT_PATH } from './constants';
+import { MANAGE_DOCS_EXTRA_ROOT_MOUNT_PATH, MANAGE_DOCS_ROOT_PATH } from './constants';
 import { ManageAnnotation, ManageArtifactKind } from './types';
 import { createEmptyExcalidrawFile } from './excalidraw-io';
 
@@ -99,8 +99,12 @@ export function canOpenManageEntryContextMenu(entry: ManageFileEntry): boolean {
   return entry.kind === 'file' || entry.kind === 'directory';
 }
 
-export function canRenameOrDeleteManageEntry(entry: ManageFileEntry): boolean {
+export function canRenameManageEntry(entry: ManageFileEntry): boolean {
   return !(entry.kind === 'directory' && entry.depth === 0);
+}
+
+export function canDeleteManageEntry(entry: ManageFileEntry): boolean {
+  return entry.path !== MANAGE_DOCS_EXTRA_ROOT_MOUNT_PATH;
 }
 
 export function canCreateManageEntryChildren(entry: ManageFileEntry): boolean {
@@ -214,6 +218,13 @@ export function moveManagePathToDirectory(path: string, targetDirectoryPath: str
 
 export function dropDirectoryPathForManageEntry(entry: ManageFileEntry): string {
   return entry.kind === 'directory' ? entry.path : parentManagePath(entry.path) || MANAGE_DOCS_ROOT_PATH;
+}
+
+export function isNoOpManageEntryDrop(draggedEntry: ManageFileEntry, targetEntry: ManageFileEntry): boolean {
+  return (
+    draggedEntry.path === targetEntry.path ||
+    (targetEntry.kind === 'file' && parentManagePath(draggedEntry.path) === parentManagePath(targetEntry.path))
+  );
 }
 
 export function canMoveManageEntryToDirectory(

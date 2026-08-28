@@ -27,7 +27,7 @@ const GIT_BASELINE_MAX_BYTES: usize = 1024 * 1024;
 const RESOURCE_MAX_BYTES: u64 = 12 * 1024 * 1024;
 const SESSION_CONTEXT_MAX_BYTES: usize = 300_000;
 const DOCS_RELATIVE_PATH: &str = "docs";
-const BUILT_IN_DOCS_RELATIVE_PATHS: &[&str] = &[DOCS_RELATIVE_PATH, "artifacts", "ai"];
+const BUILT_IN_DOCS_RELATIVE_PATHS: &[&str] = &[DOCS_RELATIVE_PATH, "artifacts", "ai", "tmp"];
 /*
 CDXC:DocsRootAdditive 2026-08-09:
 The reserved first path segment that addresses the mounted Docs directory.
@@ -557,8 +557,108 @@ fn additional_docs_folder_relative_paths(value: &str, docs_is_implicit_root: boo
     folders
 }
 
-/// The project root's scan roots: `docs` plus each configured Docs folder.
-fn scan_roots(additional_docs_folders: &str) -> Vec<String> {
+fn is_built_in_docs_folder_name(name: &str) -> bool {
+    BUILT_IN_DOCS_RELATIVE_PATHS
+        .iter()
+        .any(|folder| folder.eq_ignore_ascii_case(name))
+}
+
+fn is_skipped_first_level_docs_parent(name: &str) -> bool {
+    name.starts_with('.')
+        || is_built_in_docs_folder_name(name)
+        || IGNORED_DIRECTORY_NAMES.contains(&name)
+}
+
+fn relative_path_segments(relative_path: &str) -> Vec<&str> {
+    relative_path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+/// Built-in Docs folders at the project root (`docs`, `artifacts`, `ai`, `tmp`)
+/// and the same names one folder down (`folder/docs`).
+fn path_is_in_built_in_scan_root(relative_path: &str) -> bool {
+    let parts = relative_path_segments(relative_path);
+    match parts.as_slice() {
+        [] => false,
+        [first, ..] if is_built_in_docs_folder_name(first) => true,
+        [parent, folder, ..]
+            if !is_skipped_first_level_docs_parent(parent)
+                && is_built_in_docs_folder_name(folder) =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn path_is_built_in_scan_root(relative_path: &str) -> bool {
+    let parts = relative_path_segments(relative_path);
+    match parts.as_slice() {
+        [name] if is_built_in_docs_folder_name(name) => true,
+        [parent, folder]
+            if !is_skipped_first_level_docs_parent(parent)
+                && is_built_in_docs_folder_name(folder) =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+/// First-level project children that themselves contain a built-in Docs folder.
+fn nested_built_in_docs_relative_paths(root: &Path) -> Vec<String> {
+    let mut folders = Vec::new();
+    let mut seen = HashSet::new();
+    let Ok(entries) = fs::read_dir(root) else {
+        return folders;
+    };
+    let mut parents = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if is_skipped_first_level_docs_parent(&name) {
+                return None;
+            }
+            entry.metadata().ok().filter(|metadata| metadata.is_dir())?;
+            Some(name)
+        })
+        .collect::<Vec<_>>();
+    parents.sort_unstable();
+    for parent in parents {
+        let parent_path = root.join(&parent);
+        let Ok(children) = fs::read_dir(&parent_path) else {
+            continue;
+        };
+        let mut nested = children
+            .filter_map(Result::ok)
+            .filter_map(|child| {
+                let name = child.file_name().to_string_lossy().to_string();
+                if !is_built_in_docs_folder_name(&name) {
+                    return None;
+                }
+                child.metadata().ok().filter(|metadata| metadata.is_dir())?;
+                Some(name)
+            })
+            .collect::<Vec<_>>();
+        nested.sort_unstable();
+        for name in nested {
+            let relative = format!("{parent}/{name}");
+            if project_directory(root, &relative).is_none() {
+                continue;
+            }
+            if seen.insert(relative.to_lowercase()) {
+                folders.push(relative);
+            }
+        }
+    }
+    folders
+}
+
+/// The project root's scan roots: built-in Docs folders, each configured Docs
+/// folder, and matching built-in folders one level down.
+fn scan_roots(root: &Path, additional_docs_folders: &str) -> Vec<String> {
     let mut roots = BUILT_IN_DOCS_RELATIVE_PATHS
         .iter()
         .map(|path| (*path).to_string())
@@ -567,22 +667,44 @@ fn scan_roots(additional_docs_folders: &str) -> Vec<String> {
         additional_docs_folders,
         true,
     ));
+    let mut seen = roots
+        .iter()
+        .map(|path| path.to_lowercase())
+        .collect::<HashSet<_>>();
+    for nested in nested_built_in_docs_relative_paths(root) {
+        let key = nested.to_lowercase();
+        if roots.iter().any(|existing| {
+            key == existing.to_lowercase()
+                || key.starts_with(&format!("{}/", existing.to_lowercase()))
+        }) {
+            continue;
+        }
+        if seen.insert(key) {
+            roots.push(nested);
+        }
+    }
     roots
 }
 
 fn path_is_in_scan_root(relative_path: &str, additional_docs_folders: &str) -> bool {
-    scan_roots(additional_docs_folders)
+    if path_is_in_built_in_scan_root(relative_path) {
+        return true;
+    }
+    additional_docs_folder_relative_paths(additional_docs_folders, true)
         .iter()
         .any(|root| relative_path == root || relative_path.starts_with(&format!("{root}/")))
 }
 
 fn path_is_scan_root(relative_path: &str, additional_docs_folders: &str) -> bool {
-    scan_roots(additional_docs_folders)
+    if path_is_built_in_scan_root(relative_path) {
+        return true;
+    }
+    additional_docs_folder_relative_paths(additional_docs_folders, true)
         .iter()
         .any(|root| relative_path == root)
 }
 
-/// The nodes no operation may rename, move, or delete: the project root's scan
+/// The nodes rename and move operations must preserve: the project root's scan
 /// roots, and the mounted Docs directory itself.
 fn path_is_docs_root_node(path: &DocsPath<'_>, context: DocsContext<'_>) -> bool {
     if path.extra {
@@ -670,7 +792,7 @@ fn project_file_entries(context: DocsContext<'_>) -> Result<Vec<Value>, String> 
 fn project_root_file_entries(root: &Path, context: DocsContext<'_>) -> Result<Vec<Value>, String> {
     let mut entries = Vec::new();
     let mut scanned_directory_entries = 0;
-    let roots = scan_roots(context.additional_docs_folders);
+    let roots = scan_roots(root, context.additional_docs_folders);
     for relative_path in &roots {
         if entries.len() >= FILE_LIST_MAX_ENTRIES {
             break;
@@ -1240,7 +1362,7 @@ fn rename_project_file(
 
 fn delete_project_file(context: DocsContext<'_>, path: Option<&str>) -> Result<(), String> {
     let path = docs_path(context, path)?;
-    if path.inner.is_empty() || path_is_docs_root_node(&path, context) {
+    if path.inner.is_empty() {
         return Err("Select an item to delete.".to_string());
     }
     let target = operation_path(&path)?;

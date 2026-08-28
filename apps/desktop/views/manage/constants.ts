@@ -6,6 +6,7 @@ export const MANAGE_FILES_CHANGED_EVENT = 'ghostex-manage-files-changed';
 export const MANAGE_DRAG_DATA_TYPE = 'application/x-ghostex-manage-path';
 export const MANAGE_BRIDGE_TIMEOUT_MS = 15_000;
 export const MANAGE_DOCS_ROOT_PATH = 'docs';
+export const MANAGE_DOCS_EXTRA_ROOT_MOUNT_PATH = '.ghostex-docs-root';
 export const MANAGE_SELECTION_MAX_LENGTH = 700;
 export const MANAGE_ANNOTATIONS_SIDECAR_PATH = '.ghostex/manage-annotations.json';
 export const MANAGE_ANNOTATION_SCHEMA_VERSION = 1;

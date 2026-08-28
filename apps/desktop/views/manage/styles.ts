@@ -465,6 +465,7 @@ export const MANAGE_STYLES = `
     align-items: center;
     background: transparent;
     border: 0;
+    border-bottom: 1px solid #292929;
     box-sizing: border-box;
     display: flex;
     gap: 11px;
