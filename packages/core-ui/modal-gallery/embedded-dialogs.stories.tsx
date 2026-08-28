@@ -10,7 +10,6 @@ import { MachinesControl } from '@/apps/web/src/machines/MachinesControl';
 import '@/apps/web/src/styles.css';
 import { SessionChatImageViewerProvider, useSessionChatImageViewer } from '../chat/session-chat-image-viewer';
 import { SessionChatSaveMarkdownDialog } from '../chat/session-chat-save-markdown-dialog';
-import { SidebarV2WorktreeCleanupPrompt } from '../v2/sidebar-v2-worktree-cleanup-prompt';
 import { ModalStorySurface, modalStoryParameters } from './modal-story-surface';
 
 const noop = () => undefined;
@@ -46,22 +45,6 @@ export const SaveChatMessageToMarkdown: Story = {
         save={async ({ path }) => ({ path })}
         sessionTitle='Modal review'
         theme='dark'
-      />
-    </ModalStorySurface>
-  ),
-};
-
-export const WorktreeCleanup: Story = {
-  render: () => (
-    <ModalStorySurface>
-      <SidebarV2WorktreeCleanupPrompt
-        isDirty
-        isPending={false}
-        onCancel={noop}
-        onKeepWorktree={noop}
-        onRemoveWorktree={noop}
-        warnings={['The worktree contains two untracked files.']}
-        worktreePath='/Users/story/dev/Ghostex-modal-gallery'
       />
     </ModalStorySurface>
   ),
