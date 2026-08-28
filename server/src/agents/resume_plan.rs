@@ -107,14 +107,22 @@ pub(crate) fn to_agent_resume_input(
         agent_id.as_deref().unwrap_or(""),
         Some(&launch_settings),
     );
-    let base_command = read_text_from_map(&runtime_settings, "agentCommand")
-        .or_else(|| read_text_from_map(&agent_config, "command"))
+    let stored_agent_command = read_text_from_map(&runtime_settings, "agentCommand");
+    let configured_agent_command = read_text_from_map(&agent_config, "command");
+    let base_command = stored_agent_command
+        .clone()
+        .filter(|command| !is_one_time_agent_resume_command(agent_id.as_deref(), command))
+        .or_else(|| {
+            configured_agent_command
+                .filter(|command| !is_one_time_agent_resume_command(agent_id.as_deref(), command))
+        })
         .or_else(|| {
             agent_id
                 .as_deref()
                 .and_then(default_agent_command)
                 .map(str::to_string)
-        });
+        })
+        .or(stored_agent_command);
     let runtime_command = agent_id
         .as_ref()
         .and_then(|agent_id| {
@@ -151,6 +159,24 @@ pub(crate) fn to_agent_resume_input(
             .or_else(|| read_text_from_map(&runtime_settings, "restoreTitleSource"))
             .or_else(|| Some("user".to_string())),
     }
+}
+
+fn is_one_time_agent_resume_command(agent_id: Option<&str>, command: &str) -> bool {
+    /*
+    CDXC:AgentResume 2026-08-28:
+    Find can create a terminal from an exact Codex history launch such as
+    `codex --yolo resume <session>`. Once passive identity detection promotes that
+    terminal to a Codex session, the one-time launch command remains in
+    runtimeSettings.agentCommand. It is not a reusable agent base command: if
+    full reload feeds it back into the ordinary resume planner, the planner
+    appends another `resume <uuid>` and Codex rejects the duplicate positional
+    arguments. A Codex command that already contains the `resume` subcommand is
+    a one-time launch command whether its reference is a UUID or session name,
+    so use the configured or built-in base command instead.
+    Existing affected rows are repaired at read time without mutating their
+    saved metadata.
+    */
+    agent_id == Some("codex") && command.split_whitespace().any(|token| token == "resume")
 }
 
 pub(crate) fn build_agent_resume_command(
