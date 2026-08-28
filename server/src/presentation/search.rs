@@ -85,6 +85,7 @@ pub(crate) fn search_sessions(
     let query = normalize_search_query(params.get("query"));
     let project_id_filter = normalize_project_id_filter(params.get("projectId"));
     let tags = normalize_session_tags(params.get("sessionTags"))?;
+    let families = SessionForkFamilies::build(&sessions);
     let mut candidates = sessions
         .into_iter()
         .filter(|session| project_id_filter.matches(session))
@@ -114,7 +115,13 @@ pub(crate) fn search_sessions(
             let project = projects.iter().find(|project| {
                 string_field(project, "projectId") == string_field(&session, "projectId")
             });
-            search_result(project, &session, matched)
+            let mut result = search_result(project, &session, matched);
+            if let (Some(output), Some(session_id)) =
+                (result.as_object_mut(), string_field(&session, "sessionId"))
+            {
+                families.insert_fork_fields(&session_id, output);
+            }
+            result
         })
         .collect::<Vec<_>>();
     let mut output = Map::new();
@@ -144,9 +151,26 @@ pub(crate) fn search_previous_sessions(
     let query = normalize_search_query(params.get("query"));
     let project_id_filter = normalize_project_id_filter(params.get("projectId"));
     let tags = normalize_session_tags(params.get("sessionTags"))?;
+    /*
+    CDXC:SessionForkFamilies 2026-08-28:
+    Built over EVERY registry row, before any candidate filtering: the row that
+    supersedes a closed ancestor is very often an ACTIVE session, which this
+    surface would otherwise never look at, and the ancestor would stay listed
+    beside its own continuation forever.
+    */
+    let families = SessionForkFamilies::build(&sessions);
     let mut candidates = sessions
         .into_iter()
         .filter(is_previous_session_history_candidate)
+        /*
+        A closed row that something else continues from is history the family's
+        living branch already owns. Both leaves of a deliberate fork survive
+        this, because neither of them has a descendant.
+        */
+        .filter(|session| {
+            string_field(session, "sessionId")
+                .is_none_or(|session_id| !families.is_superseded(&session_id))
+        })
         .filter(|session| project_id_filter.matches(session))
         .filter(|session| session_matches_tag_filters(session, &tags))
         .filter(|session| {
@@ -180,6 +204,9 @@ pub(crate) fn search_previous_sessions(
                     "closedAt".to_string(),
                     Value::String(previous_session_closed_at(&session)),
                 );
+                if let Some(session_id) = string_field(&session, "sessionId") {
+                    families.insert_fork_fields(&session_id, output);
+                }
             }
             result
         })

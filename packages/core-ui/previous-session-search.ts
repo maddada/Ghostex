@@ -279,7 +279,18 @@ function createPreviousSessionDedupeKey(session: SidebarPreviousSessionItem): st
   const scopedProjectKey = projectKey || `history:${session.historyId}`;
   const titleKey = normalizeSessionSearchValue(getSessionHistoryCardTitle(session));
 
-  return `${scopedProjectKey}\u0000${titleKey}`;
+  /**
+   * CDXC:SessionForkFamilies 2026-08-28:
+   * Two branches of one forked conversation start from the same history, so
+   * they very often carry the same title in the same project. That is exactly
+   * the shape this dedupe was built to collapse, and collapsing it here would
+   * throw away a living branch the daemon deliberately kept visible. A row
+   * gxserver marked as one of several branches therefore keys on its own
+   * identity and can only ever merge with itself.
+   */
+  const branchKey = session.forkBranchCount ? `\u0000branch:${session.sessionId || session.historyId}` : '';
+
+  return `${scopedProjectKey}\u0000${titleKey}${branchKey}`;
 }
 
 function getPreviousSessionDedupeTimestamp(session: SidebarPreviousSessionItem): number {

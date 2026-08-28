@@ -54,6 +54,9 @@ pub(crate) enum FollowerDrainOutcome {
         /// Prompts published by an earlier drain that this one proved
         /// abandoned (see `superseded_prompt_id`).
         superseded: Vec<String>,
+        /// The recorded text of an API refusal row inside this drain's
+        /// appended window (CDXC:SessionChatApiRefusal), for the notice card.
+        api_refusal: Option<String>,
     },
 }
 
@@ -156,6 +159,7 @@ pub(crate) fn follower_drain_once(
             }
         }
     } else if current.size != state.incremental.offset {
+        let appended_from = state.incremental.offset;
         let mut batches: Vec<Vec<SessionChatMessage>> = Vec::new();
         let mut lifecycle: Option<SessionChatTurnLifecycle> = None;
         let mut push_batch = |batch: Vec<SessionChatMessage>| batches.push(batch);
@@ -197,13 +201,32 @@ pub(crate) fn follower_drain_once(
                     // retracted; the rest never reached a client.
                     superseded.retain(|id| !removed_before_publishing.contains(id));
                 }
-                if batches.is_empty() && lifecycle.is_none() && superseded.is_empty() {
+                /*
+                CDXC:SessionChatApiRefusal 2026-08-28:
+                The decoded batch renders the refusal row as ordinary assistant
+                text; the structured fields that PROVE it is a refusal never
+                survive decoding, so the freshly appended window is re-read
+                once and scanned raw. Appended rows only — a snapshot re-reads
+                history, and resurrecting an old refusal as a fresh card on
+                every subscribe would be noise.
+                */
+                let api_refusal = (agent == SessionChatTranscriptAgent::Claude)
+                    .then(|| {
+                        scan_claude_api_refusal(file_path, appended_from, state.incremental.offset)
+                    })
+                    .flatten();
+                if batches.is_empty()
+                    && lifecycle.is_none()
+                    && superseded.is_empty()
+                    && api_refusal.is_none()
+                {
                     FollowerDrainOutcome::Idle
                 } else {
                     FollowerDrainOutcome::Appended {
                         batches,
                         lifecycle,
                         superseded,
+                        api_refusal,
                     }
                 }
             }
@@ -221,6 +244,35 @@ pub(crate) fn follower_drain_once(
         _ => state.watched_version = Some(current),
     }
     outcome
+}
+
+/// Cap on the refusal re-read. A drain window is normally one reconcile tick
+/// (~1s) of writes; the refusal row itself is small and ends its turn, so the
+/// NEWEST bytes are kept when the window somehow exceeds the cap.
+const API_REFUSAL_SCAN_LIMIT_BYTES: u64 = 1024 * 1024;
+
+/// BLOCKING (runs on the drain's blocking task). Scans the appended byte
+/// window `[from, to)` for a Claude API refusal row; the LAST one wins.
+fn scan_claude_api_refusal(path: &Path, from: u64, to: u64) -> Option<String> {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+    if to <= from {
+        return None;
+    }
+    let start = from.max(to.saturating_sub(API_REFUSAL_SCAN_LIMIT_BYTES));
+    let mut file = std::fs::File::open(path).ok()?;
+    file.seek(SeekFrom::Start(start)).ok()?;
+    let mut buffer: Vec<u8> = Vec::new();
+    file.take(to - start).read_to_end(&mut buffer).ok()?;
+    let window = String::from_utf8_lossy(&buffer);
+    let mut refusal: Option<String> = None;
+    // A capped window starts mid-line; that first partial line just fails to
+    // parse and contributes nothing.
+    for line in window.lines() {
+        if let Some(text) = crate::session_chat_decode_claude::claude_api_refusal_text(line) {
+            refusal = Some(text);
+        }
+    }
+    refusal
 }
 
 fn session_chat_frame(
@@ -452,6 +504,10 @@ fn emit_snapshot_frame(
     epoch: i64,
     frame_type: &str,
     tail: &SessionChatTailFileResult,
+    // CDXC:SessionChatForkStitch 2026-08-28: the tailed rollout was opened by
+    // `codex fork`, so older rows live in an ancestor file the read path can
+    // stitch in. Keeps the client's scroll-up gate open past this file's top.
+    has_fork_ancestor: bool,
     prompt: Option<&SessionChatInteractivePrompt>,
     working: bool,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
@@ -466,7 +522,10 @@ fn emit_snapshot_frame(
                 serde_json::to_value(&tail.messages).unwrap_or(Value::Array(Vec::new())),
             );
             insert_optional_lifecycle(&mut frame, tail.lifecycle.as_ref());
-            frame.insert("hasMore".to_string(), json!(tail.has_more));
+            frame.insert(
+                "hasMore".to_string(),
+                json!(tail.has_more || has_fork_ancestor),
+            );
             frame.insert("hasMoreExact".to_string(), json!(true));
             frame.insert("beforeOffset".to_string(), json!(tail.before_offset));
             let status = if tail.messages.is_empty() {
@@ -781,6 +840,16 @@ pub async fn run_session_chat_follower(
     // session stopped, the daemon went away) must not put the composer back
     // under a loading skeleton.
     let mut published_screen_probed = false;
+    /*
+    CDXC:SessionChatForkStitch 2026-08-28:
+    A `codex fork` rollout carries no pre-fork rows, so a snapshot that included
+    the whole file would report `hasMore: false` and close the client's scroll-up
+    gate on history that /api/readSessionChat can still stitch in. The flag says
+    "scroll-back continues past the top of this file"; it is resolved once per
+    transcript path (the cached lineage lookup below) and never per frame.
+    */
+    let mut fork_ancestor_path: Option<PathBuf> = None;
+    let mut has_fork_ancestor = false;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
 
@@ -944,6 +1013,19 @@ pub async fn run_session_chat_follower(
                 // terminal-state notice with its snapshot, so it needs no
                 // separate read.
                 let snapshot_detection = read_cached_detection();
+                let lineage_path = resolved.clone().expect("resolved transcript path");
+                if fork_ancestor_path.as_ref() != Some(&lineage_path) {
+                    let probe_path = lineage_path.clone();
+                    has_fork_ancestor = tokio::task::spawn_blocking(move || {
+                        crate::session_chat_fork_stitch::codex_transcript_has_fork_ancestor(
+                            transcript_agent,
+                            &probe_path,
+                        )
+                    })
+                    .await
+                    .unwrap_or(false);
+                    fork_ancestor_path = Some(lineage_path);
+                }
                 emit_snapshot_frame(
                     &emit,
                     &config,
@@ -951,6 +1033,7 @@ pub async fn run_session_chat_follower(
                     epoch,
                     frame_type,
                     &tail,
+                    has_fork_ancestor,
                     prompt.as_ref(),
                     live.working,
                     snapshot_detection.options.as_ref(),
@@ -996,8 +1079,28 @@ pub async fn run_session_chat_follower(
                 batches,
                 lifecycle,
                 superseded,
+                api_refusal,
             } => {
                 last_transcript_change = std::time::Instant::now();
+                /*
+                CDXC:SessionChatApiRefusal 2026-08-28:
+                Stored in the watchdog store on purpose: it inherits the
+                store's dismissal identity, its 10-minute expiry, and its
+                retirement by the next send (the send watchdog clears the
+                store when a new message goes in — which is exactly when a
+                refusal card stops being news). Each refusal row is seen by
+                exactly one drain window, so this publishes once per refusal.
+                */
+                if let Some(refusal) = api_refusal {
+                    crate::session_chat_notice::set_session_chat_watchdog_notice(
+                        &config.project_id,
+                        &config.session_id,
+                        crate::session_chat_notice::session_chat_api_refusal_notice(refusal),
+                    );
+                    if let Some(notice_publisher) = config.notice_publisher.as_ref() {
+                        notice_publisher();
+                    }
+                }
                 if batches.is_empty() {
                     // Lifecycle-only and retraction-only frames ARE emitted.
                     emit_appended_frame(
@@ -1709,6 +1812,11 @@ pub(crate) fn sync_session_chat_follower_for_session(
             )
         })
     };
+    let notice_publisher = crate::session_chat_options::session_chat_terminal_notice_publisher(
+        state,
+        &project_id,
+        &session_id,
+    );
     let config = crate::session_chat::SessionChatFollowerConfig {
         project_id,
         session_id,
@@ -1722,6 +1830,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
         options_reader: Some(options_reader),
         queue_reader: Some(queue_reader),
         successor_hooks: Some(successor_hooks),
+        notice_publisher: Some(notice_publisher),
         tuning: crate::session_chat::SessionChatFollowerTuning::default(),
     };
     let event_hub = state.event_hub.clone();

@@ -306,6 +306,42 @@ pub(crate) fn gpui_gxserver_search_result_to_previous_session_item_with_options(
         serde_json::Value::String(closed_at.to_string()),
     );
     item.insert("column".to_string(), serde_json::Value::Number(0.into()));
+    /*
+    CDXC:SessionForkFamilies 2026-08-28:
+    Fork shape is derived by the daemon that owns the registry, so the bridge
+    only forwards it. `forkBranchCount` drives the branch badge and, together
+    with the family ids, keeps the shared title-based dedupe from merging two
+    rows that are genuinely separate branches of one conversation.
+    */
+    gpui_insert_optional_string(
+        &mut item,
+        "forkedFromSessionId",
+        json_string_field(result, "forkedFromSessionId"),
+    );
+    if let Some(fork_branch_count) = result
+        .get("forkBranchCount")
+        .and_then(|value| value.as_u64())
+    {
+        item.insert(
+            "forkBranchCount".to_string(),
+            serde_json::Value::Number(fork_branch_count.into()),
+        );
+    }
+    if let Some(fork_family_session_ids) = result
+        .get("forkFamilySessionIds")
+        .and_then(|value| value.as_array())
+    {
+        item.insert(
+            "forkFamilySessionIds".to_string(),
+            serde_json::Value::Array(
+                fork_family_session_ids
+                    .iter()
+                    .filter_map(|value| value.as_str())
+                    .map(|value| serde_json::Value::String(value.to_string()))
+                    .collect(),
+            ),
+        );
+    }
     gpui_insert_optional_string(
         &mut item,
         "displayTitle",

@@ -30,8 +30,10 @@ const SUBSTANTIVE_TAIL_SCAN_BYTES: u64 = 1024 * 1024;
 pub const SUCCESSOR_STALE_SUBSTANTIVE_IDLE_MS: i64 = 90_000;
 /// Newest-first cap on head-scanned candidates per hop.
 const SUCCESSOR_CANDIDATE_LIMIT: usize = 24;
-/// A successor can itself be compacted; follow the chain but never loop.
-const SUCCESSOR_CHAIN_LIMIT: usize = 8;
+/// A successor can itself be compacted; follow the chain but never loop. The
+/// same bound caps the BACKWARD fork walk in `session_chat_fork_stitch`, whose
+/// cursor encoding reserves exactly this many hops.
+pub(crate) const SUCCESSOR_CHAIN_LIMIT: usize = 8;
 const CLAUDE_CONTINUATION_MARKER: &str =
     "This session is being continued from a previous conversation";
 
@@ -512,14 +514,14 @@ never a liveness signal.
 /// times over while staying a bounded read.
 const CODEX_SESSION_META_HEAD_BYTES: u64 = 128 * 1024;
 
-struct CodexSessionMeta {
-    session_id: String,
-    forked_from_id: Option<String>,
+pub(crate) struct CodexSessionMeta {
+    pub(crate) session_id: String,
+    pub(crate) forked_from_id: Option<String>,
 }
 
 /// The `session_meta` is written before any conversation record, so only the
 /// rollout's first line can carry it: nothing further in the file is trusted.
-fn read_codex_session_meta(path: &Path) -> Option<CodexSessionMeta> {
+pub(crate) fn read_codex_session_meta(path: &Path) -> Option<CodexSessionMeta> {
     let head = read_transcript_head_complete_lines(path, CODEX_SESSION_META_HEAD_BYTES)?;
     let record = parse_json_object(head.lines().next()?)?;
     if record.get("type").and_then(Value::as_str) != Some("session_meta") {
@@ -600,6 +602,17 @@ fn collect_codex_day_directories(sessions_root: &Path, from_date_key: &str) -> V
         }
     }
     day_directories
+}
+
+/// Every `YYYY/MM/DD` directory under the sessions root, unfiltered.
+///
+/// The successor walk above is forward-only, so it starts at the predecessor's
+/// own day. A fork's ANCESTOR is always at or before the child's day, so
+/// `session_chat_fork_stitch` cannot reuse that filter and needs the whole set.
+/// `0000/00/00` sorts before every real date component, so the shared walker's
+/// comparisons admit everything.
+pub(crate) fn collect_all_codex_day_directories(sessions_root: &Path) -> Vec<PathBuf> {
+    collect_codex_day_directories(sessions_root, "0000/00/00")
 }
 
 fn collect_codex_successor_candidates(

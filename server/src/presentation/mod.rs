@@ -6,6 +6,8 @@
 // keeps resolving without per-call-site qualification. If two submodules ever
 // define the same name, drop the glob for one of them here and qualify its
 // call sites instead.
+pub mod fork_branches;
+pub mod fork_family;
 pub mod payload_inserts;
 pub mod search;
 pub mod session_attributes;
@@ -16,6 +18,8 @@ mod tests;
 pub mod title_normalization;
 pub mod util;
 
+pub(crate) use fork_branches::*;
+pub(crate) use fork_family::*;
 pub(crate) use payload_inserts::*;
 pub(crate) use search::*;
 pub(crate) use session_attributes::*;

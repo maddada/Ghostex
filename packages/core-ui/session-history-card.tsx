@@ -12,6 +12,7 @@ import {
   SessionFloatingAgentIcon,
   shouldShowTerminalSessionIcon,
 } from './session-card-content';
+import { SessionForkBranchBadge } from './session-fork-branch-badge';
 import { getSessionHistoryCardTitle } from './session-history-card-title';
 import { getEffectiveSessionTag } from './session-tag-ui';
 
@@ -96,6 +97,7 @@ export function SessionHistoryCard({
         data-focused='false'
         data-has-agent-icon={String(hasSessionCardIcon)}
         data-has-project-label={String(Boolean(projectLabel))}
+        data-in-sidebar={String(!isClosedSession)}
         data-pinned={String(session.isPinned === true)}
         data-running={String(!isClosedSession)}
         data-session-lifecycle={lifecycleState}
@@ -122,6 +124,7 @@ export function SessionHistoryCard({
           data-has-agent-icon={String(hasSessionCardIcon)}
           data-dragging='false'
           data-focused='false'
+          data-in-sidebar={String(!isClosedSession)}
           data-pinned={String(session.isPinned === true)}
           data-running={String(!isClosedSession)}
           data-session-lifecycle={lifecycleState}
@@ -206,13 +209,18 @@ export function SessionHistoryCard({
             showLastInteractionTime={true}
             trailingPrefix={
               <>
-                {projectLabel ? (
-                  <div className='session-history-project-label' aria-hidden='true'>
-                    {projectLabel}
-                  </div>
-                ) : (
-                  <div aria-hidden='true' className='session-history-project-label' />
-                )}
+                {/**
+                 * CDXC:SessionForkFamilies 2026-08-28:
+                 * The branch badge shares the project-label column instead of
+                 * claiming a fourth trailing slot, because that slot's grid
+                 * columns are fixed widths the transcript size and Last Active
+                 * timestamp already align against. Rows in this list are both
+                 * live and closed sessions, so one placement covers both.
+                 */}
+                <div className='session-history-project-label'>
+                  <SessionForkBranchBadge branchCount={session.forkBranchCount} />
+                  {projectLabel ? <span aria-hidden='true'>{projectLabel}</span> : null}
+                </div>
                 <div
                   aria-label={
                     typeof fileSizeBytes === 'number'

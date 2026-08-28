@@ -1006,6 +1006,7 @@ mod tests {
             options_reader: None,
             queue_reader: None,
             successor_hooks: Some(hooks),
+            notice_publisher: None,
             tuning: SessionChatFollowerTuning {
                 reconcile_interval: Duration::from_millis(20),
                 stale_transcript_idle: Duration::from_millis(40),

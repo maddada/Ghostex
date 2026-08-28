@@ -188,7 +188,69 @@ pub(crate) fn apply_transcript_successor_session_identity(
     `apply_session_state_update` itself, together with every other identity
     source (agent hooks, live-process scan) — nothing extra to do here.
     */
+    if applied {
+        if let Some(previous) = stored_agent_session_id.as_deref() {
+            record_previous_agent_session_id(repository, &lifecycle, previous, agent_session_id)?;
+        }
+    }
     Ok(applied)
+}
+
+/*
+CDXC:SessionForkFamilies 2026-08-28:
+An adoption is the only durable trace an out-of-band `codex fork` / `codex
+resume` leaves in the registry: the new rollout's `forked_from_id` lives in the
+transcript, and the id it names is exactly the one this row was carrying a moment
+ago. Appending it here turns that moment into queryable lineage, so the list pass
+can later tell that a CLOSED row still holding the pre-fork id is an ancestor of
+this one and collapse it, without opening a single rollout file.
+
+Kept as an append-only, de-duplicated array rather than a single field because a
+long-lived conversation can be compacted and forked many times, and the chain
+between two rows may be several hops long. The cap keeps a decade-old session
+from growing an unbounded runtime settings blob.
+*/
+fn record_previous_agent_session_id(
+    repository: &DomainRepository<'_>,
+    lifecycle: &LifecycleParams,
+    previous_agent_session_id: &str,
+    agent_session_id: &str,
+) -> Result<(), DomainStateError> {
+    const PREVIOUS_AGENT_SESSION_ID_LIMIT: usize = 32;
+    let previous = previous_agent_session_id.trim();
+    if previous.is_empty() || previous == agent_session_id.trim() {
+        return Ok(());
+    }
+    let session = require_session(repository, lifecycle)?;
+    let mut runtime_settings = object_field(&session, "runtimeSettings");
+    let mut ids: Vec<String> = runtime_settings
+        .get("previousAgentSessionIds")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    if ids.iter().any(|existing| existing == previous) {
+        return Ok(());
+    }
+    ids.push(previous.to_string());
+    if ids.len() > PREVIOUS_AGENT_SESSION_ID_LIMIT {
+        ids.drain(..ids.len() - PREVIOUS_AGENT_SESSION_ID_LIMIT);
+    }
+    runtime_settings.insert("previousAgentSessionIds".to_string(), json!(ids));
+    let mut update = lifecycle_update(lifecycle);
+    update.insert(
+        "runtimeSettings".to_string(),
+        Value::Object(runtime_settings),
+    );
+    repository.update_session(&update)?;
+    Ok(())
 }
 
 pub(crate) fn apply_created_session_identity(
@@ -447,6 +509,11 @@ pub(crate) fn ingest_terminal_title_event_with_home(
         runtime_settings.insert(
             "agentActivity".to_string(),
             activity_update.activity.clone(),
+        );
+        promote_draft_on_first_activity(
+            &session,
+            &mut runtime_settings,
+            activity_update.last_active_at.as_deref(),
         );
         if let Some(last_active_at) = activity_update.last_active_at.clone() {
             update.insert("lastActiveAt".to_string(), json!(last_active_at));
