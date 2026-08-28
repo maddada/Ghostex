@@ -34,15 +34,15 @@ pub const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
 CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §3):
 Everything this module reads out of the settings file, in ONE struct.
 
-The profile properties `interface` and `sidebar_version` ride every event, and
-they come from the same JSON document the opt-out flag does. Giving them their
+The `interface` profile property rides every event and comes from the same JSON
+document the opt-out flag does. Giving it its
 own reader would have meant a second `fs::metadata` + `read_to_string` on every
 capture — literally doubling the syscall cost of the hottest path in telemetry
 — so they are parsed during the read the gate was already doing and cached
 behind the same mtime key. One stat per capture before this change; one stat per
 capture after it.
 
-`interface` and `sidebar_version` are `Option` rather than defaulted: when the
+`interface` is `Option` rather than defaulted: when the
 settings file does not exist yet the honest answer is "unknown", and the addendum
 is explicit that an unavailable profile field is OMITTED rather than guessed.
 (The gate's own flag is different — it has a shipped default of ON, and a
@@ -52,7 +52,6 @@ missing file means the user has not opted out.)
 pub struct SettingsProfile {
     pub analytics_enabled: bool,
     pub interface: Option<&'static str>,
-    pub sidebar_version: Option<&'static str>,
 }
 
 struct SettingsCache {
@@ -167,12 +166,6 @@ pub fn settings_profile(paths: &GxserverPaths) -> SettingsProfile {
             taxonomy::INTERFACE_KINDS,
             "chat",
         ),
-        sidebar_version: read_settings_enum(
-            settings.as_ref(),
-            "sidebarVersion",
-            taxonomy::SIDEBAR_VERSIONS,
-            "v1",
-        ),
     };
     *cache = Some(SettingsCache {
         checked_at: Instant::now(),
@@ -225,7 +218,6 @@ pub fn evaluate(paths: &GxserverPaths) -> SettingsProfile {
         return SettingsProfile {
             analytics_enabled: false,
             interface: None,
-            sidebar_version: None,
         };
     }
     settings_profile(paths)

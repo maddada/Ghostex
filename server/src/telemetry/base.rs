@@ -13,7 +13,7 @@ identify/alias are NEVER called (PostHog creates the person implicitly from the
 events; an identify call risks an unrecoverable profile merge), and the person
 properties themselves ride the heartbeat's `$set` only.
 
-The per-EVENT profile fields (`interface`, `sidebar_version`, `default_agent`,
+The per-EVENT profile fields (`interface`, `default_agent`,
 `project_bucket`, `identity_source`) deliberately do NOT live here: they change
 while the daemon runs, and they must pass the taxonomy validator, so they are
 assembled per capture in `telemetry::profile` from cached state. This map is

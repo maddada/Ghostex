@@ -36,8 +36,6 @@ pub struct HeartbeatSnapshot {
     pub agents_used: Vec<&'static str>,
     pub default_agent: &'static str,
     pub preferred_interface: &'static str,
-    pub sidebar_version: &'static str,
-    pub sidebar_v2_layout: &'static str,
     pub extension_count: usize,
     pub remote_machine_count: usize,
     pub days_since_install: i64,
@@ -80,14 +78,6 @@ fn person_properties(snapshot: &HeartbeatSnapshot) -> PropertyValue {
     person.push((
         "interface",
         PropertyValue::Enum(snapshot.preferred_interface),
-    ));
-    person.push((
-        "sidebar_version",
-        PropertyValue::Enum(snapshot.sidebar_version),
-    ));
-    person.push((
-        "sidebar_v2_layout",
-        PropertyValue::Enum(snapshot.sidebar_v2_layout),
     ));
     person.push(("default_agent", PropertyValue::Enum(snapshot.default_agent)));
     person.push((
@@ -147,14 +137,6 @@ pub fn emit(snapshot: &HeartbeatSnapshot) {
                 PropertyValue::Enum(snapshot.preferred_interface),
             ),
             (
-                "sidebar_version",
-                PropertyValue::Enum(snapshot.sidebar_version),
-            ),
-            (
-                "sidebar_v2_layout",
-                PropertyValue::Enum(snapshot.sidebar_v2_layout),
-            ),
-            (
                 "extension_count",
                 PropertyValue::Number(snapshot.extension_count as f64),
             ),
@@ -209,13 +191,11 @@ pub fn collect_domain_counts(
     )
 }
 
-/// The three enum settings plus the remote-machine COUNT, read straight out of
+/// The interface setting plus the remote-machine COUNT, read straight out of
 /// the shared settings file. Unknown or missing values normalize to the shipped
 /// defaults, which is what the app itself renders in that situation.
 pub struct SettingsSnapshot {
     pub preferred_interface: &'static str,
-    pub sidebar_version: &'static str,
-    pub sidebar_v2_layout: &'static str,
     pub remote_machine_count: usize,
 }
 
@@ -237,8 +217,6 @@ pub fn collect_settings(paths: &GxserverPaths) -> SettingsSnapshot {
             taxonomy::INTERFACE_KINDS,
             "chat",
         ),
-        sidebar_version: read_enum("sidebarVersion", taxonomy::SIDEBAR_VERSIONS, "v1"),
-        sidebar_v2_layout: read_enum("sidebarV2Layout", taxonomy::SIDEBAR_V2_LAYOUTS, "byProject"),
         /*
         The COUNT only. Machine names, hosts, users, ports, and key paths are
         exactly the kind of thing the "never sent" list forbids, and the length

@@ -15,7 +15,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 pub const DEFAULT_POSTHOG_HOST: &str = "https://us.i.posthog.com";
-pub const DEFAULT_POSTHOG_KEY: &str = "phc_ODuv7uILtuJWkydq4Uq8J7Gvo9xPVvRSVh7zwfwnvMQ";
+pub const DEFAULT_POSTHOG_KEY: &str = "phc_toCQPnkxNYAhQMZCZAexLg3yAwUT2RMA9725nccyFdvc";
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(10);

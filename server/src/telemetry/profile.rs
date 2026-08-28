@@ -1,6 +1,6 @@
 /*
 CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §3):
-The profile properties that ride EVERY event — `interface`, `sidebar_version`,
+The profile properties that ride EVERY event: `interface`,
 `default_agent`, `project_bucket`, `identity_source` — so the PostHog UI can
 break any event down by "what kind of install is this?" without a HogQL join.
 
@@ -9,7 +9,7 @@ writes, HTTP handlers, and prompt dispatch; it must stay a gate check plus a
 push. So the two halves of the profile are refreshed on completely different
 clocks, and neither of them is "per capture":
 
-- Settings-derived (`interface`, `sidebar_version`) come back from the gate's
+- Settings-derived (`interface`) comes back from the gate's
   existing mtime-keyed read (`gate::evaluate`). The capture path was already
   doing exactly one `fs::metadata` on that file to answer the opt-out question;
   these fields ride along on the same cached parse, so the syscall count per
@@ -58,9 +58,6 @@ pub fn profile_properties(
     let mut properties: Vec<(&'static str, PropertyValue)> = Vec::with_capacity(5);
     if let Some(interface) = settings.interface {
         properties.push(("interface", PropertyValue::Enum(interface)));
-    }
-    if let Some(sidebar_version) = settings.sidebar_version {
-        properties.push(("sidebar_version", PropertyValue::Enum(sidebar_version)));
     }
     if let Some(default_agent) = snapshot.default_agent {
         properties.push(("default_agent", PropertyValue::Enum(default_agent)));
