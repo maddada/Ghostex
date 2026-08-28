@@ -65,6 +65,7 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: '.gitattributes', why: 'Git checkout behavior only; release jobs use fresh clones.' },
   { path: '.gitignore', why: 'Ignore rules only; tracked inputs are enumerated explicitly.' },
   { path: 'AGENTS.md', why: 'Agent instructions; metadata only.' },
+  { path: 'ANALYTICS.md', why: 'Analytics policy documentation; never compiled into a release artifact.' },
   { path: 'CHANGELOG.md', why: 'Release notes source; metadata only (§4.11 rule 8).' },
   { path: 'CLAUDE.md', why: 'Agent instructions; metadata only.' },
   { path: 'docs', why: 'Design and implementation documentation; never compiled into a release artifact.' },
