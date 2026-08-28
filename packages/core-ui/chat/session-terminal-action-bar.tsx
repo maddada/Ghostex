@@ -255,7 +255,7 @@ export function SessionTerminalActionBar({
                 </Button>
                 {stashedPromptCount > 0 ? (
                   <span aria-hidden='true' className='ghostex-chat-stash-count-badge'>
-                    {stashedPromptCount > 99 ? '99+' : stashedPromptCount}
+                    {Math.min(stashedPromptCount, 9)}
                   </span>
                 ) : null}
               </span>
