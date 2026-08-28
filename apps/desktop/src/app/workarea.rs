@@ -52,30 +52,6 @@ fn set_extension_view_runtime_state(id: ExtensionId, state: ExtensionViewRuntime
     }
 }
 
-fn extension_bridge_surface_spec_for_runtime_url(
-    id: ExtensionId,
-    url: &str,
-) -> Option<cef::ExtensionBridgeSurfaceSpec> {
-    let rest = url.strip_prefix("http://")?;
-    let origin_end = rest.find('/').unwrap_or(rest.len());
-    let authority = rest.get(..origin_end)?;
-    if authority.is_empty() {
-        return None;
-    }
-    let static_prefix = format!("/ext/{}/", id.as_str());
-    let path_prefix = if rest.get(origin_end..)?.starts_with(&static_prefix) {
-        static_prefix
-    } else {
-        "/".to_string()
-    };
-    cef::ExtensionBridgeSurfaceSpec::new(
-        id.as_str().to_string(),
-        format!("http://{authority}"),
-        path_prefix,
-    )
-    .ok()
-}
-
 impl GhostexGpuiApp {
     pub(crate) fn persist_shell_layout_state(&self) {
         persist_gpui_workspace_shell_state(self);
@@ -949,7 +925,8 @@ impl GhostexGpuiApp {
                         )
                         .ok()?;
                         let mut mounts = vec![cef::ManageDocsResourceRoot {
-                            allowed_relative_roots: manage_docs_scan_root_relative_paths(
+                            allowed_relative_roots: manage_docs_project_scan_root_relative_paths(
+                                roots.project.as_path(),
                                 docs_folders.as_str(),
                             ),
                             mount_segment: String::new(),
@@ -983,11 +960,11 @@ impl GhostexGpuiApp {
         };
         let creation_result = match slot_key {
             ProjectWorkareaCefSurfaceSlotKey::Extension(id) => {
-                let bridge_surface = self
-                    .installed_extension_view(id)?
+                let extension = self.installed_extension_view(id)?;
+                let bridge_surface = extension
                     .bridge_surface_spec()
                     .filter(|surface| surface.matches_url(&url))
-                    .or_else(|| extension_bridge_surface_spec_for_runtime_url(id, &url));
+                    .or_else(|| extension.bridge_surface_spec_for_url(&url));
                 let Some(bridge_surface) = bridge_surface else {
                     return None;
                 };

@@ -73,15 +73,28 @@ impl GhostexGpuiApp {
         Native CEF child views bypass the main GPUI root's outside-click
         capture. Their AppKit mouseDown hook reports the current responder on
         every click, including repeated clicks in an already-focused pane, so
-        close any of the five titlebar popup kinds at this shared CEF boundary.
-        Programmatic focus handoffs stay excluded and popup dismissal never
-        changes, reroutes, or synthesizes the Chromium mouse event.
+        close any native titlebar popup at this shared CEF boundary. Anchored
+        extension popups close at the same boundary unless the click belongs
+        to their own CEF surface. Programmatic focus handoffs stay excluded,
+        and popup dismissal never changes, reroutes, or synthesizes the
+        Chromium mouse event.
         */
         if !suppressed_by_programmatic_focus
             && matches!(target, FirstResponderTarget::CefSurface(_))
-            && self.titlebar_popup_menu.is_some()
         {
-            self.close_gpui_titlebar_popup(None, window, cx);
+            if self.titlebar_popup_menu.is_some() {
+                self.close_gpui_titlebar_popup(None, window, cx);
+            }
+            if self.titlebar_extension_popup.is_some()
+                && !matches!(
+                    target,
+                    FirstResponderTarget::CefSurface(
+                        FirstResponderCefSurface::TitlebarExtensionPopup
+                    )
+                )
+            {
+                self.close_titlebar_extension_popup(window, cx);
+            }
         }
         // Temporary input-stealing diagnosis (2026-07-09): record every raw
         // AppKit first-responder transition so the moment typing dies can be
@@ -572,6 +585,20 @@ impl GhostexGpuiApp {
                 .native_view_contains_responder(responder)
         }) {
             return Some(FirstResponderCefSurface::TitlebarTips);
+        }
+        if self
+            .titlebar_extension_popup
+            .as_ref()
+            .and_then(|state| state.panel.as_ref())
+            .is_some_and(|panel| {
+                panel
+                    .read(cx)
+                    .surface
+                    .read(cx)
+                    .native_view_contains_responder(responder)
+            })
+        {
+            return Some(FirstResponderCefSurface::TitlebarExtensionPopup);
         }
         if let Some(handle) = self.app_modal_window.clone() {
             if handle

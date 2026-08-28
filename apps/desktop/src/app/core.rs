@@ -1304,50 +1304,77 @@ impl Render for GhostexGpuiApp {
         self.refresh_zmx_persistence_focused_terminal_if_changed(cx);
         let sidebar_chrome_visible = gpui_sidebar_chrome_visible(self.sidebar_collapsed);
         let sidebar_on_left = self.sidebar_side == GpuiSidebarSide::Left;
+        let titlebar_popup_dismissal_active =
+            self.titlebar_popup_menu.is_some() || self.titlebar_extension_popup.is_some();
 
         let content = v_flex()
             .relative()
             .size_full()
             .bg(workspace_background_color())
-            .when(self.titlebar_popup_menu.is_some(), |this| {
+            .when(titlebar_popup_dismissal_active, |this| {
                 /*
-                The titlebar dropdown lives in a non-activating panel, so the
-                main window still receives every mouse-down and keeps keyboard
-                focus. Close the open dropdown on any main-window mouse-down
-                outside its trigger button (a mouse-down on the trigger itself
-                is left to the button's own toggle handler), and put the
-                dropdown key context on the root so the existing
+                Native titlebar dropdowns live in non-activating panels, while
+                extension popups are anchored in this main window. Close either
+                popup on a main-window mouse-down outside both its content and
+                trigger button (a mouse-down on the trigger itself is left to
+                the button's own toggle handler), and put the dropdown key
+                context on the root so the existing
                 Escape -> TitlebarDropdownCancel binding dispatches from
                 wherever focus currently is.
                 */
                 this.key_context(TITLEBAR_DROPDOWN_KEY_CONTEXT)
                     .capture_any_mouse_down(cx.listener(
                         |app, event: &MouseDownEvent, window, cx| {
-                            let outside_trigger =
+                            let outside_popup_menu_trigger =
                                 app.titlebar_popup_menu.as_ref().is_some_and(|state| {
                                     !state.trigger_bounds.contains(&event.position)
+                                });
+                            let outside_extension_trigger =
+                                app.titlebar_extension_popup.as_ref().is_some_and(|state| {
+                                    !state.trigger_bounds.contains(&event.position)
+                                });
+                            let outside_extension_popup = app
+                                .titlebar_extension_popup_bounds(window)
+                                .is_some_and(|bounds| !bounds.contains(&event.position));
+                            let popup_kind = app
+                                .titlebar_popup_menu
+                                .as_ref()
+                                .map(|state| state.kind.diagnostic_label())
+                                .or_else(|| {
+                                    app.titlebar_extension_popup
+                                        .as_ref()
+                                        .map(|_| "extension")
+                                });
+                            let trigger_bounds = app
+                                .titlebar_popup_menu
+                                .as_ref()
+                                .map(|state| {
+                                    gpui_titlebar_popup_bounds_diagnostic(Some(
+                                        state.trigger_bounds,
+                                    ))
+                                })
+                                .or_else(|| {
+                                    app.titlebar_extension_popup.as_ref().map(|state| {
+                                        gpui_titlebar_popup_bounds_diagnostic(Some(
+                                            state.trigger_bounds,
+                                        ))
+                                    })
                                 });
                             log_gpui_titlebar_popup_repro(
                                 "gpui.titlebarPopup.mainWindowMouseCapture",
                                 serde_json::json!({
-                                    "kind": app
-                                        .titlebar_popup_menu
-                                        .as_ref()
-                                        .map(|state| state.kind.diagnostic_label()),
+                                    "kind": popup_kind,
                                     "mainWindowActive": window.is_window_active(),
-                                    "outsideTrigger": outside_trigger,
+                                    "outsideTrigger": outside_popup_menu_trigger || outside_extension_trigger,
                                     "pointerX": event.position.x.as_f32(),
                                     "pointerY": event.position.y.as_f32(),
-                                    "triggerBounds": app
-                                        .titlebar_popup_menu
-                                        .as_ref()
-                                        .map(|state| gpui_titlebar_popup_bounds_diagnostic(
-                                            Some(state.trigger_bounds)
-                                        )),
+                                    "triggerBounds": trigger_bounds,
                                 }),
                             );
-                            if outside_trigger {
+                            if outside_popup_menu_trigger {
                                 app.close_gpui_titlebar_popup(None, window, cx);
+                            } else if outside_extension_trigger && outside_extension_popup {
+                                app.close_titlebar_extension_popup(window, cx);
                             }
                         },
                     ))

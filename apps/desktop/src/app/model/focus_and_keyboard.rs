@@ -38,6 +38,7 @@ pub(crate) enum FirstResponderCefSurface {
     BrowserTab(BrowserTabId),
     ProjectWorkarea(ProjectWorkareaCefSurfaceSlotKey),
     ProjectEditorCompanion,
+    TitlebarExtensionPopup,
     TitlebarTips,
     AppModal,
     SessionChat(TerminalSessionId),
