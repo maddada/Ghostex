@@ -606,19 +606,14 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     if (!this.client) {
       return false;
     }
-    try {
-      const response = await this.client.rpc<{ plan?: GxserverAgentResumePlan }>('/api/readAgentResumePlan', {
-        projectId: reference.projectId,
-        sessionId: reference.sessionId,
-      });
-      return (
-        Boolean(normalizeNonEmptyString(response.plan?.primaryCommand)) &&
-        GPUI_PROJECT_BOARD_RESUMABLE_AGENT_IDS.has(normalizeNonEmptyString(response.plan?.agentId)?.toLowerCase() ?? '')
-      );
-    } catch {
-      // A removed session row answers with an error; that is a dead link.
-      return false;
-    }
+    const response = await this.client.rpc<{ plan?: GxserverAgentResumePlan }>('/api/readAgentResumePlan', {
+      projectId: reference.projectId,
+      sessionId: reference.sessionId,
+    });
+    return (
+      Boolean(normalizeNonEmptyString(response.plan?.primaryCommand)) &&
+      GPUI_PROJECT_BOARD_RESUMABLE_AGENT_IDS.has(normalizeNonEmptyString(response.plan?.agentId)?.toLowerCase() ?? '')
+    );
   },
 
   async findGpuiProjectBoardPreviousSessionRow(
