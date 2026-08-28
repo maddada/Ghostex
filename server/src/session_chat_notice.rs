@@ -75,6 +75,17 @@ clients already render it. Splitting the affirmative case into a second kind
 would silently opt it out of all three.
 */
 pub const SESSION_CHAT_NOTICE_DELIVERY_FAILED: &str = "deliveryFailed";
+/*
+CDXC:SessionChatApiRefusal 2026-08-28:
+The agent's API refused to answer the last message (Claude Code's safeguards
+refusal row). Detected from the session TRANSCRIPT, not the screen — the
+follower spots the recorded refusal row, which is authoritative where a screen
+capture is a guess. A separate kind from `deliveryFailed` on purpose: the
+message DID reach the agent and the composer works fine, so this must not
+block the prompt queue — but like `deliveryFailed` it describes a past event,
+so a clean screen must not retire it.
+*/
+pub const SESSION_CHAT_NOTICE_API_REFUSAL: &str = "apiRefusal";
 /// Claude Code's resume-usage picker: an on-screen chooser the chat surface can
 /// ANSWER, not just point at. Its rows ride the notice as `choices`.
 pub use crate::session_chat_resume_prompt::SESSION_CHAT_RESUME_PROMPT_KIND as SESSION_CHAT_NOTICE_RESUME_PROMPT;
@@ -1044,14 +1055,33 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         kind: SESSION_CHAT_NOTICE_TRUST_PROMPT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Claude Code is waiting for folder trust",
+        detail: "Claude Code is asking whether to trust this workspace. Nothing you send reaches the agent until it is answered.",
+        blocks_input: true,
+        signatures: &[NoticeSignature {
+            scope: NoticeScope::Dialog,
+            parts: &[NoticePart::Text("Accessing workspace:")],
+            // This startup dialog always focuses No first. Requiring both rows
+            // keeps the Down + Enter action below scoped to that exact layout.
+            corroborators: &["Quick safety check", "No, exit", "Yes, I trust this folder"],
+        }],
+        actions: &[
+            NoticeActionSpec {
+                id: "trustDirectory",
+                label: "Trust and continue",
+                kind: SessionChatTerminalNoticeActionKind::SendKeys,
+                send: Some("\u{1b}[B\r"),
+            },
+            OPEN_TERMINAL,
+        ],
+        quote_evidence: false,
+    },
+    NoticeRule {
+        kind: SESSION_CHAT_NOTICE_TRUST_PROMPT,
+        severity: SessionChatTerminalNoticeSeverity::Warning,
+        title: "Claude Code is waiting for folder trust",
         detail: "Claude Code is showing its workspace-trust dialog and accepts nothing until it is answered. Which option is focused differs between versions, so answer it in the terminal rather than blind-pressing Enter.",
         blocks_input: true,
         signatures: &[
-            NoticeSignature {
-                scope: NoticeScope::Dialog,
-                parts: &[NoticePart::Text("Accessing workspace:")],
-                corroborators: &["Quick safety check", "Yes, I trust this folder"],
-            },
             NoticeSignature {
                 scope: NoticeScope::Dialog,
                 parts: &[NoticePart::Text("Do you trust the files in this folder?")],
@@ -1255,6 +1285,9 @@ pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
     match kind {
         SESSION_CHAT_NOTICE_DELIVERY_FAILED => true,
         SESSION_CHAT_NOTICE_QUEUED_INPUT => false,
+        // The refusal proves the terminal DID deliver the message — the model
+        // declined it. A follow-up prompt goes through fine.
+        SESSION_CHAT_NOTICE_API_REFUSAL => false,
         /*
         CDXC:SessionChatTerminalPicker 2026-08-21: the resume-usage picker owns
         the input line, and unlike the dialogs in the catalog it does not merely
@@ -1483,6 +1516,27 @@ pub fn session_chat_delivery_mismatch_notice(
     )])
 }
 
+/*
+CDXC:SessionChatApiRefusal 2026-08-28:
+The transcript recorded an API refusal row for the last turn (see
+`claude_api_refusal_text`). The detail is the CLI's own recorded explanation
+verbatim — it already names the safeguards, the category tag, the model-switch
+escape hatch and the request id, and paraphrasing it would only lose the parts
+support asks for.
+*/
+pub fn session_chat_api_refusal_notice(recorded_text: String) -> SessionChatTerminalNotice {
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_API_REFUSAL,
+        SessionChatTerminalNoticeSeverity::Error,
+        SessionChatTerminalNoticeSource::Watchdog,
+        "The agent could not respond to this message",
+    )
+    .with_detail(recorded_text)
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
+}
+
 // ---------------------------------------------------------------------------
 // Watchdog notice store (in memory only — never persisted, never in settings)
 // ---------------------------------------------------------------------------
@@ -1589,10 +1643,12 @@ pub fn retire_session_chat_watchdog_notice_on_clean_screen(
 ) -> Option<SessionChatTerminalNotice> {
     let mut notices = watchdog_notices().lock().ok()?;
     let key = session_chat_notice_key(project_id, session_id);
-    if notices
-        .get(&key)
-        .is_none_or(|stored| stored.notice.kind == SESSION_CHAT_NOTICE_DELIVERY_FAILED)
-    {
+    if notices.get(&key).is_none_or(|stored| {
+        // `apiRefusal` shares the exemption: it too describes a past event
+        // that no screen capture can confirm or deny.
+        stored.notice.kind == SESSION_CHAT_NOTICE_DELIVERY_FAILED
+            || stored.notice.kind == SESSION_CHAT_NOTICE_API_REFUSAL
+    }) {
         return None;
     }
     let stored = notices.remove(&key)?;

@@ -56,6 +56,10 @@ export function filterSessionChatSkills(skills: readonly SessionChatSkill[], que
   return skills.filter((skill) => skill.name.toLocaleLowerCase().includes(normalized));
 }
 
+export function sessionChatDisplaySkillDirectoryPath(path: string): string {
+  return path.replace(/^\/Users\/[^/]+\//, '~/');
+}
+
 /**
  * Markdown-linked skill mention: the label carries the "$name" the agent reads,
  * and the destination is the skill's SKILL.md — the thing a reader clicking the

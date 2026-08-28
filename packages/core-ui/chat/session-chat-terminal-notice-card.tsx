@@ -17,6 +17,12 @@ Dismissal is local and per-detection: hiding a notice remembers `kind` +
 `detectedAt`) shows again. The server keeps re-sending an unresolved notice, so
 a dismissal is a "I know, hide it" — never a resolution.
 
+CDXC:SessionChatTerminalNotices 2026-08-28: the dismissed key is persisted per
+session in localStorage (same per-session shape as the verbose pill), because
+switching to the terminal and back can remount — or fully reload — this view,
+and a dismissal that only lived in component state made the same detection pop
+right back up. Only the latest dismissed key per session is kept.
+
 CDXC:SessionChatTerminalPicker 2026-08-21:
 A notice that carries `choices` is not just news, it is an ANSWERABLE picker the
 agent CLI painted on screen (Claude Code's resume-usage chooser). Those rows
@@ -46,8 +52,40 @@ export function sessionChatTerminalNoticeDismissKey(notice: SessionChatTerminalN
   return notice ? `${notice.kind}:${notice.detectedAt}` : null;
 }
 
+// Per-session dismissed-detection key (session-chat-verbose-override.ts is the
+// pattern). Survives the card unmounting when the host switches surfaces.
+const DISMISS_STORAGE_PREFIX = 'ghostex.sessionChat.noticeDismissed.';
+
+function readStoredDismissedNoticeKey(sessionKey: string | undefined): string | null {
+  if (!sessionKey) {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(`${DISMISS_STORAGE_PREFIX}${sessionKey}`);
+  } catch {
+    // Storage disabled by the embedder: dismissal still works, just per-mount.
+    return null;
+  }
+}
+
+function writeStoredDismissedNoticeKey(sessionKey: string | undefined, noticeKey: string): void {
+  if (!sessionKey) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(`${DISMISS_STORAGE_PREFIX}${sessionKey}`, noticeKey);
+  } catch {
+    // Quota/private-mode failures must not break the dismiss button.
+  }
+}
+
 export interface SessionChatTerminalNoticeCardProps {
   notice: SessionChatTerminalNotice | null;
+  /**
+   * Stable identity of the session this card belongs to, keying the persisted
+   * dismissal. Without it a dismissal lives only as long as the mount.
+   */
+  sessionKey?: string;
   /** False while another device holds input: `sendKeys` actions go read-only. */
   canSend: boolean;
   /**
@@ -128,8 +166,13 @@ export function SessionChatTerminalNoticeCard({
   onSendKeys,
   onSwitchToTerminal,
   onVisibleChange,
+  sessionKey,
 }: SessionChatTerminalNoticeCardProps) {
-  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  const [dismissedKey, setDismissedKey] = useState<string | null>(() => readStoredDismissedNoticeKey(sessionKey));
+  // The card can outlive a session switch when the host reuses the mount.
+  useLayoutEffect(() => {
+    setDismissedKey(readStoredDismissedNoticeKey(sessionKey));
+  }, [sessionKey]);
   const [tailOpen, setTailOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
@@ -138,6 +181,13 @@ export function SessionChatTerminalNoticeCard({
   const sendingRef = useRef(false);
 
   const noticeKey = sessionChatTerminalNoticeDismissKey(notice);
+  const dismiss = (): void => {
+    if (noticeKey === null) {
+      return;
+    }
+    writeStoredDismissedNoticeKey(sessionKey, noticeKey);
+    setDismissedKey(noticeKey);
+  };
 
   // Every fresh detection starts clean: tail collapsed, no stale send state.
   // The dismissed key is deliberately NOT reset here — it holds the identity of
@@ -322,7 +372,7 @@ export function SessionChatTerminalNoticeCard({
           ) : null}
         </div>
         {answerable ? null : (
-          <Button aria-label='Dismiss' onClick={() => setDismissedKey(noticeKey)} size='icon-xs' variant='ghost'>
+          <Button aria-label='Dismiss' onClick={dismiss} size='icon-xs' variant='ghost'>
             <IconX aria-hidden='true' stroke={2} />
           </Button>
         )}

@@ -254,6 +254,23 @@ impl GhostexGpuiApp {
                 event,
                 serde_json::json!({
                     "sessionId": format!("{session_id:?}"),
+                    "details": details.clone(),
+                }),
+            );
+            /*
+            CDXC:SessionChatLoadingDiagnostics 2026-08-28:
+            The same page breadcrumbs, duplicated into a dedicated chat log
+            behind their own scenario, so the "Loading conversation…" flash can
+            be reproduced without turning on the whole focus firehose. Each
+            append gates independently; with only one scenario enabled only
+            that log is written.
+            */
+            support_logs::append_for_scenario(
+                support_logs::GpuiSupportLog::SessionChat,
+                "gpui.sessionChat.viewState",
+                event,
+                serde_json::json!({
+                    "sessionId": format!("{session_id:?}"),
                     "details": details,
                 }),
             );
@@ -352,6 +369,32 @@ impl GhostexGpuiApp {
                 );
                 self.reconcile_agents_chat_surfaces(cx);
             }
+            return;
+        }
+        /*
+        CDXC:GPUISessionChatContextMenuPaste 2026-08-28:
+        Chromium rejects navigator.clipboard.read() in a windowed CEF chat
+        page when GPUI owns the surrounding window focus, even though Monaco
+        is accepting routed keyboard input. Execute CEF's own Paste command
+        for the exact visible, focused chat surface instead. This produces the
+        normal paste event, so text and image clipboard payloads keep using
+        the same Monaco/composer handlers as Cmd+V.
+        */
+        if action == "pasteIntoComposer" {
+            if !self.agents_chat_mode_sessions.contains(&session_id)
+                || self.focused_agents_or_companion_shell_session_id() != Some(session_id)
+            {
+                return;
+            }
+            let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned() else {
+                return;
+            };
+            let focus_handle = surface.read(cx).focus_handle.clone();
+            focus_handle.focus(window, cx);
+            surface.update(cx, |surface, _| {
+                surface.focus();
+                let _ = surface.paste();
+            });
             return;
         }
         /*
@@ -1299,10 +1342,10 @@ impl GhostexGpuiApp {
     ) {
         self.upsert_gpui_app_toast(
             GpuiAppToast {
-                id: "gpui-session-chat-file-opening".to_string(),
+                id: GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID.to_string(),
                 level: GpuiAppToastLevel::from_raw(None),
                 title: format!("Opening file in {destination}"),
-                description: gpui_path_file_name_label(file_path),
+                description: Some(file_path.to_string_lossy().into_owned()),
                 loading: false,
                 persistent: false,
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
