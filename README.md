@@ -10,7 +10,7 @@
 
 # Ghostex
 
-Cross-platform Ghostty-based desktop app (not using Electron or Tauri) for running agent CLIs with persistent terminals, GUI panes, browser panes, notifications, mobile access, and a built-in IDE.
+A native desktop app for Claude Code, Codex, OpenCode, and any other CLI agent. Run them side by side, review their work, and keep going from your computer or your phone.
 
 Ghostex is built for developers who keep multiple agents and terminals alive at once. It combines low-RAM Ghostty terminals, a native Rust/GPUI interface, Chromium CEF browser panes, and Mobile (iOS/Android) session access in one workspace.
 
